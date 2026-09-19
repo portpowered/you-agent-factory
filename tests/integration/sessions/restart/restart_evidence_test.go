@@ -1,6 +1,7 @@
 package restart_test
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -488,37 +490,36 @@ func (evidence *restartBaselineEvidence) capturePublicObservation(t *testing.T, 
 	}
 	observation.ActiveDispatchOwnerCount = len(activeOwnerIDs)
 
+	observation.Dispatches = restartDispatchObservations(dispatches, activeDispatchIDs)
+	evidence.addPublicObservation(observation)
+	return observation
+}
+
+func restartDispatchObservations(dispatches map[string]boardPersistenceDispatchState, activeDispatchIDs map[string]struct{}) []restartDispatchEvidence {
 	dispatchIDs := make([]string, 0, len(dispatches))
 	for id := range dispatches {
 		dispatchIDs = append(dispatchIDs, id)
 	}
 	sort.Strings(dispatchIDs)
+	observations := make([]restartDispatchEvidence, 0, len(dispatches))
 	for _, id := range dispatchIDs {
 		dispatch := dispatches[id]
-		workIDs := make([]string, 0, len(dispatch.WorkIDs))
-		for workID := range dispatch.WorkIDs {
-			workIDs = append(workIDs, workID)
-		}
-		sort.Strings(workIDs)
+		workIDs := sortedWorkIDSet(dispatch.WorkIDs)
 		workerSessionIDs := append([]string(nil), dispatch.WorkerSessionIDs...)
 		sort.Strings(workerSessionIDs)
 		reconciledStatuses := make([]string, 0, len(dispatch.ReconciledStatuses))
 		for _, status := range dispatch.ReconciledStatuses {
 			reconciledStatuses = append(reconciledStatuses, string(status))
 		}
-		isActive := false
-		if _, ok := activeDispatchIDs[id]; ok {
-			isActive = true
-		}
-		observation.Dispatches = append(observation.Dispatches, restartDispatchEvidence{
+		_, active := activeDispatchIDs[id]
+		observations = append(observations, restartDispatchEvidence{
 			ID: id, WorkIDs: workIDs, WorkerSessionIDs: workerSessionIDs,
 			RequestEvents: dispatch.RequestEvents, ResponseEvents: dispatch.ResponseEvents,
 			InterruptedEvents: dispatch.InterruptedEvents, ReconciledStatuses: reconciledStatuses,
-			Active: isActive,
+			Active: active,
 		})
 	}
-	evidence.addPublicObservation(observation)
-	return observation
+	return observations
 }
 
 func capturedOutput(contents []byte) restartCapturedOutput {
@@ -529,6 +530,108 @@ func capturedOutput(contents []byte) restartCapturedOutput {
 	}
 	evidence.Tail = string(contents)
 	return evidence
+}
+
+func readRestartRecoveryRecords(root string) []map[string]any {
+	var records []map[string]any
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil || entry.IsDir() {
+			return nil
+		}
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		for _, line := range bytes.Split(contents, []byte("\n")) {
+			var value map[string]any
+			if err := json.Unmarshal(line, &value); err != nil || value["event"] != "run.recovery" {
+				continue
+			}
+			records = append(records, value)
+		}
+		return nil
+	})
+	return records
+}
+
+func readRestartRecoveryRecordsForDaemon(daemon *boardPersistenceDaemon) []map[string]any {
+	if daemon == nil {
+		return nil
+	}
+	if records := readRestartRecoveryRecords(daemon.logDir); len(records) > 0 {
+		return records
+	}
+	return parseRestartRecoveryRecords(daemon.stdout.Bytes(), daemon.stderr.Bytes())
+}
+
+func parseRestartRecoveryRecords(outputs ...[]byte) []map[string]any {
+	var records []map[string]any
+	for _, output := range outputs {
+		for _, line := range bytes.Split(output, []byte("\n")) {
+			var value map[string]any
+			if err := json.Unmarshal(bytes.TrimSpace(line), &value); err == nil && value["event"] == "run.recovery" {
+				records = append(records, value)
+				continue
+			}
+			if start := bytes.Index(line, []byte(`{"event"`)); start >= 0 {
+				if err := json.Unmarshal(bytes.TrimSpace(line[start:]), &value); err == nil && value["event"] == "run.recovery" {
+					records = append(records, value)
+				}
+			}
+		}
+	}
+	return records
+}
+
+func restartCLIErrorResponses(output []byte) []factoryapi.ErrorResponse {
+	var responses []factoryapi.ErrorResponse
+	for _, line := range bytes.Split(output, []byte("\n")) {
+		var candidate factoryapi.ErrorResponse
+		if err := json.Unmarshal(bytes.TrimSpace(line), &candidate); err == nil && strings.TrimSpace(string(candidate.Code)) != "" {
+			responses = append(responses, candidate)
+		}
+	}
+	return responses
+}
+
+func isKnownReplayDiagnostic(code string) bool {
+	known := map[string]struct{}{
+		string(recordings.ReplayArtifactDiagnosticMalformed):             {},
+		string(recordings.ReplayArtifactDiagnosticUnsupportedVersion):    {},
+		string(recordings.ReplayArtifactDiagnosticUnsupportedSchema):     {},
+		string(recordings.ReplayArtifactDiagnosticInvalidIdentity):       {},
+		string(recordings.ReplayArtifactDiagnosticInvalidSummary):        {},
+		string(recordings.ReplayArtifactDiagnosticInvalidIntegrity):      {},
+		string(recordings.ReplayArtifactDiagnosticInvalidOrder):          {},
+		string(recordings.ReplayArtifactDiagnosticMissingReference):      {},
+		string(recordings.ReplayArtifactDiagnosticForeignReference):      {},
+		string(recordings.ReplayArtifactDiagnosticRecordingNotFound):     {},
+		string(recordings.ReplayArtifactDiagnosticRecordingNotFinalized): {},
+		string(recordings.ReplayArtifactDiagnosticDependencyFailure):     {},
+		string(recordings.ReplayArtifactDiagnosticCancelled):             {},
+	}
+	_, ok := known[code]
+	return ok
+}
+
+func daemonExitCode(daemon *boardPersistenceDaemon) *int {
+	if daemon == nil || daemon.cmd == nil || daemon.cmd.ProcessState == nil {
+		return nil
+	}
+	code := daemon.cmd.ProcessState.ExitCode()
+	return &code
+}
+
+func equalStringSlices(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func collectRestartRuntimeLogs(root string) []restartLogEvidence {

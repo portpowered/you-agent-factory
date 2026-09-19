@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -25,6 +24,12 @@ const (
 	restartRecoverySecretMarker   = "restart-recovery-private-fixture-value"
 	restartRecoveryProcessTimeout = 20 * time.Second
 )
+
+type restartRecoveryFailureFixture struct {
+	id         string
+	resumePath func(string) string
+	contents   []byte
+}
 
 // TestRestartRecoveryRestoresRecordedDefinitionAndSingleOwner is the H-01
 // compiled-artifact witness. The authored Factory B cannot consume the
@@ -91,9 +96,7 @@ func TestRestartRecoveryRestoresRecordedDefinitionAndSingleOwner(t *testing.T) {
 	terminalHistoryBefore := restartWorkHistoryFingerprint(t, first.baseURL, restartRecoveryTerminalWorkIDs())
 	firstObservation := evidence.capturePublicObservation(t, "source-a-before-stop", first.baseURL)
 	assertRestartPublicCounts(t, firstObservation, 1, 3, 1, 1)
-	if firstObservation.ActiveWorkerSessionCount != 1 {
-		t.Fatalf("source active Worker Sessions = %d, want 1", firstObservation.ActiveWorkerSessionCount)
-	}
+	assertRestartActiveWorkerCount(t, firstObservation, 1)
 	first.stop(t)
 	evidence.captureDaemon(0, first)
 	if err := evidence.recordSourceRecording(sourceRecordPath); err != nil {
@@ -125,43 +128,51 @@ func TestRestartRecoveryRestoresRecordedDefinitionAndSingleOwner(t *testing.T) {
 	}
 	resumedObservation := evidence.capturePublicObservation(t, "successor-before-worker-release", second.baseURL)
 	assertRestartPublicCounts(t, resumedObservation, 1, 3, 1, 1)
-	if resumedObservation.ActiveWorkerSessionCount != 1 {
-		t.Fatalf("successor active Worker Sessions = %d, want exactly one", resumedObservation.ActiveWorkerSessionCount)
-	}
+	assertRestartActiveWorkerCount(t, resumedObservation, 1)
+	completeRestartRecoveryDispatch(t, evidence, second, releasePath, oldDispatchID, newDispatchID, terminalHistoryBefore)
+	finalizeRestartRecoveryEvidence(t, evidence, second, sourceRecordPath, successorRecordPath, factoryA, factoryB)
+}
+
+func completeRestartRecoveryDispatch(t *testing.T, evidence *restartBaselineEvidence, daemon *boardPersistenceDaemon, releasePath, oldDispatchID, newDispatchID string, terminalHistoryBefore []string) {
+	t.Helper()
 	if err := os.WriteFile(releasePath, []byte("release\n"), 0o600); err != nil {
 		t.Fatalf("release successor worker: %v", err)
 	}
-	waitForBoardDispatchResponse(t, second.baseURL, restartRecoveryEligibleWorkID, newDispatchID, 30*time.Second)
-	finalWorks := waitForBoardStates(t, second.baseURL, map[string]string{
+	waitForBoardDispatchResponse(t, daemon.baseURL, restartRecoveryEligibleWorkID, newDispatchID, 30*time.Second)
+	finalWorks := waitForBoardStates(t, daemon.baseURL, map[string]string{
 		restartRecoveryEligibleWorkID: "complete",
 		restartRecoveryCompleteWorkID: "complete",
 		restartRecoveryFailedWorkID:   "failed",
 	}, 30*time.Second)
-	assertBoardList(t, finalWorks, restartRecoveryExpectedWorks(true))
-	assertRestartWorkIDsUnique(t, finalWorks, restartRecoveryExpectedWorks(true))
-	finalEvents, err := readBoardEvents(t.Context(), second.baseURL)
+	expectedWorks := restartRecoveryExpectedWorks(true)
+	assertBoardList(t, finalWorks, expectedWorks)
+	assertRestartWorkIDsUnique(t, finalWorks, expectedWorks)
+	finalEvents, err := readBoardEvents(t.Context(), daemon.baseURL)
 	if err != nil {
 		t.Fatalf("read final Factory Event history: %v", err)
 	}
 	assertRestartReconciledBeforeRearm(t, finalEvents, oldDispatchID, newDispatchID)
 	assertSingleTerminalCompletion(t, finalEvents, restartRecoveryEligibleWorkID, "complete")
-	if got := restartWorkHistoryFingerprint(t, second.baseURL, restartRecoveryTerminalWorkIDs()); !equalStringSlices(got, terminalHistoryBefore) {
+	if got := restartWorkHistoryFingerprint(t, daemon.baseURL, restartRecoveryTerminalWorkIDs()); !equalStringSlices(got, terminalHistoryBefore) {
 		t.Fatalf("terminal Work admission/failure history changed after recovered completion:\nbefore=%v\nafter=%v", terminalHistoryBefore, got)
 	}
-	dispatchStates, err := readBoardDispatchStates(t.Context(), second.baseURL)
+	dispatchStates, err := readBoardDispatchStates(t.Context(), daemon.baseURL)
 	if err != nil {
 		t.Fatalf("read final dispatch ownership history: %v", err)
 	}
 	assertRestartDispatchHistory(t, dispatchStates, oldDispatchID, newDispatchID, restartRecoveryEligibleWorkID)
-	finalObservation := evidence.capturePublicObservation(t, "successor-after-one-completion", second.baseURL)
+	finalObservation := evidence.capturePublicObservation(t, "successor-after-one-completion", daemon.baseURL)
 	assertRestartPublicCounts(t, finalObservation, 1, 3, 0, 0)
+}
 
-	if _, err := waitForRestartRecoveryRecord(t, second, "success", 10*time.Second); err != nil {
+func finalizeRestartRecoveryEvidence(t *testing.T, evidence *restartBaselineEvidence, daemon *boardPersistenceDaemon, sourceRecordPath, successorRecordPath, factoryA, factoryB string) {
+	t.Helper()
+	if _, err := waitForRestartRecoveryRecord(t, daemon, "success", 10*time.Second); err != nil {
 		t.Fatal(err)
 	}
-	assertRestartRecoveryRecordSafe(t, second, "success")
-	second.stop(t)
-	evidence.captureDaemon(1, second)
+	assertRestartRecoveryRecordSafe(t, daemon, "success")
+	daemon.stop(t)
+	evidence.captureDaemon(1, daemon)
 	if err := verifyRestartFixtureHashes(evidence, map[string]string{
 		"factory-a/factory.json":          filepath.Join(factoryA, "factory.json"),
 		"factory-b/factory.json":          filepath.Join(factoryB, "factory.json"),
@@ -171,9 +182,7 @@ func TestRestartRecoveryRestoresRecordedDefinitionAndSingleOwner(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := evidence.verifyFixtureFilesUnchangedFromHashes(map[string]string{
-		"source.recording.json": sourceRecordPath,
-	}); err != nil {
+	if err := evidence.verifyFixtureFilesUnchangedFromHashes(map[string]string{"source.recording.json": sourceRecordPath}); err != nil {
 		t.Fatal(err)
 	}
 	if err := evidence.recordSuccessorRecordings(sourceRecordPath, successorRecordPath); err != nil {
@@ -181,6 +190,13 @@ func TestRestartRecoveryRestoresRecordedDefinitionAndSingleOwner(t *testing.T) {
 	}
 	if evidence.SourceRecordingSHA256 == evidence.SuccessorRecordingSHA256 {
 		t.Fatal("successor recording hash equals source recording hash after one recovered completion")
+	}
+}
+
+func assertRestartActiveWorkerCount(t *testing.T, observation restartPublicObservation, want int) {
+	t.Helper()
+	if observation.ActiveWorkerSessionCount != want {
+		t.Fatalf("active Worker Sessions = %d, want %d", observation.ActiveWorkerSessionCount, want)
 	}
 }
 
@@ -305,11 +321,7 @@ func TestRestartRecoveryInvalidSourcesFailFast(t *testing.T) {
 		t.Fatalf("source fixture hash = %s, evidence hash = %s", validSourceSHA, evidence.SourceRecordingSHA256)
 	}
 
-	fixtures := []struct {
-		id         string
-		resumePath func(string) string
-		contents   []byte
-	}{
+	fixtures := []restartRecoveryFailureFixture{
 		{id: "F-01-missing", resumePath: func(root string) string { return filepath.Join(root, "missing.recording.json") }},
 		{id: "F-02-truncated", resumePath: func(root string) string { return filepath.Join(root, "truncated.recording.json") }, contents: truncateReplayRecording(validSource)},
 		{id: "F-03-corrupt", resumePath: func(root string) string { return filepath.Join(root, "corrupt.recording.json") }, contents: corruptReplayRecording(validSource)},
@@ -319,86 +331,96 @@ func TestRestartRecoveryInvalidSourcesFailFast(t *testing.T) {
 	for _, fixture := range fixtures {
 		fixture := fixture
 		t.Run(fixture.id, func(t *testing.T) {
-			fixtureRoot := t.TempDir()
-			resumePath := fixture.resumePath(fixtureRoot)
-			var candidateHash string
-			if fixture.contents != nil {
-				if err := os.WriteFile(resumePath, fixture.contents, 0o600); err != nil {
-					t.Fatalf("write %s immutable source copy: %v", fixture.id, err)
-				}
-				candidateHash = sha256Hex(fixture.contents)
-			}
-			failureEvidence := restartFailureCaseEvidence{ID: fixture.id, SourceSHA256: candidateHash}
-			t.Cleanup(func() {
-				if failureEvidence.Outcome == "" {
-					failureEvidence.Outcome = "FAIL"
-					if !t.Failed() {
-						failureEvidence.Outcome = "PASS"
-					}
-				}
-				evidence.FailureCases = append(evidence.FailureCases, failureEvidence)
-			})
-			factoryCopy := scaffoldBoardPersistenceFactory(t, restartRecoveryFactoryConfig(true))
-			writeBoardPersistenceAgentConfig(t, factoryCopy, restartRecoveryWorkerName, boardPersistenceWorkerConfig(workerPath))
-			failureHome := t.TempDir()
-			successorPath := filepath.Join(fixtureRoot, "must-not-start.recording.json")
-			daemon := startBoardPersistenceJSONResumeProcess(t, artifactPath, factoryCopy, failureHome, resumePath, successorPath, filepath.Join(t.TempDir(), "unused-release"))
-			evidence.trackDaemon(t, "failed-startup-"+fixture.id, daemon)
-			startedAt := time.Now()
-			waitForBoardPersistenceDaemonExit(t, daemon, restartRecoveryProcessTimeout)
-			failureEvidence.DurationNanoseconds = int64(time.Since(startedAt))
-			daemon.cleanup()
-			evidence.captureDaemon(len(evidence.Generations)-1, daemon)
-			if daemon.waitError() == nil {
-				t.Fatalf("%s startup exited successfully; want one typed failure", fixture.id)
-			}
-			failureEvidence.ExitCode = daemonExitCode(daemon)
-			output := append(append([]byte(nil), daemon.stdout.Bytes()...), daemon.stderr.Bytes()...)
-			diagnostics := restartCLIErrorResponses(output)
-			failureEvidence.DiagnosticCount = len(diagnostics)
-			if len(diagnostics) != 1 {
-				t.Fatalf("%s emitted %d structured CLI errors; want exactly one:\n%s", fixture.id, len(diagnostics), output)
-			}
-			failureEvidence.ErrorCode = string(diagnostics[0].Code)
-			if !isKnownReplayDiagnostic(failureEvidence.ErrorCode) || failureEvidence.ErrorCode == string(factoryapi.ErrorResponseCode("SERVER_START_FAILED")) {
-				t.Fatalf("%s startup code = %q, want an existing typed Recordings code; output:\n%s", fixture.id, failureEvidence.ErrorCode, output)
-			}
-			if strings.TrimSpace(diagnostics[0].Message) == "" || strings.Contains(diagnostics[0].Message, resumePath) || strings.Contains(diagnostics[0].Message, restartRecoverySecretMarker) {
-				t.Fatalf("%s startup diagnostic is empty or exposes source details: %#v", fixture.id, diagnostics[0])
-			}
-			recoveryRecords := readRestartRecoveryRecordsForDaemon(daemon)
-			failureEvidence.RecoveryRecordCount = len(recoveryRecords)
-			for _, record := range recoveryRecords {
-				if record["outcome"] == "success" {
-					failureEvidence.RecoverySuccessCount++
-				}
-			}
-			if failureEvidence.RecoveryRecordCount != 1 || failureEvidence.RecoverySuccessCount != 0 {
-				t.Fatalf("%s recovery records = %#v, want one failed-startup record and no success", fixture.id, recoveryRecords)
-			}
-			if recoveryRecords[0]["outcome"] != "failed_startup" || recoveryRecords[0]["host_observation"] != "UNAVAILABLE_WHILE_STOPPED" || recoveryRecords[0]["supervisor"] != "external" || recoveryRecords[0]["error_code"] != failureEvidence.ErrorCode {
-				t.Fatalf("%s failed recovery record = %#v, want typed failed_startup/unavailable/external fields", fixture.id, recoveryRecords[0])
-			}
-			if _, err := os.Stat(successorPath); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("%s created a successor recording before readiness: %v", fixture.id, err)
-			}
-			if fixture.contents != nil {
-				after, err := os.ReadFile(resumePath)
-				if err != nil {
-					t.Fatalf("read %s source after failed startup: %v", fixture.id, err)
-				}
-				failureEvidence.SourceAfterSHA256 = sha256Hex(after)
-				if failureEvidence.SourceAfterSHA256 != candidateHash {
-					t.Fatalf("%s source changed from %s to %s", fixture.id, candidateHash, failureEvidence.SourceAfterSHA256)
-				}
-			} else if _, err := os.Stat(resumePath); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("%s missing source was created during failed startup: %v", fixture.id, err)
-			}
-			failureEvidence.Outcome = "PASS"
+			runRestartRecoveryFailureCase(t, evidence, artifactPath, workerPath, fixture)
 		})
 	}
 	if err := evidence.verifyFixtureFilesUnchangedFromHashes(map[string]string{"valid-source.recording.json": sourceRecordPath}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func runRestartRecoveryFailureCase(t *testing.T, evidence *restartBaselineEvidence, artifactPath, workerPath string, fixture restartRecoveryFailureFixture) {
+	t.Helper()
+	fixtureRoot := t.TempDir()
+	resumePath := fixture.resumePath(fixtureRoot)
+	var candidateHash string
+	if fixture.contents != nil {
+		if err := os.WriteFile(resumePath, fixture.contents, 0o600); err != nil {
+			t.Fatalf("write %s immutable source copy: %v", fixture.id, err)
+		}
+		candidateHash = sha256Hex(fixture.contents)
+	}
+	failureEvidence := restartFailureCaseEvidence{ID: fixture.id, SourceSHA256: candidateHash}
+	t.Cleanup(func() {
+		if failureEvidence.Outcome == "" {
+			failureEvidence.Outcome = "FAIL"
+			if !t.Failed() {
+				failureEvidence.Outcome = "PASS"
+			}
+		}
+		evidence.FailureCases = append(evidence.FailureCases, failureEvidence)
+	})
+	factoryCopy := scaffoldBoardPersistenceFactory(t, restartRecoveryFactoryConfig(true))
+	writeBoardPersistenceAgentConfig(t, factoryCopy, restartRecoveryWorkerName, boardPersistenceWorkerConfig(workerPath))
+	failureHome := t.TempDir()
+	successorPath := filepath.Join(fixtureRoot, "must-not-start.recording.json")
+	daemon := startBoardPersistenceJSONResumeProcess(t, artifactPath, factoryCopy, failureHome, resumePath, successorPath, filepath.Join(t.TempDir(), "unused-release"))
+	evidence.trackDaemon(t, "failed-startup-"+fixture.id, daemon)
+	startedAt := time.Now()
+	waitForBoardPersistenceDaemonExit(t, daemon, restartRecoveryProcessTimeout)
+	failureEvidence.DurationNanoseconds = int64(time.Since(startedAt))
+	daemon.cleanup()
+	evidence.captureDaemon(len(evidence.Generations)-1, daemon)
+	if daemon.waitError() == nil {
+		t.Fatalf("%s startup exited successfully; want one typed failure", fixture.id)
+	}
+	failureEvidence.ExitCode = daemonExitCode(daemon)
+	output := append(append([]byte(nil), daemon.stdout.Bytes()...), daemon.stderr.Bytes()...)
+	diagnostics := restartCLIErrorResponses(output)
+	failureEvidence.DiagnosticCount = len(diagnostics)
+	if len(diagnostics) != 1 {
+		t.Fatalf("%s emitted %d structured CLI errors; want exactly one:\n%s", fixture.id, len(diagnostics), output)
+	}
+	failureEvidence.ErrorCode = string(diagnostics[0].Code)
+	if !isKnownReplayDiagnostic(failureEvidence.ErrorCode) || failureEvidence.ErrorCode == string(factoryapi.ErrorResponseCode("SERVER_START_FAILED")) {
+		t.Fatalf("%s startup code = %q, want an existing typed Recordings code; output:\n%s", fixture.id, failureEvidence.ErrorCode, output)
+	}
+	if strings.TrimSpace(diagnostics[0].Message) == "" || strings.Contains(diagnostics[0].Message, resumePath) || strings.Contains(diagnostics[0].Message, restartRecoverySecretMarker) {
+		t.Fatalf("%s startup diagnostic is empty or exposes source details: %#v", fixture.id, diagnostics[0])
+	}
+	assertRestartRecoveryFailureIsSafe(t, daemon, fixture.id, resumePath, successorPath, candidateHash, &failureEvidence)
+	failureEvidence.Outcome = "PASS"
+}
+
+func assertRestartRecoveryFailureIsSafe(t *testing.T, daemon *boardPersistenceDaemon, fixtureID, resumePath, successorPath, candidateHash string, evidence *restartFailureCaseEvidence) {
+	t.Helper()
+	recoveryRecords := readRestartRecoveryRecordsForDaemon(daemon)
+	evidence.RecoveryRecordCount = len(recoveryRecords)
+	for _, record := range recoveryRecords {
+		if record["outcome"] == "success" {
+			evidence.RecoverySuccessCount++
+		}
+	}
+	if evidence.RecoveryRecordCount != 1 || evidence.RecoverySuccessCount != 0 {
+		t.Fatalf("%s recovery records = %#v, want one failed-startup record and no success", fixtureID, recoveryRecords)
+	}
+	if recoveryRecords[0]["outcome"] != "failed_startup" || recoveryRecords[0]["host_observation"] != "UNAVAILABLE_WHILE_STOPPED" || recoveryRecords[0]["supervisor"] != "external" || recoveryRecords[0]["error_code"] != evidence.ErrorCode {
+		t.Fatalf("%s failed recovery record = %#v, want typed failed_startup/unavailable/external fields", fixtureID, recoveryRecords[0])
+	}
+	if _, err := os.Stat(successorPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("%s created a successor recording before readiness: %v", fixtureID, err)
+	}
+	if candidateHash != "" {
+		after, err := os.ReadFile(resumePath)
+		if err != nil {
+			t.Fatalf("read %s source after failed startup: %v", fixtureID, err)
+		}
+		evidence.SourceAfterSHA256 = sha256Hex(after)
+		if evidence.SourceAfterSHA256 != candidateHash {
+			t.Fatalf("%s source changed from %s to %s", fixtureID, candidateHash, evidence.SourceAfterSHA256)
+		}
+	} else if _, err := os.Stat(resumePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("%s missing source was created during failed startup: %v", fixtureID, err)
 	}
 }
 
@@ -839,96 +861,6 @@ func assertRestartRecoveryRecordSafe(t *testing.T, daemon *boardPersistenceDaemo
 	}
 }
 
-func readRestartRecoveryRecords(root string) []map[string]any {
-	var records []map[string]any
-	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil || entry.IsDir() {
-			return nil
-		}
-		contents, err := os.ReadFile(path)
-		if err != nil {
-			return nil
-		}
-		for _, line := range bytes.Split(contents, []byte("\n")) {
-			var value map[string]any
-			if err := json.Unmarshal(line, &value); err != nil || value["event"] != "run.recovery" {
-				continue
-			}
-			records = append(records, value)
-		}
-		return nil
-	})
-	return records
-}
-
-func readRestartRecoveryRecordsForDaemon(daemon *boardPersistenceDaemon) []map[string]any {
-	if daemon == nil {
-		return nil
-	}
-	if records := readRestartRecoveryRecords(daemon.logDir); len(records) > 0 {
-		return records
-	}
-	return parseRestartRecoveryRecords(daemon.stdout.Bytes(), daemon.stderr.Bytes())
-}
-
-func parseRestartRecoveryRecords(outputs ...[]byte) []map[string]any {
-	var records []map[string]any
-	for _, output := range outputs {
-		for _, line := range bytes.Split(output, []byte("\n")) {
-			var value map[string]any
-			if err := json.Unmarshal(bytes.TrimSpace(line), &value); err == nil && value["event"] == "run.recovery" {
-				records = append(records, value)
-				continue
-			}
-			if start := bytes.Index(line, []byte(`{"event"`)); start >= 0 {
-				if err := json.Unmarshal(bytes.TrimSpace(line[start:]), &value); err == nil && value["event"] == "run.recovery" {
-					records = append(records, value)
-				}
-			}
-		}
-	}
-	return records
-}
-
-func restartCLIErrorResponses(output []byte) []factoryapi.ErrorResponse {
-	var responses []factoryapi.ErrorResponse
-	for _, line := range bytes.Split(output, []byte("\n")) {
-		var candidate factoryapi.ErrorResponse
-		if err := json.Unmarshal(bytes.TrimSpace(line), &candidate); err == nil && strings.TrimSpace(string(candidate.Code)) != "" {
-			responses = append(responses, candidate)
-		}
-	}
-	return responses
-}
-
-func isKnownReplayDiagnostic(code string) bool {
-	known := map[string]struct{}{
-		string(recordings.ReplayArtifactDiagnosticMalformed):             {},
-		string(recordings.ReplayArtifactDiagnosticUnsupportedVersion):    {},
-		string(recordings.ReplayArtifactDiagnosticUnsupportedSchema):     {},
-		string(recordings.ReplayArtifactDiagnosticInvalidIdentity):       {},
-		string(recordings.ReplayArtifactDiagnosticInvalidSummary):        {},
-		string(recordings.ReplayArtifactDiagnosticInvalidIntegrity):      {},
-		string(recordings.ReplayArtifactDiagnosticInvalidOrder):          {},
-		string(recordings.ReplayArtifactDiagnosticMissingReference):      {},
-		string(recordings.ReplayArtifactDiagnosticForeignReference):      {},
-		string(recordings.ReplayArtifactDiagnosticRecordingNotFound):     {},
-		string(recordings.ReplayArtifactDiagnosticRecordingNotFinalized): {},
-		string(recordings.ReplayArtifactDiagnosticDependencyFailure):     {},
-		string(recordings.ReplayArtifactDiagnosticCancelled):             {},
-	}
-	_, ok := known[code]
-	return ok
-}
-
-func daemonExitCode(daemon *boardPersistenceDaemon) *int {
-	if daemon == nil || daemon.cmd == nil || daemon.cmd.ProcessState == nil {
-		return nil
-	}
-	code := daemon.cmd.ProcessState.ExitCode()
-	return &code
-}
-
 func truncateReplayRecording(source []byte) []byte {
 	headerEnd := bytes.IndexByte(source, '\n')
 	if headerEnd < 2 {
@@ -1057,16 +989,4 @@ func mutateWrongDefinitionSnapshot(t *testing.T, payload map[string]json.RawMess
 	factory["id"] = wrongID
 	factory["workstations"] = wrongWorkstations
 	payload["factory"], _ = json.Marshal(factory)
-}
-
-func equalStringSlices(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
 }

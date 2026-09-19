@@ -69,12 +69,29 @@ func logRunServiceOutcome(ctx context.Context, cfg RunConfig, err error) {
 	if cfg.Logger == nil {
 		return
 	}
-	outcome := runServiceOutcomeSuccess
-	if errors.Is(err, context.Canceled) || (err == nil && ctx != nil && ctx.Err() != nil) {
-		outcome = runServiceOutcomeCancelled
-	} else if err != nil {
-		outcome = runServiceOutcomeFailure
+	outcome := classifyRunServiceOutcome(ctx, err)
+	fields := runServiceOutcomeFields(cfg, outcome, err)
+	switch outcome {
+	case runServiceOutcomeFailure:
+		logRunServiceFailure(cfg, fields, err)
+	case runServiceOutcomeCancelled:
+		cfg.Logger.Info("run service completed", fields...)
+	default:
+		logRunServiceSuccess(cfg, fields)
 	}
+}
+
+func classifyRunServiceOutcome(ctx context.Context, err error) string {
+	if errors.Is(err, context.Canceled) || (err == nil && ctx != nil && ctx.Err() != nil) {
+		return runServiceOutcomeCancelled
+	}
+	if err != nil {
+		return runServiceOutcomeFailure
+	}
+	return runServiceOutcomeSuccess
+}
+
+func runServiceOutcomeFields(cfg RunConfig, outcome string, err error) []zap.Field {
 	failureClass, errorCode := runServiceFailureFields(err)
 	if outcome == runServiceOutcomeCancelled {
 		failureClass, errorCode = runServiceFailureNone, ""
@@ -88,16 +105,20 @@ func logRunServiceOutcome(ctx context.Context, cfg RunConfig, err error) {
 	if errorCode != "" {
 		fields = append(fields, zap.String("error_code", errorCode))
 	}
-	if outcome == runServiceOutcomeFailure {
-		cfg.Logger.Error("run service failed", fields...)
-		var startupErr *initializer.RuntimeHostStartupError
-		if errors.As(err, &startupErr) {
-			logRunRecoveryOutcome(cfg, runRecoveryOutcomeFailed, err)
-		}
-		return
+	return fields
+}
+
+func logRunServiceFailure(cfg RunConfig, fields []zap.Field, err error) {
+	cfg.Logger.Error("run service failed", fields...)
+	var startupErr *initializer.RuntimeHostStartupError
+	if errors.As(err, &startupErr) {
+		logRunRecoveryOutcome(cfg, runRecoveryOutcomeFailed, err)
 	}
+}
+
+func logRunServiceSuccess(cfg RunConfig, fields []zap.Field) {
 	cfg.Logger.Info("run service completed", fields...)
-	if outcome == runServiceOutcomeSuccess && !cfg.WithServer && !cfg.WithSite && cfg.Port <= 0 {
+	if !cfg.WithServer && !cfg.WithSite && cfg.Port <= 0 {
 		logRunRecoveryOutcome(cfg, runRecoveryOutcomeSuccess, nil)
 	}
 }
