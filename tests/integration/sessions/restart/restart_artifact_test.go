@@ -67,6 +67,9 @@ func TestMain(m *testing.M) {
 		os.Exit(2)
 	}
 	restartCLIArtifact = identity
+	if identity != nil {
+		ensureRestartEvidence(*identity)
+	}
 
 	restartEvidenceOutput = strings.TrimSpace(os.Getenv(restartEvidenceOutputEnvironment))
 	if required && restartEvidenceOutput == "" {
