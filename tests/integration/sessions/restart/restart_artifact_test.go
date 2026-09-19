@@ -117,6 +117,24 @@ func restartArtifactPathFromEnvironment() string {
 }
 
 func resolveRestartCLIArtifact(path string, required bool) (*restartCLIArtifactIdentity, error) {
+	return resolveRestartCLIArtifactForTarget(
+		path,
+		required,
+		os.Getenv(restartSourceHeadEnvironment),
+		runtime.GOOS,
+		runtime.GOARCH,
+		inspectRestartCLIArtifact,
+	)
+}
+
+func resolveRestartCLIArtifactForTarget(
+	path string,
+	required bool,
+	sourceHead string,
+	testGOOS string,
+	testGOARCH string,
+	inspect func(path, sourceHead string) (restartCLIArtifactIdentity, error),
+) (*restartCLIArtifactIdentity, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		if required {
@@ -124,12 +142,16 @@ func resolveRestartCLIArtifact(path string, required bool) (*restartCLIArtifactI
 		}
 		return nil, nil
 	}
-	if required && strings.TrimSpace(os.Getenv(restartSourceHeadEnvironment)) == "" {
+	sourceHead = strings.TrimSpace(sourceHead)
+	if required && sourceHead == "" {
 		return nil, fmt.Errorf("%s is required when %s=1 so the built source head is recorded", restartSourceHeadEnvironment, restartArtifactRequiredEnvironment)
 	}
 
-	identity, err := inspectRestartCLIArtifact(path, os.Getenv(restartSourceHeadEnvironment))
+	identity, err := inspect(path, sourceHead)
 	if err != nil {
+		return nil, fmt.Errorf("invalid prebuilt CLI artifact %q: %w", path, err)
+	}
+	if err := validateRestartCLIArtifactPlatform(identity.BuildGOOS, identity.BuildGOARCH, testGOOS, testGOARCH); err != nil {
 		return nil, fmt.Errorf("invalid prebuilt CLI artifact %q: %w", path, err)
 	}
 	return &identity, nil
@@ -196,7 +218,6 @@ func inspectRestartCLIArtifact(path, sourceHead string) (restartCLIArtifactIdent
 	if buildGOOS == "" || buildGOARCH == "" {
 		return restartCLIArtifactIdentity{}, errors.New("artifact build is missing GOOS or GOARCH metadata")
 	}
-
 	sha := hex.EncodeToString(hash.Sum(nil))
 	identity := restartCLIArtifactIdentity{
 		Path:                         absolutePath,
@@ -216,6 +237,19 @@ func inspectRestartCLIArtifact(path, sourceHead string) (restartCLIArtifactIdent
 	}
 	identity.BuildIdentity = fmt.Sprintf("sha256:%s;head:%s;vcs:%s;target:%s;%s/%s;%s", sha, sourceHead, embeddedVCSRevision, build.Path, buildGOOS, buildGOARCH, build.GoVersion)
 	return identity, nil
+}
+
+func validateRestartCLIArtifactPlatform(buildGOOS, buildGOARCH, testGOOS, testGOARCH string) error {
+	if buildGOOS == testGOOS && buildGOARCH == testGOARCH {
+		return nil
+	}
+	return fmt.Errorf(
+		"prebuilt CLI target %s/%s is incompatible with integration test host %s/%s; build the CLI for the host running this suite",
+		buildGOOS,
+		buildGOARCH,
+		testGOOS,
+		testGOARCH,
+	)
 }
 
 func requireRestartCLIArtifact(t *testing.T) string {
