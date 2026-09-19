@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -89,17 +90,22 @@ func (h exportImportSmokeHarness) Run(t *testing.T) exportImportSmokeHarnessResu
 	waitForCurrentFactoryRuntimeIdle(t, server.URL(), 5*time.Second)
 
 	exported := getCurrentFactory(t, server.URL())
-	importRequest := exported
+	assertRuntimeFactoryActivation(t, "exported current Factory", exported, factoryapi.FactoryActivationStateNotActivated)
+	importRequest := authoredFactoryFromRuntime(exported)
 	importRequest.Name = factoryapi.FactoryName(h.options.importFactoryName)
+	assertAuthoredFactoryRequestOmitsActivation(t, importRequest)
 
 	imported := createNamedFactory(t, server.URL(), importRequest)
+	assertRuntimeFactoryActivation(t, "PUT Factory response", imported, factoryapi.FactoryActivationStateAuthoredChanged)
 	current := getCurrentFactory(t, server.URL())
+	assertRuntimeFactoryActivation(t, "current Factory after import", current, factoryapi.FactoryActivationStateAuthoredChanged)
 	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
 
 	if current.FactoryDirectory == nil || *current.FactoryDirectory == "" {
 		t.Fatalf("current imported factory directory = %#v, want public directory", current.FactoryDirectory)
 	}
 	importedDir := *current.FactoryDirectory
+	assertPersistedAuthoredFactoryOmitsActivation(t, importedDir)
 
 	result := exportImportSmokeHarnessResult{
 		RootDir:          rootDir,
@@ -178,7 +184,7 @@ func (r exportImportSmokeHarnessResult) AssertDashboardActivationSuccess(
 	fixture.assertCurrentFactorySignals(t, HTTPNamedFactoryReadback{
 		t:         t,
 		serverURL: r.Server.URL(),
-	}, string(r.ImportRequest.Name), r.ImportedDir)
+	}, string(r.ImportRequest.Name), r.ImportedDir, factoryapi.FactoryActivationStateAuthoredChanged)
 
 	if r.Status.RuntimeStatus != string(interfaces.RuntimeStatusIdle) {
 		t.Fatalf("dashboard activation drift: GET /status runtime_status = %q, want %q", r.Status.RuntimeStatus, interfaces.RuntimeStatusIdle)
@@ -189,6 +195,42 @@ func (r exportImportSmokeHarnessResult) AssertDashboardActivationSuccess(
 			r.ImportedDir,
 			filepath.Join(r.RootDir, string(r.ImportRequest.Name)),
 		)
+	}
+}
+
+func assertAuthoredFactoryRequestOmitsActivation(t *testing.T, request factoryapi.Factory) {
+	t.Helper()
+	if request.Activation != nil {
+		t.Fatalf("authored import request includes server-owned activation provenance: %#v", request.Activation)
+	}
+
+	payload, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal authored Factory import request: %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		t.Fatalf("decode authored Factory import request: %v", err)
+	}
+	if _, ok := fields["activation"]; ok {
+		t.Fatalf("serialized authored Factory import request contains activation: %s", payload)
+	}
+}
+
+func assertPersistedAuthoredFactoryOmitsActivation(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	path := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read authored Factory configuration %s: %v", path, err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		t.Fatalf("decode authored Factory configuration %s: %v", path, err)
+	}
+	if _, ok := fields["activation"]; ok {
+		t.Fatalf("persisted authored Factory configuration contains server-owned activation provenance: %s", path)
 	}
 }
 
