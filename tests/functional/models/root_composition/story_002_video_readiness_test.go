@@ -2,14 +2,17 @@ package root_composition_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -26,17 +29,23 @@ func TestModelsProjectorAwareVideoReadinessThroughRootBuildProcess(t *testing.T)
 	t.Parallel()
 
 	fixture := newProjectorReadinessFixture(t)
-	assertMissingProjectorPublicSurfaces(t, fixture)
+	assertUnavailableProjectorPublicSurfaces(t, fixture, "missing projector")
 	videoPath := filepath.Join(fixture.cliDir, "clip.mp4")
 	if err := os.WriteFile(videoPath, []byte("controlled video"), 0o600); err != nil {
 		t.Fatalf("write controlled video: %v", err)
 	}
-	assertMissingProjectorRejectsVideo(t, fixture, videoPath)
+	missingFailure := assertProjectorCLIVideoFailure(t, fixture, videoPath, "missing")
+	assertHTTPProjectorVideoFailure(t, fixture, "missing", missingFailure)
 	assertMissingProjectorAllowsText(t, fixture)
 	writeVideoReadinessModelSource(t, fixture.modelSource, true)
 	writeVideoReadinessManagedCache(t, fixture.home, true)
 	assertVerifiedProjectorPublicSurfaces(t, fixture)
-	closeRootProcess(t, fixture.process, "close projector readiness root process")
+	corruptCachedVideoReadinessProjector(t, fixture.home)
+	assertUnavailableProjectorPublicSurfaces(t, fixture, "digest-corrupt projector")
+	corruptFailure := assertProjectorCLIVideoFailure(t, fixture, videoPath, "digest-corrupt")
+	assertHTTPProjectorVideoFailure(t, fixture, "digest-corrupt", corruptFailure)
+	writeVideoReadinessManagedCache(t, fixture.home, true)
+	assertVerifiedProjectorPublicSurfaces(t, fixture)
 }
 
 type projectorReadinessFixture struct {
@@ -44,7 +53,6 @@ type projectorReadinessFixture struct {
 	modelSource      string
 	cliDir           string
 	server           *support.FunctionalAPIServer
-	process          support.Process
 	rejectingNetwork *rejectingModelAssetHTTP
 	hostLauncher     *recordingModelHostLauncher
 	protocol         *omniTextProtocolFixture
@@ -85,53 +93,151 @@ func newProjectorReadinessFixture(t *testing.T) *projectorReadinessFixture {
 		Env:                       videoReadinessEnvironment(home),
 		Edges:                     edges,
 	})
-	process := functionalBuildProcess(t, edges)
 	return &projectorReadinessFixture{
 		home: home, modelSource: modelSource, cliDir: cliDir,
-		server: server, process: process, rejectingNetwork: rejectingNetwork,
+		server: server, rejectingNetwork: rejectingNetwork,
 		hostLauncher: hostLauncher, protocol: protocol,
 	}
 }
 
-func assertMissingProjectorPublicSurfaces(t *testing.T, fixture *projectorReadinessFixture) {
+func assertUnavailableProjectorPublicSurfaces(
+	t *testing.T,
+	fixture *projectorReadinessFixture,
+	projectorState string,
+) {
 	t.Helper()
 	missingHTTPList := support.GetJSON[factoryapi.ListModelsResponse](t, fixture.server.URL()+"/models")
-	missingHTTPModel := findVideoReadinessModel(t, missingHTTPList.Results, "HTTP list missing projector")
+	missingHTTPModel := findVideoReadinessModel(t, missingHTTPList.Results, "HTTP list with "+projectorState)
 	assertVideoReadinessOmitted(t, missingHTTPModel.Operations, missingHTTPModel.Modalities, missingHTTPModel.ManagedRuntime.Diagnostics)
 	missingHTTPDetail := support.GetJSON[factoryapi.ModelDetail](t, fixture.server.URL()+"/models/llm")
 	assertVideoReadinessOmitted(t, missingHTTPDetail.Operations, missingHTTPDetail.Modalities, nil)
 	if missingHTTPDetail.Diagnostics["videoReadiness"] != "required projector artifact is missing or invalid" {
-		t.Fatalf("HTTP detail video diagnostic = %#v, want stable missing-projector reason", missingHTTPDetail.Diagnostics)
+		t.Fatalf("HTTP detail video diagnostic with %s = %#v, want stable unavailable-projector reason", projectorState, missingHTTPDetail.Diagnostics)
 	}
 	missingCLIList := executeVideoReadinessJSON[factoryapi.ListModelsResponse](
-		t, fixture.process, fixture.home, fixture.cliDir, []string{"you", "--json", "models", "list"},
+		t, fixture.server, fixture.home, fixture.cliDir, []string{"you", "--json", "models", "list"},
 	)
-	missingCLIModel := findVideoReadinessModel(t, missingCLIList.Results, "CLI list missing projector")
+	missingCLIModel := findVideoReadinessModel(t, missingCLIList.Results, "CLI list with "+projectorState)
 	assertVideoReadinessOmitted(t, missingCLIModel.Operations, missingCLIModel.Modalities, missingCLIModel.ManagedRuntime.Diagnostics)
 	if missingCLIModel.ManagedRuntime.Diagnostics == nil ||
 		(*missingCLIModel.ManagedRuntime.Diagnostics)["videoReadiness"] != "required projector artifact is missing or invalid" {
-		t.Fatalf("CLI list video diagnostic = %#v, want stable missing-projector reason", missingCLIModel.ManagedRuntime.Diagnostics)
+		t.Fatalf("CLI list video diagnostic with %s = %#v, want stable unavailable-projector reason", projectorState, missingCLIModel.ManagedRuntime.Diagnostics)
 	}
 }
 
-func assertMissingProjectorRejectsVideo(t *testing.T, fixture *projectorReadinessFixture, videoPath string) {
+func assertProjectorCLIVideoFailure(
+	t *testing.T,
+	fixture *projectorReadinessFixture,
+	videoPath string,
+	projectorState string,
+) *models.InvocationFailure {
 	t.Helper()
+	textOutputPath := filepath.Join(fixture.cliDir, "rejected-video-"+projectorState+"-text.txt")
+	usageOutputPath := filepath.Join(fixture.cliDir, "rejected-video-"+projectorState+"-usage.json")
 	videoInputs := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", "llm", "--operation", "OMNI",
-		"--input", "prompt=video should be rejected",
+		"--input", "prompt=" + projectorState + " video should be rejected",
 		"--input", "video=@" + videoPath,
+		"--output-map", "text=" + textOutputPath,
+		"--output-map", "usage=" + usageOutputPath,
 	})
 	videoInputs.Input.Env = videoReadinessEnvironment(fixture.home)
 	videoInputs.Input.WorkingDirectory = fixture.cliDir
-	videoInputs.Input.Stdout = bytes.NewBuffer(nil)
+	var stdout bytes.Buffer
+	videoInputs.Input.Stdout = &stdout
 	videoInputs.Input.Stderr = bytes.NewBuffer(nil)
-	videoErr := fixture.process.Execute(videoInputs.Input)
+	before := [3]int{fixture.hostLauncher.Calls(), fixture.protocol.Calls(), fixture.rejectingNetwork.Calls()}
+	videoErr := fixture.server.Execute(t, videoInputs.Input)
 	var failure *models.InvocationFailure
 	if !errors.As(videoErr, &failure) || failure.Class != models.InvocationFailureClassMediaCapability || failure.Slot != "video" {
-		t.Fatalf("missing-projector video invocation error = %v, failure=%#v, want typed MEDIA_CAPABILITY/video", videoErr, failure)
+		t.Fatalf("%s projector video invocation error = %v, failure=%#v, want typed MEDIA_CAPABILITY/video", projectorState, videoErr, failure)
 	}
-	if fixture.hostLauncher.Calls() != 0 || fixture.protocol.Calls() != 0 || fixture.rejectingNetwork.Calls() != 0 {
-		t.Fatalf("rejected video effects = host %d, protocol %d, network %d; want 0/0/0", fixture.hostLauncher.Calls(), fixture.protocol.Calls(), fixture.rejectingNetwork.Calls())
+	if stdout.Len() != 0 {
+		t.Fatalf("rejected %s video invocation stdout = %q, want no successful output", projectorState, stdout.String())
+	}
+	assertVideoReadinessOutputAbsent(t, textOutputPath)
+	assertVideoReadinessOutputAbsent(t, usageOutputPath)
+	after := [3]int{fixture.hostLauncher.Calls(), fixture.protocol.Calls(), fixture.rejectingNetwork.Calls()}
+	if after != before {
+		t.Fatalf("rejected %s video effects = host %d, protocol %d, network %d; before=%#v want unchanged", projectorState, after[0], after[1], after[2], before)
+	}
+	return failure
+}
+
+func assertHTTPProjectorVideoFailure(
+	t *testing.T,
+	fixture *projectorReadinessFixture,
+	projectorState string,
+	typedFailure *models.InvocationFailure,
+) {
+	t.Helper()
+	prompt := "video should be rejected"
+	mediaType := "video/mp4"
+	videoContent := []byte("controlled video")
+	operation := factoryapi.ModelOperationName(models.OperationOMNI)
+	inputs := []factoryapi.ModelInvocationInput{
+		{Name: "prompt", Modality: factoryapi.ModelInvocationContentTypeText, Content: &prompt},
+		{
+			Name: "video", Modality: factoryapi.ModelInvocationContentTypeVideo,
+			MediaType: &mediaType, ContentBase64: &videoContent,
+		},
+	}
+	requestBody, err := json.Marshal(factoryapi.GenericModelInvocationRequest{
+		Scope:     "factory-session:projector-readiness-" + projectorState,
+		Holder:    "functional-projector-readiness-http",
+		Model:     factoryapi.ModelReference{NameOrUri: models.BuiltInModelNameLLM},
+		Operation: &operation,
+		Inputs:    &inputs,
+	})
+	if err != nil {
+		t.Fatalf("marshal %s HTTP video request: %v", projectorState, err)
+	}
+	requestContext, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(
+		requestContext, http.MethodPost, fixture.server.URL()+"/models/invocations", bytes.NewReader(requestBody),
+	)
+	if err != nil {
+		t.Fatalf("build %s HTTP video request: %v", projectorState, err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	before := [3]int{fixture.hostLauncher.Calls(), fixture.protocol.Calls(), fixture.rejectingNetwork.Calls()}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST %s projector HTTP video request: %v", projectorState, err)
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read %s HTTP video response: %v", projectorState, err)
+	}
+	var failure factoryapi.ErrorResponse
+	if err := json.Unmarshal(responseBody, &failure); err != nil {
+		t.Fatalf("decode %s HTTP video failure: %v; body=%s", projectorState, err, responseBody)
+	}
+	if response.StatusCode != http.StatusBadRequest || failure.Code != factoryapi.ErrorResponseCode("BAD_REQUEST") ||
+		failure.Family != factoryapi.ErrorFamilyBadRequest || failure.Message != typedFailure.Error() {
+		t.Fatalf("%s HTTP video failure = status %d, %#v; want typed media-capability BAD_REQUEST", projectorState, response.StatusCode, failure)
+	}
+	var responseFields map[string]json.RawMessage
+	if err := json.Unmarshal(responseBody, &responseFields); err != nil {
+		t.Fatalf("decode %s HTTP video response fields: %v", projectorState, err)
+	}
+	if _, hasOutputs := responseFields["outputs"]; hasOutputs {
+		t.Fatalf("%s rejected HTTP video response unexpectedly contains successful outputs: %s", projectorState, responseBody)
+	}
+	after := [3]int{fixture.hostLauncher.Calls(), fixture.protocol.Calls(), fixture.rejectingNetwork.Calls()}
+	if after != before {
+		t.Fatalf("%s rejected HTTP video effects = host %d, protocol %d, network %d; before=%#v want unchanged", projectorState, after[0], after[1], after[2], before)
+	}
+}
+
+func assertVideoReadinessOutputAbsent(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); err == nil {
+		t.Fatalf("rejected video output %q exists", path)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("inspect rejected video output %q: %v", path, err)
 	}
 }
 
@@ -146,7 +252,7 @@ func assertMissingProjectorAllowsText(t *testing.T, fixture *projectorReadinessF
 	var textStdout, textStderr bytes.Buffer
 	textInputs.Input.Stdout = &textStdout
 	textInputs.Input.Stderr = &textStderr
-	if err := fixture.process.Execute(textInputs.Input); err != nil {
+	if err := fixture.server.Execute(t, textInputs.Input); err != nil {
 		t.Fatalf("text-only invocation with missing projector: %v", err)
 	}
 	if textStdout.String() != fixture.protocol.response {
@@ -165,7 +271,7 @@ func assertVerifiedProjectorPublicSurfaces(t *testing.T, fixture *projectorReadi
 		t.Fatalf("restored HTTP detail diagnostic = %#v, want verified-projector", restoredHTTPDetail.Diagnostics)
 	}
 	restoredCLIList := executeVideoReadinessJSON[factoryapi.ListModelsResponse](
-		t, fixture.process, fixture.home, fixture.cliDir, []string{"you", "--json", "models", "list"},
+		t, fixture.server, fixture.home, fixture.cliDir, []string{"you", "--json", "models", "list"},
 	)
 	restoredCLIModel := findVideoReadinessModel(t, restoredCLIList.Results, "CLI list restored projector")
 	assertVideoReadinessPresent(t, restoredCLIModel.Operations, restoredCLIModel.Modalities)
@@ -173,7 +279,7 @@ func assertVerifiedProjectorPublicSurfaces(t *testing.T, fixture *projectorReadi
 
 func executeVideoReadinessJSON[T any](
 	t *testing.T,
-	process support.Process,
+	server *support.FunctionalAPIServer,
 	home, factoryDir string,
 	args []string,
 ) T {
@@ -181,7 +287,7 @@ func executeVideoReadinessJSON[T any](
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.Env = videoReadinessEnvironment(home)
 	inputs.Input.WorkingDirectory = factoryDir
-	if err := process.Execute(inputs.Input); err != nil {
+	if err := server.Execute(t, inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(%v): %v\nstdout=%s\nstderr=%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 	var result T
@@ -340,5 +446,13 @@ func writeVideoReadinessManagedCache(t *testing.T, home string, includeProjector
 	}
 	if err := os.WriteFile(filepath.Join(root, ".managed-cache.json"), metadata, 0o644); err != nil {
 		t.Fatalf("write video readiness managed metadata: %v", err)
+	}
+}
+
+func corruptCachedVideoReadinessProjector(t *testing.T, home string) {
+	t.Helper()
+	path := filepath.Join(home, ".agent-factory", "models", "LLM", "video-readiness-revision", "mmproj-F16.gguf")
+	if err := os.WriteFile(path, []byte("digest-corrupt projector"), 0o644); err != nil {
+		t.Fatalf("corrupt cached video readiness projector: %v", err)
 	}
 }
