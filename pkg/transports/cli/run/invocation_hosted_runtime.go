@@ -575,6 +575,7 @@ func newRuntimeHostObserver(
 		// commits it only after binding succeeds so a listener failure remains
 		// free of human startup output.
 		startupDisclosure.commit()
+		logRunRecoveryOutcome(resolved, runRecoveryOutcomeSuccess, nil)
 		emitStartupDetails(resolved, diagnostics())
 		emitVerboseStartupDiagnostics(resolved, recordPath, requestedPort)
 		if shouldOpenDashboard(resolved) {

@@ -475,7 +475,11 @@ func open(
 		prepareWorkTarget, mockWorkersConfig, invocationMode, requestedPort,
 		buildRunner, buildRuntimeRequest, presentationOwner, visualizations,
 	)
-	return operation, classifyRunInputFailure(cfg, err)
+	err = classifyRunInputFailure(cfg, err)
+	if err != nil {
+		logRunRecoveryOutcome(cfg, runRecoveryOutcomeFailed, err)
+	}
+	return operation, err
 }
 
 // NormalizeWorkerReasoningEffort validates and canonicalizes the run-scoped
@@ -666,8 +670,8 @@ func classifyRunInputFailure(cfg RunConfig, err error) error {
 	if err == nil || clidiag.HasCodedDiagnostic(err) || errors.Is(err, context.Canceled) {
 		return err
 	}
-	if structural := recordingscli.MapStructuralReplayFailure(err); structural != nil {
-		return structural
+	if replayInput := recordingscli.MapReplayInputFailure(err); replayInput != nil {
+		return replayInput
 	}
 	if path := strings.TrimSpace(cfg.ReplayPath); path != "" {
 		return clidiag.NewLocalInputFailure("--replay", path, err)

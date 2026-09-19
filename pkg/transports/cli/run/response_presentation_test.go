@@ -199,6 +199,35 @@ func TestClassifyRunInputFailurePreservesForeignReplayDiagnostic(t *testing.T) {
 	}
 }
 
+func TestClassifyRunInputFailurePreservesTypedResumeDiagnosticWithoutSourceDetails(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New(`open C:\private\broken.recording.json secret=TOPSECRET`)
+	inputErr := &recordings.ReplayInputError{
+		Family: recordings.ReplayInputFamilyPortable,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code: recordings.ReplayArtifactDiagnosticMalformed,
+			Area: "recording", Path: "recording", Message: "untrusted source contents",
+		},
+		Cause: cause,
+	}
+
+	got := classifyRunInputFailure(RunConfig{ResumePath: `C:\private\broken.recording.json`}, inputErr)
+	want := "MALFORMED_REPLAY_ARTIFACT: preserve the recording and replace it from a trusted backup before retrying"
+	if got.Error() != want {
+		t.Fatalf("classified resume error = %q, want %q", got.Error(), want)
+	}
+	if !clidiag.HasCodedDiagnostic(got) {
+		t.Fatal("classified resume error has no CLI diagnostic")
+	}
+	if !errors.Is(got, cause) {
+		t.Fatal("classified resume error did not preserve its cause")
+	}
+	if strings.Contains(got.Error(), "TOPSECRET") || strings.Contains(got.Error(), `C:\private`) {
+		t.Fatalf("classified resume error leaked source details: %q", got)
+	}
+}
+
 func TestOperationRunEmitsReplayDriftAfterHistoricalInspection(t *testing.T) {
 	t.Parallel()
 
@@ -344,6 +373,35 @@ func TestMapServerFailurePreservesSafePreReadinessCause(t *testing.T) {
 	if invocationErr.Code != cause.Code ||
 		invocationErr.Message != "requested server did not start: RUN_INVOCATION_FAILED: required input is missing" {
 		t.Fatalf("mapped error = %#v, want preserved safe cause", invocationErr)
+	}
+}
+
+func TestMapServerFailurePreservesTypedResumeDiagnosticWithoutSourceDetails(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New(`open C:\private\broken.recording.json secret=TOPSECRET`)
+	inputErr := &recordings.ReplayInputError{
+		Family: recordings.ReplayInputFamilyPortable,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code: recordings.ReplayArtifactDiagnosticMalformed,
+			Area: "recording", Path: "recording", Message: "untrusted source contents",
+		},
+		Cause: cause,
+	}
+	mapped := MapServerFailure(&initializer.RuntimeHostStartupError{
+		Cause: fmt.Errorf("open resumed runtime: %w", inputErr),
+	})
+	var invocationErr *InvocationError
+	if !errors.As(mapped, &invocationErr) {
+		t.Fatalf("mapped error = %T, want InvocationError", mapped)
+	}
+	wantMessage := "requested server did not start: MALFORMED_REPLAY_ARTIFACT: preserve the recording and replace it from a trusted backup before retrying"
+	if invocationErr.Code != string(recordings.ReplayArtifactDiagnosticMalformed) || invocationErr.Message != wantMessage {
+		t.Fatalf("mapped error = %#v, want code and safe message %q", invocationErr, wantMessage)
+	}
+	if strings.Contains(invocationErr.Message, "TOPSECRET") || strings.Contains(invocationErr.Message, `C:\private`) ||
+		!errors.Is(mapped, cause) {
+		t.Fatalf("mapped error leaked source details or lost its cause: %q", invocationErr.Message)
 	}
 }
 

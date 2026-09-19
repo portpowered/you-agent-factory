@@ -57,6 +57,14 @@ const (
 	runServiceFailureRuntime   = "runtime_failure"
 )
 
+const (
+	runRecoveryEventName       = "run.recovery"
+	runRecoveryOutcomeSuccess  = "success"
+	runRecoveryOutcomeFailed   = "failed_startup"
+	runRecoveryHostObservation = "UNAVAILABLE_WHILE_STOPPED"
+	runRecoverySupervisor      = "external"
+)
+
 func logRunServiceOutcome(ctx context.Context, cfg RunConfig, err error) {
 	if cfg.Logger == nil {
 		return
@@ -82,9 +90,52 @@ func logRunServiceOutcome(ctx context.Context, cfg RunConfig, err error) {
 	}
 	if outcome == runServiceOutcomeFailure {
 		cfg.Logger.Error("run service failed", fields...)
+		var startupErr *initializer.RuntimeHostStartupError
+		if errors.As(err, &startupErr) {
+			logRunRecoveryOutcome(cfg, runRecoveryOutcomeFailed, err)
+		}
 		return
 	}
 	cfg.Logger.Info("run service completed", fields...)
+	if outcome == runServiceOutcomeSuccess && !cfg.WithServer && !cfg.WithSite && cfg.Port <= 0 {
+		logRunRecoveryOutcome(cfg, runRecoveryOutcomeSuccess, nil)
+	}
+}
+
+func logRunRecoveryOutcome(cfg RunConfig, outcome string, err error) {
+	if cfg.Logger == nil || strings.TrimSpace(cfg.ResumePath) == "" {
+		return
+	}
+	if outcome == runRecoveryOutcomeFailed && errors.Is(err, context.Canceled) {
+		return
+	}
+	fields := []zap.Field{
+		zap.String("event", runRecoveryEventName),
+		zap.String("outcome", outcome),
+		zap.String("host_observation", runRecoveryHostObservation),
+		zap.String("supervisor", runRecoverySupervisor),
+	}
+	sessionID := strings.TrimSpace(cfg.CanonicalSessionID)
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(cfg.FactorySessionID)
+	}
+	if sessionID != "" {
+		fields = append(fields, zap.String("factory_session_id", sessionID))
+	}
+	if outcome == runRecoveryOutcomeFailed && err != nil {
+		mapped := recordingscli.MapReplayInputFailure(err)
+		if mapped == nil {
+			mapped = MapServerFailure(err)
+		}
+		if coded, ok := safeCLIError(mapped); ok && coded.code != "" {
+			fields = append(fields, zap.String("error_code", coded.code))
+		}
+	}
+	if outcome == runRecoveryOutcomeFailed {
+		cfg.Logger.Error("run recovery outcome", fields...)
+		return
+	}
+	cfg.Logger.Info("run recovery outcome", fields...)
 }
 
 func runServiceFailureFields(err error) (string, string) {
@@ -128,6 +179,9 @@ func MapServerFailure(err error) error {
 		}
 	}
 
+	if replayFailure := recordingscli.MapReplayInputFailure(cause); replayFailure != nil {
+		cause = replayFailure
+	}
 	mapped := factoryruntimecli.MapServerFailure(cause)
 	var mappedInvocationErr *InvocationError
 	if errors.As(mapped, &mappedInvocationErr) && mappedInvocationErr.Code == ServerBindFailedCode {
