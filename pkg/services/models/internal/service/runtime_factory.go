@@ -603,15 +603,11 @@ func (o *Root) prepareJoinedInvocation(
 	plan.backend = plan.configuration.Backend
 	plan.revision = plan.configuration.Revision
 	plan.correlation = correlation
-	plan.prepared, plan.operation, err = models.PrepareGenericInvocation(request, resolved.Definition)
+	plan.prepared, plan.operation, err = o.prepareJoinedGenericInvocation(ctx, request, resolved)
 	if err != nil {
 		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
 	plan.prepared.ModelName = plan.modelName
-	plan.prepared.Operation = plan.operation.Name
-	if len(plan.prepared.Inputs) > 0 && inferenceInputIsZero(plan.prepared.Input) {
-		plan.prepared.Input = plan.prepared.Inputs[0].Clone()
-	}
 
 	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, plan.configuration)
 	if err != nil {

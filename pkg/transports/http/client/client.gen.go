@@ -6217,13 +6217,13 @@ type ModelDetail struct {
 	LoadState      ModelLoadState `json:"loadState"`
 	ManagedRuntime ManagedRuntime `json:"managedRuntime"`
 
-	// Modalities Uppercase content modalities observed across all declared operation inputs and outputs.
+	// Modalities Uppercase content modalities observed across all effective operation inputs and outputs.
 	Modalities []ModelInvocationContentType `json:"modalities"`
 
 	// Name Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier inspect fields.
 	Name string `json:"name"`
 
-	// Operations Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields.
+	// Operations Effective provider-agnostic operations supported by workers for this managed runtime after resolved runtime configuration and verified required artifacts are applied. Optional input slots whose required artifacts are unavailable are omitted. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields.
 	Operations []ModelInvocationOperation `json:"operations"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
@@ -6640,13 +6640,13 @@ type ModelSummary struct {
 	LoadState      ModelLoadState `json:"loadState"`
 	ManagedRuntime ManagedRuntime `json:"managedRuntime"`
 
-	// Modalities Uppercase content modalities observed across the model's declared operation inputs and outputs.
+	// Modalities Uppercase content modalities observed across the effective operation inputs and outputs.
 	Modalities []ModelInvocationContentType `json:"modalities"`
 
 	// Name Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier discovery fields.
 	Name string `json:"name"`
 
-	// Operations Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields.
+	// Operations Effective provider-agnostic operations supported by the managed runtime after resolved runtime configuration and verified required artifacts are applied. Optional input slots whose required artifacts are unavailable are omitted. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields.
 	Operations []ModelInvocationOperation `json:"operations"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
