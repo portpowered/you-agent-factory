@@ -458,12 +458,13 @@ func TestRestartRecoveryCancellationBeforeReadinessDoesNotClaimSuccess(t *testin
 		filepath.Join(t.TempDir(), "unused-release"), true, true,
 	)
 	evidence.trackDaemon(t, "cancelled-successor-process", second)
-	waitForBoardStartupLogBeforeReadiness(t, second, logWatcher, []string{"engine started"}, restartRecoveryProcessTimeout)
+	startupLogPath := waitForBoardStartupLogBeforeReadiness(t, second, logWatcher, restartRecoveryProcessTimeout)
 	if err := interruptBoardPersistenceProcess(second.cmd); err != nil {
 		t.Fatalf("cancel successor before readiness: %v", err)
 	}
 	waitForBoardPersistenceDaemonExit(t, second, restartRecoveryProcessTimeout)
 	second.cleanup()
+	assertBoardStartupLogContains(t, startupLogPath, []string{"engine started"})
 	evidence.captureDaemon(1, second)
 	if waitErr := second.waitError(); waitErr == nil {
 		t.Fatal("cancelled successor exited successfully after interrupt; want a nonzero interrupted-process result")
