@@ -557,33 +557,6 @@ func hostedRuntimeCapabilities(
 	return historicalReplay, hostedInvocation
 }
 
-func resumeRecoveryMetadataForRunner(
-	runner initializer.LocalRuntimeRunner,
-) *recordings.ResumeRecoveryMetadata {
-	provider, ok := runner.(interface {
-		ResumeRecoveryMetadata() *recordings.ResumeRecoveryMetadata
-	})
-	if !ok || provider == nil {
-		return nil
-	}
-	metadata := provider.ResumeRecoveryMetadata()
-	if metadata == nil {
-		return nil
-	}
-	clone := *metadata
-	return &clone
-}
-
-func cloneRunResumeRecoveryMetadata(
-	metadata *recordings.ResumeRecoveryMetadata,
-) *recordings.ResumeRecoveryMetadata {
-	if metadata == nil {
-		return nil
-	}
-	clone := *metadata
-	return &clone
-}
-
 func prepareHostedInvocation(
 	ctx context.Context,
 	cfg RunConfig,

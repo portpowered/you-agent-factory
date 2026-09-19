@@ -223,6 +223,23 @@ func replayInputArtifactDigest(data []byte) string {
 	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
+func resumeRecoveryMetadataForInput(
+	input recordings.LoadReplayInputResult,
+) recordings.ResumeRecoveryMetadata {
+	metadata := recordings.ResumeRecoveryMetadata{
+		SourceRecordingID: input.ArtifactDigest,
+	}
+	if input.Legacy == nil {
+		return metadata
+	}
+	metadata.PreviousRecordedAt = input.Legacy.RecordedAt.UTC()
+	if input.Legacy.Factory != nil {
+		digest := sha256.Sum256([]byte(*input.Legacy.Factory))
+		metadata.RecordedDefinitionID = "sha256:" + hex.EncodeToString(digest[:])
+	}
+	return metadata
+}
+
 func withReplayInputArtifactDigest(err error, digest string) error {
 	var inputErr *recordings.ReplayInputError
 	if !errors.As(err, &inputErr) || inputErr == nil {

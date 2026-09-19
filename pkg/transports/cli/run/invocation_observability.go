@@ -155,6 +155,33 @@ func logRunRecoveryOutcome(
 	if outcome == runRecoveryOutcomeFailed && errors.Is(err, context.Canceled) {
 		return
 	}
+	fields := []zap.Field{
+		zap.String("event", runRecoveryEventName),
+		zap.String("outcome", outcome),
+		zap.String("host_observation", runRecoveryHostObservation),
+		zap.String("supervisor", runRecoverySupervisor),
+	}
+	fields = append(fields, runRecoveryMetadataFields(cfg, err, recoveryMetadata...)...)
+	if sessionID := runRecoverySessionID(cfg); sessionID != "" {
+		fields = append(fields, zap.String("factory_session_id", sessionID))
+	}
+	if outcome == runRecoveryOutcomeFailed && err != nil {
+		if code := runRecoveryFailureCode(err); code != "" {
+			fields = append(fields, zap.String("error_code", code))
+		}
+	}
+	if outcome == runRecoveryOutcomeFailed {
+		cfg.Logger.Error("run recovery outcome", fields...)
+		return
+	}
+	cfg.Logger.Info("run recovery outcome", fields...)
+}
+
+func runRecoveryMetadataFields(
+	cfg RunConfig,
+	err error,
+	recoveryMetadata ...*recordings.ResumeRecoveryMetadata,
+) []zap.Field {
 	recordedDefinitionID := "UNAVAILABLE"
 	sourceRecordingID := "UNAVAILABLE"
 	successorRecordingID := "UNAVAILABLE"
@@ -174,38 +201,33 @@ func logRunRecoveryOutcome(
 	if errors.As(err, &replayInputErr) && replayInputErr != nil && strings.TrimSpace(replayInputErr.ArtifactDigest) != "" {
 		sourceRecordingID = safeRunRecoveryField(replayInputErr.ArtifactDigest)
 	}
-	fields := []zap.Field{
-		zap.String("event", runRecoveryEventName),
-		zap.String("outcome", outcome),
+	return []zap.Field{
 		zap.String("recorded_definition_id", recordedDefinitionID),
 		zap.String("source_recording_id", sourceRecordingID),
 		zap.String("successor_recording_id", successorRecordingID),
-		zap.String("host_observation", runRecoveryHostObservation),
 		zap.String("previous_recorded_at", previousRecordedAt),
 		zap.String("restarted_at", restartedAt),
-		zap.String("supervisor", runRecoverySupervisor),
 	}
+}
+
+func runRecoverySessionID(cfg RunConfig) string {
 	sessionID := strings.TrimSpace(cfg.CanonicalSessionID)
 	if sessionID == "" {
 		sessionID = strings.TrimSpace(cfg.FactorySessionID)
 	}
-	if sessionID != "" {
-		fields = append(fields, zap.String("factory_session_id", sessionID))
+	return sessionID
+}
+
+func runRecoveryFailureCode(err error) string {
+	mapped := recordingscli.MapReplayInputFailure(err)
+	if mapped == nil {
+		mapped = MapServerFailureForInvocation(err, true)
 	}
-	if outcome == runRecoveryOutcomeFailed && err != nil {
-		mapped := recordingscli.MapReplayInputFailure(err)
-		if mapped == nil {
-			mapped = MapServerFailureForInvocation(err, true)
-		}
-		if coded, ok := safeCLIError(mapped); ok && coded.code != "" {
-			fields = append(fields, zap.String("error_code", coded.code))
-		}
+	coded, ok := safeCLIError(mapped)
+	if !ok {
+		return ""
 	}
-	if outcome == runRecoveryOutcomeFailed {
-		cfg.Logger.Error("run recovery outcome", fields...)
-		return
-	}
-	cfg.Logger.Info("run recovery outcome", fields...)
+	return coded.code
 }
 
 func safeRunRecoveryField(value string) string {
@@ -221,6 +243,33 @@ func safeRunRecoveryTimestamp(value time.Time) string {
 		return "UNAVAILABLE"
 	}
 	return value.UTC().Format(time.RFC3339Nano)
+}
+
+func resumeRecoveryMetadataForRunner(
+	runner initializer.LocalRuntimeRunner,
+) *recordings.ResumeRecoveryMetadata {
+	provider, ok := runner.(interface {
+		ResumeRecoveryMetadata() *recordings.ResumeRecoveryMetadata
+	})
+	if !ok || provider == nil {
+		return nil
+	}
+	metadata := provider.ResumeRecoveryMetadata()
+	if metadata == nil {
+		return nil
+	}
+	clone := *metadata
+	return &clone
+}
+
+func cloneRunResumeRecoveryMetadata(
+	metadata *recordings.ResumeRecoveryMetadata,
+) *recordings.ResumeRecoveryMetadata {
+	if metadata == nil {
+		return nil
+	}
+	clone := *metadata
+	return &clone
 }
 
 func runServiceFailureFields(err error, resumeInput bool) (string, string) {
