@@ -408,3 +408,473 @@ func assertRecordedInspectionParity(t *testing.T, value recording.PortableRecord
 func recordingTestDigest(character byte) string {
 	return "sha256:" + strings.Repeat(string(character), 64)
 }
+
+func TestReplayLegacyRecordingSelectsSessionIdentityFallbacks(t *testing.T) {
+	t.Parallel()
+
+	eventSessionID := "session-from-event"
+	tests := []struct {
+		name      string
+		requested string
+		state     recording.FactoryWorldState
+		value     recording.ReplayArtifact
+		want      string
+	}{
+		{
+			name:      "session bracket identity wins",
+			requested: "requested-session",
+			state: recording.FactoryWorldState{
+				FactoryState:   "RUNNING",
+				SessionBracket: &factorydefinitions.FactoryWorldSessionBracketState{SessionID: "session-from-bracket"},
+			},
+			value: recording.ReplayArtifact{Events: []recording.FactoryEvent{
+				legacyReplayTestEvent("event-1", recording.FactoryEventTypeSessionStarted, eventSessionID, time.Time{}, json.RawMessage(`{}`)),
+			}},
+			want: "session-from-bracket",
+		},
+		{
+			name:      "event context identity is used when bracket is absent",
+			requested: "requested-session",
+			state:     recording.FactoryWorldState{FactoryState: "RUNNING"},
+			value: recording.ReplayArtifact{Events: []recording.FactoryEvent{
+				legacyReplayTestEvent("event-1", recording.FactoryEventTypeSessionStarted, eventSessionID, time.Time{}, json.RawMessage(`{}`)),
+			}},
+			want: "session-from-event",
+		},
+		{
+			name:      "requested identity is used without recorded identity",
+			requested: "requested-session",
+			state:     recording.FactoryWorldState{FactoryState: "RUNNING"},
+			value:     recording.ReplayArtifact{},
+			want:      "requested-session",
+		},
+		{
+			name:  "default identity is used when all sources are blank",
+			state: recording.FactoryWorldState{FactoryState: "RUNNING"},
+			value: recording.ReplayArtifact{},
+			want:  "~default",
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ReplayLegacyRecording(test.value, test.requested, test.state)
+			if err != nil {
+				t.Fatalf("ReplayLegacyRecording: %v", err)
+			}
+			if got.Session.SessionID != test.want {
+				t.Fatalf("session ID = %q, want %q", got.Session.SessionID, test.want)
+			}
+		})
+	}
+}
+
+func TestReplayLegacyRecordingProjectsSnapshotLifecycleAndArtifacts(t *testing.T) {
+	t.Parallel()
+
+	sessionID := "session-from-context"
+	startedAt := time.Date(2026, 9, 15, 8, 0, 0, 0, time.FixedZone("recorded-zone", 2*60*60))
+	pausedAt := startedAt.Add(10 * time.Minute)
+	resumedAt := startedAt.Add(20 * time.Minute)
+	completedAt := startedAt.Add(30 * time.Minute)
+	capturedAt := startedAt.Add(5 * time.Minute)
+	startedPayload, err := json.Marshal(factorydefinitions.FactorySessionStartedEventPayload{
+		StartedAt:  startedAt,
+		SourceRef:  legacyReplayStringPointer("event/source.js"),
+		SourceHash: legacyReplayStringPointer("event-source-hash"),
+	})
+	if err != nil {
+		t.Fatalf("marshal start payload: %v", err)
+	}
+	snapshot := factorydefinitions.FactorySnapshot([]byte(`{"orchestrator":{"kind":"JAVASCRIPT","javascript":{"dialect":"typescript","sourceRef":"snapshot/source.js","sourceHash":"snapshot-source-hash"}}}`))
+	value := recording.ReplayArtifact{
+		SchemaVersion: "legacy",
+		Factory:       &snapshot,
+		Events: []recording.FactoryEvent{
+			legacyReplayTestEvent("event-started", recording.FactoryEventTypeSessionStarted, sessionID, startedAt.Add(time.Hour), startedPayload),
+			legacyReplayTestEvent("event-paused", recording.FactoryEventTypeSessionPaused, sessionID, pausedAt.Add(time.Hour), json.RawMessage(`{"pausedAt":"2026-09-15T08:10:00+02:00","status":"PAUSED"}`)),
+			legacyReplayTestEvent("event-resumed", recording.FactoryEventTypeSessionResumed, sessionID, resumedAt.Add(time.Hour), json.RawMessage(`{"resumedAt":"2026-09-15T08:20:00+02:00","status":"RUNNING"}`)),
+			legacyReplayTestEvent("event-completed", recording.FactoryEventTypeSessionCompleted, sessionID, completedAt.Add(time.Hour), json.RawMessage(`{"completedAt":"2026-09-15T08:30:00+02:00","finalStatus":"SUCCEEDED","resultStatus":"FINAL"}`)),
+		},
+	}
+	state := recording.FactoryWorldState{
+		Artifacts: []factorydefinitions.FactorySessionArtifactState{
+			{
+				ID: "artifact-result", Kind: "RESULT", Visibility: "PUBLIC", Label: "Run result",
+				Summary: "Recorded result", AuditMode: "strict", ContentHash: "sha256:result", SizeBytes: 17,
+				CapturedAt: capturedAt, RedactionCounts: map[string]int{"paths": 1, "secrets": 2, "tokens": 3},
+				CaptureMetadata: map[string]string{"sourceDispatchId": "dispatch-result"},
+			},
+			{ID: "artifact-checkpoint", Kind: "CHECKPOINT", Visibility: "INTERNAL"},
+		},
+	}
+
+	got, err := ReplayLegacyRecording(value, "requested-session", state)
+	if err != nil {
+		t.Fatalf("ReplayLegacyRecording: %v", err)
+	}
+	if got.Session.SessionID != sessionID || got.Session.Status != fse.LifecycleStatusSucceeded ||
+		got.Session.ResolvedSource.SourceRef != "snapshot/source.js" ||
+		got.Session.ResolvedSource.SourceHash != "snapshot-source-hash" ||
+		got.Session.OrchestratorKind != "JAVASCRIPT" || got.Session.Dialect != "typescript" {
+		t.Fatalf("historical session projection = %#v, want snapshot and lifecycle facts", got.Session)
+	}
+	if got.Result.ResultStatus != fse.ResultStatusFinal || got.FactoryProjection == nil {
+		t.Fatalf("result/projection = %#v / %#v, want final result and canonical Factory state", got.Result, got.FactoryProjection)
+	}
+	lifecycle := got.Session.Lifecycle
+	if lifecycle == nil || lifecycle.StartedAt == nil || !lifecycle.StartedAt.Equal(startedAt.UTC()) ||
+		lifecycle.PausedAt == nil || !lifecycle.PausedAt.Equal(pausedAt.UTC()) ||
+		lifecycle.ResumedAt == nil || !lifecycle.ResumedAt.Equal(resumedAt.UTC()) ||
+		lifecycle.FinishedAt == nil || !lifecycle.FinishedAt.Equal(completedAt.UTC()) {
+		t.Fatalf("lifecycle timestamps = %#v, want UTC event payload timestamps", lifecycle)
+	}
+	if len(got.Artifacts.Artifacts) != 2 || got.Artifacts.Artifacts[0].ID != "artifact-result" ||
+		got.Artifacts.Artifacts[0].CreatedAt == nil || !got.Artifacts.Artifacts[0].CreatedAt.Equal(capturedAt.UTC()) ||
+		got.Artifacts.Artifacts[0].DispatchID != "dispatch-result" ||
+		got.Artifacts.Artifacts[1].CreatedAt != nil || got.Artifacts.Artifacts[1].RedactionCounts != nil {
+		t.Fatalf("artifact projection = %#v, want recorded metadata and absent optional fields", got.Artifacts)
+	}
+	if got.Redaction.SecretsRedacted != 2 ||
+		got.WorkerHistory.Availability != recording.PortableRecordingWorkerHistoryUnavailable {
+		t.Fatalf("legacy availability/redaction = %#v / %#v", got.WorkerHistory, got.Redaction)
+	}
+}
+
+func TestReplayLegacyRecordingProjectsBracketResultAndArtifactReferences(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Date(2026, 9, 15, 10, 0, 0, 0, time.UTC)
+	pausedAt := startedAt.Add(time.Minute)
+	resumedAt := startedAt.Add(2 * time.Minute)
+	completedAt := startedAt.Add(3 * time.Minute)
+	value := recording.ReplayArtifact{SchemaVersion: "legacy"}
+	state := recording.FactoryWorldState{
+		SessionBracket: &factorydefinitions.FactoryWorldSessionBracketState{
+			SessionID: "bracket-session", SourceRef: "workflow/bracket.js", SourceHash: "bracket-hash",
+			PolicyHash: "policy-hash", OrchestratorKind: "JAVASCRIPT", OrchestratorDialect: "typescript",
+			ResultStatus:  string(factorydefinitions.FactorySessionResultStatusFailedWithPartial),
+			ResultSummary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "persisted partial result"}},
+			ArtifactIDs:   []string{"artifact-present", "artifact-missing"}, Terminal: true,
+			FinalStatus: string(factorydefinitions.FactorySessionLifecycleStatusFailed),
+			StartedAt:   startedAt, PausedAt: pausedAt, ResumedAt: resumedAt, CompletedAt: completedAt,
+			FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeUnknown, Message: "recorded session failure"},
+		},
+		Artifacts: []factorydefinitions.FactorySessionArtifactState{{
+			ID: "artifact-present", Kind: "RESULT", Visibility: "PUBLIC", ContentHash: "sha256:result", SizeBytes: 11,
+		}},
+	}
+
+	got, err := ReplayLegacyRecording(value, "requested-session", state)
+	if err != nil {
+		t.Fatalf("ReplayLegacyRecording: %v", err)
+	}
+	if got.Session.SessionID != "bracket-session" || got.Session.Status != fse.LifecycleStatusFailed ||
+		got.Session.ResolvedSource.SourceRef != "workflow/bracket.js" || got.Result.ResultStatus != fse.ResultStatusFailedWithPartial {
+		t.Fatalf("session/result projection = %#v / %#v, want bracket-owned facts", got.Session, got.Result)
+	}
+	if !strings.Contains(string(got.Result.PrimaryResult), "persisted partial result") ||
+		!reflect.DeepEqual(got.Result.ArtifactIDs, []string{"artifact-present", "artifact-missing"}) ||
+		len(got.Result.ArtifactRefs) != 1 || got.Result.ArtifactRefs[0].ID != "artifact-present" {
+		t.Fatalf("recorded result/artifacts = %#v, want summary and only known artifact reference", got.Result)
+	}
+	if got.Result.Failure == nil || got.Result.Failure.Message != "recorded session failure" || !got.Result.Failure.PartialResultAvailable {
+		t.Fatalf("recorded failure = %#v, want partial session failure", got.Result.Failure)
+	}
+	if got.Session.Lifecycle == nil || got.Session.Lifecycle.StartedAt == nil ||
+		!got.Session.Lifecycle.StartedAt.Equal(startedAt) || got.Session.Lifecycle.PausedAt == nil ||
+		!got.Session.Lifecycle.PausedAt.Equal(pausedAt) || got.Session.Lifecycle.ResumedAt == nil ||
+		!got.Session.Lifecycle.ResumedAt.Equal(resumedAt) || got.Session.Lifecycle.FinishedAt == nil ||
+		!got.Session.Lifecycle.FinishedAt.Equal(completedAt) {
+		t.Fatalf("bracket lifecycle timestamps = %#v", got.Session.Lifecycle)
+	}
+}
+
+func TestReplayLegacyRecordingDerivesLifecycleFromRecognizedEvents(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		event recording.FactoryEvent
+		want  fse.LifecycleStatus
+	}{
+		{name: "run response", event: legacyReplayTestEvent("run", recording.FactoryEventTypeRunResponse, "", time.Time{}, json.RawMessage(`{"state":"FAILED"}`)), want: fse.LifecycleStatusFailed},
+		{name: "run response without a state", event: legacyReplayTestEvent("run-empty", recording.FactoryEventTypeRunResponse, "", time.Time{}, json.RawMessage(`{"state":null}`)), want: fse.LifecycleStatusRunning},
+		{name: "factory state response", event: legacyReplayTestEvent("factory", recording.FactoryEventTypeFactoryStateResponse, "", time.Time{}, json.RawMessage(`{"state":"PAUSED"}`)), want: fse.LifecycleStatusPaused},
+		{name: "unknown factory state", event: legacyReplayTestEvent("factory-unknown", recording.FactoryEventTypeFactoryStateResponse, "", time.Time{}, json.RawMessage(`{"state":"UNKNOWN"}`)), want: fse.LifecycleStatusRunning},
+		{name: "started", event: legacyReplayTestEvent("started", recording.FactoryEventTypeSessionStarted, "", time.Time{}, json.RawMessage(`{}`)), want: fse.LifecycleStatusRunning},
+		{name: "paused", event: legacyReplayTestEvent("paused", recording.FactoryEventTypeSessionPaused, "", time.Time{}, json.RawMessage(`{}`)), want: fse.LifecycleStatusPaused},
+		{name: "resumed", event: legacyReplayTestEvent("resumed", recording.FactoryEventTypeSessionResumed, "", time.Time{}, json.RawMessage(`{}`)), want: fse.LifecycleStatusRunning},
+		{name: "completed", event: legacyReplayTestEvent("completed", recording.FactoryEventTypeSessionCompleted, "", time.Time{}, json.RawMessage(`{"finalStatus":"CANCELED"}`)), want: fse.LifecycleStatusCanceled},
+		{name: "malformed completion status", event: legacyReplayTestEvent("completed-bad", recording.FactoryEventTypeSessionCompleted, "", time.Time{}, json.RawMessage(`{"finalStatus":3}`)), want: fse.LifecycleStatusRunning},
+		{name: "unrelated event", event: legacyReplayTestEvent("other", recording.FactoryEventTypeWorkRequest, "", time.Time{}, json.RawMessage(`{}`)), want: fse.LifecycleStatusRunning},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ReplayLegacyRecording(recording.ReplayArtifact{Events: []recording.FactoryEvent{test.event}}, "requested", recording.FactoryWorldState{})
+			if err != nil {
+				t.Fatalf("ReplayLegacyRecording: %v", err)
+			}
+			if got.Session.Status != test.want {
+				t.Fatalf("session status = %q, want %q", got.Session.Status, test.want)
+			}
+		})
+	}
+}
+
+func TestLegacyLifecycleStatusNormalizesRecordedNames(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		value string
+		want  fse.LifecycleStatus
+	}{
+		{value: "COMPLETED", want: fse.LifecycleStatusSucceeded},
+		{value: " succeeded ", want: fse.LifecycleStatusSucceeded},
+		{value: "FAILED", want: fse.LifecycleStatusFailed},
+		{value: "RUNNING", want: fse.LifecycleStatusRunning},
+		{value: "PAUSED", want: fse.LifecycleStatusPaused},
+		{value: "CANCELED", want: fse.LifecycleStatusCanceled},
+		{value: "TIMED_OUT", want: fse.LifecycleStatusTimedOut},
+		{value: "INTERRUPTED", want: fse.LifecycleStatusInterrupted},
+		{value: "TERMINATED", want: fse.LifecycleStatusTerminated},
+		{value: "unrecognized", want: ""},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.value, func(t *testing.T) {
+			t.Parallel()
+			if got := normalizeLegacyLifecycleStatus(test.value); got != test.want {
+				t.Fatalf("normalizeLegacyLifecycleStatus(%q) = %q, want %q", test.value, got, test.want)
+			}
+		})
+	}
+}
+
+func TestReplayLegacyRecordingSelectsRecordedResultStatusAndFallback(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		state  recording.FactoryWorldState
+		events []recording.FactoryEvent
+		want   fse.ResultStatus
+	}{
+		{
+			name: "session bracket result is authoritative",
+			state: recording.FactoryWorldState{SessionBracket: &factorydefinitions.FactoryWorldSessionBracketState{
+				ResultStatus: "PARTIAL",
+			}},
+			want: fse.ResultStatus("PARTIAL"),
+		},
+		{
+			name: "javascript runtime result precedes events",
+			state: recording.FactoryWorldState{JavaScriptRuntime: &factorydefinitions.FactorySessionJavaScriptRuntimeState{
+				ResultStatus: "PARTIAL",
+			}},
+			events: []recording.FactoryEvent{legacyReplayTestEvent("updated", recording.FactoryEventTypeSessionResultUpdated, "", time.Time{}, json.RawMessage(`{"resultStatus":"FINAL"}`))},
+			want:   fse.ResultStatus("PARTIAL"),
+		},
+		{
+			name:   "result update event",
+			events: []recording.FactoryEvent{legacyReplayTestEvent("updated", recording.FactoryEventTypeSessionResultUpdated, "", time.Time{}, json.RawMessage(`{"resultStatus":"PARTIAL"}`))},
+			want:   fse.ResultStatus("PARTIAL"),
+		},
+		{
+			name:   "completion event",
+			events: []recording.FactoryEvent{legacyReplayTestEvent("completed", recording.FactoryEventTypeSessionCompleted, "", time.Time{}, json.RawMessage(`{"resultStatus":"FINAL"}`))},
+			want:   fse.ResultStatusFinal,
+		},
+		{
+			name:   "malformed result event falls back",
+			state:  recording.FactoryWorldState{FactoryState: "SUCCEEDED"},
+			events: []recording.FactoryEvent{legacyReplayTestEvent("updated-bad", recording.FactoryEventTypeSessionResultUpdated, "", time.Time{}, json.RawMessage(`{"resultStatus":7}`))},
+			want:   fse.ResultStatusFinal,
+		},
+		{
+			name:   "completion without result falls back",
+			events: []recording.FactoryEvent{legacyReplayTestEvent("completed-empty", recording.FactoryEventTypeSessionCompleted, "", time.Time{}, json.RawMessage(`{"finalStatus":"FAILED","resultStatus":null}`))},
+			want:   fse.ResultStatusUnavailable,
+		},
+		{name: "successful lifecycle fallback", state: recording.FactoryWorldState{FactoryState: "SUCCEEDED"}, want: fse.ResultStatusFinal},
+		{name: "failed lifecycle fallback", state: recording.FactoryWorldState{FactoryState: "FAILED"}, want: fse.ResultStatusUnavailable},
+		{name: "nonterminal lifecycle fallback", state: recording.FactoryWorldState{FactoryState: "RUNNING"}, want: fse.ResultStatusNotReady},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ReplayLegacyRecording(recording.ReplayArtifact{Events: test.events}, "requested", test.state)
+			if err != nil {
+				t.Fatalf("ReplayLegacyRecording: %v", err)
+			}
+			if got.Result.ResultStatus != test.want {
+				t.Fatalf("result status = %q, want %q", got.Result.ResultStatus, test.want)
+			}
+		})
+	}
+}
+
+func TestReplayLegacyRecordingEnrichesFailuresFromCompletedDispatches(t *testing.T) {
+	t.Parallel()
+
+	workItems := map[string]work.FactoryWorkItem{
+		"work-existing": {ID: "work-existing", WorkTypeID: "task", State: "failed"},
+	}
+	message := "  preserved   worker failure\n" + strings.Repeat("detail ", 100)
+	completion := factorydefinitions.FactoryWorldDispatchCompletion{
+		DispatchID: "dispatch-failed", TransitionID: "transition-failed",
+		WorkItemIDs:     []string{"work-output", "work-existing", " ", "missing-work"},
+		OutputWorkItems: []work.FactoryWorkItem{{ID: "work-output", WorkTypeID: "task", State: "failed"}},
+		InputWorkItems:  []work.FactoryWorkItem{{ID: "work-input", WorkTypeID: "task", State: "failed"}},
+		Result: factorydefinitions.WorkstationResult{
+			Outcome: string(workers.OutcomeFailed), Error: message,
+			FailureMetadata: &workers.WorkFailureMetadata{Type: workers.WorkFailureTypeUnknown},
+		},
+	}
+	state := recording.FactoryWorldState{
+		FactoryState: "FAILED", WorkItemsByID: workItems,
+		CompletedDispatches: []factorydefinitions.FactoryWorldDispatchCompletion{
+			{DispatchID: "dispatch-succeeded", Result: factorydefinitions.WorkstationResult{Outcome: "SUCCEEDED"}, WorkItemIDs: []string{"work-succeeded"}},
+			completion,
+		},
+	}
+
+	got, err := ReplayLegacyRecording(recording.ReplayArtifact{}, "requested", state)
+	if err != nil {
+		t.Fatalf("ReplayLegacyRecording: %v", err)
+	}
+	expectedMessage := strings.Join(strings.Fields(message), " ")
+	if len(expectedMessage) > 512 {
+		expectedMessage = expectedMessage[:512]
+	}
+	if got.Result.Failure == nil || got.Result.Failure.Reason != string(workers.WorkFailureTypeUnknown) ||
+		got.Result.Failure.Message != expectedMessage || got.Result.SessionStatus != fse.LifecycleStatusFailed {
+		t.Fatalf("result failure = %#v, want safe recorded failure", got.Result)
+	}
+	if got.FactoryProjection == nil || len(got.FactoryProjection.FailureDetailsByWorkID) != 3 {
+		t.Fatalf("Factory failure projection = %#v, want existing, output, and input Work facts", got.FactoryProjection)
+	}
+	for _, id := range []string{"work-existing", "work-output", "work-input"} {
+		detail, ok := got.FactoryProjection.FailureDetailsByWorkID[id]
+		if !ok || detail.DispatchID != "dispatch-failed" || detail.TransitionID != "transition-failed" ||
+			detail.WorkItem.ID != id || detail.FailureDetail == nil || detail.FailureDetail.Message != expectedMessage {
+			t.Errorf("failure detail for %q = %#v, want preserved dispatch, Work, and safe message", id, detail)
+		}
+	}
+	if _, ok := got.FactoryProjection.FailureDetailsByWorkID["work-succeeded"]; ok {
+		t.Fatal("successful completion was converted into a recorded failure")
+	}
+}
+
+func TestLegacyFailureDetailPrefersRecordedDetailAndUsesSafeFallbacks(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		result factorydefinitions.WorkstationResult
+		want   workers.FailureDetail
+	}{
+		{
+			name: "typed recorded detail",
+			result: factorydefinitions.WorkstationResult{
+				FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeUnknown, Message: "typed detail"},
+				Error:         "unused error",
+			},
+			want: workers.FailureDetail{Reason: workers.WorkFailureTypeUnknown, Message: "typed detail"},
+		},
+		{
+			name: "metadata and error message",
+			result: factorydefinitions.WorkstationResult{
+				FailureMetadata: &workers.WorkFailureMetadata{Type: workers.WorkFailureTypeUnknown}, Error: "  recorded  error  ", Feedback: "unused feedback",
+			},
+			want: workers.FailureDetail{Reason: workers.WorkFailureTypeUnknown, Message: "recorded error"},
+		},
+		{
+			name:   "feedback fallback",
+			result: factorydefinitions.WorkstationResult{Feedback: "  recorded\nfeedback  "},
+			want:   workers.FailureDetail{Reason: workers.WorkFailureTypeUnknown, Message: "recorded feedback"},
+		},
+		{
+			name:   "empty fallback",
+			result: factorydefinitions.WorkstationResult{},
+			want:   workers.FailureDetail{Reason: workers.WorkFailureTypeUnknown, Message: "recorded worker failure"},
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got := legacyFailureDetail(test.result)
+			if got == nil || *got != test.want {
+				t.Fatalf("legacy failure detail = %#v, want %#v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestReplayLegacyRecordingUsesRecordingAndWallClockLifecycleFallbacks(t *testing.T) {
+	t.Parallel()
+
+	startedAt := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
+	finishedAt := startedAt.Add(time.Hour)
+	tests := []struct {
+		name       string
+		recordedAt time.Time
+		wallClock  *recording.ReplayWallClockMetadata
+		wantStart  time.Time
+		wantFinish time.Time
+	}{
+		{
+			name:       "recorded time starts before wall clock metadata",
+			recordedAt: startedAt,
+			wallClock:  &recording.ReplayWallClockMetadata{StartedAt: startedAt.Add(30 * time.Minute), FinishedAt: finishedAt},
+			wantStart:  startedAt, wantFinish: finishedAt,
+		},
+		{
+			name:      "wall clock supplies both missing bounds",
+			wallClock: &recording.ReplayWallClockMetadata{StartedAt: startedAt, FinishedAt: finishedAt},
+			wantStart: startedAt, wantFinish: finishedAt,
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			value := recording.ReplayArtifact{RecordedAt: test.recordedAt, WallClock: test.wallClock}
+			got, err := ReplayLegacyRecording(value, "requested", recording.FactoryWorldState{FactoryState: "RUNNING"})
+			if err != nil {
+				t.Fatalf("ReplayLegacyRecording: %v", err)
+			}
+			lifecycle := got.Session.Lifecycle
+			if lifecycle == nil || lifecycle.StartedAt == nil || !lifecycle.StartedAt.Equal(test.wantStart) ||
+				lifecycle.FinishedAt == nil || !lifecycle.FinishedAt.Equal(test.wantFinish) {
+				t.Fatalf("fallback lifecycle = %#v, want start=%v finish=%v", lifecycle, test.wantStart, test.wantFinish)
+			}
+		})
+	}
+}
+
+func legacyReplayTestEvent(
+	id string,
+	eventType recording.FactoryEventType,
+	sessionID string,
+	eventTime time.Time,
+	payload json.RawMessage,
+) recording.FactoryEvent {
+	context := recording.FactoryEventContext{EventTime: eventTime}
+	if sessionID != "" {
+		context.SessionID = &sessionID
+	}
+	return recording.FactoryEvent{
+		SchemaVersion: recording.FactoryEventSchemaVersionV1,
+		Id:            id, Type: eventType, Context: context, Payload: payload,
+	}
+}
+
+func legacyReplayStringPointer(value string) *string {
+	return &value
+}
