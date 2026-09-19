@@ -53,7 +53,16 @@ func BuildCatalogWithRuntime(
 	for _, resource := range factoryCfg.Resources {
 		resourceByName[resource.Name] = resource
 	}
+	aggregates := aggregateFactoryModelCatalog(factoryCfg, resourceByName)
+	return buildCatalogEntries(
+		runtimeCfg, factoryCfg, aggregates, runtimeCacheInspector, sourceResolver,
+	)
+}
 
+func aggregateFactoryModelCatalog(
+	factoryCfg *models.RuntimeConfig,
+	resourceByName map[string]models.RuntimeResource,
+) map[string]*catalogAggregate {
 	aggregates := make(map[string]*catalogAggregate)
 	for _, worker := range factoryCfg.Workers {
 		if !catalogWorkerIncludesModel(worker) {
@@ -96,7 +105,16 @@ func BuildCatalogWithRuntime(
 		}
 		collectAggregateResources(aggregate, worker, resourceByName, factoryCfg.Resources)
 	}
+	return aggregates
+}
 
+func buildCatalogEntries(
+	runtimeCfg *models.RuntimeConfig,
+	factoryCfg *models.RuntimeConfig,
+	aggregates map[string]*catalogAggregate,
+	runtimeCacheInspector RuntimeCacheInspector,
+	sourceResolver ManagedRuntimeSourceResolver,
+) map[string]CatalogEntry {
 	catalog := make(map[string]CatalogEntry, len(aggregates))
 	for key, aggregate := range aggregates {
 		sort.Strings(aggregate.workerNames)
@@ -122,7 +140,9 @@ func BuildCatalogWithRuntime(
 				aggregate.name, summary.Operations, *cacheInspection,
 			)
 			summary.Modalities = catalogOperationModalities(effectiveOperations)
-			aggregate.capabilities = projectCatalogCapabilities(aggregate.capabilities, effectiveOperations)
+			aggregate.capabilities = projectCatalogCapabilities(
+				aggregate.capabilities, aggregate.name, *cacheInspection,
+			)
 		}
 		summary.Operations = effectiveOperations
 		for name, value := range effectiveDiagnostics {
@@ -589,23 +609,15 @@ func catalogOperationModalities(operations []managedruntime.Operation) []string 
 
 func projectCatalogCapabilities(
 	capabilities []modelcatalog.Capability,
-	operations []managedruntime.Operation,
+	modelName string,
+	inspection RuntimeCacheInspection,
 ) []modelcatalog.Capability {
-	byName := make(map[string]managedruntime.Operation, len(operations))
-	for _, operation := range operations {
-		byName[strings.ToUpper(strings.TrimSpace(operation.Name))] = operation
-	}
 	projected := make([]modelcatalog.Capability, len(capabilities))
 	for index, capability := range capabilities {
 		projected[index] = capability
-		projected[index].Operations = make([]managedruntime.Operation, 0, len(capability.Operations))
-		for _, operation := range capability.Operations {
-			if effective, ok := byName[strings.ToUpper(strings.TrimSpace(operation.Name))]; ok {
-				projected[index].Operations = append(projected[index].Operations, effective.Clone())
-				continue
-			}
-			projected[index].Operations = append(projected[index].Operations, operation.Clone())
-		}
+		projected[index].Operations, _ = ProjectEffectiveVideoOperations(
+			modelName, capability.Operations, inspection,
+		)
 		projected[index].ResourceNames = append([]string(nil), capability.ResourceNames...)
 		if capability.ModelProvider != nil {
 			provider := *capability.ModelProvider

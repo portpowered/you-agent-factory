@@ -156,21 +156,16 @@ func projectEffectiveCapabilities(
 	if summary.ManagedRuntime.Diagnostics[localmodels.EffectiveOperationsDiagnostic] != "verified-runtime-assets" {
 		return capabilities
 	}
-	byName := make(map[string]models.Operation, len(summary.Operations))
-	for _, operation := range summary.Operations {
-		byName[strings.ToUpper(strings.TrimSpace(operation.Name))] = operation
+	if summary.ManagedRuntime.Diagnostics[localmodels.VideoReadinessDiagnostic] != localmodels.VideoReadinessMissing {
+		return capabilities
 	}
 	projected := make([]models.Capability, len(capabilities))
+	inspection := localmodels.RuntimeCacheInspection{}
 	for index, capability := range capabilities {
 		projected[index] = capability
-		projected[index].Operations = make([]models.Operation, 0, len(capability.Operations))
-		for _, operation := range capability.Operations {
-			if effective, ok := byName[strings.ToUpper(strings.TrimSpace(operation.Name))]; ok {
-				projected[index].Operations = append(projected[index].Operations, effective.Clone())
-				continue
-			}
-			projected[index].Operations = append(projected[index].Operations, operation.Clone())
-		}
+		projected[index].Operations, _ = localmodels.ProjectEffectiveVideoOperations(
+			summary.Name, capability.Operations, inspection,
+		)
 		projected[index].ResourceNames = append([]string(nil), capability.ResourceNames...)
 		if capability.ModelProvider != nil {
 			provider := *capability.ModelProvider

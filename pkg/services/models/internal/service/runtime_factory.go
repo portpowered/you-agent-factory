@@ -603,19 +603,11 @@ func (o *Root) prepareJoinedInvocation(
 	plan.backend = plan.configuration.Backend
 	plan.revision = plan.configuration.Revision
 	plan.correlation = correlation
-	effectiveDefinition, err := o.effectiveInvocationDefinition(ctx, request, resolved)
-	if err != nil {
-		return plan, modelseffects.RuntimeStageArtifactResolve, err
-	}
-	plan.prepared, plan.operation, err = models.PrepareGenericInvocation(request, effectiveDefinition)
+	plan.prepared, plan.operation, err = o.prepareJoinedGenericInvocation(ctx, request, resolved)
 	if err != nil {
 		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
 	plan.prepared.ModelName = plan.modelName
-	plan.prepared.Operation = plan.operation.Name
-	if len(plan.prepared.Inputs) > 0 && inferenceInputIsZero(plan.prepared.Input) {
-		plan.prepared.Input = plan.prepared.Inputs[0].Clone()
-	}
 
 	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, plan.configuration)
 	if err != nil {
@@ -677,59 +669,6 @@ func (o *Root) prepareJoinedInvocation(
 	}
 	plan.prepared.Lease = plan.lease
 	return plan, modelseffects.RuntimeStageInvoke, nil
-}
-
-func (o *Root) effectiveInvocationDefinition(
-	ctx context.Context,
-	request models.InvokeModelRequest,
-	resolved models.ResolvedModelReference,
-) (models.ModelDefinition, error) {
-	definition := resolved.Definition.Clone()
-	if !genericRequestUsesVideo(request) ||
-		!localmodels.VideoProjectorRequired(definition.Name, definition.Operations) ||
-		o == nil || o.assets == nil {
-		return definition, nil
-	}
-	inspection, err := o.assets.InspectRuntimeCache(ctx, models.InspectModelAssetsRequest{
-		Scope: request.Scope,
-		Name:  definition.Name,
-	})
-	if err != nil {
-		if errors.Is(err, models.ErrUnsupportedOperation) {
-			// Inert/unit collaborators may not expose cache inspection. Preserve
-			// the pre-existing operation path for those compatibility seams.
-			return definition, nil
-		}
-		if !isRemovableCacheAbsence(err) {
-			return models.ModelDefinition{}, err
-		}
-		inspection = scopedassets.RuntimeCacheInspection{}
-	}
-	effective, _, unavailable := localmodels.ProjectEffectiveVideoDefinition(
-		definition,
-		localmodels.RuntimeCacheInspectionFromScoped(inspection),
-	)
-	if unavailable {
-		return models.ModelDefinition{}, &models.InvocationFailure{
-			Class:     models.InvocationFailureClassMediaCapability,
-			Message:   "video input requires a verified projector artifact",
-			Model:     request.Model,
-			Operation: models.OperationOMNI,
-			Slot:      "video",
-			Cause:     models.ErrUnsupportedOperation,
-		}
-	}
-	return effective, nil
-}
-
-func genericRequestUsesVideo(request models.InvokeModelRequest) bool {
-	for _, input := range request.Inputs {
-		if strings.EqualFold(strings.TrimSpace(input.Name), "video") ||
-			input.Modality == models.ModalityVideo {
-			return true
-		}
-	}
-	return false
 }
 
 func joinedAssetRuntimeStage(err error) modelseffects.RuntimeStage {
