@@ -233,6 +233,7 @@ func registerReplacementSession(
 		},
 		Default: session.IsDefault, Project: session.Project,
 		Select: isActive, AddEventTypeRecorder: replacement.AddEventTypeRecorder,
+		AddEventTypeRecorderWithReady: replacement.AddEventTypeRecorderWithReady,
 	})
 	updated := state.Resolve(session.ID)
 	if isActive {
@@ -347,6 +348,7 @@ func Register(state *sessionruntime.Service, input Registration) string {
 		},
 		Default: logicaltarget.IsLiveSessionDefaultSelector(input.SessionID), Project: metadata.Project,
 		Select: input.Select, AllocateDefaultID: true, AddEventTypeRecorder: bundle.AddEventTypeRecorder,
+		AddEventTypeRecorderWithReady: bundle.AddEventTypeRecorderWithReady,
 	})
 }
 

@@ -16,6 +16,17 @@ UI_SCRIPT   := $(if $(BUN_BIN),$(BUN_BIN) run,$(NPM) run)
 UI_EXEC     := $(if $(BUN_BIN),$(BUN_BIN) x,$(NPM) exec)
 UI_INSTALL  := $(if $(BUN_BIN),$(BUN_BIN) install,$(NPM) install --no-package-lock)
 FUNCTIONAL_DEFAULT_PACKAGES := ./tests/functional/...
+MANAGED_PROCESS_HELPER_SOURCE ?= ./tests/integration/models/testdata/managed_process_helper
+MANAGED_PROCESS_HELPER_DIR ?= .artifacts/integration/models-managed-process
+MANAGED_PROCESS_HELPER_DIGEST_FILE ?= $(MANAGED_PROCESS_HELPER_DIR)/managed_process_helper.sha256
+MANAGED_PROCESS_INTEGRATION_PACKAGE ?= ./tests/integration/models/managed_process
+
+ifeq ($(OS),Windows_NT)
+MANAGED_PROCESS_HELPER_DEFAULT := $(MANAGED_PROCESS_HELPER_DIR)/managed_process_helper.exe
+else
+MANAGED_PROCESS_HELPER_DEFAULT := $(MANAGED_PROCESS_HELPER_DIR)/managed_process_helper
+endif
+MANAGED_PROCESS_HELPER ?= $(MANAGED_PROCESS_HELPER_DEFAULT)
 
 # Keep the default Go work claimed by each factory lane bounded when several
 # lanes share one host. GO_LANE_BUDGET is max(2, logical CPUs /
@@ -246,7 +257,7 @@ endef
 .PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
-.PHONY: test test-full test-unit test-unit-fresh test-unit-latency-budget regenerate-shared-ci-baselines test-ci-workflows test-lane-audit test-maintenance test-integration test-contract test-stress test-release
+.PHONY: test test-full test-unit test-unit-fresh test-unit-latency-budget regenerate-shared-ci-baselines test-ci-workflows test-lane-audit test-maintenance test-integration test-integration-models-managed-process build-integration-models-managed-process-helper test-contract test-stress test-release
 .PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-os-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage coverage-help test-backend-coverage test-coverage-go test-race
@@ -273,7 +284,7 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check ownership-inventory-check
+.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check ownership-inventory-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
 
@@ -544,11 +555,40 @@ test-maintenance:
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./cmd/... ./internal/... ./packages/model-providers ./packages/packaged-factories ./tests/functional/internal/... ./ui ./pkg/services/factory_runtime/internal/exhaustiontests -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-integration:
-	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests ./pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... ./tests/integration/factory/visualization/runtime_metrics ./tests/integration/models ./tests/integration/models/platform_conformance ./tests/integration/models/model_invoke ./tests/integration/sessions/restart ./tests/integration/transport/acp/realclient ./tests/integration/transport/cli/process ./tests/integration/transport/server_binding -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests ./pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... ./tests/integration/factory/visualization/runtime_metrics ./tests/integration/models ./tests/integration/models/platform_conformance ./tests/integration/models/model_invoke ./tests/integration/sessions/restart ./tests/integration/transport/acp/realclient ./tests/integration/transport/cli/process ./tests/integration/transport/server_binding ./tests/integration/workers/interrupt -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/automations/internal/services/filesystem_watchers/internal/service -run '^TestFileWatcher_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/platform/process -run '^TestExecCommandRunner_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/workers/internal/worktree -run '^TestPrepareFactoryGitWorktree_(CreatesWorktreeWhenMissing|ReusesExistingValidWorktree|UsesExistingWorktreesParent|ReturnsFailureWhenWorktreeAddFails|ReturnsFailureWhenPathExistsButIsNotWorktree)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/providers/internal/services/execution/internal/adapters/claude -run '^TestClaudeCommandEnvironmentPreventsGitMergeEditorPrompt$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+# The managed-process integration target is intentionally separate from the
+# broad integration lane. It owns one helper build, records its immutable
+# digest, and supplies both identities to the production boundary package.
+build-integration-models-managed-process-helper:
+ifeq ($(OS),Windows_NT)
+	@powershell -NoProfile -ExecutionPolicy Bypass -Command "$$ErrorActionPreference = 'Stop'; $$artifactPath = [System.IO.Path]::GetFullPath('$(MANAGED_PROCESS_HELPER)'); $$artifactDir = Split-Path -Parent $$artifactPath; $$digestPath = [System.IO.Path]::GetFullPath('$(MANAGED_PROCESS_HELPER_DIGEST_FILE)'); New-Item -ItemType Directory -Path $$artifactDir -Force | Out-Null; New-Item -ItemType Directory -Path (Split-Path -Parent $$digestPath) -Force | Out-Null; $$env:GOFLAGS = '-p=4'; $$env:GOMAXPROCS = '4'; & '$(GO)' build $(GO_BUILD_FLAGS) $(GO_LOCAL_BUILD_FLAGS) -trimpath -o $$artifactPath '$(MANAGED_PROCESS_HELPER_SOURCE)'; if ($$LASTEXITCODE -ne 0) { exit $$LASTEXITCODE }; $$hashAlgorithm = [System.Security.Cryptography.SHA256]::Create(); try { $$sha256 = [System.BitConverter]::ToString($$hashAlgorithm.ComputeHash([System.IO.File]::ReadAllBytes($$artifactPath))).Replace('-', '').ToLowerInvariant() } finally { $$hashAlgorithm.Dispose() }; Set-Content -LiteralPath $$digestPath -Value $$sha256 -NoNewline; Write-Output ('managed process helper path=' + $$artifactPath); Write-Output ('managed process helper bytes=' + (Get-Item -LiteralPath $$artifactPath).Length); Write-Output ('managed process helper sha256=' + $$sha256)"
+else
+	@set -eu; \
+	artifact_path="$(abspath $(MANAGED_PROCESS_HELPER))"; \
+	digest_path="$(abspath $(MANAGED_PROCESS_HELPER_DIGEST_FILE))"; \
+	mkdir -p "$$(dirname "$$artifact_path")" "$$(dirname "$$digest_path")"; \
+	GOFLAGS=-p=4 GOMAXPROCS=4 $(GO) build $(GO_BUILD_FLAGS) $(GO_LOCAL_BUILD_FLAGS) -trimpath -o "$$artifact_path" "$(MANAGED_PROCESS_HELPER_SOURCE)"; \
+	if command -v sha256sum >/dev/null 2>&1; then artifact_sha256="$$(sha256sum "$$artifact_path" | awk '{print $$1}')"; else artifact_sha256="$$(shasum -a 256 "$$artifact_path" | awk '{print $$1}')"; fi; \
+	printf '%s' "$$artifact_sha256" > "$$digest_path"; \
+	printf '%s\n' "managed process helper path=$$artifact_path" "managed process helper bytes=$$(wc -c < "$$artifact_path")" "managed process helper sha256=$$artifact_sha256"
+endif
+
+test-integration-models-managed-process: build-integration-models-managed-process-helper
+ifeq ($(OS),Windows_NT)
+	@powershell -NoProfile -ExecutionPolicy Bypass -Command "$$ErrorActionPreference = 'Stop'; $$artifactPath = [System.IO.Path]::GetFullPath('$(MANAGED_PROCESS_HELPER)'); $$digestPath = [System.IO.Path]::GetFullPath('$(MANAGED_PROCESS_HELPER_DIGEST_FILE)'); $$sha256 = (Get-Content -Raw -LiteralPath $$digestPath).Trim(); $$env:YOU_MODELS_MANAGED_PROCESS_HELPER = $$artifactPath; $$env:YOU_MODELS_MANAGED_PROCESS_HELPER_SHA256 = $$sha256; $$env:GOFLAGS = '-p=4'; $$env:GOMAXPROCS = '4'; & '$(GO)' test -tags=managed_process_integration -p=4 '$(MANAGED_PROCESS_INTEGRATION_PACKAGE)' -count=1 -timeout '$(GO_TEST_TIMEOUT)'; exit $$LASTEXITCODE"
+else
+	@set -eu; \
+	artifact_path="$(abspath $(MANAGED_PROCESS_HELPER))"; \
+	digest_path="$(abspath $(MANAGED_PROCESS_HELPER_DIGEST_FILE))"; \
+	artifact_sha256="$$(tr -d '\r\n' < "$$digest_path")"; \
+	printf '%s\n' "managed process integration helper path=$$artifact_path" "managed process integration helper sha256=$$artifact_sha256"; \
+	YOU_MODELS_MANAGED_PROCESS_HELPER="$$artifact_path" YOU_MODELS_MANAGED_PROCESS_HELPER_SHA256="$$artifact_sha256" GOFLAGS=-p=4 GOMAXPROCS=4 $(GO) test -tags=managed_process_integration -p=4 "$(MANAGED_PROCESS_INTEGRATION_PACKAGE)" -count=1 -timeout "$(GO_TEST_TIMEOUT)"
+endif
 
 test-contract:
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/internal/contracts/contracttests ./pkg/transports/http/contracttests ./pkg/transports/cli/baseline ./pkg/transports/cli/clicontract ./pkg/transports/cli/cliinputs ./pkg/transports/cli/climanifestgen ./pkg/transports/cli/commandidentity -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -563,6 +603,12 @@ test-functional:
 test-functional-fresh:
 	$(MAKE) functional-boundary-check
 	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+# The resumed-successor witness consumes operator-staged immutable artifacts;
+# its factoryartifact tag keeps the ordinary functional lane from reporting a
+# false SKIP when those task-owned inputs are not present.
+test-functional-resumed-successor-artifact:
+	$(GO) test -tags=factoryartifact ./tests/functional/sessions/root_composition -run '^TestResumedSuccessorResponseScopeAndWorkAdmission$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 functional-boundary-check:
 	$(GO) run ./cmd/functionalboundarycheck

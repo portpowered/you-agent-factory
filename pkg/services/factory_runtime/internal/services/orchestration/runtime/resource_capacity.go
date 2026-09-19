@@ -523,12 +523,26 @@ func uniqueNonEmptyStrings(values []string) []string {
 }
 
 func sessionIDFromFactoryConfig(cfg *runtimeConfig) string {
+	if cfg != nil {
+		if sessionID := strings.TrimSpace(cfg.publicSessionID); sessionID != "" {
+			return sessionID
+		}
+	}
 	if cfg != nil && cfg.workflowContext != nil {
 		if sessionID := strings.TrimSpace(cfg.workflowContext.SessionID); sessionID != "" {
 			return sessionID
 		}
 	}
 	return factory_context.DefaultSessionID
+}
+
+func canonicalSessionIDFromFactoryConfig(cfg *runtimeConfig) string {
+	if cfg != nil && cfg.workflowContext != nil {
+		if sessionID := strings.TrimSpace(cfg.workflowContext.SessionID); sessionID != "" {
+			return sessionID
+		}
+	}
+	return sessionIDFromFactoryConfig(cfg)
 }
 
 func factoryConfigFromFactoryConfig(cfg *runtimeConfig) *interfaces.FactoryConfig {

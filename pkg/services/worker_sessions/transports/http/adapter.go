@@ -24,11 +24,14 @@ type observationService interface {
 	StreamObservationsByWorkerSessionID(context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error)
 }
 
-// topLevelObservationService is the narrow capability consumed by the
-// process-wide list adapter. A fleet view may combine runtime-bound services
-// without becoming the owner of Work-scoped reads or lifecycle operations.
+// topLevelObservationService is the identity-scoped capability consumed by
+// process-wide reads. A fleet view may combine runtime-bound services without
+// becoming the owner of Work-scoped reads or lifecycle operations.
 type topLevelObservationService interface {
 	ListWorkerSessionObservations(context.Context, workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error)
+	GetObservationByWorkerSessionID(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error)
+	ReadTranscriptByWorkerSessionID(context.Context, workersessions.ReadTranscriptByWorkerSessionIDRequest) (workersessions.ReadTranscriptResult, error)
+	StreamObservationsByWorkerSessionID(context.Context, workersessions.StreamObservationsByWorkerSessionIDRequest) (workersessions.ObservationSubscription, error)
 }
 
 type startService interface {

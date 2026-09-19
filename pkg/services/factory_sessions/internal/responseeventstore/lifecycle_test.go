@@ -2,12 +2,14 @@ package responseeventstore_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"runtime"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 )
 
@@ -29,6 +31,110 @@ func TestSessionResponseEventStore_CompleteRejectsPublish(t *testing.T) {
 	}
 	if !store.Completed() {
 		t.Fatal("Completed() = false, want true after Complete")
+	}
+}
+
+func TestSessionResponseEventStore_TerminalIsExactOnceAndCatchUpRemainsOrdered(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	clock := &fixedClock{now: start}
+	store := responseeventstore.NewSessionResponseEventStoreWithClock("session-successor", clock, testResponseEventID)
+	publishTerminalCatchUpInputs(t, store)
+	existing := subscribeTerminalCatchUpReader(t, store, 1)
+	defer existing.Detach()
+
+	firstCompletion := completeTerminalCatchUpStore(t, store, clock, start)
+	assertExistingTerminalCatchUp(t, existing)
+	late := subscribeTerminalCatchUpReader(t, store, 0)
+	defer late.Detach()
+	assertLateTerminalCatchUp(t, late)
+	assertTerminalCatchUpRetention(t, store, firstCompletion)
+}
+
+func publishTerminalCatchUpInputs(t testing.TB, store *responseeventstore.SessionResponseEventStore) {
+	t.Helper()
+	accepted := samplePublishInput()
+	accepted.DispatchID = "accepted"
+	if _, err := store.Publish(accepted); err != nil {
+		t.Fatalf("publish accepted observation: %v", err)
+	}
+	progress := samplePublishInput()
+	progress.DispatchID = "progress"
+	progress.Kind = responseevents.KindProgress
+	progress.Phase = responseevents.PhaseUpdated
+	progress.Payload = json.RawMessage(`{"label":"building","message":"running"}`)
+	if _, err := store.Publish(progress); err != nil {
+		t.Fatalf("publish progress observation: %v", err)
+	}
+}
+
+func subscribeTerminalCatchUpReader(t testing.TB, store *responseeventstore.SessionResponseEventStore, afterSequence int64) *responseeventstore.Subscription {
+	t.Helper()
+	subscription, err := store.Subscribe(afterSequence)
+	if err != nil {
+		t.Fatalf("Subscribe catch-up reader: %v", err)
+	}
+	return subscription
+}
+
+func completeTerminalCatchUpStore(
+	t testing.TB,
+	store *responseeventstore.SessionResponseEventStore,
+	clock *fixedClock,
+	start time.Time,
+) time.Time {
+	t.Helper()
+	clock.Set(start.Add(time.Minute))
+	store.Complete()
+	firstCompletion := store.CompletedAt()
+	if !firstCompletion.Equal(start.Add(time.Minute)) {
+		t.Fatalf("first CompletedAt = %s, want %s", firstCompletion, start.Add(time.Minute))
+	}
+	clock.Set(start.Add(2 * time.Minute))
+	store.Complete()
+	if completedAt := store.CompletedAt(); !completedAt.Equal(firstCompletion) {
+		t.Fatalf("CompletedAt after repeated terminal = %s, want first completion %s", completedAt, firstCompletion)
+	}
+	return firstCompletion
+}
+
+func assertExistingTerminalCatchUp(t testing.TB, existing *responseeventstore.Subscription) {
+	t.Helper()
+	existingEvents, err := existing.Next(context.Background())
+	if err != nil {
+		t.Fatalf("existing catch-up Next: %v", err)
+	}
+	if len(existingEvents) != 1 || existingEvents[0].Sequence != 2 || existingEvents[0].DispatchID != "progress" {
+		t.Fatalf("existing catch-up events = %#v, want ordered progress sequence 2", existingEvents)
+	}
+	if _, err := existing.Next(context.Background()); !errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+		t.Fatalf("existing catch-up terminal outcome = %v, want ErrSubscriptionClosed", err)
+	}
+}
+
+func assertLateTerminalCatchUp(t testing.TB, late *responseeventstore.Subscription) {
+	t.Helper()
+	lateEvents, err := late.Next(context.Background())
+	if err != nil {
+		t.Fatalf("late catch-up Next: %v", err)
+	}
+	if len(lateEvents) != 2 || lateEvents[0].Sequence != 1 || lateEvents[1].Sequence != 2 {
+		t.Fatalf("late catch-up sequences = %#v, want [1 2]", lateEvents)
+	}
+	if _, err := late.Next(context.Background()); !errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+		t.Fatalf("late catch-up terminal outcome = %v, want ErrSubscriptionClosed", err)
+	}
+}
+
+func assertTerminalCatchUpRetention(t testing.TB, store *responseeventstore.SessionResponseEventStore, firstCompletion time.Time) {
+	t.Helper()
+	if completedAt := store.CompletedAt(); !completedAt.Equal(firstCompletion) {
+		t.Fatalf("CompletedAt changed after catch-up assertions = %s, want %s", completedAt, firstCompletion)
+	}
+	retained := store.Events()
+	if len(retained) != 2 || retained[0].Sequence != 1 || retained[1].Sequence != 2 {
+		t.Fatalf("retained events after terminal = %#v, want both ordered observations", retained)
 	}
 }
 

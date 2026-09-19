@@ -140,6 +140,30 @@ func (s *Subscription) DispatchFilter() string {
 	return s.dispatchID
 }
 
+// RetainedEventCount reports the number of records this cursor will emit from
+// its retained prefix before waiting for live publication. It is captured from
+// the store at the subscription boundary so an HTTP consumer can drain the
+// prefix without inferring completion from timing.
+func (s *Subscription) RetainedEventCount() (int, bool) {
+	if s == nil || s.store == nil {
+		return 0, false
+	}
+	s.mu.Lock()
+	detached := s.detached
+	afterSequence := s.afterSequence
+	dispatchID := s.dispatchID
+	s.mu.Unlock()
+	if detached {
+		return 0, false
+	}
+	s.store.mu.RLock()
+	defer s.store.mu.RUnlock()
+	if s.store.closed {
+		return 0, false
+	}
+	return len(s.store.eventsAfterLocked(afterSequence, dispatchID).events), true
+}
+
 // SubscriberCount reports active subscription registrations on the store.
 func (s *SessionResponseEventStore) SubscriberCount() int {
 	if s == nil {

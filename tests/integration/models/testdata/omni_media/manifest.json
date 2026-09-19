@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "you.localai.omni-media-fixture.v1",
+  "artifacts": [
+    {
+      "id": "omni-image-v1",
+      "path": "infinite-you.png",
+      "mediaType": "image/png",
+      "bytes": 1381559,
+      "sha256": "6d8f7075d2314a19be2a5b8fe52ffc44f2ab8c0fcc5b68935abbd57788e8c3d8",
+      "provenance": {
+        "repository": "https://github.com/portpowered/infinite-you.git",
+        "revision": "ff194dc02cb66e208988f918bca7386344236c52",
+        "sourcePath": "examples/factories/infinite-you.png",
+        "gitBlob": "06c7e71f4e2cb4c04ce72bfd6857a99652090547"
+      },
+      "image": {"width": 897, "height": 1672},
+      "semanticRubric": {
+        "allOf": [
+          {"kind": "symbol", "exact": "infinity"},
+          {"kind": "text", "exact": "INFINITE YOU"},
+          {"kind": "accentColors", "exact": ["blue", "gold"]}
+        ]
+      }
+    },
+    {
+      "id": "omni-video-v1",
+      "path": "groundtruth-fixture.mp4",
+      "mediaType": "video/mp4",
+      "bytes": 30039,
+      "sha256": "80db7ed6a38cb8de371ef6e732d317102b67b54977d7b0d535a7862f0f05e9b7",
+      "provenance": {
+        "repository": "https://github.com/portpowered/infinite-you.git",
+        "revision": "ff194dc02cb66e208988f918bca7386344236c52",
+        "sourcePath": "tests/functional/providers/agy/testdata/groundtruth-fixture.mp4",
+        "gitBlob": "0190b56eccf8c4cb8c4fb8cd3ffd28c2f1420c20"
+      },
+      "video": {"width": 320, "height": 240, "durationMillis": 4000, "frameRate": "25/1", "frames": 100},
+      "semanticRubric": {
+        "orderedPhases": [
+          {"label": "PHASE 1", "background": "red", "textColor": "white", "startMillis": 0, "endMillisExclusive": 2000},
+          {"label": "PHASE 2", "background": "blue", "textColor": "yellow", "startMillis": 2000, "endMillisExclusive": 4000}
+        ],
+        "transition": {"kind": "hardCut", "atMillis": 2000, "toleranceMillis": 40}
+      }
+    }
+  ]
+}

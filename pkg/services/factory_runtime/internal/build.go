@@ -253,6 +253,9 @@ func (f *RuntimeFactory) Build(
 		return nil, fmt.Errorf("Recordings runtime ledger is required")
 	}
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
+	if scoped, ok := eventHistory.(interface{ SetPublicSessionID(string) }); ok {
+		scoped.SetPublicSessionID(sessionID)
+	}
 	if initialFactory != nil {
 		eventHistory.SetInitialStructureFactory(initialFactory)
 	}
@@ -271,7 +274,7 @@ func (f *RuntimeFactory) Build(
 	}
 	bundle, err := assembleRuntimeBundle(
 		ctx,
-		dir, folderPath, sessionID, runtimeMode, verbose, runtimeScheduler,
+		dir, folderPath, sessionID, metricsSessionID, runtimeMode, verbose, runtimeScheduler,
 		inlineDispatch, submissionRecorder,
 		dispatchRecorder,
 		loadedFactoryCfg, runtimeInstanceID,
@@ -328,6 +331,7 @@ func assembleRuntimeBundle(
 	dir string,
 	folderPath string,
 	sessionID string,
+	canonicalSessionID string,
 	runtimeMode interfaces.RuntimeMode,
 	verbose bool,
 	runtimeScheduler scheduler.Scheduler,
@@ -412,7 +416,8 @@ func assembleRuntimeBundle(
 		loadedFactoryCfg,
 		invocationInterpolation,
 		invocationFileReader(inputFiles),
-		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), sessionID),
+		RuntimeWorkflowContext(loadedFactoryCfg.FactoryConfig(), canonicalSessionID),
+		sessionID,
 		runtimeMode,
 		structuredLogger,
 		clock,

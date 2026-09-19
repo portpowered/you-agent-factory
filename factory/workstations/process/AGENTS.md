@@ -1,5 +1,13 @@
 You are an autonomous coding agent working on a software project.
 
+{{ if (index .Inputs 0).RejectionFeedback }}
+When the current work input includes `RejectionFeedback`, treat the following
+value as the exact feedback for this correction attempt and address it in the
+current work item:
+
+{{ (index .Inputs 0).RejectionFeedback }}
+{{ end }}
+
 ## Required standards
 
 Before changing code, read `factory/docs/standards/implementation-standards.md`,

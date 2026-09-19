@@ -276,10 +276,10 @@ func workerSessionObservationSources(
 	opened factorysessionwire.OpenedApplicationRuntime,
 ) ([]workersessions.Service, error) {
 	sources := make([]workersessions.Service, 0, 1)
-	if opened.WorkerSessions != nil {
-		sources = append(sources, opened.WorkerSessions)
-	}
 	if opened.FactorySessions == nil {
+		if opened.WorkerSessions != nil {
+			sources = append(sources, opened.WorkerSessions)
+		}
 		return sources, nil
 	}
 	projections, err := opened.FactorySessions.ListFactorySessions(ctx)
@@ -290,6 +290,9 @@ func workerSessionObservationSources(
 		WorkerSessionsObservationForSession(string) workersessions.Service
 	})
 	if !ok {
+		if opened.WorkerSessions != nil {
+			sources = append(sources, opened.WorkerSessions)
+		}
 		return sources, nil
 	}
 	ids := make([]string, 0, len(projections))
@@ -308,6 +311,12 @@ func workerSessionObservationSources(
 		if observation := provider.WorkerSessionsObservationForSession(id); observation != nil {
 			sources = append(sources, observation)
 		}
+	}
+	// Runtime-owned projections are authoritative for Factory Worker Sessions.
+	// Keep the process-default registry last so duplicate restored identities do
+	// not hide the successor runtime's canonical session attribution.
+	if opened.WorkerSessions != nil {
+		sources = append(sources, opened.WorkerSessions)
 	}
 	return sources, nil
 }

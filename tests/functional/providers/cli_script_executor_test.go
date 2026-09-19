@@ -92,6 +92,7 @@ type scriptTimeoutThenReleaseCommandRunner struct {
 	firstStart     sync.Once
 	firstTimeout   sync.Once
 	retryStart     sync.Once
+	releaseRetry   sync.Once
 }
 
 func newScriptTimeoutThenReleaseCommandRunner() *scriptTimeoutThenReleaseCommandRunner {
@@ -117,17 +118,16 @@ func (runner *scriptTimeoutThenReleaseCommandRunner) Run(ctx context.Context, _ 
 	}
 
 	runner.retryStart.Do(func() { close(runner.retryStartCh) })
-	select {
-	case <-runner.releaseRetryCh:
-		return platformprocess.CommandResult{Stdout: []byte("script-output-after-timeout-retry")}, nil
-	default:
-	}
-	select {
-	case <-runner.releaseRetryCh:
-		return platformprocess.CommandResult{Stdout: []byte("script-output-after-timeout-retry")}, nil
-	case <-ctx.Done():
-		return platformprocess.CommandResult{}, ctx.Err()
-	}
+	// The test releases the retry only after observing retryStartCh. Waiting
+	// for that causal signal avoids a nondeterministic select between the
+	// release and a retry context whose short production deadline has already
+	// elapsed. The first attempt above still proves the real timeout path.
+	<-runner.releaseRetryCh
+	return platformprocess.CommandResult{Stdout: []byte("script-output-after-timeout-retry")}, nil
+}
+
+func (runner *scriptTimeoutThenReleaseCommandRunner) releaseRetryOutcome() {
+	runner.releaseRetry.Do(func() { close(runner.releaseRetryCh) })
 }
 
 func (runner *scriptTimeoutThenReleaseCommandRunner) CallCount() int {
@@ -611,12 +611,13 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 	runner := newScriptTimeoutThenReleaseCommandRunner()
 	fixture := FixtureFor(t)
 	scenario := fixture.OpenScenario(t, dir, dir, runner)
+	t.Cleanup(runner.releaseRetryOutcome)
 	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(fixture.baseURL, scenario.sessionID))
 	waitForScriptTimeoutCausalSignal(t, runner.firstStartCh, "first script attempt start")
 	waitForScriptTimeoutCausalSignal(t, runner.firstTimeoutCh, "first script attempt timeout")
 	waitForScriptTimeoutDispatchResponse(t, stream, factoryapi.WorkOutcomeFailed, "execution timeout")
 	waitForScriptTimeoutCausalSignal(t, runner.retryStartCh, "later script retry start")
-	close(runner.releaseRetryCh)
+	runner.releaseRetryOutcome()
 	waitForScriptTimeoutDispatchResponse(t, stream, factoryapi.WorkOutcomeAccepted, "")
 	scenario.WaitForTerminal(t, 5*time.Second)
 	listed := scenario.ListWork(t)

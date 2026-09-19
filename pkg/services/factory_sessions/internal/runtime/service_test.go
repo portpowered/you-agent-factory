@@ -1,7 +1,9 @@
 package runtime_test
 
 import (
+	"sync"
 	"testing"
+	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -16,7 +18,76 @@ func newRuntimeTestResponseStream() *responsestream.SessionResponseStream {
 	return responsestream.NewSessionResponseStream(platformclock.Real{})
 }
 
-func TestServiceRegistrationCompletesResponseEventsFromCanonicalFactoryEvent(t *testing.T) {
+func TestServiceRegistrationResponseEventsArmsAfterHistoricalReplay(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		historical []interfaces.FactoryEventType
+	}{
+		{name: "fresh session", historical: nil},
+		{name: "one restored terminal", historical: []interfaces.FactoryEventType{
+			interfaces.FactoryEventTypeSessionCompleted,
+		}},
+		{name: "multiple restored terminals", historical: []interfaces.FactoryEventType{
+			interfaces.FactoryEventTypeSessionCompleted,
+			interfaces.FactoryEventTypeSessionCompleted,
+			interfaces.FactoryEventTypeSessionCompleted,
+		}},
+	}
+
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			clock := platformclock.Real{}
+			service := sessionruntime.New(
+				sessionregistry.New(),
+				responsestream.NewRegistry(newRuntimeTestResponseStream, clock),
+				nil,
+				clock,
+				func() string { return "response-event-test-id" },
+				func() string { return "session-test-id" },
+			)
+			var recorder func(interfaces.FactoryEventType)
+			var replayed []interfaces.FactoryEventType
+			service.Register(sessionruntime.Registration{
+				SessionID: "session-completion",
+				Handle:    struct{}{},
+				AddEventTypeRecorderWithReady: func(bound func(interfaces.FactoryEventType), ready func()) {
+					recorder = bound
+					for _, eventType := range testCase.historical {
+						replayed = append(replayed, eventType)
+						bound(eventType)
+					}
+					ready()
+				},
+			})
+			session := service.Resolve("session-completion")
+			if recorder == nil || session == nil || session.ResponseEvents == nil {
+				t.Fatal("registration did not bind session-owned response-event completion")
+			}
+			if len(replayed) != len(testCase.historical) {
+				t.Fatalf("replayed historical event count = %d, want %d", len(replayed), len(testCase.historical))
+			}
+			if session.ResponseEvents.Completed() {
+				t.Fatal("restored terminal history completed the successor response events")
+			}
+
+			recorder(interfaces.FactoryEventTypeSessionResultUpdated)
+			if session.ResponseEvents.Completed() {
+				t.Fatal("response events completed for non-terminal Factory event")
+			}
+			recorder(interfaces.FactoryEventTypeSessionCompleted)
+			if !session.ResponseEvents.Completed() {
+				t.Fatal("response events remain live after successor SESSION_COMPLETED")
+			}
+		})
+	}
+}
+
+func TestServiceRegistrationResponseEventsConcurrentLiveTailAfterAttachment(t *testing.T) {
 	t.Parallel()
 
 	clock := platformclock.Real{}
@@ -29,25 +100,67 @@ func TestServiceRegistrationCompletesResponseEventsFromCanonicalFactoryEvent(t *
 		func() string { return "session-test-id" },
 	)
 	var recorder func(interfaces.FactoryEventType)
-	service.Register(sessionruntime.Registration{
-		SessionID: "session-completion",
-		Handle:    struct{}{},
-		AddEventTypeRecorder: func(bound func(interfaces.FactoryEventType)) {
-			recorder = bound
-		},
-	})
-	session := service.Resolve("session-completion")
-	if recorder == nil || session == nil || session.ResponseEvents == nil {
-		t.Fatal("registration did not bind session-owned response-event completion")
+	ready := make(chan struct{})
+	allowAppend := make(chan struct{})
+	registered := make(chan string, 1)
+	go func() {
+		registered <- service.Register(sessionruntime.Registration{
+			SessionID: "session-concurrent-completion",
+			Handle:    struct{}{},
+			AddEventTypeRecorderWithReady: func(bound func(interfaces.FactoryEventType), arm func()) {
+				recorder = bound
+				bound(interfaces.FactoryEventTypeSessionCompleted)
+				arm()
+				close(ready)
+				<-allowAppend
+				// This append occurs after the source has armed live-tail delivery
+				// but before the registrar returns to the caller.
+				bound(interfaces.FactoryEventTypeSessionStarted)
+				bound(interfaces.FactoryEventTypeSessionCompleted)
+			},
+		})
+	}()
+
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for live-tail arm")
+	}
+	close(allowAppend)
+
+	var sessionID string
+	select {
+	case sessionID = <-registered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for registration")
+	}
+	if sessionID == "" || recorder == nil {
+		t.Fatal("concurrent registration did not return a recorder")
+	}
+	session := service.Resolve(sessionID)
+	if session == nil || session.ResponseEvents == nil {
+		t.Fatal("concurrent registration did not create response events")
+	}
+	if !session.ResponseEvents.Completed() {
+		t.Fatal("terminal appended during the registration handoff did not complete response events")
 	}
 
-	recorder(interfaces.FactoryEventTypeSessionResultUpdated)
-	if session.ResponseEvents.Completed() {
-		t.Fatal("response events completed for non-terminal Factory event")
+	const concurrentTerminals = 32
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	workers.Add(concurrentTerminals)
+	for range concurrentTerminals {
+		go func() {
+			defer workers.Done()
+			<-start
+			recorder(interfaces.FactoryEventTypeSessionCompleted)
+		}()
 	}
-	recorder(interfaces.FactoryEventTypeSessionCompleted)
+	close(start)
+	workers.Wait()
+
 	if !session.ResponseEvents.Completed() {
-		t.Fatal("response events remain live after SESSION_COMPLETED")
+		t.Fatal("concurrent successor terminal observation did not complete response events")
 	}
 }
 

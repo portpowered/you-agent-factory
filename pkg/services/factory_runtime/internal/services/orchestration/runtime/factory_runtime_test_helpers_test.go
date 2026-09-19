@@ -190,7 +190,7 @@ func newTestFactory(opts ...testFactoryOption) (factoryhost.Engine, error) {
 	}
 	runtime, err := New(
 		cfg.net, cfg.scheduler, workerService, workerSessionsService, cfg.runtimeConfig, nil, nil,
-		cfg.workflowContext, cfg.runtimeMode, cfg.logger, cfg.clock,
+		cfg.workflowContext, "", cfg.runtimeMode, cfg.logger, cfg.clock,
 		cfg.inlineDispatch, cfg.eventHistory, "runtime-test-recording-id", "runtime-test-id", nil,
 		cfg.restoredWorldState, false, unavailableProviderSessions{},
 		nil, nil, cfg.submissionHooks,

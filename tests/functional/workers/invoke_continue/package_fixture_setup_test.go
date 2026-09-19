@@ -20,14 +20,11 @@ import (
 )
 
 type invokeContinueScenarioSetup struct {
-	scenarios            []invokeContinueScenario
-	routes               []invokeContinueStaticCommandRouteEntry
-	managerRunner        *s8RemoteProviderRunner
-	managerRepositoryA   s8Repository
-	managerRepositoryB   s8Repository
-	interruptRunner      *s8InterruptProviderRunner
-	interruptRepositoryA s8Repository
-	interruptRepositoryB s8Repository
+	scenarios          []invokeContinueScenario
+	routes             []invokeContinueStaticCommandRouteEntry
+	managerRunner      *s8RemoteProviderRunner
+	managerRepositoryA s8Repository
+	managerRepositoryB s8Repository
 }
 
 type invokeContinueStartedProcess struct {
@@ -105,14 +102,11 @@ func newInvokeContinueScenarioSetup(t *testing.T, rootDir, homeDir string) (invo
 		return invokeContinueScenarioSetup{}, err
 	}
 	return invokeContinueScenarioSetup{
-		scenarios:            append(direct.scenarios, manager.scenarios...),
-		routes:               append(direct.routes, manager.routes...),
-		managerRunner:        manager.managerRunner,
-		managerRepositoryA:   manager.managerRepositoryA,
-		managerRepositoryB:   manager.managerRepositoryB,
-		interruptRunner:      manager.interruptRunner,
-		interruptRepositoryA: manager.interruptRepositoryA,
-		interruptRepositoryB: manager.interruptRepositoryB,
+		scenarios:          append(direct.scenarios, manager.scenarios...),
+		routes:             append(direct.routes, manager.routes...),
+		managerRunner:      manager.managerRunner,
+		managerRepositoryA: manager.managerRepositoryA,
+		managerRepositoryB: manager.managerRepositoryB,
 	}, nil
 }
 
@@ -175,7 +169,7 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "unsupported-provider", unsupportedRunner, unsupportedRunner, nil, nil, nil, nil); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
-	for _, name := range []string{"unknown-source", "empty-input", "remote-interrupt", "remote-controls", "remote-continue-failures", "remote-stream-failure", "remote-cancellation"} {
+	for _, name := range []string{"unknown-source", "empty-input", "remote-interrupt", "remote-interrupt-failure", "remote-controls", "remote-continue-failures", "remote-stream-failure", "remote-cancellation"} {
 		runner := testutil.NewProviderCommandRunner()
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, runner, runner, nil, nil, nil, nil); err != nil {
 			return invokeContinueScenarioSetup{}, err
@@ -216,28 +210,52 @@ func newInvokeContinueManagerScenarioSetup(t *testing.T, rootDir, homeDir string
 		invokeContinueStaticCommandRouteEntry{workingDirectory: managerRepositoryA.path, runner: managerRunner},
 		invokeContinueStaticCommandRouteEntry{workingDirectory: managerRepositoryB.path, runner: managerRunner},
 	)
-	interruptRepositoryA, err := newS8RepositoryAt(filepath.Join(rootDir, "routes", "manager-interrupt-a"), s8RepositoryAMarker)
-	if err != nil {
-		return invokeContinueScenarioSetup{}, fmt.Errorf("create manager interrupt repository A: %w", err)
-	}
-	interruptRepositoryB, err := newS8RepositoryAt(filepath.Join(rootDir, "routes", "manager-interrupt-b"), s8RepositoryBMarker)
-	if err != nil {
-		return invokeContinueScenarioSetup{}, fmt.Errorf("create manager interrupt repository B: %w", err)
-	}
-	interruptRunner := newS8InterruptProviderRunner(stdout, interruptRepositoryA, interruptRepositoryB)
 	writeS8CodexRollout(t, homeDir, s8InterruptProviderSessionA, rollout, s8ReplacementOutput)
 	writeS8CodexRollout(t, homeDir, s8InterruptProviderSessionB, rollout, s8OutputB)
-	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "manager-interrupt", interruptRunner, interruptRunner, nil, nil, nil, interruptRunner.reset); err != nil {
-		return invokeContinueScenarioSetup{}, err
+	for _, name := range []string{
+		"manager-interrupt",
+		"manager-interrupt-single-successor",
+		"manager-interrupt-parity",
+		"manager-interrupt-race",
+		"manager-interrupt-failure",
+	} {
+		if err := appendInvokeContinueInterruptScenario(t, rootDir, &setup.scenarios, &setup.routes, name, stdout); err != nil {
+			return invokeContinueScenarioSetup{}, err
+		}
 	}
-	setup.routes = append(setup.routes,
-		invokeContinueStaticCommandRouteEntry{workingDirectory: interruptRepositoryA.path, runner: interruptRunner},
-		invokeContinueStaticCommandRouteEntry{workingDirectory: interruptRepositoryB.path, runner: interruptRunner},
-	)
-	setup.interruptRunner = interruptRunner
-	setup.interruptRepositoryA = interruptRepositoryA
-	setup.interruptRepositoryB = interruptRepositoryB
 	return setup, nil
+}
+
+func appendInvokeContinueInterruptScenario(
+	t *testing.T,
+	rootDir string,
+	scenarios *[]invokeContinueScenario,
+	routes *[]invokeContinueStaticCommandRouteEntry,
+	name string,
+	stdout []byte,
+) error {
+	t.Helper()
+	repositoryA, err := newS8RepositoryAt(filepath.Join(rootDir, "routes", name+"-a"), s8RepositoryAMarker)
+	if err != nil {
+		return fmt.Errorf("create %s repository A: %w", name, err)
+	}
+	repositoryB, err := newS8RepositoryAt(filepath.Join(rootDir, "routes", name+"-b"), s8RepositoryBMarker)
+	if err != nil {
+		return fmt.Errorf("create %s repository B: %w", name, err)
+	}
+	runner := newS8InterruptProviderRunner(stdout, repositoryA, repositoryB)
+	if err := appendInvokeContinueScenario(rootDir, scenarios, routes, name, runner, runner, nil, nil, nil, runner.reset); err != nil {
+		return err
+	}
+	index := len(*scenarios) - 1
+	(*scenarios)[index].interrupt = &invokeContinueInterruptScenario{
+		runner: runner, repositoryA: repositoryA, repositoryB: repositoryB,
+	}
+	*routes = append(*routes,
+		invokeContinueStaticCommandRouteEntry{workingDirectory: repositoryA.path, runner: runner},
+		invokeContinueStaticCommandRouteEntry{workingDirectory: repositoryB.path, runner: runner},
+	)
+	return nil
 }
 
 func startInvokeContinuePackageProcess(

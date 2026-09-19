@@ -383,6 +383,106 @@ func (sink *runtimeEvidenceRecords) snapshot() []RuntimeEvidenceRecord {
 	return append([]RuntimeEvidenceRecord(nil), sink.records...)
 }
 
+func TestHostProcessDiagnosticProjectionUsesExactCauseAllowlist(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"CANCELLED":             "backend operation cancelled",
+		"ENDPOINT_BIND_FAILED":  "backend endpoint bind failed",
+		"MODEL_LOAD_FAILED":     "model load failed",
+		"PROCESS_EXITED":        "managed backend process exited",
+		"PROTOCOL_INCOMPATIBLE": "backend protocol incompatible",
+		"RPC_REJECTED":          "backend RPC request rejected",
+		"TIMEOUT":               "backend operation timed out",
+	}
+	for code, message := range cases {
+		code, message := code, message
+		t.Run(code, func(t *testing.T) {
+			snapshot, ok := ProjectHostProcessDiagnostic(HostProcessDiagnosticSnapshot{
+				ExitClass: "NONZERO_EXIT", ExitCode: 17, ExitCodeKnown: true,
+				Stdout:    HostProcessStreamDiagnostic{Bytes: 3, SHA256: strings.Repeat("A", 64)},
+				CauseCode: code, CauseMessage: "native secret token", CauseMessageRedacted: true,
+			})
+			if !ok {
+				t.Fatal("valid managed-process snapshot was rejected")
+			}
+			if snapshot.CauseCode != code || snapshot.CauseMessage != message || !snapshot.CauseMessageRedacted {
+				t.Fatalf("projected cause = %#v, want allow-listed %s", snapshot, code)
+			}
+			if snapshot.Stdout.SHA256 != strings.Repeat("a", 64) {
+				t.Fatalf("stream digest = %q, want normalized digest", snapshot.Stdout.SHA256)
+			}
+		})
+	}
+
+	for _, code := range []string{"UNKNOWN", "PROJECTOR_LOAD_FAILED", "native secret"} {
+		code := code
+		t.Run("reject-"+code, func(t *testing.T) {
+			snapshot, ok := ProjectHostProcessDiagnostic(HostProcessDiagnosticSnapshot{
+				ExitClass: "NONZERO_EXIT", CauseCode: code,
+				CauseMessage: "native secret token https://private.example.test/model",
+			})
+			if !ok {
+				t.Fatal("bounded exit facts were rejected with an unknown cause")
+			}
+			if snapshot.CauseCode != "" || snapshot.CauseMessage != "" || snapshot.CauseMessageRedacted {
+				t.Fatalf("unknown cause crossed Models reducer: %#v", snapshot)
+			}
+			if strings.Contains(snapshot.CauseMessage, "native secret") {
+				t.Fatalf("native cause crossed Models reducer: %#v", snapshot)
+			}
+		})
+	}
+}
+
+func TestRuntimeEvidenceStageAttachesOneSafeHostProcessSnapshot(t *testing.T) {
+	t.Parallel()
+
+	sink := &runtimeEvidenceRecords{}
+	recorder := NewOrderedRuntimeEvidenceRecorder(sink)
+	private := "token=private endpoint=https://private.example.test prompt=secret"
+	snapshot := HostProcessDiagnosticSnapshot{
+		ExitClass: "NONZERO_EXIT", ExitCode: 17, ExitCodeKnown: true,
+		Stdout: HostProcessStreamDiagnostic{
+			Bytes: 98304, SHA256: strings.Repeat("a", 64), Truncated: true,
+		},
+		Stderr:    HostProcessStreamDiagnostic{Bytes: 2048, SHA256: strings.Repeat("b", 64)},
+		CauseCode: "RPC_REJECTED", CauseMessage: private,
+	}
+	RecordRuntimeEvidenceStageWithHostProcessDiagnostic(
+		recorder,
+		RuntimeStageBackendStart,
+		NewRuntimeStageError(RuntimeStageBackendStart, RuntimeFailureProcessExited, errors.New(private)),
+		time.Millisecond,
+		snapshot,
+	)
+	records := sink.snapshot()
+	if len(records) != 1 {
+		t.Fatalf("host-process evidence records = %#v, want one stage record", records)
+	}
+	record := records[0]
+	assertSafeHostProcessEvidenceRecord(t, record)
+	body, err := json.Marshal(record)
+	if err != nil {
+		t.Fatalf("marshal host-process evidence: %v", err)
+	}
+	serialized := string(body)
+	if strings.Contains(serialized, private) || strings.Contains(serialized, "native") {
+		t.Fatalf("host-process evidence leaked private cause: %s", serialized)
+	}
+}
+
+func assertSafeHostProcessEvidenceRecord(t *testing.T, record RuntimeEvidenceRecord) {
+	t.Helper()
+	if record.Kind != RuntimeEvidenceKindStage || record.Outcome != RuntimeEvidenceOutcomeFailed ||
+		record.Stage != RuntimeStageBackendStart || record.ExitClass != "NONZERO_EXIT" ||
+		record.ExitCode != 17 || !record.ExitCodeKnown || record.StdoutBytes != 98304 ||
+		record.StderrBytes != 2048 || !record.StdoutTruncated ||
+		record.CauseCode != "RPC_REJECTED" || record.CauseMessage != "backend RPC request rejected" {
+		t.Fatalf("host-process evidence = %#v, want one bounded snapshot", record)
+	}
+}
+
 type unknownRuntimeClassifier struct{}
 
 func (unknownRuntimeClassifier) Error() string { return "unknown" }
