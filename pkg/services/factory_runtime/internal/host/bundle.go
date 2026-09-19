@@ -201,6 +201,29 @@ func (r *Bundle) AddEventTypeRecorder(recorder func(interfaces.FactoryEventType)
 	}
 }
 
+// AddEventTypeRecorderWithReady exposes the replay-to-live synchronization
+// boundary when the concrete in-memory event history provides it. The fallback
+// keeps older ledger implementations compatible while preserving registration
+// behavior for runtimes that do not expose the stronger boundary.
+func (r *Bundle) AddEventTypeRecorderWithReady(
+	recorder func(interfaces.FactoryEventType),
+	ready func(),
+) {
+	if r == nil || r.EventHistory == nil {
+		return
+	}
+	if registrar, ok := r.EventHistory.(interface {
+		AddEventTypeRecorderWithReady(func(interfaces.FactoryEventType), func())
+	}); ok {
+		registrar.AddEventTypeRecorderWithReady(recorder, ready)
+		return
+	}
+	r.EventHistory.AddEventTypeRecorder(recorder)
+	if ready != nil {
+		ready()
+	}
+}
+
 func (r *Bundle) StreamGeneration() string {
 	if r == nil || r.EventHistory == nil {
 		return ""

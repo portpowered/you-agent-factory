@@ -92,6 +92,7 @@ type runtimeConfig struct {
 	invocationInterpolation            interfaces.InvocationInterpolationService
 	invocationFileReader               interfaces.FileReader
 	workflowContext                    *factory_context.FactoryContext
+	publicSessionID                    string
 	runtimeMode                        interfaces.RuntimeMode
 	logger                             logging.Logger
 	clock                              factory.Clock
@@ -140,6 +141,7 @@ func New(
 	invocationInterpolation interfaces.InvocationInterpolationService,
 	invocationFileReader interfaces.FileReader,
 	workflowContext *factory_context.FactoryContext,
+	publicSessionID string,
 	runtimeMode interfaces.RuntimeMode,
 	logger logging.Logger,
 	clock factory.Clock,
@@ -186,6 +188,7 @@ func New(
 		invocationInterpolation:            invocationInterpolation,
 		invocationFileReader:               invocationFileReader,
 		workflowContext:                    workflowContext.Clone(),
+		publicSessionID:                    strings.TrimSpace(publicSessionID),
 		runtimeMode:                        runtimeMode,
 		logger:                             logger,
 		clock:                              clock,
@@ -381,7 +384,7 @@ func recordSessionStartedFromFactoryConfig(cfg *runtimeConfig, eventHistory reco
 		return
 	}
 	eventHistory.RecordSessionLifecycleFromFactoryConfig(
-		sessionIDFromFactoryConfig(cfg),
+		canonicalSessionIDFromFactoryConfig(cfg),
 		factoryConfigFromFactoryConfig(cfg),
 		0,
 		cfg.clock.Now(),
@@ -399,7 +402,7 @@ func recordSessionLifecycleCompletionFromFactory(
 		return
 	}
 	f.eventHistory.RecordSessionLifecycleCompletion(
-		sessionIDFromFactoryConfig(f.cfg),
+		canonicalSessionIDFromFactoryConfig(f.cfg),
 		factoryConfigFromFactoryConfig(f.cfg),
 		tick,
 		factoryState,
@@ -467,7 +470,7 @@ func configureRuntimeDispatch(
 		cfg.completionDeliveryPlanner,
 		cfg.workService,
 		cfg.workRequestIDs,
-		sessionIDFromFactoryConfig(cfg),
+		canonicalSessionIDFromFactoryConfig(cfg),
 	)
 	return resultHook, planner, nil
 }

@@ -83,6 +83,49 @@ func TestSessionResponseEventStoreSubscription_AfterSequenceSkipsEarlierEvents(t
 	}
 }
 
+func TestSessionResponseEventStoreSubscription_RetainedEventCount(t *testing.T) {
+	t.Parallel()
+
+	var nilSubscription *responseeventstore.Subscription
+	if count, ok := nilSubscription.RetainedEventCount(); count != 0 || ok {
+		t.Fatalf("nil RetainedEventCount() = (%d, %t), want (0, false)", count, ok)
+	}
+
+	store := newResponseEventStore("session-abc")
+	first := samplePublishInput()
+	first.DispatchID = "dispatch-a"
+	second := samplePublishInput()
+	second.DispatchID = "dispatch-b"
+	third := samplePublishInput()
+	third.DispatchID = "dispatch-a"
+	for _, event := range []responseevents.FactoryResponseEvent{first, second, third} {
+		if _, err := store.Publish(event); err != nil {
+			t.Fatalf("Publish: %v", err)
+		}
+	}
+
+	subscription, err := store.Subscribe(1, responseeventstore.WithDispatchFilter("dispatch-a"))
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	if count, ok := subscription.RetainedEventCount(); count != 1 || !ok {
+		t.Fatalf("filtered RetainedEventCount() = (%d, %t), want (1, true)", count, ok)
+	}
+	subscription.Detach()
+	if count, ok := subscription.RetainedEventCount(); count != 0 || ok {
+		t.Fatalf("detached RetainedEventCount() = (%d, %t), want (0, false)", count, ok)
+	}
+
+	closedSubscription, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe before close: %v", err)
+	}
+	store.Close()
+	if count, ok := closedSubscription.RetainedEventCount(); count != 0 || ok {
+		t.Fatalf("closed RetainedEventCount() = (%d, %t), want (0, false)", count, ok)
+	}
+}
+
 func TestSessionResponseEventStoreSubscription_DrainReturnsRetainedEventsWithoutWaiting(t *testing.T) {
 	t.Parallel()
 

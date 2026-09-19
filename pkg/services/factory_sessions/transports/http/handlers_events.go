@@ -112,6 +112,7 @@ func (s *Server) GetFactoryResponseEventsBySessionId(
 			return
 		}
 		defer subscription.Detach()
+		writeResponseEventRetainedCount(w, subscription)
 		streamFactoryResponseEvents(w, r, flusher, subscription, string(sessionID), s.logger)
 		return
 	}
@@ -135,8 +136,20 @@ func (s *Server) GetFactoryResponseEventsBySessionId(
 		return
 	}
 	defer subscription.Detach()
+	writeResponseEventRetainedCount(w, subscription)
 
 	streamFactoryResponseEvents(w, r, flusher, subscription, string(sessionID), s.logger)
+}
+
+func writeResponseEventRetainedCount(w http.ResponseWriter, subscription apisurface.FactoryResponseEventSubscription) {
+	counter, ok := subscription.(interface{ RetainedEventCount() (int, bool) })
+	if !ok {
+		return
+	}
+	count, ok := counter.RetainedEventCount()
+	if ok && count >= 0 {
+		w.Header().Set(factorysessionexecution.ResponseEventStreamRetainedCountHeader, strconv.Itoa(count))
+	}
 }
 
 func streamFactoryResponseEvents(

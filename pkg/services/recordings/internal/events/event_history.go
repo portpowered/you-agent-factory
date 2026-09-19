@@ -134,11 +134,10 @@ type FactoryEventHistory struct {
 	hasRunRequest           bool
 	hasRunResponse          bool
 	hasInitialStructure     bool
-	sessionStartedAt        time.Time
-	hasSessionStarted       bool
-	hasSessionCompleted     bool
+	sessionLifecycles       map[string]sessionLifecycleState
 	liveClosed              bool
 	sessionID               string
+	publicSessionID         string
 	nextSessionSequence     int
 	canonicalEventsCalls    atomic.Uint64
 	canonicalEventsCopied   atomic.Uint64
@@ -166,6 +165,7 @@ func NewFactoryEventHistory(topology recordings.InitialStructureSource, now func
 		streamGenerationID: streamGenerationID,
 		sessionProjection:  projections.NewIncrementalSessionProjection(),
 		secretProvenance:   make(map[string][]recordings.RecordingSecret),
+		sessionLifecycles:  make(map[string]sessionLifecycleState),
 		streams:            make(map[int]*eventHistorySubscription),
 	}
 }

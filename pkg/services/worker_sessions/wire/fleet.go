@@ -34,6 +34,129 @@ func NewFleetObservationService(catalog ObservationServiceCatalog) *FleetObserva
 	return &FleetObservationService{catalog: catalog}
 }
 
+// GetObservationByWorkerSessionID resolves one top-level Worker Session
+// identity across the currently catalogued runtime registries. Detail reads
+// must use the same fleet ownership as list reads; consulting only the
+// process-default registry can otherwise report a live Factory Session as
+// unreachable even though its scoped route is healthy.
+func (s *FleetObservationService) GetObservationByWorkerSessionID(
+	ctx context.Context,
+	req workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, error) {
+	if s == nil || s.catalog == nil {
+		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	if err := req.Validate(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	sources, err := s.catalog(ctx)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	for _, source := range sources {
+		if source == nil {
+			continue
+		}
+		observation, lookupErr := source.GetObservationByWorkerSessionID(ctx, req)
+		if lookupErr == nil {
+			return observation.Clone(), nil
+		}
+		if !errors.Is(lookupErr, workersessions.ErrObservationSessionNotFound) {
+			return workersessions.Observation{}, lookupErr
+		}
+		if err := ctx.Err(); err != nil {
+			return workersessions.Observation{}, err
+		}
+	}
+	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+}
+
+// ReadTranscriptByWorkerSessionID routes one Worker Session identity to the
+// runtime registry that owns it.
+func (s *FleetObservationService) ReadTranscriptByWorkerSessionID(
+	ctx context.Context,
+	req workersessions.ReadTranscriptByWorkerSessionIDRequest,
+) (workersessions.ReadTranscriptResult, error) {
+	if s == nil || s.catalog == nil {
+		return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	if err := req.Validate(); err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	sources, err := s.catalog(ctx)
+	if err != nil {
+		return workersessions.ReadTranscriptResult{}, err
+	}
+	for _, source := range sources {
+		if source == nil {
+			continue
+		}
+		result, lookupErr := source.ReadTranscriptByWorkerSessionID(ctx, req)
+		if lookupErr == nil {
+			return result.Clone(), nil
+		}
+		if !errors.Is(lookupErr, workersessions.ErrObservationSessionNotFound) {
+			return workersessions.ReadTranscriptResult{}, lookupErr
+		}
+		if err := ctx.Err(); err != nil {
+			return workersessions.ReadTranscriptResult{}, err
+		}
+	}
+	return workersessions.ReadTranscriptResult{}, workersessions.ErrObservationSessionNotFound
+}
+
+// StreamObservationsByWorkerSessionID routes one Worker Session identity to
+// the runtime registry that owns its retained and live event topic.
+func (s *FleetObservationService) StreamObservationsByWorkerSessionID(
+	ctx context.Context,
+	req workersessions.StreamObservationsByWorkerSessionIDRequest,
+) (workersessions.ObservationSubscription, error) {
+	if s == nil || s.catalog == nil {
+		return workersessions.ObservationSubscription{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	if err := req.Validate(); err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	sources, err := s.catalog(ctx)
+	if err != nil {
+		return workersessions.ObservationSubscription{}, err
+	}
+	for _, source := range sources {
+		if source == nil {
+			continue
+		}
+		subscription, lookupErr := source.StreamObservationsByWorkerSessionID(ctx, req)
+		if lookupErr == nil {
+			return subscription, nil
+		}
+		if !errors.Is(lookupErr, workersessions.ErrObservationSessionNotFound) {
+			return workersessions.ObservationSubscription{}, lookupErr
+		}
+		if err := ctx.Err(); err != nil {
+			return workersessions.ObservationSubscription{}, err
+		}
+	}
+	return workersessions.ObservationSubscription{}, workersessions.ErrObservationSessionNotFound
+}
+
 // ListWorkerSessionObservations returns one globally ordered page across all
 // catalogued Worker Session services. Each source contributes one bounded
 // lookahead page at the fleet cursor before the rows are merged, so a page

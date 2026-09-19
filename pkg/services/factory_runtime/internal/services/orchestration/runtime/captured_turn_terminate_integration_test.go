@@ -26,6 +26,40 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestRecordedWorkerSessionLiveIdentityOnlyRebindsRestoredLineage(t *testing.T) {
+	t.Parallel()
+	const (
+		workerSessionID   = "worker-live-identity"
+		historicalSession = "factory-historical"
+		foreignSession    = "factory-foreign"
+		successorSession  = "factory-successor"
+	)
+	live := &processLocalWorkerSessionService{getByWorkerResult: workersessions.Observation{
+		WorkerSessionID: workerSessionID, FactorySessionID: foreignSession,
+	}}
+	request := workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: workerSessionID}
+	restored := &recordedWorkerSessionObservation{
+		Service: live, factorySessionID: successorSession,
+		restoredWorldState: &interfaces.FactoryWorldState{},
+		restoredEventPrefix: []interfaces.FactoryEvent{{Context: interfaces.FactoryEventContext{
+			SessionID: stringPointerForRecordedTest(historicalSession),
+		}}},
+	}
+	fresh := &recordedWorkerSessionObservation{Service: live, factorySessionID: foreignSession}
+	fleet := workersessionswire.NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		return []workersessions.Service{restored, fresh}, nil
+	})
+	observation, err := fleet.GetObservationByWorkerSessionID(context.Background(), request)
+	if err != nil || observation.FactorySessionID != foreignSession {
+		t.Fatalf("foreign fleet observation = %#v, %v; want preserved Factory Session", observation, err)
+	}
+	live.getByWorkerResult.FactorySessionID = historicalSession
+	observation, err = fleet.GetObservationByWorkerSessionID(context.Background(), request)
+	if err != nil || observation.FactorySessionID != successorSession {
+		t.Fatalf("restored fleet observation = %#v, %v; want successor Factory Session", observation, err)
+	}
+}
+
 func TestRecordedWorkerSessionObservationReprojectsWhenRestoredHistoryGrows(t *testing.T) {
 	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
 	workID := "work-restored-growth"

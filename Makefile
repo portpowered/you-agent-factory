@@ -273,7 +273,7 @@ endef
 .PHONY: docs-reference-check docs-reference-smoke
 
 .PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke javascript-contract-smoke config-contract-smoke
-.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check ownership-inventory-check
+.PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure service-cycle-check package-target-manifest-check packaged-factory-source-check packaged-factory-consumption-check packaged-factory-catalog-generate packaged-factory-catalog-check provider-catalog-generate provider-catalog-check model-provider-package-generate model-provider-package-check durable-runtime-construction-check logging-boundary-check ownership-inventory-check test-functional-resumed-successor-artifact
 .PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
 .PHONY: compatibility-alias-check retired-surface-check readme-check deadcode dashboard-verify
 
@@ -563,6 +563,12 @@ test-functional:
 test-functional-fresh:
 	$(MAKE) functional-boundary-check
 	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+# The resumed-successor witness consumes operator-staged immutable artifacts;
+# its factoryartifact tag keeps the ordinary functional lane from reporting a
+# false SKIP when those task-owned inputs are not present.
+test-functional-resumed-successor-artifact:
+	$(GO) test -tags=factoryartifact ./tests/functional/sessions/root_composition -run '^TestResumedSuccessorResponseScopeAndWorkAdmission$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 functional-boundary-check:
 	$(GO) run ./cmd/functionalboundarycheck

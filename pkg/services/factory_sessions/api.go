@@ -11,6 +11,9 @@ const (
 	// The spelling is owned by the shared Events vocabulary so producers and
 	// consumers of retained history cannot drift apart.
 	SessionEventStreamRetainedCountHeader = events.RetainedEventCountHeader
+	// ResponseEventStreamRetainedCountHeader identifies the response header
+	// that bounds a response-event cursor's retained-history prefix.
+	ResponseEventStreamRetainedCountHeader = "X-Factory-Session-Retained-Response-Event-Count"
 )
 
 // OpenRequest is the transport-independent request to discover, validate, or

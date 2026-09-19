@@ -59,6 +59,27 @@ func TestFleetObservationServiceCharacterizesPagedOrderAndCursor(t *testing.T) {
 	}
 }
 
+func TestFleetObservationServiceResolvesWorkerSessionIdentityAcrossSources(t *testing.T) {
+	t.Parallel()
+	wanted := workersessions.Observation{WorkerSessionID: "worker-fleet-2", FactorySessionID: "factory-2"}
+	service := NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
+		return []workersessions.Service{
+			newFleetObservationSource("first", workersessions.Observation{WorkerSessionID: "worker-fleet-1"}),
+			newFleetObservationSource("second", wanted),
+		}, nil
+	})
+
+	got, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{
+		WorkerSessionID: wanted.WorkerSessionID,
+	})
+	if err != nil {
+		t.Fatalf("GetObservationByWorkerSessionID() error = %v", err)
+	}
+	if got.WorkerSessionID != wanted.WorkerSessionID || got.FactorySessionID != wanted.FactorySessionID {
+		t.Fatalf("GetObservationByWorkerSessionID() = %#v, want %#v", got, wanted)
+	}
+}
+
 func TestFleetObservationServiceUsesOneLookaheadReadPerFleetPage(t *testing.T) {
 	t.Parallel()
 
@@ -862,6 +883,27 @@ func (source *fleetObservationSource) ListWorkerSessionObservations(
 		result.NextToken = base64.StdEncoding.EncodeToString([]byte(candidates[pageSize-1].WorkerSessionID))
 	}
 	return result, source.err
+}
+
+func (source *fleetObservationSource) GetObservationByWorkerSessionID(
+	ctx context.Context,
+	request workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, error) {
+	if err := request.Validate(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	for _, observation := range source.inventory {
+		if observation.WorkerSessionID == request.WorkerSessionID {
+			return observation.Clone(), nil
+		}
+	}
+	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
 }
 
 func (source *fleetObservationSource) matchingObservations(
