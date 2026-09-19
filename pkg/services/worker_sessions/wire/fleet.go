@@ -34,6 +34,49 @@ func NewFleetObservationService(catalog ObservationServiceCatalog) *FleetObserva
 	return &FleetObservationService{catalog: catalog}
 }
 
+// GetObservationByWorkerSessionID resolves one top-level Worker Session
+// identity across the currently catalogued runtime registries. Detail reads
+// must use the same fleet ownership as list reads; consulting only the
+// process-default registry can otherwise report a live Factory Session as
+// unreachable even though its scoped route is healthy.
+func (s *FleetObservationService) GetObservationByWorkerSessionID(
+	ctx context.Context,
+	req workersessions.GetObservationByWorkerSessionIDRequest,
+) (workersessions.Observation, error) {
+	if s == nil || s.catalog == nil {
+		return workersessions.Observation{}, workersessions.ErrObservationProjectionUnavailable
+	}
+	if err := req.Validate(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return workersessions.Observation{}, err
+	}
+	sources, err := s.catalog(ctx)
+	if err != nil {
+		return workersessions.Observation{}, err
+	}
+	for _, source := range sources {
+		if source == nil {
+			continue
+		}
+		observation, lookupErr := source.GetObservationByWorkerSessionID(ctx, req)
+		if lookupErr == nil {
+			return observation.Clone(), nil
+		}
+		if !errors.Is(lookupErr, workersessions.ErrObservationSessionNotFound) {
+			return workersessions.Observation{}, lookupErr
+		}
+		if err := ctx.Err(); err != nil {
+			return workersessions.Observation{}, err
+		}
+	}
+	return workersessions.Observation{}, workersessions.ErrObservationSessionNotFound
+}
+
 // ListWorkerSessionObservations returns one globally ordered page across all
 // catalogued Worker Session services. Each source contributes one bounded
 // lookahead page at the fleet cursor before the rows are merged, so a page

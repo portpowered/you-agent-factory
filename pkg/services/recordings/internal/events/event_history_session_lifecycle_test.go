@@ -1,6 +1,10 @@
 package events
 
 import (
+	"bytes"
+	"encoding/json"
+	"reflect"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -143,6 +147,154 @@ func TestFactoryEventHistory_RecordSessionLifecycle_EmitsReconstructableBracketS
 	}
 	if worldState.SessionBracket == nil || !worldState.SessionBracket.Terminal {
 		t.Fatalf("session bracket = %#v, want terminal reconstructed lifecycle", worldState.SessionBracket)
+	}
+}
+
+func TestFactoryEventHistory_RecordSessionLifecycle_SuccessorKeepsPrefixAndOwnsBracket(t *testing.T) {
+	t0 := time.Date(2026, 9, 13, 17, 0, 0, 0, time.UTC)
+	successorID := "session-successor"
+	history, prefix, prefixBytes := prepareSuccessorHistory(t, t0, successorID)
+	completeSuccessorConcurrently(history, successorID, t0.Add(15*time.Second))
+	events := history.CanonicalEvents()
+	assertSuccessorPrefixAndBracket(t, events, prefix, prefixBytes, successorID)
+}
+
+func prepareSuccessorHistory(
+	t testing.TB,
+	t0 time.Time,
+	successorID string,
+) (*FactoryEventHistory, []interfaces.FactoryEvent, []byte) {
+	t.Helper()
+	predecessor := newTestFactoryEventHistory(nil, func() time.Time { return t0 })
+	predecessor.RecordSessionLifecycleFromFactoryConfig(
+		"session-predecessor", &interfaces.FactoryConfig{Name: "factory-alpha"}, 0, t0,
+	)
+	predecessor.RecordSessionLifecycleCompletion(
+		"session-predecessor", &interfaces.FactoryConfig{}, 1,
+		interfaces.FactoryStateCompleted, "", t0.Add(2*time.Second),
+	)
+	prefix := predecessor.CanonicalEvents()
+	prefixBytes, err := json.Marshal(prefix)
+	if err != nil {
+		t.Fatalf("marshal predecessor prefix: %v", err)
+	}
+	history := newTestFactoryEventHistory(nil, func() time.Time { return t0.Add(10 * time.Second) })
+	if err := history.SeedCanonicalEvents(prefix); err != nil {
+		t.Fatalf("SeedCanonicalEvents: %v", err)
+	}
+	history.RecordSessionLifecycleFromFactoryConfig(
+		successorID, &interfaces.FactoryConfig{Name: "factory-alpha"}, 0, t0.Add(10*time.Second),
+	)
+	// A repeated start must retain the successor's first payload, identity, and
+	// start time rather than opening a second bracket.
+	history.RecordSessionLifecycleFromFactoryConfig(
+		successorID, &interfaces.FactoryConfig{Name: "changed-factory"}, 9, t0.Add(11*time.Second),
+	)
+	return history, prefix, prefixBytes
+}
+
+func completeSuccessorConcurrently(history *FactoryEventHistory, successorID string, completedAt time.Time) {
+	const completionCallers = 16
+	start := make(chan struct{})
+	var calls sync.WaitGroup
+	calls.Add(completionCallers)
+	for i := 0; i < completionCallers; i++ {
+		go func() {
+			defer calls.Done()
+			<-start
+			history.RecordSessionLifecycleCompletion(
+				successorID, &interfaces.FactoryConfig{}, 1,
+				interfaces.FactoryStateCompleted, "", completedAt,
+			)
+		}()
+	}
+	close(start)
+	calls.Wait()
+}
+
+func assertSuccessorPrefixAndBracket(
+	t testing.TB,
+	events, prefix []interfaces.FactoryEvent,
+	prefixBytes []byte,
+	successorID string,
+) {
+	t.Helper()
+	assertSuccessorPrefixUnchanged(t, events, prefix, prefixBytes)
+	if got, want := len(events), len(prefix)+3; got != want {
+		t.Fatalf("event count = %d, want %d (one successor bracket)", got, want)
+	}
+	startEvent := events[len(prefix)]
+	resultEvent := events[len(prefix)+1]
+	completedEvent := events[len(prefix)+2]
+	assertSuccessorEventIDs(t, resultEvent, startEvent, completedEvent, len(prefix), successorID)
+	assertSuccessorEventContexts(t, events[len(prefix):], successorID)
+	assertSuccessorCompletion(t, completedEvent, startEvent, resultEvent)
+}
+
+func assertSuccessorPrefixUnchanged(t testing.TB, events, prefix []interfaces.FactoryEvent, prefixBytes []byte) {
+	t.Helper()
+	gotPrefixBytes, err := json.Marshal(events[:len(prefix)])
+	if err != nil {
+		t.Fatalf("marshal restored prefix: %v", err)
+	}
+	if !bytes.Equal(gotPrefixBytes, prefixBytes) {
+		t.Fatalf("restored historical prefix changed:\n got  %s\n want %s", gotPrefixBytes, prefixBytes)
+	}
+	if !reflect.DeepEqual(events[:len(prefix)], prefix) {
+		t.Fatalf("restored prefix values changed despite equal JSON bytes")
+	}
+}
+
+func assertSuccessorEventIDs(
+	t testing.TB,
+	resultEvent, startEvent, completedEvent interfaces.FactoryEvent,
+	prefixLen int,
+	successorID string,
+) {
+	t.Helper()
+	if startEvent.Id != eventIDSessionStarted+"/"+successorID {
+		t.Fatalf("successor start id = %q, want session-qualified id", startEvent.Id)
+	}
+	if resultEvent.Id != eventIDSessionResultUpdatedPrefix+"/"+strconv.Itoa(prefixLen+1) {
+		t.Fatalf("successor result id = %q, want sequence-qualified id", resultEvent.Id)
+	}
+	if completedEvent.Id != eventIDSessionCompleted+"/"+successorID {
+		t.Fatalf("successor completion id = %q, want session-qualified id", completedEvent.Id)
+	}
+}
+
+func assertSuccessorEventContexts(t testing.TB, events []interfaces.FactoryEvent, successorID string) {
+	t.Helper()
+	for index, event := range events {
+		if event.Context.SessionID == nil || *event.Context.SessionID != successorID {
+			t.Fatalf("successor event[%d] session id = %#v, want %q", index, event.Context.SessionID, successorID)
+		}
+	}
+}
+
+func assertSuccessorCompletion(
+	t testing.TB,
+	completedEvent, startEvent, resultEvent interfaces.FactoryEvent,
+) {
+	t.Helper()
+	var completedPayload interfaces.FactorySessionCompletedEventPayload
+	if err := completedEvent.DecodePayload(&completedPayload); err != nil {
+		t.Fatalf("decode successor completion: %v", err)
+	}
+	if completedPayload.DurationMillis == nil || *completedPayload.DurationMillis != 5000 {
+		t.Fatalf("successor duration = %#v, want 5000ms from matching start", completedPayload.DurationMillis)
+	}
+	assertSuccessorSessionSequences(t, startEvent, resultEvent, completedEvent)
+}
+
+func assertSuccessorSessionSequences(t testing.TB, startEvent, resultEvent, completedEvent interfaces.FactoryEvent) {
+	t.Helper()
+	if startEvent.Context.SessionSequence == nil || resultEvent.Context.SessionSequence == nil || completedEvent.Context.SessionSequence == nil {
+		t.Fatalf("successor session sequences = %#v, %#v, %#v; want ordered values", startEvent.Context.SessionSequence, resultEvent.Context.SessionSequence, completedEvent.Context.SessionSequence)
+	}
+	if *resultEvent.Context.SessionSequence != *startEvent.Context.SessionSequence+1 ||
+		*completedEvent.Context.SessionSequence != *resultEvent.Context.SessionSequence+1 {
+		t.Fatalf("successor session sequences = %d, %d, %d; want consecutive", *startEvent.Context.SessionSequence, *resultEvent.Context.SessionSequence, *completedEvent.Context.SessionSequence)
 	}
 }
 

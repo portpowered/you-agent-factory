@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -101,6 +102,8 @@ type FactoryResponseEventStream struct {
 
 	stateMu               sync.RWMutex
 	statusCode            int
+	retainedFrameCount    int
+	hasRetainedFrameCount bool
 	terminalOutcome       FactoryResponseEventStreamOutcome
 	terminalErr           error
 	frameCount            int
@@ -150,9 +153,30 @@ func OpenFactoryResponseEventStreamAt(t testing.TB, endpoint string) *FactoryRes
 		events:     make(chan FactoryResponseEventFrame, 4096),
 		statusCode: response.StatusCode,
 	}
+	if retainedCount := strings.TrimSpace(response.Header.Get("X-Factory-Session-Retained-Response-Event-Count")); retainedCount != "" {
+		count, err := strconv.Atoi(retainedCount)
+		if err != nil || count < 0 {
+			_ = response.Body.Close()
+			cancel()
+			t.Fatalf("factory response event stream retained count = %q, want non-negative decimal", retainedCount)
+		}
+		stream.retainedFrameCount = count
+		stream.hasRetainedFrameCount = true
+	}
 	go stream.read(response)
 	t.Cleanup(stream.Close)
 	return stream
+}
+
+// RetainedFrameCount returns the point-in-time number of frames the server
+// captured for this cursor before it began live delivery.
+func (s *FactoryResponseEventStream) RetainedFrameCount() (int, bool) {
+	if s == nil {
+		return 0, false
+	}
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	return s.retainedFrameCount, s.hasRetainedFrameCount
 }
 
 func (s *FactoryResponseEventStream) read(response *http.Response) {

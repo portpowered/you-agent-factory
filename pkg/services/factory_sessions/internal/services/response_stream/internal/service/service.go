@@ -266,10 +266,18 @@ type cursorOperations interface {
 }
 
 func cursorValue(cursor cursorOperations) *responsestreamservice.Cursor {
+	retainedEventCount := func() (int, bool) {
+		counter, ok := cursor.(interface{ RetainedEventCount() (int, bool) })
+		if !ok {
+			return 0, false
+		}
+		return counter.RetainedEventCount()
+	}
 	return &responsestreamservice.Cursor{
-		NextEvents:   cursor.Next,
-		DrainEvents:  cursor.Drain,
-		DetachCursor: cursor.Detach,
+		NextEvents:           cursor.Next,
+		DrainEvents:          cursor.Drain,
+		DetachCursor:         cursor.Detach,
+		RetainedEventCountFn: retainedEventCount,
 	}
 }
 
@@ -294,6 +302,8 @@ func (c *filteredCursor) Drain() ([]responseevents.FactoryResponseEvent, error) 
 }
 
 func (c *filteredCursor) Detach() { c.cursor.Detach() }
+
+func (c *filteredCursor) RetainedEventCount() (int, bool) { return 0, false }
 
 func (c *filteredCursor) filter(events []responseevents.FactoryResponseEvent) []responseevents.FactoryResponseEvent {
 	filtered := make([]responseevents.FactoryResponseEvent, 0, len(events))

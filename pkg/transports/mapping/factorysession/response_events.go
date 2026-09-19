@@ -45,3 +45,14 @@ func (s *responseEventSubscription) Detach() {
 		s.cursor.Detach()
 	}
 }
+
+func (s *responseEventSubscription) RetainedEventCount() (int, bool) {
+	if s == nil || s.cursor == nil {
+		return 0, false
+	}
+	counter, ok := s.cursor.(interface{ RetainedEventCount() (int, bool) })
+	if !ok {
+		return 0, false
+	}
+	return counter.RetainedEventCount()
+}

@@ -333,7 +333,11 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 	if err := ctx.Err(); err != nil {
 		return factoryapi.WorkerSessionObservation{}, err
 	}
-	observation, err := a.observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+	observations := topLevelIdentityObservationService(a.observations)
+	if fleet, ok := a.topLevel.(topLevelIdentityObservationService); ok {
+		observations = fleet
+	}
+	observation, err := observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
 		WorkerSessionID: workerSessionID,
 	})
 	if err != nil {

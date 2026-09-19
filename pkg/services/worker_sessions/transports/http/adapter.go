@@ -31,6 +31,14 @@ type topLevelObservationService interface {
 	ListWorkerSessionObservations(context.Context, workersessions.ListWorkerSessionObservationsRequest) (workersessions.ListWorkerSessionObservationsResult, error)
 }
 
+// topLevelIdentityObservationService is the optional fleet-wide identity
+// lookup used by top-level detail reads. Keeping it separate lets existing
+// list-only top-level adapters remain valid while a composed fleet can route
+// an explicit Worker Session ID to the owning runtime.
+type topLevelIdentityObservationService interface {
+	GetObservationByWorkerSessionID(context.Context, workersessions.GetObservationByWorkerSessionIDRequest) (workersessions.Observation, error)
+}
+
 type startService interface {
 	Start(context.Context, workersessions.StartRequest) (workersessions.StartResult, error)
 }
