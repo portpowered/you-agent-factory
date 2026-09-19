@@ -103,29 +103,7 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 	if dispatchA == dispatchB {
 		t.Fatalf("matching review pairs shared dispatch %q, want one distinct dispatch per pair", dispatchA)
 	}
-	states := waitForBoardDispatchStates(t, second.baseURL, 30*time.Second)
-	assertRestoredReviewDispatch(t, states[dispatchA], dispatchA, restoredReviewTaskA, restoredReviewWorkA)
-	assertRestoredReviewDispatch(t, states[dispatchB], dispatchB, restoredReviewTaskB, restoredReviewWorkB)
-	if got := countActiveRestoredReviewDispatches(states, map[string]bool{
-		restoredReviewTaskA: true,
-		restoredReviewTaskB: true,
-	}); got != 2 {
-		t.Fatalf("active restored review dispatches = %d, want exactly 2", got)
-	}
-	for _, workID := range []string{restoredReviewTaskA, restoredReviewTaskB} {
-		observation := waitForBoardWorkerObservation(t, second.baseURL, second.sessionID, workID, func(observation factoryapi.WorkerSessionObservation) bool {
-			return observation.State == factoryapi.WorkerSessionObservationStateRunning || observation.State == factoryapi.WorkerSessionObservationStateStarting
-		}, 30*time.Second)
-		if observation.AttemptId == "" {
-			t.Fatalf("active Worker Session for Work %q has empty attempt identity: %#v", workID, observation)
-		}
-	}
-	states = waitForBoardDispatchStates(t, second.baseURL, 30*time.Second)
-	for _, dispatchID := range []string{dispatchA, dispatchB} {
-		if got := len(states[dispatchID].WorkerSessionIDs); got != 1 {
-			t.Fatalf("active dispatch %q worker-session associations = %d, want exactly one: %#v", dispatchID, got, states[dispatchID])
-		}
-	}
+	assertRestoredReviewDispatchOwners(t, second.baseURL, second.sessionID, dispatchA, dispatchB)
 	activeObservation := evidence.capturePublicObservation(t, "successor-after-migration-with-active-owners", second.baseURL)
 	assertRestartPublicCounts(t, activeObservation, 1, 4, 2, 2)
 	if activeObservation.WorkerSessionCount != 2 || activeObservation.ActiveWorkerSessionCount != 2 {
@@ -139,6 +117,30 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 	}
 	if err := evidence.recordSuccessorRecordings(recordPath, successorRecordPath); err != nil {
 		t.Fatalf("verify immutable source and hashed successor recordings: %v", err)
+	}
+}
+
+func assertRestoredReviewDispatchOwners(t *testing.T, baseURL, sessionID, dispatchA, dispatchB string) {
+	t.Helper()
+	states := waitForBoardDispatchStates(t, baseURL, 30*time.Second)
+	assertRestoredReviewDispatch(t, states[dispatchA], dispatchA, restoredReviewTaskA, restoredReviewWorkA)
+	assertRestoredReviewDispatch(t, states[dispatchB], dispatchB, restoredReviewTaskB, restoredReviewWorkB)
+	if got := countActiveRestoredReviewDispatches(states, map[string]bool{restoredReviewTaskA: true, restoredReviewTaskB: true}); got != 2 {
+		t.Fatalf("active restored review dispatches = %d, want exactly 2", got)
+	}
+	for _, workID := range []string{restoredReviewTaskA, restoredReviewTaskB} {
+		observation := waitForBoardWorkerObservation(t, baseURL, sessionID, workID, func(observation factoryapi.WorkerSessionObservation) bool {
+			return observation.State == factoryapi.WorkerSessionObservationStateRunning || observation.State == factoryapi.WorkerSessionObservationStateStarting
+		}, 30*time.Second)
+		if observation.AttemptId == "" {
+			t.Fatalf("active Worker Session for Work %q has empty attempt identity: %#v", workID, observation)
+		}
+	}
+	states = waitForBoardDispatchStates(t, baseURL, 30*time.Second)
+	for _, dispatchID := range []string{dispatchA, dispatchB} {
+		if got := len(states[dispatchID].WorkerSessionIDs); got != 1 {
+			t.Fatalf("active dispatch %q worker-session associations = %d, want exactly one: %#v", dispatchID, got, states[dispatchID])
+		}
 	}
 }
 
