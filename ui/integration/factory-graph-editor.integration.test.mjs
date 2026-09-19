@@ -27,6 +27,7 @@ const editableGraphFactoryActivation = {
 };
 
 const exportFactoryDefinition = {
+  activation: editableGraphFactoryActivation,
   metadata: {
     owner: "operations",
   },
