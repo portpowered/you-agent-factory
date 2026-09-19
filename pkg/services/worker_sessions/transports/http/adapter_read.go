@@ -320,7 +320,7 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 	ctx context.Context,
 	workerSessionID string,
 ) (factoryapi.WorkerSessionObservation, error) {
-	if a == nil || a.observations == nil {
+	if a == nil || a.topLevel == nil {
 		return factoryapi.WorkerSessionObservation{}, errors.New("Worker Sessions service is required")
 	}
 	workerSessionID = strings.TrimSpace(workerSessionID)
@@ -333,11 +333,7 @@ func (a *Adapter) GetTopLevelWorkerSessionObservation(
 	if err := ctx.Err(); err != nil {
 		return factoryapi.WorkerSessionObservation{}, err
 	}
-	observations := topLevelIdentityObservationService(a.observations)
-	if fleet, ok := a.topLevel.(topLevelIdentityObservationService); ok {
-		observations = fleet
-	}
-	observation, err := observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+	observation, err := a.topLevel.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
 		WorkerSessionID: workerSessionID,
 	})
 	if err != nil {
@@ -352,7 +348,7 @@ func (a *Adapter) ReadTopLevelWorkerSessionTranscript(
 	ctx context.Context,
 	workerSessionID string,
 ) (factoryapi.WorkerSessionTranscriptResponse, error) {
-	if a == nil || a.observations == nil {
+	if a == nil || a.topLevel == nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, errors.New("Worker Sessions service is required")
 	}
 	workerSessionID = strings.TrimSpace(workerSessionID)
@@ -365,7 +361,7 @@ func (a *Adapter) ReadTopLevelWorkerSessionTranscript(
 	if err := ctx.Err(); err != nil {
 		return factoryapi.WorkerSessionTranscriptResponse{}, err
 	}
-	result, err := a.observations.ReadTranscriptByWorkerSessionID(ctx, workersessions.ReadTranscriptByWorkerSessionIDRequest{
+	result, err := a.topLevel.ReadTranscriptByWorkerSessionID(ctx, workersessions.ReadTranscriptByWorkerSessionIDRequest{
 		WorkerSessionID: workerSessionID,
 	})
 	if err != nil {
@@ -382,7 +378,7 @@ func (a *Adapter) StreamTopLevelWorkerSessionEvents(
 	workerSessionID string,
 	replayOnly bool,
 ) (factoryapi.WorkerSessionObservation, workersessions.ObservationSubscription, error) {
-	if a == nil || a.observations == nil {
+	if a == nil || a.topLevel == nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, errors.New("Worker Sessions service is required")
 	}
 	workerSessionID = strings.TrimSpace(workerSessionID)
@@ -395,13 +391,13 @@ func (a *Adapter) StreamTopLevelWorkerSessionEvents(
 	if err := ctx.Err(); err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, err
 	}
-	observation, err := a.observations.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
+	observation, err := a.topLevel.GetObservationByWorkerSessionID(ctx, workersessions.GetObservationByWorkerSessionIDRequest{
 		WorkerSessionID: workerSessionID,
 	})
 	if err != nil {
 		return factoryapi.WorkerSessionObservation{}, workersessions.ObservationSubscription{}, fmt.Errorf("get top-level Worker Session observation: %w", err)
 	}
-	subscription, err := a.observations.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{
+	subscription, err := a.topLevel.StreamObservationsByWorkerSessionID(ctx, workersessions.StreamObservationsByWorkerSessionIDRequest{
 		WorkerSessionID: workerSessionID,
 		Limit:           workersessions.DefaultObservationStreamLimit,
 		ReplayOnly:      replayOnly,

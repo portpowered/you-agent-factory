@@ -548,6 +548,15 @@ func (record *generationRuntimeRecord) AddEventTypeRecorder(recorder func(interf
 		record.ledger.AddEventTypeRecorder(recorder)
 	}
 }
+func (record *generationRuntimeRecord) AddEventTypeRecorderWithReady(
+	recorder func(interfaces.FactoryEventType),
+	ready func(),
+) {
+	record.AddEventTypeRecorder(recorder)
+	if ready != nil {
+		ready()
+	}
+}
 func (record *generationRuntimeRecord) StreamGeneration() string {
 	if record.ledger == nil {
 		return ""

@@ -56,6 +56,8 @@ func (instance *hostedInstanceFake) LoadedRuntimeConfig() factory.LoadedConfig {
 func (*hostedInstanceFake) CanonicalEvents() []interfaces.FactoryEvent { return nil }
 func (*hostedInstanceFake) AddEventTypeRecorder(func(interfaces.FactoryEventType)) {
 }
+func (*hostedInstanceFake) AddEventTypeRecorderWithReady(func(interfaces.FactoryEventType), func()) {
+}
 func (instance *hostedInstanceFake) StreamGeneration() string {
 	return instance.streamGeneration
 }

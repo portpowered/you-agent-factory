@@ -28,8 +28,8 @@ func readOpenResumedResponseEvents(
 		support.SessionResponseEventsURL(baseURL, sessionID),
 	)
 	defer stream.Close()
-	retainedCount, ok := stream.RetainedFrameCount()
-	if !ok {
+	retainedCount := stream.RetainedFrameCount
+	if !stream.HasRetainedFrameCount {
 		t.Fatal("resumed response-event stream omitted its retained-prefix count")
 	}
 	events := make([]factoryapi.FactoryResponseEvent, 0, retainedCount)

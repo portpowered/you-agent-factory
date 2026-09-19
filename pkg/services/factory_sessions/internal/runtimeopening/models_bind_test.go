@@ -516,6 +516,8 @@ func (inertHostedInstance) LoadedRuntimeConfig() factoryruntime.LoadedConfig {
 func (inertHostedInstance) CanonicalEvents() []factorydefinitions.FactoryEvent { return nil }
 func (inertHostedInstance) AddEventTypeRecorder(func(factorydefinitions.FactoryEventType)) {
 }
+func (inertHostedInstance) AddEventTypeRecorderWithReady(func(factorydefinitions.FactoryEventType), func()) {
+}
 func (inertHostedInstance) StreamGeneration() string { return "" }
 func (inertHostedInstance) RuntimeLogger() *zap.Logger {
 	return zap.NewNop()

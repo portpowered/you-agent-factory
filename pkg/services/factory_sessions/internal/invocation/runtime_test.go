@@ -83,6 +83,8 @@ func (invocationHostedInstance) LoadedRuntimeConfig() factory.LoadedConfig {
 func (invocationHostedInstance) CanonicalEvents() []interfaces.FactoryEvent { return nil }
 func (invocationHostedInstance) AddEventTypeRecorder(func(interfaces.FactoryEventType)) {
 }
+func (invocationHostedInstance) AddEventTypeRecorderWithReady(func(interfaces.FactoryEventType), func()) {
+}
 func (invocationHostedInstance) StreamGeneration() string { return "" }
 func (invocationHostedInstance) RuntimeLogger() *zap.Logger {
 	return zap.NewNop()

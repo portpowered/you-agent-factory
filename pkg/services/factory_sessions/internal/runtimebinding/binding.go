@@ -233,7 +233,7 @@ func registerReplacementSession(
 		},
 		Default: session.IsDefault, Project: session.Project,
 		Select: isActive, AddEventTypeRecorder: replacement.AddEventTypeRecorder,
-		AddEventTypeRecorderWithReady: runtimeEventTypeRecorderWithReady(replacement),
+		AddEventTypeRecorderWithReady: replacement.AddEventTypeRecorderWithReady,
 	})
 	updated := state.Resolve(session.ID)
 	if isActive {
@@ -348,17 +348,8 @@ func Register(state *sessionruntime.Service, input Registration) string {
 		},
 		Default: logicaltarget.IsLiveSessionDefaultSelector(input.SessionID), Project: metadata.Project,
 		Select: input.Select, AllocateDefaultID: true, AddEventTypeRecorder: bundle.AddEventTypeRecorder,
-		AddEventTypeRecorderWithReady: runtimeEventTypeRecorderWithReady(bundle),
+		AddEventTypeRecorderWithReady: bundle.AddEventTypeRecorderWithReady,
 	})
-}
-
-func runtimeEventTypeRecorderWithReady(bundle RuntimeInstance) func(func(interfaces.FactoryEventType), func()) {
-	if registrar, ok := bundle.(interface {
-		AddEventTypeRecorderWithReady(func(interfaces.FactoryEventType), func())
-	}); ok {
-		return registrar.AddEventTypeRecorderWithReady
-	}
-	return nil
 }
 
 // ServiceForLiveRuntime returns the current opaque Runtime capability and

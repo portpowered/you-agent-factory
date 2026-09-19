@@ -3,11 +3,9 @@
 package root_composition_test
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -17,9 +15,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -169,41 +164,85 @@ func assertResumedWorkerSessionIdentity(
 	httpList := support.ListSessionWorkerSessions(t, server.URL(), sessionID, workID)
 	assertResumedWorkerSessionList(t, "HTTP", httpList, canonicalSessionID, workID)
 	assertResumedWorkerSessionID(t, "HTTP", httpList, workerSessionID)
-	stdout, err := listResumedWorkerSessionsThroughCLI(t, server.URL(), sessionID, workID)
-	if err != nil {
-		t.Fatalf("CLI Worker Session list: %v; stdout=%q", err, stdout)
-	}
-	var cliList factoryapi.ListWorkerSessionsResponse
-	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &cliList); err != nil {
-		t.Fatalf("decode CLI Worker Session list: %v; stdout=%q", err, stdout)
-	}
-	assertResumedWorkerSessionList(t, "CLI", cliList, canonicalSessionID, workID)
-	assertResumedWorkerSessionID(t, "CLI", cliList, workerSessionID)
-}
 
-func listResumedWorkerSessionsThroughCLI(
-	t testing.TB,
-	serverURL, sessionID, workID string,
-) (string, error) {
-	t.Helper()
-	protocol, err := clihttp.NewProtocol(
-		&http.Client{Timeout: resumedResponseScopeObservationTimeout},
-		platformclock.Real{},
+	var topLevel factoryapi.WorkerSessionObservation
+	readResumedWorkerSessionJSON(t, server.URL()+"/worker-sessions/"+url.PathEscape(workerSessionID), &topLevel)
+	assertResumedWorkerSessionObservation(t, "top-level HTTP", topLevel, canonicalSessionID, workID)
+
+	transcriptEndpoint := server.URL() + "/worker-sessions/" + url.PathEscape(workerSessionID) + "/transcript"
+	transcriptRequest, err := http.NewRequestWithContext(t.Context(), http.MethodGet, transcriptEndpoint, nil)
+	if err != nil {
+		t.Fatalf("build top-level Worker Session transcript request: %v", err)
+	}
+	transcriptResponse, err := http.DefaultClient.Do(transcriptRequest)
+	if err != nil {
+		t.Fatalf("read top-level Worker Session transcript: %v", err)
+	}
+	transcriptBody, err := io.ReadAll(transcriptResponse.Body)
+	_ = transcriptResponse.Body.Close()
+	if err != nil {
+		t.Fatalf("read top-level Worker Session transcript body: %v", err)
+	}
+	if transcriptResponse.StatusCode == http.StatusOK {
+		var transcript factoryapi.WorkerSessionTranscriptResponse
+		if err := json.Unmarshal(transcriptBody, &transcript); err != nil {
+			t.Fatalf("decode top-level Worker Session transcript: %v; body=%q", err, transcriptBody)
+		}
+		if transcript.WorkerSessionId != workerSessionID {
+			t.Fatalf("top-level transcript Worker Session = %q, want %q", transcript.WorkerSessionId, workerSessionID)
+		}
+	} else if transcriptResponse.StatusCode != http.StatusInternalServerError ||
+		!strings.Contains(string(transcriptBody), "WORKER_SESSION_TRANSCRIPT_UNAVAILABLE") {
+		t.Fatalf("top-level Worker Session transcript status = %d; body=%q", transcriptResponse.StatusCode, transcriptBody)
+	}
+
+	request, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodGet,
+		server.URL()+"/worker-sessions/"+url.PathEscape(workerSessionID)+"/events?replayOnly=true",
+		nil,
 	)
 	if err != nil {
-		return "", fmt.Errorf("build Worker Sessions CLI HTTP protocol: %w", err)
+		t.Fatalf("build top-level Worker Session replay request: %v", err)
 	}
-	var stdout bytes.Buffer
-	err = workersessionscli.NewList(protocol)(workersessionscli.ListConfig{
-		Context:      t.Context(),
-		Server:       serverURL,
-		SessionID:    sessionID,
-		WorkID:       workID,
-		OutputFormat: "json",
-		Output:       &stdout,
-		Diagnostics:  io.Discard,
-	})
-	return stdout.String(), err
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("read top-level Worker Session replay: %v", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read top-level Worker Session replay body: %v", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("top-level Worker Session replay status = %d; body=%q", response.StatusCode, body)
+	}
+	if !strings.Contains(string(body), workerSessionID) || !strings.Contains(string(body), "replaySummary") {
+		t.Fatalf("top-level Worker Session replay omitted identity or summary: %q", body)
+	}
+}
+
+func readResumedWorkerSessionJSON(t testing.TB, endpoint string, target any) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatalf("build Worker Session request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("read Worker Session endpoint %q: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read Worker Session endpoint %q body: %v", endpoint, err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("Worker Session endpoint %q status = %d; body=%q", endpoint, response.StatusCode, body)
+	}
+	if err := json.Unmarshal(body, target); err != nil {
+		t.Fatalf("decode Worker Session endpoint %q: %v; body=%q", endpoint, err, body)
+	}
 }
 
 func assertResumedWorkerSessionList(
