@@ -464,7 +464,7 @@ func TestRestartRecoveryCancellationBeforeReadinessDoesNotClaimSuccess(t *testin
 	}
 	waitForBoardPersistenceDaemonExit(t, second, restartRecoveryProcessTimeout)
 	second.cleanup()
-	assertBoardStartupLogContains(t, startupLogPath, []string{"engine started"})
+	assertBoardResumeStartupWasCancelled(t, second, startupLogPath)
 	evidence.captureDaemon(1, second)
 	if waitErr := second.waitError(); waitErr == nil {
 		t.Fatal("cancelled successor exited successfully after interrupt; want a nonzero interrupted-process result")

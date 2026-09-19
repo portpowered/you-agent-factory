@@ -105,16 +105,14 @@ func boardPersistenceFirstLog(logDir string) string {
 	return first
 }
 
-func assertBoardStartupLogContains(t *testing.T, path string, fragments []string) {
+func assertBoardResumeStartupWasCancelled(t *testing.T, daemon *boardPersistenceDaemon, path string) {
 	t.Helper()
-	contents, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read successor startup log %q after exit: %v", path, err)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("successor startup log %q was not retained after exit: %v", path, err)
 	}
-	for _, fragment := range fragments {
-		if !strings.Contains(string(contents), fragment) {
-			t.Fatalf("successor startup log %q does not contain %q", path, fragment)
-		}
+	if !strings.Contains(daemon.stderr.String(), "open Factory Session application runtime") ||
+		!strings.Contains(daemon.stderr.String(), "context canceled") {
+		t.Fatalf("successor did not report cancellation during Factory Session runtime opening: stderr=%s", daemon.stderr.String())
 	}
 }
 
