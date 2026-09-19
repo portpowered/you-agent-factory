@@ -15,14 +15,10 @@ func runBoardPersistenceCLI(
 	binaryPath, factoryDir, homeDir, baseURL string,
 	args ...string,
 ) ([]byte, error) {
-	commandArgs := []string{"-test.run=^TestBoardPersistenceCLIProcessHelper$", "--", "you", "--server", baseURL}
-	commandArgs = append(commandArgs, args...)
+	commandArgs := append([]string{"--server", baseURL}, args...)
 	command := exec.CommandContext(ctx, binaryPath, commandArgs...)
 	command.Dir = factoryDir
-	command.Env = append(
-		builtcliacceptance.ProcessEnvForIsolatedHome(homeDir),
-		boardPersistenceCLIHelperEnv+"=1",
-	)
+	command.Env = builtcliacceptance.ProcessEnvForIsolatedHome(homeDir)
 	return command.CombinedOutput()
 }
 

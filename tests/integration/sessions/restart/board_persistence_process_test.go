@@ -20,19 +20,23 @@ const (
 )
 
 type boardPersistenceDaemon struct {
-	cmd        *exec.Cmd
-	baseURL    string
-	sessionID  string
-	factoryDir string
-	homeDir    string
-	logDir     string
-	recordPath string
-	stdout     *bytes.Buffer
-	stderr     *bytes.Buffer
-	done       chan struct{}
-	mu         sync.Mutex
-	waitErr    error
-	stopped    bool
+	cmd               *exec.Cmd
+	baseURL           string
+	sessionID         string
+	factoryDir        string
+	homeDir           string
+	logDir            string
+	recordPath        string
+	startedAt         time.Time
+	readyAt           time.Time
+	shutdownStartedAt time.Time
+	stoppedAt         time.Time
+	stdout            *bytes.Buffer
+	stderr            *bytes.Buffer
+	done              chan struct{}
+	mu                sync.Mutex
+	waitErr           error
+	stopped           bool
 }
 
 func startBoardPersistenceDaemon(
@@ -74,7 +78,6 @@ func startBoardPersistenceDaemonProcessWithResume(
 	t.Helper()
 	address := reserveBoardPersistenceAddress(t)
 	args := []string{
-		"-test.run=^TestBoardPersistenceCLIProcessHelper$", "--", "you",
 		"run", "--dir", factoryDir,
 		"--continuously", "--with-server",
 		"--listen", address,
@@ -84,10 +87,10 @@ func startBoardPersistenceDaemonProcessWithResume(
 	}
 	args = append(args, "--record", recordPath)
 	command := exec.CommandContext(t.Context(), binaryPath, args...)
+	startedAt := time.Now()
 	command.Dir = factoryDir
 	command.Env = append(
 		builtcliacceptance.ProcessEnvForIsolatedHome(homeDir),
-		boardPersistenceCLIHelperEnv+"=1",
 		boardPersistenceHelperEnv+"="+boardPersistenceHelperEnvValue,
 		boardPersistenceReleaseEnv+"="+releasePath,
 	)
@@ -101,6 +104,7 @@ func startBoardPersistenceDaemonProcessWithResume(
 		factoryDir: factoryDir,
 		homeDir:    homeDir,
 		recordPath: recordPath,
+		startedAt:  startedAt,
 		stdout:     &stdout,
 		stderr:     &stderr,
 		done:       make(chan struct{}),
@@ -144,6 +148,7 @@ func (daemon *boardPersistenceDaemon) kill(t *testing.T) {
 		return
 	}
 	daemon.mu.Unlock()
+	daemon.shutdownStartedAt = time.Now()
 	if err := daemon.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		t.Fatalf("hard-kill isolated you daemon: %v", err)
 	}
@@ -151,6 +156,7 @@ func (daemon *boardPersistenceDaemon) kill(t *testing.T) {
 	defer timer.Stop()
 	select {
 	case <-daemon.done:
+		daemon.stoppedAt = time.Now()
 		daemon.mu.Lock()
 		daemon.stopped = true
 		daemon.mu.Unlock()
@@ -170,12 +176,14 @@ func (daemon *boardPersistenceDaemon) cleanup() {
 	}
 	daemon.stopped = true
 	daemon.mu.Unlock()
+	daemon.shutdownStartedAt = time.Now()
 	select {
 	case <-daemon.done:
 	default:
 		_ = daemon.cmd.Process.Kill()
 		<-daemon.done
 	}
+	daemon.stoppedAt = time.Now()
 }
 
 func (daemon *boardPersistenceDaemon) stop(t *testing.T) {
@@ -186,6 +194,7 @@ func (daemon *boardPersistenceDaemon) stop(t *testing.T) {
 		return
 	}
 	daemon.mu.Unlock()
+	daemon.shutdownStartedAt = time.Now()
 	if err := interruptBoardPersistenceProcess(daemon.cmd); err != nil {
 		t.Fatalf("interrupt isolated you daemon: %v", err)
 	}
@@ -193,6 +202,7 @@ func (daemon *boardPersistenceDaemon) stop(t *testing.T) {
 	defer timer.Stop()
 	select {
 	case <-daemon.done:
+		daemon.stoppedAt = time.Now()
 		if err := daemon.waitError(); err != nil {
 			if !boardPersistenceCleanExit(err) {
 				t.Fatalf("isolated you daemon shutdown error = %v\nstdout=%s\nstderr=%s", err, daemon.stdout.String(), daemon.stderr.String())

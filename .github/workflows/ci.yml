@@ -588,6 +588,7 @@ jobs:
         run: |
           mkdir -p .artifacts/integration/bin
           go build -o .artifacts/integration/bin/you ./cmd/factory
+          echo "INFINITE_YOU_SOURCE_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Build platform conformance helper artifact
         run: |
           go test -c -o .artifacts/integration/bin/platform-conformance-helper ./tests/integration/models/platform_conformance
@@ -604,7 +605,16 @@ jobs:
         env:
           INFINITE_YOU_PREBUILT_ARTIFACT: ${{ github.workspace }}/.artifacts/integration/bin/you
           INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT: "1"
+          INFINITE_YOU_RESTART_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/integration/sessions/restart/restart-baseline.json
           LOCALAI_PLATFORM_CONFORMANCE_HELPER_PATH: ${{ github.workspace }}/.artifacts/integration/bin/platform-conformance-helper
+      - name: Upload restart characterization evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restart-characterization-evidence
+          path: .artifacts/integration/sessions/restart/restart-baseline.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Run required runtime metrics session probe
         if: always()
         shell: bash
