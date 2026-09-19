@@ -712,3 +712,112 @@ func evidenceLogTailForError(logs []restartLogEvidence) string {
 	}
 	return strings.Join(parts, "\n")
 }
+
+type restartRecoveryH01Fixture struct {
+	artifactPath        string
+	evidence            *restartBaselineEvidence
+	factoryA            string
+	factoryB            string
+	homeDir             string
+	releasePath         string
+	sourceRecordPath    string
+	successorRecordPath string
+}
+
+type restartRecoveryH01SourceState struct {
+	expectedWorks         map[string]boardPersistenceExpectedWork
+	oldDispatchID         string
+	oldWorkerSessionID    string
+	oldOwnerID            string
+	workEventsBefore      []string
+	terminalHistoryBefore []string
+}
+
+func prepareRestartRecoveryH01Fixture(
+	t *testing.T,
+	artifactPath string,
+	evidence *restartBaselineEvidence,
+) restartRecoveryH01Fixture {
+	t.Helper()
+	factoryA := scaffoldBoardPersistenceFactory(t, restartRecoveryFactoryConfig(true))
+	factoryB := scaffoldBoardPersistenceFactory(t, restartRecoveryFactoryConfig(false))
+	workerPath := currentRestartWorkerExecutable(t)
+	writeBoardPersistenceAgentConfig(t, factoryA, restartRecoveryWorkerName, boardPersistenceWorkerConfig(workerPath))
+	writeBoardPersistenceAgentConfig(t, factoryB, restartRecoveryWorkerName, boardPersistenceWorkerConfig(workerPath))
+	fixture := restartRecoveryH01Fixture{
+		artifactPath: artifactPath, evidence: evidence, factoryA: factoryA, factoryB: factoryB,
+		homeDir: t.TempDir(), releasePath: filepath.Join(t.TempDir(), "release-recovered-worker"),
+		sourceRecordPath:    filepath.Join(t.TempDir(), "source.recording.json"),
+		successorRecordPath: filepath.Join(t.TempDir(), "successor.recording.json"),
+	}
+	if err := recordRestartFixtureHash(evidence, "factory-a/factory.json", filepath.Join(fixture.factoryA, "factory.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := recordRestartFixtureHash(evidence, "factory-b/factory.json", filepath.Join(fixture.factoryB, "factory.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := recordRestartFixtureHash(evidence, "factory-b/workstation/AGENTS.md", filepath.Join(fixture.factoryB, "workstations", "hold-processing", "AGENTS.md")); err != nil {
+		t.Fatal(err)
+	}
+	if evidence.FixtureSHA256["factory-a/factory.json"] == evidence.FixtureSHA256["factory-b/factory.json"] {
+		t.Fatal("Factory A and authored Factory B have identical fixture hashes")
+	}
+	if err := recordRestartFixtureHash(evidence, "factory-a/workstation/AGENTS.md", filepath.Join(fixture.factoryA, "workstations", "hold-processing", "AGENTS.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := recordRestartFixtureHash(evidence, "factory-a/worker/AGENTS.md", filepath.Join(fixture.factoryA, "workers", restartRecoveryWorkerName, "AGENTS.md")); err != nil {
+		t.Fatal(err)
+	}
+	return fixture
+}
+
+func runRestartRecoveryH01SourceGeneration(
+	t *testing.T,
+	fixture restartRecoveryH01Fixture,
+) restartRecoveryH01SourceState {
+	t.Helper()
+	first := startBoardPersistenceDaemon(
+		t, fixture.artifactPath, fixture.factoryA, fixture.homeDir,
+		fixture.sourceRecordPath, fixture.releasePath,
+	)
+	fixture.evidence.trackDaemon(t, "source-process-a", first)
+	batch := restartRecoveryBatchJSON(t)
+	submitBoardPersistenceBatchThroughCLI(
+		t, first, fixture.artifactPath, fixture.factoryA, fixture.homeDir,
+		batch, restartRecoveryRequestID, 3,
+	)
+	wantBefore := restartRecoveryExpectedWorks(false)
+	before := waitForBoardStates(t, first.baseURL, map[string]string{
+		restartRecoveryEligibleWorkID: "processing",
+		restartRecoveryCompleteWorkID: "complete",
+		restartRecoveryFailedWorkID:   "failed",
+	}, 30*time.Second)
+	assertBoardList(t, before, wantBefore)
+	assertRestartWorkIDsUnique(t, before, wantBefore)
+	oldDispatchID := waitForBoardActiveDispatch(t, first.baseURL, restartRecoveryEligibleWorkID, 30*time.Second)
+	oldWorker := waitForBoardWorkerObservation(t, first.baseURL, first.sessionID, restartRecoveryEligibleWorkID, func(observation factoryapi.WorkerSessionObservation) bool {
+		return observation.State == factoryapi.WorkerSessionObservationStateRunning || observation.State == factoryapi.WorkerSessionObservationStateStarting
+	}, 30*time.Second)
+	if oldWorker.WorkerSessionId == "" || oldWorker.AttemptId == "" {
+		t.Fatalf("source active Worker Session lacks identity: %#v", oldWorker)
+	}
+	oldOwnerDispatch, oldOwnerID := waitForBoardActiveOwner(t, first.baseURL, restartRecoveryEligibleWorkID, 30*time.Second)
+	if oldOwnerDispatch != oldDispatchID || oldOwnerID != oldWorker.WorkerSessionId {
+		t.Fatalf("source active dispatch owner = %q/%q; worker observation = %q/%q", oldOwnerDispatch, oldOwnerID, oldDispatchID, oldWorker.WorkerSessionId)
+	}
+	workEventsBefore := restartWorkHistoryFingerprint(t, first.baseURL, restartRecoveryWorkIDs())
+	terminalHistoryBefore := restartWorkHistoryFingerprint(t, first.baseURL, restartRecoveryTerminalWorkIDs())
+	firstObservation := fixture.evidence.capturePublicObservation(t, "source-a-before-stop", first.baseURL)
+	assertRestartPublicCounts(t, firstObservation, 1, 3, 1, 1)
+	assertRestartActiveWorkerCount(t, firstObservation, 1)
+	first.stop(t)
+	fixture.evidence.captureDaemon(0, first)
+	if err := fixture.evidence.recordSourceRecording(fixture.sourceRecordPath); err != nil {
+		t.Fatalf("hash source recording before resume: %v", err)
+	}
+	return restartRecoveryH01SourceState{
+		expectedWorks: wantBefore, oldDispatchID: oldDispatchID,
+		oldWorkerSessionID: oldWorker.WorkerSessionId, oldOwnerID: oldOwnerID,
+		workEventsBefore: workEventsBefore, terminalHistoryBefore: terminalHistoryBefore,
+	}
+}
