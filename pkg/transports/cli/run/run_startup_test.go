@@ -658,7 +658,7 @@ func TestFailedHostedResumeLogsTypedRecoveryCodeWithoutSecrets(t *testing.T) {
 	secretCause := errors.New(`open C:\private\source.recording.json credential=TOPSECRET`)
 	inputErr := &recordings.ReplayInputError{
 		Family:         recordings.ReplayInputFamilyPortable,
-		ArtifactDigest: "sha256:broken-source-recording",
+		ArtifactDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		Diagnostic: recordings.ReplayArtifactDiagnostic{
 			Code: recordings.ReplayArtifactDiagnosticMalformed,
 			Area: "recording", Path: "recording", Message: "untrusted bytes TOPSECRET",
@@ -688,7 +688,7 @@ func TestFailedHostedResumeLogsTypedRecoveryCodeWithoutSecrets(t *testing.T) {
 		"event":                  runRecoveryEventName,
 		"outcome":                runRecoveryOutcomeFailed,
 		"recorded_definition_id": "UNAVAILABLE",
-		"source_recording_id":    "sha256:broken-source-recording",
+		"source_recording_id":    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"successor_recording_id": "UNAVAILABLE",
 		"host_observation":       runRecoveryHostObservation,
 		"previous_recorded_at":   "UNAVAILABLE",

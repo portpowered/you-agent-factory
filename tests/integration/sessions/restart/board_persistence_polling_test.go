@@ -110,10 +110,27 @@ func assertBoardResumeStartupWasCancelled(t *testing.T, daemon *boardPersistence
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("successor startup log %q was not retained after exit: %v", path, err)
 	}
-	if !strings.Contains(daemon.stderr.String(), "open Factory Session application runtime") ||
-		!strings.Contains(daemon.stderr.String(), "context canceled") {
-		t.Fatalf("successor did not report cancellation during Factory Session runtime opening: stderr=%s", daemon.stderr.String())
+	if !boardPersistenceHasRunServiceCancellation(daemon.stderr.String()) {
+		t.Fatalf("successor did not report run.service outcome=cancelled: stderr=%s", daemon.stderr.String())
 	}
+}
+
+func boardPersistenceHasRunServiceCancellation(stderr string) bool {
+	for _, line := range strings.Split(stderr, "\n") {
+		start := strings.IndexByte(line, '{')
+		end := strings.LastIndexByte(line, '}')
+		if start < 0 || end < start {
+			continue
+		}
+		var fields map[string]any
+		if err := json.Unmarshal([]byte(line[start:end+1]), &fields); err != nil {
+			continue
+		}
+		if fields["operation"] == "run.service" && fields["outcome"] == "cancelled" {
+			return true
+		}
+	}
+	return false
 }
 
 func boardPersistenceDaemonReady(t *testing.T, daemon *boardPersistenceDaemon) bool {

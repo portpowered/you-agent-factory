@@ -3,6 +3,8 @@ package cli
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -268,6 +270,25 @@ func MapReplayInputFailure(cause error) error {
 	}
 	code, message := replayInputCLIFields(diagnostic.Code)
 	return replayInputCLIError{code: code, message: message, cause: cause}
+}
+
+// ReplayInputRecordingIdentity returns only the canonical content digest for a
+// failed replay input, keeping source paths and diagnostic payloads at this
+// Recordings-owned CLI boundary.
+func ReplayInputRecordingIdentity(cause error) string {
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(cause, &inputErr) || inputErr == nil {
+		return ""
+	}
+	const prefix = "sha256:"
+	digest := inputErr.ArtifactDigest
+	if !strings.HasPrefix(digest, prefix) || len(digest) != len(prefix)+sha256.Size*2 {
+		return ""
+	}
+	if _, err := hex.DecodeString(digest[len(prefix):]); err != nil {
+		return ""
+	}
+	return digest
 }
 
 type replayInputCLIError struct {
