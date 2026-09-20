@@ -338,18 +338,7 @@ func (r *registry) ListObservations(ctx context.Context, req workersessions.List
 		return workersessions.ListObservationsResult{}, err
 	}
 
-	r.mu.RLock()
-	ids := make([]observationOrder, 0)
-	for id, current := range r.observations {
-		if containsString(current.workIDs, req.WorkID) {
-			ids = append(ids, observationOrder{
-				id:        id,
-				startedAt: current.startedAt,
-				attemptID: current.attemptID,
-			})
-		}
-	}
-	r.mu.RUnlock()
+	ids := r.observationCandidatesForWork(req)
 	idCollectionDuration := r.clock.Now().Sub(listStartedAt)
 	if len(ids) == 0 {
 		r.logger.Info("worker session observation list", "workID", req.WorkID, "outcome", "not_found")

@@ -95,7 +95,7 @@ func runInvokeContinueForcedAssertionChild(t *testing.T) {
 		factorySessionID: scenario.session.id, repository: fixture.managerRepositoryA.path, workID: ids.workA, message: s8MessageA,
 	})
 	fixture.managerRunner.waitStarted(t, fixture.managerRepositoryA.path, fixture.router.requests)
-	stream := startS8LiveStream(t, fixture, ctx, fixture.process, invokeContinueEnvironment(fixture.homeDir), scenario.workingDirectory, fixture.baseURL, scenario.session.id, ids.workerA, s8ProviderSessionA)
+	stream := startS8LiveStream(t, fixture, ctx, fixture.process, invokeContinueEnvironment(fixture.homeDir), scenario.workingDirectory, fixture.baseURL, ids.workerA, s8ProviderSessionA)
 	stream.writer.waitWorkerSessionFrame(t, ids.workerA)
 	fixture.managerRunner.release(t, fixture.managerRepositoryA.path)
 	waitS8Stream(t, stream, ids.workerA)

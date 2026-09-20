@@ -6861,3 +6861,99 @@ func (recording *interruptRecording) counts() (closeCalls, terminalCalls int) {
 
 var _ recordings.WorkerSessionRecordingService = (*interruptRecordingService)(nil)
 var _ recordings.WorkerSessionRecordingFinalizer = (*interruptRecording)(nil)
+
+type trackingObservationProjector struct {
+	providersessions.Service
+	result  providersessions.ProjectResult
+	request providersessions.ProjectRequest
+	calls   int
+}
+
+func (f *trackingObservationProjector) Project(request providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
+	f.calls++
+	f.request = request
+	return f.result, nil
+}
+
+func TestListObservationsUsesFactorySessionAndWorkAssociations(t *testing.T) {
+	projector := &trackingObservationProjector{}
+	registry := newObservationRegistry(projector, nil)
+	addAttempt := func(id, factorySessionID, workID, attemptID string, state workersessions.State, startedAt time.Time) {
+		session := observationSession(id, state)
+		session.ProviderSessionAssociation.DispatchID = attemptID
+		session.ProviderSessionAssociation.AttemptID = attemptID
+		registry.sessions[id] = session
+		registry.ensureObservationWithFactorySession(
+			id,
+			attemptID,
+			"turn-"+id,
+			[]string{workID},
+			false,
+			factorySessionID,
+		)
+		registry.observations[id].startedAt = startedAt
+	}
+	base := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
+	addAttempt("worker-earlier", "factory-target", "work-shared", "attempt-1", workersessions.StateCompleted, base)
+	addAttempt("worker-sibling", "factory-sibling", "work-shared", "attempt-2", workersessions.StateCompleted, base.Add(time.Second))
+	addAttempt("worker-current", "factory-target", "work-shared", "attempt-3", workersessions.StateRunning, base.Add(2*time.Second))
+	addAttempt("worker-other-work", "factory-target", "work-other", "attempt-4", workersessions.StateRunning, base.Add(3*time.Second))
+
+	result, err := registry.ListObservations(context.Background(), workersessions.ListObservationsRequest{
+		FactorySessionID: "factory-target",
+		WorkID:           "work-shared",
+	})
+	if err != nil {
+		t.Fatalf("ListObservations(scoped Work) error = %v", err)
+	}
+	if len(result.Observations) != 2 || result.Observations[0].WorkerSessionID != "worker-earlier" || result.Observations[1].WorkerSessionID != "worker-current" {
+		t.Fatalf("ListObservations(scoped Work) = %#v, want ordered historical/current attempts only", result.Observations)
+	}
+	for _, observation := range result.Observations {
+		if observation.FactorySessionID != "factory-target" || len(observation.WorkIDs) != 1 || observation.WorkIDs[0] != "work-shared" {
+			t.Fatalf("scoped observation attribution = %#v, want exact Factory Session and Work", observation)
+		}
+	}
+	if projector.calls != 2 {
+		t.Fatalf("Provider Sessions projections for scoped Work = %d, want only its two attempts", projector.calls)
+	}
+}
+
+func TestStreamObservationsByWorkerSessionIDCloseCancelsBlockedNext(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	reader := &observationEventReaderFake{subscription: events.Subscription(func(ctx context.Context) events.Delivery {
+		close(started)
+		<-ctx.Done()
+		return events.Delivery{Kind: events.DeliveryCanceled}
+	})}
+	registry := newObservationRegistry(nil, reader)
+	registry.sessions["worker-1"] = observationSession("worker-1", workersessions.StateRunning)
+
+	subscription, err := registry.StreamObservationsByWorkerSessionID(context.Background(), workersessions.StreamObservationsByWorkerSessionIDRequest{
+		WorkerSessionID: "worker-1",
+	})
+	if err != nil {
+		t.Fatalf("StreamObservationsByWorkerSessionID() error = %v", err)
+	}
+
+	delivery := make(chan workersessions.ObservationDelivery, 1)
+	go func() { delivery <- subscription.Next(context.Background()) }()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("live subscription did not enter its blocking Next call")
+	}
+	subscription.Close()
+	subscription.Close()
+
+	select {
+	case got := <-delivery:
+		if got.Kind != workersessions.ObservationDeliveryCanceled || !errors.Is(got.Err, workersessions.ErrObservationCanceled) {
+			t.Fatalf("closed live delivery = %#v, want typed canceled outcome", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Close() did not unblock the active live Next call")
+	}
+}

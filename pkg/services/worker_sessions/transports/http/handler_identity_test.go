@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -44,10 +45,14 @@ func (stub *decoratedSessionScopeResolverStub) WorkerSessionsObservationForSessi
 
 type sessionObservationServiceStub struct {
 	workersessions.Service
-	result workersessions.ListObservationsResult
+	result          workersessions.ListObservationsResult
+	listCalls       int
+	lastListRequest workersessions.ListObservationsRequest
 }
 
-func (stub *sessionObservationServiceStub) ListObservations(context.Context, workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
+func (stub *sessionObservationServiceStub) ListObservations(_ context.Context, request workersessions.ListObservationsRequest) (workersessions.ListObservationsResult, error) {
+	stub.listCalls++
+	stub.lastListRequest = request
 	return stub.result, nil
 }
 
@@ -133,6 +138,54 @@ func TestListWorkerSessionsBySessionIDValidatesWorkBeforeResolvingScope(t *testi
 	}
 	if resolver.observationSessionID != "session-1" {
 		t.Fatalf("scoped observation session ID = %q, want session-1", resolver.observationSessionID)
+	}
+}
+
+func TestListWorkerSessionsPreservesUnknownFactorySessionWhenWorkLookupFails(t *testing.T) {
+	t.Parallel()
+
+	resolver := &sessionScopeResolverStub{err: workersessions.ErrObservationSessionNotFound}
+	adapter := NewAdapter(
+		&sessionObservationServiceStub{},
+		workServiceStub{getErr: errors.New("Work snapshot lookup failed for missing session")},
+		resolver,
+	)
+	_, err := adapter.ListWorkerSessions(context.Background(), "missing-session", "work-1")
+	if !errors.Is(err, workersessions.ErrObservationSessionNotFound) {
+		t.Fatalf("missing Factory Session error = %v, want ErrObservationSessionNotFound", err)
+	}
+}
+
+func TestListWorkerSessionsBySessionIDUsesOnlyTheRuntimeScopedObservationSource(t *testing.T) {
+	retained := &sessionObservationServiceStub{}
+	scoped := &sessionObservationServiceStub{result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
+		WorkerSessionID:  "worker-session-1",
+		FactorySessionID: "session-1",
+		WorkIDs:          []string{"work-1"},
+		AttemptID:        "attempt-1",
+		State:            workersessions.StateCompleted,
+	}}}}
+	resolver := &decoratedSessionScopeResolverStub{
+		sessionScopeResolverStub: sessionScopeResolverStub{scope: SessionScope{EffectiveID: "session-1"}},
+		observations:             scoped,
+	}
+	handler := NewHandler(NewAdapter(retained, workServiceStub{}, resolver), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.ListWorkerSessionsBySessionId(
+		recorder,
+		httptest.NewRequest("GET", "/factory-sessions/session-1/worker-sessions?workId=work-1", nil),
+		factoryapi.SessionID("session-1"),
+		factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work-1"},
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if scoped.listCalls != 1 || scoped.lastListRequest.FactorySessionID != "session-1" || scoped.lastListRequest.WorkID != "work-1" {
+		t.Fatalf("runtime-scoped observation request = calls:%d request:%#v, want one exact session/Work lookup", scoped.listCalls, scoped.lastListRequest)
+	}
+	if retained.listCalls != 0 {
+		t.Fatalf("process-level observation source calls = %d, want zero for a Work-scoped read", retained.listCalls)
 	}
 }
 

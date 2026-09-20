@@ -177,8 +177,8 @@ func startS8ManagerWorkers(t *testing.T, scenario s8ManagerScenario) s8ManagerOv
 	scenario.runner.waitStarted(t, scenario.repositoryB.path, scenario.fixture.router.requests)
 
 	return s8ManagerOverlap{
-		streamA: startS8LiveStream(t, scenario.fixture, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, scenario.sessionA.id, ids.workerA, s8ProviderSessionA),
-		streamB: startS8LiveStream(t, scenario.fixture, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, scenario.sessionB.id, ids.workerB, s8ProviderSessionB),
+		streamA: startS8LiveStream(t, scenario.fixture, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, s8ProviderSessionA),
+		streamB: startS8LiveStream(t, scenario.fixture, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, ids.workerB, s8ProviderSessionB),
 		correlationA: s8Correlation{
 			factorySessionID: scenario.sessionA.id, repository: scenario.repositoryA.path, marker: scenario.repositoryA.marker, dispatchID: ids.dispatchA,
 			workID: ids.workA, workerSessionID: ids.workerA, providerSessionID: s8ProviderSessionA, message: s8MessageA, output: s8OutputA,

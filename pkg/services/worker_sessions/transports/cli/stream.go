@@ -49,14 +49,15 @@ func NewStream(transport clihttp.Protocol) StreamOperation {
 }
 
 type streamJSONFrame struct {
-	Delivery        string                 `json:"delivery"`
-	WorkerSessionID string                 `json:"workerSessionId"`
-	ProviderSession *streamProviderSession `json:"providerSession"`
-	WorkIDs         []string               `json:"workIds"`
-	Event           *streamJSONEvent       `json:"event"`
-	ErrorCode       *string                `json:"errorCode"`
-	ErrorMessage    *string                `json:"errorMessage"`
-	ReplaySummary   *streamReplaySummary   `json:"replaySummary,omitempty"`
+	Delivery         string                 `json:"delivery"`
+	WorkerSessionID  string                 `json:"workerSessionId"`
+	FactorySessionID string                 `json:"factorySessionId,omitempty"`
+	ProviderSession  *streamProviderSession `json:"providerSession"`
+	WorkIDs          []string               `json:"workIds"`
+	Event            *streamJSONEvent       `json:"event"`
+	ErrorCode        *string                `json:"errorCode"`
+	ErrorMessage     *string                `json:"errorMessage"`
+	ReplaySummary    *streamReplaySummary   `json:"replaySummary,omitempty"`
 }
 
 type streamReplaySummary struct {
@@ -259,7 +260,11 @@ func validateStreamConfig(config StreamConfig) error {
 func workerSessionEventsEndpoint(server, sessionID, workerSessionID, provider, kind, id string, replayOnly bool) (url.URL, error) {
 	path := sessionpath.WorkerSessionsEventsPath(sessionID)
 	if strings.TrimSpace(workerSessionID) != "" {
-		path = sessionpath.TopLevelWorkerSessionEventsPath(workerSessionID)
+		if strings.TrimSpace(sessionID) != "" {
+			path = sessionpath.FactorySessionWorkerSessionEventsPath(sessionID, workerSessionID)
+		} else {
+			path = sessionpath.TopLevelWorkerSessionEventsPath(workerSessionID)
+		}
 	}
 	endpointURL, err := cliserver.RequestURL(server, path)
 	if err != nil {
@@ -351,6 +356,7 @@ func renderStreamFrame(output io.Writer, frame streamJSONFrame) error {
 	fields := []string{
 		"delivery=" + streamStringOrDash(frame.Delivery),
 		"workerSession=" + streamStringOrDash(frame.WorkerSessionID),
+		"factorySession=" + streamStringOrDash(frame.FactorySessionID),
 		"provider=" + streamStringOrDash(provider),
 		"kind=" + streamStringOrDash(kind),
 		"providerSession=" + streamStringOrDash(id),
