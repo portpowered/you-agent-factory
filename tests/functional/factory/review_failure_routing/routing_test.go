@@ -537,8 +537,7 @@ type reviewFailureAuthorizationCase struct {
 }
 
 func TestReviewFailureRouting_ReviewedTaskCompleteRejectsUnauthorizedReviewEvidenceKeepsFeedbackActionable(t *testing.T) {
-	// Keep the authorization matrix sequential: shared fixture routing matches
-	// scenario markers by substring, so concurrent rf-1/rf-10 sessions can alias.
+	t.Parallel()
 	cases := []reviewFailureAuthorizationCase{
 		{
 			name:     "missing approval",
@@ -564,6 +563,7 @@ func TestReviewFailureRouting_ReviewedTaskCompleteRejectsUnauthorizedReviewEvide
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runReviewFailureAuthorizationCase(t, tc)
 		})
 	}

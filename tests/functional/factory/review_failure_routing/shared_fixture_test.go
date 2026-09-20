@@ -276,7 +276,7 @@ func (fixture *reviewFailureProcessFixture) sessionLifecycleError() error {
 }
 
 func (fixture *reviewFailureProcessFixture) nextScenarioID() string {
-	return fmt.Sprintf("rf-%d", fixture.nextScenario.Add(1))
+	return fmt.Sprintf("rf-%08d", fixture.nextScenario.Add(1))
 }
 
 func writeReviewFailureBootstrapFactory(dir string) error {
