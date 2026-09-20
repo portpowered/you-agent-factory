@@ -237,6 +237,13 @@
         }
       },
       {
+        "id": "workstation:complete-reviewed-task-after-failed-idea",
+        "position": {
+          "x": 1750,
+          "y": 2265
+        }
+      },
+      {
         "id": "workstation:ci-wait",
         "position": {
           "x": 1465,
@@ -859,6 +866,7 @@
           "worker:reviewer",
           "worker:ci-waiter",
           "workstation:consume",
+          "workstation:complete-reviewed-task-after-failed-idea",
           "workstation:ci-wait",
           "workstation:process",
           "workstation:review",
@@ -1832,6 +1840,52 @@
         {
           "state": "complete",
           "workType": "task"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "id": "complete-reviewed-task-after-failed-idea",
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "task",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "failed",
+          "workType": "idea"
+        },
+        {
+          "state": "to-complete",
+          "workType": "task"
+        },
+        {
+          "guards": [
+            {
+              "matchInput": "task",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "complete",
+          "workType": "review"
+        }
+      ],
+      "name": "complete-reviewed-task-after-failed-idea",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "idea"
+        },
+        {
+          "state": "complete",
+          "workType": "task"
+        },
+        {
+          "state": "complete",
+          "workType": "review"
         }
       ],
       "type": "LOGICAL_MOVE",

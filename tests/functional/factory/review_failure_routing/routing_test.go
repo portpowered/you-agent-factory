@@ -10,6 +10,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const reviewFailureReviewedTaskCompletionTransition = "complete-reviewed-task-after-failed-idea"
+
 // TestReviewFailureRouting_ManualMigrationDispatchesExactReviewOnce proves the
 // manual operator state where same-name historical Work shares the root trace,
 // while the current task is in review and the current review is initial. The
@@ -109,6 +111,159 @@ func TestReviewFailureRouting_RejectionReturnsOneCorrectionToSameOwner(t *testin
 	})
 	assertNoReviewFailureStrands(t, works, name)
 	assertNoIncompleteReviewFailureDispatches(t, dispatches)
+}
+
+// TestReviewFailureRouting_ReviewedTaskCompletesAfterFailedIdea proves an
+// accepted task lifecycle can reach terminal completion while its failed idea
+// and completed review remain readable through the same Factory Session.
+func TestReviewFailureRouting_ReviewedTaskCompletesAfterFailedIdea(t *testing.T) {
+	t.Parallel()
+	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{
+		provider: func(_ context.Context, _ platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
+			return reviewFailureAccepted("review accepted the exact merged candidate"), nil
+		},
+	})
+	stream := scenario.eventStream(t)
+	traceID := scenario.marker + "-shared-root-trace"
+	name := scenario.marker + "-reviewed-task"
+	failedIdeaID := scenario.marker + "-failed-idea"
+	currentTaskID := scenario.marker + "-current-task"
+
+	scenario.submit(t, scenario.marker+"-failed-idea-request", reviewFailureSeed{
+		Name: name, WorkID: failedIdeaID, WorkType: "idea", State: "failed",
+		TraceID: traceID, Payload: "retained failed idea",
+	})
+	scenario.submit(t, scenario.marker+"-current-task-request", reviewFailureSeed{
+		Name: name, WorkID: currentTaskID, WorkType: "task", State: "init",
+		TraceID: traceID, Payload: "reviewed task",
+	})
+
+	currentReviewID := acceptReviewFailureTaskThroughSession(t, scenario, stream, currentTaskID)
+	completion := decodeReviewFailureDispatchResponse(t, awaitReviewFailureDispatchResponses(
+		t, stream, reviewFailureReviewedTaskCompletionTransition, 1,
+	)[0])
+	if completion.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("reviewed-task completion outcome = %q, want ACCEPTED", completion.Outcome)
+	}
+	assertExactReviewFailureDispatchOutput(t, completion, map[string]reviewFailureOutputExpectation{
+		failedIdeaID:    {workType: "idea", state: "failed"},
+		currentTaskID:   {workType: "task", state: "complete"},
+		currentReviewID: {workType: "review", state: "complete"},
+	})
+
+	dispatches := reviewFailureDispatches(t, scenario)
+	completions := dispatchesWithTransition(dispatches, reviewFailureReviewedTaskCompletionTransition)
+	if len(completions) != 1 {
+		t.Fatalf("reviewed-task completion dispatches = %d, want one for exact Work IDs: %#v", len(completions), completions)
+	}
+	assertExactReviewFailureInputIDs(t, completions[0], failedIdeaID, currentTaskID, currentReviewID)
+	assertNoIncompleteReviewFailureDispatches(t, dispatches)
+	assertReviewFailureWorkStates(t, scenario.listWorks(t), map[string]string{
+		failedIdeaID: "failed", currentTaskID: "complete", currentReviewID: "complete",
+	})
+}
+
+// TestReviewFailureRouting_FailedIdeaRequiredBeforeReviewedTaskCompletion
+// proves a completed review and task at to-complete do not complete without
+// the matching failed idea input.
+func TestReviewFailureRouting_FailedIdeaRequiredBeforeReviewedTaskCompletion(t *testing.T) {
+	t.Parallel()
+	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{
+		provider: func(_ context.Context, _ platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
+			return reviewFailureAccepted("review accepted the candidate"), nil
+		},
+	})
+	stream := scenario.eventStream(t)
+	traceID := scenario.marker + "-shared-root-trace"
+	name := scenario.marker + "-reviewed-task-without-idea"
+	currentTaskID := scenario.marker + "-current-task"
+
+	scenario.submit(t, scenario.marker+"-current-task-request", reviewFailureSeed{
+		Name: name, WorkID: currentTaskID, WorkType: "task", State: "init",
+		TraceID: traceID, Payload: "reviewed task without a failed idea",
+	})
+	currentReviewID := acceptReviewFailureTaskThroughSession(t, scenario, stream, currentTaskID)
+
+	dispatches := reviewFailureDispatches(t, scenario)
+	completions := dispatchesWithTransition(dispatches, reviewFailureReviewedTaskCompletionTransition)
+	if len(completions) != 0 {
+		t.Fatalf("reviewed-task completion dispatches without failed idea = %d, want none: %#v", len(completions), completions)
+	}
+	assertReviewFailureWorkStates(t, scenario.listWorks(t), map[string]string{
+		currentTaskID: "to-complete", currentReviewID: "complete",
+	})
+}
+
+func acceptReviewFailureTaskThroughSession(
+	t *testing.T,
+	scenario *reviewFailureScenario,
+	stream *support.FactoryEventStream,
+	taskID string,
+) string {
+	t.Helper()
+	process := decodeReviewFailureDispatchResponse(t, awaitReviewFailureDispatchResponses(t, stream, "process", 1)[0])
+	if process.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("task process outcome = %q, want ACCEPTED", process.Outcome)
+	}
+	assertReviewFailureDispatchOutputStates(t, process, map[string]string{taskID: "awaiting-ci"})
+
+	ciWait := decodeReviewFailureDispatchResponse(t, awaitReviewFailureDispatchResponses(t, stream, "ci-wait", 1)[0])
+	if ciWait.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("task CI outcome = %q, want ACCEPTED", ciWait.Outcome)
+	}
+	assertReviewFailureDispatchOutputStates(t, ciWait, map[string]string{taskID: "in-review"})
+
+	review := decodeReviewFailureDispatchResponse(t, awaitReviewFailureDispatchResponses(t, stream, "review", 1)[0])
+	if review.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("task review outcome = %q, want ACCEPTED", review.Outcome)
+	}
+	reviewID := outputReviewWorkID(t, review, "complete")
+	assertReviewFailureDispatchOutputStates(t, review, map[string]string{
+		taskID: "to-complete", reviewID: "complete",
+	})
+	return reviewID
+}
+
+type reviewFailureOutputExpectation struct {
+	workType string
+	state    string
+}
+
+func assertExactReviewFailureDispatchOutput(
+	t *testing.T,
+	payload factoryapi.DispatchResponseEventPayload,
+	want map[string]reviewFailureOutputExpectation,
+) {
+	t.Helper()
+	if payload.OutputWork == nil {
+		t.Fatalf("dispatch outputWork = nil, want exact Work IDs %v", want)
+	}
+	seen := make(map[string]struct{}, len(*payload.OutputWork))
+	for _, work := range *payload.OutputWork {
+		if work.WorkId == nil {
+			t.Fatalf("dispatch outputWork contains Work without an ID: %#v", work)
+		}
+		workID := *work.WorkId
+		expected, ok := want[workID]
+		if !ok {
+			t.Fatalf("dispatch outputWork contains unexpected Work ID %q; want %v", workID, want)
+		}
+		if _, duplicate := seen[workID]; duplicate {
+			t.Fatalf("dispatch outputWork contains duplicate Work ID %q", workID)
+		}
+		seen[workID] = struct{}{}
+		if work.WorkTypeName == nil || *work.WorkTypeName != expected.workType {
+			t.Fatalf("dispatch outputWork %q type = %#v, want %q", workID, work.WorkTypeName, expected.workType)
+		}
+		if work.State == nil || work.State.Name != expected.state {
+			t.Fatalf("dispatch outputWork %q state = %#v, want %q", workID, work.State, expected.state)
+		}
+	}
+	for workID := range want {
+		if _, ok := seen[workID]; !ok {
+			t.Fatalf("dispatch outputWork is missing exact Work ID %q; got %v", workID, seen)
+		}
+	}
 }
 
 func replacementReviewWorkID(t *testing.T, response factoryapi.DispatchResponseEventPayload) string {
