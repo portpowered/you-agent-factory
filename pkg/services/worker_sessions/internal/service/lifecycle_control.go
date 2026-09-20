@@ -289,9 +289,7 @@ func (r *registry) unsupportedControl(_ context.Context, req workersessions.Cont
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
 	result := workersessions.ControlResult{Session: session, Action: action, Outcome: workersessions.ControlOutcomeUnsupported}
-	if supervision != nil {
-		result.DispatchID = supervision.dispatchID
-	}
+	result.DispatchID = r.controlDispatchID(req.ID, supervision)
 	if session.Terminal() {
 		result.Outcome = workersessions.ControlOutcomeNoop
 	}
@@ -626,18 +624,14 @@ func (r *registry) controlNoop(id string, action workersessions.ControlAction, s
 		}
 	}
 	result := workersessions.ControlResult{Session: session, Action: action, Outcome: workersessions.ControlOutcomeNoop}
-	if supervision != nil {
-		result.DispatchID = supervision.dispatchID
-	}
+	result.DispatchID = r.controlDispatchID(id, supervision)
 	r.logger.Info("worker session control", "sessionID", id, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
 	return result
 }
 
 func (r *registry) controlApplied(id string, action workersessions.ControlAction, session workersessions.Session, supervision *supervision) workersessions.ControlResult {
 	result := workersessions.ControlResult{Session: session, Action: action, Outcome: workersessions.ControlOutcomeApplied}
-	if supervision != nil {
-		result.DispatchID = supervision.dispatchID
-	}
+	result.DispatchID = r.controlDispatchID(id, supervision)
 	r.logger.Info("worker session control", "sessionID", id, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
 	return result
 }

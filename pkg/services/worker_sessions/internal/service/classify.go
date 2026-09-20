@@ -84,29 +84,6 @@ func (r *registry) runtimeAttemptOwnedByOther(logicalDispatchID, workerID, attem
 	return owned && ownerID != workerID && attemptID == logicalDispatchID
 }
 
-func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID string, handles ...*runtimeAttempt) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.runtimeAttempts == nil {
-		r.runtimeAttempts = make(map[string]struct{})
-	}
-	if r.dispatchOwners == nil {
-		r.dispatchOwners = make(map[string]string)
-	}
-	if ownerID, exists := r.dispatchOwners[logicalDispatchID]; exists && ownerID != workerID && attemptID == logicalDispatchID {
-		return false
-	}
-	r.dispatchOwners[logicalDispatchID] = workerID
-	r.runtimeAttempts[workerID] = struct{}{}
-	if len(handles) > 0 && handles[0] != nil {
-		if r.runtimeAttemptControls == nil {
-			r.runtimeAttemptControls = make(map[string]*runtimeAttempt)
-		}
-		r.runtimeAttemptControls[workerID] = handles[0]
-	}
-	return true
-}
-
 // BindRuntimeAttemptCancellation connects the Worker Session identity to the
 // exact Runtime dispatch cancellation boundary. Runtime calls this after
 // opening the observation and before invoking Workers; the root Service

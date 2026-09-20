@@ -87,14 +87,18 @@ type registry struct {
 	// remains the sole admission, cancellation, and execution owner.
 	runtimeAttempts        map[string]struct{}
 	runtimeAttemptControls map[string]*runtimeAttempt
-	execution              workers.Service
-	events                 EventsAppender
-	eventReader            EventsReader
-	retainedReader         EventsRetainedReader
-	providerSessions       providersessions.Service
-	recording              recordings.WorkerSessionRecordingService
-	clock                  platformclock.Source
-	logger                 logging.Logger
+	// latestRuntimeDispatchIDs retains the last exact dispatch identity per
+	// Runtime-owned Worker Session after its live cancellation handle completes,
+	// so terminal NOOP controls can still return the admitted identity.
+	latestRuntimeDispatchIDs map[string]string
+	execution                workers.Service
+	events                   EventsAppender
+	eventReader              EventsReader
+	retainedReader           EventsRetainedReader
+	providerSessions         providersessions.Service
+	recording                recordings.WorkerSessionRecordingService
+	clock                    platformclock.Source
+	logger                   logging.Logger
 
 	// lifecycleCtx is owned by the process composition boundary. Request
 	// contexts are never used as the lifetime of an admitted Start. Stop
@@ -157,6 +161,7 @@ func New(
 		dispatchOwners:              make(map[string]string),
 		runtimeAttempts:             make(map[string]struct{}),
 		runtimeAttemptControls:      make(map[string]*runtimeAttempt),
+		latestRuntimeDispatchIDs:    make(map[string]string),
 		execution:                   execution,
 		events:                      eventsAppender,
 		clock:                       clock,

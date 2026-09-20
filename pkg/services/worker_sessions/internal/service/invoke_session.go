@@ -114,6 +114,51 @@ func (r *registry) BeginRuntimeAttempt(
 	return workersessions.RuntimeAttempt(handle.Complete), nil
 }
 
+func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID string, handles ...*runtimeAttempt) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.runtimeAttempts == nil {
+		r.runtimeAttempts = make(map[string]struct{})
+	}
+	if r.dispatchOwners == nil {
+		r.dispatchOwners = make(map[string]string)
+	}
+	if r.latestRuntimeDispatchIDs == nil {
+		r.latestRuntimeDispatchIDs = make(map[string]string)
+	}
+	if ownerID, exists := r.dispatchOwners[logicalDispatchID]; exists && ownerID != workerID && attemptID == logicalDispatchID {
+		return false
+	}
+	r.dispatchOwners[logicalDispatchID] = workerID
+	r.runtimeAttempts[workerID] = struct{}{}
+	r.latestRuntimeDispatchIDs[workerID] = logicalDispatchID
+	if len(handles) > 0 && handles[0] != nil {
+		if r.runtimeAttemptControls == nil {
+			r.runtimeAttemptControls = make(map[string]*runtimeAttempt)
+		}
+		r.runtimeAttemptControls[workerID] = handles[0]
+	}
+	return true
+}
+
+func (r *registry) controlDispatchID(workerSessionID string, supervision *supervision) string {
+	if supervision != nil {
+		supervision.mu.Lock()
+		dispatchID := strings.TrimSpace(supervision.dispatchID)
+		supervision.mu.Unlock()
+		if dispatchID != "" {
+			return dispatchID
+		}
+	}
+	if r == nil {
+		return ""
+	}
+	r.mu.RLock()
+	dispatchID := r.latestRuntimeDispatchIDs[strings.TrimSpace(workerSessionID)]
+	r.mu.RUnlock()
+	return strings.TrimSpace(dispatchID)
+}
+
 func runtimeAttemptPreparationError(prepared invocationPreparation) error {
 	if !prepared.terminal {
 		return nil
