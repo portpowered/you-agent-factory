@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -589,4 +591,176 @@ func addRestoredDispatchIdentity(
 	if terminal != nil {
 		addHistoricalWorkID(destination, terminal.WorkItem.ID)
 	}
+}
+
+func restoredDispatchHistoryForRuntime(restored *interfaces.FactoryWorldState) []interfaces.CompletedDispatch {
+	if restored == nil || len(restored.CompletedDispatches) == 0 {
+		return nil
+	}
+	history := make([]interfaces.CompletedDispatch, 0, len(restored.CompletedDispatches))
+	for _, completion := range restored.CompletedDispatches {
+		result := completion.Result
+		reason := result.Error
+		if workerexecution.WorkOutcome(result.Outcome) == workerexecution.OutcomeContinue || workerexecution.WorkOutcome(result.Outcome) == workerexecution.OutcomeRejected {
+			reason = result.Feedback
+		}
+		dispatch := interfaces.CompletedDispatch{
+			DispatchID:                  completion.DispatchID,
+			TransitionID:                completion.TransitionID,
+			WorkstationName:             completion.Workstation.Name,
+			ExpectedArtifactContext:     completion.ExpectedArtifactContext.Clone(),
+			Outcome:                     workerexecution.WorkOutcome(result.Outcome),
+			Cancellation:                result.Cancellation.Clone(),
+			SelectedClassificationLabel: result.SelectedClassificationLabel,
+			Reason:                      reason,
+			ArtifactVerification:        result.ArtifactVerification.Clone(),
+			FailureMetadata:             workerexecution.CloneWorkFailureMetadata(result.FailureMetadata),
+			FailureDetail:               workerexecution.CloneFailureDetail(result.FailureDetail),
+			ProviderSession:             completion.ProviderSession.Clone(),
+			StartTime:                   completion.StartedAt,
+			EndTime:                     completion.CompletedAt,
+			Duration:                    time.Duration(completion.DurationMillis) * time.Millisecond,
+			ConsumedTokens:              restoredCompletionInputTokens(completion),
+			OutputMutations:             restoredCompletionOutputMutations(completion),
+		}
+		history = append(history, dispatch)
+	}
+	return history
+}
+
+func restoredCompletionInputTokens(completion interfaces.FactoryWorldDispatchCompletion) []workerexecution.Token {
+	tokens := make([]workerexecution.Token, 0, len(completion.ConsumedInputs))
+	seen := make(map[string]struct{}, len(completion.ConsumedInputs))
+	for _, input := range completion.ConsumedInputs {
+		if input.WorkItem == nil || input.WorkItem.ID == "" {
+			continue
+		}
+		if _, ok := seen[input.WorkItem.ID]; ok {
+			continue
+		}
+		seen[input.WorkItem.ID] = struct{}{}
+		tokens = append(tokens, restoredWorkerToken(*input.WorkItem, input.TokenID))
+	}
+	if len(tokens) > 0 {
+		return tokens
+	}
+	for _, item := range completion.InputWorkItems {
+		if item.ID == "" {
+			continue
+		}
+		if _, ok := seen[item.ID]; ok {
+			continue
+		}
+		seen[item.ID] = struct{}{}
+		tokens = append(tokens, restoredWorkerToken(item, item.ID))
+	}
+	if len(tokens) > 0 {
+		return tokens
+	}
+	for _, workID := range completion.WorkItemIDs {
+		if workID == "" {
+			continue
+		}
+		if _, ok := seen[workID]; ok {
+			continue
+		}
+		seen[workID] = struct{}{}
+		tokens = append(tokens, workerexecution.Token{ID: workID, Color: workerexecution.Color{WorkID: workID, DataType: workerexecution.DataTypeWork}})
+	}
+	return tokens
+}
+
+func restoredWorkerToken(item work.FactoryWorkItem, tokenID string) workerexecution.Token {
+	if tokenID == "" {
+		tokenID = item.ID
+	}
+	return workerexecution.Token{
+		ID:    tokenID,
+		State: item.State,
+		Color: workerexecution.Color{
+			Name:                     item.DisplayName,
+			WorkID:                   item.ID,
+			WorkTypeID:               item.WorkTypeID,
+			DataType:                 workerexecution.DataTypeWork,
+			ChainingTraceDepth:       item.ChainingTraceDepth,
+			CurrentChainingTraceID:   item.CurrentChainingTraceID,
+			PreviousChainingTraceIDs: append([]string(nil), item.PreviousChainingTraceIDs...),
+			TraceID:                  item.TraceID,
+			ParentID:                 item.ParentID,
+			Tags:                     work.CloneTags(item.Tags),
+			Content:                  work.CloneWorkContentParts(item.Content),
+			StructuredResult:         item.StructuredResult,
+			StructuredResultPresent:  item.StructuredResultPresent,
+		},
+	}
+}
+
+func restoredCompletionOutputMutations(completion interfaces.FactoryWorldDispatchCompletion) []interfaces.TokenMutationRecord {
+	if len(completion.OutputWorkItems) == 0 {
+		return nil
+	}
+	mutations := make([]interfaces.TokenMutationRecord, 0, len(completion.OutputWorkItems))
+	for _, item := range completion.OutputWorkItems {
+		if item.ID == "" {
+			continue
+		}
+		token := restoredWorkerToken(item, item.ID)
+		mutations = append(mutations, interfaces.TokenMutationRecord{
+			DispatchID:   completion.DispatchID,
+			TransitionID: completion.TransitionID,
+			Outcome:      workerexecution.WorkOutcome(completion.Result.Outcome),
+			Type:         interfaces.MutationCreate,
+			TokenID:      item.ID,
+			Token:        &token,
+		})
+	}
+	return mutations
+}
+
+func workerRecordingSessionStartedAt(
+	session recordings.WorkerSessionRecordingSnapshot,
+) (*time.Time, error) {
+	if len(session.Records) == 0 {
+		return nil, nil
+	}
+	var draft workerexecution.Draft
+	if err := json.Unmarshal(session.Records[0].Payload, &draft); err != nil {
+		return nil, err
+	}
+	if draft.Kind != workerexecution.KindSession || draft.Phase != workerexecution.PhaseStarted {
+		return nil, fmt.Errorf("first source record is %s/%s, want SESSION/STARTED", draft.Kind, draft.Phase)
+	}
+	var payload workerexecution.SessionPayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		return nil, err
+	}
+	if payload.WorkerSessionID != session.WorkerSessionID {
+		return nil, fmt.Errorf("opening identity %q does not match %q", payload.WorkerSessionID, session.WorkerSessionID)
+	}
+	if payload.StartedAt == nil {
+		// Older sidecars did not retain source-native opening timestamps.
+		return nil, nil
+	}
+	startedAt := payload.StartedAt.UTC()
+	return &startedAt, nil
+}
+
+func validWorkerRecordingHealth(status recordings.WorkerRecordingStatus) bool {
+	switch status {
+	case recordings.WorkerRecordingStatusComplete,
+		recordings.WorkerRecordingStatusDegraded,
+		recordings.WorkerRecordingStatusIncomplete:
+		return true
+	}
+	return false
+}
+
+func recordingHealthReason(status recordings.WorkerRecordingStatus, failure, interruption string) string {
+	if status == recordings.WorkerRecordingStatusDegraded {
+		return strings.TrimSpace(failure)
+	}
+	if status == recordings.WorkerRecordingStatusIncomplete {
+		return strings.TrimSpace(interruption)
+	}
+	return ""
 }

@@ -233,10 +233,8 @@ func New(
 	replayHistoricalWorks := restoredHistoricalAdmissionWorks(cfg)
 	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	effectiveEventHistory := ensureEventHistory(cfg)
-	if !cfg.skipRestoredDispatchReconciliation {
-		if err := reconcileRestoredDispatches(cfg, effectiveEventHistory); err != nil {
-			return nil, fmt.Errorf("reconcile restored Factory Runtime dispatches: %w", err)
-		}
+	if err := reconcileRuntimeRestoredDispatches(cfg, effectiveEventHistory); err != nil {
+		return nil, err
 	}
 	dispatchResultHook, dispatchPlan, err := configureRuntimeDispatch(
 		cfg, resultBuffer, effectiveEventHistory,
@@ -302,11 +300,24 @@ func New(
 	if err != nil {
 		return nil, fmt.Errorf("create Factory Runtime engine: %w", err)
 	}
+	if err := runtimeEngine.SeedRestoredDispatchHistory(restoredDispatchHistoryForRuntime(cfg.restoredWorldState)); err != nil {
+		return nil, fmt.Errorf("restore Factory Runtime dispatch history: %w", err)
+	}
 	if cfg.skipRestoredDispatchReconciliation {
 		runtimeEngine.SetReplayHistoricalWorks(replayHistoricalWorks)
 	}
 	impl.engine = runtimeEngine
 	return impl, nil
+}
+
+func reconcileRuntimeRestoredDispatches(cfg *runtimeConfig, history recordings.RuntimeLedger) error {
+	if cfg.skipRestoredDispatchReconciliation {
+		return nil
+	}
+	if err := reconcileRestoredDispatches(cfg, history); err != nil {
+		return fmt.Errorf("reconcile restored Factory Runtime dispatches: %w", err)
+	}
+	return nil
 }
 
 func buildRuntimeScheduler(cfg *runtimeConfig) scheduler.Scheduler {

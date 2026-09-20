@@ -203,9 +203,9 @@ func assertConcurrentWorkerSessionDispatchesCompleted(
 	}
 }
 
-// TestWorkerSessionRouteFunctionalBadInputAndUnknownWork exercises the two
-// API-owned failure rows through the live root-built server and checks the
-// same unknown-Work outcome through Process.Execute.
+// TestWorkerSessionRouteFunctionalBadInputAndUnknownWork exercises API-owned
+// bad-input, unknown-Work, and unknown-Factory-Session outcomes through the
+// live root-built server and checks the unknown-Work result through Process.Execute.
 func TestWorkerSessionRouteFunctionalBadInputAndUnknownWork(t *testing.T) {
 	t.Parallel()
 	dir := support.ScaffoldSingleStepFactory(t, "worker-sessions-route-failures")
@@ -227,6 +227,12 @@ func TestWorkerSessionRouteFunctionalBadInputAndUnknownWork(t *testing.T) {
 	unknownWork := getWorkerSessionRouteError(t, baseEndpoint+"?workId=unknown-work", http.StatusNotFound)
 	if unknownWork.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("unknown Work REST error code = %q, want NOT_FOUND", unknownWork.Code)
+	}
+	unknownSessionEndpoint := strings.TrimSuffix(server.URL(), "/") +
+		"/factory-sessions/missing-factory-session/worker-sessions?workId=unknown-work"
+	unknownSession := getWorkerSessionRouteError(t, unknownSessionEndpoint, http.StatusNotFound)
+	if unknownSession.Code != factoryapi.ErrorResponseCodeNOTFOUND {
+		t.Fatalf("unknown Factory Session REST error code = %q, want NOT_FOUND", unknownSession.Code)
 	}
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "worker-sessions", "list", "--work-id", "unknown-work",

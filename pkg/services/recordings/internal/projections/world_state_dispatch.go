@@ -310,6 +310,9 @@ func (r *factoryWorldReducer) applyDispatchCompleted(event interfaces.FactoryEve
 	delete(r.stateValue.ActiveDispatches, dispatchID)
 
 	workIDs := append([]string(nil), dispatch.WorkItemIDs...)
+	for _, workID := range sliceValue(event.Context.WorkIDs) {
+		workIDs = appendUnique(workIDs, workID)
+	}
 	traceIDs := dispatchCompletionTraceIDs(dispatch, event.Context.TraceIDs)
 	outputWorkItems, workIDs, traceIDs := r.applyDispatchOutputWork(event.Context.Tick, dispatch, payload, workIDs, traceIDs)
 	r.releaseResourceUnits(dispatch.Resources, payload.OutputResources)

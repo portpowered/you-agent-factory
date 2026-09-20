@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -38,6 +39,14 @@ func (a *Adapter) ListWorkerSessions(
 	}
 	workModel, err := a.work.GetWork(ctx, sessionID, workID)
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return factoryapi.ListWorkerSessionsResponse{}, ctxErr
+		}
+		if !errors.Is(err, work.ErrWorkNotFound) {
+			if _, scopeErr := a.resolveWorkerSessionScope(ctx, sessionID); scopeErr != nil {
+				return factoryapi.ListWorkerSessionsResponse{}, fmt.Errorf("resolve Factory Session scope: %w", scopeErr)
+			}
+		}
 		return factoryapi.ListWorkerSessionsResponse{}, err
 	}
 	if err := ctx.Err(); err != nil {
@@ -67,7 +76,10 @@ func (a *Adapter) listWorkerSessionsForWork(
 	if observations == nil {
 		return factoryapi.ListWorkerSessionsResponse{}, errors.New("Worker Sessions service is required")
 	}
-	result, err := observations.ListObservations(ctx, workersessions.ListObservationsRequest{WorkID: workID})
+	result, err := observations.ListObservations(ctx, workersessions.ListObservationsRequest{
+		FactorySessionID: scope.effectiveID,
+		WorkID:           workID,
+	})
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return factoryapi.ListWorkerSessionsResponse{}, ctxErr
 	}

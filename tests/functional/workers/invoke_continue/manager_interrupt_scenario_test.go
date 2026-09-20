@@ -58,9 +58,9 @@ func TestDWROS8ManagerInterruptsOnlyOneRemoteWorker(t *testing.T) {
 	})
 	scenario.runner.waitStarted(t, scenario.repositoryB.path, s8InterruptCallBInitial, scenario.fixture.router.requests)
 
-	streamA := startS8LiveStream(t, scenario.fixture, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, scenario.session.id, ids.workerA, s8InterruptProviderSessionA)
+	streamA := startS8LiveStream(t, scenario.fixture, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, s8InterruptProviderSessionA)
 	streamA.writer.waitWorkerSessionFrame(t, ids.workerA)
-	streamB := startS8LiveStream(t, scenario.fixture, ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, scenario.session.id, ids.workerB, s8InterruptProviderSessionB)
+	streamB := startS8LiveStream(t, scenario.fixture, ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, ids.workerB, s8InterruptProviderSessionB)
 	streamB.writer.waitWorkerSessionFrame(t, ids.workerB)
 
 	active := listS8RemoteWorkers(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL, "STARTING", "RUNNING")
@@ -111,7 +111,7 @@ func assertS8InterruptOverlap(
 	scenario.runner.waitStarted(t, scenario.repositoryA.path, s8InterruptCallASuccessor, scenario.fixture.router.requests)
 	scenario.runner.assertOrder(t, "start:"+s8InterruptCallAInitial, "cancel:"+s8InterruptCallAInitial, "start:"+s8InterruptCallASuccessor)
 
-	streamSuccessor := startS8LiveStream(t, scenario.fixture, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, scenario.session.id, ids.successor, s8InterruptProviderSessionA)
+	streamSuccessor := startS8LiveStream(t, scenario.fixture, scenario.ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.successor, s8InterruptProviderSessionA)
 	streamSuccessor.writer.waitWorkerSessionFrame(t, ids.successor)
 	overlap := listS8RemoteWorkers(t, scenario.ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL, "CANCELED", "STARTING", "RUNNING")
 	assertS8NoUnexpectedActiveObservations(t, overlap, ids.workerA, ids.successor, ids.workerB)

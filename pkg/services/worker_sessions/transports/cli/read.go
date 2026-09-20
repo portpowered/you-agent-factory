@@ -138,7 +138,11 @@ func validateReadConfig(config ReadConfig) error {
 func workerSessionTranscriptEndpoint(server, sessionID, workerSessionID, provider, kind, id string) (url.URL, error) {
 	path := sessionpath.WorkerSessionsTranscriptPath(sessionID)
 	if strings.TrimSpace(workerSessionID) != "" {
-		path = sessionpath.TopLevelWorkerSessionTranscriptPath(workerSessionID)
+		if strings.TrimSpace(sessionID) != "" {
+			path = sessionpath.FactorySessionWorkerSessionTranscriptPath(sessionID, workerSessionID)
+		} else {
+			path = sessionpath.TopLevelWorkerSessionTranscriptPath(workerSessionID)
+		}
 	}
 	endpointURL, err := cliserver.RequestURL(server, path)
 	if err != nil {
@@ -160,13 +164,14 @@ func workerSessionTranscriptEndpoint(server, sessionID, workerSessionID, provide
 }
 
 type readJSONResponse struct {
-	AttemptID       string                  `json:"attemptId"`
-	Entries         []readJSONEntry         `json:"entries"`
-	ProviderSession readJSONProviderSession `json:"providerSession"`
-	State           string                  `json:"state"`
-	TurnID          *string                 `json:"turnId"`
-	WorkIDs         []string                `json:"workIds"`
-	WorkerSessionID string                  `json:"workerSessionId"`
+	AttemptID        string                  `json:"attemptId"`
+	Entries          []readJSONEntry         `json:"entries"`
+	FactorySessionID *string                 `json:"factorySessionId,omitempty"`
+	ProviderSession  readJSONProviderSession `json:"providerSession"`
+	State            string                  `json:"state"`
+	TurnID           *string                 `json:"turnId"`
+	WorkIDs          []string                `json:"workIds"`
+	WorkerSessionID  string                  `json:"workerSessionId"`
 }
 
 type readJSONProviderSession struct {
@@ -206,8 +211,9 @@ func encodeReadJSON(output io.Writer, response factoryapi.WorkerSessionTranscrip
 	}
 	return json.NewEncoder(output).Encode(readJSONResponse{
 		AttemptID: response.AttemptId, Entries: entries,
-		ProviderSession: readJSONProviderSession{Provider: response.ProviderSession.Provider, Kind: response.ProviderSession.Kind, ID: response.ProviderSession.Id},
-		State:           response.State, TurnID: response.TurnId, WorkIDs: response.WorkIds, WorkerSessionID: response.WorkerSessionId,
+		FactorySessionID: response.FactorySessionId,
+		ProviderSession:  readJSONProviderSession{Provider: response.ProviderSession.Provider, Kind: response.ProviderSession.Kind, ID: response.ProviderSession.Id},
+		State:            response.State, TurnID: response.TurnId, WorkIDs: response.WorkIds, WorkerSessionID: response.WorkerSessionId,
 	})
 }
 
@@ -215,6 +221,7 @@ func renderRead(output io.Writer, response factoryapi.WorkerSessionTranscriptRes
 	provider := response.ProviderSession
 	fields := []struct{ label, value string }{
 		{"Worker Session ID", response.WorkerSessionId},
+		{"Factory Session ID", stringOrDash(response.FactorySessionId)},
 		{"Provider", stringOrDashPtr(provider.Provider)},
 		{"Kind", stringOrDashPtr(provider.Kind)},
 		{"Provider Session ID", stringOrDashPtr(provider.Id)},

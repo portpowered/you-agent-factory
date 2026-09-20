@@ -68,9 +68,13 @@ func readModelFromWorkItem(
 		StructuredResultPresent:  jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent),
 		Tags:                     work.CloneTags(item.Tags),
 		ExpectedArtifacts:        expectedArtifactsFromWorldItem(item, state),
-		FailureDetail:            currentWorkFailureDetail(item, state),
 	}
 	read.State = workStateFromItem(item, state, inFlight)
+	read.FailureDetail = currentWorkFailureDetail(
+		item,
+		state,
+		read.State != nil && read.State.Type == work.StateTypeFailed,
+	)
 	if changes := state.WorkStateChangesByWorkID[item.ID]; len(changes) > 0 {
 		latest := changes[0].Sequence
 		for _, change := range changes[1:] {
@@ -101,8 +105,9 @@ func readModelFromWorkItem(
 func currentWorkFailureDetail(
 	item work.FactoryWorkItem,
 	state factorydefinitions.FactoryWorldState,
+	currentlyFailed bool,
 ) *work.FailureDetail {
-	if _, failed := state.FailedWorkItemsByID[item.ID]; !failed {
+	if _, failed := state.FailedWorkItemsByID[item.ID]; !failed && !currentlyFailed {
 		return nil
 	}
 	for index := len(state.FailedDispatches) - 1; index >= 0; index-- {
@@ -120,6 +125,20 @@ func currentWorkFailureDetail(
 	}
 	if detail, ok := state.FailureDetailsByWorkID[item.ID]; ok {
 		return detachedWorkFailureDetail(detail.FailureDetail)
+	}
+	for index := len(state.CompletedDispatches) - 1; index >= 0; index-- {
+		dispatch := state.CompletedDispatches[index]
+		if dispatch.Result.Outcome != string(workers.OutcomeFailed) ||
+			!worldDispatchContainsWork(
+				dispatch.WorkItemIDs,
+				dispatch.ConsumedInputs,
+				dispatch.InputWorkItems,
+				dispatch.OutputWorkItems,
+				item.ID,
+			) {
+			continue
+		}
+		return detachedWorkFailureDetail(dispatch.Result.FailureDetail)
 	}
 	return nil
 }

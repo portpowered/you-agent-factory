@@ -576,7 +576,7 @@ func runtimeWorkItem(
 	}
 	name := runtimeFirstNonEmpty(token.Color.Name, token.Color.WorkID, token.ID)
 	state := runtimeWorkState(token, net, inFlight)
-	item := work.ReadModel{CursorID: token.ID, Name: name, WorkID: token.Color.WorkID, RequestID: token.Color.RequestID, WorkTypeName: token.Color.WorkTypeID, State: state, FailureDetail: runtimeWorkFailureDetail(token.Color.WorkID, state, readFacts.dispatchHistory, readFacts.results), ChainingTraceDepth: token.Color.ChainingTraceDepth, CurrentChainingTraceID: runtimeFirstNonEmpty(token.Color.CurrentChainingTraceID, token.Color.TraceID), PreviousChainingTraceIDs: append([]string(nil), token.Color.PreviousChainingTraceIDs...), TraceID: token.Color.TraceID, Content: work.CloneWorkContentParts(token.Color.Content), StructuredResult: jsonvalue.Clone(token.Color.StructuredResult), StructuredResultPresent: jsonvalue.Present(token.Color.StructuredResult, token.Color.StructuredResultPresent), Tags: work.CloneTags(token.Color.Tags), ExpectedArtifacts: (factoryruntime.WorkArtifactProjection{}).Project(factoryruntime.WorkArtifactProjectionInput{Token: token, Topology: net, Dispatches: readFacts.dispatches, DispatchHistory: readFacts.dispatchHistory, Results: readFacts.results})}
+	item := work.ReadModel{CursorID: token.ID, Name: name, WorkID: token.Color.WorkID, RequestID: token.Color.RequestID, WorkTypeName: token.Color.WorkTypeID, State: state, FailureDetail: runtimeWorkFailureDetail(token.Color.WorkID, state, readFacts.dispatchHistory, readFacts.results), ChainingTraceDepth: token.Color.ChainingTraceDepth, CurrentChainingTraceID: runtimeFirstNonEmpty(token.Color.CurrentChainingTraceID, token.Color.TraceID), PreviousChainingTraceIDs: runtimeWorkPreviousChainingTraceIDs(token.Color.WorkID, token.Color, readFacts.dispatchHistory), TraceID: token.Color.TraceID, Content: work.CloneWorkContentParts(token.Color.Content), StructuredResult: jsonvalue.Clone(token.Color.StructuredResult), StructuredResultPresent: jsonvalue.Present(token.Color.StructuredResult, token.Color.StructuredResultPresent), Tags: work.CloneTags(token.Color.Tags), ExpectedArtifacts: (factoryruntime.WorkArtifactProjection{}).Project(factoryruntime.WorkArtifactProjectionInput{Token: token, Topology: net, Dispatches: readFacts.dispatches, DispatchHistory: readFacts.dispatchHistory, Results: readFacts.results})}
 	for _, relation := range token.Color.Relations {
 		item.Relations = append(item.Relations, work.ReadRelation{Type: relation.Type, SourceWorkName: name, TargetWorkName: runtimeFirstNonEmpty(names[relation.TargetWorkID], relation.TargetWorkID), TargetWorkID: relation.TargetWorkID, RequiredState: relation.RequiredState})
 	}
@@ -608,6 +608,47 @@ func runtimeWorkFailureDetail(
 			return &work.FailureDetail{Reason: string(result.FailureDetail.Reason), Message: result.FailureDetail.Message}
 		}
 		return nil
+	}
+	return nil
+}
+
+func runtimeWorkPreviousChainingTraceIDs(
+	workID string,
+	color workers.Color,
+	history []factoryruntime.CompletedDispatch,
+) []string {
+	if previous := work.CanonicalChainingTraceIDs(color.PreviousChainingTraceIDs); len(previous) > 0 {
+		return previous
+	}
+	for index := len(history) - 1; index >= 0; index-- {
+		dispatch := history[index]
+		if !runtimeCompletedDispatchContainsWork(dispatch, workID) {
+			continue
+		}
+		for mutationIndex := len(dispatch.OutputMutations) - 1; mutationIndex >= 0; mutationIndex-- {
+			mutation := dispatch.OutputMutations[mutationIndex]
+			if mutation.Token == nil || mutation.Token.Color.WorkID != workID {
+				continue
+			}
+			if previous := work.CanonicalChainingTraceIDs(mutation.Token.Color.PreviousChainingTraceIDs); len(previous) > 0 {
+				return previous
+			}
+		}
+		inputs := make([]work.FactoryWorkItem, 0, len(dispatch.ConsumedTokens))
+		for _, token := range dispatch.ConsumedTokens {
+			if token.Color.DataType == workers.DataTypeResource || token.Color.WorkID == "" {
+				continue
+			}
+			inputs = append(inputs, work.FactoryWorkItem{
+				ID:                     token.Color.WorkID,
+				WorkTypeID:             token.Color.WorkTypeID,
+				CurrentChainingTraceID: token.Color.CurrentChainingTraceID,
+				TraceID:                token.Color.TraceID,
+			})
+		}
+		if previous := work.PreviousChainingTraceIDsFromWorkItems(inputs); len(previous) > 0 {
+			return previous
+		}
 	}
 	return nil
 }
