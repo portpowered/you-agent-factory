@@ -258,9 +258,14 @@ func newHTTPWorkerSessionsHandler(
 		return nil
 	}
 	resolver := newWorkerSessionsFactorySessionScopeResolver(opened.FactorySessions)
+	controller := workerSessionControlRouter{
+		sources: func(ctx context.Context) ([]workersessions.Service, error) {
+			return workerSessionObservationSources(ctx, opened)
+		},
+	}
 	adapter := workersessionshttp.NewAdapterWithStartAndContinueAndInterruptAndControl(
 		opened.WorkerSessions, opened.WorkerSessions, opened.WorkerSessions,
-		opened.WorkerSessions, opened.WorkerSessions, opened.Work, resolver,
+		controller, opened.WorkerSessions, opened.Work, resolver,
 	)
 	if adapter == nil {
 		return nil
@@ -319,6 +324,96 @@ func workerSessionObservationSources(
 		sources = append(sources, opened.WorkerSessions)
 	}
 	return sources, nil
+}
+
+// workerSessionControlRouter resolves top-level controls through the same
+// ordered runtime-owned service sources used by Worker Session observations.
+// Factory Runtime owns sessions opened while dispatching Work, so the
+// process-default registry is only selected when it owns the exact identity.
+type workerSessionControlRouter struct {
+	sources func(context.Context) ([]workersessions.Service, error)
+}
+
+func (router workerSessionControlRouter) owner(
+	ctx context.Context,
+	request workersessions.ControlRequest,
+) (workersessions.Service, error) {
+	if err := request.Validate(); err != nil {
+		return nil, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if router.sources == nil {
+		return nil, workersessions.ErrSessionNotFound
+	}
+	sources, err := router.sources(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, source := range sources {
+		if source == nil {
+			continue
+		}
+		_, err := source.Get(ctx, workersessions.GetRequest{ID: request.ID})
+		if err == nil {
+			return source, nil
+		} else if !errors.Is(err, workersessions.ErrSessionNotFound) {
+			return nil, err
+		}
+	}
+	return nil, workersessions.ErrSessionNotFound
+}
+
+func (router workerSessionControlRouter) control(
+	ctx context.Context,
+	request workersessions.ControlRequest,
+	action workersessions.ControlAction,
+) (workersessions.ControlResult, error) {
+	owner, err := router.owner(ctx, request)
+	if err != nil {
+		return workersessions.ControlResult{}, err
+	}
+	switch action {
+	case workersessions.ControlActionPause:
+		return owner.Pause(ctx, request)
+	case workersessions.ControlActionResume:
+		return owner.Resume(ctx, request)
+	case workersessions.ControlActionCancel:
+		return owner.Cancel(ctx, request)
+	case workersessions.ControlActionTerminate:
+		return owner.Terminate(ctx, request)
+	default:
+		return workersessions.ControlResult{}, errors.New("unsupported Worker Session control action")
+	}
+}
+
+func (router workerSessionControlRouter) Pause(
+	ctx context.Context,
+	request workersessions.ControlRequest,
+) (workersessions.ControlResult, error) {
+	return router.control(ctx, request, workersessions.ControlActionPause)
+}
+
+func (router workerSessionControlRouter) Resume(
+	ctx context.Context,
+	request workersessions.ControlRequest,
+) (workersessions.ControlResult, error) {
+	return router.control(ctx, request, workersessions.ControlActionResume)
+}
+
+func (router workerSessionControlRouter) Cancel(
+	ctx context.Context,
+	request workersessions.ControlRequest,
+) (workersessions.ControlResult, error) {
+	return router.control(ctx, request, workersessions.ControlActionCancel)
+}
+
+func (router workerSessionControlRouter) Terminate(
+	ctx context.Context,
+	request workersessions.ControlRequest,
+) (workersessions.ControlResult, error) {
+	return router.control(ctx, request, workersessions.ControlActionTerminate)
 }
 
 func containsString(values []string, wanted string) bool {

@@ -100,16 +100,16 @@ func (r *registry) BeginRuntimeAttempt(
 	if !r.transitionToRunning(req.ID) {
 		return nil, workersessions.ErrStartAdmissionFailed
 	}
-	if !r.claimRuntimeAttempt(logicalDispatchID, req.ID, attemptID) {
-		r.terminalizeInvocationBeforeAdmission(context.WithoutCancel(ctx), req.ID, attemptID)
-		return nil, workersessions.ErrProviderSessionAssociationAttemptMismatch
-	}
-
 	handle := &runtimeAttempt{
 		registry:   r,
 		workerID:   req.ID,
 		dispatchID: logicalDispatchID,
 		attemptID:  attemptID,
+		completed:  make(chan struct{}),
+	}
+	if !r.claimRuntimeAttempt(logicalDispatchID, req.ID, attemptID, handle) {
+		r.terminalizeInvocationBeforeAdmission(context.WithoutCancel(ctx), req.ID, attemptID)
+		return nil, workersessions.ErrProviderSessionAssociationAttemptMismatch
 	}
 	return workersessions.RuntimeAttempt(handle.Complete), nil
 }

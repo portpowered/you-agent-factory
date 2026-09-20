@@ -96,17 +96,11 @@ func recordedDispatchFact(
 		fact.workIDs = firstRecordedWorkIDs(dispatch.WorkItemIDs, fact.workIDs)
 	}
 	if dispatch, ok := completed[dispatchID]; ok {
-		fact.state = recordedObservationState(dispatch.Result.Outcome)
+		fact.state = recordedDispatchObservationState(dispatch.Result)
 		fact.startedAt = firstRecordedTime(dispatch.StartedAt, fact.startedAt)
 		fact.endedAt = recordedDispatchEnd(dispatch, events, dispatchID)
 		fact.workIDs = firstRecordedWorkIDs(dispatch.WorkItemIDs, fact.workIDs)
-		fact.failure = recordedFailureWithDiagnostics(
-			workers.WorkOutcome(dispatch.Result.Outcome),
-			dispatch.Result.FailureDetail,
-			dispatch.Result.FailureMetadata,
-			fact.state,
-			dispatch.Diagnostics,
-		)
+		fact.failure = recordedDispatchFailureWithDiagnostics(dispatch.Result, fact.state, dispatch.Diagnostics)
 		fact.tokenUsage = recordedTokenUsageFromDiagnostics(dispatch.Diagnostics)
 		fact.provider = cloneProviderMetadata(dispatch.ProviderSession)
 	}

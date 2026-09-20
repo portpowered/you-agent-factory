@@ -596,6 +596,38 @@ func recordedObservationState(outcome string) workersessions.State {
 	}
 }
 
+func recordedDispatchObservationState(result interfaces.WorkstationResult) workersessions.State {
+	if result.Outcome == string(workers.OutcomeCanceled) &&
+		result.Cancellation != nil &&
+		result.Cancellation.Reason == workers.DispatchCancellationReasonCanceled {
+		return workersessions.StateCanceled
+	}
+	return recordedObservationState(result.Outcome)
+}
+
+func recordedDispatchFailureWithDiagnostics(
+	result interfaces.WorkstationResult,
+	state workersessions.State,
+	diagnostics *workers.SafeWorkDiagnostics,
+) *workersessions.FailureCause {
+	if state == workersessions.StateCanceled &&
+		result.Outcome == string(workers.OutcomeCanceled) &&
+		result.Cancellation != nil &&
+		result.Cancellation.Reason == workers.DispatchCancellationReasonCanceled {
+		return &workersessions.FailureCause{
+			Kind:   workersessions.FailureCauseOperatorCanceled,
+			Detail: "an operator cancel control ended the Worker Session",
+		}
+	}
+	return recordedFailureWithDiagnostics(
+		workers.WorkOutcome(result.Outcome),
+		result.FailureDetail,
+		result.FailureMetadata,
+		state,
+		diagnostics,
+	)
+}
+
 func recordedFailure(outcome workers.WorkOutcome, detail *workers.FailureDetail, metadata *workers.WorkFailureMetadata, state workersessions.State) *workersessions.FailureCause {
 	return recordedFailureWithDiagnostics(outcome, detail, metadata, state, nil)
 }

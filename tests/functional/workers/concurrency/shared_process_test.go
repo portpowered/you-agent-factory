@@ -29,6 +29,7 @@ type concurrencyRunnerBehavior string
 const (
 	concurrencyRunnerSuccess       concurrencyRunnerBehavior = "success"
 	concurrencyRunnerHold          concurrencyRunnerBehavior = "hold"
+	concurrencyRunnerLateOutput    concurrencyRunnerBehavior = "late-output"
 	concurrencyRunnerFailureHold   concurrencyRunnerBehavior = "failure-hold"
 	concurrencyRunnerTimeoutMarker concurrencyRunnerBehavior = "timeout-marker"
 )

@@ -85,15 +85,16 @@ type registry struct {
 	// execution path. Those attempts share the provider-observation lookup but
 	// deliberately do not install Worker Sessions-owned supervision: Runtime
 	// remains the sole admission, cancellation, and execution owner.
-	runtimeAttempts  map[string]struct{}
-	execution        workers.Service
-	events           EventsAppender
-	eventReader      EventsReader
-	retainedReader   EventsRetainedReader
-	providerSessions providersessions.Service
-	recording        recordings.WorkerSessionRecordingService
-	clock            platformclock.Source
-	logger           logging.Logger
+	runtimeAttempts        map[string]struct{}
+	runtimeAttemptControls map[string]*runtimeAttempt
+	execution              workers.Service
+	events                 EventsAppender
+	eventReader            EventsReader
+	retainedReader         EventsRetainedReader
+	providerSessions       providersessions.Service
+	recording              recordings.WorkerSessionRecordingService
+	clock                  platformclock.Source
+	logger                 logging.Logger
 
 	// lifecycleCtx is owned by the process composition boundary. Request
 	// contexts are never used as the lifetime of an admitted Start. Stop
@@ -155,6 +156,7 @@ func New(
 		interruptReplays:            make(map[string]*interruptReplay),
 		dispatchOwners:              make(map[string]string),
 		runtimeAttempts:             make(map[string]struct{}),
+		runtimeAttemptControls:      make(map[string]*runtimeAttempt),
 		execution:                   execution,
 		events:                      eventsAppender,
 		clock:                       clock,

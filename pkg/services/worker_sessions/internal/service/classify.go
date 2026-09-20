@@ -43,12 +43,23 @@ func startTupleFor(req workersessions.StartRequest) startTuple {
 }
 
 type runtimeAttempt struct {
-	registry   *registry
-	workerID   string
-	dispatchID string
-	attemptID  string
-	once       sync.Once
+	registry       *registry
+	workerID       string
+	dispatchID     string
+	attemptID      string
+	once           sync.Once
+	mu             sync.Mutex
+	cancel         func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
+	controlPending bool
+	controlDone    chan struct{}
+	controlAction  workersessions.ControlAction
+	controlOutcome workersessions.ControlOutcome
+	controlHistory *controlHistoryReservation
+	completing     bool
+	completed      chan struct{}
 }
+
+var errRuntimeAttemptControlUnavailable = errors.New("worker sessions: runtime attempt cancellation is unavailable")
 
 func runtimeAttemptContext(ctx context.Context) context.Context {
 	if ctx == nil {
@@ -73,7 +84,7 @@ func (r *registry) runtimeAttemptOwnedByOther(logicalDispatchID, workerID, attem
 	return owned && ownerID != workerID && attemptID == logicalDispatchID
 }
 
-func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID string) bool {
+func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID string, handles ...*runtimeAttempt) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.runtimeAttempts == nil {
@@ -87,7 +98,143 @@ func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID st
 	}
 	r.dispatchOwners[logicalDispatchID] = workerID
 	r.runtimeAttempts[workerID] = struct{}{}
+	if len(handles) > 0 && handles[0] != nil {
+		if r.runtimeAttemptControls == nil {
+			r.runtimeAttemptControls = make(map[string]*runtimeAttempt)
+		}
+		r.runtimeAttemptControls[workerID] = handles[0]
+	}
 	return true
+}
+
+// BindRuntimeAttemptCancellation connects the Worker Session identity to the
+// exact Runtime dispatch cancellation boundary. Runtime calls this after
+// opening the observation and before invoking Workers; the root Service
+// contract remains unchanged.
+func (r *registry) BindRuntimeAttemptCancellation(
+	workerSessionID string,
+	dispatchID string,
+	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
+) error {
+	workerSessionID = strings.TrimSpace(workerSessionID)
+	dispatchID = strings.TrimSpace(dispatchID)
+	if workerSessionID == "" || dispatchID == "" || cancel == nil {
+		return errRuntimeAttemptControlUnavailable
+	}
+	r.mu.RLock()
+	attempt := r.runtimeAttemptControls[workerSessionID]
+	owner := r.dispatchOwners[dispatchID]
+	r.mu.RUnlock()
+	if attempt == nil || owner != workerSessionID || attempt.dispatchID != dispatchID {
+		return errRuntimeAttemptControlUnavailable
+	}
+	attempt.mu.Lock()
+	defer attempt.mu.Unlock()
+	if attempt.completing || attempt.completed == nil {
+		return errRuntimeAttemptControlUnavailable
+	}
+	attempt.cancel = cancel
+	return nil
+}
+
+func (r *registry) runtimeAttemptFor(id string) *runtimeAttempt {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	attempt := r.runtimeAttemptControls[strings.TrimSpace(id)]
+	r.mu.RUnlock()
+	return attempt
+}
+
+func (r *registry) runtimeAttemptPending(id string) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.RLock()
+	_, pending := r.runtimeAttempts[strings.TrimSpace(id)]
+	r.mu.RUnlock()
+	return pending
+}
+
+func (a *runtimeAttempt) claimControl() (claimed bool, wait <-chan struct{}, completed <-chan struct{}) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.completed == nil {
+		a.completed = make(chan struct{})
+	}
+	if a.completing || a.controlAction != "" {
+		return false, nil, a.completed
+	}
+	if a.controlPending {
+		return false, a.controlDone, nil
+	}
+	a.controlPending = true
+	a.controlDone = make(chan struct{})
+	return true, nil, nil
+}
+
+func (a *runtimeAttempt) resolveControl(
+	action workersessions.ControlAction,
+	outcome workers.WorkstationDispatchCancelOutcome,
+	err error,
+) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err != nil {
+		a.controlOutcome = workersessions.ControlOutcomeFailed
+	} else if outcome == workers.WorkstationDispatchCancelOutcomeCanceled {
+		a.controlAction = action
+		a.controlOutcome = workersessions.ControlOutcomeApplied
+	} else {
+		a.controlOutcome = workersessions.ControlOutcomeNoop
+	}
+	a.controlPending = false
+	if a.controlDone != nil {
+		close(a.controlDone)
+		a.controlDone = nil
+	}
+}
+
+func (a *runtimeAttempt) controlCancel(ctx context.Context) (func(context.Context) (workers.WorkstationDispatchCancelOutcome, error), error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cancel == nil {
+		return nil, errRuntimeAttemptControlUnavailable
+	}
+	return a.cancel, nil
+}
+
+func (a *runtimeAttempt) waitForCompletion() {
+	a.mu.Lock()
+	if a.completed == nil {
+		a.completed = make(chan struct{})
+	}
+	done := a.completed
+	a.mu.Unlock()
+	<-done
+}
+
+func (a *runtimeAttempt) setControlHistory(reservation *controlHistoryReservation) {
+	if a == nil || reservation == nil {
+		return
+	}
+	a.mu.Lock()
+	a.controlHistory = reservation
+	a.mu.Unlock()
+}
+
+func (a *runtimeAttempt) completionState() (workersessions.ControlAction, workersessions.ControlOutcome, *controlHistoryReservation) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for a.controlPending {
+		wait := a.controlDone
+		a.mu.Unlock()
+		<-wait
+		a.mu.Lock()
+	}
+	a.completing = true
+	return a.controlAction, a.controlOutcome, a.controlHistory
 }
 
 // Complete commits the one terminal Worker Session observation. Runtime has
@@ -106,11 +253,25 @@ func (a *runtimeAttempt) Complete(
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	a.mu.Lock()
+	if a.completed == nil {
+		a.completed = make(chan struct{})
+	}
+	completed := a.completed
+	a.mu.Unlock()
 	a.once.Do(func() {
+		defer close(completed)
+		action, controlOutcome, controlHistory := a.completionState()
 		r := a.registry
 		r.associateProviderSessionFromResult(a.workerID, a.dispatchID, result)
-		state, terminal := dispatchedTerminal("", result, dispatchErr)
+		state, terminal := dispatchedTerminal(action, result, dispatchErr)
 		final, committed := r.commitTerminal(a.workerID, state, terminal)
+		if controlHistory != nil {
+			if controlOutcome == "" {
+				controlOutcome = workersessions.ControlOutcomeNoop
+			}
+			r.finishControlHistory(controlHistory, controlOutcome, a.dispatchID, final.State)
+		}
 		if committed {
 			r.logTerminal(a.workerID, a.attemptID, final)
 			r.publishTerminalRecordOrLog(
@@ -123,6 +284,7 @@ func (a *runtimeAttempt) Complete(
 		}
 		r.mu.Lock()
 		delete(r.runtimeAttempts, a.workerID)
+		delete(r.runtimeAttemptControls, a.workerID)
 		r.mu.Unlock()
 	})
 	return nil

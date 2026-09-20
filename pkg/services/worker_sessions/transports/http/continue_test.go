@@ -390,6 +390,34 @@ func TestWorkerSessionControlMapsStableFailures(t *testing.T) {
 	}
 }
 
+func TestWorkerSessionCancelBoundaryFailureNeverReturnsApplied(t *testing.T) {
+	service := &controlHTTPServiceFake{
+		fakeObservationService: fakeObservationService{},
+		results: map[workersessions.ControlAction]workersessions.ControlResult{
+			workersessions.ControlActionCancel: {
+				Session: workersessions.Session{ID: "worker-1", State: workersessions.StateCanceled},
+				Action:  workersessions.ControlActionCancel, Outcome: workersessions.ControlOutcomeApplied,
+			},
+		},
+		errors: map[workersessions.ControlAction]error{
+			workersessions.ControlActionCancel: errors.New("injected cancel boundary failure"),
+		},
+	}
+	handler := NewHandler(NewAdapterWithStartAndContinueAndInterruptAndControl(service, service, service, service, service, workServiceStub{}), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.CancelWorkerSession(recorder, httptest.NewRequest(http.MethodPost, "/worker-sessions/worker-1/cancel", nil), factoryapi.WorkerSessionID("worker-1"))
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusServiceUnavailable, recorder.Body.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if string(response.Code) != "WORKER_SESSION_CONTROL_FAILED" || strings.Contains(recorder.Body.String(), "APPLIED") {
+		t.Fatalf("cancel failure response = %s, want actionable control failure without APPLIED", recorder.Body.String())
+	}
+}
+
 type controlHTTPServiceFake struct {
 	fakeObservationService
 	results        map[workersessions.ControlAction]workersessions.ControlResult

@@ -107,6 +107,44 @@ func runtimeAttemptPreparation(
 		if err != nil {
 			return nil, err
 		}
+		if binder, ok := cfg.workerSessions.(interface {
+			BindRuntimeAttemptCancellation(
+				string,
+				string,
+				func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
+			) error
+		}); ok {
+			dispatchID := strings.TrimSpace(executeRequest.Correlation.DispatchID)
+			bindErr := binder.BindRuntimeAttemptCancellation(
+				sessionID,
+				dispatchID,
+				func(cancelCtx context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+					if cfg.attempts == nil {
+						return "", ErrAttemptLifecycleUnavailable
+					}
+					return cfg.attempts.cancel(cancelCtx, dispatchID)
+				},
+			)
+			if bindErr != nil {
+				bindErr = fmt.Errorf("bind Factory Runtime Worker Session cancellation: %w", bindErr)
+				_ = attempt.Complete(
+					context.Background(),
+					workers.WorkstationDispatchResult{
+						DispatchID:      dispatchID,
+						WorkstationName: request.WorkstationName,
+						TerminalOutcome: workers.WorkstationDispatchTerminalOutcomeFailed,
+						Result: workers.WorkResult{
+							DispatchID:   dispatchID,
+							TransitionID: request.Execution.Dispatch.TransitionID,
+							Outcome:      workers.OutcomeFailed,
+							Error:        bindErr.Error(),
+						},
+					},
+					bindErr,
+				)
+				return nil, bindErr
+			}
+		}
 		return func(callbackCtx context.Context, _ workers.ExecuteRequest, result workers.ExecuteResult, executeErr error) {
 			result = normalizeAttemptResult(
 				executeRequest,

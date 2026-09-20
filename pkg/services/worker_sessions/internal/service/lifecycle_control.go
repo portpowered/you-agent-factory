@@ -315,6 +315,9 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 	if err := req.Validate(); err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
+	if attempt := r.runtimeAttemptFor(req.ID); attempt != nil {
+		return r.cancelRuntimeAttemptControl(ctx, req, action, detachContext, attempt)
+	}
 	reservation, err := r.beginControlHistory(ctx, req.ID, action, req.RequestID)
 	if err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
@@ -326,6 +329,111 @@ func (r *registry) cancelControl(ctx context.Context, req workersessions.Control
 			return result, iterationErr
 		}
 	}
+}
+
+func (r *registry) cancelRuntimeAttemptControl(
+	ctx context.Context,
+	req workersessions.ControlRequest,
+	action workersessions.ControlAction,
+	detachContext bool,
+	attempt *runtimeAttempt,
+) (workersessions.ControlResult, error) {
+	for {
+		claimed, wait, completed := attempt.claimControl()
+		if completed != nil {
+			<-completed
+			current, err := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+			if err != nil {
+				return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed, DispatchID: attempt.dispatchID}, err
+			}
+			return r.runtimeAttemptControlResult(current, action, workersessions.ControlOutcomeNoop, attempt), nil
+		}
+		if wait != nil {
+			<-wait
+			continue
+		}
+		if claimed {
+			break
+		}
+	}
+
+	reservation, err := r.beginControlHistory(ctx, req.ID, action, req.RequestID)
+	if err != nil {
+		attempt.resolveControl(action, "", err)
+		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed, DispatchID: attempt.dispatchID}, err
+	}
+
+	cancelContext := ctx
+	if detachContext {
+		if cancelContext == nil {
+			cancelContext = context.Background()
+		} else {
+			cancelContext = context.WithoutCancel(cancelContext)
+		}
+	}
+	cancel, err := attempt.controlCancel(cancelContext)
+	if err == nil {
+		if cancelContext == nil {
+			cancelContext = context.Background()
+		}
+		var outcome workers.WorkstationDispatchCancelOutcome
+		outcome, err = cancel(cancelContext)
+		if err == nil && outcome != workers.WorkstationDispatchCancelOutcomeCanceled &&
+			outcome != workers.WorkstationDispatchCancelOutcomeAlreadyCanceled &&
+			outcome != workers.WorkstationDispatchCancelOutcomeAlreadyTerminal {
+			err = fmt.Errorf("runtime Worker Session cancellation returned unsupported outcome %q", outcome)
+		}
+		attempt.resolveControl(action, outcome, err)
+		if err == nil {
+			attempt.waitForCompletion()
+			current, getErr := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+			if getErr != nil {
+				return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed, DispatchID: attempt.dispatchID}, getErr
+			}
+			if outcome == workers.WorkstationDispatchCancelOutcomeCanceled {
+				wantState := controlTerminalState(action)
+				if current.State != wantState {
+					failure := fmt.Errorf("runtime cancellation completed in unexpected Worker Session state %q", current.State)
+					r.finishControlHistory(reservation, workersessions.ControlOutcomeFailed, attempt.dispatchID, current.State)
+					return r.runtimeAttemptControlResult(current, action, workersessions.ControlOutcomeFailed, attempt), failure
+				}
+				result := r.runtimeAttemptControlResult(current, action, workersessions.ControlOutcomeApplied, attempt)
+				r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
+				return result, nil
+			}
+			result := r.runtimeAttemptControlResult(current, action, workersessions.ControlOutcomeNoop, attempt)
+			r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
+			return result, nil
+		}
+	}
+
+	attempt.resolveControl(action, "", err)
+	current, getErr := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+	if getErr != nil {
+		current = workersessions.Session{ID: req.ID}
+	}
+	r.finishControlHistory(reservation, workersessions.ControlOutcomeFailed, attempt.dispatchID, current.State)
+	result := r.runtimeAttemptControlResult(current, action, workersessions.ControlOutcomeFailed, attempt)
+	r.logger.Info("worker session control", "sessionID", req.ID, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
+	if getErr != nil {
+		return result, errors.Join(err, getErr)
+	}
+	return result, err
+}
+
+func (r *registry) runtimeAttemptControlResult(
+	session workersessions.Session,
+	action workersessions.ControlAction,
+	outcome workersessions.ControlOutcome,
+	attempt *runtimeAttempt,
+) workersessions.ControlResult {
+	result := workersessions.ControlResult{
+		Session:    session,
+		Action:     action,
+		Outcome:    outcome,
+		DispatchID: attempt.dispatchID,
+	}
+	return result
 }
 
 func (r *registry) cancelControlIteration(
@@ -342,6 +450,9 @@ func (r *registry) cancelControlIteration(
 		return r.controlNoop(req.ID, action, session, supervision), false, nil
 	}
 	if supervision == nil {
+		if r.runtimeAttemptPending(req.ID) {
+			return workersessions.ControlResult{Session: session, Action: action, Outcome: workersessions.ControlOutcomeFailed}, false, errRuntimeAttemptControlUnavailable
+		}
 		final, _ := r.commitControlTerminal(req.ID, controlTerminalState(action))
 		return r.controlApplied(req.ID, action, final, nil), false, nil
 	}

@@ -191,6 +191,39 @@ func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 	}
 }
 
+func TestCancel_RuntimeAttemptBoundaryFailureDoesNotClaimApplied(t *testing.T) {
+	registry := newTestRegistry(t)
+	attempt, err := registry.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		ID:        "worker-cancel-failure",
+		AttemptID: "attempt-cancel-failure",
+		Execution: dispatchHandoff("dispatch-cancel-failure"),
+	})
+	if err != nil {
+		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
+	}
+	boundaryErr := errors.New("injected runtime cancellation failure")
+	cancelCalls := 0
+	if err := registry.BindRuntimeAttemptCancellation(
+		"worker-cancel-failure",
+		"dispatch-cancel-failure",
+		func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+			cancelCalls++
+			return workers.WorkstationDispatchCancelOutcomeCanceled, boundaryErr
+		},
+	); err != nil {
+		t.Fatalf("BindRuntimeAttemptCancellation() error = %v, want nil", err)
+	}
+
+	result, cancelErr := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-cancel-failure"})
+	if !errors.Is(cancelErr, boundaryErr) || result.Outcome != workersessions.ControlOutcomeFailed ||
+		result.Session.State != workersessions.StateRunning || cancelCalls != 1 {
+		t.Fatalf("Cancel() = %#v, %v, boundary calls=%d; want failed RUNNING result and one erroring call", result, cancelErr, cancelCalls)
+	}
+	if err := attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch("dispatch-cancel-failure"), nil); err != nil {
+		t.Fatalf("Complete() after rejected cancellation error = %v, want nil", err)
+	}
+}
+
 func TestBeginRuntimeAttempt_RejectsOpeningFailureAndDispatchOwnerConflict(t *testing.T) {
 	t.Run("opening failure terminalizes without claiming runtime ownership", func(t *testing.T) {
 		r := newTestRegistry(t)
