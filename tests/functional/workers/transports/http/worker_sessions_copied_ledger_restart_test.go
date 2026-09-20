@@ -260,7 +260,33 @@ func TestWorkerSessionCopiedLedgerRestartPreservesWorkTranscriptAndCursor(t *tes
 	assertCopiedLedgerWorkRows(t, after.lists[targetWorkID], fixture.factoryID, targetWorkID, 2, factoryapi.WorkerSessionObservationStateCompleted)
 	assertCopiedLedgerWorkRows(t, after.lists[failureWorkID], fixture.factoryID, failureWorkID, 1, factoryapi.WorkerSessionObservationStateFailed)
 	assertCopiedLedgerRepeatedCursorResume(t, resumedServer.URL(), fixture.factoryID, firstWorkerSessionID, after.events[firstWorkerSessionID])
+	assertCopiedLedgerSyncPreflight(t, resumedServer.URL(), fixture.factoryID)
 	assertCopiedLedgerCLIParity(t, resumedServer, fixture.factoryID, targetWorkID, firstWorkerSessionID, after)
+}
+
+func assertCopiedLedgerSyncPreflight(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+	events := support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
+	if len(events) == 0 {
+		t.Fatal("copied Factory Session has no retained Factory Events for reconnect validation")
+	}
+	cursor := strings.TrimSpace(events[0].Id)
+	if cursor == "" {
+		t.Fatalf("first retained Factory Event has no stable ID: %#v", events[0])
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) +
+		"/sync-preflight?after_event_id=" + url.QueryEscape(cursor)
+	preflight := support.GetJSON[factoryapi.FactorySessionSyncPreflightResponse](t, endpoint)
+	if preflight.ReasonCode != factoryapi.Ok || !preflight.CheckpointReusable {
+		t.Fatalf("copied-ledger sync preflight = %#v, want reusable cursor", preflight)
+	}
+	if preflight.RequestedSessionId != sessionID || preflight.FactorySessionId == nil || *preflight.FactorySessionId != sessionID {
+		t.Fatalf("copied-ledger sync preflight identity = %#v, want requested and resolved session %q", preflight, sessionID)
+	}
+	if !preflight.ReconnectCursor.Provided || !preflight.ReconnectCursor.ValidForStreamGeneration ||
+		preflight.ReconnectCursor.AfterEventId == nil || *preflight.ReconnectCursor.AfterEventId != cursor {
+		t.Fatalf("copied-ledger sync preflight cursor = %#v, want validated event ID %q", preflight.ReconnectCursor, cursor)
+	}
 }
 
 func startCopiedLedgerReplayFixture(t *testing.T) copiedLedgerReplayFixture {
