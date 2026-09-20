@@ -50,6 +50,28 @@ func TestCorpusRunnerV2SchemasPinAdmissionAndEvidence(t *testing.T) {
 	if contractObjectValue(t, reportProperties, "schemaVersion", "const") != "you.localai.omni-video-corpus-runner-report.v2" {
 		t.Fatal("runner report schema version is not pinned to v2")
 	}
+	if modes, ok := contractObjectValue(t, reportProperties, "mode", "enum").([]any); !ok || len(modes) != 2 || modes[0] != "PREFLIGHT" || modes[1] != "EXECUTE" {
+		t.Fatalf("runner report modes = %#v, want PREFLIGHT and EXECUTE", contractObjectValue(t, reportProperties, "mode", "enum"))
+	}
+	reportPolicy := contractNestedProperties(t, reportProperties, "policy")
+	if got := contractObjectValue(t, reportPolicy, "platform", "pattern"); got != "^[a-z0-9_]+/[a-z0-9_]+$" {
+		t.Fatalf("runner report platform pattern = %#v", got)
+	}
+	if got := contractObjectValue(t, reportPolicy, "perCallTimeoutSeconds", "const"); got != float64(180) {
+		t.Fatalf("runner report per-call timeout = %#v, want 180 seconds", got)
+	}
+	if got := contractObjectValue(t, reportPolicy, "maxCalls", "const"); got != float64(10) {
+		t.Fatalf("runner report call ceiling = %#v, want ten", got)
+	}
+	callsSchema := reportProperties["calls"].(map[string]any)
+	if got := callsSchema["maxItems"]; got != float64(10) {
+		t.Fatalf("runner report call array ceiling = %#v, want ten", got)
+	}
+	definitions := report["$defs"].(map[string]any)
+	failureSchema := definitions["failure"].(map[string]any)
+	if failureSchema["additionalProperties"] != false {
+		t.Fatal("runner report failure object is not closed to unreviewed fields")
+	}
 	reportCorpus := contractNestedProperties(t, reportProperties, "corpus")
 	if contractObjectValue(t, reportCorpus, "commit", "const") != authority.Commit || contractObjectValue(t, reportCorpus, "indexSha256", "const") != authority.IndexSHA256 {
 		t.Fatal("runner report corpus authority differs from the shared corpus authority")

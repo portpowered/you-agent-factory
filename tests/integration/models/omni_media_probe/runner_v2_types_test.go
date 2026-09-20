@@ -22,6 +22,17 @@ const (
 const (
 	CodeProbeCorpusAuthority ValidationCode = "probe_corpus_authority"
 	CodeProbeCorpusPolicy    ValidationCode = "probe_corpus_policy"
+	CodeProbeReportPersist   ValidationCode = "probe_report_persistence_failure"
+)
+
+const (
+	probeV2CallWarmup = "WARMUP"
+	probeV2CallCanary = "CANARY"
+	probeV2CallSample = "SAMPLE"
+
+	probeV2WarmupPrompt        = "Reply with the single word WARMUP_READY. Do not describe or infer video."
+	probeV2AntiEchoInstruction = "\n\nDescribe only what is directly visible in the video. Do not repeat, quote, or infer facts from this prompt."
+	probeV2MaxQuestionBytes    = 16 << 10
 )
 
 // ProbeInputV2 is the private, strict admission contract for the corpus
@@ -137,6 +148,7 @@ type CorpusStreamReportV2 struct {
 
 type ProbePolicyV2 struct {
 	RootIdentities        []string `json:"rootIdentities"`
+	Platform              string   `json:"platform"`
 	Port                  int      `json:"port"`
 	PerCallTimeoutSeconds int64    `json:"perCallTimeoutSeconds"`
 	NetworkPolicy         string   `json:"networkPolicy"`
