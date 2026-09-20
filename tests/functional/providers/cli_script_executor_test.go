@@ -602,6 +602,15 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 	runner := newScriptTimeoutThenSuccessCommandRunner()
 	fixture := FixtureFor(t)
 	scenario := fixture.OpenScenario(t, dir, dir, runner)
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		listed := scenario.ListWork(t)
+		events := scenario.FactoryEvents(t)
+		t.Logf("script timeout recovery failure snapshot: runner calls=%d; Work=%#v; Factory Events=%#v",
+			runner.CallCount(), listed, events)
+	})
 	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(fixture.baseURL, scenario.sessionID))
 	waitForScriptTimeoutCausalSignal(t, runner.firstStartCh, "first script attempt start")
 	waitForScriptTimeoutCausalSignal(t, runner.firstTimeoutCh, "first script attempt timeout")
@@ -612,7 +621,6 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 	listed := scenario.ListWork(t)
 	events := scenario.FactoryEvents(t)
 	assertScriptTimeoutRecovery(t, runner.CallCount(), listed, events)
-	scenario.Stop(t)
 }
 
 func waitForScriptTimeoutDispatchResponse(
