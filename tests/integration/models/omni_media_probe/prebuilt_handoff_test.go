@@ -18,20 +18,36 @@ const (
 	preflightRequiredEnvironment = "YOU_OMNI_PREFLIGHT_REQUIRED"
 	preflightInputEnvironment    = "YOU_OMNI_PREFLIGHT_INPUT"
 	preflightReportEnvironment   = "YOU_OMNI_PREFLIGHT_REPORT"
+	prebuiltArtifactEnvironment  = "INFINITE_YOU_PREBUILT_ARTIFACT"
+	prebuiltRequiredEnvironment  = "INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT"
 )
 
-// TestProbeRunnerPrebuiltCLIHandoff is the one opt-in compiled-artifact cell
-// for this preparation lane. The invoking build step owns compilation and
-// supplies the strict input; this test only launches that exact artifact once.
-func TestProbeRunnerPrebuiltCLIHandoff(t *testing.T) {
+// TestProbeRunnerV2PrebuiltCLIHandoff is the single compiled-artifact boundary
+// cell for this lane. The integration build step owns compilation; this test
+// admits and launches the supplied CLI once without building it.
+func TestProbeRunnerV2PrebuiltCLIHandoff(t *testing.T) {
 	required := strings.TrimSpace(os.Getenv(preflightRequiredEnvironment))
 	inputPath := strings.TrimSpace(os.Getenv(preflightInputEnvironment))
 	reportPath := strings.TrimSpace(os.Getenv(preflightReportEnvironment))
 	if required == "" && inputPath == "" && reportPath == "" {
-		t.Skip("prebuilt OMNI handoff is opt-in; no artifact input was supplied")
+		t.Skip("prebuilt Runner V2 handoff is opt-in; no strict artifact input was supplied")
 	}
 	if required != "1" {
-		t.Fatalf("%s must be 1 when any prebuilt handoff variable is set", preflightRequiredEnvironment)
+		t.Fatalf("%s must be 1 when prebuilt handoff is selected", preflightRequiredEnvironment)
+	}
+	buildPath, buildBytes, buildSHA256 := requirePrebuiltCLIArtifact(t)
+	if inputPath == "" && reportPath == "" {
+		input, generatedInputPath, generatedReportPath := validProbeInput(t, "runner-v2-prebuilt-"+buildSHA256[:12])
+		inputPath = generatedInputPath
+		reportPath = generatedReportPath
+		input.Build = ProbeBuildIdentity{
+			Path: buildPath, Identity: "you-cli-" + buildSHA256[:12], SHA256: buildSHA256,
+		}
+		if err := WriteProbeInputAtomic(inputPath, input); err != nil {
+			t.Fatalf("write strict prebuilt handoff input: %v", err)
+		}
+	} else if inputPath == "" || reportPath == "" {
+		t.Fatalf("%s and %s must be supplied together", preflightInputEnvironment, preflightReportEnvironment)
 	}
 	for name, path := range map[string]string{
 		preflightInputEnvironment:  inputPath,
@@ -55,6 +71,9 @@ func TestProbeRunnerPrebuiltCLIHandoff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read strict prebuilt handoff input: %v", err)
 	}
+	if input.Build.Path != buildPath || input.Build.SHA256 != buildSHA256 {
+		t.Fatalf("strict prebuilt input identity = path %q, sha256 %q; want supplied artifact and digest %q", input.Build.Path, input.Build.SHA256, buildSHA256)
+	}
 	if _, err := os.Stat(input.ProbeRoot); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("strict prebuilt handoff requires a fresh probe root, stat=%v", err)
 	}
@@ -66,15 +85,45 @@ func TestProbeRunnerPrebuiltCLIHandoff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run exact prebuilt CLI preflight: %v", err)
 	}
-	assertPrebuiltReadyReport(t, input, report, reportPath, executor)
+	assertPrebuiltReadyReport(t, input, report, reportPath, executor, buildBytes)
+	after, err := os.Lstat(buildPath)
+	if err != nil || !after.Mode().IsRegular() || after.Size() != buildBytes {
+		t.Fatalf("prebuilt CLI changed during handoff: stat=%v, want regular artifact with %d bytes", err, buildBytes)
+	}
+	if got := fileSHA256(t, buildPath); got != buildSHA256 {
+		t.Fatalf("prebuilt CLI digest changed during handoff: got %s, want %s", got, buildSHA256)
+	}
+	t.Logf("prebuilt CLI identity: bytes=%d sha256=%s version=%q pid=%d status=%s cleanup=%+v", buildBytes, buildSHA256, strings.TrimSpace(executor.stdout), report.Processes[0].PID, report.Status, report.Cleanup)
 }
 
-func assertPrebuiltReadyReport(t *testing.T, input ProbeInput, report Report, reportPath string, executor *prebuiltCLIExecutor) {
+func requirePrebuiltCLIArtifact(t *testing.T) (string, int64, string) {
+	t.Helper()
+	if value := strings.TrimSpace(os.Getenv(prebuiltRequiredEnvironment)); value != "1" {
+		t.Fatalf("%s must be 1 for the strict prebuilt integration target", prebuiltRequiredEnvironment)
+	}
+	path := strings.TrimSpace(os.Getenv(prebuiltArtifactEnvironment))
+	if path == "" {
+		t.Fatalf("%s is required for the strict prebuilt integration target", prebuiltArtifactEnvironment)
+	}
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		t.Fatalf("%s must be an absolute clean path, got %q", prebuiltArtifactEnvironment, path)
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		t.Fatalf("stat required prebuilt artifact from %s: %v", prebuiltArtifactEnvironment, err)
+	}
+	if !info.Mode().IsRegular() || info.Size() < 1 {
+		t.Fatalf("%s must name a non-empty regular file, got mode=%s bytes=%d", prebuiltArtifactEnvironment, info.Mode(), info.Size())
+	}
+	return path, info.Size(), fileSHA256(t, path)
+}
+
+func assertPrebuiltReadyReport(t *testing.T, input ProbeInput, report Report, reportPath string, executor *prebuiltCLIExecutor, buildBytes int64) {
 	t.Helper()
 	if report.Status != "READY" || report.Failure != nil {
 		t.Fatalf("prebuilt report = %#v, want READY without failure", report)
 	}
-	if report.Build.Identity != input.Build.Identity || report.Build.Bytes <= 0 || report.Build.SHA256 != input.Build.SHA256 {
+	if report.Build.Identity != input.Build.Identity || report.Build.Bytes != buildBytes || report.Build.SHA256 != input.Build.SHA256 {
 		t.Fatalf("prebuilt build identity = %#v, want supplied identity and digest", report.Build)
 	}
 	if report.Dependencies.Model.Identity != input.Dependencies.Model.Identity || report.Dependencies.Projector.Identity != input.Dependencies.Projector.Identity || report.Dependencies.Backend.Identity != input.Dependencies.Backend.Identity {
