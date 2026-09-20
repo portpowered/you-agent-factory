@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -40,178 +39,6 @@ func normalizeStartRequest(req workersessions.StartRequest) workersessions.Start
 
 func startTupleFor(req workersessions.StartRequest) startTuple {
 	return startTuple{SessionID: req.ID, Execution: cloneWorkstationDispatchRequest(req.Execution), MaxAttempts: req.Retry.Attempts()}
-}
-
-type runtimeAttempt struct {
-	registry       *registry
-	workerID       string
-	dispatchID     string
-	attemptID      string
-	once           sync.Once
-	mu             sync.Mutex
-	cancel         func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
-	controlPending bool
-	controlDone    chan struct{}
-	controlAction  workersessions.ControlAction
-	controlOutcome workersessions.ControlOutcome
-	controlHistory *controlHistoryReservation
-	completing     bool
-	completed      chan struct{}
-}
-
-var errRuntimeAttemptControlUnavailable = errors.New("worker sessions: runtime attempt cancellation is unavailable")
-
-func runtimeAttemptContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx
-}
-
-func runtimeAttemptIDs(req workersessions.RuntimeAttemptRequest) (string, string) {
-	logicalDispatchID := strings.TrimSpace(req.Execution.Execution.Dispatch.DispatchID)
-	attemptID := strings.TrimSpace(req.AttemptID)
-	if attemptID == "" {
-		attemptID = logicalDispatchID
-	}
-	return logicalDispatchID, attemptID
-}
-
-func (r *registry) runtimeAttemptOwnedByOther(logicalDispatchID, workerID, attemptID string) bool {
-	r.mu.RLock()
-	ownerID, owned := r.dispatchOwners[logicalDispatchID]
-	r.mu.RUnlock()
-	return owned && ownerID != workerID && attemptID == logicalDispatchID
-}
-
-// BindRuntimeAttemptCancellation connects the Worker Session identity to the
-// exact Runtime dispatch cancellation boundary. Runtime calls this after
-// opening the observation and before invoking Workers; the root Service
-// contract remains unchanged.
-func (r *registry) BindRuntimeAttemptCancellation(
-	workerSessionID string,
-	dispatchID string,
-	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
-) error {
-	workerSessionID = strings.TrimSpace(workerSessionID)
-	dispatchID = strings.TrimSpace(dispatchID)
-	if workerSessionID == "" || dispatchID == "" || cancel == nil {
-		return errRuntimeAttemptControlUnavailable
-	}
-	r.mu.RLock()
-	attempt := r.runtimeAttemptControls[workerSessionID]
-	owner := r.dispatchOwners[dispatchID]
-	r.mu.RUnlock()
-	if attempt == nil || owner != workerSessionID || attempt.dispatchID != dispatchID {
-		return errRuntimeAttemptControlUnavailable
-	}
-	attempt.mu.Lock()
-	defer attempt.mu.Unlock()
-	if attempt.completing || attempt.completed == nil {
-		return errRuntimeAttemptControlUnavailable
-	}
-	attempt.cancel = cancel
-	return nil
-}
-
-func (r *registry) runtimeAttemptFor(id string) *runtimeAttempt {
-	if r == nil {
-		return nil
-	}
-	r.mu.RLock()
-	attempt := r.runtimeAttemptControls[strings.TrimSpace(id)]
-	r.mu.RUnlock()
-	return attempt
-}
-
-func (r *registry) runtimeAttemptPending(id string) bool {
-	if r == nil {
-		return false
-	}
-	r.mu.RLock()
-	_, pending := r.runtimeAttempts[strings.TrimSpace(id)]
-	r.mu.RUnlock()
-	return pending
-}
-
-func (a *runtimeAttempt) claimControl() (claimed bool, wait <-chan struct{}, completed <-chan struct{}) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.completed == nil {
-		a.completed = make(chan struct{})
-	}
-	if a.completing || a.controlAction != "" {
-		return false, nil, a.completed
-	}
-	if a.controlPending {
-		return false, a.controlDone, nil
-	}
-	a.controlPending = true
-	a.controlDone = make(chan struct{})
-	return true, nil, nil
-}
-
-func (a *runtimeAttempt) resolveControl(
-	action workersessions.ControlAction,
-	outcome workers.WorkstationDispatchCancelOutcome,
-	err error,
-) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if err != nil {
-		a.controlOutcome = workersessions.ControlOutcomeFailed
-	} else if outcome == workers.WorkstationDispatchCancelOutcomeCanceled {
-		a.controlAction = action
-		a.controlOutcome = workersessions.ControlOutcomeApplied
-	} else {
-		a.controlOutcome = workersessions.ControlOutcomeNoop
-	}
-	a.controlPending = false
-	if a.controlDone != nil {
-		close(a.controlDone)
-		a.controlDone = nil
-	}
-}
-
-func (a *runtimeAttempt) controlCancel(ctx context.Context) (func(context.Context) (workers.WorkstationDispatchCancelOutcome, error), error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.cancel == nil {
-		return nil, errRuntimeAttemptControlUnavailable
-	}
-	return a.cancel, nil
-}
-
-func (a *runtimeAttempt) waitForCompletion() {
-	a.mu.Lock()
-	if a.completed == nil {
-		a.completed = make(chan struct{})
-	}
-	done := a.completed
-	a.mu.Unlock()
-	<-done
-}
-
-func (a *runtimeAttempt) setControlHistory(reservation *controlHistoryReservation) {
-	if a == nil || reservation == nil {
-		return
-	}
-	a.mu.Lock()
-	a.controlHistory = reservation
-	a.mu.Unlock()
-}
-
-func (a *runtimeAttempt) completionState() (workersessions.ControlAction, workersessions.ControlOutcome, *controlHistoryReservation) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	for a.controlPending {
-		wait := a.controlDone
-		a.mu.Unlock()
-		<-wait
-		a.mu.Lock()
-	}
-	a.completing = true
-	return a.controlAction, a.controlOutcome, a.controlHistory
 }
 
 // Complete commits the one terminal Worker Session observation. Runtime has
@@ -265,6 +92,26 @@ func (a *runtimeAttempt) Complete(
 		r.mu.Unlock()
 	})
 	return nil
+}
+
+func runtimeAttemptCancelOutcomeSupported(outcome workers.WorkstationDispatchCancelOutcome) bool {
+	return outcome == workers.WorkstationDispatchCancelOutcomeCanceled ||
+		outcome == workers.WorkstationDispatchCancelOutcomeAlreadyCanceled ||
+		outcome == workers.WorkstationDispatchCancelOutcomeAlreadyTerminal
+}
+
+func (r *registry) runtimeAttemptControlResult(
+	session workersessions.Session,
+	action workersessions.ControlAction,
+	outcome workersessions.ControlOutcome,
+	attempt *runtimeAttempt,
+) workersessions.ControlResult {
+	return workersessions.ControlResult{
+		Session:    session,
+		Action:     action,
+		Outcome:    outcome,
+		DispatchID: attempt.dispatchID,
+	}
 }
 
 // classifyTerminal derives the Worker Session terminal outcome from the

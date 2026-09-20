@@ -284,10 +284,6 @@ func controlContext(ctx context.Context) context.Context {
 	return context.WithoutCancel(ctx)
 }
 
-func controlFallbackRequestID(action workersessions.ControlAction, sessionID, dispatchID string) string {
-	return strings.Join([]string{string(action), sessionID, dispatchID}, "/")
-}
-
 func controlReplayKey(action workersessions.ControlAction, requestID string) string {
 	return string(action) + "\x00" + strings.TrimSpace(requestID)
 }

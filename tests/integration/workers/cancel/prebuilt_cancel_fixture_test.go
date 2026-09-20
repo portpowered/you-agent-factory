@@ -174,12 +174,12 @@ safe_work=$(printf '%s' "$work_id" | tr -c 'A-Za-z0-9._-' '_')
 marker_dir="$state_root/$safe_work/run-$$"
 mkdir -p "$marker_dir"
 printf '%s' "$$" > "$marker_dir/root.pid"
-sh -c 'marker_dir="$1"; parent_pid="$2"; printf "%s" "$$" > "$marker_dir/child.pid"; printf "%s" "$parent_pid" > "$marker_dir/child.parent.pid"; : > "$marker_dir/child.started"; exec sleep 600' sh "$marker_dir" "$$" &
+sh -c 'marker_dir="$1"; parent_pid="$2"; printf "%s" "$$" > "$marker_dir/child.pid"; printf "%s" "$parent_pid" > "$marker_dir/child.parent.pid"; printf "%s" "started" > "$marker_dir/child.started"; exec sleep 600' sh "$marker_dir" "$$" &
 child_pid=$!
 printf '%s' "$child_pid" > "$marker_dir/child.pid"
-: > "$marker_dir/ready"
+printf '%s' 'ready' > "$marker_dir/ready"
 printf '%s\n' "cancel-child-late-output $work_id"
-: > "$marker_dir/late-output.ready"
+printf '%s' 'ready' > "$marker_dir/late-output.ready"
 wait "$child_pid" || true
 `
 

@@ -439,38 +439,6 @@ func recordedDispatchFacts(events []interfaces.FactoryEvent) (map[string]recorde
 	return associations, requests
 }
 
-type recordedDispatchInterruptionFact struct {
-	workIDs       []string
-	interruptedAt time.Time
-	eventTime     time.Time
-	reason        string
-}
-
-func recordedDispatchInterruption(
-	events []interfaces.FactoryEvent,
-	dispatchID string,
-) (recordedDispatchInterruptionFact, bool) {
-	var fact recordedDispatchInterruptionFact
-	found := false
-	for _, event := range events {
-		if event.Type != interfaces.FactoryEventTypeDispatchInterrupted ||
-			stringPointerValue(event.Context.DispatchID) != dispatchID {
-			continue
-		}
-		var payload interfaces.DispatchInterruptedEventPayload
-		if json.Unmarshal(event.Payload, &payload) != nil {
-			continue
-		}
-		fact = recordedDispatchInterruptionFact{
-			workIDs:       append([]string(nil), pointerStringSlice(event.Context.WorkIDs)...),
-			interruptedAt: payload.InterruptedAt,
-			eventTime:     event.Context.EventTime,
-			reason:        payload.Reason,
-		}
-		found = true
-	}
-	return fact, found
-}
 func newRecordedWorkerSessionObservation(
 	live workersessions.Service,
 	ledger recordings.RuntimeLedger,

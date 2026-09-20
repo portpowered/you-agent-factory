@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -57,6 +58,178 @@ func cloneOptionalExecutionFact(value *string) *string {
 	}
 	clone := *value
 	return &clone
+}
+
+type runtimeAttempt struct {
+	registry       *registry
+	workerID       string
+	dispatchID     string
+	attemptID      string
+	once           sync.Once
+	mu             sync.Mutex
+	cancel         func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
+	controlPending bool
+	controlDone    chan struct{}
+	controlAction  workersessions.ControlAction
+	controlOutcome workersessions.ControlOutcome
+	controlHistory *controlHistoryReservation
+	completing     bool
+	completed      chan struct{}
+}
+
+var errRuntimeAttemptControlUnavailable = errors.New("worker sessions: runtime attempt cancellation is unavailable")
+
+func runtimeAttemptContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
+func runtimeAttemptIDs(req workersessions.RuntimeAttemptRequest) (string, string) {
+	logicalDispatchID := strings.TrimSpace(req.Execution.Execution.Dispatch.DispatchID)
+	attemptID := strings.TrimSpace(req.AttemptID)
+	if attemptID == "" {
+		attemptID = logicalDispatchID
+	}
+	return logicalDispatchID, attemptID
+}
+
+func (r *registry) runtimeAttemptOwnedByOther(logicalDispatchID, workerID, attemptID string) bool {
+	r.mu.RLock()
+	ownerID, owned := r.dispatchOwners[logicalDispatchID]
+	r.mu.RUnlock()
+	return owned && ownerID != workerID && attemptID == logicalDispatchID
+}
+
+// BindRuntimeAttemptCancellation connects the Worker Session identity to the
+// exact Runtime dispatch cancellation boundary. Runtime calls this after
+// opening the observation and before invoking Workers; the root Service
+// contract remains unchanged.
+func (r *registry) BindRuntimeAttemptCancellation(
+	workerSessionID string,
+	dispatchID string,
+	cancel func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
+) error {
+	workerSessionID = strings.TrimSpace(workerSessionID)
+	dispatchID = strings.TrimSpace(dispatchID)
+	if workerSessionID == "" || dispatchID == "" || cancel == nil {
+		return errRuntimeAttemptControlUnavailable
+	}
+	r.mu.RLock()
+	attempt := r.runtimeAttemptControls[workerSessionID]
+	owner := r.dispatchOwners[dispatchID]
+	r.mu.RUnlock()
+	if attempt == nil || owner != workerSessionID || attempt.dispatchID != dispatchID {
+		return errRuntimeAttemptControlUnavailable
+	}
+	attempt.mu.Lock()
+	defer attempt.mu.Unlock()
+	if attempt.completing || attempt.completed == nil {
+		return errRuntimeAttemptControlUnavailable
+	}
+	attempt.cancel = cancel
+	return nil
+}
+
+func (r *registry) runtimeAttemptFor(id string) *runtimeAttempt {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	attempt := r.runtimeAttemptControls[strings.TrimSpace(id)]
+	r.mu.RUnlock()
+	return attempt
+}
+
+func (r *registry) runtimeAttemptPending(id string) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.RLock()
+	_, pending := r.runtimeAttempts[strings.TrimSpace(id)]
+	r.mu.RUnlock()
+	return pending
+}
+
+func (a *runtimeAttempt) claimControl() (claimed bool, wait <-chan struct{}, completed <-chan struct{}) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.completed == nil {
+		a.completed = make(chan struct{})
+	}
+	if a.completing || a.controlAction != "" {
+		return false, nil, a.completed
+	}
+	if a.controlPending {
+		return false, a.controlDone, nil
+	}
+	a.controlPending = true
+	a.controlDone = make(chan struct{})
+	return true, nil, nil
+}
+
+func (a *runtimeAttempt) resolveControl(
+	action workersessions.ControlAction,
+	outcome workers.WorkstationDispatchCancelOutcome,
+	err error,
+) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err != nil {
+		a.controlOutcome = workersessions.ControlOutcomeFailed
+	} else if outcome == workers.WorkstationDispatchCancelOutcomeCanceled {
+		a.controlAction = action
+		a.controlOutcome = workersessions.ControlOutcomeApplied
+	} else {
+		a.controlOutcome = workersessions.ControlOutcomeNoop
+	}
+	a.controlPending = false
+	if a.controlDone != nil {
+		close(a.controlDone)
+		a.controlDone = nil
+	}
+}
+
+func (a *runtimeAttempt) controlCancel(ctx context.Context) (func(context.Context) (workers.WorkstationDispatchCancelOutcome, error), error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cancel == nil {
+		return nil, errRuntimeAttemptControlUnavailable
+	}
+	return a.cancel, nil
+}
+
+func (a *runtimeAttempt) waitForCompletion() {
+	a.mu.Lock()
+	if a.completed == nil {
+		a.completed = make(chan struct{})
+	}
+	done := a.completed
+	a.mu.Unlock()
+	<-done
+}
+
+func (a *runtimeAttempt) setControlHistory(reservation *controlHistoryReservation) {
+	if a == nil || reservation == nil {
+		return
+	}
+	a.mu.Lock()
+	a.controlHistory = reservation
+	a.mu.Unlock()
+}
+
+func (a *runtimeAttempt) completionState() (workersessions.ControlAction, workersessions.ControlOutcome, *controlHistoryReservation) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for a.controlPending {
+		wait := a.controlDone
+		a.mu.Unlock()
+		<-wait
+		a.mu.Lock()
+	}
+	a.completing = true
+	return a.controlAction, a.controlOutcome, a.controlHistory
 }
 
 // BeginRuntimeAttempt opens the Worker Session observation and recording
@@ -139,6 +312,124 @@ func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID st
 		r.runtimeAttemptControls[workerID] = handles[0]
 	}
 	return true
+}
+
+func (r *registry) cancelRuntimeAttemptControl(
+	ctx context.Context,
+	req workersessions.ControlRequest,
+	action workersessions.ControlAction,
+	detachContext bool,
+	attempt *runtimeAttempt,
+) (workersessions.ControlResult, error) {
+	if result, complete, err := r.awaitRuntimeAttemptControl(req.ID, action, attempt); complete {
+		return result, err
+	}
+	reservation, err := r.beginControlHistory(ctx, req.ID, action, req.RequestID)
+	if err != nil {
+		attempt.resolveControl(action, "", err)
+		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed, DispatchID: attempt.dispatchID}, err
+	}
+
+	cancelContext := ctx
+	if detachContext {
+		if cancelContext == nil {
+			cancelContext = context.Background()
+		} else {
+			cancelContext = context.WithoutCancel(cancelContext)
+		}
+	}
+	cancel, err := attempt.controlCancel(cancelContext)
+	if err == nil {
+		if cancelContext == nil {
+			cancelContext = context.Background()
+		}
+		outcome, cancelErr := cancel(cancelContext)
+		if cancelErr == nil && !runtimeAttemptCancelOutcomeSupported(outcome) {
+			cancelErr = fmt.Errorf("runtime Worker Session cancellation returned unsupported outcome %q", outcome)
+		}
+		err = cancelErr
+		if err == nil {
+			attempt.resolveControl(action, outcome, nil)
+			return r.finishRuntimeAttemptControl(req.ID, action, reservation, attempt, outcome)
+		}
+	}
+	return r.failRuntimeAttemptControl(req.ID, action, reservation, attempt, err)
+}
+
+func (r *registry) awaitRuntimeAttemptControl(
+	workerSessionID string,
+	action workersessions.ControlAction,
+	attempt *runtimeAttempt,
+) (workersessions.ControlResult, bool, error) {
+	for {
+		claimed, wait, completed := attempt.claimControl()
+		if completed != nil {
+			<-completed
+			current, err := r.Get(context.Background(), workersessions.GetRequest{ID: workerSessionID})
+			if err != nil {
+				return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed, DispatchID: attempt.dispatchID}, true, err
+			}
+			return r.runtimeAttemptControlResult(current, action, workersessions.ControlOutcomeNoop, attempt), true, nil
+		}
+		if wait != nil {
+			<-wait
+			continue
+		}
+		if claimed {
+			return workersessions.ControlResult{}, false, nil
+		}
+	}
+}
+
+func (r *registry) finishRuntimeAttemptControl(
+	workerSessionID string,
+	action workersessions.ControlAction,
+	reservation *controlHistoryReservation,
+	attempt *runtimeAttempt,
+	outcome workers.WorkstationDispatchCancelOutcome,
+) (workersessions.ControlResult, error) {
+	attempt.waitForCompletion()
+	current, err := r.Get(context.Background(), workersessions.GetRequest{ID: workerSessionID})
+	if err != nil {
+		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed, DispatchID: attempt.dispatchID}, err
+	}
+	resultOutcome := workersessions.ControlOutcomeNoop
+	if outcome == workers.WorkstationDispatchCancelOutcomeCanceled {
+		if current.State != controlTerminalState(action) {
+			failure := fmt.Errorf("runtime cancellation completed in unexpected Worker Session state %q", current.State)
+			r.finishControlHistory(reservation, workersessions.ControlOutcomeFailed, attempt.dispatchID, current.State)
+			return r.runtimeAttemptControlResult(current, action, workersessions.ControlOutcomeFailed, attempt), failure
+		}
+		resultOutcome = workersessions.ControlOutcomeApplied
+	}
+	result := r.runtimeAttemptControlResult(current, action, resultOutcome, attempt)
+	r.logger.Info("worker session control", "sessionID", workerSessionID, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
+	return result, nil
+}
+
+func (r *registry) failRuntimeAttemptControl(
+	workerSessionID string,
+	action workersessions.ControlAction,
+	reservation *controlHistoryReservation,
+	attempt *runtimeAttempt,
+	controlErr error,
+) (workersessions.ControlResult, error) {
+	attempt.resolveControl(action, "", controlErr)
+	current, getErr := r.Get(context.Background(), workersessions.GetRequest{ID: workerSessionID})
+	if getErr != nil {
+		current = workersessions.Session{ID: workerSessionID}
+	}
+	r.finishControlHistory(reservation, workersessions.ControlOutcomeFailed, attempt.dispatchID, current.State)
+	result := r.runtimeAttemptControlResult(current, action, workersessions.ControlOutcomeFailed, attempt)
+	r.logger.Info("worker session control", "sessionID", workerSessionID, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
+	if getErr != nil {
+		return result, errors.Join(controlErr, getErr)
+	}
+	return result, controlErr
+}
+
+func controlFallbackRequestID(action workersessions.ControlAction, sessionID, dispatchID string) string {
+	return strings.Join([]string{string(action), sessionID, dispatchID}, "/")
 }
 
 func (r *registry) controlDispatchID(workerSessionID string, supervision *supervision) string {

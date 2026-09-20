@@ -122,57 +122,9 @@ func TestRecordedDispatchFailureProjection(t *testing.T) {
 	if err := rejectedObservation.Validate(); err != nil {
 		t.Fatalf("recorded rejection observation validation = %v", err)
 	}
-	canceledCompletion := completed
-	canceledCompletion.DispatchID = "dispatch-canceled"
-	canceledCompletion.Result = interfaces.WorkstationResult{
-		Outcome: string(workers.OutcomeCanceled),
-		Cancellation: &workers.DispatchCancellation{
-			Reason: workers.DispatchCancellationReasonCanceled,
-		},
-	}
-	canceledFact := recordedDispatchFact(
-		"dispatch-canceled",
-		recordedDispatchAssociation{workerSessionID: "worker-canceled", eventTime: base},
-		nil,
-		map[string]interfaces.FactoryWorldDispatchCompletion{"dispatch-canceled": canceledCompletion},
-		nil,
-		nil,
-		nil,
-	)
-	canceledObservation := recordedObservationFromFact(canceledFact, nil)
-	if canceledObservation.State != workersessions.StateCanceled || canceledObservation.Failure == nil ||
-		canceledObservation.Failure.Kind != workersessions.FailureCauseOperatorCanceled ||
-		canceledObservation.Failure.Detail != "an operator cancel control ended the Worker Session" {
-		t.Fatalf("recorded cancellation observation = %#v, want CANCELED with OPERATOR_CANCELED", canceledObservation)
-	}
-	if err := canceledObservation.Validate(); err != nil {
-		t.Fatalf("recorded cancellation observation validation = %v", err)
-	}
-	supersededCompletion := canceledCompletion
-	supersededCompletion.DispatchID = "dispatch-superseded"
-	supersededCompletion.Result.Cancellation = &workers.DispatchCancellation{
-		Reason: workers.DispatchCancellationReasonSuperseded,
-	}
-	supersededFact := recordedDispatchFact(
-		"dispatch-superseded",
-		recordedDispatchAssociation{workerSessionID: "worker-superseded", eventTime: base},
-		nil,
-		map[string]interfaces.FactoryWorldDispatchCompletion{"dispatch-superseded": supersededCompletion},
-		nil,
-		nil,
-		nil,
-	)
-	supersededObservation := recordedObservationFromFact(supersededFact, nil)
-	if supersededObservation.State != workersessions.StateFailed || supersededObservation.Failure == nil ||
-		supersededObservation.Failure.Kind == workersessions.FailureCauseOperatorCanceled {
-		t.Fatalf("recorded superseded observation = %#v, want existing non-operator failure mapping", supersededObservation)
-	}
-	if recordedObservationState(string(workers.OutcomeAccepted)) != workersessions.StateCompleted || recordedObservationState(string(workers.OutcomeContinue)) != workersessions.StateCompleted || recordedObservationState(string(workers.OutcomeRejected)) != workersessions.StateFailed || recordedObservationState("unknown") != workersessions.StateFailed {
-		t.Fatal("recordedObservationState() mapping is incorrect")
-	}
-	if recordedFailure(workers.OutcomeFailed, nil, nil, workersessions.StateRunning) != nil {
-		t.Fatal("recordedFailure(active) returned a failure")
-	}
+	requireRecordedCancellationProjection(t, base, completed)
+	requireRecordedOutcomeMappings(t)
+
 }
 
 func TestRecordedDispatchIncompleteOutputProjection(t *testing.T) {

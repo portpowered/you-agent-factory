@@ -916,20 +916,6 @@ func appendUniqueRecordedString(values []string, value string) []string {
 	return append(values, value)
 }
 
-func stringPointerValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func pointerStringSlice(value *[]string) []string {
-	if value == nil {
-		return nil
-	}
-	return append([]string(nil), (*value)...)
-}
-
 func providerSessionRef(metadata providers.SessionMetadata) providers.SessionRef {
 	return providers.SessionRef{Provider: providers.ID(metadata.Provider), Kind: metadata.Kind, ID: metadata.ID}
 }
