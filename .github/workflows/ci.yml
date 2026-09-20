@@ -302,6 +302,9 @@ jobs:
         if: matrix.suite == 'functional'
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: Run LocalAI Runner V2 controlled component matrix
+        if: matrix.suite == 'unit'
+        run: make test-localai-runner-v2-component
       - name: Run backend coverage
         if: matrix.suite == 'unit'
         run: make test-unit-coverage

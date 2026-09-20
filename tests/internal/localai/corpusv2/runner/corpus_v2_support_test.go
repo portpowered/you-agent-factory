@@ -1,4 +1,4 @@
-package omni_media_probe
+package runner
 
 import (
 	"context"
@@ -73,6 +73,8 @@ const (
 	CorpusV2CodeInvalidMedia           CorpusV2ValidationCode = "invalid_media"
 	CorpusV2CodeInsufficientRows       CorpusV2ValidationCode = "insufficient_rows"
 	CorpusV2CodeSelectionDuplicate     CorpusV2ValidationCode = "selection_duplicate"
+	CorpusV2CodeSelectionMismatch      CorpusV2ValidationCode = "selection_mismatch"
+	CorpusV2CodeMetadataMismatch       CorpusV2ValidationCode = "metadata_mismatch"
 	CorpusV2CodeAuthorityUnavailable   CorpusV2ValidationCode = "authority_unavailable"
 	CorpusV2CodeGitIdentityUnavailable CorpusV2ValidationCode = "git_identity_unavailable"
 )
@@ -124,6 +126,7 @@ type CorpusV2Authority struct {
 	PairCount       int
 	SectionCounts   map[string]int
 	RequiredStudies []string
+	ExpectedSamples []CorpusV2SampleExpectation
 }
 
 func DefaultCorpusV2Authority() CorpusV2Authority {
@@ -136,6 +139,7 @@ func DefaultCorpusV2Authority() CorpusV2Authority {
 		PairCount:       370,
 		SectionCounts:   cloneCorpusV2Counts(corpusV2AuthoritySectionCounts),
 		RequiredStudies: append([]string(nil), corpusV2RequiredStudies...),
+		ExpectedSamples: defaultCorpusV2SampleExpectations(),
 	}
 }
 
@@ -244,8 +248,9 @@ func ParseCorpusV2Index(data []byte, repositoryRoot string) (CorpusV2Index, erro
 		cursor++
 	}
 	const corpusV2IndexDescription = "This index lists all 370 production `clip.mp4` files with a sibling `prompt.md` found at inspection time. Review copies, other filenames, and files without a sibling prompt are not included. Presence here does not mean approved for publication."
-	if cursor >= len(lines) || lines[cursor] != corpusV2IndexDescription {
-		return CorpusV2Index{}, corpusV2Error(CorpusV2CodeMalformedIndex, "description", corpusV2IndexDescription, lineAt(lines, cursor), nil)
+	const corpusV2SyntheticIndexDescription = "This portable synthetic index contains repository-owned rows used only by component tests."
+	if cursor >= len(lines) || (lines[cursor] != corpusV2IndexDescription && lines[cursor] != corpusV2SyntheticIndexDescription) {
+		return CorpusV2Index{}, corpusV2Error(CorpusV2CodeMalformedIndex, "description", "pinned or portable synthetic corpus index description", lineAt(lines, cursor), nil)
 	}
 
 	sections := make(map[string][]CorpusV2Pair)
@@ -820,6 +825,9 @@ func readCorpusV2Manifest(ctx context.Context, authority CorpusV2Authority) (Cor
 		return CorpusV2Manifest{}, err
 	}
 	manifest.Samples = selected
+	if err := ValidateCorpusV2Manifest(manifest, authority); err != nil {
+		return CorpusV2Manifest{}, err
+	}
 	return manifest, nil
 }
 

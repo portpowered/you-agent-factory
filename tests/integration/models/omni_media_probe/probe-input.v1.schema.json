@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:you-agent-factory:tests:omni-media-probe-input:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runId", "build", "dependencies", "fixtureManifest", "probeRoot", "journeys", "limits"],
+  "properties": {
+    "schemaVersion": {"const": "you.localai.omni-media-probe-input.v1"},
+    "runId": {"type": "string", "minLength": 1},
+    "build": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "identity", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "identity": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "dependencies": {
+      "type": "object", "additionalProperties": false,
+      "required": ["model", "projector", "backend"],
+      "properties": {
+        "model": {"$ref": "#/$defs/fileIdentity"},
+        "projector": {"$ref": "#/$defs/fileIdentity"},
+        "backend": {"$ref": "#/$defs/fileIdentity"}
+      }
+    },
+    "fixtureManifest": {"$ref": "#/$defs/fileIdentity"},
+    "probeRoot": {"type": "string", "minLength": 1},
+    "journeys": {"const": ["image", "video"]},
+    "limits": {
+      "type": "object", "additionalProperties": false,
+      "required": ["timeoutSeconds", "maxHeavyProcesses", "maxCompilerTestProcesses", "maxDiskBytes", "maxDownloadBytes", "maxPaidUsd", "maxCalls", "maxRetries", "forbiddenPort", "networkPolicy"],
+      "properties": {
+        "timeoutSeconds": {"type": "integer", "minimum": 1},
+        "maxHeavyProcesses": {"const": 1},
+        "maxCompilerTestProcesses": {"const": 4},
+        "maxDiskBytes": {"type": "integer", "maximum": 1073741824},
+        "maxDownloadBytes": {"const": 0},
+        "maxPaidUsd": {"const": 0},
+        "maxCalls": {"type": "integer", "minimum": 1, "maximum": 2},
+        "maxRetries": {"const": 0},
+        "forbiddenPort": {"const": 7437},
+        "networkPolicy": {"const": "declared-local-assets-and-loopback-only"}
+      }
+    }
+  },
+  "$defs": {
+    "fileIdentity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "identity", "bytes", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "identity": {"type": "string", "minLength": 1},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}
