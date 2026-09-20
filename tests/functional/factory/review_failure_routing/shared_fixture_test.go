@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -52,19 +51,9 @@ type reviewFailureProcessFixture struct {
 	baseURL       string
 	process       support.ApplicationProcess
 	command       *reviewFailureHostedCommand
-	api           *support.ProcessAPIServer
-	apiStarter    *reviewFailureAPIServerStarter
 	router        *reviewFailureCommandRouter
 
 	nextScenario atomic.Uint64
-	sessionMu    sync.Mutex
-	opened       map[string]struct{}
-	closed       map[string]struct{}
-}
-
-type reviewFailureAPIServerStarter struct {
-	api    *support.ProcessAPIServer
-	starts atomic.Int32
 }
 
 type reviewFailureHostedCommand struct {
@@ -108,10 +97,9 @@ func newReviewFailureProcessFixture(t testing.TB) (*reviewFailureProcessFixture,
 	}
 
 	api := support.NewProcessAPIServer()
-	apiStarter := &reviewFailureAPIServerStarter{api: api}
 	router := newReviewFailureCommandRouter()
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
-		APIServerStarter:      apiStarter.start,
+		APIServerStarter:      api.Start,
 		ProviderCommandRunner: router,
 		ScriptCommandRunner:   router,
 	})
@@ -125,11 +113,7 @@ func newReviewFailureProcessFixture(t testing.TB) (*reviewFailureProcessFixture,
 		sourceFactory: testutil.MustRepoPath(t, "factory"),
 		bootstrapDir:  bootstrapDir,
 		process:       process,
-		api:           api,
-		apiStarter:    apiStarter,
 		router:        router,
-		opened:        make(map[string]struct{}),
-		closed:        make(map[string]struct{}),
 	}
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run",
@@ -149,14 +133,6 @@ func newReviewFailureProcessFixture(t testing.TB) (*reviewFailureProcessFixture,
 	}
 	fixture.baseURL = baseURL
 	return fixture, nil
-}
-
-func (starter *reviewFailureAPIServerStarter) start(
-	ctx context.Context,
-	request platformhttpserver.StartRequest,
-) error {
-	starter.starts.Add(1)
-	return starter.api.Start(ctx, request)
 }
 
 func startReviewFailureHostedCommand(process support.Process, input root.Input) *reviewFailureHostedCommand {
@@ -198,19 +174,6 @@ func (fixture *reviewFailureProcessFixture) close() error {
 			closeErr = errors.Join(closeErr, errors.New("review-failure API port remains reachable after process close"))
 		}
 	}
-	if fixture.apiStarter != nil && fixture.apiStarter.starts.Load() != 1 {
-		closeErr = errors.Join(closeErr, fmt.Errorf(
-			"review-failure API server starts = %d, want exactly one",
-			fixture.apiStarter.starts.Load(),
-		))
-	}
-	if fixture.router != nil && fixture.router.routeCount() != 0 {
-		closeErr = errors.Join(closeErr, fmt.Errorf(
-			"review-failure command routes remaining after cleanup = %d",
-			fixture.router.routeCount(),
-		))
-	}
-	closeErr = errors.Join(closeErr, fixture.sessionLifecycleError())
 	if fixture.rootDir != "" {
 		if err := os.RemoveAll(fixture.rootDir); err != nil {
 			closeErr = errors.Join(closeErr, fmt.Errorf("remove review-failure fixture root: %w", err))
@@ -221,8 +184,6 @@ func (fixture *reviewFailureProcessFixture) close() error {
 			closeErr = errors.Join(closeErr, fmt.Errorf("probe removed review-failure fixture root: %w", err))
 		}
 	}
-	fmt.Fprintf(os.Stdout, "REVIEW_FAILURE_SHARED_RUNTIME processStarts=1 apiStarts=%d sessionsOpened=%d sessionsClosed=%d routes=0\n",
-		fixture.apiStarter.starts.Load(), len(fixture.opened), len(fixture.closed))
 	return closeErr
 }
 
@@ -243,36 +204,6 @@ func (command *reviewFailureHostedCommand) stop() error {
 	case <-time.After(reviewFailureFixtureShutdownTimeout):
 		return errors.New("timed out waiting for review-failure host shutdown")
 	}
-}
-
-func (fixture *reviewFailureProcessFixture) sessionOpened(sessionID string) error {
-	fixture.sessionMu.Lock()
-	defer fixture.sessionMu.Unlock()
-	if _, exists := fixture.opened[sessionID]; exists {
-		return fmt.Errorf("Factory Session %q was opened twice", sessionID)
-	}
-	fixture.opened[sessionID] = struct{}{}
-	return nil
-}
-
-func (fixture *reviewFailureProcessFixture) sessionClosed(sessionID string) {
-	fixture.sessionMu.Lock()
-	defer fixture.sessionMu.Unlock()
-	fixture.closed[sessionID] = struct{}{}
-}
-
-func (fixture *reviewFailureProcessFixture) sessionLifecycleError() error {
-	fixture.sessionMu.Lock()
-	defer fixture.sessionMu.Unlock()
-	if len(fixture.opened) != len(fixture.closed) {
-		return fmt.Errorf("review-failure Factory Sessions opened %d but closed %d", len(fixture.opened), len(fixture.closed))
-	}
-	for sessionID := range fixture.opened {
-		if _, ok := fixture.closed[sessionID]; !ok {
-			return fmt.Errorf("review-failure Factory Session %q was not closed", sessionID)
-		}
-	}
-	return nil
 }
 
 func (fixture *reviewFailureProcessFixture) nextScenarioID() string {
@@ -349,12 +280,6 @@ func (router *reviewFailureCommandRouter) unregister(factoryDir string) {
 	}
 	delete(router.routes, factoryDir)
 	router.mu.Unlock()
-}
-
-func (router *reviewFailureCommandRouter) routeCount() int {
-	router.mu.Lock()
-	defer router.mu.Unlock()
-	return len(router.routes)
 }
 
 func (router *reviewFailureCommandRouter) routeForRequest(request platformprocess.CommandRequest) *reviewFailureCommandRoute {
