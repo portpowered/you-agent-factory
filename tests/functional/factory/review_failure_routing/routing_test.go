@@ -2,6 +2,7 @@ package review_failure_routing
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -192,6 +193,231 @@ func TestReviewFailureRouting_FailedIdeaRequiredBeforeReviewedTaskCompletion(t *
 	assertReviewFailureWorkStates(t, scenario.listWorks(t), map[string]string{
 		currentTaskID: "to-complete", currentReviewID: "complete",
 	})
+}
+
+func TestReviewFailureRouting_StaleSameNameReviewCannotCompleteCurrentTask(t *testing.T) {
+	t.Parallel()
+	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{})
+	_ = scenario.eventStream(t)
+
+	name := scenario.marker + "-reused-delivery"
+	currentTraceID := scenario.marker + "-candidate-current"
+	staleTraceID := scenario.marker + "-candidate-stale"
+	failedIdeaID := scenario.marker + "-failed-idea"
+	currentTaskID := scenario.marker + "-current-task"
+	staleTaskID := scenario.marker + "-stale-task"
+	staleReviewID := scenario.marker + "-stale-review"
+	scenario.submit(t, scenario.marker+"-failed-idea", reviewFailureSeed{Name: name, WorkID: failedIdeaID, WorkType: "idea", State: "failed", TraceID: currentTraceID})
+	scenario.submit(t, scenario.marker+"-stale-task", reviewFailureSeed{Name: name, WorkID: staleTaskID, WorkType: "task", State: "failed", TraceID: staleTraceID})
+	scenario.submit(t, scenario.marker+"-stale-review", reviewFailureSeed{Name: name, WorkID: staleReviewID, WorkType: "review", State: "complete", TraceID: staleTraceID})
+	scenario.submit(t, scenario.marker+"-current-task", reviewFailureSeed{Name: name, WorkID: currentTaskID, WorkType: "task", State: "to-complete", TraceID: currentTraceID})
+
+	assertReviewFailureCompletionDoesNotFire(t, scenario, map[string]string{
+		failedIdeaID:  "failed",
+		currentTaskID: "to-complete",
+		staleTaskID:   "failed",
+		staleReviewID: "complete",
+	})
+}
+
+func TestReviewFailureRouting_MismatchedCompletionIdentityOrNameDoesNotFire(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name               string
+		ideaNameMismatch   bool
+		ideaTraceMismatch  bool
+		reviewNameMismatch bool
+	}{
+		{name: "stale failed idea identity", ideaTraceMismatch: true},
+		{name: "failed idea name differs", ideaNameMismatch: true},
+		{name: "completed review name differs", reviewNameMismatch: true},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{})
+			_ = scenario.eventStream(t)
+
+			name := scenario.marker + "-current-task"
+			traceID := scenario.marker + "-current-candidate"
+			ideaName := name
+			ideaTraceID := traceID
+			reviewName := name
+			if tc.ideaNameMismatch {
+				ideaName += "-stale"
+			}
+			if tc.ideaTraceMismatch {
+				ideaTraceID += "-stale"
+			}
+			if tc.reviewNameMismatch {
+				reviewName += "-stale"
+			}
+			failedIdeaID := scenario.marker + "-failed-idea"
+			currentTaskID := scenario.marker + "-current-task"
+			currentReviewID := scenario.marker + "-current-review"
+			scenario.submit(t, scenario.marker+"-mismatched-idea", reviewFailureSeed{Name: ideaName, WorkID: failedIdeaID, WorkType: "idea", State: "failed", TraceID: ideaTraceID})
+			scenario.submit(t, scenario.marker+"-mismatched-review", reviewFailureSeed{Name: reviewName, WorkID: currentReviewID, WorkType: "review", State: "complete", TraceID: traceID})
+			scenario.submit(t, scenario.marker+"-mismatched-task", reviewFailureSeed{Name: name, WorkID: currentTaskID, WorkType: "task", State: "to-complete", TraceID: traceID})
+
+			assertReviewFailureCompletionDoesNotFire(t, scenario, map[string]string{
+				failedIdeaID:    "failed",
+				currentTaskID:   "to-complete",
+				currentReviewID: "complete",
+			})
+		})
+	}
+}
+
+type reviewFailureAuthorizationCase struct {
+	name     string
+	evidence string
+	feedback string
+}
+
+func TestReviewFailureRouting_UnauthorizedReviewEvidenceKeepsFeedbackActionable(t *testing.T) {
+	// Keep the authorization matrix sequential: shared fixture routing matches
+	// scenario markers by substring, so concurrent rf-1/rf-10 sessions can alias.
+	cases := []reviewFailureAuthorizationCase{
+		{
+			name:     "missing approval",
+			evidence: "candidate head 7d9c3a1245e6f7a8091b2c3d4e5f60718293a4b5; approval missing",
+			feedback: "approval evidence is missing for candidate head 7d9c3a1245e6f7a8091b2c3d4e5f60718293a4b5",
+		},
+		{
+			name:     "missing merge",
+			evidence: "candidate head 8e0d4b2356f7081a92b3c4d5e6f708192a3b4c56; merge evidence missing",
+			feedback: "candidate head 8e0d4b2356f7081a92b3c4d5e6f708192a3b4c56 has no merge evidence",
+		},
+		{
+			name:     "merged head differs",
+			evidence: "candidate head 9f1e5c346708192ab3c4d5e6f708192ab3c4d567; merged head 0123456789abcdef0123456789abcdef01234567",
+			feedback: "merged head does not contain candidate head 9f1e5c346708192ab3c4d5e6f708192ab3c4d567",
+		},
+		{
+			name:     "reviewed head differs",
+			evidence: "candidate head a02f6d4578192ab3c4d5e6f708192ab3c4d5678; reviewed head fedcba9876543210fedcba9876543210fedcba98",
+			feedback: "reviewed head fedcba9876543210fedcba9876543210fedcba98 differs from candidate head a02f6d4578192ab3c4d5e6f708192ab3c4d5678",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			runReviewFailureAuthorizationCase(t, tc)
+		})
+	}
+}
+
+func runReviewFailureAuthorizationCase(t *testing.T, tc reviewFailureAuthorizationCase) {
+	t.Helper()
+	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{
+		provider: func(_ context.Context, _ platformprocess.CommandRequest, call int) (platformprocess.CommandResult, error) {
+			switch call {
+			case 2:
+				return reviewFailureRejected(tc.feedback), nil
+			case 4:
+				return platformprocess.CommandResult{}, errors.New("controlled reviewer failure after rejected evidence")
+			default:
+				return reviewFailureAccepted("processor completed the correction attempt"), nil
+			}
+		},
+	})
+	stream := scenario.eventStream(t)
+	traceID := scenario.marker + "-candidate"
+	name := scenario.marker + "-reviewed-task"
+	taskID := scenario.marker + "-current-task"
+	ideaID := scenario.marker + "-failed-idea"
+	scenario.submit(t, scenario.marker+"-authorization-idea", reviewFailureSeed{Name: name, WorkID: ideaID, WorkType: "idea", State: "failed", TraceID: traceID, Payload: tc.evidence})
+	scenario.submit(t, scenario.marker+"-authorization-task", reviewFailureSeed{Name: name, WorkID: taskID, WorkType: "task", State: "init", TraceID: traceID, Payload: tc.evidence})
+
+	firstProcess := decodeReviewFailureDispatchResponse(t, awaitReviewFailureDispatchResponses(t, stream, "process", 1)[0])
+	assertReviewFailureDispatchOutputStates(t, firstProcess, map[string]string{taskID: "awaiting-ci"})
+	_ = awaitReviewFailureDispatchResponses(t, stream, "ci-wait", 1)
+	firstReview := decodeReviewFailureDispatchResponse(t, awaitReviewFailureDispatchResponses(t, stream, "review", 1)[0])
+	if firstReview.Outcome != factoryapi.WorkOutcomeRejected || firstReview.Feedback == nil || *firstReview.Feedback != tc.feedback {
+		t.Fatalf("review rejection = outcome %q feedback %#v, want REJECTED with exact feedback %q", firstReview.Outcome, firstReview.Feedback, tc.feedback)
+	}
+	assertNoReviewFailureCompletionDispatch(t, scenario)
+
+	secondProcess := decodeReviewFailureDispatchResponse(t, awaitReviewFailureDispatchResponses(t, stream, "process", 1)[0])
+	assertReviewFailureDispatchOutputStates(t, secondProcess, map[string]string{taskID: "awaiting-ci"})
+	_ = awaitReviewFailureDispatchResponses(t, stream, "ci-wait", 1)
+	failedReview := decodeReviewFailureDispatchResponse(t, awaitReviewFailureDispatchResponses(t, stream, "review", 1)[0])
+	if failedReview.Outcome != factoryapi.WorkOutcomeFailed || failedReview.Error == nil || strings.TrimSpace(*failedReview.Error) == "" {
+		var failure string
+		if failedReview.Error != nil {
+			failure = *failedReview.Error
+		}
+		t.Fatalf("review failure = outcome %q error %q, want FAILED with an observable error", failedReview.Outcome, failure)
+	}
+	assertReviewFailureDispatchOutputStates(t, failedReview, map[string]string{taskID: "failed"})
+	assertNoReviewFailureCompletionDispatch(t, scenario)
+	assertReviewFailureWorkStates(t, scenario.listWorks(t), map[string]string{ideaID: "failed", taskID: "failed"})
+}
+
+func TestReviewFailureRouting_ReplayedCompletionRequestIsExactlyOnce(t *testing.T) {
+	t.Parallel()
+	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{
+		provider: func(_ context.Context, _ platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
+			return reviewFailureAccepted("review accepted the exact merged candidate"), nil
+		},
+	})
+	stream := scenario.eventStream(t)
+	traceID := scenario.marker + "-shared-root-trace"
+	name := scenario.marker + "-replayed-completion"
+	ideaRequestID := scenario.marker + "-idea-request"
+	taskRequestID := scenario.marker + "-task-request"
+	failedIdea := reviewFailureSeed{Name: name, WorkID: scenario.marker + "-failed-idea", WorkType: "idea", State: "failed", TraceID: traceID, Payload: "retained failed idea"}
+	currentTask := reviewFailureSeed{Name: name, WorkID: scenario.marker + "-current-task", WorkType: "task", State: "init", TraceID: traceID, Payload: "reviewed task"}
+	scenario.submit(t, ideaRequestID, failedIdea)
+	scenario.submit(t, taskRequestID, currentTask)
+	currentReviewID := acceptReviewFailureTaskThroughSession(t, scenario, stream, currentTask.WorkID)
+	completion := decodeReviewFailureDispatchResponse(t, awaitReviewFailureDispatchResponses(
+		t, stream, reviewFailureReviewedTaskCompletionTransition, 1,
+	)[0])
+	if completion.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("reviewed-task completion outcome = %q, want ACCEPTED", completion.Outcome)
+	}
+	assertExactReviewFailureDispatchOutput(t, completion, map[string]reviewFailureOutputExpectation{
+		failedIdea.WorkID:  {workType: "idea", state: "failed"},
+		currentTask.WorkID: {workType: "task", state: "complete"},
+		currentReviewID:    {workType: "review", state: "complete"},
+	})
+	assertReviewFailureCompletionDispatch(t, scenario, failedIdea.WorkID, currentTask.WorkID, currentReviewID)
+
+	scenario.submit(t, taskRequestID, currentTask)
+
+	assertReviewFailureCompletionDispatch(t, scenario, failedIdea.WorkID, currentTask.WorkID, currentReviewID)
+	assertReviewFailureWorkStates(t, scenario.listWorks(t), map[string]string{
+		failedIdea.WorkID:  "failed",
+		currentTask.WorkID: "complete",
+		currentReviewID:    "complete",
+	})
+}
+
+func assertReviewFailureCompletionDoesNotFire(t *testing.T, scenario *reviewFailureScenario, states map[string]string) {
+	t.Helper()
+	assertReviewFailureWorkStates(t, scenario.listWorks(t), states)
+	assertNoReviewFailureCompletionDispatch(t, scenario)
+}
+
+func assertNoReviewFailureCompletionDispatch(t *testing.T, scenario *reviewFailureScenario) {
+	t.Helper()
+	if dispatches := dispatchesWithTransition(reviewFailureDispatches(t, scenario), reviewFailureReviewedTaskCompletionTransition); len(dispatches) != 0 {
+		t.Fatalf("reviewed-task completion dispatches = %d, want none: %#v", len(dispatches), dispatches)
+	}
+}
+
+func assertReviewFailureCompletionDispatch(t *testing.T, scenario *reviewFailureScenario, failedIdeaID, taskID, reviewID string) {
+	t.Helper()
+	dispatches := dispatchesWithTransition(reviewFailureDispatches(t, scenario), reviewFailureReviewedTaskCompletionTransition)
+	if len(dispatches) != 1 {
+		t.Fatalf("reviewed-task completion dispatches = %d, want exactly one: %#v", len(dispatches), dispatches)
+	}
+	assertExactReviewFailureInputIDs(t, dispatches[0], failedIdeaID, taskID, reviewID)
+	if dispatches[0].Response == nil || dispatches[0].Response.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("reviewed-task completion response = %#v, want one accepted terminal output", dispatches[0].Response)
+	}
 }
 
 func acceptReviewFailureTaskThroughSession(

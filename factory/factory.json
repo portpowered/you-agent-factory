@@ -1849,28 +1849,30 @@
       "id": "complete-reviewed-task-after-failed-idea",
       "inputs": [
         {
-          "guards": [
-            {
-              "matchInput": "task",
-              "type": "SAME_NAME"
-            }
-          ],
-          "state": "failed",
-          "workType": "idea"
-        },
-        {
           "state": "to-complete",
           "workType": "task"
         },
         {
-          "guards": [
-            {
-              "matchInput": "task",
-              "type": "SAME_NAME"
-            }
-          ],
+          "state": "failed",
+          "workType": "idea"
+        },
+        {
           "state": "complete",
           "workType": "review"
+        }
+      ],
+      "guards": [
+        {
+          "matchConfig": {
+            "inputKey": ".Name"
+          },
+          "type": "MATCHES_FIELDS"
+        },
+        {
+          "matchConfig": {
+            "inputKey": ".TraceID"
+          },
+          "type": "MATCHES_FIELDS"
         }
       ],
       "name": "complete-reviewed-task-after-failed-idea",
