@@ -201,10 +201,10 @@ func TestReviewFailureRouting_FailedIdeaRequiredBeforeReviewedTaskCompletion(t *
 	})
 }
 
-// TestReviewFailureRouting_DependentProjectCycleDispatchesOnceAfterCompletion
+// TestReviewFailureRouting_ReviewedTaskCompletesBeforeDependentProjectCycleDispatchesOnce
 // proves an exact DEPENDS_ON Project stays blocked until the reviewed task's
 // canonical completion response, then reaches the configured Sol/high lead once.
-func TestReviewFailureRouting_DependentProjectCycleDispatchesOnceAfterCompletion(t *testing.T) {
+func TestReviewFailureRouting_ReviewedTaskCompletesBeforeDependentProjectCycleDispatchesOnce(t *testing.T) {
 	t.Parallel()
 	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{
 		provider: func(_ context.Context, _ platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
@@ -456,7 +456,7 @@ func reviewFailureHasCommandArgPair(args []string, name, value string) bool {
 	return false
 }
 
-func TestReviewFailureRouting_StaleSameNameReviewCannotCompleteCurrentTask(t *testing.T) {
+func TestReviewFailureRouting_ReviewedTaskCompleteRejectsStaleSameNameReview(t *testing.T) {
 	t.Parallel()
 	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{})
 	_ = scenario.eventStream(t)
@@ -481,7 +481,7 @@ func TestReviewFailureRouting_StaleSameNameReviewCannotCompleteCurrentTask(t *te
 	})
 }
 
-func TestReviewFailureRouting_MismatchedCompletionIdentityOrNameDoesNotFire(t *testing.T) {
+func TestReviewFailureRouting_ReviewedTaskCompleteRejectsMismatchedCompletionIdentityOrName(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name               string
@@ -536,7 +536,7 @@ type reviewFailureAuthorizationCase struct {
 	feedback string
 }
 
-func TestReviewFailureRouting_UnauthorizedReviewEvidenceKeepsFeedbackActionable(t *testing.T) {
+func TestReviewFailureRouting_ReviewedTaskCompleteRejectsUnauthorizedReviewEvidenceKeepsFeedbackActionable(t *testing.T) {
 	// Keep the authorization matrix sequential: shared fixture routing matches
 	// scenario markers by substring, so concurrent rf-1/rf-10 sessions can alias.
 	cases := []reviewFailureAuthorizationCase{
@@ -616,7 +616,7 @@ func runReviewFailureAuthorizationCase(t *testing.T, tc reviewFailureAuthorizati
 	assertReviewFailureWorkStates(t, scenario.listWorks(t), map[string]string{ideaID: "failed", taskID: "failed"})
 }
 
-func TestReviewFailureRouting_ReplayedCompletionRequestIsExactlyOnce(t *testing.T) {
+func TestReviewFailureRouting_ReviewedTaskCompleteReplayIsExactlyOnce(t *testing.T) {
 	t.Parallel()
 	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{
 		provider: func(_ context.Context, _ platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
