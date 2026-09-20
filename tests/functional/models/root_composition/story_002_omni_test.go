@@ -110,10 +110,11 @@ func TestModelsOmniTextInputReachesPinnedCodecThroughRootBuildProcess(t *testing
 }
 
 type omniTextProtocolFixture struct {
-	mu       sync.Mutex
-	request  models.InvocationProtocolRequest
-	response string
-	calls    int
+	mu                     sync.Mutex
+	request                models.InvocationProtocolRequest
+	response               string
+	calls                  int
+	preparationCallPending bool
 }
 
 func (fixture *omniTextProtocolFixture) Predict(
@@ -124,6 +125,11 @@ func (fixture *omniTextProtocolFixture) Predict(
 		return models.InvocationProtocolResponse{}, err
 	}
 	fixture.mu.Lock()
+	if fixture.preparationCallPending {
+		fixture.preparationCallPending = false
+		fixture.mu.Unlock()
+		return models.InvocationProtocolResponse{Text: "controlled fixture cache prepared"}, nil
+	}
 	fixture.calls++
 	fixture.request = request
 	response := fixture.response

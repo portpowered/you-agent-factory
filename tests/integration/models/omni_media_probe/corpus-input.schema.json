@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:you-agent-factory:tests:omni-video-corpus-input:v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runId", "build", "dependencies", "corpus", "samplePolicy", "limits"],
+  "properties": {
+    "schemaVersion": {"const": "you.localai.omni-video-corpus-input.v2"},
+    "runId": {"type": "string", "minLength": 1},
+    "build": {"$ref": "#/$defs/fileIdentity"},
+    "dependencies": {
+      "type": "object", "additionalProperties": false,
+      "required": ["model", "projector", "backend"],
+      "properties": {
+        "model": {"$ref": "#/$defs/fileIdentity"},
+        "projector": {"$ref": "#/$defs/fileIdentity"},
+        "backend": {"$ref": "#/$defs/fileIdentity"}
+      }
+    },
+    "corpus": {
+      "type": "object", "additionalProperties": false,
+      "required": ["repository", "commit", "indexPath", "indexSha256", "mode"],
+      "properties": {
+        "repository": {"const": "C:/Users/andre/work/experiments/tv-girl"},
+        "commit": {"const": "443ee4715e6e0f8ec02489e4fda9554d15434e08"},
+        "indexPath": {"const": "docs/selfiepostx/video-output-index.md"},
+        "indexSha256": {"const": "ac4eeb02e6d1e1065176dcf5c18f74367b241c698ec6344ca48829b7ab770c28"},
+        "mode": {"const": "read-only-external"}
+      }
+    },
+    "samplePolicy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["studies", "representativesPerStudy", "ordering"],
+      "properties": {
+        "studies": {"const": ["selfie-jessie-duration-study", "selfie-jessie-prompt-study", "selfie-jessie-quality"]},
+        "representativesPerStudy": {"const": 3},
+        "ordering": {"const": "durationSeconds,byteCount,normalizedPath:index[0,floor((n-1)/2),n-1]"}
+      }
+    },
+    "limits": {
+      "type": "object", "additionalProperties": false,
+      "required": ["perInvocationTimeoutSeconds", "retries", "maxHeavyProcesses", "maxDiskBytes", "maxDownloadBytes", "maxPaidUsd", "forbiddenPort", "networkPolicy"],
+      "properties": {
+        "perInvocationTimeoutSeconds": {"const": 180},
+        "retries": {"const": 0},
+        "maxHeavyProcesses": {"const": 1},
+        "maxDiskBytes": {"type": "integer", "maximum": 1073741824},
+        "maxDownloadBytes": {"const": 0},
+        "maxPaidUsd": {"const": 0},
+        "forbiddenPort": {"const": 7437},
+        "networkPolicy": {"const": "declared-local-assets-and-loopback-only"}
+      }
+    }
+  },
+  "$defs": {
+    "fileIdentity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "identity", "bytes", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "identity": {"type": "string", "minLength": 1},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

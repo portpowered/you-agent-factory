@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
+	"github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
@@ -58,6 +60,81 @@ func provideWorkersMockWorkersConfigDiagnosticsLoader(
 
 func provideRunInputPathInspector() platformfilesystem.PathInspector {
 	return platformfilesystem.Local{}
+}
+
+func provideRunRuntimeRunnerBuilder(
+	build initializer.RuntimeRunnerBuilder,
+	open *factorysessionwire.ApplicationService,
+) (runcli.RuntimeRunnerBuilder, error) {
+	if build == nil || open == nil {
+		return nil, errors.New("run application lifecycle builder and Factory Session opener are required")
+	}
+	return func(
+		ctx context.Context,
+		request *factorysessions.RuntimeOpeningRequest,
+		cancellation initializer.InvocationCancellation,
+		sinkID factorysessions.VisualizationSinkID,
+	) (initializer.LocalRuntimeRunner, error) {
+		if ctx == nil {
+			return nil, errors.New("build run application: context is required")
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("build run application: %w", err)
+		}
+		if request == nil {
+			return nil, errors.New("build run application: opening request is required")
+		}
+
+		// Open once at the Factory Sessions boundary so historical inspection
+		// can be selected before the generic initializer constructs an
+		// application runner. Its plan is already the inert historical lifecycle;
+		// hosted/ordinary replay continues through the injected builder below.
+		opened, err := open.OpenApplicationWithCancellation(ctx, request, cancellation, sinkID)
+		if err != nil {
+			return nil, err
+		}
+		replay := opened.HistoricalReplay
+		replayMetadataWarnings := append(
+			[]recordings.MetadataMismatchWarning(nil),
+			opened.ReplayMetadataWarnings...,
+		)
+		hostedInvocation := opened.HostedInvocation
+		cleanInvocation := opened.CleanInvocation
+
+		var runner initializer.LocalRuntimeRunner
+		if replay != nil {
+			runner, err = runtimeapplication.NewManagedRunner(
+				opened.Plan,
+				platformruntimeartifact.Diagnostics(opened.Diagnostics),
+			)
+			if err != nil {
+				return nil, lifecycle.CloseResources(opened.Plan.Resources, err)
+			}
+			if managed, ok := runner.(interface {
+				SetRuntimeHostReady(<-chan initializer.RuntimeHostBinding)
+			}); ok {
+				managed.SetRuntimeHostReady(opened.Ready)
+			}
+		} else {
+			if build == nil {
+				return nil, errors.New("build run application: lifecycle builder is required")
+			}
+			runner, err = build(ctx, func(context.Context) (initializer.OpenedApplication, error) {
+				return initializer.OpenedApplication{
+					Plan:        opened.Plan,
+					Diagnostics: platformruntimeartifact.Diagnostics(opened.Diagnostics),
+					Ready:       opened.Ready,
+				}, nil
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+		runner = runcli.WithHostedInvocation(runner, hostedInvocation)
+		runner = runcli.WithCleanInvocationSnapshot(runner, cleanInvocation)
+		runner = runcli.WithReplayMetadataWarnings(runner, replayMetadataWarnings)
+		return runcli.WithHistoricalReplay(runner, replay), nil
+	}, nil
 }
 
 type runtimeArtifactClock func() time.Time

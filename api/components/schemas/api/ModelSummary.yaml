@@ -28,14 +28,16 @@ properties:
   operations:
     type: array
     description: >
-      Provider-agnostic operations supported by the managed runtime. Mirrors
-      `managedRuntime.supportedOperations` for compatibility with earlier
-      discovery fields.
+      Effective provider-agnostic operations supported by the managed runtime
+      after resolved runtime configuration and verified required artifacts are
+      applied. Optional input slots whose required artifacts are unavailable
+      are omitted. Mirrors `managedRuntime.supportedOperations` for
+      compatibility with earlier discovery fields.
     items:
       $ref: './ModelInvocationOperation.yaml'
   modalities:
     type: array
-    description: Uppercase content modalities observed across the model's declared operation inputs and outputs.
+    description: Uppercase content modalities observed across the effective operation inputs and outputs.
     items:
       $ref: './ModelInvocationContentType.yaml'
   resources:

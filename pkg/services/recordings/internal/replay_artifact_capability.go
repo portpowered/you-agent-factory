@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 )
 
 var _ recordings.RecordingReplayArtifacts = (*combinedService)(nil)
@@ -198,40 +199,22 @@ func (loader *replayInputLoader) LoadReplayInput(
 	if isPortableReplayInput(data) {
 		return loader.loadPortableReplayInput(data)
 	}
-	return loader.loadLegacyReplayInput(request.Path)
+	legacyFormat := recordings.RecordedSessionFormatV1JSON
+	if replayimpl.IsReplayV2Artifact(data) {
+		legacyFormat = recordings.RecordedSessionFormatV2JSONL
+	}
+	return loader.loadLegacyReplayInput(request.Path, legacyFormat)
 }
 
 func isPortableReplayInput(data []byte) bool {
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	token, err := decoder.Token()
-	if err != nil {
+	var identity struct {
+		RecordingKind string `json:"recordingKind"`
+	}
+	if err := decoder.Decode(&identity); err != nil {
 		return false
 	}
-	if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
-		return false
-	}
-	for decoder.More() {
-		key, err := decoder.Token()
-		if err != nil {
-			return false
-		}
-		keyText, ok := key.(string)
-		if !ok {
-			return false
-		}
-		if keyText == "recordingKind" {
-			var kind string
-			if err := decoder.Decode(&kind); err != nil {
-				return false
-			}
-			return kind == recordings.KindJavaScriptFactorySession
-		}
-		var ignored json.RawMessage
-		if err := decoder.Decode(&ignored); err != nil {
-			return false
-		}
-	}
-	return false
+	return identity.RecordingKind == recordings.KindJavaScriptFactorySession
 }
 
 func (loader *replayInputLoader) loadPortableReplayInput(
@@ -254,6 +237,7 @@ func (loader *replayInputLoader) loadPortableReplayInput(
 
 func (loader *replayInputLoader) loadLegacyReplayInput(
 	path string,
+	format recordings.RecordedSessionFormat,
 ) (recordings.LoadReplayInputResult, error) {
 	if loader.loadLegacy == nil {
 		return loader.replayInputDependencyFailure("legacy_loader_unavailable", fmt.Errorf("replay artifact loader is required"))
@@ -264,11 +248,18 @@ func (loader *replayInputLoader) loadLegacyReplayInput(
 			recordings.ReplayInputFamilyLegacy,
 			fmt.Errorf("load replay artifact: %w", err),
 		)
-		loader.logReplayInputOutcome("dependency_failure", string(failure.Diagnostic.Code), "")
+		loader.logReplayInputOutcome(
+			replayInputFailureOutcome(failure.Diagnostic.Code),
+			string(failure.Diagnostic.Code),
+			string(recordings.ReplayInputFamilyLegacy),
+		)
 		return recordings.LoadReplayInputResult{}, failure
 	}
 	loader.logReplayInputOutcome("success", "", string(recordings.ReplayInputFamilyLegacy))
-	return recordings.LoadReplayInputResult{Legacy: artifact}, nil
+	return recordings.LoadReplayInputResult{
+		Legacy:       artifact,
+		LegacyFormat: string(format),
+	}, nil
 }
 
 func (loader *replayInputLoader) loadReplayInputMetadata(
@@ -314,7 +305,12 @@ func (loader *replayInputLoader) loadReplayInputMetadata(
 	metadata, err := loader.loadLegacyMetadata(path)
 	if err != nil {
 		failure := newReplayInputError(recordings.ReplayInputFamilyLegacy, fmt.Errorf("load replay artifact metadata: %w", err))
-		loader.logReplayInputOutcome("dependency_failure", string(failure.Diagnostic.Code), string(recordings.ReplayInputFamilyLegacy), true)
+		loader.logReplayInputOutcome(
+			replayInputFailureOutcome(failure.Diagnostic.Code),
+			string(failure.Diagnostic.Code),
+			string(recordings.ReplayInputFamilyLegacy),
+			true,
+		)
 		return recordings.LoadReplayInputResult{}, failure
 	}
 	loader.logReplayInputOutcome("success", "", string(recordings.ReplayInputFamilyLegacy), true)
@@ -332,66 +328,13 @@ func (loader *replayInputLoader) classifyPortableReplayInputMetadata(path string
 
 func isPortableReplayInputReader(reader io.Reader) bool {
 	decoder := json.NewDecoder(reader)
-	token, err := decoder.Token()
-	if err != nil {
+	var identity struct {
+		RecordingKind string `json:"recordingKind"`
+	}
+	if err := decoder.Decode(&identity); err != nil {
 		return false
 	}
-	if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
-		return false
-	}
-	for decoder.More() {
-		key, err := decoder.Token()
-		if err != nil {
-			return false
-		}
-		keyText, ok := key.(string)
-		if !ok {
-			return false
-		}
-		if keyText == "recordingKind" {
-			var kind string
-			if err := decoder.Decode(&kind); err != nil {
-				return false
-			}
-			return kind == recordings.KindJavaScriptFactorySession
-		}
-		if err := skipReplayInputJSONValue(decoder); err != nil {
-			return false
-		}
-	}
-	return false
-}
-
-func skipReplayInputJSONValue(decoder *json.Decoder) error {
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	delimiter, ok := token.(json.Delim)
-	if !ok {
-		return nil
-	}
-	switch delimiter {
-	case '{':
-		for decoder.More() {
-			if _, err := decoder.Token(); err != nil {
-				return err
-			}
-			if err := skipReplayInputJSONValue(decoder); err != nil {
-				return err
-			}
-		}
-	case '[':
-		for decoder.More() {
-			if err := skipReplayInputJSONValue(decoder); err != nil {
-				return err
-			}
-		}
-	default:
-		return fmt.Errorf("unexpected JSON delimiter %q", delimiter)
-	}
-	_, err = decoder.Token()
-	return err
+	return identity.RecordingKind == recordings.KindJavaScriptFactorySession
 }
 
 func (loader *replayInputLoader) replayInputDependencyFailure(
@@ -436,10 +379,11 @@ func (loader *replayInputLoader) logReplayInputOutcome(
 }
 
 func newReplayInputError(family recordings.ReplayInputFamily, cause error) *recordings.ReplayInputError {
+	diagnostic := replayInputDiagnostic(cause)
 	return &recordings.ReplayInputError{
 		Family:     family,
-		Diagnostic: replayInputDiagnostic(cause),
-		Cause:      cause,
+		Diagnostic: diagnostic,
+		Cause:      safeReplayInputCause{message: diagnostic.Error(), cause: cause},
 	}
 }
 
@@ -456,8 +400,35 @@ func newPortableReplayInputError(cause error) *recordings.ReplayInputError {
 	return &recordings.ReplayInputError{
 		Family:     recordings.ReplayInputFamilyPortable,
 		Diagnostic: diagnostic,
-		Cause:      cause,
+		Cause:      safeReplayInputCause{message: diagnostic.Error(), cause: cause},
 	}
+}
+
+type safeReplayInputCause struct {
+	message string
+	cause   error
+}
+
+func (cause safeReplayInputCause) Error() string {
+	if cause.message == "" {
+		return "replay input failure"
+	}
+	return cause.message
+}
+
+func (cause safeReplayInputCause) Unwrap() error {
+	return cause.cause
+}
+
+func replayInputFailureOutcome(code recordings.ReplayArtifactDiagnosticCode) string {
+	if code == recordings.ReplayArtifactDiagnosticDependencyFailure ||
+		code == recordings.ReplayArtifactDiagnosticCancelled {
+		if code == recordings.ReplayArtifactDiagnosticCancelled {
+			return "canceled"
+		}
+		return "dependency_failure"
+	}
+	return "validation_failure"
 }
 
 func replayInputDiagnostic(err error) recordings.ReplayArtifactDiagnostic {
