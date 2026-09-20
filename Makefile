@@ -558,10 +558,11 @@ test-localai-runner-v2-component:
 	$(GO) test ./tests/internal/localai/corpusv2/runner -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-localai-runner-v2-prebuilt: export YOU_OMNI_PREFLIGHT_REQUIRED := 1
+test-localai-runner-v2-prebuilt: export INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT := 1
 test-localai-runner-v2-prebuilt:
 	$(GO) test ./tests/integration/models/omni_media_probe -run '^TestProbeRunnerV2PrebuiltCLIHandoff$$' -count=1 -v -timeout $(GO_TEST_TIMEOUT)
 
-test-integration: test-localai-runner-v2-prebuilt
+test-integration:
 	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./pkg/services/factory_definitions/internal/services/compilation/runtimetests ./pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests ./pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests ./pkg/services/factory_sessions/internal/execution/fixtures ./pkg/transports/http/servertests/... ./tests/integration/factory/visualization/runtime_metrics ./tests/integration/models ./tests/integration/models/tts_clean_install ./tests/integration/models/platform_conformance ./tests/integration/models/model_invoke ./tests/integration/sessions/restart ./tests/integration/transport/acp/realclient ./tests/integration/transport/cli/process ./tests/integration/transport/server_binding ./tests/integration/workers/interrupt -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/automations/internal/services/filesystem_watchers/internal/service -run '^TestFileWatcher_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/platform/process -run '^TestExecCommandRunner_' -count=1 -timeout $(GO_TEST_TIMEOUT)

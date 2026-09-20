@@ -115,7 +115,7 @@ func TestCandidateManifestSchemaPinsExactWindowsArtifactProvenance(t *testing.T)
 	}
 	manifest := map[string]any{
 		"schemaVersion": "you.localai.omni-video-candidate-manifest.v1",
-		"path":          "C:/Users/andre/work/portos/infinite-you/docs/temp/projects/localai/validation/artifacts/cycle-150-v20-video-candidate/you.exe",
+		"path":          "C:/Users/andre/work/portos/infinite-you/docs/temp/projects/localai/validation/artifacts/cycle-151-v20-video-candidate/you.exe",
 		"sourceCommit":  strings.Repeat("a", 40),
 		"sourceTree":    strings.Repeat("b", 40),
 		"version":       "you@candidate",
