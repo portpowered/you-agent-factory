@@ -82,29 +82,26 @@ func (runner *baseTimeoutThenSuccessCommandRunner) CallCount() int {
 
 const scriptTimeoutCausalSignalTimeout = 10 * time.Second
 
-type scriptTimeoutThenReleaseCommandRunner struct {
+type scriptTimeoutThenSuccessCommandRunner struct {
 	mu             sync.Mutex
 	callCount      int
 	firstStartCh   chan struct{}
 	firstTimeoutCh chan struct{}
 	retryStartCh   chan struct{}
-	releaseRetryCh chan struct{}
 	firstStart     sync.Once
 	firstTimeout   sync.Once
 	retryStart     sync.Once
-	releaseRetry   sync.Once
 }
 
-func newScriptTimeoutThenReleaseCommandRunner() *scriptTimeoutThenReleaseCommandRunner {
-	return &scriptTimeoutThenReleaseCommandRunner{
+func newScriptTimeoutThenSuccessCommandRunner() *scriptTimeoutThenSuccessCommandRunner {
+	return &scriptTimeoutThenSuccessCommandRunner{
 		firstStartCh:   make(chan struct{}),
 		firstTimeoutCh: make(chan struct{}),
 		retryStartCh:   make(chan struct{}),
-		releaseRetryCh: make(chan struct{}),
 	}
 }
 
-func (runner *scriptTimeoutThenReleaseCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+func (runner *scriptTimeoutThenSuccessCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	runner.mu.Lock()
 	runner.callCount++
 	call := runner.callCount
@@ -118,19 +115,13 @@ func (runner *scriptTimeoutThenReleaseCommandRunner) Run(ctx context.Context, _ 
 	}
 
 	runner.retryStart.Do(func() { close(runner.retryStartCh) })
-	// The test releases the retry only after observing retryStartCh. Waiting
-	// for that causal signal avoids a nondeterministic select between the
-	// release and a retry context whose short production deadline has already
-	// elapsed. The first attempt above still proves the real timeout path.
-	<-runner.releaseRetryCh
+	// Return immediately so test scheduling cannot consume the retry's real
+	// workstation execution deadline. The first call still waits for the real
+	// context deadline and proves timeout handling.
 	return platformprocess.CommandResult{Stdout: []byte("script-output-after-timeout-retry")}, nil
 }
 
-func (runner *scriptTimeoutThenReleaseCommandRunner) releaseRetryOutcome() {
-	runner.releaseRetry.Do(func() { close(runner.releaseRetryCh) })
-}
-
-func (runner *scriptTimeoutThenReleaseCommandRunner) CallCount() int {
+func (runner *scriptTimeoutThenSuccessCommandRunner) CallCount() int {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	return runner.callCount
@@ -608,26 +599,19 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
-	runner := newScriptTimeoutThenReleaseCommandRunner()
+	runner := newScriptTimeoutThenSuccessCommandRunner()
 	fixture := FixtureFor(t)
 	scenario := fixture.OpenScenario(t, dir, dir, runner)
-	t.Cleanup(runner.releaseRetryOutcome)
 	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(fixture.baseURL, scenario.sessionID))
 	waitForScriptTimeoutCausalSignal(t, runner.firstStartCh, "first script attempt start")
 	waitForScriptTimeoutCausalSignal(t, runner.firstTimeoutCh, "first script attempt timeout")
 	waitForScriptTimeoutDispatchResponse(t, stream, factoryapi.WorkOutcomeFailed, "execution timeout")
 	waitForScriptTimeoutCausalSignal(t, runner.retryStartCh, "later script retry start")
-	runner.releaseRetryOutcome()
 	waitForScriptTimeoutDispatchResponse(t, stream, factoryapi.WorkOutcomeAccepted, "")
 	scenario.WaitForTerminal(t, 5*time.Second)
 	listed := scenario.ListWork(t)
-	assertSessionPlaces(t, listed, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
-
-	if runner.CallCount() < 2 {
-		t.Fatalf("expected script runner to be called at least twice, got %d", runner.CallCount())
-	}
-
-	assertDispatchTimeoutEventuallyAccepted(t, scenario.FactoryEvents(t))
+	events := scenario.FactoryEvents(t)
+	assertScriptTimeoutRecovery(t, runner.CallCount(), listed, events)
 	scenario.Stop(t)
 }
 
@@ -651,6 +635,8 @@ func waitForScriptTimeoutDispatchResponse(
 		}
 		if wantOutcome == factoryapi.WorkOutcomeAccepted && payload.Outcome == factoryapi.WorkOutcomeFailed &&
 			payload.Error != nil && strings.Contains(*payload.Error, "execution timeout") {
+			// Keep waiting for the terminal acceptance; the exact sequence
+			// assertion below reports any extra timeout with full Work/Event state.
 			continue
 		}
 		if payload.Outcome != wantOutcome {
@@ -663,6 +649,48 @@ func waitForScriptTimeoutDispatchResponse(
 			t.Fatalf("accepted script timeout dispatch error = %#v, want nil", payload.Error)
 		}
 		return payload
+	}
+}
+
+func assertScriptTimeoutRecovery(
+	t *testing.T,
+	runnerCalls int,
+	listed factoryapi.ListWorkResponse,
+	events []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+	responses := dispatchResponses(t, events)
+	evidence := struct {
+		RunnerCalls int                         `json:"runnerCalls"`
+		Work        factoryapi.ListWorkResponse `json:"work"`
+		Events      []factoryapi.FactoryEvent   `json:"events"`
+	}{runnerCalls, listed, events}
+
+	if runnerCalls != 2 {
+		t.Errorf("script runner call count = %d, want exactly 2; evidence=%#v", runnerCalls, evidence)
+	}
+	for _, want := range []struct {
+		place string
+		count int
+	}{{"task:done", 1}, {"task:init", 0}, {"task:failed", 0}} {
+		if got := support.CountWorkAtCustomerState(listed, want.place); got != want.count {
+			t.Errorf("%s Work count = %d, want %d; evidence=%#v", want.place, got, want.count, evidence)
+		}
+	}
+	if len(responses) != 2 {
+		t.Errorf("dispatch response count = %d, want exactly 2; responses=%#v; evidence=%#v", len(responses), responses, evidence)
+		return
+	}
+
+	first := responses[0]
+	if first.Outcome != factoryapi.WorkOutcomeFailed || first.Error == nil || !strings.Contains(*first.Error, "execution timeout") {
+		t.Errorf("first dispatch response = %#v, want FAILED with execution timeout; evidence=%#v", first, evidence)
+	}
+	second := responses[1]
+	if second.Outcome != factoryapi.WorkOutcomeAccepted || second.Error != nil ||
+		second.Output == nil || *second.Output != "script-output-after-timeout-retry" {
+		t.Errorf("second dispatch response = %#v, want ACCEPTED with nil error and output %q; evidence=%#v",
+			second, "script-output-after-timeout-retry", evidence)
 	}
 }
 
