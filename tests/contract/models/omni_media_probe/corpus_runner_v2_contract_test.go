@@ -5,9 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/tests/internal/localai/corpusv2"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func TestCorpusRunnerV2SchemasPinAdmissionAndEvidence(t *testing.T) {
@@ -87,6 +89,66 @@ func TestCorpusRunnerV2SchemasPinAdmissionAndEvidence(t *testing.T) {
 	selectedSamples := contractObjectValue(t, reportCorpus, "selectedSamples", "minItems")
 	if selectedSamples != float64(len(authority.ExpectedSamples)) || contractObjectValue(t, reportCorpus, "selectedSamples", "maxItems") != selectedSamples {
 		t.Fatalf("selected sample contract = %v..%v, want exactly %d", selectedSamples, contractObjectValue(t, reportCorpus, "selectedSamples", "maxItems"), len(authority.ExpectedSamples))
+	}
+}
+
+func TestCandidateManifestSchemaPinsExactWindowsArtifactProvenance(t *testing.T) {
+	t.Parallel()
+	root := contractRepositoryRoot(t)
+	manifestSchema := readContractSchema(t, filepath.Join(root, "tests", "integration", "models", "omni_media_probe", "candidate-manifest.schema.json"))
+	schemaID := "urn:you-agent-factory:tests:omni-video-candidate-manifest:v1"
+	if manifestSchema["$id"] != schemaID {
+		t.Fatalf("candidate manifest schema id = %#v, want %q", manifestSchema["$id"], schemaID)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	if err := compiler.AddResource(schemaID, manifestSchema); err != nil {
+		t.Fatalf("register candidate manifest schema: %v", err)
+	}
+	compiled, err := compiler.Compile(schemaID)
+	if err != nil {
+		t.Fatalf("compile candidate manifest schema: %v", err)
+	}
+	manifest := map[string]any{
+		"schemaVersion": "you.localai.omni-video-candidate-manifest.v1",
+		"path":          "C:/Users/andre/work/portos/infinite-you/docs/temp/projects/localai/validation/artifacts/cycle-145-v20-video-candidate/you.exe",
+		"sourceCommit":  strings.Repeat("a", 40),
+		"sourceTree":    strings.Repeat("b", 40),
+		"version":       "you@candidate",
+		"toolchain":     "go version go1.25.1 windows/amd64",
+		"goos":          "windows",
+		"goarch":        "amd64",
+		"bytes":         int64(1),
+		"sha256":        strings.Repeat("0", 64),
+	}
+	if err := compiled.Validate(manifest); err != nil {
+		t.Fatalf("valid Windows candidate manifest rejected: %v", err)
+	}
+	cases := []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{name: "unknown property", mutate: func(value map[string]any) { value["reviewerNote"] = "unreviewed" }},
+		{name: "candidate path", mutate: func(value map[string]any) { value["path"] = "C:/temp/you.exe" }},
+		{name: "source commit", mutate: func(value map[string]any) { value["sourceCommit"] = strings.Repeat("a", 39) }},
+		{name: "source tree", mutate: func(value map[string]any) { value["sourceTree"] = strings.Repeat("B", 40) }},
+		{name: "missing version", mutate: func(value map[string]any) { delete(value, "version") }},
+		{name: "platform", mutate: func(value map[string]any) { value["goos"] = "linux" }},
+		{name: "architecture", mutate: func(value map[string]any) { value["goarch"] = "arm64" }},
+		{name: "empty artifact", mutate: func(value map[string]any) { value["bytes"] = int64(0) }},
+		{name: "sha256", mutate: func(value map[string]any) { value["sha256"] = strings.Repeat("A", 64) }},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			document := make(map[string]any, len(manifest))
+			for key, value := range manifest {
+				document[key] = value
+			}
+			testCase.mutate(document)
+			if err := compiled.Validate(document); err == nil {
+				t.Fatal("invalid candidate manifest unexpectedly passed schema validation")
+			}
+		})
 	}
 }
 

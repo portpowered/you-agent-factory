@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:you-agent-factory:tests:omni-video-candidate-manifest:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "path",
+    "sourceCommit",
+    "sourceTree",
+    "version",
+    "toolchain",
+    "goos",
+    "goarch",
+    "bytes",
+    "sha256"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "you.localai.omni-video-candidate-manifest.v1" },
+    "path": { "const": "C:/Users/andre/work/portos/infinite-you/docs/temp/projects/localai/validation/artifacts/cycle-145-v20-video-candidate/you.exe" },
+    "sourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sourceTree": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "version": { "type": "string", "minLength": 1 },
+    "toolchain": { "type": "string", "minLength": 1 },
+    "goos": { "const": "windows" },
+    "goarch": { "const": "amd64" },
+    "bytes": { "type": "integer", "minimum": 1 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}
