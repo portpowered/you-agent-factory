@@ -38,7 +38,68 @@ func measurePrebuiltWorkscopeJourney(
 	journey.cancellationRequested, journey.cancellationBodyClosed = cancelPrebuiltWorkscopeStream(t, ctx, client, streamURL)
 	assertPrebuiltWorkscopeLatency(t, "before/after journey", journey.measurements)
 	journey.sourceCalls = prebuiltWorkscopeMeasuredSourceCalls(t, requestCounter, factorySessionSelector)
+	journey.sourceCalls.UnknownOutcomeHTTPRequests = assertPrebuiltWorkscopeUnknownHTTPOutcomes(
+		t, ctx, serverURL, factorySessionSelector, prebuiltWorkscopeWorkID,
+	)
+	journey.sourceCalls.PublicHTTPRequests += journey.sourceCalls.UnknownOutcomeHTTPRequests
 	return journey
+}
+
+func assertPrebuiltWorkscopeUnknownHTTPOutcomes(
+	t *testing.T,
+	ctx context.Context,
+	serverURL, factorySessionSelector, knownWorkID string,
+) int {
+	t.Helper()
+	baseURL := strings.TrimSuffix(serverURL, "/")
+	knownSessionPath := "/factory-sessions/" + url.PathEscape(factorySessionSelector) + "/worker-sessions"
+	checks := []struct {
+		name     string
+		endpoint string
+	}{
+		{
+			name:     "unknown Work",
+			endpoint: baseURL + knownSessionPath + "?workId=missing-work",
+		},
+		{
+			name:     "unknown Factory Session",
+			endpoint: baseURL + "/factory-sessions/missing-factory-session/worker-sessions?workId=" + url.QueryEscape(knownWorkID),
+		},
+		{
+			name:     "unknown Worker Session",
+			endpoint: baseURL + knownSessionPath + "/missing-worker-session",
+		},
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	for _, check := range checks {
+		response := doPrebuiltWorkscopeGET(t, ctx, client, check.endpoint)
+		body, status := readPrebuiltWorkscopeResponse(t, response)
+		if status != http.StatusNotFound {
+			t.Fatalf("prebuilt %s status = %d, want 404; body=%s", check.name, status, strings.TrimSpace(string(body)))
+		}
+		var failure factoryapi.ErrorResponse
+		if err := json.Unmarshal(body, &failure); err != nil {
+			t.Fatalf("decode prebuilt %s typed error: %v; body=%s", check.name, err, strings.TrimSpace(string(body)))
+		}
+		if failure.Code != factoryapi.ErrorResponseCodeNOTFOUND || strings.TrimSpace(failure.Message) == "" {
+			t.Fatalf("prebuilt %s error = %#v, want typed NOT_FOUND", check.name, failure)
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(body, &fields); err != nil {
+			t.Fatalf("decode prebuilt %s error fields: %v", check.name, err)
+		}
+		for _, field := range []string{"sessions", "workerSessionId", "workIds", "providerSession", "attemptId"} {
+			if _, leaked := fields[field]; leaked {
+				t.Fatalf("prebuilt %s error fabricated/leaked %q: %s", check.name, field, strings.TrimSpace(string(body)))
+			}
+		}
+		for _, identity := range []string{prebuiltWorkscopeWorkerSession, prebuiltWorkscopeProviderSession} {
+			if strings.Contains(string(body), identity) {
+				t.Fatalf("prebuilt %s error leaked known identity %q: %s", check.name, identity, strings.TrimSpace(string(body)))
+			}
+		}
+	}
+	return len(checks)
 }
 
 func measurePrebuiltWorkscopeList(

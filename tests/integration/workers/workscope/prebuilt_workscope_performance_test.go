@@ -353,14 +353,15 @@ type prebuiltWorkscopeMeasurements struct {
 }
 
 type prebuiltWorkscopeSourceCallCounts struct {
-	PublicHTTPRequests        int `json:"public_http_requests"`
-	PublicCLICommands         int `json:"public_cli_commands"`
-	ListRequests              int `json:"list_requests"`
-	ObservationReadRequests   int `json:"observation_read_requests"`
-	StableIDReadRequests      int `json:"stable_id_read_requests"`
-	RetainedStreamRequests    int `json:"retained_stream_requests"`
-	CancellationStreamReads   int `json:"cancellation_stream_reads"`
-	ExternalProviderProcesses int `json:"external_provider_processes"`
+	PublicHTTPRequests         int `json:"public_http_requests"`
+	PublicCLICommands          int `json:"public_cli_commands"`
+	ListRequests               int `json:"list_requests"`
+	ObservationReadRequests    int `json:"observation_read_requests"`
+	StableIDReadRequests       int `json:"stable_id_read_requests"`
+	RetainedStreamRequests     int `json:"retained_stream_requests"`
+	CancellationStreamReads    int `json:"cancellation_stream_reads"`
+	UnknownOutcomeHTTPRequests int `json:"unknown_outcome_http_requests"`
+	ExternalProviderProcesses  int `json:"external_provider_processes"`
 }
 
 type prebuiltWorkscopeSourceCalls struct {

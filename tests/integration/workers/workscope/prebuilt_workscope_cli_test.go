@@ -90,7 +90,57 @@ func assertPrebuiltWorkscopeCLIParity(
 	commands++
 	cliEvents := decodePrebuiltWorkscopeCLIEvents(t, streamOutput)
 	assertPrebuiltWorkscopeEventParity(t, cliEvents, journey.events)
+	assertPrebuiltWorkscopeCLIError(
+		t, ctx, binaryPath, workspace, environment, "WORK_NOT_FOUND",
+		"worker-sessions", "list", "--server", serverURL,
+		"--session", journey.factorySessionSelector, "--work-id", "missing-work", "--output", "json",
+	)
+	commands++
+	assertPrebuiltWorkscopeCLIError(
+		t, ctx, binaryPath, workspace, environment, "WORKER_SESSION_NOT_FOUND",
+		"worker-sessions", "show", "--server", serverURL,
+		"--session", journey.factorySessionSelector, "--worker-session-id", "missing-worker-session", "--json",
+	)
+	commands++
 	return *cliDetail.FactorySessionId, commands
+}
+
+func assertPrebuiltWorkscopeCLIError(
+	t *testing.T,
+	ctx context.Context,
+	binaryPath, workspace string,
+	environment []string,
+	wantCode string,
+	arguments ...string,
+) {
+	t.Helper()
+	commandCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	command := exec.CommandContext(commandCtx, binaryPath, arguments...)
+	command.Dir = workspace
+	command.Env = append([]string(nil), environment...)
+	var stdout, stderr bytes.Buffer
+	command.Stdout, command.Stderr = &stdout, &stderr
+	if err := command.Run(); err == nil {
+		t.Fatalf("prebuilt Work Session CLI %q succeeded, want typed %s error", arguments, wantCode)
+	}
+	output := strings.TrimSpace(stdout.String())
+	if output == "" {
+		output = strings.TrimSpace(stderr.String())
+	}
+	var failure struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(output), &failure); err != nil {
+		t.Fatalf("decode prebuilt Work Session CLI error: %v; stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+	if failure.Code != wantCode || strings.TrimSpace(failure.Message) == "" {
+		t.Fatalf("prebuilt Work Session CLI error = %#v, want code %q and a message", failure, wantCode)
+	}
+	if strings.Contains(output, `"sessions"`) || strings.Contains(output, `"workerSessionId"`) {
+		t.Fatalf("prebuilt Work Session CLI error fabricated/leaked identity data: %s", output)
+	}
 }
 
 type prebuiltWorkscopeCLIEvent struct {
