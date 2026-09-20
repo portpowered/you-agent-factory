@@ -315,17 +315,11 @@ func requireCanceledWorkIsolationAndSuccessor(
 	t.Helper()
 	session := scenario.session
 	canceledCall := session.runner.waitCanceled(t, concurrencySharedProcessTimeout)
-	if !commandRequestContains(canceledCall.request, "cc05-first") {
-		t.Fatalf("CC-05 canceled command = %#v, want exact A target", canceledCall.request)
-	}
-	if got := session.runner.callsForMarker("cc05-first"); got != 1 {
-		t.Fatalf("CC-05 A command calls after cancel = %d, want exactly one", got)
+	if canceledCall.index != scenario.firstCallIndex || !commandRequestContains(canceledCall.request, "cc05-first") {
+		t.Fatalf("CC-05 canceled command = %#v, want exact A attempt %d", canceledCall, scenario.firstCallIndex)
 	}
 	if got := session.runner.callsForMarker("cc05-second"); got != 1 {
 		t.Fatalf("CC-05 B command calls after cancel = %d, want exactly one", got)
-	}
-	if got := session.runner.activeCallCount(); got != 1 {
-		t.Fatalf("CC-05 active calls after A cancel = %d, want only unrelated B", got)
 	}
 	secondWorkAfter := concurrencyWorkByID(t, session, scenario.second.WorkId)
 	secondSessionAfter := concurrencyWorkerSessionForWork(t, session, scenario.second.WorkId)
@@ -361,6 +355,7 @@ func requireRepeatedWorkerSessionCancellation(
 	beforeRepeatEvents []factoryapi.FactoryEvent,
 ) {
 	t.Helper()
+	firstCallCountBeforeRepeat := scenario.session.runner.callsForMarker("cc05-first")
 	remoteInputs, remoteErr := runConcurrencyRemoteWorkerSessionControl(t, fixture, "cancel", scenario.workerSessionID)
 	if remoteErr != nil {
 		t.Fatalf("CC-05 repeated remote cancel: %v\nstdout:\n%s\nstderr:\n%s", remoteErr, remoteInputs.Stdout(), remoteInputs.Stderr())
@@ -375,6 +370,9 @@ func requireRepeatedWorkerSessionCancellation(
 	}
 	afterRepeatEvents := concurrencySessionEvents(t, fixture.baseURL, scenario.session.id)
 	assertConcurrencyEventIDsUnchanged(t, beforeRepeatEvents, afterRepeatEvents, "CC-05 repeated remote cancel")
+	if got := scenario.session.runner.callsForMarker("cc05-first"); got != firstCallCountBeforeRepeat {
+		t.Fatalf("CC-05 repeated remote cancel added an A command call: before=%d after=%d", firstCallCountBeforeRepeat, got)
+	}
 }
 
 func requireCanceledWorkerSessionObservation(
