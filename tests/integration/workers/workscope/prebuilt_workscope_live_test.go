@@ -1,10 +1,10 @@
 package workscope_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -20,15 +20,16 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
-	prebuiltWorkscopeLiveRequestID      = "workscope-live-request"
-	prebuiltWorkscopeLiveWorkerSession  = "workscope-live-worker-session"
-	prebuiltWorkscopeLiveDispatchID     = "workscope-live-dispatch"
-	prebuiltWorkscopeLiveProviderState  = "FACTORY_RELIABILITY_WORKSCOPE_PROVIDER_STATE"
-	prebuiltWorkscopeLiveProviderOutput = "{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"workscope-live-message\",\"type\":\"agent_message\",\"text\":\"Workscope live fixture COMPLETE\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n"
+	prebuiltWorkscopeLiveRequestID              = "workscope-live-request"
+	prebuiltWorkscopeLiveWorkerSession          = "workscope-live-worker-session"
+	prebuiltWorkscopeLiveDispatchID             = "workscope-live-dispatch"
+	prebuiltWorkscopeLiveProviderControlAddress = "FACTORY_RELIABILITY_WORKSCOPE_PROVIDER_CONTROL_ADDRESS"
+	prebuiltWorkscopeLiveProviderOutput         = "{\"type\":\"turn.started\"}\n{\"type\":\"item.completed\",\"item\":{\"id\":\"workscope-live-message\",\"type\":\"agent_message\",\"text\":\"Workscope live fixture COMPLETE\"}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n"
 )
 
 func TestPrebuiltWorkscopeRunningAndFinishedIdentity(t *testing.T) {
@@ -40,17 +41,21 @@ func TestPrebuiltWorkscopeRunningAndFinishedIdentity(t *testing.T) {
 	workspace := filepath.Join(root, "workspace")
 	home := filepath.Join(root, "home")
 	providerDir := filepath.Join(root, "provider")
-	providerState := filepath.Join(root, "provider-state")
-	for _, directory := range []string{factoryDir, workspace, home, providerState} {
+	for _, directory := range []string{factoryDir, workspace, home} {
 		if err := os.MkdirAll(directory, 0o700); err != nil {
 			t.Fatalf("create Work Session integration directory %s: %v", directory, err)
 		}
 	}
 	writePrebuiltWorkscopeLiveFactory(t, factoryDir)
 	writePrebuiltWorkscopeGatedCodex(t, providerDir)
+	providerControlListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for controlled Codex readiness: %v", err)
+	}
+	t.Cleanup(func() { _ = providerControlListener.Close() })
 	environment := builtcliacceptance.ProcessEnvForIsolatedHome(home)
 	environment = replacePrebuiltWorkscopeEnv(environment, "PATH", providerDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	environment = replacePrebuiltWorkscopeEnv(environment, prebuiltWorkscopeLiveProviderState, providerState)
+	environment = replacePrebuiltWorkscopeEnv(environment, prebuiltWorkscopeLiveProviderControlAddress, providerControlListener.Addr().String())
 	port, err := builtcliacceptance.ReserveLocalTCPPort()
 	if err != nil {
 		t.Fatalf("reserve isolated live Worker Session listener: %v", err)
@@ -61,12 +66,10 @@ func TestPrebuiltWorkscopeRunningAndFinishedIdentity(t *testing.T) {
 	serverURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	daemon := startPrebuiltWorkscopeDaemon(t, ctx, binaryPath, factoryDir, environment,
 		"run", "--dir", factoryDir, "--continuously", "--with-server", "--listen",
-		net.JoinHostPort("127.0.0.1", fmt.Sprint(port)), "--no-record", "--quiet",
+		net.JoinHostPort("127.0.0.1", fmt.Sprint(port)), "--no-record",
 	)
 	waitForPrebuiltWorkscopeLiveServer(t, ctx, daemon, serverURL)
 	factorySessionID := readPrebuiltWorkscopeLiveFactorySessionID(t, ctx, serverURL)
-	releasePath := filepath.Join(providerState, "release")
-	t.Cleanup(func() { _ = os.WriteFile(releasePath, []byte("release"), 0o600) })
 	workID := submitPrebuiltWorkscopeLiveWork(t, ctx, serverURL)
 	invokeOutput := runPrebuiltWorkscopeCLI(t, ctx, binaryPath, factoryDir, environment,
 		"--remote", "--server", serverURL, "--json", "worker-sessions", "invoke",
@@ -77,19 +80,22 @@ func TestPrebuiltWorkscopeRunningAndFinishedIdentity(t *testing.T) {
 		"--retry-max-attempts", "1", "--async",
 	)
 	assertPrebuiltWorkscopeLiveInvokeAccepted(t, invokeOutput)
-	waitForPrebuiltWorkscopeProviderMarker(t, ctx, daemon, filepath.Join(providerState, "started"))
+	providerControl := waitForPrebuiltWorkscopeProviderStarted(t, ctx, daemon, providerControlListener)
+	defer providerControl.Close()
 	assertPrebuiltWorkscopeLiveDirectAssociation(t, ctx, serverURL, workID, factorySessionID)
-	active := waitForPrebuiltWorkscopeLiveObservation(t, ctx, daemon, serverURL, binaryPath, factoryDir, environment, workID,
+	active := readPrebuiltWorkscopeLiveObservation(t, ctx, serverURL, binaryPath, factoryDir, environment, factorySessionID, workID,
 		func(state string) bool { return state == "STARTING" || state == "RUNNING" },
 	)
 	if active.WorkerSessionId != prebuiltWorkscopeLiveWorkerSession {
 		t.Fatalf("running Worker Session identity = %q, want %q", active.WorkerSessionId, prebuiltWorkscopeLiveWorkerSession)
 	}
-	if err := os.WriteFile(releasePath, []byte("release"), 0o600); err != nil {
+	eventStream := openPrebuiltWorkscopeLiveEventStream(t, ctx, serverURL, factorySessionID, active.WorkerSessionId)
+	defer eventStream.Close()
+	if _, err := io.WriteString(providerControl, "release\n"); err != nil {
 		t.Fatalf("release controlled Codex provider: %v", err)
 	}
-	waitForPrebuiltWorkscopeProviderMarker(t, ctx, daemon, filepath.Join(providerState, "completed"))
-	finished := waitForPrebuiltWorkscopeLiveObservation(t, ctx, daemon, serverURL, binaryPath, factoryDir, environment, workID,
+	waitForPrebuiltWorkscopeTerminalEvent(t, eventStream, active.WorkerSessionId)
+	finished := readPrebuiltWorkscopeLiveObservation(t, ctx, serverURL, binaryPath, factoryDir, environment, factorySessionID, workID,
 		func(state string) bool { return state == "COMPLETED" },
 	)
 	if finished.WorkerSessionId != active.WorkerSessionId || finished.AttemptId != active.AttemptId ||
@@ -199,32 +205,41 @@ func replacePrebuiltWorkscopeEnv(environment []string, key, value string) []stri
 
 func waitForPrebuiltWorkscopeLiveServer(t *testing.T, ctx context.Context, daemon *prebuiltWorkscopeDaemon, serverURL string) {
 	t.Helper()
-	client := &http.Client{Timeout: 2 * time.Second}
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
+	waitForPrebuiltWorkscopeOutput(t, ctx, daemon, "Dashboard URL: "+serverURL)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(serverURL, "/")+"/status", nil)
+	if err != nil {
+		t.Fatalf("build compiled live Worker Session readiness request: %v", err)
+	}
+	response, err := (&http.Client{Timeout: 5 * time.Second}).Do(request)
+	if err != nil {
+		t.Fatalf("read compiled live Worker Session status after startup signal: %v", err)
+	}
+	var status factoryapi.StatusResponse
+	decodeErr := json.NewDecoder(response.Body).Decode(&status)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK || decodeErr != nil || status.FactoryState != "RUNNING" {
+		t.Fatalf("compiled live Worker Session status = %d/%#v, decode=%v, want 200/RUNNING", response.StatusCode, status, decodeErr)
+	}
+}
+
+func waitForPrebuiltWorkscopeOutput(t *testing.T, ctx context.Context, daemon *prebuiltWorkscopeDaemon, expected string) {
+	t.Helper()
 	deadline := time.NewTimer(20 * time.Second)
 	defer deadline.Stop()
 	for {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(serverURL, "/")+"/status", nil)
-		if err == nil {
-			response, requestErr := client.Do(request)
-			if requestErr == nil {
-				var status factoryapi.StatusResponse
-				decodeErr := json.NewDecoder(response.Body).Decode(&status)
-				response.Body.Close()
-				if response.StatusCode == http.StatusOK && decodeErr == nil && status.FactoryState == "RUNNING" {
-					return
-				}
-			}
+		output, changed := daemon.stdout.snapshot()
+		if strings.Contains(output, expected) {
+			return
 		}
 		select {
+		case <-changed:
 		case err := <-daemon.done:
-			t.Fatalf("prebuilt live Work Session daemon exited before readiness: %v\nstdout=%s\nstderr=%s", err, daemon.stdout.String(), daemon.stderr.String())
+			daemon.done <- err
+			t.Fatalf("prebuilt live Work Session daemon exited before startup signal %q: %v\nstdout=%s\nstderr=%s", expected, err, output, daemon.stderr.String())
 		case <-ctx.Done():
-			t.Fatalf("prebuilt live Work Session server was not ready: %v\nstdout=%s\nstderr=%s", ctx.Err(), daemon.stdout.String(), daemon.stderr.String())
+			t.Fatalf("wait for prebuilt live Work Session startup signal %q: %v\nstdout=%s\nstderr=%s", expected, ctx.Err(), output, daemon.stderr.String())
 		case <-deadline.C:
-			t.Fatalf("prebuilt live Work Session server did not become ready\nstdout=%s\nstderr=%s", daemon.stdout.String(), daemon.stderr.String())
-		case <-ticker.C:
+			t.Fatalf("prebuilt live Work Session startup signal %q was not emitted\nstdout=%s\nstderr=%s", expected, output, daemon.stderr.String())
 		}
 	}
 }
@@ -311,97 +326,167 @@ func assertPrebuiltWorkscopeLiveInvokeAccepted(t *testing.T, output []byte) {
 	}
 }
 
-func waitForPrebuiltWorkscopeProviderMarker(
+func waitForPrebuiltWorkscopeProviderStarted(
 	t *testing.T,
 	ctx context.Context,
 	daemon *prebuiltWorkscopeDaemon,
-	markerPath string,
-) {
+	listener net.Listener,
+) net.Conn {
 	t.Helper()
-	ticker := time.NewTicker(25 * time.Millisecond)
-	defer ticker.Stop()
 	deadline := time.NewTimer(20 * time.Second)
 	defer deadline.Stop()
-	for {
-		if _, err := os.Stat(markerPath); err == nil {
-			return
-		} else if !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("read controlled Codex provider marker %s: %v", markerPath, err)
-		}
-		select {
-		case err := <-daemon.done:
-			t.Fatalf("prebuilt live Work Session daemon exited before provider marker: %v\nstdout=%s\nstderr=%s", err, daemon.stdout.String(), daemon.stderr.String())
-		case <-ctx.Done():
-			t.Fatalf("wait for controlled Codex provider marker %s: %v", markerPath, ctx.Err())
-		case <-deadline.C:
-			t.Fatalf("controlled Codex provider did not write marker %s\nstdout=%s\nstderr=%s", markerPath, daemon.stdout.String(), daemon.stderr.String())
-		case <-ticker.C:
+	if tcpListener, ok := listener.(*net.TCPListener); ok {
+		if err := tcpListener.SetDeadline(time.Now().Add(20 * time.Second)); err != nil {
+			t.Fatalf("set controlled Codex provider accept ceiling: %v", err)
 		}
 	}
+	type acceptResult struct {
+		connection net.Conn
+		err        error
+	}
+	accepted := make(chan acceptResult, 1)
+	go func() {
+		connection, err := listener.Accept()
+		accepted <- acceptResult{connection: connection, err: err}
+	}()
+	var connection net.Conn
+	select {
+	case result := <-accepted:
+		if result.err != nil {
+			t.Fatalf("accept controlled Codex provider readiness signal: %v", result.err)
+		}
+		connection = result.connection
+	case err := <-daemon.done:
+		daemon.done <- err
+		_ = listener.Close()
+		t.Fatalf("prebuilt live Work Session daemon exited before provider readiness: %v\nstdout=%s\nstderr=%s", err, daemon.stdout.String(), daemon.stderr.String())
+	case <-ctx.Done():
+		_ = listener.Close()
+		t.Fatalf("wait for controlled Codex provider readiness signal: %v", ctx.Err())
+	case <-deadline.C:
+		_ = listener.Close()
+		t.Fatalf("controlled Codex provider did not connect\nstdout=%s\nstderr=%s", daemon.stdout.String(), daemon.stderr.String())
+	}
+	if err := connection.SetDeadline(time.Now().Add(20 * time.Second)); err != nil {
+		connection.Close()
+		t.Fatalf("set controlled Codex provider handshake ceiling: %v", err)
+	}
+	started, err := bufio.NewReader(connection).ReadString('\n')
+	if err != nil || strings.TrimSpace(started) != "started" {
+		connection.Close()
+		t.Fatalf("controlled Codex provider readiness = %q, err=%v; want started", started, err)
+	}
+	if err := connection.SetDeadline(time.Time{}); err != nil {
+		connection.Close()
+		t.Fatalf("clear controlled Codex provider handshake deadline: %v", err)
+	}
+	_ = listener.Close()
+	return connection
 }
 
-func waitForPrebuiltWorkscopeLiveObservation(
+func readPrebuiltWorkscopeLiveObservation(
 	t *testing.T,
 	ctx context.Context,
-	daemon *prebuiltWorkscopeDaemon,
 	serverURL, binaryPath, workspace string,
 	environment []string,
-	workID string,
+	factorySessionID, workID string,
 	wantState func(string) bool,
 ) factoryapi.WorkerSessionObservation {
 	t.Helper()
-	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/" + url.PathEscape(prebuiltWorkscopeFactoryID) +
-		"/worker-sessions?workId=" + url.QueryEscape(workID)
-	client := &http.Client{Timeout: 5 * time.Second}
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-	deadline := time.NewTimer(20 * time.Second)
-	defer deadline.Stop()
-	var lastState string
-	var lastStatus int
-	var lastBody string
-	var lastErr error
+	endpoint := strings.TrimSuffix(serverURL, "/") + sessionpath.WorkerSessionsCollectionPath(factorySessionID) + "?workId=" + url.QueryEscape(workID)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatalf("build compiled Work-scoped Worker Session read: %v", err)
+	}
+	response, err := (&http.Client{Timeout: 5 * time.Second}).Do(request)
+	if err != nil {
+		t.Fatalf("read compiled Work-scoped Worker Sessions: %v", err)
+	}
+	body, status := readPrebuiltWorkscopeResponse(t, response)
+	if status != http.StatusOK {
+		t.Fatalf("compiled Work-scoped Worker Session list status=%d, want 200; body=%s", status, strings.TrimSpace(string(body)))
+	}
+	var rest factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(body, &rest); err != nil {
+		t.Fatalf("decode compiled Work-scoped Worker Session list: %v; body=%s", err, strings.TrimSpace(string(body)))
+	}
+	if len(rest.Sessions) != 1 || !wantState(string(rest.Sessions[0].State)) {
+		t.Fatalf("compiled Work-scoped Worker Session list = %#v, want one observation in the expected lifecycle state", rest.Sessions)
+	}
+	cliOutput := runPrebuiltWorkscopeCLI(t, ctx, binaryPath, workspace, environment,
+		"worker-sessions", "list", "--server", serverURL,
+		"--session", factorySessionID, "--work-id", workID, "--output", "json",
+	)
+	var cli factoryapi.ListWorkerSessionsResponse
+	if err := json.Unmarshal(cliOutput, &cli); err != nil {
+		t.Fatalf("decode compiled live Work-scoped CLI list: %v; output=%s", err, strings.TrimSpace(string(cliOutput)))
+	}
+	assertPrebuiltWorkscopeLiveListParity(t, rest, cli)
+	return rest.Sessions[0]
+}
+
+func openPrebuiltWorkscopeLiveEventStream(t *testing.T, ctx context.Context, serverURL, factorySessionID, workerSessionID string) io.ReadCloser {
+	t.Helper()
+	endpoint := strings.TrimSuffix(serverURL, "/") + sessionpath.FactorySessionWorkerSessionEventsPath(factorySessionID, workerSessionID)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatalf("build compiled Worker Session event stream request: %v", err)
+	}
+	request.Header.Set("Accept", "text/event-stream")
+	response, err := (&http.Client{}).Do(request)
+	if err != nil {
+		t.Fatalf("open compiled Worker Session event stream: %v", err)
+	}
+	if response.StatusCode != http.StatusOK || !strings.HasPrefix(response.Header.Get("Content-Type"), "text/event-stream") {
+		body, readErr := io.ReadAll(response.Body)
+		response.Body.Close()
+		t.Fatalf("compiled Worker Session event stream status/content-type=%d/%q, read=%v body=%s", response.StatusCode, response.Header.Get("Content-Type"), readErr, strings.TrimSpace(string(body)))
+	}
+	return response.Body
+}
+
+func waitForPrebuiltWorkscopeTerminalEvent(t *testing.T, stream io.Reader, workerSessionID string) {
+	t.Helper()
+	reader := bufio.NewReader(stream)
+	var data []string
 	for {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err == nil {
-			response, requestErr := client.Do(request)
-			if requestErr == nil {
-				lastStatus = response.StatusCode
-				body, readErr := io.ReadAll(response.Body)
-				lastBody = strings.TrimSpace(string(body))
-				var rest factoryapi.ListWorkerSessionsResponse
-				decodeErr := json.Unmarshal(body, &rest)
-				response.Body.Close()
-				lastErr = errors.Join(readErr, decodeErr)
-				if response.StatusCode == http.StatusOK && lastErr == nil && len(rest.Sessions) == 1 {
-					lastState = string(rest.Sessions[0].State)
-					if wantState(lastState) {
-						cliOutput := runPrebuiltWorkscopeCLI(t, ctx, binaryPath, workspace, environment,
-							"worker-sessions", "list", "--server", serverURL,
-							"--session", prebuiltWorkscopeFactoryID, "--work-id", workID, "--output", "json",
-						)
-						var cli factoryapi.ListWorkerSessionsResponse
-						if err := json.Unmarshal(cliOutput, &cli); err != nil {
-							t.Fatalf("decode compiled live Work-scoped CLI list: %v; output=%s", err, strings.TrimSpace(string(cliOutput)))
-						}
-						assertPrebuiltWorkscopeLiveListParity(t, rest, cli)
-						return rest.Sessions[0]
-					}
-				}
-			} else {
-				lastErr = requestErr
+		line, err := reader.ReadString('\n')
+		if len(line) > 0 {
+			line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+			if strings.HasPrefix(line, "data:") {
+				data = append(data, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
 			}
-		} else {
-			lastErr = err
+			if line == "" && len(data) > 0 {
+				var frame struct {
+					Delivery        string  `json:"delivery"`
+					WorkerSessionID string  `json:"workerSessionId"`
+					ErrorCode       *string `json:"errorCode"`
+					ErrorMessage    *string `json:"errorMessage"`
+				}
+				if decodeErr := json.Unmarshal([]byte(strings.Join(data, "\n")), &frame); decodeErr != nil {
+					t.Fatalf("decode compiled Worker Session event: %v; data=%q", decodeErr, data)
+				}
+				if frame.WorkerSessionID != workerSessionID {
+					t.Fatalf("compiled Worker Session event identity=%q, want %q", frame.WorkerSessionID, workerSessionID)
+				}
+				if frame.Delivery == "SOURCE_FAILURE" {
+					code, message := "", ""
+					if frame.ErrorCode != nil {
+						code = *frame.ErrorCode
+					}
+					if frame.ErrorMessage != nil {
+						message = *frame.ErrorMessage
+					}
+					t.Fatalf("compiled Worker Session stream failed: %s %s", code, message)
+				}
+				if frame.Delivery == "TERMINAL" || frame.Delivery == "TERMINAL_REPLAY" {
+					return
+				}
+				data = nil
+			}
 		}
-		select {
-		case err := <-daemon.done:
-			t.Fatalf("prebuilt live Work Session daemon exited during %s observation: %v\nstdout=%s\nstderr=%s", lastState, err, daemon.stdout.String(), daemon.stderr.String())
-		case <-ctx.Done():
-			t.Fatalf("wait for compiled Work-scoped Worker Session state: %v; last=%q status=%d body=%s error=%v", ctx.Err(), lastState, lastStatus, lastBody, lastErr)
-		case <-deadline.C:
-			t.Fatalf("compiled Work-scoped Worker Session did not reach expected state; last=%q status=%d body=%s error=%v", lastState, lastStatus, lastBody, lastErr)
-		case <-ticker.C:
+		if err != nil {
+			t.Fatalf("compiled Worker Session stream ended before terminal delivery: %v", err)
 		}
 	}
 }
@@ -427,25 +512,40 @@ func assertPrebuiltWorkscopeLiveListParity(
 }
 
 const prebuiltWorkscopePowerShellCodex = `$ErrorActionPreference = "Stop"
-$state = $env:FACTORY_RELIABILITY_WORKSCOPE_PROVIDER_STATE
+$address = $env:FACTORY_RELIABILITY_WORKSCOPE_PROVIDER_CONTROL_ADDRESS -split ':', 2
+$control = [System.Net.Sockets.TcpClient]::new()
+$control.Connect($address[0], [int]$address[1])
+$stream = $control.GetStream()
+$reader = [System.IO.StreamReader]::new($stream)
+$writer = [System.IO.StreamWriter]::new($stream)
+$writer.AutoFlush = $true
 $null = [Console]::In.ReadToEnd()
-[System.IO.File]::WriteAllText((Join-Path $state "started"), "started")
-while (-not (Test-Path -LiteralPath (Join-Path $state "release"))) { Start-Sleep -Milliseconds 25 }
+$writer.WriteLine("started")
+if ($reader.ReadLine() -ne "release") { throw "controlled Codex provider did not receive release" }
 [Console]::Out.WriteLine('{"type":"turn.started"}')
 [Console]::Out.WriteLine('{"type":"item.completed","item":{"id":"workscope-live-message","type":"agent_message","text":"Workscope live fixture COMPLETE"}}')
 [Console]::Out.WriteLine('{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}')
 [Console]::Out.Flush()
-[System.IO.File]::WriteAllText((Join-Path $state "completed"), "completed")
+$writer.WriteLine("completed")
+$writer.Dispose()
+$reader.Dispose()
+$control.Dispose()
 `
 
-const prebuiltWorkscopeShellCodex = `#!/bin/sh
+const prebuiltWorkscopeShellCodex = `#!/bin/bash
 set -eu
-state=${FACTORY_RELIABILITY_WORKSCOPE_PROVIDER_STATE:?provider state directory is required}
+control=${FACTORY_RELIABILITY_WORKSCOPE_PROVIDER_CONTROL_ADDRESS:?provider control address is required}
+control_host=${control%:*}
+control_port=${control##*:}
 cat >/dev/null
-printf '%s' started > "$state/started"
-while [ ! -f "$state/release" ]; do sleep 0.025; done
+exec 3<>"/dev/tcp/$control_host/$control_port"
+printf '%s\n' started >&3
+IFS= read -r control_command <&3
+[ "$control_command" = release ]
 printf '%s\n' '{"type":"turn.started"}'
 printf '%s\n' '{"type":"item.completed","item":{"id":"workscope-live-message","type":"agent_message","text":"Workscope live fixture COMPLETE"}}'
 printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
-printf '%s' completed > "$state/completed"
+printf '%s\n' completed >&3
+exec 3<&-
+exec 3>&-
 `

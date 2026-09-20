@@ -318,20 +318,34 @@ func (daemon *prebuiltWorkscopeDaemon) stopMemoryMonitor() (uint64, string, erro
 }
 
 type prebuiltWorkscopeBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
+	mu      sync.Mutex
+	buf     bytes.Buffer
+	changed chan struct{}
+}
+
+func newPrebuiltWorkscopeBuffer() *prebuiltWorkscopeBuffer {
+	return &prebuiltWorkscopeBuffer{changed: make(chan struct{})}
 }
 
 func (buffer *prebuiltWorkscopeBuffer) Write(value []byte) (int, error) {
 	buffer.mu.Lock()
 	defer buffer.mu.Unlock()
-	return buffer.buf.Write(value)
+	written, err := buffer.buf.Write(value)
+	close(buffer.changed)
+	buffer.changed = make(chan struct{})
+	return written, err
 }
 
 func (buffer *prebuiltWorkscopeBuffer) String() string {
 	buffer.mu.Lock()
 	defer buffer.mu.Unlock()
 	return buffer.buf.String()
+}
+
+func (buffer *prebuiltWorkscopeBuffer) snapshot() (string, <-chan struct{}) {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	return buffer.buf.String(), buffer.changed
 }
 
 type prebuiltWorkscopeMeasurements struct {
@@ -501,7 +515,7 @@ func startPrebuiltWorkscopeDaemon(
 	command := exec.CommandContext(ctx, binaryPath, arguments...)
 	command.Dir = workspace
 	command.Env = append([]string(nil), environment...)
-	stdout, stderr := &prebuiltWorkscopeBuffer{}, &prebuiltWorkscopeBuffer{}
+	stdout, stderr := newPrebuiltWorkscopeBuffer(), newPrebuiltWorkscopeBuffer()
 	command.Stdout, command.Stderr = stdout, stderr
 	if err := command.Start(); err != nil {
 		t.Fatalf("start prebuilt Work Session process: %v", err)

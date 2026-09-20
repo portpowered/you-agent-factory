@@ -25,7 +25,7 @@ func startS8LiveStream(
 	ctx context.Context,
 	process support.Process,
 	env []string,
-	workingDirectory, serverURL, factorySessionID, workerSessionID string,
+	workingDirectory, serverURL, workerSessionID string,
 	providerSessionID string,
 ) s8StreamCapture {
 	t.Helper()
