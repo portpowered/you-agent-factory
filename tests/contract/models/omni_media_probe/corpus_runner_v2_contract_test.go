@@ -8,8 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/tests/internal/localai/corpusv2"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+)
+
+const (
+	contractCorpusCommit    = "443ee4715e6e0f8ec02489e4fda9554d15434e08"
+	contractCorpusIndexHash = "ac4eeb02e6d1e1065176dcf5c18f74367b241c698ec6344ca48829b7ab770c28"
+	contractCorpusPairs     = 370
+	contractCorpusSamples   = 9
 )
 
 func TestCorpusRunnerV2SchemasPinAdmissionAndEvidence(t *testing.T) {
@@ -18,8 +24,6 @@ func TestCorpusRunnerV2SchemasPinAdmissionAndEvidence(t *testing.T) {
 	base := filepath.Join(root, "tests", "integration", "models", "omni_media_probe")
 	input := readContractSchema(t, filepath.Join(base, "probe-input.schema.json"))
 	report := readContractSchema(t, filepath.Join(base, "report.schema.json"))
-	authority := corpusv2.DefaultCorpusV2Authority()
-
 	if input["$id"] != "urn:you-agent-factory:tests:omni-video-corpus-runner-input:v2" {
 		t.Fatalf("runner input schema id = %#v", input["$id"])
 	}
@@ -75,11 +79,11 @@ func TestCorpusRunnerV2SchemasPinAdmissionAndEvidence(t *testing.T) {
 		t.Fatal("runner report failure object is not closed to unreviewed fields")
 	}
 	reportCorpus := contractNestedProperties(t, reportProperties, "corpus")
-	if contractObjectValue(t, reportCorpus, "commit", "const") != authority.Commit || contractObjectValue(t, reportCorpus, "indexSha256", "const") != authority.IndexSHA256 {
+	if contractObjectValue(t, reportCorpus, "commit", "const") != contractCorpusCommit || contractObjectValue(t, reportCorpus, "indexSha256", "const") != contractCorpusIndexHash {
 		t.Fatal("runner report corpus authority differs from the shared corpus authority")
 	}
 	for field, expected := range map[string]any{
-		"uniqueClips": float64(authority.PairCount), "uniquePrompts": float64(authority.PairCount),
+		"uniqueClips": float64(contractCorpusPairs), "uniquePrompts": float64(contractCorpusPairs),
 		"copiedBytes": float64(0), "uploadedBytes": float64(0), "readOnly": true,
 	} {
 		if got := contractObjectValue(t, reportCorpus, field, "const"); got != expected {
@@ -87,8 +91,8 @@ func TestCorpusRunnerV2SchemasPinAdmissionAndEvidence(t *testing.T) {
 		}
 	}
 	selectedSamples := contractObjectValue(t, reportCorpus, "selectedSamples", "minItems")
-	if selectedSamples != float64(len(authority.ExpectedSamples)) || contractObjectValue(t, reportCorpus, "selectedSamples", "maxItems") != selectedSamples {
-		t.Fatalf("selected sample contract = %v..%v, want exactly %d", selectedSamples, contractObjectValue(t, reportCorpus, "selectedSamples", "maxItems"), len(authority.ExpectedSamples))
+	if selectedSamples != float64(contractCorpusSamples) || contractObjectValue(t, reportCorpus, "selectedSamples", "maxItems") != selectedSamples {
+		t.Fatalf("selected sample contract = %v..%v, want exactly %d", selectedSamples, contractObjectValue(t, reportCorpus, "selectedSamples", "maxItems"), contractCorpusSamples)
 	}
 }
 

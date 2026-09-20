@@ -1,7 +1,6 @@
-package corpusv2
+package runner
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -247,16 +246,18 @@ func TestCorpusNegativeFailuresAreTypedAndPreHeavyweight(t *testing.T) {
 }
 
 func TestCorpusIndexConformance(t *testing.T) {
-	authority := DefaultCorpusV2Authority()
-	if !corpusV2AuthorityAvailable(authority) {
-		t.Skipf("pinned external corpus unavailable at %s", authority.RepositoryRoot)
-	}
-	index, err := ReadCorpusV2Index(context.Background(), authority)
+	authority, manifest := portableCorpusV2Fixture(t)
+	indexTemplate, err := os.ReadFile(filepath.Join(authority.RepositoryRoot, authority.IndexPath))
 	if err != nil {
-		t.Fatalf("read pinned corpus index: %v", err)
+		t.Fatalf("read portable corpus index: %v", err)
 	}
-	if len(index.Pairs) != 370 || len(index.Sections["selfie-jessie-duration-study"]) != 10 || len(index.Sections["selfie-jessie-prompt-study"]) != 100 || len(index.Sections["selfie-jessie-quality"]) != 180 {
-		t.Fatalf("index counts = total %d duration %d prompt %d quality %d, want 370/10/100/180", len(index.Pairs), len(index.Sections["selfie-jessie-duration-study"]), len(index.Sections["selfie-jessie-prompt-study"]), len(index.Sections["selfie-jessie-quality"]))
+	indexData := []byte(strings.ReplaceAll(string(indexTemplate), "{{ROOT}}", corpusV2Slash(authority.RepositoryRoot)))
+	index, err := ParseCorpusV2Index(indexData, authority.RepositoryRoot)
+	if err != nil {
+		t.Fatalf("parse portable corpus index: %v", err)
+	}
+	if err := ValidateCorpusV2Index(index, authority); err != nil {
+		t.Fatalf("validate portable corpus index counts: %v", err)
 	}
 	for _, pair := range index.Pairs {
 		for _, path := range []string{pair.Clip.Path, pair.Prompt.Path} {
@@ -265,27 +266,23 @@ func TestCorpusIndexConformance(t *testing.T) {
 			}
 		}
 	}
-	t.Logf("pinned index commit=%s sha256=%s pairs=%d uniqueClips=%d uniquePrompts=%d copiedBytes=0 uploadedBytes=0", index.Commit, index.IndexSHA256, len(index.Pairs), len(index.Pairs), len(index.Pairs))
+	if len(manifest.Pairs) != len(index.Pairs) || authority.IndexSHA256 != hashBytes(indexData) {
+		t.Fatalf("portable manifest/index identities differ: manifest pairs=%d index pairs=%d", len(manifest.Pairs), len(index.Pairs))
+	}
+	t.Logf("portable index sha256=%s pairs=%d uniqueClips=%d uniquePrompts=%d copiedBytes=0 uploadedBytes=0", authority.IndexSHA256, len(index.Pairs), len(index.Pairs), len(index.Pairs))
 }
 
 func TestCorpusMetadataConformance(t *testing.T) {
-	authority := DefaultCorpusV2Authority()
-	if !corpusV2AuthorityAvailable(authority) {
-		t.Skipf("pinned external corpus unavailable at %s", authority.RepositoryRoot)
-	}
-	manifest, err := ReadCorpusV2Manifest(context.Background(), authority)
-	if err != nil {
-		t.Fatalf("read pinned corpus metadata: %v", err)
-	}
+	authority, manifest := portableCorpusV2Fixture(t)
 	if !manifest.ReadOnly || manifest.CopiedBytes != 0 || manifest.UploadedBytes != 0 || manifest.MissingSiblings != 0 {
 		t.Fatalf("manifest read-only accounting = %#v, want read-only and zero copy/upload/missing", manifest)
 	}
-	if len(manifest.Pairs) != 370 || manifest.UniqueClips != 370 || manifest.UniquePrompts != 370 || len(manifest.Samples) != 9 {
-		t.Fatalf("manifest counts = pairs=%d clips=%d prompts=%d samples=%d, want 370/370/370/9", len(manifest.Pairs), manifest.UniqueClips, manifest.UniquePrompts, len(manifest.Samples))
+	if len(manifest.Pairs) != authority.PairCount || manifest.UniqueClips != authority.PairCount || manifest.UniquePrompts != authority.PairCount || len(manifest.Samples) != len(authority.ExpectedSamples) {
+		t.Fatalf("manifest counts = pairs=%d clips=%d prompts=%d samples=%d, want %d pairs and %d samples", len(manifest.Pairs), manifest.UniqueClips, manifest.UniquePrompts, len(manifest.Samples), authority.PairCount, len(authority.ExpectedSamples))
 	}
 	seen := make(map[string]struct{}, len(manifest.Samples))
 	for _, sample := range manifest.Samples {
-		if sample.SourceCommit != CorpusV2Commit || sample.Clip.Path == "" || sample.Prompt.Path == "" || sample.Clip.Bytes <= 0 || sample.Prompt.Bytes <= 0 || sample.Clip.SHA256 == "" || sample.Prompt.SHA256 == "" {
+		if sample.SourceCommit != authority.Commit || sample.Clip.Path == "" || sample.Prompt.Path == "" || sample.Clip.Bytes <= 0 || sample.Prompt.Bytes <= 0 || sample.Clip.SHA256 == "" || sample.Prompt.SHA256 == "" {
 			t.Fatalf("sample identity incomplete: %#v", sample)
 		}
 		if _, exists := seen[sample.Clip.Path]; exists {
@@ -294,6 +291,18 @@ func TestCorpusMetadataConformance(t *testing.T) {
 		seen[sample.Clip.Path] = struct{}{}
 		if err := validateCorpusV2Metadata(sample.Stream); err != nil {
 			t.Fatalf("sample stream metadata: %v", err)
+		}
+		data, err := os.ReadFile(sample.Clip.Path)
+		if err != nil {
+			t.Fatalf("read synthetic clip for metadata conformance: %v", err)
+		}
+		parsed, err := parseCorpusV2MP4Metadata(data)
+		if err != nil {
+			t.Fatalf("parse synthetic clip metadata: %v", err)
+		}
+		parsed.Identity = corpusV2IdentityForStream(parsed)
+		if parsed != sample.Stream {
+			t.Fatalf("parsed synthetic metadata = %#v, manifest metadata = %#v", parsed, sample.Stream)
 		}
 		t.Logf("sample study=%s band=%s attempt=%s clipBytes=%d clipSha256=%s promptBytes=%d promptSha256=%s codec=%s dimensions=%dx%d frameRate=%s durationMillis=%d frames=%d sourceCommit=%s", sample.Study, sample.Band, sample.Attempt, sample.Clip.Bytes, sample.Clip.SHA256, sample.Prompt.Bytes, sample.Prompt.SHA256, sample.Stream.Codec, sample.Stream.Width, sample.Stream.Height, sample.Stream.FrameRate, sample.Stream.DurationMillis, sample.Stream.Frames, sample.SourceCommit)
 	}
@@ -310,7 +319,7 @@ func corpusV2SyntheticIndex(t *testing.T, root, study string, rows []corpusV2Syn
 	fmt.Fprintln(&builder, "# Video and prompt output index")
 	fmt.Fprintln(&builder, "Snapshot: test")
 	fmt.Fprintln(&builder)
-	fmt.Fprintln(&builder, "This index lists all 370 production `clip.mp4` files with a sibling `prompt.md` found at inspection time. Review copies, other filenames, and files without a sibling prompt are not included. Presence here does not mean approved for publication.")
+	fmt.Fprintln(&builder, "This portable synthetic index contains repository-owned rows used only by component tests.")
 	fmt.Fprintln(&builder)
 	fmt.Fprintf(&builder, "## %s (%d)\n", study, len(rows))
 	fmt.Fprintln(&builder, "| Attempt | Video path | Corresponding prompt path |")
@@ -347,22 +356,11 @@ func assertCorpusV2Code(t *testing.T, err error, want CorpusV2ValidationCode) {
 	}
 }
 
-func corpusV2AuthorityAvailable(authority CorpusV2Authority) bool {
-	indexPath, err := corpusV2IndexAbsolutePath(authority)
-	if err != nil {
-		return false
-	}
-	if _, err := os.Stat(indexPath); err != nil {
-		return false
-	}
-	return true
-}
-
 func corpusV2RepositoryRoot(t testing.TB) string {
 	t.Helper()
 	_, source, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate corpus v2 test root")
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(source), "..", "..", "..", ".."))
+	return filepath.Clean(filepath.Join(filepath.Dir(source), "..", "..", "..", "..", ".."))
 }

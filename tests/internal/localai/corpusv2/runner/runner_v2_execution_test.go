@@ -1,4 +1,4 @@
-package omni_media_probe
+package runner
 
 import (
 	"context"
@@ -10,13 +10,11 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"github.com/portpowered/infinite-you/tests/internal/localai/corpusv2"
 )
 
 type probeV2CallPlan struct {
 	kind           string
-	sample         *corpusv2.CorpusV2Sample
+	sample         *CorpusV2Sample
 	prompt         string
 	promptIdentity RecordedIdentity
 }
@@ -89,10 +87,10 @@ func (runner RunnerV2) RunInput(ctx context.Context, input ProbeInputV2, inputPa
 		return ProbeReportV2{}, executionErr
 	}
 	report.Cleanup = CleanupEvidence{Checked: true}
-	if err := report.Validate(); err != nil {
+	if err := report.validate(runner.corpusAuthority()); err != nil {
 		return ProbeReportV2{}, fmt.Errorf("validate corpus runner v2 execution report: %w", err)
 	}
-	if err := WriteProbeReportV2Atomic(prepared.reportPath, report); err != nil {
+	if err := writeProbeReportV2Atomic(prepared.reportPath, report, runner.corpusAuthority()); err != nil {
 		return ProbeReportV2{}, fmt.Errorf("persist corpus runner v2 execution report: %w", err)
 	}
 	return report, nil
@@ -153,8 +151,8 @@ func (runner RunnerV2) executeProbeV2Call(ctx context.Context, plan probeV2CallP
 	return probeV2CallOutcome{call: call, process: process, output: output}, nil
 }
 
-func buildProbeV2CallPlan(manifest corpusv2.CorpusV2Manifest) ([]probeV2CallPlan, error) {
-	if len(manifest.Samples) != len(corpusv2.DefaultCorpusV2Authority().ExpectedSamples) {
+func buildProbeV2CallPlan(manifest CorpusV2Manifest) ([]probeV2CallPlan, error) {
+	if len(manifest.Samples) != len(DefaultCorpusV2Authority().ExpectedSamples) {
 		return nil, validationError(CodeProbeInvalidReport, "corpus.selectedSamples", "exact nine pinned samples", "sample count changed", nil)
 	}
 	plans := make([]probeV2CallPlan, 0, int(ProbeV2MaxCalls))
@@ -178,7 +176,7 @@ func buildProbeV2CallPlan(manifest corpusv2.CorpusV2Manifest) ([]probeV2CallPlan
 	return plans, nil
 }
 
-func prepareProbeV2Question(sample corpusv2.CorpusV2Sample) (string, RecordedIdentity, error) {
+func prepareProbeV2Question(sample CorpusV2Sample) (string, RecordedIdentity, error) {
 	data, err := os.ReadFile(sample.Prompt.Path)
 	if err != nil {
 		return "", RecordedIdentity{}, validationError(CodeProbeIdentityMismatch, "corpus.prompt", "readable pinned sibling prompt", "prompt is unavailable", nil)
@@ -194,7 +192,7 @@ func prepareProbeV2Question(sample corpusv2.CorpusV2Sample) (string, RecordedIde
 	return question, inlineV2Identity("derived-question", questionBytes), nil
 }
 
-func verifyProbeV2File(identity corpusv2.CorpusV2FileIdentity) error {
+func verifyProbeV2File(identity CorpusV2FileIdentity) error {
 	info, err := os.Lstat(identity.Path)
 	if err != nil || !info.Mode().IsRegular() || info.Size() != identity.Bytes {
 		return validationError(CodeProbeIdentityMismatch, "corpus.file", "pinned regular file and byte count", "source identity changed", nil)

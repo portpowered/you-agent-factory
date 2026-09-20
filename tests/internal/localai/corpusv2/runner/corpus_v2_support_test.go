@@ -1,4 +1,4 @@
-package corpusv2
+package runner
 
 import (
 	"context"
@@ -248,8 +248,9 @@ func ParseCorpusV2Index(data []byte, repositoryRoot string) (CorpusV2Index, erro
 		cursor++
 	}
 	const corpusV2IndexDescription = "This index lists all 370 production `clip.mp4` files with a sibling `prompt.md` found at inspection time. Review copies, other filenames, and files without a sibling prompt are not included. Presence here does not mean approved for publication."
-	if cursor >= len(lines) || lines[cursor] != corpusV2IndexDescription {
-		return CorpusV2Index{}, corpusV2Error(CorpusV2CodeMalformedIndex, "description", corpusV2IndexDescription, lineAt(lines, cursor), nil)
+	const corpusV2SyntheticIndexDescription = "This portable synthetic index contains repository-owned rows used only by component tests."
+	if cursor >= len(lines) || (lines[cursor] != corpusV2IndexDescription && lines[cursor] != corpusV2SyntheticIndexDescription) {
+		return CorpusV2Index{}, corpusV2Error(CorpusV2CodeMalformedIndex, "description", "pinned or portable synthetic corpus index description", lineAt(lines, cursor), nil)
 	}
 
 	sections := make(map[string][]CorpusV2Pair)

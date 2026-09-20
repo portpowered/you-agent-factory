@@ -1,4 +1,4 @@
-package omni_media_probe
+package runner
 
 import (
 	"encoding/json"
@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/portpowered/infinite-you/tests/internal/localai/corpusv2"
 )
 
 func ReadProbeReportV2(path string) (ProbeReportV2, error) {
+	return readProbeReportV2(path, DefaultCorpusV2Authority())
+}
+
+func readProbeReportV2(path string, authority CorpusV2Authority) (ProbeReportV2, error) {
 	path, err := normalizeProbePath(path, "report path")
 	if err != nil {
 		return ProbeReportV2{}, err
@@ -28,14 +30,18 @@ func ReadProbeReportV2(path string) (ProbeReportV2, error) {
 	if err := decodeStrictJSON(data, &report); err != nil {
 		return ProbeReportV2{}, strictJSONError("report", err)
 	}
-	if err := report.Validate(); err != nil {
+	if err := report.validate(authority); err != nil {
 		return ProbeReportV2{}, err
 	}
 	return report, nil
 }
 
 func WriteProbeReportV2Atomic(path string, report ProbeReportV2) error {
-	if err := report.Validate(); err != nil {
+	return writeProbeReportV2Atomic(path, report, DefaultCorpusV2Authority())
+}
+
+func writeProbeReportV2Atomic(path string, report ProbeReportV2, authority CorpusV2Authority) error {
+	if err := report.validate(authority); err != nil {
 		return fmt.Errorf("validate corpus runner v2 report: %w", err)
 	}
 	body, err := json.MarshalIndent(report, "", "  ")
@@ -54,6 +60,10 @@ func WriteProbeReportV2Atomic(path string, report ProbeReportV2) error {
 var errProbeV2ReportExists = errors.New("v2 report destination exists")
 
 func (report ProbeReportV2) Validate() error {
+	return report.validate(DefaultCorpusV2Authority())
+}
+
+func (report ProbeReportV2) validate(authority CorpusV2Authority) error {
 	if report.SchemaVersion != ProbeReportSchemaV2 {
 		return validationError(CodeProbeInvalidReport, "schemaVersion", ProbeReportSchemaV2, report.SchemaVersion, nil)
 	}
@@ -73,7 +83,7 @@ func (report ProbeReportV2) Validate() error {
 			return err
 		}
 	}
-	if err := validateCorpusReportV2(report.Corpus); err != nil {
+	if err := validateCorpusReportV2(report.Corpus, authority); err != nil {
 		return err
 	}
 	if err := validateProbePolicyV2(report.Policy); err != nil {
@@ -238,17 +248,16 @@ func corpusSampleIdentityV2(sample CorpusSampleReportV2) string {
 	return sample.Study + "/" + sample.Band + "/" + sample.Attempt
 }
 
-func validateCorpusReportV2(corpus CorpusReportV2) error {
-	authority := corpusv2.DefaultCorpusV2Authority()
+func validateCorpusReportV2(corpus CorpusReportV2, authority CorpusV2Authority) error {
 	indexPath := filepath.Join(authority.RepositoryRoot, filepath.FromSlash(authority.IndexPath))
 	if corpus.RepositoryIdentity != pathIdentity(authority.RepositoryRoot) || corpus.IndexPathIdentity != pathIdentity(indexPath) {
 		return validationError(CodeProbeInvalidReport, "corpus.pathIdentity", "hashed pinned corpus paths", "identity mismatch", nil)
 	}
 	if corpus.Commit != authority.Commit || !strings.EqualFold(corpus.IndexSHA256, authority.IndexSHA256) || corpus.UniqueClips != authority.PairCount || corpus.UniquePrompts != authority.PairCount {
-		return validationError(CodeProbeInvalidReport, "corpus", "pinned commit, index digest, and 370 pairs", "corpus identity mismatch", nil)
+		return validationError(CodeProbeInvalidReport, "corpus", "pinned commit, index digest, and pair count", "corpus identity mismatch", nil)
 	}
 	if !corpus.ReadOnly || corpus.CopiedBytes != 0 || corpus.UploadedBytes != 0 || corpus.SelectedSamples == nil || len(corpus.SelectedSamples) != len(authority.ExpectedSamples) {
-		return validationError(CodeProbeInvalidReport, "corpus", "read-only 370-pair corpus with nine selected samples and zero copied/uploaded bytes", "corpus accounting mismatch", nil)
+		return validationError(CodeProbeInvalidReport, "corpus", "read-only pinned corpus with expected sample count and zero copied/uploaded bytes", "corpus accounting mismatch", nil)
 	}
 	for index, expected := range authority.ExpectedSamples {
 		if err := validateCorpusSampleReportV2(corpus.SelectedSamples[index], expected, authority.RepositoryRoot, authority.Commit); err != nil {
@@ -258,7 +267,7 @@ func validateCorpusReportV2(corpus CorpusReportV2) error {
 	return nil
 }
 
-func validateCorpusSampleReportV2(sample CorpusSampleReportV2, expected corpusv2.CorpusV2SampleExpectation, root, commit string) error {
+func validateCorpusSampleReportV2(sample CorpusSampleReportV2, expected CorpusV2SampleExpectation, root, commit string) error {
 	field := fmt.Sprintf("corpus.selectedSamples.%s.%s", expected.Study, expected.Band)
 	if sample.Study != expected.Study || sample.Band != expected.Band || sample.Attempt != expected.Attempt || sample.SourceCommit != commit {
 		return validationError(CodeProbeInvalidReport, field, "exact pinned sample order and source commit", "selection mismatch", nil)
@@ -368,7 +377,7 @@ func newProbeReportV2(prepared admittedProbeInputV2, port int) ProbeReportV2 {
 	}
 }
 
-func corpusReportV2(manifest corpusv2.CorpusV2Manifest) CorpusReportV2 {
+func corpusReportV2(manifest CorpusV2Manifest) CorpusReportV2 {
 	indexPath := filepath.Join(manifest.Repository, filepath.FromSlash(manifest.IndexPath))
 	samples := make([]CorpusSampleReportV2, 0, len(manifest.Samples))
 	for _, sample := range manifest.Samples {
@@ -382,7 +391,7 @@ func corpusReportV2(manifest corpusv2.CorpusV2Manifest) CorpusReportV2 {
 	return CorpusReportV2{RepositoryIdentity: pathIdentity(manifest.Repository), Commit: manifest.Commit, IndexPathIdentity: pathIdentity(indexPath), IndexSHA256: manifest.IndexSHA256, UniqueClips: manifest.UniqueClips, UniquePrompts: manifest.UniquePrompts, SelectedSamples: samples, CopiedBytes: manifest.CopiedBytes, UploadedBytes: manifest.UploadedBytes, ReadOnly: manifest.ReadOnly}
 }
 
-func recordedCorpusV2File(identity corpusv2.CorpusV2FileIdentity) RecordedIdentity {
+func recordedCorpusV2File(identity CorpusV2FileIdentity) RecordedIdentity {
 	return RecordedIdentity{Identity: identity.Identity, PathIdentity: pathIdentity(identity.Path), Bytes: identity.Bytes, SHA256: identity.SHA256}
 }
 

@@ -1,9 +1,7 @@
-package omni_media_probe
+package runner
 
 import (
 	"context"
-
-	"github.com/portpowered/infinite-you/tests/internal/localai/corpusv2"
 )
 
 const (
@@ -170,12 +168,13 @@ type ProbeCallReportV2 struct {
 	Failure        *ReportFailure     `json:"failure"`
 }
 
-type corpusV2ManifestReader func(context.Context, corpusv2.CorpusV2Authority) (corpusv2.CorpusV2Manifest, error)
+type corpusV2ManifestReader func(context.Context, CorpusV2Authority) (CorpusV2Manifest, error)
 
 // RunnerV2 admits and records the exact corpus before any executor call.
 // CorpusReader replaces only the local corpus observation boundary in tests.
 type RunnerV2 struct {
 	Executor     Executor
+	authority    CorpusV2Authority
 	corpusReader corpusV2ManifestReader
 }
 

@@ -1,4 +1,4 @@
-package omni_media_probe
+package runner
 
 import (
 	"bytes"
@@ -12,17 +12,7 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/portpowered/infinite-you/tests/internal/localai/corpusv2"
 )
-
-type probeV2CorpusCache struct {
-	once     sync.Once
-	manifest corpusv2.CorpusV2Manifest
-	err      error
-}
-
-var probeV2LocalCorpus probeV2CorpusCache
 
 type probeV2ScriptedExecutor struct {
 	mu            sync.Mutex
@@ -89,33 +79,27 @@ func successfulProbeV2Observation(index int, request ExecutionRequest) Execution
 	}}}
 }
 
-func localCorpusManifestV2(t *testing.T) corpusv2.CorpusV2Manifest {
+func portableCorpusManifestV2(t *testing.T) CorpusV2Manifest {
 	t.Helper()
-	requireLocalCorpusV2(t)
-	probeV2LocalCorpus.once.Do(func() {
-		probeV2LocalCorpus.manifest, probeV2LocalCorpus.err = corpusv2.ReadCorpusV2Manifest(context.Background(), corpusv2.DefaultCorpusV2Authority())
-	})
-	if probeV2LocalCorpus.err != nil {
-		t.Fatalf("read pinned local corpus for controlled runner: %v", probeV2LocalCorpus.err)
-	}
-	return cloneCorpusV2Manifest(probeV2LocalCorpus.manifest)
+	_, manifest := portableCorpusV2Fixture(t)
+	return cloneCorpusV2Manifest(manifest)
 }
 
-func cachedCorpusReaderV2(manifest corpusv2.CorpusV2Manifest) corpusV2ManifestReader {
-	return func(ctx context.Context, _ corpusv2.CorpusV2Authority) (corpusv2.CorpusV2Manifest, error) {
+func cachedCorpusReaderV2(manifest CorpusV2Manifest) corpusV2ManifestReader {
+	return func(ctx context.Context, _ CorpusV2Authority) (CorpusV2Manifest, error) {
 		if err := ctx.Err(); err != nil {
-			return corpusv2.CorpusV2Manifest{}, err
+			return CorpusV2Manifest{}, err
 		}
 		return cloneCorpusV2Manifest(manifest), nil
 	}
 }
 
 func TestProbeRunnerV2ExecutionRunsWarmupCanaryAndEightSamplesSerially(t *testing.T) {
-	manifest := localCorpusManifestV2(t)
+	manifest := portableCorpusManifestV2(t)
 	input, inputPath, reportPath := validProbeInputV2(t, "execute-ten-call-success")
 	before := snapshotProbeV2CorpusFiles(t, manifest)
 	executor := &probeV2ScriptedExecutor{}
-	runner := NewRunnerV2(executor)
+	runner := newPortableRunnerV2(t, executor)
 	runner.corpusReader = cachedCorpusReaderV2(manifest)
 	report, err := runner.Run(context.Background(), inputPath, reportPath)
 	if err != nil {
@@ -149,14 +133,14 @@ func TestProbeRunnerV2ExecutionRunsWarmupCanaryAndEightSamplesSerially(t *testin
 		t.Fatalf("owned probe roots survived execution: %v", err)
 	}
 	assertProbeV2CorpusFilesUnchanged(t, before)
-	persisted, err := ReadProbeReportV2(reportPath)
+	persisted, err := readProbeReportV2(reportPath, runner.corpusAuthority())
 	if err != nil || persisted.Status != "PASS" || len(persisted.Calls) != 10 {
 		t.Fatalf("persisted execution report status/calls = %s/%d, err=%v", persisted.Status, len(persisted.Calls), err)
 	}
 	assertProbeV2ReportIsRedacted(t, reportPath, input, manifest)
 }
 
-func assertProbeV2RequestSequence(t *testing.T, requests []ExecutionRequest, calls []ProbeCallReportV2, manifest corpusv2.CorpusV2Manifest) {
+func assertProbeV2RequestSequence(t *testing.T, requests []ExecutionRequest, calls []ProbeCallReportV2, manifest CorpusV2Manifest) {
 	t.Helper()
 	for index, request := range requests {
 		call := calls[index]
@@ -219,7 +203,7 @@ type probeV2FailureCase struct {
 }
 
 func TestProbeRunnerV2FailuresStopAtTheMinimalPrefixWithoutRetry(t *testing.T) {
-	manifest := localCorpusManifestV2(t)
+	manifest := portableCorpusManifestV2(t)
 	cases := []probeV2FailureCase{
 		{name: "warmup cli failure", index: 0, status: "FAIL", wantCalls: 1, wantCode: CodeProbeExecutionFailure, failedOutcome: failedProbeV2Observation},
 		{name: "warmup timeout", index: 0, status: "INCONCLUSIVE", wantCalls: 1, wantCode: CodeProbeTimedOut, failedOutcome: timedOutProbeV2Observation},
@@ -243,7 +227,7 @@ func TestProbeRunnerV2FailuresStopAtTheMinimalPrefixWithoutRetry(t *testing.T) {
 				}
 				return successfulProbeV2Observation(index, request), nil
 			}}
-			runner := NewRunnerV2(executor)
+			runner := newPortableRunnerV2(t, executor)
 			runner.corpusReader = cachedCorpusReaderV2(manifest)
 			report, err := runner.Run(context.Background(), inputPath, reportPath)
 			if err != nil {
@@ -291,14 +275,14 @@ func TestProbeRunnerV2FailuresStopAtTheMinimalPrefixWithoutRetry(t *testing.T) {
 }
 
 func TestProbeRunnerV2RecordsTimeoutBeforeProcessStart(t *testing.T) {
-	manifest := localCorpusManifestV2(t)
+	manifest := portableCorpusManifestV2(t)
 	input, inputPath, reportPath := validProbeInputV2(t, "timeout-before-process-start")
 	executor := &probeV2ScriptedExecutor{handler: func(_ int, _ context.Context, _ ExecutionRequest) (ExecutionObservation, error) {
 		return ExecutionObservation{TimedOut: true, Process: ProcessEvidence{
 			Identity: "controlled-before-start", Kind: "controlled-executor", Owner: "probe-v2-test", TimedOut: true,
 		}}, nil
 	}}
-	runner := NewRunnerV2(executor)
+	runner := newPortableRunnerV2(t, executor)
 	runner.corpusReader = cachedCorpusReaderV2(manifest)
 	report, err := runner.Run(context.Background(), inputPath, reportPath)
 	if err != nil {
@@ -359,7 +343,7 @@ func malformedProbeV2OutputObservation(request ExecutionRequest, index int) Exec
 }
 
 func TestProbeRunnerV2DoesNotPublishUntilOwnedCleanupIsZero(t *testing.T) {
-	manifest := localCorpusManifestV2(t)
+	manifest := portableCorpusManifestV2(t)
 	cases := []struct {
 		name   string
 		mutate func(*ExecutionObservation)
@@ -377,7 +361,7 @@ func TestProbeRunnerV2DoesNotPublishUntilOwnedCleanupIsZero(t *testing.T) {
 				testCase.mutate(&observation)
 				return observation, nil
 			}}
-			runner := NewRunnerV2(executor)
+			runner := newPortableRunnerV2(t, executor)
 			runner.corpusReader = cachedCorpusReaderV2(manifest)
 			_, err := runner.Run(context.Background(), inputPath, reportPath)
 			if !hasValidationCode(err, CodeProbeCleanupFailure) {
@@ -398,7 +382,7 @@ func TestProbeRunnerV2DoesNotPublishUntilOwnedCleanupIsZero(t *testing.T) {
 }
 
 func TestProbeRunnerV2SerializesCompetingRunsAndHonorsCancellation(t *testing.T) {
-	manifest := localCorpusManifestV2(t)
+	manifest := portableCorpusManifestV2(t)
 	firstInput, firstInputPath, firstReportPath := validProbeInputV2(t, "competing-run-first")
 	secondInput, secondInputPath, secondReportPath := validProbeInputV2(t, "competing-run-second")
 	started := make(chan struct{})
@@ -412,7 +396,7 @@ func TestProbeRunnerV2SerializesCompetingRunsAndHonorsCancellation(t *testing.T)
 		}
 		return successfulProbeV2Observation(index, request), nil
 	}}
-	firstRunner := NewRunnerV2(firstExecutor)
+	firstRunner := newPortableRunnerV2(t, firstExecutor)
 	firstRunner.corpusReader = cachedCorpusReaderV2(manifest)
 	firstContext, cancelFirst := context.WithCancel(context.Background())
 	type runResult struct {
@@ -427,7 +411,7 @@ func TestProbeRunnerV2SerializesCompetingRunsAndHonorsCancellation(t *testing.T)
 	<-started
 
 	secondExecutor := &probeV2ScriptedExecutor{}
-	secondRunner := NewRunnerV2(secondExecutor)
+	secondRunner := newPortableRunnerV2(t, secondExecutor)
 	secondRunner.corpusReader = cachedCorpusReaderV2(manifest)
 	_, secondErr := secondRunner.Run(context.Background(), secondInputPath, secondReportPath)
 	if !hasValidationCode(secondErr, CodeProbeHeavyOwnerBusy) {
@@ -466,14 +450,14 @@ func TestProbeRunnerV2SerializesCompetingRunsAndHonorsCancellation(t *testing.T)
 }
 
 func TestProbeRunnerV2RejectsExistingReportWithoutOverwriteOrExecution(t *testing.T) {
-	manifest := localCorpusManifestV2(t)
+	manifest := portableCorpusManifestV2(t)
 	input, inputPath, reportPath := validProbeInputV2(t, "existing-report")
 	sentinel := []byte("operator-owned report bytes")
 	if err := os.WriteFile(reportPath, sentinel, 0o600); err != nil {
 		t.Fatalf("write existing destination: %v", err)
 	}
 	executor := &probeV2ScriptedExecutor{}
-	runner := NewRunnerV2(executor)
+	runner := newPortableRunnerV2(t, executor)
 	runner.corpusReader = cachedCorpusReaderV2(manifest)
 	_, err := runner.Run(context.Background(), inputPath, reportPath)
 	if !hasValidationCode(err, CodeProbeInvalidReport) {
@@ -493,7 +477,7 @@ func TestProbeRunnerV2RejectsExistingReportWithoutOverwriteOrExecution(t *testin
 }
 
 func TestProbeRunnerV2AtomicPersistenceDoesNotOverwriteConcurrentDestination(t *testing.T) {
-	manifest := localCorpusManifestV2(t)
+	manifest := portableCorpusManifestV2(t)
 	input, inputPath, reportPath := validProbeInputV2(t, "report-race")
 	started := make(chan struct{})
 	continueCall := make(chan struct{})
@@ -505,7 +489,7 @@ func TestProbeRunnerV2AtomicPersistenceDoesNotOverwriteConcurrentDestination(t *
 		}
 		return successfulProbeV2Observation(index, request), nil
 	}}
-	runner := NewRunnerV2(executor)
+	runner := newPortableRunnerV2(t, executor)
 	runner.corpusReader = cachedCorpusReaderV2(manifest)
 	type runResult struct {
 		err error
@@ -537,9 +521,9 @@ func TestProbeRunnerV2AtomicPersistenceDoesNotOverwriteConcurrentDestination(t *
 }
 
 func TestProbeRunnerV2AtomicWriteFailureLeavesNoAcceptedPartialReport(t *testing.T) {
-	manifest := localCorpusManifestV2(t)
+	manifest := portableCorpusManifestV2(t)
 	_, inputPath, preflightPath := validProbeInputV2(t, "atomic-write-failure")
-	runner := NewRunnerV2(nil)
+	runner := newPortableRunnerV2(t, nil)
 	runner.corpusReader = cachedCorpusReaderV2(manifest)
 	report, err := runner.Preflight(context.Background(), inputPath, preflightPath)
 	if err != nil {
@@ -551,23 +535,23 @@ func TestProbeRunnerV2AtomicWriteFailureLeavesNoAcceptedPartialReport(t *testing
 		t.Fatalf("write blocking parent file: %v", err)
 	}
 	reportPath := filepath.Join(parentFile, "report.json")
-	if err := WriteProbeReportV2Atomic(reportPath, report); !hasValidationCode(err, CodeProbeReportPersist) {
+	if err := writeProbeReportV2Atomic(reportPath, report, runner.corpusAuthority()); !hasValidationCode(err, CodeProbeReportPersist) {
 		t.Fatalf("atomic write error = %v, want typed persistence failure", err)
 	}
 	actual, err := os.ReadFile(parentFile)
 	if err != nil || !bytes.Equal(actual, parentSentinel) {
 		t.Fatalf("failed write changed blocking parent: read error=%v", err)
 	}
-	if _, err := ReadProbeReportV2(reportPath); err == nil {
+	if _, err := readProbeReportV2(reportPath, runner.corpusAuthority()); err == nil {
 		t.Fatal("failed atomic write exposed an accepted partial report")
 	}
 }
 
-func snapshotProbeV2CorpusFiles(t *testing.T, manifest corpusv2.CorpusV2Manifest) []RecordedIdentity {
+func snapshotProbeV2CorpusFiles(t *testing.T, manifest CorpusV2Manifest) []RecordedIdentity {
 	t.Helper()
 	identities := make([]RecordedIdentity, 0, len(manifest.Samples)*2)
 	for _, sample := range manifest.Samples {
-		for _, file := range []corpusv2.CorpusV2FileIdentity{sample.Prompt, sample.Clip} {
+		for _, file := range []CorpusV2FileIdentity{sample.Prompt, sample.Clip} {
 			data, err := os.ReadFile(file.Path)
 			if err != nil {
 				t.Fatal("read pinned source before execution")
@@ -580,10 +564,10 @@ func snapshotProbeV2CorpusFiles(t *testing.T, manifest corpusv2.CorpusV2Manifest
 
 func assertProbeV2CorpusFilesUnchanged(t *testing.T, before []RecordedIdentity) {
 	t.Helper()
-	manifest := localCorpusManifestV2(t)
+	manifest := portableCorpusManifestV2(t)
 	index := 0
 	for _, sample := range manifest.Samples {
-		for _, file := range []corpusv2.CorpusV2FileIdentity{sample.Prompt, sample.Clip} {
+		for _, file := range []CorpusV2FileIdentity{sample.Prompt, sample.Clip} {
 			data, err := os.ReadFile(file.Path)
 			if err != nil {
 				t.Fatal("read pinned source after execution")
@@ -596,13 +580,13 @@ func assertProbeV2CorpusFilesUnchanged(t *testing.T, before []RecordedIdentity) 
 	}
 }
 
-func assertProbeV2ReportIsRedacted(t *testing.T, reportPath string, input ProbeInputV2, manifest corpusv2.CorpusV2Manifest) {
+func assertProbeV2ReportIsRedacted(t *testing.T, reportPath string, input ProbeInputV2, manifest CorpusV2Manifest) {
 	t.Helper()
 	body, err := os.ReadFile(reportPath)
 	if err != nil {
 		t.Fatalf("read report for redaction assertions: %v", err)
 	}
-	for _, secretPath := range []string{input.Build.Path, input.Dependencies.Model.Path, input.Dependencies.Projector.Path, input.Dependencies.Backend.Path, input.CorpusInput.Path, input.ProbeRoot, corpusv2.CorpusV2Repository} {
+	for _, secretPath := range []string{input.Build.Path, input.Dependencies.Model.Path, input.Dependencies.Projector.Path, input.Dependencies.Backend.Path, input.CorpusInput.Path, input.ProbeRoot, CorpusV2Repository} {
 		if strings.Contains(string(body), secretPath) {
 			t.Fatal("execution report contains an absolute source or workspace path")
 		}
@@ -624,7 +608,8 @@ func assertProbeV2ReportIsRedacted(t *testing.T, reportPath string, input ProbeI
 
 func mustReadProbeReportV2(t *testing.T, path string) ProbeReportV2 {
 	t.Helper()
-	report, err := ReadProbeReportV2(path)
+	authority, _ := portableCorpusV2Fixture(t)
+	report, err := readProbeReportV2(path, authority)
 	if err != nil {
 		t.Fatalf("read validated execution report: %v", err)
 	}

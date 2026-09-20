@@ -1,4 +1,4 @@
-package omni_media_probe
+package runner
 
 import (
 	"context"
@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/portpowered/infinite-you/tests/internal/localai/corpusv2"
 )
 
 func ReadProbeInputV2(path string) (ProbeInputV2, error) {
@@ -95,7 +93,11 @@ func validateProbeV2Limits(limits ProbeLimitsV2) error {
 }
 
 func (input CorpusInputV2) Validate(runID string, limits ProbeLimitsV2) error {
-	if input.SchemaVersion != corpusv2.CorpusV2SchemaVersion || input.RunID != runID {
+	return input.validate(runID, limits, DefaultCorpusV2Authority())
+}
+
+func (input CorpusInputV2) validate(runID string, limits ProbeLimitsV2, authority CorpusV2Authority) error {
+	if input.SchemaVersion != CorpusV2SchemaVersion || input.RunID != runID {
 		return validationError(CodeProbeInvalidInput, "corpusInput", "matching v2 schema and runId", "schema or runId mismatch", nil)
 	}
 	if err := validateFileIdentityShape(input.Build, "corpusInput.build"); err != nil {
@@ -113,17 +115,20 @@ func (input CorpusInputV2) Validate(runID string, limits ProbeLimitsV2) error {
 			return err
 		}
 	}
-	if err := validateCorpusV2Authority(input.Corpus); err != nil {
+	if err := validateCorpusV2AuthorityFor(input.Corpus, authority); err != nil {
 		return err
 	}
-	if err := validateCorpusV2SamplePolicy(input.SamplePolicy); err != nil {
+	if err := validateCorpusV2SamplePolicyFor(input.SamplePolicy, authority); err != nil {
 		return err
 	}
 	return validateCorpusInputV2Limits(input.Limits, limits)
 }
 
 func validateCorpusV2Authority(got CorpusAuthorityV2) error {
-	authority := corpusv2.DefaultCorpusV2Authority()
+	return validateCorpusV2AuthorityFor(got, DefaultCorpusV2Authority())
+}
+
+func validateCorpusV2AuthorityFor(got CorpusAuthorityV2, authority CorpusV2Authority) error {
 	want := CorpusAuthorityV2{Repository: authority.RepositoryRoot, Commit: authority.Commit, IndexPath: authority.IndexPath, IndexSHA256: authority.IndexSHA256, Mode: authority.Mode}
 	if got != want {
 		return validationError(CodeProbeCorpusAuthority, "corpusInput.corpus", fmt.Sprintf("%+v", want), fmt.Sprintf("%+v", got), nil)
@@ -132,8 +137,11 @@ func validateCorpusV2Authority(got CorpusAuthorityV2) error {
 }
 
 func validateCorpusV2SamplePolicy(got CorpusSamplePolicyV2) error {
-	authority := corpusv2.DefaultCorpusV2Authority()
-	if !equalStrings(got.Studies, authority.RequiredStudies) || got.RepresentativesPerStudy != 3 || got.Ordering != corpusv2.CorpusV2Ordering {
+	return validateCorpusV2SamplePolicyFor(got, DefaultCorpusV2Authority())
+}
+
+func validateCorpusV2SamplePolicyFor(got CorpusSamplePolicyV2, authority CorpusV2Authority) error {
+	if !equalStrings(got.Studies, authority.RequiredStudies) || got.RepresentativesPerStudy != 3 || got.Ordering != CorpusV2Ordering {
 		return validationError(CodeProbeCorpusPolicy, "corpusInput.samplePolicy", "pinned studies, three representatives, and pinned ordering", "sample policy mismatch", nil)
 	}
 	return nil
@@ -188,7 +196,7 @@ type admittedProbeInputV2 struct {
 	reportPath   string
 	build        RecordedIdentity
 	dependencies ProbeReportDependencies
-	manifest     corpusv2.CorpusV2Manifest
+	manifest     CorpusV2Manifest
 }
 
 func (runner RunnerV2) Preflight(ctx context.Context, inputPath, reportPath string) (ProbeReportV2, error) {
@@ -218,10 +226,10 @@ func (runner RunnerV2) PreflightInput(ctx context.Context, input ProbeInputV2, i
 		return ProbeReportV2{}, wrapProbeCleanupError("close corpus runner v2 preflight port", err)
 	}
 	report := newProbeReportV2(prepared, port)
-	if err := report.Validate(); err != nil {
+	if err := report.validate(runner.corpusAuthority()); err != nil {
 		return ProbeReportV2{}, fmt.Errorf("validate corpus runner v2 report: %w", err)
 	}
-	if err := WriteProbeReportV2Atomic(prepared.reportPath, report); err != nil {
+	if err := writeProbeReportV2Atomic(prepared.reportPath, report, runner.corpusAuthority()); err != nil {
 		return ProbeReportV2{}, fmt.Errorf("persist corpus runner v2 report: %w", err)
 	}
 	return report, nil
@@ -258,6 +266,7 @@ func (runner RunnerV2) admit(ctx context.Context, input ProbeInputV2, inputPath,
 }
 
 func (runner RunnerV2) admitIdentities(ctx context.Context, input ProbeInputV2, reportPath string) (admittedProbeInputV2, error) {
+	authority := runner.corpusAuthority()
 	build, err := admitBuildIdentity(input.Build)
 	if err != nil {
 		return admittedProbeInputV2{}, err
@@ -273,7 +282,7 @@ func (runner RunnerV2) admitIdentities(ctx context.Context, input ProbeInputV2, 
 	if err != nil {
 		return admittedProbeInputV2{}, err
 	}
-	if err := corpusInput.Validate(input.RunID, input.Limits); err != nil {
+	if err := corpusInput.validate(input.RunID, input.Limits, authority); err != nil {
 		return admittedProbeInputV2{}, err
 	}
 	if err := validateMirroredBuildAndDependencies(input, corpusInput, build, dependencies); err != nil {
@@ -283,18 +292,25 @@ func (runner RunnerV2) admitIdentities(ctx context.Context, input ProbeInputV2, 
 	if err != nil {
 		return admittedProbeInputV2{}, err
 	}
-	if err := corpusv2.ValidateCorpusV2Manifest(manifest, corpusv2.DefaultCorpusV2Authority()); err != nil {
+	if err := ValidateCorpusV2Manifest(manifest, authority); err != nil {
 		return admittedProbeInputV2{}, err
 	}
 	return admittedProbeInputV2{input: input, reportPath: reportPath, build: build, dependencies: dependencies, manifest: manifest}, nil
 }
 
-func (runner RunnerV2) readCorpus(ctx context.Context) (corpusv2.CorpusV2Manifest, error) {
+func (runner RunnerV2) readCorpus(ctx context.Context) (CorpusV2Manifest, error) {
 	reader := runner.corpusReader
 	if reader == nil {
-		reader = corpusv2.ReadCorpusV2Manifest
+		reader = ReadCorpusV2Manifest
 	}
-	return reader(ctx, corpusv2.DefaultCorpusV2Authority())
+	return reader(ctx, runner.corpusAuthority())
+}
+
+func (runner RunnerV2) corpusAuthority() CorpusV2Authority {
+	if runner.authority.RepositoryRoot == "" {
+		return DefaultCorpusV2Authority()
+	}
+	return runner.authority
 }
 
 func admitProbeV2Dependencies(input ProbeDependencies) (ProbeReportDependencies, error) {

@@ -1,4 +1,4 @@
-package corpusv2
+package runner
 
 import (
 	"fmt"
