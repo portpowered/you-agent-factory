@@ -1,8 +1,13 @@
 package review_failure_routing
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -12,6 +17,7 @@ import (
 )
 
 const reviewFailureReviewedTaskCompletionTransition = "complete-reviewed-task-after-failed-idea"
+const reviewFailureProjectLeadTransition = "project-lead"
 
 // TestReviewFailureRouting_ManualMigrationDispatchesExactReviewOnce proves the
 // manual operator state where same-name historical Work shares the root trace,
@@ -193,6 +199,261 @@ func TestReviewFailureRouting_FailedIdeaRequiredBeforeReviewedTaskCompletion(t *
 	assertReviewFailureWorkStates(t, scenario.listWorks(t), map[string]string{
 		currentTaskID: "to-complete", currentReviewID: "complete",
 	})
+}
+
+// TestReviewFailureRouting_DependentProjectCycleDispatchesOnceAfterCompletion
+// proves an exact DEPENDS_ON Project stays blocked until the reviewed task's
+// canonical completion response, then reaches the configured Sol/high lead once.
+func TestReviewFailureRouting_DependentProjectCycleDispatchesOnceAfterCompletion(t *testing.T) {
+	t.Parallel()
+	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{
+		provider: func(_ context.Context, _ platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
+			return reviewFailureAccepted("review accepted the exact merged candidate"), nil
+		},
+	})
+	stream := scenario.eventStream(t)
+	traceID := scenario.marker + "-shared-root-trace"
+	taskName := scenario.marker + "-reviewed-task"
+	taskID := scenario.marker + "-current-task"
+	taskRequestID := scenario.marker + "-task-request"
+	failedIdeaID := scenario.marker + "-failed-idea"
+	projectName := scenario.marker + "-cycle-144"
+	projectID := scenario.marker + "-cycle-work"
+
+	currentTask := reviewFailureSeed{
+		Name: taskName, WorkID: taskID, WorkType: "task", State: "init",
+		TraceID: traceID, Payload: "reviewed task",
+	}
+	scenario.submit(t, taskRequestID, currentTask)
+	currentReviewID := acceptReviewFailureTaskThroughSession(t, scenario, stream, taskID)
+	submitReviewFailureDependentProject(t, scenario, projectName, projectID, taskName, taskID)
+
+	works := scenario.listWorks(t)
+	assertReviewFailureWorkStates(t, works, map[string]string{
+		taskID: "to-complete", currentReviewID: "complete", projectID: "init",
+	})
+	assertReviewFailureProjectDependency(t, works, projectName, projectID, taskName, taskID)
+	assertNoReviewFailureProjectLeadDispatch(t, scenario, projectID)
+
+	scenario.submit(t, scenario.marker+"-failed-idea-request", reviewFailureSeed{
+		Name: taskName, WorkID: failedIdeaID, WorkType: "idea", State: "failed",
+		TraceID: traceID, Payload: "retained failed idea",
+	})
+	completion := decodeReviewFailureDispatchResponse(t, awaitReviewFailureDispatchResponses(
+		t, stream, reviewFailureReviewedTaskCompletionTransition, 1,
+	)[0])
+	if completion.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("reviewed-task completion outcome = %q, want ACCEPTED", completion.Outcome)
+	}
+	assertExactReviewFailureDispatchOutput(t, completion, map[string]reviewFailureOutputExpectation{
+		failedIdeaID:    {workType: "idea", state: "failed"},
+		taskID:          {workType: "task", state: "complete"},
+		currentReviewID: {workType: "review", state: "complete"},
+	})
+
+	assertReviewFailureDependentProjectAccepted(t, stream, projectID)
+
+	// Replaying the admitted task request is idempotent and cannot dispatch the
+	// already-released dependent Project cycle a second time.
+	scenario.submit(t, taskRequestID, currentTask)
+	dispatches := reviewFailureDispatches(t, scenario)
+	completionDispatches := dispatchesWithTransition(dispatches, reviewFailureReviewedTaskCompletionTransition)
+	if len(completionDispatches) != 1 {
+		t.Fatalf("reviewed-task completion dispatches = %d, want one: %#v", len(completionDispatches), completionDispatches)
+	}
+	assertExactReviewFailureInputIDs(t, completionDispatches[0], failedIdeaID, taskID, currentReviewID)
+	projectDispatches := dispatchesWithTransition(dispatches, reviewFailureProjectLeadTransition)
+	if len(projectDispatches) != 1 {
+		t.Fatalf("dependent Project lead dispatches = %d, want one: %#v", len(projectDispatches), projectDispatches)
+	}
+	assertExactReviewFailureInputIDs(t, projectDispatches[0], projectID)
+	if projectDispatches[0].Response == nil || projectDispatches[0].Response.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("dependent Project lead response = %#v, want one accepted dispatch", projectDispatches[0].Response)
+	}
+	assertReviewFailureProjectDispatchFollowsCompletion(t, scenario, projectID)
+	assertReviewFailureSolHighProjectCommand(t, scenario.fixture.router.requestsFor(scenario.factoryDir), projectName)
+	assertNoIncompleteReviewFailureDispatches(t, dispatches)
+	assertReviewFailureWorkStates(t, scenario.listWorks(t), map[string]string{
+		failedIdeaID: "failed", taskID: "complete", currentReviewID: "complete", projectID: "waiting",
+	})
+}
+
+func assertReviewFailureDependentProjectAccepted(
+	t *testing.T,
+	stream *support.FactoryEventStream,
+	projectID string,
+) {
+	t.Helper()
+	response := decodeReviewFailureDispatchResponse(t, awaitReviewFailureDispatchResponses(
+		t, stream, reviewFailureProjectLeadTransition, 1,
+	)[0])
+	if response.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("dependent Project lead outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	assertExactReviewFailureDispatchOutput(t, response, map[string]reviewFailureOutputExpectation{
+		projectID: {workType: "project", state: "waiting"},
+	})
+}
+
+func submitReviewFailureDependentProject(
+	t *testing.T,
+	scenario *reviewFailureScenario,
+	projectName, projectID, taskName, taskID string,
+) {
+	t.Helper()
+	requestID := scenario.marker + "-project-cycle-request"
+	traceID := scenario.marker + "-project-cycle-trace"
+	workType := "project"
+	state := &factoryapi.WorkState{Name: "init", Type: factoryapi.WorkStateTypeINITIAL}
+	work := factoryapi.Work{
+		Name: projectName, WorkId: &projectID, WorkTypeName: &workType, State: state,
+		CurrentChainingTraceId: &traceID, TraceId: &traceID, Payload: "continue",
+	}
+	dependencyType := factoryapi.RelationTypeDependsOn
+	requiredState := "complete"
+	targetName := taskName
+	dependency := factoryapi.WorkRequestRelation{
+		Type: dependencyType, SourceWorkName: projectName, TargetWorkName: &targetName,
+		TargetWorkId: &taskID, RequiredState: &requiredState,
+	}
+	works := []factoryapi.Work{work}
+	relations := []factoryapi.WorkRequestRelation{dependency}
+	request := factoryapi.WorkRequest{
+		RequestId: requestID, Type: factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &works, Relations: &relations,
+	}
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal dependent Project Work request: %v", err)
+	}
+	endpoint := support.SessionWorkURL(scenario.fixture.baseURL, scenario.sessionID,
+		"/work-requests/"+url.PathEscape(requestID))
+	httpRequest, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build dependent Project Work request: %v", err)
+	}
+	httpRequest.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(httpRequest)
+	if err != nil {
+		t.Fatalf("submit dependent Project Work request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		responseBody, _ := io.ReadAll(response.Body)
+		t.Fatalf("dependent Project Work request status = %d: %s", response.StatusCode, strings.TrimSpace(string(responseBody)))
+	}
+	var result factoryapi.UpsertWorkRequestResponse
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode dependent Project Work request result: %v", err)
+	}
+	if result.RequestId != requestID || len(result.Works) != 1 || result.Works[0].WorkId != projectID {
+		t.Fatalf("dependent Project Work request result = %#v, want exact Work %q", result, projectID)
+	}
+}
+
+func assertReviewFailureProjectDependency(
+	t *testing.T,
+	works []factoryapi.Work,
+	projectName, projectID, taskName, taskID string,
+) {
+	t.Helper()
+	for _, work := range works {
+		if work.WorkId == nil || *work.WorkId != projectID {
+			continue
+		}
+		if work.Name != projectName || work.WorkTypeName == nil || *work.WorkTypeName != "project" || work.Relations == nil {
+			t.Fatalf("dependent Project Work = %#v, want exact name, type, and relation", work)
+		}
+		for _, relation := range *work.Relations {
+			if relation.Type == factoryapi.RelationTypeDependsOn && relation.SourceWorkName == projectName &&
+				relation.TargetWorkName == taskName && relation.TargetWorkId != nil && *relation.TargetWorkId == taskID &&
+				relation.RequiredState != nil && *relation.RequiredState == "complete" {
+				return
+			}
+		}
+		t.Fatalf("dependent Project relations = %#v, want DEPENDS_ON exact task %q at complete", work.Relations, taskID)
+	}
+	t.Fatalf("public Work list is missing dependent Project ID %q", projectID)
+}
+
+func assertNoReviewFailureProjectLeadDispatch(t *testing.T, scenario *reviewFailureScenario, projectID string) {
+	t.Helper()
+	for _, dispatch := range reviewFailureDispatches(t, scenario) {
+		if dispatch.Request.TransitionId == reviewFailureProjectLeadTransition &&
+			support.DispatchObservationIncludesWork(dispatch, projectID) {
+			t.Fatalf("dependent Project lead dispatched before its task reached complete: %#v", dispatch)
+		}
+	}
+}
+
+func assertReviewFailureProjectDispatchFollowsCompletion(t *testing.T, scenario *reviewFailureScenario, projectID string) {
+	t.Helper()
+	events := support.GetFactoryEventsForSessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
+	completionIndex, projectIndex := -1, -1
+	for index, event := range events {
+		switch event.Type {
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			payload, err := event.Payload.AsDispatchResponseEventPayload()
+			if err != nil {
+				t.Fatalf("decode dispatch response %q: %v", event.Id, err)
+			}
+			if payload.TransitionId == reviewFailureReviewedTaskCompletionTransition {
+				completionIndex = index
+			}
+		case factoryapi.FactoryEventTypeDispatchRequest:
+			payload, err := event.Payload.AsDispatchRequestEventPayload()
+			if err != nil {
+				t.Fatalf("decode dispatch request %q: %v", event.Id, err)
+			}
+			if payload.TransitionId != reviewFailureProjectLeadTransition {
+				continue
+			}
+			for _, input := range payload.Inputs {
+				if input.WorkId == projectID {
+					projectIndex = index
+					break
+				}
+			}
+		}
+	}
+	if completionIndex < 0 || projectIndex < 0 {
+		t.Fatalf("public event history indices = completion %d, dependent Project lead %d; both dispatch events are required", completionIndex, projectIndex)
+	}
+	if projectIndex <= completionIndex {
+		t.Fatalf("dependent Project lead event index = %d, want after completion response index %d", projectIndex, completionIndex)
+	}
+}
+
+func assertReviewFailureSolHighProjectCommand(
+	t *testing.T,
+	requests []platformprocess.CommandRequest,
+	projectName string,
+) {
+	t.Helper()
+	var projectRequests []platformprocess.CommandRequest
+	for _, request := range reviewFailureProviderRequests(requests) {
+		if strings.Contains(providerCommandPrompt(request), projectName) {
+			projectRequests = append(projectRequests, request)
+		}
+	}
+	if len(projectRequests) != 1 {
+		t.Fatalf("Project lead provider commands containing Work %q = %d, want one", projectName, len(projectRequests))
+	}
+	request := projectRequests[0]
+	if request.Command != "codex" ||
+		!reviewFailureHasCommandArgPair(request.Args, "--model", "gpt-5.6-sol") ||
+		!reviewFailureHasCommandArgPair(request.Args, "--config", `model_reasoning_effort="high"`) {
+		t.Fatalf("dependent Project command = %q %#v, want Codex gpt-5.6-sol/high", request.Command, request.Args)
+	}
+}
+
+func reviewFailureHasCommandArgPair(args []string, name, value string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == name && args[index+1] == value {
+			return true
+		}
+	}
+	return false
 }
 
 func TestReviewFailureRouting_StaleSameNameReviewCannotCompleteCurrentTask(t *testing.T) {
