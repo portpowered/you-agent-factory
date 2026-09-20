@@ -1,4 +1,4 @@
-package omni_media_probe
+package corpusv2
 
 import (
 	"encoding/binary"

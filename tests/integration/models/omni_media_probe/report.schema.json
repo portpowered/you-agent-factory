@@ -1,112 +1,27 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:you-agent-factory:tests:omni-media-probe-report:v1",
+  "$id": "urn:you-agent-factory:tests:omni-video-corpus-runner-report:v2",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "runId", "status", "build", "dependencies", "fixtures", "policy", "journeys", "outputs", "processes", "cleanup", "failure"],
+  "required": ["schemaVersion", "runId", "mode", "status", "build", "dependencies", "corpus", "policy", "calls", "outputs", "processes", "cleanup", "failure"],
   "properties": {
-    "schemaVersion": {"const": "you.localai.omni-media-probe-report.v1"},
+    "schemaVersion": {"const": "you.localai.omni-video-corpus-runner-report.v2"},
     "runId": {"type": "string", "minLength": 1},
+    "mode": {"enum": ["PREFLIGHT", "EXECUTE"]},
     "status": {"enum": ["READY", "PASS", "FAIL", "INCONCLUSIVE"]},
     "build": {"$ref": "#/$defs/recordedIdentity"},
-    "dependencies": {
-      "type": "object", "additionalProperties": false,
-      "required": ["model", "projector", "backend"],
-      "properties": {
-        "model": {"$ref": "#/$defs/recordedIdentity"},
-        "projector": {"$ref": "#/$defs/recordedIdentity"},
-        "backend": {"$ref": "#/$defs/recordedIdentity"}
-      }
-    },
-    "fixtures": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/recordedIdentity"}},
-    "policy": {
-      "type": "object", "additionalProperties": false,
-      "required": ["rootIdentities", "port", "timeoutSeconds", "networkPolicy", "downloadBytes", "paidUsd", "maxHeavyProcesses", "maxCalls", "maxRetries"],
-      "properties": {
-        "rootIdentities": {"type": "array", "minItems": 6, "uniqueItems": true, "items": {"type": "string"}},
-        "port": {"type": "integer", "minimum": 1, "maximum": 65535, "not": {"const": 7437}},
-        "timeoutSeconds": {"type": "integer", "minimum": 1},
-        "networkPolicy": {"const": "declared-local-assets-and-loopback-only"},
-        "downloadBytes": {"const": 0},
-        "paidUsd": {"const": 0},
-        "maxHeavyProcesses": {"const": 1},
-        "maxCalls": {"type": "integer", "minimum": 1, "maximum": 2},
-        "maxRetries": {"const": 0}
-      }
-    },
-    "journeys": {
-      "type": "array", "minItems": 2, "maxItems": 2,
-      "prefixItems": [
-        {"allOf": [{"$ref": "#/$defs/journey"}, {"properties": {"name": {"const": "image"}}}]},
-        {"allOf": [{"$ref": "#/$defs/journey"}, {"properties": {"name": {"const": "video"}}}]}
-      ],
-      "items": false
-    },
+    "dependencies": {"type": "object", "additionalProperties": false, "required": ["model", "projector", "backend"], "properties": {"model": {"$ref": "#/$defs/recordedIdentity"}, "projector": {"$ref": "#/$defs/recordedIdentity"}, "backend": {"$ref": "#/$defs/recordedIdentity"}}},
+    "corpus": {"type": "object", "additionalProperties": false, "required": ["repositoryIdentity", "commit", "indexPathIdentity", "indexSha256", "uniqueClips", "uniquePrompts", "selectedSamples", "copiedBytes", "uploadedBytes", "readOnly"], "properties": {"repositoryIdentity": {"type": "string", "minLength": 1}, "commit": {"const": "443ee4715e6e0f8ec02489e4fda9554d15434e08"}, "indexPathIdentity": {"type": "string", "minLength": 1}, "indexSha256": {"const": "ac4eeb02e6d1e1065176dcf5c18f74367b241c698ec6344ca48829b7ab770c28"}, "uniqueClips": {"const": 370}, "uniquePrompts": {"const": 370}, "selectedSamples": {"type": "array", "minItems": 9, "maxItems": 9, "items": {"$ref": "#/$defs/sample"}}, "copiedBytes": {"const": 0}, "uploadedBytes": {"const": 0}, "readOnly": {"const": true}}},
+    "policy": {"type": "object", "additionalProperties": false, "required": ["rootIdentities", "port", "perCallTimeoutSeconds", "networkPolicy", "downloadBytes", "paidUsd", "maxHeavyProcesses", "maxCalls", "maxRetries"], "properties": {"rootIdentities": {"type": "array", "minItems": 6, "uniqueItems": true, "items": {"type": "string"}}, "port": {"type": "integer", "minimum": 1, "maximum": 65535, "not": {"const": 7437}}, "perCallTimeoutSeconds": {"const": 180}, "networkPolicy": {"const": "declared-local-assets-and-loopback-only"}, "downloadBytes": {"const": 0}, "paidUsd": {"const": 0}, "maxHeavyProcesses": {"const": 1}, "maxCalls": {"const": 10}, "maxRetries": {"const": 0}}},
+    "calls": {"type": "array", "maxItems": 10, "items": {"$ref": "#/$defs/call"}},
     "outputs": {"type": "array", "items": {"$ref": "#/$defs/recordedIdentity"}},
     "processes": {"type": "array", "items": {"$ref": "#/$defs/process"}},
-    "cleanup": {
-      "type": "object", "additionalProperties": false,
-      "required": ["checked", "ownedProcessSurvivors", "ownedListenerSurvivors", "partialOutputs"],
-      "properties": {
-        "checked": {"const": true},
-        "ownedProcessSurvivors": {"const": 0},
-        "ownedListenerSurvivors": {"const": 0},
-        "partialOutputs": {"const": 0}
-      }
-    },
-    "failure": {
-      "type": ["object", "null"],
-      "required": ["owner", "code", "expected", "observed", "nextAction"],
-      "properties": {
-        "owner": {"type": "string"}, "code": {"type": "string"},
-        "expected": {"type": "string"}, "observed": {"type": "string"},
-        "nextAction": {"type": "string"}
-      }
-    }
+    "cleanup": {"type": "object", "additionalProperties": false, "required": ["checked", "ownedProcessSurvivors", "ownedListenerSurvivors", "partialOutputs"], "properties": {"checked": {"const": true}, "ownedProcessSurvivors": {"const": 0}, "ownedListenerSurvivors": {"const": 0}, "partialOutputs": {"const": 0}}},
+    "failure": {"type": ["object", "null"]}
   },
   "$defs": {
-    "recordedIdentity": {
-      "type": "object", "additionalProperties": false,
-      "required": ["identity", "pathIdentity", "bytes", "sha256"],
-      "properties": {
-        "identity": {"type": "string"}, "pathIdentity": {"type": "string"},
-        "bytes": {"type": "integer", "minimum": 0},
-        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
-      }
-    },
-    "journey": {
-      "type": "object", "additionalProperties": false,
-      "required": ["name", "status", "command", "requestInputs", "semanticRubric", "failure"],
-      "properties": {
-        "name": {"enum": ["image", "video"]},
-        "status": {"enum": ["NOT_RUN", "PASS", "FAIL", "INCONCLUSIVE"]},
-        "command": {"type": "array", "items": {"type": "string"}},
-        "requestInputs": {"type": "array", "items": {"$ref": "#/$defs/requestInput"}},
-        "semanticRubric": {"type": "object", "minProperties": 1},
-        "failure": {"type": ["object", "null"]}
-      }
-    },
-    "requestInput": {
-      "type": "object", "additionalProperties": false,
-      "required": ["order", "name", "modality", "mediaType", "bytes", "sha256"],
-      "properties": {
-        "order": {"type": "integer", "minimum": 0},
-        "name": {"enum": ["prompt", "image", "video"]},
-        "modality": {"enum": ["TEXT", "IMAGE", "VIDEO"]},
-        "mediaType": {"enum": ["text/plain", "image/png", "video/mp4"]},
-        "bytes": {"type": "integer", "minimum": 0},
-        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
-      }
-    },
-    "process": {
-      "type": "object", "additionalProperties": false,
-      "required": ["identity", "kind", "pid", "owner", "started", "exited", "exitCode", "timedOut"],
-      "properties": {
-        "identity": {"type": "string"}, "kind": {"type": "string"},
-        "pid": {"type": "integer", "minimum": 0}, "owner": {"type": "string"},
-        "started": {"type": "boolean"}, "exited": {"type": "boolean"},
-        "exitCode": {"type": "integer"}, "timedOut": {"type": "boolean"}
-      }
-    }
+    "recordedIdentity": {"type": "object", "additionalProperties": false, "required": ["identity", "pathIdentity", "bytes", "sha256"], "properties": {"identity": {"type": "string", "minLength": 1}, "pathIdentity": {"type": "string", "minLength": 1}, "bytes": {"type": "integer", "minimum": 0}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+    "sample": {"type": "object", "additionalProperties": false, "required": ["study", "band", "attempt", "clip", "prompt", "stream", "sourceCommit"], "properties": {"study": {"enum": ["selfie-jessie-duration-study", "selfie-jessie-prompt-study", "selfie-jessie-quality"]}, "band": {"enum": ["minimum", "median", "maximum"]}, "attempt": {"type": "string", "minLength": 1}, "clip": {"$ref": "#/$defs/recordedIdentity"}, "prompt": {"$ref": "#/$defs/recordedIdentity"}, "stream": {"type": "object", "required": ["codec", "width", "height", "frameRate", "durationMillis", "frames"]}, "sourceCommit": {"const": "443ee4715e6e0f8ec02489e4fda9554d15434e08"}}},
+    "call": {"type": "object", "additionalProperties": false, "required": ["ordinal", "kind", "sampleIdentity", "status", "command", "inputs", "output", "failure"], "properties": {"ordinal": {"type": "integer", "minimum": 1, "maximum": 10}, "kind": {"enum": ["WARMUP", "CANARY", "SAMPLE"]}, "sampleIdentity": {"type": ["string", "null"]}, "status": {"enum": ["PASS", "FAIL", "INCONCLUSIVE"]}, "command": {"type": "array", "minItems": 7, "items": {"type": "string"}}, "inputs": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"$ref": "#/$defs/recordedIdentity"}}, "output": {"anyOf": [{"$ref": "#/$defs/recordedIdentity"}, {"type": "null"}]}, "failure": {"type": ["object", "null"]}}},
+    "process": {"type": "object", "additionalProperties": false, "required": ["identity", "kind", "pid", "owner", "started", "exited", "exitCode", "timedOut"], "properties": {"identity": {"type": "string"}, "kind": {"type": "string"}, "pid": {"type": "integer", "minimum": 0}, "owner": {"type": "string"}, "started": {"type": "boolean"}, "exited": {"type": "boolean"}, "exitCode": {"type": "integer"}, "timedOut": {"type": "boolean"}}}
   }
 }

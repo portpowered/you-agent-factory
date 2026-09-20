@@ -1,4 +1,4 @@
-package omni_media_probe
+package corpusv2
 
 import (
 	"context"
@@ -295,7 +295,7 @@ func TestCorpusMetadataConformance(t *testing.T) {
 		if err := validateCorpusV2Metadata(sample.Stream); err != nil {
 			t.Fatalf("sample stream metadata: %v", err)
 		}
-		t.Logf("sample study=%s band=%s attempt=%s clipBytes=%d clipSha256=%s codec=%s dimensions=%dx%d frameRate=%s durationMillis=%d sourceCommit=%s", sample.Study, sample.Band, sample.Attempt, sample.Clip.Bytes, sample.Clip.SHA256, sample.Stream.Codec, sample.Stream.Width, sample.Stream.Height, sample.Stream.FrameRate, sample.Stream.DurationMillis, sample.SourceCommit)
+		t.Logf("sample study=%s band=%s attempt=%s clipBytes=%d clipSha256=%s promptBytes=%d promptSha256=%s codec=%s dimensions=%dx%d frameRate=%s durationMillis=%d frames=%d sourceCommit=%s", sample.Study, sample.Band, sample.Attempt, sample.Clip.Bytes, sample.Clip.SHA256, sample.Prompt.Bytes, sample.Prompt.SHA256, sample.Stream.Codec, sample.Stream.Width, sample.Stream.Height, sample.Stream.FrameRate, sample.Stream.DurationMillis, sample.Stream.Frames, sample.SourceCommit)
 	}
 }
 
