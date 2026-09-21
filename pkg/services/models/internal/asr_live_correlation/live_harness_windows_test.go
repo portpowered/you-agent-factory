@@ -186,7 +186,27 @@ func runASRLiveCorrelationHarness(
 		)
 		invocations <- asrLiveCorrelationInvocation{result: result, err: invokeErr}
 	}()
-	endpointEvent := awaitASRLiveCorrelationSignal(t, ctx, controller, modelseffects.ASRLiveCorrelationEndpointObserved)
+	endpointEvent, endpointErr := controller.WaitForSignal(ctx, modelseffects.ASRLiveCorrelationEndpointObserved)
+	if endpointErr != nil {
+		process := launcher.process()
+		listenerState := "unavailable"
+		if address, addressErr := asrLiveCorrelationEndpointAddress(endpoint); addressErr == nil {
+			connection, dialErr := net.DialTimeout("tcp", address, time.Second)
+			if dialErr == nil {
+				_ = connection.Close()
+				listenerState = "accepting"
+			} else {
+				listenerState = "not-accepting: " + dialErr.Error()
+			}
+		}
+		if process == nil {
+			t.Fatalf("wait for ASR live-correlation signal %s: %v; managed process was not recorded; listener=%s", modelseffects.ASRLiveCorrelationEndpointObserved, endpointErr, listenerState)
+		}
+		if snapshot, terminal := process.child.Snapshot(); terminal {
+			t.Fatalf("wait for ASR live-correlation signal %s: %v; managed process pid=%d terminated=%#v; listener=%s", modelseffects.ASRLiveCorrelationEndpointObserved, endpointErr, process.pid, snapshot, listenerState)
+		}
+		t.Fatalf("wait for ASR live-correlation signal %s: %v; managed process pid=%d still running; listener=%s", modelseffects.ASRLiveCorrelationEndpointObserved, endpointErr, process.pid, listenerState)
+	}
 	terminalEvent := awaitASRLiveCorrelationSignal(t, ctx, controller, modelseffects.ASRLiveCorrelationRPCTerminal)
 	if endpointEvent.ProcessID <= 0 || endpointEvent.Endpoint.Port == 7437 || terminalEvent.Sequence <= endpointEvent.Sequence {
 		t.Fatalf("ASR endpoint/RPC facts are not owned and ordered: endpoint=%#v terminal=%#v", endpointEvent, terminalEvent)
