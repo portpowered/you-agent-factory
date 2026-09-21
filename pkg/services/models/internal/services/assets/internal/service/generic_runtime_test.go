@@ -861,3 +861,298 @@ func TestPrepareGenericAssetsDownloadsPinnedBackendIntoSeparateRuntimeCache(t *t
 		t.Fatalf("backend cache file = (%q, %v), want verified archive", body, err)
 	}
 }
+
+func TestPrepareGenericAssetsRecoversStaleGenericRuntimeRevisionStage(t *testing.T) {
+	t.Parallel()
+	assertGenericRuntimeStageRecovery(t, true, false)
+}
+
+func TestPrepareGenericAssetsRecoversStaleGenericRuntimeMetadataStage(t *testing.T) {
+	t.Parallel()
+	assertGenericRuntimeStageRecovery(t, false, true)
+}
+
+func TestPrepareGenericAssetsRecoversBothStaleGenericRuntimeStages(t *testing.T) {
+	t.Parallel()
+	assertGenericRuntimeStageRecovery(t, true, true)
+}
+
+func assertGenericRuntimeStageRecovery(t *testing.T, revisionStage, metadataStage bool) {
+	t.Helper()
+	fixture := newGenericRuntimeRecoveryFixture(t, "stale-managed-runtime")
+	root := removeGenericRuntimeCommit(t, fixture)
+	revisionStagePath := filepath.Join(root, fixture.inspection.Revision+".partial")
+	metadataStagePath := filepath.Join(root, metadataFileName+".partial")
+	if revisionStage {
+		writeGenericRuntimeRevisionStage(t, revisionStagePath, []byte("abandoned revision stage"))
+	}
+	if metadataStage {
+		if err := os.WriteFile(metadataStagePath, []byte("abandoned metadata stage"), 0o644); err != nil {
+			t.Fatalf("write abandoned metadata stage: %v", err)
+		}
+	}
+	if err := os.RemoveAll(fixture.sourceRoot); err != nil {
+		t.Fatalf("remove original fixture sources: %v", err)
+	}
+	request := fixture.request
+	request.Offline = true
+	prepared, err := fixture.service.PrepareModelAssets(context.Background(), request)
+	if err != nil {
+		t.Fatalf("PrepareModelAssets after stale staging: %v", err)
+	}
+	if prepared.Outcome != models.AssetPreparationAlreadyAvailable {
+		t.Fatalf("PrepareModelAssets outcome = %v, want verified cache reuse", prepared.Outcome)
+	}
+	assertGenericRuntimeRecoveryContents(
+		t, inspectNamedGenericRuntime(t, fixture.service, fixture.scope, request.Name),
+		fixture.modelBodies, fixture.backendBody,
+	)
+	assertPathAbsent(t, revisionStagePath)
+	assertPathAbsent(t, metadataStagePath)
+}
+
+func TestPrepareGenericAssetsPreservesCommittedRuntimeAndUnrelatedStages(t *testing.T) {
+	t.Parallel()
+	fixture := newGenericRuntimeRecoveryFixture(t, "preserve-managed-runtime")
+	root := filepath.Join(fixture.cacheDirectory, canonicalModelName(fixture.request.Name))
+	metadataPath := filepath.Join(root, metadataFileName)
+	metadataBefore, err := os.ReadFile(metadataPath)
+	if err != nil {
+		t.Fatalf("read committed metadata: %v", err)
+	}
+	revisionStagePath := filepath.Join(root, fixture.inspection.Revision+".partial")
+	metadataStagePath := metadataPath + ".partial"
+	writeGenericRuntimeRevisionStage(t, revisionStagePath, []byte("abandoned revision stage"))
+	if err := os.WriteFile(metadataStagePath, []byte("abandoned metadata stage"), 0o644); err != nil {
+		t.Fatalf("write abandoned metadata stage: %v", err)
+	}
+	otherRevision := strings.Repeat("b", len(fixture.inspection.Revision))
+	otherRevisionPath := filepath.Join(root, otherRevision+".partial")
+	writeGenericRuntimeRevisionStage(t, otherRevisionPath, []byte("unrelated revision stage"))
+	otherModelPath := filepath.Join(fixture.cacheDirectory, canonicalModelName("another-model"), fixture.inspection.Revision+".partial")
+	writeGenericRuntimeRevisionStage(t, otherModelPath, []byte("other model stage"))
+
+	request := fixture.request
+	request.Offline = true
+	prepared, err := fixture.service.PrepareModelAssets(context.Background(), request)
+	if err != nil {
+		t.Fatalf("PrepareModelAssets with committed cache: %v", err)
+	}
+	if prepared.Outcome != models.AssetPreparationAlreadyAvailable {
+		t.Fatalf("PrepareModelAssets outcome = %v, want already available", prepared.Outcome)
+	}
+	inspection := inspectNamedGenericRuntime(t, fixture.service, fixture.scope, request.Name)
+	assertGenericRuntimeRecoveryContents(t, inspection, fixture.modelBodies, fixture.backendBody)
+	if inspection.Revision != fixture.inspection.Revision || filepath.Clean(inspection.CachePath) != filepath.Clean(fixture.inspection.CachePath) {
+		t.Fatalf("committed runtime identity changed: before=%#v after=%#v", fixture.inspection, inspection)
+	}
+	metadataAfter, err := os.ReadFile(metadataPath)
+	if err != nil || !bytes.Equal(metadataBefore, metadataAfter) {
+		t.Fatalf("committed metadata changed: before=%q after=%q err=%v", metadataBefore, metadataAfter, err)
+	}
+	assertPathAbsent(t, revisionStagePath)
+	assertPathAbsent(t, metadataStagePath)
+	assertFileBody(t, filepath.Join(otherRevisionPath, "abandoned.bin"), []byte("unrelated revision stage"))
+	assertFileBody(t, filepath.Join(otherModelPath, "abandoned.bin"), []byte("other model stage"))
+}
+
+func TestPrepareGenericAssetsReturnsTypedErrorWhenStaleStageCleanupFails(t *testing.T) {
+	t.Parallel()
+	fixture := newGenericRuntimeRecoveryFixture(t, "stale-stage-cleanup-failure")
+	root := removeGenericRuntimeCommit(t, fixture)
+	revisionStagePath := filepath.Join(root, fixture.inspection.Revision+".partial")
+	metadataStagePath := filepath.Join(root, metadataFileName+".partial")
+	writeGenericRuntimeRevisionStage(t, revisionStagePath, []byte("stale stage"))
+	if err := os.WriteFile(metadataStagePath, []byte("stale metadata"), 0o644); err != nil {
+		t.Fatalf("write stale metadata: %v", err)
+	}
+
+	cleanupErr := errors.New("injected stale stage inspection failure")
+	originalInspect := fixture.service.inspectPath
+	fixture.service.inspectPath = func(path string) (os.FileInfo, error) {
+		if filepath.Clean(path) == filepath.Clean(revisionStagePath) {
+			return nil, cleanupErr
+		}
+		return originalInspect(path)
+	}
+	request := fixture.request
+	request.Offline = true
+	_, err := fixture.service.PrepareModelAssets(context.Background(), request)
+	if !errors.Is(err, models.ErrAssetPreparationInterrupted) || !errors.Is(err, cleanupErr) {
+		t.Fatalf("PrepareModelAssets error = %v, want typed cleanup failure", err)
+	}
+	assertPathAbsent(t, filepath.Join(root, fixture.inspection.Revision))
+	assertPathAbsent(t, filepath.Join(root, metadataFileName))
+	assertFileBody(t, filepath.Join(revisionStagePath, "abandoned.bin"), []byte("stale stage"))
+	assertFileBody(t, metadataStagePath, []byte("stale metadata"))
+}
+
+func TestPublishGenericRuntimeLeavesStaleStagesWhenModelLockIsUnavailable(t *testing.T) {
+	t.Parallel()
+	fixture := newGenericRuntimeRecoveryFixture(t, "stale-stage-lock-failure")
+	root := filepath.Join(fixture.cacheDirectory, canonicalModelName(fixture.request.Name))
+	revisionStagePath := filepath.Join(root, fixture.inspection.Revision+".partial")
+	metadataStagePath := filepath.Join(root, metadataFileName+".partial")
+	writeGenericRuntimeRevisionStage(t, revisionStagePath, []byte("stale stage"))
+	if err := os.WriteFile(metadataStagePath, []byte("stale metadata"), 0o644); err != nil {
+		t.Fatalf("write stale metadata: %v", err)
+	}
+
+	source, err := parseGenericSource(fixture.request.Reference.NameOrURI)
+	if err != nil {
+		t.Fatalf("parse model source: %v", err)
+	}
+	paths := make([]string, 0, len(fixture.inspection.ObservedArtifacts))
+	for _, artifact := range fixture.inspection.ObservedArtifacts {
+		paths = append(paths, filepath.Join(fixture.inspection.CachePath, filepath.FromSlash(artifact.Name)))
+	}
+	lockErr := errors.New("injected model lock failure")
+	fixture.service.coordination = rejectingStagingCoordination{err: lockErr}
+	_, err = fixture.service.publishGenericRuntimeCache(
+		context.Background(), fixture.cacheDirectory, fixture.request.Name, source,
+		genericCacheResult{
+			snapshotPath: fixture.inspection.CachePath,
+			artifacts:    fixture.inspection.ObservedArtifacts,
+			paths:        paths,
+		}, genericCacheResult{}, "",
+	)
+	if !errors.Is(err, models.ErrAssetPreparationInterrupted) || !errors.Is(err, lockErr) {
+		t.Fatalf("publishGenericRuntimeCache error = %v, want typed lock failure", err)
+	}
+	assertFileBody(t, filepath.Join(revisionStagePath, "abandoned.bin"), []byte("stale stage"))
+	assertFileBody(t, metadataStagePath, []byte("stale metadata"))
+}
+
+type genericRuntimeRecoveryFixture struct {
+	cacheDirectory string
+	sourceRoot     string
+	scope          models.RuntimeScopeRef
+	service        *service
+	request        models.PrepareModelAssetsRequest
+	modelBodies    map[string][]byte
+	backendBody    []byte
+	inspection     assets.RuntimeCacheInspection
+}
+
+func newGenericRuntimeRecoveryFixture(t *testing.T, issuer string) genericRuntimeRecoveryFixture {
+	t.Helper()
+	cacheDirectory := t.TempDir()
+	sourceRoot := t.TempDir()
+	modelDirectory := filepath.Join(sourceRoot, "model")
+	if err := os.MkdirAll(modelDirectory, 0o755); err != nil {
+		t.Fatalf("create controlled model directory: %v", err)
+	}
+	modelBodies := map[string][]byte{
+		"weights.gguf":  []byte("controlled model weights"),
+		"projector.bin": []byte("controlled projector bytes"),
+	}
+	modelArtifacts := []models.AssetRequirement{
+		{Name: "weights.gguf", Bytes: int64(len(modelBodies["weights.gguf"])), SHA256: sha256Hex(modelBodies["weights.gguf"])},
+		{Name: "projector.bin", Bytes: int64(len(modelBodies["projector.bin"])), SHA256: sha256Hex(modelBodies["projector.bin"])},
+	}
+	for _, artifact := range modelArtifacts {
+		if err := os.WriteFile(filepath.Join(modelDirectory, artifact.Name), modelBodies[artifact.Name], 0o644); err != nil {
+			t.Fatalf("write controlled model artifact %q: %v", artifact.Name, err)
+		}
+	}
+	backendBody := []byte("controlled backend archive")
+	backendPath := filepath.Join(sourceRoot, "backend.zip")
+	if err := os.WriteFile(backendPath, backendBody, 0o644); err != nil {
+		t.Fatalf("write controlled backend artifact: %v", err)
+	}
+	scopes := newScopes(t, issuer)
+	scope := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("controlled stale-stage recovery used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+	request := models.PrepareModelAssetsRequest{
+		Scope:            scope,
+		Name:             "recovery-model",
+		Reference:        models.ModelReference{NameOrURI: modelDirectory},
+		Artifacts:        modelArtifacts,
+		Backend:          "localai-vibevoice",
+		BackendReference: models.ModelReference{NameOrURI: backendPath},
+		BackendArtifacts: []models.AssetRequirement{{
+			Name: "backend.zip", Bytes: int64(len(backendBody)), SHA256: sha256Hex(backendBody),
+		}},
+	}
+	prepared, err := service.PrepareModelAssets(context.Background(), request)
+	if err != nil || prepared.Outcome != models.AssetPreparationPrepared {
+		t.Fatalf("initial PrepareModelAssets = (%#v, %v), want prepared controlled runtime", prepared, err)
+	}
+	inspection := inspectNamedGenericRuntime(t, service, scope, request.Name)
+	assertGenericRuntimeRecoveryContents(t, inspection, modelBodies, backendBody)
+	return genericRuntimeRecoveryFixture{
+		cacheDirectory: cacheDirectory,
+		sourceRoot:     sourceRoot,
+		scope:          scope,
+		service:        service,
+		request:        request,
+		modelBodies:    modelBodies,
+		backendBody:    backendBody,
+		inspection:     inspection,
+	}
+}
+
+func assertGenericRuntimeRecoveryContents(
+	t *testing.T,
+	inspection assets.RuntimeCacheInspection,
+	modelBodies map[string][]byte,
+	backendBody []byte,
+) {
+	t.Helper()
+	if !inspection.Supported || !inspection.Installed || !inspection.ManifestPresent ||
+		!inspection.ManifestValid || !inspection.IntegrityVerified ||
+		inspection.InstalledFileCount != len(modelBodies) ||
+		len(inspection.ObservedArtifacts) != len(modelBodies) || !inspection.BackendRequired ||
+		inspection.BackendInstalledFiles != 1 || len(inspection.BackendFiles) != 1 {
+		t.Fatalf("runtime inspection = %#v, want verified multi-artifact model and backend", inspection)
+	}
+	observed := make(map[string]models.AssetArtifact, len(inspection.ObservedArtifacts))
+	var cacheBytes int64
+	for _, artifact := range inspection.ObservedArtifacts {
+		observed[artifact.Name] = artifact
+	}
+	for name, body := range modelBodies {
+		artifact, ok := observed[name]
+		if !ok || artifact.Bytes != int64(len(body)) || artifact.SHA256 != sha256Hex(body) {
+			t.Fatalf("managed artifact %q = %#v, want %d bytes with digest %s", name, artifact, len(body), sha256Hex(body))
+		}
+		assertFileBody(t, filepath.Join(inspection.CachePath, filepath.FromSlash(name)), body)
+		cacheBytes += int64(len(body))
+	}
+	if inspection.CacheBytes != cacheBytes {
+		t.Fatalf("managed cache bytes = %d, want %d", inspection.CacheBytes, cacheBytes)
+	}
+	assertFileBody(t, inspection.BackendFiles[0], backendBody)
+}
+
+func removeGenericRuntimeCommit(t *testing.T, fixture genericRuntimeRecoveryFixture) string {
+	t.Helper()
+	root := filepath.Join(fixture.cacheDirectory, canonicalModelName(fixture.request.Name))
+	if err := os.RemoveAll(fixture.inspection.CachePath); err != nil {
+		t.Fatalf("remove committed managed runtime: %v", err)
+	}
+	if err := os.Remove(filepath.Join(root, metadataFileName)); err != nil {
+		t.Fatalf("remove committed managed metadata: %v", err)
+	}
+	return root
+}
+
+func writeGenericRuntimeRevisionStage(t *testing.T, stagePath string, body []byte) {
+	t.Helper()
+	if err := os.MkdirAll(stagePath, 0o755); err != nil {
+		t.Fatalf("create managed runtime revision stage: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stagePath, "abandoned.bin"), body, 0o644); err != nil {
+		t.Fatalf("write managed runtime revision stage: %v", err)
+	}
+}
+
+func assertPathAbsent(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("path %q stat error = %v, want not-exist", path, err)
+	}
+}

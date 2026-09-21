@@ -58,6 +58,12 @@ func (s *service) publishGenericRuntimeCache(
 	}()
 
 	revision := genericRuntimeRevision(source, result.artifacts)
+	if err := assetContextError(ctx); err != nil {
+		return assets.RuntimeCacheInspection{}, err
+	}
+	if err := s.removeStaleGenericRuntimeStages(cacheDirectory, modelName, revision); err != nil {
+		return assets.RuntimeCacheInspection{}, err
+	}
 	existing, _, inspectErr := s.inspectGenericRuntimeCache(
 		ctx, cacheDirectory, canonicalModelName(modelName), source,
 	)
@@ -91,6 +97,25 @@ func (s *service) publishGenericRuntimeCache(
 		publication.finalPath, publication.revision, metadataFiles, result.artifacts,
 	)
 	return inspection, nil
+}
+
+// removeStaleGenericRuntimeStages removes only the owned stage paths while the
+// caller holds the model lock.
+func (s *service) removeStaleGenericRuntimeStages(
+	cacheDirectory, modelName, revision string,
+) error {
+	root, err := s.modelCacheRoot(cacheDirectory, canonicalModelName(modelName))
+	if err != nil {
+		return interruptedAssetError("resolve stale managed runtime stages", err)
+	}
+	if err := s.removeTree(filepath.Join(root, revision+".partial")); err != nil {
+		return interruptedAssetError("remove stale managed runtime revision stage", err)
+	}
+	metadataStagePath := filepath.Join(root, metadataFileName+".partial")
+	if err := s.removePath(metadataStagePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return interruptedAssetError("remove stale managed runtime metadata stage", err)
+	}
+	return nil
 }
 
 func genericRuntimeInspectionMatches(
