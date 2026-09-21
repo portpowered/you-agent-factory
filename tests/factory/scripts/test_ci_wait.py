@@ -425,6 +425,7 @@ time.sleep = lambda _seconds: None
             "PR: unavailable",
             "PR #not-a-number",
             "https://github.com/example/repo/pull/not-a-number",
+            "ftp://github.com/example/repo/pull/42",
             "github.com/example/repo/pull/42",
             "PR #42 " + "x" * self.module.MAX_PROCESS_OUTPUT_BYTES,
         )
@@ -502,6 +503,7 @@ time.sleep = lambda _seconds: None
             "PR #243 and PR #244 token=raw-process-output",
             "PR #243 and https://github.com/example/repo/pull/244",
             "PR #not-a-number token=raw-process-output",
+            "ftp://github.com/example/repo/pull/243 token=raw-process-output",
             "PR #243 " + "x" * self.module.MAX_PROCESS_OUTPUT_BYTES,
         )
         for process_output in cases:
@@ -509,11 +511,12 @@ time.sleep = lambda _seconds: None
                 result, calls = self.invoke_actual_script_with_fake_gh(
                     {}, process_output=process_output
                 )
+                self.assertEqual(calls, [])
                 self.assertEqual(result.returncode, 1)
                 self.assertEqual(result.stdout, "")
-                self.assertEqual(calls, [])
                 self.assertNotIn("raw-process-output", result.stderr)
                 self.assertNotIn("https://github.com", result.stderr)
+                self.assertNotIn("ftp://", result.stderr)
 
     def test_actual_entrypoint_rejects_foreign_pr_url_before_pr_or_branch_query(self):
         process_output = "https://github.com/other/repository/pull/245"

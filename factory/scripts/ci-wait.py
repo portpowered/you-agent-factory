@@ -70,7 +70,9 @@ PR_CHECKS_JSON_FIELDS = "name,state,bucket,link,workflow,startedAt,completedAt"
 CONVERGENCE_OBSERVATIONS = 2
 MAX_PROCESS_OUTPUT_BYTES = 8 * 1024
 
-PR_URL_TOKEN = re.compile(r"https?://[^\s<>\[\]\"'`]+", re.IGNORECASE)
+PR_URL_TOKEN = re.compile(
+    r"[A-Za-z][A-Za-z0-9+.-]*://[^\s<>\[\]\"'`]+", re.IGNORECASE
+)
 PR_LABEL = re.compile(r"\b(?:pull\s+request|pr)\b", re.IGNORECASE)
 PR_NUMBER = re.compile(r"(\d+)(?![\w-])")
 BARE_PR_NUMBER = re.compile(r"#?\s*(\d+)")
