@@ -11,6 +11,7 @@ const (
 	boardPersistenceNewRequestID     = "board-persistence-after-recovery-request"
 	boardPersistenceHelperEnv        = "YOU_BOARD_PERSISTENCE_HELPER"
 	boardPersistenceReleaseEnv       = "YOU_BOARD_PERSISTENCE_RELEASE"
+	boardPersistenceWorkerReadyEnv   = "YOU_BOARD_PERSISTENCE_WORKER_READY_ENDPOINT"
 	boardPersistenceHelperEnvValue   = "1"
 	boardPersistenceWorkerSentinel   = "board-persistence-worker-result:PASS"
 	boardPersistenceInitialWorkID    = "board-persistence-init"
