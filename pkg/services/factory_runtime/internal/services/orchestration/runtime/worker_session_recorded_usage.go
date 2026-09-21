@@ -2,10 +2,12 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -96,17 +98,11 @@ func recordedDispatchFact(
 		fact.workIDs = firstRecordedWorkIDs(dispatch.WorkItemIDs, fact.workIDs)
 	}
 	if dispatch, ok := completed[dispatchID]; ok {
-		fact.state = recordedObservationState(dispatch.Result.Outcome)
+		fact.state = recordedDispatchObservationState(dispatch.Result)
 		fact.startedAt = firstRecordedTime(dispatch.StartedAt, fact.startedAt)
 		fact.endedAt = recordedDispatchEnd(dispatch, events, dispatchID)
 		fact.workIDs = firstRecordedWorkIDs(dispatch.WorkItemIDs, fact.workIDs)
-		fact.failure = recordedFailureWithDiagnostics(
-			workers.WorkOutcome(dispatch.Result.Outcome),
-			dispatch.Result.FailureDetail,
-			dispatch.Result.FailureMetadata,
-			fact.state,
-			dispatch.Diagnostics,
-		)
+		fact.failure = recordedDispatchFailureWithDiagnostics(dispatch.Result, fact.state, dispatch.Diagnostics)
 		fact.tokenUsage = recordedTokenUsageFromDiagnostics(dispatch.Diagnostics)
 		fact.provider = cloneProviderMetadata(dispatch.ProviderSession)
 	}
@@ -800,6 +796,38 @@ func (s *recordedWorkerSessionObservation) confirmedObservation(
 // event for the dispatch. It is the cursor responsible for the projected
 // Worker Session state or terminal outcome, rather than merely the association
 // event that made the Worker Session addressable.
+type recordedDispatchInterruptionFact struct {
+	workIDs       []string
+	interruptedAt time.Time
+	eventTime     time.Time
+	reason        string
+}
+
+func recordedDispatchInterruption(
+	events []interfaces.FactoryEvent,
+	dispatchID string,
+) (recordedDispatchInterruptionFact, bool) {
+	var fact recordedDispatchInterruptionFact
+	found := false
+	for _, event := range events {
+		if event.Type != interfaces.FactoryEventTypeDispatchInterrupted ||
+			stringPointerValue(event.Context.DispatchID) != dispatchID {
+			continue
+		}
+		var payload interfaces.DispatchInterruptedEventPayload
+		if json.Unmarshal(event.Payload, &payload) != nil {
+			continue
+		}
+		fact = recordedDispatchInterruptionFact{
+			workIDs:       append([]string(nil), pointerStringSlice(event.Context.WorkIDs)...),
+			interruptedAt: payload.InterruptedAt,
+			eventTime:     event.Context.EventTime,
+			reason:        payload.Reason,
+		}
+		found = true
+	}
+	return fact, found
+}
 func recordedDispatchStateCursor(
 	events []interfaces.FactoryEvent,
 	dispatchID string,
@@ -860,27 +888,6 @@ func (s *recordedWorkerSessionObservation) projectRecordedWorldState(
 		return interfaces.FactoryWorldState{}, workersessions.ErrObservationProjectionUnavailable
 	}
 	return world, nil
-}
-
-func restoredWorldStateForEvents(
-	state *interfaces.FactoryWorldState,
-	prefix []interfaces.FactoryEvent,
-	events []interfaces.FactoryEvent,
-) (*interfaces.FactoryWorldState, bool) {
-	if state == nil || len(prefix) == 0 || len(events) < len(prefix) {
-		return nil, false
-	}
-	for index := range prefix {
-		if !sameFactoryEventIdentity(prefix[index], events[index]) {
-			return nil, false
-		}
-	}
-	for _, event := range events[len(prefix):] {
-		if factoryEventRequiresWorkerSessionProjection(*state, event) {
-			return nil, false
-		}
-	}
-	return state, true
 }
 
 func sameFactoryEventIdentity(left, right interfaces.FactoryEvent) bool {

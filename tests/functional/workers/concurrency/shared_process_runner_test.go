@@ -107,10 +107,13 @@ func (runner *concurrencyScenarioRunner) Run(ctx context.Context, request platfo
 	switch runner.behavior {
 	case concurrencyRunnerSuccess:
 		return runner.successResult(request), nil
-	case concurrencyRunnerHold, concurrencyRunnerFailureHold:
+	case concurrencyRunnerHold, concurrencyRunnerLateOutput, concurrencyRunnerFailureHold:
 		if err := runner.waitGate(ctx, call.index); err != nil {
 			runner.canceledCountValue.Add(1)
 			runner.canceled <- call
+			if runner.behavior == concurrencyRunnerLateOutput {
+				return runner.successResult(request), nil
+			}
 			return platformprocess.CommandResult{}, err
 		}
 		if runner.behavior == concurrencyRunnerFailureHold && commandRequestContains(request, runner.failMarker) {

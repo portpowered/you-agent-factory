@@ -2,6 +2,7 @@ package root_composition_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"reflect"
@@ -179,68 +180,274 @@ func (fixture *concurrencySharedProcessFixture) runSessionCancellationIsolation(
 	survivor.closeAndAssertGone(t)
 }
 
+type workerSessionCancellationScenario struct {
+	session          *concurrencySession
+	first            factoryapi.SubmitWorkResponse
+	second           factoryapi.SubmitWorkResponse
+	firstCallIndex   int
+	secondCallIndex  int
+	secondWorkBefore factoryapi.Work
+	secondSession    factoryapi.WorkerSessionObservation
+	workerSessionID  string
+}
+
+type workerSessionCancellationControlAttempt struct {
+	status  int
+	body    string
+	control factoryapi.WorkerSessionControlResponse
+}
+
 func (fixture *concurrencySharedProcessFixture) runWorkerSessionCancellation(t *testing.T) {
 	t.Helper()
-	session := fixture.openCase(t, "CC-05", 1, concurrencyRunnerHold, "cc05-first", "", 0)
+	scenario := prepareWorkerSessionCancellation(t, fixture)
+	results := cancelWorkerSessionTwiceConcurrently(t, fixture, scenario.workerSessionID)
+	requireConcurrentWorkerSessionCancellation(t, scenario.workerSessionID, results)
+	t.Logf("CC-05 control results=%#v runner-active=%d runner-canceled=%d", results, scenario.session.runner.activeCallCount(), scenario.session.runner.canceledCount())
+	successor := requireCanceledWorkIsolationAndSuccessor(t, scenario)
+	beforeRepeatEvents := assertConcurrencyOperatorCanceledWorkDispatch(t, scenario.session, stringPointerValue(scenario.first.WorkId))
+	requireRepeatedWorkerSessionCancellation(t, fixture, scenario, beforeRepeatEvents)
+	requireCanceledWorkerSessionObservation(t, fixture, scenario)
+	requireUnknownWorkerSessionCancellationParity(t, fixture, scenario)
+	finishWorkerSessionCancellation(t, fixture, scenario, successor.index)
+}
+
+func prepareWorkerSessionCancellation(
+	t *testing.T,
+	fixture *concurrencySharedProcessFixture,
+) workerSessionCancellationScenario {
+	t.Helper()
+	session := fixture.openCase(t, "CC-05", 2, concurrencyRunnerLateOutput, "cc05-first", "", 0)
 	first := submitConcurrencyWork(t, session, "cc05-first")
-	session.runner.waitStarted(t, concurrencySharedProcessTimeout)
 	second := submitConcurrencyWork(t, session, "cc05-second")
-	waitConcurrencyCategories(t, fixture.baseURL, session.id, func(status factoryapi.StatusResponse) bool {
-		return status.Categories.Initial >= 1
-	})
+	started := []concurrencyStartedCall{
+		session.runner.waitStarted(t, concurrencySharedProcessTimeout),
+		session.runner.waitStarted(t, concurrencySharedProcessTimeout),
+	}
+	firstCallIndex := concurrencyStartedCallIndex(t, started, "cc05-first")
+	secondCallIndex := concurrencyStartedCallIndex(t, started, "cc05-second")
+	if firstCallIndex == secondCallIndex {
+		t.Fatalf("CC-05 Work calls share index %d", firstCallIndex)
+	}
+	waitConcurrencyResource(t, fixture.baseURL, session.id, "agent-slot", 0, 2)
+	secondWorkBefore := concurrencyWorkByID(t, session, second.WorkId)
+	if secondWorkBefore.State == nil || secondWorkBefore.State.Type != factoryapi.WorkStateTypePROCESSING {
+		t.Fatalf("CC-05 unrelated Work B before A cancel = %#v, want PROCESSING", secondWorkBefore)
+	}
+	firstSession := concurrencyWorkerSessionForWork(t, session, first.WorkId)
+	secondSession := concurrencyWorkerSessionForWork(t, session, second.WorkId)
+	workerSessionID := firstSession.WorkerSessionId
+	if workerSessionID == secondSession.WorkerSessionId {
+		t.Fatalf("CC-05 Worker Session identities for A and B are equal: %q", workerSessionID)
+	}
+	return workerSessionCancellationScenario{
+		session: session, first: first, second: second,
+		firstCallIndex: firstCallIndex, secondCallIndex: secondCallIndex,
+		secondWorkBefore: secondWorkBefore, secondSession: secondSession,
+		workerSessionID: workerSessionID,
+	}
+}
 
-	workerSessions := listConcurrencyWorkerSessions(t, fixture.baseURL, session.id, first.WorkId)
-	if len(workerSessions.Sessions) != 1 {
-		t.Fatalf("CC-05 runtime Worker Session list = %#v, want one observation", workerSessions)
+func concurrencyStartedCallIndex(
+	t *testing.T,
+	started []concurrencyStartedCall,
+	marker string,
+) int {
+	t.Helper()
+	for _, call := range started {
+		if commandRequestContains(call.request, marker) {
+			return call.index
+		}
 	}
-	workerSessionID := workerSessions.Sessions[0].WorkerSessionId
-	if strings.TrimSpace(workerSessionID) == "" {
-		t.Fatalf("CC-05 runtime Worker Session observation = %#v, want identity", workerSessions.Sessions[0])
-	}
+	t.Fatalf("CC-05 started calls = %#v, want marker %q", started, marker)
+	return 0
+}
 
-	status, body, control := cancelConcurrencyWorkerSession(t, fixture.baseURL, workerSessionID)
-	if status != http.StatusNotFound || !strings.Contains(body, `"code":"NOT_FOUND"`) ||
-		!strings.Contains(body, "Worker Session not found") {
-		t.Fatalf("CC-05 top-level cancel = status %d body %q response=%#v, want current runtime-owned Worker Session not-found result", status, body, control)
+func cancelWorkerSessionTwiceConcurrently(
+	t *testing.T,
+	fixture *concurrencySharedProcessFixture,
+	workerSessionID string,
+) []workerSessionCancellationControlAttempt {
+	t.Helper()
+	startControls := make(chan struct{})
+	controls := make(chan workerSessionCancellationControlAttempt, 2)
+	for range 2 {
+		go func() {
+			<-startControls
+			status, body, control := cancelConcurrencyWorkerSession(t, fixture.baseURL, workerSessionID)
+			controls <- workerSessionCancellationControlAttempt{status: status, body: body, control: control}
+		}()
 	}
-	// The top-level control lookup does not reach the runtime-owned Worker
-	// Session, and the dispatch remains in the controlled runner. Characterize
-	// that ownership gap before releasing the edge: the capacity slot is still
-	// occupied and the queued successor has not started.
-	if got := session.runner.activeCallCount(); got != 1 {
-		t.Fatalf("CC-05 active calls after top-level cancel = %d, want one until controlled release", got)
-	}
-	if got := session.runner.callCount(); got != 1 {
-		t.Fatalf("CC-05 provider calls after top-level cancel = %d, want one with successor queued", got)
-	}
-	if got := session.runner.canceledCount(); got != 0 {
-		t.Fatalf("CC-05 controlled cancellations after top-level cancel = %d, want zero", got)
-	}
-	t.Logf("CC-05 characterization: top-level cancel returned HTTP 404 NOT_FOUND for runtime Worker Session %q, leaving the runtime capacity slot occupied; controlled edge release is required before B starts", workerSessionID)
+	close(startControls)
+	return []workerSessionCancellationControlAttempt{<-controls, <-controls}
+}
 
-	session.runner.releaseCall(1)
-	started := session.runner.waitStarted(t, concurrencySharedProcessTimeout)
-	if !commandRequestContains(started.request, "cc05-second") {
-		t.Fatalf("CC-05 successor command = %#v, want cc05-second after controlled release", started.request)
+func requireConcurrentWorkerSessionCancellation(
+	t *testing.T,
+	workerSessionID string,
+	results []workerSessionCancellationControlAttempt,
+) {
+	t.Helper()
+	applied, noop := 0, 0
+	for _, result := range results {
+		if result.status != http.StatusOK || result.control.WorkerSessionId != workerSessionID ||
+			result.control.Action != factoryapi.WorkerSessionControlResponseActionCancel ||
+			result.control.State != factoryapi.WorkerSessionControlResponseStateCanceled {
+			t.Fatalf("CC-05 exact-target cancel = status %d body %q response=%#v, want HTTP 200 CANCELED target", result.status, result.body, result.control)
+		}
+		switch result.control.Outcome {
+		case factoryapi.WorkerSessionControlResponseOutcomeApplied:
+			applied++
+		case factoryapi.WorkerSessionControlResponseOutcomeNoop:
+			noop++
+		default:
+			t.Fatalf("CC-05 cancel outcome = %q, want APPLIED or NOOP", result.control.Outcome)
+		}
+	}
+	if applied != 1 || noop != 1 {
+		t.Fatalf("CC-05 concurrent duplicate outcomes = APPLIED %d, NOOP %d; want one each", applied, noop)
+	}
+}
+
+func requireCanceledWorkIsolationAndSuccessor(
+	t *testing.T,
+	scenario workerSessionCancellationScenario,
+) concurrencyStartedCall {
+	t.Helper()
+	session := scenario.session
+	canceledCall := session.runner.waitCanceled(t, concurrencySharedProcessTimeout)
+	if canceledCall.index != scenario.firstCallIndex || !commandRequestContains(canceledCall.request, "cc05-first") {
+		t.Fatalf("CC-05 canceled command = %#v, want exact A attempt %d", canceledCall, scenario.firstCallIndex)
 	}
 	if got := session.runner.callsForMarker("cc05-second"); got != 1 {
-		t.Fatalf("CC-05 successor provider calls = %d, want exactly one", got)
+		t.Fatalf("CC-05 B command calls after cancel = %d, want exactly one", got)
 	}
-	session.runner.releaseCall(2)
+	secondWorkAfter := concurrencyWorkByID(t, session, scenario.second.WorkId)
+	secondSessionAfter := concurrencyWorkerSessionForWork(t, session, scenario.second.WorkId)
+	if !reflect.DeepEqual(scenario.secondWorkBefore, secondWorkAfter) ||
+		secondSessionAfter.WorkerSessionId != scenario.secondSession.WorkerSessionId ||
+		secondSessionAfter.State != factoryapi.WorkerSessionObservationStateRunning {
+		t.Fatalf("CC-05 unrelated Work B/Worker Session changed during A cancel: Work %#v -> %#v, Worker Session %#v -> %#v", scenario.secondWorkBefore, secondWorkAfter, scenario.secondSession, secondSessionAfter)
+	}
+	if got := session.runner.canceledCount(); got != 1 {
+		t.Fatalf("CC-05 controlled cancellations after A cancel = %d, want exactly one", got)
+	}
+	settledFirst := concurrencyWorkByID(t, session, scenario.first.WorkId)
+	if settledFirst.State != nil && settledFirst.State.Type == factoryapi.WorkStateTypeTERMINAL {
+		t.Fatalf("CC-05 canceled Work A reached terminal complete state: %#v", settledFirst)
+	}
+	if output := workContentText(t, settledFirst); strings.Contains(output, "cc05-first output") {
+		t.Fatalf("CC-05 late output from canceled A was materialized in Work content: %q", output)
+	}
+	successor := session.runner.waitStartedMarker(t, "cc05-first", concurrencySharedProcessTimeout)
+	if successor.index == scenario.firstCallIndex || session.runner.callsForMarker("cc05-first") != 2 {
+		t.Fatalf("CC-05 authorized retry call = %#v, total A calls=%d; want exactly one successor after the canceled attempt", successor, session.runner.callsForMarker("cc05-first"))
+	}
+	if got := session.runner.activeCallCount(); got != 2 {
+		t.Fatalf("CC-05 active calls with unrelated B and the single A successor = %d, want two", got)
+	}
+	return successor
+}
+
+func requireRepeatedWorkerSessionCancellation(
+	t *testing.T,
+	fixture *concurrencySharedProcessFixture,
+	scenario workerSessionCancellationScenario,
+	beforeRepeatEvents []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+	firstCallCountBeforeRepeat := scenario.session.runner.callsForMarker("cc05-first")
+	remoteInputs, remoteErr := runConcurrencyRemoteWorkerSessionControl(t, fixture, "cancel", scenario.workerSessionID)
+	if remoteErr != nil {
+		t.Fatalf("CC-05 repeated remote cancel: %v\nstdout:\n%s\nstderr:\n%s", remoteErr, remoteInputs.Stdout(), remoteInputs.Stderr())
+	}
+	var remoteControl factoryapi.WorkerSessionControlResponse
+	if err := json.Unmarshal([]byte(strings.TrimSpace(remoteInputs.Stdout())), &remoteControl); err != nil {
+		t.Fatalf("CC-05 decode repeated remote cancel: %v\nstdout:\n%s", err, remoteInputs.Stdout())
+	}
+	if remoteControl.WorkerSessionId != scenario.workerSessionID || remoteControl.Action != factoryapi.WorkerSessionControlResponseActionCancel ||
+		remoteControl.Outcome != factoryapi.WorkerSessionControlResponseOutcomeNoop || remoteControl.State != factoryapi.WorkerSessionControlResponseStateCanceled {
+		t.Fatalf("CC-05 repeated remote cancel = %#v, want NOOP CANCELED for exact target", remoteControl)
+	}
+	afterRepeatEvents := concurrencySessionEvents(t, fixture.baseURL, scenario.session.id)
+	assertConcurrencyEventIDsUnchanged(t, beforeRepeatEvents, afterRepeatEvents, "CC-05 repeated remote cancel")
+	if got := scenario.session.runner.callsForMarker("cc05-first"); got != firstCallCountBeforeRepeat {
+		t.Fatalf("CC-05 repeated remote cancel added an A command call: before=%d after=%d", firstCallCountBeforeRepeat, got)
+	}
+}
+
+func requireCanceledWorkerSessionObservation(
+	t *testing.T,
+	fixture *concurrencySharedProcessFixture,
+	scenario workerSessionCancellationScenario,
+) {
+	t.Helper()
+	listedSessions := listConcurrencyWorkerSessions(t, fixture.baseURL, scenario.session.id, scenario.first.WorkId)
+	var listed factoryapi.WorkerSessionObservation
+	listedFound := false
+	for _, observation := range listedSessions.Sessions {
+		if observation.WorkerSessionId == scenario.workerSessionID {
+			listed = observation
+			listedFound = true
+			break
+		}
+	}
+	if !listedFound {
+		t.Fatalf("CC-05 Worker Session list for Work A omitted canceled target %q: %#v", scenario.workerSessionID, listedSessions.Sessions)
+	}
+	detailed := getConcurrencyWorkerSession(t, fixture.baseURL, scenario.session.id, scenario.workerSessionID)
+	if listed.State != factoryapi.WorkerSessionObservationStateCanceled || detailed.State != factoryapi.WorkerSessionObservationStateCanceled ||
+		listed.Failure == nil || detailed.Failure == nil || listed.Failure.Kind != "OPERATOR_CANCELED" || detailed.Failure.Kind != "OPERATOR_CANCELED" {
+		t.Fatalf("CC-05 Worker Session list/detail truth = %#v/%#v, want CANCELED OPERATOR_CANCELED", listed, detailed)
+	}
+}
+
+func requireUnknownWorkerSessionCancellationParity(
+	t *testing.T,
+	fixture *concurrencySharedProcessFixture,
+	scenario workerSessionCancellationScenario,
+) {
+	t.Helper()
+	unknownID := "cc05-unknown-control-target"
+	unknownStatus, unknownBody, _ := cancelConcurrencyWorkerSession(t, fixture.baseURL, unknownID)
+	if unknownStatus != http.StatusNotFound || !strings.Contains(unknownBody, "\"code\":\"NOT_FOUND\"") {
+		t.Fatalf("CC-05 unknown API cancel = status %d body %q, want HTTP 404 NOT_FOUND", unknownStatus, unknownBody)
+	}
+	unknownInputs, unknownErr := runConcurrencyRemoteWorkerSessionControl(t, fixture, "cancel", unknownID)
+	if unknownErr == nil {
+		t.Fatalf("CC-05 unknown remote cancel succeeded: stdout=%s stderr=%s", unknownInputs.Stdout(), unknownInputs.Stderr())
+	}
+	var unknownResponse factoryapi.ErrorResponse
+	decodedUnknown := false
+	for _, output := range []string{unknownInputs.Stdout(), unknownInputs.Stderr()} {
+		if json.Unmarshal([]byte(strings.TrimSpace(output)), &unknownResponse) == nil && unknownResponse.Code != "" {
+			decodedUnknown = true
+			break
+		}
+	}
+	if !decodedUnknown || string(unknownResponse.Code) != string(factoryapi.ErrorResponseCodeNOTFOUND) {
+		t.Fatalf("CC-05 unknown remote cancel error = %#v, want NOT_FOUND; stdout=%s stderr=%s", unknownResponse, unknownInputs.Stdout(), unknownInputs.Stderr())
+	}
+}
+
+func finishWorkerSessionCancellation(
+	t *testing.T,
+	fixture *concurrencySharedProcessFixture,
+	scenario workerSessionCancellationScenario,
+	successorCallIndex int,
+) {
+	t.Helper()
+	session := scenario.session
+	session.runner.releaseCall(scenario.secondCallIndex)
+	session.runner.releaseCall(successorCallIndex)
 	waitConcurrencyWorkSettled(t, fixture.baseURL, session.id, 2)
-	assertConcurrencyWorkCompleted(t, session, first.WorkId, "cc05-first")
-	assertConcurrencyWorkCompleted(t, session, second.WorkId, "cc05-second")
-	secondWork := concurrencyWorkByID(t, session, second.WorkId)
-	secondContent := workContentText(t, secondWork)
-	if strings.Contains(secondContent, "cc05-first") {
-		t.Fatalf("CC-05 successor Work contains canceled target marker: %q", secondContent)
-	}
+	assertConcurrencyWorkCompleted(t, session, scenario.first.WorkId, "cc05-first")
+	assertConcurrencyWorkCompleted(t, session, scenario.second.WorkId, "cc05-second")
+	waitConcurrencyResource(t, fixture.baseURL, session.id, "agent-slot", 2, 2)
 	if got := session.runner.activeCallCount(); got != 0 {
 		t.Fatalf("CC-05 active calls after successor completion = %d, want zero", got)
 	}
 	session.closeAndAssertGone(t)
 }
-
 func (fixture *concurrencySharedProcessFixture) runIdempotentRequest(t *testing.T) {
 	t.Helper()
 	session := fixture.openCase(t, "CC-06", 1, concurrencyRunnerSuccess, "cc06", "", 0)

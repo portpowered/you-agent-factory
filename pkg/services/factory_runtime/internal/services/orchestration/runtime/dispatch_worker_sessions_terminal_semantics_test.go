@@ -122,12 +122,9 @@ func TestRecordedDispatchFailureProjection(t *testing.T) {
 	if err := rejectedObservation.Validate(); err != nil {
 		t.Fatalf("recorded rejection observation validation = %v", err)
 	}
-	if recordedObservationState(string(workers.OutcomeAccepted)) != workersessions.StateCompleted || recordedObservationState(string(workers.OutcomeContinue)) != workersessions.StateCompleted || recordedObservationState(string(workers.OutcomeRejected)) != workersessions.StateFailed || recordedObservationState("unknown") != workersessions.StateFailed {
-		t.Fatal("recordedObservationState() mapping is incorrect")
-	}
-	if recordedFailure(workers.OutcomeFailed, nil, nil, workersessions.StateRunning) != nil {
-		t.Fatal("recordedFailure(active) returned a failure")
-	}
+	requireRecordedCancellationProjection(t, base, completed)
+	requireRecordedOutcomeMappings(t)
+
 }
 
 func TestRecordedDispatchIncompleteOutputProjection(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -276,6 +277,101 @@ func listConcurrencyWorkerSessions(
 	}
 	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/worker-sessions?workId=" + url.QueryEscape(work)
 	return support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, endpoint)
+}
+
+func getConcurrencyWorkerSession(
+	t testing.TB,
+	baseURL, sessionID, workerSessionID string,
+) factoryapi.WorkerSessionObservation {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + url.PathEscape(sessionID) + "/worker-sessions/" + url.PathEscape(workerSessionID)
+	return support.GetJSON[factoryapi.WorkerSessionObservation](t, endpoint)
+}
+
+func waitConcurrencyResource(
+	t *testing.T,
+	baseURL, sessionID, resourceName string,
+	wantAvailable, wantTotal int,
+) factoryapi.StatusResponse {
+	t.Helper()
+	var last factoryapi.StatusResponse
+	status, err := support.WaitForObservation(concurrencySharedProcessTimeout,
+		func() (factoryapi.StatusResponse, error) {
+			status, err := readConcurrencyStatus(baseURL, sessionID)
+			if err == nil {
+				last = status
+			}
+			return status, err
+		},
+		func(status factoryapi.StatusResponse) bool {
+			usage, ok := concurrencyResourceUsage(status, resourceName)
+			return ok && usage.Available == wantAvailable && usage.Total == wantTotal
+		},
+	)
+	if err != nil {
+		usage, found := concurrencyResourceUsage(last, resourceName)
+		work := listConcurrencyWork(t, baseURL, sessionID)
+		events := concurrencySessionEvents(t, baseURL, sessionID)
+		t.Fatalf("wait for %s resource usage %d/%d in session %q: %v; last usage=%#v found=%v status=%#v work=%#v events=%s", resourceName, wantAvailable, wantTotal, sessionID, err, usage, found, last, work.Results, concurrencyEventSummary(events))
+	}
+	return status
+}
+
+func concurrencyResourceUsage(status factoryapi.StatusResponse, name string) (factoryapi.ResourceUsage, bool) {
+	if status.Resources == nil {
+		return factoryapi.ResourceUsage{}, false
+	}
+	for _, usage := range *status.Resources {
+		if usage.Name == name {
+			return usage, true
+		}
+	}
+	return factoryapi.ResourceUsage{}, false
+}
+
+func waitConcurrencyWorkResolved(
+	t *testing.T,
+	session *concurrencySession,
+	workID *string,
+) factoryapi.Work {
+	t.Helper()
+	var last factoryapi.Work
+	work, err := support.WaitForObservation(concurrencySharedProcessTimeout,
+		func() (factoryapi.Work, error) {
+			work := concurrencyWorkByID(t, session, workID)
+			last = work
+			return work, nil
+		},
+		func(work factoryapi.Work) bool {
+			return work.State != nil && work.State.Type != factoryapi.WorkStateTypeINITIAL &&
+				work.State.Type != factoryapi.WorkStateTypePROCESSING
+		},
+	)
+	if err != nil {
+		state := "<nil>"
+		if last.State != nil {
+			state = string(last.State.Type)
+		}
+		events := concurrencySessionEvents(t, session.fixture.baseURL, session.id)
+		t.Fatalf("wait for Work %q to resolve: %v; state=%s snapshot=%#v; event types=%v", stringPointerValue(workID), err, state, last, concurrencyEventTypeSummary(events))
+	}
+	return work
+}
+
+func runConcurrencyRemoteWorkerSessionControl(
+	t *testing.T,
+	fixture *concurrencySharedProcessFixture,
+	action, workerSessionID string,
+) (*support.CapturedInputs, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	inputs := support.FakeInputs(ctx, []string{
+		"you", "--remote", "--server", fixture.baseURL, "--json", "worker-sessions", action, workerSessionID,
+	})
+	inputs.Input.Env = append(os.Environ(), "HOME="+fixture.homeDir, "USERPROFILE="+fixture.homeDir)
+	inputs.Input.WorkingDirectory = fixture.hostDir
+	return inputs, fixture.process.Execute(inputs.Input)
 }
 
 func concurrencyWorkerSessionForWork(
@@ -585,14 +681,92 @@ func concurrencyEventSummary(events []factoryapi.FactoryEvent) string {
 			workIDs = append(workIDs, (*event.Context.WorkIds)...)
 		}
 		detail := ""
-		if event.Type == factoryapi.FactoryEventTypeWorkStateChange {
+		switch event.Type {
+		case factoryapi.FactoryEventTypeWorkStateChange:
 			if payload, err := event.Payload.AsWorkStateChangeEventPayload(); err == nil {
 				detail = fmt.Sprintf("work=%q to=%q", payload.WorkId, payload.ToState)
+			}
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			if payload, err := event.Payload.AsDispatchResponseEventPayload(); err == nil {
+				reason := ""
+				if payload.Cancellation != nil {
+					reason = string(payload.Cancellation.Reason)
+				}
+				output := ""
+				if payload.Output != nil {
+					output = *payload.Output
+				}
+				detail = fmt.Sprintf("outcome=%q cancellation=%q output=%q", payload.Outcome, reason, output)
 			}
 		}
 		result = append(result, fmt.Sprintf("#%d %s seq=%d sessionSeq=%v request=%q dispatch=%q contextWork=%v %s", index, event.Type, event.Context.Sequence, event.Context.SessionSequence, requestID, dispatchID, workIDs, detail))
 	}
 	return strings.Join(result, "; ")
+}
+
+func assertConcurrencyOperatorCanceledWorkDispatch(
+	t *testing.T,
+	session *concurrencySession,
+	workID string,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+	events, err := support.WaitForObservation(concurrencySharedProcessTimeout,
+		func() ([]factoryapi.FactoryEvent, error) {
+			return concurrencySessionEvents(t, session.fixture.baseURL, session.id), nil
+		},
+		func(events []factoryapi.FactoryEvent) bool {
+			for _, event := range events {
+				if event.Type == factoryapi.FactoryEventTypeDispatchResponse && concurrencyEventHasWork(event, workID) {
+					return true
+				}
+			}
+			return false
+		},
+	)
+	if err != nil {
+		t.Fatalf("wait for canceled Work %q dispatch response: %v", workID, err)
+	}
+	dispatchRequests, dispatchResponses := 0, 0
+	resourcesReturned := 0
+	for _, event := range events {
+		if !concurrencyEventHasWork(event, workID) {
+			continue
+		}
+		switch event.Type {
+		case factoryapi.FactoryEventTypeDispatchRequest:
+			dispatchRequests++
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			dispatchResponses++
+			payload, err := event.Payload.AsDispatchResponseEventPayload()
+			reason, output, outputWork := "", "", []factoryapi.Work{}
+			if payload.Cancellation != nil {
+				reason = string(payload.Cancellation.Reason)
+			}
+			if payload.Output != nil {
+				output = *payload.Output
+			}
+			if payload.OutputWork != nil {
+				outputWork = *payload.OutputWork
+			}
+			resources := []factoryapi.Resource{}
+			if payload.OutputResources != nil {
+				resources = *payload.OutputResources
+			}
+			if err != nil || string(payload.Outcome) != "CANCELED" || reason != "CANCELED" ||
+				strings.TrimSpace(output) != "" || len(outputWork) != 1 ||
+				stringPointerValue(outputWork[0].WorkId) != workID || outputWork[0].State == nil || outputWork[0].State.Name != "init" {
+				t.Fatalf("canceled Work %q dispatch response outcome=%q cancellation=%q output=%q outputWork=%#v (decode error %v), want canceled cause with no late output", workID, payload.Outcome, reason, output, outputWork, err)
+			}
+			if len(resources) != 1 || resources[0].Name != "agent-slot" || resources[0].Capacity != 2 {
+				t.Fatalf("canceled Work %q dispatch resources returned = %#v, want one agent-slot unit", workID, resources)
+			}
+			resourcesReturned += len(resources)
+		}
+	}
+	if dispatchRequests != 2 || dispatchResponses != 1 || resourcesReturned != 1 {
+		t.Fatalf("canceled Work %q dispatch requests/responses/resource returns = %d/%d/%d, want one original, one authorized successor, one terminal response, and one release; events=%s", workID, dispatchRequests, dispatchResponses, resourcesReturned, concurrencyEventSummary(events))
+	}
+	return events
 }
 
 func concurrencyDispatchStartOrderError(dispatches []support.DispatchEventObservation) error {

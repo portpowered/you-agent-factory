@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -42,54 +41,6 @@ func startTupleFor(req workersessions.StartRequest) startTuple {
 	return startTuple{SessionID: req.ID, Execution: cloneWorkstationDispatchRequest(req.Execution), MaxAttempts: req.Retry.Attempts()}
 }
 
-type runtimeAttempt struct {
-	registry   *registry
-	workerID   string
-	dispatchID string
-	attemptID  string
-	once       sync.Once
-}
-
-func runtimeAttemptContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx
-}
-
-func runtimeAttemptIDs(req workersessions.RuntimeAttemptRequest) (string, string) {
-	logicalDispatchID := strings.TrimSpace(req.Execution.Execution.Dispatch.DispatchID)
-	attemptID := strings.TrimSpace(req.AttemptID)
-	if attemptID == "" {
-		attemptID = logicalDispatchID
-	}
-	return logicalDispatchID, attemptID
-}
-
-func (r *registry) runtimeAttemptOwnedByOther(logicalDispatchID, workerID, attemptID string) bool {
-	r.mu.RLock()
-	ownerID, owned := r.dispatchOwners[logicalDispatchID]
-	r.mu.RUnlock()
-	return owned && ownerID != workerID && attemptID == logicalDispatchID
-}
-
-func (r *registry) claimRuntimeAttempt(logicalDispatchID, workerID, attemptID string) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.runtimeAttempts == nil {
-		r.runtimeAttempts = make(map[string]struct{})
-	}
-	if r.dispatchOwners == nil {
-		r.dispatchOwners = make(map[string]string)
-	}
-	if ownerID, exists := r.dispatchOwners[logicalDispatchID]; exists && ownerID != workerID && attemptID == logicalDispatchID {
-		return false
-	}
-	r.dispatchOwners[logicalDispatchID] = workerID
-	r.runtimeAttempts[workerID] = struct{}{}
-	return true
-}
-
 // Complete commits the one terminal Worker Session observation. Runtime has
 // already normalized cancellation and execution outcomes before invoking this
 // hook; Worker Sessions only classifies and durably publishes the detached
@@ -106,11 +57,25 @@ func (a *runtimeAttempt) Complete(
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	a.mu.Lock()
+	if a.completed == nil {
+		a.completed = make(chan struct{})
+	}
+	completed := a.completed
+	a.mu.Unlock()
 	a.once.Do(func() {
+		defer close(completed)
+		action, controlOutcome, controlHistory := a.completionState()
 		r := a.registry
 		r.associateProviderSessionFromResult(a.workerID, a.dispatchID, result)
-		state, terminal := dispatchedTerminal("", result, dispatchErr)
+		state, terminal := dispatchedTerminal(action, result, dispatchErr)
 		final, committed := r.commitTerminal(a.workerID, state, terminal)
+		if controlHistory != nil {
+			if controlOutcome == "" {
+				controlOutcome = workersessions.ControlOutcomeNoop
+			}
+			r.finishControlHistory(controlHistory, controlOutcome, a.dispatchID, final.State)
+		}
 		if committed {
 			r.logTerminal(a.workerID, a.attemptID, final)
 			r.publishTerminalRecordOrLog(
@@ -123,9 +88,30 @@ func (a *runtimeAttempt) Complete(
 		}
 		r.mu.Lock()
 		delete(r.runtimeAttempts, a.workerID)
+		delete(r.runtimeAttemptControls, a.workerID)
 		r.mu.Unlock()
 	})
 	return nil
+}
+
+func runtimeAttemptCancelOutcomeSupported(outcome workers.WorkstationDispatchCancelOutcome) bool {
+	return outcome == workers.WorkstationDispatchCancelOutcomeCanceled ||
+		outcome == workers.WorkstationDispatchCancelOutcomeAlreadyCanceled ||
+		outcome == workers.WorkstationDispatchCancelOutcomeAlreadyTerminal
+}
+
+func (r *registry) runtimeAttemptControlResult(
+	session workersessions.Session,
+	action workersessions.ControlAction,
+	outcome workersessions.ControlOutcome,
+	attempt *runtimeAttempt,
+) workersessions.ControlResult {
+	return workersessions.ControlResult{
+		Session:    session,
+		Action:     action,
+		Outcome:    outcome,
+		DispatchID: attempt.dispatchID,
+	}
 }
 
 // classifyTerminal derives the Worker Session terminal outcome from the

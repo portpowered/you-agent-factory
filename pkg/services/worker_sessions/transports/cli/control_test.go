@@ -143,6 +143,41 @@ func TestControlRemoteFailureDoesNotFallbackAndMapsStableError(t *testing.T) {
 	}
 }
 
+func TestControlRemoteCancelFailureDoesNotFallbackOrReportApplied(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, `{"message":"Workers could not apply the Worker Session control","code":"WORKER_SESSION_CONTROL_FAILED"}`)
+	}))
+	defer server.Close()
+
+	local := &controlLocalFake{results: map[workersessions.ControlAction]workersessions.ControlResult{
+		workersessions.ControlActionCancel: {
+			Session: workersessions.Session{ID: "worker-1", State: workersessions.StateCanceled},
+			Action:  workersessions.ControlActionCancel, Outcome: workersessions.ControlOutcomeApplied,
+		},
+	}}
+	var output bytes.Buffer
+	err := NewControl(testHTTPProtocol(t), local)(ControlConfig{
+		Context: context.Background(), Server: server.URL, Remote: true,
+		WorkerSessionID: "worker-1", Action: workersessions.ControlActionCancel,
+		OutputFormat: "json", Output: &output,
+	})
+	if err == nil || !strings.Contains(err.Error(), "could not apply the Worker Session control") {
+		t.Fatalf("remote cancel error = %v, want actionable server failure", err)
+	}
+	if local.calls != 0 {
+		t.Fatalf("remote cancel failure local calls = %d, want no fallback", local.calls)
+	}
+	var payload factoryapi.ErrorResponse
+	if decodeErr := json.Unmarshal(output.Bytes(), &payload); decodeErr != nil {
+		t.Fatalf("decode remote cancel error: %v; output=%q", decodeErr, output.String())
+	}
+	if string(payload.Code) != "WORKER_SESSION_CONTROL_FAILED" || strings.Contains(output.String(), "APPLIED") {
+		t.Fatalf("remote cancel output = %q, want stable actionable failure without APPLIED", output.String())
+	}
+}
+
 // The inspection commands (list/show/read/stream) are always addressed to the
 // factory server, so every Worker Session an operator can see belongs to that
 // server. A control addressed by the same stable Worker Session ID must reach

@@ -141,6 +141,14 @@ func runtimeAttemptFailedDispatch(dispatchID string) workers.WorkstationDispatch
 	return result
 }
 
+func runtimeAttemptCanceledDispatch(dispatchID string) workers.WorkstationDispatchResult {
+	result := runtimeAttemptCompletedDispatch(dispatchID)
+	result.TerminalOutcome = workers.WorkstationDispatchTerminalOutcomeCanceled
+	result.Result.Outcome = workers.OutcomeCanceled
+	result.Result.Cancellation = &workers.DispatchCancellation{Reason: workers.DispatchCancellationReasonCanceled}
+	return result
+}
+
 func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 	r := newTestRegistry(t)
 	attempt, err := r.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
@@ -188,6 +196,79 @@ func TestBeginRuntimeAttempt_OpensAndCompletesDurableObservation(t *testing.T) {
 	r.mu.RUnlock()
 	if runtimeOwned {
 		t.Fatal("runtime attempt ownership remained after Complete")
+	}
+}
+
+func TestCancel_RuntimeAttemptBoundaryFailureDoesNotClaimApplied(t *testing.T) {
+	registry := newTestRegistry(t)
+	attempt, err := registry.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		ID:        "worker-cancel-failure",
+		AttemptID: "attempt-cancel-failure",
+		Execution: dispatchHandoff("dispatch-cancel-failure"),
+	})
+	if err != nil {
+		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
+	}
+	boundaryErr := errors.New("injected runtime cancellation failure")
+	cancelCalls := 0
+	if err := registry.BindRuntimeAttemptCancellation(
+		"worker-cancel-failure",
+		"dispatch-cancel-failure",
+		func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+			cancelCalls++
+			return workers.WorkstationDispatchCancelOutcomeCanceled, boundaryErr
+		},
+	); err != nil {
+		t.Fatalf("BindRuntimeAttemptCancellation() error = %v, want nil", err)
+	}
+
+	result, cancelErr := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: "worker-cancel-failure"})
+	if !errors.Is(cancelErr, boundaryErr) || result.Outcome != workersessions.ControlOutcomeFailed ||
+		result.Session.State != workersessions.StateRunning || cancelCalls != 1 {
+		t.Fatalf("Cancel() = %#v, %v, boundary calls=%d; want failed RUNNING result and one erroring call", result, cancelErr, cancelCalls)
+	}
+	if err := attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch("dispatch-cancel-failure"), nil); err != nil {
+		t.Fatalf("Complete() after rejected cancellation error = %v, want nil", err)
+	}
+}
+
+func TestCancel_RuntimeAttemptRepeatNoopRetainsAdmittedDispatchID(t *testing.T) {
+	const (
+		workerID   = "worker-terminal-cancel"
+		dispatchID = "dispatch-terminal-cancel"
+	)
+	registry := newTestRegistry(t)
+	attempt, err := registry.BeginRuntimeAttempt(context.Background(), workersessions.RuntimeAttemptRequest{
+		ID:        workerID,
+		AttemptID: "attempt-terminal-cancel",
+		Execution: dispatchHandoff(dispatchID),
+	})
+	if err != nil {
+		t.Fatalf("BeginRuntimeAttempt() error = %v, want nil", err)
+	}
+	completeErr := make(chan error, 1)
+	if err := registry.BindRuntimeAttemptCancellation(workerID, dispatchID, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error) {
+		go func() {
+			completeErr <- attempt.Complete(context.Background(), runtimeAttemptCanceledDispatch(dispatchID), nil)
+		}()
+		return workers.WorkstationDispatchCancelOutcomeCanceled, nil
+	}); err != nil {
+		t.Fatalf("BindRuntimeAttemptCancellation() error = %v, want nil", err)
+	}
+
+	first, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: workerID})
+	if err != nil || first.Outcome != workersessions.ControlOutcomeApplied ||
+		first.Session.State != workersessions.StateCanceled || first.DispatchID != dispatchID {
+		t.Fatalf("first Cancel() = %#v, %v; want APPLIED/CANCELED for dispatch %q", first, err, dispatchID)
+	}
+	if err := <-completeErr; err != nil {
+		t.Fatalf("runtime attempt completion error = %v, want nil", err)
+	}
+
+	repeated, err := registry.Cancel(context.Background(), workersessions.ControlRequest{ID: workerID})
+	if err != nil || repeated.Outcome != workersessions.ControlOutcomeNoop ||
+		repeated.Session.State != workersessions.StateCanceled || repeated.DispatchID != dispatchID {
+		t.Fatalf("repeated Cancel() = %#v, %v; want NOOP/CANCELED for admitted dispatch %q", repeated, err, dispatchID)
 	}
 }
 
