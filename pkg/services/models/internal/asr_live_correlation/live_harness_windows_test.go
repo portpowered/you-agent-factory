@@ -474,7 +474,8 @@ func (launcher *asrLiveCorrelationProcessLauncher) Start(
 ) (modelseffects.HostManagedProcess, error) {
 	launcher.mu.Lock()
 	defer launcher.mu.Unlock()
-	if launcher.started || spec.HealthEndpoint != launcher.endpoint || !sameWindowsPath(spec.Command, launcher.manifest.ExecutablePath) {
+	if launcher.started || spec.HealthEndpoint != launcher.endpoint ||
+		!sameASRLiveCorrelationExecutable(spec.Command, launcher.manifest.ExecutablePath, launcher.manifest.ExecutableSHA256) {
 		return nil, errors.New("ASR managed process ownership or executable identity mismatch")
 	}
 	launcher.started = true
@@ -589,10 +590,53 @@ func asrLiveCorrelationOfflineEnvironment(base []string) []string {
 	return environment
 }
 
-func sameWindowsPath(left, right string) bool {
-	leftPath, leftErr := filepath.Abs(strings.TrimSpace(left))
-	rightPath, rightErr := filepath.Abs(strings.TrimSpace(right))
-	return leftErr == nil && rightErr == nil && strings.EqualFold(filepath.Clean(leftPath), filepath.Clean(rightPath))
+func sameASRLiveCorrelationExecutable(command, expected, wantSHA256 string) bool {
+	if strings.TrimSpace(filepath.Base(command)) == "" ||
+		!strings.EqualFold(filepath.Base(command), filepath.Base(expected)) {
+		return false
+	}
+	file, err := os.Open(command)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return false
+	}
+	return strings.EqualFold(hex.EncodeToString(hash.Sum(nil)), wantSHA256)
+}
+
+func TestASRLiveCorrelationMaterializedExecutableIdentity(t *testing.T) {
+	root := t.TempDir()
+	expected := filepath.Join(root, "manifest", "whisper.exe")
+	actual := filepath.Join(root, "runtime", "whisper.exe")
+	for _, path := range []string{expected, actual} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("prepare executable identity fixture: %v", err)
+		}
+	}
+	contents := []byte("same pinned executable bytes")
+	if err := os.WriteFile(expected, contents, 0o700); err != nil {
+		t.Fatalf("write expected executable fixture: %v", err)
+	}
+	if err := os.WriteFile(actual, contents, 0o700); err != nil {
+		t.Fatalf("write materialized executable fixture: %v", err)
+	}
+	hash := sha256.Sum256(contents)
+	want := hex.EncodeToString(hash[:])
+	if !sameASRLiveCorrelationExecutable(actual, expected, want) {
+		t.Fatal("materialized executable with matching name and digest was rejected")
+	}
+	if sameASRLiveCorrelationExecutable(filepath.Join(root, "runtime", "other.exe"), expected, want) {
+		t.Fatal("materialized executable with a different name was accepted")
+	}
+	if err := os.WriteFile(actual, []byte("different executable bytes"), 0o700); err != nil {
+		t.Fatalf("change materialized executable fixture: %v", err)
+	}
+	if sameASRLiveCorrelationExecutable(actual, expected, want) {
+		t.Fatal("materialized executable with a different digest was accepted")
+	}
 }
 
 func awaitASRLiveCorrelationSignal(
