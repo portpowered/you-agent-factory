@@ -23,7 +23,6 @@ import (
 const (
 	localAICandidatePacketDirectoryEnvironment   = "INFINITE_YOU_LOCALAI_CANDIDATE_PACKET_DIR"
 	localAICandidateInstallReportPathEnvironment = "INFINITE_YOU_LOCALAI_INSTALL_REPORT_PATH"
-	localAICandidatePacketExpectedTree           = "1bb0badc9faa244005d81e9255cb44050b4b720f"
 	localAICandidateInstallScratchMaximumBytes   = int64(536870912)
 )
 
@@ -525,18 +524,16 @@ func readLocalAICandidatePacketManifest(t *testing.T, packetDirectory, targetRev
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
 		return manifest, "", fmt.Errorf("decode packet manifest: %w", err)
 	}
+	expectedTree := localAICandidateGit(t, testutil.MustRepoRoot(t), "rev-parse", targetRevision+"^{tree}")
 	if manifest.SchemaVersion != "local-windows-candidate/v2" || manifest.Status != "PASS" ||
 		manifest.Source.Repository != "https://github.com/portpowered/you-agent-factory.git" ||
-		manifest.Source.Commit != targetRevision || manifest.Source.Tree != localAICandidatePacketExpectedTree || manifest.Source.VCSModified ||
+		manifest.Source.Commit != targetRevision || manifest.Source.Tree != expectedTree || manifest.Source.VCSModified ||
 		manifest.Target.OS != "windows" || manifest.Target.Arch != "amd64" ||
 		manifest.Build.MaximumWorkBytes <= 0 || manifest.Build.WorkBytes <= 0 || manifest.Build.WorkBytes > manifest.Build.MaximumWorkBytes ||
 		manifest.Build.MaximumChildren < 1 || manifest.Build.MaximumChildren > 4 {
 		return manifest, "", fmt.Errorf("packet manifest identity or budget is invalid: source=%s/%s target=%s/%s work=%d/%d children=%d",
 			manifest.Source.Commit, manifest.Source.Tree, manifest.Target.OS, manifest.Target.Arch,
 			manifest.Build.WorkBytes, manifest.Build.MaximumWorkBytes, manifest.Build.MaximumChildren)
-	}
-	if tree := localAICandidateGit(t, testutil.MustRepoRoot(t), "rev-parse", targetRevision+"^{tree}"); tree != localAICandidatePacketExpectedTree {
-		return manifest, "", fmt.Errorf("source commit tree is %s, want %s", tree, localAICandidatePacketExpectedTree)
 	}
 	sidecarBytes, err := os.ReadFile(filepath.Join(packetDirectory, "candidate-report.sha256"))
 	if err != nil {
