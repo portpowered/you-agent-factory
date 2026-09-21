@@ -325,6 +325,21 @@ func (evidence *restartBaselineEvidence) recordSourceRecording(path string) erro
 	return nil
 }
 
+func (evidence *restartBaselineEvidence) verifySourceRecordingUnchanged(path string) error {
+	sha, _, err := restartFileSHA256(path)
+	if err != nil {
+		return fmt.Errorf("hash source recording after restart: %w", err)
+	}
+	evidence.SourceRecordingAfterSHA256 = sha
+	if evidence.SourceRecordingSHA256 == "" {
+		return errors.New("source recording was not hashed before restart")
+	}
+	if evidence.SourceRecordingSHA256 != sha {
+		return errors.New("restart mutated the source recording")
+	}
+	return nil
+}
+
 func (evidence *restartBaselineEvidence) recordSuccessorRecordings(sourcePath, successorPath string) error {
 	sourceHash, _, err := restartFileSHA256(sourcePath)
 	if err != nil {

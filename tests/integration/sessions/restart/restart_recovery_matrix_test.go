@@ -434,8 +434,8 @@ func TestRestartRecoveryCancellationBeforeReadinessDoesNotClaimSuccess(t *testin
 	if _, err := waitForRestartRecoveryRecord(t, second, "failed_startup", 100*time.Millisecond); err == nil {
 		t.Fatal("pre-readiness cancellation emitted a failed-startup recovery record; cancellation is an unavailable observation")
 	}
-	if err := evidence.verifyFixtureFilesUnchangedFromHashes(map[string]string{"cancel-source.recording.json": sourcePath}); err != nil {
-		t.Fatal(err)
+	if err := evidence.verifySourceRecordingUnchanged(sourcePath); err != nil {
+		t.Fatalf("verify cancellation source recording remains unchanged: %v", err)
 	}
 }
 
