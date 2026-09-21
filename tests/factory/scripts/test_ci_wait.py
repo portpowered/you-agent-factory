@@ -20,8 +20,11 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "factory" / "scripts" / "ci-wait.py"
 TEST_HEAD = "0123456789abcdef0123456789abcdef01234567"
 TEST_HEAD_NEXT = "fedcba9876543210fedcba9876543210fedcba98"
+TEST_REPOSITORY = "example/repo"
+TEST_REPOSITORY_URL = "https://github.com/example/repo"
 TEST_CHECK_LINK = "https://github.com/example/repo/actions/runs/1/job/10"
 TEST_EXTRA_LINK = "https://github.com/example/repo/actions/runs/1/job/11"
+NO_PROCESS_OUTPUT = object()
 
 
 def rollup_check(state="SUCCESS", name="Verification", link=TEST_CHECK_LINK):
@@ -88,15 +91,29 @@ def view_payload(head=TEST_HEAD, rollup=None, number=100, state="OPEN"):
     }
 
 
+def repository_payload(name_with_owner=TEST_REPOSITORY, url=TEST_REPOSITORY_URL):
+    return {"nameWithOwner": name_with_owner, "url": url}
+
+
+def pr_identity_payload(number, state="OPEN", repository_url=TEST_REPOSITORY_URL):
+    return {
+        "number": number,
+        "state": state,
+        "url": f"{repository_url}/pull/{number}",
+    }
+
+
 def observation(view, checks, after_view=None):
     """Build the ordered view/checks/view inputs for one snapshot attempt."""
     return (view, checks, after_view if after_view is not None else view)
 
 
-def actual_fixture(pr_number, observations):
+def actual_fixture(pr_number, observations, direct_view=None, repository=None):
     """Serialize ordered observations for the actual fake-gh boundary."""
     views = []
     checks = []
+    if direct_view is not None:
+        views.append({"stdout": json.dumps(direct_view)})
     for before, check_response, after in observations:
         views.extend(
             [
@@ -110,11 +127,14 @@ def actual_fixture(pr_number, observations):
             checks.append(check_response)
         else:
             checks.append({"stdout": json.dumps(check_response)})
-    return {
+    fixture = {
         "list": [{"stdout": json.dumps([{"number": pr_number, "state": "OPEN"}])}],
         "view": views,
         "checks": checks,
     }
+    if repository is not None:
+        fixture["repo"] = [{"stdout": json.dumps(repository)}]
+    return fixture
 
 
 def load_ci_wait_module():
@@ -128,7 +148,13 @@ class CIWaitPRLookupTest(unittest.TestCase):
     def setUp(self):
         self.module = load_ci_wait_module()
 
-    def invoke_actual_script_with_fake_gh(self, fixture, clock="stable"):
+    def invoke_actual_script_with_fake_gh(
+        self,
+        fixture,
+        clock="stable",
+        process_output=NO_PROCESS_OUTPUT,
+        lane_name="ciwait-black-box-boundary",
+    ):
         """Run the real script entrypoint against a scratch-owned fake gh."""
         with tempfile.TemporaryDirectory(prefix="ci-wait-fake-gh-") as scratch:
             scratch_path = Path(scratch)
@@ -140,7 +166,12 @@ import os
 import sys
 
 raw_args = sys.argv[1:]
-args = raw_args if raw_args[:1] == ["pr"] else ["pr", *raw_args]
+if raw_args[:1] in (["pr"], ["repo"]):
+    args = raw_args
+elif os.path.basename(sys.argv[0]) == "repo":
+    args = ["repo", *raw_args]
+else:
+    args = ["pr", *raw_args]
 
 ledger_path = os.environ["CI_WAIT_FAKE_GH_LEDGER"]
 try:
@@ -152,12 +183,16 @@ calls.append(args)
 with open(ledger_path, "w", encoding="utf-8") as ledger:
     json.dump(calls, ledger)
 
-if args[:1] != ["pr"] or len(args) < 2:
+if len(args) < 2 or args[0] not in {"pr", "repo"}:
     print(f"unsupported fake gh command: {args!r}", file=sys.stderr)
     sys.exit(2)
-command = args[1]
-responses = json.loads(os.environ["CI_WAIT_FAKE_GH_FIXTURE"])[command]
-response_index = sum(call[:2] == ["pr", command] for call in calls) - 1
+selector = args[:2]
+command = args[1] if args[0] == "pr" else "repo"
+responses = json.loads(os.environ["CI_WAIT_FAKE_GH_FIXTURE"]).get(command, [])
+if not responses:
+    print(f"no fake response configured for {args!r}", file=sys.stderr)
+    sys.exit(2)
+response_index = sum(call[:2] == selector for call in calls) - 1
 response = responses[min(response_index, len(responses) - 1)]
 if response.get("stdout"):
     print(response["stdout"], end="")
@@ -190,8 +225,8 @@ time.sleep = lambda _seconds: None
 
             if os.name == "nt":
                 # Windows CreateProcess resolves native executables for a
-                # shell=False child. A copied Python runtime, named gh.exe,
-                # runs the extensionless `pr` fixture as its script.
+                # shell=False child. The copied Python runtime, named gh.exe,
+                # runs the extensionless command fixture as its script.
                 launcher_path = scratch_path / "gh.exe"
                 shutil.copy2(sys.executable, launcher_path)
                 for runtime_name in (
@@ -202,10 +237,11 @@ time.sleep = lambda _seconds: None
                     runtime_path = Path(sys.executable).with_name(runtime_name)
                     if runtime_path.exists():
                         shutil.copy2(runtime_path, scratch_path / runtime_name)
-                (scratch_path / "pr").write_text(
-                    fake_gh_source,
-                    encoding="utf-8",
-                )
+                for command_name in ("pr", "repo"):
+                    (scratch_path / command_name).write_text(
+                        fake_gh_source,
+                        encoding="utf-8",
+                    )
             else:
                 launcher_path = scratch_path / "gh"
                 launcher_path.write_text(
@@ -236,9 +272,12 @@ time.sleep = lambda _seconds: None
             # environment. The suite is serial and this scope is restored
             # immediately after the one boundary invocation.
             with patch.dict(os.environ, {"PATH": environment["PATH"]}):
+                command = [sys.executable, str(SCRIPT_PATH), lane_name]
+                if process_output is not NO_PROCESS_OUTPUT:
+                    command.append(process_output)
                 try:
                     result = subprocess.run(
-                        [sys.executable, str(SCRIPT_PATH), "ciwait-black-box-boundary"],
+                        command,
                         cwd=scratch_path,
                         env=environment,
                         capture_output=True,
@@ -256,17 +295,24 @@ time.sleep = lambda _seconds: None
                         f"actual ci-wait boundary timed out: stdout={error.stdout!r}; "
                         f"stderr={error.stderr!r}; ledger={ledger}"
                     ) from error
-            calls = json.loads(ledger_path.read_text(encoding="utf-8"))
+            calls = (
+                json.loads(ledger_path.read_text(encoding="utf-8"))
+                if ledger_path.exists()
+                else []
+            )
             return result, calls
 
-    def invoke_main(self, branch, run_gh):
+    def invoke_main(self, branch, run_gh, process_output=NO_PROCESS_OUTPUT):
         """Run the script entrypoint while keeping process outcomes observable."""
         sleeps = []
         stderr = io.StringIO()
         stdout = io.StringIO()
+        argv = ["ci-wait.py", branch]
+        if process_output is not NO_PROCESS_OUTPUT:
+            argv.append(process_output)
         with (
             patch.object(self.module, "run_gh", side_effect=run_gh),
-            patch.object(self.module.sys, "argv", ["ci-wait.py", branch]),
+            patch.object(self.module.sys, "argv", argv),
             patch.object(self.module.time, "sleep", side_effect=sleeps.append),
             patch.object(self.module.time, "monotonic", return_value=0),
             redirect_stdout(stdout),
@@ -287,6 +333,7 @@ time.sleep = lambda _seconds: None
         observations,
         deadline=None,
         no_checks_grace=None,
+        process_output=NO_PROCESS_OUTPUT,
     ):
         """Run main with ordered before/checks/after responses and a call ledger."""
         responses = [response for observation in observations for response in observation]
@@ -314,10 +361,13 @@ time.sleep = lambda _seconds: None
 
         stderr = io.StringIO()
         stdout = io.StringIO()
+        argv = ["ci-wait.py", branch]
+        if process_output is not NO_PROCESS_OUTPUT:
+            argv.append(process_output)
         with ExitStack() as stack:
             stack.enter_context(patch.object(self.module, "run_gh", side_effect=run_gh))
             stack.enter_context(
-                patch.object(self.module.sys, "argv", ["ci-wait.py", branch])
+                patch.object(self.module.sys, "argv", argv)
             )
             stack.enter_context(
                 patch.object(self.module.time, "sleep", side_effect=sleeps.append)
@@ -344,6 +394,251 @@ time.sleep = lambda _seconds: None
             stderr.getvalue(),
             sleeps,
             calls,
+        )
+
+    def test_process_output_classifier_accepts_one_identity_and_preserves_absence(
+        self,
+    ):
+        for output in (None, "", "  \n", "worker completed without a PR reference"):
+            with self.subTest(output=output):
+                intent = self.module.classify_process_output(output)
+                self.assertEqual(intent.status, self.module.PRIntentStatus.ABSENT)
+
+        cases = (
+            ("PR #42", 42, ""),
+            ("pull request: 42", 42, ""),
+            ("#42", 42, ""),
+            ("42", 42, ""),
+            (f"PR URL: {TEST_REPOSITORY_URL}/pull/42", 42, TEST_REPOSITORY),
+        )
+        for output, expected_number, expected_repository in cases:
+            with self.subTest(output=output):
+                intent = self.module.classify_process_output(output)
+                self.assertEqual(intent.status, self.module.PRIntentStatus.IDENTIFIED)
+                self.assertEqual(intent.identity.number, expected_number)
+                self.assertEqual(intent.identity.repository, expected_repository)
+
+    def test_process_output_classifier_rejects_ambiguous_malformed_and_oversized(self):
+        cases = (
+            "PR #42 and PR #43",
+            "PR #42 and https://github.com/example/repo/pull/43",
+            "PR: unavailable",
+            "PR #not-a-number",
+            "https://github.com/example/repo/pull/not-a-number",
+            "github.com/example/repo/pull/42",
+            "PR #42 " + "x" * self.module.MAX_PROCESS_OUTPUT_BYTES,
+        )
+        for output in cases:
+            with self.subTest(output=output[:80]):
+                intent = self.module.classify_process_output(output)
+                self.assertEqual(intent.status, self.module.PRIntentStatus.INVALID)
+
+    def test_actual_entrypoint_resolves_explicit_local_pr_and_reports_current_head(
+        self,
+    ):
+        pr_number = 241
+        view = view_payload(number=pr_number)
+        fixture = actual_fixture(
+            pr_number,
+            [
+                observation(view, [checks_row()]),
+                observation(view, [checks_row()]),
+            ],
+            direct_view=pr_identity_payload(pr_number),
+            repository=repository_payload(),
+        )
+
+        result, calls = self.invoke_actual_script_with_fake_gh(
+            fixture,
+            process_output=f"Review target: {TEST_REPOSITORY_URL}/pull/{pr_number}",
+            lane_name="work-task-name-does-not-match-branch",
+        )
+
+        self.assertEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["pr"], pr_number)
+        self.assertEqual(payload["prState"], "OPEN")
+        self.assertEqual(payload["headRefOid"], TEST_HEAD)
+        self.assertEqual(payload["reason"], "checks-terminal")
+        self.assertEqual(calls[0], ["repo", "view", "--json", "nameWithOwner,url"])
+        self.assertEqual(
+            calls[1],
+            [
+                "pr", "view", str(pr_number), "--repo", TEST_REPOSITORY,
+                "--json", "number,state,url",
+            ],
+        )
+        self.assertFalse(any(call[:2] == ["pr", "list"] for call in calls))
+        for call in calls[1:]:
+            if call[:2] in (["pr", "view"], ["pr", "checks"]):
+                self.assertEqual(call[2], str(pr_number))
+                self.assertIn("--repo", call)
+                self.assertIn(TEST_REPOSITORY, call)
+
+    def test_actual_entrypoint_empty_and_non_pr_output_keep_legacy_branch_lookup(
+        self,
+    ):
+        pr_number = 242
+        view = view_payload(number=pr_number)
+        for process_output in ("", "completed without a pull request reference"):
+            with self.subTest(process_output=process_output):
+                fixture = actual_fixture(
+                    pr_number,
+                    [
+                        observation(view, [checks_row()]),
+                        observation(view, [checks_row()]),
+                    ],
+                )
+                result, calls = self.invoke_actual_script_with_fake_gh(
+                    fixture, process_output=process_output
+                )
+                self.assertEqual(result.returncode, 0)
+                self.assertEqual(json.loads(result.stdout)["pr"], pr_number)
+                self.assertEqual(calls[0][:2], ["pr", "list"])
+                self.assertFalse(any(call[:2] == ["repo", "view"] for call in calls))
+
+    def test_actual_entrypoint_rejects_unsafe_identity_without_fallback_or_leaks(self):
+        cases = (
+            "PR #243 and PR #244 token=raw-process-output",
+            "PR #243 and https://github.com/example/repo/pull/244",
+            "PR #not-a-number token=raw-process-output",
+            "PR #243 " + "x" * self.module.MAX_PROCESS_OUTPUT_BYTES,
+        )
+        for process_output in cases:
+            with self.subTest(process_output=process_output[:80]):
+                result, calls = self.invoke_actual_script_with_fake_gh(
+                    {}, process_output=process_output
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stdout, "")
+                self.assertEqual(calls, [])
+                self.assertNotIn("raw-process-output", result.stderr)
+                self.assertNotIn("https://github.com", result.stderr)
+
+    def test_actual_entrypoint_rejects_foreign_pr_url_before_pr_or_branch_query(self):
+        process_output = "https://github.com/other/repository/pull/245"
+        fixture = {"repo": [{"stdout": json.dumps(repository_payload())}]}
+
+        result, calls = self.invoke_actual_script_with_fake_gh(
+            fixture, process_output=process_output
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(calls, [["repo", "view", "--json", "nameWithOwner,url"]])
+        self.assertNotIn(process_output, result.stderr)
+
+    def test_actual_entrypoint_distinguishes_missing_pr_from_infrastructure_requeue(self):
+        missing_stderr = (
+            "GraphQL: Could not resolve to a PullRequest with the number of 246. "
+            "token=must-not-escape"
+        )
+        missing_fixture = {
+            "repo": [{"stdout": json.dumps(repository_payload())}],
+            "view": [{"returncode": 1, "stderr": missing_stderr}],
+        }
+        missing, missing_calls = self.invoke_actual_script_with_fake_gh(
+            missing_fixture, process_output="PR #246"
+        )
+
+        self.assertEqual(missing.returncode, 1)
+        self.assertEqual(missing.stdout, "")
+        self.assertIn("was not found", missing.stderr)
+        self.assertNotIn("token=must-not-escape", missing.stderr)
+        self.assertEqual(
+            [call[:2] for call in missing_calls],
+            [["repo", "view"], ["pr", "view"]],
+        )
+
+        unavailable_fixture = {
+            "repo": [{"returncode": 1, "stderr": "token=must-not-escape"}],
+        }
+        unavailable, unavailable_calls = self.invoke_actual_script_with_fake_gh(
+            unavailable_fixture, process_output="#247"
+        )
+
+        self.assertEqual(unavailable.returncode, 0)
+        payload = json.loads(unavailable.stdout)
+        self.assertEqual(
+            payload["reason"], "explicit-pr-lookup-infrastructure-requeue"
+        )
+        self.assertEqual(payload["lookup"], "infrastructure-failure")
+        self.assertEqual(payload["infrastructureAttempts"], 3)
+        self.assertNotIn("token=must-not-escape", unavailable.stdout)
+        self.assertNotIn("token=must-not-escape", unavailable.stderr)
+        self.assertEqual(len(unavailable_calls), 3)
+        self.assertTrue(all(call[:2] == ["repo", "view"] for call in unavailable_calls))
+
+    def test_actual_entrypoint_requeues_when_exact_pr_view_is_unavailable(self):
+        pr_number = 249
+        fixture = {
+            "repo": [{"stdout": json.dumps(repository_payload())}],
+            "view": [{"returncode": 1, "stderr": "token=must-not-escape"}],
+        }
+
+        result, calls = self.invoke_actual_script_with_fake_gh(
+            fixture, process_output=f"PR #{pr_number}"
+        )
+
+        self.assertEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["pr"], pr_number)
+        self.assertEqual(payload["reason"], "explicit-pr-lookup-infrastructure-requeue")
+        self.assertEqual(payload["lookupStage"], "pull-request")
+        self.assertEqual(payload["infrastructureAttempts"], 3)
+        self.assertNotIn("token=must-not-escape", result.stdout)
+        self.assertNotIn("token=must-not-escape", result.stderr)
+        self.assertEqual(
+            [call[:2] for call in calls],
+            [["repo", "view"], ["pr", "view"], ["pr", "view"], ["pr", "view"]],
+        )
+
+    def test_actual_entrypoint_rejects_mismatched_returned_pr_identity(self):
+        pr_number = 250
+        cases = (
+            pr_identity_payload(pr_number + 1),
+            pr_identity_payload(
+                pr_number,
+                repository_url="https://github.com/other/repository",
+            ),
+        )
+        for direct_view in cases:
+            with self.subTest(direct_view=direct_view):
+                fixture = {
+                    "repo": [{"stdout": json.dumps(repository_payload())}],
+                    "view": [{"stdout": json.dumps(direct_view)}],
+                }
+                result, calls = self.invoke_actual_script_with_fake_gh(
+                    fixture, process_output=f"PR #{pr_number}"
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stdout, "")
+                self.assertIn("inconsistent identity", result.stderr)
+                self.assertNotIn("https://github.com/other", result.stderr)
+                self.assertEqual(
+                    [call[:2] for call in calls],
+                    [["repo", "view"], ["pr", "view"]],
+                )
+
+    def test_actual_entrypoint_explicit_merged_pr_keeps_short_circuit(self):
+        pr_number = 248
+        fixture = {
+            "repo": [{"stdout": json.dumps(repository_payload())}],
+            "view": [{"stdout": json.dumps(pr_identity_payload(pr_number, "MERGED"))}],
+        }
+
+        result, calls = self.invoke_actual_script_with_fake_gh(
+            fixture, process_output=str(pr_number)
+        )
+
+        self.assertEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["pr"], pr_number)
+        self.assertEqual(payload["prState"], "MERGED")
+        self.assertEqual(payload["reason"], "pr-merged")
+        self.assertEqual(
+            [call[:2] for call in calls],
+            [["repo", "view"], ["pr", "view"]],
         )
 
     def test_always_failing_github_lookup_requeues_without_no_pr_diagnosis(self):
