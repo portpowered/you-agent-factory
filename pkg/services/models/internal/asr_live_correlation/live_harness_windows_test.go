@@ -474,32 +474,75 @@ func (launcher *asrLiveCorrelationProcessLauncher) Start(
 ) (modelseffects.HostManagedProcess, error) {
 	launcher.mu.Lock()
 	defer launcher.mu.Unlock()
-	if launcher.started || spec.HealthEndpoint != launcher.endpoint ||
-		!sameASRLiveCorrelationExecutable(spec.Command, launcher.manifest.ExecutablePath, launcher.manifest.ExecutableSHA256) {
+	if launcher.started || strings.TrimSpace(spec.Command) != "" || strings.TrimSpace(spec.HealthEndpoint) != "" ||
+		!sameASRLiveCorrelationExecutable(launcher.manifest.ExecutablePath, launcher.manifest.ExecutablePath, launcher.manifest.ExecutableSHA256) {
 		return nil, errors.New("ASR managed process ownership or executable identity mismatch")
+	}
+	address, err := asrLiveCorrelationEndpointAddress(launcher.endpoint)
+	if err != nil {
+		return nil, err
 	}
 	launcher.started = true
 	childContext := context.Background()
 	if ctx != nil {
 		childContext = context.WithoutCancel(ctx)
 	}
+	args := append([]string(nil), spec.Args...)
+	args = append(args, "--addr="+address)
+	workDir := strings.TrimSpace(spec.WorkDir)
+	if workDir == "" {
+		workDir = filepath.Dir(launcher.manifest.ExecutablePath)
+	}
 	process, err := managedchild.Start(childContext, managedchild.Spec{
-		Command: spec.Command, Args: append([]string(nil), spec.Args...),
-		Env: asrLiveCorrelationOfflineEnvironment(spec.Env), WorkDir: spec.WorkDir,
+		Command: launcher.manifest.ExecutablePath, Args: args,
+		Env: asrLiveCorrelationOfflineEnvironment(spec.Env), WorkDir: workDir,
 	})
 	if err != nil {
 		return nil, errors.New("could not start the manifest-owned LocalAI executable")
 	}
 	owned := &asrLiveCorrelationManagedProcess{
-		child: process, endpoint: spec.HealthEndpoint, controller: launcher.controller,
+		child: process, endpoint: launcher.endpoint, controller: launcher.controller,
 		pid: process.PID(), waitDone: make(chan struct{}),
 	}
-	if err := launcher.controller.RecordManagedChildStarted(owned.pid, spec.HealthEndpoint); err != nil {
+	if err := launcher.controller.RecordManagedChildStarted(owned.pid, launcher.endpoint); err != nil {
 		_ = process.Stop(context.Background())
 		return nil, err
 	}
 	launcher.owned = owned
 	return owned, nil
+}
+
+func asrLiveCorrelationEndpointAddress(endpoint string) (string, error) {
+	address := strings.TrimSpace(endpoint)
+	for _, prefix := range []string{"grpc://", "http://", "https://"} {
+		if strings.HasPrefix(strings.ToLower(address), prefix) {
+			address = strings.TrimSpace(address[len(prefix):])
+			break
+		}
+	}
+	host, portText, err := net.SplitHostPort(address)
+	port, portErr := strconv.Atoi(portText)
+	if err != nil || portErr != nil || net.ParseIP(host) == nil || port < 1 || port > 65535 {
+		return "", errors.New("ASR live-correlation endpoint is not a host:port address")
+	}
+	return address, nil
+}
+
+func TestASRLiveCorrelationBackendLaunchAddress(t *testing.T) {
+	for _, endpoint := range []string{
+		"grpc://127.0.0.1:50052",
+		"127.0.0.1:50053",
+	} {
+		address, err := asrLiveCorrelationEndpointAddress(endpoint)
+		if err != nil || address == "" {
+			t.Fatalf("normalize backend endpoint %q: %v", endpoint, err)
+		}
+	}
+	for _, endpoint := range []string{"grpc://127.0.0.1", "grpc://not-an-ip:50052"} {
+		if _, err := asrLiveCorrelationEndpointAddress(endpoint); err == nil {
+			t.Fatalf("accepted invalid backend endpoint %q", endpoint)
+		}
+	}
 }
 
 func (launcher *asrLiveCorrelationProcessLauncher) process() *asrLiveCorrelationManagedProcess {
