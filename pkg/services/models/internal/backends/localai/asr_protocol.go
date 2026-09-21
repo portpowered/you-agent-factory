@@ -92,7 +92,14 @@ func (client grpcProtocolClient) transcribe(
 	if observation != nil {
 		observation.record.Phase = modelseffects.RuntimeASRPhaseMapResponse
 	}
-	return transcriptResponse(response)
+	backendResponse, err := transcriptResponse(response)
+	if err != nil {
+		return models.ASRBackendResponse{}, err
+	}
+	if err := observation.awaitDecodedResponse(ctx, backendResponse); err != nil {
+		return models.ASRBackendResponse{}, err
+	}
+	return backendResponse, nil
 }
 
 func stageASRAudio(
@@ -378,7 +385,9 @@ func (client grpcProtocolClient) invokeProto(
 	if err != nil {
 		return asrProtocolFailure("ASR backend request could not be serialized", err)
 	}
-	observation.observeRequest(request, payload, method)
+	if err := observation.observeRequest(request, payload, method); err != nil {
+		return err
+	}
 	observation.observeDial()
 	connection, err := client.dialer.Dial(ctx, endpoint)
 	if err != nil {
@@ -388,6 +397,9 @@ func (client grpcProtocolClient) invokeProto(
 		return asrProtocolFailure("ASR backend connection is unavailable", models.ErrUnavailable)
 	}
 	defer func() { _ = connection.Close() }()
+	if err := observation.observeEndpoint(ctx, endpoint); err != nil {
+		return err
+	}
 	responsePayload, err := connection.Invoke(ctx, method, payload)
 	observation.observeRPCResult(err)
 	if err != nil {

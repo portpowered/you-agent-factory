@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,9 +27,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestASRResponseAndManagedChildExitOrderChangesLeaseOutcome(t *testing.T) {
+func TestASRProcessOrderChangesLeaseOutcomeAfterManagedChildExit(t *testing.T) {
 	t.Parallel()
 
+	var schedules = make(map[string][]modelseffects.ASRLiveCorrelationEvent, 2)
 	for _, test := range []struct {
 		name          string
 		responseFirst bool
@@ -37,16 +39,88 @@ func TestASRResponseAndManagedChildExitOrderChangesLeaseOutcome(t *testing.T) {
 		{name: "child exit revokes lease before response", responseFirst: false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			runControlledASROrder(t, test.responseFirst)
+			schedules[test.name] = runControlledASROrder(t, test.responseFirst)
 		})
+	}
+	responseFirst := correlationEvent(t, schedules["response completes before child exit"], modelseffects.ASRLiveCorrelationRPCTerminal)
+	exitFirst := correlationEvent(t, schedules["child exit revokes lease before response"], modelseffects.ASRLiveCorrelationRPCTerminal)
+	if responseFirst.RequestSemanticSHA256 != exitFirst.RequestSemanticSHA256 ||
+		responseFirst.ResponseSemanticSHA256 != exitFirst.ResponseSemanticSHA256 {
+		t.Fatalf("semantic digests changed across schedules: response-first=%#v exit-first=%#v", responseFirst, exitFirst)
 	}
 }
 
-func runControlledASROrder(t *testing.T, responseFirst bool) {
+func TestASRProcessOrderCancellationCleansOwnedResourcesOnce(t *testing.T) {
+	t.Parallel()
+	scenario := newControlledASRScenario(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	request := models.EnsureModelHostRequest{Scope: scenario.scope, Name: models.BuiltInModelNameASR}
+	if _, err := scenario.host.EnsureModelHost(ctx, request); err != nil {
+		t.Fatalf("EnsureModelHost: %v", err)
+	}
+	scenario.process = scenario.launcher.process()
+	if scenario.process == nil {
+		t.Fatal("managed LocalAI process was not started")
+	}
+	lease, err := scenario.host.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{
+		Scope: scenario.scope, Name: models.BuiltInModelNameASR, Holder: "asr-worker",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease: %v", err)
+	}
+	resultChannel := make(chan controlledASRInvocation, 1)
+	go func() {
+		result, invokeErr := scenario.inference.InvokeModelWithLease(
+			modelseffects.WithASRLiveCorrelation(
+				modelseffects.WithRuntimeObservation(ctx, scenario.recorder, scenario.protocol.configuration()),
+				scenario.correlation,
+			),
+			controlledASRRequest(scenario.scope, lease.Lease.Lease, scenario.audio),
+		)
+		resultChannel <- controlledASRInvocation{result: result, err: invokeErr}
+	}()
+	awaitRPCStart(t, scenario.connection.started, resultChannel)
+	assertControlledASRRequest(t, scenario.connection, scenario.tempDirectory, scenario.audio)
+	cancel()
+	invocation := awaitInvocation(t, resultChannel)
+	if invocation.err == nil || !errors.Is(invocation.err, models.ErrInferenceCancelled) ||
+		invocation.result.Status != models.ModelInvocationStatusCancelled ||
+		invocation.result.LeaseDisposition != models.InvocationLeaseReleased ||
+		len(invocation.result.Outputs) != 0 || len(invocation.result.Content) != 0 {
+		t.Fatalf("cancelled ASR invocation = result:%#v error:%v, want typed cancellation and no outputs", invocation.result, invocation.err)
+	}
+	assertASRStagingRemoved(t, scenario.tempDirectory)
+	assertASRConnectionClosed(t, scenario.connection)
+	assertLeaseStatus(t, scenario.host, scenario.scope, lease.Lease.Lease, models.ModelLeaseStatusReleased)
+	scenario.process.exit(errors.New("controlled child exit after cancelled invocation"))
+	awaitCorrelationSignal(t, scenario.correlation, modelseffects.ASRLiveCorrelationChildWaited)
+	awaitCorrelationSignal(t, scenario.correlation, modelseffects.ASRLiveCorrelationHostFailureSeen)
+	if scenario.process.waitCount() != 1 || scenario.connection.closeCount() != 1 || scenario.connection.dialCount() != 1 {
+		t.Fatalf("cancelled ASR owned cleanup Wait=%d close=%d dial=%d, want one Wait, one close and one dial", scenario.process.waitCount(), scenario.connection.closeCount(), scenario.connection.dialCount())
+	}
+	events := scenario.correlation.Snapshot()
+	want := []modelseffects.ASRLiveCorrelationEventKind{
+		modelseffects.ASRLiveCorrelationChildStarted,
+		modelseffects.ASRLiveCorrelationEndpointObserved,
+		modelseffects.ASRLiveCorrelationChildWaited,
+		modelseffects.ASRLiveCorrelationHostFailureSeen,
+	}
+	if len(events) != len(want) {
+		t.Fatalf("cancelled ASR correlation events = %#v, want %d signals without a decoded terminal", events, len(want))
+	}
+	for index, event := range events {
+		if event.Sequence != uint64(index+1) || event.Kind != want[index] {
+			t.Fatalf("cancelled ASR event[%d] = %#v, want sequence=%d kind=%s", index, event, index+1, want[index])
+		}
+	}
+}
+
+func runControlledASROrder(t *testing.T, responseFirst bool) []modelseffects.ASRLiveCorrelationEvent {
 	t.Helper()
 	scenario := newControlledASRScenario(t)
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 	request := models.EnsureModelHostRequest{Scope: scenario.scope, Name: models.BuiltInModelNameASR}
 	if _, err := scenario.host.EnsureModelHost(ctx, request); err != nil {
 		t.Fatalf("EnsureModelHost: %v", err)
@@ -66,7 +140,10 @@ func runControlledASROrder(t *testing.T, responseFirst bool) {
 	resultChannel := make(chan controlledASRInvocation, 1)
 	go func() {
 		result, invokeErr := scenario.inference.InvokeModelWithLease(
-			modelseffects.WithRuntimeObservation(ctx, scenario.recorder, configuration),
+			modelseffects.WithASRLiveCorrelation(
+				modelseffects.WithRuntimeObservation(ctx, scenario.recorder, configuration),
+				scenario.correlation,
+			),
 			controlledASRRequest(scenario.scope, lease.Lease.Lease, scenario.audio),
 		)
 		resultChannel <- controlledASRInvocation{result: result, err: invokeErr}
@@ -74,27 +151,40 @@ func runControlledASROrder(t *testing.T, responseFirst bool) {
 	awaitRPCStart(t, scenario.connection.started, resultChannel)
 	assertControlledASRRequest(t, scenario.connection, scenario.tempDirectory, scenario.audio)
 
+	scenario.connection.allowResponse()
+	awaitCorrelationSignal(t, scenario.correlation, modelseffects.ASRLiveCorrelationRPCTerminal)
 	if responseFirst {
-		scenario.connection.allowResponse()
+		if err := scenario.correlation.ReleaseResponse(); err != nil {
+			t.Fatalf("release response-first ASR result: %v", err)
+		}
 		invocation := awaitInvocation(t, resultChannel)
 		assertCompletedASRInvocation(t, invocation)
-		awaitSignal(t, scenario.clock.timerCreated, "completed-invocation lease release")
 		assertLeaseStatus(t, scenario.host, scenario.scope, lease.Lease.Lease, models.ModelLeaseStatusReleased)
 		scenario.process.exit(errors.New("controlled managed child exit"))
 	} else {
 		scenario.process.exit(errors.New("controlled managed child exit"))
-		awaitSignal(t, scenario.clock.timerCreated, "managed child lease revocation")
+		awaitCorrelationSignal(t, scenario.correlation, modelseffects.ASRLiveCorrelationChildWaited)
+		awaitCorrelationSignal(t, scenario.correlation, modelseffects.ASRLiveCorrelationHostFailureSeen)
 		assertLeaseStatus(t, scenario.host, scenario.scope, lease.Lease.Lease, models.ModelLeaseStatusExpired)
-		scenario.connection.allowResponse()
+		if err := scenario.correlation.ReleaseResponse(); err != nil {
+			t.Fatalf("release exit-first ASR result: %v", err)
+		}
 		invocation := awaitInvocation(t, resultChannel)
 		assertExpiredLeaseASRInvocation(t, invocation)
 	}
 
 	awaitSignal(t, scenario.recorderSink.crashed, "managed child crash evidence")
 	awaitSignal(t, scenario.process.waited, "managed child Wait completion")
+	awaitCorrelationSignal(t, scenario.correlation, modelseffects.ASRLiveCorrelationHostFailureSeen)
 	assertASRStagingRemoved(t, scenario.tempDirectory)
 	assertASRConnectionClosed(t, scenario.connection)
 	assertSharedRuntimeEvidence(t, scenario.recorderSink.snapshot(), responseFirst, scenario.tempDirectory)
+	if scenario.process.waitCount() != 1 || scenario.connection.closeCount() != 1 {
+		t.Fatalf("owned cleanup counts Wait=%d connection close=%d, want one each", scenario.process.waitCount(), scenario.connection.closeCount())
+	}
+	events := scenario.correlation.Snapshot()
+	assertASRLiveCorrelationOrder(t, events, responseFirst)
+	return events
 }
 
 func newControlledASRScenario(t *testing.T) *controlledASRScenario {
@@ -122,7 +212,7 @@ func newControlledASRScenario(t *testing.T) *controlledASRScenario {
 		Supported: true, Installed: true, Revision: "controlled-asr-cache-r1",
 		CachePath: cachePath,
 	}}
-	clock := &controlledASRClock{timerCreated: make(chan struct{}, 4)}
+	clock := &controlledASRClock{}
 	response, err := proto.Marshal(&localai.TranscriptResult{
 		Text: "private transcript marker",
 		Segments: []*localai.TranscriptSegment{{
@@ -136,7 +226,18 @@ func newControlledASRScenario(t *testing.T) *controlledASRScenario {
 		started: make(chan struct{}, 1), responseReady: make(chan struct{}),
 		response: response,
 	}
-	launcher := &controlledASRLauncher{}
+	correlation, err := modelseffects.NewASRLiveCorrelationController(
+		func(_ context.Context, host string, port int) (int, error) {
+			if host != "127.0.0.1" || port != 45906 {
+				return 0, modelseffects.ErrASRLiveCorrelationOwnership
+			}
+			return controlledASRChildPID, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct ASR live-correlation controller: %v", err)
+	}
+	launcher := &controlledASRLauncher{correlation: correlation}
 	protocol := &controlledASRProtocol{}
 	sink := &controlledASREvidenceSink{crashed: make(chan struct{}, 1)}
 	recorder := modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)
@@ -188,8 +289,8 @@ func newControlledASRScenario(t *testing.T) *controlledASRScenario {
 	return &controlledASRScenario{
 		scope: scope, host: host, inference: inferenceService,
 		launcher: launcher, process: nil, protocol: protocol, connection: connection,
-		tempDirectory: tempDirectory, audio: []byte("private audio marker"),
-		recorder: recorder, recorderSink: sink, clock: clock,
+		tempDirectory: tempDirectory, audio: []byte("private audio marker"), correlation: correlation,
+		recorder: recorder, recorderSink: sink,
 	}
 }
 
@@ -380,6 +481,80 @@ func awaitSignal(t *testing.T, signal <-chan struct{}, label string) {
 	}
 }
 
+func awaitCorrelationSignal(
+	t *testing.T,
+	controller *modelseffects.ASRLiveCorrelationController,
+	kind modelseffects.ASRLiveCorrelationEventKind,
+) modelseffects.ASRLiveCorrelationEvent {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	event, err := controller.WaitForSignal(ctx, kind)
+	if err != nil {
+		t.Fatalf("wait for ASR correlation signal %s: %v", kind, err)
+	}
+	return event
+}
+
+func assertASRLiveCorrelationOrder(
+	t *testing.T,
+	events []modelseffects.ASRLiveCorrelationEvent,
+	responseFirst bool,
+) {
+	t.Helper()
+	want := []modelseffects.ASRLiveCorrelationEventKind{
+		modelseffects.ASRLiveCorrelationChildStarted,
+		modelseffects.ASRLiveCorrelationEndpointObserved,
+		modelseffects.ASRLiveCorrelationRPCTerminal,
+	}
+	if responseFirst {
+		want = append(want,
+			modelseffects.ASRLiveCorrelationResponseSent,
+			modelseffects.ASRLiveCorrelationChildWaited,
+			modelseffects.ASRLiveCorrelationHostFailureSeen,
+		)
+	} else {
+		want = append(want,
+			modelseffects.ASRLiveCorrelationChildWaited,
+			modelseffects.ASRLiveCorrelationHostFailureSeen,
+			modelseffects.ASRLiveCorrelationResponseSent,
+		)
+	}
+	if len(events) != len(want) {
+		t.Fatalf("ASR correlation events = %#v, want %d ordered signals", events, len(want))
+	}
+	for index, event := range events {
+		if event.Sequence != uint64(index+1) || event.Kind != want[index] {
+			t.Fatalf("ASR correlation event[%d] = %#v, want sequence=%d kind=%s", index, event, index+1, want[index])
+		}
+		if event.Kind == modelseffects.ASRLiveCorrelationEndpointObserved &&
+			(event.Endpoint.Port != 45906 || event.Endpoint.ListenerProcessID != controlledASRChildPID || event.ProcessID != controlledASRChildPID) {
+			t.Fatalf("ASR endpoint ownership event = %#v, want dynamic port and owned PID", event)
+		}
+		if event.Kind == modelseffects.ASRLiveCorrelationChildWaited && event.ProcessID != controlledASRChildPID {
+			t.Fatalf("ASR child Wait event = %#v, want owned PID %d", event, controlledASRChildPID)
+		}
+		if event.Kind == modelseffects.ASRLiveCorrelationHostFailureSeen && event.ProcessID != controlledASRChildPID {
+			t.Fatalf("ASR host-failure event = %#v, want owned PID %d", event, controlledASRChildPID)
+		}
+	}
+}
+
+func correlationEvent(
+	t *testing.T,
+	events []modelseffects.ASRLiveCorrelationEvent,
+	kind modelseffects.ASRLiveCorrelationEventKind,
+) modelseffects.ASRLiveCorrelationEvent {
+	t.Helper()
+	for _, event := range events {
+		if event.Kind == kind {
+			return event
+		}
+	}
+	t.Fatalf("ASR correlation event %s missing from %#v", kind, events)
+	return modelseffects.ASRLiveCorrelationEvent{}
+}
+
 func awaitRPCStart(t *testing.T, started <-chan struct{}, result <-chan controlledASRInvocation) {
 	t.Helper()
 	timer := time.NewTimer(5 * time.Second)
@@ -416,9 +591,9 @@ type controlledASRScenario struct {
 	connection    *controlledASRConnection
 	tempDirectory string
 	audio         []byte
+	correlation   *modelseffects.ASRLiveCorrelationController
 	recorder      modelseffects.RuntimeEvidenceRecorder
 	recorderSink  *controlledASREvidenceSink
-	clock         *controlledASRClock
 }
 
 type controlledASRInvocation struct {
@@ -441,7 +616,10 @@ func (assets *controlledASRAssets) InspectRuntimeCache(
 type controlledASRLauncher struct {
 	mu             sync.Mutex
 	managedProcess *controlledASRProcess
+	correlation    *modelseffects.ASRLiveCorrelationController
 }
+
+const controlledASRChildPID = 8123
 
 func (launcher *controlledASRLauncher) Start(
 	_ context.Context,
@@ -453,9 +631,14 @@ func (launcher *controlledASRLauncher) Start(
 		return nil, errors.New("controlled ASR launcher received a second start")
 	}
 	launcher.managedProcess = &controlledASRProcess{
-		endpoint: spec.HealthEndpoint,
-		exitGate: make(chan error, 1),
-		waited:   make(chan struct{}),
+		endpoint:    spec.HealthEndpoint,
+		pid:         controlledASRChildPID,
+		exitGate:    make(chan error, 1),
+		waited:      make(chan struct{}),
+		correlation: launcher.correlation,
+	}
+	if err := launcher.correlation.RecordManagedChildStarted(launcher.managedProcess.pid, spec.HealthEndpoint); err != nil {
+		return nil, err
 	}
 	return launcher.managedProcess, nil
 }
@@ -467,19 +650,28 @@ func (launcher *controlledASRLauncher) process() *controlledASRProcess {
 }
 
 type controlledASRProcess struct {
-	endpoint string
-	exitGate chan error
-	waited   chan struct{}
-	exitOnce sync.Once
-	waitOnce sync.Once
+	endpoint      string
+	pid           int
+	exitGate      chan error
+	waited        chan struct{}
+	correlation   *modelseffects.ASRLiveCorrelationController
+	exitOnce      sync.Once
+	waitOnce      sync.Once
+	waitCalls     atomic.Int32
+	waitResult    error
+	waitSignalErr error
 }
 
 func (process *controlledASRProcess) HealthEndpoint() string { return process.endpoint }
 
 func (process *controlledASRProcess) Wait() error {
-	err := <-process.exitGate
-	process.waitOnce.Do(func() { close(process.waited) })
-	return err
+	process.waitCalls.Add(1)
+	process.waitOnce.Do(func() {
+		process.waitResult = <-process.exitGate
+		process.waitSignalErr = process.correlation.RecordChildWaited(process.pid, "NONZERO_EXIT", true, 1)
+		close(process.waited)
+	})
+	return errors.Join(process.waitResult, process.waitSignalErr)
 }
 
 func (process *controlledASRProcess) Stop(context.Context) error {
@@ -487,8 +679,19 @@ func (process *controlledASRProcess) Stop(context.Context) error {
 	return nil
 }
 
+func (process *controlledASRProcess) RuntimeHostFailureObserved() {
+	process.waitSignalErr = errors.Join(
+		process.waitSignalErr,
+		process.correlation.RecordHostFailureObserved(process.pid),
+	)
+}
+
 func (process *controlledASRProcess) exit(err error) {
 	process.exitOnce.Do(func() { process.exitGate <- err })
+}
+
+func (process *controlledASRProcess) waitCount() int32 {
+	return process.waitCalls.Load()
 }
 
 type controlledASRProtocol struct {
@@ -528,19 +731,12 @@ func (controlledASRNoHTTP) Do(*http.Request) (*http.Response, error) {
 	return nil, errors.New("unexpected HTTP readiness request in pinned gRPC characterization")
 }
 
-type controlledASRClock struct {
-	timerCreated chan struct{}
-}
+type controlledASRClock struct{}
 
 func (*controlledASRClock) Now() time.Time { return time.Now() }
 
 func (clock *controlledASRClock) NewTimer(duration time.Duration) modelseffects.HostTimer {
-	// In this fixture readiness negotiation is immediate, so NewTimer signals
-	// only after lease release or crash revocation updates the actual lease.
-	select {
-	case clock.timerCreated <- struct{}{}:
-	default:
-	}
+	_ = clock
 	return controlledASRTimer{timer: time.NewTimer(duration)}
 }
 
@@ -650,6 +846,7 @@ func (sink *controlledASREvidenceSink) snapshot() []modelseffects.RuntimeEvidenc
 
 var _ modelseffects.HostProcessLauncher = (*controlledASRLauncher)(nil)
 var _ modelseffects.HostManagedProcess = (*controlledASRProcess)(nil)
+var _ modelseffects.HostManagedProcessFailureObserver = (*controlledASRProcess)(nil)
 var _ modelseffects.HostProtocolNegotiator = (*controlledASRProtocol)(nil)
 var _ modelseffects.HostCompatibilityChecker = controlledASRCompatibility{}
 var _ modelseffects.HostHTTPDoer = controlledASRNoHTTP{}

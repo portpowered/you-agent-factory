@@ -32,9 +32,10 @@ const (
 )
 
 type asrProtocolObservation struct {
-	recorder   modelseffects.RuntimeEvidenceRecorder
-	record     modelseffects.RuntimeASRProtocolObservation
-	stagedPath string
+	recorder    modelseffects.RuntimeEvidenceRecorder
+	correlation *modelseffects.ASRLiveCorrelationController
+	record      modelseffects.RuntimeASRProtocolObservation
+	stagedPath  string
 }
 
 func newASRProtocolObservation(
@@ -42,11 +43,13 @@ func newASRProtocolObservation(
 	request models.ASRBackendRequest,
 ) *asrProtocolObservation {
 	recorder, configuration, ok := modelseffects.RuntimeObservationFromContext(ctx)
-	if !ok {
+	correlation := modelseffects.ASRLiveCorrelationFromContext(ctx)
+	if !ok && correlation == nil {
 		return nil
 	}
 	observation := &asrProtocolObservation{
-		recorder: recorder,
+		recorder:    recorder,
+		correlation: correlation,
 		record: modelseffects.RuntimeASRProtocolObservation{
 			Phase:            modelseffects.RuntimeASRPhaseStageAudio,
 			RPCMethod:        modelseffects.RuntimeASRPCMethodAudioTranscription,
@@ -55,7 +58,9 @@ func newASRProtocolObservation(
 			RPCStatus:        modelseffects.RuntimeASRStatusNotAttempted,
 		},
 	}
-	observation.recordResolvedConfiguration(configuration)
+	if ok {
+		observation.recordResolvedConfiguration(configuration)
+	}
 	if len(request.Audio) > 0 {
 		observation.record.AudioBytes = uint64(len(request.Audio))
 		observation.record.AudioSHA256 = asrEvidenceSHA256(request.Audio)
@@ -132,9 +137,13 @@ func (observation *asrProtocolObservation) observeStagedPath(path string) {
 	observation.record.StagedPathSHA256 = asrEvidenceStringSHA256(path)
 }
 
-func (observation *asrProtocolObservation) observeRequest(message proto.Message, payload []byte, method string) {
+func (observation *asrProtocolObservation) observeRequest(
+	message proto.Message,
+	payload []byte,
+	method string,
+) error {
 	if observation == nil {
-		return
+		return nil
 	}
 	observation.record.Phase = modelseffects.RuntimeASRPhaseBuildRequest
 	observation.record.RPCMethod = asrEvidenceRPCMethod(method)
@@ -142,7 +151,7 @@ func (observation *asrProtocolObservation) observeRequest(message proto.Message,
 	observation.record.RequestSHA256 = asrEvidenceSHA256(payload)
 	request, ok := message.(*TranscriptRequest)
 	if !ok || request == nil {
-		return
+		return nil
 	}
 	observation.record.PromptBytes = uint64(len(request.GetPrompt()))
 	observation.record.Threads = request.GetThreads()
@@ -154,6 +163,38 @@ func (observation *asrProtocolObservation) observeRequest(message proto.Message,
 		}
 	}
 	observation.record.RequestSemanticSHA256 = semanticASRRequestSHA256(message)
+	if observation.correlation != nil {
+		return observation.correlation.RecordRequestSemanticSHA256(observation.record.RequestSemanticSHA256)
+	}
+	return nil
+}
+
+func (observation *asrProtocolObservation) observeEndpoint(ctx context.Context, address string) error {
+	if observation == nil || observation.correlation == nil {
+		return nil
+	}
+	return observation.correlation.ObserveEndpoint(ctx, address)
+}
+
+func (observation *asrProtocolObservation) awaitDecodedResponse(
+	ctx context.Context,
+	response models.ASRBackendResponse,
+) error {
+	if observation == nil || observation.correlation == nil {
+		return nil
+	}
+	semanticPayload, err := json.Marshal(struct {
+		Text     string                     `json:"text"`
+		Segments []models.ASRBackendSegment `json:"segments"`
+	}{Text: response.Text, Segments: response.Segments})
+	if err != nil {
+		return modelseffects.ErrASRLiveCorrelationInvalid
+	}
+	return observation.correlation.AwaitResponseRelease(
+		ctx,
+		observation.record.RequestSemanticSHA256,
+		asrEvidenceSHA256(semanticPayload),
+	)
 }
 
 func semanticASRRequestSHA256(message proto.Message) string {
@@ -210,7 +251,7 @@ func (observation *asrProtocolObservation) observeDecodedResponse(response *Tran
 }
 
 func (observation *asrProtocolObservation) recordInvocation(err error) {
-	if observation == nil {
+	if observation == nil || observation.recorder == nil {
 		return
 	}
 	outcome := modelseffects.RuntimeEvidenceOutcomeCompleted
