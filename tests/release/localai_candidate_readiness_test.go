@@ -12,6 +12,17 @@ import (
 	"testing"
 )
 
+type localAICandidateFinalizationResult struct {
+	Failure       string `json:"failure"`
+	Status        string `json:"status"`
+	CleanupStatus string `json:"cleanupStatus"`
+	Stable        bool   `json:"stable"`
+	Detail        string `json:"detail"`
+	OutputExists  bool   `json:"outputExists"`
+	ReportExists  bool   `json:"reportExists"`
+	DigestExists  bool   `json:"digestExists"`
+}
+
 func TestLocalAICandidateProcessPolicy(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
@@ -77,6 +88,19 @@ if ($requested.GOFLAGS -cne '-p=2' -or $requested.GOMAXPROCS -cne '2' -or
 		invalidCommand.Env = localAICandidatePowerShellEnvironment(t, tempDir, nil)
 		if output, err := invalidCommand.CombinedOutput(); err == nil {
 			t.Fatalf("invalid candidate process limit %s unexpectedly succeeded: %s", value, output)
+		}
+	}
+	for _, arguments := range [][]string{
+		{"-CandidateTargetOS", "linux"},
+		{"-CandidateTargetArch", "arm64"},
+	} {
+		commandArguments := []string{"-NoProfile", "-NonInteractive", "-File", localAICandidateScriptPath(t), "-InstallDir", filepath.Join(tempDir, "invalid-target")}
+		commandArguments = append(commandArguments, arguments...)
+		invalidCommand := exec.Command(localAICandidatePowerShell(t), commandArguments...)
+		invalidCommand.Env = localAICandidatePowerShellEnvironment(t, tempDir, nil)
+		if output, err := invalidCommand.CombinedOutput(); err == nil ||
+			!strings.Contains(string(output), "Cannot validate argument") || !strings.Contains(string(output), strings.TrimPrefix(arguments[0], "-")) {
+			t.Fatalf("invalid candidate target %v did not fail at selector binding: %v\n%s", arguments, err, output)
 		}
 	}
 }
@@ -245,6 +269,7 @@ func TestLocalAICandidateArtifactsRetained(t *testing.T) {
 	}
 	version := "1.0.1-snapshot-fixture"
 	artifacts := localAICandidateArchiveFixtures(version)
+	documentationContents := []byte("public models fixture\n")
 	for _, artifact := range artifacts {
 		if artifact.role == "windows-installer" {
 			continue
@@ -260,6 +285,10 @@ func TestLocalAICandidateArtifactsRetained(t *testing.T) {
 	if err := os.WriteFile(installerSource, []byte("installer fixture\n"), 0o600); err != nil {
 		t.Fatalf("write installer source: %v", err)
 	}
+	documentationSource := filepath.Join(tempDir, "models.md")
+	if err := os.WriteFile(documentationSource, documentationContents, 0o600); err != nil {
+		t.Fatalf("write public models documentation source: %v", err)
+	}
 	resultPath := filepath.Join(tempDir, "promotion.json")
 	harnessPath := filepath.Join(tempDir, "promotion.ps1")
 	commandEvidenceSource := filepath.Join(tempDir, "command-evidence")
@@ -267,7 +296,7 @@ func TestLocalAICandidateArtifactsRetained(t *testing.T) {
 	commandEvidenceFile := filepath.Join(commandEvidenceSource, "release.stderr.log")
 	harness := fmt.Sprintf(`
 . %s -InstallDir %s
-$promotion = Promote-SmokeCandidateArtifacts -DistDirectory %s -InstallerSourcePath %s -OutputDirectory %s
+$promotion = Promote-SmokeCandidateArtifacts -DistDirectory %s -InstallerSourcePath %s -PublicDocumentationPath %s -OutputDirectory %s
 [void][System.IO.Directory]::CreateDirectory(%s)
 [System.IO.File]::WriteAllText(%s, 'release evidence')
 $commandEvidence = Promote-SmokeCommandEvidence -SourceDirectory %s -OutputDirectory %s
@@ -278,6 +307,7 @@ $commandEvidence = Promote-SmokeCommandEvidence -SourceDirectory %s -OutputDirec
 		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
 		localAICandidatePowerShellLiteral(distDir),
 		localAICandidatePowerShellLiteral(installerSource),
+		localAICandidatePowerShellLiteral(documentationSource),
 		localAICandidatePowerShellLiteral(outputDir),
 		localAICandidatePowerShellLiteral(commandEvidenceSource),
 		localAICandidatePowerShellLiteral(commandEvidenceFile),
@@ -286,7 +316,7 @@ $commandEvidence = Promote-SmokeCommandEvidence -SourceDirectory %s -OutputDirec
 		localAICandidatePowerShellLiteral(resultPath),
 	)
 	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
-	assertLocalAICandidatePromotedArtifacts(t, resultPath, outputDir, version, artifacts)
+	assertLocalAICandidatePromotedArtifacts(t, resultPath, outputDir, version, artifacts, documentationContents)
 	var result struct {
 		CommandEvidence []struct {
 			Role   string `json:"role"`
@@ -305,7 +335,7 @@ $commandEvidence = Promote-SmokeCommandEvidence -SourceDirectory %s -OutputDirec
 	}
 }
 
-func assertLocalAICandidatePromotedArtifacts(t *testing.T, resultPath, outputDir, version string, artifacts []localAICandidateArchiveFixture) {
+func assertLocalAICandidatePromotedArtifacts(t *testing.T, resultPath, outputDir, version string, artifacts []localAICandidateArchiveFixture, documentationContents []byte) {
 	t.Helper()
 	var result struct {
 		Version          string `json:"version"`
@@ -318,12 +348,22 @@ func assertLocalAICandidatePromotedArtifacts(t *testing.T, resultPath, outputDir
 		} `json:"artifacts"`
 	}
 	readJSONFile(t, resultPath, &result)
-	if result.Version != version || len(result.Artifacts) != len(artifacts) {
-		t.Fatalf("promotion summary = %#v, want version %s and %d artifacts", result, version, len(artifacts))
+	if result.Version != version || len(result.Artifacts) != 4 {
+		t.Fatalf("promotion summary = %#v, want version %s and four Windows packet artifacts", result, version)
 	}
-	expected := make(map[string]localAICandidateArchiveFixture, len(artifacts))
+	expected := make(map[string]localAICandidateArchiveFixture, 4)
 	for _, artifact := range artifacts {
-		expected[artifact.role] = artifact
+		switch artifact.role {
+		case "windows-amd64-archive", "windows-installer":
+			expected[artifact.role] = artifact
+		case "checksums":
+			expected["detached-checksums"] = localAICandidateArchiveFixture{
+				role: "detached-checksums", file: "SHA256SUMS.txt", contents: artifact.contents,
+			}
+		}
+	}
+	expected["public-doc-snapshot"] = localAICandidateArchiveFixture{
+		role: "public-doc-snapshot", file: "models.md", contents: documentationContents,
 	}
 	seen := make(map[string]bool, len(result.Artifacts))
 	for _, evidence := range result.Artifacts {
@@ -341,15 +381,23 @@ func assertLocalAICandidatePromotedArtifacts(t *testing.T, resultPath, outputDir
 			t.Fatalf("promoted evidence for %s = %#v, bytes=%q", evidence.Role, evidence, contents)
 		}
 	}
-	if len(seen) != len(artifacts) {
-		t.Fatalf("promoted roles = %#v, want all supported artifacts", seen)
+	if len(seen) != len(expected) {
+		t.Fatalf("promoted roles = %#v, want only the four retained Windows packet roles", seen)
 	}
 	wantWindows := filepath.Join(outputDir, "you_"+version+"_windows_amd64.zip")
 	if !strings.EqualFold(filepath.Clean(result.WindowsAmd64Path), filepath.Clean(wantWindows)) {
 		t.Fatalf("selected Windows amd64 archive = %q, want %q", result.WindowsAmd64Path, wantWindows)
 	}
-	if entries, err := os.ReadDir(outputDir); err != nil || len(entries) != len(artifacts) {
-		t.Fatalf("retained output entries = %v/%d, want exactly %d supported artifacts", err, len(entries), len(artifacts))
+	if entries, err := os.ReadDir(outputDir); err != nil || len(entries) != len(expected) {
+		t.Fatalf("retained output entries = %v/%d, want exactly %d selected packet artifacts", err, len(entries), len(expected))
+	}
+	for _, artifact := range artifacts {
+		if artifact.role == "windows-amd64-archive" || artifact.role == "checksums" || artifact.role == "windows-installer" {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(outputDir, artifact.file)); !os.IsNotExist(err) {
+			t.Fatalf("unselected archive %s was promoted: %v", artifact.file, err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(outputDir, "unrelated-dist-file.txt")); !os.IsNotExist(err) {
 		t.Fatalf("unrelated dist file was copied: %v", err)
@@ -362,12 +410,18 @@ func TestLocalAICandidateArtifactPromotionFailsClosed(t *testing.T) {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
 	for _, testCase := range []struct {
-		name    string
-		missing string
+		name          string
+		missingRole   string
+		missingDocs   bool
+		checksumMode  string
+		expectedError string
 	}{
-		{name: "missing-platform", missing: "linux-arm64-archive"},
-		{name: "missing-checksums", missing: "checksums"},
-		{name: "missing-installer", missing: "windows-installer"},
+		{name: "missing-selected-archive", missingRole: "windows-amd64-archive", expectedError: "windows-amd64-archive"},
+		{name: "missing-checksums", missingRole: "checksums", expectedError: "checksums source"},
+		{name: "missing-installer", missingRole: "windows-installer", expectedError: "windows-installer source"},
+		{name: "missing-public-docs", missingDocs: true, expectedError: "public models documentation source"},
+		{name: "missing-selected-checksum-entry", checksumMode: "missing", expectedError: "0 entries for selected archive"},
+		{name: "changed-selected-checksum", checksumMode: "changed", expectedError: "does not match its retained bytes"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			tempDir := t.TempDir()
@@ -378,17 +432,30 @@ func TestLocalAICandidateArtifactPromotionFailsClosed(t *testing.T) {
 			}
 			version := "1.0.1-snapshot-fixture"
 			for _, artifact := range localAICandidateArchiveFixtures(version) {
-				if artifact.role == testCase.missing || artifact.role == "windows-installer" {
+				if artifact.role == testCase.missingRole || artifact.role == "windows-installer" {
 					continue
 				}
-				if err := os.WriteFile(filepath.Join(distDir, artifact.file), artifact.contents, 0o600); err != nil {
+				contents := artifact.contents
+				if artifact.role == "checksums" && testCase.checksumMode == "missing" {
+					contents = []byte("no selected archive checksum\n")
+				} else if artifact.role == "checksums" && testCase.checksumMode == "changed" {
+					selectedName := "you_" + version + "_windows_amd64.zip"
+					contents = []byte(strings.Repeat("0", 64) + "  " + selectedName + "\n")
+				}
+				if err := os.WriteFile(filepath.Join(distDir, artifact.file), contents, 0o600); err != nil {
 					t.Fatalf("write %s: %v", artifact.file, err)
 				}
 			}
 			installerSource := filepath.Join(tempDir, "install.ps1")
-			if testCase.missing != "windows-installer" {
+			if testCase.missingRole != "windows-installer" {
 				if err := os.WriteFile(installerSource, []byte("installer fixture\n"), 0o600); err != nil {
 					t.Fatalf("write installer source: %v", err)
+				}
+			}
+			documentationSource := filepath.Join(tempDir, "models.md")
+			if !testCase.missingDocs {
+				if err := os.WriteFile(documentationSource, []byte("public models fixture\n"), 0o600); err != nil {
+					t.Fatalf("write public models documentation source: %v", err)
 				}
 			}
 			resultPath := filepath.Join(tempDir, "promotion-failure.json")
@@ -396,7 +463,7 @@ func TestLocalAICandidateArtifactPromotionFailsClosed(t *testing.T) {
 			harness := fmt.Sprintf(`
 . %s -InstallDir %s
 $caught = ''
-try { Promote-SmokeCandidateArtifacts -DistDirectory %s -InstallerSourcePath %s -OutputDirectory %s | Out-Null; exit 2 } catch { $caught = $_.Exception.Message }
+try { Promote-SmokeCandidateArtifacts -DistDirectory %s -InstallerSourcePath %s -PublicDocumentationPath %s -OutputDirectory %s | Out-Null; exit 2 } catch { $caught = $_.Exception.Message }
 $outputExists = Test-Path -LiteralPath %s -PathType Container
 $outputEntries = @(Get-ChildItem -LiteralPath %s -Force -ErrorAction SilentlyContinue).Count
 [ordered]@{ caught = $caught; outputExists = $outputExists; outputEntries = $outputEntries } |
@@ -407,11 +474,12 @@ if ([string]::IsNullOrWhiteSpace($caught) -or -not $caught.Contains(%s) -or -not
 				localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
 				localAICandidatePowerShellLiteral(distDir),
 				localAICandidatePowerShellLiteral(installerSource),
+				localAICandidatePowerShellLiteral(documentationSource),
 				localAICandidatePowerShellLiteral(outputDir),
 				localAICandidatePowerShellLiteral(outputDir),
 				localAICandidatePowerShellLiteral(outputDir),
 				localAICandidatePowerShellLiteral(resultPath),
-				localAICandidatePowerShellLiteral(testCase.missing),
+				localAICandidatePowerShellLiteral(testCase.expectedError),
 			)
 			runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
 			var result struct {
@@ -420,8 +488,8 @@ if ([string]::IsNullOrWhiteSpace($caught) -or -not $caught.Contains(%s) -or -not
 				OutputEntries int    `json:"outputEntries"`
 			}
 			readJSONFile(t, resultPath, &result)
-			if result.Caught == "" || !strings.Contains(result.Caught, testCase.missing) || !result.OutputExists || result.OutputEntries != 0 {
-				t.Fatalf("promotion failure for %s = %#v", testCase.missing, result)
+			if result.Caught == "" || !strings.Contains(result.Caught, testCase.expectedError) || !result.OutputExists || result.OutputEntries != 0 {
+				t.Fatalf("promotion failure for %s = %#v, want error containing %q", testCase.name, result, testCase.expectedError)
 			}
 		})
 	}
@@ -452,7 +520,7 @@ function Invoke-FinalizationCase {
     $output = Split-Path -Parent $ArtifactPath
     $report = [ordered]@{
         status = 'PASS'
-        artifacts = @(Get-SmokeFileEvidence 'linux-amd64-archive' $ArtifactPath)
+        artifacts = @(Get-SmokeFileEvidence 'windows-amd64-archive' $ArtifactPath)
         cleanup = [ordered]@{ status = 'PASS' }
         error = ''
     }
@@ -488,7 +556,7 @@ function Invoke-FinalizationCase {
 	}
 	readJSONFile(t, resultPath, &result)
 	for name, value := range map[string]localAICandidateFinalizationResult{"missing": result.Missing, "changed": result.Changed} {
-		if value.Failure == "" || value.Status != "FAIL" || value.CleanupStatus != "FAIL" || value.Stable || !strings.Contains(value.Detail, "linux-amd64-archive") || !value.OutputExists || !value.ReportExists || !value.DigestExists {
+		if value.Failure == "" || value.Status != "FAIL" || value.CleanupStatus != "FAIL" || value.Stable || !strings.Contains(value.Detail, "windows-amd64-archive") || !value.OutputExists || !value.ReportExists || !value.DigestExists {
 			t.Fatalf("%s finalization = %#v, want named retained-evidence failure", name, value)
 		}
 	}
@@ -776,16 +844,23 @@ type localAICandidateArchiveFixture struct {
 }
 
 func localAICandidateArchiveFixtures(version string) []localAICandidateArchiveFixture {
-	return []localAICandidateArchiveFixture{
+	archives := []localAICandidateArchiveFixture{
 		{role: "darwin-amd64-archive", file: "you_" + version + "_darwin_amd64.tar.gz", contents: []byte("darwin amd64 archive")},
 		{role: "darwin-arm64-archive", file: "you_" + version + "_darwin_arm64.tar.gz", contents: []byte("darwin arm64 archive")},
 		{role: "linux-amd64-archive", file: "you_" + version + "_linux_amd64.tar.gz", contents: []byte("linux amd64 archive")},
 		{role: "linux-arm64-archive", file: "you_" + version + "_linux_arm64.tar.gz", contents: []byte("linux arm64 archive")},
 		{role: "windows-amd64-archive", file: "you_" + version + "_windows_amd64.zip", contents: []byte("windows amd64 archive")},
 		{role: "windows-arm64-archive", file: "you_" + version + "_windows_arm64.zip", contents: []byte("windows arm64 archive")},
-		{role: "checksums", file: "you_" + version + "_checksums.txt", contents: []byte("checksums fixture\n")},
-		{role: "windows-installer", file: "install.ps1", contents: []byte("installer fixture\n")},
 	}
+	var checksums strings.Builder
+	for _, archive := range archives {
+		digest := sha256.Sum256(archive.contents)
+		fmt.Fprintf(&checksums, "%x  %s\n", digest, archive.file)
+	}
+	return append(archives,
+		localAICandidateArchiveFixture{role: "checksums", file: "you_" + version + "_checksums.txt", contents: []byte(checksums.String())},
+		localAICandidateArchiveFixture{role: "windows-installer", file: "install.ps1", contents: []byte("installer fixture\n")},
+	)
 }
 
 type localAICandidateDiscoveryCommand struct {

@@ -103,6 +103,7 @@ func prepareLocalAICandidatePromotionSource(t *testing.T, fixture localAICandida
 		filepath.Join(fixture.dependencyDir, "ui", "node_modules", "esbuild", "lib"),
 		filepath.Join(fixture.sourceDir, "ui"),
 		filepath.Join(fixture.sourceDir, "scripts"),
+		filepath.Join(fixture.sourceDir, "docs", "reference"),
 	} {
 		if err := os.MkdirAll(directory, 0o700); err != nil {
 			t.Fatalf("create candidate fixture directory: %v", err)
@@ -118,9 +119,10 @@ func prepareLocalAICandidatePromotionSource(t *testing.T, fixture localAICandida
 		}
 	}
 	for path, contents := range map[string][]byte{
-		filepath.Join(fixture.sourceDir, ".gitignore"):             []byte("ui/node_modules/\n"),
-		filepath.Join(fixture.sourceDir, ".goreleaser.yml"):        []byte("fixture release config\n"),
-		filepath.Join(fixture.sourceDir, "scripts", "install.ps1"): []byte("fixture installer\n"),
+		filepath.Join(fixture.sourceDir, ".gitignore"):                     []byte("ui/node_modules/\n"),
+		filepath.Join(fixture.sourceDir, ".goreleaser.yml"):                []byte("fixture release config\n"),
+		filepath.Join(fixture.sourceDir, "scripts", "install.ps1"):         []byte("fixture installer\n"),
+		filepath.Join(fixture.sourceDir, "docs", "reference", "models.md"): []byte("fixture public model documentation\n"),
 	} {
 		if err := os.WriteFile(path, contents, 0o600); err != nil {
 			t.Fatalf("write source fixture %s: %v", path, err)
@@ -159,7 +161,9 @@ function Invoke-InstalledCandidateSmoke {
     [System.IO.File]::WriteAllText((Join-Path $RequestedInstallDir 'you.exe'), 'installed executable')
     return [pscustomobject][ordered]@{
         status = 'PASS'
+        activity = [ordered]@{ backendProcessStarts = 0 }
         executableBuildInfo = [ordered]@{ sourceRevision = $sourceCommit; vcsModified = $false }
+        cleanup = [ordered]@{ listenerStopped = $true }
     }
 }
 function Promote-SmokeCommandEvidence {
@@ -195,7 +199,9 @@ $versionCommandsRecorded = ($buildPropertyNames -contains 'esbuildVersionCommand
 if (-not $caught.Contains('controlled command-evidence promotion failure') -or $report.status -ne 'FAIL' -or
     $report.cleanup.status -ne 'FAIL' -or -not $report.cleanup.installDirectoryRemoved -or
     -not $report.cleanup.workDirectoryRemoved -or -not $stable -or
-    @($report.commandEvidence).Count -ne 0 -or -not $versionCommandsRecorded) { exit 3 }
+    @($report.commandEvidence).Count -ne 0 -or -not $versionCommandsRecorded) {
+    throw ('promotion cleanup evidence did not meet expectations: ' + ($report | ConvertTo-Json -Compress -Depth 12))
+}
 `,
 		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
 		localAICandidatePowerShellLiteral(filepath.Join(fixture.tempDir, "unused-install")),
@@ -227,16 +233,19 @@ function Invoke-CandidateCommand {
     } elseif (@($ArgumentList) -contains 'release') {
         $dist = Join-Path $WorkingDirectory 'dist'
         [void][System.IO.Directory]::CreateDirectory($dist)
-        foreach ($name in @(
+        $archiveNames = @(
             ('you_' + $version + '_darwin_amd64.tar.gz'),
             ('you_' + $version + '_darwin_arm64.tar.gz'),
             ('you_' + $version + '_linux_amd64.tar.gz'),
             ('you_' + $version + '_linux_arm64.tar.gz'),
             ('you_' + $version + '_windows_amd64.zip'),
-            ('you_' + $version + '_windows_arm64.zip'),
-            ('you_' + $version + '_checksums.txt'))) {
-            [System.IO.File]::WriteAllText((Join-Path $dist $name), 'candidate artifact')
+            ('you_' + $version + '_windows_arm64.zip'))
+        foreach ($name in $archiveNames) {
+            [System.IO.File]::WriteAllText((Join-Path $dist $name), 'candidate artifact', [System.Text.UTF8Encoding]::new($false))
         }
+        $selectedArchive = 'you_' + $version + '_windows_amd64.zip'
+        $selectedHash = (Get-SmokeFileEvidence 'windows-amd64-archive' (Join-Path $dist $selectedArchive)).sha256
+        [System.IO.File]::WriteAllText((Join-Path $dist ('you_' + $version + '_checksums.txt')), ($selectedHash + '  ' + $selectedArchive + [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
     }
     [System.IO.File]::WriteAllText($StdoutPath, $stdout, [System.Text.UTF8Encoding]::new($false))
     [System.IO.File]::WriteAllText($StderrPath, '', [System.Text.UTF8Encoding]::new($false))

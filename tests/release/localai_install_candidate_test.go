@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -740,6 +741,8 @@ func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, install
 	t.Helper()
 	var result struct {
 		Status                    string `json:"status"`
+		PreinstallAbsent          bool   `json:"preinstallAbsent"`
+		StateRootsInitiallyEmpty  bool   `json:"stateRootsInitiallyEmpty"`
 		ModelCalls                int    `json:"modelCalls"`
 		ModelBackendDownloadBytes int64  `json:"modelBackendDownloadBytes"`
 		Activity                  struct {
@@ -754,6 +757,44 @@ func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, install
 			BackendProcessStarts      int      `json:"backendProcessStarts"`
 			CacheRoots                []string `json:"cacheRoots"`
 		} `json:"activity"`
+		Observer struct {
+			Observed                     bool   `json:"observed"`
+			SampleCount                  int    `json:"sampleCount"`
+			AttributedProcessCount       int    `json:"attributedProcessCount"`
+			NonLoopbackConnections       int    `json:"nonLoopbackConnections"`
+			Port7437Accesses             int    `json:"port7437Accesses"`
+			BackendProcessStarts         int    `json:"backendProcessStarts"`
+			SurvivingTaskProcesses       int    `json:"survivingTaskProcesses"`
+			LoopbackDistributionRequests int    `json:"loopbackDistributionRequests"`
+			DistributionListenerPort     int    `json:"distributionListenerPort"`
+			DistributionListenerStopped  bool   `json:"distributionListenerStopped"`
+			DistributionObserverObserved bool   `json:"distributionObserverObserved"`
+			DistributionObserverError    string `json:"distributionObserverError"`
+			Error                        string `json:"error"`
+		} `json:"observer"`
+		DistributionObserver struct {
+			Observed               bool `json:"observed"`
+			ListeningPort          int  `json:"listeningPort"`
+			RequestCount           int  `json:"requestCount"`
+			NonLoopbackConnections int  `json:"nonLoopbackConnections"`
+			Port7437Accesses       int  `json:"port7437Accesses"`
+			ListenerStopped        bool `json:"listenerStopped"`
+			Requests               []struct {
+				Method        string `json:"method"`
+				Path          string `json:"path"`
+				RemoteAddress string `json:"remoteAddress"`
+				LocalAddress  string `json:"localAddress"`
+				LocalPort     int    `json:"localPort"`
+				StatusCode    int    `json:"statusCode"`
+			} `json:"requests"`
+		} `json:"distributionObserver"`
+		Cleanup struct {
+			Status                  string `json:"status"`
+			ListenerStopped         bool   `json:"listenerStopped"`
+			InstallDirectoryRemoved bool   `json:"installDirectoryRemoved"`
+			PartialFilesRemaining   int    `json:"partialFilesRemaining"`
+			Error                   string `json:"error"`
+		} `json:"cleanup"`
 		PathResolution      string `json:"pathResolution"`
 		Version             string `json:"version"`
 		ExpectedVersion     string `json:"expectedVersion"`
@@ -767,14 +808,53 @@ func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, install
 		} `json:"commands"`
 	}
 	readJSONFile(t, resultPath, &result)
-	if result.Status != "PASS" || !result.Activity.Observed ||
+	if result.Status != "PASS" || !result.PreinstallAbsent || !result.StateRootsInitiallyEmpty || !result.Activity.Observed ||
 		result.ModelCalls != result.Activity.ModelCalls ||
 		result.ModelBackendDownloadBytes != result.Activity.ModelBackendDownloadBytes ||
 		result.Activity.ModelCalls != 0 || result.Activity.ModelBackendDownloadBytes != 0 ||
 		result.Activity.CacheBytesBefore != 0 || result.Activity.CacheBytesAfter != 0 ||
 		result.Activity.CacheBytesDelta != 0 || result.Activity.RuntimeEvidenceRecords != 0 ||
-		result.Activity.BackendProcessStarts != 0 || len(result.Activity.CacheRoots) != 3 {
+		result.Activity.BackendProcessStarts != 0 || len(result.Activity.CacheRoots) != 4 {
 		t.Fatalf("public candidate install result = %#v", result)
+	}
+	if !result.Observer.Observed || result.Observer.SampleCount <= 0 || result.Observer.AttributedProcessCount <= 0 ||
+		result.Observer.NonLoopbackConnections != 0 || result.Observer.Port7437Accesses != 0 ||
+		result.Observer.BackendProcessStarts != 0 || result.Observer.SurvivingTaskProcesses != 0 ||
+		result.Observer.LoopbackDistributionRequests != 4 || result.Observer.DistributionListenerPort <= 0 ||
+		result.Observer.DistributionListenerPort == 7437 || !result.Observer.DistributionListenerStopped ||
+		!result.Observer.DistributionObserverObserved || result.Observer.DistributionObserverError != "" || result.Observer.Error != "" {
+		t.Fatalf("public candidate process/network observer = %#v", result.Observer)
+	}
+	if !result.DistributionObserver.Observed || result.DistributionObserver.RequestCount != 4 ||
+		result.DistributionObserver.ListeningPort <= 0 || result.DistributionObserver.ListeningPort == 7437 ||
+		result.DistributionObserver.ListeningPort != result.Observer.DistributionListenerPort ||
+		result.DistributionObserver.NonLoopbackConnections != 0 || result.DistributionObserver.Port7437Accesses != 0 ||
+		!result.DistributionObserver.ListenerStopped || len(result.DistributionObserver.Requests) != 4 {
+		t.Fatalf("public candidate distribution observer = %#v", result.DistributionObserver)
+	}
+	routeVersion := strings.TrimPrefix(version, "v")
+	wantRequests := map[string]int{
+		"/download/v" + routeVersion + "/install.ps1":                                         200,
+		"/releases/download/v" + routeVersion + "/you_" + routeVersion + "_windows_amd64.zip": 200,
+		"/releases/download/v" + routeVersion + "/you_" + routeVersion + "_checksums.txt":     200,
+		"/stop": 204,
+	}
+	for _, request := range result.DistributionObserver.Requests {
+		remoteAddress := net.ParseIP(request.RemoteAddress)
+		localAddress := net.ParseIP(request.LocalAddress)
+		status, expected := wantRequests[request.Path]
+		if !expected || request.Method != "GET" || request.StatusCode != status ||
+			remoteAddress == nil || !remoteAddress.IsLoopback() || localAddress == nil || !localAddress.IsLoopback() ||
+			request.LocalPort != result.DistributionObserver.ListeningPort {
+			t.Fatalf("public candidate distribution request = %#v", request)
+		}
+		delete(wantRequests, request.Path)
+	}
+	if len(wantRequests) != 0 {
+		t.Fatalf("public candidate distribution requests are missing: %#v", wantRequests)
+	}
+	if result.Cleanup.Status != "PASS" || !result.Cleanup.ListenerStopped || !result.Cleanup.InstallDirectoryRemoved || result.Cleanup.PartialFilesRemaining != 0 || result.Cleanup.Error != "" {
+		t.Fatalf("public candidate cleanup = %#v", result.Cleanup)
 	}
 	if result.Version != version || result.ExpectedVersion != version || result.PathResolution == "" || !strings.EqualFold(filepath.Clean(result.PathResolution), filepath.Clean(filepath.Join(installDir, "you.exe"))) {
 		t.Fatalf("public candidate version/PATH = %q/%q/%q, want version %q and installed executable", result.Version, result.ExpectedVersion, result.PathResolution, version)
