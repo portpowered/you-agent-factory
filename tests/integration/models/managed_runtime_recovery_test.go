@@ -401,7 +401,7 @@ func assertManagedRecoveryReady(
 	signal managedRecoveryStageSignal,
 ) {
 	t.Helper()
-	if observation.Outcome != "PREPARED" || observation.AssetReadiness != "AVAILABLE" ||
+	if observation.Outcome != "ALREADY_AVAILABLE" || observation.AssetReadiness != "AVAILABLE" ||
 		observation.AssetIntegrity != "VERIFIED" || observation.CatalogStatus != "READY" ||
 		observation.Readiness != "READY" || observation.Lifecycle != "INSTALLED" ||
 		observation.NetworkRequests != 0 {

@@ -162,7 +162,7 @@ func prepareAndInspect(
 	if err != nil {
 		return fmt.Errorf("prepare managed model assets: %w", err)
 	}
-	return writeObservation(service, client, opened.Scope, configuration, prepared.Outcome)
+	return writeObservation(service, client, opened.Scope, configuration, prepared)
 }
 
 func recoveryModelOverlay(configuration recoveryConfiguration) map[string]models.ModelOverlay {
@@ -189,21 +189,17 @@ func writeObservation(
 	client *noNetworkAssetClient,
 	scope models.RuntimeScopeRef,
 	configuration recoveryConfiguration,
-	outcome models.AssetPreparationOutcome,
+	prepared models.PrepareModelAssetsResult,
 ) error {
-	assets, err := service.InspectModelAssets(context.Background(), models.InspectModelAssetsRequest{
-		Scope: scope, Name: configuration.ModelName, VerifyIntegrity: true,
-	})
-	if err != nil {
-		return fmt.Errorf("inspect verified content-addressed inputs: %w", err)
-	}
 	catalog, err := service.GetCatalogModel(context.Background(), models.GetModelRequest{
 		Scope: scope, Name: configuration.ModelName,
 	})
 	if err != nil {
 		return fmt.Errorf("inspect managed runtime readiness: %w", err)
 	}
-	observation := recoveryObservationFrom(assets.Asset, catalog.Model, outcome, client.requests.Load())
+	observation := recoveryObservationFrom(
+		prepared.Asset, catalog.Model, prepared.Outcome, client.requests.Load(),
+	)
 	encoded, err := json.Marshal(observation)
 	if err != nil {
 		return fmt.Errorf("encode recovery observation: %w", err)
