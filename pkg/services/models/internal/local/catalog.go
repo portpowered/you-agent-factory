@@ -53,7 +53,16 @@ func BuildCatalogWithRuntime(
 	for _, resource := range factoryCfg.Resources {
 		resourceByName[resource.Name] = resource
 	}
+	aggregates := aggregateFactoryModelCatalog(factoryCfg, resourceByName)
+	return buildCatalogEntries(
+		runtimeCfg, factoryCfg, aggregates, runtimeCacheInspector, sourceResolver,
+	)
+}
 
+func aggregateFactoryModelCatalog(
+	factoryCfg *models.RuntimeConfig,
+	resourceByName map[string]models.RuntimeResource,
+) map[string]*catalogAggregate {
 	aggregates := make(map[string]*catalogAggregate)
 	for _, worker := range factoryCfg.Workers {
 		if !catalogWorkerIncludesModel(worker) {
@@ -96,7 +105,16 @@ func BuildCatalogWithRuntime(
 		}
 		collectAggregateResources(aggregate, worker, resourceByName, factoryCfg.Resources)
 	}
+	return aggregates
+}
 
+func buildCatalogEntries(
+	runtimeCfg *models.RuntimeConfig,
+	factoryCfg *models.RuntimeConfig,
+	aggregates map[string]*catalogAggregate,
+	runtimeCacheInspector RuntimeCacheInspector,
+	sourceResolver ManagedRuntimeSourceResolver,
+) map[string]CatalogEntry {
 	catalog := make(map[string]CatalogEntry, len(aggregates))
 	for key, aggregate := range aggregates {
 		sort.Strings(aggregate.workerNames)
@@ -105,9 +123,34 @@ func BuildCatalogWithRuntime(
 		})
 		summary := buildModelSummary(*aggregate)
 		detailDiagnostics := modelDiagnostics(*aggregate, summary)
-		listManagedRuntime := buildCatalogManagedRuntime(runtimeCfg, factoryCfg, *aggregate, summary, detailDiagnostics, runtimeCacheInspector, sourceResolver, false)
+		var cacheInspection *RuntimeCacheInspection
+		if runtimeCacheInspector != nil && aggregate.localCount > 0 &&
+			(primaryModelScopedResource(*aggregate, factoryCfg) != nil || isBuiltInCatalogModel(aggregate.name)) {
+			inspection, inspectErr := runtimeCacheInspector.InspectRuntimeCache(
+				context.Background(), runtimeCfg, aggregate.name,
+			)
+			if inspectErr == nil {
+				cacheInspection = &inspection
+			}
+		}
+		effectiveOperations := summary.Operations
+		var effectiveDiagnostics map[string]string
+		if cacheInspection != nil {
+			effectiveOperations, effectiveDiagnostics = ProjectEffectiveVideoOperations(
+				aggregate.name, summary.Operations, *cacheInspection,
+			)
+			summary.Modalities = catalogOperationModalities(effectiveOperations)
+			aggregate.capabilities = projectCatalogCapabilities(
+				aggregate.capabilities, aggregate.name, *cacheInspection,
+			)
+		}
+		summary.Operations = effectiveOperations
+		for name, value := range effectiveDiagnostics {
+			detailDiagnostics[name] = value
+		}
+		listManagedRuntime := buildCatalogManagedRuntime(runtimeCfg, factoryCfg, *aggregate, summary, detailDiagnostics, cacheInspection, sourceResolver, false)
 		summary.ManagedRuntime = listManagedRuntime
-		inspectManagedRuntime := buildCatalogManagedRuntime(runtimeCfg, factoryCfg, *aggregate, summary, detailDiagnostics, runtimeCacheInspector, sourceResolver, true)
+		inspectManagedRuntime := buildCatalogManagedRuntime(runtimeCfg, factoryCfg, *aggregate, summary, detailDiagnostics, cacheInspection, sourceResolver, true)
 		inspectDiagnostics := mergeInspectDiagnostics(detailDiagnostics, inspectManagedRuntime)
 		catalog[key] = modelcatalog.Entry{
 			Summary: summary,
@@ -504,7 +547,7 @@ func buildCatalogManagedRuntime(
 	aggregate catalogAggregate,
 	summary modelcatalog.Summary,
 	diagnostics map[string]string,
-	runtimeCacheInspector RuntimeCacheInspector,
+	cacheInspection *RuntimeCacheInspection,
 	sourceResolver ManagedRuntimeSourceResolver,
 	forInspect bool,
 ) managedruntime.Runtime {
@@ -525,14 +568,63 @@ func buildCatalogManagedRuntime(
 			resolution := sourceResolver.Resolve(aggregate.name, resource)
 			projection.sourceResolution = &resolution
 		}
-		if runtimeCacheInspector != nil && aggregate.localCount > 0 {
-			inspection, err := runtimeCacheInspector.InspectRuntimeCache(context.Background(), runtimeCfg, aggregate.name)
-			if err == nil {
-				projection.cacheInspection = &inspection
+	}
+	if cacheInspection != nil && aggregate.localCount > 0 {
+		projection.cacheInspection = cacheInspection
+	}
+	return buildManagedRuntimeProjection(projection)
+}
+
+func isBuiltInCatalogModel(modelName string) bool {
+	_, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(modelName)
+	return ok
+}
+
+func catalogOperationModalities(operations []managedruntime.Operation) []string {
+	seen := make(map[string]struct{})
+	for _, operation := range operations {
+		for _, slots := range [][]managedruntime.OperationSlot{operation.Inputs, operation.Outputs} {
+			for _, slot := range slots {
+				if len(slot.ContentTypes) > 0 {
+					for _, contentType := range slot.ContentTypes {
+						if normalized := strings.TrimSpace(contentType); normalized != "" {
+							seen[normalized] = struct{}{}
+						}
+					}
+					continue
+				}
+				if normalized := strings.TrimSpace(string(slot.Modality)); normalized != "" {
+					seen[normalized] = struct{}{}
+				}
 			}
 		}
 	}
-	return buildManagedRuntimeProjection(projection)
+	modalities := make([]string, 0, len(seen))
+	for modality := range seen {
+		modalities = append(modalities, modality)
+	}
+	sort.Strings(modalities)
+	return modalities
+}
+
+func projectCatalogCapabilities(
+	capabilities []modelcatalog.Capability,
+	modelName string,
+	inspection RuntimeCacheInspection,
+) []modelcatalog.Capability {
+	projected := make([]modelcatalog.Capability, len(capabilities))
+	for index, capability := range capabilities {
+		projected[index] = capability
+		projected[index].Operations, _ = ProjectEffectiveVideoOperations(
+			modelName, capability.Operations, inspection,
+		)
+		projected[index].ResourceNames = append([]string(nil), capability.ResourceNames...)
+		if capability.ModelProvider != nil {
+			provider := *capability.ModelProvider
+			projected[index].ModelProvider = &provider
+		}
+	}
+	return projected
 }
 
 func managedRuntimeReadiness(status modelcatalog.Status) managedruntime.ReadinessState {

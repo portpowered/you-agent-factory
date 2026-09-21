@@ -74,12 +74,6 @@ func openReviewFailureScenario(
 		t.Fatalf("opened review-failure Factory Session = %q, want explicit session", opened.Session.Id)
 	}
 	sessionID := opened.Session.Id
-	if err := fixture.sessionOpened(sessionID); err != nil {
-		support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
-		fixture.router.unregister(factoryDir)
-		_ = os.RemoveAll(rootDir)
-		t.Fatal(err)
-	}
 	scenario := &reviewFailureScenario{
 		fixture:    fixture,
 		rootDir:    rootDir,
@@ -97,7 +91,6 @@ func (scenario *reviewFailureScenario) close(t testing.TB) {
 	}
 	support.CloseFactorySessionAt(t, scenario.fixture.baseURL, scenario.sessionID)
 	scenario.fixture.router.unregister(scenario.factoryDir)
-	scenario.fixture.sessionClosed(scenario.sessionID)
 	if err := os.RemoveAll(scenario.rootDir); err != nil {
 		t.Errorf("remove review-failure scenario root: %v", err)
 	}

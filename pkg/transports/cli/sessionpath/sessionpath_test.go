@@ -66,6 +66,20 @@ func TestFactoryInvocationsPath(t *testing.T) {
 	}
 }
 
+func TestFactorySessionWorkerSessionPaths(t *testing.T) {
+	t.Parallel()
+
+	if got := FactorySessionWorkerSessionDetailPath("session/beta", "worker/alpha"); got != "/factory-sessions/session%2Fbeta/worker-sessions/worker%2Falpha" {
+		t.Fatalf("FactorySessionWorkerSessionDetailPath() = %q, want escaped Factory Session and Worker Session IDs", got)
+	}
+	if got := FactorySessionWorkerSessionEventsPath("session-beta", "worker-1"); got != "/factory-sessions/session-beta/worker-sessions/worker-1/events" {
+		t.Fatalf("FactorySessionWorkerSessionEventsPath() = %q, want scoped event path", got)
+	}
+	if got := FactorySessionWorkerSessionTranscriptPath("session-beta", "worker-1"); got != "/factory-sessions/session-beta/worker-sessions/worker-1/transcript" {
+		t.Fatalf("FactorySessionWorkerSessionTranscriptPath() = %q, want scoped transcript path", got)
+	}
+}
+
 func TestWorkPaths(t *testing.T) {
 	t.Parallel()
 

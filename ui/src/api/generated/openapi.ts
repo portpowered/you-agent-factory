@@ -2308,9 +2308,9 @@ export interface components {
       providerLocality: components["schemas"]["WorkerModelLocality"];
       status: components["schemas"]["ModelStatus"];
       loadState: components["schemas"]["ModelLoadState"];
-      /** @description Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields. */
+      /** @description Effective provider-agnostic operations supported by the managed runtime after resolved runtime configuration and verified required artifacts are applied. Optional input slots whose required artifacts are unavailable are omitted. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields. */
       operations: components["schemas"]["ModelInvocationOperation"][];
-      /** @description Uppercase content modalities observed across the model's declared operation inputs and outputs. */
+      /** @description Uppercase content modalities observed across the effective operation inputs and outputs. */
       modalities: components["schemas"]["ModelInvocationContentType"][];
       /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
       resources: components["schemas"]["ModelResourceSummary"][];
@@ -2323,14 +2323,15 @@ export interface components {
       providerLocality: components["schemas"]["WorkerModelLocality"];
       status: components["schemas"]["ModelStatus"];
       loadState: components["schemas"]["ModelLoadState"];
-      /** @description Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields. */
+      /** @description Effective provider-agnostic operations supported by workers for this managed runtime after resolved runtime configuration and verified required artifacts are applied. Optional input slots whose required artifacts are unavailable are omitted. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields. */
       operations: components["schemas"]["ModelInvocationOperation"][];
-      /** @description Uppercase content modalities observed across all declared operation inputs and outputs. */
+      /** @description Uppercase content modalities observed across all effective operation inputs and outputs. */
       modalities: components["schemas"]["ModelInvocationContentType"][];
       /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
       resources: components["schemas"]["ModelResourceSummary"][];
       /** @description Worker-scoped capability declarations that contribute to this discovered model. */
       capabilities: components["schemas"]["ModelCapability"][];
+      /** @description Effective-readiness diagnostics. When VIDEO is omitted because its required projector is missing or invalid, `videoReadiness` contains a stable safe reason. */
       diagnostics: components["schemas"]["StringMap"];
     };
     /** @description Opaque model name or source URI accepted by the provider-neutral invocation contract. */

@@ -46,6 +46,24 @@ func WorkerSessionsCollectionPath(sessionID string) string {
 	return fmt.Sprintf("/factory-sessions/%s/worker-sessions", escapedSessionID(sessionID))
 }
 
+// FactorySessionWorkerSessionDetailPath returns one Worker Session identity
+// route scoped to a Factory Session.
+func FactorySessionWorkerSessionDetailPath(sessionID, workerSessionID string) string {
+	return fmt.Sprintf("%s/%s", WorkerSessionsCollectionPath(sessionID), url.PathEscape(workerSessionID))
+}
+
+// FactorySessionWorkerSessionEventsPath returns one Factory Session scoped
+// Worker Session event stream route.
+func FactorySessionWorkerSessionEventsPath(sessionID, workerSessionID string) string {
+	return FactorySessionWorkerSessionDetailPath(sessionID, workerSessionID) + "/events"
+}
+
+// FactorySessionWorkerSessionTranscriptPath returns one Factory Session
+// scoped Worker Session transcript route.
+func FactorySessionWorkerSessionTranscriptPath(sessionID, workerSessionID string) string {
+	return FactorySessionWorkerSessionDetailPath(sessionID, workerSessionID) + "/transcript"
+}
+
 // TopLevelWorkerSessionsCollectionPath returns the process-scoped Worker
 // Session observation collection addressed by stable Worker Session identity.
 func TopLevelWorkerSessionsCollectionPath() string {

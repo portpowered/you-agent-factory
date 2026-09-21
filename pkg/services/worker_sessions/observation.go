@@ -18,15 +18,21 @@ import (
 // not need a second service locator or a type assertion to inspect a session.
 type ObservationService = Service
 
-// ListObservationsRequest narrows observations to one Work identity.
+// ListObservationsRequest narrows observations to one Work identity and may
+// scope that Work to one Factory Session.
 type ListObservationsRequest struct {
-	WorkID string
+	FactorySessionID string
+	WorkID           string
 }
 
-// Validate reports whether the request names a non-empty Work identity.
+// Validate reports whether the request names a non-empty Work identity and,
+// when supplied, a non-empty Factory Session identity.
 func (r ListObservationsRequest) Validate() error {
 	if strings.TrimSpace(r.WorkID) == "" {
 		return ErrInvalidObservationWorkID
+	}
+	if r.FactorySessionID != "" && strings.TrimSpace(r.FactorySessionID) == "" {
+		return ErrInvalidObservationFactorySessionID
 	}
 	return nil
 }
@@ -610,30 +616,31 @@ func (s ObservationSubscription) Close() {
 }
 
 var (
-	ErrInvalidObservationWorkID          = errors.New("worker session observation: invalid work id")
-	ErrInvalidObservationIdentity        = errors.New("worker session observation: invalid provider session identity")
-	ErrInvalidObservationScope           = errors.New("worker session observation: invalid scope")
-	ErrInvalidObservationPagination      = errors.New("worker session observation: invalid pagination")
-	ErrInvalidObservationAttempt         = errors.New("worker session observation: invalid attempt")
-	ErrInvalidObservationDuration        = errors.New("worker session observation: invalid duration projection")
-	ErrInvalidObservationFailure         = errors.New("worker session observation: invalid failure projection")
-	ErrInvalidObservationRecordingHealth = errors.New("worker session observation: invalid recording health")
-	ErrInvalidObservationStreamLimit     = errors.New("worker session observation: stream limit must not be negative")
-	ErrInvalidObservationCursor          = errors.New("worker session observation: invalid cursor")
-	ErrObservationCursorForeign          = errors.New("worker session observation: cursor belongs to another Worker Session")
-	ErrObservationCursorFuture           = errors.New("worker session observation: cursor is ahead of the available history")
-	ErrObservationCursorStale            = errors.New("worker session observation: cursor is no longer retained")
-	ErrObservationCursorUnavailable      = errors.New("worker session observation: cursor stream generation is unavailable")
-	ErrObservationWorkNotFound           = errors.New("worker session observation: work not found")
-	ErrObservationSessionNotFound        = errors.New("worker session observation: provider session not found")
-	ErrObservationNotDirect              = errors.New("worker session observation: session is not direct")
-	ErrObservationProjectionUnavailable  = errors.New("worker session observation: projection unavailable")
-	ErrObservationRecordingCorrupt       = errors.New("worker session observation: recording history is corrupt")
-	ErrObservationRecordingUnavailable   = errors.New("worker session observation: recording history unavailable")
-	ErrObservationSourceUnavailable      = errors.New("worker session observation: event source unavailable")
-	ErrObservationSourceGap              = errors.New("worker session observation: retained event gap")
-	ErrObservationSourceClosed           = errors.New("worker session observation: event source closed before terminal")
-	ErrObservationCanceled               = fmt.Errorf("worker session observation: canceled: %w", context.Canceled)
+	ErrInvalidObservationWorkID           = errors.New("worker session observation: invalid work id")
+	ErrInvalidObservationFactorySessionID = errors.New("worker session observation: invalid Factory Session id")
+	ErrInvalidObservationIdentity         = errors.New("worker session observation: invalid provider session identity")
+	ErrInvalidObservationScope            = errors.New("worker session observation: invalid scope")
+	ErrInvalidObservationPagination       = errors.New("worker session observation: invalid pagination")
+	ErrInvalidObservationAttempt          = errors.New("worker session observation: invalid attempt")
+	ErrInvalidObservationDuration         = errors.New("worker session observation: invalid duration projection")
+	ErrInvalidObservationFailure          = errors.New("worker session observation: invalid failure projection")
+	ErrInvalidObservationRecordingHealth  = errors.New("worker session observation: invalid recording health")
+	ErrInvalidObservationStreamLimit      = errors.New("worker session observation: stream limit must not be negative")
+	ErrInvalidObservationCursor           = errors.New("worker session observation: invalid cursor")
+	ErrObservationCursorForeign           = errors.New("worker session observation: cursor belongs to another Worker Session")
+	ErrObservationCursorFuture            = errors.New("worker session observation: cursor is ahead of the available history")
+	ErrObservationCursorStale             = errors.New("worker session observation: cursor is no longer retained")
+	ErrObservationCursorUnavailable       = errors.New("worker session observation: cursor stream generation is unavailable")
+	ErrObservationWorkNotFound            = errors.New("worker session observation: work not found")
+	ErrObservationSessionNotFound         = errors.New("worker session observation: provider session not found")
+	ErrObservationNotDirect               = errors.New("worker session observation: session is not direct")
+	ErrObservationProjectionUnavailable   = errors.New("worker session observation: projection unavailable")
+	ErrObservationRecordingCorrupt        = errors.New("worker session observation: recording history is corrupt")
+	ErrObservationRecordingUnavailable    = errors.New("worker session observation: recording history unavailable")
+	ErrObservationSourceUnavailable       = errors.New("worker session observation: event source unavailable")
+	ErrObservationSourceGap               = errors.New("worker session observation: retained event gap")
+	ErrObservationSourceClosed            = errors.New("worker session observation: event source closed before terminal")
+	ErrObservationCanceled                = fmt.Errorf("worker session observation: canceled: %w", context.Canceled)
 )
 
 // ReadTranscriptRequest identifies one Worker Session whose normalized

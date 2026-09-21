@@ -518,6 +518,9 @@ func (s *recordedWorkerSessionObservation) listLive(
 	if s == nil || s.Service == nil {
 		return workersessions.ListObservationsResult{}, workersessions.ErrObservationProjectionUnavailable
 	}
+	if factorySessionID := strings.TrimSpace(s.factorySessionID); factorySessionID != "" {
+		req.FactorySessionID = factorySessionID
+	}
 	return s.Service.ListObservations(ctx, req)
 }
 
@@ -553,8 +556,9 @@ func (s *recordedWorkerSessionObservation) Start(
 }
 
 type workerRecordingHealth struct {
-	status recordings.WorkerRecordingStatus
-	reason string
+	status    recordings.WorkerRecordingStatus
+	reason    string
+	startedAt *time.Time
 }
 
 func (s *recordedWorkerSessionObservation) recordingHealth(
@@ -615,32 +619,17 @@ func workerRecordingHealthMap(
 		if !validWorkerRecordingHealth(session.Status) {
 			return nil, fmt.Errorf("%w: Worker Session %q has invalid health %q", workersessions.ErrObservationRecordingCorrupt, workerSessionID, session.Status)
 		}
+		startedAt, err := workerRecordingSessionStartedAt(session)
+		if err != nil {
+			return nil, fmt.Errorf("%w: Worker Session %q has an invalid opening record: %v", workersessions.ErrObservationRecordingCorrupt, workerSessionID, err)
+		}
 		health[workerSessionID] = workerRecordingHealth{
-			status: session.Status,
-			reason: recordingHealthReason(session.Status, session.Failure, session.InterruptionReason),
+			status:    session.Status,
+			reason:    recordingHealthReason(session.Status, session.Failure, session.InterruptionReason),
+			startedAt: startedAt,
 		}
 	}
 	return health, nil
-}
-
-func validWorkerRecordingHealth(status recordings.WorkerRecordingStatus) bool {
-	switch status {
-	case recordings.WorkerRecordingStatusComplete,
-		recordings.WorkerRecordingStatusDegraded,
-		recordings.WorkerRecordingStatusIncomplete:
-		return true
-	}
-	return false
-}
-
-func recordingHealthReason(status recordings.WorkerRecordingStatus, failure, interruption string) string {
-	if status == recordings.WorkerRecordingStatusDegraded {
-		return strings.TrimSpace(failure)
-	}
-	if status == recordings.WorkerRecordingStatusIncomplete {
-		return strings.TrimSpace(interruption)
-	}
-	return ""
 }
 
 func isCorruptWorkerRecordingError(err error) bool {
@@ -667,6 +656,10 @@ func (s *recordedWorkerSessionObservation) withRecordingHealth(
 	if current, ok := health[observation.WorkerSessionID]; ok {
 		observation.RecordingHealth = current.status
 		observation.RecordingHealthReason = current.reason
+		if current.startedAt != nil {
+			startedAt := *current.startedAt
+			observation.StartedAt = &startedAt
+		}
 	}
 	return observation, nil
 }
@@ -686,6 +679,10 @@ func (s *recordedWorkerSessionObservation) applyRecordingHealth(
 		if current, ok := health[observations[index].WorkerSessionID]; ok {
 			observations[index].RecordingHealth = current.status
 			observations[index].RecordingHealthReason = current.reason
+			if current.startedAt != nil {
+				startedAt := *current.startedAt
+				observations[index].StartedAt = &startedAt
+			}
 		}
 	}
 	return nil

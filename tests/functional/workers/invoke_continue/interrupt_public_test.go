@@ -42,9 +42,9 @@ func TestInterruptSingleSuccessor(t *testing.T) {
 	})
 	scenario.runner.waitStarted(t, scenario.repositoryB.path, s8InterruptCallBInitial, scenario.fixture.router.requests)
 
-	streamA := startS8LiveStream(t, scenario.fixture, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, scenario.session.id, ids.workerA, s8InterruptProviderSessionA)
+	streamA := startS8LiveStream(t, scenario.fixture, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, s8InterruptProviderSessionA)
 	streamA.writer.waitWorkerSessionFrame(t, ids.workerA)
-	streamB := startS8LiveStream(t, scenario.fixture, ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, scenario.session.id, ids.workerB, s8InterruptProviderSessionB)
+	streamB := startS8LiveStream(t, scenario.fixture, ctx, scenario.manager, scenario.env, scenario.repositoryB.path, scenario.serverURL, ids.workerB, s8InterruptProviderSessionB)
 	streamB.writer.waitWorkerSessionFrame(t, ids.workerB)
 
 	first := interruptS8RemoteWorker(t, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.workerA, ids.interruptRequest, ids.successor)
@@ -61,9 +61,21 @@ func TestInterruptSingleSuccessor(t *testing.T) {
 		t.Fatalf("provider calls after exact interrupt replay = %d, want unchanged %d", got, beforeReplay)
 	}
 
-	streamSuccessor := startS8LiveStream(t, scenario.fixture, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, scenario.session.id, ids.successor, s8InterruptProviderSessionA)
+	streamSuccessor := startS8LiveStream(t, scenario.fixture, ctx, scenario.manager, scenario.env, scenario.repositoryA.path, scenario.serverURL, ids.successor, s8InterruptProviderSessionA)
 	streamSuccessor.writer.waitWorkerSessionFrame(t, ids.successor)
-	active := listS8RemoteWorkers(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL, "CANCELED", "STARTING", "RUNNING")
+	// These fixture Work IDs are execution associations, not materialized Work rows.
+	// Read the direct list without server-side state filters and select this run's stable IDs.
+	listed := listS8RemoteWorkers(t, ctx, scenario.manager, scenario.env, scenario.factoryDir, scenario.serverURL)
+	active := make([]s8WorkerObservation, 0, 3)
+	for _, observation := range listed {
+		switch observation.WorkerSessionID {
+		case ids.workerA, ids.successor, ids.workerB:
+			active = append(active, observation)
+		}
+	}
+	if len(active) != 3 {
+		t.Fatalf("post-interrupt direct Worker Session list contained %d scenario identities, want 3: %#v", len(active), active)
+	}
 	assertS8Observation(t, findS8Observation(t, active, ids.workerA), ids.workerA, scenario.session.id, ids.workA, "CANCELED", s8InterruptProviderSessionA, ids.dispatchA)
 	assertS8Observation(t, findS8Observation(t, active, ids.successor), ids.successor, scenario.session.id, ids.workA, "RUNNING", s8InterruptProviderSessionA, ids.dispatchA+"/continue/"+ids.successor)
 	assertS8Observation(t, findS8Observation(t, active, ids.workerB), ids.workerB, scenario.session.id, ids.workB, "RUNNING", s8InterruptProviderSessionB, ids.dispatchB)

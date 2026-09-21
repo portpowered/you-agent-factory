@@ -755,7 +755,12 @@ func mergeLiveObservation(recorded *workersessions.Observation, live workersessi
 	if recorded == nil {
 		return
 	}
-	if live.StartedAt != nil {
+	// A terminal recorded attempt already has a stable Factory timeline. A
+	// process-local live session can be reconstructed with a new opening time
+	// after restart, so it must not replace that history. The durable Worker
+	// Recording timestamp is applied later when the source-native opening record
+	// is available.
+	if live.StartedAt != nil && (recorded.StartedAt == nil || !recorded.State.Terminal()) {
 		started := *live.StartedAt
 		recorded.StartedAt = &started
 	}

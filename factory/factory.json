@@ -237,6 +237,13 @@
         }
       },
       {
+        "id": "workstation:complete-reviewed-task-after-failed-idea",
+        "position": {
+          "x": 1750,
+          "y": 2265
+        }
+      },
+      {
         "id": "workstation:ci-wait",
         "position": {
           "x": 1465,
@@ -859,6 +866,7 @@
           "worker:reviewer",
           "worker:ci-waiter",
           "workstation:consume",
+          "workstation:complete-reviewed-task-after-failed-idea",
           "workstation:ci-wait",
           "workstation:process",
           "workstation:review",
@@ -1448,7 +1456,8 @@
     {
       "args": [
         "factory/scripts/ci-wait.py",
-        "{{ (index .Inputs 0).Name }}"
+        "{{ (index .Inputs 0).Name }}",
+        "{{ (index .Inputs 0).PreviousOutput }}"
       ],
       "command": "python",
       "id": "ci-waiter",
@@ -1832,6 +1841,54 @@
         {
           "state": "complete",
           "workType": "task"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "id": "complete-reviewed-task-after-failed-idea",
+      "inputs": [
+        {
+          "state": "to-complete",
+          "workType": "task"
+        },
+        {
+          "state": "failed",
+          "workType": "idea"
+        },
+        {
+          "state": "complete",
+          "workType": "review"
+        }
+      ],
+      "guards": [
+        {
+          "matchConfig": {
+            "inputKey": ".Name"
+          },
+          "type": "MATCHES_FIELDS"
+        },
+        {
+          "matchConfig": {
+            "inputKey": ".TraceID"
+          },
+          "type": "MATCHES_FIELDS"
+        }
+      ],
+      "name": "complete-reviewed-task-after-failed-idea",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "idea"
+        },
+        {
+          "state": "complete",
+          "workType": "task"
+        },
+        {
+          "state": "complete",
+          "workType": "review"
         }
       ],
       "type": "LOGICAL_MOVE",

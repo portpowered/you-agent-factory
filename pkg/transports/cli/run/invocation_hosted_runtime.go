@@ -106,6 +106,15 @@ func (runner historicalReplayRunner) HistoricalReplay() *factorysessions.Histori
 	return runner.replay
 }
 
+// ReplayMetadataWarnings preserves the non-fatal drift facts through the
+// historical inspection wrapper. The CLI discovers optional capabilities from
+// the composed runtime runner, so dropping this forwarding method would leave
+// metadata mismatches logged internally but absent from the customer-facing
+// replay inspection.
+func (runner historicalReplayRunner) ReplayMetadataWarnings() []recordings.MetadataMismatchWarning {
+	return replayMetadataWarningsForRunner(runner.runner)
+}
+
 func (runner historicalReplayRunner) HostedInvocation() HostedInvocationOperation {
 	provider, ok := runner.runner.(interface {
 		HostedInvocation() HostedInvocationOperation

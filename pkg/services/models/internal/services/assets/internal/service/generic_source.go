@@ -188,6 +188,47 @@ func sourceMetadata(source genericSource) models.SourceMetadata {
 	return models.SourceMetadata{Provider: "LOCAL", Reference: source.safe}
 }
 
+func genericRuntimeSourceMatchesMetadata(source genericSource, metadata cacheMetadata) bool {
+	if source.kind != genericSourceHF {
+		return true
+	}
+	if revision := strings.TrimSpace(source.revision); revision != "" &&
+		!strings.EqualFold(revision, strings.TrimSpace(metadata.Revision)) {
+		return false
+	}
+	if expected := filepath.ToSlash(strings.TrimSpace(source.file)); expected != "" {
+		for _, file := range metadata.Files {
+			if filepath.ToSlash(strings.TrimSpace(file.Path)) == expected {
+				return true
+			}
+		}
+		return false
+	}
+	return true
+}
+
+func genericRuntimeMetadataFiles(artifacts []models.AssetArtifact) ([]metadataFile, error) {
+	files := make([]metadataFile, 0, len(artifacts))
+	seen := make(map[string]struct{}, len(artifacts))
+	for _, artifact := range artifacts {
+		name := filepath.ToSlash(strings.TrimSpace(artifact.Name))
+		requirement := models.AssetRequirement{
+			Name: name, Bytes: artifact.Bytes, SHA256: strings.ToLower(strings.TrimSpace(artifact.SHA256)),
+		}
+		if err := requirement.Validate(); err != nil {
+			return nil, fmt.Errorf("%w: generic runtime artifact %q is invalid", models.ErrAssetPreparationInterrupted, name)
+		}
+		if _, exists := seen[name]; exists {
+			return nil, fmt.Errorf("%w: generic runtime artifact %q is duplicated", models.ErrAssetPreparationInterrupted, name)
+		}
+		seen[name] = struct{}{}
+		files = append(files, metadataFile{
+			Path: name, Bytes: artifact.Bytes, SHA256: requirement.SHA256,
+		})
+	}
+	return files, nil
+}
+
 func genericCacheKey(kind string, source genericSource, artifacts []genericArtifact) string {
 	names := genericArtifactIdentityNames(artifacts)
 	sort.Strings(names)

@@ -28,17 +28,6 @@ func (f observationProjectorFake) Project(providersessions.ProjectRequest) (prov
 	return f.result, f.err
 }
 
-type trackingObservationProjector struct {
-	providersessions.Service
-	result  providersessions.ProjectResult
-	request providersessions.ProjectRequest
-}
-
-func (f *trackingObservationProjector) Project(request providersessions.ProjectRequest) (providersessions.ProjectResult, error) {
-	f.request = request
-	return f.result, nil
-}
-
 type observationEventReaderFake struct {
 	subscription   events.Subscription
 	err            error

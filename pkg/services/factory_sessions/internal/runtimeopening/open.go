@@ -193,12 +193,17 @@ func openRuntime(
 				return runtimeProducts{}, err
 			}
 		}
-		return historicalReplayRuntimeProducts(
+		historicalProducts := historicalReplayRuntimeProducts(
 			logger,
 			*load.HistoricalReplay,
 			liveOwner,
 			replayClose,
-		), nil
+		)
+		historicalProducts.application.ReplayMetadataWarnings = append(
+			[]recordings.MetadataMismatchWarning(nil),
+			load.ReplayMetadataWarnings...,
+		)
+		return historicalProducts, nil
 	}
 	operatorSettingsPath, err := operatorConfigPath(configured.Session)
 	if err != nil {

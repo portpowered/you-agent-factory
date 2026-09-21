@@ -61,6 +61,7 @@ func TestObservationRequests_ValidateIdentityAndBounds(t *testing.T) {
 		want error
 	}{
 		{"list valid", (ListObservationsRequest{WorkID: "work-1"}).Validate(), nil},
+		{"list blank Factory Session", (ListObservationsRequest{WorkID: "work-1", FactorySessionID: " "}).Validate(), ErrInvalidObservationFactorySessionID},
 		{"list blank", (ListObservationsRequest{WorkID: "  "}).Validate(), ErrInvalidObservationWorkID},
 		{"get valid", (GetObservationRequest{ProviderSession: valid}).Validate(), nil},
 		{"get invalid", (GetObservationRequest{}).Validate(), ErrInvalidObservationIdentity},

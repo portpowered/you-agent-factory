@@ -313,6 +313,9 @@ func prepareGenericCLIInputsWithReader(
 		if err != nil {
 			return nil, err
 		}
+		if err := omittedVideoCapabilityFailure(mappings, catalog); err != nil {
+			return nil, err
+		}
 		slots, validNames := genericCLIInputSlots(selected.Inputs)
 		counts, err := validateGenericCLIInputMappings(mappings, slots, validNames)
 		if err != nil {
@@ -328,6 +331,26 @@ func prepareGenericCLIInputsWithReader(
 	}
 	inputs = append(inputs, specInputs...)
 	return inputs, nil
+}
+
+func omittedVideoCapabilityFailure(
+	mappings []genericCLIInputMapping,
+	catalog modelinference.Detail,
+) error {
+	if catalog.Diagnostics["videoReadiness"] != "required projector artifact is missing or invalid" {
+		return nil
+	}
+	for _, mapping := range mappings {
+		if strings.EqualFold(strings.TrimSpace(mapping.slot), "video") {
+			return genericCLIInputFailure(
+				modelinference.InvocationFailureClassMediaCapability,
+				"video input requires a verified projector artifact",
+				mapping.slot,
+				nil,
+			)
+		}
+	}
+	return nil
 }
 
 func splitGenericCLIInputValues(values []string) (mappings, specs []string) {

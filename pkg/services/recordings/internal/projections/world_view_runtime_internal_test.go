@@ -440,6 +440,41 @@ func TestCanonicalDispatchResponseReconstructsCompletionAndReleasesResources(t *
 	}
 }
 
+func TestCanonicalDispatchResponseUsesContextWorkIDsWhenActiveDispatchIsMissing(t *testing.T) {
+	t.Parallel()
+
+	dispatchID, workID := "dispatch-recovered", "work-recovered-failure"
+	item := work.FactoryWorkItem{ID: workID, WorkTypeID: "task", State: "failed", TraceID: "trace-recovered"}
+	failure := &workerexecution.FailureDetail{
+		Reason:  workerexecution.WorkFailureTypeAuthFailure,
+		Message: "Provider authentication failed.",
+	}
+	reducer := newFactoryWorldReducer(2)
+	reducer.stateValue.WorkItemsByID[workID] = item
+	event := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchResponse, interfaces.FactoryEventContext{
+		DispatchID: &dispatchID,
+		WorkIDs:    &[]string{workID},
+	}, workerexecution.DispatchResponseEventPayload{
+		TransitionID:  "execute",
+		Outcome:       workerexecution.OutcomeFailed,
+		FailureDetail: failure,
+	})
+
+	if err := reducer.applyDispatchResponseEvent(event); err != nil {
+		t.Fatalf("applyDispatchResponseEvent: %v", err)
+	}
+	if len(reducer.stateValue.CompletedDispatches) != 1 || len(reducer.stateValue.FailedDispatches) != 1 {
+		t.Fatalf("completion counts = completed %d failed %d, want one canonical failed completion", len(reducer.stateValue.CompletedDispatches), len(reducer.stateValue.FailedDispatches))
+	}
+	completion := reducer.stateValue.FailedDispatches[0]
+	if !reflect.DeepEqual(completion.WorkItemIDs, []string{workID}) {
+		t.Fatalf("failed dispatch Work IDs = %v, want canonical context Work ID %q", completion.WorkItemIDs, workID)
+	}
+	if got := reducer.stateValue.FailureDetailsByWorkID[workID].FailureDetail; got == nil || *got != *failure {
+		t.Fatalf("failed Work detail = %#v, want canonical failure %#v", got, failure)
+	}
+}
+
 func TestDispatchInterruptedRearmsNonTerminalInputsAndResources(t *testing.T) {
 	t.Parallel()
 

@@ -115,7 +115,10 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 	t.Cleanup(modelServer.Close)
 
 	home := functionalTempDir(t)
-	writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
+	modelSource := filepath.Join(home, "llm-source")
+	writeVideoReadinessModelSource(t, modelSource, true)
+	writeVideoReadinessOperatorConfig(t, home, modelSource)
+	writeVideoReadinessManagedCache(t, home, true)
 	selection := serviceedges.ModelBackendArtifactSelection{
 		Name:     "localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
 		Location: "https://github.com/portpowered/infinite-you/releases/download/localai-backends-v1-374fb240161479665f1e4d2c422dbe152f7eb585fc4ee82dabd182517feae2f1/localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51feae2f1.tar.gz",
@@ -130,6 +133,7 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 		home: home, dir: dir, media: media, inputReader: media.inputReader,
 		protocol: &omniTextProtocolFixture{response: response}, network: &rejectingModelAssetHTTP{},
 	}
+	fixture.protocol.preparationCallPending = true
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL}
 	protocol := &joinedProtocolNegotiator{}
@@ -151,6 +155,15 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 		ModelHostHTTPClient:    modelServer.Client(), ModelRuntimeHTTPClient: modelServer.Client(),
 		ModelInvocationProtocolClient: fixture.protocol,
 	})
+	prepare := support.FakeInputs(t.Context(), []string{
+		"you", "models", "invoke", models.BuiltInModelNameLLM, "--operation", models.OperationOMNI,
+		"--input", "prompt=Prepare the controlled projector cache",
+	})
+	prepare.Input.Env = videoReadinessEnvironment(home)
+	prepare.Input.WorkingDirectory = dir
+	if err := fixture.process.Execute(prepare.Input); err != nil {
+		t.Fatalf("prepare OMNI file-input projector cache: %v", err)
+	}
 	return fixture
 }
 

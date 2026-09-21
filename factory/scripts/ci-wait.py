@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """ci-wait.py — Gate a task until its PR's observed checks are terminal.
 
-Usage: python3 factory/scripts/ci-wait.py <lane-name>
+Usage: python3 factory/scripts/ci-wait.py <lane-name> [process-output]
 
-Resolves the PR whose head branch equals the lane name, then waits until the
-complete current-head check set observed by review is terminal (pass, fail,
-cancelled, or skipped). Verdicts are the reviewer's job: this gate does NOT
-care whether checks passed, only that they finished, so reviewer agent sessions
-never spend time or review-loop visits watching CI.
+When bounded process output declares one repository-local pull request, resolves
+that exact PR even if its head branch differs from the lane name. Otherwise it
+preserves the legacy branch-name lookup. It then waits until the complete
+current-head check set observed by review is terminal (pass, fail, cancelled,
+or skipped). Verdicts are the reviewer's job: this gate does NOT care whether
+checks passed, only that they finished, so reviewer agent sessions never spend
+time or review-loop visits watching CI.
 
 Outcome contract (script workers signal via exit code only):
   exit 0 -> task moves to in-review (success output)
-  exit 1 -> task moves to failed (failure output)
+  exit 1 -> task moves to failed for unsafe/missing explicit identity, usage
+            error, or five successful legacy branch lookups with no PR
 
 Because the runtime gives script workers no CONTINUE outcome, this script is
 one-shot: it polls internally every POLL_INTERVAL_SECONDS and exits 0 either
@@ -22,9 +25,13 @@ hold, which routes the task back through this gate — a cheap, bounded
 re-queue rather than a lane-killing failure.
 
 Special cases:
-  - No PR yet: successful lookups that return no matching PR may race a
-    processor push; retry for ~2 minutes, then exit 1 with a clear stderr
-    message.
+  - Legacy lookup has no PR yet: successful lookups that return no matching PR
+    may race a processor push; retry for ~2 minutes, then exit 1 with a clear
+    stderr message.
+  - Explicit identity is unsafe or missing: do not fall back to lane-name
+    lookup; fail with a bounded sanitized diagnostic.
+  - Explicit lookup is unavailable: retry a bounded infrastructure budget,
+    then exit 0 for the review hold-and-requeue path.
   - GitHub lookup unavailable: retry a bounded infrastructure budget with
     backoff, then exit 0 for the review hold-and-requeue path.
   - PR already MERGED (and no open PR for the branch): exit 0 immediately;
@@ -39,11 +46,13 @@ Stdlib-only; shells out to the `gh` CLI like setup-workspace.py does for git.
 """
 
 import json
+import re
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
 from enum import Enum
+from urllib.parse import urlsplit
 
 POLL_INTERVAL_SECONDS = 120
 DEADLINE_SECONDS = 100 * 60  # one-shot budget, well below the 2h hard timeout
@@ -55,8 +64,23 @@ PR_LOOKUP_INFRASTRUCTURE_BACKOFF_SECONDS = 5
 PR_LOOKUP_INFRASTRUCTURE_MAX_BACKOFF_SECONDS = 60
 NO_CHECKS_GRACE_SECONDS = 10 * 60
 PR_VIEW_JSON_FIELDS = "number,state,headRefOid,statusCheckRollup"
+PR_IDENTITY_JSON_FIELDS = "number,state,url"
+REPOSITORY_JSON_FIELDS = "nameWithOwner,url"
 PR_CHECKS_JSON_FIELDS = "name,state,bucket,link,workflow,startedAt,completedAt"
 CONVERGENCE_OBSERVATIONS = 2
+MAX_PROCESS_OUTPUT_BYTES = 8 * 1024
+
+PR_URL_TOKEN = re.compile(
+    r"[A-Za-z][A-Za-z0-9+.-]*://[^\s<>\[\]\"'`]+", re.IGNORECASE
+)
+PR_LABEL = re.compile(r"\b(?:pull\s+request|pr)\b", re.IGNORECASE)
+PR_NUMBER = re.compile(r"(\d+)(?![\w-])")
+BARE_PR_NUMBER = re.compile(r"#?\s*(\d+)")
+PR_URL_LABEL = re.compile(r"\b(?:pull\s+request|pr)\s+url\s*:", re.IGNORECASE)
+SCHEMELESS_PR_URL = re.compile(
+    r"(?:^|[\s(<])(?:www\.)?github\.com/[^\s<>]+/pull(?:/|(?=$|[\s?#]))",
+    re.IGNORECASE,
+)
 
 NON_TERMINAL_BUCKETS = {"pending"}
 NON_TERMINAL_STATES = {"PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "EXPECTED"}
@@ -90,6 +114,59 @@ class PRLookupResult:
 
     status: PRLookupStatus
     prs: tuple = ()
+
+
+class PRIntentStatus(Enum):
+    """Classification of optional process output before any PR query."""
+
+    ABSENT = "absent"
+    IDENTIFIED = "identified"
+    INVALID = "invalid"
+
+
+@dataclass(frozen=True)
+class ExplicitPRIdentity:
+    """One bounded PR identity extracted from prior process output."""
+
+    number: int
+    repository: str = ""
+    host: str = ""
+    port: int = None
+
+
+@dataclass(frozen=True)
+class PRIntent:
+    """Result of classifying process output without making external calls."""
+
+    status: PRIntentStatus
+    identity: ExplicitPRIdentity = None
+    reason: str = ""
+
+
+class ExplicitPRLookupStatus(Enum):
+    """Outcome of resolving an explicitly declared PR in the local repo."""
+
+    FOUND = "found"
+    NOT_FOUND = "not-found"
+    INFRASTRUCTURE_FAILURE = "infrastructure-failure"
+    INVALID = "invalid"
+
+
+@dataclass(frozen=True)
+class RepositoryContext:
+    """Canonical repository identity returned by the local gh context."""
+
+    name_with_owner: str
+    host: str
+    port: int = None
+
+
+@dataclass(frozen=True)
+class ExplicitPRLookup:
+    """Typed result for one exact PR view request."""
+
+    status: ExplicitPRLookupStatus
+    value: object = None
 
 
 class JSONReadStatus(Enum):
@@ -157,6 +234,371 @@ def run_gh(*args):
         text=True,
         timeout=GH_CALL_TIMEOUT_SECONDS,
     )
+
+
+def _safe_pr_number(raw_number):
+    """Return a positive integer PR number, or None for an invalid token."""
+    try:
+        number = int(raw_number)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def _pr_identity_from_url(url):
+    """Parse a pull-request URL while retaining its repository origin."""
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except (TypeError, ValueError):
+        return None, isinstance(url, str) and "/pull" in url.casefold()
+
+    path_parts = parsed.path.split("/")
+    has_pull_path = any(part.casefold() == "pull" for part in path_parts)
+    if not has_pull_path:
+        return None, False
+    if (
+        parsed.scheme.casefold() != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or len(path_parts) < 5
+        or path_parts[0] != ""
+        or path_parts[3].casefold() != "pull"
+    ):
+        return None, True
+
+    owner, repository, raw_number = path_parts[1], path_parts[2], path_parts[4]
+    component = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?\Z")
+    if not component.fullmatch(owner) or not component.fullmatch(repository):
+        return None, True
+    number = _safe_pr_number(raw_number)
+    if number is None:
+        return None, True
+
+    suffix = path_parts[5:]
+    if suffix and suffix[-1] == "":
+        suffix.pop()
+    if any(
+        not part
+        or part in {".", ".."}
+        or not re.fullmatch(r"[A-Za-z0-9_.-]+", part)
+        for part in suffix
+    ):
+        return None, True
+
+    identity = ExplicitPRIdentity(
+        number=number,
+        repository=f"{owner}/{repository}",
+        host=parsed.hostname.casefold(),
+        port=port,
+    )
+    return identity, True
+
+
+def _labelled_pr_number(suffix, url_identities):
+    """Return (number, explicit-intent, malformed-intent) for a PR label."""
+    remaining = suffix.lstrip()
+    explicit = False
+    if remaining.startswith((":", "=")):
+        explicit = True
+        remaining = remaining[1:].lstrip()
+    if remaining.startswith("#"):
+        explicit = True
+        remaining = remaining[1:].lstrip()
+    elif remaining and remaining[0].isdigit():
+        explicit = True
+    else:
+        number_label = re.match(r"(?:number|no\.?)\b", remaining, re.IGNORECASE)
+        if number_label:
+            explicit = True
+            remaining = remaining[number_label.end():].lstrip()
+            if remaining.startswith((":", "=")):
+                remaining = remaining[1:].lstrip()
+            if remaining.startswith("#"):
+                remaining = remaining[1:].lstrip()
+        elif re.match(r"url\s*:", remaining, re.IGNORECASE):
+            return None, True, not url_identities
+        elif remaining.casefold().startswith(("https://", "http://")):
+            return None, True, not url_identities
+
+    if not explicit:
+        return None, False, False
+    match = PR_NUMBER.match(remaining)
+    if match is None:
+        return None, True, True
+    number = _safe_pr_number(match.group(1))
+    return number, True, number is None
+
+
+def classify_process_output(process_output):
+    """Classify bounded previous output without querying gh or logging input."""
+    if process_output is None:
+        return PRIntent(PRIntentStatus.ABSENT)
+    if not isinstance(process_output, str):
+        return PRIntent(PRIntentStatus.INVALID, reason="invalid-process-output")
+    if len(process_output.encode("utf-8", errors="replace")) > MAX_PROCESS_OUTPUT_BYTES:
+        return PRIntent(PRIntentStatus.INVALID, reason="process-output-too-large")
+
+    text = process_output.strip()
+    if not text:
+        return PRIntent(PRIntentStatus.ABSENT)
+
+    identities = []
+    malformed = False
+    url_identities = []
+    for match in PR_URL_TOKEN.finditer(text):
+        token = match.group(0).rstrip(".,;:!?)]}")
+        identity, has_pull_intent = _pr_identity_from_url(token)
+        if has_pull_intent:
+            if identity is None:
+                malformed = True
+            else:
+                identities.append(identity)
+                url_identities.append(identity)
+
+    if PR_URL_LABEL.search(text) and not url_identities:
+        malformed = True
+    if SCHEMELESS_PR_URL.search(text):
+        malformed = True
+
+    for marker in PR_LABEL.finditer(text):
+        number, explicit, invalid = _labelled_pr_number(
+            text[marker.end():], url_identities
+        )
+        if invalid:
+            malformed = True
+        elif explicit and number is not None:
+            identities.append(ExplicitPRIdentity(number=number))
+
+    bare_number = BARE_PR_NUMBER.fullmatch(text)
+    if bare_number:
+        number = _safe_pr_number(bare_number.group(1))
+        if number is None:
+            malformed = True
+        else:
+            identities.append(ExplicitPRIdentity(number=number))
+
+    if identities:
+        for match in re.finditer(r"(?<![\w])#(\d+)(?![\w-])", text):
+            number = _safe_pr_number(match.group(1))
+            if number is None:
+                malformed = True
+            else:
+                identities.append(ExplicitPRIdentity(number=number))
+
+    if malformed:
+        return PRIntent(PRIntentStatus.INVALID, reason="malformed-pr-identity")
+    if not identities:
+        return PRIntent(PRIntentStatus.ABSENT)
+
+    numbers = {identity.number for identity in identities}
+    locations = {
+        (identity.repository.casefold(), identity.host, identity.port)
+        for identity in identities
+        if identity.repository
+    }
+    if len(numbers) != 1 or len(locations) > 1:
+        return PRIntent(PRIntentStatus.INVALID, reason="ambiguous-pr-identities")
+
+    number = next(iter(numbers))
+    if locations:
+        repository, host, port = next(iter(locations))
+        identity = ExplicitPRIdentity(number, repository, host, port)
+    else:
+        identity = ExplicitPRIdentity(number)
+    return PRIntent(PRIntentStatus.IDENTIFIED, identity)
+
+
+def _repository_context_from_value(value):
+    """Validate the local repository name and canonical web URL from gh."""
+    if not isinstance(value, dict):
+        return None
+    name_with_owner = value.get("nameWithOwner")
+    repository_url = value.get("url")
+    component = r"[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?"
+    if not isinstance(name_with_owner, str) or not re.fullmatch(
+        rf"{component}/{component}", name_with_owner
+    ):
+        return None
+    try:
+        parsed = urlsplit(repository_url)
+        port = parsed.port
+    except (TypeError, ValueError):
+        return None
+    path_parts = parsed.path.rstrip("/").split("/")
+    if (
+        parsed.scheme.casefold() != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or len(path_parts) != 3
+        or path_parts[0] != ""
+        or "/".join(path_parts[1:]).casefold() != name_with_owner.casefold()
+    ):
+        return None
+    return RepositoryContext(name_with_owner, parsed.hostname.casefold(), port)
+
+
+def _identity_is_local(identity, repository):
+    """Return whether a URL identity points at the configured repository."""
+    return (
+        identity.repository.casefold() == repository.name_with_owner.casefold()
+        and identity.host == repository.host
+        and identity.port == repository.port
+    )
+
+
+def _read_repository_context():
+    """Read local gh repository identity without exposing dependency output."""
+    try:
+        result = run_gh("repo", "view", "--json", REPOSITORY_JSON_FIELDS)
+    except (OSError, subprocess.TimeoutExpired):
+        return ExplicitPRLookup(ExplicitPRLookupStatus.INFRASTRUCTURE_FAILURE)
+    if result.returncode != 0:
+        return ExplicitPRLookup(ExplicitPRLookupStatus.INFRASTRUCTURE_FAILURE)
+    stdout = (result.stdout or "").strip()
+    if not stdout:
+        return ExplicitPRLookup(ExplicitPRLookupStatus.INVALID)
+    try:
+        value = json.loads(stdout)
+    except (TypeError, json.JSONDecodeError):
+        return ExplicitPRLookup(ExplicitPRLookupStatus.INVALID)
+    repository = _repository_context_from_value(value)
+    if repository is None:
+        return ExplicitPRLookup(ExplicitPRLookupStatus.INVALID)
+    return ExplicitPRLookup(ExplicitPRLookupStatus.FOUND, repository)
+
+
+def _is_missing_pr_message(stderr, pr_number):
+    """Recognize gh's bounded not-a-pull-request response without logging it."""
+    pattern = (
+        r"could not resolve to a pullrequest with the number of\s+"
+        + re.escape(str(pr_number))
+        + r"\b"
+    )
+    return re.search(pattern, stderr or "", re.IGNORECASE) is not None
+
+
+def _read_explicit_pr(identity, repository):
+    """Resolve one PR number in the specified repository and verify its URL."""
+    try:
+        result = run_gh(
+            "pr", "view", str(identity.number), "--repo", repository.name_with_owner,
+            "--json", PR_IDENTITY_JSON_FIELDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ExplicitPRLookup(ExplicitPRLookupStatus.INFRASTRUCTURE_FAILURE)
+    if result.returncode != 0:
+        if _is_missing_pr_message(result.stderr, identity.number):
+            return ExplicitPRLookup(ExplicitPRLookupStatus.NOT_FOUND)
+        return ExplicitPRLookup(ExplicitPRLookupStatus.INFRASTRUCTURE_FAILURE)
+
+    stdout = (result.stdout or "").strip()
+    try:
+        value = json.loads(stdout)
+    except (TypeError, json.JSONDecodeError):
+        return ExplicitPRLookup(ExplicitPRLookupStatus.INVALID)
+    if not isinstance(value, dict):
+        return ExplicitPRLookup(ExplicitPRLookupStatus.INVALID)
+    number = value.get("number")
+    state = _non_empty_text(value.get("state"))
+    resolved, is_pr_url = _pr_identity_from_url(value.get("url", ""))
+    if (
+        not isinstance(number, int)
+        or isinstance(number, bool)
+        or number != identity.number
+        or state is None
+        or state.upper() not in PR_STATE_PREFERENCE
+        or not is_pr_url
+        or resolved is None
+        or resolved.number != identity.number
+        or not _identity_is_local(resolved, repository)
+    ):
+        return ExplicitPRLookup(ExplicitPRLookupStatus.INVALID)
+    return ExplicitPRLookup(
+        ExplicitPRLookupStatus.FOUND,
+        {"number": identity.number, "state": state.upper()},
+    )
+
+
+def _release_for_explicit_infrastructure_requeue(identity, stage, attempts):
+    """Release to the review hold path after bounded explicit lookup failure."""
+    log(
+        "ci-wait: explicit PR lookup infrastructure retry budget exhausted "
+        f"during {stage} after {attempts} failures; releasing to review"
+    )
+    emit_result(
+        pr=identity.number,
+        reason="explicit-pr-lookup-infrastructure-requeue",
+        lookup=ExplicitPRLookupStatus.INFRASTRUCTURE_FAILURE.value,
+        lookupStage=stage,
+        infrastructureAttempts=attempts,
+    )
+
+
+def _fail_explicit_identity(reason):
+    """Fail closed with a fixed diagnostic that contains no raw process data."""
+    log(f"ci-wait: {reason}; no PR selected and branch lookup was skipped")
+    sys.exit(1)
+
+
+def resolve_explicit_pr(identity):
+    """Resolve a declared local PR with a bounded, sanitized gh-call budget."""
+    repository = None
+    repository_failures = 0
+    while repository is None:
+        lookup = _read_repository_context()
+        if lookup.status == ExplicitPRLookupStatus.FOUND:
+            repository = lookup.value
+            break
+        if lookup.status == ExplicitPRLookupStatus.INVALID:
+            _fail_explicit_identity("local repository identity could not be validated")
+
+        repository_failures += 1
+        if repository_failures >= PR_LOOKUP_INFRASTRUCTURE_ATTEMPTS:
+            _release_for_explicit_infrastructure_requeue(
+                identity, "repository-context", repository_failures
+            )
+            return None
+        backoff = infrastructure_backoff_seconds(repository_failures)
+        log(
+            "ci-wait: local repository identity is temporarily unavailable "
+            f"(attempt {repository_failures}/"
+            f"{PR_LOOKUP_INFRASTRUCTURE_ATTEMPTS}); retrying in {backoff}s"
+        )
+        time.sleep(backoff)
+
+    if identity.repository and not _identity_is_local(identity, repository):
+        _fail_explicit_identity("declared PR URL does not match the local repository")
+
+    pr_failures = 0
+    while True:
+        lookup = _read_explicit_pr(identity, repository)
+        if lookup.status == ExplicitPRLookupStatus.FOUND:
+            return {**lookup.value, "repository": repository.name_with_owner}
+        if lookup.status == ExplicitPRLookupStatus.NOT_FOUND:
+            _fail_explicit_identity(
+                f"explicit PR #{identity.number} was not found in the local repository"
+            )
+        if lookup.status == ExplicitPRLookupStatus.INVALID:
+            _fail_explicit_identity(
+                f"explicit PR #{identity.number} returned an inconsistent identity"
+            )
+
+        pr_failures += 1
+        if pr_failures >= PR_LOOKUP_INFRASTRUCTURE_ATTEMPTS:
+            _release_for_explicit_infrastructure_requeue(
+                identity, "pull-request", pr_failures
+            )
+            return None
+        backoff = infrastructure_backoff_seconds(pr_failures)
+        log(
+            f"ci-wait: explicit PR #{identity.number} is temporarily unavailable "
+            f"(attempt {pr_failures}/"
+            f"{PR_LOOKUP_INFRASTRUCTURE_ATTEMPTS}); retrying in {backoff}s"
+        )
+        time.sleep(backoff)
 
 
 def list_prs_for_head(branch):
@@ -348,28 +790,22 @@ def read_gh_json(label, *args):
     return JSONRead(JSONReadStatus.OK, value)
 
 
-def fetch_pr_view(pr_number):
+def fetch_pr_view(pr_number, repository=None):
     """Read the PR head and status-check rollup for one bounded observation."""
-    return read_gh_json(
-        "gh pr view",
-        "pr",
-        "view",
-        str(pr_number),
-        "--json",
-        PR_VIEW_JSON_FIELDS,
-    )
+    args = ["pr", "view", str(pr_number)]
+    if repository:
+        args.extend(["--repo", repository])
+    args.extend(["--json", PR_VIEW_JSON_FIELDS])
+    return read_gh_json("gh pr view", *args)
 
 
-def fetch_checks(pr_number):
+def fetch_checks(pr_number, repository=None):
     """Read the full review-observed check list; required-only is not used."""
-    return read_gh_json(
-        "gh pr checks",
-        "pr",
-        "checks",
-        str(pr_number),
-        "--json",
-        PR_CHECKS_JSON_FIELDS,
-    )
+    args = ["pr", "checks", str(pr_number)]
+    if repository:
+        args.extend(["--repo", repository])
+    args.extend(["--json", PR_CHECKS_JSON_FIELDS])
+    return read_gh_json("gh pr checks", *args)
 
 
 def _non_empty_text(value):
@@ -557,11 +993,11 @@ def _observed_heads(*heads):
     return tuple(dict.fromkeys(head for head in heads if head))
 
 
-def observe_current_head(pr_number):
+def observe_current_head(pr_number, repository=None):
     """Take one bounded before/checks/after observation of the PR."""
-    before_read = fetch_pr_view(pr_number)
-    checks_read = fetch_checks(pr_number)
-    after_read = fetch_pr_view(pr_number)
+    before_read = fetch_pr_view(pr_number, repository)
+    checks_read = fetch_checks(pr_number, repository)
+    after_read = fetch_pr_view(pr_number, repository)
 
     before, before_reason = _view_parts(before_read, pr_number)
     after, after_reason = _view_parts(after_read, pr_number)
@@ -746,16 +1182,26 @@ def snapshot_uncertainty(snapshot, reason=None):
 
 
 def main():
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <lane-name>", file=sys.stderr)
+    if len(sys.argv) not in {2, 3}:
+        print(f"Usage: {sys.argv[0]} <lane-name> [process-output]", file=sys.stderr)
         sys.exit(1)
 
     branch = sys.argv[1]
-    pr = resolve_pr(branch)
+    process_output = sys.argv[2] if len(sys.argv) == 3 else None
+    intent = classify_process_output(process_output)
+    if intent.status == PRIntentStatus.INVALID:
+        _fail_explicit_identity(
+            f"process output contains {intent.reason.replace('-', ' ')}"
+        )
+    if intent.status == PRIntentStatus.IDENTIFIED:
+        pr = resolve_explicit_pr(intent.identity)
+    else:
+        pr = resolve_pr(branch)
     if pr is None:
         return
     pr_number = pr.get("number")
     pr_state = pr.get("state")
+    repository = pr.get("repository")
 
     if pr_state == "MERGED":
         log(f"PR #{pr_number} for {branch!r} is already MERGED; releasing to review")
@@ -772,7 +1218,7 @@ def main():
     candidate_fingerprint = None
     convergence_count = 0
     while True:
-        snapshot = observe_current_head(pr_number)
+        snapshot = observe_current_head(pr_number, repository)
         now = time.monotonic()
         pending = non_terminal_checks(snapshot.checks)
 

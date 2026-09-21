@@ -67,7 +67,7 @@ func TestModelsOmniUnsupportedVideoCapabilityFailsBeforeProtocolThroughRootBuild
 		"you", "models", "invoke", modelName, "--operation", models.OperationOMNI,
 		"--input", "prompt=Reject unadvertised video", "--input", "video=" + "@" + environment.videoPath,
 	})
-	inputs.Input.Env = functionalHomeEnvironment(environment.home)
+	inputs.Input.Env = videoReadinessEnvironment(environment.home)
 	inputs.Input.WorkingDirectory = environment.dir
 	inputs.Input.Stdout = &stdout
 	inputs.Input.Stderr = &stderr
@@ -225,7 +225,7 @@ func executeOmniExactMappedInvocation(
 		"--input", "video=@" + environment.media.video.ResolvedPath,
 		"--output-map", "text=" + textPath, "--output-map", "usage=" + usagePath,
 	})
-	inputs.Input.Env = functionalHomeEnvironment(environment.home)
+	inputs.Input.Env = videoReadinessEnvironment(environment.home)
 	inputs.Input.WorkingDirectory = environment.dir
 	inputs.Input.Stdout = &stdout
 	inputs.Input.Stderr = &stderr
@@ -350,7 +350,16 @@ func buildCoordinatedOmniEnvironmentWithOptions(
 	if options.modelName == "" {
 		options.modelName = models.BuiltInModelNameLLM
 	}
-	if options.modelSource == "" {
+	verifiedProjectorFixture := options.modelName == models.BuiltInModelNameLLM && options.modelSource == ""
+	if verifiedProjectorFixture {
+		// The built-in Hugging Face fixture contains only the model artifact.
+		// Use a local directory source and the production-shaped managed cache
+		// manifest so this released VIDEO journey has a verified projector.
+		modelSource := filepath.Join(home, "llm-source")
+		writeVideoReadinessModelSource(t, modelSource, true)
+		writeVideoReadinessOperatorConfig(t, home, modelSource)
+		writeVideoReadinessManagedCache(t, home, true)
+	} else if options.modelSource == "" {
 		writeGenericBuiltinModelCache(t, home, "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3")
 	} else {
 		writeGenericBuiltinModelCache(t, home, options.modelSource)
@@ -361,6 +370,7 @@ func buildCoordinatedOmniEnvironmentWithOptions(
 	dir := functionalScaffoldFactory(t, options.configFactory(modelServer.URL))
 	media := newExactOmniMediaFixture(t, dir)
 	fixture := newCoordinatedOmniProtocolFixtureWithResponse(options.usage, options.protocolError, responses...)
+	fixture.preparationCallPending = verifiedProjectorFixture
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	rejectingNetwork := &rejectingModelAssetHTTP{}
 	hostLauncher.endpoint = modelServer.URL
@@ -383,6 +393,19 @@ func buildCoordinatedOmniEnvironmentWithOptions(
 	}
 	process := functionalBuildProcess(t, edges)
 	support.CleanupProcess(t, process)
+	if verifiedProjectorFixture {
+		// Materialize the local model and projector through the public command
+		// path so the released journey starts from a complete durable cache.
+		prepare := support.FakeInputs(t.Context(), []string{
+			"you", "models", "invoke", options.modelName, "--operation", models.OperationOMNI,
+			"--input", "prompt=Prepare the controlled projector cache",
+		})
+		prepare.Input.Env = videoReadinessEnvironment(home)
+		prepare.Input.WorkingDirectory = dir
+		if err := process.Execute(prepare.Input); err != nil {
+			t.Fatalf("prepare coordinated OMNI asset cache: %v\nstdout=%s\nstderr=%s", err, prepare.Stdout(), prepare.Stderr())
+		}
+	}
 	return &coordinatedOmniEnvironment{
 		process: process, home: home, dir: dir, modelName: options.modelName,
 		videoPath: media.video.ResolvedPath, media: media, edges: edges,
@@ -401,7 +424,7 @@ func runOmniVideoInvocation(t *testing.T, environment *coordinatedOmniEnvironmen
 		"you", "models", "invoke", environment.modelName, "--input", "prompt=What happens at 0:30?",
 		"--input", "video=@" + environment.videoPath,
 	})
-	inputs.Input.Env = functionalHomeEnvironment(environment.home)
+	inputs.Input.Env = videoReadinessEnvironment(environment.home)
 	inputs.Input.WorkingDirectory = environment.dir
 	inputs.Input.Stdout = &stdout
 	inputs.Input.Stderr = &stderr
@@ -432,7 +455,7 @@ func runUnsupportedOmniInvocation(t *testing.T, environment *coordinatedOmniEnvi
 		"--input", "image=@" + environment.videoPath, "--output-map", "text=" + output,
 		"--output-map", "usage=" + usageOutput,
 	})
-	inputs.Input.Env = functionalHomeEnvironment(environment.home)
+	inputs.Input.Env = videoReadinessEnvironment(environment.home)
 	inputs.Input.WorkingDirectory = environment.dir
 	inputs.Input.Stdout = &stdout
 	inputs.Input.Stderr = &stderr
@@ -468,7 +491,7 @@ func runCancelledOmniInvocation(t *testing.T, environment *coordinatedOmniEnviro
 		"--input", "video=@" + environment.videoPath, "--output-map", "text=" + output,
 		"--output-map", "usage=" + usageOutput,
 	})
-	inputs.Input.Env = functionalHomeEnvironment(environment.home)
+	inputs.Input.Env = videoReadinessEnvironment(environment.home)
 	inputs.Input.WorkingDirectory = environment.dir
 	inputs.Input.Stdout = &stdout
 	inputs.Input.Stderr = &stderr
@@ -497,7 +520,7 @@ func runOmniFollowUpInvocation(t *testing.T, environment *coordinatedOmniEnviron
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", environment.modelName, "--input", "prompt=Follow up after cancellation",
 	})
-	inputs.Input.Env = functionalHomeEnvironment(environment.home)
+	inputs.Input.Env = videoReadinessEnvironment(environment.home)
 	inputs.Input.WorkingDirectory = environment.dir
 	inputs.Input.Stdout = &stdout
 	inputs.Input.Stderr = &stderr
@@ -518,16 +541,19 @@ func statAbsent(path string) error {
 }
 
 type coordinatedOmniProtocolFixture struct {
-	mu                  sync.Mutex
-	responses           []string
-	usage               string
-	protocolError       error
-	requests            []models.InvocationProtocolRequest
-	calls               int
-	cancellationStarted chan struct{}
-	cancellationSeen    chan struct{}
-	startOnce           sync.Once
-	cancelOnce          sync.Once
+	mu sync.Mutex
+	// preparationCallPending excludes the cache-warming invocation from the
+	// scenario-owned protocol call sequence below.
+	preparationCallPending bool
+	responses              []string
+	usage                  string
+	protocolError          error
+	requests               []models.InvocationProtocolRequest
+	calls                  int
+	cancellationStarted    chan struct{}
+	cancellationSeen       chan struct{}
+	startOnce              sync.Once
+	cancelOnce             sync.Once
 }
 
 func newCoordinatedOmniProtocolFixture(responses ...string) *coordinatedOmniProtocolFixture {
@@ -551,6 +577,12 @@ func (fixture *coordinatedOmniProtocolFixture) Predict(
 	request models.InvocationProtocolRequest,
 ) (models.InvocationProtocolResponse, error) {
 	fixture.mu.Lock()
+	if fixture.preparationCallPending {
+		fixture.preparationCallPending = false
+		usage := fixture.usage
+		fixture.mu.Unlock()
+		return models.InvocationProtocolResponse{Text: "controlled fixture cache prepared", Usage: usage}, nil
+	}
 	fixture.calls++
 	call := fixture.calls
 	request.Inputs = append([]models.InvocationProtocolInput(nil), request.Inputs...)

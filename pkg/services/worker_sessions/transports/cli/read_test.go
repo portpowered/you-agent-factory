@@ -78,6 +78,43 @@ func TestReadByWorkerSessionIDUsesTopLevelTranscriptRoute(t *testing.T) {
 	}
 }
 
+func TestReadByWorkerSessionIDUsesFactorySessionScopedTranscriptRoute(t *testing.T) {
+	var gotPath string
+	var gotQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(generated.WorkerSessionTranscriptResponse{
+			WorkerSessionId: "worker-1", FactorySessionId: stringPtrForTest("session-1"),
+			ProviderSession: generated.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: "provider-1"},
+			WorkIds:         []string{"work-1"}, AttemptId: "attempt-1", State: "COMPLETED",
+			Entries: []generated.ProviderSessionTranscriptEntry{{Order: 1, Type: generated.ProviderSessionTranscriptEntryType("assistant_message"), Text: stringPtrForTest("done")}},
+		})
+	}))
+	defer server.Close()
+
+	var output bytes.Buffer
+	err := NewRead(testHTTPProtocol(t))(ReadConfig{
+		Context: context.Background(), Server: server.URL, SessionID: "session-1",
+		WorkerSessionID: "worker-1", OutputFormat: "json", Output: &output,
+	})
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if gotPath != "/factory-sessions/session-1/worker-sessions/worker-1/transcript" || gotQuery != "" {
+		t.Fatalf("request = path=%q query=%q, want Factory Session scoped identity transcript route", gotPath, gotQuery)
+	}
+	var response generated.WorkerSessionTranscriptResponse
+	if err := json.Unmarshal(output.Bytes(), &response); err != nil {
+		t.Fatalf("decode scoped transcript response: %v; output=%q", err, output.String())
+	}
+	if response.FactorySessionId == nil || *response.FactorySessionId != "session-1" ||
+		response.WorkerSessionId != "worker-1" || len(response.WorkIds) != 1 || response.WorkIds[0] != "work-1" {
+		t.Fatalf("scoped transcript response = %#v, want exact Factory Session and Work identity", response)
+	}
+}
+
 func assertTranscriptReadRequest(t *testing.T, path string, query map[string]string) {
 	t.Helper()
 	if path != "/factory-sessions/session-1/worker-sessions/transcript" || query["provider"] != "codex" || query["kind"] != "session_id" || query["id"] != "provider-session-1" {
@@ -110,8 +147,9 @@ func TestReadHumanLabelsTranscriptRolesAndEncryptedContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(generated.WorkerSessionTranscriptResponse{
-			WorkerSessionId: "worker-session-1", ProviderSession: generated.WorkerSessionProviderSessionRef{Provider: "cursor", Kind: "session_id", Id: "cursor-session-1"},
-			WorkIds: []string{"work-1"}, AttemptId: "attempt-1", State: "FAILED",
+			WorkerSessionId: "worker-session-1", FactorySessionId: stringPtrForTest("factory-session-1"),
+			ProviderSession: generated.WorkerSessionProviderSessionRef{Provider: "cursor", Kind: "session_id", Id: "cursor-session-1"},
+			WorkIds:         []string{"work-1"}, AttemptId: "attempt-1", State: "FAILED",
 			Entries: []generated.ProviderSessionTranscriptEntry{
 				{Order: 1, Type: generated.ProviderSessionTranscriptEntryType("tool_output"), Output: stringPtrForTest("tool result")},
 				{Order: 2, Type: generated.ProviderSessionTranscriptEntryType("reasoning"), Encrypted: boolPtrForTest(true), EncryptedContent: stringPtrForTest("ciphertext")},
@@ -126,7 +164,9 @@ func TestReadHumanLabelsTranscriptRolesAndEncryptedContent(t *testing.T) {
 		t.Fatalf("Read() error = %v", err)
 	}
 	for _, want := range []string{
-		"Worker Session ID:\tworker-session-1", "Entries:\t2", "Entry 1:\ttype=tool_output order=1 role=tool", "output=tool result", "Entry 2:\ttype=reasoning order=2 role=reasoning-summary", "encrypted=true encryptedContent=ciphertext",
+		"Worker Session ID:\tworker-session-1", "Factory Session ID:\tfactory-session-1", "Entries:\t2",
+		"Entry 1:\ttype=tool_output order=1 role=tool", "output=tool result",
+		"Entry 2:\ttype=reasoning order=2 role=reasoning-summary", "encrypted=true encryptedContent=ciphertext",
 	} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("human output %q missing %q", output.String(), want)

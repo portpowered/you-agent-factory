@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -421,4 +422,437 @@ func invocationSourceLabels(labels []work.InputSourceLabel) []string {
 		out = append(out, string(label))
 	}
 	return out
+}
+
+func emitHistoricalReplayInspection(
+	output io.Writer,
+	inspection factorysessions.HistoricalReplayInspection,
+) error {
+	if output == nil {
+		return nil
+	}
+	if _, err := fmt.Fprintf(
+		output,
+		"Replayed Factory Session: %s\nSource: %s\nStatus: %s\nResult: %s\n",
+		inspection.Session.SessionID,
+		inspection.Session.ResolvedSource.SourceRef,
+		inspection.Session.Status,
+		inspection.Result.ResultStatus,
+	); err != nil {
+		return fmt.Errorf("write historical replay inspection: %w", err)
+	}
+	if _, err := fmt.Fprintf(
+		output,
+		"Worker history: %s (reason=%s)\n",
+		inspection.WorkerHistory.Availability,
+		inspection.WorkerHistory.Reason,
+	); err != nil {
+		return fmt.Errorf("write historical replay inspection: %w", err)
+	}
+	factoryProjection := normalizedHistoricalReplayFactoryProjection(inspection.FactoryProjection)
+	if _, err := fmt.Fprintf(
+		output,
+		"Factory projection: %s (reason=%s)\n",
+		factoryProjection.Availability,
+		factoryProjection.Reason,
+	); err != nil {
+		return fmt.Errorf("write historical replay inspection: %w", err)
+	}
+	controlStatus, terminal, finalStatus := historicalReplayLifecycle(inspection)
+	if _, err := fmt.Fprintf(
+		output,
+		"Session lifecycle: control=%s terminal=%t final=%s\n",
+		quoteHistoricalReplayValue(controlStatus),
+		terminal,
+		quoteHistoricalReplayValue(finalStatus),
+	); err != nil {
+		return fmt.Errorf("write historical replay inspection: %w", err)
+	}
+	if inspection.Checkpoint != nil {
+		if _, err := fmt.Fprintf(
+			output,
+			"Checkpoint: %s (%s)\n",
+			inspection.Checkpoint.ID,
+			inspection.Checkpoint.Summary,
+		); err != nil {
+			return fmt.Errorf("write historical replay inspection: %w", err)
+		}
+	}
+	if _, err := fmt.Fprintf(
+		output,
+		"Artifacts: %d\nEvents: %d\nRedaction: runtimeStateOmitted=%t checkpointBodiesOmitted=%t providerTranscriptsOmitted=%t childDispatchesOmitted=%t secretsRedacted=%d\n",
+		len(inspection.Artifacts.Artifacts),
+		len(inspection.Events.Events),
+		inspection.Redaction.RuntimeStateOmitted,
+		inspection.Redaction.CheckpointBodiesOmitted,
+		inspection.Redaction.ProviderTranscriptsOmitted,
+		inspection.Redaction.ChildDispatchesOmitted,
+		inspection.Redaction.SecretsRedacted,
+	); err != nil {
+		return fmt.Errorf("write historical replay inspection: %w", err)
+	}
+	for _, artifact := range inspection.Artifacts.Artifacts {
+		if _, err := fmt.Fprintf(output, "Artifact: %s (%s)\n", artifact.ID, artifact.Kind); err != nil {
+			return fmt.Errorf("write historical replay inspection: %w", err)
+		}
+	}
+	if err := emitHistoricalReplayFactoryFacts(output, inspection); err != nil {
+		return err
+	}
+	for index, event := range inspection.Events.Events {
+		var summary struct {
+			ID   string `json:"id"`
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(event, &summary); err != nil {
+			return fmt.Errorf("write historical replay inspection: decode event %d: %w", index, err)
+		}
+		if _, err := fmt.Fprintf(output, "Event %d: %s (%s)\n", index, summary.Type, summary.ID); err != nil {
+			return fmt.Errorf("write historical replay inspection: %w", err)
+		}
+	}
+	return nil
+}
+
+func normalizedHistoricalReplayFactoryProjection(
+	projection factorysessions.HistoricalReplayFactoryProjection,
+) factorysessions.HistoricalReplayFactoryProjection {
+	if projection.Availability != "" {
+		return projection
+	}
+	projection.Availability = factorysessions.HistoricalReplayFactoryProjectionUnavailable
+	projection.Reason = factorysessions.HistoricalReplayFactoryProjectionReasonNotRecorded
+	projection.State = nil
+	return projection
+}
+
+func quoteHistoricalReplayValue(value string) string {
+	return strconv.Quote(value)
+}
+
+func historicalReplayLifecycle(
+	inspection factorysessions.HistoricalReplayInspection,
+) (control string, terminal bool, final string) {
+	projection := normalizedHistoricalReplayFactoryProjection(inspection.FactoryProjection)
+	if projection.State != nil && projection.State.SessionBracket != nil {
+		bracket := projection.State.SessionBracket
+		return bracket.LifecycleControlStatus, bracket.Terminal, bracket.FinalStatus
+	}
+	status := inspection.Session.Status
+	switch status {
+	case factorysessions.LifecycleStatusSucceeded,
+		factorysessions.LifecycleStatusFailed,
+		factorysessions.LifecycleStatusCanceled,
+		factorysessions.LifecycleStatusTimedOut,
+		factorysessions.LifecycleStatusInterrupted,
+		factorysessions.LifecycleStatusTerminated:
+		return "", true, string(status)
+	default:
+		return "", false, ""
+	}
+}
+
+func emitHistoricalReplayFactoryFacts(
+	output io.Writer,
+	inspection factorysessions.HistoricalReplayInspection,
+) error {
+	projection := normalizedHistoricalReplayFactoryProjection(inspection.FactoryProjection)
+	if projection.State == nil {
+		return nil
+	}
+	state := projection.State
+	knownIDs, hasCanonicalWorkEvidence := historicalReplayKnownWorkIDs(*state)
+	for _, item := range historicalReplayWorkItems(*state, knownIDs) {
+		if _, err := fmt.Fprintf(
+			output,
+			"Work: id=%s type=%s state=%s trace=%s parent=%s\n",
+			quoteHistoricalReplayValue(item.ID),
+			quoteHistoricalReplayValue(item.WorkTypeID),
+			quoteHistoricalReplayValue(item.State),
+			quoteHistoricalReplayValue(item.TraceID),
+			quoteHistoricalReplayValue(item.ParentID),
+		); err != nil {
+			return fmt.Errorf("write historical replay inspection: %w", err)
+		}
+		previous := stableHistoricalReplayTraceIDs(item.PreviousChainingTraceIDs)
+		if _, err := fmt.Fprintf(
+			output,
+			"Lineage: work=%s current=%s previous=%s\n",
+			quoteHistoricalReplayValue(item.ID),
+			quoteHistoricalReplayValue(item.CurrentChainingTraceID),
+			quoteHistoricalReplayValue(strings.Join(previous, ",")),
+		); err != nil {
+			return fmt.Errorf("write historical replay inspection: %w", err)
+		}
+	}
+	for _, relation := range historicalReplayRelations(*state, knownIDs, hasCanonicalWorkEvidence) {
+		if _, err := fmt.Fprintf(
+			output,
+			"Relation: source=%s type=%s target=%s required=%s request=%s trace=%s\n",
+			quoteHistoricalReplayValue(relation.SourceWorkID),
+			quoteHistoricalReplayValue(relation.Type),
+			quoteHistoricalReplayValue(relation.TargetWorkID),
+			quoteHistoricalReplayValue(relation.RequiredState),
+			quoteHistoricalReplayValue(relation.RequestID),
+			quoteHistoricalReplayValue(relation.TraceID),
+		); err != nil {
+			return fmt.Errorf("write historical replay inspection: %w", err)
+		}
+	}
+	for _, failure := range historicalReplayFailures(*state, knownIDs, hasCanonicalWorkEvidence) {
+		reason, message := "", ""
+		if failure.FailureDetail != nil {
+			reason = string(failure.FailureDetail.Reason)
+			message = failure.FailureDetail.Message
+		}
+		if reason == "" && failure.ArtifactVerification != nil {
+			reason = string(failure.ArtifactVerification.Code)
+		}
+		if message == "" && failure.ArtifactVerification != nil {
+			message = "expected artifact verification failed"
+		}
+		if _, err := fmt.Fprintf(
+			output,
+			"Failure: work=%s dispatch=%s reason=%s message=%s\n",
+			quoteHistoricalReplayValue(failure.WorkItem.ID),
+			quoteHistoricalReplayValue(failure.DispatchID),
+			quoteHistoricalReplayValue(reason),
+			quoteHistoricalReplayValue(message),
+		); err != nil {
+			return fmt.Errorf("write historical replay inspection: %w", err)
+		}
+	}
+	return nil
+}
+
+func historicalReplayKnownWorkIDs(
+	state recordings.FactoryWorldState,
+) (map[string]struct{}, bool) {
+	known := make(map[string]struct{})
+	hasEvidence := addHistoricalReplayRequestWorkIDs(known, state)
+	if addHistoricalReplayLineageWorkIDs(known, state) {
+		hasEvidence = true
+	}
+	if hasEvidence {
+		return known, true
+	}
+	addHistoricalReplayMapWorkIDs(known, state.WorkItemsByID)
+	addHistoricalReplayMapWorkIDs(known, state.ActiveWorkItemsByID)
+	addHistoricalReplayMapWorkIDs(known, state.FailedWorkItemsByID)
+	for id, terminal := range state.TerminalWorkByID {
+		if normalizedID := strings.TrimSpace(id); normalizedID != "" {
+			known[normalizedID] = struct{}{}
+			continue
+		}
+		if itemID := strings.TrimSpace(terminal.WorkItem.ID); itemID != "" {
+			known[itemID] = struct{}{}
+		}
+	}
+	return known, false
+}
+
+func addHistoricalReplayRequestWorkIDs(
+	known map[string]struct{},
+	state recordings.FactoryWorldState,
+) bool {
+	hasEvidence := false
+	for _, request := range state.WorkRequestsByID {
+		for _, item := range request.WorkItems {
+			if id := strings.TrimSpace(item.ID); id != "" {
+				known[id] = struct{}{}
+				hasEvidence = true
+			}
+		}
+	}
+	return hasEvidence
+}
+
+func addHistoricalReplayLineageWorkIDs(
+	known map[string]struct{},
+	state recordings.FactoryWorldState,
+) bool {
+	hasEvidence := false
+	for _, snapshot := range state.PayloadLineage.SnapshotsByID {
+		if snapshot.SourceKind != work.WorkPayloadSnapshotKindWorkRequest &&
+			snapshot.SourceKind != work.WorkPayloadSnapshotKindDispatchOutput {
+			continue
+		}
+		id := strings.TrimSpace(snapshot.WorkID)
+		if id == "" {
+			id = strings.TrimSpace(snapshot.WorkItem.ID)
+		}
+		if id != "" {
+			known[id] = struct{}{}
+			hasEvidence = true
+		}
+	}
+	return hasEvidence
+}
+
+func addHistoricalReplayMapWorkIDs(
+	known map[string]struct{},
+	items map[string]work.FactoryWorkItem,
+) {
+	for id := range items {
+		if normalizedID := strings.TrimSpace(id); normalizedID != "" {
+			known[normalizedID] = struct{}{}
+		}
+	}
+}
+
+func historicalReplayWorkItems(
+	state recordings.FactoryWorldState,
+	known map[string]struct{},
+) []work.FactoryWorkItem {
+	ids := make([]string, 0, len(known))
+	for id := range known {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	items := make([]work.FactoryWorkItem, 0, len(ids))
+	for _, id := range ids {
+		item, ok := historicalReplayWorkItem(state, id)
+		if !ok {
+			continue
+		}
+		if item.ID == "" {
+			item.ID = id
+		}
+		items = append(items, item)
+	}
+	return items
+}
+
+func historicalReplayWorkItem(
+	state recordings.FactoryWorldState,
+	id string,
+) (work.FactoryWorkItem, bool) {
+	for _, items := range []map[string]work.FactoryWorkItem{
+		state.WorkItemsByID,
+		state.ActiveWorkItemsByID,
+		state.FailedWorkItemsByID,
+	} {
+		if item, ok := items[id]; ok {
+			return item, true
+		}
+	}
+	if terminal, ok := state.TerminalWorkByID[id]; ok {
+		return terminal.WorkItem, true
+	}
+	if snapshotID := state.PayloadLineage.LatestSnapshotIDByWorkID[id]; snapshotID != "" {
+		if snapshot, ok := state.PayloadLineage.SnapshotsByID[snapshotID]; ok {
+			return snapshot.WorkItem, true
+		}
+	}
+	for _, request := range state.WorkRequestsByID {
+		for _, item := range request.WorkItems {
+			if item.ID == id {
+				return item, true
+			}
+		}
+	}
+	return work.FactoryWorkItem{}, false
+}
+
+func historicalReplayRelations(
+	state recordings.FactoryWorldState,
+	known map[string]struct{},
+	hasEvidence bool,
+) []work.FactoryRelation {
+	relations := make([]work.FactoryRelation, 0)
+	keys := make([]string, 0, len(state.RelationsByWorkID))
+	for key := range state.RelationsByWorkID {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		for _, relation := range state.RelationsByWorkID[key] {
+			if relation.SourceWorkID == "" {
+				relation.SourceWorkID = key
+			}
+			if hasEvidence && !historicalReplayRelationUsesKnownWork(known, relation) {
+				continue
+			}
+			relations = append(relations, relation)
+		}
+	}
+	sort.SliceStable(relations, func(left, right int) bool {
+		l, r := relations[left], relations[right]
+		return historicalReplayRelationKey(l) < historicalReplayRelationKey(r)
+	})
+	return relations
+}
+
+func historicalReplayRelationUsesKnownWork(
+	known map[string]struct{},
+	relation work.FactoryRelation,
+) bool {
+	if _, ok := known[relation.SourceWorkID]; !ok {
+		return false
+	}
+	if relation.TargetWorkID == "" {
+		return true
+	}
+	_, ok := known[relation.TargetWorkID]
+	return ok
+}
+
+func historicalReplayRelationKey(relation work.FactoryRelation) string {
+	return strings.Join([]string{
+		relation.SourceWorkID, relation.Type, relation.TargetWorkID,
+		relation.RequiredState, relation.RequestID, relation.TraceID,
+	}, "\x00")
+}
+
+func historicalReplayFailures(
+	state recordings.FactoryWorldState,
+	known map[string]struct{},
+	hasEvidence bool,
+) []recordings.FactoryWorldFailureDetail {
+	keys := make([]string, 0, len(state.FailureDetailsByWorkID))
+	for key := range state.FailureDetailsByWorkID {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	failures := make([]recordings.FactoryWorldFailureDetail, 0, len(keys))
+	for _, key := range keys {
+		failure := state.FailureDetailsByWorkID[key]
+		id := strings.TrimSpace(key)
+		if id == "" {
+			id = strings.TrimSpace(failure.WorkItem.ID)
+		}
+		if failure.WorkItem.ID == "" {
+			failure.WorkItem.ID = id
+		}
+		if hasEvidence {
+			if _, ok := known[id]; !ok {
+				continue
+			}
+		}
+		failures = append(failures, failure)
+	}
+	sort.SliceStable(failures, func(left, right int) bool {
+		l, r := failures[left], failures[right]
+		return strings.Join([]string{l.WorkItem.ID, l.DispatchID, l.TransitionID}, "\x00") <
+			strings.Join([]string{r.WorkItem.ID, r.DispatchID, r.TransitionID}, "\x00")
+	})
+	return failures
+}
+
+func stableHistoricalReplayTraceIDs(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
 }

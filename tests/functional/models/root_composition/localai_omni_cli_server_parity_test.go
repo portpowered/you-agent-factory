@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -72,11 +73,12 @@ type localAIOMNICLIResult struct {
 }
 
 type localAIOMNIProtocolRecorder struct {
-	mu       sync.Mutex
-	requests []models.InvocationProtocolRequest
-	failures []error
-	attempts *atomic.Int32
-	next     interface {
+	mu                     sync.Mutex
+	requests               []models.InvocationProtocolRequest
+	failures               []error
+	attempts               *atomic.Int32
+	preparationCallPending bool
+	next                   interface {
 		Predict(context.Context, models.InvocationProtocolRequest) (models.InvocationProtocolResponse, error)
 	}
 }
@@ -163,11 +165,31 @@ func runLocalAIOMNIParityCase(
 	// The Factory scaffold is immutable for this row; all external behavior is
 	// supplied by the fixture-backed host and protocol edges.
 	writeGenericConformanceCaches(t, home)
+	if testCase.row.Variant == conformance.VariantVideo {
+		modelSource := filepath.Join(home, "llm-source")
+		writeVideoReadinessModelSource(t, modelSource, true)
+		writeVideoReadinessOperatorConfig(t, home, modelSource)
+		writeVideoReadinessManagedCache(t, home, true)
+	}
 	var recorder localAIOMNIProtocolRecorder
 	recorder.attempts = totalAttempts
+	recorder.preparationCallPending = testCase.row.Variant == conformance.VariantVideo
 
 	localEdges, localNetwork, _, localLauncher := localAIOMNIParityEdges(home, fixture, &recorder)
 	localProcess := functionalBuildProcess(t, localEdges)
+	if testCase.row.Variant == conformance.VariantVideo {
+		prepare := support.FakeInputs(t.Context(), []string{
+			"you", "--json", "models", "invoke", models.BuiltInModelNameLLM,
+			"--operation", models.OperationOMNI, "--input", "prompt=Prepare the controlled projector cache",
+		})
+		prepare.Input.Env = environment
+		prepare.Input.WorkingDirectory = dir
+		prepare.Input.Stdout = io.Discard
+		prepare.Input.Stderr = io.Discard
+		if err := localProcess.Execute(prepare.Input); err != nil {
+			t.Fatalf("prepare LocalAI OMNI projector cache: %v", err)
+		}
+	}
 	localCheckpoint := localAIOMNIPathCheckpointAt(&recorder, fixture)
 	localResult := executeLocalAIOMNIParityCLI(
 		t, localProcess, dir, environment, testCase.row, "",
@@ -265,10 +287,15 @@ func (recorder *localAIOMNIProtocolRecorder) Predict(
 	ctx context.Context,
 	request models.InvocationProtocolRequest,
 ) (models.InvocationProtocolResponse, error) {
+	recorder.mu.Lock()
+	if recorder.preparationCallPending {
+		recorder.preparationCallPending = false
+		recorder.mu.Unlock()
+		return models.InvocationProtocolResponse{Text: "controlled fixture cache prepared"}, nil
+	}
 	if recorder.attempts != nil {
 		recorder.attempts.Add(1)
 	}
-	recorder.mu.Lock()
 	recorder.requests = append(recorder.requests, localAIOMNICloneProtocolRequest(request))
 	recorder.mu.Unlock()
 	response, err := recorder.next.Predict(ctx, request)

@@ -645,6 +645,36 @@ func TestWorkRuntimeAdapterProjectsLatestFailureDetailOnlyForCurrentFailedWork(t
 	}
 }
 
+func TestWorkRuntimeAdapterRestoresPreviousChainingTraceFromCompletedDispatch(t *testing.T) {
+	workID, traceID := "work-failed", "trace-parent"
+	token := &workers.Token{
+		ID:    "tok-failed",
+		State: "failed",
+		Color: workers.Color{
+			WorkID: workID, WorkTypeID: "story", TraceID: traceID,
+			CurrentChainingTraceID: traceID,
+		},
+	}
+	net := &factory.Net{WorkTypes: map[string]*factory.WorkType{
+		"story": {ID: "story", States: []factory.StateDefinition{{Value: "failed", Category: factory.StateCategoryFailed}}},
+	}}
+	history := []factory.CompletedDispatch{{
+		DispatchID: "dispatch-failed",
+		Outcome:    workers.OutcomeFailed,
+		ConsumedTokens: []workers.Token{{
+			Color: workers.Color{
+				WorkID: workID, WorkTypeID: "story", TraceID: traceID,
+				CurrentChainingTraceID: traceID,
+			},
+		}},
+	}}
+
+	got := runtimeWorkItem(token, net, false, nil, runtimeReadFacts{dispatchHistory: history})
+	if len(got.PreviousChainingTraceIDs) != 1 || got.PreviousChainingTraceIDs[0] != traceID {
+		t.Fatalf("previous chaining trace IDs = %v, want canonical dispatch lineage [%q]", got.PreviousChainingTraceIDs, traceID)
+	}
+}
+
 func TestWorkRuntimeAdapterDetachesFactorySessionStopSummary(t *testing.T) {
 	workID := "work-1"
 	summary := &factorysessions.StopSummary{
