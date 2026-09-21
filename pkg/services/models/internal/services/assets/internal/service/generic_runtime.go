@@ -30,18 +30,8 @@ func (s *service) publishGenericRuntimeCache(
 	if strings.TrimSpace(modelName) == "" || result.snapshotPath == "" {
 		return assets.RuntimeCacheInspection{}, nil
 	}
-	metadataFiles, err := genericRuntimeMetadataFiles(result.artifacts)
-	if err != nil {
-		return assets.RuntimeCacheInspection{}, err
-	}
-	if len(metadataFiles) != len(result.paths) {
-		return assets.RuntimeCacheInspection{}, fmt.Errorf(
-			"%w: generic runtime snapshot is incomplete",
-			models.ErrAssetPreparationInterrupted,
-		)
-	}
-	backendMetadata, err := s.genericRuntimeBackendMetadata(
-		cacheDirectory, backendResult, backendRevision,
+	metadataFiles, backendMetadata, err := s.genericRuntimePublicationMetadata(
+		cacheDirectory, result, backendResult, backendRevision,
 	)
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, err
@@ -97,6 +87,31 @@ func (s *service) publishGenericRuntimeCache(
 		publication.finalPath, publication.revision, metadataFiles, result.artifacts,
 	)
 	return inspection, nil
+}
+
+func (s *service) genericRuntimePublicationMetadata(
+	cacheDirectory string,
+	result genericCacheResult,
+	backendResult genericCacheResult,
+	backendRevision string,
+) ([]metadataFile, *runtimeBackendMetadata, error) {
+	metadataFiles, err := genericRuntimeMetadataFiles(result.artifacts)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(metadataFiles) != len(result.paths) {
+		return nil, nil, fmt.Errorf(
+			"%w: generic runtime snapshot is incomplete",
+			models.ErrAssetPreparationInterrupted,
+		)
+	}
+	backendMetadata, err := s.genericRuntimeBackendMetadata(
+		cacheDirectory, backendResult, backendRevision,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	return metadataFiles, backendMetadata, nil
 }
 
 // removeStaleGenericRuntimeStages removes only the owned stage paths while the
@@ -311,28 +326,6 @@ func (publication *genericRuntimePublication) removeBackups(s *service) {
 	if publication.hadMetadata {
 		_ = s.removePath(publication.metadataBackup)
 	}
-}
-
-func genericRuntimeMetadataFiles(artifacts []models.AssetArtifact) ([]metadataFile, error) {
-	files := make([]metadataFile, 0, len(artifacts))
-	seen := make(map[string]struct{}, len(artifacts))
-	for _, artifact := range artifacts {
-		name := filepath.ToSlash(strings.TrimSpace(artifact.Name))
-		requirement := models.AssetRequirement{
-			Name: name, Bytes: artifact.Bytes, SHA256: strings.ToLower(strings.TrimSpace(artifact.SHA256)),
-		}
-		if err := requirement.Validate(); err != nil {
-			return nil, fmt.Errorf("%w: generic runtime artifact %q is invalid", models.ErrAssetPreparationInterrupted, name)
-		}
-		if _, exists := seen[name]; exists {
-			return nil, fmt.Errorf("%w: generic runtime artifact %q is duplicated", models.ErrAssetPreparationInterrupted, name)
-		}
-		seen[name] = struct{}{}
-		files = append(files, metadataFile{
-			Path: name, Bytes: artifact.Bytes, SHA256: requirement.SHA256,
-		})
-	}
-	return files, nil
 }
 
 func (s *service) genericRuntimeBackendMetadata(
@@ -670,25 +663,6 @@ func (s *service) inspectGenericRuntimeFiles(
 		observed = append(observed, artifact)
 	}
 	return observed, missing, "", nil
-}
-
-func genericRuntimeSourceMatchesMetadata(source genericSource, metadata cacheMetadata) bool {
-	if source.kind != genericSourceHF {
-		return true
-	}
-	if revision := strings.TrimSpace(source.revision); revision != "" &&
-		!strings.EqualFold(revision, strings.TrimSpace(metadata.Revision)) {
-		return false
-	}
-	if expected := filepath.ToSlash(strings.TrimSpace(source.file)); expected != "" {
-		for _, file := range metadata.Files {
-			if filepath.ToSlash(strings.TrimSpace(file.Path)) == expected {
-				return true
-			}
-		}
-		return false
-	}
-	return true
 }
 
 func (s *service) reusableGenericRuntimeCache(
