@@ -156,7 +156,7 @@ func runASRLiveCorrelationHarness(
 	opened, err := service.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{
 		Config: models.RuntimeScopeConfig{
 			CacheDirectory: manifest.CacheRoot,
-			Runtime:        asrLiveCorrelationRuntimeConfig(manifest.ExecutablePath, endpoint),
+			Runtime:        asrLiveCorrelationRuntimeConfig(endpoint),
 		},
 	})
 	if err != nil {
@@ -347,12 +347,12 @@ func reserveASRLiveCorrelationEndpoint(t *testing.T) string {
 	return endpoint
 }
 
-func asrLiveCorrelationRuntimeConfig(executable, endpoint string) models.RuntimeConfig {
+func asrLiveCorrelationRuntimeConfig(endpoint string) models.RuntimeConfig {
 	return models.RuntimeConfig{
 		Workers: []models.RuntimeWorker{{
 			Name: "asr-worker", Type: models.RuntimeWorkerTypeInference,
 			Model: models.BuiltInModelNameASR, ModelLocality: models.RuntimeModelLocalityLocal,
-			Command: executable, Args: []string{"--grpc-endpoint", endpoint},
+			Args:       []string{"--grpc-endpoint", endpoint},
 			Operations: []models.RuntimeOperation{{Name: models.OperationASR}},
 		}},
 		Resources: []models.RuntimeResource{{
