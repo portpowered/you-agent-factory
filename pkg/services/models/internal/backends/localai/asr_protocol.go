@@ -9,6 +9,7 @@ import (
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -65,20 +66,31 @@ func (client grpcProtocolClient) transcribe(
 	createTempFile TempFileFactory,
 	writeFile InputFileWriter,
 	removeFile InputFileRemover,
-) (models.ASRBackendResponse, error) {
+) (result models.ASRBackendResponse, resultErr error) {
+	observation := newASRProtocolObservation(ctx, request)
+	if observation != nil {
+		defer func() { observation.recordInvocation(resultErr) }()
+	}
 	path, cleanup, err := stageASRAudio(ctx, request, tempDirectory, createTempFile, writeFile, removeFile)
 	if err != nil {
 		return models.ASRBackendResponse{}, err
 	}
 	defer cleanup()
+	observation.observeStagedPath(path)
 
 	protocolRequest, err := transcriptRequest(path, request)
 	if err != nil {
 		return models.ASRBackendResponse{}, err
 	}
+	if observation != nil {
+		observation.record.Phase = modelseffects.RuntimeASRPhaseBuildRequest
+	}
 	response := &TranscriptResult{}
-	if err := client.invokeProto(ctx, localAITranscriptionMethod, protocolRequest, response); err != nil {
+	if err := client.invokeProto(ctx, localAITranscriptionMethod, protocolRequest, response, observation); err != nil {
 		return models.ASRBackendResponse{}, err
+	}
+	if observation != nil {
+		observation.record.Phase = modelseffects.RuntimeASRPhaseMapResponse
 	}
 	return transcriptResponse(response)
 }
@@ -347,6 +359,7 @@ func (client grpcProtocolClient) invokeProto(
 	method string,
 	request proto.Message,
 	response proto.Message,
+	observation *asrProtocolObservation,
 ) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -365,6 +378,8 @@ func (client grpcProtocolClient) invokeProto(
 	if err != nil {
 		return asrProtocolFailure("ASR backend request could not be serialized", err)
 	}
+	observation.observeRequest(request, payload, method)
+	observation.observeDial()
 	connection, err := client.dialer.Dial(ctx, endpoint)
 	if err != nil {
 		return protocolContextOrFailure(ctx, "ASR backend connection failed", err)
@@ -374,11 +389,20 @@ func (client grpcProtocolClient) invokeProto(
 	}
 	defer func() { _ = connection.Close() }()
 	responsePayload, err := connection.Invoke(ctx, method, payload)
+	observation.observeRPCResult(err)
 	if err != nil {
 		return protocolContextOrFailure(ctx, "ASR backend request failed", err)
 	}
+	observation.observeResponse(responsePayload)
 	if err := proto.Unmarshal(responsePayload, response); err != nil {
+		if observation != nil {
+			observation.record.Phase = modelseffects.RuntimeASRPhaseDecodeResponse
+		}
 		return asrProtocolFailure("ASR backend response was malformed", err)
+	}
+	if observation != nil {
+		transcript, _ := response.(*TranscriptResult)
+		observation.observeDecodedResponse(transcript)
 	}
 	return nil
 }

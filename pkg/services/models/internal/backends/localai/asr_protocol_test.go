@@ -6,11 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -73,6 +77,166 @@ func TestPinnedASRBackendStagesExactAudioAndMapsPinnedFields(t *testing.T) {
 	assertASRStaging(t, temporary, createdDirectory, createdPattern, writtenPath, writtenBytes, removedPath, audio)
 	assertASRTransport(t, dialer, connection)
 	assertASRRequest(t, connection.request, temporary.path)
+}
+
+func TestPinnedASRBackendRecordsRedactedProtocolEvidence(t *testing.T) {
+	t.Parallel()
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		assertASRProtocolEvidence(t, nil)
+	})
+	t.Run("rpc failure", func(t *testing.T) {
+		t.Parallel()
+		assertASRProtocolEvidence(t, status.Error(codes.Unavailable,
+			"token=rpc-secret path=C:\\private\\backend raw=private-backend-output"))
+	})
+}
+
+func assertASRProtocolEvidence(t *testing.T, invokeErr error) {
+	t.Helper()
+	record, err := runASRProtocolEvidence(t, invokeErr)
+	if (invokeErr == nil) != (err == nil) {
+		t.Fatalf("ASR invocation error = %v, want %v", err, invokeErr)
+	}
+	observation := record.ASRProtocol
+	assertASRProtocolSelectionEvidence(t, observation)
+	assertASRProtocolRequestEvidence(t, observation)
+	assertASRProtocolOutcomeEvidence(t, record, invokeErr)
+	assertASRProtocolRedaction(t, record)
+}
+
+func runASRProtocolEvidence(
+	t *testing.T,
+	invokeErr error,
+) (modelseffects.RuntimeEvidenceRecord, error) {
+	t.Helper()
+	connection := &asrProtocolConnection{err: invokeErr}
+	connection.response, _ = proto.Marshal(&TranscriptResult{
+		Text:     asrPrivateTranscript,
+		Segments: []*TranscriptSegment{{Id: 0, Start: 0, End: 1_000_000, Text: asrPrivateTranscript}},
+	})
+	dialer := &asrProtocolDialer{connection: connection}
+	temporary := &asrProtocolTempFile{path: asrPrivateStagedPath}
+	sink := &asrRuntimeEvidenceSink{}
+	recorder := modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)
+	configuration := modelseffects.ResolvedHostConfiguration{
+		ModelName:       "asr",
+		Source:          models.ModelReference{NameOrURI: "hf://private-model-source/token=source-secret"},
+		Revision:        "private-model-revision",
+		Backend:         "localai-whisper",
+		Platform:        models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64"},
+		ProtocolVersion: "private-protocol-version",
+		ModelPath:       asrPrivateModelPath,
+		ModelFiles:      []string{asrPrivateModelPath},
+		BackendFiles:    []string{`C:\private\backend-token-marker\whisper.exe`},
+		BackendArtifact: modelseffects.BackendArtifactSelection{
+			Bytes: 123, SHA256: strings.Repeat("a", 64),
+		},
+	}
+	ctx := modelseffects.WithRuntimeObservation(context.Background(), recorder, configuration)
+	ctx = WithInvocationEndpoint(ctx, "127.0.0.1:45903")
+	backend := NewPinnedASRBackend(
+		dialer,
+		func() string { return `C:\private\temp-token-marker` },
+		func(string, string) (TempFile, error) { return temporary, nil },
+		func(string, []byte) error { return nil },
+		func(string) error { return nil },
+	)
+	_, invocationErr := backend(ctx, models.ASRBackendRequest{
+		Audio: []byte(asrPrivateAudio), MediaType: "audio/wav", Prompt: asrPrivatePrompt,
+	})
+	if len(sink.records) != 1 {
+		t.Fatalf("ASR protocol evidence records = %d, want one", len(sink.records))
+	}
+	record := sink.records[0]
+	if record.ASRProtocol == nil || record.Kind != modelseffects.RuntimeEvidenceKindASRProtocol ||
+		record.Stage != modelseffects.RuntimeStageInvoke {
+		t.Fatalf("ASR protocol evidence = %#v, want one typed private record", record)
+	}
+	return record, invocationErr
+}
+
+const (
+	asrPrivateStagedPath = `C:\private\asr-token-marker\.you-model-asr-123.wav`
+	asrPrivateModelPath  = `C:\private\model-token-marker\ggml-base.en.bin`
+	asrPrivatePrompt     = "private prompt token=prompt-secret"
+	asrPrivateTranscript = "private transcript marker"
+	asrPrivateAudio      = "private audio token=audio-secret"
+)
+
+func assertASRProtocolSelectionEvidence(
+	t *testing.T,
+	observation *modelseffects.RuntimeASRProtocolObservation,
+) {
+	t.Helper()
+	if observation == nil || observation.RPCMethod != modelseffects.RuntimeASRPCMethodAudioTranscription ||
+		observation.SelectedBackend != "LOCALAI_WHISPER" || observation.SelectedPlatform != "WINDOWS_AMD64" ||
+		observation.ModelIdentitySHA256 == "" || observation.ModelPathSHA256 == "" ||
+		observation.BackendArtifactSHA256 != strings.Repeat("a", 64) ||
+		observation.BackendArtifactBytes != 123 || observation.ModelFileCount != 1 || observation.BackendFileCount != 1 {
+		t.Fatalf("ASR selection evidence = %#v, want resolved model/backend identity facts", observation)
+	}
+}
+
+func assertASRProtocolRequestEvidence(
+	t *testing.T,
+	observation *modelseffects.RuntimeASRProtocolObservation,
+) {
+	t.Helper()
+	if observation.StagedPathSHA256 != asrEvidenceStringSHA256(asrPrivateStagedPath) ||
+		observation.AudioBytes != uint64(len(asrPrivateAudio)) ||
+		observation.AudioSHA256 != asrEvidenceSHA256([]byte(asrPrivateAudio)) ||
+		!observation.DestinationCompared || !observation.DestinationMatchesStaged ||
+		observation.RequestDestinationSHA256 != observation.StagedPathSHA256 {
+		t.Fatalf("ASR staging/request evidence = %#v, want staged input and matching destination digests", observation)
+	}
+	if observation.RequestBytes == 0 || observation.RequestSHA256 == "" ||
+		observation.RequestSemanticSHA256 == "" || observation.PromptBytes != uint64(len(asrPrivatePrompt)) ||
+		observation.Threads != localAIASRDefaultThreads {
+		t.Fatalf("ASR request evidence = %#v, want bounded request facts", observation)
+	}
+}
+
+func assertASRProtocolOutcomeEvidence(
+	t *testing.T,
+	record modelseffects.RuntimeEvidenceRecord,
+	invokeErr error,
+) {
+	t.Helper()
+	observation := record.ASRProtocol
+	if invokeErr == nil {
+		if record.Outcome != modelseffects.RuntimeEvidenceOutcomeCompleted ||
+			observation.Phase != modelseffects.RuntimeASRPhaseComplete || observation.RPCStatus != "OK" ||
+			!observation.ResponseReceived || !observation.ResponseDecoded || observation.SegmentCount != 1 ||
+			observation.TranscriptTextBytes != uint64(len(asrPrivateTranscript)) {
+			t.Fatalf("successful ASR evidence = %#v, want decoded response facts", record)
+		}
+		return
+	}
+	if record.Outcome != modelseffects.RuntimeEvidenceOutcomeFailed ||
+		observation.Phase != modelseffects.RuntimeASRPhaseRPC || observation.FailureClass != "BACKEND_PROTOCOL" ||
+		observation.RPCStatus != "UNAVAILABLE" || observation.ResponseReceived {
+		t.Fatalf("failed ASR evidence = %#v, want bounded UNAVAILABLE RPC facts", record)
+	}
+}
+
+func assertASRProtocolRedaction(t *testing.T, record modelseffects.RuntimeEvidenceRecord) {
+	t.Helper()
+	encoded, marshalErr := json.Marshal(record)
+	if marshalErr != nil {
+		t.Fatalf("marshal ASR protocol evidence: %v", marshalErr)
+	}
+	serialized := string(encoded)
+	for _, marker := range []string{
+		asrPrivateStagedPath, asrPrivateModelPath, asrPrivatePrompt, asrPrivateTranscript, asrPrivateAudio,
+		"source-secret", "revision", "protocol-version", "audio-secret", "rpc-secret",
+		"backend-token-marker", "private-backend-output", "45903",
+	} {
+		if strings.Contains(serialized, marker) {
+			t.Fatalf("ASR protocol evidence leaked %q: %s", marker, serialized)
+		}
+	}
 }
 
 func assertASRProtocolResponse(t *testing.T, response models.ASRBackendResponse) {
@@ -398,6 +562,14 @@ type asrProtocolTempFile struct {
 	path       string
 	closeErr   error
 	closeCalls int
+}
+
+type asrRuntimeEvidenceSink struct {
+	records []modelseffects.RuntimeEvidenceRecord
+}
+
+func (sink *asrRuntimeEvidenceSink) RecordRuntimeEvidence(record modelseffects.RuntimeEvidenceRecord) {
+	sink.records = append(sink.records, record)
 }
 
 func (file *asrProtocolTempFile) Name() string { return file.path }
