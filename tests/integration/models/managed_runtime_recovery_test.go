@@ -23,11 +23,12 @@ const (
 	managedRecoveryHelperSHAEnv  = "INFINITE_YOU_MANAGED_RUNTIME_RECOVERY_HELPER_SHA256"
 	managedRecoveryHeadSHAEnv    = "INFINITE_YOU_MANAGED_RUNTIME_RECOVERY_HEAD_SHA"
 	managedRecoveryRequiredEnv   = "INFINITE_YOU_REQUIRE_MANAGED_RUNTIME_RECOVERY_HELPER"
-	managedRecoveryModelName     = "managed-stage-recovery-fixture"
-	managedRecoverySignalPhase   = "MANAGED_METADATA_STAGE_WRITTEN"
-	managedRecoveryTimeout       = 14 * time.Minute
-	managedRecoveryArtifactA     = "weights.gguf"
-	managedRecoveryArtifactB     = "projector.bin"
+	// The built-in identity exercises cache-aware catalog inspection; its scope overlay points at the local fixture.
+	managedRecoveryModelName   = "llm"
+	managedRecoverySignalPhase = "MANAGED_METADATA_STAGE_WRITTEN"
+	managedRecoveryTimeout     = 14 * time.Minute
+	managedRecoveryArtifactA   = "weights.gguf"
+	managedRecoveryArtifactB   = "projector.bin"
 )
 
 var managedRecoveryHeadPattern = regexp.MustCompile(`^[a-fA-F0-9]{40}$`)
