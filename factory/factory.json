@@ -1456,7 +1456,8 @@
     {
       "args": [
         "factory/scripts/ci-wait.py",
-        "{{ (index .Inputs 0).Name }}"
+        "{{ (index .Inputs 0).Name }}",
+        "{{ (index .Inputs 0).PreviousOutput }}"
       ],
       "command": "python",
       "id": "ci-waiter",
