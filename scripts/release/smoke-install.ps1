@@ -774,6 +774,8 @@ function Invoke-CandidateCommand {
         outputLimitExceeded = [bool]$commandResult.OutputLimitExceeded
         terminationReason = $terminationReason
         elapsedMilliseconds = [int64][Math]::Max(0, $stopwatch.ElapsedMilliseconds)
+        timeoutSeconds = [int]$TimeoutSeconds
+        outputMaximumBytes = [int]$OutputMaximumBytes
         stdout = $stdout.text
         stderr = $stderr.text
         stdoutEvidence = $stdout.evidence
@@ -789,13 +791,16 @@ function Invoke-InstalledCandidateCommand {
         [string]$OutputDirectory,
         [string]$OutputName,
         [System.Collections.Generic.List[object]]$Commands,
-        [string[]]$CommandPrefix = @()
+        [string[]]$CommandPrefix = @(),
+        [ValidateRange(1, 7200)][int]$TimeoutSeconds = 120,
+        [ValidateRange(1, 1048576)][int]$OutputMaximumBytes = 1048576
     )
     $processArguments = @($CommandPrefix) + @($Arguments)
     $command = Invoke-CandidateCommand -FilePath $ExecutablePath `
         -ArgumentList $processArguments -WorkingDirectory $WorkingDirectory `
         -StdoutPath (Join-Path $OutputDirectory "$OutputName.stdout") `
-        -StderrPath (Join-Path $OutputDirectory "$OutputName.stderr")
+        -StderrPath (Join-Path $OutputDirectory "$OutputName.stderr") `
+        -TimeoutSeconds $TimeoutSeconds -OutputMaximumBytes $OutputMaximumBytes
     $evidence = [ordered]@{}
     foreach ($property in $command.PSObject.Properties) {
         $evidence[$property.Name] = $property.Value
@@ -864,6 +869,11 @@ function Invoke-InstalledCandidateDiscovery {
         -OutputDirectory $OutputDirectory -OutputName "models-list" -Commands $Commands `
         -CommandPrefix $CommandPrefix
     Assert-InstalledCandidateCommand $listCommand "models list" -RequireOutput
+    foreach ($name in @("llm", "asr", "tts", "embed")) {
+        if (-not $listCommand.stdout.Contains($name)) {
+            Fail-Smoke "installed candidate models list did not expose $name"
+        }
+    }
     $helpCommand = Invoke-InstalledCandidateCommand -ExecutablePath $ExecutablePath `
         -Arguments @("models", "--help") -WorkingDirectory $WorkingDirectory `
         -OutputDirectory $OutputDirectory -OutputName "models-help" -Commands $Commands `
@@ -918,7 +928,8 @@ function Get-SmokeExecutableBuildInfo {
         -ArgumentList @("version", "-m", (Resolve-SmokePath $ExecutablePath)) `
         -WorkingDirectory $WorkingDirectory `
         -StdoutPath (Join-Path $OutputDirectory "executable-build-info.stdout.log") `
-        -StderrPath (Join-Path $OutputDirectory "executable-build-info.stderr.log")
+        -StderrPath (Join-Path $OutputDirectory "executable-build-info.stderr.log") `
+        -TimeoutSeconds 120 -OutputMaximumBytes 1048576
     if ($result.exitCode -ne 0) {
         Fail-Smoke "go version -m failed with exit $($result.exitCode): $($result.stderr)"
     }
@@ -1743,6 +1754,8 @@ function Invoke-InstalledCandidateSmoke {
             WorkingDirectory = $smokeRoot
             StdoutPath = Join-Path $CandidateDirectory "install.stdout.log"
             StderrPath = Join-Path $CandidateDirectory "install.stderr.log"
+            TimeoutSeconds = 300
+            OutputMaximumBytes = 1048576
         }
         $install = Invoke-CandidateCommand @installArguments
         [void]$commands.Add($install)
@@ -1771,9 +1784,21 @@ function Invoke-InstalledCandidateSmoke {
                 -OutputDirectory $CandidateDirectory
             [void]$commands.Add($buildInfo.command)
         }
+        $discoveryWorkingDirectory = Join-Path $smokeRoot "blank"
+        [void][System.IO.Directory]::CreateDirectory($discoveryWorkingDirectory)
+        $discoveryWorkingDirectoryInitiallyEmpty = @(Get-ChildItem -LiteralPath $discoveryWorkingDirectory -Force -ErrorAction Stop).Count -eq 0
+        if (-not $discoveryWorkingDirectoryInitiallyEmpty) {
+            Fail-Smoke "candidate discovery working directory was not initially empty: $discoveryWorkingDirectory"
+        }
+        $discoveryCommandStart = $commands.Count
         $discovery = Invoke-InstalledCandidateDiscovery -ExecutablePath $resolvedPath `
-            -WorkingDirectory $smokeRoot -OutputDirectory $smokeRoot `
+            -WorkingDirectory $discoveryWorkingDirectory -OutputDirectory $smokeRoot `
             -ExpectedVersion $expectedVersion -Commands $commands
+        $discoveryCommands = @($commands | Select-Object -Skip $discoveryCommandStart)
+        $discoveryWorkingDirectoryEmptyAfter = @(Get-ChildItem -LiteralPath $discoveryWorkingDirectory -Force -ErrorAction Stop).Count -eq 0
+        if (-not $discoveryWorkingDirectoryEmptyAfter) {
+            Fail-Smoke "candidate discovery wrote files into its blank working directory: $discoveryWorkingDirectory"
+        }
         $reportedVersion = $discovery.version
         foreach ($path in @($modelsRoot, $hfRoot)) {
             if ((Test-Path -LiteralPath $path) -and @(Get-ChildItem -LiteralPath $path -Force -ErrorAction Stop).Count -ne 0) {
@@ -1789,6 +1814,10 @@ function Invoke-InstalledCandidateSmoke {
         $activity = Get-SmokeModelActivity -Before $activityBefore -After $activityAfter `
             -Commands @($commands | ForEach-Object { $_ }) -RuntimeEvidencePath $runtimeEvidencePath
         Assert-SmokeNoModelActivity $activity
+        $operatorConfigurationPath = Join-Path $profileRoot ".you-agent-factory"
+        $operatorConfigurationAfter = Get-SmokeActivitySnapshot "operator-configuration" $operatorConfigurationPath
+        $noCurrentFactory = $stateRootsInitiallyEmpty -and [int64]$operatorConfigurationAfter.bytes -eq 0
+        if (-not $noCurrentFactory) { Fail-Smoke "candidate discovery did not remain in a no-Current-Factory context" }
         $result = [pscustomobject][ordered]@{
             status = "PASS"
             installedExecutable = $installedEvidence
@@ -1798,6 +1827,26 @@ function Invoke-InstalledCandidateSmoke {
             version = $reportedVersion
             expectedVersion = $expectedVersion
             executableBuildInfo = $buildInfo
+            budgets = [ordered]@{
+                installerTimeoutSeconds = 300
+                discoveryCommandTimeoutSeconds = 120
+                commandOutputMaximumBytes = 1048576
+                maximumDiscoveryCommands = 10
+                maximumDistributionRequests = 4
+                maximumModelCalls = 0
+                maximumModelBackendDownloadBytes = 0
+                maximumBackendProcessStarts = 0
+                allowedNetwork = "IPv4 loopback only for installer distribution requests"
+                forbiddenPort = 7437
+            }
+            discovery = [pscustomobject][ordered]@{
+                status = $discovery.status
+                workingDirectory = $discoveryWorkingDirectory
+                workingDirectoryInitiallyEmpty = [bool]$discoveryWorkingDirectoryInitiallyEmpty
+                workingDirectoryEmptyAfter = [bool]$discoveryWorkingDirectoryEmptyAfter
+                noCurrentFactory = [bool]$noCurrentFactory
+                commands = $discoveryCommands
+            }
             commands = @($commands | ForEach-Object { $_ })
             activity = $activity
             modelCalls = [int]$activity.modelCalls
