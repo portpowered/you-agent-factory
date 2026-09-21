@@ -1,48 +1,153 @@
 package release_test
 
 import (
-	"fmt"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
 
-func TestLocalAICandidateFinalizationRequiresCompleteV2Evidence(t *testing.T) {
+func TestLocalAICandidateFinalizationAcceptsCompleteV2Evidence(t *testing.T) {
 	t.Parallel()
+	requireLocalAICandidateWindows(t)
+
+	results := runLocalAICandidateFinalizationCases(t, []localAICandidateFinalizationCase{
+		{Name: "valid", Kind: "valid"},
+	})
+	valid, ok := results["valid"]
+	if !ok || valid.Status != "PASS" || valid.Failure != "" || !valid.DigestMatches {
+		t.Fatalf("complete v2 evidence finalization = %#v, want a stable PASS report", valid)
+	}
+}
+
+func TestLocalAICandidateFinalizationRejectsSourceAndObserverDrift(t *testing.T) {
+	t.Parallel()
+	requireLocalAICandidateWindows(t)
+
+	cases := []localAICandidateFinalizationCase{
+		{Name: "sourceModified", Kind: "sourceModified"},
+		{Name: "sourceIdentityMismatch", Kind: "sourceIdentityMismatch"},
+		{Name: "nonLoopback", Kind: "nonLoopback"},
+		{Name: "port7437", Kind: "port7437"},
+		{Name: "backendProcess", Kind: "backendProcess"},
+		{Name: "missingProcessAttribution", Kind: "missingProcessAttribution"},
+		{Name: "missingDistributionEvidence", Kind: "missingDistributionEvidence"},
+	}
+	results := runLocalAICandidateFinalizationCases(t, cases)
+	wantFailures := map[string]string{
+		"sourceModified":              "source.vcsModified must be false",
+		"sourceIdentityMismatch":      "install executable build info must match source.commit",
+		"nonLoopback":                 "observer.nonLoopbackConnections must be zero",
+		"port7437":                    "observer.port7437Accesses must be zero",
+		"backendProcess":              "observer backendProcessStarts and survivingTaskProcesses must be zero",
+		"missingProcessAttribution":   "observer must have attributed process/network samples",
+		"missingDistributionEvidence": "observer must attribute four loopback distribution requests",
+	}
+	for name, expectedError := range wantFailures {
+		requireLocalAICandidateFinalizationFailure(t, results, name, expectedError)
+	}
+}
+
+func TestLocalAICandidateFinalizationRejectsCleanupAndArtifactDrift(t *testing.T) {
+	t.Parallel()
+	requireLocalAICandidateWindows(t)
+
+	cases := []localAICandidateFinalizationCase{
+		{Name: "cleanupFailure", Kind: "cleanupFailure"},
+		{Name: "changedCommandEvidence", Kind: "changedCommandEvidence"},
+		{Name: "manifestDrift", Kind: "manifestDrift"},
+	}
+	results := runLocalAICandidateFinalizationCases(t, cases)
+	for name, expectedError := range map[string]string{
+		"cleanupFailure":         "cleanup must prove stopped listener",
+		"changedCommandEvidence": "command-output changed after retention",
+		"manifestDrift":          "candidate-report.sha256 does not match the retained manifest bytes",
+	} {
+		requireLocalAICandidateFinalizationFailure(t, results, name, expectedError)
+	}
+}
+
+func requireLocalAICandidateWindows(t *testing.T) {
+	t.Helper()
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
+}
+
+func runLocalAICandidateFinalizationCases(t *testing.T, cases []localAICandidateFinalizationCase) map[string]localAICandidateCompleteFinalizationResult {
+	t.Helper()
 	tempDir := t.TempDir()
-	caseDirectories := map[string]string{
-		"valid":                       filepath.Join(tempDir, "valid"),
-		"sourceModified":              filepath.Join(tempDir, "source-modified"),
-		"sourceIdentityMismatch":      filepath.Join(tempDir, "source-identity-mismatch"),
-		"nonLoopback":                 filepath.Join(tempDir, "non-loopback"),
-		"port7437":                    filepath.Join(tempDir, "port-7437"),
-		"backendProcess":              filepath.Join(tempDir, "backend-process"),
-		"missingProcessAttribution":   filepath.Join(tempDir, "missing-process-attribution"),
-		"missingDistributionEvidence": filepath.Join(tempDir, "missing-distribution-evidence"),
-		"cleanupFailure":              filepath.Join(tempDir, "cleanup-failure"),
-		"changedCommandEvidence":      filepath.Join(tempDir, "changed-command-evidence"),
-		"manifestDrift":               filepath.Join(tempDir, "manifest-drift"),
-	}
+	casesPath := filepath.Join(tempDir, "finalization-cases.json")
 	resultPath := filepath.Join(tempDir, "v2-finalization.json")
 	harnessPath := filepath.Join(tempDir, "v2-finalization.ps1")
-	harness := fmt.Sprintf(`
-. %s -InstallDir %s
-$cases = [ordered]@{
-    valid = [ordered]@{ output = %s; kind = 'valid' }
-    sourceModified = [ordered]@{ output = %s; kind = 'sourceModified' }
-    sourceIdentityMismatch = [ordered]@{ output = %s; kind = 'sourceIdentityMismatch' }
-    nonLoopback = [ordered]@{ output = %s; kind = 'nonLoopback' }
-    port7437 = [ordered]@{ output = %s; kind = 'port7437' }
-    backendProcess = [ordered]@{ output = %s; kind = 'backendProcess' }
-    missingProcessAttribution = [ordered]@{ output = %s; kind = 'missingProcessAttribution' }
-    missingDistributionEvidence = [ordered]@{ output = %s; kind = 'missingDistributionEvidence' }
-    cleanupFailure = [ordered]@{ output = %s; kind = 'cleanupFailure' }
-    changedCommandEvidence = [ordered]@{ output = %s; kind = 'changedCommandEvidence' }
-    manifestDrift = [ordered]@{ output = %s; kind = 'manifestDrift' }
+	caseBytes, err := json.Marshal(struct {
+		Cases []localAICandidateFinalizationCase `json:"cases"`
+	}{Cases: cases})
+	if err != nil {
+		t.Fatalf("encode finalization cases: %v", err)
+	}
+	if err := os.WriteFile(casesPath, caseBytes, 0o600); err != nil {
+		t.Fatalf("write finalization cases: %v", err)
+	}
+	harness := strings.NewReplacer(
+		"__SCRIPT_PATH__", localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		"__INSTALL_DIR__", localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		"__ROOT_DIRECTORY__", localAICandidatePowerShellLiteral(tempDir),
+		"__CASES_PATH__", localAICandidatePowerShellLiteral(casesPath),
+		"__RESULT_PATH__", localAICandidatePowerShellLiteral(resultPath),
+	).Replace(localAICandidateFinalizationHarness)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+	results := make(map[string]localAICandidateCompleteFinalizationResult)
+	readJSONFile(t, resultPath, &results)
+	return results
+}
+
+func requireLocalAICandidateFinalizationFailure(t *testing.T, results map[string]localAICandidateCompleteFinalizationResult, name, expectedError string) {
+	t.Helper()
+	result, ok := results[name]
+	if !ok {
+		t.Fatalf("%s finalization result is missing from %#v", name, results)
+	}
+	if result.Status != "FAIL" || !result.DigestMatches ||
+		!strings.Contains(result.Failure, expectedError) || !strings.Contains(result.ReportError, expectedError) {
+		t.Fatalf("%s finalization = %#v, want FAIL with %q and a valid detached digest", name, result, expectedError)
+	}
+	if name == "changedCommandEvidence" &&
+		(result.CleanupStatus != "FAIL" || result.Stable || !strings.Contains(result.Detail, "command-output")) {
+		t.Fatalf("changed command evidence finalization = %#v, want named unstable-evidence cleanup failure", result)
+	}
+}
+
+type localAICandidateFinalizationCase struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+}
+
+type localAICandidateCompleteFinalizationResult struct {
+	Status        string `json:"status"`
+	Failure       string `json:"failure"`
+	ReportError   string `json:"reportError"`
+	CleanupStatus string `json:"cleanupStatus"`
+	Stable        bool   `json:"stable"`
+	Detail        string `json:"detail"`
+	DigestMatches bool   `json:"digestMatches"`
+}
+
+const localAICandidateFinalizationHarness = `
+. __SCRIPT_PATH__ -InstallDir __INSTALL_DIR__
+$rootDirectory = __ROOT_DIRECTORY__
+$casePath = __CASES_PATH__
+$resultPath = __RESULT_PATH__
+$caseDocument = Get-Content -Raw -LiteralPath $casePath | ConvertFrom-Json
+$cases = [ordered]@{}
+foreach ($definition in $caseDocument.cases) {
+    $name = [string]$definition.name
+    $cases[$name] = [ordered]@{
+        output = Join-Path $rootDirectory $name
+        kind = [string]$definition.kind
+    }
 }
 $artifactSpecs = @(
     [ordered]@{ role = 'windows-amd64-archive'; file = 'you_fixture_windows_amd64.zip'; contents = 'archive bytes' },
@@ -153,58 +258,5 @@ foreach ($entry in $cases.GetEnumerator()) {
         digestMatches = $actualDigest -ceq $expectedDigest
     }
 }
-$results | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath %s -Encoding UTF8
-`,
-		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
-		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
-		localAICandidatePowerShellLiteral(caseDirectories["valid"]),
-		localAICandidatePowerShellLiteral(caseDirectories["sourceModified"]),
-		localAICandidatePowerShellLiteral(caseDirectories["sourceIdentityMismatch"]),
-		localAICandidatePowerShellLiteral(caseDirectories["nonLoopback"]),
-		localAICandidatePowerShellLiteral(caseDirectories["port7437"]),
-		localAICandidatePowerShellLiteral(caseDirectories["backendProcess"]),
-		localAICandidatePowerShellLiteral(caseDirectories["missingProcessAttribution"]),
-		localAICandidatePowerShellLiteral(caseDirectories["missingDistributionEvidence"]),
-		localAICandidatePowerShellLiteral(caseDirectories["cleanupFailure"]),
-		localAICandidatePowerShellLiteral(caseDirectories["changedCommandEvidence"]),
-		localAICandidatePowerShellLiteral(caseDirectories["manifestDrift"]),
-		localAICandidatePowerShellLiteral(resultPath),
-	)
-	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
-	var results map[string]struct {
-		Status        string `json:"status"`
-		Failure       string `json:"failure"`
-		ReportError   string `json:"reportError"`
-		CleanupStatus string `json:"cleanupStatus"`
-		Stable        bool   `json:"stable"`
-		Detail        string `json:"detail"`
-		DigestMatches bool   `json:"digestMatches"`
-	}
-	readJSONFile(t, resultPath, &results)
-	if valid := results["valid"]; valid.Status != "PASS" || valid.Failure != "" || !valid.DigestMatches {
-		t.Fatalf("complete v2 evidence finalization = %#v, want a stable PASS report", valid)
-	}
-	wantFailures := map[string]string{
-		"sourceModified":              "source.vcsModified must be false",
-		"sourceIdentityMismatch":      "install executable build info must match source.commit",
-		"nonLoopback":                 "observer.nonLoopbackConnections must be zero",
-		"port7437":                    "observer.port7437Accesses must be zero",
-		"backendProcess":              "observer backendProcessStarts and survivingTaskProcesses must be zero",
-		"missingProcessAttribution":   "observer must have attributed process/network samples",
-		"missingDistributionEvidence": "observer must attribute four loopback distribution requests",
-		"cleanupFailure":              "cleanup must prove stopped listener",
-		"changedCommandEvidence":      "command-output changed after retention",
-		"manifestDrift":               "candidate-report.sha256 does not match the retained manifest bytes",
-	}
-	for name, expectedError := range wantFailures {
-		result, ok := results[name]
-		if !ok || result.Status != "FAIL" || !result.DigestMatches ||
-			!strings.Contains(result.Failure, expectedError) || !strings.Contains(result.ReportError, expectedError) {
-			t.Fatalf("%s finalization = %#v, want FAIL with %q and a valid detached digest", name, result, expectedError)
-		}
-		if name == "changedCommandEvidence" &&
-			(result.CleanupStatus != "FAIL" || result.Stable || !strings.Contains(result.Detail, "command-output")) {
-			t.Fatalf("changed command evidence finalization = %#v, want named unstable-evidence cleanup failure", result)
-		}
-	}
-}
+$results | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $resultPath -Encoding UTF8
+`
