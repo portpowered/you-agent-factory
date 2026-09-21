@@ -20,10 +20,9 @@ const (
 )
 
 // TestRestoredReviewTransitionDispatchesEveryMigratedPair proves the real
-// daemon restart, session resume, and operator migration path. Both review
-// workers remain active so the public event ledger can prove one disjoint
-// dispatch per matching pair before either result creates another scheduling
-// opportunity.
+// daemon restart, session resume, and operator migration path. It holds both
+// script children at a parent-owned gate and checks public dispatch state
+// before releasing either result.
 func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 	t.Parallel()
 	binaryPath := requireRestartCLIArtifact(t)
@@ -32,6 +31,7 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 	workerPath := currentRestartWorkerExecutable(t)
 	homeDir := t.TempDir()
 	releasePath := filepath.Join(t.TempDir(), "release-review-workers")
+	workerBarrier := newBoardPersistenceWorkerBarrier(t)
 	recordPath := filepath.Join(factoryDir, "restored-review.recording.json")
 	successorRecordPath := filepath.Join(factoryDir, "restored-review.successor.recording.json")
 	writeBoardPersistenceAgentConfig(t, factoryDir, "review-blocker", boardPersistenceWorkerConfig(workerPath))
@@ -62,7 +62,7 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 		t.Fatalf("hash source recording before resume: %v", err)
 	}
 
-	second := startBoardPersistenceResumeDaemon(t, binaryPath, factoryDir, homeDir, recordPath, successorRecordPath, releasePath)
+	second := startBoardPersistenceResumeDaemon(t, binaryPath, factoryDir, homeDir, recordPath, successorRecordPath, releasePath, workerBarrier.endpoint())
 	evidence.trackDaemon(t, "successor-process", second)
 	secondWorks := waitForBoardStates(t, second.baseURL, map[string]string{
 		restoredReviewTaskA: "staged",
@@ -97,6 +97,7 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 	}
 	waitForBoardStates(t, second.baseURL, wantMigrated, 30*time.Second)
 	runRestoredReviewLifecycleCLI(t, second, binaryPath, factoryDir, homeDir, "resume")
+	workerBarrier.waitForReadyWorkers(t, 2, 30*time.Second)
 
 	dispatchA := waitForBoardActiveDispatch(t, second.baseURL, restoredReviewTaskA, 30*time.Second)
 	dispatchB := waitForBoardActiveDispatch(t, second.baseURL, restoredReviewTaskB, 30*time.Second)
@@ -110,6 +111,9 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 		t.Fatalf("active public Worker Session counts = total:%d active:%d, want 2/2", activeObservation.WorkerSessionCount, activeObservation.ActiveWorkerSessionCount)
 	}
 	evidence.addTiming("successor-ready-to-two-active-owners", time.Since(second.readyAt))
+	workerBarrier.releaseWorkers()
+	waitForBoardDispatchResponse(t, second.baseURL, restoredReviewTaskA, dispatchA, 30*time.Second)
+	waitForBoardDispatchResponse(t, second.baseURL, restoredReviewTaskB, dispatchB, 30*time.Second)
 	second.stop(t)
 	evidence.captureDaemon(1, second)
 	if err := evidence.verifyFixtureFilesUnchanged(factoryDir); err != nil {
@@ -212,7 +216,7 @@ func assertRestoredReviewDispatch(
 ) {
 	t.Helper()
 	if state.ID != dispatchID || state.RequestEvents != 1 || state.ResponseEvents != 0 || state.InterruptedEvents != 0 {
-		t.Fatalf("restored review dispatch %q lifecycle = %#v, want one active request only", dispatchID, state)
+		t.Fatalf("restored review dispatch %q lifecycle before worker release = %#v, want one active request only", dispatchID, state)
 	}
 	if len(state.WorkIDs) != 2 {
 		t.Fatalf("restored review dispatch %q Work IDs = %#v, want exactly task and review", dispatchID, state.WorkIDs)

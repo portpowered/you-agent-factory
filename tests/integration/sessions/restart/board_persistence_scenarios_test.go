@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,12 +17,16 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// TestBoardPersistenceWorkerHelper is launched by the real SCRIPT_WORKER child
-// in TestBoardPersistenceCLIRestartRoundTrip. It exits only after the test has
-// inspected the re-armed attempt, which makes the second dispatch observable
-// without relying on a mock worker edge.
+// TestBoardPersistenceWorkerHelper is launched by real SCRIPT_WORKER children
+// in restart process tests. Test cases hold the helper at a parent-owned gate
+// or release file while they inspect public runtime state.
 func TestBoardPersistenceWorkerHelper(t *testing.T) {
 	if os.Getenv(boardPersistenceHelperEnv) != boardPersistenceHelperEnvValue {
+		return
+	}
+	if readyEndpoint := strings.TrimSpace(os.Getenv(boardPersistenceWorkerReadyEnv)); readyEndpoint != "" {
+		fmt.Fprintln(os.Stdout, boardPersistenceWorkerSentinel)
+		signalBoardPersistenceWorkerReady(t, readyEndpoint)
 		return
 	}
 	releasePath := strings.TrimSpace(os.Getenv(boardPersistenceReleaseEnv))
@@ -30,9 +35,9 @@ func TestBoardPersistenceWorkerHelper(t *testing.T) {
 	}
 	fmt.Fprintln(os.Stdout, boardPersistenceWorkerSentinel)
 
-	// A child process has no test-owned event channel back into the daemon. The
-	// bounded file observation is deliberately confined to this helper process;
-	// the parent test synchronizes only through the public Work projection.
+	// The process-level test may provide a parent-owned barrier endpoint so it
+	// can capture public dispatch state while this child is held. Other restart
+	// scenarios use the bounded release-file gate below.
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -45,6 +50,22 @@ func TestBoardPersistenceWorkerHelper(t *testing.T) {
 		default:
 			t.Fatalf("observe worker helper release file %q: %v", releasePath, err)
 		}
+	}
+}
+
+func signalBoardPersistenceWorkerReady(t *testing.T, readyEndpoint string) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, readyEndpoint, nil)
+	if err != nil {
+		t.Fatalf("build worker readiness request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("signal worker readiness: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("worker readiness response status = %d, want %d", response.StatusCode, http.StatusNoContent)
 	}
 }
 
