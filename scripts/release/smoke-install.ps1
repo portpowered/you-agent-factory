@@ -2304,7 +2304,16 @@ function Invoke-LocalCandidateSmoke {
         if ($statusBefore -ne "") {
             Fail-Smoke "candidate clone is dirty before release"
         }
-        $releaseArguments = @("release", "--snapshot", "--clean", "-f", ".goreleaser.yml")
+        # GoReleaser task fan-out is independent of compiler -p and GOMAXPROCS.
+        $releaseArguments = @(
+            "release",
+            "--snapshot",
+            "--clean",
+            "--parallelism",
+            [string]$GoProcessLimit,
+            "-f",
+            ".goreleaser.yml"
+        )
         $releaseResult = Invoke-CandidateCommand -FilePath $releaseToolPath `
             -ArgumentList $releaseArguments -WorkingDirectory $checkoutPath `
             -StdoutPath (Join-Path $commandEvidenceDirectory "release.stdout.log") `
