@@ -1,104 +1,262 @@
 package release_test
 
 import (
-	"fmt"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
 
-type localAICandidateFinalizationResult struct {
-	Failure              string `json:"failure"`
-	Status               string `json:"status"`
-	CleanupStatus        string `json:"cleanupStatus"`
-	Stable               bool   `json:"stable"`
-	Detail               string `json:"detail"`
-	CommandEvidenceCount int    `json:"commandEvidenceCount"`
-	OutputExists         bool   `json:"outputExists"`
-	ReportExists         bool   `json:"reportExists"`
-	DigestExists         bool   `json:"digestExists"`
+func TestLocalAICandidateFinalizationAcceptsCompleteV2Evidence(t *testing.T) {
+	t.Parallel()
+	requireLocalAICandidateWindows(t)
+
+	results := runLocalAICandidateFinalizationCases(t, []localAICandidateFinalizationCase{
+		{Name: "valid", Kind: "valid"},
+	})
+	valid, ok := results["valid"]
+	if !ok || valid.Status != "PASS" || valid.Failure != "" || !valid.DigestMatches {
+		t.Fatalf("complete v2 evidence finalization = %#v, want a stable PASS report", valid)
+	}
 }
 
-func TestLocalAICandidateFinalizationRetainsFailureReport(t *testing.T) {
+func TestLocalAICandidateFinalizationRejectsSourceAndObserverDrift(t *testing.T) {
 	t.Parallel()
+	requireLocalAICandidateWindows(t)
+
+	cases := []localAICandidateFinalizationCase{
+		{Name: "sourceModified", Kind: "sourceModified"},
+		{Name: "sourceIdentityMismatch", Kind: "sourceIdentityMismatch"},
+		{Name: "nonLoopback", Kind: "nonLoopback"},
+		{Name: "port7437", Kind: "port7437"},
+		{Name: "backendProcess", Kind: "backendProcess"},
+		{Name: "missingProcessAttribution", Kind: "missingProcessAttribution"},
+		{Name: "missingDistributionEvidence", Kind: "missingDistributionEvidence"},
+	}
+	results := runLocalAICandidateFinalizationCases(t, cases)
+	wantFailures := map[string]string{
+		"sourceModified":              "source.vcsModified must be false",
+		"sourceIdentityMismatch":      "install executable build info must match source.commit",
+		"nonLoopback":                 "observer.nonLoopbackConnections must be zero",
+		"port7437":                    "observer.port7437Accesses must be zero",
+		"backendProcess":              "observer backendProcessStarts and survivingTaskProcesses must be zero",
+		"missingProcessAttribution":   "observer must have attributed process/network samples",
+		"missingDistributionEvidence": "observer must attribute four loopback distribution requests",
+	}
+	for name, expectedError := range wantFailures {
+		requireLocalAICandidateFinalizationFailure(t, results, name, expectedError)
+	}
+}
+
+func TestLocalAICandidateFinalizationRejectsCleanupAndArtifactDrift(t *testing.T) {
+	t.Parallel()
+	requireLocalAICandidateWindows(t)
+
+	cases := []localAICandidateFinalizationCase{
+		{Name: "cleanupFailure", Kind: "cleanupFailure"},
+		{Name: "changedCommandEvidence", Kind: "changedCommandEvidence"},
+		{Name: "manifestDrift", Kind: "manifestDrift"},
+	}
+	results := runLocalAICandidateFinalizationCases(t, cases)
+	for name, expectedError := range map[string]string{
+		"cleanupFailure":         "cleanup must prove stopped listener",
+		"changedCommandEvidence": "command-output changed after retention",
+		"manifestDrift":          "candidate-report.sha256 does not match the retained manifest bytes",
+	} {
+		requireLocalAICandidateFinalizationFailure(t, results, name, expectedError)
+	}
+}
+
+func requireLocalAICandidateWindows(t *testing.T) {
+	t.Helper()
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
 	}
-	tempDir := t.TempDir()
-	caseDirectories := map[string]string{
-		"missingArtifact": filepath.Join(tempDir, "missing-artifact"),
-		"changedArtifact": filepath.Join(tempDir, "changed-artifact"),
-		"missingCommand":  filepath.Join(tempDir, "missing-command"),
-		"changedCommand":  filepath.Join(tempDir, "changed-command"),
-	}
-	resultPath := filepath.Join(tempDir, "finalization.json")
-	harnessPath := filepath.Join(tempDir, "finalization.ps1")
-	harness := fmt.Sprintf(`
-. %s -InstallDir %s
-$cases = [ordered]@{
-    missingArtifact = [ordered]@{ output = %s; removeArtifact = $true; changeArtifact = $false; removeCommand = $false; changeCommand = $false }
-    changedArtifact = [ordered]@{ output = %s; removeArtifact = $false; changeArtifact = $true; removeCommand = $false; changeCommand = $false }
-    missingCommand = [ordered]@{ output = %s; removeArtifact = $false; changeArtifact = $false; removeCommand = $true; changeCommand = $false }
-    changedCommand = [ordered]@{ output = %s; removeArtifact = $false; changeArtifact = $false; removeCommand = $false; changeCommand = $true }
 }
+
+func runLocalAICandidateFinalizationCases(t *testing.T, cases []localAICandidateFinalizationCase) map[string]localAICandidateCompleteFinalizationResult {
+	t.Helper()
+	tempDir := t.TempDir()
+	casesPath := filepath.Join(tempDir, "finalization-cases.json")
+	resultPath := filepath.Join(tempDir, "v2-finalization.json")
+	harnessPath := filepath.Join(tempDir, "v2-finalization.ps1")
+	caseBytes, err := json.Marshal(struct {
+		Cases []localAICandidateFinalizationCase `json:"cases"`
+	}{Cases: cases})
+	if err != nil {
+		t.Fatalf("encode finalization cases: %v", err)
+	}
+	if err := os.WriteFile(casesPath, caseBytes, 0o600); err != nil {
+		t.Fatalf("write finalization cases: %v", err)
+	}
+	harness := strings.NewReplacer(
+		"__SCRIPT_PATH__", localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		"__INSTALL_DIR__", localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		"__ROOT_DIRECTORY__", localAICandidatePowerShellLiteral(tempDir),
+		"__CASES_PATH__", localAICandidatePowerShellLiteral(casesPath),
+		"__RESULT_PATH__", localAICandidatePowerShellLiteral(resultPath),
+	).Replace(localAICandidateFinalizationHarness)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+	results := make(map[string]localAICandidateCompleteFinalizationResult)
+	readJSONFile(t, resultPath, &results)
+	return results
+}
+
+func requireLocalAICandidateFinalizationFailure(t *testing.T, results map[string]localAICandidateCompleteFinalizationResult, name, expectedError string) {
+	t.Helper()
+	result, ok := results[name]
+	if !ok {
+		t.Fatalf("%s finalization result is missing from %#v", name, results)
+	}
+	if result.Status != "FAIL" || !result.DigestMatches ||
+		!strings.Contains(result.Failure, expectedError) || !strings.Contains(result.ReportError, expectedError) {
+		t.Fatalf("%s finalization = %#v, want FAIL with %q and a valid detached digest", name, result, expectedError)
+	}
+	if name == "changedCommandEvidence" &&
+		(result.CleanupStatus != "FAIL" || result.Stable || !strings.Contains(result.Detail, "command-output")) {
+		t.Fatalf("changed command evidence finalization = %#v, want named unstable-evidence cleanup failure", result)
+	}
+}
+
+type localAICandidateFinalizationCase struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+}
+
+type localAICandidateCompleteFinalizationResult struct {
+	Status        string `json:"status"`
+	Failure       string `json:"failure"`
+	ReportError   string `json:"reportError"`
+	CleanupStatus string `json:"cleanupStatus"`
+	Stable        bool   `json:"stable"`
+	Detail        string `json:"detail"`
+	DigestMatches bool   `json:"digestMatches"`
+}
+
+const localAICandidateFinalizationHarness = `
+. __SCRIPT_PATH__ -InstallDir __INSTALL_DIR__
+$rootDirectory = __ROOT_DIRECTORY__
+$casePath = __CASES_PATH__
+$resultPath = __RESULT_PATH__
+$caseDocument = Get-Content -Raw -LiteralPath $casePath | ConvertFrom-Json
+$cases = [ordered]@{}
+foreach ($definition in $caseDocument.cases) {
+    $name = [string]$definition.name
+    $cases[$name] = [ordered]@{
+        output = Join-Path $rootDirectory $name
+        kind = [string]$definition.kind
+    }
+}
+$artifactSpecs = @(
+    [ordered]@{ role = 'windows-amd64-archive'; file = 'you_fixture_windows_amd64.zip'; contents = 'archive bytes' },
+    [ordered]@{ role = 'windows-amd64-executable'; file = 'you.exe'; contents = 'executable bytes' },
+    [ordered]@{ role = 'windows-installer'; file = 'install.ps1'; contents = 'installer bytes' },
+    [ordered]@{ role = 'detached-checksums'; file = 'SHA256SUMS.txt'; contents = 'checksum bytes' },
+    [ordered]@{ role = 'public-doc-snapshot'; file = 'models.md'; contents = 'public docs bytes' }
+)
 $results = [ordered]@{}
 foreach ($entry in $cases.GetEnumerator()) {
     $case = $entry.Value
     $output = $case.output
     [void][System.IO.Directory]::CreateDirectory($output)
-    $artifactPath = Join-Path $output 'candidate.bin'
-    $commandPath = Join-Path $output 'command.log'
-    [System.IO.File]::WriteAllText($artifactPath, 'retained bytes')
-    [System.IO.File]::WriteAllText($commandPath, 'command evidence')
+    $artifactEvidence = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($spec in $artifactSpecs) {
+        $artifactPath = Join-Path $output $spec.file
+        [System.IO.File]::WriteAllText($artifactPath, $spec.contents, [System.Text.UTF8Encoding]::new($false))
+        [void]$artifactEvidence.Add((Get-SmokeFileEvidence $spec.role $artifactPath))
+    }
     $report = [ordered]@{
+        schemaVersion = 'local-windows-candidate/v2'
+        driverRevision = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
         status = 'PASS'
+        source = [ordered]@{
+            commit = 'b8300f24bf8b2a333a3c2743c1814d264478aedb'
+            tree = '1bb0badc9faa244005d81e9255cb44050b4b720f'
+            vcsModified = $false
+        }
+        target = [ordered]@{ os = 'windows'; arch = 'amd64' }
+        build = [ordered]@{
+            goVersion = 'go version go1.26.8 windows/amd64'
+            goReleaserVersion = 'v2.12.7'
+            maximumWorkBytes = [int64]4294967296
+            maximumChildren = 4
+            workBytes = [int64]1024
+        }
+        artifacts = @($artifactEvidence | ForEach-Object { $_ })
+        commandEvidence = @()
+        install = [ordered]@{
+            status = 'PASS'
+            preinstallAbsent = $true
+            stateRootsInitiallyEmpty = $true
+            pathResolution = (Join-Path $output 'install\you.exe')
+            executableBuildInfo = [ordered]@{ sourceRevision = 'b8300f24bf8b2a333a3c2743c1814d264478aedb'; vcsModified = $false }
+            modelCalls = 0
+            modelBackendDownloadBytes = [int64]0
+        }
+        observer = [ordered]@{
+            observed = $true
+            sampleCount = 2
+            attributedProcessCount = 1
+            nonLoopbackConnections = 0
+            port7437Accesses = 0
+            backendProcessStarts = 0
+            survivingTaskProcesses = 0
+            loopbackDistributionRequests = 4
+            distributionListenerPort = 45678
+            distributionListenerStopped = $true
+            distributionObserverObserved = $true
+            distributionObserverError = ''
+            error = ''
+        }
+        cleanup = [ordered]@{
+            status = 'PASS'
+            listenerStopped = $true
+            workDirectoryRemoved = $true
+            installDirectoryRemoved = $true
+            partialFilesRemaining = 0
+            retainedEvidenceHashesStable = $true
+        }
         error = ''
-        artifacts = @(Get-SmokeFileEvidence 'linux-amd64-archive' $artifactPath)
-        commandEvidence = @(Get-SmokeFileEvidence 'command-output' $commandPath)
-        cleanup = [ordered]@{ status = 'PASS' }
     }
-    if ($case.removeArtifact) { Remove-Item -LiteralPath $artifactPath -Force }
-    if ($case.changeArtifact) { [System.IO.File]::WriteAllText($artifactPath, 'changed artifact') }
-    if ($case.removeCommand) { Remove-Item -LiteralPath $commandPath -Force }
-    if ($case.changeCommand) { [System.IO.File]::WriteAllText($commandPath, 'changed command') }
-    $result = Finalize-SmokeCandidateReport -OutputDirectory $output -ReportPath (Join-Path $output 'candidate-report.json') -Report $report -Failure $null
+    switch ($case.kind) {
+        'sourceModified' { $report.source.vcsModified = $true }
+        'sourceIdentityMismatch' { $report.source.commit = 'cccccccccccccccccccccccccccccccccccccccc' }
+        'nonLoopback' { $report.observer.nonLoopbackConnections = 1 }
+        'port7437' { $report.observer.port7437Accesses = 1 }
+        'backendProcess' { $report.observer.backendProcessStarts = 1 }
+        'missingProcessAttribution' { $report.observer.attributedProcessCount = 0 }
+        'missingDistributionEvidence' { $report.observer.distributionObserverObserved = $false }
+        'cleanupFailure' { $report.cleanup.listenerStopped = $false }
+        'changedCommandEvidence' {
+            $commandPath = Join-Path $output 'release.stderr.log'
+            [System.IO.File]::WriteAllText($commandPath, 'retained command evidence')
+            $report.commandEvidence = @(Get-SmokeFileEvidence 'command-output' $commandPath)
+            [System.IO.File]::WriteAllText($commandPath, 'changed command evidence')
+        }
+        'manifestDrift' {
+            [System.IO.File]::WriteAllText((Join-Path $output 'candidate-report.json'), 'stale manifest')
+            [System.IO.File]::WriteAllText((Join-Path $output 'candidate-report.sha256'), ('0' * 64) + '  candidate-report.json' + [char]10)
+        }
+    }
+    $finalized = Finalize-SmokeCandidateReport -OutputDirectory $output -ReportPath (Join-Path $output 'candidate-report.json') -Report $report -Failure $null
+    $reportEvidence = Get-SmokeFileEvidence 'candidate-report' (Join-Path $output 'candidate-report.json')
+    $expectedDigest = $reportEvidence.sha256 + '  candidate-report.json' + [char]10
+    $actualDigest = [System.IO.File]::ReadAllText((Join-Path $output 'candidate-report.sha256'))
+    $retainedEvidenceError = ''
+    if ($finalized.report.cleanup.Contains('retainedEvidenceError')) {
+        $retainedEvidenceError = [string]$finalized.report.cleanup.retainedEvidenceError
+    }
     $results[$entry.Key] = [ordered]@{
-        failure = if ($null -eq $result.failure) { '' } else { $result.failure.Message }
-        status = $result.report.status
-        cleanupStatus = $result.report.cleanup.status
-        stable = $result.report.cleanup.retainedEvidenceHashesStable
-        detail = $result.report.cleanup.retainedEvidenceError
-        commandEvidenceCount = @($result.report.commandEvidence).Count
-        outputExists = Test-Path -LiteralPath $output -PathType Container
-        reportExists = Test-Path -LiteralPath (Join-Path $output 'candidate-report.json') -PathType Leaf
-        digestExists = Test-Path -LiteralPath (Join-Path $output 'candidate-report.sha256') -PathType Leaf
+        status = $finalized.report.status
+        failure = if ($null -eq $finalized.failure) { '' } else { $finalized.failure.Message }
+        reportError = [string]$finalized.report.error
+        cleanupStatus = [string]$finalized.report.cleanup.status
+        stable = [bool]$finalized.report.cleanup.retainedEvidenceHashesStable
+        detail = $retainedEvidenceError
+        digestMatches = $actualDigest -ceq $expectedDigest
     }
 }
-$results | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath %s -Encoding UTF8
-`,
-		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
-		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
-		localAICandidatePowerShellLiteral(caseDirectories["missingArtifact"]),
-		localAICandidatePowerShellLiteral(caseDirectories["changedArtifact"]),
-		localAICandidatePowerShellLiteral(caseDirectories["missingCommand"]),
-		localAICandidatePowerShellLiteral(caseDirectories["changedCommand"]),
-		localAICandidatePowerShellLiteral(resultPath),
-	)
-	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
-	var results map[string]localAICandidateFinalizationResult
-	readJSONFile(t, resultPath, &results)
-	for name, result := range results {
-		wantRole := "linux-amd64-archive"
-		if strings.Contains(name, "Command") {
-			wantRole = "command-output"
-		}
-		if result.Failure == "" || result.Status != "FAIL" ||
-			result.CleanupStatus != "FAIL" || result.Stable ||
-			result.CommandEvidenceCount != 1 ||
-			!strings.Contains(result.Detail, wantRole) ||
-			!result.OutputExists || !result.ReportExists || !result.DigestExists {
-			t.Fatalf("%s finalization = %#v, want named retained-evidence failure", name, result)
-		}
-	}
-}
+$results | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $resultPath -Encoding UTF8
+`

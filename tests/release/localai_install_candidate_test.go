@@ -734,81 +734,21 @@ $result | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath %s -Encoding UTF8
 		localAICandidatePowerShellLiteral(resultPath),
 	)
 	runLocalAICandidateHarness(t, harnessPath, harness, isolatedEnvironment, tempDir)
-	assertLocalAICandidatePublicInstallResult(t, resultPath, installDir, version, targetRevision)
+	assertLocalAICandidatePublicInstallResult(t, resultPath, installDir, version, archiveVersion, targetRevision)
 }
-func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, installDir, version, targetRevision string) {
+func assertLocalAICandidatePublicInstallResult(t *testing.T, resultPath, installDir, version, archiveVersion, targetRevision string) {
 	t.Helper()
-	var result struct {
-		Status                    string `json:"status"`
-		ModelCalls                int    `json:"modelCalls"`
-		ModelBackendDownloadBytes int64  `json:"modelBackendDownloadBytes"`
-		Activity                  struct {
-			Observed                  bool     `json:"observed"`
-			CacheBytesBefore          int64    `json:"cacheBytesBefore"`
-			CacheBytesAfter           int64    `json:"cacheBytesAfter"`
-			CacheBytesDelta           int64    `json:"cacheBytesDelta"`
-			ModelCalls                int      `json:"modelCalls"`
-			ModelBackendDownloadBytes int64    `json:"modelBackendDownloadBytes"`
-			RuntimeEvidenceObserved   bool     `json:"runtimeEvidenceObserved"`
-			RuntimeEvidenceRecords    int      `json:"runtimeEvidenceRecords"`
-			BackendProcessStarts      int      `json:"backendProcessStarts"`
-			CacheRoots                []string `json:"cacheRoots"`
-		} `json:"activity"`
-		PathResolution      string `json:"pathResolution"`
-		Version             string `json:"version"`
-		ExpectedVersion     string `json:"expectedVersion"`
-		ExecutableBuildInfo struct {
-			SourceRevision string `json:"sourceRevision"`
-			VCSModified    bool   `json:"vcsModified"`
-		} `json:"executableBuildInfo"`
-		Commands []struct {
-			Arguments     []string `json:"arguments"`
-			ElapsedMillis int64    `json:"elapsedMilliseconds"`
-		} `json:"commands"`
-	}
+	var result localAICandidatePublicInstallResult
 	readJSONFile(t, resultPath, &result)
-	if result.Status != "PASS" || !result.Activity.Observed ||
-		result.ModelCalls != result.Activity.ModelCalls ||
-		result.ModelBackendDownloadBytes != result.Activity.ModelBackendDownloadBytes ||
-		result.Activity.ModelCalls != 0 || result.Activity.ModelBackendDownloadBytes != 0 ||
-		result.Activity.CacheBytesBefore != 0 || result.Activity.CacheBytesAfter != 0 ||
-		result.Activity.CacheBytesDelta != 0 || result.Activity.RuntimeEvidenceRecords != 0 ||
-		result.Activity.BackendProcessStarts != 0 || len(result.Activity.CacheRoots) != 3 {
-		t.Fatalf("public candidate install result = %#v", result)
-	}
-	if result.Version != version || result.ExpectedVersion != version || result.PathResolution == "" || !strings.EqualFold(filepath.Clean(result.PathResolution), filepath.Clean(filepath.Join(installDir, "you.exe"))) {
-		t.Fatalf("public candidate version/PATH = %q/%q/%q, want version %q and installed executable", result.Version, result.ExpectedVersion, result.PathResolution, version)
-	}
-	if result.ExecutableBuildInfo.SourceRevision != targetRevision || result.ExecutableBuildInfo.VCSModified {
-		t.Fatalf("public candidate executable build info = %#v, want revision %s and vcs.modified=false", result.ExecutableBuildInfo, targetRevision)
-	}
-	wantCommands := []string{
-		"--version",
-		"--help",
-		"docs models",
-		"models list",
-		"models --help",
-		"--json models inspect llm",
-		"--json models inspect asr",
-		"--json models inspect tts",
-		"--json models inspect embed",
-	}
-	seenCommands := make(map[string]bool, len(result.Commands))
-	for _, command := range result.Commands {
-		if command.ElapsedMillis < 0 {
-			t.Fatalf("candidate command has negative elapsed time: %#v", command)
-		}
-		seenCommands[strings.Join(command.Arguments, " ")] = true
-	}
-	for _, command := range wantCommands {
-		if !seenCommands[command] {
-			t.Fatalf("candidate install did not record command %q: %#v", command, result.Commands)
-		}
-	}
-	if _, err := os.Stat(installDir); !os.IsNotExist(err) {
-		t.Fatalf("install directory remains after smoke: %v", err)
-	}
+	assertLocalAICandidateInstallIdentity(t, result, installDir, version, targetRevision)
+	assertLocalAICandidateInstallBudgets(t, result.Budgets)
+	assertLocalAICandidateInstallDiscovery(t, result.Discovery, result.Budgets)
+	assertLocalAICandidateInstallActivity(t, result)
+	assertLocalAICandidateInstallDistribution(t, result, archiveVersion)
+	assertLocalAICandidateInstallCleanup(t, result.Cleanup)
+
 }
+
 func localAICandidateScriptPath(t *testing.T) string {
 	t.Helper()
 	return filepath.Join(testutil.MustRepoRoot(t), "scripts", "release", "smoke-install.ps1")
