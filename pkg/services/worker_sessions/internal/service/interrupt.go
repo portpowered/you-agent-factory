@@ -220,6 +220,7 @@ func (r *registry) beginControlHistory(
 	if !pub.control.acquire() {
 		return nil, nil
 	}
+	runtimeAttempt := r.runtimeAttemptFor(id)
 
 	pub.mu.Lock()
 	open := pub.open
@@ -230,6 +231,8 @@ func (r *registry) beginControlHistory(
 		dispatchID = strings.TrimSpace(supervision.dispatchID)
 		turnID = strings.TrimSpace(supervision.turnID)
 		supervision.mu.Unlock()
+	} else if runtimeAttempt != nil {
+		dispatchID = strings.TrimSpace(runtimeAttempt.dispatchID)
 	}
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
@@ -267,6 +270,9 @@ func (r *registry) beginControlHistory(
 			reservation.supervision = supervision
 		}
 		supervision.mu.Unlock()
+	} else if runtimeAttempt != nil &&
+		(action == workersessions.ControlActionCancel || action == workersessions.ControlActionTerminate) {
+		runtimeAttempt.setControlHistory(reservation)
 	}
 	return reservation, nil
 }
@@ -276,10 +282,6 @@ func controlContext(ctx context.Context) context.Context {
 		return context.Background()
 	}
 	return context.WithoutCancel(ctx)
-}
-
-func controlFallbackRequestID(action workersessions.ControlAction, sessionID, dispatchID string) string {
-	return strings.Join([]string{string(action), sessionID, dispatchID}, "/")
 }
 
 func controlReplayKey(action workersessions.ControlAction, requestID string) string {

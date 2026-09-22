@@ -15,6 +15,41 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func stringPointerValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func pointerStringSlice(value *[]string) []string {
+	if value == nil {
+		return nil
+	}
+	return append([]string(nil), (*value)...)
+}
+
+func restoredWorldStateForEvents(
+	state *interfaces.FactoryWorldState,
+	prefix []interfaces.FactoryEvent,
+	events []interfaces.FactoryEvent,
+) (*interfaces.FactoryWorldState, bool) {
+	if state == nil || len(prefix) == 0 || len(events) < len(prefix) {
+		return nil, false
+	}
+	for index := range prefix {
+		if !sameFactoryEventIdentity(prefix[index], events[index]) {
+			return nil, false
+		}
+	}
+	for _, event := range events[len(prefix):] {
+		if factoryEventRequiresWorkerSessionProjection(*state, event) {
+			return nil, false
+		}
+	}
+	return state, true
+}
+
 type restoredDispatchPlaceFailure string
 
 const (
