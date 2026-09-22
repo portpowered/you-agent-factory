@@ -3,11 +3,7 @@
 package artifacts_test
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
@@ -34,77 +30,63 @@ func TestArtifactsReturnsDetachedDescriptorsInManifestOrder(t *testing.T) {
 	}
 }
 
-func TestDecodeCharacterizesApprovedWindowsCUDAVariantClosedMatrixRejection(t *testing.T) {
+func TestDecodeAcceptsApprovedWindowsCUDAVariant(t *testing.T) {
 	t.Parallel()
 
 	candidate := approvedWindowsCUDAManifest(t)
-	before := append([]byte(nil), candidate...)
-	_, err := artifacts.Decode(candidate)
-	if !errors.Is(err, artifacts.ErrUnsupportedPlatform) {
-		t.Fatalf("Decode(candidate) error = %v, want closed target matrix rejection", err)
+	manifest, err := artifacts.Decode(candidate)
+	if err != nil {
+		t.Fatalf("Decode(candidate) error = %v, want the approved CUDA variant to decode", err)
 	}
-	var failure *artifacts.Failure
-	if !errors.As(err, &failure) || failure.Kind != artifacts.FailureUnsupportedPlatform {
-		t.Fatalf("Decode(candidate) error = %#v, want typed unsupported target failure", err)
+	if manifest.ArtifactCount() != 10 {
+		t.Fatalf("ArtifactCount = %d, want the nine baselines plus one CUDA variant", manifest.ArtifactCount())
 	}
-	if failure.Field != "artifacts[9].target" || failure.Value != "windows-amd64-cuda" {
-		t.Fatalf("target failure = %#v, want the approved CUDA target at artifacts[9]", failure)
+	for _, descriptor := range manifest.Artifacts() {
+		if descriptor.ID != "localai-llamacpp/windows-amd64-cuda" {
+			continue
+		}
+		if descriptor.Target.OperatingSystem != "windows" || descriptor.Target.Architecture != "amd64" || len(descriptor.Target.Accelerators) != 1 || descriptor.Target.Accelerators[0] != "cuda" {
+			t.Fatalf("CUDA descriptor target = %#v, want windows/amd64/cuda", descriptor.Target)
+		}
+		return
 	}
-	if !strings.Contains(failure.Detail, "outside the supported") {
-		t.Fatalf("target failure detail = %q, want the current closed target matrix reason", failure.Detail)
+	t.Fatal("decoded manifest omitted the approved CUDA descriptor")
+}
+
+func TestSelectFindsApprovedWindowsCUDAArtifactWithoutChangingCPUSelection(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := artifacts.Decode(approvedWindowsCUDAManifest(t))
+	if err != nil {
+		t.Fatalf("Decode(candidate) error = %v", err)
 	}
-	if !bytes.Equal(candidate, before) {
-		t.Fatal("Decode mutated the candidate manifest after rejecting the CUDA variant")
+	cuda, err := manifest.Select(artifacts.SelectionRequest{
+		Backend: "localai-llamacpp", OperatingSystem: "windows", Architecture: "amd64",
+		ProtocolRevision: manifest.ProtocolRevision(), Accelerator: "cuda",
+	})
+	if err != nil {
+		t.Fatalf("Select(cuda) error = %v", err)
+	}
+	if cuda.ID != "localai-llamacpp/windows-amd64-cuda" {
+		t.Fatalf("Select(cuda) ID = %q, want approved CUDA variant", cuda.ID)
+	}
+	cpu, err := manifest.Select(artifacts.SelectionRequest{
+		Backend: "localai-llamacpp", OperatingSystem: "windows", Architecture: "amd64",
+		ProtocolRevision: manifest.ProtocolRevision(), Accelerator: "cpu",
+	})
+	if err != nil {
+		t.Fatalf("Select(cpu) error = %v", err)
+	}
+	if cpu.ID != "localai-llamacpp/windows-amd64" {
+		t.Fatalf("Select(cpu) ID = %q, want existing Windows CPU baseline", cpu.ID)
 	}
 }
 
 func approvedWindowsCUDAManifest(t *testing.T) []byte {
 	t.Helper()
-
-	manifestBytes, err := os.ReadFile("default-manifest.json")
+	manifestBytes, err := os.ReadFile("testdata/windows-cuda-variant-manifest.json")
 	if err != nil {
-		t.Fatalf("read checked-in default manifest: %v", err)
+		t.Fatalf("read approved Windows CUDA fixture: %v", err)
 	}
-	var document map[string]any
-	if err := json.Unmarshal(manifestBytes, &document); err != nil {
-		t.Fatalf("decode checked-in default manifest: %v", err)
-	}
-	entries := document["artifacts"].([]any)
-	for _, value := range entries {
-		entry := value.(map[string]any)
-		backend := entry["backend"].(map[string]any)
-		target := entry["target"].(map[string]any)
-		if backend["id"] != "localai-llamacpp" || target["id"] != "windows-amd64" {
-			continue
-		}
-
-		encoded, err := json.Marshal(entry)
-		if err != nil {
-			t.Fatalf("copy Windows CPU artifact fixture: %v", err)
-		}
-		var candidate map[string]any
-		if err := json.Unmarshal(encoded, &candidate); err != nil {
-			t.Fatalf("decode Windows CPU artifact fixture copy: %v", err)
-		}
-		candidate["id"] = "localai-llamacpp/windows-amd64-cuda"
-		candidateTarget := candidate["target"].(map[string]any)
-		candidateTarget["id"] = "windows-amd64-cuda"
-		candidateTarget["accelerators"] = []any{"cuda"}
-		archive := candidate["artifact"].(map[string]any)
-		oldName := archive["name"].(string)
-		newName := strings.Replace(oldName, "windows-amd64", "windows-amd64-cuda", 1)
-		archive["name"] = newName
-		archive["location"] = strings.Replace(
-			archive["location"].(string), oldName, newName, 1,
-		)
-		archive["sha256"] = strings.Repeat("d", 64)
-		document["artifacts"] = append(entries, candidate)
-		result, err := json.Marshal(document)
-		if err != nil {
-			t.Fatalf("encode approved Windows CUDA fixture: %v", err)
-		}
-		return result
-	}
-	t.Fatal("checked-in manifest has no localai-llamacpp/windows-amd64 baseline to copy")
-	return nil
+	return manifestBytes
 }

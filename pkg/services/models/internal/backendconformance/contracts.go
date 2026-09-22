@@ -11,9 +11,11 @@ import (
 )
 
 const (
-	TargetDarwinArm64  = "darwin-arm64"
-	TargetLinuxAmd64   = "linux-amd64"
-	TargetWindowsAmd64 = "windows-amd64"
+	TargetDarwinArm64      = "darwin-arm64"
+	TargetLinuxAmd64       = "linux-amd64"
+	TargetWindowsAmd64     = "windows-amd64"
+	TargetWindowsAmd64CUDA = "windows-amd64-cuda"
+	ApprovedCUDABackend    = "localai-llamacpp"
 )
 
 // Reference identifies one backend name exposed to a customer.
@@ -24,9 +26,12 @@ type Reference struct {
 
 // PinnedArtifact contains the manifest facts needed by the offline guard.
 type PinnedArtifact struct {
-	BackendID string
-	TargetID  string
-	SizeBytes int64
+	BackendID       string
+	TargetID        string
+	OperatingSystem string
+	Architecture    string
+	Accelerators    []string
+	SizeBytes       int64
 }
 
 // ReleaseBuiltCommand records concrete production release-build evidence for

@@ -81,9 +81,12 @@ func repositoryConformanceInputs() (Inputs, error) {
 	pinnedArtifacts := make([]PinnedArtifact, 0, manifest.ArtifactCount())
 	for _, descriptor := range manifest.Artifacts() {
 		pinnedArtifacts = append(pinnedArtifacts, PinnedArtifact{
-			BackendID: descriptor.Backend.ID,
-			TargetID:  descriptor.Target.ID,
-			SizeBytes: descriptor.Artifact.SizeBytes,
+			BackendID:       descriptor.Backend.ID,
+			TargetID:        descriptor.Target.ID,
+			OperatingSystem: descriptor.Target.OperatingSystem,
+			Architecture:    descriptor.Target.Architecture,
+			Accelerators:    append([]string(nil), descriptor.Target.Accelerators...),
+			SizeBytes:       descriptor.Artifact.SizeBytes,
 		})
 	}
 
