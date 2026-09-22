@@ -180,6 +180,24 @@ func TestBuiltInTTSResolvesAllVerifiedModelFilesForPrivateHostNegotiation(t *tes
 	}
 }
 
+func TestSupervisedIdentityCanonicalizesPinnedBackendIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	runtimeConfig := &models.RuntimeConfig{
+		Resources: []models.RuntimeResource{{
+			Type:       models.RuntimeResourceTypeModel,
+			Model:      models.BuiltInModelNameTTS,
+			Backend:    " LOCALAI-VIBEVOICE ",
+			LoadPolicy: string(models.LoadPolicyOnDemand),
+		}},
+	}
+
+	identity := supervisedIdentityForModel(runtimeConfig, nil, models.BuiltInModelNameTTS)
+	if identity.Backend != "localai-vibevoice" {
+		t.Fatalf("supervised identity backend = %q, want canonical pinned identifier", identity.Backend)
+	}
+}
+
 func TestRequiresSupervisedBackend_CharacterizesCurrentMembership(t *testing.T) {
 	t.Parallel()
 
