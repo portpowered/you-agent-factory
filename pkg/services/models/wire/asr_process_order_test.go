@@ -24,7 +24,6 @@ import (
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
-	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"google.golang.org/protobuf/proto"
@@ -240,32 +239,11 @@ func newControlledASRScenario(t *testing.T) *controlledASRScenario {
 	protocol := &controlledASRProtocol{}
 	sink := &controlledASREvidenceSink{crashed: make(chan struct{}, 1)}
 	recorder := modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)
-	host, err := runtimehostwire.NewService(
-		scopes, assets, launcher, controlledASRNoHTTP{}, clock, nil, nil,
-		runtimehost.Options{
-			Platform:           models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64"},
-			ProtocolNegotiator: protocol, CompatibilityChecker: controlledASRCompatibility{},
-			RuntimeEvidence: recorder, IdleUnloadAfter: time.Hour,
-		},
+	host := newControlledASRHost(
+		t, scopes, assets, launcher, controlledASRNoHTTP{}, clock, protocol,
+		controlledASRCompatibility{}, recorder,
 	)
-	if err != nil {
-		t.Fatalf("construct Runtime Host: %v", err)
-	}
-
-	invocation, err := inferenceRuntime(invocationRuntimeOptions{
-		Dialer:           controlledASRDialer{connection: connection},
-		ASRTempDirectory: func() string { return tempDirectory },
-		ASRCreateTemp: func(directory, pattern string) (localai.TempFile, error) {
-			return os.CreateTemp(directory, pattern)
-		},
-		ASRWriteFile: func(path string, content []byte) error {
-			return os.WriteFile(path, content, 0o600)
-		},
-		ASRRemoveFile: os.Remove,
-	})
-	if err != nil {
-		t.Fatalf("construct Models invocation runtime: %v", err)
-	}
+	invocation := newTestASRInvocationRuntime(t, controlledASRDialer{connection: connection}, tempDirectory)
 	catalog, err := catalogwire.NewService(scopes)
 	if err != nil {
 		t.Fatalf("construct Models Catalog: %v", err)

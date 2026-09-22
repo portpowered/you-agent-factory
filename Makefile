@@ -21,7 +21,8 @@ MANAGED_PROCESS_HELPER_DIR ?= .artifacts/integration/models-managed-process
 MANAGED_PROCESS_HELPER_DIGEST_FILE ?= $(MANAGED_PROCESS_HELPER_DIR)/managed_process_helper.sha256
 MANAGED_PROCESS_INTEGRATION_PACKAGE ?= ./tests/integration/models/managed_process
 ASR_LIVE_CORRELATION_HARNESS_DIR ?= .artifacts/integration/models-asr-live-correlation
-ASR_LIVE_CORRELATION_HARNESS_SOURCE ?= ./pkg/services/models/internal/asr_live_correlation
+# Keep the prebuilt helper under testdata so it is excluded from the unit package inventory.
+ASR_LIVE_CORRELATION_HARNESS_SOURCE ?= ./pkg/services/models/internal/testdata/asr_live_correlation_harness
 ASR_LIVE_CORRELATION_INTEGRATION_PACKAGE ?= ./tests/integration/models/asr_live_correlation
 
 ifeq ($(OS),Windows_NT)
