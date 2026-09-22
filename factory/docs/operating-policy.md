@@ -30,8 +30,10 @@ The roles are deliberately separated:
 | Role | Worker profile | Authority |
 | --- | --- | --- |
 | Portfolio Supervisor | Astra, medium reasoning with high autonomy | Whole-repository health, Project admission, cross-Project priority, exception handling, and Factory-level improvement |
-| Project Lead | Sol, high reasoning | One Project's immutable contract, immediate behavior slices, local dependency map, and Project completion decision |
-| Planning, delivery, and review workers | Luna, maximum reasoning | One local Work item and its declared planning, implementation, or review evidence |
+| Project Lead | Sol, medium reasoning | One Project's immutable contract, immediate behavior slices, local dependency map, and Project completion decision |
+| Planning workers | Sol, medium reasoning | One bounded plan and its admission evidence |
+| Implementation workers | Luna, xhigh reasoning | One local implementation item and its declared delivery evidence |
+| Review workers | Luna, maximum reasoning | One independent review of a current implementation head |
 | Validation workers | Luna, maximum reasoning | One read-only validation mission against one immutable build and fixture identity |
 
 The Portfolio Supervisor is normally triggered every four hours. The runtime may
