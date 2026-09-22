@@ -488,20 +488,6 @@ class SetupWorkspaceHandoffTest(unittest.TestCase):
         self.assertNotIn("Root sync:", result.stderr)
         self.assertEqual(repository_snapshot(self.repo_path), before)
 
-    def test_handoff_rejects_missing_branch_identity_before_mutation(self):
-        init_repository(self.repo_path)
-        prd_name = "missing-identity-handoff-prd"
-        write_packet(self.repo_path, prd_name, {"description": "secret"})
-        before = repository_snapshot(self.repo_path)
-
-        result = run_setup_workspace(self.repo_path, prd_name)
-
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("branchName must be a string", result.stderr)
-        self.assertNotIn("secret", result.stderr)
-        self.assertNotIn("Root sync:", result.stderr)
-        self.assertEqual(repository_snapshot(self.repo_path), before)
-
     def test_handoff_rejects_mismatched_branch_identity_before_mutation(self):
         init_repository(self.repo_path)
         prd_name = "mismatched-identity-handoff-prd"

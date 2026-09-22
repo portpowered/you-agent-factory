@@ -76,6 +76,11 @@ a valid decision.
   the task, a prerequisite or authority is missing, or the smallest correct fix
   materially exceeds the story, record a structured blocker and smallest plan
   delta instead of silently broadening scope.
+- Treat planned changed paths as impact estimates. When implementation
+  discovers another path required by the same behavior, inspect live
+  branches/worktrees for a real collision, update the reported impact, and
+  proceed when there is none. Never fail work only because a path was absent
+  from a planning allowlist.
 - For lanes whose acceptance includes measured test latency or performance,
   compute saturation and noisy local timings are expected. Continue when the change materially follows a proven
   optimization pattern—such as fewer root builds, servers, subprocesses,
