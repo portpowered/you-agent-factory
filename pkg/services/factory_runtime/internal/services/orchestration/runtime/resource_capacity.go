@@ -865,6 +865,9 @@ func seedRestoredWork(
 	if err != nil {
 		return nil, err
 	}
+	if err := addRestoredMissingInitialWorkPlacements(placements, restored, net, resourcePlaceIDs, toleratedWorkIDs); err != nil {
+		return nil, err
+	}
 	if err := validateRestoredWorkState(restored, net, items, placements, resourcePlaceIDs, toleratedWorkIDs, exhaustedPlacements); err != nil {
 		return nil, err
 	}

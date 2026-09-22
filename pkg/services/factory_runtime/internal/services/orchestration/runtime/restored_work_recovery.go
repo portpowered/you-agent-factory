@@ -639,6 +639,230 @@ func addRestoredPlacement(placements map[string]string, workID, placeID string) 
 	return nil
 }
 
+// addRestoredMissingInitialWorkPlacements recovers only an active Work whose
+// durable admission and recorded definition prove one exact initial place.
+// The placement is added to the detached in-memory projection; no recording or
+// canonical event is changed by this compatibility path.
+func addRestoredMissingInitialWorkPlacements(
+	placements map[string]string,
+	restored *interfaces.FactoryWorldState,
+	net *state.Net,
+	resourcePlaceIDs map[string]struct{},
+	toleratedWorkIDs map[string]struct{},
+) error {
+	if restored == nil || restored.PlaceOccupancyByID == nil || net == nil {
+		return nil
+	}
+	for _, workID := range sortedRestoredKeys(restored.ActiveWorkItemsByID) {
+		if _, exists := placements[workID]; exists {
+			continue
+		}
+		if _, tolerated := toleratedWorkIDs[workID]; tolerated {
+			continue
+		}
+		placeID, ok := restoredMissingInitialWorkPlace(restored, net, resourcePlaceIDs, workID)
+		if !ok {
+			return fmt.Errorf(
+				"restore Work board: active Work %q has no current place occupancy",
+				workID,
+			)
+		}
+		placements[workID] = placeID
+	}
+	return nil
+}
+
+func restoredMissingInitialWorkPlace(
+	restored *interfaces.FactoryWorldState,
+	net *state.Net,
+	resourcePlaceIDs map[string]struct{},
+	workID string,
+) (string, bool) {
+	if strings.TrimSpace(workID) == "" {
+		return "", false
+	}
+	active, activeOK := restored.ActiveWorkItemsByID[workID]
+	canonical, canonicalOK := restored.WorkItemsByID[workID]
+	admission, admissionOK := restoredUniqueAdmissionForWork(restored, workID)
+	if !activeOK || !canonicalOK || !admissionOK ||
+		active.ID != workID || canonical.ID != workID || admission.ID != workID {
+		return "", false
+	}
+	if admission.WorkTypeID == "" || active.WorkTypeID != admission.WorkTypeID || canonical.WorkTypeID != admission.WorkTypeID {
+		return "", false
+	}
+	initialPlaceID, initialState, ok := restoredUniqueInitialPlace(restored, net, resourcePlaceIDs, admission.WorkTypeID)
+	if !ok || !restoredWorkStatesMatchInitial(initialState, admission.State, active.State, canonical.State) {
+		return "", false
+	}
+	if restoredMissingInitialWorkHasLaterFacts(restored, workID) {
+		return "", false
+	}
+	return initialPlaceID, true
+}
+
+func restoredUniqueAdmissionForWork(
+	restored *interfaces.FactoryWorldState,
+	workID string,
+) (work.FactoryWorkItem, bool) {
+	var admission work.FactoryWorkItem
+	count := 0
+	for requestKey, request := range restored.WorkRequestsByID {
+		for _, item := range request.WorkItems {
+			if item.ID != workID {
+				continue
+			}
+			count++
+			if count == 1 {
+				admission = item
+			}
+			requestID := strings.TrimSpace(request.RequestID)
+			if requestID == "" {
+				requestID = strings.TrimSpace(requestKey)
+			}
+			if requestID == "" {
+				return work.FactoryWorkItem{}, false
+			}
+		}
+	}
+	return admission, count == 1
+}
+
+func restoredUniqueInitialPlace(
+	restored *interfaces.FactoryWorldState,
+	net *state.Net,
+	resourcePlaceIDs map[string]struct{},
+	workTypeID string,
+) (string, string, bool) {
+	initialStates := make([]string, 0, 1)
+	workTypeCount := 0
+	for _, workType := range restored.Topology.WorkTypes {
+		if workType.ID != workTypeID {
+			continue
+		}
+		workTypeCount++
+		for _, stateDefinition := range workType.States {
+			if stateDefinition.Category == string(state.StateCategoryInitial) {
+				initialStates = append(initialStates, stateDefinition.Value)
+			}
+		}
+	}
+	if workTypeCount != 1 || len(initialStates) != 1 || strings.TrimSpace(initialStates[0]) == "" {
+		return "", "", false
+	}
+	initialState := initialStates[0]
+	expectedPlaceID := state.PlaceID(workTypeID, initialState)
+	recordedPlaceIDs := make([]string, 0, 1)
+	for _, place := range restored.Topology.Places {
+		if place.TypeID != workTypeID || place.State != initialState ||
+			place.Category != "" && place.Category != string(state.StateCategoryInitial) {
+			continue
+		}
+		if _, isResource := resourcePlaceIDs[place.ID]; isResource {
+			continue
+		}
+		recordedPlaceIDs = append(recordedPlaceIDs, place.ID)
+	}
+	if len(recordedPlaceIDs) != 1 || recordedPlaceIDs[0] != expectedPlaceID {
+		return "", "", false
+	}
+
+	currentPlace, exists := net.Places[expectedPlaceID]
+	if !exists || currentPlace == nil || currentPlace.TypeID != workTypeID || currentPlace.State != initialState {
+		return "", "", false
+	}
+	currentPlaceCount := 0
+	for placeID, place := range net.Places {
+		if place == nil || place.TypeID != workTypeID || place.State != initialState {
+			continue
+		}
+		if _, isResource := resourcePlaceIDs[placeID]; !isResource {
+			currentPlaceCount++
+		}
+	}
+	return expectedPlaceID, initialState, currentPlaceCount == 1
+}
+
+func restoredWorkStatesMatchInitial(initialState string, states ...string) bool {
+	for _, currentState := range states {
+		if currentState != "" && currentState != initialState {
+			return false
+		}
+	}
+	return true
+}
+
+func restoredMissingInitialWorkHasLaterFacts(restored *interfaces.FactoryWorldState, workID string) bool {
+	if len(restored.WorkStateChangesByWorkID[workID]) > 0 ||
+		restoredWorkInActiveDispatches(restored.ActiveDispatches, workID) ||
+		restoredDispatchCompletionsContainWork(restored.CompletedDispatches, workID) ||
+		restoredDispatchCompletionsContainWork(restored.FailedDispatches, workID) {
+		return true
+	}
+	for indexedWorkID, terminal := range restored.TerminalWorkByID {
+		if indexedWorkID == workID || terminal.WorkItem.ID == workID {
+			return true
+		}
+	}
+	for indexedWorkID, failedWork := range restored.FailedWorkItemsByID {
+		if indexedWorkID == workID || failedWork.ID == workID {
+			return true
+		}
+	}
+	if _, failure := restored.FailureDetailsByWorkID[workID]; failure {
+		return true
+	}
+	if restoredWorkHasRecordedOccupancy(restored, workID) {
+		return true
+	}
+	for _, approval := range restored.PendingHumanApprovalsByID {
+		if restoredDispatchContainsWork(approval.WorkItemIDs, workID) {
+			return true
+		}
+		if approval.DispatchID == "" {
+			continue
+		}
+		if dispatch, exists := restored.ActiveDispatches[approval.DispatchID]; exists && restoredActiveDispatchContainsWork(dispatch, workID) {
+			return true
+		}
+	}
+	return false
+}
+
+func restoredDispatchCompletionsContainWork(
+	completions []interfaces.FactoryWorldDispatchCompletion,
+	workID string,
+) bool {
+	for _, completion := range completions {
+		if restoredDispatchContainsWork(completion.WorkItemIDs, workID) ||
+			restoredDispatchInputsContainWork(completion.ConsumedInputs, workID) ||
+			restoredWorkItemsContainWork(completion.InputWorkItems, workID) ||
+			restoredWorkItemsContainWork(completion.OutputWorkItems, workID) ||
+			completion.TerminalWork != nil && completion.TerminalWork.WorkItem.ID == workID {
+			return true
+		}
+	}
+	return false
+}
+
+func restoredDispatchInputsContainWork(inputs []interfaces.WorkstationInput, workID string) bool {
+	for _, input := range inputs {
+		if input.TokenID == workID || input.WorkItem != nil && input.WorkItem.ID == workID {
+			return true
+		}
+	}
+	return false
+}
+
+func restoredWorkItemsContainWork(items []work.FactoryWorkItem, workID string) bool {
+	for _, item := range items {
+		if item.ID == workID {
+			return true
+		}
+	}
+	return false
+}
+
 func sortedRestoredKeys[T any](values map[string]T) []string {
 	keys := make([]string, 0, len(values))
 	for key := range values {
