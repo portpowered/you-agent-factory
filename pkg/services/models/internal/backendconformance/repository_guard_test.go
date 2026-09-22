@@ -16,15 +16,18 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
-// TestNoDanglingBackendReference proves every shipped inference reference has
-// exactly one offline installation path. The repository adapter below is the
-// only code that discovers generated files or the checked-in manifest.
-func TestNoDanglingBackendReference(t *testing.T) {
+// TestNoDanglingBackendReferenceConformance proves every shipped inference
+// reference has exactly one offline installation path. The repository adapter
+// below is the only code that discovers generated files or the checked-in manifest.
+func TestNoDanglingBackendReferenceConformance(t *testing.T) {
 	t.Parallel()
 
 	inputs, err := repositoryConformanceInputs()
 	if err != nil {
 		t.Fatalf("collect repository backend references: %v", err)
+	}
+	if len(inputs.PinnedArtifacts) != 9 {
+		t.Fatalf("checked-in default manifest has %d artifacts, want the existing nine-entry baseline", len(inputs.PinnedArtifacts))
 	}
 	if err := Validate(inputs); err != nil {
 		t.Fatal(err)

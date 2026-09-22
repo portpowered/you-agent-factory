@@ -156,6 +156,77 @@ func TestValidateRejectsIncompletePinnedArtifactMatrix(t *testing.T) {
 	}
 }
 
+func TestVariantCharacterizationRetainsClosedTargetBaselineAndUniquenessFailures(t *testing.T) {
+	t.Parallel()
+
+	const backendID = "localai-llamacpp"
+	cuda := PinnedArtifact{
+		BackendID: backendID, TargetID: "windows-amd64-cuda",
+		SizeBytes: MinimumPinnedArtifactSizeBytes + 4,
+	}
+	validBaselines := completePinnedArtifacts(backendID)
+
+	tests := []struct {
+		name         string
+		artifacts    []PinnedArtifact
+		wantDetails  []string
+		wantFailures int
+	}{
+		{
+			name:         "approved CUDA variant with all baselines is outside current closed matrix",
+			artifacts:    append(append([]PinnedArtifact(nil), validBaselines...), cuda),
+			wantDetails:  []string{"outside the closed darwin-arm64, linux-amd64, windows-amd64 matrix"},
+			wantFailures: 1,
+		},
+		{
+			name:      "CUDA variant cannot replace the Windows CPU baseline",
+			artifacts: append(append([]PinnedArtifact(nil), validBaselines[:2]...), cuda),
+			wantDetails: []string{
+				"outside the closed darwin-arm64, linux-amd64, windows-amd64 matrix",
+				`missing the required target "windows-amd64"`,
+			},
+			wantFailures: 2,
+		},
+		{
+			name:         "duplicate Windows CPU tuple remains invalid",
+			artifacts:    append(append([]PinnedArtifact(nil), validBaselines...), validBaselines[2]),
+			wantDetails:  []string{`exactly one is required`},
+			wantFailures: 1,
+		},
+		{
+			name:         "duplicate Windows CUDA tuple remains invalid",
+			artifacts:    append(append(append([]PinnedArtifact(nil), validBaselines...), cuda), cuda),
+			wantDetails:  []string{"outside the closed darwin-arm64, linux-amd64, windows-amd64 matrix"},
+			wantFailures: 2,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := Validate(Inputs{
+				References:         []Reference{{Identifier: backendID, Source: "candidate manifest"}},
+				RegisteredBackends: []string{backendID},
+				PinnedArtifacts:    tc.artifacts,
+			})
+			if err == nil {
+				t.Fatal("Validate() error = nil, want the current baseline/closed-target rejection")
+			}
+			var validation *ValidationError
+			if !errors.As(err, &validation) || len(validation.Failures) != tc.wantFailures {
+				t.Fatalf("Validate() error = %#v, want %d deterministic failures", err, tc.wantFailures)
+			}
+			message := err.Error()
+			for _, expected := range tc.wantDetails {
+				if !strings.Contains(message, expected) {
+					t.Fatalf("Validate() error = %q, want detail containing %q", message, expected)
+				}
+			}
+		})
+	}
+}
+
 func TestValidateNamesFactoryAndCommandForOmnivoiceShapedReference(t *testing.T) {
 	t.Parallel()
 
