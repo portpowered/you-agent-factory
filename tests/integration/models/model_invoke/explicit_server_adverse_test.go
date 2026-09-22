@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,17 +21,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// TestBuiltCLIExplicitServerAdverseInputMatrix keeps the adverse remote input
-// proof at the OS-process boundary. The package-level tests prove context and
-// typed-error identity; this witness proves a fresh binary cannot turn those
-// server outcomes into stdout success and that concurrent processes keep their
-// file-backed bytes isolated.
-func TestBuiltCLIExplicitServerAdverseInputMatrix(t *testing.T) {
-	binary := buildExplicitServerAdverseBinary(t)
+const (
+	explicitServerPrebuiltArtifactEnvironment = "INFINITE_YOU_PREBUILT_ARTIFACT"
+	explicitServerRequireArtifactEnvironment  = "INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT"
+	explicitServerFactoryMainPackage          = "github.com/portpowered/infinite-you/cmd/factory"
+)
+
+// TestExplicitServerSuccessDeadlineCleanupParity keeps the configured-server
+// witness at the OS-process boundary. The package-level tests prove context
+// and typed-error identity; this witness proves one immutable delivered CLI
+// cannot turn those server outcomes into stdout success and that concurrent
+// processes keep their file-backed bytes isolated.
+func TestExplicitServerSuccessDeadlineCleanupParity(t *testing.T) {
+	binary := resolveExplicitServerPrebuiltArtifact(t)
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	firstImage := []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff, 0x01}
@@ -47,7 +53,7 @@ func TestBuiltCLIExplicitServerAdverseInputMatrix(t *testing.T) {
 	runBuiltExplicitServerCancellation(t, fixture, binary, workDir, homeDir, firstPath)
 	runBuiltExplicitServerUnreachable(t, fixture, binary, workDir, homeDir, endpoint, firstPath)
 
-	t.Logf("fresh binary=%s server=%s success-sha256=%s", binary, fixture.server.URL, hashExplicitServerBytes(firstImage))
+	t.Logf("prebuilt binary=%s server=%s success-sha256=%s", binary, fixture.server.URL, hashExplicitServerBytes(firstImage))
 }
 
 func runBuiltExplicitServerSuccess(t *testing.T, fixture *builtExplicitServerFixture, binary, workDir, homeDir, endpoint, imagePath string, image []byte) {
@@ -414,20 +420,53 @@ type builtExplicitServerCLIResult struct {
 	err      error
 }
 
-func buildExplicitServerAdverseBinary(t *testing.T) string {
+func resolveExplicitServerPrebuiltArtifact(t *testing.T) string {
 	t.Helper()
-	name := "you"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
+	path := strings.TrimSpace(os.Getenv(explicitServerPrebuiltArtifactEnvironment))
+	if path == "" {
+		if strings.EqualFold(strings.TrimSpace(os.Getenv(explicitServerRequireArtifactEnvironment)), "1") {
+			t.Fatalf("%s is required for compiled explicit-server integration", explicitServerPrebuiltArtifactEnvironment)
+		}
+		t.Skipf("compiled explicit-server integration skipped: %s is unset; the test never builds a replacement artifact", explicitServerPrebuiltArtifactEnvironment)
 	}
-	path := filepath.Join(t.TempDir(), name)
-	command := exec.CommandContext(t.Context(), "go", "build", "-buildvcs=false", "-o", path, "./cmd/factory")
-	command.Dir = testutil.MustRepoRoot(t)
-	output, err := command.CombinedOutput()
+	if !filepath.IsAbs(path) {
+		t.Fatalf("%s=%q must be an absolute path", explicitServerPrebuiltArtifactEnvironment, path)
+	}
+	fileInfo, err := os.Stat(path)
 	if err != nil {
-		t.Fatalf("build fresh explicit-server binary: %v\n%s", err, output)
+		t.Fatalf("stat prebuilt explicit-server artifact %q: %v", path, err)
 	}
-	t.Logf("fresh explicit-server binary: go build -buildvcs=false -o %s ./cmd/factory", path)
+	if !fileInfo.Mode().IsRegular() {
+		t.Fatalf("prebuilt explicit-server artifact %q is not a regular file: %s", path, fileInfo.Mode())
+	}
+	if runtime.GOOS == "windows" {
+		if !strings.EqualFold(filepath.Ext(path), ".exe") {
+			t.Fatalf("prebuilt explicit-server artifact %q must use .exe on Windows", path)
+		}
+	} else if fileInfo.Mode().Perm()&0o111 == 0 {
+		t.Fatalf("prebuilt explicit-server artifact %q is not executable: %s", path, fileInfo.Mode())
+	}
+	artifact, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open prebuilt explicit-server artifact %q: %v", path, err)
+	}
+	digest := sha256.New()
+	if _, err := io.Copy(digest, artifact); err != nil {
+		_ = artifact.Close()
+		t.Fatalf("hash prebuilt explicit-server artifact %q: %v", path, err)
+	}
+	if err := artifact.Close(); err != nil {
+		t.Fatalf("close prebuilt explicit-server artifact %q: %v", path, err)
+	}
+	finalInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("restat prebuilt explicit-server artifact %q: %v", path, err)
+	}
+	if finalInfo.Size() != fileInfo.Size() {
+		t.Fatalf("prebuilt explicit-server artifact %q changed size during validation: %d -> %d", path, fileInfo.Size(), finalInfo.Size())
+	}
+	digestHex := hex.EncodeToString(digest.Sum(nil))
+	t.Logf("prebuilt explicit-server artifact path=%s size=%d sha256=%s source=%s platform=%s/%s", path, finalInfo.Size(), digestHex, explicitServerFactoryMainPackage, runtime.GOOS, runtime.GOARCH)
 	return path
 }
 
