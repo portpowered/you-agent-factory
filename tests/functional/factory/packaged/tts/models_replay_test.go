@@ -47,7 +47,7 @@ func TestFactoryTTSModelsRootBuildProcessExecuteRecordsAudio(t *testing.T) {
 	homeDir := t.TempDir()
 	factoryDir := support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedTTSFactoryName)
 	cacheDir := t.TempDir()
-	writePackagedTTSReadyModelCache(t, cacheDir)
+	writePackagedTTSReadyModelCache(t, homeDir, cacheDir)
 	backend := newPackagedTTSModelsBackend(localai.AudioBytes())
 	edges, closeHost := managedTTSModelEdges(t, backend)
 	t.Cleanup(closeHost)
