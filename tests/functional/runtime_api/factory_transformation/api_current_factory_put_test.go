@@ -50,14 +50,15 @@ const (
 // session identities remain per-test; only immutable process wiring and the
 // HTTP transport are shared.
 type sharedFactoryTransformationFixture struct {
-	baseURL        string
-	factoryDir     string
-	homeDir        string
-	cancel         context.CancelFunc
-	done           chan error
-	process        support.ApplicationProcess
-	providerRunner *support.ShapedProviderCommandRunner
-	scriptRunner   *support.RecordingCommandRunner
+	baseURL           string
+	factoryDir        string
+	homeDir           string
+	cancel            context.CancelFunc
+	done              chan error
+	process           support.ApplicationProcess
+	providerRunner    *support.ShapedProviderCommandRunner
+	scriptRunner      *support.RecordingCommandRunner
+	loadingFileSystem *rollbackLoadingFileSystem
 
 	mu              sync.Mutex
 	seenSessionIDs  map[string]struct{}
@@ -117,12 +118,16 @@ func startSharedFactoryTransformationFixture() (*sharedFactoryTransformationFixt
 	api := support.NewProcessAPIServer()
 	providerRunner := support.NewShapedProviderCommandRunner()
 	scriptRunner := support.NewRecordingCommandRunner("factory-transformation-script-output")
+	loadingFileSystem := newRollbackLoadingFileSystem()
 	fixture.providerRunner = providerRunner
 	fixture.scriptRunner = scriptRunner
+	fixture.loadingFileSystem = loadingFileSystem
 	fixture.process, err = support.BuildProcessWithContext(ctx, serviceedges.Edges{
-		APIServerStarter:      api.Start,
-		ProviderCommandRunner: providerRunner,
-		ScriptCommandRunner:   scriptRunner,
+		APIServerStarter:                          api.Start,
+		ProviderCommandRunner:                     providerRunner,
+		ScriptCommandRunner:                       scriptRunner,
+		FactoryDefinitionLoadingFileSystem:        loadingFileSystem,
+		FactoryDefinitionAuthoredReaderFileSystem: loadingFileSystem,
 	})
 	if err != nil {
 		return nil, errors.Join(
