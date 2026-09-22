@@ -53,7 +53,7 @@ func TestRepositoryBackendReferenceCollectorPreservesCustomerSources(t *testing.
 		}
 	}
 	if !factoryReference {
-		t.Fatal("collector did not preserve the generated TTS Factory path for omnivoice-llamacpp")
+		t.Fatal("collector did not preserve the generated TTS Factory path for localai-vibevoice")
 	}
 	if !catalogReference {
 		t.Fatal("collector did not preserve the built-in TTS catalog source")
@@ -171,6 +171,18 @@ func collectPackagedFactoryReferences() ([]Reference, error) {
 		if err != nil {
 			return fmt.Errorf("decode %s through Factory contract: %w", path, err)
 		}
+		if factory.Resources != nil {
+			for index, resource := range *factory.Resources {
+				if resource.Type == nil || *resource.Type != factoryapi.ResourceTypeModel ||
+					resource.Backend == nil || strings.TrimSpace(*resource.Backend) == "" {
+					continue
+				}
+				references = append(references, Reference{
+					Identifier: canonicalPackagedFactoryBackend(*resource.Backend),
+					Source:     fmt.Sprintf("%s (resources[%d] %s)", path, index, resource.Name),
+				})
+			}
+		}
 		if factory.Workers == nil {
 			return nil
 		}
@@ -194,4 +206,12 @@ func collectPackagedFactoryReferences() ([]Reference, error) {
 		return nil, fmt.Errorf("walk generated packaged Factories: %w", err)
 	}
 	return references, nil
+}
+
+func canonicalPackagedFactoryBackend(identifier string) string {
+	trimmed := strings.TrimSpace(identifier)
+	if strings.HasPrefix(strings.ToLower(trimmed), "localai-") {
+		return strings.ToLower(trimmed)
+	}
+	return trimmed
 }
