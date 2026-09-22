@@ -8,12 +8,13 @@ import (
 // needed to rebuild world-state topology. Keeping this decoder beside the
 // reducer avoids making canonical projection depend on generated transports.
 type snapshotFactoryTopology struct {
-	Name         string                          `json:"name"`
-	Resources    []snapshotFactoryResource       `json:"resources"`
-	Layout       *interfaces.FactoryLayoutConfig `json:"layout"`
-	Workers      []snapshotFactoryWorker         `json:"workers"`
-	WorkTypes    []snapshotFactoryWorkType       `json:"workTypes"`
-	Workstations []snapshotFactoryWorkstation    `json:"workstations"`
+	Name            string                          `json:"name"`
+	Resources       []snapshotFactoryResource       `json:"resources"`
+	Layout          *interfaces.FactoryLayoutConfig `json:"layout"`
+	Workers         []snapshotFactoryWorker         `json:"workers"`
+	WorkTypes       []snapshotFactoryWorkType       `json:"workTypes"`
+	LegacyWorkTypes []snapshotFactoryWorkType       `json:"work_types"`
+	Workstations    []snapshotFactoryWorkstation    `json:"workstations"`
 }
 
 type snapshotFactoryResource struct {
@@ -30,13 +31,17 @@ type snapshotFactoryWorker struct {
 }
 
 type snapshotFactoryWorkType struct {
+	ID     string                     `json:"id"`
 	Name   string                     `json:"name"`
 	States []snapshotFactoryWorkState `json:"states"`
 }
 
 type snapshotFactoryWorkState struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Value    string `json:"value"`
+	Type     string `json:"type"`
+	Category string `json:"category"`
 }
 
 type snapshotFactoryWorkstation struct {
@@ -65,7 +70,11 @@ func initialStructureFromSnapshot(snapshot *interfaces.FactorySnapshot) (interfa
 	}
 
 	resources, resourcePlaces := resourcesAndPlacesFromSnapshot(factory.Resources)
-	workTypes, workTypePlaces := workTypesAndPlacesFromSnapshot(factory.WorkTypes)
+	snapshotWorkTypes := factory.WorkTypes
+	if len(snapshotWorkTypes) == 0 {
+		snapshotWorkTypes = factory.LegacyWorkTypes
+	}
+	workTypes, workTypePlaces := workTypesAndPlacesFromSnapshot(snapshotWorkTypes)
 	places := make([]interfaces.FactoryPlace, 0, len(resourcePlaces)+len(workTypePlaces))
 	places = append(places, resourcePlaces...)
 	places = append(places, workTypePlaces...)
@@ -100,14 +109,17 @@ func workTypesAndPlacesFromSnapshot(workTypes []snapshotFactoryWorkType) ([]inte
 	convertedWorkTypes := make([]interfaces.FactoryWorkType, 0, len(workTypes))
 	convertedPlaces := make([]interfaces.FactoryPlace, 0)
 	for _, workType := range workTypes {
-		converted := interfaces.FactoryWorkType{ID: workType.Name, Name: workType.Name}
+		workTypeID := firstNonEmpty(workType.Name, workType.ID)
+		converted := interfaces.FactoryWorkType{ID: workTypeID, Name: workTypeID}
 		for _, state := range workType.States {
+			stateName := firstNonEmpty(state.Name, state.Value, state.ID)
+			stateCategory := firstNonEmpty(state.Type, state.Category)
 			converted.States = append(converted.States, interfaces.FactoryStateDefinition{
-				Value: state.Name, Category: state.Type,
+				Value: stateName, Category: stateCategory,
 			})
 			convertedPlaces = append(convertedPlaces, interfaces.FactoryPlace{
-				ID:     topologyPlaceID(workType.Name, state.Name),
-				TypeID: workType.Name, State: state.Name, Category: state.Type,
+				ID:     topologyPlaceID(workTypeID, stateName),
+				TypeID: workTypeID, State: stateName, Category: stateCategory,
 			})
 		}
 		convertedWorkTypes = append(convertedWorkTypes, converted)
