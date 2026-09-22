@@ -81,7 +81,9 @@ func (s *Service) SubscribeFactoryEventsForSession(
 		return nil, fmt.Errorf("Factory Sessions gateway is required")
 	}
 	scopeSessionID := strings.TrimSpace(sessionID)
+	var resolvedSession *livesession.LiveSession
 	if session, resolveErr := s.host.RequireSession(sessionID); resolveErr == nil && session != nil {
+		resolvedSession = session
 		scopeSessionID = livesession.EventScopeID(session)
 	}
 	runtime, err := s.host.SessionFactory(sessionID)
@@ -100,6 +102,10 @@ func (s *Service) SubscribeFactoryEventsForSession(
 	}
 	if stream != nil {
 		stream.BackendScopeID = strings.TrimSpace(s.host.BackendScopeID())
+		if resolvedSession != nil {
+			stream.LogicalSessionKeyID = strings.TrimSpace(s.host.LogicalSessionKeyID(resolvedSession))
+			stream.FactorySessionID = livesession.CanonicalID(resolvedSession)
+		}
 	}
 	return stream, nil
 }

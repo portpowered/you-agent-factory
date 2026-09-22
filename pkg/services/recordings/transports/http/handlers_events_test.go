@@ -101,6 +101,48 @@ func TestGetEventsBySessionId_EncodesFakeRootHistoryAsSSE(t *testing.T) {
 	}
 }
 
+func TestGetEventsBySessionId_LiveCompatibilityPublishesCompleteStreamIdentity(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "live-sse-identity-001"
+	events := make(chan interfaces.FactoryEvent)
+	close(events)
+	adapter := NewAdapterWithLegacyFallback(nil, nil, nil, &legacyLiveEventsFake{
+		subscribe: func(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+			return &interfaces.FactoryEventStream{
+				BackendScopeID:      "backend-sse-001",
+				LogicalSessionKeyID: "logical-sse-001",
+				FactorySessionID:    "canonical-sse-001",
+				StreamGenerationID:  "generation-sse-001",
+				Events:              events,
+			}, nil
+		},
+	})
+	recorder := httptest.NewRecorder()
+
+	adapter.GetEventsBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/events", nil),
+		factoryapi.SessionID(sessionID),
+		factoryapi.GetEventsBySessionIdParams{},
+	)
+
+	for header, want := range map[string]string{
+		"X-Factory-Session-Backend-Scope-Id":       "backend-sse-001",
+		"X-Factory-Session-Logical-Session-Key-Id": "logical-sse-001",
+		SessionEventStreamFactorySessionHeader:     "canonical-sse-001",
+		SessionEventStreamGenerationHeader:         "generation-sse-001",
+		SessionEventStreamRetainedCountHeader:      "0",
+	} {
+		if got := recorder.Header().Get(header); got != want {
+			t.Fatalf("header %s = %q, want %q", header, got, want)
+		}
+	}
+	if recorder.Header().Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("Content-Type = %q, want text/event-stream", recorder.Header().Get("Content-Type"))
+	}
+}
+
 func TestGetEventsBySessionId_ProbeMapsStaleCursorWithoutTreatingFakeRootAsSuccessful(t *testing.T) {
 	t.Parallel()
 
