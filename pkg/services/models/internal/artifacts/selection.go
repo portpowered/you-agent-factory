@@ -45,17 +45,26 @@ func validateSelectionRequest(request SelectionRequest) error {
 		return failure(FailureUnknownBackend, "backend", request.Backend, "backend is outside the supported LocalAI set")
 	}
 	targetID := request.OperatingSystem + "-" + request.Architecture
-	target, knownTarget := supportedTargets[targetID]
-	if !knownTarget {
+	if _, knownTarget := supportedTargets[targetID]; !knownTarget {
 		return failure(FailureUnsupportedPlatform, "platform", targetID, "target is outside the supported closed set")
 	}
 	if !validToken(request.ProtocolRevision) {
 		return failure(FailureInvalidSelection, "protocolRevision", request.ProtocolRevision, "must be a non-empty safe revision identifier")
 	}
-	if !contains(target.accelerators, request.Accelerator) {
+	if !contains(platformAccelerators(targetID), request.Accelerator) {
 		return failure(FailureIncompatibleAccelerator, "accelerator", request.Accelerator, "the requested accelerator is not compatible with "+targetID)
 	}
 	return nil
+}
+
+func platformAccelerators(targetID string) []string {
+	accelerators := make([]string, 0)
+	for candidateID, facts := range supportedTargets {
+		if candidateID == targetID || facts.operatingSystem+"-"+facts.architecture == targetID {
+			accelerators = append(accelerators, facts.accelerators...)
+		}
+	}
+	return accelerators
 }
 
 func filterProtocol(entries []manifestEntry, revision string) []manifestEntry {
