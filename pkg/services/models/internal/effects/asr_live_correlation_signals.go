@@ -1,3 +1,5 @@
+//go:build windows && managed_process_integration
+
 package effects
 
 import (
@@ -21,6 +23,11 @@ var (
 type ASRLiveCorrelationEventKind string
 
 const (
+	ASRLiveCorrelationExitNatural          = "NATURAL"
+	ASRLiveCorrelationExitHarnessRequested = "HARNESS_REQUESTED"
+)
+
+const (
 	ASRLiveCorrelationChildStarted     ASRLiveCorrelationEventKind = "CHILD_STARTED"
 	ASRLiveCorrelationEndpointObserved ASRLiveCorrelationEventKind = "ENDPOINT_OBSERVED"
 	ASRLiveCorrelationRPCTerminal      ASRLiveCorrelationEventKind = "RPC_TERMINAL"
@@ -38,6 +45,7 @@ type ASRLiveCorrelationEvent struct {
 	Kind                   ASRLiveCorrelationEventKind `json:"kind"`
 	Endpoint               ASRLiveCorrelationEndpoint  `json:"endpoint,omitempty"`
 	ProcessID              int                         `json:"process_id,omitempty"`
+	ExitTrigger            string                      `json:"exit_trigger,omitempty"`
 	ExitClass              string                      `json:"exit_class,omitempty"`
 	ExitCodeKnown          bool                        `json:"exit_code_known,omitempty"`
 	ExitCode               int                         `json:"exit_code,omitempty"`
@@ -70,6 +78,7 @@ type ASRLiveCorrelationController struct {
 	released        bool
 	cancelled       bool
 	waitSeen        bool
+	stopRequested   bool
 	hostFailureSeen bool
 
 	nextSequence uint64
@@ -236,6 +245,24 @@ func (controller *ASRLiveCorrelationController) ReleaseResponse() error {
 	return nil
 }
 
+// RecordChildStopRequested records an owner-issued stop before waiting on the
+// process. A later Wait uses this lifecycle fact to classify its exit trigger.
+func (controller *ASRLiveCorrelationController) RecordChildStopRequested(processID int) error {
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	if !controller.started || processID != controller.childPID {
+		return ErrASRLiveCorrelationOwnership
+	}
+	if controller.waitSeen {
+		return ErrASRLiveCorrelationOutOfOrder
+	}
+	if controller.stopRequested {
+		return ErrASRLiveCorrelationDuplicate
+	}
+	controller.stopRequested = true
+	return nil
+}
+
 // RecordChildWaited appends terminal facts only for the owned process.
 func (controller *ASRLiveCorrelationController) RecordChildWaited(
 	processID int,
@@ -249,16 +276,26 @@ func (controller *ASRLiveCorrelationController) RecordChildWaited(
 	}
 	controller.mu.Lock()
 	defer controller.mu.Unlock()
-	if !controller.started || processID != controller.childPID || !validASRCorrelationExit(child) {
+	if !controller.started || processID != controller.childPID {
 		return ErrASRLiveCorrelationOwnership
 	}
 	if controller.waitSeen {
 		return ErrASRLiveCorrelationDuplicate
 	}
+	if controller.stopRequested {
+		child.ExitTrigger = ASRLiveCorrelationExitHarnessRequested
+	} else {
+		child.ExitTrigger = ASRLiveCorrelationExitNatural
+	}
+	if !validASRCorrelationExit(child) {
+		return ErrASRLiveCorrelationOwnership
+	}
 	controller.waitSeen = true
 	controller.appendLocked(ASRLiveCorrelationEvent{
-		Kind:      ASRLiveCorrelationChildWaited,
-		ProcessID: processID, ExitClass: exitClass,
+		Kind:          ASRLiveCorrelationChildWaited,
+		ProcessID:     processID,
+		ExitTrigger:   child.ExitTrigger,
+		ExitClass:     exitClass,
 		ExitCodeKnown: exitCodeKnown, ExitCode: exitCode,
 	})
 	return nil

@@ -1,4 +1,4 @@
-//go:build windows
+//go:build windows && managed_process_integration
 
 package effects
 

@@ -1,3 +1,5 @@
+//go:build windows && managed_process_integration
+
 package wire
 
 import (
@@ -23,6 +25,7 @@ import (
 	inferencewire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/wire"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"google.golang.org/protobuf/proto"
 )
@@ -84,21 +87,14 @@ func TestASRProcessOrderCancellationCleansOwnedResourcesOnce(t *testing.T) {
 	assertControlledASRRequest(t, scenario.connection, scenario.tempDirectory, scenario.audio)
 	cancel()
 	invocation := awaitInvocation(t, resultChannel)
-	if invocation.err == nil || !errors.Is(invocation.err, models.ErrInferenceCancelled) ||
-		invocation.result.Status != models.ModelInvocationStatusCancelled ||
-		invocation.result.LeaseDisposition != models.InvocationLeaseReleased ||
-		len(invocation.result.Outputs) != 0 || len(invocation.result.Content) != 0 {
-		t.Fatalf("cancelled ASR invocation = result:%#v error:%v, want typed cancellation and no outputs", invocation.result, invocation.err)
-	}
+	assertCancelledASRInvocation(t, invocation)
 	assertASRStagingRemoved(t, scenario.tempDirectory)
 	assertASRConnectionClosed(t, scenario.connection)
 	assertLeaseStatus(t, scenario.host, scenario.scope, lease.Lease.Lease, models.ModelLeaseStatusReleased)
 	scenario.process.exit(errors.New("controlled child exit after cancelled invocation"))
 	awaitCorrelationSignal(t, scenario.correlation, modelseffects.ASRLiveCorrelationChildWaited)
 	awaitCorrelationSignal(t, scenario.correlation, modelseffects.ASRLiveCorrelationHostFailureSeen)
-	if scenario.process.waitCount() != 1 || scenario.connection.closeCount() != 1 || scenario.connection.dialCount() != 1 {
-		t.Fatalf("cancelled ASR owned cleanup Wait=%d close=%d dial=%d, want one Wait, one close and one dial", scenario.process.waitCount(), scenario.connection.closeCount(), scenario.connection.dialCount())
-	}
+	assertCancelledASRCleanup(t, scenario)
 	events := scenario.correlation.Snapshot()
 	want := []modelseffects.ASRLiveCorrelationEventKind{
 		modelseffects.ASRLiveCorrelationChildStarted,
@@ -113,6 +109,23 @@ func TestASRProcessOrderCancellationCleansOwnedResourcesOnce(t *testing.T) {
 		if event.Sequence != uint64(index+1) || event.Kind != want[index] {
 			t.Fatalf("cancelled ASR event[%d] = %#v, want sequence=%d kind=%s", index, event, index+1, want[index])
 		}
+	}
+}
+
+func assertCancelledASRInvocation(t *testing.T, invocation controlledASRInvocation) {
+	t.Helper()
+	if invocation.err == nil || !errors.Is(invocation.err, models.ErrInferenceCancelled) ||
+		invocation.result.Status != models.ModelInvocationStatusCancelled ||
+		invocation.result.LeaseDisposition != models.InvocationLeaseReleased ||
+		len(invocation.result.Outputs) != 0 || len(invocation.result.Content) != 0 {
+		t.Fatalf("cancelled ASR invocation = result:%#v error:%v, want typed cancellation and no outputs", invocation.result, invocation.err)
+	}
+}
+
+func assertCancelledASRCleanup(t *testing.T, scenario *controlledASRScenario) {
+	t.Helper()
+	if scenario.process.waitCount() != 1 || scenario.connection.closeCount() != 1 || scenario.connection.dialCount() != 1 {
+		t.Fatalf("cancelled ASR owned cleanup Wait=%d close=%d dial=%d, want one Wait, one close and one dial", scenario.process.waitCount(), scenario.connection.closeCount(), scenario.connection.dialCount())
 	}
 }
 
@@ -190,21 +203,7 @@ func runControlledASROrder(t *testing.T, responseFirst bool) []modelseffects.ASR
 func newControlledASRScenario(t *testing.T) *controlledASRScenario {
 	t.Helper()
 	config := controlledASRRuntimeConfig()
-	scopes, err := runtimescopeswire.NewService(func() string { return "causal-asr-test" })
-	if err != nil {
-		t.Fatalf("construct Runtime Scopes: %v", err)
-	}
-	privateScope, err := scopes.Open(models.RuntimeBinding{
-		CacheDirectory: t.TempDir(),
-		RuntimeConfig:  func() *models.RuntimeConfig { return &config },
-	})
-	if err != nil {
-		t.Fatalf("open Runtime Scope: %v", err)
-	}
-	scope, err := (models.RuntimeScopeRef{}).Parse(string(privateScope))
-	if err != nil {
-		t.Fatalf("parse Runtime Scope: %v", err)
-	}
+	scope, scopes := openControlledASRRuntimeScope(t, config)
 
 	cachePath := t.TempDir()
 	tempDirectory := t.TempDir()
@@ -294,6 +293,29 @@ func newControlledASRScenario(t *testing.T) *controlledASRScenario {
 	}
 }
 
+func openControlledASRRuntimeScope(
+	t *testing.T,
+	config models.RuntimeConfig,
+) (models.RuntimeScopeRef, runtimescopes.Service) {
+	t.Helper()
+	scopes, err := runtimescopeswire.NewService(func() string { return "causal-asr-test" })
+	if err != nil {
+		t.Fatalf("construct Runtime Scopes: %v", err)
+	}
+	privateScope, err := scopes.Open(models.RuntimeBinding{
+		CacheDirectory: t.TempDir(),
+		RuntimeConfig:  func() *models.RuntimeConfig { return &config },
+	})
+	if err != nil {
+		t.Fatalf("open Runtime Scope: %v", err)
+	}
+	scope, err := (models.RuntimeScopeRef{}).Parse(string(privateScope))
+	if err != nil {
+		t.Fatalf("parse Runtime Scope: %v", err)
+	}
+	return scope, scopes
+}
+
 func controlledASRRuntimeConfig() models.RuntimeConfig {
 	return models.RuntimeConfig{Workers: []models.RuntimeWorker{{
 		Name: "asr-worker", Type: models.RuntimeWorkerTypeInference,
@@ -347,12 +369,20 @@ func assertCompletedASRInvocation(t *testing.T, invocation controlledASRInvocati
 	t.Helper()
 	if invocation.err != nil || invocation.result.Status != models.ModelInvocationStatusCompleted ||
 		invocation.result.LeaseDisposition != models.InvocationLeaseReleased || len(invocation.result.Content) != 2 ||
-		invocation.result.Content[0].Name != "transcript" ||
-		invocation.result.Content[0].Content != "private transcript marker" ||
-		invocation.result.Content[1].Name != "segments" ||
-		invocation.result.Content[1].MediaType != "application/json" ||
 		len(invocation.result.Outputs) != 2 {
 		t.Fatalf("response-first invocation = result:%#v error:%v, want decoded output and released lease", invocation.result, invocation.err)
+	}
+	assertCompletedASRNamedOutputs(t, invocation)
+	assertCompletedASRSegments(t, invocation.result.Content[1].Content)
+}
+
+func assertCompletedASRNamedOutputs(t *testing.T, invocation controlledASRInvocation) {
+	t.Helper()
+	if invocation.result.Content[0].Name != "transcript" ||
+		invocation.result.Content[0].Content != "private transcript marker" ||
+		invocation.result.Content[1].Name != "segments" ||
+		invocation.result.Content[1].MediaType != "application/json" {
+		t.Fatalf("response-first named content = %#v, want transcript and segment content", invocation.result.Content)
 	}
 	outputContents := make(map[string]string, len(invocation.result.Outputs))
 	for _, output := range invocation.result.Outputs {
@@ -362,13 +392,17 @@ func assertCompletedASRInvocation(t *testing.T, invocation controlledASRInvocati
 		outputContents["segments"] != invocation.result.Content[1].Content {
 		t.Fatalf("response-first named outputs = %#v, want transcript and segments", outputContents)
 	}
+}
+
+func assertCompletedASRSegments(t *testing.T, content string) {
+	t.Helper()
 	var segments []struct {
 		ID    int32  `json:"id"`
 		Start int64  `json:"start"`
 		End   int64  `json:"end"`
 		Text  string `json:"text"`
 	}
-	if err := json.Unmarshal([]byte(invocation.result.Content[1].Content), &segments); err != nil ||
+	if err := json.Unmarshal([]byte(content), &segments); err != nil ||
 		len(segments) != 1 || segments[0].ID != 0 || segments[0].Start != 0 ||
 		segments[0].End != 500 || segments[0].Text != "private transcript marker" {
 		t.Fatalf("response-first segments = %#v, decode error = %v, want one ordered 500 ms segment", segments, err)
@@ -428,6 +462,16 @@ func assertSharedRuntimeEvidence(
 	tempDirectory string,
 ) {
 	t.Helper()
+	asrSequence, crashSequence := runtimeEvidenceSequences(t, records)
+	assertSharedRuntimeEvidenceOrder(t, records, asrSequence, crashSequence, responseFirst)
+	assertSharedRuntimeEvidenceRedacted(t, records, tempDirectory)
+}
+
+func runtimeEvidenceSequences(
+	t *testing.T,
+	records []modelseffects.RuntimeEvidenceRecord,
+) (uint64, uint64) {
+	t.Helper()
 	var asrSequence, crashSequence uint64
 	for index, record := range records {
 		if record.Sequence != uint64(index+1) {
@@ -435,15 +479,7 @@ func assertSharedRuntimeEvidence(
 		}
 		if record.Kind == modelseffects.RuntimeEvidenceKindASRProtocol {
 			asrSequence = record.Sequence
-			if record.Outcome != modelseffects.RuntimeEvidenceOutcomeCompleted || record.ASRProtocol == nil ||
-				record.ASRProtocol.Phase != modelseffects.RuntimeASRPhaseComplete ||
-				record.ASRProtocol.RPCMethod != modelseffects.RuntimeASRPCMethodAudioTranscription ||
-				record.ASRProtocol.RPCStatus != "OK" || !record.ASRProtocol.ResponseDecoded ||
-				record.ASRProtocol.SelectedBackend != "LOCALAI_WHISPER" ||
-				record.ASRProtocol.SelectedPlatform != "WINDOWS_AMD64" ||
-				!record.ASRProtocol.ResponseReceived || !record.ASRProtocol.DestinationCompared ||
-				!record.ASRProtocol.DestinationMatchesStaged || record.ASRProtocol.AudioBytes != uint64(len("private audio marker")) ||
-				record.ASRProtocol.SegmentCount != 1 {
+			if !validControlledASRProtocolRecord(record) {
 				t.Fatalf("ASR protocol observation = %#v, want a successful decoded pinned call", record)
 			}
 		}
@@ -453,10 +489,36 @@ func assertSharedRuntimeEvidence(
 			crashSequence = record.Sequence
 		}
 	}
+	return asrSequence, crashSequence
+}
+
+func validControlledASRProtocolRecord(record modelseffects.RuntimeEvidenceRecord) bool {
+	observation := record.ASRProtocol
+	return record.Outcome == modelseffects.RuntimeEvidenceOutcomeCompleted && observation != nil &&
+		observation.Phase == modelseffects.RuntimeASRPhaseComplete &&
+		observation.RPCMethod == modelseffects.RuntimeASRPCMethodAudioTranscription &&
+		observation.RPCStatus == "OK" && observation.ResponseDecoded &&
+		observation.SelectedBackend == "LOCALAI_WHISPER" && observation.SelectedPlatform == "WINDOWS_AMD64" &&
+		observation.ResponseReceived && observation.DestinationCompared && observation.DestinationMatchesStaged &&
+		observation.AudioBytes == uint64(len("private audio marker")) && observation.SegmentCount == 1
+}
+
+func assertSharedRuntimeEvidenceOrder(
+	t *testing.T,
+	records []modelseffects.RuntimeEvidenceRecord,
+	asrSequence uint64,
+	crashSequence uint64,
+	responseFirst bool,
+) {
+	t.Helper()
 	if asrSequence == 0 || crashSequence == 0 ||
 		(responseFirst && asrSequence >= crashSequence) || (!responseFirst && crashSequence >= asrSequence) {
 		t.Fatalf("shared event order ASR=%d child-crash=%d responseFirst=%t records=%#v", asrSequence, crashSequence, responseFirst, records)
 	}
+}
+
+func assertSharedRuntimeEvidenceRedacted(t *testing.T, records []modelseffects.RuntimeEvidenceRecord, tempDirectory string) {
+	t.Helper()
 	serialized, err := json.Marshal(records)
 	if err != nil {
 		t.Fatalf("marshal bounded runtime evidence: %v", err)
@@ -502,6 +564,16 @@ func assertASRLiveCorrelationOrder(
 	responseFirst bool,
 ) {
 	t.Helper()
+	want := expectedASRLiveCorrelationOrder(responseFirst)
+	if len(events) != len(want) {
+		t.Fatalf("ASR correlation events = %#v, want %d ordered signals", events, len(want))
+	}
+	for index, event := range events {
+		assertASRLiveCorrelationEvent(t, event, index, want[index])
+	}
+}
+
+func expectedASRLiveCorrelationOrder(responseFirst bool) []modelseffects.ASRLiveCorrelationEventKind {
 	want := []modelseffects.ASRLiveCorrelationEventKind{
 		modelseffects.ASRLiveCorrelationChildStarted,
 		modelseffects.ASRLiveCorrelationEndpointObserved,
@@ -520,23 +592,39 @@ func assertASRLiveCorrelationOrder(
 			modelseffects.ASRLiveCorrelationResponseSent,
 		)
 	}
-	if len(events) != len(want) {
-		t.Fatalf("ASR correlation events = %#v, want %d ordered signals", events, len(want))
+	return want
+}
+
+func assertASRLiveCorrelationEvent(
+	t *testing.T,
+	event modelseffects.ASRLiveCorrelationEvent,
+	index int,
+	want modelseffects.ASRLiveCorrelationEventKind,
+) {
+	t.Helper()
+	if event.Sequence != uint64(index+1) || event.Kind != want {
+		t.Fatalf("ASR correlation event[%d] = %#v, want sequence=%d kind=%s", index, event, index+1, want)
 	}
-	for index, event := range events {
-		if event.Sequence != uint64(index+1) || event.Kind != want[index] {
-			t.Fatalf("ASR correlation event[%d] = %#v, want sequence=%d kind=%s", index, event, index+1, want[index])
-		}
-		if event.Kind == modelseffects.ASRLiveCorrelationEndpointObserved &&
-			(event.Endpoint.Port != 45906 || event.Endpoint.ListenerProcessID != controlledASRChildPID || event.ProcessID != controlledASRChildPID) {
-			t.Fatalf("ASR endpoint ownership event = %#v, want dynamic port and owned PID", event)
-		}
-		if event.Kind == modelseffects.ASRLiveCorrelationChildWaited && event.ProcessID != controlledASRChildPID {
+	assertASRLiveCorrelationEventOwnership(t, event)
+}
+
+func assertASRLiveCorrelationEventOwnership(t *testing.T, event modelseffects.ASRLiveCorrelationEvent) {
+	t.Helper()
+	if event.Kind == modelseffects.ASRLiveCorrelationEndpointObserved &&
+		(event.Endpoint.Port != 45906 || event.Endpoint.ListenerProcessID != controlledASRChildPID || event.ProcessID != controlledASRChildPID) {
+		t.Fatalf("ASR endpoint ownership event = %#v, want dynamic port and owned PID", event)
+	}
+	if event.Kind == modelseffects.ASRLiveCorrelationChildWaited {
+		if event.ProcessID != controlledASRChildPID {
 			t.Fatalf("ASR child Wait event = %#v, want owned PID %d", event, controlledASRChildPID)
 		}
-		if event.Kind == modelseffects.ASRLiveCorrelationHostFailureSeen && event.ProcessID != controlledASRChildPID {
-			t.Fatalf("ASR host-failure event = %#v, want owned PID %d", event, controlledASRChildPID)
+		if event.ExitTrigger != modelseffects.ASRLiveCorrelationExitNatural &&
+			event.ExitTrigger != modelseffects.ASRLiveCorrelationExitHarnessRequested {
+			t.Fatalf("ASR child Wait exit trigger = %q, want a known lifecycle cause", event.ExitTrigger)
 		}
+	}
+	if event.Kind == modelseffects.ASRLiveCorrelationHostFailureSeen && event.ProcessID != controlledASRChildPID {
+		t.Fatalf("ASR host-failure event = %#v, want owned PID %d", event, controlledASRChildPID)
 	}
 }
 
@@ -656,6 +744,7 @@ type controlledASRProcess struct {
 	waited        chan struct{}
 	correlation   *modelseffects.ASRLiveCorrelationController
 	exitOnce      sync.Once
+	stopOnce      sync.Once
 	waitOnce      sync.Once
 	waitCalls     atomic.Int32
 	waitResult    error
@@ -675,7 +764,13 @@ func (process *controlledASRProcess) Wait() error {
 }
 
 func (process *controlledASRProcess) Stop(context.Context) error {
-	process.exit(errors.New("controlled ASR process stopped"))
+	process.stopOnce.Do(func() {
+		process.waitSignalErr = errors.Join(
+			process.waitSignalErr,
+			process.correlation.RecordChildStopRequested(process.pid),
+		)
+		process.exit(errors.New("controlled ASR process stopped"))
+	})
 	return nil
 }
 

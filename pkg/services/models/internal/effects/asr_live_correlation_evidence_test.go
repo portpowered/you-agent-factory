@@ -1,3 +1,5 @@
+//go:build windows && managed_process_integration
+
 package effects
 
 import (
@@ -50,6 +52,8 @@ func TestASRLiveCorrelationEvidenceRejectsMalformedOwnershipOrderAndRawFacts(t *
 		{name: "endpoint digest mismatch", mutate: func(e *ASRLiveCorrelationEvidence) { e.Endpoint.IdentitySHA256 = strings.Repeat("B", 64) }},
 		{name: "missing semantic response digest", mutate: func(e *ASRLiveCorrelationEvidence) { e.RPC.ResponseSemanticSHA256 = "" }},
 		{name: "child wait before terminal", mutate: func(e *ASRLiveCorrelationEvidence) { e.Child.WaitSequence = e.RPC.TerminalSequence }},
+		{name: "missing exit trigger", mutate: func(e *ASRLiveCorrelationEvidence) { e.Child.ExitTrigger = "" }},
+		{name: "invalid exit trigger", mutate: func(e *ASRLiveCorrelationEvidence) { e.Child.ExitTrigger = "BACKEND_EXIT" }},
 		{name: "unbounded child error", mutate: func(e *ASRLiveCorrelationEvidence) { e.Child.ExitClass = "backend failure: C:\\private" }},
 		{name: "partial failed result", mutate: func(e *ASRLiveCorrelationEvidence) {
 			e.Application.Outcome = "FAILED"
@@ -148,7 +152,8 @@ func validASRLiveCorrelationEvidence(scenario string) ASRLiveCorrelationEvidence
 			ResponseDecoded: true, RequestSemanticSHA256: digest, ResponseSemanticSHA256: digest,
 		},
 		Child: ASRLiveCorrelationChild{
-			ProcessID: 8123, WaitSequence: 5, ExitClass: "NONZERO_EXIT", ExitCodeKnown: true, ExitCode: 1,
+			ProcessID: 8123, WaitSequence: 5, ExitTrigger: ASRLiveCorrelationExitHarnessRequested,
+			ExitClass: "NONZERO_EXIT", ExitCodeKnown: true, ExitCode: 1,
 		},
 		Application:     ASRLiveCorrelationApplication{Outcome: "COMPLETED", OutputCount: 2},
 		RedactionPassed: true,

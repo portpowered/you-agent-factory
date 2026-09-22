@@ -109,15 +109,17 @@ func validRuntimeASRProtocolObservation(
 		!validRuntimeASRFailureClass(observation.FailureClass) {
 		return false
 	}
+	return validRuntimeASRProtocolOutcome(observation, outcome) &&
+		validRuntimeASRDigests(observation) && validRuntimeASRByteFacts(observation)
+}
+
+func validRuntimeASRProtocolOutcome(observation RuntimeASRProtocolObservation, outcome string) bool {
 	if outcome == RuntimeEvidenceOutcomeCompleted {
-		if observation.Phase != RuntimeASRPhaseComplete || observation.FailureClass != "" ||
-			observation.RPCStatus != "OK" || !observation.ResponseReceived || !observation.ResponseDecoded {
-			return false
-		}
-	} else if observation.FailureClass == "" || observation.Phase == RuntimeASRPhaseComplete {
-		return false
+		return observation.Phase == RuntimeASRPhaseComplete && observation.FailureClass == "" &&
+			observation.RPCStatus == "OK" && observation.ResponseReceived && observation.ResponseDecoded
 	}
-	return validRuntimeASRDigests(observation) && validRuntimeASRByteFacts(observation)
+	return outcome == RuntimeEvidenceOutcomeFailed && observation.FailureClass != "" &&
+		observation.Phase != RuntimeASRPhaseComplete
 }
 
 func isRuntimeASRPCMethod(method string) bool {

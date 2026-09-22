@@ -1,3 +1,5 @@
+//go:build windows && managed_process_integration
+
 package effects
 
 import (
@@ -67,6 +69,7 @@ type ASRLiveCorrelationRPC struct {
 type ASRLiveCorrelationChild struct {
 	ProcessID     int    `json:"process_id"`
 	WaitSequence  uint64 `json:"wait_sequence"`
+	ExitTrigger   string `json:"exit_trigger"`
 	ExitClass     string `json:"exit_class"`
 	ExitCodeKnown bool   `json:"exit_code_known"`
 	ExitCode      int    `json:"exit_code"`
@@ -109,14 +112,8 @@ func ASRLiveCorrelationEndpointFromAddress(
 // ValidateASRLiveCorrelationEvidence checks enums, identity digests, event
 // ordering, endpoint ownership, result atomicity, and task-owned cleanup.
 func ValidateASRLiveCorrelationEvidence(evidence ASRLiveCorrelationEvidence) error {
-	if evidence.Schema != ASRLiveCorrelationEvidenceSchema ||
-		!safeCorrelationRunID(evidence.RunID) || !validASRCorrelationScenario(evidence.Scenario) ||
-		!validASRCorrelationGitID(evidence.SourceCommit) || !validASRCorrelationGitID(evidence.SourceTree) ||
-		evidence.GoToolchain != "go1.26.8 windows/amd64" ||
-		!validASRCorrelationDigest(evidence.ExecutableSHA) || !validASRCorrelationDigest(evidence.WAVSHA) ||
-		!validASRCorrelationDigest(evidence.ModelSHA) || !validASRCorrelationDigest(evidence.BackendSHA) ||
-		!validASRCorrelationDigest(evidence.CacheSHA) {
-		return errors.New("invalid ASR live-correlation evidence identity")
+	if err := validateASRCorrelationEvidenceIdentity(evidence); err != nil {
+		return err
 	}
 	if err := validateASRCorrelationEndpoint(evidence.Endpoint); err != nil {
 		return err
@@ -132,6 +129,19 @@ func ValidateASRLiveCorrelationEvidence(evidence ASRLiveCorrelationEvidence) err
 	}
 	if evidence.Cleanup != (ASRLiveCorrelationCleanup{}) || !evidence.RedactionPassed {
 		return errors.New("ASR live-correlation evidence has incomplete cleanup or redaction")
+	}
+	return nil
+}
+
+func validateASRCorrelationEvidenceIdentity(evidence ASRLiveCorrelationEvidence) error {
+	if evidence.Schema != ASRLiveCorrelationEvidenceSchema ||
+		!safeCorrelationRunID(evidence.RunID) || !validASRCorrelationScenario(evidence.Scenario) ||
+		!validASRCorrelationGitID(evidence.SourceCommit) || !validASRCorrelationGitID(evidence.SourceTree) ||
+		evidence.GoToolchain != "go1.26.8 windows/amd64" ||
+		!validASRCorrelationDigest(evidence.ExecutableSHA) || !validASRCorrelationDigest(evidence.WAVSHA) ||
+		!validASRCorrelationDigest(evidence.ModelSHA) || !validASRCorrelationDigest(evidence.BackendSHA) ||
+		!validASRCorrelationDigest(evidence.CacheSHA) {
+		return errors.New("invalid ASR live-correlation evidence identity")
 	}
 	return nil
 }
@@ -196,6 +206,10 @@ func validateASRCorrelationChild(
 }
 
 func validASRCorrelationExit(child ASRLiveCorrelationChild) bool {
+	if child.ExitTrigger != ASRLiveCorrelationExitNatural &&
+		child.ExitTrigger != ASRLiveCorrelationExitHarnessRequested {
+		return false
+	}
 	switch child.ExitClass {
 	case "EXITED":
 		return child.ExitCodeKnown && child.ExitCode == 0
@@ -283,27 +297,47 @@ func parseASRCorrelationEndpointAddress(address string) (string, int, error) {
 		return "", 0, errors.New("invalid ASR correlation endpoint")
 	}
 	parsed, err := url.Parse(address)
-	if err != nil || parsed.Scheme != "grpc" || parsed.Opaque != "" || parsed.User != nil ||
-		parsed.Path != "" || parsed.RawPath != "" || parsed.ForceQuery || parsed.RawQuery != "" || parsed.Fragment != "" {
+	if err != nil || !validASRCorrelationURL(parsed) {
 		return "", 0, errors.New("invalid ASR correlation endpoint")
 	}
-	host, portText, err := net.SplitHostPort(parsed.Host)
+	return parseASRCorrelationHostPort(parsed.Host)
+}
+
+func parseASRCorrelationHostPort(address string) (string, int, error) {
+	host, portText, err := net.SplitHostPort(address)
 	if err != nil {
 		return "", 0, errors.New("invalid ASR correlation endpoint")
 	}
-	if portText == "" {
-		return "", 0, errors.New("invalid ASR correlation endpoint port")
-	}
-	for _, character := range portText {
-		if character < '0' || character > '9' {
-			return "", 0, errors.New("invalid ASR correlation endpoint port")
-		}
-	}
-	portNumber, err := strconv.ParseUint(portText, 10, 16)
-	port := int(portNumber)
-	if err != nil || !validASRCorrelationPort(port) || port == 7437 ||
-		(host != "127.0.0.1" && host != "::1") {
+	port, err := parseASRCorrelationPort(portText)
+	if err != nil || !validASRCorrelationHost(host) || port == 7437 {
 		return "", 0, errors.New("invalid ASR correlation endpoint port")
 	}
 	return host, port, nil
+}
+
+func parseASRCorrelationPort(value string) (int, error) {
+	if value == "" {
+		return 0, errors.New("invalid ASR correlation endpoint port")
+	}
+	for _, character := range value {
+		if character < '0' || character > '9' {
+			return 0, errors.New("invalid ASR correlation endpoint port")
+		}
+	}
+	parsed, err := strconv.ParseUint(value, 10, 16)
+	port := int(parsed)
+	if err != nil || !validASRCorrelationPort(port) {
+		return 0, errors.New("invalid ASR correlation endpoint port")
+	}
+	return port, nil
+}
+
+func validASRCorrelationHost(host string) bool {
+	return host == "127.0.0.1" || host == "::1"
+}
+
+func validASRCorrelationURL(parsed *url.URL) bool {
+	return parsed != nil && parsed.Scheme == "grpc" && parsed.Opaque == "" && parsed.User == nil &&
+		parsed.Path == "" && parsed.RawPath == "" && !parsed.ForceQuery &&
+		parsed.RawQuery == "" && parsed.Fragment == ""
 }

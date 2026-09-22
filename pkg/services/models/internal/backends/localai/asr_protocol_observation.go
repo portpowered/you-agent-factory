@@ -33,7 +33,7 @@ const (
 
 type asrProtocolObservation struct {
 	recorder    modelseffects.RuntimeEvidenceRecorder
-	correlation *modelseffects.ASRLiveCorrelationController
+	correlation asrProtocolCorrelation
 	record      modelseffects.RuntimeASRProtocolObservation
 	stagedPath  string
 }
@@ -43,7 +43,7 @@ func newASRProtocolObservation(
 	request models.ASRBackendRequest,
 ) *asrProtocolObservation {
 	recorder, configuration, ok := modelseffects.RuntimeObservationFromContext(ctx)
-	correlation := modelseffects.ASRLiveCorrelationFromContext(ctx)
+	correlation := newASRProtocolCorrelation(ctx)
 	if !ok && correlation == nil {
 		return nil
 	}
@@ -188,7 +188,7 @@ func (observation *asrProtocolObservation) awaitDecodedResponse(
 		Segments []models.ASRBackendSegment `json:"segments"`
 	}{Text: response.Text, Segments: response.Segments})
 	if err != nil {
-		return modelseffects.ErrASRLiveCorrelationInvalid
+		return errors.New("ASR response semantic encoding failed")
 	}
 	return observation.correlation.AwaitResponseRelease(
 		ctx,
@@ -320,45 +320,21 @@ func selectedASREvidencePlatform(operatingSystem, architecture string) string {
 	}
 }
 
+var asrEvidenceRPCStatuses = map[codes.Code]string{
+	codes.OK: "OK", codes.Canceled: "CANCELED", codes.InvalidArgument: "INVALID_ARGUMENT",
+	codes.DeadlineExceeded: "DEADLINE_EXCEEDED", codes.NotFound: "NOT_FOUND",
+	codes.AlreadyExists: "ALREADY_EXISTS", codes.PermissionDenied: "PERMISSION_DENIED",
+	codes.ResourceExhausted: "RESOURCE_EXHAUSTED", codes.FailedPrecondition: "FAILED_PRECONDITION",
+	codes.Aborted: "ABORTED", codes.OutOfRange: "OUT_OF_RANGE", codes.Unauthenticated: "UNAUTHENTICATED",
+	codes.Internal: "INTERNAL", codes.Unavailable: "UNAVAILABLE", codes.DataLoss: "DATA_LOSS",
+	codes.Unimplemented: "UNIMPLEMENTED",
+}
+
 func asrEvidenceRPCStatus(code codes.Code) string {
-	switch code {
-	case codes.OK:
-		return "OK"
-	case codes.Canceled:
-		return "CANCELED"
-	case codes.Unknown:
-		return "UNKNOWN"
-	case codes.InvalidArgument:
-		return "INVALID_ARGUMENT"
-	case codes.DeadlineExceeded:
-		return "DEADLINE_EXCEEDED"
-	case codes.NotFound:
-		return "NOT_FOUND"
-	case codes.AlreadyExists:
-		return "ALREADY_EXISTS"
-	case codes.PermissionDenied:
-		return "PERMISSION_DENIED"
-	case codes.ResourceExhausted:
-		return "RESOURCE_EXHAUSTED"
-	case codes.FailedPrecondition:
-		return "FAILED_PRECONDITION"
-	case codes.Aborted:
-		return "ABORTED"
-	case codes.OutOfRange:
-		return "OUT_OF_RANGE"
-	case codes.Unauthenticated:
-		return "UNAUTHENTICATED"
-	case codes.Internal:
-		return "INTERNAL"
-	case codes.Unavailable:
-		return "UNAVAILABLE"
-	case codes.DataLoss:
-		return "DATA_LOSS"
-	case codes.Unimplemented:
-		return "UNIMPLEMENTED"
-	default:
-		return "UNKNOWN"
+	if status, ok := asrEvidenceRPCStatuses[code]; ok {
+		return status
 	}
+	return "UNKNOWN"
 }
 
 func asrEvidenceRPCMethod(method string) string {

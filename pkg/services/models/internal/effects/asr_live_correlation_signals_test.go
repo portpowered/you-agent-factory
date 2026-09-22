@@ -1,3 +1,5 @@
+//go:build windows && managed_process_integration
+
 package effects
 
 import (
@@ -29,6 +31,31 @@ func TestASRLiveCorrelationOrdersDecodedResponseAgainstOwnedWait(t *testing.T) {
 
 func runASRLiveCorrelationOrder(t *testing.T, responseFirst bool) ASRLiveCorrelationOrderFacts {
 	t.Helper()
+	controller, requestDigest, responseDigest := newASRLiveCorrelationOrder(t)
+	responseDone := awaitASRLiveCorrelationResponse(controller, requestDigest, responseDigest)
+	terminal, err := controller.WaitForSignal(testSignalContext(t), ASRLiveCorrelationRPCTerminal)
+	if err != nil || terminal.RequestSemanticSHA256 != requestDigest || terminal.ResponseSemanticSHA256 != responseDigest {
+		t.Fatalf("decoded RPC terminal = %#v, error = %v", terminal, err)
+	}
+	if responseFirst {
+		releaseASRLiveCorrelationResponse(t, controller, responseDone)
+	}
+	if err := controller.RecordChildWaited(8123, "NONZERO_EXIT", true, 1); err != nil {
+		t.Fatalf("record owned Wait: %v", err)
+	}
+	if err := controller.RecordHostFailureObserved(8123); err != nil {
+		t.Fatalf("record host lease revocation: %v", err)
+	}
+	if !responseFirst {
+		releaseASRLiveCorrelationResponse(t, controller, responseDone)
+	}
+	return asrLiveCorrelationOrderFacts(controller)
+}
+
+func newASRLiveCorrelationOrder(
+	t *testing.T,
+) (*ASRLiveCorrelationController, string, string) {
+	t.Helper()
 	controller, err := NewASRLiveCorrelationController(func(_ context.Context, host string, port int) (int, error) {
 		if host != "127.0.0.1" || port != 49152 {
 			return 0, ErrASRLiveCorrelationOwnership
@@ -49,37 +76,35 @@ func runASRLiveCorrelationOrder(t *testing.T, responseFirst bool) ASRLiveCorrela
 	if err := controller.ObserveEndpoint(context.Background(), "grpc://127.0.0.1:49152"); err != nil {
 		t.Fatalf("observe endpoint: %v", err)
 	}
+	return controller, requestDigest, responseDigest
+}
 
+func awaitASRLiveCorrelationResponse(
+	controller *ASRLiveCorrelationController,
+	requestDigest, responseDigest string,
+) <-chan error {
 	responseDone := make(chan error, 1)
 	go func() {
 		responseDone <- controller.AwaitResponseRelease(context.Background(), requestDigest, responseDigest)
 	}()
-	terminal, err := controller.WaitForSignal(testSignalContext(t), ASRLiveCorrelationRPCTerminal)
-	if err != nil || terminal.RequestSemanticSHA256 != requestDigest || terminal.ResponseSemanticSHA256 != responseDigest {
-		t.Fatalf("decoded RPC terminal = %#v, error = %v", terminal, err)
+	return responseDone
+}
+
+func releaseASRLiveCorrelationResponse(
+	t *testing.T,
+	controller *ASRLiveCorrelationController,
+	responseDone <-chan error,
+) {
+	t.Helper()
+	if err := controller.ReleaseResponse(); err != nil {
+		t.Fatalf("release decoded response: %v", err)
 	}
-	if responseFirst {
-		if err := controller.ReleaseResponse(); err != nil {
-			t.Fatalf("release decoded response: %v", err)
-		}
-		if err := <-responseDone; err != nil {
-			t.Fatalf("response-first release result: %v", err)
-		}
+	if err := <-responseDone; err != nil {
+		t.Fatalf("decoded response release result: %v", err)
 	}
-	if err := controller.RecordChildWaited(8123, "NONZERO_EXIT", true, 1); err != nil {
-		t.Fatalf("record owned Wait: %v", err)
-	}
-	if err := controller.RecordHostFailureObserved(8123); err != nil {
-		t.Fatalf("record host lease revocation: %v", err)
-	}
-	if !responseFirst {
-		if err := controller.ReleaseResponse(); err != nil {
-			t.Fatalf("release decoded response after Wait: %v", err)
-		}
-		if err := <-responseDone; err != nil {
-			t.Fatalf("exit-first release result: %v", err)
-		}
-	}
+}
+
+func asrLiveCorrelationOrderFacts(controller *ASRLiveCorrelationController) ASRLiveCorrelationOrderFacts {
 	var facts ASRLiveCorrelationOrderFacts
 	for _, event := range controller.Snapshot() {
 		switch event.Kind {
@@ -153,6 +178,36 @@ func TestASRLiveCorrelationRejectsMalformedAndUnownedEndpoints(t *testing.T) {
 	}
 	if err := controller.RecordChildWaited(9876, "NONZERO_EXIT", true, 1); !errors.Is(err, ErrASRLiveCorrelationOwnership) {
 		t.Fatalf("foreign child Wait accepted: %v", err)
+	}
+}
+
+func TestASRLiveCorrelationClassifiesNaturalAndHarnessRequestedExits(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name      string
+		stopFirst bool
+		want      string
+	}{
+		{name: "natural", want: ASRLiveCorrelationExitNatural},
+		{name: "harness requested", stopFirst: true, want: ASRLiveCorrelationExitHarnessRequested},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			controller := testASRLiveCorrelationReadyController(t)
+			if test.stopFirst {
+				if err := controller.RecordChildStopRequested(8123); err != nil {
+					t.Fatalf("record harness stop request: %v", err)
+				}
+			}
+			if err := controller.RecordChildWaited(8123, "NONZERO_EXIT", true, 1); err != nil {
+				t.Fatalf("record child Wait: %v", err)
+			}
+			event, err := controller.WaitForSignal(testSignalContext(t), ASRLiveCorrelationChildWaited)
+			if err != nil || event.ExitTrigger != test.want {
+				t.Fatalf("child exit trigger = %q, error = %v; want %q", event.ExitTrigger, err, test.want)
+			}
+		})
 	}
 }
 

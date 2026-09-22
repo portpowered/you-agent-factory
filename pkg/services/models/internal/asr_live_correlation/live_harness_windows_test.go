@@ -114,14 +114,30 @@ func readASRLiveCorrelationHarnessManifest(
 }
 
 func validateASRLiveCorrelationHarnessManifest(manifest asrLiveCorrelationHarnessManifest) error {
-	if manifest.Schema != asrLiveCorrelationManifestSchema ||
-		!safeHarnessRunID(manifest.RunID) || !validHarnessScenario(manifest.Scenario) ||
-		!validHarnessGitID(manifest.SourceCommit) || !validHarnessGitID(manifest.SourceTree) ||
-		!validHarnessDigest(manifest.ExecutableSHA256) || !validHarnessDigest(manifest.WAVSHA256) ||
-		!validHarnessDigest(manifest.ModelIdentitySHA256) || !validHarnessDigest(manifest.BackendArtifactSHA256) ||
-		!validHarnessDigest(manifest.CacheManifestSHA256) || manifest.TimeoutSeconds < 1 || manifest.TimeoutSeconds > 180 {
+	if !validASRLiveCorrelationManifestIdentity(manifest) {
 		return errors.New("manifest identity or bounded timeout is invalid")
 	}
+	return validateASRLiveCorrelationManifestPaths(manifest)
+}
+
+func validASRLiveCorrelationManifestIdentity(manifest asrLiveCorrelationHarnessManifest) bool {
+	return validASRLiveCorrelationManifestRun(manifest) && validASRLiveCorrelationManifestArtifacts(manifest) &&
+		manifest.TimeoutSeconds >= 1 && manifest.TimeoutSeconds <= 180
+}
+
+func validASRLiveCorrelationManifestRun(manifest asrLiveCorrelationHarnessManifest) bool {
+	return manifest.Schema == asrLiveCorrelationManifestSchema && safeHarnessRunID(manifest.RunID) &&
+		validHarnessScenario(manifest.Scenario) && validHarnessGitID(manifest.SourceCommit) &&
+		validHarnessGitID(manifest.SourceTree)
+}
+
+func validASRLiveCorrelationManifestArtifacts(manifest asrLiveCorrelationHarnessManifest) bool {
+	return validHarnessDigest(manifest.ExecutableSHA256) && validHarnessDigest(manifest.WAVSHA256) &&
+		validHarnessDigest(manifest.ModelIdentitySHA256) && validHarnessDigest(manifest.BackendArtifactSHA256) &&
+		validHarnessDigest(manifest.CacheManifestSHA256)
+}
+
+func validateASRLiveCorrelationManifestPaths(manifest asrLiveCorrelationHarnessManifest) error {
 	for _, path := range []string{
 		manifest.SourceRoot, manifest.ExecutablePath, manifest.WAVPath, manifest.CacheRoot,
 		manifest.CacheManifestPath, manifest.StateRoot, manifest.StagingRoot, manifest.EvidenceOutput,
@@ -140,128 +156,219 @@ func runASRLiveCorrelationHarness(
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(manifest.TimeoutSeconds)*time.Second)
 	defer cancel()
+	harness := newASRLiveCorrelationHarness(t, ctx, manifest)
+	t.Cleanup(func() { harness.cleanup(t) })
+	invocations := harness.startInvocation(ctx)
+	endpointEvent, terminalEvent := awaitASRLiveCorrelationTerminal(t, ctx, harness)
+	result := runASRLiveCorrelationSchedule(t, ctx, harness, endpointEvent, invocations)
+	finishASRLiveCorrelationHarness(t, ctx, harness, endpointEvent, terminalEvent, result)
+}
+
+type asrLiveCorrelationHarness struct {
+	manifest   asrLiveCorrelationHarnessManifest
+	fixture    asrLiveCorrelationFixture
+	endpoint   string
+	controller *modelseffects.ASRLiveCorrelationController
+	evidence   *asrLiveCorrelationRuntimeEvidenceSink
+	launcher   *asrLiveCorrelationProcessLauncher
+	service    models.Service
+	scope      models.RuntimeScopeRef
+	closed     bool
+}
+
+type asrLiveCorrelationResult struct {
+	invocation asrLiveCorrelationInvocation
+	transcript string
+}
+
+func newASRLiveCorrelationHarness(
+	t *testing.T,
+	ctx context.Context,
+	manifest asrLiveCorrelationHarnessManifest,
+) *asrLiveCorrelationHarness {
 	fixture := verifyASRLiveCorrelationInputs(t, ctx, manifest)
 	endpoint := reserveASRLiveCorrelationEndpoint(t)
-	controller, err := modelseffects.NewASRLiveCorrelationController(
-		modelseffects.WindowsASRLiveCorrelationListenerPIDLookup,
-	)
+	controller, err := modelseffects.NewASRLiveCorrelationController(modelseffects.WindowsASRLiveCorrelationListenerPIDLookup)
 	if err != nil {
 		t.Fatalf("construct ASR live-correlation controller: %v", err)
 	}
-	evidenceSink := &asrLiveCorrelationRuntimeEvidenceSink{}
-	launcher := &asrLiveCorrelationProcessLauncher{
-		controller: controller, endpoint: endpoint, manifest: manifest,
-	}
-	service := newASRLiveCorrelationModelsService(t, manifest, launcher, evidenceSink)
+	evidence := &asrLiveCorrelationRuntimeEvidenceSink{}
+	launcher := &asrLiveCorrelationProcessLauncher{controller: controller, endpoint: endpoint, manifest: manifest}
+	service := newASRLiveCorrelationModelsService(t, manifest, launcher, evidence)
 	opened, err := service.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{
-		Config: models.RuntimeScopeConfig{
-			CacheDirectory: manifest.CacheRoot,
-			Runtime:        asrLiveCorrelationRuntimeConfig(endpoint),
-		},
+		Config: models.RuntimeScopeConfig{CacheDirectory: manifest.CacheRoot, Runtime: asrLiveCorrelationRuntimeConfig(endpoint)},
 	})
 	if err != nil {
 		t.Fatalf("open isolated ASR Runtime Scope: %v", err)
 	}
-	closed := false
-	defer func() {
-		if process := launcher.process(); process != nil {
-			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
-			_ = process.Stop(cleanupCtx)
-			cleanupCancel()
-		}
-		if !closed {
-			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cleanupCancel()
-			_, _ = service.StopModelHost(cleanupCtx, models.StopModelHostRequest{Scope: opened.Scope, Name: models.BuiltInModelNameASR})
-			_, _ = service.CloseRuntimeScope(cleanupCtx, models.CloseRuntimeScopeRequest{Scope: opened.Scope})
-		}
-	}()
+	return &asrLiveCorrelationHarness{
+		manifest: manifest, fixture: fixture, endpoint: endpoint, controller: controller,
+		evidence: evidence, launcher: launcher, service: service, scope: opened.Scope,
+	}
+}
 
+func (harness *asrLiveCorrelationHarness) startInvocation(ctx context.Context) <-chan asrLiveCorrelationInvocation {
 	invocations := make(chan asrLiveCorrelationInvocation, 1)
-	processStopped := false
 	go func() {
-		result, invokeErr := service.InvokeModel(
-			modelseffects.WithASRLiveCorrelation(ctx, controller),
-			asrLiveCorrelationRequest(opened.Scope, fixture.audio),
+		result, err := harness.service.InvokeModel(
+			modelseffects.WithASRLiveCorrelation(ctx, harness.controller),
+			asrLiveCorrelationRequest(harness.scope, harness.fixture.audio),
 		)
-		invocations <- asrLiveCorrelationInvocation{result: result, err: invokeErr}
+		invocations <- asrLiveCorrelationInvocation{result: result, err: err}
 	}()
-	endpointEvent, endpointErr := controller.WaitForSignal(ctx, modelseffects.ASRLiveCorrelationEndpointObserved)
-	if endpointErr != nil {
-		process := launcher.process()
-		listenerState := "unavailable"
-		if address, addressErr := asrLiveCorrelationEndpointAddress(endpoint); addressErr == nil {
-			connection, dialErr := net.DialTimeout("tcp", address, time.Second)
-			if dialErr == nil {
-				_ = connection.Close()
-				listenerState = "accepting"
-			} else {
-				listenerState = "not-accepting: " + dialErr.Error()
-			}
-		}
-		if process == nil {
-			t.Fatalf("wait for ASR live-correlation signal %s: %v; managed process was not recorded; listener=%s", modelseffects.ASRLiveCorrelationEndpointObserved, endpointErr, listenerState)
-		}
-		if snapshot, terminal := process.child.Snapshot(); terminal {
-			t.Fatalf("wait for ASR live-correlation signal %s: %v; managed process pid=%d terminated=%#v; listener=%s", modelseffects.ASRLiveCorrelationEndpointObserved, endpointErr, process.pid, snapshot, listenerState)
-		}
-		t.Fatalf("wait for ASR live-correlation signal %s: %v; managed process pid=%d still running; listener=%s", modelseffects.ASRLiveCorrelationEndpointObserved, endpointErr, process.pid, listenerState)
-	}
-	terminalEvent := awaitASRLiveCorrelationSignal(t, ctx, controller, modelseffects.ASRLiveCorrelationRPCTerminal)
-	if endpointEvent.ProcessID <= 0 || endpointEvent.Endpoint.Port == 7437 || terminalEvent.Sequence <= endpointEvent.Sequence {
-		t.Fatalf("ASR endpoint/RPC facts are not owned and ordered: endpoint=%#v terminal=%#v", endpointEvent, terminalEvent)
-	}
+	return invocations
+}
 
-	var invocation asrLiveCorrelationInvocation
-	var transcript string
-	if manifest.Scenario == modelseffects.ASRLiveCorrelationScenarioResponseFirst {
-		if err := controller.ReleaseResponse(); err != nil {
-			t.Fatalf("release response-first decoded ASR result: %v", err)
-		}
-		invocation = awaitASRLiveCorrelationInvocation(t, ctx, invocations)
-		transcript = assertASRLiveCorrelationResponseFirst(t, invocation)
-	} else {
-		process := launcher.process()
-		if process == nil || process.PID() != endpointEvent.ProcessID {
-			t.Fatalf("owned process does not match endpoint PID: process=%v endpoint=%#v", process, endpointEvent)
-		}
-		if err := process.Stop(ctx); err != nil {
-			t.Fatalf("stop owned LocalAI child after RPC terminal: %v", err)
-		}
-		processStopped = true
-		awaitASRLiveCorrelationSignal(t, ctx, controller, modelseffects.ASRLiveCorrelationChildWaited)
-		awaitASRLiveCorrelationSignal(t, ctx, controller, modelseffects.ASRLiveCorrelationHostFailureSeen)
-		if err := controller.ReleaseResponse(); err != nil {
-			t.Fatalf("release exit-first decoded ASR result after host failure: %v", err)
-		}
-		invocation = awaitASRLiveCorrelationInvocation(t, ctx, invocations)
-		assertASRLiveCorrelationResponseFirstFailure(t, invocation)
+func awaitASRLiveCorrelationTerminal(
+	t *testing.T,
+	ctx context.Context,
+	harness *asrLiveCorrelationHarness,
+) (modelseffects.ASRLiveCorrelationEvent, modelseffects.ASRLiveCorrelationEvent) {
+	t.Helper()
+	endpoint, err := harness.controller.WaitForSignal(ctx, modelseffects.ASRLiveCorrelationEndpointObserved)
+	if err != nil {
+		failASRLiveCorrelationEndpointWait(t, harness, err)
 	}
+	terminal := awaitASRLiveCorrelationSignal(t, ctx, harness.controller, modelseffects.ASRLiveCorrelationRPCTerminal)
+	if endpoint.ProcessID <= 0 || endpoint.Endpoint.Port == 7437 || terminal.Sequence <= endpoint.Sequence {
+		t.Fatalf("ASR endpoint/RPC facts are not owned and ordered: endpoint=%#v terminal=%#v", endpoint, terminal)
+	}
+	return endpoint, terminal
+}
+
+func failASRLiveCorrelationEndpointWait(
+	t *testing.T,
+	harness *asrLiveCorrelationHarness,
+	cause error,
+) {
+	t.Helper()
+	process := harness.launcher.process()
+	if process == nil {
+		t.Fatalf("wait for ASR live-correlation endpoint: %v; managed process was not recorded", cause)
+	}
+	if snapshot, terminal := process.child.Snapshot(); terminal {
+		t.Fatalf("wait for ASR live-correlation endpoint: %v; managed process pid=%d terminated=%#v", cause, process.pid, snapshot)
+	}
+	t.Fatalf("wait for ASR live-correlation endpoint: %v; managed process pid=%d still running", cause, process.pid)
+}
+
+func runASRLiveCorrelationSchedule(
+	t *testing.T,
+	ctx context.Context,
+	harness *asrLiveCorrelationHarness,
+	endpoint modelseffects.ASRLiveCorrelationEvent,
+	invocations <-chan asrLiveCorrelationInvocation,
+) asrLiveCorrelationResult {
+	t.Helper()
+	if harness.manifest.Scenario == modelseffects.ASRLiveCorrelationScenarioResponseFirst {
+		return releaseASRLiveCorrelationFirst(t, ctx, harness, invocations)
+	}
+	return exitASRLiveCorrelationFirst(t, ctx, harness, endpoint, invocations)
+}
+
+func releaseASRLiveCorrelationFirst(
+	t *testing.T,
+	ctx context.Context,
+	harness *asrLiveCorrelationHarness,
+	invocations <-chan asrLiveCorrelationInvocation,
+) asrLiveCorrelationResult {
+	if err := harness.controller.ReleaseResponse(); err != nil {
+		t.Fatalf("release response-first decoded ASR result: %v", err)
+	}
+	invocation := awaitASRLiveCorrelationInvocation(t, ctx, invocations)
+	transcript := assertASRLiveCorrelationResponseFirst(t, invocation)
+	return asrLiveCorrelationResult{invocation: invocation, transcript: transcript}
+}
+
+func exitASRLiveCorrelationFirst(
+	t *testing.T,
+	ctx context.Context,
+	harness *asrLiveCorrelationHarness,
+	endpoint modelseffects.ASRLiveCorrelationEvent,
+	invocations <-chan asrLiveCorrelationInvocation,
+) asrLiveCorrelationResult {
+	process := requireASRLiveCorrelationOwnedProcess(t, harness.launcher, endpoint.ProcessID)
+	if err := process.Stop(ctx); err != nil {
+		t.Fatalf("stop owned LocalAI child after RPC terminal: %v", err)
+	}
+	awaitASRLiveCorrelationSignal(t, ctx, harness.controller, modelseffects.ASRLiveCorrelationChildWaited)
+	awaitASRLiveCorrelationSignal(t, ctx, harness.controller, modelseffects.ASRLiveCorrelationHostFailureSeen)
+	if err := harness.controller.ReleaseResponse(); err != nil {
+		t.Fatalf("release exit-first decoded ASR result after host failure: %v", err)
+	}
+	invocation := awaitASRLiveCorrelationInvocation(t, ctx, invocations)
+	assertASRLiveCorrelationResponseFirstFailure(t, invocation)
+	return asrLiveCorrelationResult{invocation: invocation}
+}
+
+func requireASRLiveCorrelationOwnedProcess(
+	t *testing.T,
+	launcher *asrLiveCorrelationProcessLauncher,
+	wantPID int,
+) *asrLiveCorrelationManagedProcess {
+	t.Helper()
 	process := launcher.process()
-	if process == nil || process.PID() != endpointEvent.ProcessID {
-		t.Fatalf("managed process PID does not match endpoint ownership: process=%v endpoint=%#v", process, endpointEvent)
+	if process == nil || process.PID() != wantPID {
+		t.Fatalf("managed process does not match endpoint PID %d", wantPID)
 	}
-	if !processStopped {
+	return process
+}
+
+func finishASRLiveCorrelationHarness(
+	t *testing.T,
+	ctx context.Context,
+	harness *asrLiveCorrelationHarness,
+	endpoint modelseffects.ASRLiveCorrelationEvent,
+	terminal modelseffects.ASRLiveCorrelationEvent,
+	result asrLiveCorrelationResult,
+) {
+	process := requireASRLiveCorrelationOwnedProcess(t, harness.launcher, endpoint.ProcessID)
+	if _, terminalSnapshot := process.child.Snapshot(); !terminalSnapshot {
 		if err := process.Stop(ctx); err != nil {
 			t.Fatalf("stop owned LocalAI child after ASR result: %v", err)
 		}
 	}
-	awaitASRLiveCorrelationSignal(t, ctx, controller, modelseffects.ASRLiveCorrelationChildWaited)
-	awaitASRLiveCorrelationSignal(t, ctx, controller, modelseffects.ASRLiveCorrelationHostFailureSeen)
+	awaitASRLiveCorrelationSignal(t, ctx, harness.controller, modelseffects.ASRLiveCorrelationChildWaited)
+	awaitASRLiveCorrelationSignal(t, ctx, harness.controller, modelseffects.ASRLiveCorrelationHostFailureSeen)
 	if process.waitCount() != 1 || process.stopCount() != 1 {
 		t.Fatalf("owned process Wait/Stop counts = %d/%d, want one each", process.waitCount(), process.stopCount())
 	}
-	stopASRLiveCorrelationScope(t, ctx, service, opened.Scope)
-	closed = true
-	assertASRLiveCorrelationCleanup(t, manifest, endpointEvent.Endpoint.Port)
-	protocol := asrLiveCorrelationProtocolEvidence(t, evidenceSink.snapshot())
+	stopASRLiveCorrelationScope(t, ctx, harness.service, harness.scope)
+	harness.closed = true
+	assertASRLiveCorrelationCleanup(t, harness.manifest, endpoint.Endpoint.Port)
+	protocol := asrLiveCorrelationProtocolEvidence(t, harness.evidence.snapshot())
+	assertASRLiveCorrelationProtocol(t, protocol, harness.manifest)
+	writeASRLiveCorrelationEvidence(t, harness.manifest, harness.fixture, harness.endpoint, harness.controller.Snapshot(), protocol, result.invocation, result.transcript)
+	if result.transcript != "" && terminal.ResponseSemanticSHA256 == "" {
+		t.Fatal("response-first ASR evidence is missing the response semantic digest")
+	}
+}
+
+func assertASRLiveCorrelationProtocol(
+	t *testing.T,
+	protocol modelseffects.RuntimeASRProtocolObservation,
+	manifest asrLiveCorrelationHarnessManifest,
+) {
 	if protocol.ModelIdentitySHA256 != manifest.ModelIdentitySHA256 ||
 		protocol.BackendArtifactSHA256 != manifest.BackendArtifactSHA256 ||
 		protocol.RPCMethod != modelseffects.RuntimeASRPCMethodAudioTranscription ||
 		protocol.RPCStatus != "OK" || !protocol.ResponseDecoded {
 		t.Fatalf("live ASR protocol evidence mismatches the immutable manifest: %#v", protocol)
 	}
-	writeASRLiveCorrelationEvidence(t, manifest, fixture, endpoint, controller.Snapshot(), protocol, invocation, transcript)
+}
+
+func (harness *asrLiveCorrelationHarness) cleanup(t *testing.T) {
+	if process := harness.launcher.process(); process != nil {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		_ = process.Stop(cleanupCtx)
+		cancel()
+	}
+	if !harness.closed {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, _ = harness.service.StopModelHost(cleanupCtx, models.StopModelHostRequest{Scope: harness.scope, Name: models.BuiltInModelNameASR})
+		_, _ = harness.service.CloseRuntimeScope(cleanupCtx, models.CloseRuntimeScopeRequest{Scope: harness.scope})
+	}
 }
 
 type asrLiveCorrelationFixture struct {
@@ -615,6 +722,12 @@ func (process *asrLiveCorrelationManagedProcess) Stop(ctx context.Context) error
 	var stopErr error
 	process.stopOnce.Do(func() {
 		process.stopCalls.Add(1)
+		if _, terminal := process.child.Snapshot(); !terminal {
+			if err := process.controller.RecordChildStopRequested(process.pid); err != nil {
+				stopErr = err
+				return
+			}
+		}
 		stopErr = process.child.Stop(ctx)
 	})
 	return stopErr
@@ -700,258 +813,6 @@ func TestASRLiveCorrelationMaterializedExecutableIdentity(t *testing.T) {
 	if sameASRLiveCorrelationExecutable(actual, expected, want) {
 		t.Fatal("materialized executable with a different digest was accepted")
 	}
-}
-
-func awaitASRLiveCorrelationSignal(
-	t *testing.T,
-	ctx context.Context,
-	controller *modelseffects.ASRLiveCorrelationController,
-	kind modelseffects.ASRLiveCorrelationEventKind,
-) modelseffects.ASRLiveCorrelationEvent {
-	t.Helper()
-	event, err := controller.WaitForSignal(ctx, kind)
-	if err != nil {
-		t.Fatalf("wait for ASR live-correlation signal %s: %v", kind, err)
-	}
-	return event
-}
-
-func awaitASRLiveCorrelationInvocation(
-	t *testing.T,
-	ctx context.Context,
-	invocations <-chan asrLiveCorrelationInvocation,
-) asrLiveCorrelationInvocation {
-	t.Helper()
-	select {
-	case invocation := <-invocations:
-		return invocation
-	case <-ctx.Done():
-		t.Fatalf("ASR invocation did not finish before its bounded ceiling: %v", ctx.Err())
-		return asrLiveCorrelationInvocation{}
-	}
-}
-
-func assertASRLiveCorrelationResponseFirst(
-	t *testing.T,
-	invocation asrLiveCorrelationInvocation,
-) string {
-	t.Helper()
-	if invocation.err != nil || invocation.result.Status != models.ModelInvocationStatusCompleted ||
-		invocation.result.LeaseDisposition != models.InvocationLeaseReleased || len(invocation.result.Outputs) != 2 {
-		t.Fatalf("response-first Models result = %#v error=%v, want completed two-output result", invocation.result, invocation.err)
-	}
-	var transcript string
-	var segments []models.ASRBackendSegment
-	for _, content := range invocation.result.Content {
-		switch content.Name {
-		case "transcript":
-			transcript = strings.TrimSpace(content.Content)
-		case "segments":
-			if err := json.Unmarshal([]byte(content.Content), &segments); err != nil {
-				t.Fatalf("decode normalized ASR segments: %v", err)
-			}
-		}
-	}
-	if transcript == "" || len(segments) == 0 {
-		t.Fatalf("response-first ASR semantic output is empty: transcriptBytes=%d segments=%d", len(transcript), len(segments))
-	}
-	previousStart, previousEnd := int64(-1), int64(-1)
-	for index, segment := range segments {
-		if segment.Start < 0 || segment.End < segment.Start ||
-			index > 0 && (segment.Start < previousStart || segment.Start < previousEnd) {
-			t.Fatalf("ASR segment[%d] is not finite, nonnegative and ordered: %#v", index, segment)
-		}
-		previousStart, previousEnd = segment.Start, segment.End
-	}
-	return transcript
-}
-
-func assertASRLiveCorrelationResponseFirstFailure(
-	t *testing.T,
-	invocation asrLiveCorrelationInvocation,
-) {
-	t.Helper()
-	if invocation.err == nil || !errors.Is(invocation.err, models.ErrInferenceFailed) ||
-		!errors.Is(invocation.err, models.ErrHostLeaseExpired) ||
-		invocation.result.Status != models.ModelInvocationStatusFailed ||
-		invocation.result.LeaseDisposition != models.InvocationLeaseExpired ||
-		len(invocation.result.Content) != 0 || len(invocation.result.Outputs) != 0 {
-		t.Fatalf("exit-first Models result = %#v error=%v, want typed lease failure with zero outputs", invocation.result, invocation.err)
-	}
-}
-
-func stopASRLiveCorrelationScope(
-	t *testing.T,
-	ctx context.Context,
-	service models.Service,
-	scope models.RuntimeScopeRef,
-) {
-	t.Helper()
-	if _, err := service.StopModelHost(ctx, models.StopModelHostRequest{Scope: scope, Name: models.BuiltInModelNameASR}); err != nil &&
-		!errors.Is(err, models.ErrHostRuntimeNotReady) {
-		t.Fatalf("stop ASR Runtime Host: %v", err)
-	}
-	if _, err := service.CloseRuntimeScope(ctx, models.CloseRuntimeScopeRequest{Scope: scope}); err != nil {
-		t.Fatalf("close ASR Runtime Scope: %v", err)
-	}
-}
-
-func assertASRLiveCorrelationCleanup(
-	t *testing.T,
-	manifest asrLiveCorrelationHarnessManifest,
-	port int,
-) {
-	t.Helper()
-	entries, err := os.ReadDir(manifest.StagingRoot)
-	if err != nil || len(entries) != 0 {
-		t.Fatalf("ASR staged audio cleanup entries=%v err=%v", entries, err)
-	}
-	_, err = modelseffects.WindowsASRLiveCorrelationListenerPIDLookup(context.Background(), "127.0.0.1", port)
-	if !errors.Is(err, modelseffects.ErrASRLiveCorrelationListenerAbsent) {
-		t.Fatalf("owned ASR listener remains or could not be classified: %v", err)
-	}
-}
-
-func (sink *asrLiveCorrelationRuntimeEvidenceSink) RecordRuntimeEvidence(record modelseffects.RuntimeEvidenceRecord) {
-	sink.mu.Lock()
-	defer sink.mu.Unlock()
-	copyRecord := record
-	if record.ASRProtocol != nil {
-		protocol := *record.ASRProtocol
-		copyRecord.ASRProtocol = &protocol
-	}
-	sink.records = append(sink.records, copyRecord)
-}
-
-func (sink *asrLiveCorrelationRuntimeEvidenceSink) snapshot() []modelseffects.RuntimeEvidenceRecord {
-	sink.mu.Lock()
-	defer sink.mu.Unlock()
-	return append([]modelseffects.RuntimeEvidenceRecord(nil), sink.records...)
-}
-
-func asrLiveCorrelationProtocolEvidence(
-	t *testing.T,
-	records []modelseffects.RuntimeEvidenceRecord,
-) modelseffects.RuntimeASRProtocolObservation {
-	t.Helper()
-	for _, record := range records {
-		if record.Kind == modelseffects.RuntimeEvidenceKindASRProtocol && record.ASRProtocol != nil {
-			return *record.ASRProtocol
-		}
-	}
-	t.Fatal("Models runtime did not emit the private ASR protocol observation")
-	return modelseffects.RuntimeASRProtocolObservation{}
-}
-
-func writeASRLiveCorrelationEvidence(
-	t *testing.T,
-	manifest asrLiveCorrelationHarnessManifest,
-	fixture asrLiveCorrelationFixture,
-	endpoint string,
-	events []modelseffects.ASRLiveCorrelationEvent,
-	protocol modelseffects.RuntimeASRProtocolObservation,
-	invocation asrLiveCorrelationInvocation,
-	transcript string,
-) {
-	t.Helper()
-	endpointEvent := findASRLiveCorrelationEvent(t, events, modelseffects.ASRLiveCorrelationEndpointObserved)
-	terminalEvent := findASRLiveCorrelationEvent(t, events, modelseffects.ASRLiveCorrelationRPCTerminal)
-	childEvent := findASRLiveCorrelationEvent(t, events, modelseffects.ASRLiveCorrelationChildWaited)
-	application := modelseffects.ASRLiveCorrelationApplication{
-		Outcome: "COMPLETED", OutputCount: len(invocation.result.Outputs),
-	}
-	if invocation.err != nil {
-		application.Outcome = "FAILED"
-		application.ErrorClasses = []string{"INFERENCE_FAILED", "HOST_LEASE_EXPIRED"}
-		application.OutputCount = len(invocation.result.Outputs)
-	}
-	evidence := modelseffects.ASRLiveCorrelationEvidence{
-		Schema: modelseffects.ASRLiveCorrelationEvidenceSchema,
-		RunID:  manifest.RunID, Scenario: manifest.Scenario,
-		SourceCommit: manifest.SourceCommit, SourceTree: manifest.SourceTree,
-		GoToolchain:   runtime.Version() + " " + runtime.GOOS + "/" + runtime.GOARCH,
-		ExecutableSHA: manifest.ExecutableSHA256, WAVSHA: manifest.WAVSHA256,
-		ModelSHA: protocol.ModelIdentitySHA256, BackendSHA: protocol.BackendArtifactSHA256,
-		CacheSHA: manifest.CacheManifestSHA256, Endpoint: endpointEvent.Endpoint,
-		RPC: modelseffects.ASRLiveCorrelationRPC{
-			Method: modelseffects.RuntimeASRPCMethodAudioTranscription, Status: "OK",
-			TerminalSequence: terminalEvent.Sequence, ResponseDecoded: protocol.ResponseDecoded,
-			RequestSemanticSHA256:  terminalEvent.RequestSemanticSHA256,
-			ResponseSemanticSHA256: terminalEvent.ResponseSemanticSHA256,
-		},
-		Child: modelseffects.ASRLiveCorrelationChild{
-			ProcessID: childEvent.ProcessID, WaitSequence: childEvent.Sequence,
-			ExitClass: childEvent.ExitClass, ExitCodeKnown: childEvent.ExitCodeKnown,
-			ExitCode: childEvent.ExitCode,
-		},
-		Application: application, RedactionPassed: true,
-	}
-	if err := modelseffects.ValidateASRLiveCorrelationEvidence(evidence); err != nil {
-		t.Fatalf("live ASR evidence does not meet the additive schema: %v", err)
-	}
-	encoded, err := modelseffects.MarshalASRLiveCorrelationEvidence(evidence)
-	if err != nil {
-		t.Fatalf("serialize redacted live ASR evidence: %v", err)
-	}
-	endpointAddress := endpoint
-	privateValues := [][]byte{
-		[]byte(manifest.SourceRoot), []byte(manifest.ExecutablePath), []byte(manifest.WAVPath),
-		[]byte(manifest.CacheRoot), []byte(manifest.CacheManifestPath), []byte(manifest.StateRoot),
-		[]byte(manifest.StagingRoot), []byte(manifest.EvidenceOutput), []byte(endpointAddress),
-		fixture.audio, []byte(transcript),
-	}
-	if invocation.err != nil {
-		privateValues = append(privateValues, []byte(invocation.err.Error()))
-	}
-	for _, privateValue := range privateValues {
-		if len(privateValue) != 0 && bytes.Contains(encoded, privateValue) {
-			t.Fatalf("serialized ASR evidence contains a raw private value")
-		}
-	}
-	if err := writeASRLiveCorrelationFileExclusive(manifest.EvidenceOutput, encoded); err != nil {
-		t.Fatalf("write exclusive ASR evidence output: %v", err)
-	}
-	t.Logf("ASR_LIVE_CORRELATION scenario=%s request_sha256=%s response_sha256=%s endpoint_port=%d listener_pid=%d output_count=%d", manifest.Scenario, terminalEvent.RequestSemanticSHA256, terminalEvent.ResponseSemanticSHA256, endpointEvent.Endpoint.Port, endpointEvent.ProcessID, application.OutputCount)
-}
-
-func findASRLiveCorrelationEvent(
-	t *testing.T,
-	events []modelseffects.ASRLiveCorrelationEvent,
-	kind modelseffects.ASRLiveCorrelationEventKind,
-) modelseffects.ASRLiveCorrelationEvent {
-	t.Helper()
-	for _, event := range events {
-		if event.Kind == kind {
-			return event
-		}
-	}
-	t.Fatalf("ASR live-correlation event %s is missing", kind)
-	return modelseffects.ASRLiveCorrelationEvent{}
-}
-
-func writeASRLiveCorrelationFileExclusive(path string, contents []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return errors.New("could not prepare private evidence directory")
-	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return errors.New("could not create a fresh private evidence file")
-	}
-	if _, err := file.Write(append(contents, '\n')); err != nil {
-		_ = file.Close()
-		_ = os.Remove(path)
-		return errors.New("could not write private evidence")
-	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		_ = os.Remove(path)
-		return errors.New("could not sync private evidence")
-	}
-	if err := file.Close(); err != nil {
-		_ = os.Remove(path)
-		return errors.New("could not close private evidence")
-	}
-	return nil
 }
 
 func validHarnessScenario(value string) bool {
