@@ -278,10 +278,6 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
             return_value="base-head",
         ), mock.patch.object(
             self.module,
-            "validate_packet_preflight",
-            return_value={},
-        ), mock.patch.object(
-            self.module,
             "copy_prd_files",
             side_effect=ValueError("simulated PRD copy failure"),
         ):

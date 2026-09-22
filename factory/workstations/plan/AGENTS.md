@@ -109,7 +109,6 @@ Mechanically convert the Markdown plan into
 `tasks/todo/{{ (index .Inputs 0).Name }}.json`. The JSON **MUST** contain:
 
 - `project`
-- `branchName` exactly equal to `{{ (index .Inputs 0).Name }}`
 - `description`
 - `context.customerAsk`
 - `context.sourcePlan` — the governing plan path from the ask, or `null` only
@@ -127,6 +126,12 @@ Mechanically convert the Markdown plan into
   `current`, exact `proposed`, `compatibility`, `generatedOutputs`, and
   `consumers` from the Markdown fenced blocks
 - `userStories`, ordered by semantic dependency
+
+`branchName` may be emitted as a human-readable hint, but workspace setup
+derives the lane branch from the live Work name. Do not attach immutable
+preflight metadata, duplicated hashes, or path allowlists as admission
+requirements. Record expected changed paths as advisory impact analysis when
+useful; discoveries may extend that set when no live conflict exists.
 
 Each user story **MUST** contain:
 

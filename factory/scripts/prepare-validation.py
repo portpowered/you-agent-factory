@@ -4,30 +4,11 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
-from pathlib import Path
 import re
 import shutil
 import sys
-
-
-def _load_packet_preflight():
-    """Load the setup-owned validator without executing its CLI entrypoint."""
-    script = Path(__file__).with_name("setup-workspace.py")
-    spec = importlib.util.spec_from_file_location(
-        "factory_setup_workspace_preflight", script,
-    )
-    if spec is None or spec.loader is None:
-        raise RuntimeError("could not load the packet preflight validator")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-_PACKET_PREFLIGHT = _load_packet_preflight()
-PacketPreflightError = _PACKET_PREFLIGHT.PacketPreflightError
-
+from pathlib import Path
 
 MISSION_FIELDS = frozenset(
     {
@@ -37,7 +18,6 @@ MISSION_FIELDS = frozenset(
         "criteria",
         "reportPath",
         "budget",
-        "preflight",
         "build",
         "fixtures",
         "publicDocs",
@@ -46,8 +26,11 @@ MISSION_FIELDS = frozenset(
 
 
 def artifact(value: object) -> dict:
-    if not isinstance(value, dict) or set(value) - {"identity", "path", "sha256"}:
+    required = {"identity", "path", "sha256"}
+    if not isinstance(value, dict) or set(value) != required:
         raise ValueError("artifacts require identity, absolute path and sha256 only")
+    if not isinstance(value["identity"], str) or not value["identity"]:
+        raise ValueError("artifact requires an immutable identity")
     source = Path(value.get("path", ""))
     if not source.is_absolute() or not source.is_file():
         raise ValueError("artifact path must be an existing absolute file")
@@ -58,15 +41,18 @@ def artifact(value: object) -> dict:
 
 def _staging_error(field, value, destination, code, *, observed):
     """Return one bounded staging diagnostic without exposing source bytes."""
-    return _PACKET_PREFLIGHT.packet_preflight_error(
-        "artifact-staging",
-        code,
-        field,
-        path=str(destination),
-        identity=value.get("identity"),
-        expected=value.get("sha256"),
-        observed=observed,
+    return ValueError(
+        f"artifact-staging code={code} field={field} "
+        f"path={destination} expected={value.get('sha256')} observed={observed}"
     )
+
+
+def stream_file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def stage(value: dict, destination: Path, field="artifact") -> dict:
@@ -84,14 +70,14 @@ def stage(value: dict, destination: Path, field="artifact") -> dict:
         ) from error
 
     try:
-        digest = _PACKET_PREFLIGHT.stream_file_sha256(destination)
-    except _PACKET_PREFLIGHT.FileReadFailure as error:
+        digest = stream_file_sha256(destination)
+    except OSError as error:
         raise _staging_error(
             field,
             value,
             destination,
             "input-read",
-            observed="partial" if error.position else "unreadable",
+            observed="unreadable",
         ) from error
     if digest.lower() != value["sha256"].lower():
         raise _staging_error(
@@ -106,43 +92,6 @@ def stage(value: dict, destination: Path, field="artifact") -> dict:
         "sha256": digest,
         "identity": value["identity"],
     }
-
-
-def _sanitized_preflight(packet_digest, envelope, verified_files, mainline):
-    """Persist only bounded identities; never persist authority paths."""
-    authority = [
-        {
-            "field": record["field"],
-            "identity": record["identity"],
-            "sha256": record["observedSha256"],
-        }
-        for record in verified_files
-        if record["field"].startswith("preflight.authority.")
-    ]
-    return {
-        "version": _PACKET_PREFLIGHT.PREFLIGHT_VERSION,
-        "status": "verified",
-        "packet": {
-            "identity": f"sha256:{packet_digest}",
-            "sha256": packet_digest,
-        },
-        "projectIdentity": envelope["projectIdentity"],
-        "contractRevision": envelope["contractRevision"],
-        "verifiedAuthority": authority,
-        "intendedMainline": mainline,
-    }
-
-
-def _validate_preflight(request, packet_digest, root):
-    """Validate all v1 inputs before the destination directory exists."""
-    envelope = _PACKET_PREFLIGHT.validate_preflight_contract(request)
-    verified_files = _PACKET_PREFLIGHT.validate_preflight_files(envelope)
-    mainline = _PACKET_PREFLIGHT.validate_intended_mainline(
-        root, envelope["intendedMainline"],
-    )
-    return envelope, _sanitized_preflight(
-        packet_digest, envelope, verified_files, mainline,
-    )
 
 
 def _write_mission(target, request):
@@ -174,9 +123,6 @@ def prepare(root: Path, name: str, payload: str) -> Path:
     ):
         raise ValueError("budget requires time, download, disk, process and paid bounds")
     root = root.resolve()
-    payload_bytes = payload.encode("utf-8") if isinstance(payload, str) else payload
-    packet_digest = hashlib.sha256(payload_bytes).hexdigest()
-    envelope, preflight = _validate_preflight(request, packet_digest, root)
     projects = (root / "docs/temp/projects").resolve()
     report = Path(request["reportPath"])
     if not report.is_absolute():
@@ -197,8 +143,13 @@ def prepare(root: Path, name: str, payload: str) -> Path:
     build = request.get("build")
     if request["role"] != "retrospective" and build is None:
         raise ValueError("customer and engineering validation require a prebuilt artifact")
-    if build is not None and not build.get("identity"):
-        raise ValueError("build requires an immutable identity")
+    if build is not None:
+        request["build"] = artifact(build)
+    for field in ("fixtures", "publicDocs"):
+        values = request.get(field, [])
+        if not isinstance(values, list):
+            raise TypeError(f"{field} must be an array of artifacts")
+        request[field] = [artifact(value) for value in values]
     # Atomic creation rejects repeated/concurrent admission. A failed staging
     # attempt leaves its evidence and requires a fresh validation Work name.
     try:
@@ -228,7 +179,6 @@ def prepare(root: Path, name: str, payload: str) -> Path:
         location.mkdir(exist_ok=True)
         environment[key] = str(location)
     request["environment"] = environment
-    request["preflight"] = preflight
     request["reportPath"] = str(report)
     report.parent.mkdir(parents=True, exist_ok=True)
     _write_mission(target, request)
@@ -241,7 +191,7 @@ def main() -> int:
         return 2
     try:
         prepare(Path.cwd(), sys.argv[1], sys.argv[2])
-    except (ValueError, OSError, TypeError, PacketPreflightError) as error:
+    except (ValueError, OSError, TypeError) as error:
         print(f"validation admission failed: {error}", file=sys.stderr)
         return 2
     print("validation workspace ready")
