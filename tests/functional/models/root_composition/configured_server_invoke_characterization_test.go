@@ -18,14 +18,14 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support/localai"
 )
 
-// TestLocalAIConfiguredServerInvokeCharacterization records the two remaining
+// TestModelsConfiguredServerInvokeCharacterization records the two remaining
 // cycle-164 public observations after the retained transport correction: a
 // named output mapping crosses --server and publishes atomically, while a
 // request whose server withholds response headers is bounded by the caller
 // context and publishes no output.
 // The server is root-composed and the client crosses its actual loopback HTTP
 // boundary; the LocalAI edge remains the controlled backend fixture.
-func TestLocalAIConfiguredServerInvokeCharacterization(t *testing.T) {
+func TestModelsConfiguredServerInvokeCharacterization(t *testing.T) {
 	t.Parallel()
 
 	fixture := functionalStartLocalAI(t, localai.Options{EmbeddingDimensions: 5})
@@ -45,78 +45,118 @@ func TestLocalAIConfiguredServerInvokeCharacterization(t *testing.T) {
 	)
 
 	t.Run("named output mapping", func(t *testing.T) {
-		outputPath := filepath.Join(t.TempDir(), "embedding.json")
-		result := executeLocalAIConfiguredEmbedOutputMap(
-			t, client.process, factoryDir, cleanModelsEnvironment(client.home), serverURL,
-			"embedding="+outputPath, outputPath,
-		)
-		t.Logf(
-			"configured-server named mapping: err=%v stdout=%q stderr=%q output=%q server-backend-calls=%d",
-			result.Err, result.Stdout, result.Stderr, result.Output, len(serverPath.invocation.Signatures()),
-		)
-		if result.Err != nil {
-			t.Fatalf("configured-server named mapping error = %v, want corrected remote mapping", result.Err)
-		}
-		if result.Output != `[0.1,0.2,0.3,0.4,0.5]` {
-			t.Fatalf("configured-server named mapping output = %q, want controlled vector", result.Output)
-		}
-		var response factoryapi.GenericModelInvocationResponse
-		if err := json.Unmarshal([]byte(result.Stdout), &response); err != nil {
-			t.Fatalf("decode configured-server named mapping response: %v; stdout=%q", err, result.Stdout)
-		}
-		if len(response.Outputs) != 1 || response.Outputs[0].Name != "embedding" ||
-			response.Outputs[0].Content == nil || *response.Outputs[0].Content != result.Output ||
-			response.Outputs[0].ContentType == nil || *response.Outputs[0].ContentType != "application/json" ||
-			response.Outputs[0].MediaType == nil || *response.Outputs[0].MediaType != "application/json" {
-			t.Fatalf("configured-server named mapping response = %#v, want ordered JSON embedding metadata", response)
-		}
+		assertLocalAIConfiguredServerNamedOutputMapping(t, client, factoryDir, serverURL)
 	})
 
 	t.Run("invalid output mapping", func(t *testing.T) {
-		beforeCalls := len(serverPath.invocation.Signatures())
-		outputPath := filepath.Join(t.TempDir(), "should-not-exist.json")
-		result := executeLocalAIConfiguredEmbedOutputMap(
-			t, client.process, factoryDir, cleanModelsEnvironment(client.home), serverURL,
-			"embedding", outputPath,
-		)
-		if result.Err == nil || !strings.Contains(result.Err.Error(), "--output is not supported with explicit generic inputs") {
-			t.Fatalf("invalid configured-server output mapping error = %v, want current typed preflight result", result.Err)
-		}
-		if result.Stdout != "" || result.Output != "" {
-			t.Fatalf("invalid configured-server output mapping published output: stdout=%q output=%q", result.Stdout, result.Output)
-		}
-		if got := len(serverPath.invocation.Signatures()); got != beforeCalls {
-			t.Fatalf("invalid configured-server output mapping backend calls = %d, want unchanged %d", got, beforeCalls)
-		}
+		assertLocalAIConfiguredServerInvalidOutputMapping(t, client, factoryDir, serverURL, serverPath)
 	})
 
 	t.Run("withheld headers cancel", func(t *testing.T) {
-		started := make(chan struct{})
-		blockingBackend.BlockNext(started)
-		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
-		defer cancel()
-		result := executeLocalAIConfiguredEmbedCommandWithContext(
-			t, ctx, client.process, factoryDir, cleanModelsEnvironment(client.home), serverURL,
-		)
-		select {
-		case <-started:
-		case <-time.After(2 * time.Second):
-			t.Fatal("withheld-header characterization did not reach the server backend")
-		}
-		if result.Err == nil || !strings.Contains(result.Err.Error(), "context deadline exceeded") {
-			t.Fatalf("withheld-header result error = %v, want caller deadline", result.Err)
-		}
-		if result.Stdout != "" {
-			t.Fatalf("withheld-header result published partial output: stdout=%q", result.Stdout)
-		}
-		select {
-		case <-blockingBackend.Canceled():
-		case <-time.After(2 * time.Second):
-			t.Fatal("withheld-header backend did not observe caller cancellation")
-		}
-		t.Logf("withheld-header characterization: err=%v stdout=%q stderr=%q", result.Err, result.Stdout, result.Stderr)
+		assertLocalAIConfiguredServerDeadlineCancellation(t, client, factoryDir, serverURL, blockingBackend)
 	})
 
+	closeLocalAIConfiguredServerCharacterization(t, client, server, serverURL, serverPath, fixture)
+}
+
+func assertLocalAIConfiguredServerNamedOutputMapping(
+	t *testing.T,
+	client *localAIConfiguredEmbedClientPath,
+	factoryDir, serverURL string,
+) {
+	t.Helper()
+	outputPath := filepath.Join(t.TempDir(), "embedding.json")
+	result := executeLocalAIConfiguredEmbedOutputMap(
+		t, client.process, factoryDir, cleanModelsEnvironment(client.home), serverURL,
+		"embedding="+outputPath, outputPath,
+	)
+	if result.Err != nil {
+		t.Fatalf("configured-server named mapping error = %v, want corrected remote mapping", result.Err)
+	}
+	if result.Output != `[0.1,0.2,0.3,0.4,0.5]` {
+		t.Fatalf("configured-server named mapping output = %q, want controlled vector", result.Output)
+	}
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal([]byte(result.Stdout), &response); err != nil {
+		t.Fatalf("decode configured-server named mapping response: %v; stdout=%q", err, result.Stdout)
+	}
+	if len(response.Outputs) != 1 || response.Outputs[0].Name != "embedding" ||
+		response.Outputs[0].Content == nil || *response.Outputs[0].Content != result.Output ||
+		response.Outputs[0].ContentType == nil || *response.Outputs[0].ContentType != "application/json" ||
+		response.Outputs[0].MediaType == nil || *response.Outputs[0].MediaType != "application/json" {
+		t.Fatalf("configured-server named mapping response = %#v, want ordered JSON embedding metadata", response)
+	}
+	if result.Stderr != "" {
+		t.Fatalf("configured-server named mapping stderr = %q, want empty", result.Stderr)
+	}
+}
+
+func assertLocalAIConfiguredServerInvalidOutputMapping(
+	t *testing.T,
+	client *localAIConfiguredEmbedClientPath,
+	factoryDir, serverURL string,
+	serverPath *localAIConfiguredEmbedOwnerPath,
+) {
+	t.Helper()
+	beforeCalls := len(serverPath.invocation.Signatures())
+	outputPath := filepath.Join(t.TempDir(), "should-not-exist.json")
+	result := executeLocalAIConfiguredEmbedOutputMap(
+		t, client.process, factoryDir, cleanModelsEnvironment(client.home), serverURL,
+		"embedding", outputPath,
+	)
+	if result.Err == nil || !strings.Contains(result.Err.Error(), "--output is not supported with explicit generic inputs") {
+		t.Fatalf("invalid configured-server output mapping error = %v, want current typed preflight result", result.Err)
+	}
+	if result.Stdout != "" || result.Output != "" {
+		t.Fatalf("invalid configured-server output mapping published output: stdout=%q output=%q", result.Stdout, result.Output)
+	}
+	if got := len(serverPath.invocation.Signatures()); got != beforeCalls {
+		t.Fatalf("invalid configured-server output mapping backend calls = %d, want unchanged %d", got, beforeCalls)
+	}
+}
+
+func assertLocalAIConfiguredServerDeadlineCancellation(
+	t *testing.T,
+	client *localAIConfiguredEmbedClientPath,
+	factoryDir, serverURL string,
+	blockingBackend *localAIConfiguredEmbedBlockingBackend,
+) {
+	t.Helper()
+	started := make(chan struct{})
+	blockingBackend.BlockNext(started)
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+	result := executeLocalAIConfiguredEmbedCommandWithContext(
+		t, ctx, client.process, factoryDir, cleanModelsEnvironment(client.home), serverURL,
+	)
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("withheld-header characterization did not reach the server backend")
+	}
+	if result.Err == nil || !strings.Contains(result.Err.Error(), "context deadline exceeded") {
+		t.Fatalf("withheld-header result error = %v, want caller deadline", result.Err)
+	}
+	if result.Stdout != "" {
+		t.Fatalf("withheld-header result published partial output: stdout=%q", result.Stdout)
+	}
+	select {
+	case <-blockingBackend.Canceled():
+	case <-time.After(2 * time.Second):
+		t.Fatal("withheld-header backend did not observe caller cancellation")
+	}
+	t.Logf("withheld-header characterization: err=%v stdout=%q stderr=%q", result.Err, result.Stdout, result.Stderr)
+}
+
+func closeLocalAIConfiguredServerCharacterization(
+	t *testing.T,
+	client *localAIConfiguredEmbedClientPath,
+	server *support.FunctionalAPIServer,
+	serverURL string,
+	serverPath *localAIConfiguredEmbedOwnerPath,
+	fixture *localai.Fixture,
+) {
+	t.Helper()
 	if err := client.process.Close(context.Background()); err != nil {
 		t.Fatalf("close configured-server characterization client: %v", err)
 	}

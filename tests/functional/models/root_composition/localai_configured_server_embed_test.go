@@ -301,7 +301,7 @@ func assertLocalAIConfiguredEmbedValidationEffects(
 // for the built-in EMBED model. Direct CLI and an independent thin client use
 // separate roots, while the server owns the only actual HTTP listener and the
 // controlled LocalAI fixture remains the sole protocol dependency.
-func TestLocalAIConfiguredServerEMBEDParity(t *testing.T) {
+func TestModelsConfiguredServerEMBEDParity(t *testing.T) {
 	t.Parallel()
 
 	fixture := functionalStartLocalAI(t, localai.Options{EmbeddingDimensions: 5})
