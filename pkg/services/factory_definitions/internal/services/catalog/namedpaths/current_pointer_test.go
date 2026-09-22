@@ -120,6 +120,30 @@ func TestRemoveCurrentPointerRejectsNilResolver(t *testing.T) {
 	}
 }
 
+func TestWriteCurrentPointerReportsMissingDefinitionAndWriteFailure(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	if err := testNamedPaths.WriteCurrentPointer(rootDir, "missing"); err == nil || !strings.Contains(err.Error(), "find factory config") {
+		t.Fatalf("WriteCurrentPointer(missing) = %v, want missing-config error", err)
+	}
+
+	factoryDir := filepath.Join(rootDir, "alpha")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(alpha): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, factoryConfigFile), []byte(`{"name":"alpha"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(alpha factory): %v", err)
+	}
+	failingResolver, err := New(writeCurrentPointerErrorFileSystem{err: errors.New("pointer write unavailable")})
+	if err != nil {
+		t.Fatalf("New(failing filesystem): %v", err)
+	}
+	if err := failingResolver.WriteCurrentPointer(rootDir, "alpha"); err == nil || !strings.Contains(err.Error(), "write current factory pointer") {
+		t.Fatalf("WriteCurrentPointer(write failure) = %v, want wrapped write error", err)
+	}
+}
+
 func TestResolveExistingDirReportsMissingAndNonRegularDefinitions(t *testing.T) {
 	t.Parallel()
 
@@ -182,3 +206,20 @@ func (noRemoveCurrentPointerFileSystem) ReadFile(string) ([]byte, error)        
 func (noRemoveCurrentPointerFileSystem) Stat(string) (fs.FileInfo, error)            { return nil, fs.ErrNotExist }
 func (noRemoveCurrentPointerFileSystem) MkdirAll(string, fs.FileMode) error          { return nil }
 func (noRemoveCurrentPointerFileSystem) WriteFile(string, []byte, fs.FileMode) error { return nil }
+
+type writeCurrentPointerErrorFileSystem struct {
+	noRemoveCurrentPointerFileSystem
+	err error
+}
+
+func (f writeCurrentPointerErrorFileSystem) Stat(path string) (fs.FileInfo, error) {
+	return os.Stat(path)
+}
+
+func (f writeCurrentPointerErrorFileSystem) MkdirAll(path string, mode fs.FileMode) error {
+	return os.MkdirAll(path, mode)
+}
+
+func (f writeCurrentPointerErrorFileSystem) WriteFile(string, []byte, fs.FileMode) error {
+	return f.err
+}

@@ -27,6 +27,7 @@ type rollbackLoadingFileSystem struct {
 	mu                 sync.Mutex
 	blockedFactoryName string
 	allowedConfigReads int
+	failPointerWrites  bool
 }
 
 func newRollbackLoadingFileSystem() *rollbackLoadingFileSystem {
@@ -44,6 +45,12 @@ func (f *rollbackLoadingFileSystem) FailFactoryLoad(name string) func() {
 		f.allowedConfigReads = 0
 		f.mu.Unlock()
 	}
+}
+
+func (f *rollbackLoadingFileSystem) FailCurrentPointerWrites() {
+	f.mu.Lock()
+	f.failPointerWrites = true
+	f.mu.Unlock()
 }
 
 func (f *rollbackLoadingFileSystem) ReadFile(path string) ([]byte, error) {
@@ -73,7 +80,19 @@ func (f *rollbackLoadingFileSystem) Stat(path string) (fs.FileInfo, error) {
 	return f.Local.Stat(path)
 }
 
+func (f *rollbackLoadingFileSystem) WriteFile(path string, data []byte, mode fs.FileMode) error {
+	f.mu.Lock()
+	failPointerWrite := f.failPointerWrites
+	f.mu.Unlock()
+	if failPointerWrite && filepath.Base(path) == ".current-factory" {
+		return fmt.Errorf("injected current Factory pointer write failure")
+	}
+	return f.Local.WriteFile(path, data, mode)
+}
+
 func TestDefinitionActivationNamedUpsertRollbackRemovesCandidateAndRestoresAbsentSelector(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(rootDir, interfaces.FactoryConfigFile),
@@ -116,6 +135,8 @@ func TestDefinitionActivationNamedUpsertRollbackRemovesCandidateAndRestoresAbsen
 }
 
 func TestDefinitionActivationNamedUpsertRollbackRestoresExistingSelector(t *testing.T) {
+	t.Parallel()
+
 	rootDir := t.TempDir()
 	sourceDir := t.TempDir()
 	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
@@ -167,6 +188,47 @@ func TestDefinitionActivationNamedUpsertRollbackRestoresExistingSelector(t *test
 	}
 }
 
+func TestDefinitionActivationNamedUpsertRollbackDiscardsCandidateWhenPointerWriteFails(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(rootDir, interfaces.FactoryConfigFile),
+		[]byte(definitionActivationFactoryBody("root-runtime", "root-task", nil)),
+		0o644,
+	); err != nil {
+		t.Fatalf("write root Factory config: %v", err)
+	}
+
+	loadingFileSystem := newRollbackLoadingFileSystem()
+	loadingFileSystem.FailCurrentPointerWrites()
+	server := startDefinitionActivationRollbackServer(t, rootDir, loadingFileSystem)
+
+	const candidateName = "rollback-pointer-write"
+	response := upsertDefinitionActivationNamedFactoryExpectStatus(
+		t,
+		server.URL(),
+		definitionActivationFactoryBody(candidateName, "candidate-task", nil),
+		http.StatusInternalServerError,
+	)
+	if response.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
+		t.Fatalf("pointer-write rollback error code = %q, want INTERNAL_ERROR", response.Code)
+	}
+	if _, err := os.Stat(filepath.Join(rootDir, candidateName)); !os.IsNotExist(err) {
+		t.Fatalf("candidate Factory directory after pointer-write rollback: err=%v, want absent", err)
+	}
+	if _, err := os.Stat(filepath.Join(rootDir, ".current-factory")); !os.IsNotExist(err) {
+		t.Fatalf("current Factory selector after pointer-write rollback: err=%v, want absent", err)
+	}
+	current := getDefinitionActivationCurrentFactory(t, server.URL())
+	if current.Name != factoryapi.FactoryName("UNDEFINED") {
+		t.Fatalf("current Factory name after pointer-write rollback = %q, want UNDEFINED", current.Name)
+	}
+	if current.WorkTypes == nil || len(*current.WorkTypes) != 1 || (*current.WorkTypes)[0].Name != "root-task" {
+		t.Fatalf("current Factory work types after pointer-write rollback = %#v, want root-task", current.WorkTypes)
+	}
+}
+
 func startDefinitionActivationRollbackServer(
 	t *testing.T,
 	rootDir string,
@@ -180,6 +242,7 @@ func startDefinitionActivationRollbackServer(
 		Edges: serviceedges.Edges{
 			FactoryDefinitionLoadingFileSystem:        loadingFileSystem,
 			FactoryDefinitionAuthoredReaderFileSystem: loadingFileSystem,
+			FactoryDefinitionNamedPathFileSystem:      loadingFileSystem,
 		},
 	})
 }
