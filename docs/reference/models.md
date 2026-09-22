@@ -70,7 +70,7 @@ sizes exclude the additional platform-specific backend and runtime files.
 | `llm` | `OMNI` | 5.0 GB |
 | `asr` | `ASR` | 148 MB |
 | `tts` | `TTS` | 1.714 GB |
-| `embed` | `EMBED` | 1.21 GB |
+| `embed` | `EMBED` | 639 MB |
 
 Run `you --json models inspect <name>` to confirm the pinned source before a
 pull. After installation, `cacheBytes` reports the exact managed cache size.

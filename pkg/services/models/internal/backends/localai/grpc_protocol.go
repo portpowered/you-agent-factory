@@ -17,12 +17,13 @@ import (
 )
 
 const (
-	localAIHealthMethod              = "/backend.Backend/Health"
-	localAILoadModelMethod           = "/backend.Backend/LoadModel"
-	localAIPredictMethod             = "/backend.Backend/Predict"
-	localAIEmbeddingMethod           = "/backend.Backend/Embedding"
-	localAIModelBatchSize            = 512
-	localAIDisableProjectorGPUOption = "mmproj_use_gpu:false"
+	localAIHealthMethod                    = "/backend.Backend/Health"
+	localAILoadModelMethod                 = "/backend.Backend/LoadModel"
+	localAIPredictMethod                   = "/backend.Backend/Predict"
+	localAIEmbeddingMethod                 = "/backend.Backend/Embedding"
+	localAIModelBatchSize                  = 512
+	localAIEmbedContextSize          int32 = 512
+	localAIDisableProjectorGPUOption       = "mmproj_use_gpu:false"
 )
 
 type invocationEndpointContextKey struct{}
@@ -152,14 +153,20 @@ func loadModel(
 		)
 	}
 	options = append(options, projectorLoadOptions(configuration)...)
+	isBuiltInEmbed := strings.EqualFold(configuration.ModelName, models.BuiltInModelNameEmbed)
+	contextSize := int32(0)
+	if isBuiltInEmbed {
+		contextSize = localAIEmbedContextSize
+	}
 	payload, err := proto.Marshal(&ModelOptions{
-		Model:      configuration.ModelName,
-		NBatch:     localAIModelBatchSize,
-		Embeddings: strings.EqualFold(configuration.ModelName, models.BuiltInModelNameEmbed),
-		ModelFile:  modelFile,
-		MMProj:     strings.TrimSpace(configuration.MMProjPath),
-		ModelPath:  filepath.Dir(modelFile),
-		Options:    options,
+		Model:       configuration.ModelName,
+		ContextSize: contextSize,
+		NBatch:      localAIModelBatchSize,
+		Embeddings:  isBuiltInEmbed,
+		ModelFile:   modelFile,
+		MMProj:      strings.TrimSpace(configuration.MMProjPath),
+		ModelPath:   filepath.Dir(modelFile),
+		Options:     options,
 	})
 	if err != nil {
 		return fmt.Errorf(

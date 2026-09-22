@@ -158,7 +158,7 @@ func testModelsDocumentation(t *testing.T, process support.Process) {
 		"| `llm` | `OMNI` | 5.0 GB |",
 		"| `asr` | `ASR` | 148 MB |",
 		"| `tts` | `TTS` | 1.714 GB |",
-		"| `embed` | `EMBED` | 1.21 GB |",
+		"| `embed` | `EMBED` | 639 MB |",
 		"additional platform-specific backend and runtime files",
 		"`cacheBytes` reports the exact managed cache size",
 		"INFINITE_YOU_OMNIVOICE_CACHE_DIR",
