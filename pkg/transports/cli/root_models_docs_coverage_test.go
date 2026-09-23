@@ -1130,7 +1130,18 @@ func TestModelsCommand_HelpMentionsDiscoverySurface(t *testing.T) {
 		t.Fatalf("execute models --help: %v", err)
 	}
 	help := out.String()
-	for _, want := range []string{"Run local inference", "speech", "voice", "embeddings", "list", "inspect", "invoke", "pull", "Current Factory", "./factory/factory.json", "--server"} {
+	for _, want := range []string{
+		"Run local inference",
+		"speech",
+		"voice",
+		"embeddings",
+		"list",
+		"inspect",
+		"invoke",
+		"pull",
+		"Direct built-in invocation does not require a Current Factory",
+		"--server",
+	} {
 		if !bytes.Contains([]byte(help), []byte(want)) {
 			t.Fatalf("models help missing %q:\n%s", want, help)
 		}
