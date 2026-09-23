@@ -1,0 +1,131 @@
+name: Controlled Raw Failure Witness
+
+# This intentionally selected expected-failure fixture is isolated from the
+# required CI workflow so label activity cannot restart or cancel required CI.
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: controlled-raw-failure-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  controlled-raw-failure:
+    if: >-
+      github.event.pull_request.number == 2637 &&
+      github.event.pull_request.head.ref == 'factory-reliability-functional-raw-evidence-20260923' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.label.name == 'ci-controlled-raw-failure'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
+      FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
+      FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
+      FUNCTIONAL_QUARANTINE_EVIDENCE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      FUNCTIONAL_QUARANTINE_EVIDENCE_SHA: ${{ github.event.pull_request.head.sha }}
+      FUNCTIONAL_QUARANTINE_EVIDENCE_OUTPUT: .artifacts/functional-test-viz/quarantine-package-evidence.txt
+      FUNCTIONAL_QUARANTINE_EVIDENCE_TIMEOUT: 15m
+      FUNCTIONAL_TEST_VIZ_PACKAGES: github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailure github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailurepeer
+      FUNCTIONAL_TEST_TIER: controlled-raw-failure-witness
+      FUNCTIONAL_TEST_TRIGGER: pull_request_label
+      FUNCTIONAL_TEST_BUDGET: 15m
+      FUNCTIONAL_SHORT: "false"
+      FUNCTIONAL_DEFAULT_JOBS: "2"
+      FUNCTIONAL_QUARANTINE: ""
+      FUNCTIONAL_RAW_FAILURE_WITNESS: "1"
+      FUNCTIONAL_RAW_FAILURE_RENDEZVOUS_TIMEOUT: 90s
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Validate controlled fixture head and select rendezvous
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const eventPullRequest = context.payload.pull_request;
+            const eventHead = eventPullRequest?.head?.sha;
+            const expectedRepository = `${context.repo.owner}/${context.repo.repo}`;
+            if (
+              context.issue.number !== 2637 ||
+              eventPullRequest?.head?.ref !== "factory-reliability-functional-raw-evidence-20260923" ||
+              eventPullRequest?.head?.repo?.full_name !== expectedRepository ||
+              context.payload.label?.name !== "ci-controlled-raw-failure"
+            ) {
+              core.setFailed("Refusing an event that does not match the controlled raw failure fixture.");
+              return;
+            }
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: 2637,
+            });
+            const liveHead = pullRequest.head.sha;
+            if (!eventHead || eventHead !== liveHead) {
+              core.setFailed(`Refusing stale controlled raw failure event: event head ${eventHead ?? "missing"}, live head ${liveHead}.`);
+              return;
+            }
+            core.exportVariable("FUNCTIONAL_RAW_FAILURE_RENDEZVOUS", `${process.env.RUNNER_TEMP}/pr2637-raw-failure-${liveHead}`);
+      - name: Run controlled raw failure fixture
+        id: controlled-run
+        continue-on-error: true
+        shell: bash
+        run: bash scripts/ci/run-functional-coverage-with-quarantine.sh
+      - name: Verify expected failure and publish witness
+        if: always()
+        shell: bash
+        env:
+          CONTROLLED_RUN_OUTCOME: ${{ steps.controlled-run.outcome }}
+        run: |
+          set -euo pipefail
+          artifact_root="$FUNCTIONAL_TEST_VIZ_DIR"
+          rendezvous="$FUNCTIONAL_RAW_FAILURE_RENDEZVOUS"
+          test "$CONTROLLED_RUN_OUTCOME" = success || { echo "controlled functional runner outcome was $CONTROLLED_RUN_OUTCOME" >&2; exit 1; }
+          test "$(tr -d '[:space:]' < "$FUNCTIONAL_GOCOVERAGE_EXIT_FILE")" = 1 || { echo "fixture did not produce the expected gocoveragecheck exit code" >&2; exit 1; }
+          test "$(cat "$artifact_root/c09-critical-path/quarantine-status.txt")" = 0 || { echo "quarantine validator failed" >&2; exit 1; }
+          test -s "$artifact_root/raw-failures/index.json" || { echo "raw failure index is missing" >&2; exit 1; }
+          jq -e --arg primary "github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailure" --arg peer "github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailurepeer" '
+            .captureStatus == "complete" and
+            (.failures | length == 2) and
+            ([.failures[] | select(.package == $primary and .exitStatus == 1 and .captureStatus == "complete" and (.selectors | index("TestRawFailureWitness") != null))] | length == 1) and
+            ([.failures[] | select(.package == $peer and .exitStatus == 1 and .captureStatus == "complete" and (.selectors | index("TestRawFailurePeerWitness") != null))] | length == 1)
+          ' "$artifact_root/raw-failures/index.json" > /dev/null
+          source="$rendezvous/interleaving.jsonl"
+          target="$artifact_root/raw-failure-interleaving.jsonl"
+          test -s "$source" || { echo "missing controlled raw failure interleaving witness: $source" >&2; exit 1; }
+          test "$(wc -l < "$source")" -eq 6 || { echo "incomplete controlled raw failure interleaving witness: $source" >&2; exit 1; }
+          cp "$source" "$target"
+          if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+            cat "$FUNCTIONAL_COVERAGE_VERDICT_FILE" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "Controlled expected failures and the six-event interleaving witness were captured completely."
+      - name: Upload controlled raw failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: controlled-raw-failure-witness
+          path: |
+            .artifacts/functional-test-viz/functional-tests.md
+            .artifacts/functional-test-viz/functional-timing-summary.json
+            .artifacts/functional-test-viz/coverage-summary.json
+            .artifacts/functional-test-viz/coverage.out
+            .artifacts/functional-test-viz/command.log
+            .artifacts/functional-test-viz/quarantine-package-evidence.txt
+            .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
+            .artifacts/functional-test-viz/functional-coverage-verdict.txt
+            .artifacts/functional-test-viz/raw-failures/index.json
+            .artifacts/functional-test-viz/raw-failures/*.jsonl
+            .artifacts/functional-test-viz/raw-failure-interleaving.jsonl
+            .artifacts/functional-test-viz/c09-critical-path/critical-path-timing.txt
+          if-no-files-found: ignore
+          retention-days: 14
