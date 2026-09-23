@@ -43,186 +43,6 @@ func TestRestoreRestoredActiveDispatchResolvesUniqueCanonicalPlace(t *testing.T)
 	}
 }
 
-func TestRestoreRestoredMissingInitialWorkUsesCompleteGuardMatrix(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name        string
-		mutate      func(*interfaces.FactoryWorldState)
-		wantRecover bool
-	}{
-		{name: "U01 exact admitted initial Work", wantRecover: true},
-		{
-			name: "U02 duplicate admission",
-			mutate: func(restored *interfaces.FactoryWorldState) {
-				restored.WorkRequestsByID["request-duplicate"] = restored.WorkRequestsByID["request-1"]
-			},
-		},
-		{
-			name: "U03 admission and indexes disagree on Work type",
-			mutate: func(restored *interfaces.FactoryWorldState) {
-				item := restored.WorkRequestsByID["request-1"].WorkItems[0]
-				item.WorkTypeID = "other"
-				restored.WorkRequestsByID["request-1"] = interfaces.WorkRequestPayload{
-					RequestID: "request-1", WorkItems: []work.FactoryWorkItem{item},
-				}
-			},
-		},
-		{
-			name: "U04 unknown Work type",
-			mutate: func(restored *interfaces.FactoryWorldState) {
-				item := restored.WorkItemsByID["work-recoverable"]
-				item.WorkTypeID = "unknown"
-				restored.WorkItemsByID[item.ID] = item
-				restored.ActiveWorkItemsByID[item.ID] = item
-				restored.WorkRequestsByID["request-1"] = interfaces.WorkRequestPayload{
-					RequestID: "request-1", WorkItems: []work.FactoryWorkItem{item},
-				}
-			},
-		},
-		{
-			name: "U05 state is not the sole initial state",
-			mutate: func(restored *interfaces.FactoryWorldState) {
-				item := restored.WorkItemsByID["work-recoverable"]
-				item.State = "done"
-				restored.WorkItemsByID[item.ID] = item
-				restored.ActiveWorkItemsByID[item.ID] = item
-			},
-		},
-		{
-			name: "U06 multiple initial definitions",
-			mutate: func(restored *interfaces.FactoryWorldState) {
-				restored.Topology.WorkTypes[0].States = append(
-					restored.Topology.WorkTypes[0].States,
-					interfaces.FactoryStateDefinition{Value: "ready", Category: "INITIAL"},
-				)
-			},
-		},
-		{
-			name: "U07 later Work move",
-			mutate: func(restored *interfaces.FactoryWorldState) {
-				restored.WorkStateChangesByWorkID = map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
-					"work-recoverable": {{WorkID: "work-recoverable", ToPlaceID: "task:done", Sequence: 1}},
-				}
-			},
-		},
-		{
-			name: "U08 active dispatch",
-			mutate: func(restored *interfaces.FactoryWorldState) {
-				restored.ActiveDispatches = map[string]interfaces.FactoryWorldDispatch{
-					"dispatch-active": {DispatchID: "dispatch-active", WorkItemIDs: []string{"work-recoverable"}},
-				}
-			},
-		},
-		{
-			name: "U09 completed dispatch",
-			mutate: func(restored *interfaces.FactoryWorldState) {
-				restored.CompletedDispatches = []interfaces.FactoryWorldDispatchCompletion{{
-					DispatchID: "dispatch-completed", WorkItemIDs: []string{"work-recoverable"},
-				}}
-			},
-		},
-		{
-			name: "U10 terminal failure approval conflict and malformed identity",
-			mutate: func(restored *interfaces.FactoryWorldState) {
-				restored.TerminalWorkByID = map[string]interfaces.FactoryTerminalWork{
-					"work-recoverable": {WorkItem: restored.WorkItemsByID["work-recoverable"]},
-				}
-				restored.FailedWorkItemsByID = map[string]work.FactoryWorkItem{
-					"work-recoverable": restored.WorkItemsByID["work-recoverable"],
-				}
-				restored.PendingHumanApprovalsByID = map[string]interfaces.FactoryWorldHumanApproval{
-					"approval-1": {ApprovalID: "approval-1", WorkItemIDs: []string{"work-recoverable"}},
-				}
-				restored.PlaceOccupancyByID = map[string]interfaces.FactoryPlaceOccupancy{
-					"task:init": {PlaceID: "task:init", WorkItemIDs: []string{"work-recoverable"}},
-					"task:done": {PlaceID: "task:done", WorkItemIDs: []string{"work-recoverable"}},
-				}
-				tampered := restored.WorkItemsByID["work-recoverable"]
-				tampered.ID = "different-work"
-				restored.WorkItemsByID["work-recoverable"] = tampered
-			},
-		},
-	}
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			restored := restoredMissingInitialWorkFixture()
-			if test.mutate != nil {
-				test.mutate(restored)
-			}
-			marking := petri.NewMarking("test-net")
-			cfg := &runtimeConfig{
-				net:                buildSimpleNet(),
-				clock:              platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Second),
-				restoredWorldState: restored,
-			}
-			seeded, err := restoreRestoredWorkMarking(cfg, marking, time.Unix(0, 0).UTC(), nil, nil)
-			if test.wantRecover {
-				assertRecoveredMissingInitialWork(t, seeded, marking)
-				return
-			}
-			if err == nil {
-				t.Fatal("restoreRestoredWorkMarking succeeded for an ambiguous or conflicting recording")
-			}
-			if tokens := marking.TokensInPlace("task:init"); len(tokens) != 0 {
-				t.Fatalf("fail-closed restore seeded tokens = %#v", tokens)
-			}
-		})
-	}
-}
-
-func restoredMissingInitialWorkFixture() *interfaces.FactoryWorldState {
-	item := work.FactoryWorkItem{
-		ID: "work-recoverable", WorkTypeID: "task", State: "init", DisplayName: "Recover me",
-		ChainingTraceDepth: 2, CurrentChainingTraceID: "trace-current", PreviousChainingTraceIDs: []string{"trace-parent"},
-		TraceID: "trace-work", ParentID: "parent-work", Tags: map[string]string{"lane": "recovery"},
-	}
-	return &interfaces.FactoryWorldState{
-		Topology: interfaces.InitialStructurePayload{
-			WorkTypes: []interfaces.FactoryWorkType{{
-				ID: "task", States: []interfaces.FactoryStateDefinition{
-					{Value: "init", Category: "INITIAL"}, {Value: "done", Category: "TERMINAL"},
-				},
-			}},
-			Places: []interfaces.FactoryPlace{{ID: "task:init", TypeID: "task", State: "init", Category: "INITIAL"}},
-		},
-		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
-			"request-1": {RequestID: "request-1", WorkItems: []work.FactoryWorkItem{item}},
-		},
-		WorkItemsByID:       map[string]work.FactoryWorkItem{item.ID: item},
-		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{item.ID: item},
-		RelationsByWorkID: map[string][]work.FactoryRelation{item.ID: {{
-			Type: "DEPENDS_ON", TargetWorkID: "parent-work", RequiredState: "done",
-		}}},
-		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{},
-	}
-}
-
-func assertRecoveredMissingInitialWork(
-	t *testing.T,
-	seeded map[string]struct{},
-	marking *petri.Marking,
-) {
-	t.Helper()
-	if len(seeded) != 1 {
-		t.Fatalf("seeded Work IDs = %#v, want one recovered Work", seeded)
-	}
-	tokens := marking.TokensInPlace("task:init")
-	if len(tokens) != 1 || tokens[0].Color.WorkID != "work-recoverable" {
-		t.Fatalf("recovered task:init tokens = %#v, want one exact Work", tokens)
-	}
-	token := tokens[0]
-	if token.Color.RequestID != "request-1" || token.Color.Name != "Recover me" ||
-		token.Color.TraceID != "trace-work" || token.Color.ParentID != "parent-work" ||
-		token.Color.CurrentChainingTraceID != "trace-current" || token.Color.ChainingTraceDepth != 2 ||
-		!reflect.DeepEqual(token.Color.PreviousChainingTraceIDs, []string{"trace-parent"}) ||
-		!reflect.DeepEqual(token.Color.Tags, map[string]string{"lane": "recovery"}) ||
-		len(token.Color.Relations) != 1 || token.Color.Relations[0].TargetWorkID != "parent-work" {
-		t.Fatalf("recovered Work metadata = %#v, want recorded request/lineage/relation metadata", token.Color)
-	}
-}
-
 func TestNew_WithRestoredActiveDispatchMissingPlaceResolvesCanonicalPlace(t *testing.T) {
 	restored := restoredMissingPlaceDispatchFixture()
 	f, err := newTestFactory(
@@ -718,4 +538,219 @@ func TestReconcileRuntimeRestoredDispatches(t *testing.T) {
 			t.Fatal("reconcile invalid restored dispatch: want an identity error")
 		}
 	})
+}
+
+type restoredMissingInitialWorkCase struct {
+	name        string
+	mutate      func(*interfaces.FactoryWorldState)
+	wantRecover bool
+}
+
+func TestRestoreRestoredMissingInitialWorkUsesCompleteGuardMatrix(t *testing.T) {
+	t.Parallel()
+	for _, test := range restoredMissingInitialWorkCases() {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			restored := restoredMissingInitialWorkFixture()
+			if test.mutate != nil {
+				test.mutate(restored)
+			}
+			marking := petri.NewMarking("test-net")
+			cfg := &runtimeConfig{
+				net:                buildSimpleNet(),
+				clock:              platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Second),
+				restoredWorldState: restored,
+			}
+			seeded, err := restoreRestoredWorkMarking(cfg, marking, time.Unix(0, 0).UTC(), nil, nil)
+			if test.wantRecover {
+				assertRecoveredMissingInitialWork(t, seeded, marking)
+				return
+			}
+			if err == nil {
+				t.Fatal("restoreRestoredWorkMarking succeeded for an ambiguous or conflicting recording")
+			}
+			if tokens := marking.TokensInPlace("task:init"); len(tokens) != 0 {
+				t.Fatalf("fail-closed restore seeded tokens = %#v", tokens)
+			}
+		})
+	}
+}
+
+func TestRestoreRestoredMissingInitialWorkUsesLegacyFactorySnapshotWhenTopologyIsMissing(t *testing.T) {
+	restored := restoredMissingInitialWorkFixture()
+	restored.Topology.WorkTypes = nil
+	restored.Topology.Places = nil
+	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{
+		"work_types": []any{map[string]any{
+			"id": "task", "name": "task",
+			"states": []any{map[string]any{
+				"id": "init", "name": "init", "type": "INITIAL",
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	restored.Factory = snapshot
+	marking := petri.NewMarking("test-net")
+	cfg := &runtimeConfig{
+		net:                buildSimpleNet(),
+		clock:              platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Second),
+		restoredWorldState: restored,
+	}
+	seeded, err := restoreRestoredWorkMarking(cfg, marking, time.Unix(0, 0).UTC(), nil, nil)
+	if err != nil {
+		t.Fatalf("restoreRestoredWorkMarking: %v", err)
+	}
+	assertRecoveredMissingInitialWork(t, seeded, marking)
+}
+
+func restoredMissingInitialWorkCases() []restoredMissingInitialWorkCase {
+	return append([]restoredMissingInitialWorkCase{
+		{name: "U01 exact admitted initial Work", wantRecover: true},
+		{
+			name: "U02 duplicate admission",
+			mutate: func(restored *interfaces.FactoryWorldState) {
+				restored.WorkRequestsByID["request-duplicate"] = restored.WorkRequestsByID["request-1"]
+			},
+		},
+		{
+			name: "U03 admission and indexes disagree on Work type",
+			mutate: func(restored *interfaces.FactoryWorldState) {
+				item := restored.WorkRequestsByID["request-1"].WorkItems[0]
+				item.WorkTypeID = "other"
+				restored.WorkRequestsByID["request-1"] = interfaces.WorkRequestPayload{
+					RequestID: "request-1", WorkItems: []work.FactoryWorkItem{item},
+				}
+			},
+		},
+		{
+			name: "U04 unknown Work type",
+			mutate: func(restored *interfaces.FactoryWorldState) {
+				item := restored.WorkItemsByID["work-recoverable"]
+				item.WorkTypeID = "unknown"
+				restored.WorkItemsByID[item.ID] = item
+				restored.ActiveWorkItemsByID[item.ID] = item
+				restored.WorkRequestsByID["request-1"] = interfaces.WorkRequestPayload{
+					RequestID: "request-1", WorkItems: []work.FactoryWorkItem{item},
+				}
+			},
+		},
+		{
+			name: "U05 state is not the sole initial state",
+			mutate: func(restored *interfaces.FactoryWorldState) {
+				item := restored.WorkItemsByID["work-recoverable"]
+				item.State = "done"
+				restored.WorkItemsByID[item.ID] = item
+				restored.ActiveWorkItemsByID[item.ID] = item
+			},
+		},
+	}, restoredMissingInitialWorkLaterCases()...)
+}
+
+func restoredMissingInitialWorkLaterCases() []restoredMissingInitialWorkCase {
+	return []restoredMissingInitialWorkCase{
+		{
+			name: "U06 multiple initial definitions",
+			mutate: func(restored *interfaces.FactoryWorldState) {
+				restored.Topology.WorkTypes[0].States = append(
+					restored.Topology.WorkTypes[0].States,
+					interfaces.FactoryStateDefinition{Value: "ready", Category: "INITIAL"},
+				)
+			},
+		},
+		{
+			name: "U07 later Work move",
+			mutate: func(restored *interfaces.FactoryWorldState) {
+				restored.WorkStateChangesByWorkID = map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
+					"work-recoverable": {{WorkID: "work-recoverable", ToPlaceID: "task:done", Sequence: 1}},
+				}
+			},
+		},
+		{
+			name: "U08 active dispatch",
+			mutate: func(restored *interfaces.FactoryWorldState) {
+				restored.ActiveDispatches = map[string]interfaces.FactoryWorldDispatch{
+					"dispatch-active": {DispatchID: "dispatch-active", WorkItemIDs: []string{"work-recoverable"}},
+				}
+			},
+		},
+		{
+			name: "U09 completed dispatch",
+			mutate: func(restored *interfaces.FactoryWorldState) {
+				restored.CompletedDispatches = []interfaces.FactoryWorldDispatchCompletion{{
+					DispatchID: "dispatch-completed", WorkItemIDs: []string{"work-recoverable"},
+				}}
+			},
+		},
+		{
+			name: "U10 terminal failure approval conflict and malformed identity",
+			mutate: func(restored *interfaces.FactoryWorldState) {
+				restored.TerminalWorkByID = map[string]interfaces.FactoryTerminalWork{
+					"work-recoverable": {WorkItem: restored.WorkItemsByID["work-recoverable"]},
+				}
+				restored.FailedWorkItemsByID = map[string]work.FactoryWorkItem{
+					"work-recoverable": restored.WorkItemsByID["work-recoverable"],
+				}
+				restored.PendingHumanApprovalsByID = map[string]interfaces.FactoryWorldHumanApproval{
+					"approval-1": {ApprovalID: "approval-1", WorkItemIDs: []string{"work-recoverable"}},
+				}
+				restored.PlaceOccupancyByID = map[string]interfaces.FactoryPlaceOccupancy{
+					"task:init": {PlaceID: "task:init", WorkItemIDs: []string{"work-recoverable"}},
+					"task:done": {PlaceID: "task:done", WorkItemIDs: []string{"work-recoverable"}},
+				}
+				tampered := restored.WorkItemsByID["work-recoverable"]
+				tampered.ID = "different-work"
+				restored.WorkItemsByID["work-recoverable"] = tampered
+			},
+		},
+	}
+}
+
+func restoredMissingInitialWorkFixture() *interfaces.FactoryWorldState {
+	item := work.FactoryWorkItem{
+		ID: "work-recoverable", WorkTypeID: "task", State: "init", DisplayName: "Recover me",
+		ChainingTraceDepth: 2, CurrentChainingTraceID: "trace-current", PreviousChainingTraceIDs: []string{"trace-parent"},
+		TraceID: "trace-work", ParentID: "parent-work", Tags: map[string]string{"lane": "recovery"},
+	}
+	return &interfaces.FactoryWorldState{
+		Topology: interfaces.InitialStructurePayload{
+			WorkTypes: []interfaces.FactoryWorkType{{
+				ID: "task", States: []interfaces.FactoryStateDefinition{
+					{Value: "init", Category: "INITIAL"}, {Value: "done", Category: "TERMINAL"},
+				},
+			}},
+			Places: []interfaces.FactoryPlace{{ID: "task:init", TypeID: "task", State: "init", Category: "INITIAL"}},
+		},
+		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
+			"request-1": {RequestID: "request-1", WorkItems: []work.FactoryWorkItem{item}},
+		},
+		WorkItemsByID:       map[string]work.FactoryWorkItem{item.ID: item},
+		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{item.ID: item},
+		RelationsByWorkID: map[string][]work.FactoryRelation{item.ID: {{
+			Type: "DEPENDS_ON", TargetWorkID: "parent-work", RequiredState: "done",
+		}}},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{},
+	}
+}
+
+func assertRecoveredMissingInitialWork(t *testing.T, seeded map[string]struct{}, marking *petri.Marking) {
+	t.Helper()
+	if len(seeded) != 1 {
+		t.Fatalf("seeded Work IDs = %#v, want one recovered Work", seeded)
+	}
+	tokens := marking.TokensInPlace("task:init")
+	if len(tokens) != 1 || tokens[0].Color.WorkID != "work-recoverable" {
+		t.Fatalf("recovered task:init tokens = %#v, want one exact Work", tokens)
+	}
+	token := tokens[0]
+	if token.Color.RequestID != "request-1" || token.Color.Name != "Recover me" ||
+		token.Color.TraceID != "trace-work" || token.Color.ParentID != "parent-work" ||
+		token.Color.CurrentChainingTraceID != "trace-current" || token.Color.ChainingTraceDepth != 2 ||
+		!reflect.DeepEqual(token.Color.PreviousChainingTraceIDs, []string{"trace-parent"}) ||
+		!reflect.DeepEqual(token.Color.Tags, map[string]string{"lane": "recovery"}) ||
+		len(token.Color.Relations) != 1 || token.Color.Relations[0].TargetWorkID != "parent-work" {
+		t.Fatalf("recovered Work metadata = %#v, want recorded request/lineage/relation metadata", token.Color)
+	}
 }
