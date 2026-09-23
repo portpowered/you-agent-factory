@@ -396,5 +396,35 @@
       "passes": false,
       "notes": ""
     }
+  ],
+  "reviewCorrections": [
+    {
+      "id": "CI-1",
+      "source": "Operator RejectionFeedback for PR #2642, review comment https://github.com/portpowered/you-agent-factory/pull/2642#issuecomment-5792605469",
+      "owner": "tests/integration/models/platform_conformance",
+      "scope": {
+        "in": [
+          "Deterministically inject one child-start failure in TestPortableControlledReservationContention and match each attempt to its durable reservation state.",
+          "Report typed budget reservation codes so budget_exhausted remains distinguishable from other bounded failures."
+        ],
+        "out": [
+          "Production runtime behavior, shared workflow changes, unrelated platform-conformance cases, and broad test-harness redesign."
+        ]
+      },
+      "acceptanceCriteria": [
+        "Exactly MaxChildProcesses successful starts are recorded as COMMITTED and consumed.",
+        "The injected post-reservation start failure has one matching RELEASED row; budget_exhausted attempts have no ledger rows.",
+        "The finalized five-row ledger contains only attempt-matched terminal reservations and validates."
+      ],
+      "verification": {
+        "scope": "integration",
+        "dependencyFidelity": "controlled local filesystem ledger and child process",
+        "procedure": "go test ./tests/integration/models/platform_conformance -run '^TestPortableControlledReservationContention$' -count=1 -v -timeout 3m",
+        "propertyProved": "Contention outcomes and final ledger history agree without weakening the four-process budget.",
+        "propertyNotProved": "Hosted current-head Backend Integration and Verification Policy; these require the post-push CI run."
+      },
+      "passes": true,
+      "notes": "PASS for the bounded correction. Windows test helper artifact was sha256:c20847d1c2a6b10009575d76dad21977c4a7bedc84a3c7a5387ee3c02e90c0d6. Focused command go test ./tests/integration/models/platform_conformance -run '^TestPortableControlledReservationContention$' -count=1 -v -timeout 3m passed (0.186s); full package command go test -short -p=4 ./tests/integration/models/platform_conformance -count=1 -timeout 5m passed (3.556s); focused race command go test -race ./tests/integration/models/platform_conformance -run '^TestPortableControlledReservationContention$' -count=1 -timeout 3m passed (2.295s). The deterministic witness verifies four COMMITTED starts, one RELEASED failed-start reservation, and three absent budget_exhausted attempts. Hosted current-head checks remain pending."
+    }
   ]
 }

@@ -456,3 +456,14 @@ Implementation-stage delivery criterion: The implementation stage marks this cri
 - PR #2631 `https://github.com/portpowered/you-agent-factory/pull/2631` — retained TTS diff and real evidence.
 - Run `https://github.com/portpowered/you-agent-factory/actions/runs/35781141584` — two cancelled attempts and dependent Verification Policy.
 - PR #2637 `https://github.com/portpowered/you-agent-factory/pull/2637` — Factory Reliability shared CI owner; the workflow remains excluded without lease.
+
+## 15. Operator-authorized review correction — PR #2642 CI-1
+
+The operator's `RejectionFeedback` authorizes this bounded correction after the exact PR head failed Backend Integration while the exact merge base passed. The blocking review comment is [CI-1](https://github.com/portpowered/you-agent-factory/pull/2642#issuecomment-5792605469), which identifies `TestPortableControlledReservationContention` and the final ledger assertion in `tests/integration/models/platform_conformance/runner_test.go`.
+
+- **Owner:** platform-conformance integration lane.
+- **In scope:** Make the contention witness deterministically inject one child-start failure and assert each outcome against its durable reservation state. Capacity rejections must be `budget_exhausted` and absent from the ledger; the failed start must remain as `RELEASED`; successful starts remain `COMMITTED`. Keep the four-start budget and validate the five-row finalized ledger.
+- **Out of scope:** Production behavior, shared CI/workflow edits, other platform-conformance scenarios, and broad test-harness redesign.
+- **Behavior and observer:** Eight concurrent controlled attempts share one ledger; one injected start failure is released, three capacity losers are rejected, and four children start. The integration test observes each report, process-start count, and final durable ledger; it proves exactly four starts/commits plus one matching released start reservation.
+- **Verification:** `go test ./tests/integration/models/platform_conformance -run '^TestPortableControlledReservationContention$' -count=1 -v -timeout 3m`; highest feasible local fidelity is the existing controlled runner plus the local filesystem budget ledger and child process. The current-head Backend Integration and Verification Policy checks provide the hosted gate; the exact merge-base run already passed and is recorded in CI-1.
+- **Remaining edge:** Hosted current-head checks must start after the correction is pushed; terminal CI and merge remain review-owned.
