@@ -208,9 +208,16 @@ and Recordings.
 
 ## Invoke A Model Directly
 
-Direct invocation of a built-in uses the local Models composition and does not
-require `./factory/factory.json`. If a valid Current Factory exists, its Models
-scope remains available for compatible Factory-backed model configuration.
+Invoke a built-in model directly from any directory. A Current Factory is not
+required. Use verified cached model and backend artifacts for an offline
+text-only OMNI call:
+
+```bash
+you models invoke llm --offline --operation OMNI --input prompt="Explain how a SHA-256 checksum differs from encryption."
+```
+
+If a valid Current Factory exists, its Models scope remains available for
+compatible Factory-backed model configuration.
 
 Without an explicit `--server`, direct invocation stays in the local process.
 An explicit `--server` must identify a reachable service and uses that service
