@@ -15,6 +15,94 @@ import (
 
 const rawFailureTestPackage = "github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailure"
 
+func TestFunctionalRawFailureCaptureRecordsObservedInterleavingOrder(t *testing.T) {
+	rendezvousDirectory := t.TempDir()
+	t.Setenv(functionalRawFailureRendezvousEnv, rendezvousDirectory)
+	capture := newRawFailureTestCapture(t, t.TempDir(), 1<<20)
+	packages := []string{functionalRawFailureRendezvousPrimary, functionalRawFailureRendezvousPeer}
+	kinds := []string{"work.accepted", "worker.completed", "work.dispatched", "worker.started", "worker.output", "work.completed"}
+	capture.beginInvocation(commandInvocation{name: "go", args: append([]string{"test", "-json", "-p=12"}, packages...)})
+
+	for sequence := 1; sequence <= functionalRawFailureRendezvousMaxEvent; sequence++ {
+		packageName := functionalRawFailureRendezvousPrimary
+		if sequence%2 == 0 {
+			packageName = functionalRawFailureRendezvousPeer
+		}
+		line := fmt.Sprintf("witness_test.go:1: Factory Event timeline: sequence=%d kind=%s", sequence, kinds[sequence-1])
+		if err := capture.observeLine(rawFailureTestEvent("output", packageName, "TestRawFailureWitness", line+"\n")); err != nil {
+			t.Fatalf("capture interleaved event %d: %v", sequence, err)
+		}
+		marker := filepath.Join(rendezvousDirectory, fmt.Sprintf("captured-event-%02d-complete", sequence))
+		if _, err := os.Stat(marker); err != nil {
+			t.Fatalf("captured event %d acknowledgement: %v", sequence, err)
+		}
+	}
+	for _, packageName := range packages {
+		if err := capture.observeLine(rawFailureTestEvent(timingOutcomeFail, packageName, "TestRawFailureWitness", "")); err != nil {
+			t.Fatalf("capture failed test for %s: %v", packageName, err)
+		}
+		if err := capture.observeLine(rawFailureTestEvent(timingOutcomeFail, packageName, "", "")); err != nil {
+			t.Fatalf("capture failed package for %s: %v", packageName, err)
+		}
+	}
+	capture.finishInvocation(errors.New("exit status 1"))
+	if err := capture.publish(strings.Repeat("c", 40), true); err != nil {
+		t.Fatalf("publish observed interleaving capture: %v", err)
+	}
+
+	tracePath := filepath.Join(rendezvousDirectory, functionalRawFailureRendezvousTrace)
+	trace, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("read observed interleaving trace: %v", err)
+	}
+	var entries []struct {
+		Sequence int    `json:"sequence"`
+		Package  string `json:"package"`
+		Event    string `json:"event"`
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(trace)), "\n") {
+		var entry struct {
+			Sequence int    `json:"sequence"`
+			Package  string `json:"package"`
+			Event    string `json:"event"`
+		}
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("decode interleaving trace line %q: %v", line, err)
+		}
+		entries = append(entries, entry)
+	}
+	if len(entries) != functionalRawFailureRendezvousMaxEvent {
+		t.Fatalf("interleaving trace entries = %d, want %d", len(entries), functionalRawFailureRendezvousMaxEvent)
+	}
+	for index, entry := range entries {
+		wantPackage := packages[index%len(packages)]
+		if entry.Sequence != index+1 || entry.Package != wantPackage || !strings.Contains(entry.Event, "Factory Event timeline:") {
+			t.Errorf("interleaving trace[%d] = %+v, want sequence %d from %s", index, entry, index+1, wantPackage)
+		}
+	}
+}
+
+func TestFunctionalRawFailureCaptureRejectsWrongInterleavingOrder(t *testing.T) {
+	t.Setenv(functionalRawFailureRendezvousEnv, t.TempDir())
+	capture := newRawFailureTestCapture(t, t.TempDir(), 1<<20)
+	capture.beginInvocation(commandInvocation{
+		name: "go",
+		args: []string{"test", "-json", functionalRawFailureRendezvousPrimary, functionalRawFailureRendezvousPeer},
+	})
+	peerEvent := rawFailureTestEvent("output", functionalRawFailureRendezvousPeer, "TestRawFailurePeerWitness", "Factory Event timeline: sequence=2 kind=worker.completed\n")
+	if err := capture.observeLine(peerEvent); err == nil || !strings.Contains(err.Error(), "expected sequence 1") {
+		t.Fatalf("out-of-order event error = %v, want fail-closed expected-sequence error", err)
+	}
+	capture.finishInvocation(errors.New("exit status 1"))
+	if err := capture.publish(strings.Repeat("d", 40), true); err == nil {
+		t.Fatal("publish wrong interleaving returned nil, want incomplete capture error")
+	}
+	index := readRawFailureTestIndex(t, capture.directory)
+	if index.CaptureStatus != "incomplete" || !strings.Contains(index.CaptureError, "expected sequence 1") {
+		t.Fatalf("wrong interleaving index = %+v, want explicit incomplete error", index)
+	}
+}
+
 func TestFunctionalRawFailureCapturePreservesOnlyFailedPackageEvents(t *testing.T) {
 	directory := t.TempDir()
 	capture := newRawFailureTestCapture(t, directory, 1<<20)

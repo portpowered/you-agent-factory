@@ -61,6 +61,9 @@ func TestRunnableFunctionalPackagePolicy(t *testing.T) {
 		{name: "provider contract package", importPath: ModulePath + "/tests/functional/providers/contract", want: true},
 		{name: "existing package", importPath: ModulePath + "/tests/functional/workflow", want: true},
 		{name: "shared support", importPath: ModulePath + "/tests/functional/internal/support", want: false},
+		{name: "selected raw failure fixture", importPath: ModulePath + "/cmd/gocoveragecheck/testdata/rawfailure", want: true},
+		{name: "selected raw failure peer fixture", importPath: ModulePath + "/cmd/gocoveragecheck/testdata/rawfailurepeer", want: true},
+		{name: "raw failure fixture support", importPath: ModulePath + "/cmd/gocoveragecheck/testdata/rawfailurewitness", want: false},
 		{name: "backend package", importPath: ModulePath + "/pkg/root", want: false},
 	}
 

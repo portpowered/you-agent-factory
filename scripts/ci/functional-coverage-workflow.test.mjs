@@ -166,13 +166,32 @@ test("controlled raw failure selection is limited to the retained labeled PR eve
 	assert.match(selector, /github\.rest\.pulls\.get/);
 	assert.match(selector, /eventHead !== liveHead/);
 	assert.match(selector, /core\.exportVariable\("FUNCTIONAL_RAW_FAILURE_WITNESS", "1"\)/);
-	assert.match(selector, /core\.exportVariable\("FUNCTIONAL_TEST_VIZ_PACKAGES", "github\.com\/portpowered\/infinite-you\/cmd\/gocoveragecheck\/testdata\/rawfailure"\)/);
+	assert.match(selector, /RUNNER_TEMP.*pr2637-raw-failure-.*liveHead/);
+	assert.match(selector, /FUNCTIONAL_RAW_FAILURE_RENDEZVOUS_TIMEOUT", "90s"/);
+	assert.match(selector, /core\.exportVariable\("FUNCTIONAL_TEST_VIZ_PACKAGES", "github\.com\/portpowered\/infinite-you\/cmd\/gocoveragecheck\/testdata\/rawfailure github\.com\/portpowered\/infinite-you\/cmd\/gocoveragecheck\/testdata\/rawfailurepeer"\)/);
 	assert.match(selector, /core\.exportVariable\("FUNCTIONAL_QUARANTINE", ""\)/);
 	assert.doesNotMatch(selector, /github\.event\.(?:inputs|client_payload)|workflow_dispatch/);
 	assert.ok(
 		coverageJob.indexOf(selectorMarker) < coverageJob.indexOf(supervisorMarker),
 		"the fixed selector must set its environment before the existing functional runner starts",
 	);
+});
+
+test("controlled raw failure interleaving witness is retained with diagnostics", () => {
+	const workflow = readFileSync(workflowPath, "utf8");
+	const job = jobSection(workflow, "backend-coverage");
+	const publish = stepSection(
+		job,
+		"      - name: Publish controlled raw failure interleaving witness",
+		"      - name: Upload functional test diagnostics",
+	);
+	const upload = stepSection(job, "      - name: Upload functional test diagnostics", "      # Reporting only.");
+
+	assert.match(publish, /if: always\(\) && matrix\.suite == 'functional'/);
+	assert.match(publish, /if \[\[ -z "\$\{FUNCTIONAL_RAW_FAILURE_RENDEZVOUS:-\}" \]\]; then exit 0; fi/);
+	assert.match(publish, /test -s "\$source"/);
+	assert.match(publish, /cp "\$source" "\$target"/);
+	assert.match(upload, /\.artifacts\/functional-test-viz\/raw-failure-interleaving\.jsonl/);
 });
 
 test("pinned real ACP evidence belongs to backend integration, not functional coverage", () => {

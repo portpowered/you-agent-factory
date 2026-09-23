@@ -446,7 +446,9 @@ jobs:
               return;
             }
             core.exportVariable("FUNCTIONAL_RAW_FAILURE_WITNESS", "1");
-            core.exportVariable("FUNCTIONAL_TEST_VIZ_PACKAGES", "github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailure");
+            core.exportVariable("FUNCTIONAL_RAW_FAILURE_RENDEZVOUS", `${process.env.RUNNER_TEMP}/pr2637-raw-failure-${liveHead}`);
+            core.exportVariable("FUNCTIONAL_RAW_FAILURE_RENDEZVOUS_TIMEOUT", "90s");
+            core.exportVariable("FUNCTIONAL_TEST_VIZ_PACKAGES", "github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailure github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailurepeer");
             core.exportVariable("FUNCTIONAL_QUARANTINE", "");
       - name: Run Linux functional coverage with concurrent quarantine verification
         if: matrix.suite == 'functional'
@@ -494,6 +496,17 @@ jobs:
           FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
           FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
           FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
+      - name: Publish controlled raw failure interleaving witness
+        if: always() && matrix.suite == 'functional'
+        shell: bash
+        run: |
+          if [[ -z "${FUNCTIONAL_RAW_FAILURE_RENDEZVOUS:-}" ]]; then exit 0; fi
+          source="$FUNCTIONAL_RAW_FAILURE_RENDEZVOUS/interleaving.jsonl"
+          target=".artifacts/functional-test-viz/raw-failure-interleaving.jsonl"
+          test -s "$source" || { echo "missing controlled raw failure interleaving witness: $source" >&2; exit 1; }
+          test "$(wc -l < "$source")" -eq 6 || { echo "incomplete controlled raw failure interleaving witness: $source" >&2; exit 1; }
+          mkdir -p "$(dirname "$target")"
+          cp "$source" "$target"
       - name: Upload functional test diagnostics
         if: always() && matrix.suite == 'functional'
         uses: actions/upload-artifact@v4
@@ -512,6 +525,7 @@ jobs:
             .artifacts/functional-test-viz/coverage-build-diagnostics.json
             .artifacts/functional-test-viz/raw-failures/index.json
             .artifacts/functional-test-viz/raw-failures/*.jsonl
+            .artifacts/functional-test-viz/raw-failure-interleaving.jsonl
             .artifacts/functional-test-viz/c09-critical-path/quarantine-status.txt
             .artifacts/functional-test-viz/c09-critical-path/coverage-status.txt
             .artifacts/functional-test-viz/c09-critical-path/critical-path-timing.txt

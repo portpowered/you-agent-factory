@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailurewitness"
 )
 
 func TestRawFailureWitness(t *testing.T) {
@@ -13,7 +15,5 @@ func TestRawFailureWitness(t *testing.T) {
 		}
 		return
 	}
-	t.Log("Factory Event timeline: sequence=1 kind=work.accepted")
-	t.Log("Factory Event timeline: sequence=2 kind=worker.completed")
-	t.Errorf("%s", controlledFailureAssertion)
+	rawfailurewitness.Run(t, "rawfailure", controlledFailureAssertion+" primary")
 }

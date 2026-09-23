@@ -20,24 +20,32 @@ import (
 )
 
 const (
-	functionalRawFailureSchemaVersion = "functional-raw-failures.v1"
-	functionalRawFailureIndexName     = "index.json"
-	functionalRawFailurePackageLimit  = int64(64 << 20)
+	functionalRawFailureSchemaVersion      = "functional-raw-failures.v1"
+	functionalRawFailureIndexName          = "index.json"
+	functionalRawFailurePackageLimit       = int64(64 << 20)
+	functionalRawFailureRendezvousEnv      = "FUNCTIONAL_RAW_FAILURE_RENDEZVOUS"
+	functionalRawFailureRendezvousTrace    = "interleaving.jsonl"
+	functionalRawFailureRendezvousMarker   = "Factory Event timeline: sequence="
+	functionalRawFailureRendezvousPrimary  = "github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailure"
+	functionalRawFailureRendezvousPeer     = "github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailurepeer"
+	functionalRawFailureRendezvousMaxEvent = 6
 )
 
 type functionalRawFailureCapture struct {
-	mu                 sync.Mutex
-	directory          string
-	configuredMaxBytes int64
-	packageMaxBytes    int64
-	capturedBytes      int64
-	packages           map[string]*functionalRawFailurePackage
-	executedCommands   [][]string
-	activeCommand      []string
-	activePackages     []string
-	captureError       error
-	commandExitStatus  int
-	write              func(io.Writer, []byte) error
+	mu                  sync.Mutex
+	directory           string
+	rendezvousDirectory string
+	rendezvousNextEvent int
+	configuredMaxBytes  int64
+	packageMaxBytes     int64
+	capturedBytes       int64
+	packages            map[string]*functionalRawFailurePackage
+	executedCommands    [][]string
+	activeCommand       []string
+	activePackages      []string
+	captureError        error
+	commandExitStatus   int
+	write               func(io.Writer, []byte) error
 }
 
 type functionalRawFailurePackage struct {
@@ -123,11 +131,12 @@ func newFunctionalRawFailureCapture(directory string, configuredMaxBytes int64) 
 		packageMaxBytes = functionalRawFailurePackageLimit
 	}
 	return &functionalRawFailureCapture{
-		directory:          directory,
-		configuredMaxBytes: configuredMaxBytes,
-		packageMaxBytes:    packageMaxBytes,
-		packages:           make(map[string]*functionalRawFailurePackage),
-		write:              writeRawFailureBytes,
+		directory:           directory,
+		rendezvousDirectory: strings.TrimSpace(os.Getenv(functionalRawFailureRendezvousEnv)),
+		configuredMaxBytes:  configuredMaxBytes,
+		packageMaxBytes:     packageMaxBytes,
+		packages:            make(map[string]*functionalRawFailurePackage),
+		write:               writeRawFailureBytes,
 	}, nil
 }
 
@@ -170,7 +179,71 @@ func (capture *functionalRawFailureCapture) observeLine(line []byte) error {
 	if capture.captureError != nil {
 		return capture.captureError
 	}
-	return capture.observeEventLocked(event, line)
+	if err := capture.observeEventLocked(event, line); err != nil {
+		return err
+	}
+	return capture.observeRendezvousEventLocked(event)
+}
+
+func (capture *functionalRawFailureCapture) observeRendezvousEventLocked(event goTestTimingEvent) error {
+	if capture.rendezvousDirectory == "" || event.Action != "output" || capture.rendezvousNextEvent >= functionalRawFailureRendezvousMaxEvent {
+		return nil
+	}
+	marker := strings.Index(event.Output, functionalRawFailureRendezvousMarker)
+	if marker < 0 {
+		return nil
+	}
+	sequenceText := event.Output[marker+len(functionalRawFailureRendezvousMarker):]
+	sequenceLength := 0
+	for sequenceLength < len(sequenceText) && sequenceText[sequenceLength] >= '0' && sequenceText[sequenceLength] <= '9' {
+		sequenceLength++
+	}
+	sequence, err := strconv.Atoi(sequenceText[:sequenceLength])
+	if err != nil || sequenceLength == 0 || sequence < 1 || sequence > functionalRawFailureRendezvousMaxEvent {
+		return capture.failLocked(fmt.Errorf("invalid controlled raw failure event sequence %q", sequenceText))
+	}
+	expectedPackage := functionalRawFailureRendezvousPrimary
+	if sequence%2 == 0 {
+		expectedPackage = functionalRawFailureRendezvousPeer
+	}
+	if sequence != capture.rendezvousNextEvent+1 || event.Package != expectedPackage {
+		return capture.failLocked(fmt.Errorf("controlled raw failure interleaving expected sequence %d from %s; received sequence %d from %s", capture.rendezvousNextEvent+1, expectedPackage, sequence, event.Package))
+	}
+	entry := struct {
+		Sequence int    `json:"sequence"`
+		Package  string `json:"package"`
+		Event    string `json:"event"`
+	}{Sequence: sequence, Package: event.Package, Event: strings.TrimSpace(event.Output)}
+	tracePath := filepath.Join(capture.rendezvousDirectory, functionalRawFailureRendezvousTrace)
+	traceFile, err := os.OpenFile(tracePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+	if err != nil {
+		return capture.failLocked(fmt.Errorf("open controlled raw failure interleaving trace: %w", err))
+	}
+	if err := json.NewEncoder(traceFile).Encode(entry); err != nil {
+		_ = traceFile.Close()
+		return capture.failLocked(fmt.Errorf("write controlled raw failure interleaving trace: %w", err))
+	}
+	if err := traceFile.Close(); err != nil {
+		return capture.failLocked(fmt.Errorf("close controlled raw failure interleaving trace: %w", err))
+	}
+	capturedMarker := filepath.Join(capture.rendezvousDirectory, fmt.Sprintf("captured-event-%02d-complete", sequence))
+	if err := writeRawFailureRendezvousMarker(capturedMarker); err != nil {
+		return capture.failLocked(fmt.Errorf("acknowledge captured controlled raw failure event %d: %w", sequence, err))
+	}
+	capture.rendezvousNextEvent = sequence
+	return nil
+}
+
+func writeRawFailureRendezvousMarker(path string) error {
+	marker, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := writeRawFailureBytes(marker, []byte("captured\n")); err != nil {
+		_ = marker.Close()
+		return err
+	}
+	return marker.Close()
 }
 
 func parseFunctionalRawFailureEvent(line []byte) (goTestTimingEvent, bool, error) {
