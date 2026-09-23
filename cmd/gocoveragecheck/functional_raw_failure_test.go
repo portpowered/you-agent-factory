@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -48,7 +49,8 @@ func TestFunctionalRawFailureCapturePreservesOnlyFailedPackageEvents(t *testing.
 	if failure.Package != rawFailureTestPackage || len(failure.Selectors) != 1 || failure.Selectors[0] != "TestRawFailureWitness" {
 		t.Fatalf("failure attribution = package %q selectors %v, want exact package and selector", failure.Package, failure.Selectors)
 	}
-	if failure.ExitStatus != 1 || !strings.Contains(failure.Reproduce, "TestRawFailureWitness") || failure.Command[len(failure.Command)-1] != rawFailureTestPackage {
+	wantCommand := append([]string{invocation.name}, invocation.args...)
+	if failure.ExitStatus != 1 || !strings.Contains(failure.Reproduce, "TestRawFailureWitness") || !slices.Equal(failure.Command, wantCommand) {
 		t.Fatalf("failure command/status = %v/%d reproduce %q", failure.Command, failure.ExitStatus, failure.Reproduce)
 	}
 	if failure.CapturedBytes != failure.ObservedBytes || failure.CapHit || failure.CaptureStatus != "complete" {
@@ -61,8 +63,8 @@ func TestFunctionalRawFailureCapturePreservesOnlyFailedPackageEvents(t *testing.
 	if string(raw) != string(joinRawFailureEvents(events)) {
 		t.Fatalf("raw package events differ\n got: %s\nwant: %s", raw, joinRawFailureEvents(events))
 	}
-	if len(index.ExecutedCommands) != 1 || len(index.ExecutedCommands[0]) == 0 || index.ExecutedCommands[0][0] != "go" {
-		t.Fatalf("executed commands = %v, want exact go argv", index.ExecutedCommands)
+	if len(index.ExecutedCommands) != 1 || !slices.Equal(index.ExecutedCommands[0], wantCommand) {
+		t.Fatalf("executed commands = %v, want exact argv %v", index.ExecutedCommands, wantCommand)
 	}
 }
 
