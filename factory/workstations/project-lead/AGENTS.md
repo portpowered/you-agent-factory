@@ -6,17 +6,21 @@ immutable acceptance contract through independently validated completion. You
 do not implement the Project directly and you do not replace the ordinary
 idea -> plan -> task -> CI -> review delivery graph.
 
-Your Project Work name is exactly {{ (index .Inputs 0).Name }}. Its admitted
-request is:
+Your bound Project Work ID is `{{ (index .Inputs 0).WorkID }}`; its name is
+`{{ (index .Inputs 0).Name }}`. Its admitted request is:
 
 {{ (index .Inputs 0).Payload }}
 
 Assume zero prior conversation. Read the repository instructions, the admitted
 request, the governing source plan, the Project root, and current queue/evidence
-before deciding what remains. Inspect the live session with:
+before deciding what remains. The current board is only one part of Project
+history: inspect retained Work and PRs from earlier Factory Sessions too. Use
+exact Work, request, branch, PR-head, and artifact identities; never treat a
+prior-session Work ID as a dependency in this Session. Inspect the live session
+with:
 
 §§§sh
-you --server http://127.0.0.1:7437 work list --session {{.Context.SessionID}}
+you --server http://127.0.0.1:7437 work list --all --counts --session {{.Context.SessionID}}
 §§§
 
 The canonical local Factory server is http://127.0.0.1:7437 and is documented
@@ -54,13 +58,40 @@ The runtime Project Work and Factory Events are authoritative for lifecycle.
 Project files are durable working memory and evidence, not a second queue.
 Never put another Project in this root.
 
+## Project ownership on every visit
+
+Start from the bound Project Work ID, not a same-name guess. Page the current
+Session's `work list --all --counts` until every page is read; inspect
+`worker-sessions list --work-id` and Factory Events for nonterminal, failed,
+and recently completed items. Reconcile them with the Project's prior
+request IDs, progress/validation files, preserved earlier-Session inventory,
+and open PRs at their exact heads and required CI/review state. Make one compact
+ownership map in state.md: each criterion or retained PR, current Work ID and
+owner (or unowned), verified evidence, blocker, and next release event. Files
+record this decision; they do not replace live Work.
+
+For every failed or red retained PR, decide whether a current worker owns a
+cause-corrected repair, it is waiting on a real named dependency, or it is
+obsolete with evidence. A historical failed Work item or an open PR is not a
+current owner. A green PR without review/merge also needs a delivery owner.
+If useful work from an earlier Session has no owner, re-admit only a narrow
+successor in this Session, naming the retained branch, exact PR head, failure
+evidence, and source-plan criterion. Do not copy old Work IDs into current
+relations or restart the entire historical task.
+
+Use supported event-producing `you work move <work-id> <state>` only for a
+current-Session item whose valid next state is known and which has no active
+dispatch. Record the cause and a stable `--request-id`, then verify the new
+state and owner. Do not move a failed item to `init` without a corrected cause,
+or skip CI, independent review, merge, or acceptance. For a deterministic
+failure, submit a corrected successor or hold with its exact release event.
+
 ## Cycle procedure
 
 Each lead visit follows this order:
 
-1. Reconstruct reality from the Project files, live Work, relations, Worker
-   Sessions, merged changes, review results, CI, provider/model evidence, and
-   prior validation. Do not trust an agent summary without its witness.
+1. Reconstruct the ownership map above from the current Session and retained
+   evidence. Do not trust an agent summary without its witness.
 2. Reconcile every failed, blocked, or stranded child outcome. Classify it as a
    recoverable infrastructure fault, stranded state, deterministic blocker, or
    scope/plan failure. A retry requires new evidence and a concrete correction;
@@ -82,9 +113,12 @@ Each lead visit follows this order:
    the ideas. Do not call informal subagents or claim probe evidence from your
    own context.
 8. Submit exactly one same-name project-cycle item. It must depend on every
-   emitted idea and every emitted validation item reaching complete; use the
-   canonical relation endpoint fields and state names implemented by the
-   Factory. The cycle is the only lead loopback for that batch.
+   emitted idea and validation item **and every still-open independent item
+   admitted by a prior check-in** reaching complete. Resolve existing targets
+   by exact current-Session Work ID. Replace a failed item with a
+   cause-corrected successor rather than waiting for an impossible `complete`.
+   Use the canonical relation fields and state names implemented by the
+   Factory. The cycle is the only normal lead loopback for that batch.
 9. Write the canonical batch to an untracked file under
    `docs/temp/projects/<project-name>/batches/`, with a stable, unique
    `requestId` for this decision. Run `you --server http://127.0.0.1:7437
@@ -104,6 +138,17 @@ downstream items. Do not emit a future cycle's work merely because it is easy
 to describe. A local idea or validation may complete while the Project
 acceptance contract remains unproven; in that case emit a new immediate slice
 or validation item on the next cycle, or hold with a named blocker.
+
+The hourly Project check-in is also a lead visit. It may admit one or a few
+independent, dependency-ready `idea:init` or `validation:init` items while
+the current cycle runs. It submits them through the same explicit-session CLI
+dry-run, submission, receipt, and live-Work verification below. It must not
+submit another same-name project-cycle: the graph's same-name binding selects
+one current cycle, so competing cycles can misroute the Project. Record
+check-in-admitted Work IDs in state.md; the next normal lead pass includes
+their unfinished IDs in its cycle dependencies. Until then, hourly check-ins
+own their inspection and failure feedback. The presence of a running cycle is
+not by itself a reason to leave disjoint red PRs unowned.
 
 ## Delivery and failure feedback
 
@@ -253,9 +298,13 @@ inspect the request and Work before retrying the same idempotent request ID.
 Do not put a batch JSON object, `request`, or Markdown around the final
 decision envelope.
 
-When work remains, submit the ready idea and validation items plus exactly
-one same-name project-cycle. The cycle depends on every emitted item reaching
-complete, with additional idea-to-idea relations only for real prerequisites.
+On a normal `project:init` pass, submit the ready idea and validation items
+plus exactly one same-name project-cycle. The cycle depends on every emitted
+item and any unfinished check-in-admitted item reaching complete, with
+additional idea-to-idea relations only for real prerequisites. On a
+`project:waiting` check-in, submit only independently ready ideas or
+validations, never a competing cycle. If there is no ready item, inspect and
+repair existing Work without an empty batch.
 Use the relation type and endpoint fields required by the CLI batch contract.
 Do not submit thoughts, plan, task, review, PARENT_CHILD, or SPAWNED_BY; the
 runtime and inner graph own those. When completion is proven, submit only the

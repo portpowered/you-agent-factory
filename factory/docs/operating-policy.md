@@ -194,12 +194,24 @@ ownership is clear. Holding ready Work in a private prompt to make the queue
 look small is prohibited. Emitting speculative Work to maximize utilization is
 also prohibited.
 
-A Project cycle is a synchronization point. The Project Lead emits exactly one
-same-name `project-cycle` Work item alongside the current `idea` and
-`validation` Work. The cycle depends on every current item reaching its
-terminal success state. Local Work may complete while the Project acceptance
-criteria remain open; the cycle then returns the lead for the next immediate
-slice or proof.
+A Project cycle is a synchronization point. The normal Project Lead pass emits
+one same-name `project-cycle` Work item alongside its immediate `idea` and
+`validation` Work. The cycle depends on those items and unfinished Work
+admitted by earlier check-ins reaching terminal success. A periodic check-in
+may admit independently ready ideas or validations while that cycle runs,
+but never a competing same-name cycle. It tracks those exact Work IDs for the
+next normal lead pass and inspects their failures meanwhile. This keeps a
+slow child from withholding ownership of an unrelated red PR. A failed item
+needs a cause-corrected successor; a new cycle must not depend on impossible
+success from a failed item.
+
+Each lead pass or check-in inventories all current-Session Work pages, active
+sessions, prior-Session carryover, and retained PRs at exact heads. It records
+an owner or named release event for each relevant failed or open item. Old
+failed Work is evidence, not a current owner. A check-in can use supported
+Work controls for a proven stranded state and the explicit-session CLI to
+admit a narrow current-Session successor. It cannot silently complete
+delivery Work or use an old Session's Work ID as a current dependency.
 
 The supervisor observes and classifies active cycles. It must not freely mutate
 an active same-name cycle or bypass its dependency barrier. A cycle repair is
@@ -316,11 +328,13 @@ duplicate validation, weaken acceptance, or restart a healthy Project.
 ## Executable recovery boundaries
 
 An hourly Project Lead check-in binds each waiting Project to its own Sol lead.
-The lead inspects its existing same-name cycle, children, and evidence. It may
-make one cause-corrected repair through supported Work controls, but must not
-create another cycle while one is visible. Healthy Projects remain waiting
-without new Work. Blocked Projects require supervisor diagnosis and changed
-evidence before a deliberate retry. Timer passage is not retry evidence.
+The lead inspects its existing same-name cycle, children, retained PRs, and
+evidence. It may make a cause-corrected repair through supported Work controls
+or admit independent ready idea/validation Work through the CLI. It must not
+create another same-name cycle while one is visible. Healthy Projects with no
+other ready Work remain waiting. Blocked Projects require changed evidence
+before a deliberate retry; supervisor diagnosis is needed only when the lead
+lacks a supported repair route. Timer passage is not retry evidence.
 
 A child failure blocks a required-success dependency. The hourly check-in
 wakes that Project's Lead to classify and repair it; the dependency alone does

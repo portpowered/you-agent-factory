@@ -68,20 +68,22 @@ project:waiting + project-cycle:blocked  -> project:blocked
 hourly project:waiting -> project-lead-checkin -> project:waiting
 ```
 
-The Project cycle is released only after every current idea and validation Work
-has reached its terminal success state. A failed child blocks that dependency;
-the hourly Project Lead check-in must inspect its failure evidence and make a
-cause-corrected repair or escalate the missing route. Failure must not be
-silently converted into Project success.
+The Project cycle is released only after its dependent idea and validation
+Work reaches terminal success. A failed child blocks that dependency; the
+hourly Project Lead check-in inspects its evidence and makes a cause-corrected
+repair or escalates the missing route. Failure must not be silently converted
+into Project success.
 
 The Project Lead emits only the immediate behavior and proof Work justified by
 current evidence. Local Work may complete before the Project acceptance
 criteria are proven. The lead then emits another behavior slice or validation
 mission, or records a concrete external hold.
 
-The hourly check-in runs separately for each waiting Project. It inspects the
-existing cycle and repairs only evidenced failures through supported Work
-controls. It does not create a second cycle or new behavior slice.
+The hourly check-in runs separately for each waiting Project. It inventories
+current and retained Work/PRs, repairs evidenced failures through supported
+controls, and may admit an independent ready idea or validation through the
+CLI. It does not create a second cycle. The next normal lead pass includes
+unfinished check-in Work in its cycle dependencies.
 
 ## Work types
 
