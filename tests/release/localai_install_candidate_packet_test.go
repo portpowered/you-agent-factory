@@ -468,6 +468,7 @@ type localAICandidatePacketArtifact struct {
 
 type localAICandidatePacketManifest struct {
 	SchemaVersion string `json:"schemaVersion"`
+	DeliveryMode  string `json:"deliveryMode"`
 	Status        string `json:"status"`
 	Source        struct {
 		Repository  string `json:"repository"`
@@ -480,9 +481,16 @@ type localAICandidatePacketManifest struct {
 		Arch string `json:"arch"`
 	} `json:"target"`
 	Build struct {
-		MaximumWorkBytes int64 `json:"maximumWorkBytes"`
-		MaximumChildren  int   `json:"maximumChildren"`
-		WorkBytes        int64 `json:"workBytes"`
+		MaximumWorkBytes      int64  `json:"maximumWorkBytes"`
+		MaximumChildren       int    `json:"maximumChildren"`
+		MaximumCommandSeconds int    `json:"maximumCommandSeconds"`
+		WorkBytes             int64  `json:"workBytes"`
+		ExecutablePath        string `json:"executablePath"`
+		ExecutableSHA256      string `json:"executableSHA256"`
+		ExecutableBuildInfo   struct {
+			SourceRevision string `json:"sourceRevision"`
+			VCSModified    bool   `json:"vcsModified"`
+		} `json:"executableBuildInfo"`
 	} `json:"build"`
 	Artifacts []localAICandidatePacketArtifact `json:"artifacts"`
 }
@@ -505,6 +513,11 @@ func verifyLocalAICandidatePacket(t *testing.T, packetDirectory, targetRevision 
 	if err != nil {
 		return verified, err
 	}
+	executable := artifacts["windows-amd64-executable"]
+	if !strings.EqualFold(filepath.Clean(manifest.Build.ExecutablePath), filepath.Join(packetDirectory, executable.File)) ||
+		!strings.EqualFold(manifest.Build.ExecutableSHA256, executable.SHA256) {
+		return verified, fmt.Errorf("packet executable path or SHA-256 differs from retained executable")
+	}
 	verified.manifest = manifest
 	verified.manifestSHA256 = digest
 	verified.artifacts = artifacts
@@ -525,12 +538,16 @@ func readLocalAICandidatePacketManifest(t *testing.T, packetDirectory, targetRev
 		return manifest, "", fmt.Errorf("decode packet manifest: %w", err)
 	}
 	expectedTree := localAICandidateGit(t, testutil.MustRepoRoot(t), "rev-parse", targetRevision+"^{tree}")
-	if manifest.SchemaVersion != "local-windows-candidate/v2" || manifest.Status != "PASS" ||
+	if manifest.SchemaVersion != "local-windows-candidate/v2" || manifest.DeliveryMode != "PACKET_ONLY" || manifest.Status != "PASS" ||
 		manifest.Source.Repository != "https://github.com/portpowered/you-agent-factory.git" ||
 		manifest.Source.Commit != targetRevision || manifest.Source.Tree != expectedTree || manifest.Source.VCSModified ||
 		manifest.Target.OS != "windows" || manifest.Target.Arch != "amd64" ||
-		manifest.Build.MaximumWorkBytes <= 0 || manifest.Build.WorkBytes <= 0 || manifest.Build.WorkBytes > manifest.Build.MaximumWorkBytes ||
-		manifest.Build.MaximumChildren < 1 || manifest.Build.MaximumChildren > 4 {
+		manifest.Build.MaximumWorkBytes <= 0 || manifest.Build.MaximumWorkBytes > 4294967296 ||
+		manifest.Build.WorkBytes <= 0 || manifest.Build.WorkBytes > manifest.Build.MaximumWorkBytes ||
+		manifest.Build.MaximumChildren < 1 || manifest.Build.MaximumChildren > 4 ||
+		manifest.Build.MaximumCommandSeconds < 60 || manifest.Build.MaximumCommandSeconds > 4500 ||
+		!filepath.IsAbs(manifest.Build.ExecutablePath) || filepath.Base(manifest.Build.ExecutablePath) != "you.exe" ||
+		manifest.Build.ExecutableBuildInfo.SourceRevision != targetRevision || manifest.Build.ExecutableBuildInfo.VCSModified {
 		return manifest, "", fmt.Errorf("packet manifest identity or budget is invalid: source=%s/%s target=%s/%s work=%d/%d children=%d",
 			manifest.Source.Commit, manifest.Source.Tree, manifest.Target.OS, manifest.Target.Arch,
 			manifest.Build.WorkBytes, manifest.Build.MaximumWorkBytes, manifest.Build.MaximumChildren)

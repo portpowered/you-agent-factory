@@ -15,10 +15,15 @@ func TestLocalAICandidateFinalizationAcceptsCompleteV2Evidence(t *testing.T) {
 
 	results := runLocalAICandidateFinalizationCases(t, []localAICandidateFinalizationCase{
 		{Name: "valid", Kind: "valid"},
+		{Name: "packetOnly", Kind: "packetOnlyValid"},
 	})
 	valid, ok := results["valid"]
 	if !ok || valid.Status != "PASS" || valid.Failure != "" || !valid.DigestMatches {
 		t.Fatalf("complete v2 evidence finalization = %#v, want a stable PASS report", valid)
+	}
+	packetOnly, ok := results["packetOnly"]
+	if !ok || packetOnly.Status != "PASS" || packetOnly.Failure != "" || !packetOnly.DigestMatches {
+		t.Fatalf("packet-only evidence finalization = %#v, want stable PASS without installer execution", packetOnly)
 	}
 }
 
@@ -29,6 +34,8 @@ func TestLocalAICandidateFinalizationRejectsSourceAndObserverDrift(t *testing.T)
 	cases := []localAICandidateFinalizationCase{
 		{Name: "sourceModified", Kind: "sourceModified"},
 		{Name: "sourceIdentityMismatch", Kind: "sourceIdentityMismatch"},
+		{Name: "packetBuildInfoMismatch", Kind: "packetBuildInfoMismatch"},
+		{Name: "packetExecutableDigestMismatch", Kind: "packetExecutableDigestMismatch"},
 		{Name: "nonLoopback", Kind: "nonLoopback"},
 		{Name: "port7437", Kind: "port7437"},
 		{Name: "backendProcess", Kind: "backendProcess"},
@@ -37,13 +44,15 @@ func TestLocalAICandidateFinalizationRejectsSourceAndObserverDrift(t *testing.T)
 	}
 	results := runLocalAICandidateFinalizationCases(t, cases)
 	wantFailures := map[string]string{
-		"sourceModified":              "source.vcsModified must be false",
-		"sourceIdentityMismatch":      "install executable build info must match source.commit",
-		"nonLoopback":                 "observer.nonLoopbackConnections must be zero",
-		"port7437":                    "observer.port7437Accesses must be zero",
-		"backendProcess":              "observer backendProcessStarts and survivingTaskProcesses must be zero",
-		"missingProcessAttribution":   "observer must have attributed process/network samples",
-		"missingDistributionEvidence": "observer must attribute four loopback distribution requests",
+		"sourceModified":                 "source.vcsModified must be false",
+		"sourceIdentityMismatch":         "install executable build info must match source.commit",
+		"packetBuildInfoMismatch":        "packet executable build info must match source.commit",
+		"packetExecutableDigestMismatch": "packet executable path and SHA-256 must match the retained Windows executable",
+		"nonLoopback":                    "observer.nonLoopbackConnections must be zero",
+		"port7437":                       "observer.port7437Accesses must be zero",
+		"backendProcess":                 "observer backendProcessStarts and survivingTaskProcesses must be zero",
+		"missingProcessAttribution":      "observer must have attributed process/network samples",
+		"missingDistributionEvidence":    "observer must attribute four loopback distribution requests",
 	}
 	for name, expectedError := range wantFailures {
 		requireLocalAICandidateFinalizationFailure(t, results, name, expectedError)
@@ -167,8 +176,9 @@ foreach ($entry in $cases.GetEnumerator()) {
         [System.IO.File]::WriteAllText($artifactPath, $spec.contents, [System.Text.UTF8Encoding]::new($false))
         [void]$artifactEvidence.Add((Get-SmokeFileEvidence $spec.role $artifactPath))
     }
-    $report = [ordered]@{
-        schemaVersion = 'local-windows-candidate/v2'
+	$report = [ordered]@{
+		schemaVersion = 'local-windows-candidate/v2'
+		deliveryMode = 'PUBLIC_INSTALL'
         driverRevision = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
         status = 'PASS'
         source = [ordered]@{
@@ -177,12 +187,16 @@ foreach ($entry in $cases.GetEnumerator()) {
             vcsModified = $false
         }
         target = [ordered]@{ os = 'windows'; arch = 'amd64' }
-        build = [ordered]@{
-            goVersion = 'go version go1.26.8 windows/amd64'
-            goReleaserVersion = 'v2.12.7'
-            maximumWorkBytes = [int64]4294967296
-            maximumChildren = 4
-            workBytes = [int64]1024
+		build = [ordered]@{
+			goVersion = 'go version go1.26.8 windows/amd64'
+			goReleaserVersion = 'v2.12.7'
+			maximumWorkBytes = [int64]4294967296
+			maximumChildren = 4
+			maximumCommandSeconds = 3900
+			workBytes = [int64]1024
+			executablePath = ''
+			executableSHA256 = ''
+			executableBuildInfo = [ordered]@{ sourceRevision = ''; vcsModified = $null }
         }
         artifacts = @($artifactEvidence | ForEach-Object { $_ })
         commandEvidence = @()
@@ -223,6 +237,29 @@ foreach ($entry in $cases.GetEnumerator()) {
     switch ($case.kind) {
         'sourceModified' { $report.source.vcsModified = $true }
         'sourceIdentityMismatch' { $report.source.commit = 'cccccccccccccccccccccccccccccccccccccccc' }
+        'packetOnlyValid' {
+            $report.deliveryMode = 'PACKET_ONLY'
+            $report.install.status = 'NOT_RUN'
+            $report.build.executablePath = Join-Path $output 'you.exe'
+            $executable = @($artifactEvidence | Where-Object { $_.role -ceq 'windows-amd64-executable' })[0]
+            $report.build.executableSHA256 = $executable.sha256
+            $report.build.executableBuildInfo = [ordered]@{ sourceRevision = $report.source.commit; vcsModified = $false }
+        }
+		'packetBuildInfoMismatch' {
+			$report.deliveryMode = 'PACKET_ONLY'
+			$report.install.status = 'NOT_RUN'
+			$report.build.executablePath = Join-Path $output 'you.exe'
+			$executable = @($artifactEvidence | Where-Object { $_.role -ceq 'windows-amd64-executable' })[0]
+			$report.build.executableSHA256 = $executable.sha256
+			$report.build.executableBuildInfo = [ordered]@{ sourceRevision = 'cccccccccccccccccccccccccccccccccccccccc'; vcsModified = $false }
+		}
+		'packetExecutableDigestMismatch' {
+			$report.deliveryMode = 'PACKET_ONLY'
+			$report.install.status = 'NOT_RUN'
+			$report.build.executablePath = Join-Path $output 'you.exe'
+			$report.build.executableSHA256 = '0' * 64
+			$report.build.executableBuildInfo = [ordered]@{ sourceRevision = $report.source.commit; vcsModified = $false }
+		}
         'nonLoopback' { $report.observer.nonLoopbackConnections = 1 }
         'port7437' { $report.observer.port7437Accesses = 1 }
         'backendProcess' { $report.observer.backendProcessStarts = 1 }

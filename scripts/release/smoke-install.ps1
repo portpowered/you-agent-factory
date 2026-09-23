@@ -31,6 +31,9 @@ param(
     [string]$ExpectedEsbuildSHA256,
     [ValidateRange(1, 4)]
     [int]$CandidateGoProcessLimit = 4,
+    [ValidateRange(60, 4500)]
+    [int]$CandidateBuildTimeoutSeconds = 3900,
+    [switch]$CandidatePacketOnly,
     [int64]$CandidateMaximumWorkBytes = 4294967296,
     [string]$ReportPath
 )
@@ -1960,7 +1963,10 @@ function Invoke-InstalledCandidateSmoke {
 }
 
 function Get-SmokeCandidatePassEvidenceFailures {
-    param([System.Collections.IDictionary]$Report)
+    param(
+        [System.Collections.IDictionary]$Report,
+        [string]$OutputDirectory
+    )
     $failures = New-Object 'System.Collections.Generic.List[string]'
     if ([string]$Report.schemaVersion -cne "local-windows-candidate/v2") {
         [void]$failures.Add("manifest.schemaVersion must be local-windows-candidate/v2")
@@ -1991,6 +1997,9 @@ function Get-SmokeCandidatePassEvidenceFailures {
     }
     if ([int]$Report.build.maximumChildren -lt 1 -or [int]$Report.build.maximumChildren -gt 4) {
         [void]$failures.Add("build.maximumChildren must be between 1 and 4")
+    }
+    if ([int]$Report.build.maximumCommandSeconds -lt 60 -or [int]$Report.build.maximumCommandSeconds -gt 4500) {
+        [void]$failures.Add("build.maximumCommandSeconds must be between 60 and 4500")
     }
     $expectedRoles = @(
         "windows-amd64-archive",
@@ -2032,6 +2041,47 @@ function Get-SmokeCandidatePassEvidenceFailures {
     }
     foreach ($role in $expectedRoles) {
         if (-not $seenRoles.ContainsKey($role)) { [void]$failures.Add("artifact role is missing: $role") }
+    }
+    $executableArtifact = @($artifacts | Where-Object { [string]$_.role -ceq "windows-amd64-executable" })
+    if ([string]$Report.deliveryMode -ceq "PACKET_ONLY") {
+        $executableArtifactMatches = $false
+        if ($executableArtifact.Count -eq 1) {
+            $expectedExecutablePath = Join-Path $OutputDirectory ([string]$executableArtifact[0].file)
+            $executableArtifactMatches = ([string]$Report.build.executablePath).Equals(
+                $expectedExecutablePath, [System.StringComparison]::OrdinalIgnoreCase) -and
+                [string]$Report.build.executableSHA256 -ceq [string]$executableArtifact[0].sha256
+        }
+        if (-not $executableArtifactMatches -or
+            -not [System.IO.Path]::IsPathRooted([string]$Report.build.executablePath) -or
+            [System.IO.Path]::GetFileName([string]$Report.build.executablePath) -cne "you.exe") {
+            [void]$failures.Add("packet executable path and SHA-256 must match the retained Windows executable")
+        }
+        if ([string]$Report.build.executableBuildInfo.sourceRevision -cne [string]$Report.source.commit -or
+            $Report.build.executableBuildInfo.vcsModified -ne $false) {
+            [void]$failures.Add("packet executable build info must match source.commit with vcs.modified=false")
+        }
+        if ([string]$Report.install.status -cne "NOT_RUN") {
+            [void]$failures.Add("packet-only mode must leave public installer execution NOT_RUN")
+        }
+        if ($Report.observer.observed -ne $true -or [int]$Report.observer.sampleCount -le 0 -or
+            [int]$Report.observer.attributedProcessCount -le 0 -or
+            [int]$Report.observer.nonLoopbackConnections -ne 0 -or
+            [int]$Report.observer.port7437Accesses -ne 0 -or
+            [int]$Report.observer.backendProcessStarts -ne 0 -or
+            [int]$Report.observer.survivingTaskProcesses -ne 0) {
+            [void]$failures.Add("packet observer must attribute the build and prove no external network, backend, or surviving task process")
+        }
+        if ([string]$Report.cleanup.status -cne "PASS" -or
+            -not [bool]$Report.cleanup.workDirectoryRemoved -or
+            -not [bool]$Report.cleanup.installDirectoryRemoved -or
+            [int]$Report.cleanup.partialFilesRemaining -ne 0 -or
+            $Report.cleanup.retainedEvidenceHashesStable -ne $true) {
+            [void]$failures.Add("packet cleanup must remove scratch, leave zero partial files, and preserve retained hashes")
+        }
+        return @($failures | ForEach-Object { $_ })
+    }
+    if ([string]$Report.deliveryMode -cne "PUBLIC_INSTALL") {
+        [void]$failures.Add("deliveryMode must be PACKET_ONLY or PUBLIC_INSTALL")
     }
     if ([string]$Report.install.status -cne "PASS" -or
         $Report.install.preinstallAbsent -ne $true -or
@@ -2147,7 +2197,7 @@ function Finalize-SmokeCandidateReport {
     }
     if ([string]$Report.status -ceq "PASS" -and $null -eq $Failure) {
         try {
-            $passEvidenceFailures = @(Get-SmokeCandidatePassEvidenceFailures -Report $Report)
+            $passEvidenceFailures = @(Get-SmokeCandidatePassEvidenceFailures -Report $Report -OutputDirectory $OutputDirectory)
         } catch {
             $passEvidenceFailures = @("manifest PASS evidence could not be attributed: $($_.Exception.Message)")
         }
@@ -2202,6 +2252,8 @@ function Invoke-LocalCandidateSmoke {
         [string]$GoVersion,
         [string]$EsbuildVersion,
         [string]$EsbuildSHA256,
+        [int]$BuildTimeoutSeconds = 3900,
+        [switch]$PacketOnly,
         [int64]$MaximumWorkBytes,
         [string]$RequestedInstallDir,
         [string]$RequestedReportPath
@@ -2259,6 +2311,7 @@ function Invoke-LocalCandidateSmoke {
     }
     $report = [ordered]@{
         schemaVersion = "local-windows-candidate/v2"
+        deliveryMode = if ($PacketOnly) { "PACKET_ONLY" } else { "PUBLIC_INSTALL" }
         driverRevision = ""
         status = "FAIL"
         source = [ordered]@{
@@ -2287,7 +2340,11 @@ function Invoke-LocalCandidateSmoke {
             goReleaserVersion = $ReleaseToolVersion
             maximumWorkBytes = [int64]$MaximumWorkBytes
             maximumChildren = [int]$GoProcessLimit
+            maximumCommandSeconds = [int]$BuildTimeoutSeconds
             workBytes = 0
+            executablePath = ""
+            executableSHA256 = ""
+            executableBuildInfo = [ordered]@{ sourceRevision = ""; vcsModified = $null }
         }
         artifacts = @()
         commandEvidence = @()
@@ -2438,19 +2495,23 @@ function Invoke-LocalCandidateSmoke {
             "--clean",
             "--parallelism",
             [string]$GoProcessLimit,
+            "--timeout",
+            "60m",
             "-f",
             ".goreleaser.yml"
         )
         $releaseResult = Invoke-CandidateCommand -FilePath $releaseToolPath `
             -ArgumentList $releaseArguments -WorkingDirectory $checkoutPath `
             -StdoutPath (Join-Path $commandEvidenceDirectory "release.stdout.log") `
-            -StderrPath (Join-Path $commandEvidenceDirectory "release.stderr.log")
+            -StderrPath (Join-Path $commandEvidenceDirectory "release.stderr.log") `
+            -TimeoutSeconds $BuildTimeoutSeconds
         $workBytes = Get-SmokeDirectoryBytes $workDirectory
         $report.build = [ordered]@{
             goVersion = $goVersionResult.stdout.Trim()
             goReleaserVersion = $ReleaseToolVersion
             maximumWorkBytes = [int64]$MaximumWorkBytes
             maximumChildren = [int]$GoProcessLimit
+            maximumCommandSeconds = [int]$BuildTimeoutSeconds
             workBytes = [int64]$workBytes
             command = $releaseToolPath
             arguments = $releaseArguments
@@ -2524,22 +2585,34 @@ function Invoke-LocalCandidateSmoke {
             Fail-Smoke "retained executable does not match the archive member"
         }
         $report.artifacts = @($report.artifacts + $retainedExecutableEvidence)
-        $installArguments = @{
-            CandidateDirectory = $outputDirectory
-            ArchivePath = $archivePath
-            ChecksumPath = $checksumPath
-            InstallerPath = $installerPath
-            ArchiveExecutablePath = $archiveExecutablePath
-            Version = $version
-            ExpectedExecutableVersion = $expectedExecutableVersion
-            ExpectedSourceCommit = $sourceIdentity.commit
-            GoExecutablePath = $goPath
-            RequestedInstallDir = $installDirectory
-            WorkDirectory = $workDirectory
+        $report.build.executablePath = Resolve-SmokePath $retainedExecutablePath
+        $report.build.executableSHA256 = [string]$retainedExecutableEvidence.sha256
+        $packetBuildInfo = Get-SmokeExecutableBuildInfo -ExecutablePath $retainedExecutablePath `
+            -ExpectedRevision $sourceIdentity.commit -GoExecutablePath $goPath `
+            -WorkingDirectory $extractPath -OutputDirectory $commandEvidenceDirectory
+        $report.build.executableBuildInfo = [ordered]@{
+            sourceRevision = [string]$packetBuildInfo.sourceRevision
+            vcsModified = [bool]$packetBuildInfo.vcsModified
         }
-        $report.install = Invoke-InstalledCandidateSmoke @installArguments
-        $report.build.executableBuildInfo = $report.install.executableBuildInfo
-        $report.source.vcsModified = $report.install.executableBuildInfo.vcsModified
+        $report.source.vcsModified = [bool]$packetBuildInfo.vcsModified
+        if (-not $PacketOnly) {
+            $installArguments = @{
+                CandidateDirectory = $outputDirectory
+                ArchivePath = $archivePath
+                ChecksumPath = $checksumPath
+                InstallerPath = $installerPath
+                ArchiveExecutablePath = $archiveExecutablePath
+                Version = $version
+                ExpectedExecutableVersion = $expectedExecutableVersion
+                ExpectedSourceCommit = $sourceIdentity.commit
+                GoExecutablePath = $goPath
+                RequestedInstallDir = $installDirectory
+                WorkDirectory = $workDirectory
+            }
+            $report.install = Invoke-InstalledCandidateSmoke @installArguments
+            $report.build.executableBuildInfo = $report.install.executableBuildInfo
+            $report.source.vcsModified = $report.install.executableBuildInfo.vcsModified
+        }
         $report.status = "PASS"
     } catch {
         $failure = $_.Exception
@@ -2682,6 +2755,8 @@ if (-not [string]::IsNullOrWhiteSpace($CandidateSourcePath)) {
         CandidateTargetOS = $CandidateTargetOS
         CandidateTargetArch = $CandidateTargetArch
         GoProcessLimit = $CandidateGoProcessLimit
+        BuildTimeoutSeconds = $CandidateBuildTimeoutSeconds
+        PacketOnly = [bool]$CandidatePacketOnly
         ReleaseToolPath = $GoReleaserPath
         ReleaseToolVersion = $ExpectedGoReleaserVersion
         GoVersion = $ExpectedGoVersion
