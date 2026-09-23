@@ -289,9 +289,7 @@ func (r *registry) unsupportedControl(_ context.Context, req workersessions.Cont
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
 	}
 	result := workersessions.ControlResult{Session: session, Action: action, Outcome: workersessions.ControlOutcomeUnsupported}
-	if supervision != nil {
-		result.DispatchID = supervision.dispatchID
-	}
+	result.DispatchID = r.controlDispatchID(req.ID, supervision)
 	if session.Terminal() {
 		result.Outcome = workersessions.ControlOutcomeNoop
 	}
@@ -314,6 +312,9 @@ func (r *registry) terminateForShutdown(ctx context.Context, id string) (workers
 func (r *registry) cancelControl(ctx context.Context, req workersessions.ControlRequest, action workersessions.ControlAction, detachContext bool) (workersessions.ControlResult, error) {
 	if err := req.Validate(); err != nil {
 		return workersessions.ControlResult{Action: action, Outcome: workersessions.ControlOutcomeFailed}, err
+	}
+	if attempt := r.runtimeAttemptFor(req.ID); attempt != nil {
+		return r.cancelRuntimeAttemptControl(ctx, req, action, detachContext, attempt)
 	}
 	reservation, err := r.beginControlHistory(ctx, req.ID, action, req.RequestID)
 	if err != nil {
@@ -342,6 +343,9 @@ func (r *registry) cancelControlIteration(
 		return r.controlNoop(req.ID, action, session, supervision), false, nil
 	}
 	if supervision == nil {
+		if r.runtimeAttemptPending(req.ID) {
+			return workersessions.ControlResult{Session: session, Action: action, Outcome: workersessions.ControlOutcomeFailed}, false, errRuntimeAttemptControlUnavailable
+		}
 		final, _ := r.commitControlTerminal(req.ID, controlTerminalState(action))
 		return r.controlApplied(req.ID, action, final, nil), false, nil
 	}
@@ -515,18 +519,14 @@ func (r *registry) controlNoop(id string, action workersessions.ControlAction, s
 		}
 	}
 	result := workersessions.ControlResult{Session: session, Action: action, Outcome: workersessions.ControlOutcomeNoop}
-	if supervision != nil {
-		result.DispatchID = supervision.dispatchID
-	}
+	result.DispatchID = r.controlDispatchID(id, supervision)
 	r.logger.Info("worker session control", "sessionID", id, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
 	return result
 }
 
 func (r *registry) controlApplied(id string, action workersessions.ControlAction, session workersessions.Session, supervision *supervision) workersessions.ControlResult {
 	result := workersessions.ControlResult{Session: session, Action: action, Outcome: workersessions.ControlOutcomeApplied}
-	if supervision != nil {
-		result.DispatchID = supervision.dispatchID
-	}
+	result.DispatchID = r.controlDispatchID(id, supervision)
 	r.logger.Info("worker session control", "sessionID", id, "attemptID", result.DispatchID, "action", string(action), "outcome", string(result.Outcome))
 	return result
 }

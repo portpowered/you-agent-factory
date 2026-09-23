@@ -21,7 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const story004EmbedSource = "hf://Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-f16.gguf@370f27d7550e0def9b39c1f16d3fbaa13aa67728"
+const story004EmbedSource = "hf://Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf@370f27d7550e0def9b39c1f16d3fbaa13aa67728"
 
 func TestModelsEmbedRootCompositionBehavior(t *testing.T) {
 	t.Parallel()
@@ -554,7 +554,7 @@ func (client *story004EmbedAssetHTTP) Do(request *http.Request) (*http.Response,
 		manifest := map[string]any{
 			"sha": "370f27d7550e0def9b39c1f16d3fbaa13aa67728",
 			"siblings": []map[string]any{{
-				"rfilename": "Qwen3-Embedding-0.6B-f16.gguf",
+				"rfilename": "Qwen3-Embedding-0.6B-Q8_0.gguf",
 				"size":      len(client.modelBody),
 				"lfs":       map[string]any{"oid": digest, "size": len(client.modelBody)},
 			}},

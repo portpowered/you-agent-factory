@@ -47,6 +47,11 @@ var supportedTargets = map[string]targetFacts{
 		architecture:    "amd64",
 		accelerators:    []string{"cpu"},
 	},
+	"windows-amd64-cuda": {
+		operatingSystem: "windows",
+		architecture:    "amd64",
+		accelerators:    []string{"cuda"},
+	},
 }
 
 // SelectionRequest identifies one exact backend capability request.

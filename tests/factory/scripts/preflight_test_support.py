@@ -1,4 +1,4 @@
-"""Disposable v1 packet fixtures shared by setup-workspace tests."""
+"""Disposable packet fixtures shared by setup-workspace tests."""
 
 import hashlib
 import json
@@ -14,10 +14,6 @@ def git(args, cwd, check=True):
         capture_output=True,
         text=True,
     )
-
-
-def current_head(repo_path):
-    return git(["rev-parse", "HEAD"], repo_path).stdout.strip()
 
 
 def _ignore_operator_packet(repo_path):
@@ -42,30 +38,10 @@ def _descriptor(path):
 
 
 def valid_packet(repo_path, prd_name, *, fixtures=None, public_docs=None):
-    """Create authority files and return a complete valid setup packet."""
-    fixture_root = repo_path.parent / f"{repo_path.name}-{prd_name}-authority"
-    fixture_root.mkdir(parents=True, exist_ok=True)
-    authority = {}
-    for field, contents in (
-        ("sourcePlan", f"source plan for {prd_name}\n"),
-        ("request", f"request for {prd_name}\n"),
-        ("acceptance", f"acceptance for {prd_name}\n"),
-    ):
-        path = fixture_root / f"{field}.md"
-        path.write_text(contents, encoding="utf-8")
-        authority[field] = _descriptor(path)
-
+    """Return a normal setup packet without duplicated preflight metadata."""
     return {
         "branchName": prd_name,
         "project": "setup-workspace-test",
-        "preflight": {
-            "version": "factory-preflight.v1",
-            "projectRoot": str(fixture_root),
-            "projectIdentity": "setup-workspace-test",
-            "contractRevision": "setup-workspace-test-v1",
-            "authority": authority,
-            "intendedMainline": {"commit": current_head(repo_path)},
-        },
         "build": None,
         "fixtures": list(fixtures or []),
         "publicDocs": list(public_docs or []),

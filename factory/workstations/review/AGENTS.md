@@ -104,6 +104,21 @@ If the change involves modification to the website, you should use the playwrigh
   on another lane, not executor rework, so it takes the hold route; post that
   comment at most once and stay silent on later holds for the same flake. Never
   demand code changes for a baseline flake in a package the diff does not touch.
+- Required-job timeout policy: a configured job time limit is a delivery
+  constraint. If a required check is cancelled at that limit, inspect the job
+  and step durations, logs, current-head attempt history, and a comparable
+  passing base or main run. Separate setup/cache time from the test or coverage
+  command, and identify the likely cause or the specific remaining uncertainty.
+  Do not call the result shared infrastructure just because GitHub cancelled
+  the job at its configured limit; do not raise the limit or blindly rerun it.
+  For example, Backend Unit Coverage has a five-minute job limit. If the
+  current head repeatedly exceeds it and the evidence points to PR-owned
+  work, post a BLOCKING comment with the timing comparison and the bounded
+  diagnosis and correction needed on the retained PR, then return `REJECTED`
+  so the existing implementer receives the work. A same-failure base run or
+  independently verified GitHub infrastructure cancellation needs its own
+  evidence and owner; do not demand speculative PR changes. A red job does
+  not mean this reviewer failed to execute.
 
 ### Step 2.1a - Reject a plan that disagrees with itself
 
@@ -310,8 +325,8 @@ field. Set `decision` to:
   PR comment, routes the task back through the `ci-wait` gate, and re-enters
   review without a failed worker session or consecutive-failure strike;
 - `REJECTED` when concrete executor rework remains that the executor has not
-  already been given, such as a newly raised blocker or a new blocker on a
-  pushed head; or
+  already been given, such as a newly raised blocker, a new blocker on a
+  pushed head, or an actionable required-CI timeout on the current head; or
 - `FAILED` when review execution cannot complete or an authority/plan
   contradiction prevents a valid decision.
 

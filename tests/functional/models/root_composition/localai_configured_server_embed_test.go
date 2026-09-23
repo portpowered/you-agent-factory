@@ -129,10 +129,6 @@ func runLocalAIConfiguredEmbedDirectParity(
 		t.Fatalf("direct configured EMBED backend requests = %d, want one", len(requests))
 	}
 	assertLocalAIConfiguredEmbedRequest(t, "direct", requests[0])
-	if err := direct.process.Close(context.Background()); err != nil {
-		t.Fatalf("close direct configured EMBED process: %v", err)
-	}
-	assertLocalAIDirectHostReleased(t, direct.launcher)
 	return direct, result
 }
 
@@ -186,6 +182,46 @@ func assertLocalAIConfiguredEmbedParity(
 	clientCacheRoot := filepath.Join(client.home, ".agent-factory", "models")
 	if _, err := os.Stat(clientCacheRoot); !os.IsNotExist(err) {
 		t.Fatalf("explicit --server client model cache root = %q, %v; want absent", clientCacheRoot, err)
+	}
+}
+
+func assertLocalAIConfiguredEmbedOutputMappingParity(
+	t *testing.T,
+	direct, remote localAIConfiguredEmbedOutputMapResult,
+) {
+	t.Helper()
+	for path, result := range map[string]localAIConfiguredEmbedOutputMapResult{
+		"direct": direct, "explicit --server": remote,
+	} {
+		if result.Err != nil {
+			t.Fatalf("%s named EMBED mapping error = %v", path, result.Err)
+		}
+		if result.Stdout == "" || result.Output != `[0.1,0.2,0.3,0.4,0.5]` {
+			t.Fatalf("%s named EMBED mapping stdout/output = %q/%q, want response and controlled vector", path, result.Stdout, result.Output)
+		}
+		if result.Stderr != "" {
+			t.Fatalf("%s named EMBED mapping stderr = %q, want empty", path, result.Stderr)
+		}
+	}
+	var directResponse, remoteResponse factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal([]byte(direct.Stdout), &directResponse); err != nil {
+		t.Fatalf("decode direct named EMBED mapping response: %v", err)
+	}
+	if err := json.Unmarshal([]byte(remote.Stdout), &remoteResponse); err != nil {
+		t.Fatalf("decode explicit-server named EMBED mapping response: %v", err)
+	}
+	if len(directResponse.Outputs) != 1 || len(remoteResponse.Outputs) != 1 {
+		t.Fatalf("named EMBED mapping output counts = direct:%d remote:%d, want one each", len(directResponse.Outputs), len(remoteResponse.Outputs))
+	}
+	directOutput, remoteOutput := directResponse.Outputs[0], remoteResponse.Outputs[0]
+	if directOutput.Name != remoteOutput.Name || directOutput.Modality != remoteOutput.Modality ||
+		directOutput.ContentType == nil || remoteOutput.ContentType == nil ||
+		*directOutput.ContentType != *remoteOutput.ContentType ||
+		directOutput.MediaType == nil || remoteOutput.MediaType == nil ||
+		*directOutput.MediaType != *remoteOutput.MediaType ||
+		directOutput.Content == nil || remoteOutput.Content == nil ||
+		*directOutput.Content != *remoteOutput.Content {
+		t.Fatalf("direct/explicit-server named EMBED metadata = %#v / %#v, want equivalent ordered JSON output", directOutput, remoteOutput)
 	}
 }
 
@@ -265,7 +301,7 @@ func assertLocalAIConfiguredEmbedValidationEffects(
 // for the built-in EMBED model. Direct CLI and an independent thin client use
 // separate roots, while the server owns the only actual HTTP listener and the
 // controlled LocalAI fixture remains the sole protocol dependency.
-func TestLocalAIConfiguredServerEMBEDParity(t *testing.T) {
+func TestModelsConfiguredServerEMBEDParity(t *testing.T) {
 	t.Parallel()
 
 	fixture := functionalStartLocalAI(t, localai.Options{EmbeddingDimensions: 5})
@@ -274,9 +310,30 @@ func TestLocalAIConfiguredServerEMBEDParity(t *testing.T) {
 	serverPath, client, server, serverURL, remote := runLocalAIConfiguredEmbedServerParity(t, fixture, factoryDir)
 	assertLocalAIConfiguredEmbedParity(t, fixture, direct, directResult, serverPath, client, remote)
 
+	directOutputPath := filepath.Join(t.TempDir(), "direct-embedding.json")
+	remoteOutputPath := filepath.Join(t.TempDir(), "remote-embedding.json")
+	directMapped := executeLocalAIConfiguredEmbedOutputMap(
+		t, direct.process, factoryDir, cleanModelsEnvironment(direct.home), "",
+		"embedding="+directOutputPath, directOutputPath,
+	)
+	remoteMapped := executeLocalAIConfiguredEmbedOutputMap(
+		t, client.process, factoryDir, cleanModelsEnvironment(client.home), serverURL,
+		"embedding="+remoteOutputPath, remoteOutputPath,
+	)
+	assertLocalAIConfiguredEmbedOutputMappingParity(t, directMapped, remoteMapped)
+	directRequests := direct.invocation.Signatures()
+	serverRequests := serverPath.invocation.Signatures()
+	if len(directRequests) != 2 || len(serverRequests) != 2 || directRequests[1] != serverRequests[1] {
+		t.Fatalf("named mapping request signatures = direct:%#v server:%#v, want matching second invocation", directRequests, serverRequests)
+	}
+
 	if err := client.process.Close(context.Background()); err != nil {
 		t.Fatalf("close configured EMBED client process: %v", err)
 	}
+	if err := direct.process.Close(context.Background()); err != nil {
+		t.Fatalf("close direct configured EMBED process: %v", err)
+	}
+	assertLocalAIDirectHostReleased(t, direct.launcher)
 	server.Close(t)
 	assertLocalAIConfiguredServerReleased(t, server, serverURL)
 	assertLocalAIDirectHostReleased(t, serverPath.launcher)

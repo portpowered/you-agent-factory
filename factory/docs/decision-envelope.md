@@ -36,7 +36,7 @@ existing work-outcome vocabulary:
 | `ACCEPTED` | Work passed review or check; follow the workstation's accepted path. |
 | `CONTINUE` | More executor work is required before the lane can finish. |
 | `REJECTED` | Review or check failed; follow the workstation's rejection path. |
-| `FAILED` | The reviewer/checker hit a runtime failure while evaluating the work. |
+| `FAILED` | The reviewer/checker could not complete evaluation or make a valid decision; a diagnosed failing check on the submitted work is not reviewer failure. |
 
 ## Goal-routing vocabulary
 

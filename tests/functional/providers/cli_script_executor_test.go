@@ -83,21 +83,24 @@ func (runner *baseTimeoutThenSuccessCommandRunner) CallCount() int {
 const scriptTimeoutCausalSignalTimeout = 10 * time.Second
 
 type scriptTimeoutThenSuccessCommandRunner struct {
-	mu             sync.Mutex
-	callCount      int
-	firstStartCh   chan struct{}
-	firstTimeoutCh chan struct{}
-	retryStartCh   chan struct{}
-	firstStart     sync.Once
-	firstTimeout   sync.Once
-	retryStart     sync.Once
+	mu                    sync.Mutex
+	callCount             int
+	firstStartCh          chan struct{}
+	firstTimeoutCh        chan struct{}
+	firstAttemptReleaseCh chan struct{}
+	retryStartCh          chan struct{}
+	firstStart            sync.Once
+	firstTimeout          sync.Once
+	firstAttemptRelease   sync.Once
+	retryStart            sync.Once
 }
 
 func newScriptTimeoutThenSuccessCommandRunner() *scriptTimeoutThenSuccessCommandRunner {
 	return &scriptTimeoutThenSuccessCommandRunner{
-		firstStartCh:   make(chan struct{}),
-		firstTimeoutCh: make(chan struct{}),
-		retryStartCh:   make(chan struct{}),
+		firstStartCh:          make(chan struct{}),
+		firstTimeoutCh:        make(chan struct{}),
+		firstAttemptReleaseCh: make(chan struct{}),
+		retryStartCh:          make(chan struct{}),
 	}
 }
 
@@ -109,6 +112,11 @@ func (runner *scriptTimeoutThenSuccessCommandRunner) Run(ctx context.Context, _ 
 
 	if call == 1 {
 		runner.firstStart.Do(func() { close(runner.firstStartCh) })
+		// Keep the real timed-out attempt from publishing its failure before
+		// the live Factory-event observer has completed registration. This
+		// closes the test-owned admission/observation race without changing
+		// the workstation's 10ms execution deadline.
+		<-runner.firstAttemptReleaseCh
 		<-ctx.Done()
 		runner.firstTimeout.Do(func() { close(runner.firstTimeoutCh) })
 		return platformprocess.CommandResult{}, ctx.Err()
@@ -119,6 +127,10 @@ func (runner *scriptTimeoutThenSuccessCommandRunner) Run(ctx context.Context, _ 
 	// workstation execution deadline. The first call still waits for the real
 	// context deadline and proves timeout handling.
 	return platformprocess.CommandResult{Stdout: []byte("script-output-after-timeout-retry")}, nil
+}
+
+func (runner *scriptTimeoutThenSuccessCommandRunner) releaseFirstAttempt() {
+	runner.firstAttemptRelease.Do(func() { close(runner.firstAttemptReleaseCh) })
 }
 
 func (runner *scriptTimeoutThenSuccessCommandRunner) CallCount() int {
@@ -611,7 +623,9 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 		t.Logf("script timeout recovery failure snapshot: runner calls=%d; Work=%#v; Factory Events=%#v",
 			runner.CallCount(), listed, events)
 	})
+	t.Cleanup(runner.releaseFirstAttempt)
 	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(fixture.baseURL, scenario.sessionID))
+	runner.releaseFirstAttempt()
 	waitForScriptTimeoutCausalSignal(t, runner.firstStartCh, "first script attempt start")
 	waitForScriptTimeoutCausalSignal(t, runner.firstTimeoutCh, "first script attempt timeout")
 	waitForScriptTimeoutDispatchResponse(t, stream, factoryapi.WorkOutcomeFailed, "execution timeout")

@@ -23,7 +23,6 @@ EXPECTED_RESULT_KEYS = {
     "prd_md_path",
     "standing_rules_path",
     "reused",
-    "preflight",
 }
 
 
@@ -330,10 +329,7 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         self.assertNotEqual(local_main_sha, origin_main_sha)
 
         prd_name = "local-main-ahead-prd"
-        packet_path, _ = write_prd(local_repo, prd_name)
-        packet = json.loads(packet_path.read_text(encoding="utf-8"))
-        packet["preflight"]["intendedMainline"]["commit"] = origin_main_sha
-        packet_path.write_text(json.dumps(packet), encoding="utf-8")
+        write_prd(local_repo, prd_name)
 
         result = run_setup_workspace(local_repo, prd_name)
         self.assertEqual(result.returncode, 0, result.stderr)

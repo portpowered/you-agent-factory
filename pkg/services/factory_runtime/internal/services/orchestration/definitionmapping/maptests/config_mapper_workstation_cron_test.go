@@ -49,6 +49,52 @@ func TestConfigMapping_CronWithoutRequiredInputsUsesOutputWorkTypeForImplicitFai
 	}
 }
 
+func TestConfigMapping_CronAgentCheckInBindsWaitingProjectAndDueTime(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "project",
+			States: []interfaces.StateConfig{
+				{Name: "waiting", Type: interfaces.StateTypeProcessing},
+				{Name: "needs-supervision", Type: interfaces.StateTypeProcessing},
+			},
+		}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: "lead", Type: interfaces.WorkerTypeModel}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name: "project-lead-checkin", Type: interfaces.WorkstationTypeAgent,
+			Kind: interfaces.WorkstationKindCron, WorkerTypeName: "lead",
+			Cron:            &interfaces.CronConfig{Schedule: "0 * * * *"},
+			Inputs:          []interfaces.IOConfig{{WorkTypeName: "project", StateName: "waiting"}},
+			Outputs:         []interfaces.IOConfig{{WorkTypeName: "project", StateName: "waiting"}},
+			OnFailure:       []interfaces.IOConfig{{WorkTypeName: "project", StateName: "needs-supervision"}},
+			WorkPropagation: &interfaces.WorkPropagationConfig{Mode: interfaces.WorkPropagationModePreserveInput},
+		}},
+	}
+
+	net, err := (testConfigMapper{}).Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("map cron agent: %v", err)
+	}
+	tr := net.Transitions["project-lead-checkin"]
+	if tr == nil || len(tr.InputArcs) != 2 {
+		t.Fatalf("check-in inputs = %+v, want project and cron time", tr)
+	}
+	if tr.InputArcs[0].PlaceID != "project:waiting" || tr.InputArcs[0].Mode != interfaces.ArcModeConsume {
+		t.Fatalf("project input = %+v, want consumed waiting Project", tr.InputArcs[0])
+	}
+	if tr.InputArcs[1].PlaceID != interfaces.SystemTimePendingPlaceID {
+		t.Fatalf("cron input = %+v, want due time", tr.InputArcs[1])
+	}
+	if _, ok := tr.InputArcs[1].Guard.(*factoryruntime.PetriCronTimeWindowGuard); !ok {
+		t.Fatalf("cron guard = %T, want time-window guard", tr.InputArcs[1].Guard)
+	}
+	if len(tr.OutputArcs) != 1 || tr.OutputArcs[0].PlaceID != "project:waiting" {
+		t.Fatalf("check-in outputs = %+v, want same waiting Project", tr.OutputArcs)
+	}
+	if len(tr.FailureArcs) != 1 || tr.FailureArcs[0].PlaceID != "project:needs-supervision" {
+		t.Fatalf("check-in failure arcs = %+v, want lead escalation", tr.FailureArcs)
+	}
+}
+
 // portos:func-length-exception owner=agent-factory reason=cron-mapping-fixture review=2026-07-18 removal=split-cron-fixture-before-next-cron-topology-change
 func TestConfigMapping_LogicalMoveCronWorkstationWithoutWorker(t *testing.T) {
 	input := &interfaces.FactoryConfig{

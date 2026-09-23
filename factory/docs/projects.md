@@ -8,10 +8,10 @@ the runtime.
 
 ## Ownership
 
-The Astra Portfolio Supervisor owns whole-repository health, Project admission,
+The GPT-6 Sol Portfolio Supervisor owns whole-repository health, Project admission,
 cross-Project priority, Factory capacity decisions, significant-exception
 response, and promotion of evidence-backed Factory improvements. It normally
-runs every four hours and may be triggered sooner by a significant exception.
+runs every eight hours and may be triggered sooner by a significant exception.
 
 A Sol Project Lead owns one Project from its admitted contract through
 independently validated completion. It chooses the next behavior slice, maps
@@ -156,8 +156,9 @@ validation:init
 ```
 
 A failed or rejected plan, workspace, executor, CI, review, or validation
-outcome must preserve its failure evidence and reach the dependent Project
-cycle. The lead then diagnoses and emits a smaller correction, changes a real
+outcome must preserve its failure evidence. The required-success dependency
+blocks the cycle until corrected; the hourly lead check-in inspects that
+evidence. The lead then diagnoses and emits a smaller correction, changes a real
 dependency, escalates a contract issue, or records an external hold. A failed
 child must never be treated as a completed idea.
 
@@ -244,7 +245,7 @@ on a later cycle.
 A retrospective report is evidence for the Portfolio Supervisor. It never
 marks Project acceptance complete. Its action proposal names the observed
 common or special cause, one owner, evidence required, verification procedure,
-and rollback or stop condition. The Astra supervisor aggregates retrospective
+and rollback or stop condition. The Sol supervisor aggregates retrospective
 reports on its scheduled pass and promotes a Factory rule only through a
 validated change and controlled rollout.
 

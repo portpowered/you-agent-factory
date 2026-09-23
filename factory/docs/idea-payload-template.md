@@ -48,8 +48,12 @@ Every submitted `idea.payload` MUST include at least:
 | `antiPatterns` | Concrete wrong implementations to reject |
 | `currentProgress` | Why this packet is next (evidence, not slogans) |
 | `requestedOutcome` | Single long-form synthesis of ask + requirements + delivery |
-| `changedPathLease` | Paths the worker may change; call out excludes |
 | `sourcePath` | Plan/meta source when applicable |
+
+`expectedChangedPaths` may be included as advisory impact analysis. It is not
+an allowlist: implementation may add a required path when repository evidence
+shows the path belongs to the same behavior and no live branch/worktree
+conflict exists. Public-contract and generated-file rules still apply.
 
 Always append the delivery contract to `requestedOutcome` (or as its own final
 acceptance bullet): required CI terminal green, blocking PR conversation
@@ -70,8 +74,9 @@ complete.
 5. **One architecture.** An implementer reading only this payload must not need
    chat context to choose between "add functional tests" and "build a new
    root composition API".
-6. **Leases are real.** `changedPathLease` must exclude paths that would pull
-   the worker into a different packet.
+6. **Report impact from reality.** Compare the planned impact with live
+   branches/worktrees before implementation and report the final changed paths.
+   A missing or incomplete estimate never rejects otherwise valid Work.
 
 ## Filled Example (FUN-style proof — correct)
 
@@ -135,15 +140,15 @@ Corresponding JSON fragment:
   "antiPatterns": [
     "Building a root/wire 'AutomationsRootFromEdges' subsystem because tests asked for public composition",
     "Treating package-shape or import-boundary unit tests as sufficient FUN proof without external lifecycle behavior",
-    "Rewriting unrelated functional suite topology outside the Automations lease"
+    "Rewriting unrelated functional suite topology"
   ],
   "currentProgress": [
     "Automations IMP/LWR/adapters and CUT→fold→DEL are Factory-terminal",
     "Deletion alone does not prove external Automations behavior still works"
   ],
-  "changedPathLease": [
+  "expectedChangedPaths": [
     "tests/functional/automations/**",
-    "exclude pkg/root and pkg/wire except unavoidable compile fixes unrelated to new Automations helper APIs"
+    "pkg/root or pkg/wire only for an evidenced compile fix required by this behavior"
   ],
   "requestedOutcome": "Extend or add focused functional proofs under tests/functional/automations so cron, filesystem watchers, hosted sources, script pollers, and reconciliation remain inert until runtime lifecycle, then activate through public Automations/Work surfaces without inventing root/wire test subsystems or importing automations/internal or deleted automations/service. Delivery contract: loop until required CI is terminal green, blocking PR conversation comments are addressed, conflicts are reconciled, the PR is merged, and only then complete Factory work."
 }

@@ -2179,6 +2179,190 @@
               "transport": "none"
             }
           ]
+        },
+        {
+          "efforts": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "id": "gpt-6-luna",
+          "modalities": [
+            {
+              "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "evidenceRefs": [
+                "codex-docs"
+              ],
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
+        },
+        {
+          "efforts": [
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "id": "gpt-6-sol",
+          "modalities": [
+            {
+              "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "image",
+              "support": "supported",
+              "transport": "file_path"
+            },
+            {
+              "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "input",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "audio",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "evidenceRefs": [
+                "codex-docs"
+              ],
+              "modality": "image",
+              "support": "unsupported",
+              "transport": "none"
+            },
+            {
+              "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "text",
+              "support": "supported",
+              "transport": "inline"
+            },
+            {
+              "direction": "output",
+              "evidenceRefs": [
+                "codex-docs",
+                "codex-conformance"
+              ],
+              "modality": "video",
+              "support": "unsupported",
+              "transport": "none"
+            }
+          ]
         }
       ],
       "technicalSupportLevel": "production",

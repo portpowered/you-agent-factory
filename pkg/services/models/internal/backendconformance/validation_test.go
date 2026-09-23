@@ -156,6 +156,129 @@ func TestValidateRejectsIncompletePinnedArtifactMatrix(t *testing.T) {
 	}
 }
 
+func TestVariantCharacterizationRetainsClosedTargetBaselineAndUniquenessFailures(t *testing.T) {
+	t.Parallel()
+
+	const backendID = "localai-llamacpp"
+	cuda := PinnedArtifact{
+		BackendID: backendID, TargetID: TargetWindowsAmd64CUDA,
+		OperatingSystem: "windows", Architecture: "amd64", Accelerators: []string{"cuda"},
+		SizeBytes: MinimumPinnedArtifactSizeBytes + 4,
+	}
+	validBaselines := completePinnedArtifacts(backendID)
+
+	tests := []struct {
+		name         string
+		artifacts    []PinnedArtifact
+		wantDetails  []string
+		wantFailures int
+	}{
+		{
+			name:         "approved CUDA variant with all baselines is accepted",
+			artifacts:    append(append([]PinnedArtifact(nil), validBaselines...), cuda),
+			wantFailures: 0,
+		},
+		{
+			name:         "CUDA variant cannot replace the Windows CPU baseline",
+			artifacts:    append(append([]PinnedArtifact(nil), validBaselines[:2]...), cuda),
+			wantDetails:  []string{`missing the required target "windows-amd64"`},
+			wantFailures: 1,
+		},
+		{
+			name:         "duplicate Windows CPU tuple remains invalid",
+			artifacts:    append(append([]PinnedArtifact(nil), validBaselines...), validBaselines[2]),
+			wantDetails:  []string{`exactly one is required`},
+			wantFailures: 1,
+		},
+		{
+			name:         "duplicate Windows CUDA tuple remains invalid",
+			artifacts:    append(append(append([]PinnedArtifact(nil), validBaselines...), cuda), cuda),
+			wantDetails:  []string{`approved target "windows-amd64-cuda"; exactly one is required`},
+			wantFailures: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := Validate(Inputs{
+				References:         []Reference{{Identifier: backendID, Source: "candidate manifest"}},
+				RegisteredBackends: []string{backendID},
+				PinnedArtifacts:    tc.artifacts,
+			})
+			if tc.wantFailures == 0 {
+				if err != nil {
+					t.Fatalf("Validate() error = %v, want approved variant to pass", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("Validate() error = nil, want the current baseline/closed-target rejection")
+			}
+			var validation *ValidationError
+			if !errors.As(err, &validation) || len(validation.Failures) != tc.wantFailures {
+				t.Fatalf("Validate() error = %#v, want %d deterministic failures", err, tc.wantFailures)
+			}
+			message := err.Error()
+			for _, expected := range tc.wantDetails {
+				if !strings.Contains(message, expected) {
+					t.Fatalf("Validate() error = %q, want detail containing %q", message, expected)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateRejectsUnauthorizedOrMismatchedCUDAVariants(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		artifact   PinnedArtifact
+		wantDetail string
+	}{
+		{
+			name: "unauthorized backend",
+			artifact: PinnedArtifact{BackendID: "localai-whisper", TargetID: TargetWindowsAmd64CUDA,
+				OperatingSystem: "windows", Architecture: "amd64", Accelerators: []string{"cuda"}, SizeBytes: MinimumPinnedArtifactSizeBytes + 1},
+			wantDetail: "mismatched approved CUDA compatibility facts",
+		},
+		{
+			name: "mismatched operating system",
+			artifact: PinnedArtifact{BackendID: ApprovedCUDABackend, TargetID: TargetWindowsAmd64CUDA,
+				OperatingSystem: "linux", Architecture: "amd64", Accelerators: []string{"cuda"}, SizeBytes: MinimumPinnedArtifactSizeBytes + 1},
+			wantDetail: "mismatched approved CUDA compatibility facts",
+		},
+		{
+			name: "placeholder size",
+			artifact: PinnedArtifact{BackendID: ApprovedCUDABackend, TargetID: TargetWindowsAmd64CUDA,
+				OperatingSystem: "windows", Architecture: "amd64", Accelerators: []string{"cuda"}, SizeBytes: MinimumPinnedArtifactSizeBytes},
+			wantDetail: "target \"windows-amd64-cuda\" sizeBytes 1048576",
+		},
+		{
+			name: "unknown target",
+			artifact: PinnedArtifact{BackendID: ApprovedCUDABackend, TargetID: "windows-amd64-rocm",
+				OperatingSystem: "windows", Architecture: "amd64", Accelerators: []string{"rocm"}, SizeBytes: MinimumPinnedArtifactSizeBytes + 1},
+			wantDetail: "is not an approved optional variant",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			artifacts := append(completePinnedArtifacts(tc.artifact.BackendID), tc.artifact)
+			err := Validate(Inputs{
+				References:         []Reference{{Identifier: tc.artifact.BackendID, Source: tc.name}},
+				RegisteredBackends: []string{tc.artifact.BackendID}, PinnedArtifacts: artifacts,
+			})
+			if err == nil || !strings.Contains(err.Error(), tc.wantDetail) {
+				t.Fatalf("Validate() error = %v, want detail containing %q", err, tc.wantDetail)
+			}
+		})
+	}
+}
+
 func TestValidateNamesFactoryAndCommandForOmnivoiceShapedReference(t *testing.T) {
 	t.Parallel()
 
