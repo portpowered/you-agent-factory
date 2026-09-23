@@ -33,8 +33,8 @@ func TestModelsInvokeCleanDirectorySeparatesFactoryDebugAndProtocolFailure(t *te
 		{name: "F-01 blank directory debug off"},
 		{name: "F-02 minimal Factory debug off", factory: true},
 		{name: "F-03 blank directory debug on", debug: true},
-		{name: "F-04 blank directory protocol failure", failure: true},
-		{name: "F-04 recovery in blank directory"},
+		{name: "controlled protocol fault; cycle-192 cause unresolved", failure: true},
+		{name: "controlled recovery in blank directory"},
 	} {
 		t.Run(cell.name, func(t *testing.T) { runZeroConfigFirstUseCell(t, scenario, cell) })
 	}
