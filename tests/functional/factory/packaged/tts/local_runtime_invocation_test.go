@@ -352,7 +352,6 @@ func writePackagedTTSReadyModelCache(t testing.TB, homeDir, cacheDir string) {
 	if err := os.WriteFile(filepath.Join(modelSnapshot, ".you-assets.json"), metadata, 0o644); err != nil {
 		t.Fatalf("write packaged TTS generic model metadata: %v", err)
 	}
-
 	const backend = "localai-vibevoice"
 	selection := packagedTTSPinnedBackendSelection()
 	backendURLHash := fmt.Sprintf("%x", sha256.Sum256([]byte(selection.Location)))
