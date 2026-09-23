@@ -81,6 +81,38 @@ if ($errors.Count -ne 0) { $errors | ForEach-Object { [Console]::Error.WriteLine
 		t.Fatalf("parse candidate delivery script: %v\n%s", err, output)
 	}
 }
+
+func TestLocalAICandidateGoVersionMatchesPreflight(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate release is Windows-only")
+	}
+
+	tempDir := t.TempDir()
+	harnessPath := filepath.Join(tempDir, "go-version.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$valid = $false
+try {
+    Assert-SmokeCandidateGoVersion -Output 'go version go1.25.0 windows/amd64' -ExpectedVersion '1.25.0'
+    $valid = $true
+} catch {
+    throw "declared preflight Go version was rejected: $($_.Exception.Message)"
+}
+$driftRejected = $false
+try {
+    Assert-SmokeCandidateGoVersion -Output 'go version go1.25.1 windows/amd64' -ExpectedVersion '1.25.0'
+} catch {
+    $driftRejected = $_.Exception.Message -like '*want go1.25.0*'
+}
+if (-not $valid -or -not $driftRejected) { throw "Go version gate results: valid=$valid driftRejected=$driftRejected" }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+}
+
 func TestLocalAICandidateCommandPreservesArgumentsFailureAndRedaction(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {

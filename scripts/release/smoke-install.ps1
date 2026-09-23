@@ -26,6 +26,7 @@ param(
     [string]$CandidateTargetArch = "amd64",
     [string]$GoReleaserPath,
     [string]$ExpectedGoReleaserVersion,
+    [string]$ExpectedGoVersion,
     [string]$ExpectedEsbuildVersion,
     [string]$ExpectedEsbuildSHA256,
     [ValidateRange(1, 4)]
@@ -283,6 +284,16 @@ namespace InfiniteYou.ReleaseSmoke
 function Fail-Smoke {
     param([string]$Message)
     throw "install smoke: $Message"
+}
+
+function Assert-SmokeCandidateGoVersion {
+    param([string]$Output, [string]$ExpectedVersion)
+    if ($ExpectedVersion -notmatch '^\d+\.\d+\.\d+$') {
+        Fail-Smoke "ExpectedGoVersion must be a complete Go version such as 1.25.0"
+    }
+    if ($Output -notmatch ("(?m)\bgo" + [regex]::Escape($ExpectedVersion) + "\b")) {
+        Fail-Smoke "Go version check failed: output='$($Output.Trim())', want go$ExpectedVersion"
+    }
 }
 
 function Resolve-SmokePath {
@@ -2157,6 +2168,7 @@ function Invoke-LocalCandidateSmoke {
         [int]$GoProcessLimit = 4,
         [string]$ReleaseToolPath,
         [string]$ReleaseToolVersion,
+        [string]$GoVersion,
         [string]$EsbuildVersion,
         [string]$EsbuildSHA256,
         [int64]$MaximumWorkBytes,
@@ -2172,6 +2184,7 @@ function Invoke-LocalCandidateSmoke {
         CandidateWorkDir = $WorkDirectory
         GoReleaserPath = $ReleaseToolPath
         ExpectedGoReleaserVersion = $ReleaseToolVersion
+        ExpectedGoVersion = $GoVersion
         ExpectedEsbuildVersion = $EsbuildVersion
         ExpectedEsbuildSHA256 = $EsbuildSHA256
         ReportPath = $RequestedReportPath
@@ -2340,15 +2353,16 @@ function Invoke-LocalCandidateSmoke {
             Fail-Smoke "GoReleaser version check failed: exit=$($releaseToolResult.exitCode) output='$($releaseToolResult.stdout.Trim())'"
         }
         $goCommand = Get-Command go.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($null -eq $goCommand) { Fail-Smoke "Go 1.26.8 is required for candidate release" }
+        if ($null -eq $goCommand) { Fail-Smoke "Go $GoVersion is required for candidate release" }
         $goPath = [string]$goCommand.Source
         $goVersionResult = Invoke-CandidateCommand -FilePath $goPath `
             -ArgumentList @("version") -WorkingDirectory $checkoutPath `
             -StdoutPath (Join-Path $commandEvidenceDirectory "go-version.stdout.log") `
             -StderrPath (Join-Path $commandEvidenceDirectory "go-version.stderr.log")
-        if ($goVersionResult.exitCode -ne 0 -or $goVersionResult.stdout -notmatch '(?m)\bgo1\.26\.8\b') {
-            Fail-Smoke "Go version check failed: exit=$($goVersionResult.exitCode) output='$($goVersionResult.stdout.Trim())', want go1.26.8"
+        if ($goVersionResult.exitCode -ne 0) {
+            Fail-Smoke "Go version command failed: exit=$($goVersionResult.exitCode) output='$($goVersionResult.stdout.Trim())'"
         }
+        Assert-SmokeCandidateGoVersion -Output $goVersionResult.stdout -ExpectedVersion $GoVersion
         $statusBefore = Invoke-SmokeGit @("-C", $checkoutPath, "status", "--porcelain=v1", "--untracked-files=all")
         if ($statusBefore -ne "") {
             Fail-Smoke "candidate clone is dirty before release"
@@ -2606,6 +2620,7 @@ if (-not [string]::IsNullOrWhiteSpace($CandidateSourcePath)) {
         GoProcessLimit = $CandidateGoProcessLimit
         ReleaseToolPath = $GoReleaserPath
         ReleaseToolVersion = $ExpectedGoReleaserVersion
+        GoVersion = $ExpectedGoVersion
         EsbuildVersion = $ExpectedEsbuildVersion
         EsbuildSHA256 = $ExpectedEsbuildSHA256
         MaximumWorkBytes = $CandidateMaximumWorkBytes
