@@ -27,6 +27,24 @@ func TestLocalAICandidateFinalizationAcceptsCompleteV2Evidence(t *testing.T) {
 	}
 }
 
+func TestLocalAICandidatePacketOnlySuccessMessage(t *testing.T) {
+	t.Parallel()
+	requireLocalAICandidateWindows(t)
+
+	tempDir := t.TempDir()
+	harnessPath := filepath.Join(tempDir, "packet-only-success-message.ps1")
+	harness := strings.Join([]string{
+		". " + localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)) + " -InstallDir " + localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		"$report = [pscustomobject]@{ deliveryMode = 'PACKET_ONLY'; source = [pscustomobject]@{ commit = 'packet-commit' }; install = [pscustomobject]@{ status = 'NOT_RUN' } }",
+		"Write-LocalCandidateSuccessMessage -Report $report -ReportPath 'candidate-report.json'",
+	}, "\n")
+	output := runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+	want := "local candidate packet build passed for packet-commit; install was not run; report: candidate-report.json\r\n"
+	if string(output) != want {
+		t.Fatalf("packet-only success output = %q, want %q", output, want)
+	}
+}
+
 func TestLocalAICandidateFinalizationRejectsSourceAndObserverDrift(t *testing.T) {
 	t.Parallel()
 	requireLocalAICandidateWindows(t)

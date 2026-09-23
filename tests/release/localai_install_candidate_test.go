@@ -802,7 +802,7 @@ func localAICandidatePowerShell(t *testing.T) string {
 	}
 	return path
 }
-func runLocalAICandidateHarness(t *testing.T, path, source string, environment []string, directory string) {
+func runLocalAICandidateHarness(t *testing.T, path, source string, environment []string, directory string) []byte {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
 		t.Fatalf("write PowerShell harness: %v", err)
@@ -816,9 +816,11 @@ func runLocalAICandidateHarness(t *testing.T, path, source string, environment [
 	if directory != "" {
 		command.Dir = directory
 	}
-	if output, err := command.CombinedOutput(); err != nil {
+	output, err := command.CombinedOutput()
+	if err != nil {
 		t.Fatalf("run PowerShell harness: %v\n%s", err, output)
 	}
+	return output
 }
 func localAICandidatePowerShellEnvironment(t *testing.T, root string, base []string) []string {
 	t.Helper()

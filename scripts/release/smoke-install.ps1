@@ -2702,7 +2702,19 @@ function Invoke-LocalCandidateSmoke {
     if ($null -ne $failure) {
         throw $failure
     }
-    Write-Output "local candidate build and install smoke passed for $($sourceIdentity.commit); report: $reportPath"
+    Write-LocalCandidateSuccessMessage -Report $report -ReportPath $reportPath
+}
+
+function Write-LocalCandidateSuccessMessage {
+    param(
+        [object]$Report,
+        [string]$ReportPath
+    )
+    if ([string]$Report.deliveryMode -ceq "PACKET_ONLY") {
+        Write-Output "local candidate packet build passed for $($Report.source.commit); install was not run; report: $ReportPath"
+        return
+    }
+    Write-Output "local candidate build and install smoke passed for $($Report.source.commit); report: $ReportPath"
 }
 
 function Invoke-HostedInstallSmoke {
