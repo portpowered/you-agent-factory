@@ -90,17 +90,42 @@ func validatePinned(reference Reference, artifacts []PinnedArtifact) []Failure {
 		return []Failure{pinnedFailure(reference, "manifest has no artifact entry for the registered backend")}
 	}
 
+	byTarget, failures := classifyPinnedTargets(reference, matching)
+	failures = append(failures, validateRequiredTargets(reference, byTarget)...)
+	failures = append(failures, validateApprovedCUDATarget(reference, byTarget)...)
+	return failures
+}
+
+func classifyPinnedTargets(reference Reference, matching []PinnedArtifact) (map[string][]PinnedArtifact, []Failure) {
 	byTarget := make(map[string][]PinnedArtifact, len(matching))
 	failures := make([]Failure, 0)
 	for _, artifact := range matching {
-		if !isRequiredTarget(artifact.TargetID) {
+		if isRequiredTarget(artifact.TargetID) {
+			byTarget[artifact.TargetID] = append(byTarget[artifact.TargetID], artifact)
+			continue
+		}
+		if artifact.TargetID != TargetWindowsAmd64CUDA {
 			failures = append(failures, pinnedFailure(reference,
-				fmt.Sprintf("manifest target %q is outside the closed darwin-arm64, linux-amd64, windows-amd64 matrix", artifact.TargetID)))
+				fmt.Sprintf("manifest target %q is not an approved optional variant", artifact.TargetID)))
+			continue
+		}
+		if !approvedCUDAFacts(artifact) {
+			failures = append(failures, pinnedFailure(reference,
+				fmt.Sprintf("manifest target %q has mismatched approved CUDA compatibility facts", artifact.TargetID)))
 			continue
 		}
 		byTarget[artifact.TargetID] = append(byTarget[artifact.TargetID], artifact)
 	}
+	return byTarget, failures
+}
 
+func approvedCUDAFacts(artifact PinnedArtifact) bool {
+	return artifact.BackendID == ApprovedCUDABackend && artifact.OperatingSystem == "windows" &&
+		artifact.Architecture == "amd64" && sameStrings(artifact.Accelerators, []string{"cuda"})
+}
+
+func validateRequiredTargets(reference Reference, byTarget map[string][]PinnedArtifact) []Failure {
+	failures := make([]Failure, 0)
 	for _, target := range requiredTargets() {
 		entries := byTarget[target]
 		switch len(entries) {
@@ -109,8 +134,7 @@ func validatePinned(reference Reference, artifacts []PinnedArtifact) []Failure {
 				fmt.Sprintf("manifest is missing the required target %q", target)))
 		case 1:
 			if entries[0].SizeBytes <= MinimumPinnedArtifactSizeBytes {
-				failures = append(failures, pinnedFailure(reference,
-					fmt.Sprintf("target %q sizeBytes %d must be strictly greater than %d bytes (1 MiB)", target, entries[0].SizeBytes, MinimumPinnedArtifactSizeBytes)))
+				failures = append(failures, sizeFailure(reference, target, entries[0].SizeBytes))
 			}
 		default:
 			failures = append(failures, pinnedFailure(reference,
@@ -118,6 +142,26 @@ func validatePinned(reference Reference, artifacts []PinnedArtifact) []Failure {
 		}
 	}
 	return failures
+}
+
+func validateApprovedCUDATarget(reference Reference, byTarget map[string][]PinnedArtifact) []Failure {
+	entries := byTarget[TargetWindowsAmd64CUDA]
+	if len(entries) == 0 {
+		return nil
+	}
+	if len(entries) > 1 {
+		return []Failure{pinnedFailure(reference,
+			fmt.Sprintf("manifest has %d entries for approved target %q; exactly one is required", len(entries), TargetWindowsAmd64CUDA))}
+	}
+	if entries[0].SizeBytes <= MinimumPinnedArtifactSizeBytes {
+		return []Failure{sizeFailure(reference, TargetWindowsAmd64CUDA, entries[0].SizeBytes)}
+	}
+	return nil
+}
+
+func sizeFailure(reference Reference, target string, size int64) Failure {
+	return pinnedFailure(reference,
+		fmt.Sprintf("target %q sizeBytes %d must be strictly greater than %d bytes (1 MiB)", target, size, MinimumPinnedArtifactSizeBytes))
 }
 
 func validateReleaseBuilt(reference Reference, commands []ReleaseBuiltCommand) []Failure {
@@ -139,6 +183,18 @@ func isRequiredTarget(target string) bool {
 		}
 	}
 	return false
+}
+
+func sameStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func pinnedFailure(reference Reference, detail string) Failure {

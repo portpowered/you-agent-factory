@@ -29,15 +29,24 @@ The roles are deliberately separated:
 
 | Role | Worker profile | Authority |
 | --- | --- | --- |
-| Portfolio Supervisor | Astra, medium reasoning with high autonomy | Whole-repository health, Project admission, cross-Project priority, exception handling, and Factory-level improvement |
-| Project Lead | Sol, high reasoning | One Project's immutable contract, immediate behavior slices, local dependency map, and Project completion decision |
-| Planning, delivery, and review workers | Luna, maximum reasoning | One local Work item and its declared planning, implementation, or review evidence |
+| Portfolio Supervisor | GPT-6 Sol, medium reasoning with high autonomy | Whole-repository health, Project admission, cross-Project priority, exception handling, and Factory-level improvement |
+| Project Lead | Sol, medium reasoning | One Project's immutable contract, immediate behavior slices, local dependency map, and Project completion decision |
+| Planning workers | Sol, medium reasoning | One bounded plan and its admission evidence |
+| Implementation workers | Luna, xhigh reasoning | One local implementation item and its declared delivery evidence |
+| Review workers | Luna, maximum reasoning | One independent review of a current implementation head |
 | Validation workers | Luna, maximum reasoning | One read-only validation mission against one immutable build and fixture identity |
 
-The Portfolio Supervisor is normally triggered every four hours. The runtime may
+The Portfolio Supervisor is normally triggered every eight hours. The runtime may
 also trigger it for a significant exception. Project cycle completion and
 ordinary child Work completion are handled by the Project Lead and the inner
 graph; they do not themselves require an immediate portfolio-wide pass.
+
+The supervisor and Project Leads submit new Work using the explicit-session
+`you submit batch` CLI. Each batch is dry-run, submitted with a stable request
+ID, and checked against the returned Work IDs and live Work list. Their final
+workstation response is a decision envelope reporting that result, not a Work
+request. A failed or uncertain CLI submission cannot be reported as accepted
+Work; inspect the request ID before retrying to avoid duplicates.
 
 A significant exception is one of:
 
@@ -185,12 +194,24 @@ ownership is clear. Holding ready Work in a private prompt to make the queue
 look small is prohibited. Emitting speculative Work to maximize utilization is
 also prohibited.
 
-A Project cycle is a synchronization point. The Project Lead emits exactly one
-same-name `project-cycle` Work item alongside the current `idea` and
-`validation` Work. The cycle depends on every current item reaching its
-terminal success state. Local Work may complete while the Project acceptance
-criteria remain open; the cycle then returns the lead for the next immediate
-slice or proof.
+A Project cycle is a synchronization point. The normal Project Lead pass emits
+one same-name `project-cycle` Work item alongside its immediate `idea` and
+`validation` Work. The cycle depends on those items and unfinished Work
+admitted by earlier check-ins reaching terminal success. A periodic check-in
+may admit independently ready ideas or validations while that cycle runs,
+but never a competing same-name cycle. It tracks those exact Work IDs for the
+next normal lead pass and inspects their failures meanwhile. This keeps a
+slow child from withholding ownership of an unrelated red PR. A failed item
+needs a cause-corrected successor; a new cycle must not depend on impossible
+success from a failed item.
+
+Each lead pass or check-in inventories all current-Session Work pages, active
+sessions, prior-Session carryover, and retained PRs at exact heads. It records
+an owner or named release event for each relevant failed or open item. Old
+failed Work is evidence, not a current owner. A check-in can use supported
+Work controls for a proven stranded state and the explicit-session CLI to
+admit a narrow current-Session successor. It cannot silently complete
+delivery Work or use an old Session's Work ID as a current dependency.
 
 The supervisor observes and classifies active cycles. It must not freely mutate
 an active same-name cycle or bypass its dependency barrier. A cycle repair is
@@ -269,7 +290,7 @@ can inform Factory improvement; it cannot mark product acceptance complete.
 
 ## Learning and controlled change
 
-The Astra supervisor aggregates retrospective reports on scheduled passes. It
+The Sol supervisor aggregates retrospective reports on scheduled passes. It
 promotes a learned rule only when:
 
 1. the pattern is supported by more than one relevant observation or a strong
@@ -300,23 +321,28 @@ After reconciliation, the supervisor records a hold and stops when:
 - no new evidence requires admission, validation, escalation, or route repair.
 
 A hold records the reason, evidence, affected Work or Projects, owner of the
-external condition, next scheduled four-hour review, and exception signals that
+external condition, next scheduled eight-hour review, and exception signals that
 should wake the supervisor sooner. It does not create placeholder Work,
 duplicate validation, weaken acceptance, or restart a healthy Project.
 
 ## Executable recovery boundaries
 
-Every fifteen minutes the script reconciler wakes a waiting Project whose
-same-name cycle is missing, after checking no lead is active. It preserves
-existing children. A visible cycle remains owned by the normal graph; the
-sweep never replaces it. Blocked Projects require supervisor diagnosis and
-changed evidence before a deliberate retry. Timer passage is not retry evidence.
+An hourly Project Lead check-in binds each waiting Project to its own Sol lead.
+The lead inspects its existing same-name cycle, children, retained PRs, and
+evidence. It may make a cause-corrected repair through supported Work controls
+or admit independent ready idea/validation Work through the CLI. It must not
+create another same-name cycle while one is visible. Healthy Projects with no
+other ready Work remain waiting. Blocked Projects require changed evidence
+before a deliberate retry; supervisor diagnosis is needed only when the lead
+lacks a supported repair route. Timer passage is not retry evidence.
 
-A child failure wakes its Project Lead to classify the failure; it does not
-automatically resubmit the child. A blocked cycle, failed lead, or exhausted
-lead visit budget passes through `project:needs-supervision` once, preserving
+A child failure blocks a required-success dependency. The hourly check-in
+wakes that Project's Lead to classify and repair it; the dependency alone does
+not fail the cycle or automatically resubmit the child. A blocked cycle, failed
+lead, or exhausted lead visit budget passes through `project:needs-supervision`
+once, preserving
 `project:blocked` and creating a supervisor thought. This route cannot repeatedly
-consume the unchanged blocked state. Script sweep failures also notify the
+consume the unchanged blocked state. A failed lead check-in notifies the
 supervisor. A stopped host cannot run its own timers; host restart supervision
 is a separate deployment concern.
 

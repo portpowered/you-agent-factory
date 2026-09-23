@@ -836,6 +836,10 @@ func controlledErrorClass(err error) string {
 	if err == nil {
 		return "none"
 	}
+	var budgetErr *BudgetError
+	if errors.As(err, &budgetErr) {
+		return budgetErr.Code
+	}
 	if isControlledCleanupCeiling(err) {
 		return "quiescence_ceiling"
 	}

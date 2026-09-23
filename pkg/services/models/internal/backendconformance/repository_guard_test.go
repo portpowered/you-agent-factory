@@ -5,6 +5,7 @@ package backendconformance
 import (
 	"fmt"
 	"io/fs"
+	"os"
 	"strings"
 	"testing"
 
@@ -16,15 +17,18 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
-// TestNoDanglingBackendReference proves every shipped inference reference has
-// exactly one offline installation path. The repository adapter below is the
-// only code that discovers generated files or the checked-in manifest.
-func TestNoDanglingBackendReference(t *testing.T) {
+// TestNoDanglingBackendReferenceConformance proves every shipped inference
+// reference has exactly one offline installation path. The repository adapter
+// below is the only code that discovers generated files or the checked-in manifest.
+func TestNoDanglingBackendReferenceConformance(t *testing.T) {
 	t.Parallel()
 
 	inputs, err := repositoryConformanceInputs()
 	if err != nil {
 		t.Fatalf("collect repository backend references: %v", err)
+	}
+	if len(inputs.PinnedArtifacts) != 9 {
+		t.Fatalf("checked-in default manifest has %d artifacts, want the existing nine-entry baseline", len(inputs.PinnedArtifacts))
 	}
 	if err := Validate(inputs); err != nil {
 		t.Fatal(err)
@@ -56,6 +60,51 @@ func TestRepositoryBackendReferenceCollectorPreservesCustomerSources(t *testing.
 	}
 }
 
+func TestWindowsCUDAVariantFixtureTraversesRepositoryConformanceSpine(t *testing.T) {
+	t.Parallel()
+
+	fixture, err := os.ReadFile("../artifacts/testdata/windows-cuda-variant-manifest.json")
+	if err != nil {
+		t.Fatalf("read exact Windows CUDA fixture: %v", err)
+	}
+	manifest, err := artifacts.Decode(fixture)
+	if err != nil {
+		t.Fatalf("Decode(exact Windows CUDA fixture): %v", err)
+	}
+
+	pinnedArtifacts := pinnedArtifactsFromManifest(manifest)
+	wantTargets := map[string]int{
+		TargetDarwinArm64:      1,
+		TargetLinuxAmd64:       1,
+		TargetWindowsAmd64:     1,
+		TargetWindowsAmd64CUDA: 1,
+	}
+	observedTargets := make(map[string]int, len(pinnedArtifacts))
+	for _, artifact := range pinnedArtifacts {
+		if artifact.BackendID != ApprovedCUDABackend {
+			continue
+		}
+		observedTargets[artifact.TargetID]++
+	}
+	if len(pinnedArtifacts) != 10 || len(observedTargets) != len(wantTargets) {
+		t.Fatalf("projected exact fixture = %d artifacts; approved backend targets = %#v, want three baselines plus one CUDA entry", len(pinnedArtifacts), observedTargets)
+	}
+	for target, wantCount := range wantTargets {
+		if observedTargets[target] != wantCount {
+			t.Fatalf("projected target %q count = %d, want %d", target, observedTargets[target], wantCount)
+		}
+	}
+
+	inputs := Inputs{
+		References:         []Reference{{Identifier: ApprovedCUDABackend, Source: "exact Windows CUDA fixture"}},
+		RegisteredBackends: []string{ApprovedCUDABackend},
+		PinnedArtifacts:    pinnedArtifacts,
+	}
+	if err := Validate(inputs); err != nil {
+		t.Fatalf("Validate(projected exact Windows CUDA fixture): %v", err)
+	}
+}
+
 func repositoryConformanceInputs() (Inputs, error) {
 	references, err := collectPackagedFactoryReferences()
 	if err != nil {
@@ -75,14 +124,7 @@ func repositoryConformanceInputs() (Inputs, error) {
 	if err != nil {
 		return Inputs{}, fmt.Errorf("decode default backend manifest: %w", err)
 	}
-	pinnedArtifacts := make([]PinnedArtifact, 0, manifest.ArtifactCount())
-	for _, descriptor := range manifest.Artifacts() {
-		pinnedArtifacts = append(pinnedArtifacts, PinnedArtifact{
-			BackendID: descriptor.Backend.ID,
-			TargetID:  descriptor.Target.ID,
-			SizeBytes: descriptor.Artifact.SizeBytes,
-		})
-	}
+	pinnedArtifacts := pinnedArtifactsFromManifest(manifest)
 
 	registeredBackends := make([]string, 0)
 	for _, record := range backendregistry.Records() {
@@ -93,6 +135,21 @@ func repositoryConformanceInputs() (Inputs, error) {
 		RegisteredBackends: registeredBackends,
 		PinnedArtifacts:    pinnedArtifacts,
 	}, nil
+}
+
+func pinnedArtifactsFromManifest(manifest artifacts.Manifest) []PinnedArtifact {
+	pinnedArtifacts := make([]PinnedArtifact, 0, manifest.ArtifactCount())
+	for _, descriptor := range manifest.Artifacts() {
+		pinnedArtifacts = append(pinnedArtifacts, PinnedArtifact{
+			BackendID:       descriptor.Backend.ID,
+			TargetID:        descriptor.Target.ID,
+			OperatingSystem: descriptor.Target.OperatingSystem,
+			Architecture:    descriptor.Target.Architecture,
+			Accelerators:    append([]string(nil), descriptor.Target.Accelerators...),
+			SizeBytes:       descriptor.Artifact.SizeBytes,
+		})
+	}
+	return pinnedArtifacts
 }
 
 func collectPackagedFactoryReferences() ([]Reference, error) {

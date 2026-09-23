@@ -271,30 +271,31 @@ const (
 
 // RuntimeEvidenceRecord is the private, ordered representation shared by the
 // Models runtime and its integration witness. It deliberately contains only
-// bounded enums, elapsed time, cause digests, and bounded managed-process
-// terminal facts; callers never publish a raw error, endpoint, path, prompt,
-// token, or media payload through it.
+// bounded enums, elapsed time, byte counts, digests, managed-process terminal
+// facts, and an optional allow-listed ASR protocol observation; callers never
+// publish a raw error, endpoint, path, prompt, token, or media payload through it.
 type RuntimeEvidenceRecord struct {
-	Sequence             uint64                 `json:"sequence"`
-	Kind                 string                 `json:"kind"`
-	Stage                RuntimeStage           `json:"stage,omitempty"`
-	Outcome              string                 `json:"outcome"`
-	Class                RuntimeFailureClass    `json:"failure_class,omitempty"`
-	Subcause             RuntimeFailureSubcause `json:"failure_subcause,omitempty"`
-	DurationMillis       int64                  `json:"duration_millis"`
-	CauseSHA256          string                 `json:"cause_sha256,omitempty"`
-	ExitClass            string                 `json:"exit_class,omitempty"`
-	ExitCode             int                    `json:"exit_code,omitempty"`
-	ExitCodeKnown        bool                   `json:"exit_code_known,omitempty"`
-	StdoutBytes          uint64                 `json:"stdout_bytes,omitempty"`
-	StdoutSHA256         string                 `json:"stdout_sha256,omitempty"`
-	StdoutTruncated      bool                   `json:"stdout_truncated,omitempty"`
-	StderrBytes          uint64                 `json:"stderr_bytes,omitempty"`
-	StderrSHA256         string                 `json:"stderr_sha256,omitempty"`
-	StderrTruncated      bool                   `json:"stderr_truncated,omitempty"`
-	CauseCode            string                 `json:"cause_code,omitempty"`
-	CauseMessage         string                 `json:"cause_message,omitempty"`
-	CauseMessageRedacted bool                   `json:"cause_message_redacted,omitempty"`
+	Sequence             uint64                         `json:"sequence"`
+	Kind                 string                         `json:"kind"`
+	Stage                RuntimeStage                   `json:"stage,omitempty"`
+	Outcome              string                         `json:"outcome"`
+	Class                RuntimeFailureClass            `json:"failure_class,omitempty"`
+	Subcause             RuntimeFailureSubcause         `json:"failure_subcause,omitempty"`
+	DurationMillis       int64                          `json:"duration_millis"`
+	CauseSHA256          string                         `json:"cause_sha256,omitempty"`
+	ExitClass            string                         `json:"exit_class,omitempty"`
+	ExitCode             int                            `json:"exit_code,omitempty"`
+	ExitCodeKnown        bool                           `json:"exit_code_known,omitempty"`
+	StdoutBytes          uint64                         `json:"stdout_bytes,omitempty"`
+	StdoutSHA256         string                         `json:"stdout_sha256,omitempty"`
+	StdoutTruncated      bool                           `json:"stdout_truncated,omitempty"`
+	StderrBytes          uint64                         `json:"stderr_bytes,omitempty"`
+	StderrSHA256         string                         `json:"stderr_sha256,omitempty"`
+	StderrTruncated      bool                           `json:"stderr_truncated,omitempty"`
+	CauseCode            string                         `json:"cause_code,omitempty"`
+	CauseMessage         string                         `json:"cause_message,omitempty"`
+	CauseMessageRedacted bool                           `json:"cause_message_redacted,omitempty"`
+	ASRProtocol          *RuntimeASRProtocolObservation `json:"asr_protocol,omitempty"`
 }
 
 // RuntimeEvidenceRecorder accepts one private runtime observation. The
@@ -316,8 +317,7 @@ type orderedRuntimeEvidenceRecorder struct {
 
 // runtimeEvidenceInvocationRecorder scopes terminal suppression to one
 // invocation while retaining the process-wide sequence owned by the ordered
-// recorder. The underlying RuntimeEvidenceRecord remains intentionally
-// unchanged and carries no request identity.
+// recorder. Invocation-scoped protocol facts do not change terminal ownership.
 type runtimeEvidenceInvocationRecorder struct {
 	mu               sync.Mutex
 	terminalRecorded bool
@@ -523,6 +523,9 @@ func runtimeEvidenceRecordFromDiagnostic(
 func normalizeRuntimeEvidenceRecord(
 	record RuntimeEvidenceRecord,
 ) (RuntimeEvidenceRecord, bool) {
+	if record.Kind == RuntimeEvidenceKindASRProtocol {
+		return normalizeRuntimeASRProtocolEvidenceRecord(record)
+	}
 	if !validRuntimeEvidenceRecordShape(record) {
 		return RuntimeEvidenceRecord{}, false
 	}
@@ -540,7 +543,8 @@ func normalizeRuntimeEvidenceRecord(
 }
 
 func validRuntimeEvidenceRecordShape(record RuntimeEvidenceRecord) bool {
-	return (record.Kind == RuntimeEvidenceKindStage || record.Kind == RuntimeEvidenceKindTerminal) &&
+	return record.ASRProtocol == nil &&
+		(record.Kind == RuntimeEvidenceKindStage || record.Kind == RuntimeEvidenceKindTerminal) &&
 		isRuntimeStage(record.Stage) &&
 		(record.Outcome == RuntimeEvidenceOutcomeCompleted || record.Outcome == RuntimeEvidenceOutcomeFailed)
 }

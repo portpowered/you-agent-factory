@@ -12027,7 +12027,7 @@
           },
           "description": {
             "id": "you.models.description",
-            "canonicalEnglish": "Discover, inspect, pull, and invoke local models for language, speech, voice, and embeddings.\n\nUse list and inspect to review the shipped llm, asr, tts, and embed names. Commands use local Models composition unless you explicitly select a reachable service with --server. Direct invocation also requires a valid Current Factory at ./factory/factory.json."
+            "canonicalEnglish": "Discover, inspect, pull, and invoke local models for language, speech, voice, and embeddings.\n\nUse list and inspect to review the shipped llm, asr, tts, and embed names. Commands use local Models composition unless you explicitly select a reachable service with --server. Direct built-in invocation does not require a Current Factory. A valid Current Factory may provide compatible model configuration."
           }
         },
         "examples": [
@@ -12745,7 +12745,7 @@
           },
           "description": {
             "id": "you.models.invoke.description",
-            "canonicalEnglish": "Invoke one local model through the Current Factory at ./factory/factory.json. Use shipped model names: llm for OMNI, asr for speech recognition, tts for voice synthesis, or embed for embeddings. Use --offline to require verified cached model and backend artifacts without network access. An explicit --server must identify a reachable service. Repeatable --input and --output values preserve the existing named-slot contract."
+            "canonicalEnglish": "Invoke a built-in model directly from any directory; no Current Factory is required. Use llm for OMNI, asr for speech recognition, tts for voice synthesis, or embed for embeddings. Use --offline with verified cached model and backend artifacts. An explicit --server selects a reachable service. Repeatable --input and --output flags bind named slots."
           }
         },
         "examples": [

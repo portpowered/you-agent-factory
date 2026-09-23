@@ -543,6 +543,9 @@ func (r *supervisedRuntime) watchProcessExit(
 	if r.cfg.onProcessFailure != nil {
 		r.cfg.onProcessFailure()
 	}
+	if observer, ok := process.(modelseffects.HostManagedProcessFailureObserver); ok {
+		observer.RuntimeHostFailureObserved()
+	}
 }
 
 func runtimeLoadElapsed(clock modelseffects.HostClock, started time.Time) time.Duration {

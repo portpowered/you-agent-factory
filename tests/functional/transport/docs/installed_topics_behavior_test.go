@@ -158,13 +158,13 @@ func testModelsDocumentation(t *testing.T, process support.Process) {
 		"| `llm` | `OMNI` | 5.0 GB |",
 		"| `asr` | `ASR` | 148 MB |",
 		"| `tts` | `TTS` | 1.714 GB |",
-		"| `embed` | `EMBED` | 1.21 GB |",
+		"| `embed` | `EMBED` | 639 MB |",
 		"additional platform-specific backend and runtime files",
 		"`cacheBytes` reports the exact managed cache size",
 		"INFINITE_YOU_OMNIVOICE_CACHE_DIR",
-		"Direct invocation of a built-in uses the local Models composition",
-		"does not\nrequire `./factory/factory.json`",
-		"its Models\nscope remains available",
+		"Invoke a built-in model directly from any directory. A Current Factory is not\nrequired.",
+		"its Models scope remains available",
+		`you models invoke llm --offline --operation OMNI --input prompt="Explain how a SHA-256 checksum differs from encryption."`,
 		"A missing implicit Current Factory is not an error for a built-in invocation.",
 		"An explicitly supplied or malformed Factory still returns its typed Factory\nerror",
 		"never creates or initializes a Factory as a workaround.",
@@ -205,16 +205,16 @@ func testModelsInvokeHelp(t *testing.T, process support.Process) {
 	env := isolatedDocumentationEnvironment(t)
 	help := executeDocumentationCommand(t, process, env, documentationProcess(t).tempDir(t), "models", "invoke", "--help")
 	for _, want := range []string{
-		"Invoke one local model",
-		"Current Factory at ./factory/factory.json",
+		"Invoke one discovered model",
+		"Invoke a built-in model directly from any directory; no Current Factory is required.",
 		"llm for OMNI",
 		"asr for speech recognition",
 		"tts for voice synthesis",
 		"embed for embeddings",
-		"An explicit --server must identify a reachable service",
+		"An explicit --server selects a reachable service",
 		"--offline",
 		"you models invoke embed --operation EMBED",
-		"you models invoke llm --operation OMNI",
+		`you models invoke llm --operation OMNI --input prompt="Summarize this."`,
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("Models invoke help missing %q", want)

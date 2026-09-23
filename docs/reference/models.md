@@ -70,7 +70,7 @@ sizes exclude the additional platform-specific backend and runtime files.
 | `llm` | `OMNI` | 5.0 GB |
 | `asr` | `ASR` | 148 MB |
 | `tts` | `TTS` | 1.714 GB |
-| `embed` | `EMBED` | 1.21 GB |
+| `embed` | `EMBED` | 639 MB |
 
 Run `you --json models inspect <name>` to confirm the pinned source before a
 pull. After installation, `cacheBytes` reports the exact managed cache size.
@@ -208,9 +208,16 @@ and Recordings.
 
 ## Invoke A Model Directly
 
-Direct invocation of a built-in uses the local Models composition and does not
-require `./factory/factory.json`. If a valid Current Factory exists, its Models
-scope remains available for compatible Factory-backed model configuration.
+Invoke a built-in model directly from any directory. A Current Factory is not
+required. Use verified cached model and backend artifacts for an offline
+text-only OMNI call:
+
+```bash
+you models invoke llm --offline --operation OMNI --input prompt="Explain how a SHA-256 checksum differs from encryption."
+```
+
+If a valid Current Factory exists, its Models scope remains available for
+compatible Factory-backed model configuration.
 
 Without an explicit `--server`, direct invocation stays in the local process.
 An explicit `--server` must identify a reachable service and uses that service

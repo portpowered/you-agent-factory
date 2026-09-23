@@ -1162,9 +1162,12 @@ available, but they do not select a different TTS backend.
 
 **Worker roles and provider/model overrides.** The Factory has one inference
 worker role, `tts-executor`, selecting the built-in `tts` model backed by
-VibeVoice-7B through the Models-owned generic `InvokeModel` path and its `TTS`
-operation. The operation accepts one required `TEXT` slot and produces one
-`AUDIO` slot. The packaged Factory does not define a separate TTS codec or an
+the pinned VibeVoice Realtime 0.5B three-file bundle through the Models-owned
+generic `InvokeModel` path and its `TTS` operation. The managed payload is
+approximately 1.714 GB and contains the model, tokenizer, and Carter voice
+assets listed in [`you docs models`](./models.md#built-in-tts-bundle-identity).
+The operation accepts one required `TEXT` slot and produces one `AUDIO` slot.
+The packaged Factory does not define a separate TTS codec or an
 OmniVoice-specific execution route; Models owns the generic managed backend
 process. There is no general inference-provider or model override in the live
 `@you/tts` signature: `modelProvider: CODEX` in the packaged worker metadata
