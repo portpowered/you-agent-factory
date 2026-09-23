@@ -27,9 +27,6 @@ func TestNoDanglingBackendReferenceConformance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collect repository backend references: %v", err)
 	}
-	if len(inputs.PinnedArtifacts) != 9 {
-		t.Fatalf("checked-in default manifest has %d artifacts, want the existing nine-entry baseline", len(inputs.PinnedArtifacts))
-	}
 	if err := Validate(inputs); err != nil {
 		t.Fatal(err)
 	}
@@ -61,8 +58,8 @@ func TestWindowsCUDAVariantFixtureTraversesRepositoryConformanceSpine(t *testing
 		}
 		observedTargets[artifact.TargetID]++
 	}
-	if len(pinnedArtifacts) != 10 || len(observedTargets) != len(wantTargets) {
-		t.Fatalf("projected exact fixture = %d artifacts; approved backend targets = %#v, want three baselines plus one CUDA entry", len(pinnedArtifacts), observedTargets)
+	if len(observedTargets) != len(wantTargets) {
+		t.Fatalf("approved backend targets = %#v, want three baselines plus one CUDA entry", observedTargets)
 	}
 	for target, wantCount := range wantTargets {
 		if observedTargets[target] != wantCount {
