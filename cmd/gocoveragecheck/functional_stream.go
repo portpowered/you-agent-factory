@@ -22,6 +22,7 @@ type functionalStreamReporter struct {
 	sinkMu              sync.Mutex
 	completedPackages   map[string]struct{}
 	onEvent             func(goTestTimingEvent)
+	onRawLine           func([]byte) error
 	suppressHumanOutput bool
 }
 
@@ -115,6 +116,11 @@ func (writer *functionalStreamWriter) Flush() error {
 }
 
 func (writer *functionalStreamWriter) writeLineLocked(line []byte) error {
+	if writer.reporter.onRawLine != nil {
+		if err := writer.reporter.onRawLine(line); err != nil {
+			return err
+		}
+	}
 	var event goTestTimingEvent
 	if err := json.Unmarshal(bytes.TrimSpace(line), &event); err != nil || event.Package == "" {
 		if writer.reporter.suppressHumanOutput {

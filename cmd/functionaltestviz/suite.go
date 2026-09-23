@@ -41,23 +41,9 @@ func runFunctionalSuite(cfg config, stdout, stderr io.Writer) error {
 	if err := validateSuiteConfig(cfg); err != nil {
 		return err
 	}
-	ownedPaths := []string{
-		cfg.logPath,
-		functionalDiagnosticStatusPath(cfg),
-		cfg.timingSummaryPath,
-		cfg.coverageSummaryPath,
-		cfg.profilePath,
-		cfg.coverageBuildDiagnosticsPath,
-		cfg.outputPath,
-		cfg.verdictPath,
-		cfg.exitCodePath,
-	}
-	if err := resetSuiteArtifacts(ownedPaths); err != nil {
-		return err
-	}
-	logFile, err := os.OpenFile(cfg.logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	logFile, err := prepareFunctionalSuiteLog(cfg)
 	if err != nil {
-		return fmt.Errorf("open functional test command log %s: %w", cfg.logPath, err)
+		return err
 	}
 	defer logFile.Close()
 	_, _ = fmt.Fprintf(
@@ -112,6 +98,31 @@ func runFunctionalSuite(cfg config, stdout, stderr io.Writer) error {
 		}
 	}
 	return nil
+}
+
+func prepareFunctionalSuiteLog(cfg config) (*os.File, error) {
+	ownedPaths := []string{
+		cfg.logPath,
+		functionalDiagnosticStatusPath(cfg),
+		cfg.timingSummaryPath,
+		cfg.coverageSummaryPath,
+		cfg.profilePath,
+		cfg.coverageBuildDiagnosticsPath,
+		cfg.outputPath,
+		cfg.verdictPath,
+		cfg.exitCodePath,
+	}
+	if strings.TrimSpace(cfg.rawFailureDir) != "" {
+		ownedPaths = append(ownedPaths, filepath.Join(cfg.rawFailureDir, "index.json"))
+	}
+	if err := resetSuiteArtifacts(ownedPaths); err != nil {
+		return nil, err
+	}
+	logFile, err := os.OpenFile(cfg.logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("open functional test command log %s: %w", cfg.logPath, err)
+	}
+	return logFile, nil
 }
 
 func publishFunctionalJobSummary(cfg config) error {
@@ -212,6 +223,17 @@ func validateSuiteConfig(cfg config) error {
 	if cfg.jobs < 1 {
 		return fmt.Errorf("jobs must be positive")
 	}
+	if strings.TrimSpace(cfg.rawFailureDir) != "" {
+		if cfg.rawFailureMaxBytes <= 0 || cfg.rawFailureMaxBytes > 512<<20 {
+			return fmt.Errorf("raw-failure-max-bytes must be between 1 and 536870912")
+		}
+		cleanRawFailureDir := filepath.Clean(cfg.rawFailureDir)
+		if cleanRawFailureDir == "." || filepath.Dir(cleanRawFailureDir) == cleanRawFailureDir {
+			return fmt.Errorf("raw-failure-dir cannot be the current directory or a filesystem root")
+		}
+	} else if cfg.rawFailureMaxBytes != 0 {
+		return fmt.Errorf("raw-failure-max-bytes requires raw-failure-dir")
+	}
 	return nil
 }
 
@@ -244,6 +266,18 @@ func coverageCommandArguments(cfg config) []string {
 	}
 	if strings.TrimSpace(cfg.coverageBuildDiagnosticsPath) != "" {
 		args = append(args, "-coverage-build-diagnostics-output", cfg.coverageBuildDiagnosticsPath)
+	}
+	if strings.TrimSpace(cfg.coverageTestPackages) != "" {
+		args = append(args, "-packages", cfg.coverageTestPackages)
+	}
+	if strings.TrimSpace(cfg.coverageCoverPackages) != "" {
+		args = append(args, "-coverpkg", cfg.coverageCoverPackages)
+	}
+	if strings.TrimSpace(cfg.rawFailureDir) != "" {
+		args = append(args,
+			"-raw-failure-dir", cfg.rawFailureDir,
+			"-raw-failure-max-bytes", strconv.FormatInt(cfg.rawFailureMaxBytes, 10),
+		)
 	}
 	if !cfg.short {
 		args = append(args, "-short=false")
