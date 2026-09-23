@@ -742,13 +742,22 @@ func TestACPEventWitnessRejectsUnsafeCanonicalIdentifiers(t *testing.T) {
 func TestACPEventWitnessEmitterLogsOnceWhenStallDeadlineExpires(t *testing.T) {
 	t.Parallel()
 	captureCalls := 0
+	invocation := acpWitnessInvocation{
+		Test: "TestReusableACPServerTurnsThroughOneProcess", RequestID: 4, ACPSessionID: "acp-session-42",
+		FactorySessionID: stringPointer("factory-session-17"), DispatchID: stringPointer("dispatch-3"),
+	}
 	emitter := newACPWitnessEmitter(t, func() string {
 		captureCalls++
-		return acpWitnessPrefix + `{"status":"captured"}`
+		return captureACPEventWitness(context.Background(), acpWitnessReaderFake{}, invocation, nil)
 	}, 0)
 	<-emitter.done
-	if emitter.line != acpWitnessPrefix+`{"status":"captured"}` || captureCalls != 1 {
-		t.Fatalf("deadline witness = %q, capture calls = %d, want one safe line", emitter.line, captureCalls)
+	var witness acpFactoryEventWitness
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(emitter.line, acpWitnessPrefix)), &witness); err != nil {
+		t.Fatalf("decode deadline witness: %v", err)
+	}
+	if witness.Status != "unavailable" || witness.CaptureError == nil || witness.CaptureError.Class != "no_canonical_events" ||
+		witness.Invocation.FactorySessionID != nil || witness.Invocation.DispatchID != nil || captureCalls != 1 {
+		t.Fatalf("deadline witness = %+v, capture calls = %d, want one typed unavailable line without borrowed identity", witness, captureCalls)
 	}
 	if got := emitter.emit(); got != emitter.line || captureCalls != 1 {
 		t.Fatalf("second emit = %q, calls = %d, want the original one-time line", got, captureCalls)
