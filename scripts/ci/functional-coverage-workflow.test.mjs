@@ -166,7 +166,8 @@ test("controlled raw failure selection is limited to the retained labeled PR eve
 	assert.match(selector, /github\.rest\.pulls\.get/);
 	assert.match(selector, /eventHead !== liveHead/);
 	assert.match(selector, /core\.exportVariable\("FUNCTIONAL_RAW_FAILURE_WITNESS", "1"\)/);
-	assert.match(selector, /core\.exportVariable\("FUNCTIONAL_TEST_VIZ_PACKAGES", "\.\/cmd\/gocoveragecheck\/testdata\/rawfailure"\)/);
+	assert.match(selector, /core\.exportVariable\("FUNCTIONAL_TEST_VIZ_PACKAGES", "github\.com\/portpowered\/infinite-you\/cmd\/gocoveragecheck\/testdata\/rawfailure"\)/);
+	assert.match(selector, /core\.exportVariable\("FUNCTIONAL_QUARANTINE", ""\)/);
 	assert.doesNotMatch(selector, /github\.event\.(?:inputs|client_payload)|workflow_dispatch/);
 	assert.ok(
 		coverageJob.indexOf(selectorMarker) < coverageJob.indexOf(supervisorMarker),

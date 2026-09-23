@@ -446,7 +446,8 @@ jobs:
               return;
             }
             core.exportVariable("FUNCTIONAL_RAW_FAILURE_WITNESS", "1");
-            core.exportVariable("FUNCTIONAL_TEST_VIZ_PACKAGES", "./cmd/gocoveragecheck/testdata/rawfailure");
+            core.exportVariable("FUNCTIONAL_TEST_VIZ_PACKAGES", "github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailure");
+            core.exportVariable("FUNCTIONAL_QUARANTINE", "");
       - name: Run Linux functional coverage with concurrent quarantine verification
         if: matrix.suite == 'functional'
         timeout-minutes: 75
