@@ -4,11 +4,17 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
+	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -87,4 +93,53 @@ func (connection *asrRuntimeConnection) Invoke(context.Context, string, []byte) 
 func (connection *asrRuntimeConnection) Close() error {
 	connection.closed++
 	return nil
+}
+
+func newControlledASRHost(
+	t *testing.T,
+	scopes runtimescopes.Service,
+	assets scopedassets.Service,
+	launcher modelseffects.HostProcessLauncher,
+	httpDoer modelseffects.HostHTTPDoer,
+	clock modelseffects.HostClock,
+	protocol modelseffects.HostProtocolNegotiator,
+	compatibility modelseffects.HostCompatibilityChecker,
+	recorder modelseffects.RuntimeEvidenceRecorder,
+) runtimehost.Service {
+	t.Helper()
+	host, err := runtimehostwire.NewService(
+		scopes, assets, launcher, httpDoer, clock, nil, nil,
+		runtimehost.Options{
+			Platform:           models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64"},
+			ProtocolNegotiator: protocol, CompatibilityChecker: compatibility,
+			RuntimeEvidence: recorder, IdleUnloadAfter: time.Hour,
+		},
+	)
+	if err != nil {
+		t.Fatalf("construct Runtime Host: %v", err)
+	}
+	return host
+}
+
+func newTestASRInvocationRuntime(
+	t *testing.T,
+	dialer platformgrpc.Dialer,
+	tempDirectory string,
+) invocationRuntime {
+	t.Helper()
+	runtime, err := inferenceRuntime(invocationRuntimeOptions{
+		Dialer:           dialer,
+		ASRTempDirectory: func() string { return tempDirectory },
+		ASRCreateTemp: func(directory, pattern string) (localai.TempFile, error) {
+			return os.CreateTemp(directory, pattern)
+		},
+		ASRWriteFile: func(path string, content []byte) error {
+			return os.WriteFile(path, content, 0o600)
+		},
+		ASRRemoveFile: os.Remove,
+	})
+	if err != nil {
+		t.Fatalf("construct Models invocation runtime: %v", err)
+	}
+	return runtime
 }

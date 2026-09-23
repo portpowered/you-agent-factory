@@ -20,6 +20,10 @@ MANAGED_PROCESS_HELPER_SOURCE ?= ./tests/integration/models/testdata/managed_pro
 MANAGED_PROCESS_HELPER_DIR ?= .artifacts/integration/models-managed-process
 MANAGED_PROCESS_HELPER_DIGEST_FILE ?= $(MANAGED_PROCESS_HELPER_DIR)/managed_process_helper.sha256
 MANAGED_PROCESS_INTEGRATION_PACKAGE ?= ./tests/integration/models/managed_process
+ASR_LIVE_CORRELATION_HARNESS_DIR ?= .artifacts/integration/models-asr-live-correlation
+# Keep the prebuilt helper under testdata so it is excluded from the unit package inventory.
+ASR_LIVE_CORRELATION_HARNESS_SOURCE ?= ./pkg/services/models/internal/testdata/asr_live_correlation_harness
+ASR_LIVE_CORRELATION_INTEGRATION_PACKAGE ?= ./tests/integration/models/asr_live_correlation
 
 ifeq ($(OS),Windows_NT)
 MANAGED_PROCESS_HELPER_DEFAULT := $(MANAGED_PROCESS_HELPER_DIR)/managed_process_helper.exe
@@ -27,6 +31,14 @@ else
 MANAGED_PROCESS_HELPER_DEFAULT := $(MANAGED_PROCESS_HELPER_DIR)/managed_process_helper
 endif
 MANAGED_PROCESS_HELPER ?= $(MANAGED_PROCESS_HELPER_DEFAULT)
+
+ifeq ($(OS),Windows_NT)
+ASR_LIVE_CORRELATION_HARNESS_DEFAULT := $(ASR_LIVE_CORRELATION_HARNESS_DIR)/asr-live-correlation-harness.exe
+else
+ASR_LIVE_CORRELATION_HARNESS_DEFAULT := $(ASR_LIVE_CORRELATION_HARNESS_DIR)/asr-live-correlation-harness
+endif
+ASR_LIVE_CORRELATION_HARNESS ?= $(ASR_LIVE_CORRELATION_HARNESS_DEFAULT)
+ASR_LIVE_CORRELATION_HARNESS_DIGEST_FILE ?= $(ASR_LIVE_CORRELATION_HARNESS_DIR)/asr-live-correlation-harness.sha256
 
 # Keep the default Go work claimed by each factory lane bounded when several
 # lanes share one host. GO_LANE_BUDGET is max(2, logical CPUs /
@@ -257,7 +269,7 @@ endef
 .PHONY: default default-pipeline-banner build install bundle-api print-go-parallelism
 .PHONY: fmt fmt-check vet deps deps-tidy clean init typecheck release lint
 
-.PHONY: test test-full test-unit test-unit-fresh test-unit-latency-budget regenerate-shared-ci-baselines test-ci-workflows test-lane-audit test-maintenance test-integration test-localai-runner-v2-component test-localai-runner-v2-prebuilt test-integration-models-managed-process build-integration-models-managed-process-helper test-contract test-stress test-release
+.PHONY: test test-full test-unit test-unit-fresh test-unit-latency-budget regenerate-shared-ci-baselines test-ci-workflows test-lane-audit test-maintenance test-integration test-localai-runner-v2-component test-localai-runner-v2-prebuilt test-integration-models-managed-process build-integration-models-managed-process-helper test-integration-models-asr-live-correlation build-integration-models-asr-live-correlation-harness test-contract test-stress test-release
 .PHONY: test-functional test-functional-fresh test-functional-long test-functional-long-compile test-backend-functional functional-boundary-check functional-os-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage coverage-help test-backend-coverage test-coverage-go test-race
@@ -569,6 +581,10 @@ test-integration:
 	$(GO) test ./pkg/services/workers/internal/worktree -run '^TestPrepareFactoryGitWorktree_(CreatesWorktreeWhenMissing|ReusesExistingValidWorktree|UsesExistingWorktreesParent|ReturnsFailureWhenWorktreeAddFails|ReturnsFailureWhenPathExistsButIsNotWorktree)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/providers/internal/services/execution/internal/adapters/claude -run '^TestClaudeCommandEnvironmentPreventsGitMergeEditorPrompt$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
+ifeq ($(OS),Windows_NT)
+	$(MAKE) test-integration-models-asr-live-correlation
+endif
+
 # The managed-process integration target is intentionally separate from the
 # broad integration lane. It owns one helper build, records its immutable
 # digest, and supplies both identities to the production boundary package.
@@ -596,6 +612,27 @@ else
 	artifact_sha256="$$(tr -d '\r\n' < "$$digest_path")"; \
 	printf '%s\n' "managed process integration helper path=$$artifact_path" "managed process integration helper sha256=$$artifact_sha256"; \
 	YOU_MODELS_MANAGED_PROCESS_HELPER="$$artifact_path" YOU_MODELS_MANAGED_PROCESS_HELPER_SHA256="$$artifact_sha256" GOFLAGS=-p=4 GOMAXPROCS=4 $(GO) test -tags=managed_process_integration -p=4 "$(MANAGED_PROCESS_INTEGRATION_PACKAGE)" -count=1 -timeout "$(GO_TEST_TIMEOUT)"
+endif
+
+# The ASR correlation test package needs Models internal access, so it is
+# compiled as one immutable helper artifact. The integration package under
+# tests/integration owns its execution and the two serialized manifest calls.
+ifeq ($(OS),Windows_NT)
+build-integration-models-asr-live-correlation-harness:
+	@powershell -NoProfile -ExecutionPolicy Bypass -Command "$$ErrorActionPreference = 'Stop'; $$artifactPath = [System.IO.Path]::GetFullPath('$(ASR_LIVE_CORRELATION_HARNESS)'); $$digestPath = [System.IO.Path]::GetFullPath('$(ASR_LIVE_CORRELATION_HARNESS_DIGEST_FILE)'); New-Item -ItemType Directory -Path (Split-Path -Parent $$artifactPath) -Force | Out-Null; New-Item -ItemType Directory -Path (Split-Path -Parent $$digestPath) -Force | Out-Null; if (Test-Path -LiteralPath $$artifactPath) { Set-ItemProperty -LiteralPath $$artifactPath -Name IsReadOnly -Value $$false }; $$env:GOFLAGS = '-p=4'; $$env:GOMAXPROCS = '4'; & '$(GO)' test -c -tags=managed_process_integration -trimpath -o $$artifactPath '$(ASR_LIVE_CORRELATION_HARNESS_SOURCE)'; if ($$LASTEXITCODE -ne 0) { exit $$LASTEXITCODE }; $$hashAlgorithm = [System.Security.Cryptography.SHA256]::Create(); try { $$artifactSHA = [System.BitConverter]::ToString($$hashAlgorithm.ComputeHash([System.IO.File]::ReadAllBytes($$artifactPath))).Replace('-', '').ToLowerInvariant() } finally { $$hashAlgorithm.Dispose() }; Set-Content -LiteralPath $$digestPath -Value $$artifactSHA -NoNewline; Set-ItemProperty -LiteralPath $$artifactPath -Name IsReadOnly -Value $$true; Write-Output ('ASR live-correlation harness sha256=' + $$artifactSHA)"
+
+test-integration-models-asr-live-correlation:
+	@powershell -NoProfile -ExecutionPolicy Bypass -Command "$$ErrorActionPreference = 'Stop'; $$manifestNames = @('INFINITE_YOU_ASR_LIVE_CORRELATION_RESPONSE_FIRST_MANIFEST','INFINITE_YOU_ASR_LIVE_CORRELATION_EXIT_FIRST_MANIFEST'); $$manifestPaths = @(); foreach ($$name in $$manifestNames) { $$path = [Environment]::GetEnvironmentVariable($$name); if ([string]::IsNullOrWhiteSpace($$path) -or -not [System.IO.Path]::IsPathRooted($$path) -or -not (Test-Path -LiteralPath $$path -PathType Leaf)) { throw ($$name + ' must name an existing absolute manifest file') }; $$manifestPaths += [System.IO.Path]::GetFullPath($$path) }; if ([System.StringComparer]::OrdinalIgnoreCase.Equals($$manifestPaths[0], $$manifestPaths[1])) { throw 'response-first and exit-first ASR manifests must be distinct files' }"
+	@$(MAKE) build-integration-models-asr-live-correlation-harness
+	@powershell -NoProfile -ExecutionPolicy Bypass -Command "$$ErrorActionPreference = 'Stop'; $$env:INFINITE_YOU_ASR_LIVE_CORRELATION_HARNESS = [System.IO.Path]::GetFullPath('$(ASR_LIVE_CORRELATION_HARNESS)'); $$env:INFINITE_YOU_ASR_LIVE_CORRELATION_HARNESS_SHA256 = (Get-Content -Raw -LiteralPath '$(ASR_LIVE_CORRELATION_HARNESS_DIGEST_FILE)').Trim(); $$env:GOFLAGS = '-p=4'; $$env:GOMAXPROCS = '4'; & '$(GO)' test -tags=managed_process_integration -p=4 '$(ASR_LIVE_CORRELATION_INTEGRATION_PACKAGE)' -count=1 -timeout 10m -v; exit $$LASTEXITCODE"
+else
+build-integration-models-asr-live-correlation-harness:
+	@echo "ASR live-correlation harness is Windows-only" >&2
+	@exit 1
+
+test-integration-models-asr-live-correlation:
+	@echo "ASR live-correlation integration is Windows-only" >&2
+	@exit 1
 endif
 
 test-contract:
