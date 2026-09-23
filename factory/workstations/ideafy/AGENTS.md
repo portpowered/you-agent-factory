@@ -190,11 +190,22 @@ Work, evidence, and the next decision. Compact the files when they stop helping
 the next pass. Never commit them or any provider payload, transcript, CI log,
 or validation report to a feature branch.
 
-## Response contract
+## Submission and response contract
 
-The runtime reads your complete response as a raw JSON object wrapped in
-`request`; do not add Markdown or prose around it. Use the canonical
-`FACTORY_REQUEST_BATCH` shape from `factory/docs/batch-inputs.md`.
+Submit new Work through the CLI, never through the final response. Write a raw
+`FACTORY_REQUEST_BATCH` with a stable request ID to an untracked file under
+`docs/temp/`, using `factory/docs/batch-inputs.md` as the shape. Run
+`you --server http://127.0.0.1:7437 --json submit batch --dry-run --session {{.Context.SessionID}} <file>`;
+then run it without `--dry-run`. Check the returned request ID, session ID,
+Work count and Work IDs, then inspect the admitted Work. On an uncertain result,
+inspect by request ID before retrying that same idempotent request ID. Record
+the receipt in supervisor state.
+
+Return only `{"decision":"ACCEPTED","feedback":"<verified submission or hold>","output":"<request ID or hold>"}`.
+On a failed CLI operation or unverified admission, return `FAILED` with the
+exact blocker. Do not return a Work batch or a `request` wrapper. When no safe
+action remains, record the hold and return an accepted hold decision without
+submitting a batch.
 
 The supervisor may emit `project` or bounded legacy `idea` Work, with ordinary
 relations required by their real semantic prerequisites. It must not emit a

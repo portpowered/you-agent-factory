@@ -19,3 +19,10 @@ Reliability and the portfolio supervisor; do not claim Project completion.
 Keep all changes scoped to this Project. Do not admit a new behavior slice from
 the periodic check-in. The normal `project:init` lead pass remains the only
 route that creates the next cycle and new Work.
+
+Return only a decision envelope. Use `ACCEPTED` after verified inspection or
+repair, with concise feedback naming the observed owner and action. Use
+`FAILED` with the exact blocker when inspection or a supported repair fails.
+Do not emit a Work batch in this response. If a cause-corrected batch is ever
+authorized for this check-in, submit it through the same explicit-session CLI
+dry-run, submission, and Work verification procedure as the Project Lead.
