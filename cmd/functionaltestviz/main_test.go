@@ -24,6 +24,50 @@ func TestRunRequiresCoverageSummary(t *testing.T) {
 	}
 }
 
+func TestValidateSuiteConfigRequiresBoundedRawCaptureConfiguration(t *testing.T) {
+	t.Parallel()
+	base := config{
+		coverageSummaryPath: "coverage.json",
+		timingSummaryPath:   "timing.json",
+		outputPath:          "tests.md",
+		logPath:             "command.log",
+		profilePath:         "coverage.out",
+		jobs:                12,
+	}
+	if err := validateSuiteConfig(base); err != nil {
+		t.Fatalf("legacy suite configuration: %v", err)
+	}
+	base.rawFailureDir = ".artifacts/functional-test-viz/raw-failures"
+	if err := validateSuiteConfig(base); err == nil || !strings.Contains(err.Error(), "raw-failure-max-bytes") {
+		t.Fatalf("raw directory without size cap error = %v, want bounded cap requirement", err)
+	}
+	base.rawFailureMaxBytes = 536870912
+	if err := validateSuiteConfig(base); err != nil {
+		t.Fatalf("valid bounded raw configuration: %v", err)
+	}
+}
+
+func TestWriteCompactVerdictPreservesFailedCoverageExit(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	logPath := filepath.Join(root, "command.log")
+	verdictPath := filepath.Join(root, "functional-coverage-verdict.txt")
+	log := "coverage not evaluated: 1 failed tests observed; package floors were NOT checked because the coverage test run failed\n"
+	if err := os.WriteFile(logPath, []byte(log), 0o644); err != nil {
+		t.Fatalf("write failed functional command log: %v", err)
+	}
+	if err := writeCompactVerdict(logPath, verdictPath, 1); err != nil {
+		t.Fatalf("write compact failed verdict: %v", err)
+	}
+	verdict, err := os.ReadFile(verdictPath)
+	if err != nil {
+		t.Fatalf("read compact failed verdict: %v", err)
+	}
+	if normalizedExitCode(1) != 1 || !strings.Contains(string(verdict), "Functional coverage outcome: test-failure") || !strings.Contains(string(verdict), strings.TrimSpace(log)) {
+		t.Fatalf("failed verdict = %q, want test-failure details and nonzero exit", verdict)
+	}
+}
+
 func TestCoverageCommandArgumentsKeepsProbeOptIn(t *testing.T) {
 	t.Parallel()
 
@@ -48,6 +92,23 @@ func TestCoverageCommandArgumentsKeepsProbeOptIn(t *testing.T) {
 	probeArgs := coverageCommandArguments(withProbe)
 	if !slicesContainsString(probeArgs, "-coverage-build-diagnostics-output") || !slicesContainsString(probeArgs, "coverage-build-diagnostics.json") {
 		t.Fatalf("probe coverage args = %v, want optional diagnostic path", probeArgs)
+	}
+
+	withRawEvidence := base
+	withRawEvidence.coverageTestPackages = "./cmd/gocoveragecheck/testdata/rawfailure"
+	withRawEvidence.coverageCoverPackages = "github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailure"
+	withRawEvidence.rawFailureDir = ".artifacts/functional-test-viz/raw-failures"
+	withRawEvidence.rawFailureMaxBytes = 536870912
+	rawArgs := coverageCommandArguments(withRawEvidence)
+	for _, expected := range []string{
+		"-packages", withRawEvidence.coverageTestPackages,
+		"-coverpkg", withRawEvidence.coverageCoverPackages,
+		"-raw-failure-dir", withRawEvidence.rawFailureDir,
+		"-raw-failure-max-bytes", "536870912",
+	} {
+		if !slicesContainsString(rawArgs, expected) {
+			t.Fatalf("raw coverage args = %v, want %q", rawArgs, expected)
+		}
 	}
 }
 

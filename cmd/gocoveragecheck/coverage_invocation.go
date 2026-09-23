@@ -375,51 +375,17 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 	if diagnosticSetupErr != nil {
 		return errors.Join(diagnosticSetupErr, plan.cleanup())
 	}
+	rawCapture, rawHead, rawSetupErr := prepareFunctionalRawFailureCapture(cfg, repoRoot)
+	if rawSetupErr != nil {
+		return errors.Join(rawSetupErr, plan.cleanup())
+	}
 
 	started := time.Now()
-	snapshotter := configureFunctionalTimingSnapshot(&plan, cfg, testPackages, started, profilePath, repoRoot, coverPackages)
+	snapshotter := configureFunctionalTimingSnapshot(&plan, cfg, testPackages, started, profilePath, repoRoot, coverPackages, rawCapture)
 	if snapshotter != nil {
 		defer snapshotter.stopAndWait()
 	}
-	var stdout strings.Builder
-	var stderr strings.Builder
-	var laneErr error
-	var coverageCommandErr error
-	var coverageBuildTrace strings.Builder
-	succeeded := make([]bool, len(plan.invocations))
-	testFailureObserved := false
-	failedTestCount := 0
-	failedTestCountKnown := true
-	for index, invocation := range plan.invocations {
-		batchStdout, batchStderr, commandErr := runCommand(invocation)
-		commandErr = errors.Join(commandErr, flushFunctionalStreamWriter(invocation.stdoutWriter))
-		if buildDiagnosticRun != nil {
-			appendCoverageBuildTrace(&coverageBuildTrace, batchStdout, batchStderr)
-		}
-		appendCoverageOutput(&stdout, batchStdout)
-		appendCoverageOutput(&stderr, batchStderr)
-		coverageCommandErr = errors.Join(coverageCommandErr, commandErr)
-		if commandErr == nil {
-			succeeded[index] = true
-			continue
-		}
-		if count, known, observed := coverageTestFailureDetails(commandErr, batchStdout, batchStderr); observed {
-			testFailureObserved = true
-			failedTestCount += count
-			failedTestCountKnown = failedTestCountKnown && known
-		}
-
-		detail := coverageFailureDetail(cfg, batchStdout, batchStderr)
-		batchFailurePrefix := failurePrefix
-		if len(plan.invocations) > 1 {
-			batchFailurePrefix = fmt.Sprintf("%s (batch %d/%d)", failurePrefix, index+1, len(plan.invocations))
-		}
-		if detail != "" {
-			laneErr = errors.Join(laneErr, fmt.Errorf("%s: %w\n%s", batchFailurePrefix, commandErr, detail))
-		} else {
-			laneErr = errors.Join(laneErr, fmt.Errorf("%s: %w", batchFailurePrefix, commandErr))
-		}
-	}
+	invocationResult := runCoverageInvocations(cfg, plan, failurePrefix, buildDiagnosticRun, rawCapture)
 	wallSeconds := time.Since(started).Seconds()
 	covdataErr := materializeUnitCovdataProfile(plan, profilePath, repoRoot)
 
@@ -429,33 +395,105 @@ func executeCoverageInvocationPlan(cfg config, plan coverageInvocationPlan, test
 			buildDiagnosticRun,
 			strings.TrimSpace(cfg.coverageBuildDiagnosticsOutput),
 			wallSeconds,
-			coverageBuildTrace.String(),
-			coverageCommandErr,
+			invocationResult.coverageBuildTrace,
+			invocationResult.coverageCommandErr,
 		)
 	}
 
-	timingWriteErr := finalizeFunctionalTiming(cfg, snapshotter, stdout.String(), testPackages, wallSeconds, laneErr, expectedFunctionalInventory)
+	timingWriteErr := finalizeFunctionalTiming(cfg, snapshotter, invocationResult.stdout, testPackages, wallSeconds, invocationResult.laneErr, expectedFunctionalInventory)
 
 	var mergeErr error
 	mergeErr = errors.Join(mergeErr, covdataErr)
 	if len(plan.profilePaths) > 1 {
-		availableProfiles, availabilityErr := availableBatchCoverageProfiles(plan.profilePaths, succeeded)
+		availableProfiles, availabilityErr := availableBatchCoverageProfiles(plan.profilePaths, invocationResult.succeeded)
 		mergeErr = availabilityErr
 		if len(availableProfiles) > 0 {
 			mergeErr = errors.Join(mergeErr, mergeCoverageProfiles(availableProfiles, profilePath, repoRoot, coverPackages))
 		}
 	}
 
-	partialCoverageErr := publishPartialCoverageIfNeeded(cfg, profilePath, repoRoot, coverPackages, laneErr, mergeErr)
-	runErr := errors.Join(laneErr, timingWriteErr, buildDiagnosticErr, mergeErr, partialCoverageErr, plan.cleanup())
-	if !testFailureObserved {
+	partialCoverageErr := publishPartialCoverageIfNeeded(cfg, profilePath, repoRoot, coverPackages, invocationResult.laneErr, mergeErr)
+	var rawCaptureErr error
+	if rawCapture != nil {
+		rawCaptureErr = rawCapture.publish(rawHead, invocationResult.coverageCommandErr != nil)
+	}
+	runErr := errors.Join(invocationResult.laneErr, timingWriteErr, buildDiagnosticErr, mergeErr, partialCoverageErr, rawCaptureErr, plan.cleanup())
+	if !invocationResult.testFailureObserved {
 		return runErr
 	}
 	return &coverageTestFailureError{
 		err:                  runErr,
-		failedTestCount:      failedTestCount,
-		failedTestCountKnown: failedTestCountKnown && failedTestCount > 0,
+		failedTestCount:      invocationResult.failedTestCount,
+		failedTestCountKnown: invocationResult.failedTestCountKnown && invocationResult.failedTestCount > 0,
 	}
+}
+
+type coverageInvocationResult struct {
+	stdout               string
+	laneErr              error
+	coverageCommandErr   error
+	coverageBuildTrace   string
+	succeeded            []bool
+	testFailureObserved  bool
+	failedTestCount      int
+	failedTestCountKnown bool
+}
+
+func prepareFunctionalRawFailureCapture(cfg config, repoRoot string) (*functionalRawFailureCapture, string, error) {
+	if strings.TrimSpace(cfg.rawFailureDir) == "" {
+		return nil, "", nil
+	}
+	head, err := currentFunctionalRawFailureHead(repoRoot)
+	if err != nil {
+		return nil, "", err
+	}
+	capture, err := newFunctionalRawFailureCapture(cfg.rawFailureDir, cfg.rawFailureMaxBytes)
+	return capture, head, err
+}
+
+func runCoverageInvocations(cfg config, plan coverageInvocationPlan, failurePrefix string, buildDiagnosticRun *coverageBuildDiagnosticRun, rawCapture *functionalRawFailureCapture) coverageInvocationResult {
+	var result coverageInvocationResult
+	var stdout strings.Builder
+	var coverageBuildTrace strings.Builder
+	result.succeeded = make([]bool, len(plan.invocations))
+	result.failedTestCountKnown = true
+	for index, invocation := range plan.invocations {
+		if rawCapture != nil {
+			rawCapture.beginInvocation(invocation)
+		}
+		batchStdout, batchStderr, commandErr := runCommand(invocation)
+		commandErr = errors.Join(commandErr, flushFunctionalStreamWriter(invocation.stdoutWriter))
+		if rawCapture != nil {
+			rawCapture.finishInvocation(commandErr)
+		}
+		if buildDiagnosticRun != nil {
+			appendCoverageBuildTrace(&coverageBuildTrace, batchStdout, batchStderr)
+		}
+		appendCoverageOutput(&stdout, batchStdout)
+		result.coverageCommandErr = errors.Join(result.coverageCommandErr, commandErr)
+		if commandErr == nil {
+			result.succeeded[index] = true
+			continue
+		}
+		if count, known, observed := coverageTestFailureDetails(commandErr, batchStdout, batchStderr); observed {
+			result.testFailureObserved = true
+			result.failedTestCount += count
+			result.failedTestCountKnown = result.failedTestCountKnown && known
+		}
+		detail := coverageFailureDetail(cfg, batchStdout, batchStderr)
+		batchFailurePrefix := failurePrefix
+		if len(plan.invocations) > 1 {
+			batchFailurePrefix = fmt.Sprintf("%s (batch %d/%d)", failurePrefix, index+1, len(plan.invocations))
+		}
+		if detail != "" {
+			result.laneErr = errors.Join(result.laneErr, fmt.Errorf("%s: %w\n%s", batchFailurePrefix, commandErr, detail))
+		} else {
+			result.laneErr = errors.Join(result.laneErr, fmt.Errorf("%s: %w", batchFailurePrefix, commandErr))
+		}
+	}
+	result.stdout = stdout.String()
+	result.coverageBuildTrace = coverageBuildTrace.String()
+	return result
 }
 
 func materializeUnitCovdataProfile(plan coverageInvocationPlan, profilePath string, repoRoot string) error {
@@ -481,9 +519,10 @@ func materializeUnitCovdataProfile(plan coverageInvocationPlan, profilePath stri
 	return fmt.Errorf("materialize unit coverage profile: %w", err)
 }
 
-func configureFunctionalTimingSnapshot(plan *coverageInvocationPlan, cfg config, testPackages []string, started time.Time, profilePath string, repoRoot string, coverPackages []string) *functionalTimingSnapshotter {
+func configureFunctionalTimingSnapshot(plan *coverageInvocationPlan, cfg config, testPackages []string, started time.Time, profilePath string, repoRoot string, coverPackages []string, rawCapture *functionalRawFailureCapture) *functionalTimingSnapshotter {
 	timingEnabled := strings.TrimSpace(cfg.timingOutput) != ""
-	if !cfg.stream && !timingEnabled {
+	streamEnabled := cfg.stream || rawCapture != nil
+	if !streamEnabled && !timingEnabled {
 		return nil
 	}
 
@@ -497,14 +536,17 @@ func configureFunctionalTimingSnapshot(plan *coverageInvocationPlan, cfg config,
 		tracker.observe(event)
 	}
 	var reporter *functionalStreamReporter
-	if cfg.stream {
+	if streamEnabled {
 		reporter = configureCoverageInvocationStreamingForSuite(plan, true, cfg.suite == functionalCoverageSuite, observer)
+		if rawCapture != nil {
+			reporter.onRawLine = rawCapture.observeLine
+		}
 	} else {
 		reporter = configureCoverageInvocationObservation(plan, observer)
 	}
 	sink := io.Writer(nil)
 	var sinkMu *sync.Mutex
-	if cfg.stream && cfg.suite != functionalCoverageSuite {
+	if streamEnabled && cfg.suite != functionalCoverageSuite {
 		sink = stdoutWriter
 		sinkMu = &reporter.sinkMu
 	}

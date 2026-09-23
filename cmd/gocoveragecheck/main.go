@@ -101,6 +101,8 @@ type config struct {
 	jsonOutput                     string
 	timingOutput                   string
 	coverageBuildDiagnosticsOutput string
+	rawFailureDir                  string
+	rawFailureMaxBytes             int64
 	min                            float64
 	packageBaseline                string
 	packageMin                     float64
@@ -153,6 +155,9 @@ func main() {
 func execute(cfg config) error {
 	if err := validateConfig(cfg); err != nil {
 		return err
+	}
+	if strings.TrimSpace(cfg.rawFailureDir) != "" {
+		cfg.stream = true
 	}
 	if cfg.validateFunctionalQuarantine {
 		return executeFunctionalQuarantineValidation(cfg)
@@ -242,6 +247,8 @@ func parseConfig() config {
 	flag.StringVar(&cfg.jsonOutput, "json-output", "", "optional path for a deterministic machine-readable coverage summary JSON document")
 	flag.StringVar(&cfg.timingOutput, "timing-output", "", "optional path for a deterministic machine-readable functional package timing summary JSON document, captured from the same go test run")
 	flag.StringVar(&cfg.coverageBuildDiagnosticsOutput, "coverage-build-diagnostics-output", "", "optional path for a coverage build-cache diagnostic JSON document")
+	flag.StringVar(&cfg.rawFailureDir, "raw-failure-dir", "", "directory for bounded failed-package functional go test JSON")
+	flag.Int64Var(&cfg.rawFailureMaxBytes, "raw-failure-max-bytes", 0, "maximum retained functional failure event bytes (at most 512 MiB)")
 	flag.Float64Var(&cfg.min, "min", 0, "minimum total statement coverage percentage")
 	flag.StringVar(&cfg.packageBaseline, "package-baseline", "", "newline-delimited list of backend packages temporarily exempt from the per-package minimum coverage gate; defaults by suite")
 	flag.Float64Var(&cfg.packageMin, "package-min", defaultPackageCoverageMin, "minimum statement coverage required for each non-baselined backend package")
@@ -260,6 +267,19 @@ func parseConfig() config {
 }
 
 func validateConfig(cfg config) error {
+	if strings.TrimSpace(cfg.rawFailureDir) != "" {
+		if cfg.suite != functionalCoverageSuite {
+			return fmt.Errorf("configure raw functional failure capture: -suite must be %q (got %q)", functionalCoverageSuite, cfg.suite)
+		}
+		if cfg.rawFailureMaxBytes <= 0 || cfg.rawFailureMaxBytes > 512<<20 {
+			return errors.New("configure raw functional failure capture: -raw-failure-max-bytes must be between 1 and 536870912")
+		}
+		if cfg.validateFunctionalQuarantine {
+			return errors.New("configure raw functional failure capture: cannot combine with -validate-functional-quarantine")
+		}
+	} else if cfg.rawFailureMaxBytes != 0 {
+		return errors.New("configure raw functional failure capture: -raw-failure-max-bytes requires -raw-failure-dir")
+	}
 	if policy := cfg.packageFloorPolicyValue(); policy != coverageFloorPolicyBlocking && policy != coverageFloorPolicyAdvisory {
 		return fmt.Errorf("configure go coverage: -package-floor-policy must be %q or %q (got %q)", coverageFloorPolicyBlocking, coverageFloorPolicyAdvisory, cfg.packageFloorPolicy)
 	}
