@@ -128,6 +128,21 @@ a wait state, not executor rework. Failures caused by untouched baseline code
 must be distinguished from failures introduced by the PR and handled through
 the repository's baseline-flake policy.
 
+When a required job reaches its configured time limit, review **MUST** inspect
+the job and step timings, the current-head attempts, and a comparable passing
+base or main run before assigning cause. A configured job limit is a delivery
+constraint: do not raise it or classify the timeout as shared infrastructure
+solely because the job was cancelled at that limit. If the current head
+repeatedly exceeds the limit and the evidence points to work this PR can
+correct, record a blocking CI performance finding and return `REJECTED` with
+the measured timings, comparison, and a bounded diagnosis and correction for
+the existing implementer on the retained PR. Do not rerun without a reason to
+expect a different result. If a base run has the same failure or GitHub
+infrastructure independently cancelled the job, report that evidence and route
+according to the actual owner; do not invent a PR defect. `FAILED` is reserved
+for a review that cannot complete or cannot make a valid decision, not a
+successfully diagnosed red CI job.
+
 When the PR conflicts with its base, review requests the exact reconciliation
 needed and returns it to implementation. When all blocking criteria pass,
 required CI is terminal and green, conflicts are resolved, and policy permits,
