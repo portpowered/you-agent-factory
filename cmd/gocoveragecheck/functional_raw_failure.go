@@ -156,7 +156,21 @@ func (capture *functionalRawFailureCapture) beginInvocation(invocation commandIn
 
 func (capture *functionalRawFailureCapture) observeLine(line []byte) error {
 	var event goTestTimingEvent
-	if err := json.Unmarshal(bytes.TrimSpace(line), &event); err != nil || event.Package == "" {
+	if err := json.Unmarshal(bytes.TrimSpace(line), &event); err != nil {
+		capture.mu.Lock()
+		defer capture.mu.Unlock()
+		if capture.captureError == nil {
+			capture.captureError = errors.New("unattributable or malformed go test JSON output")
+		}
+		return capture.captureError
+	}
+	if event.Package == "" {
+		// `go test -json -x` emits compiler and linker trace records as
+		// build-output events. They are not test package output and should not
+		// interrupt the package-keyed failure spool.
+		if event.Action == "build-output" {
+			return nil
+		}
 		capture.mu.Lock()
 		defer capture.mu.Unlock()
 		if capture.captureError == nil {

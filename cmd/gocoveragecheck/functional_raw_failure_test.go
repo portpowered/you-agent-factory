@@ -169,6 +169,50 @@ func TestFunctionalRawFailureCaptureMarksEarlyCrashIncomplete(t *testing.T) {
 	}
 }
 
+func TestFunctionalRawFailureCaptureIgnoresGoBuildTraceEvents(t *testing.T) {
+	directory := t.TempDir()
+	capture := newRawFailureTestCapture(t, directory, 1<<20)
+	invocation := commandInvocation{name: "go", args: []string{"test", "-json", "-x", rawFailureTestPackage}}
+	capture.beginInvocation(invocation)
+	buildTrace := []byte(`{"Action":"build-output","ImportPath":"example.test/compiler","Output":"WORK=/tmp/go-build\n"}` + "\n")
+	if err := capture.observeLine(buildTrace); err != nil {
+		t.Fatalf("ignore go test build trace event: %v", err)
+	}
+	events := [][]byte{
+		rawFailureTestEvent("output", rawFailureTestPackage, "TestBuildTraceFailure", "assertion marker\n"),
+		rawFailureTestEvent(timingOutcomeFail, rawFailureTestPackage, "TestBuildTraceFailure", ""),
+		rawFailureTestEvent(timingOutcomeFail, rawFailureTestPackage, "", ""),
+	}
+	for _, event := range events {
+		if err := capture.observeLine(event); err != nil {
+			t.Fatalf("capture package event after build trace: %v", err)
+		}
+	}
+	capture.finishInvocation(errors.New("exit status 1"))
+	if err := capture.publish(strings.Repeat("f", 40), true); err != nil {
+		t.Fatalf("publish complete failure after build trace: %v", err)
+	}
+
+	index := readRawFailureTestIndex(t, directory)
+	if index.CaptureStatus != "complete" || len(index.Failures) != 1 {
+		t.Fatalf("build trace index = %+v, want one complete package failure", index)
+	}
+	failure := index.Failures[0]
+	if failure.Package != rawFailureTestPackage || failure.ExitStatus != 1 || failure.CapturedBytes != int64(len(joinRawFailureEvents(events))) {
+		t.Fatalf("build trace failure entry = %+v, want only attributable test events and exit 1", failure)
+	}
+	if failure.File == "" {
+		t.Fatal("build trace failure entry has no raw file")
+	}
+	raw, err := os.ReadFile(filepath.Join(directory, failure.File))
+	if err != nil {
+		t.Fatalf("read raw failure after build trace: %v", err)
+	}
+	if string(raw) != string(joinRawFailureEvents(events)) {
+		t.Fatalf("raw failure differs\n got: %s\nwant: %s", raw, joinRawFailureEvents(events))
+	}
+}
+
 func TestFunctionalRawFailureCaptureWriteFailureIsIncomplete(t *testing.T) {
 	directory := t.TempDir()
 	capture := newRawFailureTestCapture(t, directory, 1<<20)
