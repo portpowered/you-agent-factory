@@ -86,7 +86,7 @@ func TestCatalogPublishesCanonicalCapabilityFacts(t *testing.T) {
 		t.Fatal("codex is missing from the catalog")
 	}
 	codexModels := derefSlice(codex.Models)
-	wantCodexModels := []string{"gpt-5.6", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"}
+	wantCodexModels := []string{"gpt-5.6", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-6-luna", "gpt-6-sol"}
 	if len(codexModels) != len(wantCodexModels) {
 		t.Fatalf("codex models = %#v, want exact IDs %v", codexModels, wantCodexModels)
 	}

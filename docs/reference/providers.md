@@ -37,8 +37,8 @@ outperforms another.
 
 | Provider and model | Good starting point | Effort guidance |
 |--------------------|---------------------|-----------------|
-| `CODEX` / `gpt-5.6-luna` | Difficult implementation, deep review, or work where correctness is more important than throughput. This is operator selection guidance; the checked-in Factory does not currently assign this tier to a named worker. | Codex accepts the provider-neutral effort vocabulary and forwards it as its native reasoning setting. Use the value your selected model/account supports. |
-| `CODEX` / `gpt-5.6-sol` | Planning, ideation, and ordinary analysis. The checked-in Factory uses this tier for planner and ideafier workers at `medium`. | `medium` is the observed Factory choice; it is not a hard requirement for the model. |
+| `CODEX` / `gpt-6-luna` | Implementation, review, and validation in the checked-in Factory. | The Factory uses `xhigh` for processors and `max` for reviewers and validators. |
+| `CODEX` / `gpt-6-sol` | Project leads, planning, and portfolio supervision in the checked-in Factory. | The Factory uses `medium` for every Sol worker. |
 | `CODEX` / `gpt-5.6-terra` | Balanced implementation and verification when a general GPT-5.6 tier is preferable. | Choose an effort supported by the selected model/account; do not infer a media capability from the tier name. |
 | `CLAUDE` / `claude-sonnet-5` | General text/code work when the Claude CLI exposes this model. | The current Claude adapter rejects `minimal`; its other canonical effort values are forwarded to Claude's `--effort` option, subject to the installed CLI/model. |
 
@@ -243,8 +243,9 @@ has:
 
 The current first-party entries make several preflight constraints explicit:
 
-- Codex publishes the exact IDs `gpt-5.6`, `gpt-5.6-luna`, `gpt-5.6-sol`, and
-  `gpt-5.6-terra`. Each supports text and image input but marks audio and
+- Codex publishes the exact IDs `gpt-5.6`, `gpt-5.6-luna`, `gpt-5.6-sol`,
+  `gpt-5.6-terra`, `gpt-6-luna`, and `gpt-6-sol`. Each supports text and image
+  input but marks audio and
   video understanding as unsupported. Image generation accepts at most five
   `referenced_image_paths`.
 - `antigravity` is the AGY provider. Its catalog includes
