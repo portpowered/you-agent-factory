@@ -2,12 +2,14 @@ package inference_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	asrruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/runtime"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
@@ -87,6 +89,73 @@ func TestASRInvocationRuntimeClassifiesMalformedAndBackendFailuresAtomically(t *
 	}
 }
 
+func TestASRInvocationRuntimeFailureEvidenceCollapsesBackendCauses(t *testing.T) {
+	t.Parallel()
+
+	firstDigest := runASRRuntimeFailureEvidenceCase(t, errors.New("transport unavailable private-a"))
+	secondDigest := runASRRuntimeFailureEvidenceCase(t, errors.New("transport internal private-b"))
+	if secondDigest != firstDigest {
+		t.Fatalf("different backend failures produced digests %q and %q", secondDigest, firstDigest)
+	}
+}
+
+func runASRRuntimeFailureEvidenceCase(t *testing.T, cause error) string {
+	t.Helper()
+	failure := &models.InvocationFailure{
+		Class: models.InvocationFailureClassBackendProtocol, Operation: models.OperationASR,
+		Message: "ASR backend request failed", Cause: cause,
+	}
+	backend := &recordingASRBackend{err: failure}
+	if !errors.Is(failure, cause) {
+		t.Fatalf("test backend failure = %v, want its private transport cause", failure)
+	}
+	runtime, err := asrruntime.New(backend.transcribe)
+	if err != nil {
+		t.Fatalf("asrruntime.New() error = %v", err)
+	}
+	result, invocationErr := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{Request: asrRuntimeRequest()})
+	assertASRRuntimeFailure(t, result, invocationErr, cause)
+	diagnostic := modelseffects.ProjectRuntimeFailure(
+		modelseffects.WrapRuntimeFailure(modelseffects.RuntimeStageInvoke, invocationErr), 0,
+	)
+	assertASRFailureDiagnostic(t, diagnostic)
+	return diagnostic.CauseSHA256
+}
+
+func assertASRRuntimeFailure(
+	t *testing.T,
+	result inference.InvocationRuntimeResult,
+	err error,
+	cause error,
+) {
+	t.Helper()
+	if result.Content != nil || err == nil {
+		t.Fatalf("failed invocation = result %#v, error %v; want no output and typed failure", result, err)
+	}
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassBackendProtocol {
+		t.Fatalf("invocation error = %v, failure = %#v, want backend protocol failure", err, failure)
+	}
+	if err.Error() != "ASR backend invocation failed" || !errors.Is(err, models.ErrInferenceFailed) || errors.Is(err, cause) {
+		t.Fatalf("invocation error identity = %q, want generic ASR failure without its backend cause", err.Error())
+	}
+}
+
+func assertASRFailureDiagnostic(t *testing.T, diagnostic modelseffects.RuntimeFailureDiagnostic) {
+	t.Helper()
+	if diagnostic.CauseSHA256 != modelseffects.RuntimeCauseSHA256(models.ErrInferenceFailed) {
+		t.Fatalf("cause digest = %q, want the generic inference failure digest", diagnostic.CauseSHA256)
+	}
+	encodedDiagnostic, err := json.Marshal(diagnostic)
+	if err != nil {
+		t.Fatalf("marshal runtime diagnostic: %v", err)
+	}
+	for _, privateDetail := range []string{"private-a", "private-b"} {
+		if strings.Contains(string(encodedDiagnostic), privateDetail) {
+			t.Fatalf("runtime diagnostic leaked a backend detail")
+		}
+	}
+}
 func TestASRInvocationRuntimeHonorsCancellationBeforeAndDuringBackendCall(t *testing.T) {
 	t.Parallel()
 

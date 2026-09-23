@@ -270,6 +270,13 @@ type HostManagedProcess interface {
 	Stop(context.Context) error
 }
 
+// HostManagedProcessFailureObserver is an optional private signal used by an
+// invocation-owned correlation harness after Runtime Host has observed Wait
+// and revoked the host's leases.
+type HostManagedProcessFailureObserver interface {
+	RuntimeHostFailureObserved()
+}
+
 // HostManagedProcessDiagnosticSource is optional so existing host process
 // implementations remain source-compatible.
 type HostManagedProcessDiagnosticSource interface {

@@ -573,6 +573,7 @@ func (o *Root) InvokeModel(
 		return finish(models.InvokeModelResult{}, joinedInvocationContextError(ctx, err))
 	}
 
+	ctx = modelseffects.WithRuntimeObservation(ctx, invocationEvidence, plan.configuration)
 	result, invokeStage, err := o.executeJoinedInvocation(ctx, plan, started)
 	stage = invokeStage
 	return finish(result, joinedInvocationContextError(ctx, err))
