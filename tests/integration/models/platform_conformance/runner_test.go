@@ -223,6 +223,13 @@ func TestPortableControlledReservationContention(t *testing.T) {
 	sharedLedger := filepath.Join(sharedRoot, "contention-budget.json")
 	noFinalize := false
 	runner := mustControlledRunner(t)
+	var injectedStartFailure atomic.Bool
+	runner.starter = func(command *exec.Cmd) error {
+		if injectedStartFailure.CompareAndSwap(false, true) {
+			return errors.New("injected controlled process start failure")
+		}
+		return command.Start()
+	}
 	gate := make(chan struct{})
 	results := make(chan controlledRunResult, attempts)
 	var started atomic.Int32
@@ -237,47 +244,138 @@ func TestPortableControlledReservationContention(t *testing.T) {
 			t.Fatalf("admit contention fixture %d: %v", index, err)
 		}
 		fixture.admission = admitted
+		reservationID := fmt.Sprintf("contention-reservation-%d", index)
 		go func() {
 			<-gate
 			report, runErr := runner.Run(context.Background(), admitted, ControlledRunOptions{
-				ReservationID:  fmt.Sprintf("contention-reservation-%d", index),
+				ReservationID:  reservationID,
 				FinalizeLedger: &noFinalize,
 				OnStarted:      func() { started.Add(1) },
 			})
-			results <- controlledRunResult{report: report, err: runErr}
+			results <- controlledRunResult{report: report, err: runErr, reservationID: reservationID}
 		}()
 	}
 	close(gate)
 
-	admittedCount := 0
-	failedBeforeStart := 0
-	for index := 0; index < attempts; index++ {
-		result := <-results
-		if result.err != nil {
-			t.Fatalf("contention attempt returned infrastructure error: %v", result.err)
-		}
-		if result.report.Status == StatusPass {
-			admittedCount++
-			continue
-		}
-		failedBeforeStart++
-		if result.report.Failure == nil || result.report.Commands[0].Started {
-			t.Fatalf("contention loser was not a pre-launch failure: %#v", result.report)
-		}
-	}
-	if admittedCount != int(MaxChildProcesses) || failedBeforeStart != attempts-int(MaxChildProcesses) {
-		t.Fatalf("contention outcomes = admitted %d failedBeforeStart %d, want %d and %d", admittedCount, failedBeforeStart, MaxChildProcesses, attempts-int(MaxChildProcesses))
-	}
-	if got := started.Load(); int64(got) != MaxChildProcesses {
-		t.Fatalf("controlled children started = %d, want %d", got, MaxChildProcesses)
-	}
+	outcomes := collectControlledContentionResults(t, results, attempts)
+	assertControlledContentionOutcomes(t, outcomes, attempts, int(started.Load()), injectedStartFailure.Load())
 	store := mustLocalBudgetStore(t)
 	finalized, err := store.Finalize(context.Background(), sharedLedger, "contention-run")
 	if err != nil {
 		t.Fatalf("finalize contention ledger: %v", err)
 	}
-	if !finalized.Finalized || finalized.Consumed.ChildProcesses != MaxChildProcesses || len(finalized.Reservations) != int(MaxChildProcesses) {
+	assertControlledContentionLedger(t, finalized, outcomes.reservationStates)
+}
+
+type controlledContentionOutcomes struct {
+	admittedCount       int
+	failedBeforeStart   int
+	budgetRejectedCount int
+	startFailureCount   int
+	reservationStates   map[string]string
+}
+
+func collectControlledContentionResults(
+	t testing.TB,
+	results <-chan controlledRunResult,
+	attempts int,
+) controlledContentionOutcomes {
+	t.Helper()
+	outcomes := controlledContentionOutcomes{
+		reservationStates: make(map[string]string, MaxChildProcesses+1),
+	}
+	for index := 0; index < attempts; index++ {
+		result := <-results
+		if result.err != nil {
+			t.Fatalf("contention attempt returned infrastructure error: %v", result.err)
+		}
+		if result.reservationID == "" {
+			t.Fatal("contention attempt did not retain its reservation identity")
+		}
+		if result.report.Status == StatusPass {
+			outcomes.admittedCount++
+			if result.report.Failure != nil || !result.report.Commands[0].Started {
+				t.Fatalf("passing contention attempt did not start cleanly: %#v", result.report)
+			}
+			outcomes.reservationStates[result.reservationID] = ReservationStateCommitted
+			continue
+		}
+		outcomes.failedBeforeStart++
+		if result.report.Failure == nil || result.report.Commands[0].Started {
+			t.Fatalf("contention loser was not a pre-launch failure: %#v", result.report)
+		}
+		switch result.report.Failure.Assertion {
+		case "child-process budget reservation":
+			if result.report.Failure.Observed != "budget_exhausted" {
+				t.Fatalf("contention rejection = %#v, want budget exhaustion", result.report.Failure)
+			}
+			outcomes.budgetRejectedCount++
+		case "controlled command start":
+			if result.report.Failure.Observed != "bounded_failure" && result.report.Failure.Observed != "missing" {
+				t.Fatalf("contention start failure = %#v, want bounded start error", result.report.Failure)
+			}
+			outcomes.startFailureCount++
+			outcomes.reservationStates[result.reservationID] = ReservationStateReleased
+		default:
+			t.Fatalf("contention attempt failed for unexpected reason: %#v", result.report.Failure)
+		}
+	}
+	return outcomes
+}
+
+func assertControlledContentionOutcomes(
+	t testing.TB,
+	outcomes controlledContentionOutcomes,
+	attempts, started int,
+	injectedStartFailure bool,
+) {
+	t.Helper()
+	wantFailed := attempts - int(MaxChildProcesses)
+	wantBudgetRejected := wantFailed - 1
+	if outcomes.admittedCount != int(MaxChildProcesses) || outcomes.failedBeforeStart != wantFailed ||
+		outcomes.budgetRejectedCount != wantBudgetRejected || outcomes.startFailureCount != 1 {
+		t.Fatalf("contention outcomes = %+v; want %d starts, %d budget rejections, and 1 start failure", outcomes, MaxChildProcesses, wantBudgetRejected)
+	}
+	if !injectedStartFailure {
+		t.Fatal("contention runner did not exercise the controlled start failure")
+	}
+	if int64(started) != MaxChildProcesses {
+		t.Fatalf("controlled children started = %d, want %d", started, MaxChildProcesses)
+	}
+}
+
+func assertControlledContentionLedger(
+	t testing.TB,
+	finalized BudgetLedger,
+	expectedReservationStates map[string]string,
+) {
+	t.Helper()
+	// Failed starts retain RELEASED reservations for audit, while
+	// budget-exhausted attempts never enter the ledger. Compare the ledger with
+	// each observed attempt below instead of equating rows with commits.
+	if !finalized.Finalized || finalized.Consumed.ChildProcesses != MaxChildProcesses ||
+		len(finalized.Reservations) != int(MaxChildProcesses)+1 {
 		t.Fatalf("invalid settled contention ledger: %#v", finalized)
+	}
+	releasedCount := 0
+	for _, reservation := range finalized.Reservations {
+		wantState, expected := expectedReservationStates[reservation.ID]
+		if !expected || reservation.State != wantState {
+			t.Fatalf("settled contention reservation = %#v, expected state %q", reservation, wantState)
+		}
+		if reservation.Kind != BudgetKindChildProcesses || reservation.Amount != 1 {
+			t.Fatalf("settled contention reservation has wrong budget: %#v", reservation)
+		}
+		if reservation.State == ReservationStateReleased {
+			releasedCount++
+		}
+		delete(expectedReservationStates, reservation.ID)
+	}
+	if releasedCount != 1 {
+		t.Fatalf("released contention reservations = %d, want 1", releasedCount)
+	}
+	if len(expectedReservationStates) != 0 {
+		t.Fatalf("settled contention ledger omitted attempt reservations: %#v", expectedReservationStates)
 	}
 	if err := finalized.Validate(); err != nil {
 		t.Fatalf("settled contention ledger is invalid: %v", err)
@@ -285,8 +383,9 @@ func TestPortableControlledReservationContention(t *testing.T) {
 }
 
 type controlledRunResult struct {
-	report Report
-	err    error
+	report        Report
+	err           error
+	reservationID string
 }
 
 type controlledFixture struct {

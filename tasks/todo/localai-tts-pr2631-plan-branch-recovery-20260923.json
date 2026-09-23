@@ -1,0 +1,430 @@
+{
+  "project": "localai",
+  "description": "Exact-name PRD admission and bounded cause-correct PR #2631 CI release, independent review and merge or named Factory Reliability blocker.",
+  "branchName": "localai-tts-pr2631-plan-branch-recovery-20260923",
+  "context": {
+    "customerAsk": "Recover failed idea localai-cycle-195 and work-plan-6 with a separate exact-name PRD branch; retained PR #2631 exact head 1f0fdcb075788670a209a6ceec21434af5f71b36 is read-only; diagnose run 35781141584 and obtain terminal required CI at changed head/corrected baseline or return shared CI dependency.",
+    "sourcePlan": "docs/temp/projects/localai/source-plan.md",
+    "problem": "Previous PRD reader rejected retained PR branch as this Work branchName; Backend Unit Coverage cancelled twice and Verification Policy failed at the retained head.",
+    "solution": "Create separate exact-name PRD branch; compare both CI attempts and diagnostics with passing base/main; correct only demonstrated TTS-owned cause or route shared CI to Factory Reliability; require changed-condition current-head CI and independent review."
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "LA-03",
+      "requirement": "A separate validator, independent of the blind probe and its implementation worker, inspects the source, plan, tests, and traces. It reruns or checks the same observable claims and verifies the Models boundary, lifecycle, cache and backend ownership, output shaping, and transport behavior. The validator does not repair a failing probe and then approve its own repair. Its report names the checked commands, evidence identity, findings, and any loopback action.",
+      "localCriterion": "004",
+      "laterVerificationGate": "GATE-CLEAN-ROOM; full Project engineering validation",
+      "status": "slice-owned"
+    },
+    {
+      "id": "LA-04",
+      "requirement": "For every operation admitted by the reconciled plan, the focused functional matrix proves the public grammar, resolution, load/cache behavior, output mode, offline/error handling, and release lifecycle. It covers the source plan's ASR, OMNI/video/image, TTS, LLM, and EMBED requirements without claiming an unsupported platform is supported. Unknown model, invalid slot, repeated request, multi-output, configuration, offline, digest, unsupported platform, backend crash, protocol, modality, malformed input, timeout, disk, and secret handling failures have typed, bounded outcomes.",
+      "localCriterion": "retained TTS evidence only",
+      "laterVerificationGate": "Project functional matrix",
+      "status": "project-pending"
+    },
+    {
+      "id": "LA-05",
+      "requirement": "After reconciliation selects and records one currently supportable non-TTS operation (default `llm` text; `embed` or another operation requires a written environment-based choice), a minimal local Factory Session drives it through admission, invocation, result selection, canonical event/artifact inspection, and release. The evidence proves the Work and Factory Event/artifact lineage for that journey. This criterion cannot be marked passed by a direct CLI call, by a TTS-only factory path, or by an unmeasured assumption about model feasibility. If no existing Factory/Worker path can carry the operation without a new public contract, the result is a characterized blocker and a separate Current/Proposed contract delta is required.",
+      "localCriterion": "None in this TTS delivery recovery.",
+      "laterVerificationGate": "GATE-NON-TTS-FACTORY",
+      "status": "project-pending"
+    },
+    {
+      "id": "LA-06",
+      "requirement": "Assertions verify meaning, not merely file or field presence: ASR transcript text and segment structure; TTS media type and decodable bytes; LLM returned text or structured values; embedding dimensions and stable numeric content; and factory Work, event, artifact, and lineage relationships. Any intentional nondeterminism has a named invariant and tolerance. The evidence records artifact identities, media types, sizes or dimensions, and release status.",
+      "localCriterion": "retained WAV decoding and 14-event lineage only",
+      "laterVerificationGate": "GATE-LA14-LA15; Project semantic validation",
+      "status": "project-pending"
+    },
+    {
+      "id": "LA-09",
+      "requirement": "The real conformance lane exercises the built artifact with the documented small/prebuilt model assets and an actual LocalAI backend or server on macOS, Linux, and Windows, the target platform matrix in the source plan. It records whether provisioning, backend startup, operation, server parity, and release completed. A failed or unavailable platform is named and escalated as `FAIL`/`INCONCLUSIVE` and blocks completion; it is never converted to `PASS` by a hermetic fixture result or accepted as a platform exception under this contract.",
+      "localCriterion": "none",
+      "laterVerificationGate": "GATE-C1",
+      "status": "project-pending"
+    },
+    {
+      "id": "LA-10",
+      "requirement": "Before each blind probe, functional run, server parity run, or real integration run, the execution record declares platform, binary/artifact identity, isolated state/cache/port locations, timeout, process lifetime, network policy, model/download budget, and maximum retry/call budget. Missing budget or environment data blocks the criterion. Executor failures receive the bounded retry in the task packet and then escalate to the Sol project lead.",
+      "localCriterion": "003 conditional run declaration",
+      "laterVerificationGate": "each later probe gate",
+      "status": "slice-owned"
+    },
+    {
+      "id": "LA-11",
+      "requirement": "Each project retrospective checkpoint has three linked fields: observed finding, concrete action with owner, and verification command/probe with its result. The next cycle consumes unresolved actions before new scope. A lesson without its verification witness remains open and cannot satisfy any other criterion.",
+      "localCriterion": "002–004 cancellation owner and release/blocker record.",
+      "laterVerificationGate": "Project retrospective loopback",
+      "status": "slice-owned"
+    },
+    {
+      "id": "LA-12",
+      "requirement": "The implementation preserves the governing source plan's requirements and the bounded amendments in `source-plan.md`. No new public Go, OpenAPI, CLI, or Factory graph contract is introduced by this admission. If one becomes necessary, implementation pauses and a new plan delta supplies explicit Current/Proposed native shapes, authored/generated file policy, and focused acceptance tests. Generated artifacts are changed only from authored sources.",
+      "localCriterion": "001-004 internal PRD identity only; no new public contract; retained source/generated audit",
+      "laterVerificationGate": "Project contract audit",
+      "status": "slice-owned"
+    },
+    {
+      "id": "LA-13",
+      "requirement": "Each independently mergeable story has bounded task packets, focused tests, review evidence, and a releasable head. The source plan's delivery criterion, verification commands, blind exit script, and real conformance requirement are met before project completion. No criterion is marked passed from plan text, source inventory, or an early-exit command alone.",
+      "localCriterion": "001 admission and 003 conditional CI/review/merge or exact blocker",
+      "laterVerificationGate": "GATE-REVIEW-MERGE; GATE-C1; final Project gate",
+      "status": "slice-owned"
+    },
+    {
+      "id": "LA-14",
+      "requirement": "Maintain a matrix for TTS, ASR, LLM text, image, video, EMBED, and the required Factory journey. Each row names its immutable installable build, platform, implementation state, targeted customer probe/verdict, independent engineering evidence, open UX/functionality findings, correction owner and next gate. As soon as a row's full journey is available, the existing Sol lead admits a fresh Luna-max customer validation through ordinary validation Work. Do not wait for unrelated verticals. A slice can merge before its parent vertical's blind gate; that does not make the vertical accepted. Prior developer witnesses and controlled tests are useful prerequisite evidence, not blind acceptance. The mission gives only a customer outcome, observable rubric, public docs, immutable customer distribution and declared input fixtures. It withholds source, implementation plans, command recipes, claimed fixes and previous probe reports. The agent discovers the public workflow. The independent engineering validator owns internal quality and may inspect source; it cannot be the implementing or customer-probe agent. Final integrated LA-02/LA-03 validation still applies.",
+      "localCriterion": "TTS prerequisite evidence only",
+      "laterVerificationGate": "GATE-LA14-LA15 independent blind probe",
+      "status": "project-pending"
+    },
+    {
+      "id": "LA-15",
+      "requirement": "Before starting, prove the product is not installed in the isolated environment and product configuration/state/model/backend caches are empty. Record permitted host prerequisites, PATH resolution and isolation limits; private HOME alone is not a fresh OS. Use a disposable host where the required platform/install claim needs it. Install the declared immutable distribution by its public documented route and verify the installed identity. No operator service, preinstalled backend, prewarmed model or hidden setup may supply a prerequisite. A staged executable alone cannot pass the installer criterion. If packaging is not ready, assign that missing prerequisite to the existing lead rather than bypassing installation. For TTS specifically: install; discover usage through public docs/help; generate speech from a declared text with documented defaults and real on-demand dependency provisioning; verify decodable audio and meaningful speech content against the input with a declared independent semantic method; verify outputs and cleanup. A nonempty WAV or successful exit alone is insufficient. Run warm-cache/offline reuse separately after cold first use; do not borrow previous task caches. Equivalent outcome-specific rubrics apply to every other vertical, retaining its existing CLI/server/Factory and platform requirements at their named gates. Report PASS/FAIL/INCONCLUSIVE per installation, discovery/UX, functionality, semantic output and cleanup criterion, with exact actions and evidence. Hidden coaching, source inspection, manual product repair or an undocumented workaround needed to complete the mission fails the UX criterion even if output later works. Missing evidence or unavailable mandatory installation is INCONCLUSIVE and blocks acceptance. The lead owns bounded repair and a new fresh blind probe; do not coach the failed agent into passing or alter the criterion after observing failure. Record all invocation/download/time/cost consumption across attempts. Existing project budgets persist; no new spend or unlimited retry allowance is created. Real-heavy probes respect the current exclusive witness window. Continue useful independent controlled work. Preserve the active ASR correction and existing cycle; take up this amendment in the next lead reconciliation, not a duplicate wake. Completion now requires LA-01–LA-15 with current applicable evidence. Sol/medium audits the per-vertical matrix and prompts the existing lead to close missing gates; it does not replace the lead. UX and functional failures have equal blocking force.",
+      "localCriterion": "retained real WAV and warm reuse prerequisite only",
+      "laterVerificationGate": "GATE-LA14-LA15 public clean-install probe",
+      "status": "project-pending"
+    },
+    {
+      "id": "DELIVERY",
+      "requirement": "Implementation-stage delivery criterion: The implementation stage marks this criterion satisfied and stops after its final head is pushed, the PR is open, CI has started, and all blocking review feedback is addressed. It does not poll or re-check CI after this finish line. The review stage owns driving CI to terminal-and-passing, resolving merge conflicts, and merging the PR; merge remains the lane-wide delivery boundary. CI-run evidence goes in a PR comment and never in a commit.",
+      "localCriterion": "003 implementation handoff; 004 review",
+      "laterVerificationGate": "GATE-REVIEW-MERGE"
+    },
+    {
+      "id": "GATE-CI-DIAG",
+      "requirement": "Compare exact attempts, job and resource timing, diagnostic artifact and passing base/main run; name cause and owner.",
+      "localCriterion": "002",
+      "laterVerificationGate": "GATE-CI-RELEASE"
+    },
+    {
+      "id": "GATE-CI-RELEASE",
+      "requirement": "Only after a witnessed changed condition, required Backend Unit Coverage and Verification Policy reach terminal success on current PR head.",
+      "localCriterion": "003 conditional",
+      "laterVerificationGate": "GATE-REVIEW-MERGE"
+    },
+    {
+      "id": "GATE-CLEAN-ROOM",
+      "requirement": "Independent read-only validation report follows validation-loopback-template.md and requests a delta for FAIL/BLOCKED.",
+      "localCriterion": "004",
+      "laterVerificationGate": "Project validation"
+    },
+    {
+      "id": "GATE-PRD-ADMISSION",
+      "requirement": "Reader parses this Work exact branchName and sequential stories from separate worktree while PR #2631 remains unchanged.",
+      "localCriterion": "001",
+      "laterVerificationGate": "GATE-CI-DIAG",
+      "status": "slice-owned"
+    }
+  ],
+  "behaviorLanes": [
+    {
+      "id": "BEH-ADMISSION",
+      "behavior": "Reader accepts this Work exact branch in separate worktree while PR #2631 stays read-only.",
+      "stories": [
+        "localai-tts-pr2631-plan-branch-recovery-20260923-001"
+      ],
+      "spine": "new branch/worktree → exact branchName JSON → reader parse"
+    },
+    {
+      "id": "BEH-CI",
+      "behavior": "Reviewer identifies exact required-check cancellation mechanism and correction owner.",
+      "stories": [
+        "localai-tts-pr2631-plan-branch-recovery-20260923-002"
+      ],
+      "spine": "PR head → run/job → diagnostics → comparable base → owner"
+    },
+    {
+      "id": "BEH-DELIVERY",
+      "behavior": "Only a witnessed changed release event advances terminal CI and ordinary review/merge, or yields precise blocked handoff.",
+      "stories": [
+        "localai-tts-pr2631-plan-branch-recovery-20260923-003",
+        "localai-tts-pr2631-plan-branch-recovery-20260923-004"
+      ],
+      "spine": "diagnosed cause → changed release event or shared blocker → current-head CI → independent review/merge"
+    }
+  ],
+  "contractChanges": [
+    {
+      "name": "PRD branch identity",
+      "authoredSource": "tasks/todo/localai-tts-pr2631-plan-branch-recovery-20260923.json",
+      "format": "json",
+      "classification": "changed internal configuration",
+      "current": "{\n  \"project\": \"localai\",\n  \"branchName\": \"localai-tts-factory-managed-backend-repair-20260922 (retained PR #2631)\",\n  \"context\": {\n    \"sourcePlan\": \"docs/temp/projects/localai/source-plan.md\"\n  }\n}",
+      "proposed": "{\n  \"project\": \"localai\",\n  \"branchName\": \"localai-tts-pr2631-plan-branch-recovery-20260923\",\n  \"context\": {\n    \"sourcePlan\": \"docs/temp/projects/localai/source-plan.md\"\n  }\n}",
+      "compatibility": "Prior rejected PRD remains historical; retained PR head unchanged; new Work uses exact new branch.",
+      "generatedOutputs": [],
+      "consumers": [
+        "PRD reader",
+        "workspace setup",
+        "Factory task routing"
+      ]
+    }
+  ],
+  "userStories": [
+    {
+      "id": "localai-tts-pr2631-plan-branch-recovery-20260923-001",
+      "title": "Admit this Work on its own branch",
+      "description": "Previous PRD reader rejected retained implementation branch as this Work branchName.",
+      "parentBehavior": "BEH-ADMISSION: exact PRD identity accepted while retained PR stays read-only.",
+      "outcome": "Separate exact-name worktree/branch and parseable Markdown/JSON pair.",
+      "sourcePlanRef": "docs/temp/projects/localai/source-plan.md — Lane plan V4/C1 and Verification; acceptance.md LA-10/LA-13; local branch recovery requirement.",
+      "dependencies": [],
+      "sharedSurfaceOwner": "This Work owns new PRD branch/worktree only; retained TTS PR #2631 and Factory Reliability PR #2637 stay read-only.",
+      "scope": {
+        "in": [
+          "Exact-name branch/worktree and PRD JSON; reader parse and sequential story IDs."
+        ],
+        "out": [
+          "Retained PR mutation, product correction, CI retry."
+        ]
+      },
+      "contractChanges": [
+        {
+          "name": "PRD branch identity",
+          "authoredSource": "tasks/todo/localai-tts-pr2631-plan-branch-recovery-20260923.json",
+          "format": "json",
+          "classification": "changed internal configuration",
+          "current": "{\n  \"project\": \"localai\",\n  \"branchName\": \"localai-tts-factory-managed-backend-repair-20260922 (retained PR #2631)\",\n  \"context\": {\n    \"sourcePlan\": \"docs/temp/projects/localai/source-plan.md\"\n  }\n}",
+          "proposed": "{\n  \"project\": \"localai\",\n  \"branchName\": \"localai-tts-pr2631-plan-branch-recovery-20260923\",\n  \"context\": {\n    \"sourcePlan\": \"docs/temp/projects/localai/source-plan.md\"\n  }\n}",
+          "compatibility": "Prior rejected PRD remains historical; retained PR head unchanged; new Work uses exact new branch.",
+          "generatedOutputs": [],
+          "consumers": [
+            "PRD reader",
+            "workspace setup",
+            "Factory task routing"
+          ]
+        }
+      ],
+      "acceptanceCriteria": [
+        "Given new JSON, when PRD reader parses it, then branchName exactly equals this Work name and all four sequential stories are accepted.",
+        "Given retained PR branch, when worktree identity is inspected, then head remains 1f0fdcb075788670a209a6ceec21434af5f71b36 without write.",
+        "Given parse or worktree collision, when setup stops, then exact conflict is reported and both branches are preserved."
+      ],
+      "verification": {
+        "behavioralWitness": "Reader accepts this Work and resolves separate worktree.",
+        "executableSpineEffect": "establish",
+        "requiredEvidence": [
+          {
+            "scope": "contract/configuration",
+            "dependencyFidelity": "controlled",
+            "procedure": "Parse new JSON with Factory PRD reader; inspect git worktree list --porcelain and gh pr view 2631 --json headRefName,headRefOid.",
+            "propertyProved": "Exact admission and retained PR custody.",
+            "propertyNotProved": "CI or TTS behavior.",
+            "cadenceAndCost": "Per PRD change; free."
+          }
+        ],
+        "highestFeasibleLevel": "Local Factory admission because only task artifact changes.",
+        "remainingUnprovenEdges": [
+          "Cancellation cause → GATE-CI-DIAG; terminal CI → GATE-CI-RELEASE."
+        ],
+        "gateIds": [
+          "GATE-CI-DIAG",
+          "GATE-CI-RELEASE"
+        ]
+      },
+      "priority": "P0",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "localai-tts-pr2631-plan-branch-recovery-20260923-002",
+      "title": "Identify the cancellation cause and owner",
+      "description": "Two cancelled unit jobs lack a measured causal comparison.",
+      "parentBehavior": "`BEH-CI` — reviewer can route the exact required-check failure to the demonstrated owner.",
+      "outcome": "An exact-head diagnosis records job timings, diagnostics, comparable base/main evidence, and a named owner/changed-condition gate.",
+      "sourcePlanRef": "`C:\\Users\\andre\\work\\portos\\infinite-you\\docs\\temp\\projects\\localai\\source-plan.md` §§“Backend artifacts and CI compilation”, “Verification”, `V4`/`C1`; `acceptance.md` LA-03, LA-10, LA-13.",
+      "dependencies": [
+        "localai-tts-pr2631-plan-branch-recovery-20260923-001"
+      ],
+      "sharedSurfaceOwner": "Read-only alongside PR #2637; Factory Reliability owns workflow edits.",
+      "scope": {
+        "in": [
+          "PR/check query, both job attempts and steps, uploaded unit diagnostics, workflow timeout and cache behavior, comparable passing base/main run, cancellation classification."
+        ],
+        "out": [
+          "workflow edit, rerun, TTS source change, model invocation."
+        ]
+      },
+      "contractChanges": [],
+      "acceptanceCriteria": [
+        "Given retained head, when both jobs and diagnostics are inspected, then cancellation times, completed 159.524-second test phase, 109-second cache restore, resource context and Verification Policy dependency are recorded.",
+        "Given a comparable passing base/main run, when its unit critical path is compared, then the likely cancellation mechanism and precise CI/process or TTS source owner are identified, or an evidence-limited uncertainty is explicitly routed.",
+        "Given a missing artifact or comparator, when diagnosis reaches the timebox, then the handoff names the missing evidence and owner without an unchanged rerun."
+      ],
+      "verification": {
+        "behavioralWitness": "reviewer can reproduce the cancellation-to-Verification-Policy chain and identify the next responsible owner.",
+        "executableSpineEffect": "extend",
+        "requiredEvidence": [
+          {
+            "scope": "integration delivery",
+            "dependencyFidelity": "remote real",
+            "procedure": "Compare both attempts of run 35781141584, job 106947274488, artifact 10720088803 with timing SHA-256 13169f4e90d17842efd1153dbf2e5b0e7ab8aac34e57f496894a669daf2d4fd4; compare passing main run 35828877253 and workflow/resource/cache context.",
+            "propertyProved": "exact cancellation timing/owner",
+            "propertyNotProved": "TTS speech or a passing release gate",
+            "cadenceAndCost": "once per cause; cost free/bounded GitHub API and 60 minutes."
+          }
+        ],
+        "highestFeasibleLevel": "remote-real hosted CI records; no new execution needed for diagnosis.",
+        "remainingUnprovenEdges": [
+          "corrected run → `GATE-CI-RELEASE`; blind speech/install → `GATE-LA14-LA15`."
+        ],
+        "gateIds": [
+          "GATE-CI-RELEASE",
+          "GATE-LA14-LA15"
+        ]
+      },
+      "priority": "P0",
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "localai-tts-pr2631-plan-branch-recovery-20260923-003",
+      "title": "Consume a witnessed corrected CI condition or hand off the blocker",
+      "description": "An unchanged retry has already failed and cannot satisfy branch protection.",
+      "parentBehavior": "`BEH-DELIVERY` — required CI can advance only from a cause-corrected release event.",
+      "outcome": "Exact changed-event and owner handoff, followed by at most one justified current-head run and ordinary review/merge if all gates pass.",
+      "sourcePlanRef": "`C:\\Users\\andre\\work\\portos\\infinite-you\\docs\\temp\\projects\\localai\\source-plan.md` §§“Lane plan” (`P3`, `V4`, `C1`), “Acceptance criteria”, “Verification”; `acceptance.md` LA-09, LA-10, LA-12, LA-13.",
+      "dependencies": [
+        "localai-tts-pr2631-plan-branch-recovery-20260923-002"
+      ],
+      "sharedSurfaceOwner": "Factory Reliability PR #2637 owns `.github/workflows/ci.yml`; TTS branch owner controls only PR #2631 private diff/evidence; review owns merge.",
+      "scope": {
+        "in": [
+          "Verify changed source or baseline event; declare Windows amd64, artifact hashes, isolated state/cache/ports, timeout/process/network/download/call budgets; make only demonstrated TTS-owned correction if needed; run one cause-corrected hosted execution; obtain terminal checks and independent review/merge or exact shared blocker."
+        ],
+        "out": [
+          "Unchanged rerun, waiver/manual check, .github/workflows/ci.yml and Factory Reliability PR #2637 without lease, broad TTS reimplementation."
+        ]
+      },
+      "contractChanges": [],
+      "acceptanceCriteria": [
+        "Given witnessed changed PR head or corrected baseline, when hosted execution runs, then Backend Unit Coverage and Verification Policy finish terminal success on same reviewed head before ordinary merge.",
+        "Given shared CI cause, missing changed condition or repeat failure, when gate is assessed, then PR #2631 remains OPEN/BLOCKED with exact Factory Reliability release event, job/cause evidence and next gate; no waiver, unchanged rerun or manual Work completion occurs.",
+        "Given a source-specific failure, when review routes it, then the smallest TTS-private correction is separately reviewed and all current-head checks restart.",
+        "Given TTS-owned correction, when focused TTS/Factory tests run, then direct cold/warm audio and Factory Work/Event lineage remain observable at corrected head; changed functional tests require prior complete behavior-matrix delta."
+      ],
+      "verification": {
+        "behavioralWitness": "PR shows either merged current-head green gate and independent review, or a precise blocked owner handoff.",
+        "executableSpineEffect": "promote",
+        "requiredEvidence": [
+          {
+            "scope": "integration delivery",
+            "dependencyFidelity": "remote real",
+            "procedure": "compare `gh pr view 2631 --json headRefOid,statusCheckRollup,mergeStateStatus` with changed workflow/base SHA, run/job API and review/merge state",
+            "propertyProved": "terminal current-head gate or exact blocker",
+            "propertyNotProved": "blind speech, cross-platform conformance, or other verticals",
+            "cadenceAndCost": "Once after changed event; one hosted run, one corrected executor retry, 3 GiB disk, $0; at most one backend and two real TTS calls of ten minutes each only if cause requires; zero model download."
+          }
+        ],
+        "highestFeasibleLevel": "Remote-real current-head required CI and independent review; unchanged product head reuses exact-head real WAV/lineage evidence; changed product head requires bounded affected-edge revalidation.",
+        "remainingUnprovenEdges": [
+          "Project real platform matrix → `GATE-C1`; public clean install and semantic speech → `GATE-LA14-LA15`."
+        ],
+        "gateIds": [
+          "GATE-C1",
+          "GATE-LA14-LA15"
+        ]
+      },
+      "priority": "P1",
+      "passes": false,
+      "notes": "",
+      "paidValidation": {
+        "trigger": "Witnessed cause-corrected source/process/base event; real edge only if required",
+        "maximumCalls": 2,
+        "maximumBackendCalls": 1,
+        "maximumCostUSD": 0,
+        "maximumDuration": "10 minutes per real TTS call; one hosted run under workflow timeout",
+        "fixture": "Retained declared TTS text/audio validator and exact Windows amd64 binary/backend/model hashes",
+        "outputValidator": "Decodable audio/lineage where relevant and terminal Backend Unit Coverage plus Verification Policy on same head",
+        "evidenceReuseKey": "exact commit + contract version + binary/backend/model hashes + Windows amd64 + fixture + target environment + configuration hash",
+        "maximumHostedRuns": 1,
+        "maximumCorrectedExecutorRetries": 1,
+        "maximumIncrementalDiskGiB": 3,
+        "maximumNewModelDownloads": 0
+      }
+    },
+    {
+      "id": "localai-tts-pr2631-plan-branch-recovery-20260923-004",
+      "title": "Independently validate the delivery evidence",
+      "description": "A green or blocked CI status alone does not audit TTS evidence identity and remaining acceptance gates.",
+      "parentBehavior": "`BEH-DELIVERY` — independent reviewer can distinguish slice delivery from Project acceptance.",
+      "outcome": "Read-only clean-room report using `factory/docs/standards/validation-loopback-template.md` with criterion-by-criterion verdict and delta request for any failure.",
+      "sourcePlanRef": "`C:\\Users\\andre\\work\\portos\\infinite-you\\docs\\temp\\projects\\localai\\source-plan.md` §§“Factory inference and the OmniVoice switch”, “Functional test plan”, “Acceptance criteria”, “Verification”; `acceptance.md` LA-03, LA-04, LA-06, LA-09, LA-10, LA-12, LA-13; `operator-amendment-v3.md` LA-14/LA-15.",
+      "dependencies": [
+        "localai-tts-pr2631-plan-branch-recovery-20260923-003"
+      ],
+      "sharedSurfaceOwner": "Validator writes report only; TTS owner and Factory Reliability retain their own surfaces.",
+      "scope": {
+        "in": [
+          "clean checkout/read-only PR inspection, exact-head retained WAV/14-event evidence, source/generated consistency, CI result or blocker, project criterion map, next gates."
+        ],
+        "out": [
+          "defect repair, new backend/model run, blind speech claim, manual merge."
+        ]
+      },
+      "contractChanges": [],
+      "acceptanceCriteria": [
+        "Given the current PR/head, when the independent report is written, then every assigned criterion has PASS/FAIL/BLOCKED, evidence identity, unproven edge, and owning gate.",
+        "Given red CI or missing blind semantic/public-install proof, when the report concludes, then verdict is BLOCKED for that criterion and a smallest delta-plan request is recorded.",
+        "Given terminal current-head green CI and no review blockers, when review completes, then the report cites ordinary merge/consume or names the remaining release owner."
+      ],
+      "verification": {
+        "behavioralWitness": "a reviewer can follow the report to the actual PR/job and distinguish retained real TTS proof from later blind acceptance.",
+        "executableSpineEffect": "promote",
+        "requiredEvidence": [
+          {
+            "scope": "end-to-end delivery review",
+            "dependencyFidelity": "remote real PR plus retained local-real artifact",
+            "procedure": "clean checkout, `gh pr view 2631 --json headRefOid,statusCheckRollup,mergeStateStatus`, exact job/PR comments, template report",
+            "propertyProved": "independent gate/owner classification",
+            "propertyNotProved": "new runtime behavior or meaningful speech",
+            "cadenceAndCost": "once after owner disposition; cost free, zero model calls."
+          }
+        ],
+        "highestFeasibleLevel": "Independent clean-room delivery loopback over current PR head and retained real artifacts; new runtime execution is not applicable to unchanged delivery-only head; changed product head requires bounded affected-edge revalidation.",
+        "remainingUnprovenEdges": [
+          "blind TTS semantic/install → `GATE-LA14-LA15`; full real platform matrix → `GATE-C1`; whole Project integration → Project validation."
+        ],
+        "gateIds": [
+          "GATE-LA14-LA15",
+          "GATE-C1"
+        ]
+      },
+      "priority": "P2",
+      "passes": false,
+      "notes": ""
+    }
+  ],
+  "reviewCorrections": [
+    {
+      "id": "CI-1",
+      "source": "Operator RejectionFeedback for PR #2642, review comment https://github.com/portpowered/you-agent-factory/pull/2642#issuecomment-5792605469",
+      "owner": "tests/integration/models/platform_conformance",
+      "scope": {
+        "in": [
+          "Deterministically inject one child-start failure in TestPortableControlledReservationContention and match each attempt to its durable reservation state.",
+          "Report typed budget reservation codes so budget_exhausted remains distinguishable from other bounded failures."
+        ],
+        "out": [
+          "Production runtime behavior, shared workflow changes, unrelated platform-conformance cases, and broad test-harness redesign."
+        ]
+      },
+      "acceptanceCriteria": [
+        "Exactly MaxChildProcesses successful starts are recorded as COMMITTED and consumed.",
+        "The injected post-reservation start failure has one matching RELEASED row; budget_exhausted attempts have no ledger rows.",
+        "The finalized five-row ledger contains only attempt-matched terminal reservations and validates."
+      ],
+      "verification": {
+        "scope": "integration",
+        "dependencyFidelity": "controlled local filesystem ledger and child process",
+        "procedure": "go test ./tests/integration/models/platform_conformance -run '^TestPortableControlledReservationContention$' -count=1 -v -timeout 3m",
+        "propertyProved": "Contention outcomes and final ledger history agree without weakening the four-process budget.",
+        "propertyNotProved": "Hosted current-head Backend Integration and Verification Policy; these require the post-push CI run."
+      },
+      "passes": true,
+      "notes": "PASS for the bounded correction. Windows test helper artifact was sha256:c20847d1c2a6b10009575d76dad21977c4a7bedc84a3c7a5387ee3c02e90c0d6. Focused command go test ./tests/integration/models/platform_conformance -run '^TestPortableControlledReservationContention$' -count=1 -v -timeout 3m passed (0.186s); full package command go test -short -p=4 ./tests/integration/models/platform_conformance -count=1 -timeout 5m passed (3.556s); focused race command go test -race ./tests/integration/models/platform_conformance -run '^TestPortableControlledReservationContention$' -count=1 -timeout 3m passed (2.295s). The deterministic witness verifies four COMMITTED starts, one RELEASED failed-start reservation, and three absent budget_exhausted attempts. Hosted current-head checks remain pending."
+    }
+  ]
+}
