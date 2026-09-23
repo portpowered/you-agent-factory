@@ -143,6 +143,37 @@ test("functional coverage joins quarantine after concurrent execution and publis
 	}
 });
 
+test("controlled raw failure selection is limited to the retained labeled PR event", () => {
+	const workflow = readFileSync(workflowPath, "utf8");
+	const coverageJob = jobSection(workflow, "backend-coverage");
+	const selectorMarker = "      - name: Select controlled raw failure fixture";
+	const supervisorMarker = "      - name: Run Linux functional coverage with concurrent quarantine verification";
+	const selector = stepSection(coverageJob, selectorMarker, supervisorMarker);
+	const normalizedSelector = selector.replace(/\s+/g, " ");
+
+	assert.match(workflow, /pull_request:\n    types: \[opened, synchronize, reopened, labeled, unlabeled\]/);
+	for (const condition of [
+		"matrix.suite == 'functional'",
+		"github.event_name == 'pull_request'",
+		"github.event.action == 'labeled'",
+		"github.event.pull_request.number == 2637",
+		"github.event.pull_request.head.ref == 'factory-reliability-functional-raw-evidence-20260923'",
+		"github.event.label.name == 'ci-controlled-raw-failure'",
+	]) {
+		assert.ok(normalizedSelector.includes(condition), `raw failure selector is missing ${condition}`);
+	}
+	assert.match(selector, /uses: actions\/github-script@v7/);
+	assert.match(selector, /github\.rest\.pulls\.get/);
+	assert.match(selector, /eventHead !== liveHead/);
+	assert.match(selector, /core\.exportVariable\("FUNCTIONAL_RAW_FAILURE_WITNESS", "1"\)/);
+	assert.match(selector, /core\.exportVariable\("FUNCTIONAL_TEST_VIZ_PACKAGES", "\.\/cmd\/gocoveragecheck\/testdata\/rawfailure"\)/);
+	assert.doesNotMatch(selector, /github\.event\.(?:inputs|client_payload)|workflow_dispatch/);
+	assert.ok(
+		coverageJob.indexOf(selectorMarker) < coverageJob.indexOf(supervisorMarker),
+		"the fixed selector must set its environment before the existing functional runner starts",
+	);
+});
+
 test("pinned real ACP evidence belongs to backend integration, not functional coverage", () => {
 	const workflow = readFileSync(workflowPath, "utf8");
 	const coverageJob = jobSection(workflow, "backend-coverage");

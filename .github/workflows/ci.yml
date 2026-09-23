@@ -2,6 +2,7 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
 
@@ -422,6 +423,30 @@ jobs:
       # gate returns, including on failure. The supervisor starts the unchanged
       # quarantine validator in the same critical-path window and joins both
       # independent verdicts before returning.
+      - name: Select controlled raw failure fixture
+        if: >-
+          matrix.suite == 'functional' &&
+          github.event_name == 'pull_request' &&
+          github.event.action == 'labeled' &&
+          github.event.pull_request.number == 2637 &&
+          github.event.pull_request.head.ref == 'factory-reliability-functional-raw-evidence-20260923' &&
+          github.event.label.name == 'ci-controlled-raw-failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const eventHead = context.payload.pull_request?.head?.sha;
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: 2637,
+            });
+            const liveHead = pullRequest.head.sha;
+            if (!eventHead || eventHead !== liveHead) {
+              core.setFailed(`Refusing stale controlled raw failure event: event head ${eventHead ?? "missing"}, live head ${liveHead}.`);
+              return;
+            }
+            core.exportVariable("FUNCTIONAL_RAW_FAILURE_WITNESS", "1");
+            core.exportVariable("FUNCTIONAL_TEST_VIZ_PACKAGES", "./cmd/gocoveragecheck/testdata/rawfailure");
       - name: Run Linux functional coverage with concurrent quarantine verification
         if: matrix.suite == 'functional'
         timeout-minutes: 75
