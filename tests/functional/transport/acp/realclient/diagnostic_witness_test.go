@@ -92,7 +92,7 @@ func (fixture *reusableACPFixture) startPromptWitness(
 	excludedSessionIDs := fixture.seenFactorySessionIDsCopy()
 	return requestID, newACPWitnessEmitter(t, func() string {
 		return captureACPEventWitness(context.Background(), fixture.recordings, invocation, after, excludedSessionIDs...)
-	})
+	}, acpWitnessStallAfter)
 }
 
 func (fixture *reusableACPFixture) eventCursorCopy(factorySessionID string) *recordings.CanonicalEventCursor {
@@ -168,7 +168,7 @@ type acpWitnessEmitter struct {
 	line    string
 }
 
-func newACPWitnessEmitter(t *testing.T, capture func() string) *acpWitnessEmitter {
+func newACPWitnessEmitter(t *testing.T, capture func() string, stallAfter time.Duration) *acpWitnessEmitter {
 	emitter := &acpWitnessEmitter{
 		t:       t,
 		capture: capture,
@@ -177,7 +177,7 @@ func newACPWitnessEmitter(t *testing.T, capture func() string) *acpWitnessEmitte
 	}
 	go func() {
 		defer close(emitter.done)
-		timer := time.NewTimer(acpWitnessStallAfter)
+		timer := time.NewTimer(stallAfter)
 		defer timer.Stop()
 		select {
 		case <-emitter.stopCh:
@@ -719,4 +719,21 @@ func TestACPEventWitnessRejectsUnsafeCanonicalIdentifiers(t *testing.T) {
 	if strings.Contains(line, "private") || !strings.Contains(line, `"acpSessionId":"redacted"`) {
 		t.Fatalf("unsafe invocation identity was not redacted: %s", line)
 	}
+}
+
+func TestACPEventWitnessEmitterLogsOnceWhenStallDeadlineExpires(t *testing.T) {
+	t.Parallel()
+	captureCalls := 0
+	emitter := newACPWitnessEmitter(t, func() string {
+		captureCalls++
+		return acpWitnessPrefix + `{"status":"captured"}`
+	}, 0)
+	<-emitter.done
+	if emitter.line != acpWitnessPrefix+`{"status":"captured"}` || captureCalls != 1 {
+		t.Fatalf("deadline witness = %q, capture calls = %d, want one safe line", emitter.line, captureCalls)
+	}
+	if got := emitter.emit(); got != emitter.line || captureCalls != 1 {
+		t.Fatalf("second emit = %q, calls = %d, want the original one-time line", got, captureCalls)
+	}
+	emitter.stop()
 }
