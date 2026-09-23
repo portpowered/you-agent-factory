@@ -81,6 +81,38 @@ if ($errors.Count -ne 0) { $errors | ForEach-Object { [Console]::Error.WriteLine
 		t.Fatalf("parse candidate delivery script: %v\n%s", err, output)
 	}
 }
+
+func TestLocalAICandidateGoVersionMatchesPreflight(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell candidate release is Windows-only")
+	}
+
+	tempDir := t.TempDir()
+	harnessPath := filepath.Join(tempDir, "go-version.ps1")
+	harness := fmt.Sprintf(`
+. %s -InstallDir %s
+$valid = $false
+try {
+    Assert-SmokeCandidateGoVersion -Output 'go version go1.25.0 windows/amd64' -ExpectedVersion '1.25.0'
+    $valid = $true
+} catch {
+    throw "declared preflight Go version was rejected: $($_.Exception.Message)"
+}
+$driftRejected = $false
+try {
+    Assert-SmokeCandidateGoVersion -Output 'go version go1.25.1 windows/amd64' -ExpectedVersion '1.25.0'
+} catch {
+    $driftRejected = $_.Exception.Message -like '*want go1.25.0*'
+}
+if (-not $valid -or -not $driftRejected) { throw "Go version gate results: valid=$valid driftRejected=$driftRejected" }
+`,
+		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
+		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+	)
+	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
+}
+
 func TestLocalAICandidateCommandPreservesArgumentsFailureAndRedaction(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
@@ -511,7 +543,7 @@ Get-CandidateSourceIdentity -SourcePath %s -Commit %s -Repository 'https://examp
 		t.Fatalf("mismatched repository result = %v\n%s", err, output)
 	}
 }
-func TestLocalAICandidateGitCapturesCloneProgress(t *testing.T) {
+func TestLocalAICandidateGitCapturesFetchProgress(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
@@ -519,7 +551,7 @@ func TestLocalAICandidateGitCapturesCloneProgress(t *testing.T) {
 
 	tempDir := t.TempDir()
 	sourceDir := filepath.Join(tempDir, "source")
-	cloneDir := filepath.Join(tempDir, "clone")
+	stageDir := filepath.Join(tempDir, "stage")
 	if err := os.MkdirAll(sourceDir, 0o700); err != nil {
 		t.Fatalf("create source repository: %v", err)
 	}
@@ -531,19 +563,28 @@ func TestLocalAICandidateGitCapturesCloneProgress(t *testing.T) {
 	}
 	localAICandidateRunGit(t, sourceDir, "add", "tracked.txt")
 	localAICandidateRunGit(t, sourceDir, "commit", "--quiet", "-m", "fixture")
+	if err := os.MkdirAll(stageDir, 0o700); err != nil {
+		t.Fatalf("create stage repository: %v", err)
+	}
+	localAICandidateRunGit(t, stageDir, "init", "--quiet")
+	commit := localAICandidateGit(t, sourceDir, "rev-parse", "HEAD")
 
-	harnessPath := filepath.Join(tempDir, "clone.ps1")
+	harnessPath := filepath.Join(tempDir, "fetch.ps1")
 	harness := fmt.Sprintf(`
 . %s -InstallDir %s
-$result = Invoke-SmokeGit @('clone', '--local', '--no-checkout', '--', %s, %s)
-if (-not (Test-Path -LiteralPath %s -PathType Container)) { throw 'clone directory was not created' }
-if ([string]::IsNullOrWhiteSpace($result)) { throw 'clone progress was not retained' }
+$result = Invoke-SmokeGit @('-C', %s, 'fetch', '--no-tags', '--depth=1', '--progress', %s, %s)
+if (-not (Test-Path -LiteralPath (Join-Path %s '.git') -PathType Container)) { throw 'stage repository was not created' }
+if ([string]::IsNullOrWhiteSpace($result)) { throw 'fetch progress was not retained' }
+$shallow = Invoke-SmokeGit @('-C', %s, 'rev-parse', '--is-shallow-repository')
+if ($shallow -cne 'true') { throw "fetch did not create a shallow repository: $shallow" }
 `,
 		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
 		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(stageDir),
 		localAICandidatePowerShellLiteral(sourceDir),
-		localAICandidatePowerShellLiteral(cloneDir),
-		localAICandidatePowerShellLiteral(cloneDir),
+		localAICandidatePowerShellLiteral(commit),
+		localAICandidatePowerShellLiteral(stageDir),
+		localAICandidatePowerShellLiteral(stageDir),
 	)
 	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
 }
@@ -761,7 +802,7 @@ func localAICandidatePowerShell(t *testing.T) string {
 	}
 	return path
 }
-func runLocalAICandidateHarness(t *testing.T, path, source string, environment []string, directory string) {
+func runLocalAICandidateHarness(t *testing.T, path, source string, environment []string, directory string) []byte {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
 		t.Fatalf("write PowerShell harness: %v", err)
@@ -775,9 +816,11 @@ func runLocalAICandidateHarness(t *testing.T, path, source string, environment [
 	if directory != "" {
 		command.Dir = directory
 	}
-	if output, err := command.CombinedOutput(); err != nil {
+	output, err := command.CombinedOutput()
+	if err != nil {
 		t.Fatalf("run PowerShell harness: %v\n%s", err, output)
 	}
+	return output
 }
 func localAICandidatePowerShellEnvironment(t *testing.T, root string, base []string) []string {
 	t.Helper()
