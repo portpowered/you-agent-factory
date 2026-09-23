@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,7 +37,7 @@ func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
 		factorydefinitions.PackagedTTSFactoryName,
 	)
 	cacheDir := t.TempDir()
-	writePackagedTTSReadyModelCache(t, cacheDir)
+	writePackagedTTSReadyModelCache(t, homeDir, cacheDir)
 	modelServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path == "/health" {
 			writer.WriteHeader(http.StatusOK)
@@ -275,24 +276,75 @@ func (packagedTTSHostCompatibilityChecker) Check(
 	return nil
 }
 
-func writePackagedTTSReadyModelCache(t testing.TB, cacheDir string) {
+func writePackagedTTSReadyModelCache(t testing.TB, homeDir, cacheDir string) {
 	t.Helper()
-	const source = "hf://vibevoice/VibeVoice-7B@505114ae6ad17be74df98e6939707434ec49c187"
-	const modelAssetName = "weights.bin"
-	modelBody := []byte("joined built-in tts fixture")
-	modelDigest := fmt.Sprintf("%x", sha256.Sum256(modelBody))
-	modelIdentity := fmt.Sprintf("model|%s|%s:%d:%s", source, modelAssetName, len(modelBody), modelDigest)
+	artifacts := []struct {
+		name string
+		body []byte
+	}{
+		{name: "vibevoice-realtime-0.5B-q8_0.gguf", body: []byte("joined built-in tts model fixture")},
+		{name: "tokenizer.gguf", body: []byte("joined built-in tts tokenizer fixture")},
+		{name: "voice-en-Carter_man.gguf", body: []byte("joined built-in tts voice fixture")},
+	}
+	bundleDir := filepath.Join(homeDir, "tts-role-bundle")
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatalf("create packaged TTS role bundle: %v", err)
+	}
+	metadataArtifacts := make([]map[string]any, 0, len(artifacts))
+	identitiesByName := make(map[string]string, len(artifacts))
+	for _, artifact := range artifacts {
+		if err := os.WriteFile(filepath.Join(bundleDir, artifact.name), artifact.body, 0o644); err != nil {
+			t.Fatalf("write packaged TTS role bundle asset %q: %v", artifact.name, err)
+		}
+		digest := fmt.Sprintf("%x", sha256.Sum256(artifact.body))
+		identitiesByName[artifact.name] = fmt.Sprintf("%s:%d:%s", artifact.name, len(artifact.body), digest)
+		metadataArtifacts = append(metadataArtifacts, map[string]any{
+			"Name": artifact.name, "Bytes": len(artifact.body), "SHA256": digest,
+		})
+	}
+	source := (&url.URL{Scheme: "file", Path: filepath.ToSlash(bundleDir)}).String()
+	configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
+	var operatorConfig map[string]any
+	configData, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read packaged TTS operator config: %v", err)
+	}
+	if err := json.Unmarshal(configData, &operatorConfig); err != nil {
+		t.Fatalf("decode packaged TTS operator config: %v", err)
+	}
+	modelsConfig, ok := operatorConfig["models"].(map[string]any)
+	if !ok {
+		modelsConfig = map[string]any{}
+		operatorConfig["models"] = modelsConfig
+	}
+	modelsConfig[models.BuiltInModelNameTTS] = map[string]any{"source": source}
+	configData, err = json.Marshal(operatorConfig)
+	if err != nil {
+		t.Fatalf("marshal packaged TTS operator config: %v", err)
+	}
+	if err := os.WriteFile(configPath, configData, 0o600); err != nil {
+		t.Fatalf("write packaged TTS operator config: %v", err)
+	}
+	modelIdentity := fmt.Sprintf(
+		"model|%s|%s,%s,%s",
+		source,
+		identitiesByName["tokenizer.gguf"],
+		identitiesByName["vibevoice-realtime-0.5B-q8_0.gguf"],
+		identitiesByName["voice-en-Carter_man.gguf"],
+	)
 	modelIdentityHash := fmt.Sprintf("%x", sha256.Sum256([]byte(modelIdentity)))
 	modelSnapshot := filepath.Join(cacheDir, ".you-content-addressed", "model", modelIdentityHash)
 	if err := os.MkdirAll(modelSnapshot, 0o755); err != nil {
 		t.Fatalf("create packaged TTS generic model snapshot: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(modelSnapshot, modelAssetName), modelBody, 0o644); err != nil {
-		t.Fatalf("write packaged TTS generic model asset: %v", err)
+	for _, artifact := range artifacts {
+		if err := os.WriteFile(filepath.Join(modelSnapshot, artifact.name), artifact.body, 0o644); err != nil {
+			t.Fatalf("write packaged TTS generic model asset %q: %v", artifact.name, err)
+		}
 	}
 	metadata, err := json.Marshal(map[string]any{
 		"kind": "model", "identity": modelIdentity, "source": source, "sourceKey": source,
-		"artifacts": []map[string]any{{"Name": modelAssetName, "Bytes": len(modelBody), "SHA256": modelDigest}},
+		"artifacts": metadataArtifacts,
 	})
 	if err != nil {
 		t.Fatalf("marshal packaged TTS generic model metadata: %v", err)
@@ -300,7 +352,6 @@ func writePackagedTTSReadyModelCache(t testing.TB, cacheDir string) {
 	if err := os.WriteFile(filepath.Join(modelSnapshot, ".you-assets.json"), metadata, 0o644); err != nil {
 		t.Fatalf("write packaged TTS generic model metadata: %v", err)
 	}
-
 	const backend = "localai-vibevoice"
 	selection := packagedTTSPinnedBackendSelection()
 	backendURLHash := fmt.Sprintf("%x", sha256.Sum256([]byte(selection.Location)))

@@ -489,13 +489,6 @@
         }
       },
       {
-        "id": "doc:factory/scripts/reconcile-projects.py",
-        "position": {
-          "x": 2990,
-          "y": 2935
-        }
-      },
-      {
         "id": "doc:factory/scripts/setup-workspace.py",
         "position": {
           "x": 2440,
@@ -664,48 +657,6 @@
         }
       },
       {
-        "id": "worker:project-reconciler",
-        "position": {
-          "x": 2095,
-          "y": 1135
-        }
-      },
-      {
-        "id": "workstation:project-reconcile",
-        "position": {
-          "x": 1240,
-          "y": 1325
-        }
-      },
-      {
-        "id": "work-type:project-reconcile",
-        "position": {
-          "x": 325,
-          "y": 565
-        }
-      },
-      {
-        "id": "work-state:project-reconcile:init",
-        "position": {
-          "x": 610,
-          "y": 565
-        }
-      },
-      {
-        "id": "work-state:project-reconcile:complete",
-        "position": {
-          "x": 895,
-          "y": 565
-        }
-      },
-      {
-        "id": "work-state:project-reconcile:failed",
-        "position": {
-          "x": 40,
-          "y": 755
-        }
-      },
-      {
         "id": "doc:factory/docs/overview.md",
         "position": {
           "x": 40,
@@ -746,6 +697,13 @@
           "x": 590,
           "y": 3085
         }
+      },
+      {
+        "id": "workstation:project-lead-checkin",
+        "position": {
+          "x": 2095,
+          "y": 1135
+        }
       }
     ],
     "edges": [],
@@ -769,11 +727,7 @@
           "workstation:though-retrigger",
           "resource:supervisor-slot",
           "work-type:thoughts",
-          "work-type:cron-triggers",
-          "work-type:project-reconcile",
-          "work-state:project-reconcile:init",
-          "work-state:project-reconcile:complete",
-          "work-state:project-reconcile:failed"
+          "work-type:cron-triggers"
         ]
       },
       {
@@ -810,8 +764,7 @@
           "work-type:project-cycle",
           "work-state:project:needs-supervision",
           "workstation:escalate-project",
-          "worker:project-reconciler",
-          "workstation:project-reconcile"
+          "workstation:project-lead-checkin"
         ]
       },
       {
@@ -956,7 +909,6 @@
           "doc:factory/scripts/ci-wait.py",
           "doc:factory/scripts/decide-project-cycle.py",
           "doc:factory/scripts/prepare-validation.py",
-          "doc:factory/scripts/reconcile-projects.py",
           "doc:factory/scripts/setup-workspace.py"
         ]
       }
@@ -1129,14 +1081,6 @@
         "id": "factory/docs/standards/validation-loopback-template.md",
         "targetPath": "factory/docs/standards/validation-loopback-template.md",
         "type": "DOC",
-        "content": {
-          "encoding": "utf-8"
-        }
-      },
-      {
-        "id": "factory/scripts/reconcile-projects.py",
-        "targetPath": "factory/scripts/reconcile-projects.py",
-        "type": "SCRIPT",
         "content": {
           "encoding": "utf-8"
         }
@@ -1381,35 +1325,14 @@
           "type": "FAILED"
         }
       ]
-    },
-    {
-      "id": "project-reconcile",
-      "name": "project-reconcile",
-      "states": [
-        {
-          "id": "init",
-          "name": "init",
-          "type": "INITIAL"
-        },
-        {
-          "id": "complete",
-          "name": "complete",
-          "type": "TERMINAL"
-        },
-        {
-          "id": "failed",
-          "name": "failed",
-          "type": "FAILED"
-        }
-      ]
     }
   ],
   "workers": [
     {
       "executorProvider": "SCRIPT_WRAP",
       "modelProvider": "codex",
-      "model": "gpt-5.6-sol",
-      "reasoningEffort": "high",
+      "model": "gpt-6-sol",
+      "reasoningEffort": "medium",
       "id": "project-lead",
       "name": "project-lead",
       "skipPermissions": true,
@@ -1428,8 +1351,8 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "modelProvider": "codex",
-      "model": "gpt-5.6-luna",
-      "reasoningEffort": "max",
+      "model": "gpt-6-luna",
+      "reasoningEffort": "xhigh",
       "name": "processor",
       "skipPermissions": true,
       "type": "AGENT_WORKER"
@@ -1437,7 +1360,7 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "modelProvider": "codex",
-      "model": "gpt-5.6-luna",
+      "model": "gpt-6-luna",
       "reasoningEffort": "max",
       "name": "reviewer",
       "skipPermissions": true,
@@ -1467,8 +1390,8 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "modelProvider": "codex",
-      "model": "gpt-5.6-luna",
-      "reasoningEffort": "max",
+      "model": "gpt-6-sol",
+      "reasoningEffort": "medium",
       "id": "planner",
       "name": "planner",
       "skipPermissions": true,
@@ -1477,7 +1400,7 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "modelProvider": "codex",
-      "model": "gpt-6-astra",
+      "model": "gpt-6-sol",
       "reasoningEffort": "medium",
       "id": "ideafier",
       "name": "ideafier",
@@ -1501,22 +1424,9 @@
       "type": "AGENT_WORKER",
       "executorProvider": "SCRIPT_WRAP",
       "modelProvider": "codex",
-      "model": "gpt-5.6-luna",
+      "model": "gpt-6-luna",
       "reasoningEffort": "max",
       "skipPermissions": true
-    },
-    {
-      "id": "project-reconciler",
-      "name": "project-reconciler",
-      "type": "SCRIPT_WORKER",
-      "command": "python",
-      "args": [
-        "factory/scripts/reconcile-projects.py",
-        "--server",
-        "http://127.0.0.1:7437",
-        "--session",
-        "{{ .Context.SessionID }}"
-      ]
     }
   ],
   "workstations": [
@@ -2129,7 +2039,7 @@
     {
       "behavior": "CRON",
       "cron": {
-        "schedule": "0 */4 * * *"
+        "schedule": "0 */8 * * *"
       },
       "id": "though-retrigger",
       "inputs": [],
@@ -2300,31 +2210,41 @@
       ]
     },
     {
-      "id": "project-reconcile",
-      "name": "project-reconcile",
-      "type": "SCRIPT_RUN",
+      "id": "project-lead-checkin",
+      "name": "project-lead-checkin",
+      "type": "AGENT_RUN",
       "behavior": "CRON",
       "cron": {
-        "schedule": "*/15 * * * *"
+        "schedule": "0 * * * *"
       },
-      "worker": "project-reconciler",
-      "inputs": [],
+      "worker": "project-lead",
+      "inputs": [
+        {
+          "workType": "project",
+          "state": "waiting"
+        }
+      ],
       "outputs": [
         {
-          "workType": "project-reconcile",
-          "state": "complete"
+          "workType": "project",
+          "state": "waiting"
         }
       ],
       "onFailure": [
         {
-          "workType": "project-reconcile",
-          "state": "failed"
-        },
-        {
-          "workType": "thoughts",
-          "state": "init"
+          "workType": "project",
+          "state": "needs-supervision"
         }
-      ]
+      ],
+      "resources": [
+        {
+          "name": "concurrent-project-leads",
+          "capacity": 1
+        }
+      ],
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
     }
   ]
 }

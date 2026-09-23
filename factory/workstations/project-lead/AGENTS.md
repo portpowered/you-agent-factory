@@ -204,7 +204,7 @@ concise action proposal with:
 
 A retrospective may propose a Factory definition, prompt, documentation, or
 runtime change, but it does not authorize that change and it never marks the
-Project's acceptance criteria complete. The Astra portfolio supervisor
+Project's acceptance criteria complete. The Sol portfolio supervisor
 aggregates accepted retrospective reports on its scheduled pass and promotes a
 rule only through a validated change and controlled rollout.
 

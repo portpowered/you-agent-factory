@@ -6,14 +6,15 @@ workers through the you CLI, backend runtime, and dashboard.
 
 The Factory has four operating roles:
 
-- the Astra Portfolio Supervisor uses medium reasoning with high autonomy to
+- the GPT-6 Sol Portfolio Supervisor uses medium reasoning with high autonomy to
   watch the whole repository, admit Projects, reconcile health, and choose the
-  next priority every four hours or when a significant exception occurs;
-- a Sol Project Lead owns one Project's immutable acceptance contract and
+  next priority every eight hours or when a significant exception occurs;
+- a GPT-6 Sol Project Lead owns one Project's immutable acceptance contract and
   chooses its next behavior slice;
-- Luna planning, delivery, and review workers execute and gate one local
-  Work item at maximum reasoning; and
-- Luna validation workers run fresh, read-only customer, engineering, or
+- GPT-6 Sol planning workers shape one bounded plan at medium reasoning;
+- GPT-6 Luna delivery and review workers execute and gate one local Work item
+  at xhigh and maximum reasoning, respectively; and
+- GPT-6 Luna validation workers run fresh, read-only customer, engineering, or
   retrospective missions against immutable artifacts.
 
 The executable Factory definition is the authority for Work types, states,
@@ -63,17 +64,24 @@ project:init -> project-lead -> project:waiting
 project:waiting + project-cycle:continue -> project:init
 project:waiting + project-cycle:complete -> project:complete
 project:waiting + project-cycle:blocked  -> project:blocked
+
+hourly project:waiting -> project-lead-checkin -> project:waiting
 ```
 
 The Project cycle is released only after every current idea and validation Work
-has reached its terminal success state. A child failure or rejection is
-preserved as cycle failure evidence and wakes the Project Lead for a smaller
-correction. It must not be silently converted into an idea or Project success.
+has reached its terminal success state. A failed child blocks that dependency;
+the hourly Project Lead check-in must inspect its failure evidence and make a
+cause-corrected repair or escalate the missing route. Failure must not be
+silently converted into Project success.
 
 The Project Lead emits only the immediate behavior and proof Work justified by
 current evidence. Local Work may complete before the Project acceptance
 criteria are proven. The lead then emits another behavior slice or validation
 mission, or records a concrete external hold.
+
+The hourly check-in runs separately for each waiting Project. It inspects the
+existing cycle and repairs only evidenced failures through supported Work
+controls. It does not create a second cycle or new behavior slice.
 
 ## Work types
 
@@ -178,7 +186,7 @@ the smallest correction supported by the evidence.
 
 A retrospective is a validation mission with role `retrospective`. It reports a
 common or special cause and proposes an owner, evidence, verification
-procedure, and rollback/stop condition. Retrospective output informs the Astra
+procedure, and rollback/stop condition. Retrospective output informs the Sol
 Portfolio Supervisor; it does not mark product acceptance complete.
 
 ## Project working memory
@@ -240,6 +248,6 @@ parallelize only when semantic prerequisites are satisfied.
 
 When all active Projects are progressing or held on named external conditions
 and no priority class has a safe, dependency-ready action, record a hold with
-the next four-hour review or exception trigger and stop. Do not create
+the next eight-hour review or exception trigger and stop. Do not create
 placeholder Work, duplicate validation, restart healthy Projects, or weaken
 acceptance criteria.

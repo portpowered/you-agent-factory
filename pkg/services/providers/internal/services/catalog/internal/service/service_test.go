@@ -283,7 +283,7 @@ func assertCodexCatalogFacts(t *testing.T, codex providers.Descriptor) {
 		"workspace/writable-workspace",
 	})
 	assertToolNames(t, codex, []string{"filesystem", "shell", "web_search"})
-	wantModels := []string{"gpt-5.6", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"}
+	wantModels := []string{"gpt-5.6", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-6-luna", "gpt-6-sol"}
 	if len(codex.Models) != len(wantModels) {
 		t.Fatalf("codex models = %#v, want exact IDs %v", codex.Models, wantModels)
 		return

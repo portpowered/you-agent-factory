@@ -842,7 +842,7 @@ func writeGenericBuiltinModelCache(t *testing.T, home, source string) {
 	name := "weights.bin"
 	if sourcePath := strings.Split(strings.TrimSuffix(strings.TrimSpace(source), "@"), "@")[0]; strings.Contains(sourcePath, "/") {
 		parts := strings.Split(strings.Trim(sourcePath, "/"), "/")
-		if candidate := strings.TrimSpace(parts[len(parts)-1]); candidate != "" && candidate != "VibeVoice-7B" {
+		if candidate := strings.TrimSpace(parts[len(parts)-1]); candidate != "" {
 			name = candidate
 		}
 	}

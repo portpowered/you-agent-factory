@@ -85,12 +85,12 @@ func newManagedFactoryTTSFixture(t *testing.T) *managedFactoryTTSFixture {
 		t.TempDir(),
 		factorydefinitions.PackagedTTSFactoryName,
 	)
+	cacheSeedDir := t.TempDir()
+	writePackagedTTSReadyModelCache(t, seedHomeDir, cacheSeedDir)
 	configSeed, err := os.ReadFile(filepath.Join(seedHomeDir, ".you-agent-factory", "config.json"))
 	if err != nil {
 		t.Fatalf("read managed TTS Factory config seed: %v", err)
 	}
-	cacheSeedDir := t.TempDir()
-	writePackagedTTSReadyModelCache(t, cacheSeedDir)
 
 	fixture := &managedFactoryTTSFixture{
 		process:         process,
