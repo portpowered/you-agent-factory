@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 // Timing globals are stubbed per test; these contracts do not require a DOM.
 
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
+import { defaultSessionFactoryActivation } from "../../../api/session-factory/import-activation.test-helpers";
 import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
@@ -112,6 +113,7 @@ describe("pausedDashboardStreamState", () => {
 describe("syncCurrentFactoryDefinition", () => {
   const sessionID = "~default";
   const validFactory = {
+    activation: defaultSessionFactoryActivation,
     name: "factory",
     workers: [
       {
@@ -212,14 +214,19 @@ describe("syncCurrentFactoryDefinition", () => {
       sessionID,
     );
 
-    expect(
-      queryClient.getQueryData(currentFactoryDocumentQueryKey(sessionID)),
-    ).toMatchObject({
+    const document = queryClient.getQueryData(
+      currentFactoryDocumentQueryKey(sessionID),
+    );
+    expect(document).toMatchObject({
+      activation: defaultSessionFactoryActivation,
       version: {
         logical: "9",
         physical: "2026-05-31T12:00:00Z",
       },
     });
+    expect(
+      queryClient.getQueryData(currentFactoryDefinitionQueryKey(sessionID)),
+    ).not.toHaveProperty("activation");
   });
 
   it("re-reads the document cache before writing so a concurrent factory GET cannot be overwritten", () => {
@@ -299,6 +306,7 @@ describe("syncCurrentFactoryDefinition", () => {
 describe("syncCurrentFactoryDefinition bundled docs", () => {
   const sessionID = "~default";
   const validFactory = {
+    activation: defaultSessionFactoryActivation,
     name: "factory",
     workers: [
       {

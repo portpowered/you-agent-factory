@@ -41,6 +41,10 @@ func TestDefinitionActivationGatewaySaveAndNamedSwap(t *testing.T) {
 	support.WaitForRuntimeIdle(t, baseURL, 10*time.Second)
 
 	current := getDefinitionActivationCurrentFactory(t, baseURL)
+	if current.Activation == nil {
+		t.Fatal("initial current activation provenance is nil")
+	}
+	initialActivationID := current.Activation.ActivationId
 	firstVersion := definitionActivationAdvancedFactoryVersion(t, current.Version)
 	firstSaved := saveDefinitionActivationCurrentFactory(
 		t,
@@ -49,6 +53,9 @@ func TestDefinitionActivationGatewaySaveAndNamedSwap(t *testing.T) {
 	)
 	if firstSaved.WorkTypes == nil || len(*firstSaved.WorkTypes) != 1 || (*firstSaved.WorkTypes)[0].Name != "story" {
 		t.Fatalf("first saved work types = %#v, want story", firstSaved.WorkTypes)
+	}
+	if firstSaved.Activation == nil || firstSaved.Activation.ActivationId == initialActivationID || firstSaved.Activation.LoadedSourceDigest == "" {
+		t.Fatalf("first saved activation = %#v, want one new complete identity", firstSaved.Activation)
 	}
 
 	secondVersion := definitionActivationAdvancedFactoryVersion(t, firstSaved.Version)
@@ -60,6 +67,9 @@ func TestDefinitionActivationGatewaySaveAndNamedSwap(t *testing.T) {
 	if secondSaved.WorkTypes == nil || len(*secondSaved.WorkTypes) != 1 || (*secondSaved.WorkTypes)[0].Name != "article" {
 		t.Fatalf("second saved work types = %#v, want article", secondSaved.WorkTypes)
 	}
+	if secondSaved.Activation == nil || secondSaved.Activation.ActivationId == firstSaved.Activation.ActivationId || secondSaved.Activation.LoadedSourceDigest == "" {
+		t.Fatalf("second saved activation = %#v, want one new complete identity", secondSaved.Activation)
+	}
 
 	activated := upsertDefinitionActivationNamedFactory(
 		t,
@@ -69,10 +79,16 @@ func TestDefinitionActivationGatewaySaveAndNamedSwap(t *testing.T) {
 	if activated.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("activated factory name = %q, want beta", activated.Name)
 	}
+	if activated.Activation == nil || activated.Activation.ActivationId == secondSaved.Activation.ActivationId || activated.Activation.LoadedSourceDigest == "" {
+		t.Fatalf("named activation = %#v, want one new complete identity", activated.Activation)
+	}
 
 	current = getDefinitionActivationCurrentFactory(t, baseURL)
 	if current.Name != factoryapi.FactoryName("beta") {
 		t.Fatalf("current factory after beta activation = %q, want beta", current.Name)
+	}
+	if current.Activation == nil || current.Activation.ActivationId != activated.Activation.ActivationId || current.Activation.LoadedSourceDigest != activated.Activation.LoadedSourceDigest {
+		t.Fatalf("current activation after beta activation = %#v, want response tuple %#v", current.Activation, activated.Activation)
 	}
 
 	inputs := support.FakeInputs(t.Context(), []string{
@@ -95,6 +111,9 @@ func TestDefinitionActivationGatewaySaveAndNamedSwap(t *testing.T) {
 			postReplace.Version.Logical.Int64(),
 			current.Version.Logical.Int64(),
 		)
+	}
+	if postReplace.Activation == nil || postReplace.Activation.ActivationId == current.Activation.ActivationId || postReplace.Activation.LoadedSourceDigest == "" {
+		t.Fatalf("post-replace activation = %#v, want one new complete identity", postReplace.Activation)
 	}
 }
 

@@ -23,10 +23,38 @@ const (
 	SaveModeUpsertNamedAndActivate SaveMode = "UPSERT_NAMED_AND_ACTIVATE"
 )
 
+// FactoryActivationState describes whether the authored source currently
+// agrees with the immutable Factory snapshot accepted by the live runtime.
+// The comparison is a read-model concern; it never changes the loaded runtime
+// or persists authored data.
+type FactoryActivationState string
+
+const (
+	FactoryActivationStateActive                    FactoryActivationState = "ACTIVE"
+	FactoryActivationStateAuthoredChanged           FactoryActivationState = "AUTHORED_CHANGED"
+	FactoryActivationStateNotActivated              FactoryActivationState = "NOT_ACTIVATED"
+	FactoryActivationStateAuthoredSourceUnavailable FactoryActivationState = "AUTHORED_SOURCE_UNAVAILABLE"
+)
+
+// FactoryActivationProvenance is the server-owned identity of one immutable
+// Factory snapshot accepted by a runtime. It contains no authored Factory or
+// instruction bytes.
+type FactoryActivationProvenance struct {
+	ActivationID       string
+	LoadedSourceDigest string
+	State              FactoryActivationState
+}
+
+// AuthoredSourceComparison is installed by the Definitions loader on a
+// loaded source. Implementations read the selected authored source and return
+// only a safe comparison state.
+type AuthoredSourceComparison func() (FactoryActivationState, error)
+
 type EditableFactory struct {
-	Name     string
-	Snapshot *FactorySnapshot
-	Version  *FactoryVersion
+	Name       string
+	Snapshot   *FactorySnapshot
+	Version    *FactoryVersion
+	Activation *FactoryActivationProvenance
 }
 
 // NamedFactoryListEntry describes one persisted named Factory under a Factory
@@ -178,6 +206,35 @@ type FactorySnapshotSource interface {
 type LoadedFactorySource interface {
 	FactorySnapshotSource
 	RuntimeBaseDir() string
+}
+
+// LoadedFactoryActivationSource is an optional capability exposed by loaded
+// sources that were constructed with an immutable activation identity. It is
+// separate from LoadedFactorySource so older adapters and focused test doubles
+// remain valid.
+type LoadedFactoryActivationSource interface {
+	FactoryActivationProvenance() *FactoryActivationProvenance
+}
+
+// LoadedFactoryAuthoredSourceComparator is an optional read-only capability
+// used to compare the active snapshot with the selected authored source.
+type LoadedFactoryAuthoredSourceComparator interface {
+	CompareAuthoredSource() (FactoryActivationState, error)
+}
+
+// LoadedFactoryVersionSource is an optional capability carrying the version
+// observed when the active source was loaded. It prevents current inspection
+// from mixing a loaded snapshot with a later authored file version.
+type LoadedFactoryVersionSource interface {
+	LoadedFactoryVersion() *FactoryVersion
+}
+
+// LoadedFactorySourceMetadataSetter is the construction-time capability used
+// by the Definitions loader to attach read-only comparison and version
+// metadata without changing the stable LoadedFactorySource contract.
+type LoadedFactorySourceMetadataSetter interface {
+	SetAuthoredSourceComparison(AuthoredSourceComparison)
+	SetLoadedFactoryVersion(*FactoryVersion)
 }
 
 type MutableLoadedFactorySource interface {

@@ -163,18 +163,29 @@ func currentFactoryResponseBytes(result factoryapi.Factory) (int, error) {
 
 // RenderCurrentFactory writes a concise human-readable current-factory result.
 func RenderCurrentFactory(current factoryapi.Factory, output io.Writer) error {
-	if _, err := fmt.Fprintln(output, "NAME\tKIND\tID\tFACTORY DIRECTORY"); err != nil {
+	if _, err := fmt.Fprintln(output, "NAME\tKIND\tID\tFACTORY DIRECTORY\tACTIVATION STATE\tACTIVATION ID\tLOADED SOURCE DIGEST"); err != nil {
 		return err
 	}
+	activationState, activationID, loadedSourceDigest := currentFactoryActivationValues(current)
 	_, err := fmt.Fprintf(
 		output,
-		"%s\t%s\t%s\t%s\n",
+		"%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 		current.Name,
 		currentFactoryKind(current),
 		stringPtrValue(current.Id),
 		stringPtrValue(current.FactoryDirectory),
+		activationState,
+		activationID,
+		loadedSourceDigest,
 	)
 	return err
+}
+
+func currentFactoryActivationValues(current factoryapi.Factory) (string, string, string) {
+	if current.Activation == nil {
+		return "", "", ""
+	}
+	return string(current.Activation.State), current.Activation.ActivationId, current.Activation.LoadedSourceDigest
 }
 
 func renderQueryCurrentError(err error) error {

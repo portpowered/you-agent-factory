@@ -13,25 +13,26 @@ import (
 )
 
 type DefinitionHostCallbacks struct {
-	PersistRootDir                          func() string
-	WorkstationLoader                       func() interfaces.WorkstationLoader
-	CurrentRuntimeConfig                    func() interfaces.LoadedFactorySource
-	WorkflowID                              func() string
-	RequireSession                          func(string) (*livesession.LiveSession, error)
-	SessionRuntimeConfig                    func(string) (interfaces.LoadedFactorySource, error)
-	SessionFactoryPersistRoot               func(*livesession.LiveSession) string
-	ValidateEditableFactorySnapshot         func(context.Context, *interfaces.FactorySnapshot) error
-	GetCurrentFactorySnapshotForSession     func(context.Context, string) (*interfaces.FactorySnapshot, error)
-	WithActivationLock                      func(func() error) error
-	RequireIdleRuntimeForSession            func(context.Context, string) error
-	ActivateSessionEditableFactory          func(context.Context, *livesession.LiveSession, string, string, string, string, string) error
-	ReplaceFactoryLayoutAtDir               func(string, *interfaces.PreparedFactoryLayoutPayload) (*interfaces.FactorySplitLayoutReplaceResult, error)
-	SaveNow                                 func() time.Time
-	RunSessionID                            func() string
-	SessionForActivation                    func(string) *livesession.LiveSession
-	NamedFactoryActivationPaths             func(*livesession.LiveSession) (string, string)
-	RequireIdleBeforeNamedFactoryActivation func(context.Context, string, *livesession.LiveSession) error
-	SwapPersistedNamedFactoryRuntime        func(context.Context, string, *livesession.LiveSession, string, string, string, string) error
+	PersistRootDir                           func() string
+	WorkstationLoader                        func() interfaces.WorkstationLoader
+	CurrentRuntimeConfig                     func() interfaces.LoadedFactorySource
+	WorkflowID                               func() string
+	RequireSession                           func(string) (*livesession.LiveSession, error)
+	SessionRuntimeConfig                     func(string) (interfaces.LoadedFactorySource, error)
+	SessionFactoryPersistRoot                func(*livesession.LiveSession) string
+	ValidateEditableFactorySnapshot          func(context.Context, *interfaces.FactorySnapshot) error
+	GetCurrentFactorySnapshotForSession      func(context.Context, string) (*interfaces.FactorySnapshot, error)
+	WithActivationLock                       func(func() error) error
+	RequireIdleRuntimeForSession             func(context.Context, string) error
+	ActivateSessionEditableFactory           func(context.Context, *livesession.LiveSession, string, string, string, string, string) error
+	ActivateSessionEditableFactoryWithResult func(context.Context, *livesession.LiveSession, string, string, string, string, string) (interfaces.DefinitionActivationResult, error)
+	ReplaceFactoryLayoutAtDir                func(string, *interfaces.PreparedFactoryLayoutPayload) (*interfaces.FactorySplitLayoutReplaceResult, error)
+	SaveNow                                  func() time.Time
+	RunSessionID                             func() string
+	SessionForActivation                     func(string) *livesession.LiveSession
+	NamedFactoryActivationPaths              func(*livesession.LiveSession) (string, string)
+	RequireIdleBeforeNamedFactoryActivation  func(context.Context, string, *livesession.LiveSession) error
+	SwapPersistedNamedFactoryRuntime         func(context.Context, string, *livesession.LiveSession, string, string, string, string) error
 }
 
 // DefinitionCallbacks exposes bounded Factory Session callbacks for composition
@@ -86,17 +87,31 @@ func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 	}
 	dependencies.WithActivationLock = runtime.sessionState.WithActivationLock
 	dependencies.RequireIdleRuntimeForSession = runtime.requireIdleRuntimeForSession
-	dependencies.ActivateSessionEditableFactory = func(
+	dependencies.ActivateSessionEditableFactoryWithResult = func(
 		ctx context.Context,
 		session *livesession.LiveSession,
 		sessionID, sessionRootDir, factoryDir, name, runtimeName string,
-	) error {
-		return ActivateSessionRuntime(
+	) (interfaces.DefinitionActivationResult, error) {
+		loaded, err := ActivateSessionRuntimeWithResult(
 			ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName,
 			runtime.buildReplacementFactoryRuntime,
 			runtime.requireIdleRuntimeForSession,
 			runtime.ReplaceSessionRuntime,
 		)
+		if err != nil {
+			return interfaces.DefinitionActivationResult{}, err
+		}
+		return interfaces.DefinitionActivationResult{LoadedSource: loaded, Available: true}, nil
+	}
+	dependencies.ActivateSessionEditableFactory = func(
+		ctx context.Context,
+		session *livesession.LiveSession,
+		sessionID, sessionRootDir, factoryDir, name, runtimeName string,
+	) error {
+		_, err := dependencies.ActivateSessionEditableFactoryWithResult(
+			ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName,
+		)
+		return err
 	}
 	dependencies.SaveNow = func() time.Time {
 		return runtime.clock.Now().UTC()
@@ -139,10 +154,24 @@ func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 					runtime.namedPaths.WriteCurrentPointer,
 				)
 			},
+			runtime.namedPaths.ReadCurrentPointer,
 			runtime.namedPaths.WriteCurrentPointer,
+			currentFactoryPointerRemover(runtime.namedPaths),
 		)
 	}
 	return dependencies
+}
+
+func currentFactoryPointerRemover(
+	paths interfaces.NamedPathResolver,
+) func(string) error {
+	remover, _ := paths.(interface {
+		RemoveCurrentPointer(string) error
+	})
+	if remover == nil {
+		return nil
+	}
+	return remover.RemoveCurrentPointer
 }
 
 func (h *SessionRuntime) requireDefinitions() interfaces.Service {

@@ -135,6 +135,22 @@ func startSharedCurrentFactoryAPI(t *testing.T) *sharedCurrentFactoryAPI {
 				"alpha-prompt-nonmutation",
 				functionalNamedFactoryPayloadWithWorkType(t, "alpha-prompt-nonmutation", "alpha-prompt-nonmutation-task"),
 			)
+			createNamedFactoryFixtureWithProcess(
+				t,
+				process,
+				env,
+				fixture.rootDir,
+				"alpha-provenance",
+				functionalNamedFactoryPayloadWithWorkType(t, "alpha-provenance", "alpha-provenance-task"),
+			)
+			createNamedFactoryFixtureWithProcess(
+				t,
+				process,
+				env,
+				fixture.rootDir,
+				"alpha-activation-atomic",
+				functionalNamedFactoryPayloadWithWorkType(t, "alpha-activation-atomic", "alpha-activation-atomic-task"),
+			)
 		}),
 	)
 	t.Cleanup(func() {

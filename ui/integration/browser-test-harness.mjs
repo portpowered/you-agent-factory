@@ -3380,7 +3380,12 @@ export async function startFactoryApiServer({
             sessionID,
           });
         }
-        sessionState.currentFactory = normalizedFactory;
+        sessionState.currentFactory = {
+          ...normalizedFactory,
+          ...(sessionState.currentFactory?.activation
+            ? { activation: sessionState.currentFactory.activation }
+            : {}),
+        };
         bumpEditableFactoryDefinitionVersion(sessionID);
         sessionState.eventLines = buildSavedFactoryReplayLines(
           sessionState.currentFactory,

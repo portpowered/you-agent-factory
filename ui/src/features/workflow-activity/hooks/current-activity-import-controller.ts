@@ -109,6 +109,7 @@ function currentActivityImportDocumentFromFactory(
   if (
     !factory ||
     version == null ||
+    factory.activation == null ||
     typeof version !== "object" ||
     (typeof version.logical !== "string" &&
       typeof version.logical !== "number") ||
@@ -119,6 +120,7 @@ function currentActivityImportDocumentFromFactory(
 
   return {
     ...factory,
+    activation: factory.activation,
     version: {
       logical: String(version.logical),
       physical: version.physical,

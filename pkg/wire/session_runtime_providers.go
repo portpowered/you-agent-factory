@@ -473,7 +473,7 @@ func provideSubmittedDefinitionValidationOperation(
 }
 
 func provideLoadedFactorySourceFactory() factorydefinitions.LoadedFactorySourceFactory {
-	return factorydefinitionswire.LoadedFactorySourceFactory()
+	return factorydefinitionswire.LoadedFactorySourceFactory(uuid.NewString)
 }
 
 func provideNamedFactoryCatalog(

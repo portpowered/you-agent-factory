@@ -4,6 +4,7 @@ import {
   activateImportedFactoryForSession,
   getCurrentFactory,
 } from "./import-activation";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 
 const canonicalFactory = {
   name: "Current Factory",
@@ -280,6 +281,7 @@ describe("session factory getCurrentFactory error handling", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Current Factory",
             workTypes: [],
             workers: [],

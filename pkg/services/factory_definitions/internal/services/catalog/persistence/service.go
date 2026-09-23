@@ -235,6 +235,29 @@ func (s *service) ReplaceNamedFactory(
 	return s.persistNamedFactory(rootDir, name, prepared, true)
 }
 
+// DiscardNamedFactory removes a newly-created candidate after a later pointer
+// or runtime activation step fails. It is separate from catalog deletion so a
+// rollback can remove the candidate after restoring the previous selector.
+func (s *service) DiscardNamedFactory(rootDir, name string) error {
+	if s == nil || s.fileSystem == nil {
+		return fmt.Errorf("Factory Definitions persistence service is required")
+	}
+	if strings.TrimSpace(rootDir) == "" {
+		return fmt.Errorf("factory root is required")
+	}
+	if err := catalognamedpaths.ValidateName(name); err != nil {
+		return err
+	}
+	factoryDir, err := catalognamedpaths.MapDir(rootDir, strings.TrimSpace(name))
+	if err != nil {
+		return err
+	}
+	if err := s.fileSystem.RemoveAll(factoryDir); err != nil {
+		return fmt.Errorf("discard named Factory %q: %w", name, err)
+	}
+	return nil
+}
+
 func (s *service) ReplaceFactoryLayout(
 	targetDir string,
 	prepared *factorydefinitions.PreparedFactoryLayoutPayload,

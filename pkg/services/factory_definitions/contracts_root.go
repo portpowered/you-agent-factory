@@ -22,6 +22,9 @@ type FactoryWebhookEffectiveDeliveryPolicy = contracts.FactoryWebhookEffectiveDe
 type NameValueConfig = contracts.NameValueConfig
 type NameValueValidationError = contracts.NameValueValidationError
 type SaveMode = contracts.SaveMode
+type FactoryActivationState = contracts.FactoryActivationState
+type FactoryActivationProvenance = contracts.FactoryActivationProvenance
+type AuthoredSourceComparison = contracts.AuthoredSourceComparison
 type NamedFactoryPersistenceMode = contracts.NamedFactoryPersistenceMode
 type NamedFactoryPersistenceRequest = contracts.NamedFactoryPersistenceRequest
 type NamedFactoryPersistenceResult = contracts.NamedFactoryPersistenceResult
@@ -83,14 +86,18 @@ type ValidationTarget = contracts.ValidationTarget
 type ValidationSubject = contracts.ValidationSubject
 
 const (
-	NameValueTypeLocalizableAsset      = contracts.NameValueTypeLocalizableAsset
-	SaveModeReplaceCurrent             = contracts.SaveModeReplaceCurrent
-	SaveModeUpsertNamedAndActivate     = contracts.SaveModeUpsertNamedAndActivate
-	NamedFactoryPersistenceModeCreate  = contracts.NamedFactoryPersistenceModeCreate
-	NamedFactoryPersistenceModeReplace = contracts.NamedFactoryPersistenceModeReplace
-	ValidationProfileTopology          = contracts.ValidationProfileTopology
-	ValidationProfilePrePersist        = contracts.ValidationProfilePrePersist
-	DefaultTopologyValidationMessage   = contracts.DefaultTopologyValidationMessage
+	NameValueTypeLocalizableAsset                   = contracts.NameValueTypeLocalizableAsset
+	SaveModeReplaceCurrent                          = contracts.SaveModeReplaceCurrent
+	SaveModeUpsertNamedAndActivate                  = contracts.SaveModeUpsertNamedAndActivate
+	FactoryActivationStateActive                    = contracts.FactoryActivationStateActive
+	FactoryActivationStateAuthoredChanged           = contracts.FactoryActivationStateAuthoredChanged
+	FactoryActivationStateNotActivated              = contracts.FactoryActivationStateNotActivated
+	FactoryActivationStateAuthoredSourceUnavailable = contracts.FactoryActivationStateAuthoredSourceUnavailable
+	NamedFactoryPersistenceModeCreate               = contracts.NamedFactoryPersistenceModeCreate
+	NamedFactoryPersistenceModeReplace              = contracts.NamedFactoryPersistenceModeReplace
+	ValidationProfileTopology                       = contracts.ValidationProfileTopology
+	ValidationProfilePrePersist                     = contracts.ValidationProfilePrePersist
+	DefaultTopologyValidationMessage                = contracts.DefaultTopologyValidationMessage
 
 	FactoryWebhookEventTypeWorkStateChange     = contracts.FactoryWebhookEventTypeWorkStateChange
 	FactoryWebhookEventTypeDispatchResponse    = contracts.FactoryWebhookEventTypeDispatchResponse
@@ -165,6 +172,10 @@ var (
 
 type PortableBundledFileReplacement = contracts.PortableBundledFileReplacement
 type MutableLoadedFactorySource = contracts.MutableLoadedFactorySource
+type LoadedFactoryActivationSource = contracts.LoadedFactoryActivationSource
+type LoadedFactoryAuthoredSourceComparator = contracts.LoadedFactoryAuthoredSourceComparator
+type LoadedFactoryVersionSource = contracts.LoadedFactoryVersionSource
+type LoadedFactorySourceMetadataSetter = contracts.LoadedFactorySourceMetadataSetter
 type DefinitionSession = contracts.DefinitionSession
 
 const (

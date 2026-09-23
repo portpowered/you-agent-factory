@@ -1,11 +1,13 @@
 import { saveSessionFactory } from "./api";
 import { SessionFactoryAPIError } from "./errors";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 
 describe("saveSessionFactory upsert and transport", () => {
   it("issues PUT with UPSERT_NAMED_AND_ACTIVATE on a non-default session without version", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Imported Factory",
           workers: [],
           workstations: [],

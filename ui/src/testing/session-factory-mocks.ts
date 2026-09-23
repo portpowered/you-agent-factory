@@ -6,6 +6,7 @@ import type {
   SessionFactoryVersion,
 } from "../api/session-factory";
 import { currentFactorySessionPath } from "../api/session-routing";
+import { defaultFactoryActivation } from "./factory-activation-fixtures";
 import { baseFactoryDefinition } from "./graph-editor-harness";
 
 export type SessionFactoryPutMode =
@@ -24,6 +25,7 @@ export const incrementedSessionFactoryVersion: SessionFactoryVersion = {
 };
 
 export const sessionFactoryImportActivationDocument: SessionFactoryDocument = {
+  activation: defaultFactoryActivation,
   name: "Session Current Name",
   workTypes: [],
   workers: [],
@@ -33,6 +35,7 @@ export const sessionFactoryImportActivationDocument: SessionFactoryDocument = {
 
 export const sessionFactoryNamedExportDocument: SessionFactoryDocument = {
   ...baseFactoryDefinition,
+  activation: defaultFactoryActivation,
   name: "semantic-workflow",
   version: defaultSessionFactoryVersion,
 };

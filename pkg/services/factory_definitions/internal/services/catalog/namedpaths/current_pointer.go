@@ -131,3 +131,20 @@ func (r *Resolver) WriteCurrentPointer(rootDir, name string) error {
 	}
 	return nil
 }
+
+// RemoveCurrentPointer removes the durable selector used by named Factory
+// activation. It is intentionally a narrow rollback capability; callers must
+// use WriteCurrentPointer to create or change a selector.
+func (r *Resolver) RemoveCurrentPointer(rootDir string) error {
+	if r == nil || r.fileSystem == nil {
+		return fmt.Errorf("named Factory path filesystem is required")
+	}
+	if strings.TrimSpace(rootDir) == "" {
+		return fmt.Errorf("factory root is required")
+	}
+	remover, ok := r.fileSystem.(interface{ RemoveAll(string) error })
+	if !ok {
+		return fmt.Errorf("named Factory pointer filesystem does not support removal")
+	}
+	return remover.RemoveAll(filepath.Join(rootDir, currentFactoryPointerFile))
+}

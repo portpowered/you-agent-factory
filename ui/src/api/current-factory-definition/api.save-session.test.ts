@@ -1,4 +1,5 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: canonical name transport cases share one mocked fetch seam.
+import { defaultSessionFactoryActivation } from "../session-factory/import-activation.test-helpers";
 import { saveFactoryForSessionDocument } from "./api";
 
 describe("saveFactoryForSessionDocument", () => {
@@ -10,6 +11,7 @@ describe("saveFactoryForSessionDocument", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "alpha",
           workers: [],
           workstations: [],
@@ -67,6 +69,7 @@ describe("saveFactoryForSessionDocument", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Imported Factory Name-2",
           workers: [],
           workstations: [],
@@ -125,6 +128,7 @@ describe("saveFactoryForSessionDocument", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Imported Factory",
           workers: [],
           workstations: [],

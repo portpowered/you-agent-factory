@@ -1,4 +1,5 @@
 import { activateImportedFactoryForSession } from "./import-activation";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 
 describe("session factory import activation create-new-named new names", () => {
   it("activates create-new-named imports through UPSERT_NAMED_AND_ACTIVATE without version for new names", async () => {
@@ -7,6 +8,7 @@ describe("session factory import activation create-new-named new names", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Session Current Name",
             workTypes: [],
             workers: [],
@@ -27,6 +29,7 @@ describe("session factory import activation create-new-named new names", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Imported Factory Name-2",
             workTypes: [
               { name: "story", states: [{ name: "new", type: "INITIAL" }] },
@@ -68,6 +71,7 @@ describe("session factory import activation create-new-named new names", () => {
         },
       ),
     ).resolves.toEqual({
+      activation: defaultSessionFactoryActivation,
       name: "Imported Factory Name-2",
       workTypes: [
         { name: "story", states: [{ name: "new", type: "INITIAL" }] },
@@ -104,6 +108,7 @@ describe("session factory import activation create-new-named drifted imported pa
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Session Current Name",
             workTypes: [],
             workers: [],
@@ -124,6 +129,7 @@ describe("session factory import activation create-new-named drifted imported pa
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Imported Factory Name-2",
             workTypes: [
               { name: "story", states: [{ name: "new", type: "INITIAL" }] },
@@ -165,6 +171,7 @@ describe("session factory import activation create-new-named drifted imported pa
         },
       ),
     ).resolves.toEqual({
+      activation: defaultSessionFactoryActivation,
       name: "Imported Factory Name-2",
       workTypes: [
         { name: "story", states: [{ name: "new", type: "INITIAL" }] },
@@ -201,6 +208,7 @@ describe("session factory import activation create-new-named listed existing nam
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Session Current Name",
             workTypes: [],
             workers: [],
@@ -221,6 +229,7 @@ describe("session factory import activation create-new-named listed existing nam
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Known Existing Name",
             workTypes: [
               { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
@@ -289,6 +298,7 @@ describe("session factory import activation create-new-named current session nam
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Session Current Name",
             workTypes: [],
             workers: [],
@@ -309,6 +319,7 @@ describe("session factory import activation create-new-named current session nam
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Session Current Name",
             workTypes: [
               { name: "task", states: [{ name: "queued", type: "INITIAL" }] },

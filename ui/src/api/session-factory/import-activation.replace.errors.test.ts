@@ -1,5 +1,6 @@
 import { SessionFactoryAPIError } from "./errors";
 import { activateImportedFactoryForSession } from "./import-activation";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 
 const defaultSessionFactoryVersion = {
   logical: "9",
@@ -47,6 +48,7 @@ describe("session factory import activation replace PUT conflict errors", () => 
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Current Factory",
             workTypes: [],
             workers: [],
@@ -112,6 +114,7 @@ describe("session factory import activation replace PUT conflict errors", () => 
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Current Factory",
             workTypes: [],
             workers: [],
@@ -179,6 +182,7 @@ describe("session factory import activation replace PUT internal errors", () => 
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            activation: defaultSessionFactoryActivation,
             name: "Session Current Name",
             workTypes: [],
             workers: [],

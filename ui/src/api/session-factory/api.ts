@@ -23,11 +23,14 @@ export type { CanonicalFactoryDefinition } from "../factory-definition";
 
 type CanonicalFactory = components["schemas"]["Factory"];
 type FactorySaveMode = components["schemas"]["FactorySaveMode"];
+export type FactoryActivationProvenance =
+  components["schemas"]["FactoryActivationProvenance"];
 export type SessionFactoryVersion =
   components["schemas"]["HybridLogicalTimestamp"];
 
 export type SessionFactoryDocument = CanonicalFactoryDefinition & {
   version: SessionFactoryVersion;
+  activation: FactoryActivationProvenance;
 };
 
 export interface GetSessionFactoryOptions {
@@ -56,6 +59,7 @@ interface RequestSessionFactoryDocumentOptions {
 }
 
 type FactoryDocumentRecord = Record<string, unknown> & {
+  activation?: unknown;
   name?: unknown;
   version: unknown;
 };
@@ -79,8 +83,10 @@ export async function saveSessionFactory(
   const resolvedMode = params.mode ?? "REPLACE_CURRENT";
   const includeVersion =
     params.includeVersion ?? resolvedMode === "REPLACE_CURRENT";
+  const { activation: _readOnlyActivation, ...editableFactory } =
+    params.factory;
   const factoryPayload: CanonicalFactory = {
-    ...params.factory,
+    ...editableFactory,
   };
   if (includeVersion) {
     factoryPayload.version = incrementSessionFactoryVersion(params.baseVersion);
@@ -181,23 +187,23 @@ function normalizeSessionFactoryDocument(
   responseDetails: Pick<SessionFactoryAPIErrorDetails, "status" | "statusText">,
 ): SessionFactoryDocument {
   if (!isEditableFactoryDefinitionValue(responseBody)) {
-    throw new SessionFactoryAPIError(
-      sessionFactoryAPIErrorMessages.invalidResponse,
-      {
-        code: "INTERNAL_ERROR",
-        responseBody,
-        ...responseDetails,
-      },
-    );
+    throw invalidSessionFactoryResponse(responseBody, responseDetails);
   }
 
   try {
-    const normalizedFactory = normalizeFactoryDefinition(responseBody);
+    const { activation: _readOnlyActivation, ...editableFactory } =
+      responseBody;
+    const normalizedFactory = normalizeFactoryDefinition(editableFactory);
     const version = normalizeSessionFactoryVersion(normalizedFactory.version);
+    const activation = normalizeSessionFactoryActivation(
+      responseBody.activation,
+      responseDetails,
+    );
 
     return {
       ...normalizedFactory,
       version,
+      activation,
     };
   } catch (error) {
     if (error instanceof FactoryDefinitionAPIError) {
@@ -214,6 +220,64 @@ function normalizeSessionFactoryDocument(
 
     throw error;
   }
+}
+
+function normalizeSessionFactoryActivation(
+  value: unknown,
+  responseDetails: Pick<SessionFactoryAPIErrorDetails, "status" | "statusText">,
+): FactoryActivationProvenance {
+  const record = isAPIRecord(value) ? value : null;
+  if (
+    !record ||
+    !hasOnlySessionFactoryActivationKeys(record) ||
+    typeof record.activationId !== "string" ||
+    record.activationId.length === 0 ||
+    typeof record.loadedSourceDigest !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/.test(record.loadedSourceDigest) ||
+    !isSessionFactoryActivationState(record.state)
+  ) {
+    throw invalidSessionFactoryResponse(value, responseDetails);
+  }
+
+  return {
+    activationId: record.activationId,
+    loadedSourceDigest: record.loadedSourceDigest,
+    state: record.state,
+  };
+}
+
+function hasOnlySessionFactoryActivationKeys(
+  value: Record<string, unknown>,
+): boolean {
+  return Object.keys(value).every(
+    (key) =>
+      key === "activationId" || key === "loadedSourceDigest" || key === "state",
+  );
+}
+
+function isSessionFactoryActivationState(
+  value: unknown,
+): value is FactoryActivationProvenance["state"] {
+  return (
+    value === "ACTIVE" ||
+    value === "AUTHORED_CHANGED" ||
+    value === "NOT_ACTIVATED" ||
+    value === "AUTHORED_SOURCE_UNAVAILABLE"
+  );
+}
+
+function invalidSessionFactoryResponse(
+  responseBody: unknown,
+  responseDetails: Pick<SessionFactoryAPIErrorDetails, "status" | "statusText">,
+): SessionFactoryAPIError {
+  return new SessionFactoryAPIError(
+    sessionFactoryAPIErrorMessages.invalidResponse,
+    {
+      code: "INTERNAL_ERROR",
+      responseBody,
+      ...responseDetails,
+    },
+  );
 }
 
 function normalizeSessionFactoryVersion(value: unknown): SessionFactoryVersion {

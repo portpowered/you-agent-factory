@@ -3,6 +3,7 @@ import {
   normalizeSessionFactoryAPIErrorCode,
   SessionFactoryAPIError,
 } from "./index";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 
 describe("session-factory index exports", () => {
   it("re-exports session factory transport and error helpers", async () => {
@@ -16,6 +17,7 @@ describe("session-factory index exports", () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
+          activation: defaultSessionFactoryActivation,
           name: "Current Factory",
           workers: [],
           workstations: [],

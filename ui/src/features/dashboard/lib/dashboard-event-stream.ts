@@ -12,8 +12,36 @@ import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { FactoryActivationProvenance } from "../../../api/session-factory";
 import type { StreamDerivedCacheIdentity } from "../../timeline/public/stream-identity";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
+
+type FactoryDocumentRecord = Record<string, unknown> & {
+  activation?: unknown;
+};
+
+function isFactoryRecord(value: unknown): value is FactoryDocumentRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stripFactoryActivation(value: unknown): unknown {
+  if (!isFactoryRecord(value)) {
+    return value;
+  }
+
+  const { activation: _readOnlyActivation, ...editableFactory } = value;
+  return editableFactory;
+}
+
+function readFactoryActivation(
+  value: unknown,
+): FactoryActivationProvenance | undefined {
+  if (!isFactoryRecord(value) || !isFactoryRecord(value.activation)) {
+    return undefined;
+  }
+
+  return value.activation as FactoryActivationProvenance;
+}
 
 export function clearQueuedFlush(
   flushHandleRef: RefObject<number | null>,
@@ -105,14 +133,17 @@ export function syncCurrentFactoryDefinition(
   const resolvedStreamIdentity =
     resolveStreamDerivedCacheIdentity(streamIdentity);
   try {
-    const normalizedFactory = normalizeFactoryDefinition(payloadFactory);
+    const existingFactory = cachedFactoryWithBundledFiles(
+      queryClient,
+      sessionID,
+      resolvedStreamIdentity,
+    );
+    const normalizedFactory = normalizeFactoryDefinition(
+      stripFactoryActivation(payloadFactory),
+    );
     const factoryWithBundledFiles = preserveExistingBundledFilesWhenAbsent(
       normalizedFactory,
-      cachedFactoryWithBundledFiles(
-        queryClient,
-        sessionID,
-        resolvedStreamIdentity,
-      ),
+      existingFactory,
     );
     queryClient.setQueryData(
       currentFactoryDefinitionQueryKey(sessionID, resolvedStreamIdentity),
@@ -128,6 +159,9 @@ export function syncCurrentFactoryDefinition(
     );
     const document = toCurrentFactoryDocumentFromNormalizedFactory(
       factoryForDocumentCache,
+      readFactoryActivation(payloadFactory) ??
+        readFactoryActivation(factoryForDocumentCache) ??
+        readFactoryActivation(existingFactory),
     );
     if (document) {
       queryClient.setQueryData(
@@ -142,10 +176,12 @@ export function syncCurrentFactoryDefinition(
 
 function toCurrentFactoryDocumentFromNormalizedFactory(
   normalizedFactory: CanonicalFactoryDefinition,
+  activation?: FactoryActivationProvenance,
 ): CurrentFactoryDocument | null {
   const version = normalizedFactory.version;
   if (
     version == null ||
+    activation == null ||
     typeof version !== "object" ||
     (typeof version.logical !== "string" &&
       typeof version.logical !== "number") ||
@@ -156,6 +192,7 @@ function toCurrentFactoryDocumentFromNormalizedFactory(
 
   return {
     ...normalizedFactory,
+    activation,
     version: {
       logical: String(version.logical),
       physical: version.physical,
