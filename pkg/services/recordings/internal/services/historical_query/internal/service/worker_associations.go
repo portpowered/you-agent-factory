@@ -1,0 +1,216 @@
+package service
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"slices"
+	"strings"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
+)
+
+// QueryHistoricalWorkerAssociations reads one artifact and returns only the
+// Work-scoped Worker Session associations that can be established from its
+// recorded dispatch facts. It never opens a Factory Session or activates a
+// runtime.
+func (service *Service) QueryHistoricalWorkerAssociations(
+	request recordings.HistoricalWorkerAssociationsRequest,
+) (recordings.HistoricalWorkerAssociationsResult, error) {
+	identity, err := validHistoricalRecordingIdentity(request.Recording)
+	workID := strings.TrimSpace(request.WorkID)
+	if err != nil || workID == "" {
+		if err != nil {
+			return recordings.HistoricalWorkerAssociationsResult{}, err
+		}
+		return recordings.HistoricalWorkerAssociationsResult{}, historicalQueryError(
+			recordings.HistoricalRecordingQueryErrorInvalidRequest, identity, "", nil,
+		)
+	}
+	base := recordings.HistoricalWorkerAssociationsResult{
+		FactorySessionID: string(identity.RecordingID),
+		WorkID:           workID,
+	}
+	if service == nil || service.readArtifact == nil || service.projection == nil {
+		return unavailableWorkerAssociations(base), nil
+	}
+	payload, err := service.readArtifact(string(identity.Artifact))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return unavailableWorkerAssociations(base), nil
+		}
+		return unavailableWorkerAssociations(base), nil
+	}
+	if identity.Scope.FactorySessionID == "" {
+		var found bool
+		identity.Scope, found, err = historicalArtifactScope(payload, identity.RecordingID)
+		if err != nil || !found {
+			return unavailableWorkerAssociations(base), nil
+		}
+	}
+	history, err := service.queryHistoricalRecording(identity, payload)
+	if err != nil {
+		var queryErr *recordings.HistoricalRecordingQueryError
+		if errors.As(err, &queryErr) && queryErr.Kind == recordings.HistoricalRecordingQueryErrorInvalidRequest {
+			return recordings.HistoricalWorkerAssociationsResult{}, err
+		}
+		return unavailableWorkerAssociations(base), nil
+	}
+	if historicalRecordingHasGap(history.Status) {
+		base.State = recordings.HistoricalWorkerAssociationsGap
+		base.ErrorCode = "RECORDED_WORKER_HISTORY_GAP"
+		return base, nil
+	}
+	if len(history.Events) == 0 {
+		return unavailableWorkerAssociations(base), nil
+	}
+
+	workIDsByDispatch, knownWorkIDs := historicalDispatchWorkIDs(history.Events)
+	if _, found := knownWorkIDs[workID]; !found {
+		base.State = recordings.HistoricalWorkerAssociationsWorkNotFound
+		base.ErrorCode = "WORK_NOT_FOUND"
+		return base, nil
+	}
+	for _, dispatch := range history.Dispatches {
+		if dispatch.Association == nil || !slices.Contains(workIDsByDispatch[dispatch.ID], workID) {
+			continue
+		}
+		base.WorkerSessionIDs = append(base.WorkerSessionIDs, dispatch.Association.WorkerSessionID)
+		if dispatch.Status == recordings.FactoryDispatchStatusRunning {
+			base.IncompleteDispatchIDs = append(base.IncompleteDispatchIDs, dispatch.ID)
+		}
+	}
+	slices.Sort(base.WorkerSessionIDs)
+	slices.Sort(base.IncompleteDispatchIDs)
+	base.Count = len(base.WorkerSessionIDs)
+	base.State = recordings.HistoricalWorkerAssociationsAvailable
+	return base, nil
+}
+
+func unavailableWorkerAssociations(
+	result recordings.HistoricalWorkerAssociationsResult,
+) recordings.HistoricalWorkerAssociationsResult {
+	result.State = recordings.HistoricalWorkerAssociationsUnavailable
+	result.ErrorCode = "RECORDED_WORKER_HISTORY_UNAVAILABLE"
+	return result
+}
+
+func historicalRecordingHasGap(status recordings.RecordingStatusFacts) bool {
+	for _, failure := range status.Failures {
+		code := strings.ToUpper(strings.TrimSpace(failure.Code))
+		if code == "RETENTION_GAP" || code == "RECORDING_GAP" || code == "CANONICAL_EVENT_GAP" {
+			return true
+		}
+	}
+	return false
+}
+
+func historicalDispatchWorkIDs(
+	events []recordings.CanonicalEvent,
+) (map[string][]string, map[string]struct{}) {
+	byDispatch := make(map[string][]string)
+	known := make(map[string]struct{})
+	for _, event := range events {
+		legacy := canonical.FactoryEventFromCanonical(event)
+		workIDs := make([]string, 0)
+		if legacy.Context.WorkIDs != nil {
+			workIDs = append(workIDs, (*legacy.Context.WorkIDs)...)
+		}
+		if legacy.Context.DispatchID != nil {
+			if legacy.Type == factorydefinitions.FactoryEventTypeDispatchRequest {
+				var request factorydefinitions.DispatchRequestEventPayload
+				if legacy.DecodePayload(&request) == nil {
+					for _, input := range request.Inputs {
+						workIDs = append(workIDs, input.WorkID)
+					}
+				}
+			}
+			if legacy.Type == factorydefinitions.FactoryEventTypeDispatchQueued {
+				var queued factorydefinitions.DispatchQueuedEventPayload
+				if legacy.DecodePayload(&queued) == nil && queued.InputWorkIDs != nil {
+					workIDs = append(workIDs, (*queued.InputWorkIDs)...)
+				}
+			}
+			dispatchID := strings.TrimSpace(*legacy.Context.DispatchID)
+			if dispatchID != "" {
+				byDispatch[dispatchID] = appendUniqueStrings(byDispatch[dispatchID], workIDs...)
+			}
+		}
+		if legacy.Type == factorydefinitions.FactoryEventTypeWorkStateChange {
+			var stateChange factorydefinitions.WorkStateChangeEventPayload
+			if legacy.DecodePayload(&stateChange) == nil {
+				workIDs = append(workIDs, stateChange.WorkID)
+			}
+		}
+		for _, id := range workIDs {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				known[id] = struct{}{}
+			}
+		}
+	}
+	return byDispatch, known
+}
+
+func appendUniqueStrings(values []string, additions ...string) []string {
+	for _, addition := range additions {
+		addition = strings.TrimSpace(addition)
+		if addition != "" && !slices.Contains(values, addition) {
+			values = append(values, addition)
+		}
+	}
+	return values
+}
+
+func historicalArtifactScope(
+	payload []byte,
+	recordingID recordings.RecordingID,
+) (recordings.CanonicalEventScope, bool, error) {
+	if replayimpl.IsReplayV2Artifact(payload) {
+		stream, err := replayimpl.ParseReplayV2(payload)
+		if err != nil {
+			return recordings.CanonicalEventScope{}, false, err
+		}
+		if strings.TrimSpace(stream.Header.SessionID) != string(recordingID) {
+			return recordings.CanonicalEventScope{}, false, nil
+		}
+		if len(stream.Events) == 0 {
+			return recordings.CanonicalEventScope{}, false, nil
+		}
+		return factoryEventScope(stream.Events[0]), true, nil
+	}
+	var header struct {
+		SchemaVersion string `json:"schemaVersion"`
+	}
+	if err := json.Unmarshal(payload, &header); err != nil {
+		return recordings.CanonicalEventScope{}, false, err
+	}
+	if header.SchemaVersion == string(recordings.PortableArtifactSchemaV1) {
+		var artifact recordings.PortableArtifact
+		if err := json.Unmarshal(payload, &artifact); err != nil {
+			return recordings.CanonicalEventScope{}, false, err
+		}
+		return artifact.Summary.Scope, true, nil
+	}
+	if header.SchemaVersion == factorydefinitions.ReplayV1SourceFormat {
+		var artifact legacyArtifactDocument
+		if err := json.Unmarshal(payload, &artifact); err != nil {
+			return recordings.CanonicalEventScope{}, false, err
+		}
+		if len(artifact.Events) == 0 {
+			return recordings.CanonicalEventScope{}, false, nil
+		}
+		return factoryEventScope(artifact.Events[0]), true, nil
+	}
+	return recordings.CanonicalEventScope{}, false, nil
+}
+
+func factoryEventScope(event factorydefinitions.FactoryEvent) recordings.CanonicalEventScope {
+	if event.Context.SessionID == nil {
+		return recordings.CanonicalEventScope{}
+	}
+	return recordings.CanonicalEventScope{FactorySessionID: strings.TrimSpace(*event.Context.SessionID)}
+}

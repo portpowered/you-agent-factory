@@ -8,6 +8,8 @@ import (
 
 type ListConfig = workersessionscli.ListConfig
 type ListOperation = workersessionscli.ListOperation
+type HistoryConfig = workersessionscli.HistoryConfig
+type HistoryOperation = workersessionscli.HistoryOperation
 type ShowConfig = workersessionscli.ShowConfig
 type ShowOperation = workersessionscli.ShowOperation
 type ReadConfig = workersessionscli.ReadConfig
@@ -31,4 +33,8 @@ const StreamModeConflictCode = workersessionscli.StreamModeConflictCode
 
 func NewStreamModeConflictError() *CLIError {
 	return workersessionscli.NewStreamModeConflictError()
+}
+
+func NewHistory(reader workersessionscli.HistoricalWorkerAssociationsReader) HistoryOperation {
+	return workersessionscli.NewHistory(reader)
 }

@@ -113,6 +113,7 @@ type ListHumanApprovalsOperation func(workcli.ListHumanApprovalsConfig) error
 type ShowHumanApprovalOperation func(workcli.ShowHumanApprovalConfig) error
 
 type ListWorkerSessionsOperation = workersessionscli.ListOperation
+type HistoryWorkerSessionsOperation = workersessionscli.HistoryOperation
 type ShowWorkerSessionsOperation = workersessionscli.ShowOperation
 type ReadWorkerSessionOperation = workersessionscli.ReadOperation
 type StreamWorkerSessionOperation = workersessionscli.StreamOperation
@@ -175,6 +176,7 @@ type CommandOperations struct {
 	MoveWork                          MoveWorkOperation
 	VisualizeWork                     VisualizeWorkOperation
 	ListWorkerSessions                ListWorkerSessionsOperation
+	HistoryWorkerSessions             HistoryWorkerSessionsOperation
 	ShowWorkerSession                 ShowWorkerSessionsOperation
 	ReadWorkerSession                 ReadWorkerSessionOperation
 	StreamWorkerSession               StreamWorkerSessionOperation
@@ -254,6 +256,7 @@ type CommandFactory struct {
 	MoveWork                   func(workcli.MoveConfig) error
 	VisualizeWork              func(workcli.VisualizeConfig) error
 	ListWorkerSessions         workersessionscli.ListOperation
+	HistoryWorkerSessions      workersessionscli.HistoryOperation
 	ShowWorkerSession          workersessionscli.ShowOperation
 	ReadWorkerSession          workersessionscli.ReadOperation
 	StreamWorkerSession        workersessionscli.StreamOperation
@@ -330,6 +333,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		MoveWork:                          operations.MoveWork,
 		VisualizeWork:                     operations.VisualizeWork,
 		ListWorkerSessions:                operations.ListWorkerSessions,
+		HistoryWorkerSessions:             operations.HistoryWorkerSessions,
 		ShowWorkerSession:                 operations.ShowWorkerSession,
 		ReadWorkerSession:                 operations.ReadWorkerSession,
 		StreamWorkerSession:               operations.StreamWorkerSession,

@@ -60,6 +60,13 @@ func (service *Service) QueryHistoricalRecording(
 		}
 		return recordings.HistoricalRecordingQueryResult{}, historicalQueryError(kind, identity, "", err)
 	}
+	return service.queryHistoricalRecording(identity, payload)
+}
+
+func (service *Service) queryHistoricalRecording(
+	identity recordings.HistoricalRecordingIdentity,
+	payload []byte,
+) (recordings.HistoricalRecordingQueryResult, error) {
 	events, selectedTick, status, ignoredJSONPaths, err := decodeHistoricalArtifact(payload, identity)
 	if err != nil {
 		return recordings.HistoricalRecordingQueryResult{}, err

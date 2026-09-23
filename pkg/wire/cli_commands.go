@@ -178,6 +178,10 @@ func provideListWorkerSessionsOperation(transport standardCLIHTTPProtocol) cli.L
 	return workersessionscli.BindList(transport.Protocol)
 }
 
+func provideHistoryWorkerSessionsOperation(service recordings.Service) cli.HistoryWorkerSessionsOperation {
+	return workersessionscli.NewHistory(service)
+}
+
 func provideShowWorkerSessionOperation(transport standardCLIHTTPProtocol) cli.ShowWorkerSessionsOperation {
 	return workersessionscli.BindShow(transport.Protocol)
 }

@@ -18,6 +18,7 @@ func TestNewWorkerSessionsFamilyCommandBuildsDetachedRunnableLeaves(t *testing.T
 		handlerID string
 	}{
 		{id: "you.worker-sessions.list", handlerID: "you.worker-sessions.list.handler"},
+		{id: "you.worker-sessions.history", handlerID: "you.worker-sessions.history.handler"},
 		{id: "you.worker-sessions.show", handlerID: "you.worker-sessions.show.handler"},
 		{id: "you.worker-sessions.read", handlerID: "you.worker-sessions.read.handler"},
 		{id: "you.worker-sessions.stream", handlerID: "you.worker-sessions.stream.handler"},
@@ -51,11 +52,11 @@ func TestNewWorkerSessionsFamilyCommandBuildsDetachedRunnableLeaves(t *testing.T
 	if workerSessions.Name() != "worker-sessions" || workerSessions.Parent() != nil {
 		t.Fatalf("worker-sessions command = name %q parent %v, want detached root", workerSessions.Name(), workerSessions.Parent())
 	}
-	if len(workerSessions.Commands()) != 11 {
-		t.Fatalf("worker-sessions child count = %d, want 11", len(workerSessions.Commands()))
+	if len(workerSessions.Commands()) != 12 {
+		t.Fatalf("worker-sessions child count = %d, want 12", len(workerSessions.Commands()))
 	}
 
-	for _, command := range []string{"invoke", "continue", "interrupt", "pause", "resume", "cancel", "terminate", "list", "show", "read", "stream"} {
+	for _, command := range []string{"invoke", "continue", "interrupt", "pause", "resume", "cancel", "terminate", "list", "history", "show", "read", "stream"} {
 		leaf, err := findCommandByPath(workerSessions, "worker-sessions "+command)
 		if err != nil {
 			t.Fatalf("FindCommandByPath(%s) error = %v", command, err)
@@ -177,6 +178,7 @@ func workerSessionsRegistry(t *testing.T) *commandregistry.Registry {
 		"you.worker-sessions.invoke.handler",
 		"you.worker-sessions.continue.handler",
 		"you.worker-sessions.list.handler",
+		"you.worker-sessions.history.handler",
 		"you.worker-sessions.show.handler",
 		"you.worker-sessions.read.handler",
 		"you.worker-sessions.stream.handler",
@@ -196,8 +198,13 @@ func workerSessionsRegistry(t *testing.T) *commandregistry.Registry {
 func workerSessionsResolvedOnlyRegistry(t *testing.T) *commandregistry.Registry {
 	t.Helper()
 	registry := commandregistry.NewRegistry()
-	if err := registry.RegisterResolved("you.worker-sessions.list.handler", func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil }); err != nil {
-		t.Fatalf("RegisterResolved() error = %v", err)
+	for _, handlerID := range []string{
+		"you.worker-sessions.list.handler",
+		"you.worker-sessions.history.handler",
+	} {
+		if err := registry.RegisterResolved(handlerID, func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil }); err != nil {
+			t.Fatalf("RegisterResolved(%q) error = %v", handlerID, err)
+		}
 	}
 	for _, handlerID := range []string{
 		"you.worker-sessions.invoke.handler",

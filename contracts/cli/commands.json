@@ -9667,6 +9667,194 @@
         ]
       }
     },
+    "you.worker-sessions.history": {
+      "id": "you.worker-sessions.history",
+      "name": "history",
+      "path": "you worker-sessions history",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.history",
+        "documentation": {
+          "title": {
+            "id": "you.worker-sessions.history.title",
+            "canonicalEnglish": "Inspect recorded Worker Sessions for Work"
+          },
+          "description": {
+            "id": "you.worker-sessions.history.description",
+            "canonicalEnglish": "Read Worker Session associations for one Work from a local recording without resuming the Factory."
+          }
+        },
+        "examples": [
+          "you worker-sessions history --recording C:/copy/source-frozen.jsonl --session a6925b33-db77-4e62-ab6f-2a8d06783e5e --work-id work-task-8 --output json"
+        ],
+        "visibility": "public"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.worker-sessions.history",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "placement": "local-only",
+      "usage": {
+        "line": "history --recording <absolute-path> --session <factory-session-id> --work-id <work-id> --output json",
+        "example": "you worker-sessions history --recording C:/copy/source-frozen.jsonl --session a6925b33-db77-4e62-ab6f-2a8d06783e5e --work-id work-task-8 --output json"
+      },
+      "flags": {
+        "you.worker-sessions.history.flag.recording": {
+          "id": "you.worker-sessions.history.flag.recording",
+          "long": "recording",
+          "usage": "absolute local recording artifact path",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": true,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.history.flag.recording",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.history.flag.session": {
+          "id": "you.worker-sessions.history.flag.session",
+          "long": "session",
+          "usage": "Factory Session identity recorded in the artifact header",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": true,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.history.flag.session",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.history.flag.work-id": {
+          "id": "you.worker-sessions.history.flag.work-id",
+          "long": "work-id",
+          "usage": "Work identity whose recorded Worker Sessions should be read",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": true,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.history.flag.work-id",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.worker-sessions.history.flag.output": {
+          "id": "you.worker-sessions.history.flag.output",
+          "long": "output",
+          "usage": "output format: json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "enum": [
+            "json"
+          ],
+          "required": false,
+          "default": "json",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.worker-sessions.history.flag.output",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "errors": {
+        "you.worker-sessions.history.error.gap": {
+          "id": "you.worker-sessions.history.error.gap",
+          "code": "RECORDED_WORKER_HISTORY_GAP"
+        },
+        "you.worker-sessions.history.error.unavailable": {
+          "id": "you.worker-sessions.history.error.unavailable",
+          "code": "RECORDED_WORKER_HISTORY_UNAVAILABLE"
+        },
+        "you.worker-sessions.history.error.work-not-found": {
+          "id": "you.worker-sessions.history.error.work-not-found",
+          "code": "WORK_NOT_FOUND"
+        }
+      },
+      "exits": {
+        "you.worker-sessions.history.exit.success": {
+          "id": "you.worker-sessions.history.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.worker-sessions.history.exit.failure": {
+          "id": "you.worker-sessions.history.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.worker-sessions.history.exit.usage": {
+          "id": "you.worker-sessions.history.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "you.worker-sessions.history.side-effect.filesystem": {
+          "id": "you.worker-sessions.history.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      },
+      "handler": {
+        "id": "you.worker-sessions.history.handler"
+      }
+    },
     "you.worker-sessions.show": {
       "id": "you.worker-sessions.show",
       "name": "show",

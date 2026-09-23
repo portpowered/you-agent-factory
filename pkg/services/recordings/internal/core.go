@@ -106,6 +106,20 @@ func (service *combinedService) QueryHistoricalRecording(
 	return service.historicalQuery.QueryHistoricalRecording(request)
 }
 
+func (service *combinedService) QueryHistoricalWorkerAssociations(
+	request recordings.HistoricalWorkerAssociationsRequest,
+) (recordings.HistoricalWorkerAssociationsResult, error) {
+	if service == nil || service.historicalQuery == nil {
+		return recordings.HistoricalWorkerAssociationsResult{
+			FactorySessionID: string(request.Recording.RecordingID),
+			WorkID:           request.WorkID,
+			State:            recordings.HistoricalWorkerAssociationsUnavailable,
+			ErrorCode:        "RECORDED_WORKER_HISTORY_UNAVAILABLE",
+		}, nil
+	}
+	return service.historicalQuery.QueryHistoricalWorkerAssociations(request)
+}
+
 func (service *combinedService) QuerySimpleDashboard(
 	request recordings.SimpleDashboardQueryRequest,
 ) (recordings.SimpleDashboardQueryResult, error) {

@@ -97,6 +97,7 @@ var WorkerSessionsFamilyCommandIDs = []string{
 	"you.worker-sessions.cancel",
 	"you.worker-sessions.terminate",
 	"you.worker-sessions.list",
+	"you.worker-sessions.history",
 	"you.worker-sessions.read",
 	"you.worker-sessions.show",
 	"you.worker-sessions.stream",

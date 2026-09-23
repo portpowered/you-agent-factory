@@ -147,6 +147,9 @@ func productionWorkerSessionsCommand(
 	register("you.worker-sessions.list.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
 		return executeGeneratedWorkerSessionsListWithValues(cmd, resolvedGlobals, resolvedDiagnostics, options.ListWorkerSessions, values)
 	}))
+	register("you.worker-sessions.history.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
+		return executeGeneratedWorkerSessionsHistoryWithValues(cmd, resolvedGlobals, options.HistoryWorkerSessions, values)
+	}))
 	register("you.worker-sessions.show.handler", resolvedWorkerSessionsHandler(globals, diagnostics, func(cmd *cobra.Command, resolvedGlobals *cliGlobalOptions, resolvedDiagnostics *cliDiagnosticsOptions, values map[string]any) error {
 		return executeGeneratedWorkerSessionsShowWithValues(cmd, resolvedGlobals, resolvedDiagnostics, options.ShowWorkerSession, values)
 	}))
@@ -685,6 +688,47 @@ func executeGeneratedWorkerSessionsListWithValues(
 		OutputFormat: outputFormat, JSON: jsonOutput,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics.writer(cmd),
 		Verbose: diagnostics.verboseEnabled(), Debug: diagnostics.debug,
+	})
+}
+
+func executeGeneratedWorkerSessionsHistoryWithValues(
+	cmd *cobra.Command,
+	globals *cliGlobalOptions,
+	operation workersessionscli.HistoryOperation,
+	values map[string]any,
+) error {
+	if operation == nil {
+		return fmt.Errorf("worker sessions history service is required")
+	}
+	if err := requireWorkerSessionsCommand(cmd); err != nil {
+		return err
+	}
+	var inputs struct {
+		recording string
+		session   string
+		workID    string
+		output    string
+	}
+	for _, input := range []struct {
+		id     string
+		target *string
+	}{
+		{"you.worker-sessions.history.flag.recording", &inputs.recording},
+		{"you.worker-sessions.history.flag.session", &inputs.session},
+		{"you.worker-sessions.history.flag.work-id", &inputs.workID},
+		{"you.worker-sessions.history.flag.output", &inputs.output},
+	} {
+		value, err := commandInputValue[string](values, input.id)
+		if err != nil {
+			return err
+		}
+		*input.target = value
+	}
+	return operation(workersessionscli.HistoryConfig{
+		Context: cmd.Context(), Recording: inputs.recording, SessionID: inputs.session,
+		WorkID: inputs.workID, OutputFormat: inputs.output,
+		JSON:   globals.json || strings.EqualFold(strings.TrimSpace(inputs.output), "json"),
+		Output: cmd.OutOrStdout(),
 	})
 }
 
