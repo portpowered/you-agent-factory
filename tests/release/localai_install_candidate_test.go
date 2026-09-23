@@ -543,7 +543,7 @@ Get-CandidateSourceIdentity -SourcePath %s -Commit %s -Repository 'https://examp
 		t.Fatalf("mismatched repository result = %v\n%s", err, output)
 	}
 }
-func TestLocalAICandidateGitCapturesCloneProgress(t *testing.T) {
+func TestLocalAICandidateGitCapturesFetchProgress(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS != "windows" {
 		t.Skip("PowerShell candidate delivery is Windows-only")
@@ -551,7 +551,7 @@ func TestLocalAICandidateGitCapturesCloneProgress(t *testing.T) {
 
 	tempDir := t.TempDir()
 	sourceDir := filepath.Join(tempDir, "source")
-	cloneDir := filepath.Join(tempDir, "clone")
+	stageDir := filepath.Join(tempDir, "stage")
 	if err := os.MkdirAll(sourceDir, 0o700); err != nil {
 		t.Fatalf("create source repository: %v", err)
 	}
@@ -563,19 +563,28 @@ func TestLocalAICandidateGitCapturesCloneProgress(t *testing.T) {
 	}
 	localAICandidateRunGit(t, sourceDir, "add", "tracked.txt")
 	localAICandidateRunGit(t, sourceDir, "commit", "--quiet", "-m", "fixture")
+	if err := os.MkdirAll(stageDir, 0o700); err != nil {
+		t.Fatalf("create stage repository: %v", err)
+	}
+	localAICandidateRunGit(t, stageDir, "init", "--quiet")
+	commit := localAICandidateGit(t, sourceDir, "rev-parse", "HEAD")
 
-	harnessPath := filepath.Join(tempDir, "clone.ps1")
+	harnessPath := filepath.Join(tempDir, "fetch.ps1")
 	harness := fmt.Sprintf(`
 . %s -InstallDir %s
-$result = Invoke-SmokeGit @('clone', '--local', '--no-hardlinks', '--no-checkout', '--', %s, %s)
-if (-not (Test-Path -LiteralPath %s -PathType Container)) { throw 'clone directory was not created' }
-if ([string]::IsNullOrWhiteSpace($result)) { throw 'clone progress was not retained' }
+$result = Invoke-SmokeGit @('-C', %s, 'fetch', '--no-tags', '--depth=1', '--progress', %s, %s)
+if (-not (Test-Path -LiteralPath (Join-Path %s '.git') -PathType Container)) { throw 'stage repository was not created' }
+if ([string]::IsNullOrWhiteSpace($result)) { throw 'fetch progress was not retained' }
+$shallow = Invoke-SmokeGit @('-C', %s, 'rev-parse', '--is-shallow-repository')
+if ($shallow -cne 'true') { throw "fetch did not create a shallow repository: $shallow" }
 `,
 		localAICandidatePowerShellLiteral(localAICandidateScriptPath(t)),
 		localAICandidatePowerShellLiteral(filepath.Join(tempDir, "unused-install")),
+		localAICandidatePowerShellLiteral(stageDir),
 		localAICandidatePowerShellLiteral(sourceDir),
-		localAICandidatePowerShellLiteral(cloneDir),
-		localAICandidatePowerShellLiteral(cloneDir),
+		localAICandidatePowerShellLiteral(commit),
+		localAICandidatePowerShellLiteral(stageDir),
+		localAICandidatePowerShellLiteral(stageDir),
 	)
 	runLocalAICandidateHarness(t, harnessPath, harness, nil, "")
 }

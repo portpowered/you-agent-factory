@@ -1021,6 +1021,37 @@ function Get-CandidateSourceIdentity {
     return [pscustomobject][ordered]@{ repository = $origin; commit = $resolvedCommit; tree = $tree }
 }
 
+function New-SmokeCandidateGitStage {
+    param(
+        [string]$SourcePath,
+        [string]$StagePath,
+        [string]$Repository,
+        [string]$Commit,
+        [string]$WorkDirectory
+    )
+    $source = Resolve-SmokePath $SourcePath
+    $stage = Resolve-SmokePath $StagePath
+    $work = Resolve-SmokePath $WorkDirectory
+    [void](Invoke-SmokeGit @("init", "--quiet", $stage))
+    [void](Invoke-SmokeGit @("-C", $stage, "remote", "add", "origin", $Repository))
+    [void](Invoke-SmokeGit @("-C", $stage, "fetch", "--no-tags", "--depth=1", $source, $Commit))
+    [void](Invoke-SmokeGit @("-C", $stage, "checkout", "--detach", $Commit))
+
+    # Measure the owned work root immediately after materializing the requested tree.
+    $workBytes = Get-SmokeDirectoryBytes -Path $work -RejectReparsePoint
+    $stagedCommit = Invoke-SmokeGit @("-C", $stage, "rev-parse", "HEAD")
+    $stagedTree = Invoke-SmokeGit @("-C", $stage, "rev-parse", "HEAD^{tree}")
+    $stagedStatus = Invoke-SmokeGit @("-C", $stage, "status", "--porcelain=v1", "--untracked-files=all")
+    $shallow = Invoke-SmokeGit @("-C", $stage, "rev-parse", "--is-shallow-repository")
+    return [pscustomobject][ordered]@{
+        commit = $stagedCommit
+        tree = $stagedTree
+        status = $stagedStatus
+        shallow = $shallow -ceq "true"
+        workBytes = [int64]$workBytes
+    }
+}
+
 function Set-CandidateGoProcessEnvironment {
     param(
         [ValidateRange(1, 4)]
@@ -2236,6 +2267,17 @@ function Invoke-LocalCandidateSmoke {
             tree = ""
             vcsModified = $null
         }
+        stage = [ordered]@{
+            status = "NOT_RUN"
+            requestedCommit = $SourceCommit
+            requestedTree = ""
+            stagedCommit = ""
+            stagedTree = ""
+            porcelain = ""
+            shallow = $false
+            workBytes = [int64]0
+            maximumWorkBytes = [int64]$MaximumWorkBytes
+        }
         target = [ordered]@{
             os = $CandidateTargetOS
             arch = $CandidateTargetArch
@@ -2293,22 +2335,44 @@ function Invoke-LocalCandidateSmoke {
         $report.source.repository = $sourceIdentity.repository
         $report.source.commit = $sourceIdentity.commit
         $report.source.tree = $sourceIdentity.tree
+        $report.stage.requestedCommit = $sourceIdentity.commit
         $processEnvironment = Set-CandidateGoProcessEnvironment -GoProcessLimit $GoProcessLimit
         $env:GOPROXY = "off"
         $env:GOSUMDB = "off"
         $env:GOTOOLCHAIN = "local"
         $env:npm_config_offline = "true"
-        [void](Invoke-SmokeGit @("clone", "--local", "--no-hardlinks", "--no-checkout", "--", $sourcePath, $checkoutPath))
-        [void](Invoke-SmokeGit @("-C", $checkoutPath, "checkout", "--detach", $sourceIdentity.commit))
+        $stageEvidence = New-SmokeCandidateGitStage -SourcePath $sourcePath `
+            -StagePath $checkoutPath -Repository $sourceIdentity.repository `
+            -Commit $sourceIdentity.commit -WorkDirectory $workDirectory
+        $report.stage.requestedTree = $sourceIdentity.tree
+        $report.stage.stagedCommit = $stageEvidence.commit
+        $report.stage.stagedTree = $stageEvidence.tree
+        $report.stage.porcelain = $stageEvidence.status
+        $report.stage.shallow = [bool]$stageEvidence.shallow
+        $report.stage.workBytes = [int64]$stageEvidence.workBytes
+        $report.build.workBytes = [int64]$stageEvidence.workBytes
+        $report.source.vcsModified = [string]$stageEvidence.status -cne ""
+        if ($stageEvidence.commit -cne $sourceIdentity.commit -or $stageEvidence.tree -cne $sourceIdentity.tree) {
+            $report.stage.status = "FAIL"
+            Fail-Smoke "candidate staged source identity mismatch: requested commit=$($sourceIdentity.commit) tree=$($sourceIdentity.tree); staged commit=$($stageEvidence.commit) tree=$($stageEvidence.tree); workBytes=$($stageEvidence.workBytes) status='$($stageEvidence.status)'"
+        }
+        if ([string]$stageEvidence.status -cne "") {
+            $report.stage.status = "FAIL"
+            Fail-Smoke "candidate staged source is dirty: workBytes=$($stageEvidence.workBytes) requested commit=$($sourceIdentity.commit) tree=$($sourceIdentity.tree); staged commit=$($stageEvidence.commit) tree=$($stageEvidence.tree); status='$($stageEvidence.status)'"
+        }
+        if ($MaximumWorkBytes -le 0 -or $stageEvidence.workBytes -gt $MaximumWorkBytes) {
+            $report.stage.status = "FAIL"
+            Fail-Smoke "candidate staged work directory used $($stageEvidence.workBytes) bytes, limit $MaximumWorkBytes; requested commit=$($sourceIdentity.commit) tree=$($sourceIdentity.tree); staged commit=$($stageEvidence.commit) tree=$($stageEvidence.tree)"
+        }
+        if (-not $stageEvidence.shallow) {
+            $report.stage.status = "FAIL"
+            Fail-Smoke "candidate source stage is not shallow: workBytes=$($stageEvidence.workBytes) requested commit=$($sourceIdentity.commit) tree=$($sourceIdentity.tree); staged commit=$($stageEvidence.commit) tree=$($stageEvidence.tree)"
+        }
         $gitDirectory = Get-Item -LiteralPath (Join-Path $checkoutPath ".git") -Force -ErrorAction Stop
         if (-not $gitDirectory.PSIsContainer) {
-            Fail-Smoke "candidate clone must have a real .git directory"
+            Fail-Smoke "candidate stage must have a real .git directory"
         }
-        $checkoutCommit = Invoke-SmokeGit @("-C", $checkoutPath, "rev-parse", "HEAD")
-        $checkoutTree = Invoke-SmokeGit @("-C", $checkoutPath, "rev-parse", "HEAD^{tree}")
-        if ($checkoutCommit -cne $sourceIdentity.commit -or $checkoutTree -cne $sourceIdentity.tree) {
-            Fail-Smoke "candidate clone source identity changed"
-        }
+        $report.stage.status = "PASS"
         [System.IO.File]::AppendAllText((Join-Path $checkoutPath ".git\info\exclude"), "`n/dist/`n", [System.Text.UTF8Encoding]::new($false))
         $sourceLock = Get-SmokeFileEvidence "source-bun-lock" (Join-Path $checkoutPath "ui\bun.lock")
         $dependencyLock = Get-SmokeFileEvidence "dependency-bun-lock" (Join-Path $dependencySourcePath "ui\bun.lock")
