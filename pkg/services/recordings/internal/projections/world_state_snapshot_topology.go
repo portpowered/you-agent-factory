@@ -8,12 +8,12 @@ import (
 // needed to rebuild world-state topology. Keeping this decoder beside the
 // reducer avoids making canonical projection depend on generated transports.
 type snapshotFactoryTopology struct {
-	Name            string                          `json:"name"`
-	Resources       []snapshotFactoryResource       `json:"resources"`
-	Layout          *interfaces.FactoryLayoutConfig `json:"layout"`
-	Workers         []snapshotFactoryWorker         `json:"workers"`
-	WorkTypes       []snapshotFactoryWorkType       `json:"workTypes"`
-	Workstations    []snapshotFactoryWorkstation    `json:"workstations"`
+	Name         string                          `json:"name"`
+	Resources    []snapshotFactoryResource       `json:"resources"`
+	Layout       *interfaces.FactoryLayoutConfig `json:"layout"`
+	Workers      []snapshotFactoryWorker         `json:"workers"`
+	WorkTypes    []snapshotFactoryWorkType       `json:"workTypes"`
+	Workstations []snapshotFactoryWorkstation    `json:"workstations"`
 }
 
 type snapshotFactoryResource struct {
