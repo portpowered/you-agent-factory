@@ -21,6 +21,8 @@ const (
 	acpWitnessReadLimit       = 64
 	acpWitnessCursorReadLimit = 4096
 	acpWitnessStallAfter      = 30 * time.Second
+	acpWitnessControlledStall = 50 * time.Millisecond
+	acpWitnessStallWaitLimit  = 5 * time.Second
 	acpWitnessReadTimeout     = 2 * time.Second
 )
 
@@ -74,11 +76,11 @@ type canonicalEventSourceContext struct {
 
 func (fixture *reusableACPFixture) startPromptWitness(
 	t *testing.T,
-	connection *reusableACPConnection,
 	session reusableACPSession,
-) (uint64, *acpWitnessEmitter) {
+	requestID uint64,
+	stallAfter time.Duration,
+) *acpWitnessEmitter {
 	t.Helper()
-	requestID := connection.nextID + 1
 	invocation := acpWitnessInvocation{
 		Test:         "TestReusableACPServerTurnsThroughOneProcess",
 		RequestID:    requestID,
@@ -90,9 +92,9 @@ func (fixture *reusableACPFixture) startPromptWitness(
 	}
 	after := fixture.eventCursorCopy(session.factorySessionID)
 	excludedSessionIDs := fixture.seenFactorySessionIDsCopy()
-	return requestID, newACPWitnessEmitter(t, func() string {
+	return newACPWitnessEmitter(t, func() string {
 		return captureACPEventWitness(context.Background(), fixture.recordings, invocation, after, excludedSessionIDs...)
-	}, acpWitnessStallAfter)
+	}, stallAfter)
 }
 
 func (fixture *reusableACPFixture) eventCursorCopy(factorySessionID string) *recordings.CanonicalEventCursor {
@@ -525,7 +527,8 @@ func assertCapturedFactoryWitness(t *testing.T, line string) {
 	if witness.SchemaVersion != acpWitnessSchemaVersion || witness.Status != "captured" ||
 		witness.CaptureError != nil || len(witness.Events) == 0 ||
 		witness.Invocation.FactorySessionID == nil || *witness.Invocation.FactorySessionID == "" ||
-		witness.Invocation.DispatchID == nil || *witness.Invocation.DispatchID == "" {
+		witness.Invocation.DispatchID == nil || *witness.Invocation.DispatchID == "" ||
+		len(witness.Events) > acpWitnessMaxEvents || len(line)+1 > acpWitnessMaxBytes {
 		t.Fatalf("ACP failure-time witness = %+v, want captured canonical dispatch correlation", witness)
 	}
 	for index, event := range witness.Events {
@@ -675,6 +678,7 @@ func TestACPEventWitnessReportsSafeUnavailableBoundaries(t *testing.T) {
 		{name: "retention gap", reader: acpWitnessReaderFake{events: []recordings.CanonicalEvent{
 			witnessTestEvent("event/session-one/1", "session-one", "dispatch-one", 1, 1),
 		}, gap: true}, class: "canonical_read_gap"},
+		{name: "expired cursor", reader: acpWitnessReaderFake{err: recordings.ErrReconnectCursorExpired}, class: "canonical_read_cursor_expired", factoryID: stringPointer("factory-session-one")},
 		{name: "closed stream", reader: acpWitnessReaderFake{events: []recordings.CanonicalEvent{
 			witnessTestEvent("event/session-one/1", "session-one", "dispatch-one", 1, 1),
 		}, closed: true}, class: "canonical_read_failed", factoryID: stringPointer("session-one")},
@@ -699,10 +703,24 @@ func TestACPEventWitnessReportsSafeUnavailableBoundaries(t *testing.T) {
 				t.Fatalf("decode unavailable witness: %v", err)
 			}
 			if witness.Status != "unavailable" || witness.CaptureError == nil || witness.CaptureError.Class != testCase.class ||
-				len(witness.Events) != 0 || strings.Contains(line, secret) {
+				len(witness.Events) != 0 || witness.Invocation.FactorySessionID != nil ||
+				witness.Invocation.DispatchID != nil || strings.Contains(line, secret) || len(line)+1 > acpWitnessMaxBytes {
 				t.Fatalf("unavailable witness = %+v; line=%s", witness, line)
 			}
 		})
+	}
+}
+
+func waitForACPWitness(t *testing.T, emitter *acpWitnessEmitter) string {
+	t.Helper()
+	timer := time.NewTimer(acpWitnessStallWaitLimit)
+	defer timer.Stop()
+	select {
+	case <-emitter.done:
+		return emitter.line
+	case <-timer.C:
+		t.Fatal("ACP stall witness did not finish within its bounded capture window")
+		return ""
 	}
 }
 

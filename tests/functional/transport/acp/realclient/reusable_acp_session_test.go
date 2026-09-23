@@ -310,7 +310,8 @@ func (fixture *reusableACPFixture) runTurn(
 		testCase.blockProvider,
 	)
 	defer fixture.provider.end(testCase.marker)
-	requestID, witness := fixture.startPromptWitness(t, connection, session)
+	requestID := connection.nextID + 1
+	witness := fixture.startPromptWitness(t, session, requestID, acpWitnessStallAfter)
 	defer witness.stop()
 	frame, notifications := connection.request(t, "session/prompt", map[string]any{
 		"sessionId": session.id,
@@ -367,17 +368,18 @@ func (fixture *reusableACPFixture) closeActiveSession(
 		testCase.blockProvider,
 	)
 	defer fixture.provider.end(testCase.marker)
-	requestID, witness := fixture.startPromptWitness(t, connection, session)
-	defer witness.stop()
 	promptID := connection.writeRequest(t, "session/prompt", map[string]any{
 		"sessionId": session.id,
 		"prompt":    []map[string]string{{"type": "text", "text": testCase.prompt}},
 	})
-	if promptID != requestID {
-		t.Fatalf("close scenario prompt request id = %d, want %d", promptID, requestID)
-	}
 	fixture.provider.waitForStart(t, testCase.marker)
-	assertCapturedFactoryWitness(t, witness.emit())
+	witness := fixture.startPromptWitness(t, session, promptID, acpWitnessControlledStall)
+	defer witness.stop()
+	witnessLine := waitForACPWitness(t, witness)
+	assertCapturedFactoryWitness(t, witnessLine)
+	if strings.Contains(witnessLine, testCase.prompt) || strings.Contains(witnessLine, testCase.output) {
+		t.Fatal("ACP Factory Event witness included provider prompt or result payload")
+	}
 	closeID := connection.writeRequest(t, "session/close", map[string]string{"sessionId": session.id})
 	responses, _ := connection.readResponses(t, promptID, closeID)
 	fixture.advanceCanonicalCursor(session.factorySessionID)
