@@ -100,14 +100,17 @@ func workTypesAndPlacesFromSnapshot(workTypes []snapshotFactoryWorkType) ([]inte
 	convertedWorkTypes := make([]interfaces.FactoryWorkType, 0, len(workTypes))
 	convertedPlaces := make([]interfaces.FactoryPlace, 0)
 	for _, workType := range workTypes {
-		converted := interfaces.FactoryWorkType{ID: workType.Name, Name: workType.Name}
+		workTypeID := workType.Name
+		converted := interfaces.FactoryWorkType{ID: workTypeID, Name: workTypeID}
 		for _, state := range workType.States {
+			stateName := state.Name
+			stateCategory := state.Type
 			converted.States = append(converted.States, interfaces.FactoryStateDefinition{
-				Value: state.Name, Category: state.Type,
+				Value: stateName, Category: stateCategory,
 			})
 			convertedPlaces = append(convertedPlaces, interfaces.FactoryPlace{
-				ID:     topologyPlaceID(workType.Name, state.Name),
-				TypeID: workType.Name, State: state.Name, Category: state.Type,
+				ID:     topologyPlaceID(workTypeID, stateName),
+				TypeID: workTypeID, State: stateName, Category: stateCategory,
 			})
 		}
 		convertedWorkTypes = append(convertedWorkTypes, converted)

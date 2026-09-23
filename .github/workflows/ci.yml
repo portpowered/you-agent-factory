@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
 
@@ -423,33 +423,6 @@ jobs:
       # gate returns, including on failure. The supervisor starts the unchanged
       # quarantine validator in the same critical-path window and joins both
       # independent verdicts before returning.
-      - name: Select controlled raw failure fixture
-        if: >-
-          matrix.suite == 'functional' &&
-          github.event_name == 'pull_request' &&
-          github.event.action == 'labeled' &&
-          github.event.pull_request.number == 2637 &&
-          github.event.pull_request.head.ref == 'factory-reliability-functional-raw-evidence-20260923' &&
-          github.event.label.name == 'ci-controlled-raw-failure'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const eventHead = context.payload.pull_request?.head?.sha;
-            const { data: pullRequest } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: 2637,
-            });
-            const liveHead = pullRequest.head.sha;
-            if (!eventHead || eventHead !== liveHead) {
-              core.setFailed(`Refusing stale controlled raw failure event: event head ${eventHead ?? "missing"}, live head ${liveHead}.`);
-              return;
-            }
-            core.exportVariable("FUNCTIONAL_RAW_FAILURE_WITNESS", "1");
-            core.exportVariable("FUNCTIONAL_RAW_FAILURE_RENDEZVOUS", `${process.env.RUNNER_TEMP}/pr2637-raw-failure-${liveHead}`);
-            core.exportVariable("FUNCTIONAL_RAW_FAILURE_RENDEZVOUS_TIMEOUT", "90s");
-            core.exportVariable("FUNCTIONAL_TEST_VIZ_PACKAGES", "github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailure github.com/portpowered/infinite-you/cmd/gocoveragecheck/testdata/rawfailurepeer");
-            core.exportVariable("FUNCTIONAL_QUARANTINE", "");
       - name: Run Linux functional coverage with concurrent quarantine verification
         if: matrix.suite == 'functional'
         timeout-minutes: 75
@@ -496,17 +469,6 @@ jobs:
           FUNCTIONAL_TEST_VIZ_DIR: .artifacts/functional-test-viz
           FUNCTIONAL_GOCOVERAGE_EXIT_FILE: .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
           FUNCTIONAL_COVERAGE_VERDICT_FILE: .artifacts/functional-test-viz/functional-coverage-verdict.txt
-      - name: Publish controlled raw failure interleaving witness
-        if: always() && matrix.suite == 'functional'
-        shell: bash
-        run: |
-          if [[ -z "${FUNCTIONAL_RAW_FAILURE_RENDEZVOUS:-}" ]]; then exit 0; fi
-          source="$FUNCTIONAL_RAW_FAILURE_RENDEZVOUS/interleaving.jsonl"
-          target=".artifacts/functional-test-viz/raw-failure-interleaving.jsonl"
-          test -s "$source" || { echo "missing controlled raw failure interleaving witness: $source" >&2; exit 1; }
-          test "$(wc -l < "$source")" -eq 6 || { echo "incomplete controlled raw failure interleaving witness: $source" >&2; exit 1; }
-          mkdir -p "$(dirname "$target")"
-          cp "$source" "$target"
       - name: Upload functional test diagnostics
         if: always() && matrix.suite == 'functional'
         uses: actions/upload-artifact@v4
@@ -525,7 +487,6 @@ jobs:
             .artifacts/functional-test-viz/coverage-build-diagnostics.json
             .artifacts/functional-test-viz/raw-failures/index.json
             .artifacts/functional-test-viz/raw-failures/*.jsonl
-            .artifacts/functional-test-viz/raw-failure-interleaving.jsonl
             .artifacts/functional-test-viz/c09-critical-path/quarantine-status.txt
             .artifacts/functional-test-viz/c09-critical-path/coverage-status.txt
             .artifacts/functional-test-viz/c09-critical-path/critical-path-timing.txt
@@ -630,6 +591,7 @@ jobs:
         run: |
           mkdir -p .artifacts/integration/bin
           go build -o .artifacts/integration/bin/you ./cmd/factory
+          echo "INFINITE_YOU_SOURCE_HEAD=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       - name: Build platform conformance helper artifact
         run: |
           go test -c -o .artifacts/integration/bin/platform-conformance-helper ./tests/integration/models/platform_conformance
@@ -646,7 +608,16 @@ jobs:
         env:
           INFINITE_YOU_PREBUILT_ARTIFACT: ${{ github.workspace }}/.artifacts/integration/bin/you
           INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT: "1"
+          INFINITE_YOU_RESTART_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/integration/sessions/restart/restart-baseline.json
           LOCALAI_PLATFORM_CONFORMANCE_HELPER_PATH: ${{ github.workspace }}/.artifacts/integration/bin/platform-conformance-helper
+      - name: Upload restart characterization evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restart-characterization-evidence
+          path: .artifacts/integration/sessions/restart/restart-baseline.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Run required runtime metrics session probe
         if: always()
         shell: bash

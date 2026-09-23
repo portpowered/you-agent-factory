@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,12 +17,16 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// TestBoardPersistenceWorkerHelper is launched by the real SCRIPT_WORKER child
-// in TestBoardPersistenceCLIRestartRoundTrip. It exits only after the test has
-// inspected the re-armed attempt, which makes the second dispatch observable
-// without relying on a mock worker edge.
+// TestBoardPersistenceWorkerHelper is launched by real SCRIPT_WORKER children
+// in restart process tests. Test cases hold the helper at a parent-owned gate
+// or release file while they inspect public runtime state.
 func TestBoardPersistenceWorkerHelper(t *testing.T) {
 	if os.Getenv(boardPersistenceHelperEnv) != boardPersistenceHelperEnvValue {
+		return
+	}
+	if readyEndpoint := strings.TrimSpace(os.Getenv(boardPersistenceWorkerReadyEnv)); readyEndpoint != "" {
+		fmt.Fprintln(os.Stdout, boardPersistenceWorkerSentinel)
+		signalBoardPersistenceWorkerReady(t, readyEndpoint)
 		return
 	}
 	releasePath := strings.TrimSpace(os.Getenv(boardPersistenceReleaseEnv))
@@ -30,9 +35,9 @@ func TestBoardPersistenceWorkerHelper(t *testing.T) {
 	}
 	fmt.Fprintln(os.Stdout, boardPersistenceWorkerSentinel)
 
-	// A child process has no test-owned event channel back into the daemon. The
-	// bounded file observation is deliberately confined to this helper process;
-	// the parent test synchronizes only through the public Work projection.
+	// The process-level test may provide a parent-owned barrier endpoint so it
+	// can capture public dispatch state while this child is held. Other restart
+	// scenarios use the bounded release-file gate below.
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -48,6 +53,22 @@ func TestBoardPersistenceWorkerHelper(t *testing.T) {
 	}
 }
 
+func signalBoardPersistenceWorkerReady(t *testing.T, readyEndpoint string) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, readyEndpoint, nil)
+	if err != nil {
+		t.Fatalf("build worker readiness request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("signal worker readiness: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("worker readiness response status = %d, want %d", response.StatusCode, http.StatusNoContent)
+	}
+}
+
 // TestBoardPersistenceCLIRestartRoundTrip proves the customer-visible board
 // contract across real daemon processes. The in-process functional harnesses
 // cover service composition; this test intentionally crosses the OS boundary
@@ -55,9 +76,17 @@ func TestBoardPersistenceWorkerHelper(t *testing.T) {
 func TestBoardPersistenceCLIRestartRoundTrip(t *testing.T) {
 	t.Parallel()
 	scenario := newBoardPersistenceScenario(t)
-	runBoardPersistenceInitialGeneration(t, scenario)
-	runBoardPersistenceRecoveryGeneration(t, scenario)
-	runBoardPersistenceSecondRestart(t, scenario)
+	t.Run("source-to-successor", func(t *testing.T) {
+		// This cell owns exactly two Factory process generations: the original
+		// owner and its externally started successor.
+		runBoardPersistenceInitialGeneration(t, scenario)
+		runBoardPersistenceRecoveryGeneration(t, scenario)
+	})
+	t.Run("successor-recording-restart", func(t *testing.T) {
+		// The next serialized cell consumes the flushed successor recording and
+		// owns only that final process generation.
+		runBoardPersistenceSecondRestart(t, scenario)
+	})
 }
 
 // TestBoardPersistenceCLIRestartAfterHardKillWithMissingBoardRecording proves
@@ -205,15 +234,12 @@ type boardPersistenceScenario struct {
 	expected              map[string]boardPersistenceExpectedWork
 	activeDispatchID      string
 	activeWorkerSessionID string
-	second                *boardPersistenceDaemon
 }
 
 func newBoardPersistenceScenario(t *testing.T) *boardPersistenceScenario {
 	t.Helper()
-	binaryPath, err := os.Executable()
-	if err != nil {
-		t.Fatalf("resolve functional test executable: %v", err)
-	}
+	binaryPath := requireRestartCLIArtifact(t)
+	workerPath := currentRestartWorkerExecutable(t)
 	factoryDir := scaffoldBoardPersistenceFactory(t, boardPersistenceFactoryConfig())
 	homeDir := t.TempDir()
 	releasePath := filepath.Join(t.TempDir(), "release-worker")
@@ -222,7 +248,7 @@ func newBoardPersistenceScenario(t *testing.T) *boardPersistenceScenario {
 		t,
 		factoryDir,
 		"restart-blocker",
-		boardPersistenceWorkerConfig(binaryPath),
+		boardPersistenceWorkerConfig(workerPath),
 	)
 	return &boardPersistenceScenario{
 		binaryPath: binaryPath, factoryDir: factoryDir, homeDir: homeDir,
@@ -352,7 +378,6 @@ func runBoardPersistenceRecoveryGeneration(t *testing.T, scenario *boardPersiste
 	}
 
 	second.stop(t)
-	scenario.second = second
 }
 
 func runBoardPersistenceSecondRestart(t *testing.T, scenario *boardPersistenceScenario) {

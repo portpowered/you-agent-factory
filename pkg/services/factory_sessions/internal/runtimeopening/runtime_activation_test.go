@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -532,6 +533,11 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 
 	const resumePath = "source.recording.json"
 	resumeInput := recordings.LoadResumeInputResult{
+		RecoveryMetadata: recordings.ResumeRecoveryMetadata{
+			SourceRecordingID:    "sha256:source-recording",
+			RecordedDefinitionID: "sha256:recorded-definition",
+			PreviousRecordedAt:   time.Date(2026, 9, 19, 18, 0, 0, 0, time.UTC),
+		},
 		Input: recordings.LoadReplayInputResult{
 			Legacy: &factorydefinitions.ReplayArtifact{
 				Events: []factorydefinitions.FactoryEvent{{
@@ -758,133 +764,51 @@ func TestOpenForRequestRoutesLegacyReplayThroughRuntimeRoot(t *testing.T) {
 	}
 }
 
-func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *testing.T) {
+func TestOpenForRequestResumeInputFailureStopsBeforeActivationAndDoesNotRetry(t *testing.T) {
 	t.Parallel()
 
 	root := &resumeRoutingRoot{}
-	factorySnapshot := factorydefinitions.FactorySnapshot(`{"factoryDirectory":"/factory","name":"legacy"}`)
-	resumeInput := recordings.LoadResumeInputResult{
-		Input: recordings.LoadReplayInputResult{
-			Legacy: &factorydefinitions.ReplayArtifact{
-				Factory: &factorySnapshot,
-				Events: []factorydefinitions.FactoryEvent{{
-					Id:      "resume-event",
-					Context: factorydefinitions.FactoryEventContext{Tick: 7},
-				}},
-			},
+	inputErr := &recordings.ReplayInputError{
+		Family: recordings.ReplayInputFamilyPortable,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code: recordings.ReplayArtifactDiagnosticMalformed,
+			Area: "recording", Path: "recording", Message: "invalid source bytes",
 		},
+		Cause: errors.New("invalid source bytes"),
 	}
-	resumeRuntime := &resumeInputRuntime{result: resumeInput}
+	resumeRuntime := &resumeInputRuntime{err: inputErr}
 	factory := &Factory{
 		runtimeRoot:               root,
 		recordingsRuntime:         resumeRuntime,
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
-		decodeReplayConfig: func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
-			return replayRuntimeConfigStub{}, nil
-		},
-	}
-	_, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
-		Recordings: recordings.RuntimeOpeningRequest{
-			RecordPath: "successor.recording.json",
-			ResumePath: "source.recording.json",
-		},
-	})
-	if err != nil {
-		t.Fatalf("openForRequest(resume) error = %v", err)
-	}
-	if resumeRuntime.path != "source.recording.json" {
-		t.Fatalf("resume source path = %q, want source.recording.json", resumeRuntime.path)
-	}
-	if root.activation.Inputs.ResumeInput != resumeInput {
-		t.Fatalf("activation resume input = %#v, want %#v", root.activation.Inputs.ResumeInput, resumeInput)
-	}
-	if len(root.activation.Inputs.ResumeInput.Input.Legacy.Events) != 1 ||
-		root.activation.Inputs.ResumeInput.Input.Legacy.Events[0].Id != "resume-event" {
-		t.Fatalf("activation resume events = %#v, want selected recording event", root.activation.Inputs.ResumeInput.Input.Legacy.Events)
-	}
-	if root.activation.Inputs.Recordings.ResumePath != "source.recording.json" {
-		t.Fatalf("activation resume path = %q, want source.recording.json", root.activation.Inputs.Recordings.ResumePath)
-	}
-	if root.activation.Inputs.Recordings.RecordPath != "successor.recording.json" {
-		t.Fatalf("activation successor path = %q, want successor.recording.json", root.activation.Inputs.Recordings.RecordPath)
-	}
-	if root.activation.Inputs.Recordings.ReplayPath != "" {
-		t.Fatalf("activation replay path = %q, want empty for resume", root.activation.Inputs.Recordings.ReplayPath)
-	}
-}
-
-func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
-	t.Parallel()
-
-	factorySnapshot := factorydefinitions.FactorySnapshot(`{"factoryDirectory":"/recorded","name":"recorded"}`)
-	resumeInput := recordings.LoadResumeInputResult{
-		Input: recordings.LoadReplayInputResult{
-			Legacy: &factorydefinitions.ReplayArtifact{
-				Factory: &factorySnapshot,
-				Events: []factorydefinitions.FactoryEvent{{
-					Id:      "resume-event",
-					Context: factorydefinitions.FactoryEventContext{Tick: 4},
-				}},
-			},
-		},
-	}
-	definitions := &resumeDefinitionStub{
-		snapshot: factorydefinitions.RuntimeSnapshot{
-			FactoryDir:     "/recorded",
-			RuntimeBaseDir: "/recorded",
-			EffectiveFactory: factorydefinitions.FactoryConfig{
-				Name: "recorded",
-			},
-		},
-	}
-	root := &resumeRoutingRoot{}
-	factory := &Factory{
-		runtimeRoot:               root,
-		recordingsRuntime:         &resumeInputRuntime{result: resumeInput},
-		generateRuntimeInstanceID: func() string { return "runtime-1" },
-		factoryDefinitions:        definitions,
-		decodeReplayConfig: func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
-			return replayRuntimeConfigStub{factoryDir: "/recorded"}, nil
-		},
 	}
 
 	_, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
-		Recordings: recordings.RuntimeOpeningRequest{
-			RecordPath: "successor.recording.json",
-			ResumePath: "source.recording.json",
-		},
+		Recordings: recordings.RuntimeOpeningRequest{ResumePath: "source.recording.json"},
 	})
-	if err != nil {
-		t.Fatalf("openForRequest(bare resume) error = %v", err)
+	var replayInputErr *recordings.ReplayInputError
+	if !errors.As(err, &replayInputErr) || replayInputErr != inputErr {
+		t.Fatalf("openForRequest error = %T %v, want original ReplayInputError", err, err)
 	}
-	if string(definitions.request.Canonical) != string(factorySnapshot) {
-		t.Fatalf("resume Factory Definition canonical = %q, want captured recording definition", definitions.request.Canonical)
+	if resumeRuntime.path != "source.recording.json" || resumeRuntime.calls != 1 {
+		t.Fatalf("resume reads = %d at %q, want one source read", resumeRuntime.calls, resumeRuntime.path)
 	}
-	if root.activation.Snapshot.EffectiveFactory.Name != "recorded" {
-		t.Fatalf("activation Factory name = %q, want captured recording definition", root.activation.Snapshot.EffectiveFactory.Name)
-	}
-	if root.activation.Snapshot.FactoryDir != "/recorded" {
-		t.Fatalf("activation Factory directory = %q, want captured recording directory", root.activation.Snapshot.FactoryDir)
-	}
-	if root.activation.Inputs.Recordings.RecordPath != "successor.recording.json" {
-		t.Fatalf("activation successor path = %q, want successor.recording.json", root.activation.Inputs.Recordings.RecordPath)
-	}
-	if root.activation.Inputs.Recordings.ReplayPath != "" {
-		t.Fatalf("activation replay path = %q, want empty for resume", root.activation.Inputs.Recordings.ReplayPath)
+	if root.activations != 0 {
+		t.Fatalf("Runtime root activations = %d, want zero before valid resume input", root.activations)
 	}
 }
 
 type resumeRoutingRoot struct {
 	factoryruntime.Service
-	activation factoryruntime.RuntimeActivationRequest
+	activation  factoryruntime.RuntimeActivationRequest
+	activations int
 }
 
 func (root *resumeRoutingRoot) Activate(
 	_ context.Context,
 	request factoryruntime.RuntimeActivationRequest,
 ) (factoryruntime.RuntimeActivationResult, error) {
+	root.activations++
 	root.activation = request
 	return factoryruntime.RuntimeActivationResult{
 		RuntimeID: "runtime-1",
@@ -905,14 +829,17 @@ func (root *resumeRoutingRoot) Deactivate(
 type resumeInputRuntime struct {
 	recordings.RuntimeOpening
 	path   string
+	calls  int
 	result recordings.LoadResumeInputResult
+	err    error
 }
 
 func (runtime *resumeInputRuntime) LoadResumeInput(
 	request recordings.LoadResumeInputRequest,
 ) (recordings.LoadResumeInputResult, error) {
 	runtime.path = request.Path
-	return runtime.result, nil
+	runtime.calls++
+	return runtime.result, runtime.err
 }
 
 type replayRoutingRoot struct {

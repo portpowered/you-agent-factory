@@ -3,7 +3,6 @@ package restart_test
 import (
 	"bytes"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -21,42 +20,59 @@ const (
 )
 
 // TestRestoredReviewTransitionDispatchesEveryMigratedPair proves the real
-// daemon restart, session resume, and operator migration path. Both review
-// workers remain active so the public event ledger can prove one disjoint
-// dispatch per matching pair before either result creates another scheduling
-// opportunity.
+// daemon restart, session resume, and operator migration path. It holds both
+// script children at a parent-owned gate and checks public dispatch state
+// before releasing either result.
 func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 	t.Parallel()
-	binaryPath, err := os.Executable()
-	if err != nil {
-		t.Fatalf("resolve integration test executable: %v", err)
-	}
+	binaryPath := requireRestartCLIArtifact(t)
+	evidence := beginRestartBaselineEvidence(*restartCLIArtifact)
 	factoryDir := scaffoldBoardPersistenceFactory(t, restoredReviewFactoryConfig())
+	workerPath := currentRestartWorkerExecutable(t)
 	homeDir := t.TempDir()
 	releasePath := filepath.Join(t.TempDir(), "release-review-workers")
+	workerBarrier := newBoardPersistenceWorkerBarrier(t)
 	recordPath := filepath.Join(factoryDir, "restored-review.recording.json")
 	successorRecordPath := filepath.Join(factoryDir, "restored-review.successor.recording.json")
-	writeBoardPersistenceAgentConfig(t, factoryDir, "review-blocker", boardPersistenceWorkerConfig(binaryPath))
+	writeBoardPersistenceAgentConfig(t, factoryDir, "review-blocker", boardPersistenceWorkerConfig(workerPath))
+	if err := evidence.hashFixtureFiles(factoryDir,
+		"factory.json",
+		"workstations/hold-processing/AGENTS.md",
+		"workers/review-blocker/AGENTS.md",
+	); err != nil {
+		t.Fatalf("hash complete immutable restart fixtures: %v", err)
+	}
 
 	first := startBoardPersistenceDaemon(t, binaryPath, factoryDir, homeDir, recordPath, releasePath)
+	evidence.trackDaemon(t, "source-process", first)
 	submitBoardPersistenceBatchThroughCLI(t, first, binaryPath, factoryDir, homeDir, restoredReviewBatchJSON(t, "task"), restoredReviewTaskRequest, 2)
 	submitBoardPersistenceBatchThroughCLI(t, first, binaryPath, factoryDir, homeDir, restoredReviewBatchJSON(t, "review"), restoredReviewWorkRequest, 2)
-	waitForBoardStates(t, first.baseURL, map[string]string{
+	firstWorks := waitForBoardStates(t, first.baseURL, map[string]string{
 		restoredReviewTaskA: "staged",
 		restoredReviewTaskB: "staged",
 		restoredReviewWorkA: "staged",
 		restoredReviewWorkB: "staged",
 	}, 30*time.Second)
+	assertBoardList(t, firstWorks, restoredReviewExpectedWorks())
+	firstObservation := evidence.capturePublicObservation(t, "source-before-stop", first.baseURL)
+	assertRestartPublicCounts(t, firstObservation, 1, 4, 0, 0)
 	first.stop(t)
+	evidence.captureDaemon(0, first)
+	if err := evidence.recordSourceRecording(recordPath); err != nil {
+		t.Fatalf("hash source recording before resume: %v", err)
+	}
 
-	second := startBoardPersistenceResumeDaemon(t, binaryPath, factoryDir, homeDir, recordPath, successorRecordPath, releasePath)
-	defer second.kill(t)
-	waitForBoardStates(t, second.baseURL, map[string]string{
+	second := startBoardPersistenceResumeDaemon(t, binaryPath, factoryDir, homeDir, recordPath, successorRecordPath, releasePath, workerBarrier.endpoint())
+	evidence.trackDaemon(t, "successor-process", second)
+	secondWorks := waitForBoardStates(t, second.baseURL, map[string]string{
 		restoredReviewTaskA: "staged",
 		restoredReviewTaskB: "staged",
 		restoredReviewWorkA: "staged",
 		restoredReviewWorkB: "staged",
 	}, 30*time.Second)
+	assertBoardList(t, secondWorks, restoredReviewExpectedWorks())
+	resumedObservation := evidence.capturePublicObservation(t, "successor-after-resume-before-migration", second.baseURL)
+	assertRestartPublicCounts(t, resumedObservation, 1, 4, 0, 0)
 	runRestoredReviewLifecycleCLI(t, second, binaryPath, factoryDir, homeDir, "pause")
 	for _, migration := range []struct{ workID, state string }{
 		{restoredReviewTaskA, "in-review"},
@@ -64,6 +80,7 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 		{restoredReviewTaskB, "in-review"},
 		{restoredReviewWorkB, "init"},
 	} {
+		evidence.recordManualWorkMove(migration.workID, migration.state)
 		output, moveErr := runBoardPersistenceCLIWithFreshContext(
 			t, binaryPath, factoryDir, homeDir, second.baseURL,
 			"--json", "work", "move", migration.workID, migration.state,
@@ -80,20 +97,75 @@ func TestRestoredReviewTransitionDispatchesEveryMigratedPair(t *testing.T) {
 	}
 	waitForBoardStates(t, second.baseURL, wantMigrated, 30*time.Second)
 	runRestoredReviewLifecycleCLI(t, second, binaryPath, factoryDir, homeDir, "resume")
+	workerBarrier.waitForReadyWorkers(t, 2, 30*time.Second)
 
 	dispatchA := waitForBoardActiveDispatch(t, second.baseURL, restoredReviewTaskA, 30*time.Second)
 	dispatchB := waitForBoardActiveDispatch(t, second.baseURL, restoredReviewTaskB, 30*time.Second)
 	if dispatchA == dispatchB {
 		t.Fatalf("matching review pairs shared dispatch %q, want one distinct dispatch per pair", dispatchA)
 	}
-	states := waitForBoardDispatchStates(t, second.baseURL, 30*time.Second)
+	assertRestoredReviewDispatchOwners(t, second.baseURL, second.sessionID, dispatchA, dispatchB)
+	activeObservation := evidence.capturePublicObservation(t, "successor-after-migration-with-active-owners", second.baseURL)
+	assertRestartPublicCounts(t, activeObservation, 1, 4, 2, 2)
+	if activeObservation.WorkerSessionCount != 2 || activeObservation.ActiveWorkerSessionCount != 2 {
+		t.Fatalf("active public Worker Session counts = total:%d active:%d, want 2/2", activeObservation.WorkerSessionCount, activeObservation.ActiveWorkerSessionCount)
+	}
+	evidence.addTiming("successor-ready-to-two-active-owners", time.Since(second.readyAt))
+	workerBarrier.releaseWorkers()
+	waitForBoardDispatchResponse(t, second.baseURL, restoredReviewTaskA, dispatchA, 30*time.Second)
+	waitForBoardDispatchResponse(t, second.baseURL, restoredReviewTaskB, dispatchB, 30*time.Second)
+	second.stop(t)
+	evidence.captureDaemon(1, second)
+	if err := evidence.verifyFixtureFilesUnchanged(factoryDir); err != nil {
+		t.Fatalf("verify immutable restart fixtures: %v", err)
+	}
+	if err := evidence.recordSuccessorRecordings(recordPath, successorRecordPath); err != nil {
+		t.Fatalf("verify immutable source and hashed successor recordings: %v", err)
+	}
+}
+
+func assertRestoredReviewDispatchOwners(t *testing.T, baseURL, sessionID, dispatchA, dispatchB string) {
+	t.Helper()
+	states := waitForBoardDispatchStates(t, baseURL, 30*time.Second)
 	assertRestoredReviewDispatch(t, states[dispatchA], dispatchA, restoredReviewTaskA, restoredReviewWorkA)
 	assertRestoredReviewDispatch(t, states[dispatchB], dispatchB, restoredReviewTaskB, restoredReviewWorkB)
-	if got := countActiveRestoredReviewDispatches(states, map[string]bool{
-		restoredReviewTaskA: true,
-		restoredReviewTaskB: true,
-	}); got != 2 {
+	if got := countActiveRestoredReviewDispatches(states, map[string]bool{restoredReviewTaskA: true, restoredReviewTaskB: true}); got != 2 {
 		t.Fatalf("active restored review dispatches = %d, want exactly 2", got)
+	}
+	for _, workID := range []string{restoredReviewTaskA, restoredReviewTaskB} {
+		observation := waitForBoardWorkerObservation(t, baseURL, sessionID, workID, func(observation factoryapi.WorkerSessionObservation) bool {
+			return observation.State == factoryapi.WorkerSessionObservationStateRunning || observation.State == factoryapi.WorkerSessionObservationStateStarting
+		}, 30*time.Second)
+		if observation.AttemptId == "" {
+			t.Fatalf("active Worker Session for Work %q has empty attempt identity: %#v", workID, observation)
+		}
+	}
+	states = waitForBoardDispatchStates(t, baseURL, 30*time.Second)
+	for _, dispatchID := range []string{dispatchA, dispatchB} {
+		if got := len(states[dispatchID].WorkerSessionIDs); got != 1 {
+			t.Fatalf("active dispatch %q worker-session associations = %d, want exactly one: %#v", dispatchID, got, states[dispatchID])
+		}
+	}
+}
+
+func restoredReviewExpectedWorks() map[string]boardPersistenceExpectedWork {
+	return map[string]boardPersistenceExpectedWork{
+		restoredReviewTaskA: {
+			Name: "pair-a", WorkID: restoredReviewTaskA, RequestID: restoredReviewTaskRequest,
+			State: "staged", StateType: "INITIAL", TraceID: "trace-restored-review", CurrentTraceID: "trace-restored-review", Content: "task a",
+		},
+		restoredReviewTaskB: {
+			Name: "pair-b", WorkID: restoredReviewTaskB, RequestID: restoredReviewTaskRequest,
+			State: "staged", StateType: "INITIAL", TraceID: "trace-restored-review", CurrentTraceID: "trace-restored-review", Content: "task b",
+		},
+		restoredReviewWorkA: {
+			Name: "pair-a", WorkID: restoredReviewWorkA, RequestID: restoredReviewWorkRequest,
+			State: "staged", StateType: "INITIAL", TraceID: "trace-restored-review", CurrentTraceID: "trace-restored-review", Content: "review a",
+		},
+		restoredReviewWorkB: {
+			Name: "pair-b", WorkID: restoredReviewWorkB, RequestID: restoredReviewWorkRequest,
+			State: "staged", StateType: "INITIAL", TraceID: "trace-restored-review", CurrentTraceID: "trace-restored-review", Content: "review b",
+		},
 	}
 }
 
@@ -144,7 +216,7 @@ func assertRestoredReviewDispatch(
 ) {
 	t.Helper()
 	if state.ID != dispatchID || state.RequestEvents != 1 || state.ResponseEvents != 0 || state.InterruptedEvents != 0 {
-		t.Fatalf("restored review dispatch %q lifecycle = %#v, want one active request only", dispatchID, state)
+		t.Fatalf("restored review dispatch %q lifecycle before worker release = %#v, want one active request only", dispatchID, state)
 	}
 	if len(state.WorkIDs) != 2 {
 		t.Fatalf("restored review dispatch %q Work IDs = %#v, want exactly task and review", dispatchID, state.WorkIDs)

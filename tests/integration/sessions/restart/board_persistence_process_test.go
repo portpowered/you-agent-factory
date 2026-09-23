@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,19 +22,82 @@ const (
 )
 
 type boardPersistenceDaemon struct {
-	cmd        *exec.Cmd
-	baseURL    string
-	sessionID  string
-	factoryDir string
-	homeDir    string
-	logDir     string
-	recordPath string
-	stdout     *bytes.Buffer
-	stderr     *bytes.Buffer
-	done       chan struct{}
-	mu         sync.Mutex
-	waitErr    error
-	stopped    bool
+	cmd               *exec.Cmd
+	baseURL           string
+	sessionID         string
+	factoryDir        string
+	homeDir           string
+	logDir            string
+	recordPath        string
+	startedAt         time.Time
+	readyAt           time.Time
+	shutdownStartedAt time.Time
+	stoppedAt         time.Time
+	stdout            *bytes.Buffer
+	stderr            *bytes.Buffer
+	done              chan struct{}
+	mu                sync.Mutex
+	waitErr           error
+	stopped           bool
+}
+
+type boardPersistenceWorkerBarrier struct {
+	server      *httptest.Server
+	ready       chan struct{}
+	release     chan struct{}
+	releaseOnce sync.Once
+}
+
+func newBoardPersistenceWorkerBarrier(t *testing.T) *boardPersistenceWorkerBarrier {
+	t.Helper()
+	barrier := &boardPersistenceWorkerBarrier{
+		ready:   make(chan struct{}, 2),
+		release: make(chan struct{}),
+	}
+	barrier.server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodPost {
+			response.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		select {
+		case barrier.ready <- struct{}{}:
+		case <-request.Context().Done():
+			return
+		}
+		select {
+		case <-barrier.release:
+			response.WriteHeader(http.StatusNoContent)
+		case <-request.Context().Done():
+		}
+	}))
+	t.Cleanup(func() {
+		barrier.releaseWorkers()
+		barrier.server.Close()
+	})
+	return barrier
+}
+
+func (barrier *boardPersistenceWorkerBarrier) endpoint() string {
+	return barrier.server.URL
+}
+
+func (barrier *boardPersistenceWorkerBarrier) waitForReadyWorkers(t *testing.T, expected int, timeout time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for ready := 0; ready < expected; ready++ {
+		select {
+		case <-barrier.ready:
+		case <-timer.C:
+			t.Fatalf("script workers at hold barrier = %d, want %d before release", ready, expected)
+		case <-t.Context().Done():
+			t.Fatalf("wait for script worker hold barrier: %v", t.Context().Err())
+		}
+	}
+}
+
+func (barrier *boardPersistenceWorkerBarrier) releaseWorkers() {
+	barrier.releaseOnce.Do(func() { close(barrier.release) })
 }
 
 func startBoardPersistenceDaemon(
@@ -50,9 +115,10 @@ func startBoardPersistenceDaemon(
 func startBoardPersistenceResumeDaemon(
 	t *testing.T,
 	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
+	workerReadyEndpoint ...string,
 ) *boardPersistenceDaemon {
 	t.Helper()
-	daemon := startBoardPersistenceDaemonProcessWithResume(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath)
+	daemon := startBoardPersistenceDaemonProcessWithResumeOutput(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath, false, false, workerReadyEndpoint...)
 	waitForBoardDaemonReady(t, daemon, 45*time.Second)
 	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 30*time.Second)
 	t.Logf("isolated daemon live session ID: %q", daemon.sessionID)
@@ -71,26 +137,64 @@ func startBoardPersistenceDaemonProcessWithResume(
 	t *testing.T,
 	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
 ) *boardPersistenceDaemon {
+	return startBoardPersistenceDaemonProcessWithResumeOutput(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath, false, false)
+}
+
+func startBoardPersistenceJSONResumeProcess(
+	t *testing.T,
+	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
+) *boardPersistenceDaemon {
+	return startBoardPersistenceDaemonProcessWithResumeOutput(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath, true, true)
+}
+
+func startBoardPersistenceObservedResumeDaemon(
+	t *testing.T,
+	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
+) *boardPersistenceDaemon {
+	t.Helper()
+	daemon := startBoardPersistenceDaemonProcessWithResumeOutput(t, binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath, false, true)
+	waitForBoardDaemonReady(t, daemon, 45*time.Second)
+	daemon.sessionID = waitForBoardSessionID(t, daemon.baseURL, 30*time.Second)
+	t.Logf("isolated observed resume session ID: %q", daemon.sessionID)
+	return daemon
+}
+
+func startBoardPersistenceDaemonProcessWithResumeOutput(
+	t *testing.T,
+	binaryPath, factoryDir, homeDir, resumePath, recordPath, releasePath string,
+	jsonOutput, debugOutput bool,
+	workerReadyEndpoint ...string,
+) *boardPersistenceDaemon {
 	t.Helper()
 	address := reserveBoardPersistenceAddress(t)
-	args := []string{
-		"-test.run=^TestBoardPersistenceCLIProcessHelper$", "--", "you",
+	args := make([]string, 0, 12)
+	if jsonOutput {
+		args = append(args, "--json")
+	}
+	if debugOutput {
+		args = append(args, "--debug")
+	}
+	args = append(args,
 		"run", "--dir", factoryDir,
 		"--continuously", "--with-server",
 		"--listen", address,
-	}
+	)
 	if resumePath != "" {
 		args = append(args, "--resume", resumePath)
 	}
 	args = append(args, "--record", recordPath)
 	command := exec.CommandContext(t.Context(), binaryPath, args...)
+	startedAt := time.Now()
 	command.Dir = factoryDir
-	command.Env = append(
+	commandEnv := append(
 		builtcliacceptance.ProcessEnvForIsolatedHome(homeDir),
-		boardPersistenceCLIHelperEnv+"=1",
 		boardPersistenceHelperEnv+"="+boardPersistenceHelperEnvValue,
 		boardPersistenceReleaseEnv+"="+releasePath,
 	)
+	if len(workerReadyEndpoint) > 0 && workerReadyEndpoint[0] != "" {
+		commandEnv = append(commandEnv, boardPersistenceWorkerReadyEnv+"="+workerReadyEndpoint[0])
+	}
+	command.Env = commandEnv
 	configureBoardPersistenceCommand(command)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
@@ -101,6 +205,7 @@ func startBoardPersistenceDaemonProcessWithResume(
 		factoryDir: factoryDir,
 		homeDir:    homeDir,
 		recordPath: recordPath,
+		startedAt:  startedAt,
 		stdout:     &stdout,
 		stderr:     &stderr,
 		done:       make(chan struct{}),
@@ -144,6 +249,7 @@ func (daemon *boardPersistenceDaemon) kill(t *testing.T) {
 		return
 	}
 	daemon.mu.Unlock()
+	daemon.shutdownStartedAt = time.Now()
 	if err := daemon.cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		t.Fatalf("hard-kill isolated you daemon: %v", err)
 	}
@@ -151,6 +257,7 @@ func (daemon *boardPersistenceDaemon) kill(t *testing.T) {
 	defer timer.Stop()
 	select {
 	case <-daemon.done:
+		daemon.stoppedAt = time.Now()
 		daemon.mu.Lock()
 		daemon.stopped = true
 		daemon.mu.Unlock()
@@ -170,12 +277,14 @@ func (daemon *boardPersistenceDaemon) cleanup() {
 	}
 	daemon.stopped = true
 	daemon.mu.Unlock()
+	daemon.shutdownStartedAt = time.Now()
 	select {
 	case <-daemon.done:
 	default:
 		_ = daemon.cmd.Process.Kill()
 		<-daemon.done
 	}
+	daemon.stoppedAt = time.Now()
 }
 
 func (daemon *boardPersistenceDaemon) stop(t *testing.T) {
@@ -186,6 +295,7 @@ func (daemon *boardPersistenceDaemon) stop(t *testing.T) {
 		return
 	}
 	daemon.mu.Unlock()
+	daemon.shutdownStartedAt = time.Now()
 	if err := interruptBoardPersistenceProcess(daemon.cmd); err != nil {
 		t.Fatalf("interrupt isolated you daemon: %v", err)
 	}
@@ -193,6 +303,7 @@ func (daemon *boardPersistenceDaemon) stop(t *testing.T) {
 	defer timer.Stop()
 	select {
 	case <-daemon.done:
+		daemon.stoppedAt = time.Now()
 		if err := daemon.waitError(); err != nil {
 			if !boardPersistenceCleanExit(err) {
 				t.Fatalf("isolated you daemon shutdown error = %v\nstdout=%s\nstderr=%s", err, daemon.stdout.String(), daemon.stderr.String())

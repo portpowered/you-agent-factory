@@ -701,3 +701,86 @@ func (assembler portableReplayRuntimeAssemblerStub) Assemble(
 }
 
 var _ durableexecution.Service = (*portableReplayRuntimeOwner)(nil)
+
+func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *testing.T) {
+	t.Parallel()
+
+	root := &resumeRoutingRoot{}
+	factorySnapshot := factorydefinitions.FactorySnapshot(`{"factoryDirectory":"/factory","name":"legacy"}`)
+	resumeInput := recordings.LoadResumeInputResult{
+		RecoveryMetadata: recordings.ResumeRecoveryMetadata{
+			SourceRecordingID:    "sha256:source-recording",
+			RecordedDefinitionID: "sha256:recorded-definition",
+			PreviousRecordedAt:   time.Date(2026, 9, 19, 18, 0, 0, 0, time.UTC),
+		},
+		Input: recordings.LoadReplayInputResult{
+			Legacy: &factorydefinitions.ReplayArtifact{
+				Factory: &factorySnapshot,
+				Events: []factorydefinitions.FactoryEvent{{
+					Id:      "resume-event",
+					Context: factorydefinitions.FactoryEventContext{Tick: 7},
+				}},
+			},
+		},
+	}
+	resumeRuntime := &resumeInputRuntime{result: resumeInput}
+	factory := &Factory{
+		runtimeRoot:               root,
+		recordingsRuntime:         resumeRuntime,
+		generateRuntimeInstanceID: func() string { return "runtime-1" },
+		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
+		decodeReplayConfig: func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
+			return replayRuntimeConfigStub{}, nil
+		},
+	}
+	opened, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+		Recordings: recordings.RuntimeOpeningRequest{
+			RecordPath: "successor.recording.json",
+			ResumePath: "source.recording.json",
+		},
+	})
+	if err != nil {
+		t.Fatalf("openForRequest(resume) error = %v", err)
+	}
+	if resumeRuntime.path != "source.recording.json" {
+		t.Fatalf("resume source path = %q, want source.recording.json", resumeRuntime.path)
+	}
+	if resumeRuntime.calls != 1 {
+		t.Fatalf("resume source loads = %d, want one", resumeRuntime.calls)
+	}
+	if root.activations != 1 {
+		t.Fatalf("Runtime root activations = %d, want one", root.activations)
+	}
+	if root.activation.Inputs.ResumeInput != resumeInput {
+		t.Fatalf("activation resume input = %#v, want %#v", root.activation.Inputs.ResumeInput, resumeInput)
+	}
+	if len(root.activation.Inputs.ResumeInput.Input.Legacy.Events) != 1 ||
+		root.activation.Inputs.ResumeInput.Input.Legacy.Events[0].Id != "resume-event" {
+		t.Fatalf("activation resume events = %#v, want selected recording event", root.activation.Inputs.ResumeInput.Input.Legacy.Events)
+	}
+	if root.activation.Inputs.Recordings.ResumePath != "source.recording.json" {
+		t.Fatalf("activation resume path = %q, want source.recording.json", root.activation.Inputs.Recordings.ResumePath)
+	}
+	if root.activation.Inputs.Recordings.RecordPath != "successor.recording.json" {
+		t.Fatalf("activation successor path = %q, want successor.recording.json", root.activation.Inputs.Recordings.RecordPath)
+	}
+	if root.activation.Inputs.Recordings.ReplayPath != "" {
+		t.Fatalf("activation replay path = %q, want empty for resume", root.activation.Inputs.Recordings.ReplayPath)
+	}
+	assertResumeRecoveryMetadata(t, opened.application.ResumeRecoveryMetadata, resumeInput.RecoveryMetadata)
+}
+
+func assertResumeRecoveryMetadata(
+	t *testing.T,
+	metadata *recordings.ResumeRecoveryMetadata,
+	want recordings.ResumeRecoveryMetadata,
+) {
+	t.Helper()
+	if metadata == nil || metadata.SourceRecordingID != want.SourceRecordingID ||
+		metadata.RecordedDefinitionID != want.RecordedDefinitionID ||
+		metadata.SuccessorRecordingID != recoveryRecordingID("runtime-1") ||
+		!metadata.PreviousRecordedAt.Equal(want.PreviousRecordedAt) {
+		t.Fatalf("opened resume recovery metadata = %#v, want selected source and successor identities", metadata)
+	}
+}

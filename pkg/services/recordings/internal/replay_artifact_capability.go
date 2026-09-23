@@ -3,6 +3,8 @@ package internal
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -197,13 +199,55 @@ func (loader *replayInputLoader) LoadReplayInput(
 		return loader.replayInputDependencyFailure("read_failure", fmt.Errorf("read replay recording: %w", err))
 	}
 	if isPortableReplayInput(data) {
-		return loader.loadPortableReplayInput(data)
+		result, err := loader.loadPortableReplayInput(data)
+		if err != nil {
+			return recordings.LoadReplayInputResult{}, withReplayInputArtifactDigest(err, replayInputArtifactDigest(data))
+		}
+		result.ArtifactDigest = replayInputArtifactDigest(data)
+		return result, nil
 	}
 	legacyFormat := recordings.RecordedSessionFormatV1JSON
 	if replayimpl.IsReplayV2Artifact(data) {
 		legacyFormat = recordings.RecordedSessionFormatV2JSONL
 	}
-	return loader.loadLegacyReplayInput(request.Path, legacyFormat)
+	result, err := loader.loadLegacyReplayInput(request.Path, legacyFormat)
+	if err != nil {
+		return recordings.LoadReplayInputResult{}, withReplayInputArtifactDigest(err, replayInputArtifactDigest(data))
+	}
+	result.ArtifactDigest = replayInputArtifactDigest(data)
+	return result, nil
+}
+
+func replayInputArtifactDigest(data []byte) string {
+	digest := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(digest[:])
+}
+
+func resumeRecoveryMetadataForInput(
+	input recordings.LoadReplayInputResult,
+) recordings.ResumeRecoveryMetadata {
+	metadata := recordings.ResumeRecoveryMetadata{
+		SourceRecordingID: input.ArtifactDigest,
+	}
+	if input.Legacy == nil {
+		return metadata
+	}
+	metadata.PreviousRecordedAt = input.Legacy.RecordedAt.UTC()
+	if input.Legacy.Factory != nil {
+		digest := sha256.Sum256([]byte(*input.Legacy.Factory))
+		metadata.RecordedDefinitionID = "sha256:" + hex.EncodeToString(digest[:])
+	}
+	return metadata
+}
+
+func withReplayInputArtifactDigest(err error, digest string) error {
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(err, &inputErr) || inputErr == nil {
+		return err
+	}
+	copy := *inputErr
+	copy.ArtifactDigest = digest
+	return &copy
 }
 
 func isPortableReplayInput(data []byte) bool {

@@ -90,6 +90,7 @@ type OpenedApplicationRuntime struct {
 	Resources              RuntimeResources
 	HistoricalReplay       *factorysessions.HistoricalReplayInspection
 	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
+	ResumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
 }
 
 type OpenedProcessApplication struct {
@@ -98,6 +99,7 @@ type OpenedProcessApplication struct {
 	Ready                  <-chan initializer.RuntimeHostBinding
 	CleanInvocation        factoryruntime.Service
 	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
+	ResumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
 	// HostedInvocation is a narrow operation result for the hosted CLI path;
 	// it is not the opened runtime's HTTP service table.
 	HostedInvocation HostedInvocationOperation

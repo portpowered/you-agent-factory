@@ -3,6 +3,8 @@ package cli
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -244,6 +246,107 @@ func MapStructuralReplayFailure(cause error) error {
 	return &replayStructuralCLIError{diagnostic: diagnostic, cause: cause}
 }
 
+// MapReplayInputFailure preserves a Recordings-owned replay-input code at the
+// CLI boundary. The diagnostic message and source path are intentionally not
+// copied into the operator-facing message: a recording is user-controlled
+// input, while its stable code and repair direction are safe to retain.
+func MapReplayInputFailure(cause error) error {
+	if cause == nil {
+		return nil
+	}
+	if structural := MapStructuralReplayFailure(cause); structural != nil {
+		return structural
+	}
+	var diagnostic recordings.ReplayArtifactDiagnostic
+	var inputErr *recordings.ReplayInputError
+	if errors.As(cause, &inputErr) && inputErr != nil {
+		diagnostic = inputErr.Diagnostic
+	} else {
+		var artifactErr *recordings.ReplayArtifactError
+		if !errors.As(cause, &artifactErr) || artifactErr == nil {
+			return nil
+		}
+		diagnostic = artifactErr.Diagnostic
+	}
+	code, message := replayInputCLIFields(diagnostic.Code)
+	return replayInputCLIError{code: code, message: message, cause: cause}
+}
+
+// ReplayInputRecordingIdentity returns only the canonical content digest for a
+// failed replay input, keeping source paths and diagnostic payloads at this
+// Recordings-owned CLI boundary.
+func ReplayInputRecordingIdentity(cause error) string {
+	var inputErr *recordings.ReplayInputError
+	if !errors.As(cause, &inputErr) || inputErr == nil {
+		return ""
+	}
+	const prefix = "sha256:"
+	digest := inputErr.ArtifactDigest
+	if !strings.HasPrefix(digest, prefix) || len(digest) != len(prefix)+sha256.Size*2 {
+		return ""
+	}
+	if _, err := hex.DecodeString(digest[len(prefix):]); err != nil {
+		return ""
+	}
+	return digest
+}
+
+type replayInputCLIError struct {
+	code    string
+	message string
+	cause   error
+}
+
+func (err replayInputCLIError) Error() string {
+	return strings.TrimSpace(err.code + ": " + err.message)
+}
+
+func (err replayInputCLIError) Unwrap() error {
+	return err.cause
+}
+
+func (err replayInputCLIError) CLIErrorCode() string {
+	return err.code
+}
+
+func (err replayInputCLIError) CLIErrorFamily() factoryapi.ErrorFamily {
+	return factoryapi.ErrorFamilyBadRequest
+}
+
+func (err replayInputCLIError) CLIErrorMessage() string {
+	return err.message
+}
+
+func replayInputCLIFields(code recordings.ReplayArtifactDiagnosticCode) (string, string) {
+	message := "verify that the recording is available and readable before retrying"
+	switch code {
+	case recordings.ReplayArtifactDiagnosticMalformed,
+		recordings.ReplayArtifactDiagnosticInvalidIdentity,
+		recordings.ReplayArtifactDiagnosticInvalidSummary,
+		recordings.ReplayArtifactDiagnosticInvalidIntegrity,
+		recordings.ReplayArtifactDiagnosticInvalidOrder:
+		message = "preserve the recording and replace it from a trusted backup before retrying"
+	case recordings.ReplayArtifactDiagnosticUnsupportedVersion,
+		recordings.ReplayArtifactDiagnosticUnsupportedSchema:
+		message = "use a recording created by a compatible you version"
+	case recordings.ReplayArtifactDiagnosticMissingReference:
+		message = "export the source recording again to restore its artifact reference"
+	case recordings.ReplayArtifactDiagnosticForeignReference:
+		message = "use the artifact exported for this recording"
+	case recordings.ReplayArtifactDiagnosticRecordingNotFound:
+		message = "verify that the source recording is available"
+	case recordings.ReplayArtifactDiagnosticRecordingNotFinalized:
+		message = "finalize the source recording before trying again"
+	case recordings.ReplayArtifactDiagnosticCancelled:
+		message = "retry the operation when ready"
+	case recordings.ReplayArtifactDiagnosticDependencyFailure:
+		// Keep the default message for a dependency failure.
+	default:
+		code = recordings.ReplayArtifactDiagnosticDependencyFailure
+	}
+	return string(code), message
+}
+
 func isLegacyReplayStructuralDiagnostic(diagnostic recordings.ReplayArtifactDiagnostic) bool {
 	return strings.TrimSpace(diagnostic.Area) == "events" &&
 		strings.HasPrefix(strings.TrimSpace(diagnostic.Path), "events[")
@@ -285,3 +388,4 @@ func safeReplayStructuralMessage(message string) string {
 }
 
 var _ clidiag.FamilyCodedError = (*replayStructuralCLIError)(nil)
+var _ clidiag.FamilyCodedError = (*replayInputCLIError)(nil)

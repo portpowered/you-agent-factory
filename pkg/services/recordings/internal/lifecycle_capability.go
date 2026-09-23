@@ -88,6 +88,7 @@ func (service *combinedService) LoadResumeInput(
 	return recordings.LoadResumeInputResult{
 		Input:                    input,
 		SourceCanonicalSessionID: sourceID,
+		RecoveryMetadata:         resumeRecoveryMetadataForInput(input),
 	}, nil
 }
 

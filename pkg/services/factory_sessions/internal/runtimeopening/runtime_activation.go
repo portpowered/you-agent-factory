@@ -333,6 +333,11 @@ func (f *Factory) openActivatedRuntimeWithInputs(
 		return runtimeProducts{}, fmt.Errorf("open Factory Runtime: activation handoff is unavailable")
 	}
 	products := handoff.runtimeProducts()
+	if resumeInput != nil {
+		metadata := resumeInput.RecoveryMetadata
+		metadata.SuccessorRecordingID = recoveryRecordingID(activationRequest.RuntimeID)
+		products.application.ResumeRecoveryMetadata = &metadata
+	}
 	closeRuntime := f.activationCloser(binding, result.RuntimeID)
 	if !binding.IsZero() && products.bindRuntime != nil {
 		if err := products.bindRuntime(binding); err != nil {

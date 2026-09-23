@@ -799,3 +799,200 @@ func recordingHealthReason(status recordings.WorkerRecordingStatus, failure, int
 	}
 	return ""
 }
+
+// addRestoredMissingInitialWorkPlacements recovers only an active Work whose
+// durable admission and recorded definition prove one exact initial place.
+// The placement is added to the detached in-memory projection; no recording or
+// canonical event is changed by this compatibility path.
+func addRestoredMissingInitialWorkPlacements(
+	placements map[string]string,
+	restored *interfaces.FactoryWorldState,
+	net *state.Net,
+	resourcePlaceIDs map[string]struct{},
+	toleratedWorkIDs map[string]struct{},
+) error {
+	if restored == nil || restored.PlaceOccupancyByID == nil || net == nil {
+		return nil
+	}
+	for _, workID := range sortedRestoredKeys(restored.ActiveWorkItemsByID) {
+		if _, exists := placements[workID]; exists {
+			continue
+		}
+		if _, tolerated := toleratedWorkIDs[workID]; tolerated {
+			continue
+		}
+		placeID, ok := restoredMissingInitialWorkPlace(restored, net, resourcePlaceIDs, workID)
+		if !ok {
+			return fmt.Errorf(
+				"restore Work board: active Work %q has no current place occupancy",
+				workID,
+			)
+		}
+		placements[workID] = placeID
+	}
+	return nil
+}
+
+func restoredMissingInitialWorkPlace(
+	restored *interfaces.FactoryWorldState,
+	net *state.Net,
+	resourcePlaceIDs map[string]struct{},
+	workID string,
+) (string, bool) {
+	if strings.TrimSpace(workID) == "" {
+		return "", false
+	}
+	active, activeOK := restored.ActiveWorkItemsByID[workID]
+	canonical, canonicalOK := restored.WorkItemsByID[workID]
+	admission, admissionOK := restoredUniqueAdmissionForWork(restored, workID)
+	if !restoredWorkIdentityMatches(workID, active, activeOK, canonical, canonicalOK, admission, admissionOK) {
+		return "", false
+	}
+	if !restoredWorkTypeMatchesAdmission(active, canonical, admission) {
+		return "", false
+	}
+	initialPlaceID, initialState, ok := restoredUniqueInitialPlace(restored, net, resourcePlaceIDs, admission.WorkTypeID)
+	if !ok || !restoredWorkStatesMatchInitial(initialState, admission.State, active.State, canonical.State) {
+		return "", false
+	}
+	if restoredMissingInitialWorkHasLaterFacts(restored, workID) {
+		return "", false
+	}
+	return initialPlaceID, true
+}
+
+func restoredWorkIdentityMatches(
+	workID string,
+	active work.FactoryWorkItem,
+	activeOK bool,
+	canonical work.FactoryWorkItem,
+	canonicalOK bool,
+	admission work.FactoryWorkItem,
+	admissionOK bool,
+) bool {
+	return activeOK && canonicalOK && admissionOK &&
+		active.ID == workID && canonical.ID == workID && admission.ID == workID
+}
+
+func restoredWorkTypeMatchesAdmission(
+	active work.FactoryWorkItem,
+	canonical work.FactoryWorkItem,
+	admission work.FactoryWorkItem,
+) bool {
+	return admission.WorkTypeID != "" && active.WorkTypeID == admission.WorkTypeID &&
+		canonical.WorkTypeID == admission.WorkTypeID
+}
+
+func restoredUniqueAdmissionForWork(
+	restored *interfaces.FactoryWorldState,
+	workID string,
+) (work.FactoryWorkItem, bool) {
+	var admission work.FactoryWorkItem
+	count := 0
+	for requestKey, request := range restored.WorkRequestsByID {
+		for _, item := range request.WorkItems {
+			if item.ID != workID {
+				continue
+			}
+			count++
+			if count == 1 {
+				admission = item
+			}
+			requestID := strings.TrimSpace(request.RequestID)
+			if requestID == "" {
+				requestID = strings.TrimSpace(requestKey)
+			}
+			if requestID == "" {
+				return work.FactoryWorkItem{}, false
+			}
+		}
+	}
+	return admission, count == 1
+}
+
+func restoredUniqueInitialPlace(
+	restored *interfaces.FactoryWorldState,
+	net *state.Net,
+	resourcePlaceIDs map[string]struct{},
+	workTypeID string,
+) (string, string, bool) {
+	initialState, ok := restoredInitialWorkState(restored, workTypeID)
+	if !ok || strings.TrimSpace(initialState) == "" {
+		return "", "", false
+	}
+	expectedPlaceID := state.PlaceID(workTypeID, initialState)
+	if !restoredCurrentInitialPlaceIsUnique(net, resourcePlaceIDs, workTypeID, initialState, expectedPlaceID) {
+		return "", "", false
+	}
+	return expectedPlaceID, initialState, true
+}
+
+type restoredFactoryDefinition struct {
+	WorkTypes       []restoredFactoryWorkType `json:"workTypes"`
+	LegacyWorkTypes []restoredFactoryWorkType `json:"work_types"`
+}
+
+type restoredFactoryWorkType struct {
+	ID     string                     `json:"id"`
+	Name   string                     `json:"name"`
+	States []restoredFactoryWorkState `json:"states"`
+}
+
+type restoredFactoryWorkState struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Value    string `json:"value"`
+	Type     string `json:"type"`
+	Category string `json:"category"`
+}
+
+func restoredFactoryInitialWorkState(snapshot *interfaces.FactorySnapshot, workTypeID string) (string, bool) {
+	if snapshot == nil {
+		return "", false
+	}
+	var definition restoredFactoryDefinition
+	if err := snapshot.Decode(&definition); err != nil {
+		return "", false
+	}
+	workTypes := definition.WorkTypes
+	if len(workTypes) == 0 {
+		workTypes = definition.LegacyWorkTypes
+	}
+	initialStates := make([]string, 0, 1)
+	workTypeCount := 0
+	for _, workType := range workTypes {
+		if firstNonEmptyRestored(workType.ID, workType.Name) != workTypeID {
+			continue
+		}
+		workTypeCount++
+		for _, stateDefinition := range workType.States {
+			if firstNonEmptyRestored(stateDefinition.Type, stateDefinition.Category) == string(state.StateCategoryInitial) {
+				initialStates = append(initialStates, firstNonEmptyRestored(
+					stateDefinition.Name, stateDefinition.Value, stateDefinition.ID,
+				))
+			}
+		}
+	}
+	if workTypeCount != 1 || len(initialStates) != 1 {
+		return "", false
+	}
+	return initialStates[0], strings.TrimSpace(initialStates[0]) != ""
+}
+
+func firstNonEmptyRestored(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func restoredWorkStatesMatchInitial(initialState string, states ...string) bool {
+	for _, currentState := range states {
+		if currentState != "" && currentState != initialState {
+			return false
+		}
+	}
+	return true
+}

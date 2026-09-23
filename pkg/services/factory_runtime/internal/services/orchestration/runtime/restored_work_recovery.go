@@ -873,3 +873,124 @@ func sortedRestoredApprovalIDs(approvals map[string]interfaces.FactoryWorldHuman
 	sort.Strings(ids)
 	return ids
 }
+
+func restoredInitialWorkState(restored *interfaces.FactoryWorldState, workTypeID string) (string, bool) {
+	initialStates := make([]string, 0, 1)
+	workTypeCount := 0
+	for _, workType := range restored.Topology.WorkTypes {
+		if workType.ID != workTypeID {
+			continue
+		}
+		workTypeCount++
+		for _, stateDefinition := range workType.States {
+			if stateDefinition.Category == string(state.StateCategoryInitial) {
+				initialStates = append(initialStates, stateDefinition.Value)
+			}
+		}
+	}
+	if workTypeCount == 1 && len(initialStates) == 1 {
+		return initialStates[0], true
+	}
+	return restoredFactoryInitialWorkState(restored.Factory, workTypeID)
+}
+
+func restoredCurrentInitialPlaceIsUnique(
+	net *state.Net,
+	resourcePlaceIDs map[string]struct{},
+	workTypeID, initialState, expectedPlaceID string,
+) bool {
+	currentPlace, exists := net.Places[expectedPlaceID]
+	if !exists || currentPlace == nil || currentPlace.TypeID != workTypeID || currentPlace.State != initialState {
+		return false
+	}
+	currentPlaceCount := 0
+	for placeID, place := range net.Places {
+		if place == nil || place.TypeID != workTypeID || place.State != initialState {
+			continue
+		}
+		if _, isResource := resourcePlaceIDs[placeID]; !isResource {
+			currentPlaceCount++
+		}
+	}
+	return currentPlaceCount == 1
+}
+
+func restoredMissingInitialWorkHasLaterFacts(restored *interfaces.FactoryWorldState, workID string) bool {
+	return restoredMissingInitialWorkHasLifecycleFacts(restored, workID) ||
+		restoredMissingInitialWorkHasTerminalFacts(restored, workID) ||
+		restoredMissingInitialWorkHasApprovalFacts(restored, workID)
+}
+
+func restoredMissingInitialWorkHasLifecycleFacts(restored *interfaces.FactoryWorldState, workID string) bool {
+	return len(restored.WorkStateChangesByWorkID[workID]) > 0 ||
+		restoredWorkInActiveDispatches(restored.ActiveDispatches, workID) ||
+		restoredDispatchCompletionsContainWork(restored.CompletedDispatches, workID) ||
+		restoredDispatchCompletionsContainWork(restored.FailedDispatches, workID) ||
+		restoredWorkHasRecordedOccupancy(restored, workID)
+}
+
+func restoredMissingInitialWorkHasTerminalFacts(restored *interfaces.FactoryWorldState, workID string) bool {
+	for indexedWorkID, terminal := range restored.TerminalWorkByID {
+		if indexedWorkID == workID || terminal.WorkItem.ID == workID {
+			return true
+		}
+	}
+	for indexedWorkID, failedWork := range restored.FailedWorkItemsByID {
+		if indexedWorkID == workID || failedWork.ID == workID {
+			return true
+		}
+	}
+	if _, failure := restored.FailureDetailsByWorkID[workID]; failure {
+		return true
+	}
+	return false
+}
+
+func restoredMissingInitialWorkHasApprovalFacts(restored *interfaces.FactoryWorldState, workID string) bool {
+	for _, approval := range restored.PendingHumanApprovalsByID {
+		if restoredDispatchContainsWork(approval.WorkItemIDs, workID) {
+			return true
+		}
+		if approval.DispatchID == "" {
+			continue
+		}
+		if dispatch, exists := restored.ActiveDispatches[approval.DispatchID]; exists && restoredActiveDispatchContainsWork(dispatch, workID) {
+			return true
+		}
+	}
+	return false
+}
+
+func restoredDispatchCompletionsContainWork(
+	completions []interfaces.FactoryWorldDispatchCompletion,
+	workID string,
+) bool {
+	for _, completion := range completions {
+		if restoredDispatchContainsWork(completion.WorkItemIDs, workID) ||
+			restoredDispatchInputsContainWork(completion.ConsumedInputs, workID) ||
+			restoredWorkItemsContainWork(completion.InputWorkItems, workID) ||
+			restoredWorkItemsContainWork(completion.OutputWorkItems, workID) ||
+			completion.TerminalWork != nil && completion.TerminalWork.WorkItem.ID == workID {
+			return true
+		}
+	}
+	return false
+}
+
+func restoredDispatchInputsContainWork(inputs []interfaces.WorkstationInput, workID string) bool {
+	for _, input := range inputs {
+		if input.TokenID == workID || input.WorkItem != nil && input.WorkItem.ID == workID {
+			return true
+		}
+	}
+	return false
+}
+
+func restoredWorkItemsContainWork(items []work.FactoryWorkItem, workID string) bool {
+	for _, item := range items {
+		if item.ID == workID {
+			return true
+		}
+	}
+	return false
+}

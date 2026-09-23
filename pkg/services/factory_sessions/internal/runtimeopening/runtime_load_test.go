@@ -2,6 +2,7 @@ package runtimeopening
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -893,5 +894,77 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 	}
 	if preset := got.Presets["review"]; preset.ModelProvider != "cursor" {
 		t.Fatalf("review preset = %#v, want canonical cursor identity", preset)
+	}
+}
+
+func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
+	t.Parallel()
+
+	factorySnapshot := factorydefinitions.FactorySnapshot(`{"factoryDirectory":"/recorded","name":"recorded"}`)
+	resumeInput := recordings.LoadResumeInputResult{
+		Input: recordings.LoadReplayInputResult{
+			Legacy: &factorydefinitions.ReplayArtifact{
+				Factory: &factorySnapshot,
+				Events: []factorydefinitions.FactoryEvent{{
+					Id:      "resume-event",
+					Context: factorydefinitions.FactoryEventContext{Tick: 4},
+				}},
+			},
+		},
+	}
+	definitions := &resumeDefinitionStub{
+		snapshot: factorydefinitions.RuntimeSnapshot{
+			FactoryDir:     "/recorded",
+			RuntimeBaseDir: "/recorded",
+			EffectiveFactory: factorydefinitions.FactoryConfig{
+				Name: "recorded",
+			},
+		},
+	}
+	root := &resumeRoutingRoot{}
+	factory := &Factory{
+		runtimeRoot:               root,
+		recordingsRuntime:         &resumeInputRuntime{result: resumeInput},
+		generateRuntimeInstanceID: func() string { return "runtime-1" },
+		factoryDefinitions:        definitions,
+		decodeReplayConfig: func(*factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
+			return replayRuntimeConfigStub{factoryDir: "/recorded"}, nil
+		},
+	}
+
+	_, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
+			Directory:        "/authored-b",
+			SourcePath:       "/authored-b/factory.json",
+			ExecutionBaseDir: "/authored-b",
+		},
+		Recordings: recordings.RuntimeOpeningRequest{
+			RecordPath: "successor.recording.json",
+			ResumePath: "source.recording.json",
+		},
+	})
+	if err != nil {
+		t.Fatalf("openForRequest(bare resume) error = %v", err)
+	}
+	if string(definitions.request.Canonical) != string(factorySnapshot) {
+		t.Fatalf("resume Factory Definition canonical = %q, want captured recording definition", definitions.request.Canonical)
+	}
+	if definitions.request.Canonical != nil && strings.Contains(string(definitions.request.Canonical), "authored-b") {
+		t.Fatalf("resume Factory Definition canonical selected authored input B: %q", definitions.request.Canonical)
+	}
+	if root.activations != 1 {
+		t.Fatalf("Runtime root activations = %d, want exactly one", root.activations)
+	}
+	if root.activation.Snapshot.EffectiveFactory.Name != "recorded" {
+		t.Fatalf("activation Factory name = %q, want captured recording definition", root.activation.Snapshot.EffectiveFactory.Name)
+	}
+	if root.activation.Snapshot.FactoryDir != "/recorded" {
+		t.Fatalf("activation Factory directory = %q, want captured recording directory", root.activation.Snapshot.FactoryDir)
+	}
+	if root.activation.Inputs.Recordings.RecordPath != "successor.recording.json" {
+		t.Fatalf("activation successor path = %q, want successor.recording.json", root.activation.Inputs.Recordings.RecordPath)
+	}
+	if root.activation.Inputs.Recordings.ReplayPath != "" {
+		t.Fatalf("activation replay path = %q, want empty for resume", root.activation.Inputs.Recordings.ReplayPath)
 	}
 }

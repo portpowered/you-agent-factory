@@ -366,6 +366,7 @@ type Operation struct {
 	openingPresentations   factorysessions.OpeningPresentationOwner
 	visualizations         factoryvisualization.RuntimeSinkOwner
 	visualizationSinkID    factoryvisualization.RuntimeSinkID
+	resumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
 }
 
 // Open resolves run inputs and opens invocation-local runtime state without
@@ -475,7 +476,11 @@ func open(
 		prepareWorkTarget, mockWorkersConfig, invocationMode, requestedPort,
 		buildRunner, buildRuntimeRequest, presentationOwner, visualizations,
 	)
-	return operation, classifyRunInputFailure(cfg, err)
+	err = classifyRunInputFailure(cfg, err)
+	if err != nil {
+		logRunRecoveryOutcome(cfg, runRecoveryOutcomeFailed, err)
+	}
+	return operation, err
 }
 
 // NormalizeWorkerReasoningEffort validates and canonicalizes the run-scoped
@@ -525,6 +530,7 @@ func (operation *Operation) Run(ctx context.Context) error {
 		operation.runner,
 		operation.recordPath,
 		operation.batchReportProvider,
+		operation.resumeRecoveryMetadata,
 	); err != nil {
 		return err
 	}
@@ -663,17 +669,29 @@ func prepareRunConfig(
 // diagnostic. The underlying error remains available to callers, but the
 // default CLI renderer receives only the safe flag/path context.
 func classifyRunInputFailure(cfg RunConfig, err error) error {
-	if err == nil || clidiag.HasCodedDiagnostic(err) || errors.Is(err, context.Canceled) {
+	if err == nil || errors.Is(err, context.Canceled) {
 		return err
 	}
-	if structural := recordingscli.MapStructuralReplayFailure(err); structural != nil {
-		return structural
+	if path := strings.TrimSpace(cfg.ResumePath); path != "" {
+		if replayInput := recordingscli.MapReplayInputFailure(err); replayInput != nil {
+			return replayInput
+		}
+		if clidiag.HasCodedDiagnostic(err) {
+			return err
+		}
+		return clidiag.NewLocalInputFailure("--resume", path, err)
 	}
 	if path := strings.TrimSpace(cfg.ReplayPath); path != "" {
+		if structural := recordingscli.MapStructuralReplayFailure(err); structural != nil {
+			return structural
+		}
+		if clidiag.HasCodedDiagnostic(err) {
+			return err
+		}
 		return clidiag.NewLocalInputFailure("--replay", path, err)
 	}
-	if path := strings.TrimSpace(cfg.ResumePath); path != "" {
-		return clidiag.NewLocalInputFailure("--resume", path, err)
+	if clidiag.HasCodedDiagnostic(err) {
+		return err
 	}
 	return err
 }
@@ -738,6 +756,7 @@ func runFactoryServiceAndEmitResult(
 	factorySvc factoryServiceRunner,
 	recordPath resolvedRunRecordPath,
 	batchProvider batchReportProvider,
+	recoveryMetadata ...*recordings.ResumeRecoveryMetadata,
 ) error {
 	var snapshot state.CleanInvocationSnapshot
 	var snapshotReady bool
@@ -747,7 +766,14 @@ func runFactoryServiceAndEmitResult(
 	} else {
 		err = factorySvc.Run(ctx)
 	}
-	logRunServiceOutcome(ctx, cfg, err)
+	var recovery *recordings.ResumeRecoveryMetadata
+	if len(recoveryMetadata) > 0 {
+		recovery = recoveryMetadata[0]
+	}
+	if recovery == nil {
+		recovery = resumeRecoveryMetadataForRunner(factorySvc)
+	}
+	logRunServiceOutcome(ctx, cfg, err, recovery)
 	if err == nil {
 		reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath, cfg.RecordingsCLI)
 	}

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -284,6 +285,168 @@ func TestMapStructuralReplayFailurePreservesSafeCodedDiagnostic(t *testing.T) {
 	}
 	if strings.Contains(mapped.Error(), `C:\private\recordings\legacy.jsonl`) || !errors.Is(mapped, cause) {
 		t.Fatalf("mapped error leaked its local source or lost its cause: %q", mapped)
+	}
+}
+
+func TestMapReplayInputFailurePreservesExistingCodesAndRedactsSourceDetails(t *testing.T) {
+	t.Parallel()
+
+	codes := []recordings.ReplayArtifactDiagnosticCode{
+		recordings.ReplayArtifactDiagnosticMalformed,
+		recordings.ReplayArtifactDiagnosticUnsupportedVersion,
+		recordings.ReplayArtifactDiagnosticUnsupportedSchema,
+		recordings.ReplayArtifactDiagnosticInvalidIdentity,
+		recordings.ReplayArtifactDiagnosticInvalidSummary,
+		recordings.ReplayArtifactDiagnosticInvalidIntegrity,
+		recordings.ReplayArtifactDiagnosticInvalidOrder,
+		recordings.ReplayArtifactDiagnosticMissingReference,
+		recordings.ReplayArtifactDiagnosticForeignReference,
+		recordings.ReplayArtifactDiagnosticRecordingNotFound,
+		recordings.ReplayArtifactDiagnosticRecordingNotFinalized,
+		recordings.ReplayArtifactDiagnosticDependencyFailure,
+		recordings.ReplayArtifactDiagnosticCancelled,
+	}
+	for _, code := range codes {
+		code := code
+		t.Run(string(code), func(t *testing.T) {
+			t.Parallel()
+
+			cause := errors.New(`open C:\private\recording.json payload=TOPSECRET`)
+			inputErr := &recordings.ReplayInputError{
+				Family: recordings.ReplayInputFamilyPortable,
+				Diagnostic: recordings.ReplayArtifactDiagnostic{
+					Code: code, Area: "recording", Path: "recording", Message: "TOPSECRET source bytes",
+				},
+				Cause: cause,
+			}
+			mapped := MapReplayInputFailure(inputErr)
+			if mapped == nil {
+				t.Fatal("MapReplayInputFailure() = nil, want a coded Recordings diagnostic")
+			}
+			type codedError interface {
+				error
+				CLIErrorCode() string
+				CLIErrorFamily() factoryapi.ErrorFamily
+				CLIErrorMessage() string
+			}
+			var coded codedError
+			if !errors.As(mapped, &coded) {
+				t.Fatalf("mapped error %T does not implement the coded CLI error contract", mapped)
+			}
+			if coded.CLIErrorCode() != string(code) || coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest {
+				t.Fatalf("coded error = %q / %q, want %q / bad request", coded.CLIErrorCode(), coded.CLIErrorFamily(), code)
+			}
+			if strings.Contains(mapped.Error(), "TOPSECRET") || strings.Contains(mapped.Error(), `C:\private`) ||
+				strings.Contains(coded.CLIErrorMessage(), "recording.json") {
+				t.Fatalf("mapped error exposed source details: %q / %q", mapped, coded.CLIErrorMessage())
+			}
+			if !errors.Is(mapped, cause) {
+				t.Fatalf("mapped error %v lost its cause", mapped)
+			}
+		})
+	}
+}
+
+func TestMapReplayInputFailureAdaptsRecordingsArtifactErrors(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("recording dependency failed")
+	mapped := MapReplayInputFailure(&recordings.ReplayArtifactError{
+		Kind: recordings.ReplayArtifactErrorUnavailable,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code: recordings.ReplayArtifactDiagnosticDependencyFailure,
+			Area: "recording", Path: "recording", Message: "untrusted source path and contents",
+		},
+		Cause: cause,
+	})
+	if mapped == nil {
+		t.Fatal("MapReplayInputFailure() = nil, want adapted Recordings artifact failure")
+	}
+	type codedError interface {
+		error
+		CLIErrorCode() string
+		CLIErrorFamily() factoryapi.ErrorFamily
+		CLIErrorMessage() string
+	}
+	var coded codedError
+	if !errors.As(mapped, &coded) || coded.CLIErrorCode() != string(recordings.ReplayArtifactDiagnosticDependencyFailure) ||
+		coded.CLIErrorFamily() != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("mapped error = %#v, want dependency code in the bad-request family", mapped)
+	}
+	if coded.CLIErrorMessage() != "verify that the recording is available and readable before retrying" ||
+		strings.Contains(mapped.Error(), "untrusted") || !errors.Is(mapped, cause) {
+		t.Fatalf("mapped error = %q / %q, want safe guidance and preserved cause", mapped, coded.CLIErrorMessage())
+	}
+}
+
+func TestMapReplayInputFailureUsesMalformedGuidanceAndKnownFallbackCode(t *testing.T) {
+	t.Parallel()
+
+	malformed := MapReplayInputFailure(&recordings.ReplayInputError{
+		Family: recordings.ReplayInputFamilyLegacy,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code: recordings.ReplayArtifactDiagnosticMalformed,
+			Area: "recording", Path: "recording", Message: "untrusted source text",
+		},
+	})
+	type codedError interface {
+		error
+		CLIErrorCode() string
+		CLIErrorMessage() string
+	}
+	var malformedCoded codedError
+	if !errors.As(malformed, &malformedCoded) {
+		t.Fatalf("malformed error %T does not implement the coded CLI error contract", malformed)
+	}
+	if malformedCoded.CLIErrorCode() != string(recordings.ReplayArtifactDiagnosticMalformed) ||
+		malformedCoded.CLIErrorMessage() != "preserve the recording and replace it from a trusted backup before retrying" {
+		t.Fatalf("malformed CLI diagnostic = %q / %q", malformedCoded.CLIErrorCode(), malformedCoded.CLIErrorMessage())
+	}
+
+	unknown := MapReplayInputFailure(&recordings.ReplayInputError{
+		Family: recordings.ReplayInputFamilyLegacy,
+		Diagnostic: recordings.ReplayArtifactDiagnostic{
+			Code: recordings.ReplayArtifactDiagnosticCode("UNSAFE_SOURCE_CODE"),
+		},
+	})
+	var unknownCoded codedError
+	if !errors.As(unknown, &unknownCoded) ||
+		unknownCoded.CLIErrorCode() != string(recordings.ReplayArtifactDiagnosticDependencyFailure) {
+		t.Fatalf("unknown diagnostic = %#v, want the existing dependency-failure code", unknown)
+	}
+	if MapReplayInputFailure(errors.New("ordinary error")) != nil {
+		t.Fatal("MapReplayInputFailure(ordinary error) != nil")
+	}
+}
+
+func TestReplayInputRecordingIdentityReturnsOnlyCanonicalDigest(t *testing.T) {
+	t.Parallel()
+
+	digest := "sha256:" + strings.Repeat("a", 64)
+	tests := []struct {
+		name  string
+		cause error
+		want  string
+	}{
+		{
+			name:  "wrapped replay input",
+			cause: fmt.Errorf("load recording: %w", &recordings.ReplayInputError{ArtifactDigest: digest}),
+			want:  digest,
+		},
+		{
+			name:  "untrusted source path",
+			cause: &recordings.ReplayInputError{ArtifactDigest: `C:\private\recording.json`},
+		},
+		{name: "ordinary error", cause: errors.New("startup failed")},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ReplayInputRecordingIdentity(test.cause); got != test.want {
+				t.Fatalf("ReplayInputRecordingIdentity() = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 
