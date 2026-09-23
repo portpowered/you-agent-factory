@@ -112,7 +112,8 @@ Each lead visit follows this order:
    evidence, emit a first-class validation:init Work item in the same batch as
    the ideas. Do not call informal subagents or claim probe evidence from your
    own context.
-8. Submit exactly one same-name project-cycle item. It must depend on every
+8. On a normal `project:init` visit, submit exactly one same-name
+   project-cycle item. It must depend on every
    emitted idea and validation item **and every still-open independent item
    admitted by a prior check-in** reaching complete. Resolve existing targets
    by exact current-Session Work ID. Replace a failed item with a
