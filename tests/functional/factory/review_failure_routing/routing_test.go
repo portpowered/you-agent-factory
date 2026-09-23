@@ -203,7 +203,7 @@ func TestReviewFailureRouting_FailedIdeaRequiredBeforeReviewedTaskCompletion(t *
 
 // TestReviewFailureRouting_ReviewedTaskCompletesBeforeDependentProjectCycleDispatchesOnce
 // proves an exact DEPENDS_ON Project stays blocked until the reviewed task's
-// canonical completion response, then reaches the configured Sol/high lead once.
+// canonical completion response, then reaches the configured Sol/medium lead once.
 func TestReviewFailureRouting_ReviewedTaskCompletesBeforeDependentProjectCycleDispatchesOnce(t *testing.T) {
 	t.Parallel()
 	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{
@@ -271,7 +271,7 @@ func TestReviewFailureRouting_ReviewedTaskCompletesBeforeDependentProjectCycleDi
 		t.Fatalf("dependent Project lead response = %#v, want one accepted dispatch", projectDispatches[0].Response)
 	}
 	assertReviewFailureProjectDispatchFollowsCompletion(t, scenario, projectID)
-	assertReviewFailureSolHighProjectCommand(t, scenario.fixture.router.requestsFor(scenario.factoryDir), projectName)
+	assertReviewFailureSolMediumProjectCommand(t, scenario.fixture.router.requestsFor(scenario.factoryDir), projectName)
 	assertNoIncompleteReviewFailureDispatches(t, dispatches)
 	assertReviewFailureWorkStates(t, scenario.listWorks(t), map[string]string{
 		failedIdeaID: "failed", taskID: "complete", currentReviewID: "complete", projectID: "waiting",
@@ -424,7 +424,7 @@ func assertReviewFailureProjectDispatchFollowsCompletion(t *testing.T, scenario 
 	}
 }
 
-func assertReviewFailureSolHighProjectCommand(
+func assertReviewFailureSolMediumProjectCommand(
 	t *testing.T,
 	requests []platformprocess.CommandRequest,
 	projectName string,
@@ -441,9 +441,9 @@ func assertReviewFailureSolHighProjectCommand(
 	}
 	request := projectRequests[0]
 	if request.Command != "codex" ||
-		!reviewFailureHasCommandArgPair(request.Args, "--model", "gpt-5.6-sol") ||
-		!reviewFailureHasCommandArgPair(request.Args, "--config", `model_reasoning_effort="high"`) {
-		t.Fatalf("dependent Project command = %q %#v, want Codex gpt-5.6-sol/high", request.Command, request.Args)
+		!reviewFailureHasCommandArgPair(request.Args, "--model", "gpt-6-sol") ||
+		!reviewFailureHasCommandArgPair(request.Args, "--config", `model_reasoning_effort="medium"`) {
+		t.Fatalf("dependent Project command = %q %#v, want Codex gpt-6-sol/medium", request.Command, request.Args)
 	}
 }
 
