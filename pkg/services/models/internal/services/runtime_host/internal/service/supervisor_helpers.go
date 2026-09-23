@@ -63,6 +63,14 @@ func requiresPinnedGRPCBackend(backend string) bool {
 		canonical == "localai" || canonical == "localai_grpc" || canonical == "localai-grpc"
 }
 
+func canonicalPinnedBackend(backend string) string {
+	trimmed := strings.TrimSpace(backend)
+	if !requiresPinnedGRPCBackend(trimmed) {
+		return trimmed
+	}
+	return strings.ToLower(trimmed)
+}
+
 func localWorkerForModel(
 	runtimeCfg *models.RuntimeConfig,
 	modelName string,
@@ -144,7 +152,7 @@ func supervisedIdentityForModel(
 	}
 	return supervisedIdentity{
 		Name:       identity.Name,
-		Backend:    identity.Backend,
+		Backend:    canonicalPinnedBackend(identity.Backend),
 		LoadPolicy: identity.LoadPolicy,
 		Source:     identity.Source,
 		Revision:   identity.Revision,

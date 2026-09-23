@@ -50,6 +50,8 @@ func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
 	backend := newPackagedTTSModelsBackend([]byte(packagedTTSFakeAudioFixture))
 	privateFixture := localai.Start(t)
 	launcher := &packagedTTSModelHostLauncher{endpoint: privateFixture.Endpoint()}
+	var selectionMu sync.Mutex
+	var selectionRequests []serviceedges.ModelBackendArtifactSelectionRequest
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "run",
 		"--named", factorydefinitions.PackagedTTSFactoryName,
@@ -68,9 +70,12 @@ func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelResolveBackendArtifact: func(
-			context.Context,
-			serviceedges.ModelBackendArtifactSelectionRequest,
+			_ context.Context,
+			request serviceedges.ModelBackendArtifactSelectionRequest,
 		) (serviceedges.ModelBackendArtifactSelection, error) {
+			selectionMu.Lock()
+			selectionRequests = append(selectionRequests, request)
+			selectionMu.Unlock()
 			return packagedTTSPinnedBackendSelection(), nil
 		},
 		ModelHostProcessLauncher:      launcher,
@@ -95,6 +100,12 @@ func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
 	}
 	if response.RequestId == "" || response.TraceId == "" {
 		t.Fatalf("local TTS invocation identity = request %q trace %q, want non-empty values", response.RequestId, response.TraceId)
+	}
+	selectionMu.Lock()
+	observedSelections := append([]serviceedges.ModelBackendArtifactSelectionRequest(nil), selectionRequests...)
+	selectionMu.Unlock()
+	if len(observedSelections) != 1 || observedSelections[0].Backend != "localai-vibevoice" {
+		t.Fatalf("Models backend artifact selections = %#v, want one pinned localai-vibevoice selection", observedSelections)
 	}
 	assertPackagedTTSNoWorkerHostOverride(t, launcher.LastStartSpec(t), "successful invocation")
 	if backend.CallCount() != 0 {
@@ -331,6 +342,9 @@ func assertPackagedTTSNoWorkerHostOverride(
 	t.Helper()
 	if spec.Command != "" || len(spec.Args) != 0 || spec.HealthEndpoint != "" {
 		t.Fatalf("%s host launch override = command %q args %#v endpoint %q; want Models-owned launch", label, spec.Command, spec.Args, spec.HealthEndpoint)
+	}
+	if spec.Backend != "localai-vibevoice" || len(spec.BackendFiles) == 0 {
+		t.Fatalf("%s host launch backend = %q files %#v; want pinned localai-vibevoice artifact files", label, spec.Backend, spec.BackendFiles)
 	}
 }
 
