@@ -155,28 +155,14 @@ func (capture *functionalRawFailureCapture) beginInvocation(invocation commandIn
 }
 
 func (capture *functionalRawFailureCapture) observeLine(line []byte) error {
-	var event goTestTimingEvent
-	if err := json.Unmarshal(bytes.TrimSpace(line), &event); err != nil {
+	event, ignored, err := parseFunctionalRawFailureEvent(line)
+	if err != nil {
 		capture.mu.Lock()
 		defer capture.mu.Unlock()
-		if capture.captureError == nil {
-			capture.captureError = errors.New("unattributable or malformed go test JSON output")
-		}
-		return capture.captureError
+		return capture.failLocked(err)
 	}
-	if event.Package == "" {
-		// `go test -json -x` emits compiler and linker trace records as
-		// build-output events. They are not test package output and should not
-		// interrupt the package-keyed failure spool.
-		if event.Action == "build-output" {
-			return nil
-		}
-		capture.mu.Lock()
-		defer capture.mu.Unlock()
-		if capture.captureError == nil {
-			capture.captureError = errors.New("unattributable or malformed go test JSON output")
-		}
-		return capture.captureError
+	if ignored {
+		return nil
 	}
 
 	capture.mu.Lock()
@@ -184,6 +170,27 @@ func (capture *functionalRawFailureCapture) observeLine(line []byte) error {
 	if capture.captureError != nil {
 		return capture.captureError
 	}
+	return capture.observeEventLocked(event, line)
+}
+
+func parseFunctionalRawFailureEvent(line []byte) (goTestTimingEvent, bool, error) {
+	var event goTestTimingEvent
+	if err := json.Unmarshal(bytes.TrimSpace(line), &event); err != nil {
+		return goTestTimingEvent{}, false, errors.New("unattributable or malformed go test JSON output")
+	}
+	if event.Package == "" {
+		// `go test -json -x` emits compiler and linker trace records as
+		// build-output events. They are not test package output and should not
+		// interrupt the package-keyed failure spool.
+		if event.Action == "build-output" {
+			return event, true, nil
+		}
+		return goTestTimingEvent{}, false, errors.New("unattributable or malformed go test JSON output")
+	}
+	return event, false, nil
+}
+
+func (capture *functionalRawFailureCapture) observeEventLocked(event goTestTimingEvent, line []byte) error {
 	packageOutput := capture.packages[event.Package]
 	if packageOutput == nil {
 		packageOutput = &functionalRawFailurePackage{
@@ -206,14 +213,17 @@ func (capture *functionalRawFailureCapture) observeLine(line []byte) error {
 		case timingOutcomePass, timingOutcomeSkip:
 			packageOutput.terminal = event.Action
 			if err := capture.discardPackageSpool(packageOutput); err != nil {
-				capture.captureError = fmt.Errorf("discard successful raw package spool for %s: %w", event.Package, err)
-				return capture.captureError
+				return capture.failLocked(fmt.Errorf("discard successful raw package spool for %s: %w", event.Package, err))
 			}
 			return nil
 		case timingOutcomeFail:
 			packageOutput.terminal = event.Action
 		}
 	}
+	return capture.spoolPackageLineLocked(packageOutput, event.Package, line)
+}
+
+func (capture *functionalRawFailureCapture) spoolPackageLineLocked(packageOutput *functionalRawFailurePackage, packageName string, line []byte) error {
 	if packageOutput.capHit {
 		return nil
 	}
@@ -226,20 +236,25 @@ func (capture *functionalRawFailureCapture) observeLine(line []byte) error {
 	if packageOutput.file == nil {
 		file, err := os.CreateTemp(capture.directory, ".raw-spool-*")
 		if err != nil {
-			capture.captureError = fmt.Errorf("create raw package spool for %s: %w", event.Package, err)
-			return capture.captureError
+			return capture.failLocked(fmt.Errorf("create raw package spool for %s: %w", packageName, err))
 		}
 		packageOutput.file = file
 		packageOutput.temporaryPath = file.Name()
 	}
 	if err := capture.write(packageOutput.file, line); err != nil {
-		capture.captureError = fmt.Errorf("write raw package spool for %s: %w", event.Package, err)
-		return capture.captureError
+		return capture.failLocked(fmt.Errorf("write raw package spool for %s: %w", packageName, err))
 	}
 	packageOutput.capturedBytes += int64(len(line))
 	packageOutput.capturedEvents++
 	capture.capturedBytes += int64(len(line))
 	return nil
+}
+
+func (capture *functionalRawFailureCapture) failLocked(err error) error {
+	if capture.captureError == nil {
+		capture.captureError = err
+	}
+	return capture.captureError
 }
 
 func writeRawFailureBytes(writer io.Writer, value []byte) error {
