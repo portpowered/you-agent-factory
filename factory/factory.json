@@ -1459,6 +1459,7 @@
       ],
       "type": "AGENT_RUN",
       "worker": "project-lead",
+      "outcomeFormat": "decision-envelope",
       "workPropagation": {
         "mode": "PRESERVE_INPUT"
       }
@@ -1675,7 +1676,8 @@
         }
       ],
       "type": "AGENT_RUN",
-      "worker": "ideafier"
+      "worker": "ideafier",
+      "outcomeFormat": "decision-envelope"
     },
     {
       "id": "plan",
@@ -2214,6 +2216,7 @@
       "name": "project-lead-checkin",
       "type": "AGENT_RUN",
       "behavior": "CRON",
+      "outcomeFormat": "decision-envelope",
       "cron": {
         "schedule": "0 * * * *"
       },

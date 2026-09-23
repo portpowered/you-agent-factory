@@ -20,6 +20,12 @@ you docs batch-inputs
 The example JSON uses the canonical `FACTORY_REQUEST_BATCH` shape from
 `you docs batch-inputs`:
 
+* the batch file passed to `you submit batch` is the raw request object; it is
+  not wrapped in `request`
+* Project Leads and the Portfolio Supervisor submit that file through the CLI,
+  check the accepted Work IDs, and return only a decision envelope from their
+  workstation; their final response does not submit Work
+
 * submit 3-5 `idea` work items per batch
 * submit one loopback `thoughts` work item
 * make the loopback depend on the ideas through `DEPENDS_ON` relations

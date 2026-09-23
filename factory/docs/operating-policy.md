@@ -41,6 +41,13 @@ also trigger it for a significant exception. Project cycle completion and
 ordinary child Work completion are handled by the Project Lead and the inner
 graph; they do not themselves require an immediate portfolio-wide pass.
 
+The supervisor and Project Leads submit new Work using the explicit-session
+`you submit batch` CLI. Each batch is dry-run, submitted with a stable request
+ID, and checked against the returned Work IDs and live Work list. Their final
+workstation response is a decision envelope reporting that result, not a Work
+request. A failed or uncertain CLI submission cannot be reported as accepted
+Work; inspect the request ID before retrying to avoid duplicates.
+
 A significant exception is one of:
 
 - a Factory Session, dispatch loop, provider, model, or required resource is
