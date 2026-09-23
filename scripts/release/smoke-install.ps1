@@ -2298,7 +2298,7 @@ function Invoke-LocalCandidateSmoke {
         $env:GOSUMDB = "off"
         $env:GOTOOLCHAIN = "local"
         $env:npm_config_offline = "true"
-        [void](Invoke-SmokeGit @("clone", "--local", "--no-checkout", "--", $sourcePath, $checkoutPath))
+        [void](Invoke-SmokeGit @("clone", "--local", "--no-hardlinks", "--no-checkout", "--", $sourcePath, $checkoutPath))
         [void](Invoke-SmokeGit @("-C", $checkoutPath, "checkout", "--detach", $sourceIdentity.commit))
         $gitDirectory = Get-Item -LiteralPath (Join-Path $checkoutPath ".git") -Force -ErrorAction Stop
         if (-not $gitDirectory.PSIsContainer) {

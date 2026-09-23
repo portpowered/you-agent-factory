@@ -567,7 +567,7 @@ func TestLocalAICandidateGitCapturesCloneProgress(t *testing.T) {
 	harnessPath := filepath.Join(tempDir, "clone.ps1")
 	harness := fmt.Sprintf(`
 . %s -InstallDir %s
-$result = Invoke-SmokeGit @('clone', '--local', '--no-checkout', '--', %s, %s)
+$result = Invoke-SmokeGit @('clone', '--local', '--no-hardlinks', '--no-checkout', '--', %s, %s)
 if (-not (Test-Path -LiteralPath %s -PathType Container)) { throw 'clone directory was not created' }
 if ([string]::IsNullOrWhiteSpace($result)) { throw 'clone progress was not retained' }
 `,
