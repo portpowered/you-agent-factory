@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -95,6 +96,7 @@ func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
 	if response.RequestId == "" || response.TraceId == "" {
 		t.Fatalf("local TTS invocation identity = request %q trace %q, want non-empty values", response.RequestId, response.TraceId)
 	}
+	assertPackagedTTSNoWorkerHostOverride(t, launcher.LastStartSpec(t), "successful invocation")
 	if backend.CallCount() != 0 {
 		t.Fatalf("generic Models TTS invocation count = %d, want zero private-route fallback calls", backend.CallCount())
 	}
@@ -107,6 +109,56 @@ func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
 	if len(ttsCalls) != 1 || ttsCalls[0].Method != "TTS" || ttsCalls[0].Text != text {
 		t.Fatalf("private TTS calls = %#v, want one exact text request", ttsCalls)
 	}
+}
+
+func TestPackagedTTSManagedHostStartupFailureDoesNotReturnAudio(t *testing.T) {
+	t.Parallel()
+
+	const text = "This TTS request must fail if the managed host cannot start."
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedTTSFactoryName)
+	cacheDir := t.TempDir()
+	writePackagedTTSReadyModelCache(t, homeDir, cacheDir)
+	launcher := &packagedTTSModelHostLauncher{
+		endpoint:     "http://127.0.0.1:50051",
+		startFailure: errors.New("fixture managed host startup failure"),
+	}
+	backend := newPackagedTTSModelsBackend([]byte(packagedTTSFakeAudioFixture))
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--named", factorydefinitions.PackagedTTSFactoryName,
+		"--no-record",
+		"--output", "primary",
+		"--to", text,
+	})
+	inputs.Input.Env = append(os.Environ(),
+		"HOME="+homeDir,
+		"USERPROFILE="+homeDir,
+		run.ModelCacheDirEnvironment+"="+cacheDir,
+	)
+	inputs.Input.WorkingDirectory = t.TempDir()
+
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelResolveBackendArtifact: func(
+			context.Context,
+			serviceedges.ModelBackendArtifactSelectionRequest,
+		) (serviceedges.ModelBackendArtifactSelection, error) {
+			return packagedTTSPinnedBackendSelection(), nil
+		},
+		ModelHostProcessLauncher: launcher,
+		ModelInvocationBackend:   backend.Invoke,
+	})
+	support.CleanupProcess(t, process)
+	err := process.Execute(inputs.Input)
+	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
+	if err == nil || response.Status != factoryapi.InvocationTerminalStatusFailed || response.PrimaryResult != nil {
+		t.Fatalf("managed host startup failure = error %v, response %#v; want failed invocation without audio", err, response)
+	}
+	if backend.CallCount() != 0 || launcher.StartCount() != 1 || launcher.StopCount() != 0 {
+		t.Fatalf("managed host startup failure effects = backend calls %d, starts %d, stops %d; want no inference and one failed start", backend.CallCount(), launcher.StartCount(), launcher.StopCount())
+	}
+	assertPackagedTTSNoWorkerHostOverride(t, launcher.LastStartSpec(t), "failed startup")
 }
 
 type packagedTTSModelsBackend struct {
@@ -189,15 +241,17 @@ func (backend *packagedTTSModelsBackend) LastRequest(t testing.TB) models.Invoke
 }
 
 type packagedTTSModelHostLauncher struct {
-	mu       sync.Mutex
-	endpoint string
-	starts   int
-	stops    int
+	mu           sync.Mutex
+	endpoint     string
+	startFailure error
+	starts       int
+	stops        int
+	specs        []serviceedges.HostProcessStartSpec
 }
 
 func (launcher *packagedTTSModelHostLauncher) Start(
-	context.Context,
-	serviceedges.HostProcessStartSpec,
+	_ context.Context,
+	spec serviceedges.HostProcessStartSpec,
 ) (interface {
 	HealthEndpoint() string
 	Wait() error
@@ -205,7 +259,13 @@ func (launcher *packagedTTSModelHostLauncher) Start(
 }, error) {
 	launcher.mu.Lock()
 	launcher.starts++
+	launcher.specs = append(launcher.specs, clonePackagedTTSHostStartSpec(spec))
+	startFailure := launcher.startFailure
+	launcher.startFailure = nil
 	launcher.mu.Unlock()
+	if startFailure != nil {
+		return nil, startFailure
+	}
 	return &packagedTTSModelHostProcess{
 		endpoint: launcher.endpoint,
 		stopped:  make(chan struct{}),
@@ -251,6 +311,33 @@ func (launcher *packagedTTSModelHostLauncher) StopCount() int {
 	launcher.mu.Lock()
 	defer launcher.mu.Unlock()
 	return launcher.stops
+}
+
+func (launcher *packagedTTSModelHostLauncher) LastStartSpec(t testing.TB) serviceedges.HostProcessStartSpec {
+	t.Helper()
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	if len(launcher.specs) == 0 {
+		t.Fatal("managed model host launch spec was not observed")
+	}
+	return clonePackagedTTSHostStartSpec(launcher.specs[len(launcher.specs)-1])
+}
+
+func assertPackagedTTSNoWorkerHostOverride(
+	t *testing.T,
+	spec serviceedges.HostProcessStartSpec,
+	label string,
+) {
+	t.Helper()
+	if spec.Command != "" || len(spec.Args) != 0 || spec.HealthEndpoint != "" {
+		t.Fatalf("%s host launch override = command %q args %#v endpoint %q; want Models-owned launch", label, spec.Command, spec.Args, spec.HealthEndpoint)
+	}
+}
+
+func clonePackagedTTSHostStartSpec(spec serviceedges.HostProcessStartSpec) serviceedges.HostProcessStartSpec {
+	spec.Args = append([]string(nil), spec.Args...)
+	spec.Env = append([]string(nil), spec.Env...)
+	return spec
 }
 
 type packagedTTSHostProtocolNegotiator struct{}
