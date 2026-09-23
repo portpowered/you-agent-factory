@@ -96,14 +96,81 @@ export function validateTtsCleanInstallWorkflowContract({ workflow, makefile } =
 	return { name: "tts-clean-install-workflow", status: "pass" };
 }
 
+/**
+ * Keep bounded raw failure evidence in the always-run functional artifact.
+ * This contract protects the diagnostic output reviewers download from CI.
+ */
+export function validateFunctionalDiagnosticsArtifactWorkflowContract({ workflow } = {}) {
+	if (typeof workflow !== "string") {
+		throw new Error("functional diagnostics workflow contract requires workflow text");
+	}
+
+	const functionalJob = workflowJobSection(workflow, "backend-coverage");
+	const verdictMarker = "      - name: Report functional coverage verdict";
+	const uploadMarker = "      - name: Upload functional test diagnostics";
+	const verdictOffset = functionalJob.indexOf(verdictMarker);
+	const uploadOffset = functionalJob.indexOf(uploadMarker);
+	if (verdictOffset < 0) {
+		throw new Error("workflow contract is missing the functional coverage verdict step");
+	}
+	if (uploadOffset < 0) {
+		throw new Error("workflow contract is missing the functional diagnostics upload step");
+	}
+	if (uploadOffset <= verdictOffset) {
+		throw new Error("workflow contract requires functional diagnostics upload after the coverage verdict");
+	}
+
+	const nextStepOffset = functionalJob.indexOf("\n      - name:", uploadOffset + uploadMarker.length);
+	const uploadStep = functionalJob.slice(uploadOffset, nextStepOffset < 0 ? undefined : nextStepOffset);
+	requireWorkflowMatch(
+		uploadStep,
+		/^        if: always\(\) && matrix\.suite == 'functional'\s*$/m,
+		"functional diagnostics upload must run after failures and only for the functional matrix row",
+	);
+	requireWorkflowMatch(
+		uploadStep,
+		/^        uses: actions\/upload-artifact@v4\s*$/m,
+		"functional diagnostics must use the pinned artifact action",
+	);
+	requireWorkflowMatch(
+		uploadStep,
+		/^          name: functional-test-diagnostics\s*$/m,
+		"raw evidence must join the existing functional diagnostics artifact",
+	);
+	requireWorkflowMatch(
+		uploadStep,
+		/^            \.artifacts\/functional-test-viz\/raw-failures\/index\.json\s*$/m,
+		"functional diagnostics artifact must include the raw failure index",
+	);
+	requireWorkflowMatch(
+		uploadStep,
+		/^            \.artifacts\/functional-test-viz\/raw-failures\/\*\.jsonl\s*$/m,
+		"functional diagnostics artifact must include package-keyed raw failure files",
+	);
+	requireWorkflowMatch(
+		uploadStep,
+		/^          if-no-files-found: ignore\s*$/m,
+		"an all-green run must not fail when raw files are absent",
+	);
+	requireWorkflowMatch(
+		uploadStep,
+		/^          retention-days: 14\s*$/m,
+		"functional diagnostic retention must remain 14 days",
+	);
+
+	return { name: "functional-diagnostics-artifact-workflow", status: "pass" };
+}
+
 export function validateRepositoryWorkflowContracts({ repositoryRoot = process.cwd() } = {}) {
 	const root = resolve(repositoryRoot);
+	const workflow = readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8");
 	return {
 		contracts: [
 			validateTtsCleanInstallWorkflowContract({
-				workflow: readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8"),
+				workflow,
 				makefile: readFileSync(join(root, "Makefile"), "utf8"),
 			}),
+			validateFunctionalDiagnosticsArtifactWorkflowContract({ workflow }),
 		],
 	};
 }

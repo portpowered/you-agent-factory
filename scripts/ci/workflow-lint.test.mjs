@@ -5,7 +5,47 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
-import { discoverWorkflowFiles, runWorkflowLint } from "./workflow-lint.mjs";
+import {
+	discoverWorkflowFiles,
+	runWorkflowLint,
+	validateFunctionalDiagnosticsArtifactWorkflowContract,
+} from "./workflow-lint.mjs";
+
+test("functional diagnostics artifact uploads bounded raw failure evidence after the verdict", () => {
+	const workflow = `name: CI
+jobs:
+  backend-coverage:
+    steps:
+      - name: Report functional coverage verdict
+        if: always() && matrix.suite == 'functional'
+        run: bash scripts/ci/publish-functional-coverage-verdict.sh
+      - name: Upload functional test diagnostics
+        if: always() && matrix.suite == 'functional'
+        uses: actions/upload-artifact@v4
+        with:
+          name: functional-test-diagnostics
+          path: |
+            .artifacts/functional-test-viz/command.log
+            .artifacts/functional-test-viz/raw-failures/index.json
+            .artifacts/functional-test-viz/raw-failures/*.jsonl
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Finish
+        run: true
+`;
+
+	assert.deepEqual(validateFunctionalDiagnosticsArtifactWorkflowContract({ workflow }), {
+		name: "functional-diagnostics-artifact-workflow",
+		status: "pass",
+	});
+	assert.throws(
+		() =>
+			validateFunctionalDiagnosticsArtifactWorkflowContract({
+				workflow: workflow.replace("raw-failures/index.json\n", ""),
+			}),
+		/workflow contract failed: functional diagnostics artifact must include the raw failure index/,
+	);
+});
 
 test("the workflow lint runner passes every top-level YAML workflow to actionlint", async (t) => {
 	const root = await mkdtemp(join(tmpdir(), "workflow-lint-files-"));

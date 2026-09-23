@@ -484,6 +484,8 @@ jobs:
             .artifacts/functional-test-viz/gocoveragecheck-exit-code.txt
             .artifacts/functional-test-viz/functional-coverage-verdict.txt
             .artifacts/functional-test-viz/coverage-build-diagnostics.json
+            .artifacts/functional-test-viz/raw-failures/index.json
+            .artifacts/functional-test-viz/raw-failures/*.jsonl
             .artifacts/functional-test-viz/c09-critical-path/quarantine-status.txt
             .artifacts/functional-test-viz/c09-critical-path/coverage-status.txt
             .artifacts/functional-test-viz/c09-critical-path/critical-path-timing.txt
