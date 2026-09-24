@@ -333,6 +333,19 @@ you --server http://localhost:7437 worker-sessions stream --worker-session-id <w
 you --server http://localhost:7437 worker-sessions read --worker-session-id <worker-session-id>
 ```
 
+To inspect a saved recording without resuming its Factory or executing Work,
+read associations for one Work directly from the local recording file:
+
+```bash
+you worker-sessions history --recording <absolute-path> --session <factory-session-id> --work-id <work-id> --output json
+```
+
+The command is local-only. `--session` identifies the Factory Session recorded
+in the artifact header; the recorded event scope is read from the artifact.
+`AVAILABLE` includes the sorted Worker Session IDs, count, and incomplete
+dispatch IDs. `GAP`, `UNAVAILABLE`, and `WORK_NOT_FOUND` report an `errorCode`
+without returning a count or IDs that cannot be trusted.
+
 The unscoped top-level list is the fleet-wide view: it includes direct and
 Factory-originated observations across the process. Use `--scope direct`,
 `--scope factory`, or `--scope all` when an origin-specific view is needed.

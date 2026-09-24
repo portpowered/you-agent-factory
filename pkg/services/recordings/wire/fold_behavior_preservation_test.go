@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
@@ -70,6 +71,7 @@ func newWireFoldService(t *testing.T, ledger recordings.Ledger) recordings.Servi
 		os.Remove,
 		os.Rename,
 		os.ReadFile,
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)

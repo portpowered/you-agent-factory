@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
@@ -23,6 +24,8 @@ import (
 type Service struct {
 	readArtifact recordings.RecordingReadFile
 	projection   recordings.ProjectionService
+	logger       logging.Logger
+	clock        recordings.RecordingClock
 }
 
 var _ interface {
@@ -34,8 +37,15 @@ var _ interface {
 func New(
 	readArtifact recordings.RecordingReadFile,
 	projection recordings.ProjectionService,
+	logger logging.Logger,
+	clock recordings.RecordingClock,
 ) *Service {
-	return &Service{readArtifact: readArtifact, projection: projection}
+	return &Service{
+		readArtifact: readArtifact,
+		projection:   projection,
+		logger:       logging.EnsureLogger(logger),
+		clock:        clock,
+	}
 }
 
 // QueryHistoricalRecording reads and reduces only the selected artifact; it
@@ -60,6 +70,13 @@ func (service *Service) QueryHistoricalRecording(
 		}
 		return recordings.HistoricalRecordingQueryResult{}, historicalQueryError(kind, identity, "", err)
 	}
+	return service.queryHistoricalRecording(identity, payload)
+}
+
+func (service *Service) queryHistoricalRecording(
+	identity recordings.HistoricalRecordingIdentity,
+	payload []byte,
+) (recordings.HistoricalRecordingQueryResult, error) {
 	events, selectedTick, status, ignoredJSONPaths, err := decodeHistoricalArtifact(payload, identity)
 	if err != nil {
 		return recordings.HistoricalRecordingQueryResult{}, err

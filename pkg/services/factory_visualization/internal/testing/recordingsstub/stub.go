@@ -11,11 +11,17 @@ import (
 
 // Service implements recordings.Service and recordings.ProjectionService for tests.
 type Service struct {
+	historicalWorkerAssociationsReader
+
 	ReconstructWorldStateFn func(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error)
 	QuerySimpleDashboardFn  func(recordings.SimpleDashboardQueryRequest) (recordings.SimpleDashboardQueryResult, error)
 	ValidateReconnectFn     func(recordings.ValidateReconnectReplayRequest) error
 
 	DashboardData recordings.SimpleDashboardRenderData
+}
+
+type historicalWorkerAssociationsReader interface {
+	QueryHistoricalWorkerAssociations(recordings.HistoricalWorkerAssociationsRequest) (recordings.HistoricalWorkerAssociationsResult, error)
 }
 
 var (

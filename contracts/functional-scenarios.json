@@ -636,6 +636,21 @@
       ]
     },
     {
+      "stableId": "cli/you.worker-sessions.history",
+      "name": "you worker-sessions history",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/workers/recorded_history/history_test.go::TestWorkerSessionsHistoryCLIReportsTrustedRecordedAssociations",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
       "stableId": "cli/you.worker-sessions.interrupt",
       "name": "you worker-sessions interrupt",
       "interface": "cli",

@@ -167,6 +167,12 @@
       ]
     },
     {
+      "test": "tests/functional/workers/recorded_history/history_test.go::TestWorkerSessionsHistoryCLIReportsTrustedRecordedAssociations",
+      "stableIds": [
+        "cli/you.worker-sessions.history"
+      ]
+    },
+    {
       "test": "tests/functional/workers/transports/http/worker_sessions_invoke_continue_test.go::TestWorkerSessionRemoteInvokeObserveContinueUsesServerAfterDisconnect",
       "stableIds": [
         "sse/streamWorkerSessionEventsByTopLevelWorkerSessionId"

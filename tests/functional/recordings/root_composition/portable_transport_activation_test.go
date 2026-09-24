@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
@@ -176,6 +177,7 @@ func recordingsTransportActivationService(
 		edges.RecordingRemovePath,
 		edges.RecordingRenamePath,
 		edges.RecordingReadFile,
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("compose Recordings service for transport activation: %v", err)

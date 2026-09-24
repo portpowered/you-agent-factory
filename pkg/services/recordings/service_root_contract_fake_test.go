@@ -57,6 +57,17 @@ func (fake *peerRootServiceFake) QueryHistoricalRecording(
 	}
 }
 
+func (fake *peerRootServiceFake) QueryHistoricalWorkerAssociations(
+	request recordings.HistoricalWorkerAssociationsRequest,
+) (recordings.HistoricalWorkerAssociationsResult, error) {
+	return recordings.HistoricalWorkerAssociationsResult{
+		FactorySessionID: string(request.Recording.RecordingID),
+		WorkID:           request.WorkID,
+		State:            recordings.HistoricalWorkerAssociationsUnavailable,
+		ErrorCode:        "RECORDED_WORKER_HISTORY_UNAVAILABLE",
+	}, nil
+}
+
 func (fake *peerRootServiceFake) Append(
 	request recordings.AppendRecordedEventRequest,
 ) (recordings.AppendRecordedEventResult, error) {

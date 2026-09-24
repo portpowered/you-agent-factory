@@ -8,4 +8,5 @@ import recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 // state without consulting the live ledger.
 type Service interface {
 	QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error)
+	QueryHistoricalWorkerAssociations(recordings.HistoricalWorkerAssociationsRequest) (recordings.HistoricalWorkerAssociationsResult, error)
 }

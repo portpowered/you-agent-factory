@@ -549,6 +549,11 @@ type Service interface {
 	// published artifact and returns the detached canonical history and
 	// projections selected by that artifact.
 	QueryHistoricalRecording(HistoricalRecordingQueryRequest) (HistoricalRecordingQueryResult, error)
+
+	// QueryHistoricalWorkerAssociations returns Worker Sessions associated with
+	// one Work in an immutable recording. An empty Recording.Scope asks the
+	// historical reader to use the scope stored by the artifact.
+	QueryHistoricalWorkerAssociations(HistoricalWorkerAssociationsRequest) (HistoricalWorkerAssociationsResult, error)
 }
 
 // HistoricalRecordingIdentity identifies one durable recording and its
@@ -557,6 +562,36 @@ type HistoricalRecordingIdentity struct {
 	RecordingID RecordingID
 	Artifact    RecordingArtifactReference
 	Scope       CanonicalEventScope
+}
+
+// HistoricalWorkerAssociationsState describes whether a Work-scoped
+// association count can be trusted from the selected artifact.
+type HistoricalWorkerAssociationsState string
+
+const (
+	HistoricalWorkerAssociationsAvailable    HistoricalWorkerAssociationsState = "AVAILABLE"
+	HistoricalWorkerAssociationsGap          HistoricalWorkerAssociationsState = "GAP"
+	HistoricalWorkerAssociationsUnavailable  HistoricalWorkerAssociationsState = "UNAVAILABLE"
+	HistoricalWorkerAssociationsWorkNotFound HistoricalWorkerAssociationsState = "WORK_NOT_FOUND"
+)
+
+// HistoricalWorkerAssociationsRequest selects one recorded Factory Session
+// and Work. Recording.Scope may be empty when the artifact owns the scope.
+type HistoricalWorkerAssociationsRequest struct {
+	Recording HistoricalRecordingIdentity
+	WorkID    string
+}
+
+// HistoricalWorkerAssociationsResult contains trusted associations or an
+// explicit state explaining why a count cannot be supplied.
+type HistoricalWorkerAssociationsResult struct {
+	FactorySessionID      string
+	WorkID                string
+	State                 HistoricalWorkerAssociationsState
+	WorkerSessionIDs      []string
+	Count                 int
+	IncompleteDispatchIDs []string
+	ErrorCode             string
 }
 
 // HistoricalRecordingQueryRequest selects one immutable recording artifact.

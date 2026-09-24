@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
@@ -53,6 +54,7 @@ func newTestRecordingReplayArtifacts(t *testing.T) (recordings.Service, recordin
 		os.Remove,
 		os.Rename,
 		os.ReadFile,
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceWithProjectionAndEffects() error = %v", err)
@@ -83,6 +85,7 @@ func TestRecordingReplayArtifacts_ConstructionIsInert(t *testing.T) {
 		func(string) error { panicEffect("removePath"); return nil },
 		func(string, string) error { panicEffect("renamePath"); return nil },
 		func(string) ([]byte, error) { panicEffect("readFile"); return nil, nil },
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceWithProjectionAndEffects() error = %v", err)

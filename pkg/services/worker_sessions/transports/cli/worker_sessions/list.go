@@ -8,6 +8,8 @@ import (
 
 type ListConfig = workersessionscli.ListConfig
 type ListOperation = workersessionscli.ListOperation
+type HistoryConfig = workersessionscli.HistoryConfig
+type HistoryOperation = workersessionscli.HistoryOperation
 type ShowConfig = workersessionscli.ShowConfig
 type ShowOperation = workersessionscli.ShowOperation
 type ReadConfig = workersessionscli.ReadConfig

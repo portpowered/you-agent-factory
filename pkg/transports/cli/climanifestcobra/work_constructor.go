@@ -336,6 +336,7 @@ const workerSessionsPauseHandlerID = "you.worker-sessions.pause.handler"
 const workerSessionsResumeHandlerID = "you.worker-sessions.resume.handler"
 const workerSessionsCancelHandlerID = "you.worker-sessions.cancel.handler"
 const workerSessionsTerminateHandlerID = "you.worker-sessions.terminate.handler"
+const workerSessionsHistoryHandlerID = "you.worker-sessions.history.handler"
 
 var workerSessionsRunnableCommands = []struct {
 	id        string
@@ -349,6 +350,7 @@ var workerSessionsRunnableCommands = []struct {
 	{id: "you.worker-sessions.cancel", handlerID: workerSessionsCancelHandlerID},
 	{id: "you.worker-sessions.terminate", handlerID: workerSessionsTerminateHandlerID},
 	{id: "you.worker-sessions.list", handlerID: workerSessionsListHandlerID},
+	{id: "you.worker-sessions.history", handlerID: workerSessionsHistoryHandlerID},
 	{id: "you.worker-sessions.show", handlerID: workerSessionsShowHandlerID},
 	{id: "you.worker-sessions.read", handlerID: workerSessionsReadHandlerID},
 	{id: "you.worker-sessions.stream", handlerID: workerSessionsStreamHandlerID},
@@ -408,6 +410,7 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 		{workerSessionsCancelHandlerID, registered.cancel},
 		{workerSessionsTerminateHandlerID, registered.terminate},
 		{workerSessionsListHandlerID, registered.list},
+		{workerSessionsHistoryHandlerID, registered.history},
 		{workerSessionsShowHandlerID, registered.show},
 		{workerSessionsReadHandlerID, registered.read},
 		{workerSessionsStreamHandlerID, registered.stream},
@@ -438,6 +441,7 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 			workerSessionsCancelHandlerID:    true,
 			workerSessionsTerminateHandlerID: true,
 			workerSessionsListHandlerID:      true,
+			workerSessionsHistoryHandlerID:   true,
 			workerSessionsShowHandlerID:      true,
 			workerSessionsReadHandlerID:      true,
 			workerSessionsStreamHandlerID:    true,
@@ -460,7 +464,7 @@ func NewWorkerSessionsFamilyCommandFromManifest(
 }
 
 type workerSessionsHandlers struct {
-	invoke, continueOperation, interrupt, pause, resume, cancel, terminate, list, show, read, stream commandregistry.CommandHandlers
+	invoke, continueOperation, interrupt, pause, resume, cancel, terminate, list, history, show, read, stream commandregistry.CommandHandlers
 }
 
 func lookupWorkerSessionsHandlers(registry *commandregistry.Registry) (workerSessionsHandlers, error) {
@@ -481,7 +485,7 @@ func lookupWorkerSessionsHandlers(registry *commandregistry.Registry) (workerSes
 	return workerSessionsHandlers{
 		invoke: found[0], continueOperation: found[1], interrupt: found[2],
 		pause: found[3], resume: found[4], cancel: found[5], terminate: found[6],
-		list: found[7], show: found[8], read: found[9], stream: found[10],
+		list: found[7], history: found[8], show: found[9], read: found[10], stream: found[11],
 	}, nil
 }
 
