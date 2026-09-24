@@ -11,11 +11,17 @@ import (
 
 // Service implements recordings.Service and recordings.ProjectionService for tests.
 type Service struct {
+	historicalWorkerAssociationsReader
+
 	ReconstructWorldStateFn func(recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error)
 	QuerySimpleDashboardFn  func(recordings.SimpleDashboardQueryRequest) (recordings.SimpleDashboardQueryResult, error)
 	ValidateReconnectFn     func(recordings.ValidateReconnectReplayRequest) error
 
 	DashboardData recordings.SimpleDashboardRenderData
+}
+
+type historicalWorkerAssociationsReader interface {
+	QueryHistoricalWorkerAssociations(recordings.HistoricalWorkerAssociationsRequest) (recordings.HistoricalWorkerAssociationsResult, error)
 }
 
 var (
@@ -30,17 +36,6 @@ func (stub *Service) QueryHistoricalRecording(
 		Kind:        recordings.HistoricalRecordingQueryErrorUnavailable,
 		RecordingID: request.Recording.RecordingID,
 	}
-}
-
-func (stub *Service) QueryHistoricalWorkerAssociations(
-	request recordings.HistoricalWorkerAssociationsRequest,
-) (recordings.HistoricalWorkerAssociationsResult, error) {
-	return recordings.HistoricalWorkerAssociationsResult{
-		FactorySessionID: string(request.Recording.RecordingID),
-		WorkID:           request.WorkID,
-		State:            recordings.HistoricalWorkerAssociationsUnavailable,
-		ErrorCode:        "RECORDED_WORKER_HISTORY_UNAVAILABLE",
-	}, nil
 }
 
 func (stub *Service) ReconstructWorldState(

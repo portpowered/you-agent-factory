@@ -56,26 +56,8 @@ func NewHistory(reader HistoricalWorkerAssociationsReader) HistoryOperation {
 				nil,
 			))
 		}
-		if config.Recording == "" || !filepath.IsAbs(config.Recording) {
-			return emitHistoryCLIError(config, jsonOutput, newCLIError(
-				"WORKER_SESSION_HISTORY_INVALID",
-				"--recording must be an absolute local file path",
-				nil,
-			))
-		}
-		if config.SessionID == "" || config.WorkID == "" {
-			return emitHistoryCLIError(config, jsonOutput, newCLIError(
-				"WORKER_SESSION_HISTORY_INVALID",
-				"--session and --work-id are required",
-				nil,
-			))
-		}
-		if !jsonOutput {
-			return emitHistoryCLIError(config, false, newCLIError(
-				"WORKER_SESSION_HISTORY_OUTPUT_INVALID",
-				"recorded Worker Session history supports only --output json",
-				nil,
-			))
+		if err := validateHistoryConfig(config, jsonOutput); err != nil {
+			return emitHistoryCLIError(config, jsonOutput, err)
 		}
 		result, err := reader.QueryHistoricalWorkerAssociations(recordings.HistoricalWorkerAssociationsRequest{
 			Recording: recordings.HistoricalRecordingIdentity{
@@ -125,6 +107,31 @@ func NewHistory(reader HistoricalWorkerAssociationsReader) HistoryOperation {
 		}
 		return nil
 	}
+}
+
+func validateHistoryConfig(config HistoryConfig, jsonOutput bool) error {
+	if config.Recording == "" || !filepath.IsAbs(config.Recording) {
+		return newCLIError(
+			"WORKER_SESSION_HISTORY_INVALID",
+			"--recording must be an absolute local file path",
+			nil,
+		)
+	}
+	if config.SessionID == "" || config.WorkID == "" {
+		return newCLIError(
+			"WORKER_SESSION_HISTORY_INVALID",
+			"--session and --work-id are required",
+			nil,
+		)
+	}
+	if !jsonOutput {
+		return newCLIError(
+			"WORKER_SESSION_HISTORY_OUTPUT_INVALID",
+			"recorded Worker Session history supports only --output json",
+			nil,
+		)
+	}
+	return nil
 }
 
 func emitHistoryCLIError(config HistoryConfig, jsonOutput bool, err error) error {

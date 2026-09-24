@@ -34,7 +34,3 @@ const StreamModeConflictCode = workersessionscli.StreamModeConflictCode
 func NewStreamModeConflictError() *CLIError {
 	return workersessionscli.NewStreamModeConflictError()
 }
-
-func NewHistory(reader workersessionscli.HistoricalWorkerAssociationsReader) HistoryOperation {
-	return workersessionscli.NewHistory(reader)
-}

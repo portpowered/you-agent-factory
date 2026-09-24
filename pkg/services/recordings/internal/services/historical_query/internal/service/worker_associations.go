@@ -3,7 +3,6 @@ package service
 import (
 	"encoding/json"
 	"errors"
-	"os"
 	"slices"
 	"strings"
 
@@ -20,28 +19,41 @@ import (
 func (service *Service) QueryHistoricalWorkerAssociations(
 	request recordings.HistoricalWorkerAssociationsRequest,
 ) (recordings.HistoricalWorkerAssociationsResult, error) {
+	identity, base, err := historicalWorkerAssociationRequest(request)
+	if err != nil {
+		return recordings.HistoricalWorkerAssociationsResult{}, err
+	}
+	return service.queryHistoricalWorkerAssociations(identity, base)
+}
+
+func historicalWorkerAssociationRequest(
+	request recordings.HistoricalWorkerAssociationsRequest,
+) (recordings.HistoricalRecordingIdentity, recordings.HistoricalWorkerAssociationsResult, error) {
 	identity, err := validHistoricalRecordingIdentity(request.Recording)
+	if err != nil {
+		return recordings.HistoricalRecordingIdentity{}, recordings.HistoricalWorkerAssociationsResult{}, err
+	}
 	workID := strings.TrimSpace(request.WorkID)
-	if err != nil || workID == "" {
-		if err != nil {
-			return recordings.HistoricalWorkerAssociationsResult{}, err
-		}
-		return recordings.HistoricalWorkerAssociationsResult{}, historicalQueryError(
+	if workID == "" {
+		return recordings.HistoricalRecordingIdentity{}, recordings.HistoricalWorkerAssociationsResult{}, historicalQueryError(
 			recordings.HistoricalRecordingQueryErrorInvalidRequest, identity, "", nil,
 		)
 	}
-	base := recordings.HistoricalWorkerAssociationsResult{
+	return identity, recordings.HistoricalWorkerAssociationsResult{
 		FactorySessionID: string(identity.RecordingID),
 		WorkID:           workID,
-	}
+	}, nil
+}
+
+func (service *Service) queryHistoricalWorkerAssociations(
+	identity recordings.HistoricalRecordingIdentity,
+	base recordings.HistoricalWorkerAssociationsResult,
+) (recordings.HistoricalWorkerAssociationsResult, error) {
 	if service == nil || service.readArtifact == nil || service.projection == nil {
 		return unavailableWorkerAssociations(base), nil
 	}
 	payload, err := service.readArtifact(string(identity.Artifact))
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return unavailableWorkerAssociations(base), nil
-		}
 		return unavailableWorkerAssociations(base), nil
 	}
 	if identity.Scope.FactorySessionID == "" {
@@ -53,12 +65,26 @@ func (service *Service) QueryHistoricalWorkerAssociations(
 	}
 	history, err := service.queryHistoricalRecording(identity, payload)
 	if err != nil {
-		var queryErr *recordings.HistoricalRecordingQueryError
-		if errors.As(err, &queryErr) && queryErr.Kind == recordings.HistoricalRecordingQueryErrorInvalidRequest {
-			return recordings.HistoricalWorkerAssociationsResult{}, err
-		}
-		return unavailableWorkerAssociations(base), nil
+		return historicalWorkerAssociationQueryError(base, err)
 	}
+	return historicalWorkerAssociationResult(base, history)
+}
+
+func historicalWorkerAssociationQueryError(
+	base recordings.HistoricalWorkerAssociationsResult,
+	err error,
+) (recordings.HistoricalWorkerAssociationsResult, error) {
+	var queryErr *recordings.HistoricalRecordingQueryError
+	if errors.As(err, &queryErr) && queryErr.Kind == recordings.HistoricalRecordingQueryErrorInvalidRequest {
+		return recordings.HistoricalWorkerAssociationsResult{}, err
+	}
+	return unavailableWorkerAssociations(base), nil
+}
+
+func historicalWorkerAssociationResult(
+	base recordings.HistoricalWorkerAssociationsResult,
+	history recordings.HistoricalRecordingQueryResult,
+) (recordings.HistoricalWorkerAssociationsResult, error) {
 	if historicalRecordingHasGap(history.Status) {
 		base.State = recordings.HistoricalWorkerAssociationsGap
 		base.ErrorCode = "RECORDED_WORKER_HISTORY_GAP"
@@ -69,13 +95,13 @@ func (service *Service) QueryHistoricalWorkerAssociations(
 	}
 
 	workIDsByDispatch, knownWorkIDs := historicalDispatchWorkIDs(history.Events)
-	if _, found := knownWorkIDs[workID]; !found {
+	if _, found := knownWorkIDs[base.WorkID]; !found {
 		base.State = recordings.HistoricalWorkerAssociationsWorkNotFound
 		base.ErrorCode = "WORK_NOT_FOUND"
 		return base, nil
 	}
 	for _, dispatch := range history.Dispatches {
-		if dispatch.Association == nil || !slices.Contains(workIDsByDispatch[dispatch.ID], workID) {
+		if dispatch.Association == nil || !slices.Contains(workIDsByDispatch[dispatch.ID], base.WorkID) {
 			continue
 		}
 		base.WorkerSessionIDs = append(base.WorkerSessionIDs, dispatch.Association.WorkerSessionID)

@@ -59,18 +59,30 @@ func TestWorkerSessionsHistoryCLIReportsTrustedRecordedAssociations(t *testing.T
 			t.Errorf("controlled submission recorder calls = %d, want 0", got)
 		}
 	})
+	for _, testCase := range historyTestCases(t) {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			runHistoryCase(t, process, testCase)
+		})
+	}
+}
 
-	tests := []struct {
-		name       string
-		workID     string
-		fileName   string
-		artifact   []byte
-		wantStatus string
-		wantCode   string
-		wantCount  *int
-		wantIDs    []string
-		wantOpen   []string
-	}{
+type historyTestCase struct {
+	name       string
+	workID     string
+	fileName   string
+	artifact   []byte
+	wantStatus string
+	wantCode   string
+	wantCount  *int
+	wantIDs    []string
+	wantOpen   []string
+}
+
+func historyTestCases(t *testing.T) []historyTestCase {
+	t.Helper()
+	return []historyTestCase{
 		{
 			name:   "F1 recorded associations are sorted and incomplete dispatches are identified",
 			workID: "work-history-1", fileName: "available.jsonl",
@@ -133,51 +145,47 @@ func TestWorkerSessionsHistoryCLIReportsTrustedRecordedAssociations(t *testing.T
 			wantStatus: "GAP", wantCode: "RECORDED_WORKER_HISTORY_GAP",
 		},
 	}
-	for _, testCase := range tests {
-		testCase := testCase
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-			home := t.TempDir()
-			workingDirectory := t.TempDir()
-			recordingPath := filepath.Join(t.TempDir(), testCase.fileName)
-			if testCase.artifact != nil {
-				if err := os.WriteFile(recordingPath, testCase.artifact, 0o600); err != nil {
-					t.Fatalf("write recording fixture: %v", err)
-				}
-			}
-			inputs := support.FakeInputs(context.Background(), []string{
-				"you", "worker-sessions", "history", "--recording", recordingPath,
-				"--session", historyRecordingSessionID, "--work-id", testCase.workID, "--output", "json",
-			})
-			inputs.Input.Env = historyEnvironment(home)
-			inputs.Input.WorkingDirectory = workingDirectory
-			if err := process.Execute(inputs.Input); err != nil {
-				t.Fatalf("Process.Execute: %v\nstdout: %s\nstderr: %s", err, inputs.Stdout(), inputs.Stderr())
-			}
-			assertHistoryRecordingUnchanged(t, recordingPath, testCase.artifact)
-			var result historyCLIResult
-			if err := json.Unmarshal([]byte(inputs.Stdout()), &result); err != nil {
-				t.Fatalf("decode public history JSON %q: %v", inputs.Stdout(), err)
-			}
-			if result.FactorySessionID != historyRecordingSessionID || result.WorkID != testCase.workID || result.Status != testCase.wantStatus {
-				t.Fatalf("public result identity/status = %#v, want session=%s work=%s status=%s", result, historyRecordingSessionID, testCase.workID, testCase.wantStatus)
-			}
-			if result.ErrorCode != testCase.wantCode {
-				t.Fatalf("public errorCode = %q, want %q", result.ErrorCode, testCase.wantCode)
-			}
-			if testCase.wantCount == nil {
-				if result.Count != nil || result.WorkerSessionIDs != nil || result.IncompleteDispatchIDs != nil {
-					t.Fatalf("untrusted association result contains a count or IDs: %#v", result)
-				}
-			} else {
-				if result.Count == nil || *result.Count != *testCase.wantCount {
-					t.Fatalf("public count = %v, want %d", result.Count, *testCase.wantCount)
-				}
-				if !reflect.DeepEqual(result.WorkerSessionIDs, testCase.wantIDs) || !reflect.DeepEqual(result.IncompleteDispatchIDs, testCase.wantOpen) {
-					t.Fatalf("public association sets = %#v/%#v, want %#v/%#v", result.WorkerSessionIDs, result.IncompleteDispatchIDs, testCase.wantIDs, testCase.wantOpen)
-				}
-			}
-		})
+}
+func runHistoryCase(t *testing.T, process support.ApplicationProcess, testCase historyTestCase) {
+	home := t.TempDir()
+	workingDirectory := t.TempDir()
+	recordingPath := filepath.Join(t.TempDir(), testCase.fileName)
+	if testCase.artifact != nil {
+		if err := os.WriteFile(recordingPath, testCase.artifact, 0o600); err != nil {
+			t.Fatalf("write recording fixture: %v", err)
+		}
+	}
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you", "worker-sessions", "history", "--recording", recordingPath,
+		"--session", historyRecordingSessionID, "--work-id", testCase.workID, "--output", "json",
+	})
+	inputs.Input.Env = historyEnvironment(home)
+	inputs.Input.WorkingDirectory = workingDirectory
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute: %v\nstdout: %s\nstderr: %s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	assertHistoryRecordingUnchanged(t, recordingPath, testCase.artifact)
+	var result historyCLIResult
+	if err := json.Unmarshal([]byte(inputs.Stdout()), &result); err != nil {
+		t.Fatalf("decode public history JSON %q: %v", inputs.Stdout(), err)
+	}
+	if result.FactorySessionID != historyRecordingSessionID || result.WorkID != testCase.workID || result.Status != testCase.wantStatus {
+		t.Fatalf("public result identity/status = %#v, want session=%s work=%s status=%s", result, historyRecordingSessionID, testCase.workID, testCase.wantStatus)
+	}
+	if result.ErrorCode != testCase.wantCode {
+		t.Fatalf("public errorCode = %q, want %q", result.ErrorCode, testCase.wantCode)
+	}
+	if testCase.wantCount == nil {
+		if result.Count != nil || result.WorkerSessionIDs != nil || result.IncompleteDispatchIDs != nil {
+			t.Fatalf("untrusted association result contains a count or IDs: %#v", result)
+		}
+	} else {
+		if result.Count == nil || *result.Count != *testCase.wantCount {
+			t.Fatalf("public count = %v, want %d", result.Count, *testCase.wantCount)
+		}
+		if !reflect.DeepEqual(result.WorkerSessionIDs, testCase.wantIDs) || !reflect.DeepEqual(result.IncompleteDispatchIDs, testCase.wantOpen) {
+			t.Fatalf("public association sets = %#v/%#v, want %#v/%#v", result.WorkerSessionIDs, result.IncompleteDispatchIDs, testCase.wantIDs, testCase.wantOpen)
+		}
 	}
 }
 

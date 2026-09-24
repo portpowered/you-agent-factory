@@ -9688,7 +9688,8 @@
         "examples": [
           "you worker-sessions history --recording C:/copy/source-frozen.jsonl --session a6925b33-db77-4e62-ab6f-2a8d06783e5e --work-id work-task-8 --output json"
         ],
-        "visibility": "public"
+        "visibility": "public",
+        "sourceHash": "10e45baa911d9b316b4e7b5f53efa6b399289d314e816b5c2ee20aac406ee763"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
