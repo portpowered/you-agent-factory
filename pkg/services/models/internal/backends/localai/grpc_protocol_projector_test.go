@@ -3,12 +3,19 @@ package localai
 import (
 	"bytes"
 	"context"
+	"errors"
+	"net"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	grpcgo "google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
@@ -239,4 +246,125 @@ func containsWireField(t *testing.T, payload []byte, want protowire.Number) bool
 		}
 	}
 	return false
+}
+
+func TestPinnedGRPCHostNegotiatorPropagatesDeadlineToBlockedLoadModel(t *testing.T) {
+	t.Parallel()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for controlled LocalAI peer: %v", err)
+	}
+	backend := &blockedLoadModelBackend{
+		health: make(chan time.Time, 1), loadModel: make(chan time.Time, 1),
+		cancelled: make(chan time.Time, 1),
+	}
+	server := grpcgo.NewServer()
+	server.RegisterService(&localAIBackendServiceDesc, backend)
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- server.Serve(listener) }()
+	t.Cleanup(func() {
+		server.Stop()
+		_ = listener.Close()
+		select {
+		case <-serveDone:
+		case <-time.After(time.Second):
+			t.Errorf("controlled LocalAI gRPC server did not stop")
+		}
+	})
+
+	const readinessBudget = 150 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), readinessBudget)
+	defer cancel()
+	deadlineAt, _ := ctx.Deadline()
+	modelPath := filepath.Join(t.TempDir(), "fixture.gguf")
+	negotiator := NewPinnedGRPCHostProtocolNegotiator(platformgrpc.NetworkDialer{})
+	resultCh := make(chan protocolNegotiationOutcome, 1)
+	go func() {
+		result, negotiateErr := negotiator.Negotiate(
+			ctx,
+			listener.Addr().String(),
+			modelseffects.HostProtocolNegotiationRequest{Configuration: modelseffects.ResolvedHostConfiguration{
+				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+				Backend:         "localai-llamacpp",
+				ModelName:       models.BuiltInModelNameEmbed,
+				ModelPath:       modelPath,
+			}},
+		)
+		resultCh <- protocolNegotiationOutcome{result: result, err: negotiateErr}
+	}()
+
+	healthAt := awaitWitnessSignal(t, backend.health, resultCh, "Health")
+	loadModelAt := awaitWitnessSignal(t, backend.loadModel, resultCh, "LoadModel")
+	outcome := awaitProtocolNegotiationOutcome(t, resultCh)
+	serverCanceledAt := awaitWitnessSignal(t, backend.cancelled, resultCh, "LoadModel cancellation")
+	if outcome.result.Ready || !errors.Is(outcome.err, context.DeadlineExceeded) {
+		t.Fatalf("Negotiate at the readiness deadline = result %#v, error %v; want not-ready/context.DeadlineExceeded", outcome.result, outcome.err)
+	}
+	if !healthAt.Before(loadModelAt) || !loadModelAt.Before(deadlineAt) || serverCanceledAt.Before(deadlineAt) {
+		t.Fatalf("witness phase order is invalid: health=%s load_model=%s deadline=%s server_cancel=%s", healthAt, loadModelAt, deadlineAt, serverCanceledAt)
+	}
+	t.Logf("LOCALAI-PROTOCOL-DEADLINE endpoint=%s health=%s load_model=%s peer_deadline=%s server_cancel=%s result=%T ready=false", listener.Addr(), healthAt.UTC().Format(time.RFC3339Nano), loadModelAt.UTC().Format(time.RFC3339Nano), deadlineAt.UTC().Format(time.RFC3339Nano), serverCanceledAt.UTC().Format(time.RFC3339Nano), outcome.err)
+}
+
+func awaitProtocolNegotiationOutcome(
+	t *testing.T,
+	result <-chan protocolNegotiationOutcome,
+) protocolNegotiationOutcome {
+	t.Helper()
+	select {
+	case outcome := <-result:
+		return outcome
+	case <-time.After(3 * time.Second):
+		t.Fatal("LoadModel gRPC call did not return after readiness deadline")
+		return protocolNegotiationOutcome{}
+	}
+}
+
+type protocolNegotiationOutcome struct {
+	result modelseffects.HostProtocolNegotiationResult
+	err    error
+}
+
+func awaitWitnessSignal[T any](
+	t *testing.T,
+	signal <-chan T,
+	result <-chan protocolNegotiationOutcome,
+	phase string,
+) T {
+	t.Helper()
+	select {
+	case observed := <-signal:
+		return observed
+	case outcome := <-result:
+		t.Fatalf("Negotiate returned before %s was observed: result=%#v error=%v", phase, outcome.result, outcome.err)
+		var zero T
+		return zero
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for %s from controlled LocalAI peer", phase)
+		var zero T
+		return zero
+	}
+}
+
+type blockedLoadModelBackend struct {
+	health    chan time.Time
+	loadModel chan time.Time
+	cancelled chan time.Time
+}
+
+func (backend *blockedLoadModelBackend) Health(context.Context, *HealthMessage) (*Reply, error) {
+	backend.health <- time.Now()
+	return &Reply{}, nil
+}
+
+func (backend *blockedLoadModelBackend) LoadModel(ctx context.Context, _ *ModelOptions) (*Result, error) {
+	backend.loadModel <- time.Now()
+	<-ctx.Done()
+	backend.cancelled <- time.Now()
+	return nil, status.Error(codes.Canceled, "controlled LoadModel cancellation")
+}
+
+func (*blockedLoadModelBackend) Predict(context.Context, *PredictOptions) (*Reply, error) {
+	return nil, status.Error(codes.Unimplemented, "not used by readiness witness")
 }

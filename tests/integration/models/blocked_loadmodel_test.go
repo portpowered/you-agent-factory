@@ -98,7 +98,42 @@ type blockedReadinessOutcome struct {
 	at     time.Time
 }
 
+type blockedReadinessHarness struct {
+	helper          string
+	helperSHA       string
+	sourceHead      string
+	root            string
+	eventsPath      string
+	runtimeEvidence string
+	service         models.Service
+	scope           models.RuntimeScopeRef
+	launcher        *blockedReadinessProcessLauncher
+	watcher         *fsnotify.Watcher
+	ensureCh        chan blockedReadinessOutcome
+	ensureStartedAt time.Time
+	loadEvent       blockedReadinessEvent
+	loadObservedAt  time.Time
+}
+
+type blockedReadinessFixture struct {
+	root                string
+	cacheDirectory      string
+	port                string
+	endpoint            string
+	eventsPath          string
+	readyPath           string
+	preflightPath       string
+	runtimeEvidencePath string
+	preflight           blockedReadinessPreflight
+}
+
 func TestBlockedLoadModelStopsOwnedProcess(t *testing.T) {
+	witness := newBlockedReadinessHarness(t)
+	startBlockedReadinessCall(t, witness)
+	assertBlockedReadinessCompletion(t, witness)
+}
+
+func newBlockedReadinessHarness(t *testing.T) *blockedReadinessHarness {
 	helper, helperSHA := requireBlockedReadinessHelper(t)
 	sourceHead := strings.TrimSpace(os.Getenv(blockedReadinessHeadEnv))
 	if len(sourceHead) != 40 {
@@ -107,48 +142,15 @@ func TestBlockedLoadModelStopsOwnedProcess(t *testing.T) {
 	if _, err := hex.DecodeString(sourceHead); err != nil {
 		t.Fatalf("%s is not a hexadecimal source HEAD: %v", blockedReadinessHeadEnv, err)
 	}
-
-	root := t.TempDir()
-	cacheDirectory := filepath.Join(root, "cache")
-	writeBlockedReadinessCache(t, cacheDirectory)
-	port, err := reserveBlockedReadinessAddress()
-	if err != nil {
-		t.Fatalf("reserve OS-assigned loopback port: %v", err)
-	}
-	endpoint := "grpc://" + port
-	eventsPath := filepath.Join(root, "peer-events.jsonl")
-	readyPath := filepath.Join(root, "peer-ready.json")
-	preflightPath := filepath.Join(root, "preflight.json")
-	runtimeEvidencePath := filepath.Join(root, "runtime-evidence.jsonl")
-	preflight := blockedReadinessPreflight{
-		SourceHead: sourceHead, ASRMerge: "8f945b0eadcf9863821585c7f5edeb84d855f471",
-		Platform: runtime.GOOS + "/" + runtime.GOARCH, GoVersion: runtime.Version(),
-		Fixture: "blocked-host-helper-v1", HelperPath: helper, HelperSHA256: helperSHA,
-		Endpoint: endpoint, Port: port, ParentPID: os.Getpid(),
-		ProcessTree: []blockedReadinessNode{
-			{Role: "models-integration-test", PID: os.Getpid(), ParentPID: os.Getppid(), Image: os.Args[0]},
-			{Role: "owned-blocked-host-helper", ParentPID: os.Getpid(), Image: helper},
-		},
-		ReadinessBudgetSecond: int(blockedReadinessBudget / time.Second),
-		MaximumSeconds:        int(blockedReadinessMaximum / time.Second),
-		DownloadBudget:        0, PaidCalls: 0, AttemptBudget: 1, RetryBudget: 0,
-		FixtureWaitSeconds:   int(blockedReadinessWait / time.Second),
-		ReadinessCleanupSecs: int(blockedReadinessWait / time.Second),
-		TotalWitnessMaxSecs:  int((blockedReadinessMaximum + blockedReadinessWait) / time.Second),
-		NetworkPolicy:        "loopback only; Go module proxy disabled by invoking command",
-		StartedAtUTC:         time.Now().UTC().Format(time.RFC3339Nano),
-	}
-	if err := writeBlockedReadinessPreflight(preflightPath, preflight); err != nil {
-		t.Fatalf("write controlled witness preflight: %v", err)
-	}
-	t.Setenv(blockedRuntimeEvidenceEnv, runtimeEvidencePath)
+	fixture := newBlockedReadinessFixture(t, helper, helperSHA, sourceHead)
+	t.Setenv(blockedRuntimeEvidenceEnv, fixture.runtimeEvidencePath)
 	t.Setenv("HF_HUB_OFFLINE", "1")
 	t.Setenv("LOCALAI_OFFLINE", "1")
 	t.Setenv("HTTP_PROXY", "http://127.0.0.1:9")
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:9")
 	launcher := &blockedReadinessProcessLauncher{
-		preflight: preflight, preflightPath: preflightPath,
-		readyPath: readyPath,
+		preflight: fixture.preflight, preflightPath: fixture.preflightPath,
+		readyPath: fixture.readyPath,
 	}
 	service, err := appwire.NewModelsServiceForManagedProcessIntegration(serviceedges.Edges{
 		ModelInvocationGRPCDialer: platformgrpc.NetworkDialer{},
@@ -158,30 +160,16 @@ func TestBlockedLoadModelStopsOwnedProcess(t *testing.T) {
 		t.Fatalf("construct production Models service: %v", err)
 	}
 	opened, err := service.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
-		Config: models.RuntimeScopeConfig{
-			CacheDirectory: cacheDirectory,
-			Runtime: models.RuntimeConfig{
-				Workers: []models.RuntimeWorker{{
-					Name: "blocked-readiness-worker", Type: models.RuntimeWorkerTypeInference,
-					Model: blockedReadinessModel, ModelLocality: models.RuntimeModelLocalityLocal,
-					Command: helper,
-					Args: []string{
-						"--grpc-endpoint", endpoint,
-						"--fixture-endpoint", port,
-						"--events-file", eventsPath,
-						"--ready-file", readyPath,
-					},
-				}},
-				Resources: []models.RuntimeResource{{
-					Name: "blocked-readiness-cache", Type: models.RuntimeResourceTypeModel,
-					Capacity: 1, Model: blockedReadinessModel, Backend: "localai-llamacpp",
-					LoadPolicy: string(models.LoadPolicyOnDemand), Provider: "MODELSCOPE",
-				}},
-			},
-		},
+		Config: blockedReadinessRuntimeConfig(fixture.cacheDirectory, helper, fixture.endpoint, fixture.port, fixture.eventsPath, fixture.readyPath),
 	})
 	if err != nil {
 		t.Fatalf("open isolated Models runtime scope: %v", err)
+	}
+	witness := &blockedReadinessHarness{
+		helper: helper, helperSHA: helperSHA, sourceHead: sourceHead,
+		root: fixture.root, eventsPath: fixture.eventsPath,
+		runtimeEvidence: fixture.runtimeEvidencePath, service: service,
+		scope: opened.Scope, launcher: launcher,
 	}
 	t.Cleanup(func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), blockedReadinessWait)
@@ -195,101 +183,214 @@ func TestBlockedLoadModelStopsOwnedProcess(t *testing.T) {
 			_ = child.Stop(cleanupCtx)
 		}
 	})
+	return witness
+}
 
-	preflightWatcher, err := fsnotify.NewWatcher()
+func newBlockedReadinessFixture(
+	t *testing.T,
+	helper string,
+	helperSHA string,
+	sourceHead string,
+) blockedReadinessFixture {
+	t.Helper()
+	root := t.TempDir()
+	cacheDirectory := filepath.Join(root, "cache")
+	writeBlockedReadinessCache(t, cacheDirectory)
+	port, err := reserveBlockedReadinessAddress()
+	if err != nil {
+		t.Fatalf("reserve OS-assigned loopback port: %v", err)
+	}
+	fixture := blockedReadinessFixture{
+		root: root, cacheDirectory: cacheDirectory,
+		port: port, endpoint: "grpc://" + port,
+		eventsPath:          filepath.Join(root, "peer-events.jsonl"),
+		readyPath:           filepath.Join(root, "peer-ready.json"),
+		preflightPath:       filepath.Join(root, "preflight.json"),
+		runtimeEvidencePath: filepath.Join(root, "runtime-evidence.jsonl"),
+	}
+	fixture.preflight = blockedReadinessPreflight{
+		SourceHead: sourceHead, ASRMerge: "8f945b0eadcf9863821585c7f5edeb84d855f471",
+		Platform: runtime.GOOS + "/" + runtime.GOARCH, GoVersion: runtime.Version(),
+		Fixture: "blocked-host-helper-v1", HelperPath: helper, HelperSHA256: helperSHA,
+		Endpoint: fixture.endpoint, Port: port, ParentPID: os.Getpid(),
+		ProcessTree: []blockedReadinessNode{
+			{Role: "models-integration-test", PID: os.Getpid(), ParentPID: os.Getppid(), Image: os.Args[0]},
+			{Role: "owned-blocked-host-helper", ParentPID: os.Getpid(), Image: helper},
+		},
+		ReadinessBudgetSecond: int(blockedReadinessBudget / time.Second),
+		MaximumSeconds:        int(blockedReadinessMaximum / time.Second),
+		DownloadBudget:        0, PaidCalls: 0, AttemptBudget: 1, RetryBudget: 0,
+		FixtureWaitSeconds:   int(blockedReadinessWait / time.Second),
+		ReadinessCleanupSecs: int(blockedReadinessWait / time.Second),
+		TotalWitnessMaxSecs:  int((blockedReadinessMaximum + blockedReadinessWait) / time.Second),
+		NetworkPolicy:        "loopback only; Go module proxy disabled by invoking command",
+		StartedAtUTC:         time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	if err := writeBlockedReadinessPreflight(fixture.preflightPath, fixture.preflight); err != nil {
+		t.Fatalf("write controlled witness preflight: %v", err)
+	}
+	return fixture
+}
+
+func blockedReadinessRuntimeConfig(
+	cacheDirectory string,
+	helper string,
+	endpoint string,
+	port string,
+	eventsPath string,
+	readyPath string,
+) models.RuntimeScopeConfig {
+	return models.RuntimeScopeConfig{
+		CacheDirectory: cacheDirectory,
+		Runtime: models.RuntimeConfig{
+			Workers: []models.RuntimeWorker{{
+				Name: "blocked-readiness-worker", Type: models.RuntimeWorkerTypeInference,
+				Model: blockedReadinessModel, ModelLocality: models.RuntimeModelLocalityLocal,
+				Command: helper,
+				Args: []string{"--grpc-endpoint", endpoint, "--fixture-endpoint", port,
+					"--events-file", eventsPath, "--ready-file", readyPath},
+			}},
+			Resources: []models.RuntimeResource{{
+				Name: "blocked-readiness-cache", Type: models.RuntimeResourceTypeModel,
+				Capacity: 1, Model: blockedReadinessModel, Backend: "localai-llamacpp",
+				LoadPolicy: string(models.LoadPolicyOnDemand), Provider: "MODELSCOPE",
+			}},
+		},
+	}
+}
+
+func startBlockedReadinessCall(t *testing.T, witness *blockedReadinessHarness) {
+	t.Helper()
+	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		t.Fatalf("create peer evidence watcher: %v", err)
 	}
-	if err := preflightWatcher.Add(root); err != nil {
-		_ = preflightWatcher.Close()
+	if err := watcher.Add(witness.root); err != nil {
+		_ = watcher.Close()
 		t.Fatalf("watch peer evidence directory: %v", err)
 	}
-	t.Cleanup(func() { _ = preflightWatcher.Close() })
+	witness.watcher = watcher
+	t.Cleanup(func() { _ = watcher.Close() })
 	ensureCtx, cancelEnsure := context.WithCancel(context.Background())
 	t.Cleanup(cancelEnsure)
-	ensureCh := make(chan blockedReadinessOutcome, 1)
-	ensureStartedAt := time.Now()
+	witness.ensureCh = make(chan blockedReadinessOutcome, 1)
+	witness.ensureStartedAt = time.Now()
 	go func() {
-		result, ensureErr := service.EnsureModelHost(ensureCtx, models.EnsureModelHostRequest{
-			Scope: opened.Scope, Name: blockedReadinessModel,
+		result, ensureErr := witness.service.EnsureModelHost(ensureCtx, models.EnsureModelHostRequest{
+			Scope: witness.scope, Name: blockedReadinessModel,
 		})
-		ensureCh <- blockedReadinessOutcome{result: result, err: ensureErr, at: time.Now()}
+		witness.ensureCh <- blockedReadinessOutcome{result: result, err: ensureErr, at: time.Now()}
 	}()
-	loadEvent, loadObservedAt := waitForBlockedReadinessEvent(
-		t, preflightWatcher, eventsPath, ensureCh, "LOADMODEL_BLOCKED", blockedReadinessWait,
+	witness.loadEvent, witness.loadObservedAt = waitForBlockedReadinessEvent(
+		t, watcher, witness.eventsPath, witness.ensureCh, "LOADMODEL_BLOCKED", blockedReadinessWait,
 	)
-	if loadEvent.Method != "/backend.Backend/LoadModel" {
-		t.Fatalf("blocked peer event method = %q, want /backend.Backend/LoadModel", loadEvent.Method)
+	assertBlockedReadinessPeerDeadline(t, witness)
+}
+
+func assertBlockedReadinessPeerDeadline(t *testing.T, witness *blockedReadinessHarness) {
+	t.Helper()
+	if witness.loadEvent.Method != "/backend.Backend/LoadModel" {
+		t.Fatalf("blocked peer event method = %q, want /backend.Backend/LoadModel", witness.loadEvent.Method)
 	}
-	if !loadEvent.HasDeadline {
+	if !witness.loadEvent.HasDeadline {
 		t.Fatal("LoadModel peer context had no deadline; readiness budget did not reach the RPC")
 	}
-	loadDeadline, err := time.Parse(time.RFC3339Nano, loadEvent.DeadlineUTC)
+	loadDeadline, err := time.Parse(time.RFC3339Nano, witness.loadEvent.DeadlineUTC)
 	if err != nil {
-		t.Fatalf("parse LoadModel deadline %q: %v", loadEvent.DeadlineUTC, err)
+		t.Fatalf("parse LoadModel deadline %q: %v", witness.loadEvent.DeadlineUTC, err)
 	}
 	if remaining := time.Until(loadDeadline); remaining <= 0 || remaining > blockedReadinessBudget {
 		t.Fatalf("LoadModel deadline has remaining budget %s, want (0, %s]", remaining, blockedReadinessBudget)
 	}
-	childPID := launcher.pid()
-	if childPID <= 0 || childPID != loadEvent.PID {
-		t.Fatalf("owned child PID = %d, peer LoadModel PID = %d; want the same positive process", childPID, loadEvent.PID)
+	childPID := witness.launcher.pid()
+	if childPID <= 0 || childPID != witness.loadEvent.PID {
+		t.Fatalf("owned child PID = %d, peer LoadModel PID = %d; want same positive process", childPID, witness.loadEvent.PID)
 	}
-	if processRunning(childPID) == false {
-		t.Fatalf("owned helper PID %d exited before the LoadModel boundary was measured", childPID)
+	if !processRunning(childPID) {
+		t.Fatalf("owned helper PID %d exited before LoadModel boundary was measured", childPID)
 	}
+}
 
-	outcome := blockedReadinessOutcome{}
-	budgetTimer := time.NewTimer(blockedReadinessMaximum)
+func assertBlockedReadinessCompletion(t *testing.T, witness *blockedReadinessHarness) {
+	t.Helper()
+	timer := time.NewTimer(blockedReadinessMaximum)
+	defer timer.Stop()
+	var outcome blockedReadinessOutcome
 	select {
-	case outcome = <-ensureCh:
-		budgetTimer.Stop()
-	case <-budgetTimer.C:
+	case outcome = <-witness.ensureCh:
+	case <-timer.C:
 		t.Fatal("EnsureModelHost did not return within 35 seconds of blocked LoadModel")
 	}
 	if !errors.Is(outcome.err, models.ErrHostLoadingTimeout) || errors.Is(outcome.err, models.ErrHostCancelled) {
 		t.Fatalf("EnsureModelHost outcome = %#v, error %v; want typed readiness timeout without caller cancellation", outcome.result, outcome.err)
 	}
 	if outcome.result.Host.ReadinessState == models.ReadinessStateReady {
-		t.Fatalf("host returned READY after blocked LoadModel: %#v", outcome.result.Host)
+		t.Fatalf("host became READY after blocked LoadModel: %#v", outcome.result.Host)
 	}
-	inspect, err := service.InspectModelHost(context.Background(), models.InspectModelHostRequest{
-		Scope: opened.Scope, Name: blockedReadinessModel,
+	inspect, err := witness.service.InspectModelHost(context.Background(), models.InspectModelHostRequest{
+		Scope: witness.scope, Name: blockedReadinessModel,
 	})
 	if err != nil {
 		t.Fatalf("inspect host after readiness failure: %v", err)
 	}
-	if inspect.Host.ReadinessState == models.ReadinessStateReady {
-		t.Fatalf("Models service published READY after LoadModel failure: %#v", inspect.Host)
+	assertBlockedReadinessStopped(t, witness, inspect.Host.ReadinessState)
+	runtimeRecords := readBlockedRuntimeEvidence(t, witness.runtimeEvidence)
+	runtimeDuration := blockedReadinessRuntimeDuration(runtimeRecords)
+	if runtimeDuration < int64(blockedReadinessBudget/time.Millisecond) {
+		t.Fatalf("Runtime Host terminal evidence duration = %d ms, want at least %d ms", runtimeDuration, blockedReadinessBudget/time.Millisecond)
 	}
+	logBlockedReadinessEvidence(t, witness, outcome, inspect.Host.ReadinessState, runtimeDuration)
+}
+
+func assertBlockedReadinessStopped(
+	t *testing.T,
+	witness *blockedReadinessHarness,
+	readiness models.ReadinessState,
+) {
+	t.Helper()
+	if readiness == models.ReadinessStateReady {
+		t.Fatalf("Models service published READY after LoadModel failure")
+	}
+	childPID := witness.launcher.pid()
 	childStoppedAt := time.Now()
 	if processRunning(childPID) {
 		t.Fatalf("Runtime Host returned while owned helper PID %d was still alive", childPID)
 	}
-	if elapsed := childStoppedAt.Sub(loadObservedAt); elapsed > blockedReadinessMaximum {
+	if elapsed := childStoppedAt.Sub(witness.loadObservedAt); elapsed > blockedReadinessMaximum {
 		t.Fatalf("owned helper stop observed %s after LoadModel started, budget is %s", elapsed, blockedReadinessMaximum)
 	}
-	runtimeRecords := readBlockedRuntimeEvidence(t, runtimeEvidencePath)
-	var runtimeDuration int64
-	for _, record := range runtimeRecords {
-		if record.DurationMillis > runtimeDuration {
-			runtimeDuration = record.DurationMillis
+	if elapsed := time.Since(witness.loadObservedAt); elapsed > blockedReadinessMaximum {
+		t.Fatalf("witness exceeded 35 seconds from LoadModel observation: %s", elapsed)
+	}
+}
+
+func blockedReadinessRuntimeDuration(records []blockedReadinessRuntimeEvidence) int64 {
+	var duration int64
+	for _, record := range records {
+		if record.DurationMillis > duration {
+			duration = record.DurationMillis
 		}
 	}
-	if runtimeDuration < int64(blockedReadinessBudget/time.Millisecond) {
-		t.Fatalf("Runtime Host terminal evidence duration = %d ms, want at least %d ms", runtimeDuration, blockedReadinessBudget/time.Millisecond)
-	}
-	preflightAfterStart := launcher.preflightSnapshot()
-	preflightBytes, err := json.Marshal(preflightAfterStart)
+	return duration
+}
+
+func logBlockedReadinessEvidence(
+	t *testing.T,
+	witness *blockedReadinessHarness,
+	outcome blockedReadinessOutcome,
+	readiness models.ReadinessState,
+	runtimeDuration int64,
+) {
+	t.Helper()
+	preflight := witness.launcher.preflightSnapshot()
+	preflightBytes, err := json.Marshal(preflight)
 	if err != nil {
 		t.Fatalf("marshal completed preflight: %v", err)
 	}
-	if elapsed := time.Since(loadObservedAt); elapsed > blockedReadinessMaximum {
-		t.Fatalf("witness exceeded 35 seconds from LoadModel observation: %s", elapsed)
-	}
+	childStoppedAt := time.Now()
 	t.Logf("LOCALAI-READINESS-PREFLIGHT %s", preflightBytes)
-	t.Logf("LOCALAI-READINESS-WITNESS source_head=%s helper_sha256=%s health=success load_model=blocked_at:%s peer_deadline=%s ensure_typed_timeout_at:%s external_cancellation=false typed_error=%T ready_state=%s runtime_duration_ms=%d child_pid=%d child_stop_observed_at:%s load_to_stop=%s no_model_or_backend_downloads=true retries=0", sourceHead, helperSHA, loadEvent.AtUTC, loadEvent.DeadlineUTC, outcome.at.UTC().Format(time.RFC3339Nano), outcome.err, inspect.Host.ReadinessState, runtimeDuration, childPID, childStoppedAt.UTC().Format(time.RFC3339Nano), childStoppedAt.Sub(loadObservedAt))
-	if elapsed := time.Since(ensureStartedAt); elapsed > blockedReadinessMaximum+blockedReadinessWait {
+	t.Logf("LOCALAI-READINESS-WITNESS source_head=%s helper_sha256=%s health=success load_model=blocked_at:%s peer_deadline=%s ensure_typed_timeout_at:%s external_cancellation=false typed_error=%T ready_state=%s runtime_duration_ms=%d child_pid=%d child_stop_observed_at:%s load_to_stop=%s no_model_or_backend_downloads=true retries=0", witness.sourceHead, witness.helperSHA, witness.loadEvent.AtUTC, witness.loadEvent.DeadlineUTC, outcome.at.UTC().Format(time.RFC3339Nano), outcome.err, readiness, runtimeDuration, witness.launcher.pid(), childStoppedAt.UTC().Format(time.RFC3339Nano), childStoppedAt.Sub(witness.loadObservedAt))
+	if elapsed := time.Since(witness.ensureStartedAt); elapsed > blockedReadinessMaximum+blockedReadinessWait {
 		t.Fatalf("bounded witness took %s including fixture startup, unexpected", elapsed)
 	}
 }
