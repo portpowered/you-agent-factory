@@ -35,7 +35,6 @@ const (
 	blockedRuntimeEvidenceEnv = "INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE"
 	blockedReadinessModel     = "OMNIVOICE_Q4_K_M"
 	blockedReadinessBudget    = 30 * time.Second
-	blockedReadinessOverrun   = time.Second
 	blockedReadinessMaximum   = 35 * time.Second
 	blockedReadinessWait      = 5 * time.Second
 )
@@ -69,9 +68,8 @@ type blockedReadinessPreflight struct {
 	PaidCalls             int                    `json:"paid_calls"`
 	AttemptBudget         int                    `json:"attempts"`
 	RetryBudget           int                    `json:"retries"`
-	OverrunObservationSec int                    `json:"overrun_observation_seconds"`
 	FixtureWaitSeconds    int                    `json:"fixture_wait_seconds"`
-	CancelUnwindSeconds   int                    `json:"cancel_unwind_seconds"`
+	ReadinessCleanupSecs  int                    `json:"readiness_cleanup_seconds"`
 	TotalWitnessMaxSecs   int                    `json:"ensure_start_to_return_maximum_seconds"`
 	NetworkPolicy         string                 `json:"network_policy"`
 	StartedAtUTC          string                 `json:"started_at_utc"`
@@ -134,12 +132,11 @@ func TestBlockedLoadModelStopsOwnedProcess(t *testing.T) {
 		ReadinessBudgetSecond: int(blockedReadinessBudget / time.Second),
 		MaximumSeconds:        int(blockedReadinessMaximum / time.Second),
 		DownloadBudget:        0, PaidCalls: 0, AttemptBudget: 1, RetryBudget: 0,
-		OverrunObservationSec: int(blockedReadinessOverrun / time.Second),
-		FixtureWaitSeconds:    int(blockedReadinessWait / time.Second),
-		CancelUnwindSeconds:   int(blockedReadinessWait / time.Second),
-		TotalWitnessMaxSecs:   int((blockedReadinessMaximum + blockedReadinessWait) / time.Second),
-		NetworkPolicy:         "loopback only; Go module proxy disabled by invoking command",
-		StartedAtUTC:          time.Now().UTC().Format(time.RFC3339Nano),
+		FixtureWaitSeconds:   int(blockedReadinessWait / time.Second),
+		ReadinessCleanupSecs: int(blockedReadinessWait / time.Second),
+		TotalWitnessMaxSecs:  int((blockedReadinessMaximum + blockedReadinessWait) / time.Second),
+		NetworkPolicy:        "loopback only; Go module proxy disabled by invoking command",
+		StartedAtUTC:         time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	if err := writeBlockedReadinessPreflight(preflightPath, preflight); err != nil {
 		t.Fatalf("write controlled witness preflight: %v", err)
@@ -224,8 +221,15 @@ func TestBlockedLoadModelStopsOwnedProcess(t *testing.T) {
 	if loadEvent.Method != "/backend.Backend/LoadModel" {
 		t.Fatalf("blocked peer event method = %q, want /backend.Backend/LoadModel", loadEvent.Method)
 	}
-	if loadEvent.HasDeadline {
-		t.Fatalf("LoadModel peer context has deadline %q; expected the observed unbounded negotiation context", loadEvent.DeadlineUTC)
+	if !loadEvent.HasDeadline {
+		t.Fatal("LoadModel peer context had no deadline; readiness budget did not reach the RPC")
+	}
+	loadDeadline, err := time.Parse(time.RFC3339Nano, loadEvent.DeadlineUTC)
+	if err != nil {
+		t.Fatalf("parse LoadModel deadline %q: %v", loadEvent.DeadlineUTC, err)
+	}
+	if remaining := time.Until(loadDeadline); remaining <= 0 || remaining > blockedReadinessBudget {
+		t.Fatalf("LoadModel deadline has remaining budget %s, want (0, %s]", remaining, blockedReadinessBudget)
 	}
 	childPID := launcher.pid()
 	if childPID <= 0 || childPID != loadEvent.PID {
@@ -235,31 +239,16 @@ func TestBlockedLoadModelStopsOwnedProcess(t *testing.T) {
 		t.Fatalf("owned helper PID %d exited before the LoadModel boundary was measured", childPID)
 	}
 
-	stillInFlightAfterBudget := false
-	callerCanceledAt := time.Time{}
 	outcome := blockedReadinessOutcome{}
-	budgetTimer := time.NewTimer(blockedReadinessBudget)
+	budgetTimer := time.NewTimer(blockedReadinessMaximum)
 	select {
 	case outcome = <-ensureCh:
 		budgetTimer.Stop()
 	case <-budgetTimer.C:
-		select {
-		case outcome = <-ensureCh:
-		default:
-			stillInFlightAfterBudget = true
-			overrunTimer := time.NewTimer(blockedReadinessOverrun)
-			select {
-			case outcome = <-ensureCh:
-				overrunTimer.Stop()
-			case <-overrunTimer.C:
-				callerCanceledAt = time.Now()
-				cancelEnsure()
-				outcome = awaitBlockedReadinessOutcome(t, ensureCh, blockedReadinessWait)
-			}
-		}
+		t.Fatal("EnsureModelHost did not return within 35 seconds of blocked LoadModel")
 	}
-	if outcome.err == nil || (!errors.Is(outcome.err, models.ErrHostLoadingTimeout) && !errors.Is(outcome.err, models.ErrHostCancelled)) {
-		t.Fatalf("EnsureModelHost outcome = %#v, error %v; want typed bounded host readiness failure", outcome.result, outcome.err)
+	if !errors.Is(outcome.err, models.ErrHostLoadingTimeout) || errors.Is(outcome.err, models.ErrHostCancelled) {
+		t.Fatalf("EnsureModelHost outcome = %#v, error %v; want typed readiness timeout without caller cancellation", outcome.result, outcome.err)
 	}
 	if outcome.result.Host.ReadinessState == models.ReadinessStateReady {
 		t.Fatalf("host returned READY after blocked LoadModel: %#v", outcome.result.Host)
@@ -272,6 +261,12 @@ func TestBlockedLoadModelStopsOwnedProcess(t *testing.T) {
 	}
 	if inspect.Host.ReadinessState == models.ReadinessStateReady {
 		t.Fatalf("Models service published READY after LoadModel failure: %#v", inspect.Host)
+	}
+	loadCanceledEvent, _ := waitForBlockedReadinessEvent(
+		t, preflightWatcher, eventsPath, ensureCh, "LOADMODEL_CANCELED", blockedReadinessWait,
+	)
+	if loadCanceledEvent.Method != "/backend.Backend/LoadModel" || loadCanceledEvent.PID != childPID {
+		t.Fatalf("canceled LoadModel event = %#v; want the blocked method on owned helper PID %d", loadCanceledEvent, childPID)
 	}
 	childStoppedAt := time.Now()
 	if processRunning(childPID) {
@@ -295,14 +290,11 @@ func TestBlockedLoadModelStopsOwnedProcess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal completed preflight: %v", err)
 	}
-	if stillInFlightAfterBudget && callerCanceledAt.IsZero() {
-		t.Fatalf("RPC remained in-flight past its budget but no caller cancellation was recorded")
-	}
 	if elapsed := time.Since(loadObservedAt); elapsed > blockedReadinessMaximum {
 		t.Fatalf("witness exceeded 35 seconds from LoadModel observation: %s", elapsed)
 	}
 	t.Logf("LOCALAI-READINESS-PREFLIGHT %s", preflightBytes)
-	t.Logf("LOCALAI-READINESS-WITNESS source_head=%s helper_sha256=%s health=success load_model=blocked_at:%s loadmodel_context_has_deadline=%t readiness_rpc_active_after_30s=%t external_cancel_at:%s ensure_return_at:%s typed_error=%T ready_state=%s runtime_duration_ms=%d child_pid=%d child_stop_observed_at:%s load_to_stop=%s no_model_or_backend_downloads=true retries=0", sourceHead, helperSHA, loadEvent.AtUTC, loadEvent.HasDeadline, stillInFlightAfterBudget, formatBlockedReadinessTime(callerCanceledAt), outcome.at.UTC().Format(time.RFC3339Nano), outcome.err, inspect.Host.ReadinessState, runtimeDuration, childPID, childStoppedAt.UTC().Format(time.RFC3339Nano), childStoppedAt.Sub(loadObservedAt))
+	t.Logf("LOCALAI-READINESS-WITNESS source_head=%s helper_sha256=%s health=success load_model=blocked_at:%s loadmodel_deadline=%s readiness_rpc_canceled_at:%s external_cancellation=false ensure_return_at:%s typed_error=%T ready_state=%s runtime_duration_ms=%d child_pid=%d child_stop_observed_at:%s load_to_stop=%s no_model_or_backend_downloads=true retries=0", sourceHead, helperSHA, loadEvent.AtUTC, loadEvent.DeadlineUTC, loadCanceledEvent.AtUTC, outcome.at.UTC().Format(time.RFC3339Nano), outcome.err, inspect.Host.ReadinessState, runtimeDuration, childPID, childStoppedAt.UTC().Format(time.RFC3339Nano), childStoppedAt.Sub(loadObservedAt))
 	if elapsed := time.Since(ensureStartedAt); elapsed > blockedReadinessMaximum+blockedReadinessWait {
 		t.Fatalf("bounded witness took %s including fixture startup, unexpected", elapsed)
 	}
@@ -447,21 +439,6 @@ func readBlockedReadinessEvents(path string) ([]blockedReadinessEvent, error) {
 	return events, nil
 }
 
-func awaitBlockedReadinessOutcome(
-	t *testing.T,
-	ensure <-chan blockedReadinessOutcome,
-	timeout time.Duration,
-) blockedReadinessOutcome {
-	t.Helper()
-	select {
-	case outcome := <-ensure:
-		return outcome
-	case <-time.After(timeout):
-		t.Fatal("EnsureModelHost did not unwind after bounded caller cancellation")
-		return blockedReadinessOutcome{}
-	}
-}
-
 func readBlockedRuntimeEvidence(t *testing.T, path string) []blockedReadinessRuntimeEvidence {
 	t.Helper()
 	body, err := os.ReadFile(path)
@@ -485,13 +462,6 @@ func readBlockedRuntimeEvidence(t *testing.T, path string) []blockedReadinessRun
 		t.Fatal("Models runtime evidence is empty")
 	}
 	return records
-}
-
-func formatBlockedReadinessTime(at time.Time) string {
-	if at.IsZero() {
-		return "not-required-readiness-returned-within-budget"
-	}
-	return at.UTC().Format(time.RFC3339Nano)
 }
 
 type blockedReadinessReadyRecord struct {
