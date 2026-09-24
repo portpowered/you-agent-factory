@@ -16,6 +16,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -182,6 +183,7 @@ func RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose(
 		terminalObservationStableWindow,
 		nil,
 		beforeClose,
+		"",
 	)
 	return session, work, events
 }
@@ -206,6 +208,37 @@ func RunFactoryToCompletionWithConfiguredHome(
 		terminalObservationCorrelated,
 		nil,
 		nil,
+		"",
+	)
+	return session, work, events
+}
+
+// RunFactoryToCompletionWithSessionAndConfiguredHome executes one scenario-
+// owned Factory Session through the public CLI invocation and reads its public
+// session, Work, and Factory Event projections before stopping the process.
+func RunFactoryToCompletionWithSessionAndConfiguredHome(
+	t testing.TB,
+	dir string,
+	sessionID string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+	configure func(string),
+) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+	t.Helper()
+	if strings.TrimSpace(sessionID) == "" {
+		t.Fatal("Factory Session ID is empty")
+	}
+	session, work, events, _ := runFactoryToCompletionWithHome(
+		t,
+		dir,
+		overrides,
+		timeout,
+		false,
+		configure,
+		terminalObservationCorrelated,
+		nil,
+		nil,
+		sessionID,
 	)
 	return session, work, events
 }
@@ -272,6 +305,7 @@ func RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents(
 			}
 		},
 		nil,
+		"",
 	)
 	return session, work, events, responseEvents, workerEvents
 }
@@ -321,6 +355,7 @@ func runFactoryToCompletionWithMode(
 		observationMode,
 		nil,
 		nil,
+		"",
 	)
 }
 
@@ -335,6 +370,7 @@ func runFactoryToCompletionWithHome(
 	observationMode terminalObservationMode,
 	captureWorkerSessionEvents func(string, factoryapi.ListWorkResponse),
 	beforeClose func(),
+	factorySessionID string,
 ) (
 	factoryapi.FactorySession,
 	factoryapi.ListWorkResponse,
@@ -346,7 +382,7 @@ func runFactoryToCompletionWithHome(
 	server := NewProcessAPIServer()
 	overrides.APIServerStarter = server.Start
 	process := BuildProcess(t, overrides)
-	inputs := FakeInputs(t.Context(), []string{
+	args := []string{
 		"you", "run",
 		"--dir", dir,
 		"--continuously",
@@ -354,7 +390,11 @@ func runFactoryToCompletionWithHome(
 		"--server", "http://127.0.0.1:1",
 		"--quiet",
 		"--no-record",
-	})
+	}
+	if factorySessionID != "" {
+		args = append(args, "--session", factorySessionID)
+	}
+	inputs := FakeInputs(t.Context(), args)
 	homeDir := t.TempDir()
 	if configure != nil {
 		configure(homeDir)
@@ -374,7 +414,11 @@ func runFactoryToCompletionWithHome(
 	})
 	daemon := StartProcessCommand(t, process, inputs.Input)
 	baseURL := server.WaitForURL(t)
-	liveSession := GetDefaultSession(t, baseURL)
+	selectedSessionID := strings.TrimSpace(factorySessionID)
+	if selectedSessionID == "" {
+		selectedSessionID = factorysessions.DefaultSessionID
+	}
+	liveSession := GetFactorySessionByID(t, baseURL, selectedSessionID)
 	var (
 		responseCaptureCancel context.CancelFunc
 		responseCaptureDone   <-chan responseEventCaptureResult
@@ -411,9 +455,9 @@ func runFactoryToCompletionWithHome(
 		WaitForSessionTerminalStatus(t, baseURL, liveSession.Id, timeout)
 	}
 
-	session := GetDefaultSession(t, baseURL)
-	work := ListDefaultSessionWork(t, baseURL)
-	events := GetFactoryEventsAt(t, baseURL)
+	session := GetFactorySessionByID(t, baseURL, liveSession.Id)
+	work := GetJSON[factoryapi.ListWorkResponse](t, SessionWorkURL(baseURL, liveSession.Id, "/work"))
+	events := GetFactoryEventsForSessionAt(t, baseURL, liveSession.Id)
 	if captureWorkerSessionEvents != nil {
 		// Worker Session replay is the provider-owned lifecycle boundary. Its
 		// terminal replay summary is authoritative for source observations that

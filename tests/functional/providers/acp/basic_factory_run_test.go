@@ -8,10 +8,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -20,80 +22,32 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestFactoryRunRetriesACPProviderByResumingExactSession exercises the public
-// Factory execution path through an ACP server error. The helper accepts a
-// fresh session only before it writes the failure marker, then accepts only
-// session/load with the original opaque id. A passing run therefore proves the
-// worker retry kept its Provider Session and called Providers.Continue rather
-// than silently opening a new ACP session. The fixture uses an operator-
-// configured ACP integration because packaged ACP profiles may truthfully omit
-// session resume; packaged behavior is covered by the package conformance
-// matrix and capability tests.
-// Isolation: isolated-with-reason - restart and session continuation; the two
-// real ACP process identities and exact opaque session load are the witness.
-func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
+// TestFactoryRunRetriesProviderByResumingExactSession exercises the public
+// Factory Work/Event path with a controlled Providers edge. The failed first
+// attempt returns a Provider Session reference, and the retry succeeds only
+// through Continue with that exact reference. ACP process and stdio lifecycle
+// behavior is owned by the integration test that consumes the prebuilt helper.
+func TestFactoryRunRetriesProviderByResumingExactSession(t *testing.T) {
 	t.Parallel()
-	const sessionID = "acp-session-retry-resume"
-	const providerID = "retry-acp"
+	const providerSessionID = "provider-session-retry-resume"
+	factorySessionID := uuid.NewString()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"retry ACP through its prior session"}`))
-	writeACPWorker(t, dir, providerID)
-	retryAttemptDir := t.TempDir()
-	retryHoldMarker := filepath.Join(retryAttemptDir, "first-prompt-held")
-	observationDir := filepath.Join(retryAttemptDir, "private")
-	if err := os.Mkdir(observationDir, 0o700); err != nil {
-		t.Fatalf("create private ACP observation directory: %v", err)
-	}
-	retryObservationPath := filepath.Join(observationDir, "rpc.jsonl")
-	// The explicit export opt-in preserves the already-redacted bounded trace
-	// outside t.TempDir so one diagnostic run can hash and inspect it afterward.
-	if exportDir := os.Getenv("YOU_ACP_TEST_OBSERVATION_EXPORT_DIR"); exportDir != "" {
-		if !filepath.IsAbs(exportDir) {
-			t.Fatalf("ACP observation export directory must be absolute: %q", exportDir)
-		}
-		if err := os.Mkdir(exportDir, 0o700); err != nil {
-			t.Fatalf("create private ACP observation export directory: %v", err)
-		}
-		if err := os.Chmod(exportDir, 0o700); err != nil {
-			t.Fatalf("restrict ACP observation export directory permissions: %v", err)
-		}
-		dirInfo, err := os.Lstat(exportDir)
-		if err != nil {
-			t.Fatalf("inspect ACP observation export directory: %v", err)
-		}
-		if dirInfo.Mode()&os.ModeSymlink != 0 || !dirInfo.IsDir() {
-			t.Fatalf("ACP observation export path must be a new directory: %q", exportDir)
-		}
-		retryObservationPath = filepath.Join(exportDir, "rpc.jsonl")
-	}
-	retryFixture := functionalACPFixture("retry-resume")
-	retryFixture.SessionID = sessionID
-	retryFixture.RetryAttemptDirectory = retryAttemptDir
-	retryFixture.RetryHoldPath = retryHoldMarker
-	retryFixture.ObservationPath = retryObservationPath
-
-	var processStarts atomic.Int32
-	_, listed, events := support.RunFactoryToCompletionWithConfiguredHome(t, dir, serviceedges.Edges{
-		PlatformProcessCommandFactory: retryACPCommandFactory(&processStarts, retryFixture),
-		ProvidersExecutableLocator:    availableExecutableLocator{},
-	}, 20*time.Second, func(home string) {
-		configDir := filepath.Join(home, ".you-agent-factory")
-		if err := os.MkdirAll(configDir, 0o700); err != nil {
-			t.Fatalf("create operator config directory: %v", err)
-		}
-		config := []byte(`{"workers":{"acp":{"integrations":[{"id":"retry-entry","name":"retry-acp","transport":"stdio","command":"custom-agent acp"}]}}}`)
-		if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
-			t.Fatalf("write operator config: %v", err)
-		}
-	})
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"retry through the prior Provider Session"}`))
+	writeLegacyACPWorker(t, dir, string(providers.IDCodex))
+	retryingProvider := &retryingCodexCommandRunner{providerSessionID: providerSessionID}
+	session, listed, events := support.RunFactoryToCompletionWithSessionAndConfiguredHome(
+		t,
+		dir,
+		factorySessionID,
+		serviceedges.Edges{ProviderCommandRunner: retryingProvider},
+		20*time.Second,
+		nil,
+	)
 
 	publicSummary := summarizeACPPublicOutcome(listed, events)
-	t.Logf("ACP retry public Work/Event observation: %s", publicSummary)
-	records, observationErr := readACPObservationRecords(retryObservationPath)
-	if observationErr != nil {
-		t.Errorf("ACP retry peer observation is incomplete; public Work/Event observation: %s: %v", publicSummary, observationErr)
-	} else if observationErr := validateACPRetryObservation(records); observationErr != nil {
-		t.Errorf("ACP retry peer observation is incomplete; public Work/Event observation: %s: %v", publicSummary, observationErr)
+	t.Logf("Factory retry public Work/Event observation: %s", publicSummary)
+	if session.Id != factorySessionID {
+		t.Fatalf("Factory Session ID = %q, want scenario-owned %q; %s", session.Id, factorySessionID, publicSummary)
 	}
 
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
@@ -102,13 +56,86 @@ func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
 		t.Fatalf("failed work = %d, want 0; %s", got, acpFailureDiagnostics(events))
 	}
-	if got := processStarts.Load(); got != 2 {
-		t.Fatalf("ACP process starts = %d, want 2 for the failed attempt and resumed retry", got)
+	requests := retryingProvider.Requests()
+	if len(requests) != 2 {
+		t.Fatalf("provider command calls = %d, want initial failure and one resumed attempt", len(requests))
 	}
-	if _, err := os.Stat(retryHoldMarker); err != nil {
-		t.Fatalf("first ACP retry peer did not reach its controlled live-process checkpoint: %v", err)
+	if !hasCommandArgument(requests[1].Args, "resume") || !hasCommandArgument(requests[1].Args, providerSessionID) {
+		t.Fatalf("retry provider command args = %#v, want resume of %q", requests[1].Args, providerSessionID)
 	}
-	assertProviderSessionID(t, events, providerID, sessionID)
+	assertProviderSessionID(t, events, string(providers.IDCodex), providerSessionID)
+	assertFactoryEventSession(t, events, factorySessionID)
+}
+
+type retryingCodexCommandRunner struct {
+	mu                sync.Mutex
+	providerSessionID string
+	requests          []platformprocess.CommandRequest
+}
+
+func (runner *retryingCodexCommandRunner) Run(
+	_ context.Context,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	runner.requests = append(runner.requests, request)
+	attempt := len(runner.requests)
+	runner.mu.Unlock()
+	switch attempt {
+	case 1:
+		return platformprocess.CommandResult{Stdout: []byte(
+				`{"type":"thread.started","thread_id":"` + runner.providerSessionID + `"}` + "\n",
+			), ExitCode: 1}, providers.ExecuteFailure{
+				Kind:    providers.ExecuteFailureKindDependency,
+				Message: "controlled transient provider failure",
+			}
+	case 2:
+		return platformprocess.CommandResult{Stdout: []byte(
+			`{"type":"thread.started","thread_id":"` + runner.providerSessionID + `"}` + "\n" +
+				`{"type":"item.completed","item":{"id":"message-final","type":"agent_message","text":"resumed retry COMPLETE"}}` + "\n",
+		)}, nil
+	default:
+		return platformprocess.CommandResult{}, fmt.Errorf("unexpected provider command attempt %d", attempt)
+	}
+}
+
+func (runner *retryingCodexCommandRunner) Requests() []platformprocess.CommandRequest {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	requests := make([]platformprocess.CommandRequest, len(runner.requests))
+	for index, request := range runner.requests {
+		requests[index] = request
+		requests[index].Args = append([]string(nil), request.Args...)
+		requests[index].Stdin = append([]byte(nil), request.Stdin...)
+		requests[index].Env = append([]string(nil), request.Env...)
+	}
+	return requests
+}
+
+func hasCommandArgument(args []string, want string) bool {
+	for _, argument := range args {
+		if argument == want {
+			return true
+		}
+	}
+	return false
+}
+
+func assertFactoryEventSession(t *testing.T, events []factoryapi.FactoryEvent, sessionID string) {
+	t.Helper()
+	seen := false
+	for _, event := range events {
+		if event.Context.SessionId == nil {
+			continue
+		}
+		seen = true
+		if *event.Context.SessionId != sessionID {
+			t.Fatalf("Factory Event %q sessionId = %q, want %q", event.Id, *event.Context.SessionId, sessionID)
+		}
+	}
+	if !seen {
+		t.Fatalf("Factory Event history omitted the selected Factory Session %q", sessionID)
+	}
 }
 
 func assertACPProviderSession(t *testing.T, events []factoryapi.FactoryEvent) {
@@ -209,23 +236,6 @@ func acpHelperCommandFactoryWithProvider(
 			return exec.Command(os.Args[0], acpFixtureChildArgs("TestACPAgentHelperProcess", fixtureProvider())...)
 		}
 		return exec.Command(name, args...)
-	}
-}
-
-func retryACPCommandFactory(starts *atomic.Int32, fixture acpFixtureConfig) platformprocess.CommandFactory {
-	return func(name string, args ...string) *exec.Cmd {
-		if name != "custom-agent" || !sameStringSlice(args, []string{"acp"}) {
-			return exec.Command(name, args...)
-		}
-		attempt := starts.Add(1)
-		// The Providers ACP service replaces the command's environment with the
-		// invocation environment before Start, so the attempt phase is carried
-		// through a pre-start filesystem edge instead of cmd.Env. The helper reads
-		// the highest phase file after the process has started; this makes the
-		// first failure and resumed second process deterministic without a prompt
-		// marker race.
-		_ = os.WriteFile(filepath.Join(fixture.RetryAttemptDirectory, strconv.Itoa(int(attempt))), []byte("started"), 0o600)
-		return exec.Command(os.Args[0], acpFixtureChildArgs("TestACPAgentHelperProcess", fixture)...)
 	}
 }
 

@@ -19,14 +19,20 @@ import (
 const sessionStopObservationTimeout = 10 * time.Second
 
 func GetDefaultSession(t testing.TB, baseURL string) factoryapi.FactorySession {
+	return GetFactorySessionByID(t, baseURL, factorysessions.DefaultSessionID)
+}
+
+// GetFactorySessionByID reads one public Factory Session projection by its
+// scenario-selected identity.
+func GetFactorySessionByID(t testing.TB, baseURL, sessionID string) factoryapi.FactorySession {
 	t.Helper()
 	response := GetJSON[factoryapi.FactorySessionGetResponse](
 		t,
-		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(sessionID),
 	)
 	session, err := response.AsFactorySession()
 	if err != nil {
-		t.Fatalf("decode default live Factory Session: %v", err)
+		t.Fatalf("decode live Factory Session %q: %v", sessionID, err)
 	}
 	return session
 }

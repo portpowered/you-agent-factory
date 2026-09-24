@@ -320,63 +320,27 @@ func boundedACPSummaryValue(value string) string {
 	return value
 }
 
-func validateACPRetryObservation(records []acpObservationRecord) error {
-	starts := map[int]bool{}
-	exits := map[int]bool{}
-	firstFailure := false
-	secondResume := false
-	secondSuccess := false
-	for _, record := range records {
-		if record.PID <= 0 {
-			return fmt.Errorf("observation record omitted helper PID")
-		}
-		switch record.Phase {
-		case "start":
-			starts[record.Attempt] = true
-		case "exit":
-			if record.Result != "success" || record.ExitCode == nil || *record.ExitCode != 0 {
-				return fmt.Errorf("helper attempt %d exited with observation %#v", record.Attempt, record)
-			}
-			exits[record.Attempt] = true
-		case "rpc":
-			switch {
-			case record.Attempt == 1 && record.Direction == "peer_to_client" && record.Method == "session/prompt" && record.Error != nil && record.Error.Code == -32001:
-				firstFailure = true
-			case record.Attempt == 2 && record.Direction == "client_to_peer" && record.Method == "session/load":
-				secondResume = true
-			case record.Attempt == 2 && record.Direction == "peer_to_client" && record.Method == "session/prompt" && record.Result == "success":
-				secondSuccess = true
-			}
-		}
-	}
-	for _, attempt := range []int{1, 2} {
-		if !starts[attempt] || !exits[attempt] {
-			return fmt.Errorf("helper lifecycle is incomplete for attempt %d", attempt)
-		}
-	}
-	if !firstFailure || !secondResume || !secondSuccess {
-		return fmt.Errorf("trace omitted the failed prompt, exact-session resume, or successful retry")
-	}
-	return nil
-}
-
 func TestACPFixtureObservationOptIn(t *testing.T) {
 	t.Run("disabled helper does not create a trace", testACPObservationDisabled)
-	t.Run("enabled retry helper records bounded redacted RPC and lifecycle", testACPObservationEnabled)
+	t.Run("enabled retry helper records bounded redacted RPC", testACPObservationEnabled)
 	t.Run("invalid paths and trace-write failures fail explicitly", testACPObservationPathFailures)
 	t.Run("trace stops at its byte cap", testACPObservationByteCap)
 }
 
 func testACPObservationDisabled(t *testing.T) {
-	tracePath := filepath.Join(t.TempDir(), "rpc.jsonl")
+	traceDirectory := t.TempDir()
 	fixture := functionalACPFixture("1")
 	var stdout, stderr bytes.Buffer
 	input := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}` + "\n")
 	if err := runFunctionalRPCPeer(fixture, input, &stdout, &stderr); err != nil {
 		t.Fatalf("run ordinary fixture peer: %v", err)
 	}
-	if _, err := os.Stat(tracePath); !os.IsNotExist(err) {
-		t.Fatalf("trace without opt-in: stat error = %v, want not-exist", err)
+	entries, err := os.ReadDir(traceDirectory)
+	if err != nil {
+		t.Fatalf("read observation directory: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("peer without observation path created files: %#v", entries)
 	}
 	if stdout.Len() == 0 {
 		t.Fatal("ordinary helper response was not written")
@@ -452,23 +416,26 @@ func assertACPObservationRetryRecords(t *testing.T, path string) {
 	if err != nil {
 		t.Fatalf("decode trace: %v", err)
 	}
-	if len(records) != 8 {
-		t.Fatalf("trace records = %d, want lifecycle plus three request/response pairs", len(records))
-	}
-	start := records[0]
-	exit := records[len(records)-1]
-	if start.Phase != "start" || start.PID != os.Getpid() || start.Attempt != 1 || exit.Phase != "exit" || exit.ExitCode == nil || *exit.ExitCode != 0 {
-		t.Fatalf("trace lifecycle endpoints = %#v and %#v", records[0], records[len(records)-1])
-	}
+	var rpcRecords int
+	firstPromptFailure := false
 	for _, record := range records {
+		if record.Phase != "rpc" {
+			continue
+		}
+		rpcRecords++
 		if record.Direction == "peer_to_client" && record.Method == "session/prompt" && record.Error != nil {
 			if record.Error.Code != -32001 || record.Result != "error" || record.Attempt != 1 {
 				t.Fatalf("first retry prompt error = %#v, want code -32001", record.Error)
 			}
-			return
+			firstPromptFailure = true
 		}
 	}
-	t.Fatal("trace omitted the first retry prompt error")
+	if rpcRecords != 6 {
+		t.Fatalf("RPC trace records = %d, want three request/response pairs", rpcRecords)
+	}
+	if !firstPromptFailure {
+		t.Fatal("trace omitted the first retry prompt error")
+	}
 }
 
 func assertACPObservationErrorDataRedacted(t *testing.T) {
