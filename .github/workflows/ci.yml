@@ -620,9 +620,11 @@ jobs:
           go build -trimpath -o "$helper_path" ./tests/integration/models/testdata/blocked_host
           test -x "$helper_path"
           helper_sha256=$(sha256sum "$helper_path" | awk '{print $1}')
-          printf 'path=%s\n' "$helper_path" >> "$GITHUB_OUTPUT"
-          printf 'sha256=%s\n' "$helper_sha256" >> "$GITHUB_OUTPUT"
-          printf 'source_head=%s\n' "$checkout_head" >> "$GITHUB_OUTPUT"
+          {
+            printf 'path=%s\n' "$helper_path"
+            printf 'sha256=%s\n' "$helper_sha256"
+            printf 'source_head=%s\n' "$checkout_head"
+          } >> "$GITHUB_OUTPUT"
       - name: Run required blocked LoadModel owned-process witness
         shell: bash
         run: |
