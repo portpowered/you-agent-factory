@@ -30,6 +30,26 @@ func TestRemoveModelAssetsRemovesSelectedRevisionAndPreservesSiblings(t *testing
 	if err := os.WriteFile(siblingFile, []byte("sibling"), 0o644); err != nil {
 		t.Fatalf("write sibling revision: %v", err)
 	}
+	sharedModelFile := filepath.Join(
+		cacheDirectory, ".you-content-addressed", "model", "shared", "weights.bin",
+	)
+	sharedBackendFile := filepath.Join(
+		cacheDirectory, "backend-artifacts", ".you-content-addressed", "backend", "shared", "backend.tar.gz",
+	)
+	for _, fixture := range []struct {
+		path string
+		body []byte
+	}{
+		{path: sharedModelFile, body: []byte("shared model snapshot")},
+		{path: sharedBackendFile, body: []byte("shared backend snapshot")},
+	} {
+		if err := os.MkdirAll(filepath.Dir(fixture.path), 0o755); err != nil {
+			t.Fatalf("create shared cache fixture: %v", err)
+		}
+		if err := os.WriteFile(fixture.path, fixture.body, 0o644); err != nil {
+			t.Fatalf("write shared cache fixture: %v", err)
+		}
+	}
 	nestedFile := filepath.Join(
 		cacheDirectory, "OMNIVOICE_Q4_K_M", "rev-test", "nested", "empty-marker",
 	)
@@ -63,6 +83,18 @@ func TestRemoveModelAssetsRemovesSelectedRevisionAndPreservesSiblings(t *testing
 	}
 	if body, err := os.ReadFile(siblingFile); err != nil || string(body) != "sibling" {
 		t.Fatalf("sibling revision changed: body=%q error=%v", body, err)
+	}
+	for _, fixture := range []struct {
+		path string
+		body string
+	}{
+		{path: sharedModelFile, body: "shared model snapshot"},
+		{path: sharedBackendFile, body: "shared backend snapshot"},
+	} {
+		body, err := os.ReadFile(fixture.path)
+		if err != nil || string(body) != fixture.body {
+			t.Fatalf("shared cache fixture changed: path=%q body=%q error=%v", fixture.path, body, err)
+		}
 	}
 }
 
