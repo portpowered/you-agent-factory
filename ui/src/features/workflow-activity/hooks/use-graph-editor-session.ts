@@ -58,6 +58,7 @@ export function useGraphEditorSession({
   const canInteractWithEditor =
     editorMode &&
     sessionState.definitionStatus === "success" &&
+    currentFactoryDefinition !== null &&
     editorUnavailableClassifierWorkstationName === undefined &&
     !sessionState.isSaving;
 

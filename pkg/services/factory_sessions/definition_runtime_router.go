@@ -245,6 +245,19 @@ type definitionActivationGatewayRouter struct {
 	router *DefinitionRuntimeRouter
 }
 
+var _ interface {
+	DefinitionActivationGateway
+	ActivateSessionEditableFactoryWithResult(
+		ctx context.Context,
+		session *factorydefinitions.DefinitionSession,
+		sessionID string,
+		sessionRootDir string,
+		factoryDir string,
+		name string,
+		runtimeName string,
+	) (factorydefinitions.DefinitionActivationResult, error)
+} = definitionActivationGatewayRouter{}
+
 func (g definitionActivationGatewayRouter) target(sessionID string) (DefinitionActivationGateway, error) {
 	target, err := g.router.target(sessionID)
 	if err != nil {
@@ -349,6 +362,45 @@ func (g definitionActivationGatewayRouter) ActivateSessionEditableFactory(
 		return err
 	}
 	return target.ActivateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName)
+}
+
+func (g definitionActivationGatewayRouter) ActivateSessionEditableFactoryWithResult(
+	ctx context.Context,
+	session *factorydefinitions.DefinitionSession,
+	sessionID string,
+	sessionRootDir string,
+	factoryDir string,
+	name string,
+	runtimeName string,
+) (factorydefinitions.DefinitionActivationResult, error) {
+	target, err := g.target(sessionID)
+	if err != nil {
+		return factorydefinitions.DefinitionActivationResult{}, err
+	}
+	resultGateway, ok := target.(interface {
+		DefinitionActivationGateway
+		ActivateSessionEditableFactoryWithResult(
+			ctx context.Context,
+			session *factorydefinitions.DefinitionSession,
+			sessionID string,
+			sessionRootDir string,
+			factoryDir string,
+			name string,
+			runtimeName string,
+		) (factorydefinitions.DefinitionActivationResult, error)
+	})
+	if !ok {
+		return factorydefinitions.DefinitionActivationResult{}, nil
+	}
+	return resultGateway.ActivateSessionEditableFactoryWithResult(
+		ctx,
+		session,
+		sessionID,
+		sessionRootDir,
+		factoryDir,
+		name,
+		runtimeName,
+	)
 }
 
 func (g definitionActivationGatewayRouter) SwapPersistedNamedFactoryRuntime(

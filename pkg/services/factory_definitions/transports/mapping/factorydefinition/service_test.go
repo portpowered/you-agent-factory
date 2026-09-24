@@ -43,6 +43,56 @@ func TestEditableFactoryRoundTripPreservesSnapshotAndVersion(t *testing.T) {
 	}
 }
 
+func TestEditableFactoryMappingPreservesServerOwnedActivationProvenance(t *testing.T) {
+	t.Parallel()
+
+	snapshot, err := factorydefinitions.NewFactorySnapshot(factoryapi.Factory{Name: "alpha"})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	want := &factorydefinitions.FactoryActivationProvenance{
+		ActivationID:       "activation-alpha",
+		LoadedSourceDigest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		State:              factorydefinitions.FactoryActivationStateActive,
+	}
+	mapped, err := editableFactoryToAPI(factorydefinitions.EditableFactory{
+		Snapshot:   snapshot,
+		Activation: want,
+	})
+	if err != nil {
+		t.Fatalf("editableFactoryToAPI: %v", err)
+	}
+	if mapped.Activation == nil || mapped.Activation.ActivationId != want.ActivationID ||
+		mapped.Activation.LoadedSourceDigest != want.LoadedSourceDigest ||
+		mapped.Activation.State != factoryapi.FactoryActivationStateActive {
+		t.Fatalf("mapped activation = %#v, want %#v", mapped.Activation, want)
+	}
+}
+
+func TestEditableFactoryMappingIgnoresClientActivationProvenance(t *testing.T) {
+	t.Parallel()
+
+	request := factoryapi.Factory{
+		Name: "alpha",
+		Activation: &factoryapi.FactoryActivationProvenance{
+			ActivationId:       "forged",
+			LoadedSourceDigest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			State:              factoryapi.FactoryActivationStateActive,
+		},
+	}
+	editable, err := editableFactoryFromAPI(request)
+	if err != nil {
+		t.Fatalf("editableFactoryFromAPI: %v", err)
+	}
+	var payload map[string]any
+	if err := editable.Snapshot.Decode(&payload); err != nil {
+		t.Fatalf("decode editable snapshot: %v", err)
+	}
+	if _, ok := payload["activation"]; ok {
+		t.Fatalf("client activation leaked into authored snapshot: %#v", payload)
+	}
+}
+
 func TestSaveModeFromAPIPreservesPolicySelection(t *testing.T) {
 	t.Parallel()
 

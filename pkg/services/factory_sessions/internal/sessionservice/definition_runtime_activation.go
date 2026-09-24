@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -54,9 +56,12 @@ func RequireIdleBeforeNamedActivation(
 	return requireRuntimeIdle(ctx)
 }
 
-// ActivateSessionRuntime builds, validates, and installs one persisted
-// definition replacement using the canonical ordering and error policy.
-func ActivateSessionRuntime(
+// ActivateSessionRuntimeWithResult builds, validates, and installs one
+// persisted definition replacement, returning the exact loaded source that
+// was handed to the live runtime. The source is validated before replacement
+// so a successful result can be used for response assembly without a
+// failure-prone post-swap read.
+func ActivateSessionRuntimeWithResult(
 	ctx context.Context,
 	session *livesession.LiveSession,
 	sessionID string,
@@ -67,18 +72,33 @@ func ActivateSessionRuntime(
 	build func(context.Context, string, string, string) (runtimeports.RuntimeInstance, error),
 	requireIdle func(context.Context, string) error,
 	replace func(context.Context, *livesession.LiveSession, string, runtimeports.RuntimeInstance) error,
-) error {
+) (factorydefinitions.LoadedFactorySource, error) {
 	if build == nil || requireIdle == nil || replace == nil {
-		return fmt.Errorf("factory runtime activation dependencies are required")
+		return nil, fmt.Errorf("factory runtime activation dependencies are required")
 	}
 	replacement, err := build(ctx, sessionRootDir, factoryDir, sessionID)
 	if err != nil {
-		return fmt.Errorf("%w: build replacement factory %q: %w", factorydefinitions.ErrInvalidNamedFactory, name, err)
+		return nil, fmt.Errorf("%w: build replacement factory %q: %w", factorydefinitions.ErrInvalidNamedFactory, name, err)
+	}
+	if replacement == nil {
+		return nil, fmt.Errorf("replacement Factory Runtime is unavailable")
+	}
+	loadedConfig := replacement.LoadedRuntimeConfig()
+	loaded, ok := loadedConfig.(factorydefinitions.LoadedFactorySource)
+	if !ok || loaded == nil {
+		return nil, fmt.Errorf("replacement Factory Runtime loaded source is required")
+	}
+	activationSource, ok := loaded.(factorydefinitions.LoadedFactoryActivationSource)
+	if !ok || activationSource.FactoryActivationProvenance() == nil {
+		return nil, fmt.Errorf("replacement Factory Runtime activation provenance is required")
 	}
 	if err := requireIdle(ctx, sessionID); err != nil {
-		return err
+		return nil, err
 	}
-	return replace(ctx, session, runtimeName, replacement)
+	if err := replace(ctx, session, runtimeName, replacement); err != nil {
+		return nil, err
+	}
+	return loaded, nil
 }
 
 // ApplyNamedReplacement installs a built named Factory definition using the
@@ -95,7 +115,9 @@ func ApplyNamedReplacement(
 	requireRuntimeIdle func(context.Context) error,
 	replaceSession func(context.Context, *livesession.LiveSession, string, runtimeports.RuntimeInstance) error,
 	activateWithoutLiveRuntime func(string, string, runtimeports.RuntimeInstance) error,
+	readCurrent factorydefinitions.CurrentFactoryPointerReader,
 	writeCurrent factorydefinitions.CurrentFactoryPointerWriter,
+	removeCurrent func(string) error,
 ) error {
 	if writeCurrent == nil {
 		return fmt.Errorf("current Factory pointer writer is required")
@@ -107,10 +129,23 @@ func ApplyNamedReplacement(
 		if err := requireSessionIdle(ctx, sessionID); err != nil {
 			return err
 		}
-		if err := writeCurrent(persistRoot, name); err != nil {
+		restorePointer, err := writeCurrentFactoryPointerTransaction(
+			persistRoot,
+			name,
+			readCurrent,
+			writeCurrent,
+			removeCurrent,
+		)
+		if err != nil {
 			return err
 		}
-		return replaceSession(ctx, session, name, replacement)
+		if err := replaceSession(ctx, session, name, replacement); err != nil {
+			if restoreErr := restorePointer(); restoreErr != nil {
+				return errors.Join(err, fmt.Errorf("restore current Factory pointer: %w", restoreErr))
+			}
+			return err
+		}
+		return nil
 	}
 	if requireRuntimeIdle == nil || activateWithoutLiveRuntime == nil {
 		return fmt.Errorf("factory runtime replacement dependencies are required")
@@ -145,4 +180,68 @@ func ActivateStartupRuntime(
 		syncDirectory(replacement)
 	}
 	return nil
+}
+
+type currentFactoryPointerState struct {
+	name   string
+	exists bool
+}
+
+func writeCurrentFactoryPointerTransaction(
+	rootDir string,
+	name string,
+	read factorydefinitions.CurrentFactoryPointerReader,
+	write factorydefinitions.CurrentFactoryPointerWriter,
+	remove func(string) error,
+) (func() error, error) {
+	if read == nil {
+		return nil, fmt.Errorf("current Factory pointer reader is required")
+	}
+	state, err := readCurrentFactoryPointerState(read, rootDir)
+	if err != nil {
+		return nil, err
+	}
+	return writeCurrentFactoryPointerAfterState(state, rootDir, name, write, remove)
+}
+
+func readCurrentFactoryPointerState(
+	read factorydefinitions.CurrentFactoryPointerReader,
+	rootDir string,
+) (currentFactoryPointerState, error) {
+	name, err := read(rootDir)
+	if err == nil {
+		return currentFactoryPointerState{name: name, exists: true}, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return currentFactoryPointerState{}, nil
+	}
+	return currentFactoryPointerState{}, err
+}
+
+func writeCurrentFactoryPointerAfterState(
+	state currentFactoryPointerState,
+	rootDir string,
+	name string,
+	write factorydefinitions.CurrentFactoryPointerWriter,
+	remove func(string) error,
+) (func() error, error) {
+	if write == nil {
+		return nil, fmt.Errorf("current Factory pointer writer is required")
+	}
+	restore := func() error {
+		if state.exists {
+			return write(rootDir, state.name)
+		}
+		if remove == nil {
+			return fmt.Errorf("current Factory pointer remover is required to restore an absent pointer")
+		}
+		return remove(rootDir)
+	}
+	if err := write(rootDir, name); err != nil {
+		if restoreErr := restore(); restoreErr != nil {
+			return nil, errors.Join(err, fmt.Errorf("restore current Factory pointer after write failure: %w", restoreErr))
+		}
+		return nil, err
+	}
+	return restore, nil
 }

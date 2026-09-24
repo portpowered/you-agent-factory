@@ -1,4 +1,5 @@
 import { getSessionFactory } from "./api";
+import { defaultSessionFactoryActivation } from "./import-activation.test-helpers";
 
 describe("getSessionFactory version validation", () => {
   it("accepts numeric logical version values from the API", async () => {
@@ -7,6 +8,7 @@ describe("getSessionFactory version validation", () => {
         fetch: vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({
+              activation: defaultSessionFactoryActivation,
               name: "Current Factory",
               workers: [],
               workstations: [],

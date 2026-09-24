@@ -7,6 +7,7 @@ import {
   type MockFactoryDocumentSaveReturn,
   mockFactoryDocumentSave,
 } from "../../../../../testing/factory-document-save-mocks";
+import { defaultFactoryActivation } from "../../../../../testing/factory-activation-fixtures";
 import type { FactoryDocumentSaveInput } from "../../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { CurrentSelectionState } from "../../../hooks/core/useCurrentSelection";
 import { DETAIL_CARD_NOW } from "./detail-card-test-helpers";
@@ -28,13 +29,7 @@ function resolveLatestDetailCardCurrentFactoryDocument() {
 export type DetailCardEditableFactoryDocumentOverrides = {
   behavior?: "STANDARD" | "REPEATER" | "POLLER";
   model?: string;
-  modelProvider?:
-    | "CODEX"
-    | "CODEX"
-    | "CLAUDE"
-    | "GEMINI"
-    | "KIRO"
-    | "OPENCODE";
+  modelProvider?: "CODEX" | "CODEX" | "CLAUDE" | "GEMINI" | "KIRO" | "OPENCODE";
   prompt?: string;
   workerName?: string;
   workerOptions?: string[];
@@ -98,6 +93,7 @@ export function buildDetailCardEditableFactoryDocument(
   const workerOptions = overrides?.workerOptions ?? ["reviewer", "planner"];
 
   return {
+    activation: defaultFactoryActivation,
     name: "Current Factory",
     version: { ...DETAIL_CARD_SAVE_FACTORY_VERSION },
     workers: workerOptions.map((name, index) => ({
@@ -130,6 +126,7 @@ export function buildDetailCardMultiWorkstationFactoryDocument(
   overrides?: DetailCardMultiWorkstationFactoryDocumentOverrides,
 ): CurrentFactoryDocument {
   return {
+    activation: defaultFactoryActivation,
     name: "Current Factory",
     version: { ...DETAIL_CARD_SAVE_FACTORY_VERSION },
     workers: [
@@ -174,6 +171,7 @@ export function buildDetailCardMultiWorkstationFactoryDocument(
 
 export function buildDetailCardMultiResourceFactoryDocument(): CurrentFactoryDocument {
   return {
+    activation: defaultFactoryActivation,
     name: "Current Factory",
     version: { ...DETAIL_CARD_SAVE_FACTORY_VERSION },
     resources: [
@@ -218,6 +216,7 @@ export function buildDetailCardSharedWorkerFactoryDocument(overrides?: {
   prompt?: string;
 }): CurrentFactoryDocument {
   return {
+    activation: defaultFactoryActivation,
     name: "Current Factory",
     version: { ...DETAIL_CARD_SAVE_FACTORY_VERSION },
     workers: [
@@ -335,6 +334,7 @@ export function buildDetailCardWorkStateFactoryDocument(
   overrides?: Partial<CurrentFactoryDocument>,
 ): CurrentFactoryDocument {
   return {
+    activation: defaultFactoryActivation,
     name: "Current Factory",
     version: { ...DETAIL_CARD_SAVE_FACTORY_VERSION },
     workers: [],

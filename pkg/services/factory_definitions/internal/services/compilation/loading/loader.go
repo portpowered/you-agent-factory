@@ -334,6 +334,13 @@ func (l *Loader) LoadSourceFromFactoryDir(
 	if err != nil {
 		return nil, sourceContextError(source, "build loaded factory source", err)
 	}
+	l.configureLoadedSourceMetadata(
+		loadedSource,
+		resolvedFactoryDir,
+		factoryConfig,
+		source.Path,
+		workstationLoader,
+	)
 	return loadedSource, nil
 }
 

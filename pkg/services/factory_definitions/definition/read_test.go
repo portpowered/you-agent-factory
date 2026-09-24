@@ -334,6 +334,167 @@ func TestService_GetCurrentFactoryForSession_IncludesPersistedVersionForNamedPoi
 	}
 }
 
+func TestService_GetCurrentFactoryForSession_PreservesLoadedProvenanceAcrossAuthoredDrift(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, rootDir, factoryfixtures.MinimalFactoryConfig())
+	runtimeCfg, err := factorydefinitioncomposition.LoadCurrent(rootDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+	const sessionID = "session-provenance"
+	host := stubDefinitionHost{
+		persistRootDir: rootDir,
+		session: &factorydefinitions.DefinitionSession{
+			ID:         sessionID,
+			FactoryDir: rootDir,
+			FolderPath: rootDir,
+			IsDefault:  true,
+		},
+		sessionRuntime:     runtimeCfg,
+		sessionPersistRoot: rootDir,
+	}
+	svc := newTestService(host)
+
+	witness := requireLoadedProvenance(t, svc, sessionID)
+
+	edited := factoryfixtures.MinimalFactoryConfig()
+	edited["id"] = "authored-after-activation"
+	factoryfixtures.WriteFactoryJSON(t, rootDir, edited)
+
+	requireAuthoredDriftProvenance(t, svc, sessionID, witness)
+
+	factoryPath := filepath.Join(rootDir, factorydefinitions.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, []byte("{"), 0o644); err != nil {
+		t.Fatalf("malform authored factory: %v", err)
+	}
+	requireUnavailableAuthoredSourceProvenance(t, svc, sessionID, witness)
+}
+
+type loadedProvenanceWitness struct {
+	activationID string
+	digest       string
+	version      factorydefinitions.FactoryVersion
+}
+
+func requireLoadedProvenance(
+	t *testing.T,
+	svc *Service,
+	sessionID string,
+) loadedProvenanceWitness {
+	t.Helper()
+	first, err := svc.GetCurrentFactoryForSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("initial GetCurrentFactoryForSession: %v", err)
+	}
+	if first.Activation == nil || first.Activation.State != factorydefinitions.FactoryActivationStateActive {
+		t.Fatalf("initial activation = %#v, want ACTIVE provenance", first.Activation)
+	}
+	if first.Version == nil {
+		t.Fatal("initial loaded version is nil")
+	}
+	return loadedProvenanceWitness{
+		activationID: first.Activation.ActivationID,
+		digest:       first.Activation.LoadedSourceDigest,
+		version:      *first.Version,
+	}
+}
+
+func requireAuthoredDriftProvenance(
+	t *testing.T,
+	svc *Service,
+	sessionID string,
+	witness loadedProvenanceWitness,
+) {
+	t.Helper()
+	changed, err := svc.GetCurrentFactoryForSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("drifted GetCurrentFactoryForSession: %v", err)
+	}
+	if changed.Activation == nil || changed.Activation.State != factorydefinitions.FactoryActivationStateAuthoredChanged {
+		t.Fatalf("drifted activation = %#v, want AUTHORED_CHANGED provenance", changed.Activation)
+	}
+	if changed.Activation.ActivationID != witness.activationID || changed.Activation.LoadedSourceDigest != witness.digest {
+		t.Fatalf("loaded activation tuple changed after authored drift: %#v", changed.Activation)
+	}
+	if changed.Version == nil || changed.Version.Logical != witness.version.Logical || !changed.Version.Physical.Equal(witness.version.Physical) {
+		t.Fatalf("loaded version changed after authored drift: %#v, want %#v", changed.Version, witness.version)
+	}
+}
+
+func requireUnavailableAuthoredSourceProvenance(
+	t *testing.T,
+	svc *Service,
+	sessionID string,
+	witness loadedProvenanceWitness,
+) {
+	t.Helper()
+	unavailable, err := svc.GetCurrentFactoryForSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("unavailable-source GetCurrentFactoryForSession: %v", err)
+	}
+	if unavailable.Activation == nil || unavailable.Activation.State != factorydefinitions.FactoryActivationStateAuthoredSourceUnavailable {
+		t.Fatalf("unavailable activation = %#v, want AUTHORED_SOURCE_UNAVAILABLE", unavailable.Activation)
+	}
+	if unavailable.Activation.ActivationID != witness.activationID || unavailable.Activation.LoadedSourceDigest != witness.digest {
+		t.Fatalf("loaded activation tuple changed after authored source became unavailable: %#v", unavailable.Activation)
+	}
+}
+
+func TestService_GetCurrentFactoryForSession_ReportsNotActivatedForCanonicalSource(t *testing.T) {
+	t.Parallel()
+
+	payload := namedFactoryPayload(t, "canonical-alpha")
+	var document map[string]any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatalf("decode canonical payload: %v", err)
+	}
+	document["version"] = map[string]any{
+		"logical":  float64(31),
+		"physical": time.Date(2026, time.July, 7, 8, 9, 10, 0, time.UTC).Format(time.RFC3339Nano),
+	}
+	payload, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("encode canonical payload: %v", err)
+	}
+	runtimeCfg, err := factorydefinitioncomposition.LoadCanonicalJSON(payload, nil)
+	if err != nil {
+		t.Fatalf("LoadCanonicalJSON: %v", err)
+	}
+	const sessionID = "session-canonical"
+	host := stubDefinitionHost{
+		persistRootDir: t.TempDir(),
+		session: &factorydefinitions.DefinitionSession{
+			ID:         sessionID,
+			FactoryDir: t.TempDir(),
+			FolderPath: t.TempDir(),
+			IsDefault:  true,
+		},
+		sessionRuntime: runtimeCfg,
+	}
+	got, err := newTestService(host).GetCurrentFactoryForSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession: %v", err)
+	}
+	if got.Activation == nil || got.Activation.State != factorydefinitions.FactoryActivationStateNotActivated {
+		t.Fatalf("activation = %#v, want NOT_ACTIVATED", got.Activation)
+	}
+	if got.Activation.ActivationID == "" || got.Activation.LoadedSourceDigest == "" {
+		t.Fatalf("activation tuple = %#v, want non-empty loaded identity", got.Activation)
+	}
+	if got.Version == nil || got.Version.Logical != 31 {
+		t.Fatalf("version = %#v, want loaded canonical version 31", got.Version)
+	}
+	var snapshot map[string]any
+	if err := got.Snapshot.Decode(&snapshot); err != nil {
+		t.Fatalf("decode canonical snapshot: %v", err)
+	}
+	if _, ok := snapshot["factoryDirectory"]; ok {
+		t.Fatalf("canonical source was labeled with a disk Factory directory: %#v", snapshot)
+	}
+}
+
 func TestService_CurrentFactoryDefinitionVersionAtRoot_UsesFileModTimeForDefaultFactory(t *testing.T) {
 	t.Parallel()
 

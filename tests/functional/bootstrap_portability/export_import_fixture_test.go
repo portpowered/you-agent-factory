@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sync"
 	"testing"
 
@@ -46,6 +47,8 @@ type exportImportFixtureCache struct {
 
 var cachedExportImportFixture exportImportFixtureCache
 
+var factoryActivationDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+
 func newExportImportFixture(t *testing.T) exportImportFixture {
 	t.Helper()
 
@@ -56,6 +59,9 @@ func newExportImportFixture(t *testing.T) exportImportFixture {
 	flattenedFactory, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(canonicalFactoryJSON)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(flattened): %v", err)
+	}
+	if flattenedFactory.Activation != nil {
+		t.Fatal("canonical authored Factory fixture includes server-owned activation provenance")
 	}
 
 	return exportImportFixture{
@@ -279,6 +285,7 @@ func (fixture exportImportFixture) assertCurrentFactorySignals(
 	t *testing.T,
 	svc namedFactoryReadback,
 	wantName, wantDir string,
+	wantActivationState factoryapi.FactoryActivationState,
 ) {
 	t.Helper()
 
@@ -291,6 +298,10 @@ func (fixture exportImportFixture) assertCurrentFactorySignals(
 	}
 	if current.FactoryDirectory == nil || *current.FactoryDirectory != wantDir {
 		t.Fatalf("current factory directory = %#v, want %q", current.FactoryDirectory, wantDir)
+	}
+	assertRuntimeFactoryActivation(t, "current Factory readback", current, wantActivationState)
+	if fixture.GeneratedExportFactor.Activation != nil {
+		t.Fatal("authored export fixture includes server-owned activation provenance")
 	}
 
 	if !reflect.DeepEqual(
@@ -317,13 +328,41 @@ func (fixture exportImportFixture) assertCurrentFactorySignals(
 }
 
 func comparableExportImportFactory(factory factoryapi.Factory) factoryapi.Factory {
-	comparable := factory
+	comparable := authoredFactoryFromRuntime(factory)
 	comparable.Name = ""
 	comparable.FactoryDirectory = nil
 	comparable.SourceDirectory = nil
 	comparable.Metadata = nil
 	comparable.Version = nil
 	return comparable
+}
+
+func authoredFactoryFromRuntime(factory factoryapi.Factory) factoryapi.Factory {
+	factory.Activation = nil
+	return factory
+}
+
+func assertRuntimeFactoryActivation(
+	t *testing.T,
+	context string,
+	factory factoryapi.Factory,
+	wantState factoryapi.FactoryActivationState,
+) {
+	t.Helper()
+
+	activation := factory.Activation
+	if activation == nil {
+		t.Fatalf("%s is missing server-owned activation provenance", context)
+	}
+	if activation.ActivationId == "" {
+		t.Fatalf("%s activation ID is empty", context)
+	}
+	if !factoryActivationDigestPattern.MatchString(activation.LoadedSourceDigest) {
+		t.Fatalf("%s loaded source digest = %q, want sha256 plus 64 lowercase hex digits", context, activation.LoadedSourceDigest)
+	}
+	if activation.State != wantState {
+		t.Fatalf("%s activation state = %q, want %q", context, activation.State, wantState)
+	}
 }
 
 func comparableExportImportFactoryJSON(factory factoryapi.Factory) string {
@@ -359,7 +398,14 @@ func TestExportImportFixture_PersistedFactoryExposesReusableCurrentFactorySignal
 	selectedDir := fixture.persistAndActivateAs(t, rootDir, "beta")
 
 	svc := buildExportImportFixtureService(t, rootDir)
-	fixture.assertCurrentFactorySignals(t, svc, "beta", selectedDir)
+	fixture.assertCurrentFactorySignals(
+		t,
+		svc,
+		"beta",
+		selectedDir,
+		factoryapi.FactoryActivationStateNotActivated,
+	)
+	assertPersistedAuthoredFactoryOmitsActivation(t, selectedDir)
 }
 
 func assertExportImportFixtureCanonicalRouteArraysJSON(

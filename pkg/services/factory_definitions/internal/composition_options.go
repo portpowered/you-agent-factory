@@ -8,6 +8,8 @@ import (
 type compositionOptions struct {
 	scaffoldInitializer         factoryroot.ScaffoldInitializer
 	scaffoldFactoryNameResolver distributionservice.ScaffoldFactoryNameResolver
+	discardNamedFactory         func(string, string) error
+	removeCurrentFactoryPointer func(string) error
 }
 
 // CompositionOption configures optional Factory Definitions composition ports.
@@ -22,6 +24,19 @@ func WithDistributionScaffold(
 	return func(opts *compositionOptions) {
 		opts.scaffoldInitializer = scaffoldInitializer
 		opts.scaffoldFactoryNameResolver = scaffoldFactoryNameResolver
+	}
+}
+
+// WithActivationRollback supplies the durable inverse effects used by the
+// request-scoped named activation transaction. The option keeps these effects
+// at composition time instead of expanding the stable Definition Host port.
+func WithActivationRollback(
+	discardNamedFactory func(string, string) error,
+	removeCurrentFactoryPointer func(string) error,
+) CompositionOption {
+	return func(opts *compositionOptions) {
+		opts.discardNamedFactory = discardNamedFactory
+		opts.removeCurrentFactoryPointer = removeCurrentFactoryPointer
 	}
 }
 

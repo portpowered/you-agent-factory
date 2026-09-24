@@ -96,6 +96,9 @@ func saveModeFromAPI(mode factoryapi.FactorySaveMode) factorydefinitions.SaveMod
 }
 
 func editableFactoryFromAPI(request factoryapi.Factory) (factorydefinitions.EditableFactory, error) {
+	// Activation is a server-owned read model. Never capture a client-supplied
+	// value into the authored snapshot or persistence path.
+	request.Activation = nil
 	snapshot, err := interfaces.NewFactorySnapshot(request)
 	if err != nil {
 		return factorydefinitions.EditableFactory{}, fmt.Errorf("capture editable factory snapshot: %w", err)
@@ -111,6 +114,13 @@ func editableFactoryToAPI(editable factorydefinitions.EditableFactory) (factorya
 	if editable.Version != nil {
 		version := factoryVersionToAPI(*editable.Version)
 		mapped.Version = &version
+	}
+	if editable.Activation != nil {
+		mapped.Activation = &factoryapi.FactoryActivationProvenance{
+			ActivationId:       editable.Activation.ActivationID,
+			LoadedSourceDigest: editable.Activation.LoadedSourceDigest,
+			State:              factoryapi.FactoryActivationState(editable.Activation.State),
+		}
 	}
 	return mapped, nil
 }

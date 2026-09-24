@@ -28,6 +28,11 @@ properties:
         allOf:
             - $ref: '../api/HybridLogicalTimestamp.yaml'
         description: Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology.
+    activation:
+        allOf:
+            - $ref: '../api/FactoryActivationProvenance.yaml'
+        readOnly: true
+        description: Server-owned provenance returned by current-Factory inspection and activation responses. It is not accepted as authored topology and is never persisted.
     metadata:
         allOf:
             - $ref: '../shared/StringMap.yaml'

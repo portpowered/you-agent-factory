@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -11,6 +12,19 @@ import (
 
 type definitionActivationGateway struct {
 	runtime *SessionRuntime
+}
+
+type definitionActivationResultGateway interface {
+	factorysessions.DefinitionActivationGateway
+	ActivateSessionEditableFactoryWithResult(
+		ctx context.Context,
+		session *factorydefinitions.DefinitionSession,
+		sessionID string,
+		sessionRootDir string,
+		factoryDir string,
+		name string,
+		runtimeName string,
+	) (factorydefinitions.DefinitionActivationResult, error)
 }
 
 // NewDefinitionActivationGateway publishes the narrow Sessions-root activation
@@ -94,6 +108,30 @@ func (g definitionActivationGateway) ActivateSessionEditableFactory(
 	)
 }
 
+func (g definitionActivationGateway) ActivateSessionEditableFactoryWithResult(
+	ctx context.Context,
+	session *factorydefinitions.DefinitionSession,
+	sessionID string,
+	sessionRootDir string,
+	factoryDir string,
+	name string,
+	runtimeName string,
+) (factorydefinitions.DefinitionActivationResult, error) {
+	callback := g.callbacks().ActivateSessionEditableFactoryWithResult
+	if callback == nil {
+		return factorydefinitions.DefinitionActivationResult{}, fmt.Errorf("Factory Session activation result callback is required")
+	}
+	return callback(
+		ctx,
+		g.liveSession(session),
+		sessionID,
+		sessionRootDir,
+		factoryDir,
+		name,
+		runtimeName,
+	)
+}
+
 func (g definitionActivationGateway) SwapPersistedNamedFactoryRuntime(
 	ctx context.Context,
 	sessionID string,
@@ -134,3 +172,4 @@ func (g definitionActivationGateway) liveSession(
 }
 
 var _ factorysessions.DefinitionActivationGateway = definitionActivationGateway{}
+var _ definitionActivationResultGateway = definitionActivationGateway{}

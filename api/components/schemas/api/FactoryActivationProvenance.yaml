@@ -1,0 +1,18 @@
+type: object
+description: Server-owned identity of the immutable Factory snapshot accepted by the active runtime.
+additionalProperties: false
+required:
+    - activationId
+    - loadedSourceDigest
+    - state
+properties:
+    activationId:
+        type: string
+        minLength: 1
+        description: Opaque identity published once for this successful activation.
+    loadedSourceDigest:
+        type: string
+        pattern: '^sha256:[a-f0-9]{64}$'
+        description: SHA-256 identity of the canonical effective Factory and resolved definition/instruction bytes accepted for activation; source bytes are never returned.
+    state:
+        $ref: './FactoryActivationState.yaml'

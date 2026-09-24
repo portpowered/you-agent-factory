@@ -20,7 +20,14 @@ import {
 } from "./browser-test-harness.mjs";
 import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
+const editableGraphFactoryActivation = {
+  activationId: "browser-fixture-activation",
+  loadedSourceDigest: `sha256:${"0".repeat(64)}`,
+  state: "ACTIVE",
+};
+
 const exportFactoryDefinition = {
+  activation: editableGraphFactoryActivation,
   metadata: {
     owner: "operations",
   },
@@ -82,6 +89,7 @@ const exportFactoryDefinition = {
 };
 
 const editableGraphFactoryDefinition = {
+  activation: editableGraphFactoryActivation,
   metadata: {
     owner: "operations",
   },
@@ -152,6 +160,7 @@ const editableGraphFactoryReplayLines = [
     id: "editable-graph-1",
     payload: {
       factory: {
+        activation: editableGraphFactoryActivation,
         resources: [
           {
             capacity: 2,
@@ -739,13 +748,19 @@ describe.concurrent("factory graph editor browser integration", () => {
         expect(sessionFactoryPutRequests[0]?.sessionID).toBe(
           resolvedDefaultFactorySessionID,
         );
+        const { activation, ...authoredExportFactoryDefinition } =
+          exportFactoryDefinition;
+        expect(activation).toEqual(editableGraphFactoryActivation);
         expect(sessionFactoryPutRequests[0]?.body).toMatchObject({
-          ...exportFactoryDefinition,
+          ...authoredExportFactoryDefinition,
           name: exportName,
           version: {
             logical: "2",
           },
         });
+        expect(sessionFactoryPutRequests[0]?.body).not.toHaveProperty(
+          "activation",
+        );
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,

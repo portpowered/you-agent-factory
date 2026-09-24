@@ -17,6 +17,13 @@ export interface CurrentActivityFactoryDocumentState {
   editableDefinitionQuery: CurrentActivityFactoryDocumentQuery;
 }
 
+type VersionedEventFactory = NonNullable<DashboardSnapshot["factory"]> & {
+  version: {
+    logical: string | number;
+    physical: string;
+  };
+};
+
 export function useCurrentActivityFactoryDocumentState({
   eventFactory,
 }: {
@@ -40,12 +47,22 @@ export function useCurrentActivityFactoryDocumentState({
         };
       }
 
+      if (hasVersionedEventFactory(eventFactory)) {
+        return {
+          data: undefined,
+          error: null,
+          // Keep observer rendering settled for legacy events. The editor
+          // separately fails closed when this document is absent.
+          status: "success",
+        };
+      }
+
       return {
         data: undefined,
         error: null,
         status: "pending",
       };
-    }, [eventFactoryDocument]);
+    }, [eventFactory, eventFactoryDocument]);
 
   return useMemo(
     () => ({
@@ -59,22 +76,34 @@ export function useCurrentActivityFactoryDocumentState({
 function toCurrentFactoryDocumentFromEventFactory(
   eventFactory: NonNullable<DashboardSnapshot["factory"]>,
 ): CurrentFactoryDocument | null {
-  const version = eventFactory.version;
   if (
-    version == null ||
-    typeof version !== "object" ||
-    (typeof version.logical !== "string" &&
-      typeof version.logical !== "number") ||
-    typeof version.physical !== "string"
+    !hasVersionedEventFactory(eventFactory) ||
+    eventFactory.activation == null
   ) {
     return null;
   }
 
+  const version = eventFactory.version;
+
   return {
     ...eventFactory,
+    activation: eventFactory.activation,
     version: {
       logical: String(version.logical),
       physical: version.physical,
     },
   };
+}
+
+function hasVersionedEventFactory(
+  eventFactory?: DashboardSnapshot["factory"] | null,
+): eventFactory is VersionedEventFactory {
+  const version = eventFactory?.version;
+  return (
+    version != null &&
+    typeof version === "object" &&
+    (typeof version.logical === "string" ||
+      typeof version.logical === "number") &&
+    typeof version.physical === "string"
+  );
 }

@@ -36,6 +36,14 @@ type namedPathHost interface {
 	ResolveExistingFactoryDir(string, string) (string, error)
 }
 
+type namedFactoryDiscardHost interface {
+	DiscardNamedFactory(string, string) error
+}
+
+type currentFactoryPointerRemoverHost interface {
+	RemoveCurrentFactoryPointer(string) error
+}
+
 func resolveExistingFactoryDirFromHost(host Host, rootDir, name string) (string, error) {
 	paths, ok := host.(namedPathHost)
 	if !ok {
@@ -118,6 +126,22 @@ func writeCurrentFactoryPointerFromHost(host Host, rootDir, name string) error {
 	return persistence.WriteCurrentFactoryPointer(rootDir, name)
 }
 
+func discardNamedFactoryFromHost(host Host, rootDir, name string) error {
+	discarder, ok := host.(namedFactoryDiscardHost)
+	if !ok {
+		return fmt.Errorf("named Factory discard capability is required")
+	}
+	return discarder.DiscardNamedFactory(rootDir, name)
+}
+
+func removeCurrentFactoryPointerFromHost(host Host, rootDir string) error {
+	remover, ok := host.(currentFactoryPointerRemoverHost)
+	if !ok {
+		return fmt.Errorf("current Factory pointer remover is required")
+	}
+	return remover.RemoveCurrentFactoryPointer(rootDir)
+}
+
 func preparePortableFactoryConfigFromHost(
 	host Host,
 	factoryDir string,
@@ -175,6 +199,17 @@ type dependencyHost struct {
 	validateEditableFactorySnapshot     func(context.Context, *factorydefinitions.FactorySnapshot) error
 	getCurrentFactorySnapshotForSession func(context.Context, string) (*factorydefinitions.FactorySnapshot, error)
 	replaceFactoryLayoutAtDir           func(string, *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error)
+	discardNamedFactory                 func(string, string) error
+	removeCurrentFactoryPointer         func(string) error
+}
+
+// RollbackCallbacks contains optional durable effects needed to undo a named
+// activation candidate. They are optional so focused legacy hosts can retain
+// the existing Host contract while production composition supplies the exact
+// filesystem capabilities.
+type RollbackCallbacks struct {
+	DiscardNamedFactory         func(string, string) error
+	RemoveCurrentFactoryPointer func(string) error
 }
 
 // NewHost adapts flat process callbacks to the canonical Definition Host.
@@ -197,7 +232,12 @@ func NewHost(
 	validateEditableFactorySnapshot func(context.Context, *factorydefinitions.FactorySnapshot) error,
 	getCurrentFactorySnapshotForSession func(context.Context, string) (*factorydefinitions.FactorySnapshot, error),
 	replaceFactoryLayoutAtDir func(string, *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error),
+	rollback ...RollbackCallbacks,
 ) (Host, error) {
+	var rollbackCallbacks RollbackCallbacks
+	if len(rollback) > 0 {
+		rollbackCallbacks = rollback[0]
+	}
 	return dependencyHost{
 		persistRootDir: persistRootDir, workstationLoader: workstationLoader,
 		loadFactory: loadFactory, readCurrentFactoryPointer: readCurrentFactoryPointer,
@@ -213,6 +253,8 @@ func NewHost(
 		validateEditableFactorySnapshot:     validateEditableFactorySnapshot,
 		getCurrentFactorySnapshotForSession: getCurrentFactorySnapshotForSession,
 		replaceFactoryLayoutAtDir:           replaceFactoryLayoutAtDir,
+		discardNamedFactory:                 rollbackCallbacks.DiscardNamedFactory,
+		removeCurrentFactoryPointer:         rollbackCallbacks.RemoveCurrentFactoryPointer,
 	}, nil
 }
 
@@ -283,6 +325,20 @@ func (h dependencyHost) WriteCurrentFactoryPointer(rootDir, name string) error {
 		return fmt.Errorf("current Factory pointer writer is required")
 	}
 	return h.writeCurrentFactoryPointer(rootDir, name)
+}
+
+func (h dependencyHost) DiscardNamedFactory(rootDir, name string) error {
+	if h.discardNamedFactory == nil {
+		return fmt.Errorf("named Factory discard capability is required")
+	}
+	return h.discardNamedFactory(rootDir, name)
+}
+
+func (h dependencyHost) RemoveCurrentFactoryPointer(rootDir string) error {
+	if h.removeCurrentFactoryPointer == nil {
+		return fmt.Errorf("current Factory pointer remover is required")
+	}
+	return h.removeCurrentFactoryPointer(rootDir)
 }
 
 func (h dependencyHost) LoadFactory(

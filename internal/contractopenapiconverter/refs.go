@@ -118,6 +118,10 @@ func (ctx *convertContext) convertSchemaObject(schema map[string]any, path strin
 		}
 		childPath := joinPath(path, key)
 		switch key {
+		case "readOnly":
+			if _, ok := value.(bool); !ok {
+				return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
+			}
 		case "properties":
 			converted, diagnostics := ctx.convertPropertiesField(value, childPath)
 			if len(diagnostics) != 0 {
@@ -179,7 +183,11 @@ func (ctx *convertContext) convertSchemaObject(schema map[string]any, path strin
 			}
 		case "required", "enum", "description", "title", "format", "default",
 			"minLength", "maxLength", "pattern", "minItems", "maxItems", "uniqueItems":
-			result[key] = value
+			if key == "required" {
+				result[key] = removeReadOnlyRequiredProperties(value, schema["properties"])
+			} else {
+				result[key] = value
+			}
 		default:
 			return nil, []contractvalidator.Diagnostic{unsupportedKeyword(key, childPath, ctx.stage)}
 		}

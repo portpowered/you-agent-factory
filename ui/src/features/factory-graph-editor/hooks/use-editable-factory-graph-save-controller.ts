@@ -178,6 +178,7 @@ function savedFactoryGraphDocument(
 ): CurrentFactoryDocument {
   return {
     ...savedFactory,
+    activation: savedDocument.activation,
     version: savedDocument.version,
   };
 }

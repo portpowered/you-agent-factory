@@ -6,6 +6,7 @@ import {
   incrementSessionFactoryVersion,
   parseSessionFactoryPutFactory,
 } from "../../../../../testing/session-factory-mocks";
+import { defaultFactoryActivation } from "../../../../../testing/factory-activation-fixtures";
 import { createDefaultFactoryLayout } from "../../../lib/layout/factory-graph-layout-operations";
 
 const VISUAL_GROUP_EDITOR_STORAGE_KEY =
@@ -19,6 +20,7 @@ export function createVisualGroupEditorFactoryDocument(): SessionFactoryDocument
 
   return {
     ...factory,
+    activation: factory.activation ?? defaultFactoryActivation,
     layout: createDefaultFactoryLayout(),
     version: { ...defaultSessionFactoryVersion },
   };
@@ -98,8 +100,10 @@ export function buildVisualGroupEditorFetchMocks() {
         const savedFactory = parseSessionFactoryPutFactory(
           String(init?.body ?? "{}"),
         );
+        const currentDocument = getVisualGroupEditorPersistedFactory();
         const nextDocument: SessionFactoryDocument = {
           ...savedFactory,
+          activation: currentDocument.activation,
           version: incrementSessionFactoryVersion(
             savedFactory.version ?? defaultSessionFactoryVersion,
           ),

@@ -2015,7 +2015,7 @@ paths:
                     workstations: []
       responses:
         '200':
-          description: Saved current factory definition and new version metadata for the targeted session.
+          description: Saved and activated Factory with the newly published version and activation provenance for the targeted session.
           content:
             application/json:
               schema:
@@ -11880,6 +11880,38 @@ components:
       x-enum-descriptions:
         - Replace the factory already current in the selected live session.
         - Create or replace a named factory under the session root and activate it in that session.
+    FactoryActivationState:
+      type: string
+      description: Comparison of the active runtime snapshot with the currently selected authored source. ACTIVE means the selected authored definition and instruction bytes match the loaded digest. AUTHORED_CHANGED means bytes at the same authored source changed after activation. NOT_ACTIVATED means no selected authored source is proven to be the loaded runtime. AUTHORED_SOURCE_UNAVAILABLE means the active identity remains authoritative but the authored source cannot be read or validated for comparison.
+      enum:
+        - ACTIVE
+        - AUTHORED_CHANGED
+        - NOT_ACTIVATED
+        - AUTHORED_SOURCE_UNAVAILABLE
+      x-enum-varnames:
+        - FactoryActivationStateActive
+        - FactoryActivationStateAuthoredChanged
+        - FactoryActivationStateNotActivated
+        - FactoryActivationStateAuthoredSourceUnavailable
+    FactoryActivationProvenance:
+      type: object
+      description: Server-owned identity of the immutable Factory snapshot accepted by the active runtime.
+      additionalProperties: false
+      required:
+        - activationId
+        - loadedSourceDigest
+        - state
+      properties:
+        activationId:
+          type: string
+          minLength: 1
+          description: Opaque identity published once for this successful activation.
+        loadedSourceDigest:
+          type: string
+          pattern: ^sha256:[a-f0-9]{64}$
+          description: SHA-256 identity of the canonical effective Factory and resolved definition/instruction bytes accepted for activation; source bytes are never returned.
+        state:
+          $ref: '#/components/schemas/FactoryActivationState'
     SaveFactoryForSessionRequest:
       type: object
       description: Session-scoped factory submission payload for PUT /factory-sessions/{session_id}/factory.
@@ -11953,6 +11985,11 @@ components:
           allOf:
             - $ref: '#/components/schemas/HybridLogicalTimestamp'
           description: Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology.
+        activation:
+          allOf:
+            - $ref: '#/components/schemas/FactoryActivationProvenance'
+          readOnly: true
+          description: Server-owned provenance returned by current-Factory inspection and activation responses. It is not accepted as authored topology and is never persisted.
         metadata:
           allOf:
             - $ref: '#/components/schemas/StringMap'

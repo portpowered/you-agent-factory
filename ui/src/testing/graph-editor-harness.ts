@@ -17,6 +17,7 @@ import type {
 } from "../features/factory-graph-editor/hooks/use-editable-factory-graph-types";
 import { currentFactoryDocument } from "../features/factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "../features/factory-graph-editor/lib/draft/factory-graph-draft-graph";
+import { defaultFactoryActivation } from "./factory-activation-fixtures";
 import {
   createEmptyFactoryGraphDraft,
   type FactoryGraphDraftDerivedState,
@@ -102,6 +103,7 @@ export const baseFactoryDefinition: CanonicalFactoryDefinition = {
 
 export const baseFactoryDefinitionDocument: CurrentFactoryDocument = {
   ...baseFactoryDefinition,
+  activation: defaultFactoryActivation,
   version: {
     logical: "8",
     physical: "2026-05-18T15:32:00Z",
@@ -773,6 +775,7 @@ const divergentSnapshotOnlyWorkstation = {
 /** Factory document with a workstation absent from a divergent snapshot-only node. */
 export const divergentDocumentPlaneFactoryDocument: CurrentFactoryDocument = {
   ...baseFactoryDefinition,
+  activation: defaultFactoryActivation,
   name: "Document Factory",
   version: {
     logical: "7",

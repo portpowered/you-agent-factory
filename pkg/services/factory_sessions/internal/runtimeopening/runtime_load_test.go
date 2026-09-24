@@ -421,7 +421,9 @@ func TestLoadRuntimePreservesLegacyReplayInputs(t *testing.T) {
 		nil,
 		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()},
 		nil,
-		factorydefinitionswire.LoadedFactorySourceFactory(),
+		factorydefinitionswire.LoadedFactorySourceFactory(func() string {
+			return "runtime-load-activation"
+		}),
 		factorydefinitionswire.ReplayRuntimeConfigDecoder(),
 		capability,
 		nil,

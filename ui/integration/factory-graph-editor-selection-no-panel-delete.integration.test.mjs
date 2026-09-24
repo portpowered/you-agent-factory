@@ -17,7 +17,14 @@ import {
 } from "./browser-test-harness.mjs";
 import { isolatedMockBrowserTest as it } from "./mocked-browser-test-fixture.mjs";
 
+const editableGraphFactoryActivation = {
+  activationId: "browser-fixture-activation",
+  loadedSourceDigest: `sha256:${"0".repeat(64)}`,
+  state: "ACTIVE",
+};
+
 const editableGraphFactoryDefinition = {
+  activation: editableGraphFactoryActivation,
   metadata: {
     owner: "operations",
   },
@@ -88,6 +95,7 @@ const editableGraphFactoryReplayLines = [
     id: "editable-graph-1",
     payload: {
       factory: {
+        activation: editableGraphFactoryActivation,
         resources: [
           {
             capacity: 2,

@@ -29,6 +29,7 @@ func NewLoader(
 	sourceResolver factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	activationID func() string,
 ) *Loader {
 	mapper := factorymapping.NewFactoryConfigMapper()
 	authoredReader := internalauthoredlayout.NewReader(
@@ -41,7 +42,7 @@ func NewLoader(
 		loadingFileSystem,
 		internalauthoredlayout.NewFactorySourceLoader(fileSystem),
 		namedPaths.ResolveCurrentDir,
-		LoadedFactorySourceFactory(),
+		LoadedFactorySourceFactory(activationID),
 		factorymapping.ExpandFactoryConfigForRuntimeLoad,
 		mapper.Expand,
 		factorymapping.MarshalCanonicalFactoryConfig,
@@ -97,7 +98,7 @@ func NewPathRequiredToolChecker(
 
 // LoadedFactorySourceFactory binds the compilation-owned effective-source
 // implementation to the Factory Definitions root constructor contract.
-func LoadedFactorySourceFactory() factorydefinitions.LoadedFactorySourceFactory {
+func LoadedFactorySourceFactory(activationID func() string) factorydefinitions.LoadedFactorySourceFactory {
 	return func(
 		factoryDir string,
 		factoryConfig *factorydefinitions.FactoryConfig,
@@ -109,6 +110,7 @@ func LoadedFactorySourceFactory() factorydefinitions.LoadedFactorySourceFactory 
 			factoryConfig,
 			runtimeDefinitions,
 			replacements,
+			activationID,
 		)
 	}
 }

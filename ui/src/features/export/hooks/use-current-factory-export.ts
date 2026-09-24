@@ -114,7 +114,11 @@ export function useCurrentFactoryExport(
 function currentFactoryDocumentToExportValue(
   document: CurrentFactoryDocument,
 ): ImportFactoryValue {
-  const { version: _version, ...factoryValue } = document;
+  const {
+    activation: _activation,
+    version: _version,
+    ...factoryValue
+  } = document;
   return factoryValue;
 }
 

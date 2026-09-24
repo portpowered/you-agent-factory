@@ -5662,6 +5662,19 @@ export interface components {
      */
     FactorySaveMode: FactorySaveMode;
     /**
+     * @description Comparison of the active runtime snapshot with the currently selected authored source. ACTIVE means the selected authored definition and instruction bytes match the loaded digest. AUTHORED_CHANGED means bytes at the same authored source changed after activation. NOT_ACTIVATED means no selected authored source is proven to be the loaded runtime. AUTHORED_SOURCE_UNAVAILABLE means the active identity remains authoritative but the authored source cannot be read or validated for comparison.
+     * @enum {string}
+     */
+    FactoryActivationState: FactoryActivationState;
+    /** @description Server-owned identity of the immutable Factory snapshot accepted by the active runtime. */
+    FactoryActivationProvenance: {
+      /** @description Opaque identity published once for this successful activation. */
+      activationId: string;
+      /** @description SHA-256 identity of the canonical effective Factory and resolved definition/instruction bytes accepted for activation; source bytes are never returned. */
+      loadedSourceDigest: string;
+      state: components["schemas"]["FactoryActivationState"];
+    };
+    /**
      * @description Session-scoped factory submission payload for PUT /factory-sessions/{session_id}/factory.
      * @example {
      *       "mode": "REPLACE_CURRENT",
@@ -5738,6 +5751,8 @@ export interface components {
       sourceDirectory?: string;
       /** @description Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology. */
       version?: components["schemas"]["HybridLogicalTimestamp"];
+      /** @description Server-owned provenance returned by current-Factory inspection and activation responses. It is not accepted as authored topology and is never persisted. */
+      readonly activation?: components["schemas"]["FactoryActivationProvenance"];
       /** @description Free-form factory-level metadata carried through runtime serialization and replay diagnostics. */
       metadata?: components["schemas"]["StringMap"];
       /** @description Authored orchestrator identity for this factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI. */
@@ -10185,7 +10200,7 @@ export interface operations {
       };
     };
     responses: {
-      /** @description Saved current factory definition and new version metadata for the targeted session. */
+      /** @description Saved and activated Factory with the newly published version and activation provenance for the targeted session. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -11642,6 +11657,15 @@ export const FactorySaveMode = {
 } as const;
 export type FactorySaveMode =
   (typeof FactorySaveMode)[keyof typeof FactorySaveMode];
+export const FactoryActivationState = {
+  FactoryActivationStateActive: "ACTIVE",
+  FactoryActivationStateAuthoredChanged: "AUTHORED_CHANGED",
+  FactoryActivationStateNotActivated: "NOT_ACTIVATED",
+  FactoryActivationStateAuthoredSourceUnavailable:
+    "AUTHORED_SOURCE_UNAVAILABLE",
+} as const;
+export type FactoryActivationState =
+  (typeof FactoryActivationState)[keyof typeof FactoryActivationState];
 export const FactoryWebhookEventType = {
   WORK_STATE_CHANGE: "WORK_STATE_CHANGE",
   DISPATCH_RESPONSE: "DISPATCH_RESPONSE",
