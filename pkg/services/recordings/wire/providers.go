@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
@@ -191,6 +192,7 @@ func newRuntimeRoot(
 		readFile,
 		NewProjectionService(),
 		logger,
+		historicalQueryClock(clocks...),
 	)
 	root := recordingsinternal.NewRuntimeRootWithHistoricalQueryAndAppender(
 		targets,
@@ -347,7 +349,7 @@ func NewServiceWithProjectionAndEffects(
 	if err != nil {
 		return nil, fmt.Errorf("construct Recordings publication: %w", err)
 	}
-	historicalQuery := historicalquerywire.NewService(readFile, projection, logger)
+	historicalQuery := historicalquerywire.NewService(readFile, projection, logger, historicalQueryClock(clocks...))
 	return newServiceWithProjection(
 		ledger,
 		projection,
@@ -358,6 +360,15 @@ func NewServiceWithProjectionAndEffects(
 		false,
 		clocks...,
 	)
+}
+
+func historicalQueryClock(clocks ...recordings.RecordingClock) recordings.RecordingClock {
+	for _, clock := range clocks {
+		if clock != nil {
+			return clock
+		}
+	}
+	return platformclock.Real{}
 }
 
 type portableArtifactPublication interface {

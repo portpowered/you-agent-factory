@@ -14,6 +14,7 @@ func NewService(
 	readArtifact recordings.RecordingReadFile,
 	projection recordings.ProjectionService,
 	logger logging.Logger,
+	clock recordings.RecordingClock,
 ) historicalquery.Service {
-	return service.New(readArtifact, projection, logger)
+	return service.New(readArtifact, projection, logger, clock)
 }

@@ -22,7 +22,10 @@ import (
 func (service *Service) QueryHistoricalWorkerAssociations(
 	request recordings.HistoricalWorkerAssociationsRequest,
 ) (recordings.HistoricalWorkerAssociationsResult, error) {
-	started := time.Now()
+	started := time.Time{}
+	if service != nil && service.clock != nil {
+		started = service.clock.Now()
+	}
 	logger := serviceLogger(service)
 	baseFields := []any{
 		"operation", "query_historical_worker_associations",
@@ -33,7 +36,11 @@ func (service *Service) QueryHistoricalWorkerAssociations(
 	outcome := "failed"
 	failureClass := ""
 	defer func() {
-		fields := append(append([]any(nil), baseFields...), "outcome", outcome, "duration", time.Since(started))
+		duration := time.Duration(0)
+		if service != nil && service.clock != nil {
+			duration = service.clock.Now().Sub(started)
+		}
+		fields := append(append([]any(nil), baseFields...), "outcome", outcome, "duration", duration)
 		if failureClass != "" {
 			fields = append(fields, "failureClass", failureClass)
 		}

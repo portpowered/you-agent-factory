@@ -40,7 +40,7 @@ func TestQueryHistoricalWorkerAssociationsReturnsSortedIDsAndIncompleteDispatche
 			workers.DispatchResponseEventPayload{Outcome: workers.OutcomeAccepted, TransitionID: "review"}),
 	}
 	payload := historicalReplayV1(t, events)
-	query := New(func(string) ([]byte, error) { return payload, nil }, recordingsinternal.NewProjectionService(), logging.NoopLogger{})
+	query := New(func(string) ([]byte, error) { return payload, nil }, recordingsinternal.NewProjectionService(), logging.NoopLogger{}, testHistoricalQueryClock())
 	result, err := query.QueryHistoricalWorkerAssociations(recordings.HistoricalWorkerAssociationsRequest{
 		Recording: recordings.HistoricalRecordingIdentity{RecordingID: "recording-1", Artifact: "history.jsonl"},
 		WorkID:    workID,
@@ -89,7 +89,7 @@ func TestQueryHistoricalWorkerAssociationsClassifiesUnavailableAndUnknownWork(t 
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			query := New(testCase.read, recordingsinternal.NewProjectionService(), logging.NoopLogger{})
+			query := New(testCase.read, recordingsinternal.NewProjectionService(), logging.NoopLogger{}, testHistoricalQueryClock())
 			result, err := query.QueryHistoricalWorkerAssociations(recordings.HistoricalWorkerAssociationsRequest{
 				Recording: recordings.HistoricalRecordingIdentity{RecordingID: "recording-2", Artifact: "history.jsonl"},
 				WorkID:    testCase.workID,
@@ -112,7 +112,10 @@ func TestQueryHistoricalWorkerAssociationsLogsOutcomeWithoutArtifactPath(t *test
 
 	logger := &historicalQueryTestLogger{}
 	artifactPath := `C:\private\recordings\history.jsonl`
-	query := New(func(string) ([]byte, error) { return nil, os.ErrPermission }, recordingsinternal.NewProjectionService(), logger)
+	query := New(func(string) ([]byte, error) { return nil, os.ErrPermission }, recordingsinternal.NewProjectionService(), logger, &advancingHistoricalQueryClock{
+		at:   time.Unix(1_700_000_000, 0).UTC(),
+		step: 125 * time.Millisecond,
+	})
 	result, err := query.QueryHistoricalWorkerAssociations(recordings.HistoricalWorkerAssociationsRequest{
 		Recording: recordings.HistoricalRecordingIdentity{
 			RecordingID: "recording-safe-id",
@@ -139,8 +142,8 @@ func TestQueryHistoricalWorkerAssociationsLogsOutcomeWithoutArtifactPath(t *test
 		finished["outcome"] != "unavailable" || finished["failureClass"] != "artifact_read_failed" {
 		t.Fatalf("terminal operation log = %#v, want unavailable artifact_read_failed", logger.entries[1])
 	}
-	if _, ok := finished["duration"].(time.Duration); !ok {
-		t.Fatalf("terminal operation duration = %#v, want time.Duration", finished["duration"])
+	if duration, ok := finished["duration"].(time.Duration); !ok || duration != 125*time.Millisecond {
+		t.Fatalf("terminal operation duration = %#v, want 125ms from the injected clock", finished["duration"])
 	}
 	for _, entry := range logger.entries {
 		for _, value := range entry.fields {
@@ -149,6 +152,22 @@ func TestQueryHistoricalWorkerAssociationsLogsOutcomeWithoutArtifactPath(t *test
 			}
 		}
 	}
+}
+
+type advancingHistoricalQueryClock struct {
+	at    time.Time
+	step  time.Duration
+	calls int
+}
+
+func (clock *advancingHistoricalQueryClock) Now() time.Time {
+	at := clock.at.Add(time.Duration(clock.calls) * clock.step)
+	clock.calls++
+	return at
+}
+
+func testHistoricalQueryClock() recordings.RecordingClock {
+	return &advancingHistoricalQueryClock{at: time.Unix(1_700_000_000, 0).UTC()}
 }
 
 type historicalQueryLogEntry struct {

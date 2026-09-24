@@ -25,6 +25,7 @@ type Service struct {
 	readArtifact recordings.RecordingReadFile
 	projection   recordings.ProjectionService
 	logger       logging.Logger
+	clock        recordings.RecordingClock
 }
 
 var _ interface {
@@ -37,11 +38,13 @@ func New(
 	readArtifact recordings.RecordingReadFile,
 	projection recordings.ProjectionService,
 	logger logging.Logger,
+	clock recordings.RecordingClock,
 ) *Service {
 	return &Service{
 		readArtifact: readArtifact,
 		projection:   projection,
 		logger:       logging.EnsureLogger(logger),
+		clock:        clock,
 	}
 }
 
