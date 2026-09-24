@@ -40,10 +40,16 @@ func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 	writeACPWorker(t, dir, providerID)
 	retryAttemptDir := t.TempDir()
 	retryHoldMarker := filepath.Join(retryAttemptDir, "first-prompt-held")
+	observationDir := filepath.Join(retryAttemptDir, "private")
+	if err := os.Mkdir(observationDir, 0o700); err != nil {
+		t.Fatalf("create private ACP observation directory: %v", err)
+	}
+	retryObservationPath := filepath.Join(observationDir, "rpc.jsonl")
 	retryFixture := functionalACPFixture("retry-resume")
 	retryFixture.SessionID = sessionID
 	retryFixture.RetryAttemptDirectory = retryAttemptDir
 	retryFixture.RetryHoldPath = retryHoldMarker
+	retryFixture.ObservationPath = retryObservationPath
 
 	var processStarts atomic.Int32
 	_, listed, events := support.RunFactoryToCompletionWithConfiguredHome(t, dir, serviceedges.Edges{
@@ -59,6 +65,15 @@ func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 			t.Fatalf("write operator config: %v", err)
 		}
 	})
+
+	publicSummary := summarizeACPPublicOutcome(listed, events)
+	t.Logf("ACP retry public Work/Event observation: %s", publicSummary)
+	records, observationErr := readACPObservationRecords(retryObservationPath)
+	if observationErr != nil {
+		t.Errorf("ACP retry peer observation is incomplete; public Work/Event observation: %s: %v", publicSummary, observationErr)
+	} else if observationErr := validateACPRetryObservation(records); observationErr != nil {
+		t.Errorf("ACP retry peer observation is incomplete; public Work/Event observation: %s: %v", publicSummary, observationErr)
+	}
 
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
 		t.Fatalf("completed work = %d, want 1; %s", got, acpFailureDiagnostics(events))
