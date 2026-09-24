@@ -1,6 +1,7 @@
 package recordedhistory_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -153,6 +154,7 @@ func TestWorkerSessionsHistoryCLIReportsTrustedRecordedAssociations(t *testing.T
 			if err := process.Execute(inputs.Input); err != nil {
 				t.Fatalf("Process.Execute: %v\nstdout: %s\nstderr: %s", err, inputs.Stdout(), inputs.Stderr())
 			}
+			assertHistoryRecordingUnchanged(t, recordingPath, testCase.artifact)
 			var result historyCLIResult
 			if err := json.Unmarshal([]byte(inputs.Stdout()), &result); err != nil {
 				t.Fatalf("decode public history JSON %q: %v", inputs.Stdout(), err)
@@ -176,6 +178,24 @@ func TestWorkerSessionsHistoryCLIReportsTrustedRecordedAssociations(t *testing.T
 				}
 			}
 		})
+	}
+}
+
+func assertHistoryRecordingUnchanged(t *testing.T, path string, want []byte) {
+	t.Helper()
+
+	got, err := os.ReadFile(path)
+	if want == nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("missing recording state changed: read error = %v, want %v", err, os.ErrNotExist)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("read recording after history query: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("history query changed recording bytes: got %d bytes, want unchanged %d bytes", len(got), len(want))
 	}
 }
 
