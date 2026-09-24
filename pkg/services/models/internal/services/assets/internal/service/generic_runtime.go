@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 )
 
@@ -39,6 +40,20 @@ func (s *service) publishGenericRuntimeCache(
 	if err := assetContextError(ctx); err != nil {
 		return assets.RuntimeCacheInspection{}, err
 	}
+	modelRoot, err := s.modelCacheRoot(cacheDirectory, canonicalModelName(modelName))
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, err
+	}
+	referenceLock, err := s.lockCacheReferenceUpdates(ctx, filepath.Dir(modelRoot))
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, pullsupport.WrapPullStage(
+			models.PullStageCacheInstallation, modelName, "coordinate managed cache reference", "",
+			interruptedAssetError("coordinate managed cache reference", err),
+		)
+	}
+	defer func() {
+		err = closeAssetStagingLock(referenceLock, err)
+	}()
 	lock, err := s.lockGenericRuntime(ctx, cacheDirectory, modelName)
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, err

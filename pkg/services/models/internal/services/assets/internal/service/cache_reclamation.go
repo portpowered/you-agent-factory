@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -29,6 +30,87 @@ type cacheReclamationCandidate struct {
 type cacheReclamationPlan struct {
 	candidates []cacheReclamationCandidate
 	retained   int64
+}
+
+const cacheReferenceLockName = "references.lock"
+
+// lockCacheReferenceUpdates serializes durable managed-cache reference
+// publication with a reclamation census and its subsequent deletions. Cache
+// content acquisition uses separate source locks; callers take those locks
+// for every candidate before applying a reclamation plan.
+func (s *service) lockCacheReferenceUpdates(ctx context.Context, cacheRoot string) (io.Closer, error) {
+	if s == nil || s.coordination == nil {
+		return nil, errors.New("cache reference coordination is unavailable")
+	}
+	return s.coordination.Lock(ctx, filepath.Join(cacheRoot, ".you-asset-locks", cacheReferenceLockName))
+}
+
+func (s *service) planAndLockCacheReclamationCandidates(
+	ctx context.Context,
+	cacheRoot string,
+	modelRoot string,
+	modelName string,
+	metadata cacheMetadata,
+	source genericSource,
+) (cacheReclamationPlan, []io.Closer, error) {
+	locks := make([]io.Closer, 0, 2)
+	lockedPaths := make(map[string]struct{}, 2)
+	for {
+		plan, err := s.planCacheReclamation(ctx, cacheRoot, modelRoot, modelName, metadata, source)
+		if err != nil {
+			return cacheReclamationPlan{}, locks, err
+		}
+		lockPaths := make([]string, 0, len(plan.candidates))
+		for _, candidate := range plan.candidates {
+			path := cacheCandidateSourceLockPath(cacheRoot, candidate)
+			if _, locked := lockedPaths[path]; !locked {
+				lockPaths = append(lockPaths, path)
+			}
+		}
+		if len(lockPaths) == 0 {
+			return plan, locks, nil
+		}
+		sort.Strings(lockPaths)
+		for _, path := range lockPaths {
+			lock, lockErr := s.lockCacheReferencePath(ctx, path)
+			if lockErr != nil {
+				return cacheReclamationPlan{}, locks, lockErr
+			}
+			locks = append(locks, lock)
+			lockedPaths[path] = struct{}{}
+		}
+	}
+}
+
+func cacheCandidateSourceLockPath(cacheRoot string, candidate cacheReclamationCandidate) string {
+	lockRoot := cacheRoot
+	if candidate.kind == assetKindBackend {
+		lockRoot = filepath.Join(lockRoot, "backend-artifacts")
+	}
+	identity := sha256.Sum256([]byte(candidate.kind + "|" + candidate.sourceKey))
+	return filepath.Join(
+		lockRoot, ".you-asset-locks", candidate.kind,
+		hex.EncodeToString(identity[:])+".lock",
+	)
+}
+
+func (s *service) lockCacheReferencePath(ctx context.Context, path string) (io.Closer, error) {
+	if s == nil || s.coordination == nil {
+		return nil, errors.New("cache candidate coordination is unavailable")
+	}
+	return s.coordination.Lock(ctx, path)
+}
+
+func closeCacheReclamationLocks(locks []io.Closer, primary error) error {
+	for index := len(locks) - 1; index >= 0; index-- {
+		if locks[index] == nil {
+			continue
+		}
+		if err := locks[index].Close(); err != nil {
+			primary = errors.Join(primary, fmt.Errorf("%w: coordinated cache removal could not release ownership", models.ErrModelCacheRemovalFailed))
+		}
+	}
+	return primary
 }
 
 func (s *service) planCacheReclamation(
@@ -140,8 +222,7 @@ func (s *service) inspectReclaimableBackendSnapshot(
 	backend *runtimeBackendMetadata,
 ) (cacheReclamationCandidate, bool, error) {
 	relative := strings.TrimSpace(backend.CachePath)
-	if !validGenericRuntimeRelativePath(relative) ||
-		!strings.HasPrefix(relative, "backend-artifacts/.you-content-addressed/backend/") {
+	if !validBackendCacheReferencePath(relative) {
 		return cacheReclamationCandidate{}, false, fmt.Errorf("backend cache path is not a YOU-owned content-addressed path")
 	}
 	identity := filepath.Base(filepath.FromSlash(relative))
@@ -392,7 +473,11 @@ func (s *service) markSharedReclamationCandidates(
 			otherName = entry.Name()
 		}
 		for index := range candidates {
-			if candidateReferencesBackend(candidates[index], metadata.Backend) {
+			sharedBackend, refErr := candidateReferencesBackend(candidates[index], metadata.Backend)
+			if refErr != nil {
+				return refErr
+			}
+			if sharedBackend {
 				candidates[index].shared = true
 			}
 			if candidates[index].kind == assetKindModel {
@@ -414,11 +499,40 @@ func (s *service) markSharedReclamationCandidates(
 	return nil
 }
 
-func candidateReferencesBackend(candidate cacheReclamationCandidate, backend *runtimeBackendMetadata) bool {
+func candidateReferencesBackend(candidate cacheReclamationCandidate, backend *runtimeBackendMetadata) (bool, error) {
 	if candidate.kind != assetKindBackend || backend == nil {
+		return false, nil
+	}
+	relative := strings.TrimSpace(backend.CachePath)
+	if !validBackendCacheReferencePath(relative) {
+		return false, fmt.Errorf("managed backend cache reference is unsafe")
+	}
+	requirements, err := cacheRequirements(backend.Files)
+	if err != nil || len(requirements) == 0 || strings.TrimSpace(backend.Revision) == "" {
+		return false, fmt.Errorf("managed backend cache reference is incomplete")
+	}
+	relative = filepath.ToSlash(filepath.Clean(filepath.FromSlash(relative)))
+	if relative != candidate.relativePath {
+		return false, nil
+	}
+	if !sameAssetRequirements(requirements, candidate.artifacts) {
+		return false, fmt.Errorf("managed backend cache reference does not match its snapshot")
+	}
+	return true, nil
+}
+
+func validBackendCacheReferencePath(relative string) bool {
+	if !validGenericRuntimeRelativePath(relative) {
 		return false
 	}
-	return filepath.ToSlash(filepath.Clean(filepath.FromSlash(strings.TrimSpace(backend.CachePath)))) == candidate.relativePath
+	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(relative)))
+	parts := strings.Split(clean, "/")
+	if len(parts) != 4 || parts[0] != "backend-artifacts" ||
+		parts[1] != assetContentDirectory || parts[2] != assetKindBackend || len(parts[3]) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(parts[3])
+	return err == nil
 }
 
 func modelCandidateReferencedByMetadata(

@@ -771,11 +771,12 @@ func (coordination *observingStagingCoordination) Lock(ctx context.Context, path
 
 func (coordination *genericLockPathRecorder) Lock(ctx context.Context, path string) (io.Closer, error) {
 	isRuntimeLock := strings.Contains(filepath.ToSlash(path), "/.you-asset-locks/runtime/")
-	if !isRuntimeLock && coordination.state.cacheCalls.Add(1) == 2 {
+	isReferenceLock := filepath.Base(path) == cacheReferenceLockName
+	if !isRuntimeLock && !isReferenceLock && coordination.state.cacheCalls.Add(1) == 2 {
 		coordination.state.secondOnce.Do(func() { close(coordination.state.secondAttempted) })
 	}
 	coordination.state.mu.Lock()
-	if !isRuntimeLock {
+	if !isRuntimeLock && !isReferenceLock {
 		if coordination.state.path == "" {
 			coordination.state.path = path
 		} else if coordination.state.path != path {

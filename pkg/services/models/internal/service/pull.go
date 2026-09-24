@@ -461,11 +461,6 @@ func removeModelCacheTerminalLog(
 	fields := []zap.Field{
 		zap.String("model_name", strings.TrimSpace(request.Name)),
 		zap.String("scope", request.Scope.String()),
-		zap.String("revision", result.Revision),
-		zap.String("cache_path", result.CachePath),
-		zap.Int64("bytes_removed", result.BytesRemoved),
-		zap.Int64("reclaimed_cache_bytes", result.ReclaimedCacheBytes),
-		zap.Int64("retained_shared_cache_bytes", result.RetainedSharedCacheBytes),
 		zap.String("outcome", outcome),
 		zap.Duration("duration", elapsed),
 	}
@@ -477,6 +472,13 @@ func removeModelCacheTerminalLog(
 		o.process.Logger.Warn("models cache removal completed", fields...)
 		return
 	}
+	fields = append(fields,
+		zap.String("revision", result.Revision),
+		zap.String("cache_path", result.CachePath),
+		zap.Int64("bytes_removed", result.BytesRemoved),
+		zap.Int64("reclaimed_cache_bytes", result.ReclaimedCacheBytes),
+		zap.Int64("retained_shared_cache_bytes", result.RetainedSharedCacheBytes),
+	)
 	o.process.Logger.Info("models cache removal completed", fields...)
 }
 

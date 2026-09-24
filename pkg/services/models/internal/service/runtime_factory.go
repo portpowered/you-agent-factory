@@ -337,6 +337,11 @@ func (o *Root) RemoveModelAssets(
 	o.cacheLifecycleMu.Lock()
 	result, err := o.removeModelAssets(ctx, request)
 	o.cacheLifecycleMu.Unlock()
+	if err != nil {
+		// Failure responses and terminal logs never publish success byte fields,
+		// including when an injected remover reports partial measurements.
+		result = models.RemoveModelAssetsResult{}
+	}
 	removeModelCacheTerminalLog(o, request, result, err, joinedInvocationElapsed(o, started))
 	return result, err
 }
