@@ -30,13 +30,14 @@ import (
 )
 
 const (
-	blockedReadinessHelperEnv = "LOCALAI_READINESS_HELPER"
-	blockedReadinessHeadEnv   = "LOCALAI_READINESS_SOURCE_HEAD"
-	blockedRuntimeEvidenceEnv = "INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE"
-	blockedReadinessModel     = "OMNIVOICE_Q4_K_M"
-	blockedReadinessBudget    = 30 * time.Second
-	blockedReadinessMaximum   = 35 * time.Second
-	blockedReadinessWait      = 5 * time.Second
+	blockedReadinessHelperEnv    = "LOCALAI_READINESS_HELPER"
+	blockedReadinessHelperSHAEnv = "LOCALAI_READINESS_HELPER_SHA256"
+	blockedReadinessHeadEnv      = "LOCALAI_READINESS_SOURCE_HEAD"
+	blockedRuntimeEvidenceEnv    = "INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE"
+	blockedReadinessModel        = "OMNIVOICE_Q4_K_M"
+	blockedReadinessBudget       = 30 * time.Second
+	blockedReadinessMaximum      = 35 * time.Second
+	blockedReadinessWait         = 5 * time.Second
 )
 
 type blockedReadinessEvent struct {
@@ -401,12 +402,20 @@ func requireBlockedReadinessHelper(t *testing.T) (string, string) {
 	if helper == "" || !filepath.IsAbs(helper) {
 		t.Fatalf("%s must be the absolute path to the build-lane-prebuilt helper", blockedReadinessHelperEnv)
 	}
-	body, err := os.ReadFile(helper)
-	if err != nil {
-		t.Fatalf("read blocked-readiness helper %q: %v", helper, err)
+	digest := strings.TrimSpace(os.Getenv(blockedReadinessHelperSHAEnv))
+	if digest == "" {
+		body, err := os.ReadFile(helper)
+		if err != nil {
+			t.Fatalf("read blocked-readiness helper %q: %v", helper, err)
+		}
+		computed := sha256.Sum256(body)
+		digest = hex.EncodeToString(computed[:])
 	}
-	digest := sha256.Sum256(body)
-	return helper, hex.EncodeToString(digest[:])
+	decoded, err := hex.DecodeString(digest)
+	if err != nil || len(decoded) != sha256.Size {
+		t.Fatalf("%s must contain the SHA-256 digest of the build-lane-prebuilt helper", blockedReadinessHelperSHAEnv)
+	}
+	return helper, strings.ToLower(digest)
 }
 
 func reserveBlockedReadinessAddress() (string, error) {
