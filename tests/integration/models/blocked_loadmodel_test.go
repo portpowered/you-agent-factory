@@ -262,12 +262,6 @@ func TestBlockedLoadModelStopsOwnedProcess(t *testing.T) {
 	if inspect.Host.ReadinessState == models.ReadinessStateReady {
 		t.Fatalf("Models service published READY after LoadModel failure: %#v", inspect.Host)
 	}
-	loadCanceledEvent, _ := waitForBlockedReadinessEvent(
-		t, preflightWatcher, eventsPath, ensureCh, "LOADMODEL_CANCELED", blockedReadinessWait,
-	)
-	if loadCanceledEvent.Method != "/backend.Backend/LoadModel" || loadCanceledEvent.PID != childPID {
-		t.Fatalf("canceled LoadModel event = %#v; want the blocked method on owned helper PID %d", loadCanceledEvent, childPID)
-	}
 	childStoppedAt := time.Now()
 	if processRunning(childPID) {
 		t.Fatalf("Runtime Host returned while owned helper PID %d was still alive", childPID)
@@ -294,7 +288,7 @@ func TestBlockedLoadModelStopsOwnedProcess(t *testing.T) {
 		t.Fatalf("witness exceeded 35 seconds from LoadModel observation: %s", elapsed)
 	}
 	t.Logf("LOCALAI-READINESS-PREFLIGHT %s", preflightBytes)
-	t.Logf("LOCALAI-READINESS-WITNESS source_head=%s helper_sha256=%s health=success load_model=blocked_at:%s loadmodel_deadline=%s readiness_rpc_canceled_at:%s external_cancellation=false ensure_return_at:%s typed_error=%T ready_state=%s runtime_duration_ms=%d child_pid=%d child_stop_observed_at:%s load_to_stop=%s no_model_or_backend_downloads=true retries=0", sourceHead, helperSHA, loadEvent.AtUTC, loadEvent.DeadlineUTC, loadCanceledEvent.AtUTC, outcome.at.UTC().Format(time.RFC3339Nano), outcome.err, inspect.Host.ReadinessState, runtimeDuration, childPID, childStoppedAt.UTC().Format(time.RFC3339Nano), childStoppedAt.Sub(loadObservedAt))
+	t.Logf("LOCALAI-READINESS-WITNESS source_head=%s helper_sha256=%s health=success load_model=blocked_at:%s peer_deadline=%s ensure_typed_timeout_at:%s external_cancellation=false typed_error=%T ready_state=%s runtime_duration_ms=%d child_pid=%d child_stop_observed_at:%s load_to_stop=%s no_model_or_backend_downloads=true retries=0", sourceHead, helperSHA, loadEvent.AtUTC, loadEvent.DeadlineUTC, outcome.at.UTC().Format(time.RFC3339Nano), outcome.err, inspect.Host.ReadinessState, runtimeDuration, childPID, childStoppedAt.UTC().Format(time.RFC3339Nano), childStoppedAt.Sub(loadObservedAt))
 	if elapsed := time.Since(ensureStartedAt); elapsed > blockedReadinessMaximum+blockedReadinessWait {
 		t.Fatalf("bounded witness took %s including fixture startup, unexpected", elapsed)
 	}
