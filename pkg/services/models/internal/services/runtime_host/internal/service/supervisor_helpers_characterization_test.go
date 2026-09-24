@@ -180,6 +180,38 @@ func TestBuiltInTTSResolvesAllVerifiedModelFilesForPrivateHostNegotiation(t *tes
 	}
 }
 
+func TestSupervisedIdentityCanonicalizesPinnedBackendAndPreservesOtherCase(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		backend string
+		want    string
+	}{
+		{name: "pinned LocalAI identifier", backend: " LOCALAI-VIBEVOICE ", want: "localai-vibevoice"},
+		{name: "non-pinned identifier", backend: " CoDeX-Hosted ", want: "CoDeX-Hosted"},
+	}
+	for _, testCase := range tests {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			runtimeConfig := &models.RuntimeConfig{
+				Resources: []models.RuntimeResource{{
+					Type:       models.RuntimeResourceTypeModel,
+					Model:      models.BuiltInModelNameTTS,
+					Backend:    testCase.backend,
+					LoadPolicy: string(models.LoadPolicyOnDemand),
+				}},
+			}
+
+			identity := supervisedIdentityForModel(runtimeConfig, nil, models.BuiltInModelNameTTS)
+			if identity.Backend != testCase.want {
+				t.Fatalf("supervised identity backend = %q, want %q", identity.Backend, testCase.want)
+			}
+		})
+	}
+}
+
 func TestRequiresSupervisedBackend_CharacterizesCurrentMembership(t *testing.T) {
 	t.Parallel()
 
