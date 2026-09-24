@@ -1543,8 +1543,7 @@ time.sleep = lambda _seconds: None
         self.assertNotIn("checks-terminal", result.stdout)
         self.assertEqual(len(calls), 4)
 
-    @unittest.expectedFailure
-    def test_reconstructed_c1_changing_checks_witnesses_null_diagnostic_crash(self):
+    def test_reconstructed_c1_changing_checks_returns_bounded_uncertainty(self):
         """Reconstruct the lost Work response around its retained head identity."""
         pr_number = 120
         shared_before = rollup_check(
@@ -1583,15 +1582,17 @@ time.sleep = lambda _seconds: None
             lane_name="ciwait-reconstructed-work-task-138-c1",
         )
 
-        if result.returncode != 0:
-            self.assertIn("NoneType", result.stderr)
-            self.assertIn("has no attribute 'values'", result.stderr)
-            self.assertIn("ci-wait.py", result.stderr)
-            self.assertIn("1117", result.stderr)
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "ready")
         self.assertEqual(payload["reason"], "deadline-requeue")
         self.assertEqual(payload["headRefOid"], RECONSTRUCTED_WORK_TASK_138_HEAD)
+        self.assertEqual(payload["checks"], 1)
+        self.assertEqual(len(payload["checkIdentities"]), 1)
+        self.assertEqual(
+            payload["checkIdentities"][0]["name"], "Backend Functional Coverage"
+        )
+        self.assertEqual(payload["checkIdentities"][0]["state"], "SUCCESS")
         self.assertEqual(
             payload["uncertainty"]["reason"],
             "check-set-changed-during-observation",
@@ -1600,7 +1601,8 @@ time.sleep = lambda _seconds: None
             payload["uncertainty"]["observedHeads"],
             [RECONSTRUCTED_WORK_TASK_138_HEAD],
         )
-        self.assertNotIn("passed", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertNotIn('"status": "passed"', result.stdout)
         self.assertNotIn("checks-terminal", result.stdout)
         self.assertEqual(len(calls), 4)
 

@@ -1105,9 +1105,11 @@ def observe_current_head(pr_number, repository=None):
         diagnostic_checks = before_map
         if reason == "check-set-changed-during-observation":
             # The union is diagnostic only: the differing snapshots remain
-            # uncertain and cannot be used as terminal evidence. Including
-            # both sides makes a delayed registration visible to review.
-            diagnostic_checks, _ = _merge_check_maps(before_map, after_map)
+            # uncertain and cannot be used as terminal evidence. Keep the
+            # validated before-map if conflicting states prevent a safe union.
+            union_checks, _ = _merge_check_maps(before_map, after_map)
+            if union_checks is not None:
+                diagnostic_checks = union_checks
         return CurrentHeadSnapshot(
             SnapshotStatus.UNCERTAIN,
             reason,
