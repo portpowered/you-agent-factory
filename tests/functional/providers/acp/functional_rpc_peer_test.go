@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -102,6 +103,9 @@ func currentRetryAttempt(directory string) (int, error) {
 	if directory == "" {
 		return 0, fmt.Errorf("retry-resume mode requires retryAttemptDirectory")
 	}
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return 0, fmt.Errorf("create retry attempt directory: %w", err)
+	}
 	entries, err := os.ReadDir(directory)
 	if err != nil {
 		return 0, fmt.Errorf("read retry attempt directory: %w", err)
@@ -117,10 +121,24 @@ func currentRetryAttempt(directory string) (int, error) {
 		}
 		latest = attempt
 	}
-	if latest == 0 {
-		return 0, fmt.Errorf("retry attempt directory %q has no process phase", directory)
+	for attempt := latest + 1; ; attempt++ {
+		path := filepath.Join(directory, strconv.Itoa(attempt))
+		marker, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if os.IsExist(err) {
+			continue
+		}
+		if err != nil {
+			return 0, fmt.Errorf("claim retry attempt %d: %w", attempt, err)
+		}
+		if _, err := marker.WriteString("started"); err != nil {
+			_ = marker.Close()
+			return 0, fmt.Errorf("write retry attempt marker: %w", err)
+		}
+		if err := marker.Close(); err != nil {
+			return 0, fmt.Errorf("close retry attempt marker: %w", err)
+		}
+		return attempt, nil
 	}
-	return latest, nil
 }
 
 func (p *functionalRPCPeer) serve() error {

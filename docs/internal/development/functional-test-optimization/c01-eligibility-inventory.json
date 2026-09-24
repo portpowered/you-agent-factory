@@ -6886,44 +6886,6 @@
       ]
     },
     {
-      "siteId": "OSSPAWN-tests-functional-providers-acp-basic-factory-run-test-retryACPCommandFactory-01",
-      "packagePath": "tests/functional/providers/acp",
-      "sourcePath": "tests/functional/providers/acp/basic_factory_run_test.go",
-      "sourceLine": 193,
-      "enclosingIdentity": "retryACPCommandFactory",
-      "launcherKind": "external-process-harness",
-      "occurrence": 1,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "stream-file-descriptor-behavior",
-      "assertionEvidence": "The assertion owning tests/functional/providers/acp/basic_factory_run_test.go:193 observes child stdio framing, stream completion, or protocol peer behavior at the process boundary.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F066-top-level-test-TestACPAgentHelperProcess",
-        "C07-F066-top-level-test-TestFactoryRunRetriesACPProviderByResumingExactSession",
-        "C07-F066-top-level-test-TestRootConstructionDoesNotStartACPProcess",
-        "C07-F066-top-level-test-TestUnknownExecutorProviderFailsBeforeACPProcessStart"
-      ]
-    },
-    {
-      "siteId": "OSSPAWN-tests-functional-providers-acp-basic-factory-run-test-retryACPCommandFactory-02",
-      "packagePath": "tests/functional/providers/acp",
-      "sourcePath": "tests/functional/providers/acp/basic_factory_run_test.go",
-      "sourceLine": 203,
-      "enclosingIdentity": "retryACPCommandFactory",
-      "launcherKind": "test-helper-process",
-      "occurrence": 2,
-      "verdict": "INTENTIONAL-OS",
-      "requiredProperty": "stream-file-descriptor-behavior",
-      "assertionEvidence": "The assertion owning tests/functional/providers/acp/basic_factory_run_test.go:203 observes child stdio framing, stream completion, or protocol peer behavior at the process boundary.",
-      "conversionObligation": null,
-      "testRowIds": [
-        "C07-F066-top-level-test-TestACPAgentHelperProcess",
-        "C07-F066-top-level-test-TestFactoryRunRetriesACPProviderByResumingExactSession",
-        "C07-F066-top-level-test-TestRootConstructionDoesNotStartACPProcess",
-        "C07-F066-top-level-test-TestUnknownExecutorProviderFailsBeforeACPProcessStart"
-      ]
-    },
-    {
       "siteId": "OSSPAWN-tests-functional-providers-acp-golden-rpc-peer-test-goldenACPCommandFactory-01",
       "packagePath": "tests/functional/providers/acp",
       "sourcePath": "tests/functional/providers/acp/golden_rpc_peer_test.go",

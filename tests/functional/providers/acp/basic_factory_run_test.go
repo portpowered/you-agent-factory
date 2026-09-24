@@ -2,6 +2,7 @@ package acp_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -35,13 +36,13 @@ func TestFactoryRunRetriesProviderByResumingExactSession(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"retry through the prior Provider Session"}`))
 	writeLegacyACPWorker(t, dir, string(providers.IDCodex))
 	retryingProvider := &retryingCodexCommandRunner{providerSessionID: providerSessionID}
-	session, listed, events := support.RunFactoryToCompletionWithSessionAndConfiguredHome(
+	session, listed, events := support.RunFactoryToCompletionWithConfiguredHome(
 		t,
 		dir,
-		factorySessionID,
 		serviceedges.Edges{ProviderCommandRunner: retryingProvider},
 		20*time.Second,
 		nil,
+		factorySessionID,
 	)
 
 	publicSummary := summarizeACPPublicOutcome(listed, events)
@@ -65,6 +66,135 @@ func TestFactoryRunRetriesProviderByResumingExactSession(t *testing.T) {
 	}
 	assertProviderSessionID(t, events, string(providers.IDCodex), providerSessionID)
 	assertFactoryEventSession(t, events, factorySessionID)
+}
+
+// TestConfiguredACPProviderRetryResumesExactProviderSession exercises the
+// configured ACP continuation through the root process and asserts its public
+// Factory Session, Work, and Provider Session result.
+func TestConfiguredACPProviderRetryResumesExactProviderSession(t *testing.T) {
+	t.Parallel()
+	const providerID = "retry-acp"
+	const providerSessionID = "acp-session-retry-resume"
+	factorySessionID := uuid.NewString()
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"resume the exact ACP Provider Session"}`))
+	writeACPWorker(t, dir, providerID)
+
+	root := t.TempDir()
+	attemptDirectory := filepath.Join(root, "attempts")
+	fixture := acpFixtureConfig{
+		Kind:                  acpFixtureKindFunctional,
+		Mode:                  "retry-resume",
+		SessionID:             providerSessionID,
+		RetryAttemptDirectory: attemptDirectory,
+	}
+	session, listed, events := support.RunFactoryToCompletionWithConfiguredHome(
+		t,
+		dir,
+		serviceedges.Edges{
+			PlatformProcessCommandFactory: acpHelperCommandFactoryWithProvider(nil, func() acpFixtureConfig { return fixture }),
+			ProvidersExecutableLocator:    availableExecutableLocator{},
+		},
+		20*time.Second,
+		func(home string) { writeACPProviderOperatorConfig(t, home, providerID, "custom-agent acp") },
+		factorySessionID,
+	)
+
+	publicSummary := summarizeACPPublicOutcome(listed, events)
+	t.Logf("ACP retry Factory outcome: session=%s %s", session.Id, publicSummary)
+	if session.Id != factorySessionID {
+		t.Fatalf("Factory Session ID = %q, want scenario-owned %q; %s", session.Id, factorySessionID, publicSummary)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("completed Work = %d, want 1; %s", got, publicSummary)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+		t.Fatalf("failed Work = %d, want 0 after ACP continuation; %s", got, publicSummary)
+	}
+	assertProviderSessionID(t, events, providerID, providerSessionID)
+	assertFactoryEventSession(t, events, factorySessionID)
+}
+
+// TestConfiguredACPProviderUnavailableFailsOneFactorySession exercises the
+// customer-visible provider-resolution failure without crossing the OS process
+// boundary. The compiled-artifact integration witness owns ACP stdio and retry.
+func TestConfiguredACPProviderUnavailableFailsOneFactorySession(t *testing.T) {
+	t.Parallel()
+	const providerID = "retry-acp"
+	factorySessionID := uuid.NewString()
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"unavailable ACP executable"}`))
+	writeACPWorker(t, dir, providerID)
+
+	var commandFactoryCalls atomic.Int32
+	session, listed, events := support.RunFactoryToCompletionWithConfiguredHome(
+		t,
+		dir,
+		serviceedges.Edges{
+			PlatformProcessCommandFactory: func(string, ...string) *exec.Cmd {
+				commandFactoryCalls.Add(1)
+				return &exec.Cmd{}
+			},
+			ProvidersExecutableLocator: missingExecutableLocator{},
+		},
+		20*time.Second,
+		func(home string) {
+			writeACPProviderOperatorConfig(t, home, providerID, "missing-agent acp")
+		},
+		factorySessionID,
+	)
+
+	publicSummary := summarizeACPPublicOutcome(listed, events)
+	t.Logf("Unavailable ACP Factory outcome: session=%s %s", session.Id, publicSummary)
+	if session.Id != factorySessionID {
+		t.Fatalf("Factory Session ID = %q, want scenario-owned %q; %s", session.Id, factorySessionID, publicSummary)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed Work = %d, want 1; %s", got, publicSummary)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
+		t.Fatalf("completed Work = %d, want 0; %s", got, publicSummary)
+	}
+	if got := commandFactoryCalls.Load(); got != 0 {
+		t.Fatalf("ACP process factory calls = %d, want 0 for an unavailable executable", got)
+	}
+	assertFactoryEventSession(t, events, factorySessionID)
+	if !strings.Contains(acpFailureDiagnostics(events), "reason=") {
+		t.Fatalf("ACP failure diagnostics missing from public ModelResponse events: %s", publicSummary)
+	}
+}
+
+func writeACPProviderOperatorConfig(t *testing.T, home, providerID, command string) {
+	t.Helper()
+	config := struct {
+		Workers struct {
+			ACP struct {
+				Integrations []struct {
+					ID        string `json:"id"`
+					Name      string `json:"name"`
+					Transport string `json:"transport"`
+					Command   string `json:"command"`
+				} `json:"integrations"`
+			} `json:"acp"`
+		} `json:"workers"`
+	}{}
+	config.Workers.ACP.Integrations = append(config.Workers.ACP.Integrations, struct {
+		ID        string `json:"id"`
+		Name      string `json:"name"`
+		Transport string `json:"transport"`
+		Command   string `json:"command"`
+	}{ID: "retry-entry", Name: providerID, Transport: "stdio", Command: command})
+	configData, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("encode ACP provider operator config: %v", err)
+	}
+	configDirectory := filepath.Join(home, ".you-agent-factory")
+	if err := os.MkdirAll(configDirectory, 0o700); err != nil {
+		t.Fatalf("create operator config directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDirectory, "config.json"), configData, 0o600); err != nil {
+		t.Fatalf("write ACP provider operator config: %v", err)
+	}
 }
 
 type retryingCodexCommandRunner struct {
@@ -232,7 +362,9 @@ func acpHelperCommandFactoryWithProvider(
 ) platformprocess.CommandFactory {
 	return func(name string, args ...string) *exec.Cmd {
 		if (name == "cursor-agent" || name == "custom-agent") && len(args) == 1 && args[0] == "acp" {
-			starts.Add(1)
+			if starts != nil {
+				starts.Add(1)
+			}
 			return exec.Command(os.Args[0], acpFixtureChildArgs("TestACPAgentHelperProcess", fixtureProvider())...)
 		}
 		return exec.Command(name, args...)

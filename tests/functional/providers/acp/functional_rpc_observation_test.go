@@ -353,12 +353,6 @@ func testACPObservationDisabled(t *testing.T) {
 func testACPObservationEnabled(t *testing.T) {
 	dir := t.TempDir()
 	attemptDir := filepath.Join(dir, "attempts")
-	if err := os.Mkdir(attemptDir, 0o700); err != nil {
-		t.Fatalf("create retry attempt directory: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(attemptDir, "1"), []byte("started"), 0o600); err != nil {
-		t.Fatalf("write retry attempt marker: %v", err)
-	}
 	tracePath := filepath.Join(dir, "rpc.jsonl")
 	fixture := functionalACPFixture("retry-resume")
 	fixture.SessionID = "acp-observation-test-session"

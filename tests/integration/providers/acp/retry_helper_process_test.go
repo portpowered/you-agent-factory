@@ -127,6 +127,7 @@ type acpObservationRecord struct {
 	Attempt   int                     `json:"attempt"`
 	Direction string                  `json:"direction,omitempty"`
 	Method    string                  `json:"method,omitempty"`
+	ID        json.RawMessage         `json:"id,omitempty"`
 	Result    string                  `json:"result,omitempty"`
 	Error     *acpObservationRPCError `json:"error,omitempty"`
 	ExitCode  *int                    `json:"exitCode,omitempty"`
@@ -322,6 +323,9 @@ func validateRetryObservationTrace(t *testing.T, path string) {
 			}
 			exits[record.Attempt] = record.PID
 		case "rpc":
+			if record.Result != "notification" && len(record.ID) == 0 {
+				t.Fatalf("ACP RPC record omitted request id: %#v", record)
+			}
 			switch {
 			case record.Attempt == 1 && record.Direction == "peer_to_client" && record.Method == "session/prompt" && record.Error != nil && record.Error.Code == -32001:
 				firstFailure = true
