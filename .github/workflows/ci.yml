@@ -603,6 +603,48 @@ jobs:
           helper_sha256=$(sha256sum .artifacts/integration/bin/tts-clean-install-helper | awk '{print $1}')
           echo "INFINITE_YOU_TTS_PREBUILT_HELPER_PATH=${{ github.workspace }}/.artifacts/integration/bin/tts-clean-install-helper" >> "$GITHUB_ENV"
           echo "INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256=$helper_sha256" >> "$GITHUB_ENV"
+      - name: Build blocked LoadModel witness helper
+        id: blocked-loadmodel-helper
+        shell: bash
+        env:
+          LOCALAI_READINESS_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          checkout_head=$(git rev-parse HEAD)
+          if [[ "$checkout_head" != "$LOCALAI_READINESS_SOURCE_HEAD" ]]; then
+            echo "checked-out source head $checkout_head does not match requested head $LOCALAI_READINESS_SOURCE_HEAD" >&2
+            exit 1
+          fi
+          helper_path="$GITHUB_WORKSPACE/.artifacts/integration/bin/blocked-host-helper"
+          mkdir -p "$(dirname "$helper_path")"
+          go build -trimpath -o "$helper_path" ./tests/integration/models/testdata/blocked_host
+          test -x "$helper_path"
+          helper_sha256=$(sha256sum "$helper_path" | awk '{print $1}')
+          {
+            printf 'path=%s\n' "$helper_path"
+            printf 'sha256=%s\n' "$helper_sha256"
+            printf 'source_head=%s\n' "$checkout_head"
+          } >> "$GITHUB_OUTPUT"
+      - name: Run required blocked LoadModel owned-process witness
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -tags managed_process_integration ./tests/integration/models \
+            -run '^TestBlockedLoadModelStopsOwnedProcess$' -count=1 -v -timeout=5m \
+            2>&1 | tee .artifacts/integration/blocked-loadmodel-process-witness.log
+        env:
+          LOCALAI_READINESS_HELPER: ${{ steps.blocked-loadmodel-helper.outputs.path }}
+          LOCALAI_READINESS_HELPER_SHA256: ${{ steps.blocked-loadmodel-helper.outputs.sha256 }}
+          LOCALAI_READINESS_SOURCE_HEAD: ${{ steps.blocked-loadmodel-helper.outputs.source_head }}
+          GOPROXY: off
+      - name: Upload blocked LoadModel owned-process evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blocked-loadmodel-owned-process-evidence
+          path: .artifacts/integration/blocked-loadmodel-process-witness.log
+          if-no-files-found: warn
+          retention-days: 14
       - name: Run backend integration tests with shared CLI artifact
         run: make test-integration
         env:

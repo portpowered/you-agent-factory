@@ -270,6 +270,8 @@ func (r *supervisedRuntime) waitForReadiness(
 	processExit <-chan error,
 ) error {
 	deadline := r.cfg.Clock.Now().Add(r.cfg.ReadinessTimeout)
+	readinessCtx, cancelReadiness := context.WithTimeout(ctx, r.cfg.ReadinessTimeout)
+	defer cancelReadiness()
 	var lastReadinessErr error
 	for {
 		if !r.isCurrentLoad(loadDone, process) {
@@ -283,8 +285,16 @@ func (r *supervisedRuntime) waitForReadiness(
 			_ = process.Stop(context.Background())
 			return r.markFailed(loadDone, identity, hostFailureClassCancelled, cancelHostError(err))
 		}
-		ready, checkErr := r.checkReadiness(ctx, identity, spec, process)
+		ready, checkErr := r.checkReadiness(readinessCtx, identity, spec, process)
 		lastReadinessErr = checkErr
+		if err := ctx.Err(); err != nil {
+			_ = process.Stop(context.Background())
+			return r.markFailed(loadDone, identity, hostFailureClassCancelled, cancelHostError(err))
+		}
+		if errors.Is(readinessCtx.Err(), context.DeadlineExceeded) {
+			_ = process.Stop(context.Background())
+			return r.markFailed(loadDone, identity, hostFailureClassLoadingTimeout, models.ErrHostLoadingTimeout)
+		}
 		if errors.Is(checkErr, models.ErrHostProtocolIncompatible) {
 			_ = process.Stop(context.Background())
 			return r.markFailed(loadDone, identity, hostFailureClassProtocol, checkErr)
