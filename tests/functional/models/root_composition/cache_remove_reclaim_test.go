@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -144,6 +145,219 @@ func TestModelsPublicOptInRemoveRetainsSharedBackendCandidateOnce(t *testing.T) 
 	}
 	if _, err := os.Stat(filepath.Dir(fixture.backendPath)); err != nil {
 		t.Fatalf("multiply referenced backend snapshot stat error = %v, want retained", err)
+	}
+}
+
+func TestModelsPublicOptInRemoveRefusesActiveASRAndSucceedsAfterRelease(t *testing.T) {
+	t.Parallel()
+
+	witness := newActiveASRRemovalWitness(t)
+	defer witness.server.Close(t)
+	defer witness.releaseBackend()
+
+	invocation := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "--server", witness.server.URL(), "models", "invoke", models.BuiltInModelNameASR,
+		"--operation", "ASR", "--input", "audio=@" + witness.inputPath,
+	})
+	invocation.Input.Env = witness.environment
+	invocation.Input.WorkingDirectory = witness.factoryDir
+	invocationDone := make(chan error, 1)
+	go func() { invocationDone <- witness.server.Execute(t, invocation.Input) }()
+	select {
+	case <-witness.backendStarted:
+	case <-time.After(5 * time.Second):
+		select {
+		case invokeErr := <-invocationDone:
+			t.Fatalf("ASR invocation ended before controlled backend: %v stdout=%q stderr=%q", invokeErr, invocation.Stdout(), invocation.Stderr())
+		default:
+			t.Fatal("ASR invocation did not reach the controlled backend")
+		}
+	}
+	if !witness.hostLauncher.Active() {
+		t.Fatal("ASR managed host is not active while the backend call is blocked")
+	}
+
+	removeErr, removeStdout, removeStderr := executeASRRemoval(t, witness, "--reclaim-unused-cache")
+	assertASRRemovalInUse(t, removeErr, removeStdout, removeStderr)
+	assertASRRemovalFixtureRetained(t, witness.fixture)
+
+	witness.releaseBackend()
+	select {
+	case invokeErr := <-invocationDone:
+		assertActiveASRInvocationFinished(t, witness, invokeErr, invocation.Stdout())
+	case <-time.After(30 * time.Second):
+		t.Fatal("controlled ASR invocation did not finish after backend release")
+	}
+	removeErr, removeStdout, removeStderr = executeASRRemoval(t, witness, "--reclaim-unused-cache")
+	if removeErr != nil {
+		t.Fatalf("opt-in ASR removal after invocation release: %v stdout=%q stderr=%q", removeErr, removeStdout, removeStderr)
+	}
+	var removed factoryapi.ModelRemoveResponse
+	if err := json.Unmarshal([]byte(removeStdout), &removed); err != nil {
+		t.Fatalf("decode ASR removal after release: %v stdout=%q", err, removeStdout)
+	}
+	assertASRReclaimResponse(t, removed, witness.fixture, witness.evidence)
+	assertASRReclaimEffects(t, witness.fixture)
+	if witness.hostLauncher.Active() || witness.hostLauncher.StopCalls() != 1 {
+		t.Fatalf("ASR host after released-cache removal = active:%t stops:%d, want inactive and exactly one stop", witness.hostLauncher.Active(), witness.hostLauncher.StopCalls())
+	}
+	t.Logf("active ASR removal proof: in-flight invocation returned MODEL_CACHE_IN_USE without mutation; after release, opt-in removal stopped the host once and reclaimed %d bytes", int64Value(removed.ReclaimedCacheBytes))
+}
+
+type activeASRRemovalWitness struct {
+	server         *support.FunctionalAPIServer
+	factoryDir     string
+	environment    []string
+	inputPath      string
+	fixture        defaultASRRemovalFixture
+	evidence       asrReclamationEvidence
+	hostLauncher   *recordingModelHostLauncher
+	backendStarted <-chan struct{}
+	releaseBackend func()
+}
+
+func newActiveASRRemovalWitness(t *testing.T) activeASRRemovalWitness {
+	t.Helper()
+	home := functionalTempDir(t)
+	cacheRoot := filepath.Join(home, "model-cache")
+	fixture := writeDefaultASRRemovalFixture(t, cacheRoot)
+	evidence := measureASRReclamationEvidence(t, fixture)
+	_, inputPath, _, _, _ := loadASRStoryFixture(t)
+	modelServer := functionalNewHTTPServer(t, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/health" {
+			writer.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(writer, request)
+	}))
+	t.Cleanup(modelServer.Close)
+
+	started := make(chan struct{})
+	released := make(chan struct{})
+	var startOnce, releaseOnce sync.Once
+	backend := func(ctx context.Context, _ models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+		startOnce.Do(func() { close(started) })
+		select {
+		case <-released:
+			return models.ASRBackendResponse{
+				Text:     "controlled lease transcript",
+				Segments: []models.ASRBackendSegment{{ID: 0, Start: 0, End: 1, Text: "controlled lease transcript"}},
+			}, nil
+		case <-ctx.Done():
+			return models.ASRBackendResponse{}, ctx.Err()
+		}
+	}
+	assetFiles := functionalModelAssetFileSystem{home: home}
+	selection := pinnedASRBackendSelection()
+	backendBody := []byte("controlled ASR backend snapshot")
+	selection.Bytes = int64(len(backendBody))
+	selection.SHA256 = fmt.Sprintf("%x", sha256.Sum256(backendBody))
+	hostLauncher := &recordingModelHostLauncher{endpoint: modelServer.URL, exclusive: true}
+	edges := activeASRRemovalEdges(assetFiles, modelServer.Client(), hostLauncher, backend, selection)
+	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir, Env: isolatedModelEnvironment(home, cacheRoot),
+		WaitForServiceModeRuntime: true, ServerReadyTimeout: 60 * time.Second,
+		Edges: edges,
+	})
+	return activeASRRemovalWitness{
+		server: server, factoryDir: functionalTempDir(t),
+		environment: functionalHomeEnvironment(home), inputPath: inputPath,
+		fixture: fixture, evidence: evidence, hostLauncher: hostLauncher,
+		backendStarted: started, releaseBackend: func() { releaseOnce.Do(func() { close(released) }) },
+	}
+}
+
+func activeASRRemovalEdges(
+	assetFiles functionalModelAssetFileSystem,
+	hostHTTP asrStoryHTTPClient,
+	hostLauncher *recordingModelHostLauncher,
+	backend serviceedges.ModelASRBackend,
+	selection serviceedges.ModelBackendArtifactSelection,
+) serviceedges.Edges {
+	return serviceedges.Edges{
+		ModelAssetHTTPClient:           &rejectingModelAssetHTTP{},
+		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
+		ModelAssetInspectPath:          assetFiles.Stat,
+		ModelAssetResolveHomeDirectory: assetFiles.UserHomeDir,
+		ModelAssetResolveEnvironment:   func(string) string { return "" },
+		ModelAssetWriteFile:            assetFiles.WriteFile,
+		ModelAssetRenamePath:           assetFiles.Rename,
+		ModelAssetRemovePath:           assetFiles.Remove,
+		ModelAssetReadFile:             assetFiles.ReadFile,
+		ModelAssetReadDirectory:        assetFiles.ReadDir,
+		ModelAssetCreateFile:           assetFiles.Create,
+		ModelAssetOpenFile:             assetFiles.Open,
+		ModelHostProcessLauncher:       hostLauncher,
+		ModelHostProtocolNegotiator:    &joinedProtocolNegotiator{},
+		ModelHostCompatibilityChecker:  &joinedCompatibilityChecker{},
+		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		ModelResolveBackendArtifact: func(ctx context.Context, request serviceedges.ModelBackendArtifactSelectionRequest) (serviceedges.ModelBackendArtifactSelection, error) {
+			if err := ctx.Err(); err != nil {
+				return serviceedges.ModelBackendArtifactSelection{}, err
+			}
+			if request.Backend != "localai-whisper" {
+				return serviceedges.ModelBackendArtifactSelection{}, fmt.Errorf("unexpected ASR backend %q", request.Backend)
+			}
+			return selection, nil
+		},
+		ModelASRBackend:        backend,
+		ModelHostHTTPClient:    hostHTTP,
+		ModelRuntimeHTTPClient: hostHTTP,
+	}
+}
+
+func executeASRRemoval(t *testing.T, witness activeASRRemovalWitness, flags ...string) (error, string, string) {
+	t.Helper()
+	args := []string{"you", "--server", witness.server.URL(), "--json", "models", "remove", models.BuiltInModelNameASR}
+	args = append(args, flags...)
+	inputs := support.FakeInputs(context.Background(), args)
+	inputs.Input.Env = witness.environment
+	inputs.Input.WorkingDirectory = witness.factoryDir
+	err := witness.server.Execute(t, inputs.Input)
+	return err, inputs.Stdout(), inputs.Stderr()
+}
+
+func assertASRRemovalInUse(t *testing.T, err error, stdout, stderr string) {
+	t.Helper()
+	if err == nil || !errors.Is(err, modelscli.ErrModelCacheInUse) {
+		t.Fatalf("opt-in ASR removal during invocation = %v stdout=%q stderr=%q, want typed in-use conflict", err, stdout, stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("in-use ASR removal stdout = %q, want empty", stdout)
+	}
+	diagnostic := decodeFirstDiagnostic(t, stderr)
+	if diagnostic.Code != factoryapi.ErrorResponseCode("MODEL_CACHE_IN_USE") || diagnostic.Family != factoryapi.ErrorFamilyConflict {
+		t.Fatalf("in-use ASR removal diagnostic = %#v, want MODEL_CACHE_IN_USE/CONFLICT", diagnostic)
+	}
+}
+
+func assertASRRemovalFixtureRetained(t *testing.T, fixture defaultASRRemovalFixture) {
+	t.Helper()
+	for _, path := range []string{fixture.revisionPath, filepath.Dir(fixture.modelCASPath), filepath.Dir(fixture.backendPath)} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("cache path %q after in-use refusal: %v, want retained", path, err)
+		}
+	}
+	if body, err := os.ReadFile(fixture.siblingPath); err != nil || string(body) != "another managed revision" {
+		t.Fatalf("ASR sibling revision changed during in-use refusal: body=%q error=%v", body, err)
+	}
+}
+
+func assertActiveASRInvocationFinished(t *testing.T, witness activeASRRemovalWitness, err error, stdout string) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("controlled ASR invocation after backend release: %v stdout=%q", err, stdout)
+	}
+	var response factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal([]byte(stdout), &response); err != nil {
+		t.Fatalf("decode released ASR invocation: %v stdout=%q", err, stdout)
+	}
+	if response.Failure != nil || len(response.Outputs) < 1 || response.Outputs[0].Content == nil || *response.Outputs[0].Content != "controlled lease transcript" {
+		t.Fatalf("released ASR invocation response = %#v, want controlled transcript", response)
+	}
+	if witness.hostLauncher.Calls() != 1 {
+		t.Fatalf("ASR managed host starts = %d, want one during active invocation", witness.hostLauncher.Calls())
 	}
 }
 
