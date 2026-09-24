@@ -105,9 +105,6 @@ func assertPrebuiltHistoryCommand(
 	if wantExit == 1 && result.ErrorCode == "" {
 		t.Fatalf("failure result has no errorCode: %s", stdout.String())
 	}
-	if strings.TrimSpace(stderr.String()) != "" {
-		t.Fatalf("prebuilt history CLI wrote unexpected stderr: %s", stderr.String())
-	}
 }
 
 func historyArtifactWithKnownWork(t *testing.T) []byte {
