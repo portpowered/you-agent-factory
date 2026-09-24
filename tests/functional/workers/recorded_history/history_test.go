@@ -23,12 +23,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const historyRecordingSessionID = "a6925b33-db77-4e62-ab6f-2a8d06783e5e"
 
 func TestWorkerSessionsHistoryCLIReportsTrustedRecordedAssociations(t *testing.T) {
 	t.Parallel()
+	functionalevidence.Covers(t, "cli/you.worker-sessions.history")
 
 	runner := &historyCommandRunner{}
 	var dispatchCalls atomic.Int32
