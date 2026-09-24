@@ -14,12 +14,11 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/internal/reclamation"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
 const metadataFileName = ".managed-cache.json"
-
-const maxManagedCacheBytes = int64(1<<63 - 1)
 
 type service struct {
 	scopes             runtimescopes.Service
@@ -52,6 +51,7 @@ type service struct {
 
 	preparedRuntimeMu sync.RWMutex
 	preparedRuntime   map[string]assets.RuntimeCacheInspection
+	reclamation       *reclamation.Service
 }
 
 type assetSpec struct {
@@ -61,28 +61,9 @@ type assetSpec struct {
 	allowedPlatforms  map[string]struct{}
 }
 
-type cacheMetadata struct {
-	ModelName string                  `json:"modelName"`
-	Revision  string                  `json:"revision"`
-	Files     []metadataFile          `json:"files"`
-	Backend   *runtimeBackendMetadata `json:"backend,omitempty"`
-}
-
-type metadataFile struct {
-	Path   string `json:"path"`
-	Bytes  int64  `json:"bytes,omitempty"`
-	SHA256 string `json:"sha256,omitempty"`
-}
-
-// runtimeBackendMetadata records the content-addressed backend snapshot that
-// belongs to a managed generic model runtime. It is deliberately private to
-// the asset service: peers receive resolved runtime paths, never this cache
-// representation.
-type runtimeBackendMetadata struct {
-	CachePath string         `json:"cachePath"`
-	Revision  string         `json:"revision,omitempty"`
-	Files     []metadataFile `json:"files"`
-}
+type cacheMetadata = reclamation.ManagedMetadata
+type metadataFile = reclamation.ManagedFile
+type runtimeBackendMetadata = reclamation.BackendMetadata
 
 type activePullState struct {
 	expected []models.AssetRequirement
@@ -124,7 +105,7 @@ func New(
 			return "", models.ErrModelRevisionUnresolved
 		}
 	}
-	return &service{
+	instance := &service{
 		scopes:             scopes,
 		platform:           platform,
 		client:             client,
@@ -147,6 +128,8 @@ func New(
 		pullFailure:        make(map[string]string),
 		preparedRuntime:    make(map[string]assets.RuntimeCacheInspection),
 	}
+	instance.reclamation = reclamation.New(instance, instance.coordination, instance, assetContextError)
+	return instance
 }
 
 func (s *service) InspectModelAssets(
@@ -274,7 +257,7 @@ func (s *service) InspectRuntimeCache(
 	if prepared, ok := s.preparedRuntimeInspection(request.Scope, request.Name); ok {
 		prepared = s.applyActivePullFacts(prepared, active, isActive, pullFailure)
 		if prepared.Installed && strings.TrimSpace(prepared.CachePath) != "" {
-			cacheBytes, measureErr := s.measureRevisionBytes(ctx, prepared.CachePath)
+			cacheBytes, measureErr := s.reclamation.MeasureRevisionBytes(ctx, prepared.CachePath)
 			if measureErr != nil {
 				return assets.RuntimeCacheInspection{}, measureErr
 			}
@@ -354,7 +337,7 @@ func (s *service) inspectRuntimeCacheFiles(
 	if available {
 		result.InstalledFileCount = len(snapshot.Artifacts)
 		result.MissingAssets = nil
-		cacheBytes, measureErr := s.measureRevisionBytes(ctx, result.CachePath)
+		cacheBytes, measureErr := s.reclamation.MeasureRevisionBytes(ctx, result.CachePath)
 		if measureErr != nil {
 			return assets.RuntimeCacheInspection{}, measureErr
 		}

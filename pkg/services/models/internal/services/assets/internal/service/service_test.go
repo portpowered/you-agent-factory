@@ -844,6 +844,112 @@ func assertFileBody(t *testing.T, path string, want []byte) {
 	}
 }
 
+func writeAssetTestFile(t *testing.T, path string, body []byte) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRemoveModelAssetsRemovesSelectedRevisionAndPreservesSiblings(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	writeCacheFixture(t, cacheDirectory, true)
+	sibling := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M", "rev-sibling")
+	if err := os.MkdirAll(sibling, 0o755); err != nil {
+		t.Fatalf("create sibling revision: %v", err)
+	}
+	siblingFile := filepath.Join(sibling, "sibling.bin")
+	if err := os.WriteFile(siblingFile, []byte("sibling"), 0o644); err != nil {
+		t.Fatalf("write sibling revision: %v", err)
+	}
+	sharedModelFile := filepath.Join(cacheDirectory, ".you-content-addressed", "model", "shared", "weights.bin")
+	sharedBackendFile := filepath.Join(cacheDirectory, "backend-artifacts", ".you-content-addressed", "backend", "shared", "backend.tar.gz")
+	writeAssetTestFile(t, sharedModelFile, []byte("shared model snapshot"))
+	writeAssetTestFile(t, sharedBackendFile, []byte("shared backend snapshot"))
+	nestedFile := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M", "rev-test", "nested", "empty-marker")
+	if err := os.MkdirAll(filepath.Dir(nestedFile), 0o755); err != nil {
+		t.Fatalf("create nested revision directory: %v", err)
+	}
+	if err := os.WriteFile(nestedFile, nil, 0o644); err != nil {
+		t.Fatalf("write nested revision marker: %v", err)
+	}
+
+	scopes := newScopes(t, "remove-success")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+	result, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref,
+		Name:  "omnivoice_q4_k_m",
+	})
+	if err != nil {
+		t.Fatalf("RemoveModelAssets: %v", err)
+	}
+	if result.ModelName != "OMNIVOICE_Q4_K_M" || result.Revision != "rev-test" ||
+		result.CachePath != filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M", "rev-test") ||
+		result.BytesRemoved != 4 || result.Readiness != models.AssetReadinessMissing ||
+		result.Outcome != models.AssetRemovalRemoved {
+		t.Fatalf("RemoveModelAssets result = %#v", result)
+	}
+	if _, err := os.Stat(result.CachePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("removed revision stat error = %v, want not-exist", err)
+	}
+	assertFileBody(t, siblingFile, []byte("sibling"))
+	assertFileBody(t, sharedModelFile, []byte("shared model snapshot"))
+	assertFileBody(t, sharedBackendFile, []byte("shared backend snapshot"))
+}
+
+func TestRemoveModelAssetsReportsMissingCacheWithoutFilesystemMutation(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	scopes := newScopes(t, "remove-missing")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+	_, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if !errors.Is(err, models.ErrModelCacheNotFound) {
+		t.Fatalf("RemoveModelAssets error = %v, want ErrModelCacheNotFound", err)
+	}
+	entries, err := os.ReadDir(cacheDirectory)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("cache root after missing removal = %#v, %v; want empty", entries, err)
+	}
+}
+
+func TestRemoveModelAssetsRejectsModelDirectorySymlink(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory, externalDirectory := t.TempDir(), t.TempDir()
+	writeCacheFixture(t, externalDirectory, true)
+	modelPath := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M")
+	if err := os.Symlink(filepath.Join(externalDirectory, "OMNIVOICE_Q4_K_M"), modelPath); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink creation is unavailable: %v", err)
+		}
+		t.Fatalf("create model cache symlink: %v", err)
+	}
+	scopes := newScopes(t, "remove-model-link")
+	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
+	service := newTestService(scopes, nil)
+	_, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if !errors.Is(err, models.ErrModelCacheUnsafe) {
+		t.Fatalf("RemoveModelAssets error = %v, want ErrModelCacheUnsafe", err)
+	}
+	if _, err := os.Stat(filepath.Join(externalDirectory, "OMNIVOICE_Q4_K_M", "rev-test")); err != nil {
+		t.Fatalf("external revision changed after rejected removal: %v", err)
+	}
+}
+
 type httpDoerFunc func(*http.Request) (*http.Response, error)
 
 func (do httpDoerFunc) Do(request *http.Request) (*http.Response, error) {

@@ -152,8 +152,9 @@ func runStory004ConfiguredServerRemove(
 	}
 	assertStory004EquivalentRemove(t, response, httpResponse)
 	process.stop()
-	if process.command.ProcessState == nil || !process.command.ProcessState.Exited() {
-		t.Fatalf("prebuilt server process state = %#v, want exited after release", process.command.ProcessState)
+	if !process.killed || !process.waited || process.command.ProcessState == nil {
+		t.Fatalf("prebuilt server cleanup killed=%t waited=%t state=%#v, want forced stop followed by Wait to reap the owned server",
+			process.killed, process.waited, process.command.ProcessState)
 	}
 	return response
 }

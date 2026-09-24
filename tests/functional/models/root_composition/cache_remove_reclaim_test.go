@@ -404,6 +404,63 @@ func TestModelsPublicOptInRemoveFailsClosedOnUnsafeSiblingReference(t *testing.T
 	}
 }
 
+func TestModelsPublicOptInRemoveMapsCandidateLockFailureAndPreservesCache(t *testing.T) {
+	t.Parallel()
+
+	home := functionalTempDir(t)
+	cacheRoot := filepath.Join(home, "model-cache")
+	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
+	fixture := writeDefaultASRRemovalFixture(t, cacheRoot)
+	coordination, err := platformlocking.New(platformlocking.LocalFileSystem{})
+	if err != nil {
+		t.Fatalf("construct coordinated cache owner: %v", err)
+	}
+	candidateLockFailure := errors.New("candidate cache lock unavailable")
+	process := functionalBuildProcess(t, serviceedges.Edges{
+		ModelAssetStagingCoordinationFactory: func() (serviceedges.AssetStagingCoordination, error) {
+			return failingCandidateCacheCoordination{delegate: coordination, failure: candidateLockFailure}, nil
+		},
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "remove", models.BuiltInModelNameASR, "--reclaim-unused-cache",
+	})
+	inputs.Input.Env = isolatedModelEnvironment(home, cacheRoot)
+	inputs.Input.WorkingDirectory = factoryDir
+	removeErr := process.Execute(inputs.Input)
+	if removeErr == nil || !errors.Is(removeErr, modelscli.ErrModelCacheReferenceUncertain) {
+		t.Fatalf("candidate-lock remove error = %v, want ErrModelCacheReferenceUncertain; stdout=%q stderr=%q",
+			removeErr, inputs.Stdout(), inputs.Stderr())
+	}
+	if inputs.Stdout() != "" {
+		t.Fatalf("candidate-lock remove stdout = %q, want no success response", inputs.Stdout())
+	}
+	diagnostic := decodeFirstDiagnostic(t, inputs.Stderr())
+	if diagnostic.Code != factoryapi.ErrorResponseCode("MODEL_CACHE_REFERENCE_UNCERTAIN") ||
+		diagnostic.Family != factoryapi.ErrorFamilyConflict {
+		t.Fatalf("candidate-lock diagnostic = %#v, want typed conflict", diagnostic)
+	}
+	for _, path := range []string{fixture.revisionPath, filepath.Dir(fixture.modelCASPath), filepath.Dir(fixture.backendPath)} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("candidate-lock failure path %q stat error = %v, want retained", path, err)
+		}
+	}
+}
+
+type failingCandidateCacheCoordination struct {
+	delegate serviceedges.AssetStagingCoordination
+	failure  error
+}
+
+func (coordination failingCandidateCacheCoordination) Lock(
+	ctx context.Context,
+	path string,
+) (io.Closer, error) {
+	if filepath.Base(path) != "references.lock" {
+		return nil, coordination.failure
+	}
+	return coordination.delegate.Lock(ctx, path)
+}
+
 func TestModelsPublicOptInRemoveSerializesAgainstReferencePublication(t *testing.T) {
 	t.Parallel()
 

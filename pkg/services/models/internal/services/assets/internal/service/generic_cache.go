@@ -15,7 +15,31 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
+	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 )
+
+func genericRuntimeInspectionMatches(
+	inspection assets.RuntimeCacheInspection,
+	revision string,
+	metadataFiles []metadataFile,
+) bool {
+	if !inspection.Installed || inspection.Revision != revision ||
+		len(inspection.ObservedArtifacts) != len(metadataFiles) {
+		return false
+	}
+	observed := make(map[string]models.AssetArtifact, len(inspection.ObservedArtifacts))
+	for _, artifact := range inspection.ObservedArtifacts {
+		observed[filepath.ToSlash(strings.TrimSpace(artifact.Name))] = artifact
+	}
+	for _, file := range metadataFiles {
+		artifact, ok := observed[file.Path]
+		if !ok || artifact.Bytes != file.Bytes ||
+			!strings.EqualFold(strings.TrimSpace(artifact.SHA256), strings.TrimSpace(file.SHA256)) {
+			return false
+		}
+	}
+	return true
+}
 
 func (s *service) acquireGenericCache(
 	ctx context.Context,

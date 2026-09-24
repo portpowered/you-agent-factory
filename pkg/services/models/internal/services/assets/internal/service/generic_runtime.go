@@ -37,14 +37,11 @@ func (s *service) publishGenericRuntimeCache(
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, err
 	}
-	if err := assetContextError(ctx); err != nil {
-		return assets.RuntimeCacheInspection{}, err
-	}
 	modelRoot, err := s.modelCacheRoot(cacheDirectory, canonicalModelName(modelName))
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, err
 	}
-	referenceLock, err := s.lockCacheReferenceUpdates(ctx, filepath.Dir(modelRoot))
+	referenceLock, err := s.reclamation.LockReferences(ctx, filepath.Dir(modelRoot))
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, pullsupport.WrapPullStage(
 			models.PullStageCacheInstallation, modelName, "coordinate managed cache reference", "",
@@ -63,20 +60,13 @@ func (s *service) publishGenericRuntimeCache(
 	}()
 
 	revision := genericRuntimeRevision(source, result.artifacts)
-	if err := assetContextError(ctx); err != nil {
-		return assets.RuntimeCacheInspection{}, err
-	}
-	if err := s.removeStaleGenericRuntimeStages(cacheDirectory, modelName, revision); err != nil {
-		return assets.RuntimeCacheInspection{}, err
-	}
-	existing, _, inspectErr := s.inspectGenericRuntimeCache(
-		ctx, cacheDirectory, canonicalModelName(modelName), source,
+	existing, reusable, err := s.reusableOrRefreshGenericRuntime(
+		ctx, cacheDirectory, modelName, source, revision, metadataFiles, backendMetadata,
 	)
-	if inspectErr != nil {
-		return assets.RuntimeCacheInspection{}, inspectErr
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, err
 	}
-	if genericRuntimeInspectionMatches(existing, revision, metadataFiles) &&
-		s.genericRuntimeBackendInspectionMatches(existing, cacheDirectory, backendMetadata) {
+	if reusable {
 		return existing, nil
 	}
 
@@ -102,6 +92,32 @@ func (s *service) publishGenericRuntimeCache(
 		publication.finalPath, publication.revision, metadataFiles, result.artifacts,
 	)
 	return inspection, nil
+}
+
+func (s *service) reusableOrRefreshGenericRuntime(
+	ctx context.Context,
+	cacheDirectory string,
+	modelName string,
+	source genericSource,
+	revision string,
+	metadataFiles []metadataFile,
+	backendMetadata *runtimeBackendMetadata,
+) (assets.RuntimeCacheInspection, bool, error) {
+	if err := assetContextError(ctx); err != nil {
+		return assets.RuntimeCacheInspection{}, false, err
+	}
+	if err := s.removeStaleGenericRuntimeStages(cacheDirectory, modelName, revision); err != nil {
+		return assets.RuntimeCacheInspection{}, false, err
+	}
+	existing, _, inspectErr := s.inspectGenericRuntimeCache(
+		ctx, cacheDirectory, canonicalModelName(modelName), source,
+	)
+	if inspectErr != nil {
+		return assets.RuntimeCacheInspection{}, false, inspectErr
+	}
+	reusable := genericRuntimeInspectionMatches(existing, revision, metadataFiles) &&
+		s.genericRuntimeBackendInspectionMatches(existing, cacheDirectory, backendMetadata)
+	return existing, reusable, nil
 }
 
 func (s *service) genericRuntimePublicationMetadata(
@@ -146,29 +162,6 @@ func (s *service) removeStaleGenericRuntimeStages(
 		return interruptedAssetError("remove stale managed runtime metadata stage", err)
 	}
 	return nil
-}
-
-func genericRuntimeInspectionMatches(
-	inspection assets.RuntimeCacheInspection,
-	revision string,
-	metadataFiles []metadataFile,
-) bool {
-	if !inspection.Installed || inspection.Revision != revision ||
-		len(inspection.ObservedArtifacts) != len(metadataFiles) {
-		return false
-	}
-	observed := make(map[string]models.AssetArtifact, len(inspection.ObservedArtifacts))
-	for _, artifact := range inspection.ObservedArtifacts {
-		observed[filepath.ToSlash(strings.TrimSpace(artifact.Name))] = artifact
-	}
-	for _, file := range metadataFiles {
-		artifact, ok := observed[file.Path]
-		if !ok || artifact.Bytes != file.Bytes ||
-			!strings.EqualFold(strings.TrimSpace(artifact.SHA256), strings.TrimSpace(file.SHA256)) {
-			return false
-		}
-	}
-	return true
 }
 
 func (s *service) genericRuntimeBackendInspectionMatches(
@@ -579,7 +572,7 @@ func (s *service) inspectGenericRuntimeCache(
 	inspection.CachePath = revisionPath
 	inspection.InstalledFileCount = len(observed)
 	inspection.IntegrityVerified = hasVerifiableMetadata(inspection.ExpectedArtifacts)
-	inspection.CacheBytes, err = s.measureRevisionBytes(ctx, revisionPath)
+	inspection.CacheBytes, err = s.reclamation.MeasureRevisionBytes(ctx, revisionPath)
 	if err != nil {
 		return assets.RuntimeCacheInspection{}, true, err
 	}
