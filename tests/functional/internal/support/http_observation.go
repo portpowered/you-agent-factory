@@ -22,11 +22,11 @@ func GetDefaultSession(t testing.TB, baseURL string) factoryapi.FactorySession {
 	t.Helper()
 	response := GetJSON[factoryapi.FactorySessionGetResponse](
 		t,
-		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(factorysessions.DefaultSessionID),
 	)
 	session, err := response.AsFactorySession()
 	if err != nil {
-		t.Fatalf("decode default live Factory Session: %v", err)
+		t.Fatalf("decode live Factory Session %q: %v", factorysessions.DefaultSessionID, err)
 	}
 	return session
 }

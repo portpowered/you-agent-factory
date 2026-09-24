@@ -603,6 +603,13 @@ jobs:
           helper_sha256=$(sha256sum .artifacts/integration/bin/tts-clean-install-helper | awk '{print $1}')
           echo "INFINITE_YOU_TTS_PREBUILT_HELPER_PATH=${{ github.workspace }}/.artifacts/integration/bin/tts-clean-install-helper" >> "$GITHUB_ENV"
           echo "INFINITE_YOU_TTS_PREBUILT_HELPER_SHA256=$helper_sha256" >> "$GITHUB_ENV"
+      - name: Build ACP retry peer helper artifact
+        run: |
+          go test -c -o .artifacts/integration/bin/acp-functional-helper ./tests/functional/providers/acp
+          test -x .artifacts/integration/bin/acp-functional-helper
+          helper_sha256=$(sha256sum .artifacts/integration/bin/acp-functional-helper | awk '{print $1}')
+          echo "INFINITE_YOU_ACP_HELPER_ARTIFACT_PATH=${{ github.workspace }}/.artifacts/integration/bin/acp-functional-helper" >> "$GITHUB_ENV"
+          echo "INFINITE_YOU_ACP_HELPER_ARTIFACT_SHA256=$helper_sha256" >> "$GITHUB_ENV"
       - name: Build blocked LoadModel witness helper
         id: blocked-loadmodel-helper
         shell: bash
@@ -650,6 +657,8 @@ jobs:
         env:
           INFINITE_YOU_PREBUILT_ARTIFACT: ${{ github.workspace }}/.artifacts/integration/bin/you
           INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT: "1"
+          INFINITE_YOU_ACP_HELPER_ARTIFACT_PATH: ${{ github.workspace }}/.artifacts/integration/bin/acp-functional-helper
+          INFINITE_YOU_ACP_HELPER_ARTIFACT_REQUIRED: "1"
           INFINITE_YOU_RESTART_EVIDENCE_OUTPUT: ${{ github.workspace }}/.artifacts/integration/sessions/restart/restart-baseline.json
           LOCALAI_PLATFORM_CONFORMANCE_HELPER_PATH: ${{ github.workspace }}/.artifacts/integration/bin/platform-conformance-helper
       - name: Upload restart characterization evidence
