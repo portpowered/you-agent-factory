@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-09-06
+last-modified: 2026-09-24
 doc-id: agent-factory/models
 ---
 
@@ -78,6 +78,50 @@ pull. After installation, `cacheBytes` reports the exact managed cache size.
 Warning: Pulling `tts` downloads an approximately 1.714 GB three-file model
 bundle. Backend and runtime files need additional disk space. Inspect `tts`
 before pulling or invoking it.
+
+### Built-in Windows ASR backend provenance
+
+This backend identity is pinned to merged build
+`8f945b0eadcf9863821585c7f5edeb84d855f471`. It describes the Windows Whisper
+CPU backend ZIP, separate from the ASR model payload listed above.
+
+| Field | Pinned value |
+| --- | --- |
+| LocalAI source | `b224c96db6f4b87306a33a808650bfce63b12588` (`backend/go/whisper`) |
+| Whisper.cpp source | `080bbbe85230f624f0b52127f1ae1218247989f9` |
+| Protocol source | `backend/backend.proto` at `ad62c6df07ae1169eb14411a565a689cd996b19c` |
+| Release tag | `localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106` |
+| Asset | `localai-backend-localai-whisper-windows-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.zip` |
+| Size | `11,935,463` bytes |
+| Manifest SHA-256 | `6956415b4b47b14346e0eacc1c5fa34b15a0c8cf9e7c4e7a3436b8b9e96b63c3` |
+| Immutable asset URL | `https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106/localai-backend-localai-whisper-windows-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.zip` |
+
+A no-body HTTPS `HEAD` trace on 2026-09-24 observed this redirect chain:
+
+| Time (UTC) | HTTPS host | Status | Declared next host | Peer |
+| --- | --- | ---: | --- | --- |
+| `08:23:03.612`–`08:23:04.130` | `github.com` | `302` | `release-assets.githubusercontent.com` | `140.82.114.4` |
+| `08:23:04.184`–`08:23:04.534` | `release-assets.githubusercontent.com` | `200` | — | `185.199.108.133` |
+
+The signed redirect path and query are omitted. The corrected chain completed
+in `0.933` seconds, returned no body, and accounted for `7,700` request and
+response bytes. The diagnosed initial capture plus the corrected chain
+accounted for `13,356` application bytes total. The probe allowed at most two
+redirects, a 60-second deadline per chain, and 16 MiB total transfer; it used
+one corrected retry and no further retry.
+
+Before pulling this pinned Windows backend, predeclare outbound DNS and HTTPS
+TCP port `443` access to `github.com` and
+`release-assets.githubusercontent.com`. Apply the policy to hostnames; do not
+allowlist the observed peer IPs or infer additional hosts from reverse DNS.
+The GitHub peer varied between observations while the declared redirect host
+remained the same.
+
+This observation identifies the manifest's expected size and checksum; it did
+not download or hash the asset. It does not cover the ASR model payload, other
+builds, backend startup, transcription, offline reuse, or cleanup. For another
+build, inspect that build's selected manifest entry and verify its artifact
+identity before reusing this host policy.
 
 ### Built-in TTS bundle identity
 
