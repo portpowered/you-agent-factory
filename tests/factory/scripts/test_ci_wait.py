@@ -20,6 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "factory" / "scripts" / "ci-wait.py"
 TEST_HEAD = "0123456789abcdef0123456789abcdef01234567"
 TEST_HEAD_NEXT = "fedcba9876543210fedcba9876543210fedcba98"
+RECONSTRUCTED_WORK_TASK_138_HEAD = "fbff2286b1b506ae2a1dca7d9c7dcf1ebe6a0fae"
 TEST_REPOSITORY = "example/repo"
 TEST_REPOSITORY_URL = "https://github.com/example/repo"
 TEST_CHECK_LINK = "https://github.com/example/repo/actions/runs/1/job/10"
@@ -1539,6 +1540,67 @@ time.sleep = lambda _seconds: None
         self.assertEqual(payload["reason"], "deadline-requeue")
         self.assertEqual(payload["headRefOid"], TEST_HEAD)
         self.assertEqual(payload["pendingChecks"][0]["state"], "IN_PROGRESS")
+        self.assertNotIn("checks-terminal", result.stdout)
+        self.assertEqual(len(calls), 4)
+
+    @unittest.expectedFailure
+    def test_reconstructed_c1_changing_checks_witnesses_null_diagnostic_crash(self):
+        """Reconstruct the lost Work response around its retained head identity."""
+        pr_number = 120
+        shared_before = rollup_check(
+            state="SUCCESS", name="Backend Functional Coverage"
+        )
+        shared_after = rollup_check(
+            state="FAILURE", name="Backend Functional Coverage"
+        )
+        before = view_payload(
+            head=RECONSTRUCTED_WORK_TASK_138_HEAD,
+            number=pr_number,
+            rollup=[shared_before],
+        )
+        after = view_payload(
+            head=RECONSTRUCTED_WORK_TASK_138_HEAD,
+            number=pr_number,
+            rollup=[
+                shared_after,
+                rollup_check(
+                    state="IN_PROGRESS",
+                    name="Backend Integration",
+                    link=TEST_EXTRA_LINK,
+                ),
+            ],
+        )
+        fixture = actual_fixture(
+            pr_number,
+            [observation(before, [checks_row(state="FAILURE")], after)],
+        )
+
+        self.assertEqual(before["headRefOid"], RECONSTRUCTED_WORK_TASK_138_HEAD)
+        self.assertEqual(after["headRefOid"], RECONSTRUCTED_WORK_TASK_138_HEAD)
+        result, calls = self.invoke_actual_script_with_fake_gh(
+            fixture,
+            clock="deadline",
+            lane_name="ciwait-reconstructed-work-task-138-c1",
+        )
+
+        if result.returncode != 0:
+            self.assertIn("NoneType", result.stderr)
+            self.assertIn("has no attribute 'values'", result.stderr)
+            self.assertIn("ci-wait.py", result.stderr)
+            self.assertIn("1117", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["reason"], "deadline-requeue")
+        self.assertEqual(payload["headRefOid"], RECONSTRUCTED_WORK_TASK_138_HEAD)
+        self.assertEqual(
+            payload["uncertainty"]["reason"],
+            "check-set-changed-during-observation",
+        )
+        self.assertEqual(
+            payload["uncertainty"]["observedHeads"],
+            [RECONSTRUCTED_WORK_TASK_138_HEAD],
+        )
+        self.assertNotIn("passed", result.stdout)
         self.assertNotIn("checks-terminal", result.stdout)
         self.assertEqual(len(calls), 4)
 
