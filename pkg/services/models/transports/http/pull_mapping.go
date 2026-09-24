@@ -50,12 +50,20 @@ func modelPullOutcomeFromManagedRuntime(outcome factoryapi.ManagedRuntimePullOut
 	}
 }
 
-func modelRemoveResponseFromService(result models.RemoveModelAssetsResult) factoryapi.ModelRemoveResponse {
-	return factoryapi.ModelRemoveResponse{
+func modelRemoveResponseFromService(
+	result models.RemoveModelAssetsResult,
+	reclaimUnusedCache bool,
+) factoryapi.ModelRemoveResponse {
+	response := factoryapi.ModelRemoveResponse{
 		ModelName:    result.ModelName,
 		Revision:     result.Revision,
 		CachePath:    result.CachePath,
 		Outcome:      factoryapi.ModelRemoveOutcome(result.Outcome),
 		BytesRemoved: result.BytesRemoved,
 	}
+	if reclaimUnusedCache {
+		response.ReclaimedCacheBytes = &result.ReclaimedCacheBytes
+		response.RetainedSharedCacheBytes = &result.RetainedSharedCacheBytes
+	}
+	return response
 }

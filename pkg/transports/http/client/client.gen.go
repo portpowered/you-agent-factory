@@ -158,6 +158,7 @@ const (
 	ErrorResponseCodeMETRICSSESSIONSCOPEUNAVAILABLE                 ErrorResponseCode = "METRICS_SESSION_SCOPE_UNAVAILABLE"
 	ErrorResponseCodeMODELCACHEINUSE                                ErrorResponseCode = "MODEL_CACHE_IN_USE"
 	ErrorResponseCodeMODELCACHENOTFOUND                             ErrorResponseCode = "MODEL_CACHE_NOT_FOUND"
+	ErrorResponseCodeMODELCACHEREFERENCEUNCERTAIN                   ErrorResponseCode = "MODEL_CACHE_REFERENCE_UNCERTAIN"
 	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED                  ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
 	ErrorResponseCodeNOTFOUND                                       ErrorResponseCode = "NOT_FOUND"
 	ErrorResponseCodePROJECTIONUNAVAILABLE                          ErrorResponseCode = "PROJECTION_UNAVAILABLE"
@@ -6510,6 +6511,12 @@ type ModelRemoveResponse struct {
 
 	// Outcome Outcome of removing the selected managed model cache revision.
 	Outcome ModelRemoveOutcome `json:"outcome"`
+
+	// ReclaimedCacheBytes YOU-owned unreferenced shared-cache bytes reclaimed by this operation.
+	ReclaimedCacheBytes *int64 `json:"reclaimedCacheBytes,omitempty"`
+
+	// RetainedSharedCacheBytes Candidate shared-cache bytes retained because they remain referenced.
+	RetainedSharedCacheBytes *int64 `json:"retainedSharedCacheBytes,omitempty"`
 
 	// Revision Exact managed cache revision removed by the operation.
 	Revision string `json:"revision"`

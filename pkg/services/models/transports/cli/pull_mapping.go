@@ -541,6 +541,12 @@ func modelsRequestError(statusCode int, body []byte, response ...*http.Response)
 				return clihttp.NewAPIErrorFromResponse(httpResponse, errResp, displayMessage, ErrModelCacheInUse)
 			}
 			return clihttp.NewAPIError(statusCode, errResp, displayMessage, ErrModelCacheInUse)
+		case factoryapi.ErrorResponseCode("MODEL_CACHE_REFERENCE_UNCERTAIN"):
+			displayMessage := fmt.Sprintf("%s: %s", ErrModelCacheReferenceUncertain, errResp.Message)
+			if httpResponse != nil {
+				return clihttp.NewAPIErrorFromResponse(httpResponse, errResp, displayMessage, ErrModelCacheReferenceUncertain)
+			}
+			return clihttp.NewAPIError(statusCode, errResp, displayMessage, ErrModelCacheReferenceUncertain)
 		}
 		if statusCode == http.StatusNotFound && errResp.Code == factoryapi.ErrorResponseCodeNOTFOUND {
 			if httpResponse != nil {

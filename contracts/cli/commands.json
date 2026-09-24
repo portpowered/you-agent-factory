@@ -13348,12 +13348,12 @@
           },
           "description": {
             "id": "you.models.remove.description",
-            "canonicalEnglish": "Remove one installed managed model cache revision from the local Models composition. The operation reports the selected revision, validated cache path, outcome, and measured bytes removed; it refuses active model hosts or invocation leases and never follows links outside the managed cache root. Use global --json for API-shaped output and explicit --server to target a reachable factory API service."
+              "canonicalEnglish": "Remove the selected managed model cache revision. Add --reclaim-unused-cache to reclaim YOU-owned model and backend cache assets when no managed runtime references them. The flag defaults to off. JSON output reports revision and shared-cache bytes separately. Use explicit --server to target a reachable Factory API service."
           }
         },
         "examples": [
           "you models remove llm",
-          "you --json models remove embed"
+          "you --json models remove embed --reclaim-unused-cache"
         ],
         "visibility": "public",
         "sourceHash": "cb8ee2af65b102201dab00c728a3430b160a8b0daa1e96409aeba318c187dbc1"
@@ -13368,8 +13368,8 @@
       "runnable": true,
       "placement": "dual",
       "usage": {
-        "line": "remove <model-name>",
-        "example": "  # Remove one installed managed cache revision.\n  you models remove llm\n\n  # Emit deterministic JSON for automation.\n  you --json models remove embed"
+        "line": "remove <model-name> [--reclaim-unused-cache]",
+        "example": "  # Remove one managed model cache revision.\n  you models remove llm\n\n  # Reclaim unreferenced model and backend cache assets.\n  you --json models remove embed --reclaim-unused-cache"
       },
       "arguments": {
         "you.models.remove.arg.0": {
@@ -13469,6 +13469,29 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.models.remove.flag.remote",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.models.remove.flag.reclaim-unused-cache": {
+          "id": "you.models.remove.flag.reclaim-unused-cache",
+          "long": "reclaim-unused-cache",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.remove.flag.reclaim-unused-cache",
             "state": "active",
             "since": "1.0.0"
           }

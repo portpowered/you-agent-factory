@@ -1157,6 +1157,13 @@ paths:
           description: Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`.
           schema:
             type: string
+        - name: reclaim_unused_cache
+          in: query
+          required: false
+          description: Also reclaim proven unreferenced model and backend cache assets. The default preserves them.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: The selected managed model cache revision was removed.
@@ -1169,7 +1176,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: The managed model cache is held by an active host or invocation.
+          description: Active use or uncertain shared-cache references prevented safe reclamation.
           content:
             application/json:
               schema:
@@ -5496,6 +5503,16 @@ components:
           format: int64
           minimum: 0
           description: Total size of regular files measured immediately before removal.
+        reclaimedCacheBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: YOU-owned unreferenced shared-cache bytes reclaimed by this operation.
+        retainedSharedCacheBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Candidate shared-cache bytes retained because they remain referenced.
     ResolvedModelOperationBinding:
       type: object
       additionalProperties: false
@@ -5681,6 +5698,7 @@ components:
             - METRICS_SESSION_SCOPE_UNAVAILABLE
             - MODEL_CACHE_NOT_FOUND
             - MODEL_CACHE_IN_USE
+            - MODEL_CACHE_REFERENCE_UNCERTAIN
             - NOT_FOUND
             - INTERNAL_ERROR
             - COSTS_INVALID_REQUEST
@@ -5744,6 +5762,7 @@ components:
             - The live Factory Session was discoverable, but no retained metrics scope was available.
             - The selected managed model cache revision does not exist.
             - The selected managed model cache revision is held by an active model host or invocation.
+            - Managed model cache references could not be proven safe for reclamation.
             - The requested resource does not exist.
             - The server failed while handling an otherwise valid request.
             - The metrics costs request contained invalid configuration or selection input.

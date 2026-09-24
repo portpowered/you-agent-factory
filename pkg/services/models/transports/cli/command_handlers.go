@@ -51,21 +51,22 @@ func NewCommandHandler(
 }
 
 const (
-	modelsInspectNameInputID = "you.models.inspect.arg.0"
-	modelsInvokeNameInputID  = "you.models.invoke.arg.0"
-	modelsInvokeOperationID  = "you.models.invoke.flag.operation"
-	modelsInvokeOfflineID    = "you.models.invoke.flag.offline"
-	modelsInvokeTextID       = "you.models.invoke.flag.text"
-	modelsInvokeInputID      = "you.models.invoke.flag.input"
-	modelsInvokeParameterID  = "you.models.invoke.flag.parameter"
-	modelsInvokeOutputID     = "you.models.invoke.flag.output"
-	modelsInvokeOutputMapID  = "you.models.invoke.flag.output-map"
-	modelsPullNameInputID    = "you.models.pull.arg.0"
-	modelsRemoveNameInputID  = "you.models.remove.arg.0"
-	serverInputID            = "you.flag.server"
-	jsonInputID              = "you.flag.json"
-	verboseInputID           = "you.flag.verbose"
-	debugInputID             = "you.flag.debug"
+	modelsInspectNameInputID         = "you.models.inspect.arg.0"
+	modelsInvokeNameInputID          = "you.models.invoke.arg.0"
+	modelsInvokeOperationID          = "you.models.invoke.flag.operation"
+	modelsInvokeOfflineID            = "you.models.invoke.flag.offline"
+	modelsInvokeTextID               = "you.models.invoke.flag.text"
+	modelsInvokeInputID              = "you.models.invoke.flag.input"
+	modelsInvokeParameterID          = "you.models.invoke.flag.parameter"
+	modelsInvokeOutputID             = "you.models.invoke.flag.output"
+	modelsInvokeOutputMapID          = "you.models.invoke.flag.output-map"
+	modelsPullNameInputID            = "you.models.pull.arg.0"
+	modelsRemoveNameInputID          = "you.models.remove.arg.0"
+	modelsRemoveReclaimUnusedCacheID = "you.models.remove.flag.reclaim-unused-cache"
+	serverInputID                    = "you.flag.server"
+	jsonInputID                      = "you.flag.json"
+	verboseInputID                   = "you.flag.verbose"
+	debugInputID                     = "you.flag.debug"
 )
 
 func (h *CommandHandler) List(
@@ -422,8 +423,13 @@ func (h *CommandHandler) Remove(
 	if err != nil {
 		return fmt.Errorf("read models remove model name: %w", err)
 	}
+	reclaimUnusedCache, err := inputs.Bool(modelsRemoveReclaimUnusedCacheID)
+	if err != nil {
+		return fmt.Errorf("read models remove cache-reclamation option: %w", err)
+	}
 	cfg := RemoveConfig{
 		Context: cmd.Context(), ModelName: modelName, Output: cmd.OutOrStdout(),
+		ReclaimUnusedCache: reclaimUnusedCache,
 	}
 	if err := h.applyResolvedCommon(cmd, inherited, &cfg.Server, &cfg.JSON, &cfg.Verbose, &cfg.Debug, &cfg.Diagnostics); err != nil {
 		return fmt.Errorf("resolve models remove inputs: %w", err)

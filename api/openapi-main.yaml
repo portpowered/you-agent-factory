@@ -1368,6 +1368,13 @@ paths:
           description: Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`.
           schema:
             type: string
+        - name: reclaim_unused_cache
+          in: query
+          required: false
+          description: Also reclaim proven unreferenced model and backend cache assets. The default preserves them.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: The selected managed model cache revision was removed.
@@ -1380,7 +1387,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: The managed model cache is held by an active host or invocation.
+          description: Active use or uncertain shared-cache references prevented safe reclamation.
           content:
             application/json:
               schema:

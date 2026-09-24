@@ -171,14 +171,8 @@ func TestCommandHandlerCatalogCommandsSelectOneResolvedCache(t *testing.T) {
 		t.Fatalf("Pull() error = %v", err)
 	}
 	removeInputs, err := resolvedinput.Resolve(
-		[]resolvedinput.Definition{{
-			ID: modelsRemoveNameInputID, Kind: resolvedinput.ValueKindString,
-			Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument},
-		}},
-		[]resolvedinput.Candidate{{
-			InputID: modelsRemoveNameInputID, Source: resolvedinput.SourcePositionalArgument,
-			Value: resolvedinput.StringValue("model-a"),
-		}},
+		modelsRemoveResolvedDefinitions(),
+		modelsRemoveResolvedCandidates("model-a"),
 	)
 	if err != nil {
 		t.Fatalf("resolve remove inputs: %v", err)
@@ -263,14 +257,8 @@ func TestCommandHandlerCatalogCommandsPreserveLegacyForEmptyAndServerSelection(t
 				t.Fatalf("Pull() error = %v", err)
 			}
 			removeInputs, err := resolvedinput.Resolve(
-				[]resolvedinput.Definition{{
-					ID: modelsRemoveNameInputID, Kind: resolvedinput.ValueKindString,
-					Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument},
-				}},
-				[]resolvedinput.Candidate{{
-					InputID: modelsRemoveNameInputID, Source: resolvedinput.SourcePositionalArgument,
-					Value: resolvedinput.StringValue("model-a"),
-				}},
+				modelsRemoveResolvedDefinitions(),
+				modelsRemoveResolvedCandidates("model-a"),
 			)
 			if err != nil {
 				t.Fatalf("resolve remove inputs: %v", err)
@@ -308,6 +296,32 @@ func TestCommandHandlerCatalogCacheResolverFailureShortCircuitsModels(t *testing
 	}
 	if serviceCalls != 0 {
 		t.Fatalf("Models service calls = %d, want zero after resolver failure", serviceCalls)
+	}
+}
+
+func modelsRemoveResolvedDefinitions() []resolvedinput.Definition {
+	return []resolvedinput.Definition{
+		{
+			ID: modelsRemoveNameInputID, Kind: resolvedinput.ValueKindString,
+			Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument},
+		},
+		{
+			ID: modelsRemoveReclaimUnusedCacheID, Kind: resolvedinput.ValueKindBool,
+			Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag},
+		},
+	}
+}
+
+func modelsRemoveResolvedCandidates(modelName string) []resolvedinput.Candidate {
+	return []resolvedinput.Candidate{
+		{
+			InputID: modelsRemoveNameInputID, Source: resolvedinput.SourcePositionalArgument,
+			Value: resolvedinput.StringValue(modelName),
+		},
+		{
+			InputID: modelsRemoveReclaimUnusedCacheID, Source: resolvedinput.SourceCLIFlag,
+			Value: resolvedinput.BoolValue(false),
+		},
 	}
 }
 

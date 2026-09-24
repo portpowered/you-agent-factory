@@ -62,6 +62,9 @@ var (
 	// ErrModelCacheUnsafe reports that a managed cache path contains a link or
 	// path shape that cannot be removed without following it outside the cache.
 	ErrModelCacheUnsafe = errors.New("managed model cache path is unsafe")
+	// ErrModelCacheReferenceUncertain reports that Models cannot prove the
+	// selected shared-cache candidates are owned and unreferenced.
+	ErrModelCacheReferenceUncertain = errors.New("managed model cache references are uncertain")
 	// ErrModelCacheRemovalFailed reports that removal could not be verified.
 	ErrModelCacheRemovalFailed = errors.New("managed model cache removal failed")
 )
@@ -601,8 +604,9 @@ type InspectModelAssetsResult struct {
 
 // RemoveModelAssetsRequest asks Models to remove one scoped model's assets.
 type RemoveModelAssetsRequest struct {
-	Scope RuntimeScopeRef
-	Name  string
+	Scope              RuntimeScopeRef
+	Name               string
+	ReclaimUnusedCache bool
 }
 
 // Validate checks fields whose validity does not depend on private scope or
@@ -614,12 +618,14 @@ func (request RemoveModelAssetsRequest) Validate() error {
 // RemoveModelAssetsResult reports the resulting readiness and whether assets
 // were removed or were already absent.
 type RemoveModelAssetsResult struct {
-	ModelName    string
-	Revision     string
-	CachePath    string
-	BytesRemoved int64
-	Readiness    AssetReadinessState
-	Outcome      AssetRemovalOutcome
+	ModelName                string
+	Revision                 string
+	CachePath                string
+	BytesRemoved             int64
+	ReclaimedCacheBytes      int64
+	RetainedSharedCacheBytes int64
+	Readiness                AssetReadinessState
+	Outcome                  AssetRemovalOutcome
 }
 
 func validateAssetModelName(name string) error {

@@ -180,17 +180,26 @@ managed-runtime meanings.
 The byte count sums regular files recursively within the selected revision. It
 does not follow symbolic links, and it does not count data outside that revision.
 
-Remove one installed revision only when you no longer need its local files:
+Remove one managed model cache revision when you no longer need its local files:
 
 ```bash
 you models remove llm
 you --json models remove embed
+you --json models remove asr --reclaim-unused-cache
 ```
 
-Removal names the model, revision, and validated `cachePath`. It measures regular
-files before deletion, removes only that revision, verifies that the path is gone,
-and reports `bytesRemoved`. `MODEL_CACHE_NOT_FOUND` means no installed cache exists.
-`MODEL_CACHE_IN_USE` means an active host or invocation still holds the cache.
+Without `--reclaim-unused-cache`, removal deletes only the selected revision and
+reports its measured `bytesRemoved`. The default retains shared model and backend
+cache assets.
+
+Add `--reclaim-unused-cache` to reclaim proven unreferenced cache assets managed by
+YOU. The flag defaults to off. JSON output reports `bytesRemoved`,
+`reclaimedCacheBytes`, and `retainedSharedCacheBytes` separately.
+`MODEL_CACHE_REFERENCE_UNCERTAIN` means Models could not prove that reclamation is
+safe. In that case, removal leaves the revision and candidate shared assets intact.
+
+`MODEL_CACHE_NOT_FOUND` means no installed cache exists. `MODEL_CACHE_IN_USE` means
+an active host or invocation still holds the cache.
 
 Removal is always customer-initiated. The managed disk cache has no automatic
 eviction, time-to-live policy, or background cleanup. Runtime host unloading does

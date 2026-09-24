@@ -2,6 +2,8 @@ package http
 
 import (
 	"net/http"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Model endpoint methods are generated-server composition shims. Protocol
@@ -26,8 +28,14 @@ func (s *Server) PullModel(w http.ResponseWriter, r *http.Request, modelName str
 	s.modelsHTTP.PullModel(w, r, modelName)
 }
 
-func (s *Server) RemoveModel(w http.ResponseWriter, r *http.Request, modelName string) {
-	s.modelsHTTP.RemoveModel(w, r, modelName)
+func (s *Server) RemoveModel(
+	w http.ResponseWriter,
+	r *http.Request,
+	modelName string,
+	params factoryapi.RemoveModelParams,
+) {
+	reclaimUnusedCache := params.ReclaimUnusedCache != nil && *params.ReclaimUnusedCache
+	s.modelsHTTP.RemoveModel(w, r, modelName, reclaimUnusedCache)
 }
 
 // ListPackagedFactories forwards the generated operation to the Factory

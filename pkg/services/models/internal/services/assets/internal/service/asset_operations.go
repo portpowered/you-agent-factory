@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -564,23 +565,48 @@ func (s *service) removeGenericModelAssets(
 	if err != nil {
 		return result, err
 	}
+	var reclamation cacheReclamationPlan
+	if request.ReclaimUnusedCache {
+		metadata, err := s.readReclamationMetadata(
+			ctx, target.modelRoot, target.modelName, target.revision,
+		)
+		if err != nil {
+			return models.RemoveModelAssetsResult{}, err
+		}
+		reclamation, err = s.planCacheReclamation(
+			ctx, filepath.Dir(target.modelRoot), target.modelRoot, target.modelName,
+			metadata, target.source,
+		)
+		if err != nil {
+			return models.RemoveModelAssetsResult{}, err
+		}
+	}
 	if err := s.removeManagedTree(ctx, target.revisionPath); err != nil {
-		return result, err
+		return models.RemoveModelAssetsResult{}, err
 	}
 	if err := s.verifyManagedPathRemoved(ctx, target.modelRoot, target.revision); err != nil {
-		return result, err
+		return models.RemoveModelAssetsResult{}, err
 	}
 
 	s.preparedRuntimeMu.Lock()
 	delete(s.preparedRuntime, preparedRuntimeKey(request.Scope, request.Name))
 	s.preparedRuntimeMu.Unlock()
+	reclaimedCacheBytes := int64(0)
+	if request.ReclaimUnusedCache {
+		reclaimedCacheBytes, err = s.applyCacheReclamationPlan(ctx, reclamation)
+		if err != nil {
+			return models.RemoveModelAssetsResult{}, err
+		}
+	}
 	return models.RemoveModelAssetsResult{
-		ModelName:    target.modelName,
-		Revision:     target.revision,
-		CachePath:    target.revisionPath,
-		BytesRemoved: bytesRemoved,
-		Readiness:    models.AssetReadinessMissing,
-		Outcome:      models.AssetRemovalRemoved,
+		ModelName:                target.modelName,
+		Revision:                 target.revision,
+		CachePath:                target.revisionPath,
+		BytesRemoved:             bytesRemoved,
+		ReclaimedCacheBytes:      reclaimedCacheBytes,
+		RetainedSharedCacheBytes: reclamation.retained,
+		Readiness:                models.AssetReadinessMissing,
+		Outcome:                  models.AssetRemovalRemoved,
 	}, nil
 }
 
@@ -589,6 +615,7 @@ type genericRemovalTarget struct {
 	modelRoot    string
 	revision     string
 	revisionPath string
+	source       genericSource
 }
 
 func (s *service) resolveGenericRemovalTarget(
@@ -613,7 +640,7 @@ func (s *service) resolveGenericRemovalTarget(
 		return genericRemovalTarget{}, modelCacheNotFound(modelName)
 	}
 	return s.validateGenericRemovalTarget(
-		ctx, scope.CacheDirectory, canonicalModelName(modelName), inspection,
+		ctx, scope.CacheDirectory, canonicalModelName(modelName), inspection, source,
 	)
 }
 
@@ -631,6 +658,7 @@ func (s *service) validateGenericRemovalTarget(
 	cacheDirectory string,
 	modelName string,
 	inspection assets.RuntimeCacheInspection,
+	source genericSource,
 ) (genericRemovalTarget, error) {
 	modelRoot, err := s.modelCacheRoot(cacheDirectory, modelName)
 	if err != nil {
@@ -662,6 +690,7 @@ func (s *service) validateGenericRemovalTarget(
 		modelRoot:    modelRoot,
 		revision:     inspection.Revision,
 		revisionPath: revisionPath,
+		source:       source,
 	}, nil
 }
 
@@ -714,6 +743,25 @@ func (s *service) removeResolvedModelAssets(
 	if err := s.requireManagedDirectoryChild(ctx, modelRoot, revision, "revision"); err != nil {
 		return result, err
 	}
+	var reclamation cacheReclamationPlan
+	if request.ReclaimUnusedCache {
+		metadata, err := s.readReclamationMetadata(
+			ctx, modelRoot, spec.modelName, revision,
+		)
+		if err != nil {
+			return models.RemoveModelAssetsResult{}, err
+		}
+		managedSource, sourceFound := genericSourceForManagedModel(spec.modelName)
+		if !sourceFound {
+			return models.RemoveModelAssetsResult{}, uncertainCacheReferences(spec.modelName, nil)
+		}
+		reclamation, err = s.planCacheReclamation(
+			ctx, filepath.Dir(modelRoot), modelRoot, spec.modelName, metadata, managedSource,
+		)
+		if err != nil {
+			return models.RemoveModelAssetsResult{}, err
+		}
+	}
 
 	bytesRemoved, err := s.measureRevisionBytes(ctx, revisionPath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -723,23 +771,54 @@ func (s *service) removeResolvedModelAssets(
 		return result, err
 	}
 	if err := s.removeManagedTree(ctx, revisionPath); err != nil {
-		return result, err
+		return models.RemoveModelAssetsResult{}, err
 	}
 	if err := s.verifyManagedPathRemoved(ctx, modelRoot, revision); err != nil {
-		return result, err
+		return models.RemoveModelAssetsResult{}, err
 	}
 
 	s.preparedRuntimeMu.Lock()
 	delete(s.preparedRuntime, preparedRuntimeKey(request.Scope, request.Name))
 	s.preparedRuntimeMu.Unlock()
+	reclaimedCacheBytes := int64(0)
+	if request.ReclaimUnusedCache {
+		reclaimedCacheBytes, err = s.applyCacheReclamationPlan(ctx, reclamation)
+		if err != nil {
+			return models.RemoveModelAssetsResult{}, err
+		}
+	}
 	return models.RemoveModelAssetsResult{
-		ModelName:    spec.modelName,
-		Revision:     revision,
-		CachePath:    revisionPath,
-		BytesRemoved: bytesRemoved,
-		Readiness:    models.AssetReadinessMissing,
-		Outcome:      models.AssetRemovalRemoved,
+		ModelName:                spec.modelName,
+		Revision:                 revision,
+		CachePath:                revisionPath,
+		BytesRemoved:             bytesRemoved,
+		ReclaimedCacheBytes:      reclaimedCacheBytes,
+		RetainedSharedCacheBytes: reclamation.retained,
+		Readiness:                models.AssetReadinessMissing,
+		Outcome:                  models.AssetRemovalRemoved,
 	}, nil
+}
+
+func (s *service) readReclamationMetadata(
+	ctx context.Context,
+	modelRoot string,
+	modelName string,
+	revision string,
+) (cacheMetadata, error) {
+	body, found, err := s.readManagedRegularFile(ctx, modelRoot, metadataFileName)
+	if err != nil {
+		return cacheMetadata{}, uncertainCacheReferences(modelName, err)
+	}
+	if !found {
+		return cacheMetadata{}, uncertainCacheReferences(modelName, nil)
+	}
+	var metadata cacheMetadata
+	if err := json.Unmarshal(body, &metadata); err != nil ||
+		canonicalModelName(metadata.ModelName) != canonicalModelName(modelName) ||
+		strings.TrimSpace(metadata.Revision) != strings.TrimSpace(revision) {
+		return cacheMetadata{}, uncertainCacheReferences(modelName, err)
+	}
+	return metadata, nil
 }
 
 func modelCacheNotFound(name string) error {

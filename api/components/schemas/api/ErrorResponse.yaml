@@ -70,6 +70,7 @@ properties:
       - METRICS_SESSION_SCOPE_UNAVAILABLE
       - MODEL_CACHE_NOT_FOUND
       - MODEL_CACHE_IN_USE
+      - MODEL_CACHE_REFERENCE_UNCERTAIN
       - NOT_FOUND
       - INTERNAL_ERROR
       - COSTS_INVALID_REQUEST
@@ -133,6 +134,7 @@ properties:
       - The live Factory Session was discoverable, but no retained metrics scope was available.
       - The selected managed model cache revision does not exist.
       - The selected managed model cache revision is held by an active model host or invocation.
+      - Managed model cache references could not be proven safe for reclamation.
       - The requested resource does not exist.
       - The server failed while handling an otherwise valid request.
       - The metrics costs request contained invalid configuration or selection input.

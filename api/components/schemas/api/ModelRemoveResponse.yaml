@@ -22,3 +22,13 @@ properties:
     format: int64
     minimum: 0
     description: Total size of regular files measured immediately before removal.
+  reclaimedCacheBytes:
+    type: integer
+    format: int64
+    minimum: 0
+    description: YOU-owned unreferenced shared-cache bytes reclaimed by this operation.
+  retainedSharedCacheBytes:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Candidate shared-cache bytes retained because they remain referenced.

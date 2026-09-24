@@ -292,13 +292,14 @@ func (service *rootService) removeLocal(
 ) error {
 	return service.withCatalogScopeForModelCache(cfg.Context, modelCacheDir, func(scope modelinference.RuntimeScopeRef) error {
 		result, err := service.models.RemoveModelAssets(cfg.Context, modelinference.RemoveModelAssetsRequest{
-			Scope: scope,
-			Name:  modelName,
+			Scope:              scope,
+			Name:               modelName,
+			ReclaimUnusedCache: cfg.ReclaimUnusedCache,
 		})
 		if err != nil {
 			return mapModelsRootError(err)
 		}
-		response := removeResultToGenerated(result)
+		response := removeResultToGenerated(result, cfg.ReclaimUnusedCache)
 		if cfg.JSON {
 			return json.NewEncoder(cfg.Output).Encode(response)
 		}
@@ -495,6 +496,7 @@ func (service *rootService) removeRemote(cfg RemoveConfig) error {
 	response, err := removeModel(removeOptions{
 		Context: cfg.Context, Server: cfg.Server, ModelName: cfg.ModelName,
 		Verbose: cfg.Verbose, Diagnostics: cfg.Diagnostics, HTTP: service.http,
+		ReclaimUnusedCache: cfg.ReclaimUnusedCache,
 	})
 	if err != nil {
 		return err
@@ -506,12 +508,13 @@ func (service *rootService) removeRemote(cfg RemoveConfig) error {
 }
 
 type removeOptions struct {
-	Context     context.Context
-	Server      string
-	ModelName   string
-	Verbose     bool
-	Diagnostics io.Writer
-	HTTP        clihttp.Protocol
+	Context            context.Context
+	Server             string
+	ModelName          string
+	Verbose            bool
+	ReclaimUnusedCache bool
+	Diagnostics        io.Writer
+	HTTP               clihttp.Protocol
 }
 
 func removeModel(cfg removeOptions) (factoryapi.ModelRemoveResponse, error) {
@@ -519,6 +522,11 @@ func removeModel(cfg removeOptions) (factoryapi.ModelRemoveResponse, error) {
 	endpoint, err := modelsEndpoint(cfg.Server, path)
 	if err != nil {
 		return factoryapi.ModelRemoveResponse{}, err
+	}
+	if cfg.ReclaimUnusedCache {
+		query := endpoint.Query()
+		query.Set("reclaim_unused_cache", "true")
+		endpoint.RawQuery = query.Encode()
 	}
 	var response factoryapi.ModelRemoveResponse
 	if err := doModelsDELETE(cfg.Context, cfg.HTTP, endpoint, &response, requestDiagnostics{
@@ -585,6 +593,29 @@ func doModelsDELETE(
 }
 
 func renderRemove(response factoryapi.ModelRemoveResponse, output io.Writer) error {
+	if response.ReclaimedCacheBytes != nil || response.RetainedSharedCacheBytes != nil {
+		reclaimed := int64(0)
+		if response.ReclaimedCacheBytes != nil {
+			reclaimed = *response.ReclaimedCacheBytes
+		}
+		retained := int64(0)
+		if response.RetainedSharedCacheBytes != nil {
+			retained = *response.RetainedSharedCacheBytes
+		}
+		_, err := fmt.Fprintf(
+			output,
+			"MODEL\tREMOVE OUTCOME\tREVISION\tCACHE PATH\tBYTES REMOVED\tRECLAIMED CACHE BYTES\tRETAINED SHARED CACHE BYTES\n%s\t%s\t%s\t%s\t%s (%d bytes)\t%d\t%d\n",
+			response.ModelName,
+			response.Outcome,
+			response.Revision,
+			response.CachePath,
+			humanByteSize(response.BytesRemoved),
+			response.BytesRemoved,
+			reclaimed,
+			retained,
+		)
+		return err
+	}
 	_, err := fmt.Fprintf(
 		output,
 		"MODEL\tREMOVE OUTCOME\tREVISION\tCACHE PATH\tBYTES REMOVED\n%s\t%s\t%s\t%s\t%s (%d bytes)\n",
@@ -598,12 +629,20 @@ func renderRemove(response factoryapi.ModelRemoveResponse, output io.Writer) err
 	return err
 }
 
-func removeResultToGenerated(result modelinference.RemoveModelAssetsResult) factoryapi.ModelRemoveResponse {
-	return factoryapi.ModelRemoveResponse{
+func removeResultToGenerated(
+	result modelinference.RemoveModelAssetsResult,
+	reclaimUnusedCache bool,
+) factoryapi.ModelRemoveResponse {
+	response := factoryapi.ModelRemoveResponse{
 		ModelName:    result.ModelName,
 		Revision:     result.Revision,
 		CachePath:    result.CachePath,
 		Outcome:      factoryapi.ModelRemoveOutcome(result.Outcome),
 		BytesRemoved: result.BytesRemoved,
 	}
+	if reclaimUnusedCache {
+		response.ReclaimedCacheBytes = &result.ReclaimedCacheBytes
+		response.RetainedSharedCacheBytes = &result.RetainedSharedCacheBytes
+	}
+	return response
 }

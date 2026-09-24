@@ -15,16 +15,17 @@ import (
 )
 
 const (
-	modelsRootModelNotFoundCode    = "NOT_FOUND"
-	modelsRootModelUnavailableCode = "MODEL_NOT_AVAILABLE"
-	modelsRootBadRequestCode       = "BAD_REQUEST"
-	modelsRootCacheNotFoundCode    = "MODEL_CACHE_NOT_FOUND"
-	modelsRootCacheInUseCode       = "MODEL_CACHE_IN_USE"
-	modelsRootCacheUnsafeCode      = modelsRootBadRequestCode
-	modelsRootPullFailedCode       = "CLI_MODEL_PULL_FAILED"
-	modelsRootDefaultErrorText     = "models command failed"
-	modelsRootMissingCachePrefix   = "model cache is not installed; run you models pull"
-	modelsMalformedResponseCode    = "MODEL_BACKEND_FAILURE"
+	modelsRootModelNotFoundCode           = "NOT_FOUND"
+	modelsRootModelUnavailableCode        = "MODEL_NOT_AVAILABLE"
+	modelsRootBadRequestCode              = "BAD_REQUEST"
+	modelsRootCacheNotFoundCode           = "MODEL_CACHE_NOT_FOUND"
+	modelsRootCacheInUseCode              = "MODEL_CACHE_IN_USE"
+	modelsRootCacheReferenceUncertainCode = "MODEL_CACHE_REFERENCE_UNCERTAIN"
+	modelsRootCacheUnsafeCode             = modelsRootBadRequestCode
+	modelsRootPullFailedCode              = "CLI_MODEL_PULL_FAILED"
+	modelsRootDefaultErrorText            = "models command failed"
+	modelsRootMissingCachePrefix          = "model cache is not installed; run you models pull"
+	modelsMalformedResponseCode           = "MODEL_BACKEND_FAILURE"
 )
 
 const modelsFactoryLayoutNotFoundCode = "CURRENT_FACTORY_NOT_FOUND"
@@ -315,6 +316,14 @@ func mapModelsRootError(err error) error {
 			factoryapi.ErrorFamilyConflict,
 			strings.TrimSpace(err.Error()),
 			ErrModelCacheInUse,
+			err,
+		)
+	case errors.Is(err, modelinference.ErrModelCacheReferenceUncertain):
+		return newModelsRootError(
+			modelsRootCacheReferenceUncertainCode,
+			factoryapi.ErrorFamilyConflict,
+			strings.TrimSpace(err.Error()),
+			ErrModelCacheReferenceUncertain,
 			err,
 		)
 	case errors.Is(err, modelinference.ErrModelCacheUnsafe):

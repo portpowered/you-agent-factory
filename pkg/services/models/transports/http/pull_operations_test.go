@@ -245,7 +245,7 @@ func TestRemoveModelHandlerMapsDetachedResultAndScope(t *testing.T) {
 	handler := NewHandlerFromRoot(RootBinding{Models: root, Scope: scope}, zap.NewNop())
 	request := httptest.NewRequest(http.MethodDelete, "/models/OMNIVOICE_Q4_K_M", nil)
 	response := httptest.NewRecorder()
-	handler.RemoveModel(response, request, "OMNIVOICE_Q4_K_M")
+	handler.RemoveModel(response, request, "OMNIVOICE_Q4_K_M", false)
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", response.Code, response.Body.String())
 	}
@@ -271,7 +271,7 @@ func TestRemoveModelHandlerUsesSpecificCacheErrors(t *testing.T) {
 	}}
 	handler := NewHandlerFromRoot(RootBinding{Models: root, Scope: scope}, zap.NewNop())
 	response := httptest.NewRecorder()
-	handler.RemoveModel(response, httptest.NewRequest(http.MethodDelete, "/models/model", nil), "model")
+	handler.RemoveModel(response, httptest.NewRequest(http.MethodDelete, "/models/model", nil), "model", false)
 	if response.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want conflict; body=%s", response.Code, response.Body.String())
 	}
@@ -287,6 +287,36 @@ func TestRemoveModelHandlerUsesSpecificCacheErrors(t *testing.T) {
 	}
 }
 
+func TestRemoveModelHandlerMapsUncertainCacheReferences(t *testing.T) {
+	t.Parallel()
+
+	root := &rootFake{remove: func(_ context.Context, request models.RemoveModelAssetsRequest) (models.RemoveModelAssetsResult, error) {
+		if !request.ReclaimUnusedCache {
+			t.Fatal("remove request did not preserve reclaim_unused_cache=true")
+		}
+		return models.RemoveModelAssetsResult{}, models.ErrModelCacheReferenceUncertain
+	}}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	response := httptest.NewRecorder()
+	handler.RemoveModel(
+		response,
+		httptest.NewRequest(http.MethodDelete, "/models/ASR?reclaim_unused_cache=true", nil),
+		"ASR",
+		true,
+	)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want conflict; body=%s", response.Code, response.Body.String())
+	}
+	var body factoryapi.ErrorResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode uncertain-reference response: %v", err)
+	}
+	if body.Code != factoryapi.ErrorResponseCode("MODEL_CACHE_REFERENCE_UNCERTAIN") ||
+		body.Family != factoryapi.ErrorFamilyConflict {
+		t.Fatalf("error response = %#v, want MODEL_CACHE_REFERENCE_UNCERTAIN/CONFLICT", body)
+	}
+}
+
 func TestRemoveModelHandlerMapsWrappedModelCacheNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -299,7 +329,7 @@ func TestRemoveModelHandlerMapsWrappedModelCacheNotFound(t *testing.T) {
 	}}
 	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	response := httptest.NewRecorder()
-	handler.RemoveModel(response, httptest.NewRequest(http.MethodDelete, "/models/LLM", nil), modelName)
+	handler.RemoveModel(response, httptest.NewRequest(http.MethodDelete, "/models/LLM", nil), modelName, false)
 
 	assertCatalogHTTPError(t, response, http.StatusNotFound, "MODEL_CACHE_NOT_FOUND", "model cache is not installed; run you models pull LLM first")
 	var body factoryapi.ErrorResponse
@@ -323,7 +353,7 @@ func TestRemoveModelHandlerPreservesUnsafeCacheMapping(t *testing.T) {
 	}}
 	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	response := httptest.NewRecorder()
-	handler.RemoveModel(response, httptest.NewRequest(http.MethodDelete, "/models/LLM", nil), "LLM")
+	handler.RemoveModel(response, httptest.NewRequest(http.MethodDelete, "/models/LLM", nil), "LLM", false)
 
 	assertCatalogHTTPError(t, response, http.StatusBadRequest, "BAD_REQUEST", "managed model cache path is unsafe: symlink target")
 	var body factoryapi.ErrorResponse
@@ -343,7 +373,7 @@ func TestRemoveModelHandlerSanitizesUnmappedFailure(t *testing.T) {
 	}}
 	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	response := httptest.NewRecorder()
-	handler.RemoveModel(response, httptest.NewRequest(http.MethodDelete, "/models/LLM", nil), "LLM")
+	handler.RemoveModel(response, httptest.NewRequest(http.MethodDelete, "/models/LLM", nil), "LLM", false)
 
 	assertCatalogHTTPError(t, response, http.StatusInternalServerError, "INTERNAL_ERROR", removeFailedMessage)
 	var body factoryapi.ErrorResponse
