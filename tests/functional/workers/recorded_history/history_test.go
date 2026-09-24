@@ -163,8 +163,12 @@ func runHistoryCase(t *testing.T, process support.ApplicationProcess, testCase h
 	})
 	inputs.Input.Env = historyEnvironment(home)
 	inputs.Input.WorkingDirectory = workingDirectory
-	if err := process.Execute(inputs.Input); err != nil {
-		t.Fatalf("Process.Execute: %v\nstdout: %s\nstderr: %s", err, inputs.Stdout(), inputs.Stderr())
+	executeErr := process.Execute(inputs.Input)
+	if testCase.wantStatus == "AVAILABLE" && executeErr != nil {
+		t.Fatalf("Process.Execute: %v\nstdout: %s\nstderr: %s", executeErr, inputs.Stdout(), inputs.Stderr())
+	}
+	if testCase.wantStatus != "AVAILABLE" && executeErr == nil {
+		t.Fatalf("Process.Execute = nil for %s, want failure while retaining its JSON result\nstdout: %s\nstderr: %s", testCase.wantStatus, inputs.Stdout(), inputs.Stderr())
 	}
 	assertHistoryRecordingUnchanged(t, recordingPath, testCase.artifact)
 	var result historyCLIResult

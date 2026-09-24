@@ -3,9 +3,12 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"os"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
@@ -19,11 +22,58 @@ import (
 func (service *Service) QueryHistoricalWorkerAssociations(
 	request recordings.HistoricalWorkerAssociationsRequest,
 ) (recordings.HistoricalWorkerAssociationsResult, error) {
+	started := time.Now()
+	logger := serviceLogger(service)
+	baseFields := []any{
+		"operation", "query_historical_worker_associations",
+		"recordingID", strings.TrimSpace(string(request.Recording.RecordingID)),
+		"workID", strings.TrimSpace(request.WorkID),
+	}
+	logger.Info("recordings historical worker associations query started", baseFields...)
+	outcome := "failed"
+	failureClass := ""
+	defer func() {
+		fields := append(append([]any(nil), baseFields...), "outcome", outcome, "duration", time.Since(started))
+		if failureClass != "" {
+			fields = append(fields, "failureClass", failureClass)
+		}
+		logger.Info("recordings historical worker associations query finished", fields...)
+	}()
+
 	identity, base, err := historicalWorkerAssociationRequest(request)
 	if err != nil {
+		failureClass = "invalid_request"
 		return recordings.HistoricalWorkerAssociationsResult{}, err
 	}
-	return service.queryHistoricalWorkerAssociations(identity, base)
+	result, failureClass, err := service.queryHistoricalWorkerAssociations(identity, base)
+	outcome = historicalWorkerAssociationOutcome(result, err)
+	return result, err
+}
+
+func serviceLogger(service *Service) logging.Logger {
+	if service == nil {
+		return logging.NoopLogger{}
+	}
+	return logging.EnsureLogger(service.logger)
+}
+
+func historicalWorkerAssociationOutcome(
+	result recordings.HistoricalWorkerAssociationsResult,
+	err error,
+) string {
+	if err != nil {
+		return "failed"
+	}
+	switch result.State {
+	case recordings.HistoricalWorkerAssociationsAvailable:
+		return "available"
+	case recordings.HistoricalWorkerAssociationsGap:
+		return "gap"
+	case recordings.HistoricalWorkerAssociationsWorkNotFound:
+		return "work_not_found"
+	default:
+		return "unavailable"
+	}
 }
 
 func historicalWorkerAssociationRequest(
@@ -48,19 +98,25 @@ func historicalWorkerAssociationRequest(
 func (service *Service) queryHistoricalWorkerAssociations(
 	identity recordings.HistoricalRecordingIdentity,
 	base recordings.HistoricalWorkerAssociationsResult,
-) (recordings.HistoricalWorkerAssociationsResult, error) {
+) (recordings.HistoricalWorkerAssociationsResult, string, error) {
 	if service == nil || service.readArtifact == nil || service.projection == nil {
-		return unavailableWorkerAssociations(base), nil
+		return unavailableWorkerAssociations(base), "query_dependencies_unavailable", nil
 	}
 	payload, err := service.readArtifact(string(identity.Artifact))
 	if err != nil {
-		return unavailableWorkerAssociations(base), nil
+		if errors.Is(err, os.ErrNotExist) {
+			return unavailableWorkerAssociations(base), "recording_not_found", nil
+		}
+		return unavailableWorkerAssociations(base), "artifact_read_failed", nil
 	}
 	if identity.Scope.FactorySessionID == "" {
 		var found bool
 		identity.Scope, found, err = historicalArtifactScope(payload, identity.RecordingID)
-		if err != nil || !found {
-			return unavailableWorkerAssociations(base), nil
+		if err != nil {
+			return unavailableWorkerAssociations(base), "recording_scope_decode_failed", nil
+		}
+		if !found {
+			return unavailableWorkerAssociations(base), "recording_scope_unavailable", nil
 		}
 	}
 	history, err := service.queryHistoricalRecording(identity, payload)
@@ -73,32 +129,42 @@ func (service *Service) queryHistoricalWorkerAssociations(
 func historicalWorkerAssociationQueryError(
 	base recordings.HistoricalWorkerAssociationsResult,
 	err error,
-) (recordings.HistoricalWorkerAssociationsResult, error) {
+) (recordings.HistoricalWorkerAssociationsResult, string, error) {
 	var queryErr *recordings.HistoricalRecordingQueryError
 	if errors.As(err, &queryErr) && queryErr.Kind == recordings.HistoricalRecordingQueryErrorInvalidRequest {
-		return recordings.HistoricalWorkerAssociationsResult{}, err
+		return recordings.HistoricalWorkerAssociationsResult{}, "invalid_request", err
 	}
-	return unavailableWorkerAssociations(base), nil
+	if errors.As(err, &queryErr) {
+		switch queryErr.Kind {
+		case recordings.HistoricalRecordingQueryErrorMissingHistory:
+			return unavailableWorkerAssociations(base), "recording_not_found", nil
+		case recordings.HistoricalRecordingQueryErrorCorruptHistory:
+			return unavailableWorkerAssociations(base), "corrupt_history", nil
+		case recordings.HistoricalRecordingQueryErrorUnavailable:
+			return unavailableWorkerAssociations(base), "history_query_unavailable", nil
+		}
+	}
+	return unavailableWorkerAssociations(base), "history_query_failed", nil
 }
 
 func historicalWorkerAssociationResult(
 	base recordings.HistoricalWorkerAssociationsResult,
 	history recordings.HistoricalRecordingQueryResult,
-) (recordings.HistoricalWorkerAssociationsResult, error) {
+) (recordings.HistoricalWorkerAssociationsResult, string, error) {
 	if historicalRecordingHasGap(history.Status) {
 		base.State = recordings.HistoricalWorkerAssociationsGap
 		base.ErrorCode = "RECORDED_WORKER_HISTORY_GAP"
-		return base, nil
+		return base, "recorded_history_gap", nil
 	}
 	if len(history.Events) == 0 {
-		return unavailableWorkerAssociations(base), nil
+		return unavailableWorkerAssociations(base), "recording_has_no_events", nil
 	}
 
 	workIDsByDispatch, knownWorkIDs := historicalDispatchWorkIDs(history.Events)
 	if _, found := knownWorkIDs[base.WorkID]; !found {
 		base.State = recordings.HistoricalWorkerAssociationsWorkNotFound
 		base.ErrorCode = "WORK_NOT_FOUND"
-		return base, nil
+		return base, "work_not_found", nil
 	}
 	for _, dispatch := range history.Dispatches {
 		if dispatch.Association == nil || !slices.Contains(workIDsByDispatch[dispatch.ID], base.WorkID) {
@@ -113,7 +179,7 @@ func historicalWorkerAssociationResult(
 	slices.Sort(base.IncompleteDispatchIDs)
 	base.Count = len(base.WorkerSessionIDs)
 	base.State = recordings.HistoricalWorkerAssociationsAvailable
-	return base, nil
+	return base, "", nil
 }
 
 func unavailableWorkerAssociations(

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
@@ -68,6 +69,7 @@ func TestNewServiceWithProjectionRejectsMissingProjection(t *testing.T) {
 		os.Remove,
 		os.Rename,
 		os.ReadFile,
+		logging.NoopLogger{},
 	)
 	if err == nil {
 		t.Fatal("NewServiceWithProjection() error = nil, want missing projection dependency")

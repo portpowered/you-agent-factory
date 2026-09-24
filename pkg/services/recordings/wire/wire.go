@@ -10,6 +10,7 @@ package wire
 import (
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 )
@@ -27,6 +28,7 @@ func NewService(
 	removePath recordings.RecordingRemovePath,
 	renamePath recordings.RecordingRenamePath,
 	readFile recordings.RecordingReadFile,
+	logger logging.Logger,
 	clocks ...recordings.RecordingClock,
 ) (recordings.Service, error) {
 	if ledger == nil {
@@ -45,6 +47,7 @@ func NewService(
 		removePath,
 		renamePath,
 		readFile,
+		logger,
 		clocks...,
 	)
 }

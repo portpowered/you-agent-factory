@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
@@ -23,6 +24,7 @@ import (
 type Service struct {
 	readArtifact recordings.RecordingReadFile
 	projection   recordings.ProjectionService
+	logger       logging.Logger
 }
 
 var _ interface {
@@ -34,8 +36,13 @@ var _ interface {
 func New(
 	readArtifact recordings.RecordingReadFile,
 	projection recordings.ProjectionService,
+	logger logging.Logger,
 ) *Service {
-	return &Service{readArtifact: readArtifact, projection: projection}
+	return &Service{
+		readArtifact: readArtifact,
+		projection:   projection,
+		logger:       logging.EnsureLogger(logger),
+	}
 }
 
 // QueryHistoricalRecording reads and reduces only the selected artifact; it

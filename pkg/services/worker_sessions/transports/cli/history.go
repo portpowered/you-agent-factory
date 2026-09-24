@@ -105,7 +105,28 @@ func NewHistory(reader HistoricalWorkerAssociationsReader) HistoryOperation {
 		if _, err := fmt.Fprintln(config.Output, string(payload)); err != nil {
 			return fmt.Errorf("write recorded Worker Session history: %w", err)
 		}
+		return historyResultFailure(result)
+	}
+}
+
+func historyResultFailure(result recordings.HistoricalWorkerAssociationsResult) error {
+	switch result.State {
+	case recordings.HistoricalWorkerAssociationsAvailable:
 		return nil
+	case recordings.HistoricalWorkerAssociationsGap:
+		return newCLIError(
+			"RECORDED_WORKER_HISTORY_GAP",
+			"recorded Worker Session history contains a completeness gap",
+			nil,
+		)
+	case recordings.HistoricalWorkerAssociationsWorkNotFound:
+		return newCLIError("WORK_NOT_FOUND", "Work was not found in the recording", nil)
+	default:
+		return newCLIError(
+			"RECORDED_WORKER_HISTORY_UNAVAILABLE",
+			"recorded Worker Session history is unavailable",
+			nil,
+		)
 	}
 }
 

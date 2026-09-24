@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
@@ -93,6 +94,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		removePath,
 		renamePath,
 		readFile,
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -167,6 +169,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 				removePath,
 				renamePath,
 				readFile,
+				logging.NoopLogger{},
 			)
 			if err == nil {
 				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
@@ -195,6 +198,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 		os.Remove,
 		os.Rename,
 		os.ReadFile,
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -222,6 +226,7 @@ func TestNewServiceRejectsMissingArtifactPublicationEffects(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		logging.NoopLogger{},
 	)
 	if err == nil {
 		t.Fatal("NewService() error = nil, want missing artifact publication effects")
@@ -393,6 +398,7 @@ func newFunctionalRecordingsRoot(t *testing.T) recordings.Service {
 		os.Remove,
 		os.Rename,
 		os.ReadFile,
+		logging.NoopLogger{},
 	)
 	if err != nil {
 		t.Fatalf("NewServiceWithProjectionAndEffects: %v", err)

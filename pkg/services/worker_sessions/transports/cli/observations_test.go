@@ -90,8 +90,8 @@ func TestHistoryOmitsUntrustedCountsAndReportsDistinctStatus(t *testing.T) {
 		Context: context.Background(), Recording: filepath.Join(t.TempDir(), "recording.jsonl"),
 		SessionID: "recording-session-2", WorkID: "work-2", JSON: true, Output: &output,
 	})
-	if err != nil {
-		t.Fatalf("HistoryOperation: %v", err)
+	if err == nil || cliErrorCode(err) != "RECORDED_WORKER_HISTORY_GAP" {
+		t.Fatalf("HistoryOperation error = %v, want typed GAP failure", err)
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(output.Bytes(), &fields); err != nil {
@@ -111,6 +111,47 @@ func TestHistoryOmitsUntrustedCountsAndReportsDistinctStatus(t *testing.T) {
 	}
 	if result.Status != "GAP" || result.ErrorCode == nil || *result.ErrorCode != "RECORDED_WORKER_HISTORY_GAP" {
 		t.Fatalf("JSON status/errorCode = %#v, want GAP with typed code", result)
+	}
+}
+
+func TestHistoryFailureStatusesReturnActionableErrors(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		state recordings.HistoricalWorkerAssociationsState
+		code  string
+	}{
+		{state: recordings.HistoricalWorkerAssociationsGap, code: "RECORDED_WORKER_HISTORY_GAP"},
+		{state: recordings.HistoricalWorkerAssociationsUnavailable, code: "RECORDED_WORKER_HISTORY_UNAVAILABLE"},
+		{state: recordings.HistoricalWorkerAssociationsWorkNotFound, code: "WORK_NOT_FOUND"},
+	} {
+		testCase := testCase
+		t.Run(testCase.code, func(t *testing.T) {
+			t.Parallel()
+			operation := NewHistory(historicalWorkerAssociationsReaderFunc(func(recordings.HistoricalWorkerAssociationsRequest) (recordings.HistoricalWorkerAssociationsResult, error) {
+				return recordings.HistoricalWorkerAssociationsResult{
+					FactorySessionID: "recording-session-3", WorkID: "work-3", State: testCase.state, ErrorCode: testCase.code,
+				}, nil
+			}))
+			var output bytes.Buffer
+			err := operation(HistoryConfig{
+				Context: context.Background(), Recording: filepath.Join(t.TempDir(), "recording.jsonl"),
+				SessionID: "recording-session-3", WorkID: "work-3", JSON: true, Output: &output,
+			})
+			if err == nil || cliErrorCode(err) != testCase.code {
+				t.Fatalf("HistoryOperation error = %v, want code %q", err, testCase.code)
+			}
+			var result struct {
+				Status    string  `json:"status"`
+				ErrorCode *string `json:"errorCode"`
+			}
+			if decodeErr := json.Unmarshal(output.Bytes(), &result); decodeErr != nil {
+				t.Fatalf("decode retained result JSON %q: %v", output.String(), decodeErr)
+			}
+			if result.Status != string(testCase.state) || result.ErrorCode == nil || *result.ErrorCode != testCase.code {
+				t.Fatalf("status/errorCode JSON = %#v, want %s/%s", result, testCase.state, testCase.code)
+			}
+		})
 	}
 }
 

@@ -190,6 +190,7 @@ func newRuntimeRoot(
 	historicalQuery := historicalquerywire.NewService(
 		readFile,
 		NewProjectionService(),
+		logger,
 	)
 	root := recordingsinternal.NewRuntimeRootWithHistoricalQueryAndAppender(
 		targets,
@@ -286,6 +287,7 @@ func NewServiceWithProjection(
 	removePath recordings.RecordingRemovePath,
 	renamePath recordings.RecordingRenamePath,
 	readFile recordings.RecordingReadFile,
+	logger logging.Logger,
 	clocks ...recordings.RecordingClock,
 ) (recordings.Service, error) {
 	if ledger == nil {
@@ -307,6 +309,7 @@ func NewServiceWithProjection(
 		removePath,
 		renamePath,
 		readFile,
+		logger,
 		clocks...,
 	)
 }
@@ -325,6 +328,7 @@ func NewServiceWithProjectionAndEffects(
 	removePath recordings.RecordingRemovePath,
 	renamePath recordings.RecordingRenamePath,
 	readFile recordings.RecordingReadFile,
+	logger logging.Logger,
 	clocks ...recordings.RecordingClock,
 ) (recordings.Service, error) {
 	if ledger == nil {
@@ -343,7 +347,7 @@ func NewServiceWithProjectionAndEffects(
 	if err != nil {
 		return nil, fmt.Errorf("construct Recordings publication: %w", err)
 	}
-	historicalQuery := historicalquerywire.NewService(readFile, projection)
+	historicalQuery := historicalquerywire.NewService(readFile, projection, logger)
 	return newServiceWithProjection(
 		ledger,
 		projection,

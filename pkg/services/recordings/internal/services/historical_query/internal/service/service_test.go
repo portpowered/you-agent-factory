@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 )
@@ -43,7 +44,7 @@ func TestQueryHistoricalRecordingReadsAndProjectsPortableArtifact(t *testing.T) 
 	query := New(func(reference string) ([]byte, error) {
 		readReference = reference
 		return payload, nil
-	}, recordingsinternal.NewProjectionService())
+	}, recordingsinternal.NewProjectionService(), logging.NoopLogger{})
 	result, err := query.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: identity})
 	if err != nil {
 		t.Fatalf("QueryHistoricalRecording: %v", err)
@@ -79,7 +80,7 @@ func TestQueryHistoricalRecordingClassifiesMissingAndCorruptHistory(t *testing.T
 		Scope:       recordings.CanonicalEventScope{FactorySessionID: "dur-sess-history-errors"},
 	}
 	t.Run("missing", func(t *testing.T) {
-		query := New(func(string) ([]byte, error) { return nil, os.ErrNotExist }, recordingsinternal.NewProjectionService())
+		query := New(func(string) ([]byte, error) { return nil, os.ErrNotExist }, recordingsinternal.NewProjectionService(), logging.NoopLogger{})
 		_, err := query.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: identity})
 		assertHistoricalQueryKind(t, err, recordings.HistoricalRecordingQueryErrorMissingHistory)
 		if !errors.Is(err, os.ErrNotExist) {
@@ -89,12 +90,12 @@ func TestQueryHistoricalRecordingClassifiesMissingAndCorruptHistory(t *testing.T
 	t.Run("corrupt", func(t *testing.T) {
 		query := New(func(string) ([]byte, error) {
 			return []byte(`{"schemaVersion":"recordings.portable-artifact.v1","summary":{}}`), nil
-		}, recordingsinternal.NewProjectionService())
+		}, recordingsinternal.NewProjectionService(), logging.NoopLogger{})
 		_, err := query.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: identity})
 		assertHistoricalQueryKind(t, err, recordings.HistoricalRecordingQueryErrorCorruptHistory)
 	})
 	t.Run("unreadable", func(t *testing.T) {
-		query := New(func(string) ([]byte, error) { return nil, os.ErrPermission }, recordingsinternal.NewProjectionService())
+		query := New(func(string) ([]byte, error) { return nil, os.ErrPermission }, recordingsinternal.NewProjectionService(), logging.NoopLogger{})
 		_, err := query.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: identity})
 		assertHistoricalQueryKind(t, err, recordings.HistoricalRecordingQueryErrorUnavailable)
 		if errors.Is(err, os.ErrNotExist) {

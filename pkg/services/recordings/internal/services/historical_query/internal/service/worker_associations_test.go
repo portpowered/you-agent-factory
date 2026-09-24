@@ -2,11 +2,14 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
@@ -37,7 +40,7 @@ func TestQueryHistoricalWorkerAssociationsReturnsSortedIDsAndIncompleteDispatche
 			workers.DispatchResponseEventPayload{Outcome: workers.OutcomeAccepted, TransitionID: "review"}),
 	}
 	payload := historicalReplayV1(t, events)
-	query := New(func(string) ([]byte, error) { return payload, nil }, recordingsinternal.NewProjectionService())
+	query := New(func(string) ([]byte, error) { return payload, nil }, recordingsinternal.NewProjectionService(), logging.NoopLogger{})
 	result, err := query.QueryHistoricalWorkerAssociations(recordings.HistoricalWorkerAssociationsRequest{
 		Recording: recordings.HistoricalRecordingIdentity{RecordingID: "recording-1", Artifact: "history.jsonl"},
 		WorkID:    workID,
@@ -86,7 +89,7 @@ func TestQueryHistoricalWorkerAssociationsClassifiesUnavailableAndUnknownWork(t 
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			query := New(testCase.read, recordingsinternal.NewProjectionService())
+			query := New(testCase.read, recordingsinternal.NewProjectionService(), logging.NoopLogger{})
 			result, err := query.QueryHistoricalWorkerAssociations(recordings.HistoricalWorkerAssociationsRequest{
 				Recording: recordings.HistoricalRecordingIdentity{RecordingID: "recording-2", Artifact: "history.jsonl"},
 				WorkID:    testCase.workID,
@@ -102,6 +105,80 @@ func TestQueryHistoricalWorkerAssociationsClassifiesUnavailableAndUnknownWork(t 
 			}
 		})
 	}
+}
+
+func TestQueryHistoricalWorkerAssociationsLogsOutcomeWithoutArtifactPath(t *testing.T) {
+	t.Parallel()
+
+	logger := &historicalQueryTestLogger{}
+	artifactPath := `C:\private\recordings\history.jsonl`
+	query := New(func(string) ([]byte, error) { return nil, os.ErrPermission }, recordingsinternal.NewProjectionService(), logger)
+	result, err := query.QueryHistoricalWorkerAssociations(recordings.HistoricalWorkerAssociationsRequest{
+		Recording: recordings.HistoricalRecordingIdentity{
+			RecordingID: "recording-safe-id",
+			Artifact:    recordings.RecordingArtifactReference(artifactPath),
+		},
+		WorkID: "work-safe-id",
+	})
+	if err != nil {
+		t.Fatalf("QueryHistoricalWorkerAssociations: %v", err)
+	}
+	if result.State != recordings.HistoricalWorkerAssociationsUnavailable {
+		t.Fatalf("history state = %s, want UNAVAILABLE", result.State)
+	}
+	if len(logger.entries) != 2 {
+		t.Fatalf("operation log entries = %d, want start and terminal entries: %#v", len(logger.entries), logger.entries)
+	}
+	start := historicalQueryLogFields(t, logger.entries[0])
+	if logger.entries[0].message != "recordings historical worker associations query started" ||
+		start["recordingID"] != "recording-safe-id" || start["workID"] != "work-safe-id" {
+		t.Fatalf("operation start log = %#v, want safe recording/work identifiers", logger.entries[0])
+	}
+	finished := historicalQueryLogFields(t, logger.entries[1])
+	if logger.entries[1].message != "recordings historical worker associations query finished" ||
+		finished["outcome"] != "unavailable" || finished["failureClass"] != "artifact_read_failed" {
+		t.Fatalf("terminal operation log = %#v, want unavailable artifact_read_failed", logger.entries[1])
+	}
+	if _, ok := finished["duration"].(time.Duration); !ok {
+		t.Fatalf("terminal operation duration = %#v, want time.Duration", finished["duration"])
+	}
+	for _, entry := range logger.entries {
+		for _, value := range entry.fields {
+			if strings.Contains(fmt.Sprint(value), artifactPath) {
+				t.Fatalf("operation log leaked local artifact path %q: %#v", artifactPath, entry)
+			}
+		}
+	}
+}
+
+type historicalQueryLogEntry struct {
+	message string
+	fields  []any
+}
+
+type historicalQueryTestLogger struct {
+	entries []historicalQueryLogEntry
+}
+
+func (logger *historicalQueryTestLogger) Debug(string, ...any)   {}
+func (logger *historicalQueryTestLogger) Warn(string, ...any)    {}
+func (logger *historicalQueryTestLogger) Error(string, ...any)   {}
+func (logger *historicalQueryTestLogger) Verbose(string, ...any) {}
+func (logger *historicalQueryTestLogger) Info(message string, fields ...any) {
+	logger.entries = append(logger.entries, historicalQueryLogEntry{message: message, fields: append([]any(nil), fields...)})
+}
+
+func historicalQueryLogFields(t *testing.T, entry historicalQueryLogEntry) map[string]any {
+	t.Helper()
+	fields := make(map[string]any, len(entry.fields)/2)
+	for index := 0; index+1 < len(entry.fields); index += 2 {
+		key, ok := entry.fields[index].(string)
+		if !ok {
+			t.Fatalf("operation log field key[%d] = %#v, want string", index, entry.fields[index])
+		}
+		fields[key] = entry.fields[index+1]
+	}
+	return fields
 }
 
 func TestHistoricalRecordingHasGapUsesRecordedFailureCode(t *testing.T) {
