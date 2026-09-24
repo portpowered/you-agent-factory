@@ -337,6 +337,11 @@ func (o *Root) RemoveModelAssets(
 	o.cacheLifecycleMu.Lock()
 	result, err := o.removeModelAssets(ctx, request)
 	o.cacheLifecycleMu.Unlock()
+	if err != nil {
+		// Failure responses and terminal logs never publish success byte fields,
+		// including when an injected remover reports partial measurements.
+		result = models.RemoveModelAssetsResult{}
+	}
 	removeModelCacheTerminalLog(o, request, result, err, joinedInvocationElapsed(o, started))
 	return result, err
 }
@@ -957,30 +962,6 @@ func (o *Root) CancelInvocation(
 		return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
 	}
 	return o.inference.CancelInvocation(ctx, request)
-}
-
-func (o *Root) ListModels(context.Context) (models.List, error) {
-	return models.List{}, missingDependencyError("Models runtime binding")
-}
-
-func (o *Root) GetModel(context.Context, string) (models.Detail, error) {
-	return models.Detail{}, missingDependencyError("Models runtime binding")
-}
-
-func (o *Root) PullModel(context.Context, string) (models.PullResult, error) {
-	return models.PullResult{}, missingDependencyError("Models runtime binding")
-}
-
-func (o *Root) InspectRuntime(context.Context, string) (models.Runtime, error) {
-	return models.Runtime{}, missingDependencyError("Models runtime binding")
-}
-
-func (o *Root) AcquireLease(context.Context, models.AcquireLeaseRequest) (models.HostLease, error) {
-	return models.HostLease{}, missingDependencyError("Models runtime binding")
-}
-
-func (o *Root) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
-	return missingDependencyError("Models runtime binding")
 }
 
 func (o *Root) InvokeLocal(

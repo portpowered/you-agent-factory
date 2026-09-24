@@ -440,6 +440,7 @@ func removeModelCacheStartLog(o *Root, request models.RemoveModelAssetsRequest) 
 		"models cache removal started",
 		zap.String("model_name", strings.TrimSpace(request.Name)),
 		zap.String("scope", request.Scope.String()),
+		zap.Bool("reclaim_unused_cache", request.ReclaimUnusedCache),
 	)
 }
 
@@ -460,9 +461,6 @@ func removeModelCacheTerminalLog(
 	fields := []zap.Field{
 		zap.String("model_name", strings.TrimSpace(request.Name)),
 		zap.String("scope", request.Scope.String()),
-		zap.String("revision", result.Revision),
-		zap.String("cache_path", result.CachePath),
-		zap.Int64("bytes_removed", result.BytesRemoved),
 		zap.String("outcome", outcome),
 		zap.Duration("duration", elapsed),
 	}
@@ -474,6 +472,13 @@ func removeModelCacheTerminalLog(
 		o.process.Logger.Warn("models cache removal completed", fields...)
 		return
 	}
+	fields = append(fields,
+		zap.String("revision", result.Revision),
+		zap.String("cache_path", result.CachePath),
+		zap.Int64("bytes_removed", result.BytesRemoved),
+		zap.Int64("reclaimed_cache_bytes", result.ReclaimedCacheBytes),
+		zap.Int64("retained_shared_cache_bytes", result.RetainedSharedCacheBytes),
+	)
 	o.process.Logger.Info("models cache removal completed", fields...)
 }
 
@@ -485,6 +490,8 @@ func removeModelCacheFailureClass(err error) string {
 		return "CACHE_NOT_FOUND"
 	case errors.Is(err, models.ErrModelCacheUnsafe):
 		return "CACHE_UNSAFE"
+	case errors.Is(err, models.ErrModelCacheReferenceUncertain):
+		return "CACHE_REFERENCES_UNCERTAIN"
 	case errors.Is(err, models.ErrModelCacheRemovalFailed):
 		return "REMOVAL_FAILED"
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):

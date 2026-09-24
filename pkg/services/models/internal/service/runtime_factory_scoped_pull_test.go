@@ -327,8 +327,9 @@ func TestRootRemoveModelAssetsRefusesAnInUseCacheBeforeMutation(t *testing.T) {
 	}
 
 	_, err = root.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
-		Scope: scope,
-		Name:  "managed-model",
+		Scope:              scope,
+		Name:               "managed-model",
+		ReclaimUnusedCache: true,
 	})
 	if !errors.Is(err, models.ErrModelCacheInUse) {
 		t.Fatalf("RemoveModelAssets error = %v, want ErrModelCacheInUse", err)
@@ -437,9 +438,56 @@ func TestRootRemoveModelAssetsLogsStartAndTerminalOutcome(t *testing.T) {
 	}
 }
 
+func TestRootRemoveModelAssetsOmitsUnverifiedBytesFromFailureLog(t *testing.T) {
+	scope, err := (models.RuntimeScopeRef{}).Parse("remove-failure-logging:scope")
+	if err != nil {
+		t.Fatalf("parse scope: %v", err)
+	}
+	core, observed := observer.New(zap.InfoLevel)
+	root := &Root{
+		assets: &removeGuardAssets{
+			inspection: scopedassets.RuntimeCacheInspection{Installed: true},
+			removeResult: models.RemoveModelAssetsResult{
+				ModelName: "MANAGED-MODEL", BytesRemoved: 11,
+				ReclaimedCacheBytes: 23, RetainedSharedCacheBytes: 29,
+				Outcome: models.AssetRemovalRemoved,
+			},
+			removeErr: errors.New("injected cache reclamation failure"),
+		},
+		runtimeHost: &removeGuardHost{},
+		process: modelseffects.ProcessDependencies{
+			Logger: zap.New(core),
+			Clock:  func() time.Time { return time.Unix(123, 0) },
+		},
+	}
+	result, err := root.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: scope, Name: "managed-model", ReclaimUnusedCache: true,
+	})
+	if err == nil {
+		t.Fatal("RemoveModelAssets error = nil, want injected failure")
+	}
+	if result.BytesRemoved != 0 || result.ReclaimedCacheBytes != 0 || result.RetainedSharedCacheBytes != 0 {
+		t.Fatalf("failure result leaked success byte fields: %#v", result)
+	}
+	completed := observed.FilterMessage("models cache removal completed").All()
+	if len(completed) != 1 {
+		t.Fatalf("removal terminal logs = %d, want 1", len(completed))
+	}
+	fields := completed[0].ContextMap()
+	for _, key := range []string{"bytes_removed", "reclaimed_cache_bytes", "retained_shared_cache_bytes", "cache_path", "revision"} {
+		if _, ok := fields[key]; ok {
+			t.Fatalf("failure log contains unverified field %q: %#v", key, fields)
+		}
+	}
+	if fields["outcome"] != "FAILED" {
+		t.Fatalf("failure log outcome = %#v, want FAILED", fields["outcome"])
+	}
+}
+
 type removeGuardAssets struct {
 	inspection      scopedassets.RuntimeCacheInspection
 	removeResult    models.RemoveModelAssetsResult
+	removeErr       error
 	removalComplete chan struct{}
 	removeOnce      sync.Once
 	removeCalls     int
@@ -462,8 +510,8 @@ func (assets *removeGuardAssets) RemoveModelAssets(context.Context, models.Remov
 	if assets.removalComplete != nil {
 		assets.removeOnce.Do(func() { close(assets.removalComplete) })
 	}
-	if assets.removeResult.Outcome != "" {
-		return assets.removeResult, nil
+	if assets.removeResult.Outcome != "" || assets.removeErr != nil {
+		return assets.removeResult, assets.removeErr
 	}
 	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
 }

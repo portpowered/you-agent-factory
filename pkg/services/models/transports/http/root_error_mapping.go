@@ -112,6 +112,12 @@ func removeSentinelErrorResponse(err error, operation modelsHTTPOperation) (int,
 			Family:  factoryapi.ErrorFamilyConflict,
 			Code:    factoryapi.ErrorResponseCode("MODEL_CACHE_IN_USE"),
 		}, true
+	case errors.Is(err, models.ErrModelCacheReferenceUncertain):
+		return http.StatusConflict, factoryapi.ErrorResponse{
+			Message: strings.TrimSpace(err.Error()),
+			Family:  factoryapi.ErrorFamilyConflict,
+			Code:    factoryapi.ErrorResponseCode("MODEL_CACHE_REFERENCE_UNCERTAIN"),
+		}, true
 	case errors.Is(err, models.ErrModelCacheUnsafe):
 		return badRequestErrorResponse(strings.TrimSpace(err.Error()))
 	default:

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,13 +16,15 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/internal/reclamation"
 )
 
 const (
-	assetContentDirectory = ".you-content-addressed"
-	assetMetadataName     = ".you-assets.json"
-	assetKindModel        = "model"
-	assetKindBackend      = "backend"
+	assetContentDirectory  = ".you-content-addressed"
+	assetMetadataName      = ".you-assets.json"
+	assetKindModel         = "model"
+	assetKindBackend       = "backend"
+	cacheReferenceLockName = "references.lock"
 
 	builtInGemmaLLMModelName       = "gemma-4-E4B-it-Q4_K_M.gguf"
 	builtInGemmaLLMModelBytes      = int64(4977171584)
@@ -71,13 +75,7 @@ type assetCacheCall struct {
 	err    error
 }
 
-type genericCacheMetadata struct {
-	Kind      string                    `json:"kind"`
-	Identity  string                    `json:"identity"`
-	Source    string                    `json:"source"`
-	SourceKey string                    `json:"sourceKey"`
-	Artifacts []models.AssetRequirement `json:"artifacts"`
-}
+type genericCacheMetadata = reclamation.SnapshotMetadata
 
 type genericCachePath struct {
 	artifact           models.AssetArtifact
@@ -722,6 +720,47 @@ func (s *service) walkLocalRequirements(root, relative string) ([]models.AssetRe
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result, nil
+}
+
+func (s *service) ReadDirectory(path string) ([]os.DirEntry, error) {
+	return s.readDirectory(path)
+}
+
+func (s *service) ReadFile(path string) ([]byte, error) {
+	return s.readFile(path)
+}
+
+func (s *service) OpenFile(path string) (io.ReadCloser, error) {
+	return s.openFile(path)
+}
+
+func (s *service) InspectPath(path string) (os.FileInfo, error) {
+	return s.inspectPath(path)
+}
+
+func (s *service) RemoveManagedTree(ctx context.Context, path string) error {
+	return s.removeManagedTree(ctx, path)
+}
+
+func (s *service) VerifyManagedPathRemoved(ctx context.Context, parent, child string) error {
+	return s.verifyManagedPathRemoved(ctx, parent, child)
+}
+
+func (s *service) ManagedSourceIdentity(name string) (string, bool) {
+	source, ok := genericSourceForManagedModel(name)
+	if !ok {
+		return "", false
+	}
+	return genericSourceIdentity(source), true
+}
+
+func genericSourceForManagedModel(name string) (genericSource, bool) {
+	if definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(name); ok {
+		source, err := parseGenericSource(definition.Source)
+		return source, err == nil
+	}
+	source, err := parseGenericSource(name)
+	return source, err == nil
 }
 
 func (s *service) fetchGenericManifest(

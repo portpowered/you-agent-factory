@@ -39,6 +39,7 @@ type startedBuiltProcess struct {
 	stderr  bytes.Buffer
 	cancel  context.CancelFunc
 	waited  bool
+	killed  bool
 }
 
 func story001Environment(home, cache, endpoint string) []string {
@@ -173,7 +174,7 @@ func (process *startedBuiltProcess) stop() {
 		return
 	}
 	if process.command.Process != nil && process.command.ProcessState == nil {
-		_ = process.command.Process.Kill()
+		process.killed = process.command.Process.Kill() == nil
 	}
 	_ = process.command.Wait()
 	process.cancel()

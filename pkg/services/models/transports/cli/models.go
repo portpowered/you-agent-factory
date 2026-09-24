@@ -25,10 +25,11 @@ import (
 const modelsErrorBodyPreviewSize = 200
 
 var (
-	ErrModelNotFound      = errors.New("model not found")
-	ErrModelCacheNotFound = errors.New("model cache not found")
-	ErrModelCacheInUse    = errors.New("model cache is in use")
-	ErrModelCacheUnsafe   = errors.New("model cache path is unsafe")
+	ErrModelNotFound                = errors.New("model not found")
+	ErrModelCacheNotFound           = errors.New("model cache not found")
+	ErrModelCacheInUse              = errors.New("model cache is in use")
+	ErrModelCacheUnsafe             = errors.New("model cache path is unsafe")
+	ErrModelCacheReferenceUncertain = errors.New("model cache references are uncertain")
 )
 
 const managedRuntimePullFailureCode = "CLI_MODEL_PULL_FAILED"
@@ -123,14 +124,15 @@ type PullConfig struct {
 }
 
 type RemoveConfig struct {
-	Context     context.Context
-	ModelName   string
-	Server      string
-	JSON        bool
-	Verbose     bool
-	Debug       bool
-	Output      io.Writer
-	Diagnostics io.Writer
+	Context            context.Context
+	ModelName          string
+	Server             string
+	JSON               bool
+	Verbose            bool
+	Debug              bool
+	ReclaimUnusedCache bool
+	Output             io.Writer
+	Diagnostics        io.Writer
 }
 
 // Service exposes the Models CLI command operations to Cobra composition.
@@ -445,6 +447,7 @@ func (service *httpService) Remove(cfg RemoveConfig) error {
 	response, err := removeModel(removeOptions{
 		Context: cfg.Context, Server: cfg.Server, ModelName: modelName,
 		Verbose: cfg.Verbose, Diagnostics: cfg.Diagnostics, HTTP: service.http,
+		ReclaimUnusedCache: cfg.ReclaimUnusedCache,
 	})
 	if err != nil {
 		return err

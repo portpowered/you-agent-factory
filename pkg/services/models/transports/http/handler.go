@@ -143,16 +143,21 @@ func isModelPullError(err error) bool {
 	return errors.As(err, &pullErr) && pullErr != nil
 }
 
-func (h *Handler) RemoveModel(w http.ResponseWriter, r *http.Request, modelName string) {
+func (h *Handler) RemoveModel(
+	w http.ResponseWriter,
+	r *http.Request,
+	modelName string,
+	reclaimUnusedCache bool,
+) {
 	if h.guardModelsRequestContext(w, r) {
 		return
 	}
-	result, err := h.adapter.RemoveModel(r.Context(), modelName)
+	result, err := h.adapter.RemoveModel(r.Context(), modelName, reclaimUnusedCache)
 	if err != nil {
 		h.writeRootOrInternalError(w, modelsHTTPOperationRemove, err, removeFailedMessage)
 		return
 	}
-	h.writeJSON(w, http.StatusOK, modelRemoveResponseFromService(result))
+	h.writeJSON(w, http.StatusOK, modelRemoveResponseFromService(result, reclaimUnusedCache))
 }
 
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, value any) {

@@ -165,14 +165,20 @@ func TestCommandHandlerTransformsRemoveArguments(t *testing.T) {
 	cmd.SetOut(io.Discard)
 	_, _, inherited := resolvedModelsHandlerInputs(t, server)
 	inputs, err := resolvedinput.Resolve(
-		[]resolvedinput.Definition{{
-			ID: modelsRemoveNameInputID, Kind: resolvedinput.ValueKindString,
-			Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument},
-		}},
-		[]resolvedinput.Candidate{{
-			InputID: modelsRemoveNameInputID, Source: resolvedinput.SourcePositionalArgument,
-			Value: resolvedinput.StringValue("model-cache"),
-		}},
+		[]resolvedinput.Definition{
+			{
+				ID: modelsRemoveNameInputID, Kind: resolvedinput.ValueKindString,
+				Precedence: []resolvedinput.Source{resolvedinput.SourcePositionalArgument},
+			},
+			{
+				ID: modelsRemoveReclaimUnusedCacheID, Kind: resolvedinput.ValueKindBool,
+				Precedence: []resolvedinput.Source{resolvedinput.SourceCLIFlag},
+			},
+		},
+		[]resolvedinput.Candidate{
+			{InputID: modelsRemoveNameInputID, Source: resolvedinput.SourcePositionalArgument, Value: resolvedinput.StringValue("model-cache")},
+			{InputID: modelsRemoveReclaimUnusedCacheID, Source: resolvedinput.SourceCLIFlag, Value: resolvedinput.BoolValue(false)},
+		},
 	)
 	if err != nil {
 		t.Fatalf("resolve remove inputs: %v", err)
@@ -180,7 +186,8 @@ func TestCommandHandlerTransformsRemoveArguments(t *testing.T) {
 	if err := handler.Remove(cmd, inputs, inherited); err != nil {
 		t.Fatalf("Remove() error = %v", err)
 	}
-	if received.ModelName != "model-cache" || received.Server != server || !received.JSON || !received.Verbose || !received.Debug {
+	if received.ModelName != "model-cache" || received.Server != server || !received.JSON ||
+		!received.Verbose || !received.Debug || received.ReclaimUnusedCache {
 		t.Fatalf("RemoveConfig = %#v, want resolved model and common flags", received)
 	}
 }

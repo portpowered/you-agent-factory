@@ -17,55 +17,6 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
-func TestRemoveModelAssetsRemovesSelectedRevisionAndPreservesSiblings(t *testing.T) {
-	t.Parallel()
-
-	cacheDirectory := t.TempDir()
-	writeCacheFixture(t, cacheDirectory, true)
-	sibling := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M", "rev-sibling")
-	if err := os.MkdirAll(sibling, 0o755); err != nil {
-		t.Fatalf("create sibling revision: %v", err)
-	}
-	siblingFile := filepath.Join(sibling, "sibling.bin")
-	if err := os.WriteFile(siblingFile, []byte("sibling"), 0o644); err != nil {
-		t.Fatalf("write sibling revision: %v", err)
-	}
-	nestedFile := filepath.Join(
-		cacheDirectory, "OMNIVOICE_Q4_K_M", "rev-test", "nested", "empty-marker",
-	)
-	if err := os.MkdirAll(filepath.Dir(nestedFile), 0o755); err != nil {
-		t.Fatalf("create nested revision directory: %v", err)
-	}
-	if err := os.WriteFile(nestedFile, nil, 0o644); err != nil {
-		t.Fatalf("write nested revision marker: %v", err)
-	}
-
-	scopes := newScopes(t, "remove-success")
-	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
-	service := newTestService(scopes, nil)
-	result, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
-		Scope: ref,
-		Name:  "omnivoice_q4_k_m",
-	})
-	if err != nil {
-		t.Fatalf("RemoveModelAssets: %v", err)
-	}
-	if result.ModelName != "OMNIVOICE_Q4_K_M" ||
-		result.Revision != "rev-test" ||
-		result.CachePath != filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M", "rev-test") ||
-		result.BytesRemoved != 4 ||
-		result.Readiness != models.AssetReadinessMissing ||
-		result.Outcome != models.AssetRemovalRemoved {
-		t.Fatalf("RemoveModelAssets result = %#v", result)
-	}
-	if _, err := os.Stat(result.CachePath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("removed revision stat error = %v, want not-exist", err)
-	}
-	if body, err := os.ReadFile(siblingFile); err != nil || string(body) != "sibling" {
-		t.Fatalf("sibling revision changed: body=%q error=%v", body, err)
-	}
-}
-
 func TestRemoveModelAssetsRemovesGenericManagedRevisionAndPreservesSiblings(t *testing.T) {
 	t.Parallel()
 
@@ -94,6 +45,353 @@ func TestRemoveModelAssetsRemovesGenericManagedRevisionAndPreservesSiblings(t *t
 	}); !errors.Is(err, models.ErrModelCacheNotFound) {
 		t.Fatalf("repeated generic removal error = %v, want ErrModelCacheNotFound", err)
 	}
+}
+
+func TestRemoveModelAssetsReclaimsUnsharedGenericSnapshotsWhenOptedIn(t *testing.T) {
+	t.Parallel()
+
+	fixture := writeGenericRemovalFixture(t)
+	candidates := writeGenericRemovalCacheCandidates(t, fixture)
+
+	scopes := newScopes(t, "remove-generic-reclaim")
+	ref := openScope(t, scopes, fixture.cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("cache reclamation used the source")
+		return nil, nil
+	}), func(string) string { return "" })
+	result, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref, Name: fixture.definition.Name, ReclaimUnusedCache: true,
+	})
+	if err != nil {
+		t.Fatalf("RemoveModelAssets(opt-in): %v", err)
+	}
+	if result.BytesRemoved != int64(len(fixture.body)) || result.ReclaimedCacheBytes != candidates.modelBytes+candidates.backendBytes ||
+		result.RetainedSharedCacheBytes != 0 || result.Outcome != models.AssetRemovalRemoved {
+		t.Fatalf("opt-in removal result = %#v, want revision bytes %d and separate model/backend cache bytes %d+%d",
+			result, len(fixture.body), candidates.modelBytes, candidates.backendBytes)
+	}
+	for _, path := range []string{fixture.revisionPath, candidates.modelPath, candidates.backendPath} {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("reclaimed path %q stat error = %v, want not-exist", path, err)
+		}
+	}
+	assertGenericRemovalSibling(t, fixture.siblingPath)
+	if _, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref, Name: fixture.definition.Name, ReclaimUnusedCache: true,
+	}); !errors.Is(err, models.ErrModelCacheNotFound) {
+		t.Fatalf("repeated opt-in removal error = %v, want ErrModelCacheNotFound", err)
+	}
+}
+
+func TestRemoveModelAssetsRetainsSharedBackendCandidateOnce(t *testing.T) {
+	t.Parallel()
+
+	fixture := writeGenericRemovalFixture(t)
+	candidates := writeGenericRemovalCacheCandidates(t, fixture)
+	writeGenericRemovalBackendReference(t, fixture.cacheDirectory, "OTHER_MODEL_A", candidates.backendReference)
+	writeGenericRemovalBackendReference(t, fixture.cacheDirectory, "OTHER_MODEL_B", candidates.backendReference)
+
+	scopes := newScopes(t, "remove-generic-reclaim-shared")
+	ref := openScope(t, scopes, fixture.cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("cache reclamation used the source")
+		return nil, nil
+	}), func(string) string { return "" })
+	result, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref, Name: fixture.definition.Name, ReclaimUnusedCache: true,
+	})
+	if err != nil {
+		t.Fatalf("RemoveModelAssets with shared backend: %v", err)
+	}
+	if result.ReclaimedCacheBytes != candidates.modelBytes || result.RetainedSharedCacheBytes != candidates.backendBytes {
+		t.Fatalf("shared cache byte result = reclaimed:%d retained:%d, want model:%d backend once:%d",
+			result.ReclaimedCacheBytes, result.RetainedSharedCacheBytes, candidates.modelBytes, candidates.backendBytes)
+	}
+	if _, err := os.Stat(candidates.modelPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unshared model snapshot stat error = %v, want reclaimed", err)
+	}
+	if _, err := os.Stat(candidates.backendPath); err != nil {
+		t.Fatalf("multiply referenced backend snapshot stat error = %v, want retained", err)
+	}
+	for _, modelName := range []string{"OTHER_MODEL_A", "OTHER_MODEL_B"} {
+		if _, err := os.Stat(filepath.Join(fixture.cacheDirectory, modelName, "other-revision", "peer.bin")); err != nil {
+			t.Fatalf("peer revision %q stat error = %v, want retained", modelName, err)
+		}
+	}
+}
+
+func TestRemoveModelAssetsFailsClosedOnUnsafeSiblingBackendReference(t *testing.T) {
+	t.Parallel()
+
+	fixture := writeGenericRemovalFixture(t)
+	candidates := writeGenericRemovalCacheCandidates(t, fixture)
+	writeGenericRemovalBackendReference(t, fixture.cacheDirectory, "UNSAFE_MODEL", runtimeBackendMetadata{
+		CachePath: "../../outside/backend",
+		Revision:  "unsafe-revision",
+		Files:     candidates.backendReference.Files,
+	})
+
+	scopes := newScopes(t, "remove-generic-reclaim-unsafe-reference")
+	ref := openScope(t, scopes, fixture.cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("cache reclamation used the source")
+		return nil, nil
+	}), func(string) string { return "" })
+	_, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref, Name: fixture.definition.Name, ReclaimUnusedCache: true,
+	})
+	if !errors.Is(err, models.ErrModelCacheReferenceUncertain) {
+		t.Fatalf("unsafe sibling reference error = %v, want ErrModelCacheReferenceUncertain", err)
+	}
+	for _, path := range []string{fixture.revisionPath, candidates.modelPath, candidates.backendPath} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("fail-closed path %q stat error = %v, want retained", path, err)
+		}
+	}
+}
+
+func TestRemoveModelAssetsFailsClosedOnCorruptSiblingReference(t *testing.T) {
+	t.Parallel()
+
+	fixture := writeGenericRemovalFixture(t)
+	candidates := writeGenericRemovalCacheCandidates(t, fixture)
+	corruptRoot := filepath.Join(fixture.cacheDirectory, "CORRUPT_MODEL")
+	if err := os.MkdirAll(corruptRoot, 0o755); err != nil {
+		t.Fatalf("create corrupt sibling model root: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(corruptRoot, metadataFileName), []byte("{"), 0o644); err != nil {
+		t.Fatalf("write corrupt sibling managed metadata: %v", err)
+	}
+
+	scopes := newScopes(t, "remove-generic-reclaim-corrupt-reference")
+	ref := openScope(t, scopes, fixture.cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("cache reclamation used the source")
+		return nil, nil
+	}), func(string) string { return "" })
+	_, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref, Name: fixture.definition.Name, ReclaimUnusedCache: true,
+	})
+	if !errors.Is(err, models.ErrModelCacheReferenceUncertain) {
+		t.Fatalf("corrupt sibling reference error = %v, want ErrModelCacheReferenceUncertain", err)
+	}
+	for _, path := range []string{fixture.revisionPath, candidates.modelPath, candidates.backendPath} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("fail-closed path %q stat error = %v, want retained", path, err)
+		}
+	}
+}
+
+func TestRemoveModelAssetsReclamationFailureHasNoSuccessByteFields(t *testing.T) {
+	t.Parallel()
+
+	fixture := writeGenericRemovalFixture(t)
+	candidates := writeGenericRemovalCacheCandidates(t, fixture)
+	scopes := newScopes(t, "remove-generic-reclaim-injected-failure")
+	ref := openScope(t, scopes, fixture.cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("cache reclamation used the source")
+		return nil, nil
+	}), func(string) string { return "" })
+	removePath := service.removePath
+	service.removePath = func(path string) error {
+		if filepath.Clean(path) == filepath.Join(candidates.modelPath, fixture.source.file) {
+			return errors.New("injected candidate removal failure")
+		}
+		return removePath(path)
+	}
+	result, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref, Name: fixture.definition.Name, ReclaimUnusedCache: true,
+	})
+	if !errors.Is(err, models.ErrModelCacheRemovalFailed) {
+		t.Fatalf("injected reclamation error = %v, want ErrModelCacheRemovalFailed", err)
+	}
+	if result.BytesRemoved != 0 || result.ReclaimedCacheBytes != 0 || result.RetainedSharedCacheBytes != 0 {
+		t.Fatalf("reclamation failure result contains success byte fields: %#v", result)
+	}
+	if _, err := os.Stat(candidates.backendPath); err != nil {
+		t.Fatalf("unattempted backend candidate stat error = %v, want retained", err)
+	}
+}
+
+type genericRemovalCacheCandidates struct {
+	modelPath        string
+	backendPath      string
+	modelBytes       int64
+	backendBytes     int64
+	backendReference runtimeBackendMetadata
+}
+
+func writeGenericRemovalCacheCandidates(t *testing.T, fixture genericRemovalFixture) genericRemovalCacheCandidates {
+	t.Helper()
+	modelRequirement := models.AssetRequirement{
+		Name: fixture.source.file, Bytes: int64(len(fixture.body)), SHA256: sha256Hex(fixture.body),
+	}
+	modelArtifacts := []genericArtifact{{requirement: modelRequirement}}
+	modelIdentity := genericArtifactIdentityHash(assetKindModel, fixture.source, modelArtifacts)
+	modelPath := filepath.Join(fixture.cacheDirectory, assetContentDirectory, assetKindModel, modelIdentity)
+	writeReclamationSnapshotFixture(t, modelPath, genericCacheMetadata{
+		Kind: assetKindModel, Identity: genericCacheKey(assetKindModel, fixture.source, modelArtifacts),
+		Source: fixture.source.safe, SourceKey: genericSourceIdentity(fixture.source),
+		Artifacts: []models.AssetRequirement{modelRequirement},
+	}, modelRequirement.Name, fixture.body)
+
+	backendBody := []byte("managed backend runtime")
+	backendRequirement := models.AssetRequirement{
+		Name: "backend.tar.gz", Bytes: int64(len(backendBody)), SHA256: sha256Hex(backendBody),
+	}
+	backendArtifacts := []genericArtifact{{requirement: backendRequirement}}
+	backendSource := genericSource{kind: genericSourceHF, safe: "backend://fixture/release://fixture"}
+	backendIdentity := genericArtifactIdentityHash(assetKindBackend, backendSource, backendArtifacts)
+	backendPath := filepath.Join(
+		fixture.cacheDirectory, "backend-artifacts", assetContentDirectory, assetKindBackend, backendIdentity,
+	)
+	writeReclamationSnapshotFixture(t, backendPath, genericCacheMetadata{
+		Kind: assetKindBackend, Identity: genericCacheKey(assetKindBackend, backendSource, backendArtifacts),
+		Source: backendSource.safe, SourceKey: genericSourceIdentity(backendSource),
+		Artifacts: []models.AssetRequirement{backendRequirement},
+	}, backendRequirement.Name, backendBody)
+	backendRelative, err := filepath.Rel(fixture.cacheDirectory, backendPath)
+	if err != nil {
+		t.Fatalf("relative backend snapshot path: %v", err)
+	}
+	backendReference := runtimeBackendMetadata{
+		CachePath: filepath.ToSlash(backendRelative), Revision: "fixture-backend",
+		Files: []metadataFile{{Path: backendRequirement.Name, Bytes: backendRequirement.Bytes, SHA256: backendRequirement.SHA256}},
+	}
+	managedMetadataPath := filepath.Join(filepath.Dir(fixture.revisionPath), metadataFileName)
+	managedBody, err := os.ReadFile(managedMetadataPath)
+	if err != nil {
+		t.Fatalf("read managed model metadata: %v", err)
+	}
+	var managedMetadata cacheMetadata
+	if err := json.Unmarshal(managedBody, &managedMetadata); err != nil {
+		t.Fatalf("decode managed model metadata: %v", err)
+	}
+	managedMetadata.Backend = &backendReference
+	managedBody, err = json.Marshal(managedMetadata)
+	if err != nil {
+		t.Fatalf("encode managed model metadata: %v", err)
+	}
+	if err := os.WriteFile(managedMetadataPath, managedBody, 0o644); err != nil {
+		t.Fatalf("write backend reference into managed model metadata: %v", err)
+	}
+	return genericRemovalCacheCandidates{
+		modelPath: modelPath, backendPath: backendPath,
+		modelBytes: regularFileBytes(t, modelPath), backendBytes: regularFileBytes(t, backendPath),
+		backendReference: backendReference,
+	}
+}
+
+func writeGenericRemovalBackendReference(
+	t *testing.T,
+	cacheDirectory string,
+	modelName string,
+	backend runtimeBackendMetadata,
+) {
+	t.Helper()
+	modelRoot := filepath.Join(cacheDirectory, modelName)
+	revisionPath := filepath.Join(modelRoot, "other-revision")
+	if err := os.MkdirAll(revisionPath, 0o755); err != nil {
+		t.Fatalf("create sibling model revision: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(revisionPath, "peer.bin"), []byte("peer"), 0o644); err != nil {
+		t.Fatalf("write sibling model revision: %v", err)
+	}
+	body, err := json.Marshal(cacheMetadata{
+		ModelName: modelName,
+		Revision:  "other-revision",
+		Files:     []metadataFile{{Path: "peer.bin", Bytes: 4, SHA256: sha256Hex([]byte("peer"))}},
+		Backend:   &backend,
+	})
+	if err != nil {
+		t.Fatalf("encode sibling backend reference: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelRoot, metadataFileName), body, 0o644); err != nil {
+		t.Fatalf("write sibling backend reference: %v", err)
+	}
+}
+
+func TestRemoveModelAssetsFailsClosedOnUnverifiedReclamationSnapshot(t *testing.T) {
+	t.Parallel()
+
+	fixture := writeGenericRemovalFixture(t)
+	requirement := models.AssetRequirement{
+		Name: fixture.source.file, Bytes: int64(len(fixture.body)), SHA256: sha256Hex(fixture.body),
+	}
+	artifacts := []genericArtifact{{requirement: requirement}}
+	identity := genericArtifactIdentityHash(assetKindModel, fixture.source, artifacts)
+	snapshotPath := filepath.Join(fixture.cacheDirectory, assetContentDirectory, assetKindModel, identity)
+	writeReclamationSnapshotFixture(t, snapshotPath, genericCacheMetadata{
+		Kind: assetKindModel, Identity: genericCacheKey(assetKindModel, fixture.source, artifacts),
+		Source: fixture.source.safe, SourceKey: genericSourceIdentity(fixture.source),
+		Artifacts: []models.AssetRequirement{requirement},
+	}, requirement.Name, []byte("corrupt model bytes"))
+
+	scopes := newScopes(t, "remove-generic-reclaim-corrupt")
+	ref := openScope(t, scopes, fixture.cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("cache reclamation used the source")
+		return nil, nil
+	}), func(string) string { return "" })
+	_, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: ref, Name: fixture.definition.Name, ReclaimUnusedCache: true,
+	})
+	if !errors.Is(err, models.ErrModelCacheReferenceUncertain) {
+		t.Fatalf("unverified snapshot error = %v, want ErrModelCacheReferenceUncertain", err)
+	}
+	for _, path := range []string{fixture.revisionPath, snapshotPath} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("failed closed path %q stat error = %v, want retained", path, err)
+		}
+	}
+}
+
+func writeReclamationSnapshotFixture(
+	t *testing.T,
+	root string,
+	metadata genericCacheMetadata,
+	name string,
+	body []byte,
+) {
+	t.Helper()
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("create reclamation snapshot: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, name), body, 0o644); err != nil {
+		t.Fatalf("write reclamation artifact: %v", err)
+	}
+	metadataBody, err := json.Marshal(metadata)
+	if err != nil {
+		t.Fatalf("encode reclamation snapshot metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, assetMetadataName), metadataBody, 0o644); err != nil {
+		t.Fatalf("write reclamation snapshot metadata: %v", err)
+	}
+}
+
+func regularFileBytes(t *testing.T, root string) int64 {
+	t.Helper()
+	var total int64
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode().IsRegular() {
+			total += info.Size()
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("measure reclamation fixture %q: %v", root, err)
+	}
+	return total
 }
 
 type genericRemovalFixture struct {
@@ -171,59 +469,6 @@ func assertGenericRemovalSibling(t *testing.T, siblingPath string) {
 	t.Helper()
 	if sibling, err := os.ReadFile(siblingPath); err != nil || string(sibling) != "sibling" {
 		t.Fatalf("generic sibling changed: body=%q error=%v", sibling, err)
-	}
-}
-
-func TestRemoveModelAssetsReportsMissingCacheWithoutFilesystemMutation(t *testing.T) {
-	t.Parallel()
-
-	cacheDirectory := t.TempDir()
-	scopes := newScopes(t, "remove-missing")
-	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
-	service := newTestService(scopes, nil)
-
-	_, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
-		Scope: ref,
-		Name:  "OMNIVOICE_Q4_K_M",
-	})
-	if !errors.Is(err, models.ErrModelCacheNotFound) {
-		t.Fatalf("RemoveModelAssets error = %v, want ErrModelCacheNotFound", err)
-	}
-	entries, readErr := os.ReadDir(cacheDirectory)
-	if readErr != nil {
-		t.Fatalf("read cache root after missing removal: %v", readErr)
-	}
-	if len(entries) != 0 {
-		t.Fatalf("missing removal created or removed cache entries: %#v", entries)
-	}
-}
-
-func TestRemoveModelAssetsRejectsModelDirectorySymlink(t *testing.T) {
-	t.Parallel()
-
-	cacheDirectory := t.TempDir()
-	externalDirectory := t.TempDir()
-	writeCacheFixture(t, externalDirectory, true)
-	modelPath := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M")
-	if err := os.Symlink(filepath.Join(externalDirectory, "OMNIVOICE_Q4_K_M"), modelPath); err != nil {
-		if runtime.GOOS == "windows" {
-			t.Skipf("symlink creation is unavailable: %v", err)
-		}
-		t.Fatalf("create model cache symlink: %v", err)
-	}
-
-	scopes := newScopes(t, "remove-model-link")
-	ref := openScope(t, scopes, cacheDirectory, runtimeConfig(""))
-	service := newTestService(scopes, nil)
-	_, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
-		Scope: ref,
-		Name:  "OMNIVOICE_Q4_K_M",
-	})
-	if !errors.Is(err, models.ErrModelCacheUnsafe) {
-		t.Fatalf("RemoveModelAssets error = %v, want ErrModelCacheUnsafe", err)
-	}
-	if _, err := os.Stat(filepath.Join(externalDirectory, "OMNIVOICE_Q4_K_M", "rev-test")); err != nil {
-		t.Fatalf("external revision changed after rejected removal: %v", err)
 	}
 }
 

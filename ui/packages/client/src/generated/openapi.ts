@@ -2557,6 +2557,16 @@ export interface components {
        * @description Total size of regular files measured immediately before removal.
        */
       bytesRemoved: number;
+      /**
+       * Format: int64
+       * @description YOU-owned unreferenced shared-cache bytes reclaimed by this operation.
+       */
+      reclaimedCacheBytes?: number;
+      /**
+       * Format: int64
+       * @description Candidate shared-cache bytes retained because they remain referenced.
+       */
+      retainedSharedCacheBytes?: number;
     };
     ResolvedModelOperationBinding: {
       /** @description Stable input slot name declared by the worker capability. */
@@ -9296,7 +9306,10 @@ export interface operations {
   };
   removeModel: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Also reclaim proven unreferenced model and backend cache assets. The default preserves them. */
+        reclaim_unused_cache?: boolean;
+      };
       header?: never;
       path: {
         /** @description Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. */
@@ -9317,7 +9330,7 @@ export interface operations {
       };
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
-      /** @description The managed model cache is held by an active host or invocation. */
+      /** @description Active use or uncertain shared-cache references prevented safe reclamation. */
       409: {
         headers: {
           [name: string]: unknown;
@@ -10840,12 +10853,14 @@ export const ErrorResponseCode = {
   METRICS_INVALID_REQUEST: "METRICS_INVALID_REQUEST",
   // The selected managed model cache revision is held by an active model host or invocation.
   METRICS_SESSION_NOT_FOUND: "METRICS_SESSION_NOT_FOUND",
-  // The requested resource does not exist.
+  // Managed model cache references could not be proven safe for reclamation.
   METRICS_SESSION_SCOPE_UNAVAILABLE: "METRICS_SESSION_SCOPE_UNAVAILABLE",
-  // The server failed while handling an otherwise valid request.
+  // The requested resource does not exist.
   MODEL_CACHE_NOT_FOUND: "MODEL_CACHE_NOT_FOUND",
-  // The metrics costs request contained invalid configuration or selection input.
+  // The server failed while handling an otherwise valid request.
   MODEL_CACHE_IN_USE: "MODEL_CACHE_IN_USE",
+  // The metrics costs request contained invalid configuration or selection input.
+  MODEL_CACHE_REFERENCE_UNCERTAIN: "MODEL_CACHE_REFERENCE_UNCERTAIN",
   // The metrics costs request was canceled before the report completed.
   NOT_FOUND: "NOT_FOUND",
   // The metrics costs query failed while reading or valuing runtime usage.

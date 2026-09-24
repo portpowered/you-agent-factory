@@ -155,6 +155,7 @@ const (
 	ErrorResponseCodeMETRICSSESSIONSCOPEUNAVAILABLE                 ErrorResponseCode = "METRICS_SESSION_SCOPE_UNAVAILABLE"
 	ErrorResponseCodeMODELCACHEINUSE                                ErrorResponseCode = "MODEL_CACHE_IN_USE"
 	ErrorResponseCodeMODELCACHENOTFOUND                             ErrorResponseCode = "MODEL_CACHE_NOT_FOUND"
+	ErrorResponseCodeMODELCACHEREFERENCEUNCERTAIN                   ErrorResponseCode = "MODEL_CACHE_REFERENCE_UNCERTAIN"
 	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED                  ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
 	ErrorResponseCodeNOTFOUND                                       ErrorResponseCode = "NOT_FOUND"
 	ErrorResponseCodePROJECTIONUNAVAILABLE                          ErrorResponseCode = "PROJECTION_UNAVAILABLE"
@@ -6537,6 +6538,12 @@ type ModelRemoveResponse struct {
 	// Outcome Outcome of removing the selected managed model cache revision.
 	Outcome ModelRemoveOutcome `json:"outcome"`
 
+	// ReclaimedCacheBytes YOU-owned unreferenced shared-cache bytes reclaimed by this operation.
+	ReclaimedCacheBytes *int64 `json:"reclaimedCacheBytes,omitempty"`
+
+	// RetainedSharedCacheBytes Candidate shared-cache bytes retained because they remain referenced.
+	RetainedSharedCacheBytes *int64 `json:"retainedSharedCacheBytes,omitempty"`
+
 	// Revision Exact managed cache revision removed by the operation.
 	Revision string `json:"revision"`
 }
@@ -10005,6 +10012,12 @@ type GetMetricsParams struct {
 type GetMetricsCostsParams struct {
 	// SessionId Optional Factory Session identity to scope the report.
 	SessionId *string `form:"session_id,omitempty" json:"session_id,omitempty"`
+}
+
+// RemoveModelParams defines parameters for RemoveModel.
+type RemoveModelParams struct {
+	// ReclaimUnusedCache Also reclaim proven unreferenced model and backend cache assets. The default preserves them.
+	ReclaimUnusedCache *bool `form:"reclaim_unused_cache,omitempty" json:"reclaim_unused_cache,omitempty"`
 }
 
 // GetProviderSessionDetailsParams defines parameters for GetProviderSessionDetails.
@@ -18822,7 +18835,7 @@ type ServerInterface interface {
 	InvokeGenericModel(w http.ResponseWriter, r *http.Request)
 	// Remove one managed model cache revision
 	// (DELETE /models/{model_name})
-	RemoveModel(w http.ResponseWriter, r *http.Request, modelName string)
+	RemoveModel(w http.ResponseWriter, r *http.Request, modelName string, params RemoveModelParams)
 	// Inspect one managed runtime
 	// (GET /models/{model_name})
 	GetModel(w http.ResponseWriter, r *http.Request, modelName string)
@@ -20672,8 +20685,19 @@ func (siw *ServerInterfaceWrapper) RemoveModel(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RemoveModelParams
+
+	// ------------- Optional query parameter "reclaim_unused_cache" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "reclaim_unused_cache", r.URL.Query(), &params.ReclaimUnusedCache)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "reclaim_unused_cache", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RemoveModel(w, r, modelName)
+		siw.Handler.RemoveModel(w, r, modelName, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
