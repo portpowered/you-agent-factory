@@ -45,6 +45,27 @@ func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 		t.Fatalf("create private ACP observation directory: %v", err)
 	}
 	retryObservationPath := filepath.Join(observationDir, "rpc.jsonl")
+	// The explicit export opt-in preserves the already-redacted bounded trace
+	// outside t.TempDir so one diagnostic run can hash and inspect it afterward.
+	if exportDir := os.Getenv("YOU_ACP_TEST_OBSERVATION_EXPORT_DIR"); exportDir != "" {
+		if !filepath.IsAbs(exportDir) {
+			t.Fatalf("ACP observation export directory must be absolute: %q", exportDir)
+		}
+		if err := os.Mkdir(exportDir, 0o700); err != nil {
+			t.Fatalf("create private ACP observation export directory: %v", err)
+		}
+		if err := os.Chmod(exportDir, 0o700); err != nil {
+			t.Fatalf("restrict ACP observation export directory permissions: %v", err)
+		}
+		dirInfo, err := os.Lstat(exportDir)
+		if err != nil {
+			t.Fatalf("inspect ACP observation export directory: %v", err)
+		}
+		if dirInfo.Mode()&os.ModeSymlink != 0 || !dirInfo.IsDir() {
+			t.Fatalf("ACP observation export path must be a new directory: %q", exportDir)
+		}
+		retryObservationPath = filepath.Join(exportDir, "rpc.jsonl")
+	}
 	retryFixture := functionalACPFixture("retry-resume")
 	retryFixture.SessionID = sessionID
 	retryFixture.RetryAttemptDirectory = retryAttemptDir
