@@ -98,6 +98,7 @@ func TestPackagedTTSLocalRuntimePayloadPreservesExactBoundText(t *testing.T) {
 	if backend.CallCount() != 0 {
 		t.Fatalf("generic Models TTS invocation count = %d, want zero private-route fallback calls", backend.CallCount())
 	}
+	assertPackagedTTSManagedHostLaunch(t, launcher, cacheDir)
 
 	audio := packagedTTSPrimaryAudio(t, response.PrimaryResult)
 	if string(audio) != string(localai.AudioBytes()) {
@@ -193,11 +194,12 @@ type packagedTTSModelHostLauncher struct {
 	endpoint string
 	starts   int
 	stops    int
+	specs    []serviceedges.HostProcessStartSpec
 }
 
 func (launcher *packagedTTSModelHostLauncher) Start(
-	context.Context,
-	serviceedges.HostProcessStartSpec,
+	_ context.Context,
+	spec serviceedges.HostProcessStartSpec,
 ) (interface {
 	HealthEndpoint() string
 	Wait() error
@@ -205,6 +207,7 @@ func (launcher *packagedTTSModelHostLauncher) Start(
 }, error) {
 	launcher.mu.Lock()
 	launcher.starts++
+	launcher.specs = append(launcher.specs, clonePackagedTTSHostStartSpec(spec))
 	launcher.mu.Unlock()
 	return &packagedTTSModelHostProcess{
 		endpoint: launcher.endpoint,
@@ -251,6 +254,56 @@ func (launcher *packagedTTSModelHostLauncher) StopCount() int {
 	launcher.mu.Lock()
 	defer launcher.mu.Unlock()
 	return launcher.stops
+}
+
+func (launcher *packagedTTSModelHostLauncher) LastStartSpec(t testing.TB) serviceedges.HostProcessStartSpec {
+	t.Helper()
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	if len(launcher.specs) == 0 {
+		t.Fatal("local model host launch spec was not observed")
+	}
+	return clonePackagedTTSHostStartSpec(launcher.specs[len(launcher.specs)-1])
+}
+
+func assertPackagedTTSManagedHostLaunch(
+	t *testing.T,
+	launcher *packagedTTSModelHostLauncher,
+	cacheDir string,
+) {
+	t.Helper()
+	spec := launcher.LastStartSpec(t)
+	modelPathObserved := false
+	for _, modelFile := range spec.ModelFiles {
+		if modelFile == spec.ModelPath {
+			modelPathObserved = true
+			break
+		}
+	}
+	if spec.Backend != "localai-vibevoice" || spec.ModelPath == "" || len(spec.ModelFiles) != 3 ||
+		!modelPathObserved || len(spec.BackendFiles) != 1 || !pathWithinPackagedTTSCache(cacheDir, spec.ModelPath) {
+		t.Fatalf("Models host launch = %#v, want managed VibeVoice backend and resolved model/backend artifacts", spec)
+	}
+	if filepath.Base(spec.BackendFiles[0]) != packagedTTSPinnedBackendSelection().Name ||
+		!pathWithinPackagedTTSCache(cacheDir, spec.BackendFiles[0]) {
+		t.Fatalf("Models host backend artifact = %q, want the selected cached backend artifact under %q", spec.BackendFiles[0], cacheDir)
+	}
+	if spec.Command != "" || len(spec.Args) != 0 || spec.HealthEndpoint != "" {
+		t.Fatalf("Models host launch override = command %q args %#v endpoint %q, want Models to pass only its resolved backend artifact", spec.Command, spec.Args, spec.HealthEndpoint)
+	}
+}
+
+func clonePackagedTTSHostStartSpec(spec serviceedges.HostProcessStartSpec) serviceedges.HostProcessStartSpec {
+	spec.Args = append([]string(nil), spec.Args...)
+	spec.Env = append([]string(nil), spec.Env...)
+	spec.ModelFiles = append([]string(nil), spec.ModelFiles...)
+	spec.BackendFiles = append([]string(nil), spec.BackendFiles...)
+	return spec
+}
+
+func pathWithinPackagedTTSCache(cacheDir, candidate string) bool {
+	relative, err := filepath.Rel(cacheDir, candidate)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
 type packagedTTSHostProtocolNegotiator struct{}
