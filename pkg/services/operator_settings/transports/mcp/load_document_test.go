@@ -4,12 +4,46 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	mcpoperatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp"
 )
+
+func TestReadCurrentConfigReflectsOperatorFileWithoutRestart(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	path := operatorsettings.DefaultConfigPath(home)
+	read := func() string {
+		t.Helper()
+		data, err := mcpoperatorsettings.ReadCurrentConfig(context.Background(), operatorsettings.DefaultConfigPath, platformfilesystem.Local{}, home)
+		if err != nil {
+			t.Fatalf("ReadCurrentConfig() error = %v", err)
+		}
+		return string(data)
+	}
+	if got := read(); got != "{}" {
+		t.Fatalf("absent config = %q, want {}", got)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{
+		`{"defaults":{"workerModelProvider":"opencode"}}`,
+		`{"defaults":{"workerModelProvider":"codex","workerModel":"gpt-6-luna"}}`,
+	} {
+		if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if got := read(); got != value {
+			t.Fatalf("current config = %q, want %q", got, value)
+		}
+	}
+}
 
 func TestBind_LoadDocumentSuccessReturnsDetachedFactsFromInjectedRoot(t *testing.T) {
 	t.Parallel()

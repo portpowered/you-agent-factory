@@ -222,7 +222,8 @@ func (f *Factory) OpenExecutionRuntime(
 	}
 	request := &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
-			Directory: opening.ProjectRoot, ExecutionBaseDir: opening.ProjectRoot,
+			Directory: opening.ProjectRoot, SourcePath: opening.FactoryConfigPath,
+			ExecutionBaseDir: opening.ProjectRoot,
 		},
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
 			SystemConfigHome: opening.SystemConfigHome,

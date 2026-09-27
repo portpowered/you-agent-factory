@@ -2,7 +2,7 @@ name: "@you/subagent"
 id: builtin-subagent
 description:
   type: LOCALIZABLE_ASSET
-  value: Runs one bounded read-only subagent and returns its result.
+  value: Runs one bounded subagent and returns its result.
 invocationSignature:
   parameters:
     - name: input

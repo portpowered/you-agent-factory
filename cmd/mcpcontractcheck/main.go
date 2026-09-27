@@ -9,7 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/mcpcontractcheck"
 )
 
-const successMessage = "[agent-factory:mcp-contract-check] authored catalog, generated discovery, handwritten handler registry, and retained aliases are aligned"
+const successMessage = "[agent-factory:mcp-contract-check] public MCP manifest, generated tools/resources/skills, legacy adapter catalog, and handler registries are aligned"
 
 func main() {
 	root := flag.String("root", ".", "repository root")

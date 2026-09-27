@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -19,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -91,10 +89,10 @@ func TestMCPUnknownToolReturnsProtocolError(t *testing.T) {
 	}
 }
 
-// TestMCPDiscoveryContainsCanonicalFactorySessionTools proves tools/list exposes
-// the canonical Factory Session tool names published for MCP hosts without
-// asserting Session lifecycle or tool execution semantics.
-func TestMCPDiscoveryContainsCanonicalFactorySessionTools(t *testing.T) {
+// TestMCPDiscoveryExposesOnlySubagentInvocation proves the public MCP tool
+// surface stays focused on invoking a subagent. Provider and configuration
+// discovery is exposed through MCP resources.
+func TestMCPDiscoveryExposesOnlySubagentInvocation(t *testing.T) {
 	// Keep this fixture isolated: generated discovery membership is an
 	// independent catalog witness, not reusable live session state.
 	server := startFixtureBackedMCPServer(t)
@@ -108,10 +106,8 @@ func TestMCPDiscoveryContainsCanonicalFactorySessionTools(t *testing.T) {
 	}
 	toolNames := toolNamesFromListResult(t, toolsResult.Result)
 
-	for _, tool := range mcpgenerated.PrimaryDiscovery() {
-		if !slices.Contains(toolNames, tool.Name) {
-			t.Fatalf("tools/list missing canonical Factory Session tool %q; got %#v", tool.Name, toolNames)
-		}
+	if len(toolNames) != 1 || toolNames[0] != "you.subagent" {
+		t.Fatalf("tools/list names = %#v, want only you.subagent", toolNames)
 	}
 }
 
@@ -125,38 +121,18 @@ func TestMCPStdioRuntimeRejectsMissingHomeEnvironment(t *testing.T) {
 	projectRoot := trackedMCPTempDir(t)
 	workingDirectory := trackedMCPTempDir(t)
 	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "server", "mcp", "--runtime", "--project-root", projectRoot,
+		"you", "server", "mcp", "--project-root", projectRoot,
 	})
 	inputs.Env = []string{"PATH="}
 	inputs.WorkingDirectory = workingDirectory
 	err := executeMCPProcess(t, process, inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "home directory is not defined in the supplied environment") {
-		t.Fatalf("Process.Execute(you server mcp --runtime) error = %v, want missing-home diagnostic", err)
-	}
-}
-
-// TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot proves runtime-backed you
-// server mcp rejects a project root that cannot resolve a factory layout before
-// stdio initialize succeeds.
-func TestMCPStdioRuntimeRejectsInvalidRuntimeProjectRoot(t *testing.T) {
-	// Keep this root isolated: invalid Factory layout exercises initializer
-	// failure with its own project and home environment.
-	process := buildMCPProcess(t)
-	projectRoot := trackedMCPTempDir(t)
-	homeDir := trackedMCPTempDir(t)
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "server", "mcp", "--runtime", "--project-root", projectRoot,
-	})
-	inputs.Env = append([]string{"PATH=", "HOME=" + homeDir, "USERPROFILE=" + homeDir}, os.Environ()...)
-	inputs.WorkingDirectory = projectRoot
-	err := executeMCPProcess(t, process, inputs.Input)
-	if err == nil || !strings.Contains(err.Error(), "factory layout not found") {
-		t.Fatalf("Process.Execute(you server mcp --runtime) error = %v, want factory layout diagnostic", err)
+		t.Fatalf("Process.Execute(you server mcp) error = %v, want missing-home diagnostic", err)
 	}
 }
 
 // TestMCPStdioFixtureAndRuntimePathsReachInitializer proves fixture-backed and
-// runtime-backed you server mcp both reach a successful stdio initialize through
+// default runtime you server mcp both reach a successful stdio initialize through
 // the public process boundary with injected transport dependencies.
 func TestMCPStdioFixtureAndRuntimePathsReachInitializer(t *testing.T) {
 	// The parent row owns two named initializer witnesses. They remain
@@ -171,7 +147,7 @@ func TestMCPStdioFixtureAndRuntimePathsReachInitializer(t *testing.T) {
 		assertIncompleteMCPFrameTerminates(t, server)
 	})
 	t.Run("runtime-backed", func(t *testing.T) {
-		projectRoot := support.ScaffoldSingleStepFactory(t, "mcp-stdio-discovery-runtime")
+		projectRoot := trackedMCPTempDir(t)
 
 		// Keep the runtime-backed initializer row isolated: its project root
 		// and environment are distinct from the fixture-backed row.
@@ -214,6 +190,7 @@ type stdioMCPClient struct {
 
 type stdioMCPServer struct {
 	t                   *testing.T
+	home                string
 	client              *stdioMCPClient
 	stdin               *os.File
 	stdinRead           *os.File
@@ -345,6 +322,11 @@ func trackedMCPTempDir(t testing.TB) string {
 
 func startFixtureBackedMCPServer(t *testing.T) *stdioMCPServer {
 	t.Helper()
+	return startFixtureBackedMCPServerWithHome(t, t.TempDir())
+}
+
+func startFixtureBackedMCPServerWithHome(t *testing.T, home string) *stdioMCPServer {
+	t.Helper()
 
 	fixtureCatalog := testutil.MustRepoPath(t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json")
 	process := buildMCPProcess(t)
@@ -371,7 +353,7 @@ func startFixtureBackedMCPServer(t *testing.T) *stdioMCPServer {
 				"you", "server", "mcp",
 				"--fixture-catalog", fixtureCatalog,
 			},
-			Env:              builtcliacceptance.ProcessEnvForIsolatedHome(t.TempDir()),
+			Env:              builtcliacceptance.ProcessEnvForIsolatedHome(home),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
 			Stderr:           &stderr,
@@ -382,6 +364,7 @@ func startFixtureBackedMCPServer(t *testing.T) *stdioMCPServer {
 
 	server := &stdioMCPServer{
 		t:            t,
+		home:         home,
 		client:       newStdioMCPClient(t, stdinWrite, stdoutRead),
 		stdin:        stdinWrite,
 		stdinRead:    stdinRead,
@@ -399,6 +382,11 @@ func startFixtureBackedMCPServer(t *testing.T) *stdioMCPServer {
 
 func startRuntimeBackedMCPServer(t *testing.T, projectRoot string) *stdioMCPServer {
 	t.Helper()
+	return startRuntimeBackedMCPServerWithHome(t, projectRoot, trackedMCPTempDir(t))
+}
+
+func startRuntimeBackedMCPServerWithHome(t *testing.T, projectRoot, homeDir string) *stdioMCPServer {
+	t.Helper()
 
 	process := buildMCPProcess(t)
 
@@ -414,8 +402,7 @@ func startRuntimeBackedMCPServer(t *testing.T, projectRoot string) *stdioMCPServ
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	homeDir := trackedMCPTempDir(t)
-	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	env := builtcliacceptance.ProcessEnvForIsolatedHome(homeDir)
 
 	serveErr := make(chan error, 1)
 	var stderr bytes.Buffer
@@ -423,7 +410,7 @@ func startRuntimeBackedMCPServer(t *testing.T, projectRoot string) *stdioMCPServ
 		serveErr <- process.Execute(root.Input{
 			Args: []string{
 				"you", "server", "mcp",
-				"--runtime", "--project-root", projectRoot,
+				"--project-root", projectRoot,
 			},
 			Env:              env,
 			Stdin:            stdinRead,
@@ -436,6 +423,7 @@ func startRuntimeBackedMCPServer(t *testing.T, projectRoot string) *stdioMCPServ
 
 	server := &stdioMCPServer{
 		t:            t,
+		home:         homeDir,
 		client:       newStdioMCPClient(t, stdinWrite, stdoutRead),
 		stdin:        stdinWrite,
 		stdinRead:    stdinRead,

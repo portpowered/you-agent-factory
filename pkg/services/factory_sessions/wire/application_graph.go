@@ -316,6 +316,7 @@ func NewStdioOpeningService(
 	buildFixture FixtureStdioApplicationBuilder,
 	buildRuntime RuntimeStdioApplicationBuilder,
 	presentations OpeningPresentationOwner,
+	installSubagent factorydefinitions.InstallPackagedFactoryOperation,
 ) (*StdioOpeningService, error) {
-	return executionopening.NewStdioOpeningService(opening, buildFixture, buildRuntime, presentations)
+	return executionopening.NewStdioOpeningService(opening, buildFixture, buildRuntime, presentations, installSubagent)
 }

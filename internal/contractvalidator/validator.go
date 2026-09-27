@@ -110,6 +110,7 @@ func CommonRegistry() Registry {
 func MCPRegistry() Registry {
 	const (
 		toolCatalogID        = "https://schemas.portpowered.com/you/contracts/mcp/tool-catalog.schema.json"
+		mcpManifestID        = "https://schemas.portpowered.com/you/contracts/mcp/manifest.schema.json"
 		contentID            = "https://schemas.portpowered.com/you/contracts/mcp/protocol/content.schema.json"
 		callToolResultID     = "https://schemas.portpowered.com/you/contracts/mcp/protocol/call-tool-result.schema.json"
 		domainToolResponseID = "https://schemas.portpowered.com/you/contracts/mcp/protocol/domain-tool-response.schema.json"
@@ -128,9 +129,11 @@ func MCPRegistry() Registry {
 			{ID: domainToolResponseID, Path: "contracts/mcp/protocol/domain-tool-response.schema.json"},
 			{ID: jsonRPCErrorID, Path: "contracts/mcp/protocol/json-rpc-error.schema.json"},
 			{ID: toolCatalogID, Path: "contracts/mcp/tool-catalog.schema.json"},
+			{ID: mcpManifestID, Path: "contracts/mcp/manifest.schema.json"},
 		},
 		Documents: []Document{
 			{Path: "contracts/mcp/tools.json", SchemaID: toolCatalogID},
+			{Path: "contracts/mcp/manifest.json", SchemaID: mcpManifestID},
 			{Path: "contracts/testdata/mcp/valid-input-closed-nested.json", SchemaID: toolCatalogID},
 			{Path: "contracts/testdata/mcp/valid-text-success-result.json", SchemaID: toolCatalogID},
 			{Path: "contracts/testdata/mcp/valid-text-error-result.json", SchemaID: toolCatalogID},

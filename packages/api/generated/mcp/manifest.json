@@ -1,0 +1,89 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2024-11-05",
+  "tools": [
+    {
+      "id": "mcp.tool.you.subagent",
+      "name": "you.subagent",
+      "description": "Run one bounded subagent using packaged @you/subagent; omitted model options use operator and provider defaults.",
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "description": "Model name; omitted values use operator defaults.",
+            "type": "string"
+          },
+          "prompt": {
+            "description": "Text request for the one-pass subagent.",
+            "type": "string"
+          },
+          "provider": {
+            "description": "Model provider; omitted values use operator defaults.",
+            "type": "string"
+          },
+          "reasoningEffort": {
+            "description": "Reasoning effort; omitted values use the provider default.",
+            "type": "string"
+          },
+          "timeoutMillis": {
+            "description": "Optional maximum wait time in milliseconds.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      },
+      "handler": "mcp.handler.you.subagent"
+    }
+  ],
+  "resources": [
+    {
+      "id": "mcp.resource.subagent.skill",
+      "uri": "skill://subagent-configuration/SKILL.md",
+      "name": "subagent-configuration",
+      "description": "Inspect subagent providers and configure operator defaults or custom ACP providers using the operator configuration file.",
+      "mimeType": "text/markdown",
+      "handler": "mcp.handler.resource.subagent_skill"
+    },
+    {
+      "id": "mcp.resource.operator.config_schema",
+      "uri": "you://operator/config/schema",
+      "name": "operator-config-schema",
+      "description": "JSON Schema for the operator configuration file",
+      "mimeType": "application/schema+json",
+      "handler": "mcp.handler.resource.operator_config_schema"
+    },
+    {
+      "id": "mcp.resource.operator.current_config",
+      "uri": "you://operator/config/current",
+      "name": "current-operator-config",
+      "description": "Current operator configuration file, or an empty object when absent",
+      "mimeType": "application/json",
+      "handler": "mcp.handler.resource.operator_current_config"
+    },
+    {
+      "id": "mcp.resource.providers.catalog",
+      "uri": "you://providers/catalog",
+      "name": "provider-catalog",
+      "description": "Current provider catalog with available providers, models, reasoning efforts, and readiness",
+      "mimeType": "application/json",
+      "handler": "mcp.handler.resource.providers_catalog"
+    }
+  ],
+  "skills": [
+    {
+      "id": "mcp.skill.subagent_configuration",
+      "uri": "skill://subagent-configuration/SKILL.md",
+      "frontmatter": {
+        "description": "Inspect subagent providers and configure operator defaults or custom ACP providers using the operator configuration file.",
+        "name": "subagent-configuration"
+      },
+      "resourceURIs": [
+        "skill://subagent-configuration/SKILL.md"
+      ]
+    }
+  ]
+}

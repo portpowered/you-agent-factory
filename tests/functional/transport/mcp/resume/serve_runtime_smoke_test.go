@@ -1,240 +1,113 @@
 package mcp_resume_test
 
 import (
+	"context"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const runtimeSmokeSimpleFinalWorkflowSource = `// Runtime-backed MCP server smoke fixture: terminal async completion.
-// runtimeSmokeProjectRoot removes persisted factory state before t.TempDir cleanup.
-return {
-  label: meta.name,
-  description: meta.description,
-  subject: args.subject,
-  repeat: args.count,
-  echo: args.prefix + ":" + args.subject,
-};
-`
+func TestMCPResumePackage_PublicCatalogMatchesGeneratedSubagentCatalog(t *testing.T) {
+	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("build application process: %v", err)
+	}
 
-func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
-	t.Parallel()
-	fixture := mcpResumePackageFixtureForTest(t)
-	client := fixture.client
-
-	sessionID := assertRuntimeSmokeAsyncStart(t, client, fixture, fixture.nextRequestID("runtime-smoke"))
-	assertRuntimeSmokePollObservesRunningOrTerminal(t, client, sessionID)
-	waitRuntimeSmokeTerminalCompletion(t, client, sessionID)
-}
-
-func waitRuntimeSmokeTerminalCompletion(t *testing.T, client *stdioMCPClient, sessionID string) {
-	t.Helper()
-
-	// The public session read and final result are the observable async
-	// completion witnesses. The provider edge cannot prove that persistence and
-	// result projection are complete, so this bounded poll intentionally yields
-	// between public reads instead of using a fixed startup wait.
-	deadline := time.Now().Add(5 * time.Second)
-	mode := factoryapi.FactorySessionResultModeFinal
-	for time.Now().Before(deadline) {
-		status := runtimeSmokeSessionStatus(t, client, sessionID)
-		switch status {
-		case factoryapi.FactorySessionDurableLifecycleStatusSucceeded:
-			assertRuntimeSmokeTerminalResult(t, client, sessionID, mode)
-			return
-		case factoryapi.FactorySessionDurableLifecycleStatusRunning:
-			time.Sleep(10 * time.Millisecond)
-			continue
-		default:
-			t.Fatalf("get status = %q, want RUNNING or SUCCEEDED before runtime smoke shutdown", status)
+	workDir := t.TempDir()
+	homeDir := filepath.Join(workDir, "home")
+	if err := os.MkdirAll(homeDir, 0o755); err != nil {
+		t.Fatalf("create isolated home: %v", err)
+	}
+	stdinRead, stdinWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create MCP stdin: %v", err)
+	}
+	stdoutRead, stdoutWrite, err := os.Pipe()
+	if err != nil {
+		_ = stdinRead.Close()
+		_ = stdinWrite.Close()
+		t.Fatalf("create MCP stdout: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = stdinRead.Close()
+		_ = stdinWrite.Close()
+		_ = stdoutRead.Close()
+		_ = stdoutWrite.Close()
+		closeCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := process.Close(closeCtx); err != nil {
+			t.Errorf("close application process: %v", err)
 		}
-	}
-	t.Fatalf("session %s did not reach SUCCEEDED within 5s before runtime smoke shutdown", sessionID)
-}
+	})
 
-func assertRuntimeSmokeAsyncStart(
-	t *testing.T,
-	client *stdioMCPClient,
-	fixture *mcpResumePackageFixture,
-	requestID string,
-) string {
-	t.Helper()
-	asyncStart := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
-		t,
-		client.callTool(t, mcpfactorysession.ToolStartAsync, runtimeSmokeInlineAsyncRequest(requestID)),
-	)
-	if asyncStart.Error != nil || asyncStart.Result == nil {
-		t.Fatalf("start_async = %#v, want success", asyncStart)
-	}
-	if asyncStart.Result.SessionId == "" {
-		t.Fatal("sessionId missing from async start response")
-	}
-	sessionID := asyncStart.Result.SessionId
-	// Register cleanup before checking any post-start state so a failed status
-	// or result observation cannot leave this durable session unowned.
-	fixture.trackSession(t, client, sessionID)
-	if asyncStart.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
-		t.Fatalf("start_async status = %q, want RUNNING", asyncStart.Result.Status)
-	}
-	return sessionID
-}
-
-func assertRuntimeSmokePollObservesRunningOrTerminal(t *testing.T, client *stdioMCPClient, sessionID string) {
-	t.Helper()
-
-	// This checks the customer-visible RUNNING/not-ready and terminal/result
-	// sequence. A provider completion signal cannot prove either public read
-	// model, so the bounded poll must observe those MCP responses directly.
-	deadline := time.Now().Add(5 * time.Second)
-	mode := factoryapi.FactorySessionResultModeFinal
-	observedRunningNotReady := false
-	observedTerminal := false
-
-	for time.Now().Before(deadline) {
-		status := runtimeSmokeSessionStatus(t, client, sessionID)
-		switch status {
-		case factoryapi.FactorySessionDurableLifecycleStatusRunning:
-			if runtimeSmokeResultIsFinal(t, client, sessionID, mode) {
-				assertRuntimeSmokeTerminalResult(t, client, sessionID, mode)
-				observedTerminal = true
-			} else {
-				assertRuntimeSmokeRunningNotReady(t, client, sessionID, mode)
-				observedRunningNotReady = true
+	serveCtx, cancelServe := context.WithCancel(context.Background())
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- process.Execute(root.Input{
+			Args:             []string{"you", "server", "mcp"},
+			Env:              append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir),
+			Stdin:            stdinRead,
+			Stdout:           stdoutWrite,
+			Stderr:           io.Discard,
+			Context:          serveCtx,
+			WorkingDirectory: workDir,
+		})
+	}()
+	client := newStdioMCPClient(t, stdinWrite, stdoutRead)
+	t.Cleanup(func() {
+		cancelServe()
+		_ = stdinWrite.Close()
+		select {
+		case err := <-serveErr:
+			if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, io.EOF) {
+				t.Errorf("MCP serve: %v", err)
 			}
-		case factoryapi.FactorySessionDurableLifecycleStatusSucceeded:
-			assertRuntimeSmokeTerminalResult(t, client, sessionID, mode)
-			observedTerminal = true
-		default:
-			t.Fatalf("get status = %q, want RUNNING or SUCCEEDED", status)
+		case <-time.After(15 * time.Second):
+			t.Error("MCP server did not stop after cancellation")
 		}
+	})
 
-		if observedRunningNotReady || observedTerminal {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
+	assertMCPInitialized(t, client)
+	toolNames := toolNamesFromListResult(t, client.call(t, "tools/list", map[string]any{}).Result)
+	wantNames := make([]string, 0, len(mcpgenerated.PrimaryDiscovery()))
+	for _, definition := range mcpgenerated.PrimaryDiscovery() {
+		wantNames = append(wantNames, definition.Name)
+	}
+	if !slices.Equal(toolNames, wantNames) {
+		t.Fatalf("tools/list = %#v, want generated catalog %#v", toolNames, wantNames)
+	}
+	if len(toolNames) != 1 || toolNames[0] != mcpfactorysession.ToolSubagent {
+		t.Fatalf("tools/list = %#v, want only %q", toolNames, mcpfactorysession.ToolSubagent)
 	}
 
-	if !observedRunningNotReady && !observedTerminal {
-		t.Fatalf("session %s did not reach RUNNING+not-ready or SUCCEEDED+terminal result within 5s", sessionID)
+	removed := client.callTool(t, "you.factory_session.get", map[string]any{"sessionId": "removed-tool"})
+	if removed.Error == nil {
+		t.Fatalf("tools/call for removed Factory Session tool returned %#v, want protocol error", removed.Result)
 	}
 }
 
-func runtimeSmokeSessionStatus(t *testing.T, client *stdioMCPClient, sessionID string) factoryapi.FactorySessionDurableLifecycleStatus {
+func assertMCPInitialized(t *testing.T, client *stdioMCPClient) {
 	t.Helper()
-	statusResponse := decodeToolResponse[factoryapi.FactorySessionDurableReadModel](
-		t,
-		client.callTool(t, mcpfactorysession.ToolGetSession, map[string]any{"sessionId": sessionID}),
-	)
-	if statusResponse.Error != nil || statusResponse.Result == nil {
-		t.Fatalf("get = %#v, want success", statusResponse)
+	initResult := client.call(t, "initialize", map[string]any{
+		"protocolVersion": "2024-11-05",
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "mcp-public-catalog-test", "version": "test"},
+	})
+	if initResult.Error != nil {
+		t.Fatalf("initialize error = %#v", initResult.Error)
 	}
-	return statusResponse.Result.Status
-}
-
-func runtimeSmokeResultIsFinal(
-	t *testing.T,
-	client *stdioMCPClient,
-	sessionID string,
-	mode factoryapi.FactorySessionResultMode,
-) bool {
-	t.Helper()
-	response := decodeToolResponse[factoryapi.FactorySessionResult](
-		t,
-		client.callTool(t, mcpfactorysession.ToolGetResult, map[string]any{
-			"sessionId": sessionID,
-			"mode":      mode,
-		}),
-	)
-	return response.Error == nil &&
-		response.Result != nil &&
-		response.Result.ResultStatus == factoryapi.FactorySessionResultStatusFinal
-}
-
-func assertRuntimeSmokeRunningNotReady(
-	t *testing.T,
-	client *stdioMCPClient,
-	sessionID string,
-	mode factoryapi.FactorySessionResultMode,
-) bool {
-	t.Helper()
-	response := decodeToolResponse[factoryapi.FactorySessionResult](
-		t,
-		client.callTool(t, mcpfactorysession.ToolGetResult, map[string]any{
-			"sessionId": sessionID,
-			"mode":      mode,
-		}),
-	)
-	if response.Result != nil && response.Result.ResultStatus == factoryapi.FactorySessionResultStatusFinal {
-		if response.Result.PrimaryResult == nil {
-			t.Fatal("primaryResult missing from terminal result")
-		}
-		return true
-	}
-	assertRuntimeSmokeRunningNotReadyResponse(t, response)
-	return false
-}
-
-func assertRuntimeSmokeRunningNotReadyResponse(t *testing.T, response mcpfactorysession.ToolResponse[factoryapi.FactorySessionResult]) {
-	t.Helper()
-	if response.Result != nil {
-		t.Fatalf("get_result running = %#v, want not-ready envelope", response.Result)
-	}
-	if response.Error == nil || response.Error.Code != "factory_session.result.not_ready" {
-		t.Fatalf("get_result error = %#v, want factory_session.result.not_ready", response.Error)
-	}
-}
-
-func assertRuntimeSmokeTerminalResult(
-	t *testing.T,
-	client *stdioMCPClient,
-	sessionID string,
-	mode factoryapi.FactorySessionResultMode,
-) {
-	t.Helper()
-	completedResult := decodeToolResponse[factoryapi.FactorySessionResult](
-		t,
-		client.callTool(t, mcpfactorysession.ToolGetResult, map[string]any{
-			"sessionId": sessionID,
-			"mode":      mode,
-		}),
-	)
-	if completedResult.Error != nil || completedResult.Result == nil {
-		t.Fatalf("get_result terminal = %#v, want terminal result", completedResult)
-	}
-	if completedResult.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("resultStatus = %q, want FINAL", completedResult.Result.ResultStatus)
-	}
-	if completedResult.Result.PrimaryResult == nil {
-		t.Fatal("primaryResult missing from terminal result")
-	}
-}
-
-func runtimeSmokeInlineAsyncRequest(requestID string) factoryapi.FactorySessionExecutionRequest {
-	dialect := "you-workflow-v1"
-	metadata := factoryapi.StringMap{
-		"name":        "runtime-mcp-serve-smoke",
-		"description": "runtime-backed MCP server smoke fixture",
-	}
-	args := map[string]any{
-		"subject": "workflows",
-		"count":   2,
-		"prefix":  "you",
-	}
-	return factoryapi.FactorySessionExecutionRequest{
-		RequestId: requestID,
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
-			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
-				InlineSource: factoryapi.FactoryOrchestratorJavaScriptInlineSource{
-					Encoding: factoryapi.FactoryOrchestratorJavaScriptInlineSourceEncodingUtf8,
-					Inline:   runtimeSmokeSimpleFinalWorkflowSource,
-				},
-				Dialect:  &dialect,
-				Metadata: &metadata,
-			},
-		},
-		Args: &args,
+	protocolVersion, _ := initResult.Result["protocolVersion"].(string)
+	if protocolVersion != "2024-11-05" {
+		t.Fatalf("protocolVersion = %q, want 2024-11-05", protocolVersion)
 	}
 }

@@ -36,3 +36,18 @@ func TestClientRequestPermissionUsesBoundBypassPolicy(t *testing.T) {
 		})
 	}
 }
+
+func TestClientRequestPermissionCancelsWhenNoRejectOptionExists(t *testing.T) {
+	t.Parallel()
+	client := &client{}
+	client.reset(false, nil)
+	response, err := client.RequestPermission(context.Background(), acpsdk.RequestPermissionRequest{
+		Options: []acpsdk.PermissionOption{{OptionId: "allow", Kind: acpsdk.PermissionOptionKindAllowOnce}},
+	})
+	if err != nil {
+		t.Fatalf("RequestPermission() error = %v", err)
+	}
+	if response.Outcome.Cancelled == nil {
+		t.Fatalf("permission outcome = %#v, want cancelled without a reject option", response.Outcome)
+	}
+}

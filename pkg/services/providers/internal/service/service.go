@@ -102,13 +102,12 @@ func (s *Service) ListProviders(
 		return listed, nil
 	}
 	for _, integration := range s.acp.Integrations() {
-		if _, err := s.catalog.RegistrationProvider(integration.Name); err == nil {
-			// Packaged ACP metadata is authored in the provider package and was
-			// already returned by Catalog. Do not replace it with a generic
-			// runtime-only descriptor.
-			continue
-		}
 		descriptor := acpDescriptor(integration)
+		if packaged, err := s.catalog.RegistrationProvider(integration.Name); err == nil {
+			// Preserve the richer package-owned descriptor while reflecting the
+			// active launch configuration's permission capability.
+			descriptor = applyACPBypassCapability(packaged, integration)
+		}
 		if index, exists := byID[descriptor.ID]; exists {
 			listed.Providers[index] = descriptor
 		} else {
@@ -126,6 +125,9 @@ func (s *Service) GetProvider(
 	if s.acp != nil {
 		if canonical, ok := s.acp.Resolve(request.ID); ok {
 			if descriptor, err := s.catalog.GetProvider(ctx, providers.GetProviderRequest{ID: canonical}); err == nil {
+				if integration, found := s.activeACPIntegration(canonical); found {
+					descriptor.Provider = applyACPBypassCapability(descriptor.Provider, integration)
+				}
 				return descriptor, nil
 			}
 			for _, integration := range s.acp.Integrations() {
@@ -172,6 +174,11 @@ func (s *Service) dispatch(
 				}
 			}
 			request.Provider = canonical
+			// Only the packaged OpenCode ACP integration has a known permission
+			// bypass contract. Other ACP peers must continue to receive permission
+			// requests with the conservative deny policy, even when callers set the
+			// generic skipPermissions option.
+			request.SkipPermissions = request.SkipPermissions && s.acpSupportsPermissionBypass(canonical)
 			if err := s.validatePermissionBypass(canonical, request.SkipPermissions); err != nil {
 				return providers.ExecuteResult{}, err
 			}
@@ -236,6 +243,7 @@ func (s *Service) dispatchContinuation(
 				}
 			}
 			request.Provider = canonical
+			request.SkipPermissions = request.SkipPermissions && s.acpSupportsPermissionBypass(canonical)
 			if err := s.validatePermissionBypass(canonical, request.SkipPermissions); err != nil {
 				return providers.ExecuteResult{}, err
 			}
@@ -648,12 +656,13 @@ func (s *Service) permissionDescriptor(provider providers.ID) (providers.Descrip
 			// runtime fallback below is only for operator-configured integrations
 			// that have no published catalog entry.
 			if descriptor, err := s.catalog.RegistrationProvider(canonical); err == nil {
+				if integration, ok := s.activeACPIntegration(canonical); ok {
+					descriptor = applyACPBypassCapability(descriptor, integration)
+				}
 				return descriptor, nil
 			}
-			for _, integration := range s.acp.Integrations() {
-				if integration.Name == canonical {
-					return acpDescriptor(integration), nil
-				}
+			if integration, ok := s.activeACPIntegration(canonical); ok {
+				return acpDescriptor(integration), nil
 			}
 			return providers.Descriptor{}, providers.ErrUnknownProvider
 		}
@@ -788,11 +797,55 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 }
 
 func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
+	capabilities := []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilitySessionResume}
+	if supportsACPPermissionBypass(integration) {
+		capabilities = append(capabilities, providers.CapabilityPermissionBypass)
+	}
 	return providers.Descriptor{
 		ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(),
 		Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessUnverified,
-		Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilitySessionResume},
+		Capabilities: capabilities,
 	}
+}
+
+func applyACPBypassCapability(descriptor providers.Descriptor, integration providers.ACPIntegration) providers.Descriptor {
+	if integration.Name != "opencode-acp" {
+		return descriptor
+	}
+	descriptor.Capabilities = slices.DeleteFunc(append([]providers.Capability(nil), descriptor.Capabilities...), func(capability providers.Capability) bool {
+		return capability == providers.CapabilityPermissionBypass
+	})
+	if supportsACPPermissionBypass(integration) {
+		descriptor.Capabilities = append(descriptor.Capabilities, providers.CapabilityPermissionBypass)
+	}
+	return descriptor
+}
+
+func (s *Service) activeACPIntegration(provider providers.ID) (providers.ACPIntegration, bool) {
+	if s.acp == nil {
+		return providers.ACPIntegration{}, false
+	}
+	for _, integration := range s.acp.Integrations() {
+		if integration.Name == provider {
+			return integration, true
+		}
+	}
+	return providers.ACPIntegration{}, false
+}
+
+func (s *Service) acpSupportsPermissionBypass(provider providers.ID) bool {
+	integration, ok := s.activeACPIntegration(provider)
+	return ok && supportsACPPermissionBypass(integration)
+}
+
+func supportsACPPermissionBypass(integration providers.ACPIntegration) bool {
+	return integration.ID == "opencode-acp" &&
+		integration.Name == "opencode-acp" &&
+		integration.Transport == "stdio" &&
+		integration.Command == "npx -y opencode-ai acp" &&
+		slices.Equal(integration.Arguments, []string{"-y", "opencode-ai", "acp"}) &&
+		integration.RuntimePosture == "package_runner" &&
+		integration.ImplementationProfile == "opencode-acp"
 }
 
 var _ interface {

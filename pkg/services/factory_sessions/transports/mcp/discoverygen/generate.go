@@ -46,6 +46,22 @@ func DiscoveryGoArtifact(repositoryRoot string) ([]byte, error) {
 	source.WriteString("import \"encoding/json\"\n\n")
 	source.WriteString("// DiscoveryTool is one canonical generated MCP tools/list descriptor.\n")
 	source.WriteString("type DiscoveryTool struct {\n\tID string\n\tName string\n\tDescription string\n\tInputSchema json.RawMessage\n}\n\n")
+	manifest, err := LoadAuthoredManifest(repositoryRoot)
+	if err != nil {
+		return nil, err
+	}
+	legacyValue, err := LoadResolvedCatalog(repositoryRoot)
+	if err != nil {
+		return nil, err
+	}
+	legacyMetadata, err := ProjectDiscoveryFromCatalogDocument(legacyValue)
+	if err != nil {
+		return nil, err
+	}
+	source.WriteString("// DiscoveryResource is one generated readable MCP resource descriptor.\n")
+	source.WriteString("type DiscoveryResource struct { ID string; URI string; Name string; Description string; MIMEType string; Handler string }\n\n")
+	source.WriteString("// DiscoverySkill is one generated Agent Skill descriptor.\n")
+	source.WriteString("type DiscoverySkill struct { ID string; URI string; Frontmatter map[string]any; ResourceURIs []string }\n\n")
 	source.WriteString("// PrimaryDiscovery returns canonical generated discovery in stable tool-ID order.\n")
 	source.WriteString("func PrimaryDiscovery() []DiscoveryTool {\n\treturn []DiscoveryTool{\n")
 	for _, id := range ids {
@@ -58,6 +74,29 @@ func DiscoveryGoArtifact(repositoryRoot string) ([]byte, error) {
 			strconv.Quote(tool.ID), strconv.Quote(tool.Name), strconv.Quote(tool.Description), strconv.Quote(string(schema)))
 	}
 	source.WriteString("\t}\n}\n")
+	source.WriteString("\n// LegacyDiscovery returns the internal Factory Session adapter catalog. It is not registered as public MCP discovery.\nfunc LegacyDiscovery() []DiscoveryTool {\n\treturn []DiscoveryTool{\n")
+	legacyIDs := make([]string, 0, len(legacyMetadata.Tools))
+	for id := range legacyMetadata.Tools {
+		legacyIDs = append(legacyIDs, id)
+	}
+	slices.Sort(legacyIDs)
+	for _, id := range legacyIDs {
+		tool := legacyMetadata.Tools[id]
+		schema, marshalErr := contractjoiner.MarshalCanonicalJSON(tool.InputSchema)
+		if marshalErr != nil {
+			return nil, fmt.Errorf("marshal legacy input schema for %s: %w", id, marshalErr)
+		}
+		fmt.Fprintf(&source, "\t\t{ID: %s, Name: %s, Description: %s, InputSchema: json.RawMessage(%s)},\n", strconv.Quote(tool.ID), strconv.Quote(tool.Name), strconv.Quote(tool.Description), strconv.Quote(string(schema)))
+	}
+	source.WriteString("\t}\n}\n")
+	source.WriteString("\n// PrimaryResources returns manifest resources in authored order.\nfunc PrimaryResources() []DiscoveryResource {\n\treturn []DiscoveryResource{\n")
+	for _, resource := range manifest.Resources {
+		fmt.Fprintf(&source, "\t\t{ID:%s, URI:%s, Name:%s, Description:%s, MIMEType:%s, Handler:%s},\n", strconv.Quote(resource.ID), strconv.Quote(resource.URI), strconv.Quote(resource.Name), strconv.Quote(resource.Description), strconv.Quote(resource.MIMEType), strconv.Quote(resource.Handler))
+	}
+	source.WriteString("\t}\n}\n")
+	if err := writePrimarySkills(&source, manifest.Skills); err != nil {
+		return nil, err
+	}
 
 	formatted, err := format.Source([]byte(source.String()))
 	if err != nil {
@@ -66,12 +105,32 @@ func DiscoveryGoArtifact(repositoryRoot string) ([]byte, error) {
 	return formatted, nil
 }
 
+func writePrimarySkills(source *strings.Builder, skills []ManifestSkill) error {
+	source.WriteString("\n// PrimarySkills returns manifest skills in authored order.\nfunc PrimarySkills() []DiscoverySkill {\n\tout := make([]DiscoverySkill, 0, ")
+	fmt.Fprintf(source, "%d", len(skills))
+	source.WriteString(")\n")
+	for _, skill := range skills {
+		frontmatter, err := contractjoiner.MarshalCanonicalJSON(skill.Frontmatter)
+		if err != nil {
+			return err
+		}
+		refs := make([]string, len(skill.ResourceURIs))
+		for i, ref := range skill.ResourceURIs {
+			refs[i] = strconv.Quote(ref)
+		}
+		fmt.Fprintf(source, "\tvar frontmatter map[string]any\n\tif err := json.Unmarshal([]byte(%s), &frontmatter); err != nil { panic(err) }\n", strconv.Quote(string(frontmatter)))
+		fmt.Fprintf(source, "\tout = append(out, DiscoverySkill{ID:%s, URI:%s, Frontmatter:frontmatter, ResourceURIs:[]string{%s}})\n", strconv.Quote(skill.ID), strconv.Quote(skill.URI), strings.Join(refs, ","))
+	}
+	source.WriteString("\treturn out\n}\n")
+	return nil
+}
+
 func discoveryMetadata(repositoryRoot string) (DiscoveryMetadata, error) {
-	resolved, err := LoadResolvedCatalog(repositoryRoot)
+	manifest, err := LoadAuthoredManifest(repositoryRoot)
 	if err != nil {
 		return DiscoveryMetadata{}, err
 	}
-	metadata, err := ProjectDiscoveryFromCatalogDocument(resolved)
+	metadata, err := ProjectManifestDiscovery(manifest)
 	if err != nil {
 		return DiscoveryMetadata{}, err
 	}

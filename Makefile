@@ -2,6 +2,7 @@ BINARY_NAME := you
 CMD_PATH    := ./cmd/factory/
 BIN_DIR     := bin
 GO          ?= go
+PYTHON      ?= python
 INSTALL_DIR = $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
 NPM         ?= npm
 NODE        ?= node
@@ -285,7 +286,7 @@ endef
 
 .PHONY: backend-dependency-graph
 
-.PHONY: generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
+.PHONY: generate-api generate-operator-config-schema operator-config-schema-check generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
 .PHONY: interfaces-api-bundle interfaces-go interfaces-contracts interfaces-ui-openapi interfaces-ui-client interfaces-ui-emulator interfaces-ui interfaces-all
 
 .PHONY: wire-smoke api-smoke api-package-pack-smoke api-package-verify packaged-factory-package-smoke packaged-factory-package-verify packaged-factory-package-script-test packaged-factory-package-pack-check packaged-factory-package-candidate-dry-run packaged-factory-package-consumer-smoke model-provider-package-smoke model-provider-package-verify model-provider-reference-input-smoke
@@ -355,7 +356,13 @@ install:
 bundle-api:
 	$(NODE) scripts/run-quiet-api-command.js bundle:rest ./api/openapi-main.yaml ./api/openapi.yaml
 
-generate-api: bundle-api generate-go-api generate-ui-api
+generate-api: bundle-api generate-go-api generate-ui-api generate-operator-config-schema
+
+generate-operator-config-schema: bundle-api
+	$(PYTHON) scripts/generate-operator-config-schema.py
+
+operator-config-schema-check:
+	$(PYTHON) scripts/generate-operator-config-schema.py --check
 
 generate-go-api: generate-go-server-api generate-go-client-api
 
@@ -409,6 +416,7 @@ api-smoke:
 	node scripts/run-quiet-api-command.js validate:main ./api/openapi-main.yaml
 	$(MAKE) generate-api
 	$(MAKE) generate-api
+	$(MAKE) operator-config-schema-check
 	node scripts/check-api-generated-drift.js
 	$(GO) test ./pkg/transports/http/contracttests -run TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/transport/http/server -run TestGeneratedClientAndServerSchemaStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)

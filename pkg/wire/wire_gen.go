@@ -715,18 +715,19 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	stdioOpener := stdio.NewOpener()
-	wireMcpServerBuilder := provideMCPServerBuilder(workingDirectory)
+	wireMcpServerBuilder := provideMCPServerBuilder(workingDirectory, operatorsettingsService, service, fileSystem, homeDirectoryResolver)
 	v96 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v72, workflowPreviewOperation, targetExecutionService)
 	openedStdioRunnerBuilder, err := application.NewOpenedStdioRunnerBuilder(managedRunnerFactory)
 	if err != nil {
 		return nil, err
 	}
 	v97 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v72, targetExecutionService)
-	v98, err := wire.NewStdioOpeningService(v68, v96, v97, openingPresentationOwner)
+	v98, err := wire.NewStdioOpeningService(v68, v96, v97, openingPresentationOwner, installPackagedFactoryOperation)
 	if err != nil {
 		return nil, err
 	}
-	processStdioApplicationOpener, err := provideStdioApplicationOpener(v98, openingPresentationOwner)
+	wireMcpProviderConfigurer := provideMCPProviderConfigurer(operatorsettingsService, service)
+	processStdioApplicationOpener, err := provideStdioApplicationOpener(v98, openingPresentationOwner, wireMcpProviderConfigurer)
 	if err != nil {
 		return nil, err
 	}
@@ -1214,6 +1215,7 @@ var BundleSet = wire5.NewSet(
 	provideInvocationOperation, application.NewStdioRunnerBuilder, application.NewOpenedStdioRunnerBuilder, provideFixtureStdioApplicationBuilder,
 	provideRuntimeStdioApplicationBuilder,
 	provideMCPServerBuilder,
+	provideMCPProviderConfigurer,
 	provideSessionExecutionOpeningFactory, wire5.Bind(new(wire.StdioExecutionOpening), new(*wire.ExecutionOpeningFactory)), wire.NewStdioOpeningService, wire5.Bind(new(wire.StdioOpeningOperation), new(*wire.StdioOpeningService)), provideStdioApplicationOpener,
 	provideDirectJavaScriptSyncRunner,
 	provideDirectJavaScriptHostAdapter, wire.NewDirectJavaScriptRunOperation, application.NewInitializer, wire.NewExecutionServiceBuilder, provideCLIExecutionServiceBuilder,

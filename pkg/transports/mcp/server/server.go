@@ -1,4 +1,4 @@
-// Package server exposes an SDK-backed stdio MCP transport for Factory Session tools.
+// Package server exposes an SDK-backed stdio MCP transport for the subagent tool.
 package server
 
 import (
@@ -30,6 +30,8 @@ type Options struct {
 	ToolOperation ToolOperation
 	ServerName    string
 	ServerVersion string
+	Resources     []ResourceRegistration
+	Skills        []SkillEntry
 }
 
 // Server owns protocol and tool registration. Stream selection and lifecycle
@@ -38,13 +40,20 @@ type Server struct {
 	sdk *mcp.Server
 }
 
-// New constructs an inert MCP server with all canonical and compatibility
-// Factory Session tools registered through the official Go SDK.
+// New constructs an inert MCP server with the generated subagent tool registered
+// through the official Go SDK.
 func New(opts Options) (*Server, error) {
 	if opts.ToolOperation == nil {
 		return nil, fmt.Errorf("mcp server requires a tool operation")
 	}
+	sdk, err := newSDKServer(opts)
+	if err != nil {
+		return nil, err
+	}
+	return &Server{sdk: sdk}, nil
+}
 
+func newSDKServer(opts Options) (*mcp.Server, error) {
 	name := strings.TrimSpace(opts.ServerName)
 	if name == "" {
 		name = defaultServerName
@@ -54,18 +63,41 @@ func New(opts Options) (*Server, error) {
 		version = defaultServerVersion
 	}
 
+	capabilities := &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}}
+	if len(opts.Resources) > 0 {
+		capabilities.Resources = &mcp.ResourceCapabilities{}
+	}
+	if len(opts.Skills) > 0 {
+		capabilities.AddExtension(skillsExtension, nil)
+	}
 	sdk := mcp.NewServer(
 		&mcp.Implementation{Name: name, Version: version},
 		&mcp.ServerOptions{
-			Capabilities: &mcp.ServerCapabilities{
-				Tools: &mcp.ToolCapabilities{},
-			},
+			Capabilities: capabilities,
 		},
 	)
+	if err := registerResources(sdk, opts.Resources); err != nil {
+		return nil, err
+	}
 	if err := registerTools(sdk, toolCaller(opts.ToolOperation)); err != nil {
 		return nil, err
 	}
-	return &Server{sdk: sdk}, nil
+	if len(opts.Skills) > 0 {
+		if err := registerSkills(sdk, opts.Skills); err != nil {
+			return nil, err
+		}
+	}
+	return sdk, nil
+}
+
+func registerResources(server *mcp.Server, resources []ResourceRegistration) error {
+	for _, resource := range resources {
+		if resource.Resource == nil || resource.Read == nil {
+			return fmt.Errorf("mcp server resource registration requires resource and read handler")
+		}
+		server.AddResource(resource.Resource, resource.Read)
+	}
+	return nil
 }
 
 type toolCaller func(context.Context, string, json.RawMessage) (json.RawMessage, error)

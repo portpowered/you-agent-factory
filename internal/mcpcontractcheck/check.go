@@ -33,6 +33,21 @@ type AliasBinding struct {
 	CanonicalToolID string
 }
 
+type ResourceRecord struct {
+	ID          string `json:"id"`
+	URI         string `json:"uri"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	MIMEType    string `json:"mimeType"`
+	Handler     string `json:"handler"`
+}
+type SkillRecord struct {
+	ID           string         `json:"id"`
+	URI          string         `json:"uri"`
+	Frontmatter  map[string]any `json:"frontmatter"`
+	ResourceURIs []string       `json:"resourceURIs"`
+}
+
 // RuntimeAliasBinding is one handwritten compatibility route. It remains
 // separate from the retained inventory so the checker can detect routing drift.
 type RuntimeAliasBinding struct {
@@ -42,11 +57,18 @@ type RuntimeAliasBinding struct {
 
 // Inputs contains every explicit value consumed by the pure parity checker.
 type Inputs struct {
-	Catalog        []ToolRecord
-	Discovery      []ToolRecord
-	Registry       []HandlerBinding
-	Aliases        []AliasBinding
-	RuntimeAliases []RuntimeAliasBinding
+	Catalog            []ToolRecord
+	Discovery          []ToolRecord
+	Registry           []HandlerBinding
+	LegacyCatalog      []ToolRecord
+	LegacyDiscovery    []ToolRecord
+	LegacyRegistry     []HandlerBinding
+	Aliases            []AliasBinding
+	RuntimeAliases     []RuntimeAliasBinding
+	Resources          []ResourceRecord
+	GeneratedResources []ResourceRecord
+	Skills             []SkillRecord
+	GeneratedSkills    []SkillRecord
 }
 
 // Diagnostic records one deterministic stable-ID parity failure.
@@ -113,6 +135,11 @@ func Validate(inputs Inputs) []Diagnostic {
 				Message: fmt.Sprintf("handwritten registry contains uncontracted tool %q; remove the binding or add the intended tool to the authored catalog", id),
 			})
 		}
+	}
+	diagnostics = append(diagnostics, resourceParityDiagnostics(inputs.Resources, inputs.GeneratedResources)...)
+	diagnostics = append(diagnostics, skillParityDiagnostics(inputs.Skills, inputs.GeneratedSkills)...)
+	if len(inputs.LegacyCatalog) > 0 || len(inputs.LegacyDiscovery) > 0 || len(inputs.LegacyRegistry) > 0 {
+		diagnostics = append(diagnostics, Validate(Inputs{Catalog: inputs.LegacyCatalog, Discovery: inputs.LegacyDiscovery, Registry: inputs.LegacyRegistry})...)
 	}
 	diagnostics = append(diagnostics, aliasBoundaryDiagnostics(aliases, aliasNames, runtimeAliases, catalog, discovery)...)
 
@@ -262,4 +289,46 @@ func normalizeJSON(value any) any {
 		return value
 	}
 	return normalized
+}
+
+func resourceParityDiagnostics(expected, actual []ResourceRecord) []Diagnostic {
+	return surfaceParityDiagnostics("resource", indexResources(expected), indexResources(actual))
+}
+
+func skillParityDiagnostics(expected, actual []SkillRecord) []Diagnostic {
+	return surfaceParityDiagnostics("skill", indexSkills(expected), indexSkills(actual))
+}
+
+func indexResources(records []ResourceRecord) map[string]any {
+	indexed := make(map[string]any, len(records))
+	for _, record := range records {
+		indexed[record.ID] = record
+	}
+	return indexed
+}
+
+func indexSkills(records []SkillRecord) map[string]any {
+	indexed := make(map[string]any, len(records))
+	for _, record := range records {
+		indexed[record.ID] = record
+	}
+	return indexed
+}
+
+func surfaceParityDiagnostics(surface string, expected, actual map[string]any) []Diagnostic {
+	var diagnostics []Diagnostic
+	for id, record := range expected {
+		got, ok := actual[id]
+		if !ok {
+			diagnostics = append(diagnostics, Diagnostic{Code: "mcp." + surface + ".missing", ToolID: id, Surface: surface, Message: fmt.Sprintf("manifest %s %q is missing from generated descriptors", surface, id)})
+		} else if !reflect.DeepEqual(normalizeJSON(record), normalizeJSON(got)) {
+			diagnostics = append(diagnostics, Diagnostic{Code: "mcp." + surface + ".metadata_mismatch", ToolID: id, Surface: surface, Message: fmt.Sprintf("generated %s %q differs from the authored manifest", surface, id)})
+		}
+	}
+	for id := range actual {
+		if _, ok := expected[id]; !ok {
+			diagnostics = append(diagnostics, Diagnostic{Code: "mcp." + surface + ".extra", ToolID: id, Surface: surface, Message: fmt.Sprintf("generated %s %q is absent from the authored manifest", surface, id)})
+		}
+	}
+	return diagnostics
 }

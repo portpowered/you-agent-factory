@@ -12,8 +12,33 @@ type DiscoveryTool struct {
 	InputSchema json.RawMessage
 }
 
+// DiscoveryResource is one generated readable MCP resource descriptor.
+type DiscoveryResource struct {
+	ID          string
+	URI         string
+	Name        string
+	Description string
+	MIMEType    string
+	Handler     string
+}
+
+// DiscoverySkill is one generated Agent Skill descriptor.
+type DiscoverySkill struct {
+	ID           string
+	URI          string
+	Frontmatter  map[string]any
+	ResourceURIs []string
+}
+
 // PrimaryDiscovery returns canonical generated discovery in stable tool-ID order.
 func PrimaryDiscovery() []DiscoveryTool {
+	return []DiscoveryTool{
+		{ID: "mcp.tool.you.subagent", Name: "you.subagent", Description: "Run one bounded subagent using packaged @you/subagent; omitted model options use operator and provider defaults.", InputSchema: json.RawMessage("{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"model\": {\n      \"description\": \"Model name; omitted values use operator defaults.\",\n      \"type\": \"string\"\n    },\n    \"prompt\": {\n      \"description\": \"Text request for the one-pass subagent.\",\n      \"type\": \"string\"\n    },\n    \"provider\": {\n      \"description\": \"Model provider; omitted values use operator defaults.\",\n      \"type\": \"string\"\n    },\n    \"reasoningEffort\": {\n      \"description\": \"Reasoning effort; omitted values use the provider default.\",\n      \"type\": \"string\"\n    },\n    \"timeoutMillis\": {\n      \"description\": \"Optional maximum wait time in milliseconds.\",\n      \"type\": \"integer\"\n    }\n  },\n  \"required\": [\n    \"prompt\"\n  ],\n  \"type\": \"object\"\n}\n")},
+	}
+}
+
+// LegacyDiscovery returns the internal Factory Session adapter catalog. It is not registered as public MCP discovery.
+func LegacyDiscovery() []DiscoveryTool {
 	return []DiscoveryTool{
 		{ID: "mcp.tool.you.factory_session.control", Name: "you.factory_session.control", Description: "Apply one durable Factory Session lifecycle control such as approve, pause, resume, cancel, terminate, or retry-dispatch. Maps to POST /factory-sessions/{session_id}/{control}.", InputSchema: json.RawMessage("{\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"approvalPreviewId\": {\n      \"type\": \"string\"\n    },\n    \"approvedPolicy\": {\n      \"additionalProperties\": true,\n      \"type\": \"object\"\n    },\n    \"dispatchId\": {\n      \"type\": \"string\"\n    },\n    \"operation\": {\n      \"enum\": [\n        \"APPROVE\",\n        \"PAUSE\",\n        \"RESUME\",\n        \"CANCEL\",\n        \"TERMINATE\",\n        \"RETRY_DISPATCH\"\n      ],\n      \"type\": \"string\"\n    },\n    \"reason\": {\n      \"type\": \"string\"\n    },\n    \"requestId\": {\n      \"type\": \"string\"\n    },\n    \"sessionId\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"sessionId\",\n    \"operation\"\n  ],\n  \"type\": \"object\"\n}\n")},
 		{ID: "mcp.tool.you.factory_session.get", Name: "you.factory_session.get", Description: "Get one durable Factory Session inspection read model with lifecycle status, source identity, phase, progress, and result summary. Maps to GET /factory-sessions/{session_id}.", InputSchema: json.RawMessage("{\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"sessionId\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"sessionId\"\n  ],\n  \"type\": \"object\"\n}\n")},
@@ -27,4 +52,25 @@ func PrimaryDiscovery() []DiscoveryTool {
 		{ID: "mcp.tool.you.factory_session.validate_source", Name: "you.factory_session.validate_source", Description: "Validate JavaScript orchestrator factory source through the canonical Factory preview contract (POST /factories/preview) before starting a Factory Session.", InputSchema: json.RawMessage("{\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"allowFactoryLookup\": {\n      \"type\": \"boolean\"\n    },\n    \"argsSchema\": {\n      \"additionalProperties\": true,\n      \"type\": \"object\"\n    },\n    \"artifactRoot\": {\n      \"type\": \"string\"\n    },\n    \"defaultPolicy\": {\n      \"additionalProperties\": true,\n      \"type\": \"object\"\n    },\n    \"inlineSource\": {\n      \"type\": \"string\"\n    },\n    \"metadata\": {\n      \"additionalProperties\": true,\n      \"type\": \"object\"\n    },\n    \"projectRoot\": {\n      \"type\": \"string\"\n    },\n    \"requestedPolicy\": {\n      \"additionalProperties\": true,\n      \"type\": \"object\"\n    },\n    \"sourceKind\": {\n      \"enum\": [\n        \"FACTORY_ID\",\n        \"FACTORY_INLINE\",\n        \"WORKFLOW_FILE\",\n        \"WORKFLOW_NAME\",\n        \"INLINE_WORKFLOW\"\n      ],\n      \"type\": \"string\"\n    },\n    \"sourceValue\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"sourceKind\"\n  ],\n  \"type\": \"object\"\n}\n")},
 		{ID: "mcp.tool.you.subagent", Name: "you.subagent", Description: "Run one bounded read-only subagent using packaged @you/subagent; omitted model options use operator and provider defaults.", InputSchema: json.RawMessage("{\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"model\": {\n      \"type\": \"string\"\n    },\n    \"prompt\": {\n      \"type\": \"string\"\n    },\n    \"provider\": {\n      \"type\": \"string\"\n    },\n    \"reasoningEffort\": {\n      \"type\": \"string\"\n    },\n    \"timeoutMillis\": {\n      \"type\": \"integer\"\n    }\n  },\n  \"required\": [\n    \"prompt\"\n  ],\n  \"type\": \"object\"\n}\n")},
 	}
+}
+
+// PrimaryResources returns manifest resources in authored order.
+func PrimaryResources() []DiscoveryResource {
+	return []DiscoveryResource{
+		{ID: "mcp.resource.subagent.skill", URI: "skill://subagent-configuration/SKILL.md", Name: "subagent-configuration", Description: "Inspect subagent providers and configure operator defaults or custom ACP providers using the operator configuration file.", MIMEType: "text/markdown", Handler: "mcp.handler.resource.subagent_skill"},
+		{ID: "mcp.resource.operator.config_schema", URI: "you://operator/config/schema", Name: "operator-config-schema", Description: "JSON Schema for the operator configuration file", MIMEType: "application/schema+json", Handler: "mcp.handler.resource.operator_config_schema"},
+		{ID: "mcp.resource.operator.current_config", URI: "you://operator/config/current", Name: "current-operator-config", Description: "Current operator configuration file, or an empty object when absent", MIMEType: "application/json", Handler: "mcp.handler.resource.operator_current_config"},
+		{ID: "mcp.resource.providers.catalog", URI: "you://providers/catalog", Name: "provider-catalog", Description: "Current provider catalog with available providers, models, reasoning efforts, and readiness", MIMEType: "application/json", Handler: "mcp.handler.resource.providers_catalog"},
+	}
+}
+
+// PrimarySkills returns manifest skills in authored order.
+func PrimarySkills() []DiscoverySkill {
+	out := make([]DiscoverySkill, 0, 1)
+	var frontmatter map[string]any
+	if err := json.Unmarshal([]byte("{\n  \"description\": \"Inspect subagent providers and configure operator defaults or custom ACP providers using the operator configuration file.\",\n  \"name\": \"subagent-configuration\"\n}\n"), &frontmatter); err != nil {
+		panic(err)
+	}
+	out = append(out, DiscoverySkill{ID: "mcp.skill.subagent_configuration", URI: "skill://subagent-configuration/SKILL.md", Frontmatter: frontmatter, ResourceURIs: []string{"skill://subagent-configuration/SKILL.md"}})
+	return out
 }

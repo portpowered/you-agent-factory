@@ -16,7 +16,7 @@ func TestAllowedArtifactsAreTheReviewedJoinedContracts(t *testing.T) {
 		"packages/api/generated/joined/contracts/common/documentation.schema.json",
 		"packages/api/generated/joined/contracts/manifest.schema.json",
 		"packages/api/generated/manifest.json",
-		"packages/api/generated/mcp/tools.json",
+		"packages/api/generated/mcp/manifest.json",
 		"packages/api/generated/openapi/openapi.yaml",
 		"packages/api/generated/schemas/factory-event.schema.json",
 		"packages/api/generated/schemas/factory-recording.schema.json",

@@ -4370,7 +4370,7 @@
       "knownLimits": [],
       "maximumExecutionCapabilities": {
         "imageInput": false,
-        "permissionBypass": false,
+        "permissionBypass": true,
         "promptSubmission": true,
         "sessionResume": false,
         "structuredOutput": false,

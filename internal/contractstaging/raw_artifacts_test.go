@@ -18,7 +18,7 @@ var exportMapRawTargets = []string{
 	"packages/api/generated/cli/command-manifest.schema.json",
 	"packages/api/generated/cli/commands.json",
 	"packages/api/generated/javascript/runtime-api.json",
-	"packages/api/generated/mcp/tools.json",
+	"packages/api/generated/mcp/manifest.json",
 	"packages/api/generated/openapi/openapi.yaml",
 	"packages/api/generated/schemas/factory.schema.json",
 	"packages/api/generated/schemas/mock-workers.schema.json",

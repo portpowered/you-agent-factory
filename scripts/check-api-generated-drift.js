@@ -7,6 +7,7 @@ const GENERATED_PATHS = [
   'pkg/transports/http/generated/server.gen.go',
   'pkg/transports/http/client/client.gen.go',
   'ui/src/api/generated/openapi.ts',
+  'pkg/transports/mcp/content/operator-config.schema.json',
 ];
 
 function runGitDiff(args) {

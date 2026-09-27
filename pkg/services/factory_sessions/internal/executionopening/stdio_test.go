@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"testing"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -50,6 +52,7 @@ func TestStdioOpeningServiceOwnsFixtureSelection(t *testing.T) {
 }
 
 func TestStdioOpeningServiceOwnsRuntimeBackedSelection(t *testing.T) {
+	home := t.TempDir()
 	opened := roles.OpenedExecutionRuntime{Execution: &ownedExecutionStub{}}
 	opening := &stdioExecutionOpeningStub{resolvedRoot: "resolved", opened: opened}
 	application := stdioApplicationStub{}
@@ -68,19 +71,21 @@ func TestStdioOpeningServiceOwnsRuntimeBackedSelection(t *testing.T) {
 			return application, nil
 		},
 		owner,
+		testSubagentInstaller(),
 	)
 	if err != nil {
 		t.Fatalf("NewStdioOpeningService: %v", err)
 	}
 
 	got, err := operation.OpenStdio(context.Background(), factorysessions.StdioOpeningRequest{
-		RuntimeBacked: true, ProjectRoot: "project", SystemConfigHome: "home",
+		RuntimeBacked: true, ProjectRoot: "project", SystemConfigHome: home,
 		ScopeID: scopeID,
 	})
 	if err != nil {
 		t.Fatalf("OpenStdio: %v", err)
 	}
-	if got != application || opening.resolvedInput != "project" || opening.opening.ProjectRoot != "resolved" || opening.opening.SystemConfigHome != "home" {
+	wantConfigPath := filepath.Join(home, ".you-agent-factory", "factories", "@you", "subagent", "factory.json")
+	if got != application || opening.resolvedInput != "project" || opening.opening.ProjectRoot != "resolved" || opening.opening.SystemConfigHome != home || opening.opening.FactoryConfigPath != wantConfigPath {
 		t.Fatalf("runtime opening = application:%v input:%q request:%#v", got, opening.resolvedInput, opening.opening)
 	}
 }
@@ -114,6 +119,7 @@ func TestStdioOpeningServiceClosesFixtureWhenApplicationBuildFails(t *testing.T)
 
 func TestStdioOpeningServiceLeavesRuntimeFailureCleanupWithBuilder(t *testing.T) {
 	buildErr := errors.New("build failed")
+	home := t.TempDir()
 	closeCount := 0
 	owner := &openingOwnerStub{}
 	scopeID, err := owner.RegisterStdio(factorysessions.StdioOpeningScope{Input: &bytes.Buffer{}, Output: &bytes.Buffer{}})
@@ -140,15 +146,28 @@ func TestStdioOpeningServiceLeavesRuntimeFailureCleanupWithBuilder(t *testing.T)
 			return nil, buildErr
 		},
 		owner,
+		testSubagentInstaller(),
 	)
 	if err != nil {
 		t.Fatalf("NewStdioOpeningService: %v", err)
 	}
 	_, err = operation.OpenStdio(context.Background(), factorysessions.StdioOpeningRequest{
-		RuntimeBacked: true, ProjectRoot: "project", ScopeID: scopeID,
+		RuntimeBacked: true, ProjectRoot: "project", SystemConfigHome: home, ScopeID: scopeID,
 	})
 	if !errors.Is(err, buildErr) || closeCount != 1 {
 		t.Fatalf("OpenStdio error = %v, close count = %d, want build error and one close", err, closeCount)
+	}
+}
+
+func testSubagentInstaller() factorydefinitions.InstallPackagedFactoryOperation {
+	return func(_ context.Context, request factorydefinitions.InstallPackagedFactoryRequest) (factorydefinitions.InstallPackagedFactoryResult, error) {
+		return factorydefinitions.InstallPackagedFactoryResult{
+			Definition: factorydefinitions.DistributedFactoryDefinitionFacts{
+				Name:       request.Name,
+				FactoryDir: filepath.Join(request.RootDir, "@you", "subagent"),
+			},
+			Format: request.Format,
+		}, nil
 	}
 }
 

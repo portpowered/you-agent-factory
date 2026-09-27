@@ -143,7 +143,7 @@ it is not a promise of deterministic content.
 | Planning and implementation | `@you/ralph` | Graph | Plans a request, iterates through every incomplete plan story, and returns only after the durable plan is complete. |
 | Bounded and iterative | `@you/review` | Graph | Produces candidate work and repeats independent review until approval or a bounded failure. |
 | Parallel investigation and selection | `@you/spawn` | JavaScript | Plans an exact number of independent tasks, runs them concurrently, and merges their results into one answer. |
-| Single bounded call | `@you/subagent` | Graph | Runs one bounded read-only subagent and returns its result. |
+| Single bounded call | `@you/subagent` | Graph | Runs one bounded subagent and returns its result. |
 | Parallel investigation and selection | `@you/tournament` | JavaScript | Runs candidates through bounded 1v1 matches, uses a judge to advance each winner, and returns the champion result. |
 | Local media | `@you/tts` | Graph | Converts submitted text to audio with the packaged local text-to-speech model. |
 | Media review | `@you/agy-clip-qa` | Graph | Gates a rendered clip against its shot specification with ANTIGRAVITY and returns a schema-validated pass-or-reroll verdict. |
@@ -752,12 +752,12 @@ you run --named @you/full-flow --no-record --quiet --max-cycles 9 --max-tasks-pe
 
 ### `@you/subagent`
 
-**Purpose and suitable use.** Use `@you/subagent` for one bounded, read-only
+**Purpose and suitable use.** Use `@you/subagent` for one bounded
 worker task that should inspect the submitted request and return a
 self-contained answer in one pass. It is useful for a focused summary,
 explanation, or repository inspection when one worker is enough. It does not
-recursively orchestrate other Factories, write to the selected workspace, or
-represent an ongoing conversational agent session; use `goal`, `review`, or a
+recursively orchestrate other Factories or represent an ongoing conversational
+agent session; use `goal`, `review`, or a
 planning Factory when the work needs iteration, implementation, or orchestration.
 
 **Invocation signature.** The live signature is:
@@ -784,10 +784,12 @@ provider's default reasoning setting. These are the only Factory-defined
 provider, model, and reasoning inputs shown by the live help output.
 
 **Prerequisites and side effects.** A live run needs a configured provider and
-model route for `subagent-worker`; the worker can inspect the request and its
-read-only workspace context but is not an implementation path for workspace
-changes. One invocation creates runtime session, Work, dispatch, and provider
-session activity, and normal recording/artifact behavior applies unless a
+model route for `subagent-worker`. Its Factory-provided workspace tools are
+read-only, while provider-native tools follow the selected provider's own
+permissions. The packaged worker requests `skipPermissions` by default on
+providers that support it. One invocation creates runtime session, Work,
+dispatch, and provider session activity. Normal recording/artifact behavior
+applies unless a
 run-level option such as `--no-record` is supplied. The worker's answer is
 bounded to one pass; a provider or child failure is terminal and does not
 produce a success-shaped primary result. The runtime session and its metadata

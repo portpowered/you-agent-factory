@@ -6552,7 +6552,7 @@
       ],
       "include": "Go AST CallExpr whose function is exec.Command or exec.CommandContext",
       "lookupExclusion": "exec.LookPath is an executable lookup, not a process-start site; it is not counted",
-      "siteCount": 69,
+      "siteCount": 71,
       "sourceRoot": "tests/functional",
       "stableIdentity": "OSSPAWN-<source-path-without-.go>-<enclosing-function>-<two-digit-occurrence>",
       "rowMapping": "37 sites have retained row IDs; 32 helper-only sites have an explicit rowMappingStatus because their source files are outside the retained C01-C07 row spine"
@@ -6588,8 +6588,8 @@
         }
       ],
       "accidentalSites": 8,
-      "intentionalSites": 61,
-      "packageCount": 23,
+      "intentionalSites": 63,
+      "packageCount": 24,
       "packageCounts": [
         {
           "count": 2,
@@ -6652,6 +6652,10 @@
           "packagePath": "tests/functional/transport/acp/realclient"
         },
         {
+          "count": 2,
+          "packagePath": "tests/functional/transport/mcp/stdio"
+        },
+        {
           "count": 1,
           "packagePath": "tests/functional/workers/agent"
         },
@@ -6684,7 +6688,7 @@
           "packagePath": "tests/functional/workers/transports/cli/run/lifecycle"
         }
       ],
-      "siteCount": 69
+      "siteCount": 71
     },
     "allowedProperties": [
       "exit-status",
@@ -7130,6 +7134,36 @@
       "verdict": "INTENTIONAL-OS",
       "requiredProperty": "descendant-cleanup",
       "assertionEvidence": "The assertion owning tests/functional/sessions/resume_from_recording/resume_from_recording_test.go:247 observes termination and cleanup of a separately launched helper process and its descendants.",
+      "conversionObligation": null,
+      "testRowIds": [],
+      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
+    },
+    {
+      "siteId": "OSSPAWN-tests-functional-transport-mcp-stdio-subagent-acp-permissions-test-TestMCPSubagentCustomACPDoesNotSkipPermission-01",
+      "packagePath": "tests/functional/transport/mcp/stdio",
+      "sourcePath": "tests/functional/transport/mcp/stdio/subagent_acp_permissions_test.go",
+      "sourceLine": 50,
+      "enclosingIdentity": "TestMCPSubagentCustomACPDoesNotSkipPermission",
+      "launcherKind": "test-helper-process",
+      "occurrence": 1,
+      "verdict": "INTENTIONAL-OS",
+      "requiredProperty": "stream-file-descriptor-behavior",
+      "assertionEvidence": "The assertion in TestMCPSubagentCustomACPDoesNotSkipPermission observes ACP JSON-RPC permission selection and completion over the child process stdio streams.",
+      "conversionObligation": null,
+      "testRowIds": [],
+      "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"
+    },
+    {
+      "siteId": "OSSPAWN-tests-functional-transport-mcp-stdio-subagent-acp-permissions-test-TestMCPSubagentCustomACPDoesNotSkipPermission-02",
+      "packagePath": "tests/functional/transport/mcp/stdio",
+      "sourcePath": "tests/functional/transport/mcp/stdio/subagent_acp_permissions_test.go",
+      "sourceLine": 52,
+      "enclosingIdentity": "TestMCPSubagentCustomACPDoesNotSkipPermission",
+      "launcherKind": "external-process-harness",
+      "occurrence": 2,
+      "verdict": "INTENTIONAL-OS",
+      "requiredProperty": "stream-file-descriptor-behavior",
+      "assertionEvidence": "The assertion in TestMCPSubagentCustomACPDoesNotSkipPermission observes a real ACP child process communicating through the configured command factory stdio boundary.",
       "conversionObligation": null,
       "testRowIds": [],
       "rowMappingStatus": "helper-only-current-source-not-in-retained-row-spine"

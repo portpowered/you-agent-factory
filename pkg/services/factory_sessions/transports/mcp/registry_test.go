@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -898,6 +899,7 @@ type subagentTargetFake struct {
 	started   bool
 	closed    bool
 	invokeErr error
+	wait      <-chan struct{}
 }
 
 func (fake *subagentTargetFake) StartAsync(_ context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
@@ -906,8 +908,15 @@ func (fake *subagentTargetFake) StartAsync(_ context.Context, request factoryses
 	return factorysessions.AsyncStartResult{SessionID: "session-1", Status: "RUNNING"}, nil
 }
 
-func (fake *subagentTargetFake) InvokeFactorySession(_ context.Context, _ string, request factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+func (fake *subagentTargetFake) InvokeFactorySession(ctx context.Context, _ string, request factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
 	fake.invoke = request
+	if fake.wait != nil {
+		select {
+		case <-fake.wait:
+		case <-ctx.Done():
+			return factorysessions.InvocationResult{}, ctx.Err()
+		}
+	}
 	if fake.invokeErr != nil {
 		return factorysessions.InvocationResult{}, fake.invokeErr
 	}
@@ -915,6 +924,33 @@ func (fake *subagentTargetFake) InvokeFactorySession(_ context.Context, _ string
 		Status:        factorysessions.InvocationTerminalStatusCompleted,
 		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "subagent answer"}},
 	}, nil
+}
+
+func TestSubagentWaitsForLongInvocationAndForwardsOneHourTimeout(t *testing.T) {
+	release := make(chan struct{})
+	target := &subagentTargetFake{wait: release}
+	timeoutMillis := int64(3_600_000)
+	finished := make(chan mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult], 1)
+	go func() {
+		finished <- mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-long" }, mcpfactorysession.SubagentInput{Prompt: "Wait for the result", TimeoutMillis: &timeoutMillis})
+	}()
+	select {
+	case response := <-finished:
+		t.Fatalf("subagent returned before provider completion: %#v", response)
+	case <-time.After(1500 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case response := <-finished:
+		if response.Error != nil || response.Result == nil || response.Result.Status != string(factorysessions.InvocationTerminalStatusCompleted) {
+			t.Fatalf("subagent response = %#v", response)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("subagent did not return after provider completion")
+	}
+	if target.invoke.TimeoutMillis == nil || *target.invoke.TimeoutMillis != timeoutMillis || !target.closed {
+		t.Fatalf("invocation timeout = %#v, closed = %t", target.invoke.TimeoutMillis, target.closed)
+	}
 }
 
 func (fake *subagentTargetFake) CloseFactorySession(_ context.Context, sessionID string) error {

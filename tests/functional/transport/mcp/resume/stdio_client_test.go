@@ -8,8 +8,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 )
 
 type stdioMCPClient struct {
@@ -113,27 +111,6 @@ func (c *stdioMCPClient) callTool(t *testing.T, name string, arguments any) mcpJ
 	})
 }
 
-func decodeToolResponse[T any](t *testing.T, response mcpJSONRPCResponse) mcpfactorysession.ToolResponse[T] {
-	t.Helper()
-	if response.Error != nil {
-		t.Fatalf("tools/call protocol error = %#v", response.Error)
-	}
-	content, ok := response.Result["content"].([]any)
-	if !ok || len(content) == 0 {
-		t.Fatalf("tools/call result missing content: %#v", response.Result)
-	}
-	first, ok := content[0].(map[string]any)
-	if !ok {
-		t.Fatalf("tools/call content[0] = %#v, want object", content[0])
-	}
-	text, _ := first["text"].(string)
-	var toolResponse mcpfactorysession.ToolResponse[T]
-	if err := json.Unmarshal([]byte(text), &toolResponse); err != nil {
-		t.Fatalf("unmarshal tool response: %v", err)
-	}
-	return toolResponse
-}
-
 func toolNamesFromListResult(t *testing.T, result map[string]any) []string {
 	t.Helper()
 	rawTools, ok := result["tools"].([]any)
@@ -150,20 +127,4 @@ func toolNamesFromListResult(t *testing.T, result map[string]any) []string {
 		names = append(names, name)
 	}
 	return names
-}
-
-func assertInstallSmokeInitialize(t *testing.T, client *stdioMCPClient) {
-	t.Helper()
-	initResult := client.call(t, "initialize", map[string]any{
-		"protocolVersion": "2024-11-05",
-		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "install-smoke", "version": "test"},
-	})
-	if initResult.Error != nil {
-		t.Fatalf("initialize error = %#v", initResult.Error)
-	}
-	protocolVersion, _ := initResult.Result["protocolVersion"].(string)
-	if protocolVersion != "2024-11-05" {
-		t.Fatalf("protocolVersion = %q, want 2024-11-05", protocolVersion)
-	}
 }

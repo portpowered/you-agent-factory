@@ -30,10 +30,27 @@ func TestValidateCleanExplicitBoundaryInputs(t *testing.T) {
 		RuntimeAliases: []mcpcontractcheck.RuntimeAliasBinding{{
 			Name: "you.workflow.status", CanonicalName: "you.factory_session.list",
 		}},
+		Resources:          []mcpcontractcheck.ResourceRecord{{ID: "mcp.resource.providers.catalog", URI: "you://providers/catalog", Name: "provider-catalog", Description: "Provider catalog", MIMEType: "application/json", Handler: "mcp.handler.providers.catalog"}},
+		GeneratedResources: []mcpcontractcheck.ResourceRecord{{ID: "mcp.resource.providers.catalog", URI: "you://providers/catalog", Name: "provider-catalog", Description: "Provider catalog", MIMEType: "application/json", Handler: "mcp.handler.providers.catalog"}},
+		Skills:             []mcpcontractcheck.SkillRecord{{ID: "mcp.skill.subagent", URI: "skill://subagent/SKILL.md", Frontmatter: map[string]any{"name": "subagent", "description": "Configure subagents"}, ResourceURIs: []string{"skill://subagent/SKILL.md"}}},
+		GeneratedSkills:    []mcpcontractcheck.SkillRecord{{ID: "mcp.skill.subagent", URI: "skill://subagent/SKILL.md", Frontmatter: map[string]any{"name": "subagent", "description": "Configure subagents"}, ResourceURIs: []string{"skill://subagent/SKILL.md"}}},
 	}
 
 	if diagnostics := mcpcontractcheck.Validate(inputs); len(diagnostics) != 0 {
 		t.Fatalf("Validate() diagnostics = %+v, want none", diagnostics)
+	}
+}
+
+func TestValidateDetectsResourceAndSkillDescriptorDrift(t *testing.T) {
+	inputs := mcpcontractcheck.Inputs{
+		Resources:          []mcpcontractcheck.ResourceRecord{{ID: "resource-a", URI: "you://a", Name: "a", Description: "a", MIMEType: "application/json", Handler: "handler-a"}},
+		GeneratedResources: []mcpcontractcheck.ResourceRecord{},
+		Skills:             []mcpcontractcheck.SkillRecord{{ID: "skill-a", URI: "skill://a/SKILL.md", Frontmatter: map[string]any{"name": "a", "description": "a"}, ResourceURIs: []string{"skill://a/SKILL.md"}}},
+		GeneratedSkills:    []mcpcontractcheck.SkillRecord{},
+	}
+	diagnostics := mcpcontractcheck.Validate(inputs)
+	if len(diagnostics) != 2 || diagnostics[0].Code != "mcp.resource.missing" || diagnostics[1].Code != "mcp.skill.missing" {
+		t.Fatalf("Validate() diagnostics = %#v, want one resource and one skill missing diagnostic", diagnostics)
 	}
 }
 

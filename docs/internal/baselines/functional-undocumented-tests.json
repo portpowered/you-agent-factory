@@ -1227,18 +1227,6 @@
       "name": "TestRecordedFactoryRedactsSecretStepAndPreservesPlainStepAcrossLifecycle"
     },
     {
-      "file": "sessions/standalone/fixture_characterization_test.go",
-      "name": "TestBTRCP0StandaloneFixtureFailureCharacterization"
-    },
-    {
-      "file": "sessions/standalone/fixture_characterization_test.go",
-      "name": "TestBTRCP0StandaloneFixtureRunsRemainIsolated"
-    },
-    {
-      "file": "sessions/standalone/fixture_characterization_test.go",
-      "name": "TestBTRCP0StandaloneFixtureSuccessCharacterization"
-    },
-    {
       "file": "smoke/cli_docs_smoke_test.go",
       "name": "TestDocsCommandSmoke_AuthoringFactoriesDescribesFactoryBuilder"
     },

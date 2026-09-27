@@ -24,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 )
@@ -34,17 +35,10 @@ phase("setup");
 log("starting");
 `
 
-// pkgmaintcheck:ignore-cyclomatic-complexity install smoke keeps discovery, validate, async start, and polling assertions on one documented stdio path.
-func TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll(t *testing.T) {
-	service := installSmokeExecutionScript{}
-	projectRoot := writeValidWorkflowFixture(t)
-
-	client, stdinWrite, serveErr := startRunServeSmokeServer(t, service)
+func TestRunServe_StdioDiscoveryMatchesSubagentCatalog(t *testing.T) {
+	client, stdinWrite, serveErr := startRunServeSmokeServer(t, installSmokeExecutionScript{})
 	assertInstallSmokeInitialize(t, client)
 	assertInstallSmokeDiscovery(t, client)
-	assertInstallSmokeValidateSuccess(t, client, projectRoot)
-	sessionID := assertInstallSmokeAsyncStart(t, client)
-	assertInstallSmokeRunningPoll(t, client, sessionID)
 	closeRunServeSmokeServer(t, stdinWrite, serveErr)
 }
 
@@ -196,11 +190,11 @@ func executeGeneratedMCPServe(
 	root.SetOut(stdout)
 	root.SetErr(io.Discard)
 	args := []string{"server", "mcp"}
-	if wantRuntime {
-		args = append(args, "--runtime")
-		if wantProjectRoot != "" {
-			args = append(args, "--project-root", wantProjectRoot)
-		}
+	if !wantRuntime {
+		args = append(args, "--fixture-catalog", "test-fixtures.json")
+	}
+	if wantProjectRoot != "" {
+		args = append(args, "--project-root", wantProjectRoot)
 	}
 	root.SetArgs(args)
 	return root.ExecuteContext(ctx)
@@ -317,15 +311,15 @@ func assertInstallSmokeDiscovery(t *testing.T, client *stdioMCPClient) {
 	t.Helper()
 	toolsResult := client.call("tools/list", map[string]any{})
 	toolNames := toolNamesFromListResult(t, toolsResult.Result)
-	for _, want := range []string{
-		mcpfactorysession.ToolValidateSource,
-		mcpfactorysession.ToolStartAsync,
-		mcpfactorysession.ToolGetSession,
-		mcpfactorysession.ToolGetResult,
-	} {
-		if !slices.Contains(toolNames, want) {
-			t.Fatalf("tools/list missing %q; got %#v", want, toolNames)
-		}
+	wantNames := make([]string, 0, len(mcpgenerated.PrimaryDiscovery()))
+	for _, tool := range mcpgenerated.PrimaryDiscovery() {
+		wantNames = append(wantNames, tool.Name)
+	}
+	if !slices.Equal(toolNames, wantNames) {
+		t.Fatalf("tools/list = %#v, want generated catalog %#v", toolNames, wantNames)
+	}
+	if len(toolNames) != 1 || toolNames[0] != mcpfactorysession.ToolSubagent {
+		t.Fatalf("tools/list = %#v, want only %q", toolNames, mcpfactorysession.ToolSubagent)
 	}
 }
 

@@ -34,7 +34,7 @@ async function createHarness(t, failMatch = "") {
 		].join("\n") + "\n",
 	);
 
-	const toolNames = ["go", "node", "npm", "nested-make"];
+	const toolNames = ["go", "node", "npm", "python", "nested-make"];
 	const toolPaths = {};
 	for (const tool of toolNames) {
 		const filename = platform === "win32" ? `${tool}.cmd` : tool;
@@ -68,6 +68,7 @@ function runMakeTarget(harness, target, extraArgs = []) {
 		`GO=${makeArgumentPath(harness.toolPaths.go)}`,
 		`NODE=${makeArgumentPath(harness.toolPaths.node)}`,
 		`NPM=${makeArgumentPath(harness.toolPaths.npm)}`,
+		`PYTHON=${makeArgumentPath(harness.toolPaths.python)}`,
 		`MAKE=${makeArgumentPath(harness.toolPaths["nested-make"])}`,
 		"BUN_BIN=",
 		"YOU_LOGICAL_CPUS=4",
@@ -101,6 +102,7 @@ function phaseForEvent(event) {
 	const [tool, command = ""] = event.split("|", 2);
 	if (tool === "nested-make") return "nested-make";
 	if (tool === "node" && (command.includes("bundle:rest") || command.includes("generate-openapi-types"))) return "generate-api";
+	if (tool === "python" && command.includes("generate-operator-config-schema.py")) return "generate-api";
 	if (tool === "npm" && command.startsWith("exec --package")) return "generate-api";
 	if (tool === "go" && command.startsWith("generate ")) return "generate-api";
 	if (tool === "npm" && command.startsWith("install")) return "ui-deps";
