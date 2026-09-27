@@ -97,6 +97,58 @@ func TestManifestRejectsSkillReferenceWithoutDeclaredResource(t *testing.T) {
 	}
 }
 
+func TestValidateManifestRejectsMalformedAndDuplicateSurfaces(t *testing.T) {
+	valid := func() discoverygen.MCPManifest {
+		return discoverygen.MCPManifest{
+			FormatVersion: "1.0.0", ProtocolVersion: "2024-11-05",
+			Tools:     []discoverygen.ManifestTool{{ID: "tool-1", Name: "tool", Description: "Tool", Handler: "handleTool", InputSchema: map[string]any{"type": "object"}}},
+			Resources: []discoverygen.ManifestResource{{ID: "resource-1", URI: "you://example", Name: "Example", Description: "Example resource", MIMEType: "text/plain", Handler: "handleResource"}},
+			Skills:    []discoverygen.ManifestSkill{{ID: "skill-1", URI: "skill://example", Frontmatter: map[string]any{"name": "example", "description": "Example skill"}, ResourceURIs: []string{"you://example"}}},
+		}
+	}
+	tests := []struct {
+		name    string
+		mutate  func(*discoverygen.MCPManifest)
+		wantErr string
+	}{
+		{name: "unsupported version", mutate: func(m *discoverygen.MCPManifest) { m.FormatVersion = "2.0.0" }, wantErr: "unsupported format or protocol version"},
+		{name: "incomplete tool", mutate: func(m *discoverygen.MCPManifest) { m.Tools[0].InputSchema = nil }, wantErr: "tool \"tool-1\" is incomplete"},
+		{name: "duplicate tool id", mutate: func(m *discoverygen.MCPManifest) { m.Tools = append(m.Tools, m.Tools[0]) }, wantErr: "tool \"tool-1\" or name \"tool\" is duplicated"},
+		{name: "duplicate tool name", mutate: func(m *discoverygen.MCPManifest) {
+			duplicate := m.Tools[0]
+			duplicate.ID = "tool-2"
+			m.Tools = append(m.Tools, duplicate)
+		}, wantErr: "or name \"tool\" is duplicated"},
+		{name: "incomplete resource", mutate: func(m *discoverygen.MCPManifest) { m.Resources[0].Handler = "" }, wantErr: "resource \"resource-1\" is incomplete"},
+		{name: "duplicate resource id", mutate: func(m *discoverygen.MCPManifest) {
+			duplicate := m.Resources[0]
+			duplicate.URI = "you://other"
+			m.Resources = append(m.Resources, duplicate)
+		}, wantErr: "resource \"resource-1\" or URI \"you://other\" is duplicated"},
+		{name: "duplicate resource uri", mutate: func(m *discoverygen.MCPManifest) {
+			duplicate := m.Resources[0]
+			duplicate.ID = "resource-2"
+			m.Resources = append(m.Resources, duplicate)
+		}, wantErr: "or URI \"you://example\" is duplicated"},
+		{name: "incomplete skill", mutate: func(m *discoverygen.MCPManifest) { m.Skills[0].ResourceURIs = nil }, wantErr: "skill \"skill-1\" is incomplete"},
+		{name: "duplicate skill id", mutate: func(m *discoverygen.MCPManifest) {
+			m.Skills[0].URI = "you://example"
+			duplicate := m.Skills[0]
+			m.Skills = append(m.Skills, duplicate)
+		}, wantErr: "skill \"skill-1\" is duplicated"},
+		{name: "skill uri undeclared", mutate: func(m *discoverygen.MCPManifest) { m.Skills[0].URI = "skill://missing" }, wantErr: "has undeclared skill URI"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifest := valid()
+			tt.mutate(&manifest)
+			if err := discoverygen.ValidateManifest(manifest); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("ValidateManifest() error = %v, want substring %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestGeneratedGoCarriesEveryManifestSurface(t *testing.T) {
 	root := testutil.MustRepoPath(t, ".")
 	payload, err := discoverygen.DiscoveryGoArtifact(root)
