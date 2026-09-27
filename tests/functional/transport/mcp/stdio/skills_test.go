@@ -70,6 +70,19 @@ func TestMCPSkillsExtensionListsGetsAndReadsPublishedSkills(t *testing.T) {
 	if !ok {
 		t.Fatalf("skills/get resources = %#v, want complete array", gotSkill["resources"])
 	}
+	assertSkillResourcesReadable(t, server, files)
+
+	resources := server.client.call("resources/list", map[string]any{})
+	if resources.Error != nil {
+		t.Fatalf("resources/list error = %#v", resources.Error)
+	}
+	// The legacy handshake used by this stdio fixture predates cacheable
+	// resources/list results; the 2026 handshake is covered by server tests.
+	assertOperatorConfigResourcesPublished(t, server, resources.Result)
+}
+
+func assertSkillResourcesReadable(t *testing.T, server *stdioMCPServer, files []any) {
+	t.Helper()
 	for _, value := range files {
 		file, ok := value.(map[string]any)
 		if !ok {
@@ -105,13 +118,6 @@ func TestMCPSkillsExtensionListsGetsAndReadsPublishedSkills(t *testing.T) {
 		}
 	}
 
-	resources := server.client.call("resources/list", map[string]any{})
-	if resources.Error != nil {
-		t.Fatalf("resources/list error = %#v", resources.Error)
-	}
-	// The legacy handshake used by this stdio fixture predates cacheable
-	// resources/list results; the 2026 handshake is covered by server tests.
-	assertOperatorConfigResourcesPublished(t, server, resources.Result)
 }
 
 // TestMCP2026SkillsDiscovery proves the current protocol discovery request and
