@@ -49,6 +49,7 @@ func TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll(t *testing.T) {
 }
 
 func TestRunServe_SubagentProtocolUsesTargetExecutionService(t *testing.T) {
+	t.Parallel()
 	target := &subagentProtocolTargetFake{}
 	client, stdinWrite, serveErr := startRunServeSmokeServerWithTarget(t, installSmokeExecutionScript{}, target)
 	initResult := client.call("initialize", map[string]any{
