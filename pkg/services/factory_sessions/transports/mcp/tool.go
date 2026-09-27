@@ -5,9 +5,14 @@ package factorysession
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -106,4 +111,116 @@ func ValidateSource(
 		return ToolResponse[factoryapi.FactoryPreviewResult]{Error: &envelope}
 	}
 	return ToolResponse[factoryapi.FactoryPreviewResult]{Result: &preview}
+}
+
+// SubagentInput is the simplified request accepted by you.subagent.
+type SubagentInput struct {
+	Prompt          string `json:"prompt"`
+	Provider        string `json:"provider,omitempty"`
+	Model           string `json:"model,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	TimeoutMillis   *int64 `json:"timeoutMillis,omitempty"`
+}
+
+// SubagentResult returns the child response as readable text with the identity
+// of the Factory Session used for the invocation.
+type SubagentResult struct {
+	SessionID string `json:"sessionId"`
+	Status    string `json:"status"`
+	Text      string `json:"text,omitempty"`
+}
+
+// Subagent invokes the packaged @you/subagent Factory through the canonical
+// on-demand target execution service.
+func Subagent(ctx context.Context, target factorysessionexecution.TargetExecutionService, workingRoot string, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) ToolResponse[SubagentResult] {
+	if err := validateSubagentRequest(ctx, target, generateID, input); err != nil {
+		var envelope ToolErrorEnvelope
+		if errors.Is(err, errMissingRequestContext) || ctx == nil || ctx.Err() != nil || target == nil {
+			envelope = executionErrorEnvelope(err)
+		} else {
+			envelope = requestValidationErrorEnvelope(err)
+		}
+		return ToolResponse[SubagentResult]{Error: &envelope}
+	}
+	requestID := generateID()
+	startArgs := map[string]any{"workingRoot": workingRoot}
+	started, err := target.StartAsync(ctx, factorysessionexecution.StartRequest{
+		RequestID: requestID,
+		Source: factorysessionexecution.Source{
+			Kind:      factoryruntime.WorkflowSourceKindFactoryID,
+			FactoryID: factorydefinitions.PackagedSubagentFactoryName,
+		},
+		Args: startArgs,
+	})
+	if err != nil {
+		return subagentExecutionFailure(err)
+	}
+	if started.SessionID == "" {
+		return subagentExecutionFailure(fmt.Errorf("subagent Factory Session identity is missing"))
+	}
+	args := subagentInvocationArgs(input)
+	invocationRequest := factorysessionexecution.InvocationRequest{
+		Args: &args, RequestID: &requestID,
+		TimeoutMillis: input.TimeoutMillis,
+	}
+	result, invokeErr := target.InvokeFactorySession(ctx, started.SessionID, invocationRequest)
+	closeErr := target.CloseFactorySession(context.WithoutCancel(ctx), started.SessionID)
+	if err := errors.Join(invokeErr, closeErr); err != nil {
+		return subagentExecutionFailure(err)
+	}
+	if result.Status != factorysessionexecution.InvocationTerminalStatusCompleted {
+		message := result.Message
+		if message == "" {
+			message = fmt.Sprintf("subagent finished with status %s", result.Status)
+		}
+		return subagentExecutionFailure(errors.New(message))
+	}
+	response := SubagentResult{SessionID: started.SessionID, Status: string(result.Status)}
+	for _, part := range result.PrimaryResult {
+		if part.Type == work.WorkContentPartTypeText {
+			if response.Text != "" {
+				response.Text += "\n"
+			}
+			response.Text += part.Text
+		}
+	}
+	return ToolResponse[SubagentResult]{Result: &response}
+}
+
+func subagentInvocationArgs(input SubagentInput) map[string]any {
+	args := map[string]any{"input": input.Prompt}
+	if input.Provider != "" {
+		args["workerProvider"] = input.Provider
+	}
+	if input.Model != "" {
+		args["workerModel"] = input.Model
+	}
+	if input.ReasoningEffort != "" {
+		args["workerReasoningEffort"] = input.ReasoningEffort
+	}
+	return args
+}
+
+func validateSubagentRequest(ctx context.Context, target factorysessionexecution.TargetExecutionService, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) error {
+	switch {
+	case ctx == nil:
+		return errMissingRequestContext
+	case ctx.Err() != nil:
+		return ctx.Err()
+	case target == nil:
+		return errors.New("Factory Session target execution service is unavailable")
+	case generateID == nil:
+		return errors.New("subagent request ID generator is unavailable")
+	case strings.TrimSpace(input.Prompt) == "":
+		return fmt.Errorf("prompt is required")
+	case input.TimeoutMillis != nil && *input.TimeoutMillis <= 0:
+		return fmt.Errorf("timeoutMillis must be greater than zero")
+	default:
+		return nil
+	}
+}
+
+func subagentExecutionFailure(err error) ToolResponse[SubagentResult] {
+	envelope := executionErrorEnvelope(err)
+	return ToolResponse[SubagentResult]{Error: &envelope}
 }

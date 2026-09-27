@@ -143,7 +143,7 @@ func executeGeneratedMCPServe(
 		}
 		server, err := mcpserver.New(mcpserver.Options{
 			ToolOperation: mcpserver.ToolOperation(mcpfactorysession.BindToolOperation(
-				service, nil, installSmokeRequestPreparation(), installSmokeWorkflowDefinitions(), target, "",
+				service, nil, installSmokeRequestPreparation(), installSmokeWorkflowDefinitions(), target, "", func() string { return "mcp-subagent-test-id" },
 			)),
 		})
 		if err != nil {

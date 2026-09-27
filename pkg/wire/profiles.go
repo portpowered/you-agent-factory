@@ -679,7 +679,7 @@ func provideMCPServerBuilder(workingDirectory platformfilesystem.WorkingDirector
 		}
 		return mcpserver.New(mcpserver.Options{
 			ToolOperation: mcpserver.ToolOperation(factorysessionmcp.BindToolOperation(
-				execution, inspection, prepare, workflowPreview, target, workingRoot,
+				execution, inspection, prepare, workflowPreview, target, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString),
 			)),
 		})
 	}

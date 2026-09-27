@@ -3768,36 +3768,177 @@
       },
       "id": "mcp.tool.you.subagent",
       "input": {
-        "arguments": {},
+        "arguments": {
+          "mcp.arg.you.subagent.model": {
+            "documentation": {
+              "documentation": {
+                "description": {
+                  "canonicalEnglish": "Model name; omitted values use operator defaults.",
+                  "id": "mcp.arg.you.subagent.model.description"
+                },
+                "title": {
+                  "canonicalEnglish": "Model",
+                  "id": "mcp.arg.you.subagent.model.title"
+                }
+              },
+              "examples": [
+                "local-model"
+              ],
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.subagent.model",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "visibility": "public"
+            },
+            "examples": [
+              "local-model"
+            ],
+            "id": "mcp.arg.you.subagent.model",
+            "name": "model",
+            "required": false,
+            "sensitivity": "public"
+          },
+          "mcp.arg.you.subagent.prompt": {
+            "documentation": {
+              "documentation": {
+                "description": {
+                  "canonicalEnglish": "Text request for the one-pass subagent.",
+                  "id": "mcp.arg.you.subagent.prompt.description"
+                },
+                "title": {
+                  "canonicalEnglish": "Prompt",
+                  "id": "mcp.arg.you.subagent.prompt.title"
+                }
+              },
+              "examples": [
+                "Summarize this release"
+              ],
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.subagent.prompt",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "visibility": "public"
+            },
+            "examples": [
+              "Summarize this release"
+            ],
+            "id": "mcp.arg.you.subagent.prompt",
+            "name": "prompt",
+            "required": true,
+            "sensitivity": "public"
+          },
+          "mcp.arg.you.subagent.provider": {
+            "documentation": {
+              "documentation": {
+                "description": {
+                  "canonicalEnglish": "Model provider; omitted values use operator defaults.",
+                  "id": "mcp.arg.you.subagent.provider.description"
+                },
+                "title": {
+                  "canonicalEnglish": "Provider",
+                  "id": "mcp.arg.you.subagent.provider.title"
+                }
+              },
+              "examples": [
+                "opencode"
+              ],
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.subagent.provider",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "visibility": "public"
+            },
+            "examples": [
+              "opencode"
+            ],
+            "id": "mcp.arg.you.subagent.provider",
+            "name": "provider",
+            "required": false,
+            "sensitivity": "public"
+          },
+          "mcp.arg.you.subagent.reasoning_effort": {
+            "documentation": {
+              "documentation": {
+                "description": {
+                  "canonicalEnglish": "Reasoning effort; omitted values use the provider default.",
+                  "id": "mcp.arg.you.subagent.reasoning_effort.description"
+                },
+                "title": {
+                  "canonicalEnglish": "Reasoning effort",
+                  "id": "mcp.arg.you.subagent.reasoning_effort.title"
+                }
+              },
+              "examples": [
+                "high"
+              ],
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.subagent.reasoning_effort",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "visibility": "public"
+            },
+            "examples": [
+              "high"
+            ],
+            "id": "mcp.arg.you.subagent.reasoning_effort",
+            "name": "reasoningEffort",
+            "required": false,
+            "sensitivity": "public"
+          },
+          "mcp.arg.you.subagent.timeout_millis": {
+            "documentation": {
+              "documentation": {
+                "description": {
+                  "canonicalEnglish": "Optional maximum wait time in milliseconds.",
+                  "id": "mcp.arg.you.subagent.timeout_millis.description"
+                },
+                "title": {
+                  "canonicalEnglish": "Timeout milliseconds",
+                  "id": "mcp.arg.you.subagent.timeout_millis.title"
+                }
+              },
+              "examples": [
+                30000
+              ],
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.subagent.timeout_millis",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "visibility": "public"
+            },
+            "examples": [
+              30000
+            ],
+            "id": "mcp.arg.you.subagent.timeout_millis",
+            "name": "timeoutMillis",
+            "required": false,
+            "sensitivity": "public"
+          }
+        },
         "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
           "additionalProperties": false,
-          "type": "object",
+          "properties": {
+            "model": {
+              "description": "Model name; omitted values use operator defaults.",
+              "type": "string"
+            },
+            "prompt": {
+              "description": "Text request for the one-pass subagent.",
+              "type": "string"
+            },
+            "provider": {
+              "description": "Model provider; omitted values use operator defaults.",
+              "type": "string"
+            },
+            "reasoningEffort": {
+              "description": "Reasoning effort; omitted values use the provider default.",
+              "type": "string"
+            },
+            "timeoutMillis": {
+              "description": "Optional maximum wait time in milliseconds.",
+              "type": "integer"
+            }
+          },
           "required": [
             "prompt"
           ],
-          "$schema": "https://json-schema.org/draft/2020-12/schema",
-          "properties": {
-            "prompt": {
-              "type": "string",
-              "description": "Text request for the one-pass subagent."
-            },
-            "timeoutMillis": {
-              "type": "integer",
-              "description": "Optional maximum wait time in milliseconds."
-            },
-            "model": {
-              "type": "string",
-              "description": "Model name; omitted values use operator defaults."
-            },
-            "reasoningEffort": {
-              "type": "string",
-              "description": "Reasoning effort; omitted values use the provider default."
-            },
-            "provider": {
-              "type": "string",
-              "description": "Model provider; omitted values use operator defaults."
-            }
-          }
+          "type": "object"
         }
       },
       "lifecycle": {
@@ -3862,30 +4003,30 @@
               {
                 "result": {
                   "sessionId": "session-1",
-                  "text": "Summary text",
-                  "status": "COMPLETED"
+                  "status": "COMPLETED",
+                  "text": "Summary text"
                 }
               }
             ],
             "schema": {
-              "additionalProperties": false,
-              "type": "object",
-              "required": [
-                "sessionId",
-                "status"
-              ],
               "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "additionalProperties": false,
               "properties": {
                 "sessionId": {
                   "type": "string"
                 },
-                "text": {
-                  "type": "string"
-                },
                 "status": {
                   "type": "string"
+                },
+                "text": {
+                  "type": "string"
                 }
-              }
+              },
+              "required": [
+                "sessionId",
+                "status"
+              ],
+              "type": "object"
             }
           }
         },
@@ -3893,8 +4034,8 @@
           {
             "content": [
               {
-                "type": "text",
-                "text": "{\"result\":{\"sessionId\":\"session-1\",\"status\":\"COMPLETED\",\"text\":\"Summary text\"}}"
+                "text": "{\"result\":{\"sessionId\":\"session-1\",\"status\":\"COMPLETED\",\"text\":\"Summary text\"}}",
+                "type": "text"
               }
             ],
             "isError": false
