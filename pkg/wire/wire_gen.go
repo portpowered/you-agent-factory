@@ -715,13 +715,13 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	stdioOpener := stdio.NewOpener()
-	wireMcpServerBuilder := provideMCPServerBuilder()
-	v96 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v72, workflowPreviewOperation)
+	wireMcpServerBuilder := provideMCPServerBuilder(workingDirectory)
+	v96 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v72, workflowPreviewOperation, targetExecutionService)
 	openedStdioRunnerBuilder, err := application.NewOpenedStdioRunnerBuilder(managedRunnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v97 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v72)
+	v97 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v72, targetExecutionService)
 	v98, err := wire.NewStdioOpeningService(v68, v96, v97, openingPresentationOwner)
 	if err != nil {
 		return nil, err

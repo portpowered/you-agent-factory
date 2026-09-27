@@ -374,6 +374,35 @@
         ],
         "type": "object"
       }
+    },
+    "mcp.tool.you.subagent": {
+      "id": "mcp.tool.you.subagent",
+      "name": "you.subagent",
+      "description": "Run one bounded read-only subagent using packaged @you/subagent; omitted model options use operator and provider defaults.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "reasoningEffort": {
+            "type": "string"
+          },
+          "timeoutMillis": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      }
     }
   }
 }

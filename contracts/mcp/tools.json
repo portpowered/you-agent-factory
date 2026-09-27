@@ -3731,6 +3731,182 @@
       "transports": {
         "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.transports_stdio/transports"
       }
+    },
+    "mcp.tool.you.subagent": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Run one bounded read-only subagent using packaged @you/subagent; omitted model options use operator and provider defaults.",
+            "id": "mcp.tool.you.subagent.description"
+          },
+          "title": {
+            "canonicalEnglish": "Run subagent",
+            "id": "mcp.tool.you.subagent.title"
+          }
+        },
+        "examples": [
+          {
+            "prompt": "Summarize this release"
+          }
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.subagent",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "visibility": "public"
+      },
+      "execution": {
+        "mode": "tools-call"
+      },
+      "handler": {
+        "id": "mcp.handler.you.subagent"
+      },
+      "id": "mcp.tool.you.subagent",
+      "input": {
+        "arguments": {},
+        "schema": {
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "prompt"
+          ],
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "description": "Text request for the one-pass subagent."
+            },
+            "timeoutMillis": {
+              "type": "integer",
+              "description": "Optional maximum wait time in milliseconds."
+            },
+            "model": {
+              "type": "string",
+              "description": "Model name; omitted values use operator defaults."
+            },
+            "reasoningEffort": {
+              "type": "string",
+              "description": "Reasoning effort; omitted values use the provider default."
+            },
+            "provider": {
+              "type": "string",
+              "description": "Model provider; omitted values use operator defaults."
+            }
+          }
+        }
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.subagent",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "you.subagent",
+      "result": {
+        "domain": {
+          "failures": {
+            "mcp.failure.you.factory_session.start_sync.request_id_conflict": {
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.start.request_id_conflict",
+                    "message": "execution request id was reused with a different start tuple",
+                    "retryable": false
+                  }
+                }
+              ],
+              "id": "mcp.failure.you.factory_session.start_sync.request_id_conflict",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              }
+            },
+            "mcp.failure.you.factory_session.start_sync.service_unavailable": {
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.service.unavailable",
+                    "message": "factory session execution service is unavailable",
+                    "retryable": false
+                  }
+                }
+              ],
+              "id": "mcp.failure.you.factory_session.start_sync.service_unavailable",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              }
+            },
+            "mcp.failure.you.factory_session.start_sync.validation_failed": {
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.start.validation_failed",
+                    "message": "factory session source validation failed",
+                    "retryable": false,
+                    "sessionId": "dur-sess-pending-001"
+                  }
+                }
+              ],
+              "id": "mcp.failure.you.factory_session.start_sync.validation_failed",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              }
+            }
+          },
+          "success": {
+            "examples": [
+              {
+                "result": {
+                  "sessionId": "session-1",
+                  "text": "Summary text",
+                  "status": "COMPLETED"
+                }
+              }
+            ],
+            "schema": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "sessionId",
+                "status"
+              ],
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "properties": {
+                "sessionId": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "examples": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"result\":{\"sessionId\":\"session-1\",\"status\":\"COMPLETED\",\"text\":\"Summary text\"}}"
+              }
+            ],
+            "isError": false
+          }
+        ],
+        "transport": {
+          "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.result_transport_serialized_json/resultTransport"
+        }
+      },
+      "transports": {
+        "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.transports_stdio/transports"
+      }
     }
   }
 }

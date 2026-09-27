@@ -6,9 +6,8 @@ doc-id: agent-factory/guides/mcp
 
 # MCP Host Setup
 
-Use this guide to install `you` in an MCP host, choose a backing mode, and
-verify the Factory Session tools. `you docs mcp` is the only packaged MCP setup
-topic.
+Use this guide to install `you` in an MCP host, run a subagent, and inspect
+Factory Sessions. `you docs mcp` is the packaged MCP setup topic.
 
 ## Start The Stdio Server
 
@@ -46,10 +45,39 @@ No extra environment variables are required. A generic host configuration is:
 ```
 
 For Cursor, save that object in project `.cursor/mcp.json` or global
-`~/.cursor/mcp.json`, then reload the window. Codex, OpenCode, Kiro, Gemini, and
-other stdio MCP hosts use the same executable, arguments, and working-directory
-contract in their MCP settings. Restart or reload the host after changing it so
-the host respawns the child process.
+`~/.cursor/mcp.json`, then reload the window. Other stdio MCP hosts use the
+same executable, arguments, and working-directory contract. Restart or reload
+the host after changing it so the host respawns the child process.
+
+For OpenCode, add the local server with its installed CLI:
+
+```text
+opencode mcp add you-agent-factory --global -- /absolute/path/to/you server mcp
+opencode mcp list
+```
+
+The list must show `you-agent-factory` connected. Set the OpenCode workspace to
+the project whose files the subagent should inspect. OpenCode starts the MCP
+child from that workspace.
+
+## Run A Subagent
+
+Call `you.subagent` with a short `prompt`:
+
+```json
+{"prompt":"Summarize the purpose of this repository in one sentence."}
+```
+
+The tool runs one bounded `@you/subagent` Factory invocation and returns its
+answer as `result.text`. Optional `provider`, `model`, and `reasoningEffort`
+fields select the worker route for that call. Omit them to use the operator's
+configured provider and model and the provider's default reasoning effort.
+The subagent can inspect the workspace with read-only tools. Each call opens
+and closes its own Factory Session.
+
+If no provider default is configured, run `you init --provider codex` or supply
+`provider` in the tool call. `you.subagent` is available in both MCP backing
+modes; the mode controls the separate durable JavaScript Factory Session tools.
 
 ## Choose A Backing Mode
 
@@ -58,7 +86,7 @@ only in how Factory Sessions execute.
 
 | Mode | Host arguments | Use it for |
 |------|----------------|------------|
-| Fixture-backed (default) | `["server", "mcp"]` | Deterministic install smoke and offline fixture scenarios |
+| Fixture-backed (default) | `["server", "mcp"]` | Deterministic durable-session smoke and live `you.subagent` calls |
 | Runtime-backed | `["server", "mcp", "--runtime"]` | Live durable JavaScript workflow execution |
 
 The equivalent runtime-backed child-process command is:
@@ -92,7 +120,7 @@ deterministic catalog scenarios.
 
 ## Use Canonical Factory Session Tools
 
-Tool discovery exposes this primary catalog:
+Tool discovery exposes `you.subagent` and this Factory Session catalog:
 
 | Tool | Task |
 |------|------|
@@ -162,7 +190,7 @@ go test ./tests/functional/smoke -run TestDocsCommandSmoke
 
 | Symptom or outcome | Action |
 |--------------------|--------|
-| Host cannot start `you` | Use an absolute executable path, confirm it is executable, and keep `args` as separate `mcp` and `serve` values. |
+| Host cannot start `you` | Use an absolute executable path, confirm it is executable, and keep `server` and `mcp` as separate arguments. |
 | No tools appear | Reload the host, inspect child-process stderr, and confirm stdout is not receiving logs or shell banners. |
 | `fixture catalog not found` | Start from the repository/project root that contains the catalog or pass an absolute `--fixture-catalog` path. |
 | Named workflow or source is not found | Set `cwd` to the project root or use runtime mode with an explicit `--project-root`; confirm the source exists under a supported source location. |

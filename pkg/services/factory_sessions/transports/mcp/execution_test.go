@@ -593,6 +593,8 @@ func TestToolOperationRejectsMissingContext(t *testing.T) {
 		nil,
 		canonicalMCPRequestPreparation,
 		nil,
+		nil,
+		"",
 	)
 	if _, err := operation(nil, mcpfactorysession.ToolListSessions, json.RawMessage(`{}`)); err == nil || !strings.Contains(err.Error(), "context is required") {
 		t.Fatalf("ToolOperation(nil context) error = %v, want required-context error", err)

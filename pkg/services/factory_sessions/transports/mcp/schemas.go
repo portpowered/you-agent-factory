@@ -150,6 +150,16 @@ func factorySessionExecutionRequestSchema() map[string]any {
 	}, "requestId", "source")
 }
 
+func subagentInputSchema() map[string]any {
+	return objectSchema(map[string]any{
+		"prompt":          stringProperty("Text request for the one-pass subagent."),
+		"provider":        stringProperty("Model provider. Omit to use operator defaults."),
+		"model":           stringProperty("Model name. Omit to use operator defaults."),
+		"reasoningEffort": stringProperty("Reasoning effort. Omit to use the provider default."),
+		"timeoutMillis":   integerProperty("Optional maximum wait time for the subagent result."),
+	}, "prompt")
+}
+
 func factorySessionExecutionResponseSchema() map[string]any {
 	return objectSchema(map[string]any{
 		"sessionId":           stringProperty("Stable durable Factory Session identifier."),

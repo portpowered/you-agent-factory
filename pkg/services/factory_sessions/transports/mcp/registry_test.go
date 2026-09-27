@@ -15,14 +15,15 @@ import (
 
 func TestDiscoverTools_ExposesExpectedFactorySessionTools(t *testing.T) {
 	tools := mcpfactorysession.DiscoverTools()
-	if len(tools) != 10 {
-		t.Fatalf("tool count = %d, want 10", len(tools))
+	if len(tools) != 11 {
+		t.Fatalf("tool count = %d, want 11", len(tools))
 	}
 
 	wantNames := []string{
 		mcpfactorysession.ToolListSessions,
 		mcpfactorysession.ToolValidateSource,
 		mcpfactorysession.ToolStartSync,
+		mcpfactorysession.ToolSubagent,
 		mcpfactorysession.ToolStartAsync,
 		mcpfactorysession.ToolGetSession,
 		mcpfactorysession.ToolGetResult,
@@ -91,6 +92,28 @@ func TestDiscoverTools_EachToolHasSchemasDescriptionsAndStableFields(t *testing.
 	}
 }
 
+func TestSubagentToolDocumentsTextResultContract(t *testing.T) {
+	tool, ok := mcpfactorysession.ToolByName(mcpfactorysession.ToolSubagent)
+	if !ok {
+		t.Fatal("you.subagent tool is missing")
+	}
+	properties := tool.OutputSchema["properties"].(map[string]any)
+	result := properties["result"].(map[string]any)
+	resultProperties := result["properties"].(map[string]any)
+	for _, field := range []string{"sessionId", "status", "text"} {
+		if _, exists := resultProperties[field]; !exists {
+			t.Errorf("you.subagent result schema is missing %q", field)
+		}
+	}
+	if _, exists := resultProperties["syncOutcome"]; exists {
+		t.Fatal("you.subagent result schema exposes the sync execution response")
+	}
+	wantStableFields := []string{"result.sessionId", "result.status", "result.text"}
+	if !slices.Equal(tool.SuccessStableFields, wantStableFields) {
+		t.Fatalf("success stable fields = %#v, want %#v", tool.SuccessStableFields, wantStableFields)
+	}
+}
+
 func TestDiscoverTools_UsesFactorySessionVocabularyNotWorkflowPreviewPrimarySurface(t *testing.T) {
 	forbidden := []string{
 		"/workflow-previews",
@@ -109,7 +132,8 @@ func TestDiscoverTools_UsesFactorySessionVocabularyNotWorkflowPreviewPrimarySurf
 			}
 		}
 		if !strings.Contains(tool.Description, "Factory Session") &&
-			tool.Name != mcpfactorysession.ToolValidateSource {
+			tool.Name != mcpfactorysession.ToolValidateSource &&
+			tool.Name != mcpfactorysession.ToolSubagent {
 			t.Fatalf("tool %q description should mention Factory Session vocabulary", tool.Name)
 		}
 	}

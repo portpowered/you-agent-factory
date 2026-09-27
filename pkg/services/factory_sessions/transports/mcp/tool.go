@@ -24,6 +24,7 @@ const (
 	ToolListArtifacts  = "you.factory_session.list_artifacts"
 	ToolControl        = "you.factory_session.control"
 	ToolReadEvents     = "you.factory_session.read_events"
+	ToolSubagent       = "you.subagent"
 )
 
 // Stable error envelope fields shared by every dynamic workflow MCP tool.

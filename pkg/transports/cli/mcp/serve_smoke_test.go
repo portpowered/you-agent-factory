@@ -96,7 +96,7 @@ func executeGeneratedMCPServe(
 		}
 		server, err := mcpserver.New(mcpserver.Options{
 			ToolOperation: mcpserver.ToolOperation(mcpfactorysession.BindToolOperation(
-				service, nil, installSmokeRequestPreparation(), installSmokeWorkflowDefinitions(),
+				service, nil, installSmokeRequestPreparation(), installSmokeWorkflowDefinitions(), nil, "",
 			)),
 		})
 		if err != nil {
