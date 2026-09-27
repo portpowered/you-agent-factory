@@ -102,10 +102,11 @@ shows changes made after the MCP server started. The file is located at
 values from that file out of shared transcripts.
 
 The MCP tool catalog includes `you.provider.list_providers` to inspect the
-available provider names, `you.operator_settings.set_subagent_defaults` to set
-the default provider and model, and `you.operator_settings.add_acp_provider` to
-register a custom ACP command. For example, after registering a local OpenCode
-command, set its name as the default provider:
+available provider names and `you.provider.get_provider` to read the full
+descriptor for a provider ID. Use `you.operator_settings.set_subagent_defaults`
+to set the default provider and model, and `you.operator_settings.add_acp_provider`
+to register a custom ACP command. For example, after registering a local
+OpenCode command, set its name as the default provider:
 
 ```json
 {"name":"you.operator_settings.add_acp_provider","arguments":{"name":"local-opencode","command":"/absolute/path/to/opencode acp"}}

@@ -394,6 +394,14 @@ func mcpConfigurationTools(settings operatorsettings.Service, providerService pr
 			},
 		},
 		{
+			Name:        providersmcp.ToolGetProvider,
+			Description: "Get the full descriptor for one provider using its canonical provider ID.",
+			InputSchema: []byte(`{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"}},"required":["id"]}`),
+			Call: func(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
+				return providersmcp.CallTool(ctx, providerService, name, raw)
+			},
+		},
+		{
 			Name:        operatorsettingsmcp.ToolSetSubagentDefaults,
 			Description: "Set the operator-wide default subagent provider and/or model using the canonical operator configuration path.",
 			InputSchema: []byte(`{"type":"object","additionalProperties":false,"properties":{"provider":{"type":"string"},"model":{"type":"string"}},"minProperties":1}`),

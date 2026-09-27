@@ -1,56 +1,118 @@
 package stdio_test
 
 import (
-	"context"
 	"encoding/json"
+	"strings"
 	"testing"
-
-	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	providersmcp "github.com/portpowered/infinite-you/pkg/services/providers/transports/mcp"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
-// TestMCPProviderCatalogAdapterReadsTheRuntimeCatalog exercises the Providers
-// MCP adapter against the real, inert Providers root and catalog composition.
-func TestMCPProviderCatalogAdapterReadsTheRuntimeCatalog(t *testing.T) {
-	names := providersmcp.ToolNames()
-	if len(names) == 0 || names[0] != providersmcp.ToolListProviders {
-		t.Fatalf("provider MCP tool catalog = %v, want list providers first", names)
-	}
-	service, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("construct Providers service: %v", err)
+// TestMCPProviderCatalogReadsTheRuntimeCatalog exercises provider discovery
+// through the canonical runtime composition and the public stdio MCP surface.
+func TestMCPProviderCatalogReadsTheRuntimeCatalog(t *testing.T) {
+	server := startRuntimeBackedMCPServerWithHome(t, t.TempDir(), t.TempDir())
+	defer server.cleanup()
+	if result := server.client.call("initialize", map[string]any{
+		"protocolVersion": "2024-11-05",
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "provider-catalog-test", "version": "test"},
+	}); result.Error != nil {
+		t.Fatalf("initialize error = %#v", result.Error)
 	}
 
-	call := func(name string, input string) json.RawMessage {
-		t.Helper()
-		raw, callErr := providersmcp.CallTool(context.Background(), service, name, json.RawMessage(input))
-		if callErr != nil {
-			t.Fatalf("CallTool(%s): %v", name, callErr)
+	listing := server.client.call("tools/call", map[string]any{
+		"name": "you.provider.list_providers", "arguments": map[string]any{},
+	})
+	if listing.Error != nil || listing.Result["isError"] == true {
+		t.Fatalf("provider catalog = %#v error=%#v", listing.Result, listing.Error)
+	}
+	content, ok := listing.Result["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatalf("provider catalog content = %#v, want provider catalog", listing.Result["content"])
+	}
+	item, ok := content[0].(map[string]any)
+	if !ok {
+		t.Fatalf("provider catalog content item = %#v", content[0])
+	}
+	text, _ := item["text"].(string)
+	var response struct {
+		Result struct {
+			Providers []struct {
+				ID          string `json:"id"`
+				DisplayName string `json:"displayName"`
+			} `json:"providers"`
+		} `json:"result"`
+		Error *json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(text), &response); err != nil {
+		t.Fatalf("decode provider catalog response %q: %v", text, err)
+	}
+	if response.Error != nil || len(response.Result.Providers) == 0 {
+		t.Fatalf("provider catalog response = %#v, want successful nonempty catalog", response)
+	}
+	for _, provider := range response.Result.Providers {
+		if strings.TrimSpace(provider.ID) == "" || strings.TrimSpace(provider.DisplayName) == "" {
+			t.Fatalf("provider descriptor = %#v, want ID and display name", provider)
 		}
-		return raw
 	}
 
-	var listed providersmcp.ToolResponse[providers.ListProvidersResult]
-	if err := json.Unmarshal(call(providersmcp.ToolListProviders, `{}`), &listed); err != nil {
-		t.Fatalf("decode list providers response: %v", err)
+	providerID := response.Result.Providers[0].ID
+	details := server.client.call("tools/call", map[string]any{
+		"name": "you.provider.get_provider", "arguments": map[string]any{"id": providerID},
+	})
+	if details.Error != nil || details.Result["isError"] == true {
+		t.Fatalf("provider details for %q = %#v error=%#v", providerID, details.Result, details.Error)
 	}
-	if listed.Error != nil || listed.Result == nil {
-		t.Fatalf("list providers response = %#v, want successful catalog", listed)
+	detailContent, ok := details.Result["content"].([]any)
+	if !ok || len(detailContent) == 0 {
+		t.Fatalf("provider detail content = %#v", details.Result["content"])
 	}
-	if len(listed.Result.Providers) == 0 {
-		t.Fatal("real provider catalog is empty")
+	detailItem, ok := detailContent[0].(map[string]any)
+	if !ok {
+		t.Fatalf("provider detail content item = %#v", detailContent[0])
 	}
+	detailText, _ := detailItem["text"].(string)
+	var detailResponse struct {
+		Result struct {
+			Provider struct {
+				ID          string `json:"id"`
+				DisplayName string `json:"displayName"`
+			} `json:"provider"`
+		} `json:"result"`
+		Error *json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(detailText), &detailResponse); err != nil {
+		t.Fatalf("decode provider detail response %q: %v", detailText, err)
+	}
+	if detailResponse.Error != nil || detailResponse.Result.Provider.ID != providerID || detailResponse.Result.Provider.DisplayName == "" {
+		t.Fatalf("provider detail response = %#v, want descriptor for %q", detailResponse, providerID)
+	}
+	assertMissingProviderCatalogLookup(t, server)
+}
 
-	providerID := listed.Result.Providers[0].ID
-	var got providersmcp.ToolResponse[providers.GetProviderResult]
-	if err := json.Unmarshal(call(providersmcp.ToolGetProvider, `{"id":"`+string(providerID)+`"}`), &got); err != nil {
-		t.Fatalf("decode get provider response: %v", err)
+func assertMissingProviderCatalogLookup(t *testing.T, server *stdioMCPServer) {
+	t.Helper()
+	missing := server.client.call("tools/call", map[string]any{
+		"name": "you.provider.get_provider", "arguments": map[string]any{"id": "mcp-functional-missing-provider"},
+	})
+	if missing.Error != nil || missing.Result["isError"] == true {
+		t.Fatalf("missing provider lookup = %#v error=%#v, want stable tool error envelope", missing.Result, missing.Error)
 	}
-	if got.Error != nil || got.Result == nil {
-		t.Fatalf("get provider response = %#v, want successful descriptor", got)
+	missingContent, ok := missing.Result["content"].([]any)
+	if !ok || len(missingContent) == 0 {
+		t.Fatalf("missing provider content = %#v", missing.Result["content"])
 	}
-	if got.Result.Provider.ID != providerID || got.Result.Provider.DisplayName == "" {
-		t.Fatalf("get provider descriptor = %#v, want listed provider %q with a display name", got.Result.Provider, providerID)
+	missingItem, ok := missingContent[0].(map[string]any)
+	if !ok {
+		t.Fatalf("missing provider content item = %#v", missingContent[0])
+	}
+	missingText, _ := missingItem["text"].(string)
+	var missingResponse struct {
+		Error *json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(missingText), &missingResponse); err != nil {
+		t.Fatalf("decode missing provider response %q: %v", missingText, err)
+	}
+	if missingResponse.Error == nil {
+		t.Fatalf("missing provider response = %s, want stable error envelope", missingText)
 	}
 }
