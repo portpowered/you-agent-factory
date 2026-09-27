@@ -743,8 +743,8 @@ func stdioLifecycleOpening(
 }
 
 type stdioApplicationOpener struct {
-	open          factorysessionwire.StdioOpeningOperation
-	presentations factorysessions.OpeningPresentationOwner
+	open               factorysessionwire.StdioOpeningOperation
+	presentations      factorysessions.OpeningPresentationOwner
 	configureProviders mcpProviderConfigurer
 }
 
