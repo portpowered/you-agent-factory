@@ -671,3 +671,47 @@ func assertEnvelopeDoesNotLeakInternalPaths(t *testing.T, raw json.RawMessage) {
 		t.Fatalf("tool response leaks internal package path: %s", raw)
 	}
 }
+
+func TestSubagentRejectsInputsOutsidePublishedSchemaBeforeStartingSession(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		input  string
+		reason string
+	}{
+		{name: "null input", input: `null`, reason: "input must be an object"},
+		{name: "missing prompt", input: `{}`, reason: "prompt is required"},
+		{name: "null prompt", input: `{"prompt":null}`, reason: "prompt must not be null"},
+		{name: "blank prompt", input: `{"prompt":" \n\t "}`, reason: "prompt is required"},
+		{name: "number prompt", input: `{"prompt":42}`, reason: "cannot unmarshal number"},
+		{name: "zero timeout", input: `{"prompt":"hello","timeoutMillis":0}`, reason: "timeoutMillis must be greater than zero"},
+		{name: "negative timeout", input: `{"prompt":"hello","timeoutMillis":-1}`, reason: "timeoutMillis must be greater than zero"},
+		{name: "string timeout", input: `{"prompt":"hello","timeoutMillis":"1000"}`, reason: "cannot unmarshal string"},
+		{name: "null provider", input: `{"prompt":"hello","provider":null}`, reason: "provider must not be null"},
+		{name: "null model", input: `{"prompt":"hello","model":null}`, reason: "model must not be null"},
+		{name: "null effort", input: `{"prompt":"hello","reasoningEffort":null}`, reason: "reasoningEffort must not be null"},
+		{name: "null timeout", input: `{"prompt":"hello","timeoutMillis":null}`, reason: "timeoutMillis must not be null"},
+		{name: "unknown field", input: `{"prompt":"hello","unknownOption":"ignored?"}`, reason: `unknown field "unknownOption"`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			target := &subagentTargetFake{}
+			operation := mcpfactorysession.BindToolOperation(nil, nil, nil, nil, target, "C:/project", func() string { return "request-1" })
+			raw, err := operation(context.Background(), mcpfactorysession.ToolSubagent, json.RawMessage(test.input))
+			if err != nil {
+				t.Fatalf("CallTool() transport error = %v", err)
+			}
+			var response mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult]
+			if err := json.Unmarshal(raw, &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response.Error == nil || response.Error.Code != "BAD_REQUEST" || !strings.Contains(response.Error.Message, test.reason) {
+				t.Fatalf("response = %#v, want BAD_REQUEST containing %q", response, test.reason)
+			}
+			if target.started {
+				t.Fatal("invalid input started a Factory Session")
+			}
+		})
+	}
+}

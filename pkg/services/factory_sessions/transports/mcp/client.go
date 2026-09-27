@@ -1,10 +1,12 @@
 package factorysession
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 
@@ -89,6 +91,37 @@ func callToolJSON[Input any, Output any](
 	return json.Marshal(handler(request))
 }
 
+func callSubagentJSON(input json.RawMessage, handler func(SubagentInput) ToolResponse[SubagentResult]) (json.RawMessage, error) {
+	var request SubagentInput
+	decoder := json.NewDecoder(bytes.NewReader(input))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		envelope := decodeInputErrorEnvelope("decode subagent input", err)
+		return json.Marshal(ToolResponse[SubagentResult]{Error: &envelope})
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		envelope := decodeInputErrorEnvelope("decode subagent input", fmt.Errorf("unexpected trailing JSON value"))
+		return json.Marshal(ToolResponse[SubagentResult]{Error: &envelope})
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(input, &fields); err != nil {
+		envelope := decodeInputErrorEnvelope("decode subagent input", err)
+		return json.Marshal(ToolResponse[SubagentResult]{Error: &envelope})
+	}
+	if fields == nil {
+		envelope := decodeInputErrorEnvelope("decode subagent input", errors.New("input must be an object"))
+		return json.Marshal(ToolResponse[SubagentResult]{Error: &envelope})
+	}
+	for _, field := range []string{"prompt", "provider", "model", "reasoningEffort", "timeoutMillis"} {
+		if value, present := fields[field]; present && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			envelope := decodeInputErrorEnvelope("decode subagent input", fmt.Errorf("%s must not be null", field))
+			return json.Marshal(ToolResponse[SubagentResult]{Error: &envelope})
+		}
+	}
+	return json.Marshal(handler(request))
+}
+
 type canonicalToolHandler func(
 	context.Context,
 	DurableExecution,
@@ -158,7 +191,7 @@ var canonicalToolHandlersByID = map[string]canonicalToolBinding{
 		})
 	}),
 	stableToolID(ToolSubagent): handwrittenToolBinding(ToolSubagent, func(ctx context.Context, _ DurableExecution, _ RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, _ RecordingsInspection, target factorysessionexecution.TargetExecutionService, workingRoot string, generateID factorysessionexecution.SessionIDGenerator, input json.RawMessage) (json.RawMessage, error) {
-		return callToolJSON(input, "decode subagent input", func(request SubagentInput) ToolResponse[SubagentResult] {
+		return callSubagentJSON(input, func(request SubagentInput) ToolResponse[SubagentResult] {
 			return Subagent(ctx, target, workingRoot, generateID, request)
 		})
 	}),
