@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -275,6 +276,110 @@ func TestSkillsCapabilityAdvertisedFor2026Protocol(t *testing.T) {
 	discover, _ := runRawRequestAtVersion(t, server, "2026-07-28", `{"jsonrpc":"2.0","id":22,"method":"server/discover","params":{}}`)
 	if !strings.Contains(discover, skillsExtension) {
 		t.Fatalf("server/discover response = %s, want skills extension declaration", discover)
+	}
+}
+
+func TestSkillsValidationAndPagination(t *testing.T) {
+	t.Parallel()
+
+	valid := SkillEntry{
+		URI:         "skill://valid/SKILL.md",
+		Frontmatter: map[string]any{"name": "valid", "description": "Valid skill"},
+		Resources:   []SkillResource{{URI: "skill://valid/SKILL.md", Digest: "sha256:abc", Size: 3}},
+	}
+	tests := []struct {
+		name    string
+		entries []SkillEntry
+	}{
+		{name: "missing fields", entries: []SkillEntry{{}}},
+		{name: "missing name", entries: []SkillEntry{{URI: valid.URI, Frontmatter: map[string]any{"description": "x"}, Resources: "dynamic"}}},
+		{name: "missing description", entries: []SkillEntry{{URI: valid.URI, Frontmatter: map[string]any{"name": "x"}, Resources: "dynamic"}}},
+		{name: "unsupported dynamic marker", entries: []SkillEntry{{URI: valid.URI, Frontmatter: valid.Frontmatter, Resources: "other"}}},
+		{name: "empty manifest", entries: []SkillEntry{{URI: valid.URI, Frontmatter: valid.Frontmatter, Resources: []SkillResource{}}}},
+		{name: "duplicate URI", entries: []SkillEntry{valid, valid}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := New(Options{ToolOperation: scriptedToolOperation(nil, nil), Skills: test.entries}); err == nil {
+				t.Fatal("New() error = nil, want invalid skill registration error")
+			}
+		})
+	}
+
+	entries := make([]SkillEntry, skillPageSize+1)
+	for i := range entries {
+		entries[i] = SkillEntry{
+			URI:         "skill://valid/SKILL.md",
+			Frontmatter: valid.Frontmatter,
+			Resources:   "dynamic",
+		}
+	}
+	first, err := makeListSkillsResult(entries, nil)
+	if err != nil || len(first.Skills) != skillPageSize || first.NextCursor != strconv.Itoa(skillPageSize) {
+		t.Fatalf("first page = (%d skills, cursor %q), %v", len(first.Skills), first.NextCursor, err)
+	}
+	last, err := makeListSkillsResult(entries, &listSkillsParams{Cursor: first.NextCursor})
+	if err != nil || len(last.Skills) != 1 || last.NextCursor != "" {
+		t.Fatalf("last page = (%d skills, cursor %q), %v", len(last.Skills), last.NextCursor, err)
+	}
+	for _, cursor := range []string{"not-a-number", "-1", "102"} {
+		if _, err := makeListSkillsResult(entries, &listSkillsParams{Cursor: cursor}); err == nil {
+			t.Errorf("makeListSkillsResult(cursor %q) error = nil", cursor)
+		}
+	}
+}
+
+func TestAdditionalToolRegistrationValidationAndCall(t *testing.T) {
+	t.Parallel()
+
+	base := Options{ToolOperation: scriptedToolOperation(nil, nil)}
+	for _, tool := range []ToolRegistration{
+		{Name: "missing-handler", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		{Name: "missing-schema", Call: scriptedToolOperation(nil, nil)},
+		{Name: "invalid-json", Call: scriptedToolOperation(nil, nil), InputSchema: json.RawMessage(`{`)},
+		{Name: "non-object-schema", Call: scriptedToolOperation(nil, nil), InputSchema: json.RawMessage(`{"type":"string"}`)},
+	} {
+		if _, err := New(Options{ToolOperation: base.ToolOperation, AdditionalTools: []ToolRegistration{tool}}); err == nil {
+			t.Errorf("New(additional tool %q) error = nil", tool.Name)
+		}
+	}
+
+	server, err := New(Options{
+		ToolOperation: base.ToolOperation,
+		AdditionalTools: []ToolRegistration{{
+			Name: "you.test.extra", InputSchema: json.RawMessage(`{"type":"object"}`),
+			Call: func(_ context.Context, name string, _ json.RawMessage) (json.RawMessage, error) {
+				if name != "you.test.extra" {
+					return nil, errors.New("unexpected tool name")
+				}
+				return json.RawMessage(`{"ok":true}`), nil
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := runRawRequest(t, server, `{"jsonrpc":"2.0","id":40,"method":"tools/list","params":{}}`)
+	if !strings.Contains(response, "you.test.extra") {
+		t.Fatalf("tools/list = %s, missing custom tool", response)
+	}
+	response = runRawRequest(t, server, `{"jsonrpc":"2.0","id":41,"method":"tools/call","params":{"name":"you.test.extra","arguments":{}}}`)
+	if !strings.Contains(response, `\"ok\":true`) {
+		t.Fatalf("tools/call = %s, missing custom result", response)
+	}
+}
+
+func TestServeValidatesServerAndTransport(t *testing.T) {
+	t.Parallel()
+	if err := (*Server)(nil).Serve(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "server is required") {
+		t.Fatalf("Serve(nil server) error = %v", err)
+	}
+	server, err := New(Options{ToolOperation: scriptedToolOperation(nil, nil)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := server.Serve(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "transport is required") {
+		t.Fatalf("Serve(nil transport) error = %v", err)
 	}
 }
 
