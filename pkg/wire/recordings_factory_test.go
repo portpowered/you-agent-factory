@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -70,14 +71,14 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 		t.Fatal("provideRecordingsRuntimeOpening(nil) error = nil, want capability validation")
 	}
 
-	buildServer := provideMCPServerBuilder()
+	buildServer := provideMCPServerBuilder(platformfilesystem.Local{})
 	if buildServer == nil {
 		t.Fatal("provideMCPServerBuilder() returned nil")
 	}
-	if server, err := buildServer(nil, nil, nil, nil); err != nil || server == nil {
+	if server, err := buildServer(nil, nil, nil, nil, nil); err != nil || server == nil {
 		t.Fatalf("buildServer(nil roles) = %v, %v; want inert protocol server", server, err)
 	}
-	if server, err := buildServer(nil, root, nil, nil); err != nil || server == nil {
+	if server, err := buildServer(nil, root, nil, nil, nil); err != nil || server == nil {
 		t.Fatalf("buildServer(recordings root) = %v, %v; want owner-backed protocol server", server, err)
 	}
 

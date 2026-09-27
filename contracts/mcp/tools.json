@@ -3731,6 +3731,323 @@
       "transports": {
         "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.transports_stdio/transports"
       }
+    },
+    "mcp.tool.you.subagent": {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Run one bounded read-only subagent using packaged @you/subagent; omitted model options use operator and provider defaults.",
+            "id": "mcp.tool.you.subagent.description"
+          },
+          "title": {
+            "canonicalEnglish": "Run subagent",
+            "id": "mcp.tool.you.subagent.title"
+          }
+        },
+        "examples": [
+          {
+            "prompt": "Summarize this release"
+          }
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.subagent",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "visibility": "public"
+      },
+      "execution": {
+        "mode": "tools-call"
+      },
+      "handler": {
+        "id": "mcp.handler.you.subagent"
+      },
+      "id": "mcp.tool.you.subagent",
+      "input": {
+        "arguments": {
+          "mcp.arg.you.subagent.model": {
+            "documentation": {
+              "documentation": {
+                "description": {
+                  "canonicalEnglish": "Model name; omitted values use operator defaults.",
+                  "id": "mcp.arg.you.subagent.model.description"
+                },
+                "title": {
+                  "canonicalEnglish": "Model",
+                  "id": "mcp.arg.you.subagent.model.title"
+                }
+              },
+              "examples": [
+                "local-model"
+              ],
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.subagent.model",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "visibility": "public"
+            },
+            "examples": [
+              "local-model"
+            ],
+            "id": "mcp.arg.you.subagent.model",
+            "name": "model",
+            "required": false,
+            "sensitivity": "public"
+          },
+          "mcp.arg.you.subagent.prompt": {
+            "documentation": {
+              "documentation": {
+                "description": {
+                  "canonicalEnglish": "Text request for the one-pass subagent.",
+                  "id": "mcp.arg.you.subagent.prompt.description"
+                },
+                "title": {
+                  "canonicalEnglish": "Prompt",
+                  "id": "mcp.arg.you.subagent.prompt.title"
+                }
+              },
+              "examples": [
+                "Summarize this release"
+              ],
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.subagent.prompt",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "visibility": "public"
+            },
+            "examples": [
+              "Summarize this release"
+            ],
+            "id": "mcp.arg.you.subagent.prompt",
+            "name": "prompt",
+            "required": true,
+            "sensitivity": "public"
+          },
+          "mcp.arg.you.subagent.provider": {
+            "documentation": {
+              "documentation": {
+                "description": {
+                  "canonicalEnglish": "Model provider; omitted values use operator defaults.",
+                  "id": "mcp.arg.you.subagent.provider.description"
+                },
+                "title": {
+                  "canonicalEnglish": "Provider",
+                  "id": "mcp.arg.you.subagent.provider.title"
+                }
+              },
+              "examples": [
+                "opencode"
+              ],
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.subagent.provider",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "visibility": "public"
+            },
+            "examples": [
+              "opencode"
+            ],
+            "id": "mcp.arg.you.subagent.provider",
+            "name": "provider",
+            "required": false,
+            "sensitivity": "public"
+          },
+          "mcp.arg.you.subagent.reasoning_effort": {
+            "documentation": {
+              "documentation": {
+                "description": {
+                  "canonicalEnglish": "Reasoning effort; omitted values use the provider default.",
+                  "id": "mcp.arg.you.subagent.reasoning_effort.description"
+                },
+                "title": {
+                  "canonicalEnglish": "Reasoning effort",
+                  "id": "mcp.arg.you.subagent.reasoning_effort.title"
+                }
+              },
+              "examples": [
+                "high"
+              ],
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.subagent.reasoning_effort",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "visibility": "public"
+            },
+            "examples": [
+              "high"
+            ],
+            "id": "mcp.arg.you.subagent.reasoning_effort",
+            "name": "reasoningEffort",
+            "required": false,
+            "sensitivity": "public"
+          },
+          "mcp.arg.you.subagent.timeout_millis": {
+            "documentation": {
+              "documentation": {
+                "description": {
+                  "canonicalEnglish": "Optional maximum wait time in milliseconds.",
+                  "id": "mcp.arg.you.subagent.timeout_millis.description"
+                },
+                "title": {
+                  "canonicalEnglish": "Timeout milliseconds",
+                  "id": "mcp.arg.you.subagent.timeout_millis.title"
+                }
+              },
+              "examples": [
+                30000
+              ],
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.subagent.timeout_millis",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "visibility": "public"
+            },
+            "examples": [
+              30000
+            ],
+            "id": "mcp.arg.you.subagent.timeout_millis",
+            "name": "timeoutMillis",
+            "required": false,
+            "sensitivity": "public"
+          }
+        },
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "description": "Model name; omitted values use operator defaults.",
+              "type": "string"
+            },
+            "prompt": {
+              "description": "Text request for the one-pass subagent.",
+              "type": "string"
+            },
+            "provider": {
+              "description": "Model provider; omitted values use operator defaults.",
+              "type": "string"
+            },
+            "reasoningEffort": {
+              "description": "Reasoning effort; omitted values use the provider default.",
+              "type": "string"
+            },
+            "timeoutMillis": {
+              "description": "Optional maximum wait time in milliseconds.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "prompt"
+          ],
+          "type": "object"
+        }
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.subagent",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "you.subagent",
+      "result": {
+        "domain": {
+          "failures": {
+            "mcp.failure.you.factory_session.start_sync.request_id_conflict": {
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.start.request_id_conflict",
+                    "message": "execution request id was reused with a different start tuple",
+                    "retryable": false
+                  }
+                }
+              ],
+              "id": "mcp.failure.you.factory_session.start_sync.request_id_conflict",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              }
+            },
+            "mcp.failure.you.factory_session.start_sync.service_unavailable": {
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.service.unavailable",
+                    "message": "factory session execution service is unavailable",
+                    "retryable": false
+                  }
+                }
+              ],
+              "id": "mcp.failure.you.factory_session.start_sync.service_unavailable",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              }
+            },
+            "mcp.failure.you.factory_session.start_sync.validation_failed": {
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.start.validation_failed",
+                    "message": "factory session source validation failed",
+                    "retryable": false,
+                    "sessionId": "dur-sess-pending-001"
+                  }
+                }
+              ],
+              "id": "mcp.failure.you.factory_session.start_sync.validation_failed",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              }
+            }
+          },
+          "success": {
+            "examples": [
+              {
+                "result": {
+                  "sessionId": "session-1",
+                  "status": "COMPLETED",
+                  "text": "Summary text"
+                }
+              }
+            ],
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "additionalProperties": false,
+              "properties": {
+                "sessionId": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sessionId",
+                "status"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "examples": [
+          {
+            "content": [
+              {
+                "text": "{\"result\":{\"sessionId\":\"session-1\",\"status\":\"COMPLETED\",\"text\":\"Summary text\"}}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        ],
+        "transport": {
+          "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.result_transport_serialized_json/resultTransport"
+        }
+      },
+      "transports": {
+        "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.transports_stdio/transports"
+      }
     }
   }
 }

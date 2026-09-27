@@ -45,6 +45,10 @@ func TestProjectCanonicalRepositoryInventories(t *testing.T) {
 			StableID: "mcp/mcp.tool.you.factory_session.get", Interface: InterfaceMCP,
 			Identity: "mcp.tool.you.factory_session.get", Name: "you.factory_session.get", Classification: ClassificationTool,
 		},
+		"mcp/mcp.tool.you.subagent": {
+			StableID: "mcp/mcp.tool.you.subagent", Interface: InterfaceMCP,
+			Identity: "mcp.tool.you.subagent", Name: "you.subagent", Classification: ClassificationTool,
+		},
 		"sse/getEventsBySessionId": {
 			StableID: "sse/getEventsBySessionId", Interface: InterfaceSSE, Identity: "getEventsBySessionId",
 			Name: "getEventsBySessionId", Classification: ClassificationEventStream,

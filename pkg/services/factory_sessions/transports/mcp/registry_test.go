@@ -1,7 +1,9 @@
 package factorysession_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"reflect"
 	"slices"
@@ -9,20 +11,25 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestDiscoverTools_ExposesExpectedFactorySessionTools(t *testing.T) {
 	tools := mcpfactorysession.DiscoverTools()
-	if len(tools) != 10 {
-		t.Fatalf("tool count = %d, want 10", len(tools))
+	if len(tools) != 11 {
+		t.Fatalf("tool count = %d, want 11", len(tools))
 	}
 
 	wantNames := []string{
 		mcpfactorysession.ToolListSessions,
 		mcpfactorysession.ToolValidateSource,
 		mcpfactorysession.ToolStartSync,
+		mcpfactorysession.ToolSubagent,
 		mcpfactorysession.ToolStartAsync,
 		mcpfactorysession.ToolGetSession,
 		mcpfactorysession.ToolGetResult,
@@ -91,6 +98,28 @@ func TestDiscoverTools_EachToolHasSchemasDescriptionsAndStableFields(t *testing.
 	}
 }
 
+func TestSubagentToolDocumentsTextResultContract(t *testing.T) {
+	tool, ok := mcpfactorysession.ToolByName(mcpfactorysession.ToolSubagent)
+	if !ok {
+		t.Fatal("you.subagent tool is missing")
+	}
+	properties := tool.OutputSchema["properties"].(map[string]any)
+	result := properties["result"].(map[string]any)
+	resultProperties := result["properties"].(map[string]any)
+	for _, field := range []string{"sessionId", "status", "text"} {
+		if _, exists := resultProperties[field]; !exists {
+			t.Errorf("you.subagent result schema is missing %q", field)
+		}
+	}
+	if _, exists := resultProperties["syncOutcome"]; exists {
+		t.Fatal("you.subagent result schema exposes the sync execution response")
+	}
+	wantStableFields := []string{"result.sessionId", "result.status", "result.text"}
+	if !slices.Equal(tool.SuccessStableFields, wantStableFields) {
+		t.Fatalf("success stable fields = %#v, want %#v", tool.SuccessStableFields, wantStableFields)
+	}
+}
+
 func TestDiscoverTools_UsesFactorySessionVocabularyNotWorkflowPreviewPrimarySurface(t *testing.T) {
 	forbidden := []string{
 		"/workflow-previews",
@@ -109,7 +138,8 @@ func TestDiscoverTools_UsesFactorySessionVocabularyNotWorkflowPreviewPrimarySurf
 			}
 		}
 		if !strings.Contains(tool.Description, "Factory Session") &&
-			tool.Name != mcpfactorysession.ToolValidateSource {
+			tool.Name != mcpfactorysession.ToolValidateSource &&
+			tool.Name != mcpfactorysession.ToolSubagent {
 			t.Fatalf("tool %q description should mention Factory Session vocabulary", tool.Name)
 		}
 	}
@@ -859,4 +889,75 @@ func cloneToolDefinitions(t *testing.T, tools []mcpfactorysession.ToolDefinition
 		t.Fatalf("unmarshal tool definitions: %v", err)
 	}
 	return cloned
+}
+
+type subagentTargetFake struct {
+	factorysessions.TargetExecutionService
+	start     factorysessions.StartRequest
+	invoke    factorysessions.InvocationRequest
+	started   bool
+	closed    bool
+	invokeErr error
+}
+
+func (fake *subagentTargetFake) StartAsync(_ context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+	fake.start = request
+	fake.started = true
+	return factorysessions.AsyncStartResult{SessionID: "session-1", Status: "RUNNING"}, nil
+}
+
+func (fake *subagentTargetFake) InvokeFactorySession(_ context.Context, _ string, request factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+	fake.invoke = request
+	if fake.invokeErr != nil {
+		return factorysessions.InvocationResult{}, fake.invokeErr
+	}
+	return factorysessions.InvocationResult{
+		Status:        factorysessions.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "subagent answer"}},
+	}, nil
+}
+
+func (fake *subagentTargetFake) CloseFactorySession(_ context.Context, sessionID string) error {
+	fake.closed = sessionID == "session-1"
+	return nil
+}
+
+func TestSubagentRunsPackagedFactoryWithDefaultsAndReturnsText(t *testing.T) {
+	target := &subagentTargetFake{}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-1" }, mcpfactorysession.SubagentInput{Prompt: "Summarize this"})
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("Subagent response = %#v", response)
+	}
+	if response.Result.Text != "subagent answer" || response.Result.SessionID != "session-1" {
+		t.Fatalf("Subagent result = %#v", response.Result)
+	}
+	if target.start.Source.Kind != factoryruntime.WorkflowSourceKindFactoryID || target.start.Source.FactoryID != factorydefinitions.PackagedSubagentFactoryName {
+		t.Fatalf("start source = %#v", target.start.Source)
+	}
+	if target.start.Args["workingRoot"] != "C:/project" {
+		t.Fatalf("workingRoot = %#v", target.start.Args)
+	}
+	if got := *target.invoke.Args; len(got) != 1 || got["input"] != "Summarize this" {
+		t.Fatalf("default invocation args = %#v", got)
+	}
+	if !target.started || !target.closed {
+		t.Fatalf("lifecycle start=%t close=%t", target.started, target.closed)
+	}
+}
+
+func TestSubagentForwardsModelOverridesAndCleansUpOnInvocationFailure(t *testing.T) {
+	target := &subagentTargetFake{invokeErr: errors.New("provider unavailable")}
+	response := mcpfactorysession.Subagent(context.Background(), target, "", func() string { return "request-2" }, mcpfactorysession.SubagentInput{
+		Prompt: "Explain this", Provider: "opencode", Model: "local-model", ReasoningEffort: "high",
+	})
+	if response.Error == nil || response.Result != nil {
+		t.Fatalf("Subagent response = %#v", response)
+	}
+	args := *target.invoke.Args
+	if args["workerProvider"] != "opencode" || args["workerModel"] != "local-model" || args["workerReasoningEffort"] != "high" {
+		t.Fatalf("override args = %#v", args)
+	}
+	if !target.closed {
+		t.Fatal("Factory Session was not closed after invocation failure")
+	}
 }

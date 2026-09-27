@@ -96,12 +96,18 @@ func (r *drainReader) finish() error {
 }
 
 type drainWriter struct {
+	mu sync.Mutex
 	io.Writer
 	drain  *responseDrain
 	buffer []byte
 }
 
 func (w *drainWriter) Write(payload []byte) (int, error) {
+	// MCP can emit responses to concurrent calls from separate goroutines.
+	// Serialize the physical write and matching observation so JSON-RPC lines
+	// cannot interleave and the observation buffer follows the wire order.
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	n, err := w.Writer.Write(payload)
 	w.buffer = observeLines(w.buffer, payload[:n], func(line []byte) { w.drain.observe(line, false) })
 	return n, err

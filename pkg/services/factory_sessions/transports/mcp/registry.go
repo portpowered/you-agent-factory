@@ -192,6 +192,7 @@ func DiscoverTools() []ToolDefinition {
 		listSessionsTool(),
 		validateSourceTool(),
 		startSyncTool(),
+		subagentTool(),
 		startAsyncTool(),
 		getSessionTool(),
 		getResultTool(),
@@ -199,6 +200,22 @@ func DiscoverTools() []ToolDefinition {
 		listArtifactsTool(),
 		controlTool(),
 		readEventsTool(),
+	}
+}
+
+func subagentTool() ToolDefinition {
+	return ToolDefinition{
+		Name: ToolSubagent,
+		Description: "Run one bounded read-only subagent using the packaged @you/subagent Factory. " +
+			"Omitted provider, model, and reasoning effort use operator and provider defaults.",
+		InputSchema: subagentInputSchema(),
+		OutputSchema: toolResponseSchema(objectSchema(map[string]any{
+			"sessionId": stringProperty("Stable identity of the Factory Session used for this subagent invocation."),
+			"status":    stringProperty("Terminal status of the subagent invocation."),
+			"text":      stringProperty("Text returned by the subagent."),
+		}, "sessionId", "status")),
+		SuccessStableFields: []string{"result.sessionId", "result.status", "result.text"},
+		ErrorStableFields:   sharedErrorStableFields,
 	}
 }
 

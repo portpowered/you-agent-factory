@@ -19,6 +19,7 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
@@ -47,9 +48,54 @@ func TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll(t *testing.T) {
 	closeRunServeSmokeServer(t, stdinWrite, serveErr)
 }
 
+func TestRunServe_SubagentProtocolUsesTargetExecutionService(t *testing.T) {
+	t.Parallel()
+	target := &subagentProtocolTargetFake{}
+	client, stdinWrite, serveErr := startRunServeSmokeServerWithTarget(t, installSmokeExecutionScript{}, target)
+	initResult := client.call("initialize", map[string]any{
+		"protocolVersion": "2024-11-05",
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "subagent-smoke", "version": "test"},
+	})
+	if initResult.Error != nil {
+		t.Fatalf("initialize error = %#v", initResult.Error)
+	}
+	toolNames := toolNamesFromListResult(t, client.call("tools/list", map[string]any{}).Result)
+	if !slices.Contains(toolNames, mcpfactorysession.ToolSubagent) {
+		t.Fatalf("tools/list missing %q; got %#v", mcpfactorysession.ToolSubagent, toolNames)
+	}
+	response := decodeToolResponse[mcpfactorysession.SubagentResult](t,
+		client.callTool(mcpfactorysession.ToolSubagent, map[string]any{"prompt": "Summarize this"}),
+	)
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("you.subagent response = %#v, want success", response)
+	}
+	if response.Result.Status != "COMPLETED" || response.Result.Text != "The short answer." {
+		t.Fatalf("you.subagent result = %#v, want completed text", response.Result)
+	}
+	if !slices.Equal(target.operations, []string{"start", "invoke", "close"}) {
+		t.Fatalf("target operations = %#v, want start → invoke → close", target.operations)
+	}
+	if target.start.Source.FactoryID != "@you/subagent" || target.start.Source.Kind != factory.WorkflowSourceKindFactoryID {
+		t.Fatalf("target start source = %#v", target.start.Source)
+	}
+	if target.invoke.Args == nil || (*target.invoke.Args)["input"] != "Summarize this" || len(*target.invoke.Args) != 1 {
+		t.Fatalf("target invocation args = %#v, want prompt only and defaults omitted", target.invoke.Args)
+	}
+	closeRunServeSmokeServer(t, stdinWrite, serveErr)
+}
+
 func startRunServeSmokeServer(
 	t *testing.T,
 	service mcpfactorysession.DurableExecution,
+) (*stdioMCPClient, *os.File, <-chan error) {
+	return startRunServeSmokeServerWithTarget(t, service, nil)
+}
+
+func startRunServeSmokeServerWithTarget(
+	t *testing.T,
+	service mcpfactorysession.DurableExecution,
+	target factorysessions.TargetExecutionService,
 ) (*stdioMCPClient, *os.File, <-chan error) {
 	t.Helper()
 	stdinRead, stdinWrite, err := os.Pipe()
@@ -72,7 +118,7 @@ func startRunServeSmokeServer(
 
 	serveErr := make(chan error, 1)
 	go func() {
-		serveErr <- executeGeneratedMCPServe(ctx, service, stdinRead, stdoutWrite, false, "")
+		serveErr <- executeGeneratedMCPServe(ctx, service, target, stdinRead, stdoutWrite, false, "")
 	}()
 	return newStdioMCPClient(t, stdinWrite, stdoutRead), stdinWrite, serveErr
 }
@@ -80,6 +126,7 @@ func startRunServeSmokeServer(
 func executeGeneratedMCPServe(
 	ctx context.Context,
 	service mcpfactorysession.DurableExecution,
+	target factorysessions.TargetExecutionService,
 	stdin io.Reader,
 	stdout io.Writer,
 	wantRuntime bool,
@@ -96,7 +143,7 @@ func executeGeneratedMCPServe(
 		}
 		server, err := mcpserver.New(mcpserver.Options{
 			ToolOperation: mcpserver.ToolOperation(mcpfactorysession.BindToolOperation(
-				service, nil, installSmokeRequestPreparation(), installSmokeWorkflowDefinitions(),
+				service, nil, installSmokeRequestPreparation(), installSmokeWorkflowDefinitions(), target, "", func() string { return "mcp-subagent-test-id" },
 			)),
 		})
 		if err != nil {
@@ -456,6 +503,46 @@ func decodeToolResponse[T any](t *testing.T, response mcpJSONRPCResponse) mcpfac
 
 type installSmokeExecutionScript struct {
 	mcpfactorysession.DurableExecution
+}
+
+type subagentProtocolTargetFake struct {
+	factorysessions.TargetExecutionService
+	operations []string
+	start      factorysessions.StartRequest
+	invoke     factorysessions.InvocationRequest
+}
+
+func (fake *subagentProtocolTargetFake) StartAsync(
+	_ context.Context,
+	request factorysessions.StartRequest,
+) (factorysessions.AsyncStartResult, error) {
+	fake.operations = append(fake.operations, "start")
+	fake.start = request
+	return factorysessions.AsyncStartResult{SessionID: "target-session-1", Status: "RUNNING"}, nil
+}
+
+func (fake *subagentProtocolTargetFake) InvokeFactorySession(
+	_ context.Context,
+	sessionID string,
+	request factorysessions.InvocationRequest,
+) (factorysessions.InvocationResult, error) {
+	fake.operations = append(fake.operations, "invoke")
+	if sessionID != "target-session-1" {
+		return factorysessions.InvocationResult{}, fmt.Errorf("unexpected target session %q", sessionID)
+	}
+	fake.invoke = request
+	return factorysessions.InvocationResult{
+		Status:        factorysessions.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "The short answer."}},
+	}, nil
+}
+
+func (fake *subagentProtocolTargetFake) CloseFactorySession(_ context.Context, sessionID string) error {
+	fake.operations = append(fake.operations, "close")
+	if sessionID != "target-session-1" {
+		return fmt.Errorf("unexpected target session %q", sessionID)
+	}
+	return nil
 }
 
 func (installSmokeExecutionScript) StartAsync(
