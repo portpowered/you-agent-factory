@@ -93,19 +93,6 @@ type OpenedApplicationRuntime struct {
 	ResumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
 }
 
-type OpenedProcessApplication struct {
-	Plan                   lifecycle.Plan
-	Diagnostics            factoryruntime.RuntimeLogDiagnostics
-	Ready                  <-chan initializer.RuntimeHostBinding
-	CleanInvocation        factoryruntime.Service
-	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
-	ResumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
-	// HostedInvocation is a narrow operation result for the hosted CLI path;
-	// it is not the opened runtime's HTTP service table.
-	HostedInvocation HostedInvocationOperation
-	HistoricalReplay *factorysessions.HistoricalReplayInspection
-}
-
 type OpenedInvocationRuntime struct {
 	Workers        workers.Service
 	ModelInvoker   workers.ModelInvoker

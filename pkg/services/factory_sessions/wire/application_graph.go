@@ -8,7 +8,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	applicationopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/applicationopening"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors/persistence"
 	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
@@ -75,15 +74,9 @@ type (
 	RuntimeResources                     = roles.RuntimeResources
 	RuntimeVisualizationServices         = roles.RuntimeVisualizationServices
 	OpenedApplicationRuntime             = roles.OpenedApplicationRuntime
-	OpenedProcessApplication             = roles.OpenedProcessApplication
 	OpenedInvocationRuntime              = roles.OpenedInvocationRuntime
 	OpenedExecutionRuntime               = roles.OpenedExecutionRuntime
 	RuntimeOpeningCapability             = roles.RuntimeOpening
-
-	ApplicationRuntimeInputs        = applicationopening.RuntimeInputs
-	ApplicationRuntimeInputResolver = applicationopening.RuntimeInputResolver
-	RuntimeAdapter                  = applicationopening.RuntimeAdapter
-	ApplicationService              = applicationopening.Service
 
 	SyncWaitScheduler = execution.SyncWaitScheduler
 
@@ -260,15 +253,6 @@ func NewRuntimeOpening(
 
 func NewLifecyclePlanOperation() LifecyclePlanOperation {
 	return processlifecycle.NewLifecyclePlanOperation()
-}
-
-func NewApplicationService(
-	resolveInputs ApplicationRuntimeInputResolver,
-	openRuntime ApplicationRuntimeOpening,
-	adaptRuntime RuntimeAdapter,
-	planLifecycle LifecyclePlanOperation,
-) (*ApplicationService, error) {
-	return applicationopening.New(resolveInputs, openRuntime, adaptRuntime, planLifecycle)
 }
 
 func NewInvocationOperation(

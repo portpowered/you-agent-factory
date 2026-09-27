@@ -683,15 +683,15 @@ func TestRuntimeInputResolverCopiesRequestWithoutSelectingEffects(t *testing.T) 
 	request := &factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "factory"},
 	}
-	resolved, err := provideRuntimeInputResolver()(t.Context(), request)
+	resolved, err := copyWireRuntimeOpeningRequest(t.Context(), request)
 	if err != nil {
 		t.Fatalf("resolve inputs: %v", err)
 	}
-	if resolved.Request == request || resolved.Request.FactoryDefinition.Directory != "factory" {
-		t.Fatalf("resolved request = %#v; want detached value", resolved.Request)
+	if resolved == request || resolved.FactoryDefinition.Directory != "factory" {
+		t.Fatalf("resolved request = %#v; want detached value", resolved)
 	}
 	request.FactoryDefinition.Directory = "mutated"
-	if resolved.Request.FactoryDefinition.Directory != "factory" {
+	if resolved.FactoryDefinition.Directory != "factory" {
 		t.Fatal("resolved request retained caller mutation")
 	}
 }
@@ -763,7 +763,7 @@ func TestRuntimeInputResolverRejectsMissingRequiredInputs(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := provideRuntimeInputResolver()(test.ctx, test.request)
+			_, err := copyWireRuntimeOpeningRequest(test.ctx, test.request)
 			if err == nil || err.Error() != test.want {
 				t.Fatalf("error = %v, want %q", err, test.want)
 			}

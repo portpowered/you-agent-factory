@@ -431,8 +431,6 @@ var BundleSet = wire.NewSet(
 	provideWorkStopSummaryProjector,
 	provideRuntimeOpeningRequestFactory,
 	provideRunOpener,
-	provideRuntimeInputResolver,
-	factorysessionwire.NewApplicationService,
 	initializerapplication.NewRuntimeRunnerBuilder,
 	provideRunRuntimeRunnerBuilder,
 	provideRunSelectionFactory,

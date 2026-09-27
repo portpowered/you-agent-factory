@@ -566,7 +566,7 @@ func provideApplicationRuntimeAdapter(
 	visualizationSinks factoryvisualization.RuntimeSinkOwner,
 	httpBinding httpRuntimeBinding,
 	newRunner lifecycle.RunnerFactory,
-) (factorysessionwire.RuntimeAdapter, error) {
+) (runRuntimeAdapter, error) {
 	if visualizationFactory == nil || visualizationSinks == nil || httpBinding == nil || newRunner == nil {
 		return nil, errors.New("Factory visualization, HTTP binding, and lifecycle component operations are required")
 	}
