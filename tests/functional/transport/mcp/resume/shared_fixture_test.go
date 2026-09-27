@@ -151,7 +151,7 @@ func newMCPResumePackageFixture(t *testing.T) (*mcpResumePackageFixture, error) 
 	fixture.serverStarts.Add(1)
 	go func() {
 		fixture.serveErr <- fixture.process.Execute(root.Input{
-			Args:             []string{"you", "server", "mcp", "--runtime", "--project-root", fixture.projectRoot},
+			Args:             []string{"you", "server", "mcp", "--project-root", fixture.projectRoot},
 			Env:              env,
 			Stdin:            fixture.stdinRead,
 			Stdout:           fixture.stdoutWrite,

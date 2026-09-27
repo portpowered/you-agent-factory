@@ -131,7 +131,7 @@ func TestMCPStdioRuntimeRejectsMissingHomeEnvironment(t *testing.T) {
 	inputs.WorkingDirectory = workingDirectory
 	err := executeMCPProcess(t, process, inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), "home directory is not defined in the supplied environment") {
-		t.Fatalf("Process.Execute(you server mcp --runtime) error = %v, want missing-home diagnostic", err)
+		t.Fatalf("Process.Execute(you server mcp) error = %v, want missing-home diagnostic", err)
 	}
 }
 
