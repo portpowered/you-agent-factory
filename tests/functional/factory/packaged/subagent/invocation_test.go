@@ -129,7 +129,7 @@ func testPackagedSubagentPropagatesLunaXHighReasoningEffort(t *testing.T, fixtur
 		t.Fatalf("response = %#v, want completed", response)
 	}
 	want := []string{
-		"exec", "--json",
+		"exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
 		"--model", "gpt-5.6-luna",
 		"--config", `model_reasoning_effort="xhigh"`,
 		"-",
@@ -153,7 +153,7 @@ func testPackagedSubagentOmittedReasoningEffortPreservesProviderDefault(t *testi
 		t.Fatalf("response = %#v, want completed", response)
 	}
 	want := []string{
-		"exec", "--json",
+		"exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
 		"--model", "gpt-5.6-luna",
 		"-",
 	}
