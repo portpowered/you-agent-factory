@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/mcp/manifest.schema.json",
+  "title": "You MCP surface manifest",
+  "description": "Authored MCP tools, resources, and skills published to MCP clients.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formatVersion", "protocolVersion", "tools", "resources", "skills"],
+  "properties": {
+    "formatVersion": { "const": "1.0.0" },
+    "protocolVersion": { "const": "2024-11-05" },
+    "tools": { "type": "array", "items": { "$ref": "#/$defs/tool" } },
+    "resources": { "type": "array", "items": { "$ref": "#/$defs/resource" } },
+    "skills": { "type": "array", "items": { "$ref": "#/$defs/skill" } }
+  },
+  "$defs": {
+    "tool": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "name", "description", "inputSchema", "handler"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^mcp[.]tool[.].+" },
+        "name": { "type": "string", "pattern": "^you[.][a-z0-9_]+(?:[.][a-z0-9_]+)*$" },
+        "description": { "type": "string", "minLength": 1 },
+        "inputSchema": { "type": "object", "required": ["type"], "properties": { "type": { "const": "object" } } },
+        "handler": { "type": "string", "pattern": "^mcp[.]handler[.].+" }
+      }
+    },
+    "resource": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "uri", "name", "description", "mimeType", "handler"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^mcp[.]resource[.].+" },
+        "uri": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "mimeType": { "type": "string", "minLength": 1 },
+        "handler": { "type": "string", "pattern": "^mcp[.]handler[.].+" }
+      }
+    },
+    "skill": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "uri", "frontmatter", "resourceURIs"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^mcp[.]skill[.].+" },
+        "uri": { "type": "string", "minLength": 1 },
+        "frontmatter": { "type": "object", "required": ["name", "description"], "properties": { "name": { "type": "string", "minLength": 1 }, "description": { "type": "string", "minLength": 1 } } },
+        "resourceURIs": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } }
+      }
+    }
+  }
+}

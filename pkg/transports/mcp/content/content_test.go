@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 	"gopkg.in/yaml.v3"
 )
 
@@ -72,6 +73,10 @@ func TestSkillFrontmatterMatchesEmbeddedDocument(t *testing.T) {
 	}
 	if metadata["name"] != "subagent-configuration" || metadata["description"] == "" {
 		t.Fatalf("skill frontmatter = %#v", metadata)
+	}
+	skills := mcpgenerated.PrimarySkills()
+	if len(skills) != 1 || !reflect.DeepEqual(metadata, skills[0].Frontmatter) {
+		t.Fatalf("embedded skill frontmatter = %#v, generated manifest = %#v", metadata, skills)
 	}
 }
 

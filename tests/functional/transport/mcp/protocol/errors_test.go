@@ -22,11 +22,9 @@ import (
 )
 
 const (
-	jsonRPCInvalidParamsCode   = -32602
-	factorySessionNotFoundCode = "factory_session.session.not_found"
-	missingFactorySessionID    = "dur-sess-missing-999"
-	factorySessionGetToolName  = "you.factory_session.get"
-	mcpProtocolStopTimeout     = 5 * time.Second
+	jsonRPCInvalidParamsCode  = -32602
+	factorySessionGetToolName = "you.factory_session.get"
+	mcpProtocolStopTimeout    = 5 * time.Second
 )
 
 type mcpProtocolPackageFixture struct {
@@ -72,13 +70,6 @@ type mcpToolsCallResult struct {
 	IsError bool `json:"isError"`
 }
 
-type mcpToolErrorEnvelope struct {
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	Retryable bool   `json:"retryable"`
-	SessionID string `json:"sessionId"`
-}
-
 // TestMCPMalformedParametersReturnInvalidParams proves malformed MCP parameters
 // return a JSON-RPC invalid-params error at the public stdio/protocol boundary.
 func TestMCPMalformedParametersReturnInvalidParams(t *testing.T) {
@@ -95,46 +86,16 @@ func TestMCPMalformedParametersReturnInvalidParams(t *testing.T) {
 	})
 }
 
-// TestMCPMissingFactorySessionReturnsCanonicalNotFound proves a well-formed Factory
-// Session tools/call for a missing session id returns the canonical not-found
-// result at the public MCP stdio/protocol boundary.
-func TestMCPMissingFactorySessionReturnsCanonicalNotFound(t *testing.T) {
+// TestMCPFactorySessionToolIsOutsidePublicCatalog proves removed Factory
+// Session tools cannot be invoked through the public MCP stdio boundary.
+func TestMCPFactorySessionToolIsOutsidePublicCatalog(t *testing.T) {
 	withSharedMCPProtocolServer(t, func(server *fixtureBackedMCPServer) {
 		assertInitializeHandshake(t, server)
-		request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + factorySessionGetToolName +
-			`","arguments":{"sessionId":"` + missingFactorySessionID + `"}}}`
+		request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + factorySessionGetToolName + `","arguments":{}}}`
 		response := server.exchange(request)
 		assertMCPResponseID(t, response, float64(1))
-		if response.Error != nil {
-			t.Fatalf("tools/call for missing session returned JSON-RPC error %#v, want typed domain result", response.Error)
-		}
-		if response.Result == nil {
-			t.Fatal("tools/call for missing session returned nil result")
-		}
-		if response.Result.IsError {
-			t.Fatalf("tools/call isError = true, want typed domain error in success envelope %#v", response.Result)
-		}
-		if len(response.Result.Content) != 1 || response.Result.Content[0].Type != "text" {
-			t.Fatalf("tools/call content = %#v, want one text item", response.Result.Content)
-		}
-
-		var payload struct {
-			Error *mcpToolErrorEnvelope `json:"error"`
-		}
-		if err := json.Unmarshal([]byte(response.Result.Content[0].Text), &payload); err != nil {
-			t.Fatalf("unmarshal tools/call domain error payload: %v", err)
-		}
-		if payload.Error == nil {
-			t.Fatalf("tools/call payload = %q, want typed error envelope", response.Result.Content[0].Text)
-		}
-		if payload.Error.Code != factorySessionNotFoundCode {
-			t.Fatalf("error code = %q, want %q", payload.Error.Code, factorySessionNotFoundCode)
-		}
-		if payload.Error.SessionID != missingFactorySessionID {
-			t.Fatalf("error sessionId = %q, want %q", payload.Error.SessionID, missingFactorySessionID)
-		}
-		if payload.Error.Retryable {
-			t.Fatalf("error retryable = true, want false for missing session")
+		if response.Error == nil {
+			t.Fatalf("tools/call for removed tool returned result %#v, want unknown-tool protocol error", response.Result)
 		}
 	})
 }

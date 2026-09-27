@@ -66,6 +66,7 @@ workers:
       modelProvider: ${workerProvider}
       name: subagent-worker
       reasoningEffort: ${workerReasoningEffort}
+      skipPermissions: true
       type: AGENT_WORKER
 workstations:
     - body: |

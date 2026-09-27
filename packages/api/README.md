@@ -12,7 +12,7 @@ are not JavaScript module APIs.
 | `@you-agent-factory/api/openapi` | Bundled OpenAPI YAML |
 | `@you-agent-factory/api/cli` | Authoritative static CLI command manifest |
 | `@you-agent-factory/api/schemas/cli-command-manifest` | CLI command-manifest JSON Schema |
-| `@you-agent-factory/api/mcp` | MCP tool inventory JSON |
+| `@you-agent-factory/api/mcp` | MCP tool, resource, and skill manifest JSON |
 | `@you-agent-factory/api/schemas/you-config` | `you` configuration JSON Schema |
 | `@you-agent-factory/api/schemas/factory` | Factory configuration JSON Schema |
 | `@you-agent-factory/api/schemas/factory-event` | Standalone canonical Factory Event JSON Schema |
@@ -42,7 +42,7 @@ const openapiURL = import.meta.resolve("@you-agent-factory/api/openapi");
 const openapiYAML = await readFile(fileURLToPath(openapiURL), "utf8");
 ```
 
-Use the same resolution-and-read pattern for CLI, MCP, schema, JavaScript
+Use the same resolution-and-read pattern for CLI, MCP manifest, schema, JavaScript
 runtime-contract, and joined artifacts. Parse `.json` files as JSON and pass
 `.yaml` files to the YAML reader chosen by your application. The CLI manifest
 contains the static command graph and stable input and handler bindings. Combine

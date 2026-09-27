@@ -76,9 +76,11 @@ the redirected NDJSON file.
 
 ## JavaScript Factory Session Model
 
-The task procedure and complete CLI/API/MCP command sequence live in
-`you docs javascript-workflows`. The material here only maps that procedure to
-the shared Factory Session model used by the rest of this session reference.
+The durable Factory Session task procedure and CLI/API sequence live in
+`you docs javascript-workflows`. MCP's `you.subagent` tool invokes the packaged
+subagent; use REST or CLI for general Factory Session starts, reads, and
+controls. The material here maps those durable procedures to the shared
+Factory Session model used by the rest of this session reference.
 
 A JavaScript execution is a `FactorySession` whose `orchestratorKind` is
 `JAVASCRIPT`. It is not a workflow run or another resource alongside a Factory
@@ -87,23 +89,25 @@ dispatch and artifact inspection, event replay, and result retrieval.
 
 ### Canonical surface map
 
-Choose canonical Factory Session surfaces first. The CLI does not yet provide a
-canonical `session start` spelling, so API or MCP is the canonical start path;
-the `you session` commands are canonical for CLI discovery, inspection, and the
-currently shipped pause, resume, cancel, and terminate controls.
+Choose the REST API for direct durable Factory Session starts and reads. The CLI
+provides session discovery, inspection, and the currently shipped pause, resume,
+cancel, and terminate controls. MCP exposes `you.subagent` for one-shot
+subagent invocation and does not expose general Factory Session lifecycle
+tools.
 
 | Goal | API | CLI | MCP | Dashboard |
 |------|-----|-----|-----|-----------|
-| Validate JavaScript source without starting a session | `POST /factories/preview` | No Factory Session-named spelling; use the API or MCP path | `you.factory_session.validate_source` | Factory preview or editor validation |
-| Start synchronously | `POST /factory-sessions/sync` | No Factory Session-named spelling; use the API or MCP path | `you.factory_session.start_sync` | Start from the Factory Session entry surface when offered |
-| Start asynchronously | `POST /factory-sessions/async` | No Factory Session-named spelling; use the API or MCP path | `you.factory_session.start_async` | Start from the Factory Session entry surface when offered |
-| List or read sessions | `GET /factory-sessions`, `GET /factory-sessions/{session_id}` | `you session list --scope persisted`, `you session show {session_id}` | `you.factory_session.list`, `you.factory_session.get` | Factory Sessions list and Factory Session detail |
-| Read the result | `GET /factory-sessions/{session_id}/results` | `you session show {session_id}` exposes result availability and refs | `you.factory_session.get_result` | Factory Session detail result state |
-| Inspect dispatches | `GET /factory-sessions/{session_id}/dispatches` | Use the dispatch inspection guidance below | `you.factory_session.list_dispatches` | Factory Session detail dispatches |
-| Inspect artifacts | `GET /factory-sessions/{session_id}/artifacts` | `you session show {session_id}` exposes artifact refs | `you.factory_session.list_artifacts` | Factory Session detail artifacts |
-| Read ordered events | `GET /factory-sessions/{session_id}/events` | No Factory Session-named spelling; use the API or MCP path | `you.factory_session.read_events` | Factory Session detail live updates and history |
-| Observe ephemeral response events | `GET /factory-sessions/{session_id}/response-events` | No Factory Session-named spelling; use the API path | No Factory Session-named spelling; use the API path | No dashboard-owned response-event stream today |
-| Control lifecycle | `POST /factory-sessions/{session_id}/{pause\|resume\|cancel\|terminate}` | `you session pause\|resume\|cancel\|terminate {session_id}` | `you.factory_session.control` | Available actions on Factory Session detail |
+| Validate JavaScript source without starting a session | `POST /factories/preview` | No Factory Session-named spelling; use REST | —; use REST | Factory preview or editor validation |
+| Start synchronously | `POST /factory-sessions/sync` | No Factory Session-named spelling; use REST | —; use REST or CLI | Start from the Factory Session entry surface when offered |
+| Start asynchronously | `POST /factory-sessions/async` | No Factory Session-named spelling; use REST | —; use REST | Start from the Factory Session entry surface when offered |
+| List or read sessions | `GET /factory-sessions`, `GET /factory-sessions/{session_id}` | `you session list --scope persisted`, `you session show {session_id}` | —; use REST or CLI | Factory Sessions list and Factory Session detail |
+| Read the result | `GET /factory-sessions/{session_id}/results` | `you session show {session_id}` exposes result availability and refs | —; use REST or CLI | Factory Session detail result state |
+| Inspect dispatches | `GET /factory-sessions/{session_id}/dispatches` | Use the dispatch inspection guidance below | —; use REST | Factory Session detail dispatches |
+| Inspect artifacts | `GET /factory-sessions/{session_id}/artifacts` | `you session show {session_id}` exposes artifact refs | —; use REST or CLI | Factory Session detail artifacts |
+| Read ordered events | `GET /factory-sessions/{session_id}/events` | No Factory Session-named spelling; use REST | —; use REST | Factory Session detail live updates and history |
+| Observe ephemeral response events | `GET /factory-sessions/{session_id}/response-events` | No Factory Session-named spelling; use REST | —; use REST | No dashboard-owned response-event stream today |
+| Control lifecycle | `POST /factory-sessions/{session_id}/{pause\|resume\|cancel\|terminate}` | `you session pause\|resume\|cancel\|terminate {session_id}` | —; use REST or CLI | Available actions on Factory Session detail |
+| Invoke packaged subagent | — | — | `you.subagent` |
 
 ### Migration guidance: dispatch inspection after CLI removal
 
@@ -114,7 +118,7 @@ The `you session dispatches` command is removed. No single CLI command replaces 
 - Use `you metrics --session SESSION_ID --group-by worker` for worker aggregates.
 - Use `you metrics --session SESSION_ID --group-by provider` for provider aggregates.
 - Use `GET /factory-sessions/SESSION_ID/dispatches` for exact durable dispatch records.
-- Use `you.factory_session.list_dispatches` for exact dispatch records through MCP.
+- MCP does not expose Factory Session dispatch tools; use REST for exact durable dispatch records.
 - Use `you worker-sessions list --work-id WORK_ID` for Work-specific Worker Session drill-down.
 
 The Work-specific command requires a Work identifier. It does not replace session-level dispatch reads.
@@ -139,17 +143,17 @@ identity for the UI.
 
 ### Supported scope today
 
-- Use `POST /factories/preview` (or
-  `you.factory_session.validate_source`) before execution when
-  you need a source or policy check without creating a session.
+- Use `POST /factories/preview` before execution when you need a source or
+  policy check without creating a session. MCP does not expose a validation
+  tool.
 - Use the exact `/factory-sessions/{session_id}` reads in the canonical surface
   map for JavaScript execution inspection.
 - Use `you session show`, `GET /factory-sessions/{session_id}`, and the
   dashboard Factory Session detail surface when the session is also available
   through the running host's live session projection.
-- Treat `Dispatch`, `FactoryArtifact`, and `FactoryEvent` as the shared
-  inspection nouns across CLI, API, dashboard, and MCP surfaces. Do not
-  introduce a separate workflow-run object model when comparing outputs.
+- Treat `Dispatch`, `FactoryArtifact`, and `FactoryEvent` as shared inspection
+  nouns across CLI, API, and dashboard surfaces. MCP's one-shot subagent result
+  includes its session id but does not provide those inspection tools.
 - Ordinary live `you run` and packaged-factory invocations keep Factory Session
   durable execution in memory for now. They do not create or update
   project-local `.you-agent-factory/durable-sessions`. Explicit restart/resume
@@ -164,9 +168,9 @@ or control the same durable `FactorySession`.
 
 | Step | Surface | Check | Expected observable outcome |
 |------|---------|-------|-----------------------------|
-| 1 | Factory Preview | Call `POST /factories/preview` or `you.factory_session.validate_source` against the target JavaScript source. | Validation succeeds without creating a session id, confirming the source and effective policy are ready for durable execution. |
-| 2 | Factory Session start and read | Start with `POST /factory-sessions/async` or `you.factory_session.start_async`, then read `GET /factory-sessions/{session_id}` or call `you.factory_session.get`. | One durable `FactorySession` id is returned and subsequent reads show the same id, JavaScript lifecycle status, and progress for that session. |
-| 3 | Session-owned inspection reads | Read the canonical dispatch, artifact, and event endpoints or their `you.factory_session.*` MCP tools for that same session id. | The shared `Dispatch`, `FactoryArtifact`, and `FactoryEvent` outputs all point back to the same `FactorySession`, and the event history shows the lifecycle and child-work facts that explain the dispatch or artifact state. |
+| 1 | Factory Preview | Call `POST /factories/preview` against the target JavaScript source. | Validation succeeds without creating a session id, confirming the source and effective policy are ready for durable execution. |
+| 2 | Factory Session start and read | Start with `POST /factory-sessions/async`, then read `GET /factory-sessions/{session_id}`. | One durable `FactorySession` id is returned and subsequent reads show the same id, JavaScript lifecycle status, and progress for that session. |
+| 3 | Session-owned inspection reads | Read the canonical dispatch, artifact, and event endpoints for that same session id. | The shared `Dispatch`, `FactoryArtifact`, and `FactoryEvent` outputs all point back to the same `FactorySession`, and the event history shows the lifecycle and child-work facts that explain the dispatch or artifact state. |
 | 4 | Website Factory Session detail | Open the dashboard Factory Session detail surface for the same session id. | The website shows the same session identity, JavaScript phase, checkpoint refs, dispatch counts, artifact visibility, and lifecycle banner state already observed through CLI or API reads. |
 | 5 | Lifecycle control on the same session | Apply the supported lifecycle control route for that session, then re-read status or events. | Pause, resume, cancel, or terminate outcomes are reflected by the session status read and by canonical `SESSION_LIFECYCLE_CONTROL` facts on the same durable session event stream. |
 
@@ -189,11 +193,11 @@ or control the same durable `FactorySession`.
 - Keep the matrix narrow. It is meant to revalidate one already supported
   durable JavaScript session path, not to inventory every route or dashboard
   widget.
-- Do not treat portable JavaScript recording resume, broader live-provider
-  bridge parity, or broader MCP host parity as required outcomes for this
-  proof. See `you docs record-replay` for the supported Factory Event resume
-  path and portable recording limits. This matrix covers durable JavaScript
-  session reads and controls.
+- Do not treat portable JavaScript recording resume or broader live-provider
+  bridge parity as required outcomes for this proof. See `you docs
+  record-replay` for the supported Factory Event resume path and portable
+  recording limits. This matrix covers durable JavaScript session reads and
+  controls; MCP is limited to packaged subagent invocation.
 - If the chosen session is already terminal, start another supported durable
   JavaScript session before attempting lifecycle-control confirmation so the
   control outcome remains observable on the same session path.
@@ -230,8 +234,8 @@ you use this proof for closeout review.
   beyond the already shipped durable session reads
 - Broader live-provider bridge parity than the current bounded dispatch,
   artifact, and result inspection path
-- Broader MCP host parity follow-up beyond the currently documented
-  fixture-backed and runtime-backed host setup and smoke coverage
+- General durable Factory Session tools on MCP; direct starts, reads, and
+  controls use REST or CLI, while MCP invokes the packaged subagent.
 
 ## When To Use This Guide
 
@@ -461,10 +465,10 @@ Use typed fields instead of parsing status messages:
 
 | Fact | REST | CLI | MCP | Dashboard |
 |------|------|-----|-----|-----------|
-| Session identity and lifecycle | `GET /factory-sessions/{session_id}` | `you --json session show <session-id>` | `you.factory_session.get` | Factory Session detail header and lifecycle status |
-| Result availability | `GET /factory-sessions/{session_id}/result` | durable workflow `status` and `result` JSON | `you.factory_session.get_result` | Explicit not-ready, partial, failed-with-partial, or final result state |
-| Latest approved checkpoint | session runtime checkpoint reference and canonical checkpoint events | session JSON and event inspection | Factory Session get and event tools | replay timeline checkpoint reference |
-| Artifact lineage | `artifactRefs` and `/factory-sessions/{session_id}/artifacts` | result JSON artifact refs | result and artifact inspection tools | session-owned artifact drilldown links |
+| Session identity and lifecycle | `GET /factory-sessions/{session_id}` | `you --json session show <session-id>` | —; use REST or CLI | Factory Session detail header and lifecycle status |
+| Result availability | `GET /factory-sessions/{session_id}/result` | durable workflow `status` and `result` JSON | —; use REST or CLI | Explicit not-ready, partial, failed-with-partial, or final result state |
+| Latest approved checkpoint | session runtime checkpoint reference and canonical checkpoint events | session JSON and event inspection | —; use REST | replay timeline checkpoint reference |
+| Artifact lineage | `artifactRefs` and `/factory-sessions/{session_id}/artifacts` | result JSON artifact refs | —; use REST or CLI | session-owned artifact drilldown links |
 
 Result availability has stable typed meanings across those surfaces:
 
@@ -794,8 +798,9 @@ For steady operator loops (check running → submit → verify), prefer
 
 ## Event stream lifecycle and reconnect
 
-API, CLI, dashboard, and future MCP tools observe the same canonical
-`FactoryEvent` stream for one selected Factory Session. Open the session-scoped
+REST, CLI, and dashboard observe the same canonical `FactoryEvent` stream for
+one selected Factory Session. MCP's `you.subagent` invocation does not expose
+the session event stream. Open the session-scoped
 route with the resolved Factory Session UUID so reconnect cursors and stream
 recovery always carry canonical live identity:
 
@@ -810,11 +815,11 @@ with `Accept: application/json` on the same route when the UI needs structured
 
 | Surface | How lifecycle is observed |
 |---------|---------------------------|
-| Validate-first setup | `POST /factories/preview` or MCP `you.factory_session.validate_source` confirms source and policy readiness before a durable session exists. |
+| Validate-first setup | `POST /factories/preview` confirms source and policy readiness before a durable session exists. |
 | API | `GET /factory-sessions/{session_id}/events` is the normal event stream for dashboard, Factory Session, durable replay, and reconnect traffic; pass `after_event_id` or `after_sequence` on that route. `GET /events` remains a **compatibility-only** process-global stream for legacy tooling and operator diagnostics—new session-aware consumers should migrate to the session-scoped route. |
 | CLI | `you session show` prints Factory Session lifecycle timestamps, dispatch status, artifact refs, and best-effort partial/final result refs. Use `you metrics --session SESSION_ID --group-by worker` for aggregates. |
 | Dashboard | Opens the selected session's `GET /factory-sessions/{session_id}/events` stream, replays lifecycle events into the timeline projection, and shows reconnecting/stale, partial, paused, running, and terminal states in the session lifecycle banner. |
-| MCP (planned) | Status/result/event tools should map `NOT_READY`, `PARTIAL`, `FINAL`, `FAILED_WITH_PARTIAL`, `INTERRUPTED`, and `RECONCILED` to the same `FactorySessionResultStatus` and dispatch status vocabulary as the session API and event stream. |
+| MCP | `you.subagent` runs the packaged subagent and returns its outcome. Use REST or CLI for direct Factory Session status, result, and event inspection. |
 
 Lifecycle brackets use `SESSION_STARTED`, `SESSION_RESULT_UPDATED`, and
 `SESSION_COMPLETED`. `SESSION_LIFECYCLE_CONTROL` records pause, resume, and other

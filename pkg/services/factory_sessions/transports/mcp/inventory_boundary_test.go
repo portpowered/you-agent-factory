@@ -201,7 +201,7 @@ func TestDomainErrorFixture_MatchesServerToolsCallEncoding(t *testing.T) {
 
 	srv := newResultPolicyTestServer(t, raw)
 	result := decodeToolsCallResult(t, runResultPolicyServerHandleLine(t, srv,
-		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"you.factory_session.get","arguments":{"sessionId":"dur-sess-missing-999"}}}`,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"you.subagent","arguments":{"prompt":"fixture"}}}`,
 	))
 
 	projected, err := mcpfactorysession.MarshalSuccessCallToolResultJSON(raw)
@@ -274,7 +274,7 @@ func TestEncodeSuccessCallToolResult_MatchesServerToolsCallSuccessEncoding(t *te
 
 	srv := newResultPolicyTestServer(t, raw)
 	result := decodeToolsCallResult(t, runResultPolicyServerHandleLine(t, srv,
-		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"you.factory_session.list","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"you.subagent","arguments":{"prompt":"fixture"}}}`,
 	))
 
 	projected, err := mcpfactorysession.MarshalSuccessCallToolResultJSON(raw)
@@ -330,7 +330,7 @@ func TestResultPolicyBaselineFixtureMatchesLiveListSessionsToolsCall(t *testing.
 
 	srv := newResultPolicyTestServer(t, raw)
 	result := decodeToolsCallResult(t, runResultPolicyServerHandleLine(t, srv,
-		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"you.factory_session.list","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"you.subagent","arguments":{"prompt":"fixture"}}}`,
 	))
 	serverEncoded, err := json.Marshal(result)
 	if err != nil {

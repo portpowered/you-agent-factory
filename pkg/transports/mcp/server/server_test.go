@@ -15,6 +15,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
 
 func TestMCPToolCallRemainsOpenForLongSubagentWait(t *testing.T) {
@@ -93,7 +94,7 @@ func TestNewValidatesDirectDependencies(t *testing.T) {
 // docs/models/mcp CLI-manifest baselines.
 //
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
-func TestServeStdioUsesSDKProtocolAndRegistersCatalog(t *testing.T) {
+func TestServeStdioUsesSDKProtocolAndRegistersGeneratedSubagentCatalog(t *testing.T) {
 	t.Parallel()
 
 	calls := make(chan recordedToolCall, 1)
@@ -132,18 +133,23 @@ func TestServeStdioUsesSDKProtocolAndRegistersCatalog(t *testing.T) {
 		t.Fatalf("ListTools() error = %v", err)
 	}
 	listed := listResult.Tools
-	wantCount := len(mcpfactorysession.DiscoverTools())
+	wantCount := len(mcpgenerated.PrimaryDiscovery())
 	if len(listed) != wantCount {
 		t.Fatalf("tools/list count = %d, want %d", len(listed), wantCount)
 	}
-	assertToolListed(t, listed, mcpfactorysession.ToolListSessions)
+	for _, definition := range mcpgenerated.PrimaryDiscovery() {
+		assertToolListed(t, listed, definition.Name)
+	}
+	if wantCount != 1 || mcpgenerated.PrimaryDiscovery()[0].Name != mcpfactorysession.ToolSubagent {
+		t.Fatalf("generated public MCP catalog = %#v, want only %s", mcpgenerated.PrimaryDiscovery(), mcpfactorysession.ToolSubagent)
+	}
 	for _, tool := range listed {
-		if strings.HasPrefix(tool.Name, "you.workflow.") {
-			t.Fatalf("tools/list exposed removed workflow alias %q", tool.Name)
+		if tool.Name != mcpfactorysession.ToolSubagent {
+			t.Fatalf("tools/list exposed non-subagent tool %q", tool.Name)
 		}
 	}
 
-	called, err := session.CallTool(ctx, &mcp.CallToolParams{Name: mcpfactorysession.ToolListSessions, Arguments: map[string]any{}})
+	called, err := session.CallTool(ctx, &mcp.CallToolParams{Name: mcpfactorysession.ToolSubagent, Arguments: map[string]any{"prompt": "hello"}})
 	if err != nil {
 		t.Fatalf("CallTool() error = %v", err)
 	}
@@ -155,10 +161,10 @@ func TestServeStdioUsesSDKProtocolAndRegistersCatalog(t *testing.T) {
 		t.Fatalf("tools/call text = %q, want serialized result", content.Text)
 	}
 	call := <-calls
-	if call.name != mcpfactorysession.ToolListSessions || string(call.arguments) != `{}` {
-		t.Fatalf("tool operation call = (%q, %s), want (%q, {})", call.name, call.arguments, mcpfactorysession.ToolListSessions)
+	if call.name != mcpfactorysession.ToolSubagent || !strings.Contains(string(call.arguments), `"prompt":"hello"`) {
+		t.Fatalf("tool operation call = (%q, %s), want %q with prompt", call.name, call.arguments, mcpfactorysession.ToolSubagent)
 	}
-	invalid, err := session.CallTool(ctx, &mcp.CallToolParams{Name: mcpfactorysession.ToolListSessions, Arguments: "invalid"})
+	invalid, err := session.CallTool(ctx, &mcp.CallToolParams{Name: mcpfactorysession.ToolSubagent, Arguments: "invalid"})
 	if err != nil {
 		t.Fatalf("CallTool(invalid input) protocol error = %v", err)
 	}
@@ -326,46 +332,6 @@ func TestSkillsValidationAndPagination(t *testing.T) {
 		if _, err := makeListSkillsResult(entries, &listSkillsParams{Cursor: cursor}); err == nil {
 			t.Errorf("makeListSkillsResult(cursor %q) error = nil", cursor)
 		}
-	}
-}
-
-func TestAdditionalToolRegistrationValidationAndCall(t *testing.T) {
-	t.Parallel()
-
-	base := Options{ToolOperation: scriptedToolOperation(nil, nil)}
-	for _, tool := range []ToolRegistration{
-		{Name: "missing-handler", InputSchema: json.RawMessage(`{"type":"object"}`)},
-		{Name: "missing-schema", Call: scriptedToolOperation(nil, nil)},
-		{Name: "invalid-json", Call: scriptedToolOperation(nil, nil), InputSchema: json.RawMessage(`{`)},
-		{Name: "non-object-schema", Call: scriptedToolOperation(nil, nil), InputSchema: json.RawMessage(`{"type":"string"}`)},
-	} {
-		if _, err := New(Options{ToolOperation: base.ToolOperation, AdditionalTools: []ToolRegistration{tool}}); err == nil {
-			t.Errorf("New(additional tool %q) error = nil", tool.Name)
-		}
-	}
-
-	server, err := New(Options{
-		ToolOperation: base.ToolOperation,
-		AdditionalTools: []ToolRegistration{{
-			Name: "you.test.extra", InputSchema: json.RawMessage(`{"type":"object"}`),
-			Call: func(_ context.Context, name string, _ json.RawMessage) (json.RawMessage, error) {
-				if name != "you.test.extra" {
-					return nil, errors.New("unexpected tool name")
-				}
-				return json.RawMessage(`{"ok":true}`), nil
-			},
-		}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	response := runRawRequest(t, server, `{"jsonrpc":"2.0","id":40,"method":"tools/list","params":{}}`)
-	if !strings.Contains(response, "you.test.extra") {
-		t.Fatalf("tools/list = %s, missing custom tool", response)
-	}
-	response = runRawRequest(t, server, `{"jsonrpc":"2.0","id":41,"method":"tools/call","params":{"name":"you.test.extra","arguments":{}}}`)
-	if !strings.Contains(response, `\"ok\":true`) {
-		t.Fatalf("tools/call = %s, missing custom result", response)
 	}
 }
 

@@ -791,7 +791,15 @@ func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
 	return providers.Descriptor{
 		ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(),
 		Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessUnverified,
-		Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilitySessionResume},
+		// ACP permission requests are mediated by our client implementation. A
+		// custom peer does not need to advertise a provider-specific bypass
+		// capability: SkipPermissions selects an allow option when the peer asks
+		// for permission, and is a no-op when the peer does not ask.
+		Capabilities: []providers.Capability{
+			providers.CapabilityPromptSubmission,
+			providers.CapabilitySessionResume,
+			providers.CapabilityPermissionBypass,
+		},
 	}
 }
 

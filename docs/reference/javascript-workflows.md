@@ -62,7 +62,9 @@ curl -X POST http://localhost:7437/factory-sessions/async \
 ```
 
 Retain the returned `sessionId`. JavaScript execution uses the same canonical
-Factory Session API and MCP surfaces as other orchestrators.
+Factory Session API as other orchestrators. MCP's `you.subagent` runs the
+packaged subagent Factory; use REST or CLI for direct durable workflow
+execution and session inspection.
 
 These examples use the deterministic fake execution provider and published
 fixture catalog selected by default. For live source resolution and JavaScript
@@ -216,23 +218,23 @@ that approved state. The checkpoint reference is a `FactoryArtifact`, its
 write is a `FactoryEvent`, and child work remains visible as `Dispatch`
 records. Raw VM state is not captured.
 
-## Equivalent CLI, API, and MCP execution
+## Durable Factory Session access and MCP subagents
 
-CLI, REST, and MCP are adapters over the same durable Factory Session execution
-contract. Pick one `requestId` as the idempotency key, retain the returned
-`sessionId`, and use that same stable Factory Session identifier for every
-later status, result, dispatch, artifact, and event read. A synchronous start
-waits for a terminal outcome (or its configured timeout); an asynchronous start
-returns the same session concept immediately for polling. Terminal status and
-result availability have the same meaning on every surface.
+Use REST and CLI surfaces for durable Factory Session execution and inspection.
+MCP exposes one invocation tool, `you.subagent`, which runs the packaged
+`@you/subagent` Factory using operator defaults or per-call provider, model, and
+reasoning settings. It does not expose general Factory Session start, read,
+result, dispatch, artifact, event, or lifecycle tools. Retain the returned
+`sessionId` from REST starts when using the same identifier for later reads.
 
 | Operation | CLI | REST API | MCP |
 |-----------|-----|----------|-----|
-| Validate or resolve source without starting a session | — | `POST /factories/preview` | `you.factory_session.validate_source` |
-| Start and wait | `you run --named FACTORY` for canonical named-Factory invocation | `POST /factory-sessions/sync` | `you.factory_session.start_sync` |
-| Start for polling | — | `POST /factory-sessions/async` | `you.factory_session.start_async` |
-| Read status or final/partial result | `you session show SESSION_ID` | `GET /factory-sessions/SESSION_ID`; `GET /factory-sessions/SESSION_ID/results` | `you.factory_session.get`; `you.factory_session.get_result` |
-| Inspect child work and durable facts | `you session show SESSION_ID` for status; use `you metrics --session SESSION_ID --group-by worker` for aggregates | `GET /factory-sessions/SESSION_ID/dispatches`; `artifacts`; `events` | `you.factory_session.list_dispatches`; `list_artifacts`; `read_events` |
+| Validate or resolve source without starting a session | — | `POST /factories/preview` | —; use REST |
+| Start and wait | `you run --named FACTORY` for canonical named-Factory invocation | `POST /factory-sessions/sync` | —; use REST or CLI |
+| Start for polling | — | `POST /factory-sessions/async` | —; use REST |
+| Read status or final/partial result | `you session show SESSION_ID` | `GET /factory-sessions/SESSION_ID`; `GET /factory-sessions/SESSION_ID/results` | —; use REST or CLI |
+| Inspect child work and durable facts | `you session show SESSION_ID` for status; use `you metrics --session SESSION_ID --group-by worker` for aggregates | `GET /factory-sessions/SESSION_ID/dispatches`; `artifacts`; `events` | —; use REST or CLI |
+| Invoke the packaged subagent | — | — | `you.subagent` |
 
 Start requests use the shared `FactorySessionExecutionRequest` shape: one source
 selector, JSON-compatible `args`, requested policy where applicable, and the
@@ -243,11 +245,10 @@ sync response or fetched later; running sessions can report a not-ready final
 result while their status, partial result, dispatches, artifacts, and events
 remain inspectable.
 
-`you server mcp` runs live JavaScript execution by default. Pass an explicit
-`--fixture-catalog` path for deterministic offline contract scenarios. Both
-modes expose the same `you.factory_session.*` tool envelopes. Fixture-backed
-calls return catalog scenarios, while runtime-backed calls execute resolved
-source.
+`you server mcp` runs with live runtime backing by default. It exposes the
+`you.subagent` invocation tool and the documented configuration and provider
+resources. Pass an explicit `--fixture-catalog` path for deterministic offline
+contract scenarios; the fixture mode keeps the same focused public tool surface.
 
 ## Child worker presets
 
@@ -315,7 +316,7 @@ VM internals part of the inspection contract.
 | Child execution failure | The child `Dispatch` is failed and the session result/status reports a failed or partial terminal outcome with safe failure detail. | The `FactorySession`, failed `Dispatch`, prior artifacts, and ordered events remain inspectable. | Inspect the dispatch failure class/detail, correct the child request or provider condition, and start or resume through a supported path. |
 | Non-JSON checkpoint, artifact, log fields, or final value | Execution fails with a bounded `must be JSON-compatible` diagnostic. | The session, earlier dispatches/artifacts/events, and any approved checkpoint references remain inspectable; the rejected value is not promised as an artifact. | Convert the value to JSON data without functions, cycles, or host objects. |
 | Result not ready | Result reads return `resultStatus: NOT_READY` with availability reason `RESULT_NOT_READY`; this is retryable while the session is running. | Status, partial result when present, dispatches, artifacts, and events remain inspectable. | Poll status/events and retry the result read after progress or a terminal transition. |
-| Factory Session not found | CLI reports `SESSION_NOT_FOUND`; REST uses `NOT_FOUND`; MCP returns its Factory Session not-found error envelope. | Nothing is inspectable for that identifier. | Reuse the exact `sessionId` returned by start and confirm the same runtime/storage scope. |
+| Factory Session not found | CLI reports `SESSION_NOT_FOUND`; REST uses `NOT_FOUND`. MCP does not expose direct Factory Session reads. | Nothing is inspectable for that identifier. | Reuse the exact `sessionId` returned by start and confirm the same runtime/storage scope. |
 | Recording flag conflict | `--record` with `--replay`, `--no-record` with `--record`, `--resume` with `--replay`, or `--resume` with `--no-record` is rejected before execution. | No new session or session-owned facts. | Choose one recording mode; see `you docs record-replay`. |
 | Missing, malformed, or incompatible replay | Replay load fails before reconstruction; unsupported artifacts report `unsupported replay artifact schemaVersion`. | No reconstructed session is created from the rejected file; the file itself remains unchanged. | Use an artifact with the supported schema, regenerate it with a compatible `you` version, or run live to create a new recording. |
 

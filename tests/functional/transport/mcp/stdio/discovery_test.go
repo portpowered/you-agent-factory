@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -19,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -91,10 +89,10 @@ func TestMCPUnknownToolReturnsProtocolError(t *testing.T) {
 	}
 }
 
-// TestMCPDiscoveryContainsCanonicalFactorySessionTools proves tools/list exposes
-// the canonical Factory Session tool names published for MCP hosts without
-// asserting Session lifecycle or tool execution semantics.
-func TestMCPDiscoveryContainsCanonicalFactorySessionTools(t *testing.T) {
+// TestMCPDiscoveryExposesOnlySubagentInvocation proves the public MCP tool
+// surface stays focused on invoking a subagent. Provider and configuration
+// discovery is exposed through MCP resources.
+func TestMCPDiscoveryExposesOnlySubagentInvocation(t *testing.T) {
 	// Keep this fixture isolated: generated discovery membership is an
 	// independent catalog witness, not reusable live session state.
 	server := startFixtureBackedMCPServer(t)
@@ -108,10 +106,8 @@ func TestMCPDiscoveryContainsCanonicalFactorySessionTools(t *testing.T) {
 	}
 	toolNames := toolNamesFromListResult(t, toolsResult.Result)
 
-	for _, tool := range mcpgenerated.PrimaryDiscovery() {
-		if !slices.Contains(toolNames, tool.Name) {
-			t.Fatalf("tools/list missing canonical Factory Session tool %q; got %#v", tool.Name, toolNames)
-		}
+	if len(toolNames) != 1 || toolNames[0] != "you.subagent" {
+		t.Fatalf("tools/list names = %#v, want only you.subagent", toolNames)
 	}
 }
 

@@ -57,35 +57,34 @@ func TestMCPToolCatalogPublication_OnDiskCatalogIsCanonicallyByteStable(t *testi
 	}
 }
 
-func TestMCPToolCatalogPublication_AuthoredCatalogIsNotStagingSource(t *testing.T) {
+func TestMCPToolCatalogPublication_SurfaceManifestIsStagingSource(t *testing.T) {
 	for _, artifact := range contractstaging.RawArtifacts() {
-		if artifact.Target != "packages/api/generated/mcp/tools.json" {
+		if artifact.Target != "packages/api/generated/mcp/manifest.json" {
 			continue
 		}
-		if artifact.Source == "contracts/mcp/tools.json" {
-			t.Fatalf("staged MCP tools must not be projected from authored catalog %s", artifact.Source)
+		if artifact.Source != "contracts/mcp/manifest.json" {
+			t.Fatalf("staged MCP manifest source = %q, want contracts/mcp/manifest.json", artifact.Source)
 		}
-		if artifact.Source != "contracts/testdata/baseline/mcp-tools.json" {
-			t.Fatalf("staged MCP tools source = %q, want contracts/testdata/baseline/mcp-tools.json", artifact.Source)
-		}
+		return
 	}
+	t.Fatal("MCP manifest raw artifact is missing")
 }
 
-func TestMCPToolCatalogPublication_AuthoredCatalogDiffersFromStagedInventory(t *testing.T) {
+func TestMCPToolCatalogPublication_StagedManifestMatchesAuthoredSurface(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {
 		t.Fatalf("repository root: %v", err)
 	}
-	authored, err := os.ReadFile(filepath.Join(root, "contracts/mcp/tools.json"))
+	authored, err := os.ReadFile(filepath.Join(root, "contracts/mcp/manifest.json"))
 	if err != nil {
 		t.Fatalf("read authored catalog: %v", err)
 	}
-	staged, err := os.ReadFile(filepath.Join(root, "packages/api/generated/mcp/tools.json"))
+	staged, err := os.ReadFile(filepath.Join(root, "packages/api/generated/mcp/manifest.json"))
 	if err != nil {
 		t.Fatalf("read staged MCP tools inventory: %v", err)
 	}
-	if bytes.Equal(authored, staged) {
-		t.Fatal("authored catalog must not be byte-identical to packages/api/generated/mcp/tools.json staging output")
+	if !bytes.Equal(authored, staged) {
+		t.Fatal("generated package MCP manifest differs from its authored surface")
 	}
 }
 

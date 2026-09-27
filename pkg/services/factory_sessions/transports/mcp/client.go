@@ -247,7 +247,7 @@ func CallTool(
 }
 
 func generatedToolIDByName(name string) (string, bool) {
-	for _, tool := range mcpgenerated.PrimaryDiscovery() {
+	for _, tool := range mcpgenerated.LegacyDiscovery() {
 		if tool.Name == name {
 			return tool.ID, true
 		}

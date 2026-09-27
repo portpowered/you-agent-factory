@@ -418,6 +418,48 @@ func TestRootACPUsesAdvertisedPermissionBypass(t *testing.T) {
 	}
 }
 
+func TestRootCustomACPUsesInterpreterPermissionPolicy(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(catalogService)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	acpService := &stubACPService{provider: "custom-acp"}
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewWithACP() = %v", err)
+	}
+
+	listed, err := root.ListProviders(context.Background(), providers.ListProvidersRequest{})
+	if err != nil {
+		t.Fatalf("ListProviders() = %v", err)
+	}
+	var custom providers.Descriptor
+	for _, descriptor := range listed.Providers {
+		if descriptor.ID == acpService.provider {
+			custom = descriptor
+			break
+		}
+	}
+	if !slices.Contains(custom.Capabilities, providers.CapabilityPermissionBypass) {
+		t.Fatalf("custom ACP capabilities = %v, want interpreter-mediated permission bypass", custom.Capabilities)
+	}
+
+	result, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        acpService.provider,
+		AttemptID:       "custom-acp-bypass",
+		SkipPermissions: true,
+	})
+	if executeErr != nil || result.Content != "acp result" || !acpService.skipPermissions || acpService.executeCalls != 1 {
+		t.Fatalf("Execute(custom ACP bypass) = (%#v, %v, skip=%v, calls=%d), want successful delegated policy", result, executeErr, acpService.skipPermissions, acpService.executeCalls)
+	}
+}
+
 func TestRootDelegatesTypedExecutionFailure(t *testing.T) {
 	t.Parallel()
 

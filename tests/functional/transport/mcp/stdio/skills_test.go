@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
 
 func TestMCPSkillsRejectsInvalidRequests(t *testing.T) {
@@ -292,22 +294,23 @@ func assertOperatorConfigResourcesPublished(t *testing.T, server *stdioMCPServer
 	if !ok {
 		t.Fatalf("resources/list resources = %#v, want array", result["resources"])
 	}
-	var hasSchema, hasCurrentConfig bool
+	seen := make(map[string]bool, len(resources))
 	for _, value := range resources {
 		resource, ok := value.(map[string]any)
 		if !ok {
 			t.Fatalf("resources/list entry = %#v, want object", value)
 		}
 		uri := strings.ToLower(fmt.Sprint(resource["uri"]))
-		if uri == "you://operator/config/schema" {
-			hasSchema = true
-		}
-		if uri == "you://operator/config/current" {
-			hasCurrentConfig = true
-		}
+		seen[uri] = true
 	}
-	if !hasSchema || !hasCurrentConfig {
-		t.Fatalf("resources/list missing you://operator/config/schema or you://operator/config/current (schema=%t current=%t): %#v", hasSchema, hasCurrentConfig, resources)
+	definitions := mcpgenerated.PrimaryResources()
+	if len(seen) != len(definitions) {
+		t.Fatalf("resources/list URIs = %#v, generated manifest resources = %#v", seen, definitions)
+	}
+	for _, definition := range definitions {
+		if !seen[strings.ToLower(definition.URI)] {
+			t.Fatalf("resources/list omitted generated resource %q: %#v", definition.URI, resources)
+		}
 	}
 	for _, uri := range []string{"you://operator/config/schema", "you://operator/config/current"} {
 		read := server.client.call("resources/read", map[string]any{"uri": uri})

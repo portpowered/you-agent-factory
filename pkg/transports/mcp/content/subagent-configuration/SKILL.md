@@ -1,6 +1,6 @@
 ---
 name: subagent-configuration
-description: Configure default worker provider and model settings, inspect the operator configuration, and add or update ACP subagent providers.
+description: Inspect subagent providers and configure operator defaults or custom ACP providers using the operator configuration file.
 ---
 
 # Configure subagent defaults and providers
@@ -46,7 +46,7 @@ reporting configuration to a customer.
 
 ## Discover provider names and models
 
-Use MCP tool `you.provider.list_providers` or run `you providers list` (or `you providers list --json`) to inspect provider
+Read MCP resource `you://providers/catalog` or run `you providers list` (or `you providers list --json`) to inspect provider
 identities, aliases, exact model IDs, effort values, capabilities, and
 readiness. Use the canonical provider `id` in configuration. Do not invent
 provider aliases or model IDs. Readiness can be unverified until a request-time
@@ -70,12 +70,7 @@ confirm its ACP launch command. The built-in OpenCode preset uses
 `npx -y opencode-ai acp`; inspect `you providers list` for the preset identity
 and current availability.
 
-Prefer MCP tool `you.operator_settings.add_acp_provider` when available. It
-accepts `name`, `command`, optional `id`, and optional `transport` (defaults to
-`stdio`), validates the candidate, and persists it at the canonical config
-path and activates the provider in the current server. The result reports
-`requiresRestart: false`; call `you.provider.list_providers` to verify the new
-provider, then invoke it. The equivalent supported CLI is:
+Use the CLI to add an ACP provider and validate the resulting configuration:
 
 ```text
 you workers acp add --name company-opencode --transport stdio --argument "npx -y opencode-ai acp"
@@ -90,16 +85,14 @@ workers select it by its `name` (the provider identity). Adding an existing
 built-in name overrides that preset's launch command; deleting that override
 restores the built-in preset.
 
-To select the custom provider as the default, call
-`you.operator_settings.set_subagent_defaults` with `provider` set to its
-canonical `name` (and optionally `model`). The tool validates and persists the
-operator defaults at the canonical config path. To set it for one worker,
+To select the custom provider as the default, set `defaults.workerModelProvider`
+in the operator configuration to its canonical `name` (and optionally set
+`defaults.workerModel`). To set it for one worker,
 configure that worker's `modelProvider` to the same name. Choose a
 model only when the provider catalog reports an exact supported model ID.
 Custom ACP providers may not publish model metadata, so do not guess one.
 
-The CLI is preferred to hand-editing the file. When direct editing is needed,
-preserve existing keys and use this shape:
+When editing the file, preserve existing keys and use this shape:
 
 ```json
 {
@@ -126,17 +119,18 @@ verify the integration.
 
 ACP integration entries do not contain timeout or permission policy. Use the
 normal worker or Factory Session limits for execution timeouts and the
-invocation's supported permission setting for permission behavior.
+invocation's supported permission setting for permission behavior. The
+packaged `@you/subagent` worker sets `skipPermissions: true`; the ACP client
+selects an allow option when the provider sends an ACP permission request.
 
 ## Existing MCP capabilities
 
-Use `you.provider.list_providers` to inspect the live catalog, and read
-`you://operator/config/current` before changing defaults. Apply changes with
-`you.operator_settings.set_subagent_defaults` or
-`you.operator_settings.add_acp_provider`, then read the current configuration
-and provider catalog again to verify. The MCP tool activates custom ACP
-providers without a server restart. Do not claim that a change succeeded
-unless the MCP tool or resource confirms it.
+Read `you://providers/catalog` and `you://operator/config/current` before
+changing defaults. Change the configuration using the CLI or by editing the
+file, then read both resources again to verify the values visible to the MCP
+server. The MCP server exposes `you.subagent` for invocation; configuration
+and catalog data are resources. Do not claim that a change is active until a
+small real invocation confirms it.
 
 Long-running subagent invocations are synchronous. Do not assume a one-hour
 invocation will complete: the MCP client, server transport, and provider may
