@@ -11,7 +11,17 @@ func ValidateManifest(manifest MCPManifest) error {
 		return fmt.Errorf("MCP manifest has unsupported format or protocol version")
 	}
 	ids, names, uris := map[string]bool{}, map[string]bool{}, map[string]bool{}
-	for _, tool := range manifest.Tools {
+	if err := validateManifestTools(manifest.Tools, ids, names); err != nil {
+		return err
+	}
+	if err := validateManifestResources(manifest.Resources, ids, uris); err != nil {
+		return err
+	}
+	return validateManifestSkills(manifest.Skills, ids, uris)
+}
+
+func validateManifestTools(tools []ManifestTool, ids, names map[string]bool) error {
+	for _, tool := range tools {
 		if tool.ID == "" || tool.Name == "" || strings.TrimSpace(tool.Description) == "" || tool.Handler == "" || tool.InputSchema["type"] != "object" {
 			return fmt.Errorf("MCP manifest tool %q is incomplete", tool.ID)
 		}
@@ -20,7 +30,11 @@ func ValidateManifest(manifest MCPManifest) error {
 		}
 		ids[tool.ID], names[tool.Name] = true, true
 	}
-	for _, resource := range manifest.Resources {
+	return nil
+}
+
+func validateManifestResources(resources []ManifestResource, ids, uris map[string]bool) error {
+	for _, resource := range resources {
 		if resource.ID == "" || resource.URI == "" || resource.Name == "" || resource.Description == "" || resource.MIMEType == "" || resource.Handler == "" {
 			return fmt.Errorf("MCP manifest resource %q is incomplete", resource.ID)
 		}
@@ -29,7 +43,11 @@ func ValidateManifest(manifest MCPManifest) error {
 		}
 		ids[resource.ID], uris[resource.URI] = true, true
 	}
-	for _, skill := range manifest.Skills {
+	return nil
+}
+
+func validateManifestSkills(skills []ManifestSkill, ids, uris map[string]bool) error {
+	for _, skill := range skills {
 		name, _ := skill.Frontmatter["name"].(string)
 		description, _ := skill.Frontmatter["description"].(string)
 		if skill.ID == "" || skill.URI == "" || name == "" || description == "" || len(skill.ResourceURIs) == 0 {

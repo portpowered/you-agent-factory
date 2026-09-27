@@ -94,28 +94,35 @@ func DiscoveryGoArtifact(repositoryRoot string) ([]byte, error) {
 		fmt.Fprintf(&source, "\t\t{ID:%s, URI:%s, Name:%s, Description:%s, MIMEType:%s, Handler:%s},\n", strconv.Quote(resource.ID), strconv.Quote(resource.URI), strconv.Quote(resource.Name), strconv.Quote(resource.Description), strconv.Quote(resource.MIMEType), strconv.Quote(resource.Handler))
 	}
 	source.WriteString("\t}\n}\n")
-	source.WriteString("\n// PrimarySkills returns manifest skills in authored order.\nfunc PrimarySkills() []DiscoverySkill {\n\tout := make([]DiscoverySkill, 0, ")
-	fmt.Fprintf(&source, "%d", len(manifest.Skills))
-	source.WriteString(")\n")
-	for _, skill := range manifest.Skills {
-		frontmatter, marshalErr := contractjoiner.MarshalCanonicalJSON(skill.Frontmatter)
-		if marshalErr != nil {
-			return nil, marshalErr
-		}
-		refs := make([]string, len(skill.ResourceURIs))
-		for i, ref := range skill.ResourceURIs {
-			refs[i] = strconv.Quote(ref)
-		}
-		fmt.Fprintf(&source, "\tvar frontmatter map[string]any\n\tif err := json.Unmarshal([]byte(%s), &frontmatter); err != nil { panic(err) }\n", strconv.Quote(string(frontmatter)))
-		fmt.Fprintf(&source, "\tout = append(out, DiscoverySkill{ID:%s, URI:%s, Frontmatter:frontmatter, ResourceURIs:[]string{%s}})\n", strconv.Quote(skill.ID), strconv.Quote(skill.URI), strings.Join(refs, ","))
+	if err := writePrimarySkills(&source, manifest.Skills); err != nil {
+		return nil, err
 	}
-	source.WriteString("\treturn out\n}\n")
 
 	formatted, err := format.Source([]byte(source.String()))
 	if err != nil {
 		return nil, fmt.Errorf("format generated Go discovery metadata: %w", err)
 	}
 	return formatted, nil
+}
+
+func writePrimarySkills(source *strings.Builder, skills []ManifestSkill) error {
+	source.WriteString("\n// PrimarySkills returns manifest skills in authored order.\nfunc PrimarySkills() []DiscoverySkill {\n\tout := make([]DiscoverySkill, 0, ")
+	fmt.Fprintf(source, "%d", len(skills))
+	source.WriteString(")\n")
+	for _, skill := range skills {
+		frontmatter, err := contractjoiner.MarshalCanonicalJSON(skill.Frontmatter)
+		if err != nil {
+			return err
+		}
+		refs := make([]string, len(skill.ResourceURIs))
+		for i, ref := range skill.ResourceURIs {
+			refs[i] = strconv.Quote(ref)
+		}
+		fmt.Fprintf(source, "\tvar frontmatter map[string]any\n\tif err := json.Unmarshal([]byte(%s), &frontmatter); err != nil { panic(err) }\n", strconv.Quote(string(frontmatter)))
+		fmt.Fprintf(source, "\tout = append(out, DiscoverySkill{ID:%s, URI:%s, Frontmatter:frontmatter, ResourceURIs:[]string{%s}})\n", strconv.Quote(skill.ID), strconv.Quote(skill.URI), strings.Join(refs, ","))
+	}
+	source.WriteString("\treturn out\n}\n")
+	return nil
 }
 
 func discoveryMetadata(repositoryRoot string) (DiscoveryMetadata, error) {

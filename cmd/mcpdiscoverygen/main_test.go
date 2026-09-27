@@ -76,15 +76,17 @@ func TestRunCheckFailsOnStaleArtifact(t *testing.T) {
 
 func writeAuthoredCatalogFixture(t *testing.T, root string) {
 	t.Helper()
-	catalog, err := os.ReadFile(filepath.Join("..", "..", discoverygen.AuthoredCatalogPath))
-	if err != nil {
-		t.Fatalf("read authored catalog fixture: %v", err)
-	}
-	target := filepath.Join(root, filepath.FromSlash(discoverygen.AuthoredCatalogPath))
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		t.Fatalf("create catalog directory: %v", err)
-	}
-	if err := os.WriteFile(target, catalog, 0o644); err != nil {
-		t.Fatalf("write catalog: %v", err)
+	for _, source := range []string{discoverygen.AuthoredCatalogPath, discoverygen.AuthoredManifestPath} {
+		payload, err := os.ReadFile(filepath.Join("..", "..", filepath.FromSlash(source)))
+		if err != nil {
+			t.Fatalf("read authored fixture %s: %v", source, err)
+		}
+		target := filepath.Join(root, filepath.FromSlash(source))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatalf("create fixture directory: %v", err)
+		}
+		if err := os.WriteFile(target, payload, 0o644); err != nil {
+			t.Fatalf("write fixture %s: %v", source, err)
+		}
 	}
 }

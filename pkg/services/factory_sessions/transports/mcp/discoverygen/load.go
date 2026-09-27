@@ -3,8 +3,6 @@ package discoverygen
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/contractvalidator"
@@ -18,10 +16,17 @@ const (
 
 // LoadAuthoredManifest reads the single source used to publish and register MCP surfaces.
 func LoadAuthoredManifest(repositoryRoot string) (MCPManifest, error) {
-	path := filepath.Join(repositoryRoot, filepath.FromSlash(AuthoredManifestPath))
-	payload, err := os.ReadFile(path)
+	resolved, diagnostics := contractvalidator.LoadAndResolve(
+		repositoryRoot,
+		AuthoredManifestPath,
+		[]string{AuthoredManifestPath},
+	)
+	if len(diagnostics) != 0 {
+		return MCPManifest{}, fmt.Errorf("resolve %s: %s", AuthoredManifestPath, diagnostics[0].Message)
+	}
+	payload, err := json.Marshal(resolved)
 	if err != nil {
-		return MCPManifest{}, fmt.Errorf("read %s: %w", AuthoredManifestPath, err)
+		return MCPManifest{}, fmt.Errorf("marshal %s: %w", AuthoredManifestPath, err)
 	}
 	var manifest MCPManifest
 	if err := json.Unmarshal(payload, &manifest); err != nil {

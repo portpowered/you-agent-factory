@@ -429,20 +429,32 @@ func mcpSubagentContent(
 	skill := mcpcontent.SkillBytes()
 	schema := mcpcontent.SchemaBytes()
 	digest := sha256.Sum256(skill)
-	entries := make([]mcpserver.SkillEntry, 0, len(mcpgenerated.PrimarySkills()))
 	frontmatter, err := mcpcontent.SkillFrontmatter()
 	if err != nil {
 		return nil, nil, err
 	}
+	entries, err := buildMCPSubagentSkills(frontmatter, digest, skill)
+	if err != nil {
+		return nil, nil, err
+	}
+	resources, err := buildMCPResourceRegistrations(settings, providerService, files, homeDirectory, skill, schema)
+	if err != nil {
+		return nil, nil, err
+	}
+	return entries, resources, nil
+}
+
+func buildMCPSubagentSkills(frontmatter map[string]any, digest [32]byte, skill []byte) ([]mcpserver.SkillEntry, error) {
+	entries := make([]mcpserver.SkillEntry, 0, len(mcpgenerated.PrimarySkills()))
 	for _, definition := range mcpgenerated.PrimarySkills() {
 		if !reflect.DeepEqual(frontmatter, definition.Frontmatter) {
-			return nil, nil, fmt.Errorf("MCP skill frontmatter differs from generated manifest")
+			return nil, fmt.Errorf("MCP skill frontmatter differs from generated manifest")
 		}
 		entry := mcpserver.SkillEntry{URI: definition.URI, Frontmatter: definition.Frontmatter}
 		linkedResources := make([]mcpserver.SkillResource, 0, len(definition.ResourceURIs))
 		for _, uri := range definition.ResourceURIs {
 			if uri != definition.URI {
-				return nil, nil, fmt.Errorf("unsupported MCP skill resource %q", uri)
+				return nil, fmt.Errorf("unsupported MCP skill resource %q", uri)
 			}
 			linkedResources = append(linkedResources, mcpserver.SkillResource{
 				URI: uri, Digest: "sha256:" + hex.EncodeToString(digest[:]), Size: int64(len(skill)),
@@ -451,6 +463,10 @@ func mcpSubagentContent(
 		entry.Resources = linkedResources
 		entries = append(entries, entry)
 	}
+	return entries, nil
+}
+
+func buildMCPResourceRegistrations(settings operatorsettings.Service, providerService providers.Service, files operatorsettings.FileSystem, homeDirectory factorysessions.HomeDirectoryResolver, skill, schema []byte) ([]mcpserver.ResourceRegistration, error) {
 	resources := make([]mcpserver.ResourceRegistration, 0, len(mcpgenerated.PrimaryResources()))
 	for _, definition := range mcpgenerated.PrimaryResources() {
 		resource := &mcp.Resource{URI: definition.URI, Name: definition.Name, Description: definition.Description, MIMEType: definition.MIMEType}
@@ -496,11 +512,11 @@ func mcpSubagentContent(
 				return mcpResourceResult(uri, mimeType, data), nil
 			}
 		default:
-			return nil, nil, fmt.Errorf("unsupported MCP resource handler %q", definition.Handler)
+			return nil, fmt.Errorf("unsupported MCP resource handler %q", definition.Handler)
 		}
 		resources = append(resources, mcpserver.ResourceRegistration{Resource: resource, Read: read})
 	}
-	return entries, resources, nil
+	return resources, nil
 }
 
 func staticMCPResourceReader(uri, mimeType string, data []byte) func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
