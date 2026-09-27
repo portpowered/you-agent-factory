@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
@@ -13,17 +15,19 @@ import (
 // for one MCP stdio invocation. Its builder ports adapt already-injected
 // transport and lifecycle machinery without exposing those implementations.
 type StdioOpeningService struct {
-	opening       roles.StdioExecutionOpening
-	buildFixture  roles.FixtureStdioApplicationBuilder
-	buildRuntime  roles.RuntimeStdioApplicationBuilder
-	presentations factorysessions.OpeningPresentationOwner
+	opening         roles.StdioExecutionOpening
+	buildFixture    roles.FixtureStdioApplicationBuilder
+	buildRuntime    roles.RuntimeStdioApplicationBuilder
+	presentations   factorysessions.OpeningPresentationOwner
+	installSubagent factorydefinitions.InstallPackagedFactoryOperation
 }
 
 func NewStdioOpeningService(
 	opening roles.StdioExecutionOpening,
 	buildFixture roles.FixtureStdioApplicationBuilder,
 	buildRuntime roles.RuntimeStdioApplicationBuilder,
-	presentations ...factorysessions.OpeningPresentationOwner,
+	presentations factorysessions.OpeningPresentationOwner,
+	installers ...factorydefinitions.InstallPackagedFactoryOperation,
 ) (*StdioOpeningService, error) {
 	if opening == nil {
 		return nil, fmt.Errorf("session execution opening factory is required")
@@ -31,13 +35,13 @@ func NewStdioOpeningService(
 	if buildFixture == nil || buildRuntime == nil {
 		return nil, fmt.Errorf("stdio application builders are required")
 	}
-	var presentationOwner factorysessions.OpeningPresentationOwner
-	if len(presentations) > 0 {
-		presentationOwner = presentations[0]
+	var installSubagent factorydefinitions.InstallPackagedFactoryOperation
+	if len(installers) > 0 {
+		installSubagent = installers[0]
 	}
 	return &StdioOpeningService{
 		opening: opening, buildFixture: buildFixture, buildRuntime: buildRuntime,
-		presentations: presentationOwner,
+		presentations: presentations, installSubagent: installSubagent,
 	}, nil
 }
 
@@ -60,12 +64,29 @@ func (service *StdioOpeningService) OpenStdio(
 		return nil, err
 	}
 	if request.RuntimeBacked {
+		if service.installSubagent == nil {
+			return nil, fmt.Errorf("packaged subagent installer is required")
+		}
 		root, err := service.opening.ResolveProjectRoot(request.ProjectRoot)
 		if err != nil {
 			return nil, err
 		}
+		factoryRoot, err := factorydefinitions.NamedFactoriesRootForHome(request.SystemConfigHome)
+		if err != nil {
+			return nil, fmt.Errorf("resolve packaged subagent Factory root: %w", err)
+		}
+		installed, err := service.installSubagent(ctx, factorydefinitions.InstallPackagedFactoryRequest{
+			RootDir: factoryRoot,
+			Name:    factorydefinitions.PackagedSubagentFactoryName,
+			Format:  factorydefinitions.PackagedFactoryFormatJSON,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("install packaged subagent Factory: %w", err)
+		}
 		opened, err := service.opening.OpenExecutionRuntime(ctx, factorysessions.ExecutionRuntimeOpeningRequest{
-			ProjectRoot: root, SystemConfigHome: request.SystemConfigHome,
+			ProjectRoot:       root,
+			FactoryConfigPath: filepath.Join(installed.Definition.FactoryDir, factorydefinitions.FactoryConfigFile),
+			SystemConfigHome:  request.SystemConfigHome,
 		})
 		if err != nil {
 			return nil, err

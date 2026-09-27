@@ -2,6 +2,24 @@ package wire
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	factorysessionmcp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	operatorsettingsmcp "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providersmcp "github.com/portpowered/infinite-you/pkg/services/providers/transports/mcp"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingmcp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	mcpcontent "github.com/portpowered/infinite-you/pkg/transports/mcp/content"
+	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	"os"
 	"strings"
 	"time"
@@ -295,3 +313,254 @@ func provideChatSessionsResponseBridge(
 type wireTranscriptClock runtimeArtifactClock
 
 func (c wireTranscriptClock) Now() time.Time { return c() }
+
+type mcpServerBuilder func(
+	factorysessionwire.DurableExecutionService,
+	recordings.Service,
+	factorysessionwire.RequestPreparation,
+	factoryruntime.WorkflowPreviewOperation,
+	factorysessions.TargetExecutionService,
+) (*mcpserver.Server, error)
+
+type mcpProviderConfigurer func(context.Context, string) error
+
+func provideMCPProviderConfigurer(settings operatorsettings.Service, providerService providers.Service) mcpProviderConfigurer {
+	return func(ctx context.Context, home string) error {
+		return configureMCPProvidersAtHome(ctx, settings, providerService, home)
+	}
+}
+
+// provideMCPServerBuilder composes owner adapters at the Wire boundary. The
+// protocol stdio package receives only the resulting inert server and caller
+// streams; it does not construct Factory Sessions, Recordings, or workflow
+// services while an opening is being selected.
+func provideMCPServerBuilder(
+	workingDirectory platformfilesystem.WorkingDirectory,
+	settings operatorsettings.Service,
+	providerService providers.Service,
+	settingsFiles operatorsettings.FileSystem,
+	homeDirectory factorysessions.HomeDirectoryResolver,
+) mcpServerBuilder {
+	skills, resources, err := mcpSubagentContent(settings, settingsFiles, homeDirectory)
+	if err != nil {
+		return func(factorysessionwire.DurableExecutionService, recordings.Service, factorysessionwire.RequestPreparation, factoryruntime.WorkflowPreviewOperation, factorysessions.TargetExecutionService) (*mcpserver.Server, error) {
+			return nil, err
+		}
+	}
+	return func(
+		execution factorysessionwire.DurableExecutionService,
+		recordingsService recordings.Service,
+		prepare factorysessionwire.RequestPreparation,
+		workflowPreview factoryruntime.WorkflowPreviewOperation,
+		target factorysessions.TargetExecutionService,
+	) (*mcpserver.Server, error) {
+		workingRoot, err := workingDirectory.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("resolve MCP working directory: %w", err)
+		}
+		inspection := factorysessionmcp.RecordingsInspection(recordingsService)
+		if inspection == nil {
+			if bridge := factorysessionmapping.NewDurableInspectionBridge(execution); bridge != nil {
+				inspection = recordingmcp.NewLegacyFactorySessionInspection(bridge)
+			}
+		}
+		subagentOperation := mcpserver.ToolOperation(factorysessionmcp.BindToolOperation(
+			execution, inspection, prepare, workflowPreview, target, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString),
+		))
+		return mcpserver.New(mcpserver.Options{
+			Skills:          skills,
+			Resources:       resources,
+			AdditionalTools: mcpConfigurationTools(settings, providerService, homeDirectory),
+			ToolOperation: func(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
+				if name == factorysessionmcp.ToolSubagent {
+					if err := configureMCPProviders(ctx, settings, providerService, homeDirectory); err != nil {
+						return nil, err
+					}
+				}
+				return subagentOperation(ctx, name, raw)
+			},
+		})
+	}
+}
+
+func mcpConfigurationTools(settings operatorsettings.Service, providerService providers.Service, homeDirectory factorysessions.HomeDirectoryResolver) []mcpserver.ToolRegistration {
+	return []mcpserver.ToolRegistration{
+		{
+			Name:        providersmcp.ToolListProviders,
+			Description: "List the actual providers, canonical names, models, reasoning efforts, and readiness available to this installation.",
+			InputSchema: []byte(`{"type":"object","additionalProperties":false,"properties":{}}`),
+			Call: func(ctx context.Context, _ string, _ json.RawMessage) (json.RawMessage, error) {
+				return listMCPProviders(ctx, settings, providerService, homeDirectory)
+			},
+		},
+		{
+			Name:        operatorsettingsmcp.ToolSetSubagentDefaults,
+			Description: "Set the operator-wide default subagent provider and/or model using the canonical operator configuration path.",
+			InputSchema: []byte(`{"type":"object","additionalProperties":false,"properties":{"provider":{"type":"string"},"model":{"type":"string"}},"minProperties":1}`),
+			Call: func(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
+				home, err := resolveMCPHomeDirectory(ctx, homeDirectory)
+				if err != nil {
+					return nil, err
+				}
+				return operatorsettingsmcp.ConfigureSubagentsTool(ctx, settings, home, name, raw, uuid.NewString)
+			},
+		},
+		{
+			Name:        operatorsettingsmcp.ToolAddACPProvider,
+			Description: "Add a validated custom stdio ACP provider integration to the operator configuration and activate it in the current Providers service.",
+			InputSchema: []byte(`{"type":"object","additionalProperties":false,"properties":{"id":{"type":"string"},"name":{"type":"string"},"transport":{"type":"string","enum":["stdio"]},"command":{"type":"string"}},"required":["name","command"]}`),
+			Call: func(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
+				home, err := resolveMCPHomeDirectory(ctx, homeDirectory)
+				if err != nil {
+					return nil, err
+				}
+				result, err := operatorsettingsmcp.ConfigureSubagentsTool(ctx, settings, home, name, raw, uuid.NewString)
+				if err != nil {
+					return nil, err
+				}
+				if err := configureMCPProviders(ctx, settings, providerService, homeDirectory); err != nil {
+					return nil, err
+				}
+				return withMCPRestartRequired(result, false)
+			},
+		},
+	}
+}
+
+func configureMCPProviders(ctx context.Context, settings operatorsettings.Service, providerService providers.Service, homeDirectory factorysessions.HomeDirectoryResolver) error {
+	home, err := resolveMCPHomeDirectory(ctx, homeDirectory)
+	if err != nil {
+		return err
+	}
+	return configureMCPProvidersAtHome(ctx, settings, providerService, home)
+}
+
+func configureMCPProvidersAtHome(ctx context.Context, settings operatorsettings.Service, providerService providers.Service, home string) error {
+	if settings == nil || providerService == nil {
+		return fmt.Errorf("operator settings and Providers services are required")
+	}
+	configurable, ok := providerService.(interface {
+		ConfigureACPIntegrations(context.Context, []providers.ACPIntegration) error
+	})
+	if !ok {
+		return fmt.Errorf("Providers ACP configuration is unavailable")
+	}
+	document, err := settings.LoadDocument(operatorsettings.LoadDocumentRequest{Path: settings.DefaultConfigPath(home)})
+	if err != nil {
+		return err
+	}
+	configured := document.Document.Workers.ACP.Integrations
+	integrations := make([]providers.ACPIntegration, len(configured))
+	for index, integration := range configured {
+		integrations[index] = providers.ACPIntegration{ID: integration.ID, Name: providers.ID(integration.Name), Transport: integration.Transport, Command: integration.Command}
+	}
+	return configurable.ConfigureACPIntegrations(ctx, integrations)
+}
+
+func listMCPProviders(ctx context.Context, settings operatorsettings.Service, providerService providers.Service, homeDirectory factorysessions.HomeDirectoryResolver) (json.RawMessage, error) {
+	if err := configureMCPProviders(ctx, settings, providerService, homeDirectory); err != nil {
+		return nil, err
+	}
+	home, err := resolveMCPHomeDirectory(ctx, homeDirectory)
+	if err != nil {
+		return nil, err
+	}
+	document, err := settings.LoadDocument(operatorsettings.LoadDocumentRequest{Path: settings.DefaultConfigPath(home)})
+	if err != nil {
+		return nil, err
+	}
+	result, err := providerService.ListProviders(ctx, providers.ListProvidersRequest{})
+	if err != nil {
+		return nil, err
+	}
+	existing := make(map[providers.ID]struct{}, len(result.Providers))
+	for _, descriptor := range result.Providers {
+		existing[descriptor.ID] = struct{}{}
+	}
+	for _, integration := range document.Document.Workers.ACP.Integrations {
+		id := providers.ID(integration.Name)
+		if _, ok := existing[id]; ok {
+			continue
+		}
+		result.Providers = append(result.Providers, providers.Descriptor{
+			ID: id, DisplayName: integration.Name, Availability: providers.AvailabilitySelectable,
+			Readiness: providers.ReadinessUnverified, TechnicalSupportLevel: providers.TechnicalSupportExperimental,
+			ImplementationAvailability: providers.ImplementationExternallySupplied,
+			Capabilities:               []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilitySessionResume},
+		})
+	}
+	return json.Marshal(providersmcp.ToolResponse[providers.ListProvidersResult]{Result: &result})
+}
+
+func withMCPRestartRequired(response json.RawMessage, required bool) (json.RawMessage, error) {
+	var envelope map[string]any
+	if err := json.Unmarshal(response, &envelope); err != nil {
+		return nil, err
+	}
+	result, ok := envelope["result"].(map[string]any)
+	if !ok {
+		return response, nil
+	}
+	result["requiresRestart"] = required
+	return json.Marshal(envelope)
+}
+
+func resolveMCPHomeDirectory(ctx context.Context, fallback factorysessions.HomeDirectoryResolver) (string, error) {
+	if home := processcontract.HomeDirectory(ctx); home != "" {
+		return home, nil
+	}
+	return fallback()
+}
+
+func mcpSubagentContent(
+	settings operatorsettings.Service,
+	files operatorsettings.FileSystem,
+	homeDirectory factorysessions.HomeDirectoryResolver,
+) ([]mcpserver.SkillEntry, []mcpserver.ResourceRegistration, error) {
+	frontmatter, err := mcpcontent.SkillFrontmatter()
+	if err != nil {
+		return nil, nil, err
+	}
+	skill := mcpcontent.SkillBytes()
+	schema := mcpcontent.SchemaBytes()
+	const skillURI = "skill://subagent-configuration/SKILL.md"
+	const schemaURI = "you://operator/config/schema"
+	const currentURI = "you://operator/config/current"
+	digest := sha256.Sum256(skill)
+	entries := []mcpserver.SkillEntry{{
+		URI:         skillURI,
+		Frontmatter: frontmatter,
+		Resources: []mcpserver.SkillResource{{
+			URI: skillURI, Digest: "sha256:" + hex.EncodeToString(digest[:]), Size: int64(len(skill)),
+		}},
+	}}
+	resources := []mcpserver.ResourceRegistration{
+		{
+			Resource: &mcp.Resource{URI: skillURI, Name: "subagent-configuration", Description: "Configure subagent defaults and providers", MIMEType: "text/markdown", Size: int64(len(skill))},
+			Read: func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+				return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: skillURI, MIMEType: "text/markdown", Text: string(skill)}}}, nil
+			},
+		},
+		{
+			Resource: &mcp.Resource{URI: schemaURI, Name: "operator-config-schema", Description: "JSON Schema for the operator configuration file", MIMEType: "application/schema+json", Size: int64(len(schema))},
+			Read: func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+				return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: schemaURI, MIMEType: "application/schema+json", Text: string(schema)}}}, nil
+			},
+		},
+		{
+			Resource: &mcp.Resource{URI: currentURI, Name: "current-operator-config", Description: "Current operator configuration file, or an empty object when absent", MIMEType: "application/json"},
+			Read: func(ctx context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+				resourceHome, err := resolveMCPHomeDirectory(ctx, homeDirectory)
+				if err != nil {
+					return nil, err
+				}
+				data, err := operatorsettingsmcp.ReadCurrentConfig(ctx, settings.DefaultConfigPath, files, resourceHome)
+				if err != nil {
+					return nil, err
+				}
+				return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: currentURI, MIMEType: "application/json", Text: string(data)}}}, nil
+			},
+		},
+	}
+	return entries, resources, nil
+}

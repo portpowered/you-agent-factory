@@ -76,8 +76,51 @@ The subagent can inspect the workspace with read-only tools. Each call opens
 and closes its own Factory Session.
 
 If no provider default is configured, run `you init --provider codex` or supply
-`provider` in the tool call. `you.subagent` is available in both MCP backing
-modes; the mode controls the separate durable JavaScript Factory Session tools.
+`provider` in the tool call. `you.subagent` is available alongside the durable
+Factory Session tools.
+
+## Discover subagent configuration
+
+The server publishes the `subagent-configuration` skill through the MCP Skills
+extension. A host that supports the extension can call `skills/list`, then
+`skills/get` for `skill://subagent-configuration/SKILL.md`. Read that file with
+`resources/read`. The skill explains the default provider and model, provider
+names, and custom ACP agent setup.
+
+The server also publishes two configuration resources:
+
+| Resource URI | Content |
+|--------------|---------|
+| `you://operator/config/schema` | JSON Schema derived from the `GlobalConfig` OpenAPI contract |
+| `you://operator/config/current` | The current operator configuration file, or `{}` when it does not exist |
+
+Call `resources/list` to discover the resources, then `resources/read` to read
+them. The current-file resource reads the file for each request, so a later read
+shows changes made after the MCP server started. The file is located at
+`~/.you-agent-factory/config.json` on macOS and Linux, or
+`%USERPROFILE%\.you-agent-factory\config.json` on Windows. Keep sensitive
+values from that file out of shared transcripts.
+
+The MCP tool catalog includes `you.provider.list_providers` to inspect the
+available provider names, `you.operator_settings.set_subagent_defaults` to set
+the default provider and model, and `you.operator_settings.add_acp_provider` to
+register a custom ACP command. For example, after registering a local OpenCode
+command, set its name as the default provider:
+
+```json
+{"name":"you.operator_settings.add_acp_provider","arguments":{"name":"local-opencode","command":"/absolute/path/to/opencode acp"}}
+```
+
+```json
+{"name":"you.operator_settings.set_subagent_defaults","arguments":{"provider":"local-opencode"}}
+```
+
+Read `you://operator/config/current` to confirm the saved configuration.
+
+`you.subagent` waits for a terminal result. Its optional `timeoutMillis` is a
+wait budget in milliseconds; for example, `3600000` requests one hour. The MCP
+host must also allow a call of that duration. If the host ends the request
+early, the call cannot return the eventual answer through the same request.
 
 ## Choose A Backing Mode
 
@@ -86,18 +129,16 @@ only in how Factory Sessions execute.
 
 | Mode | Host arguments | Use it for |
 |------|----------------|------------|
-| Fixture-backed (default) | `["server", "mcp"]` | Deterministic durable-session smoke and live `you.subagent` calls |
-| Runtime-backed | `["server", "mcp", "--runtime"]` | Live durable JavaScript workflow execution |
+| Runtime-backed (default) | `["server", "mcp"]` | Live subagents and durable JavaScript workflow execution |
+| Fixture-backed | `["server", "mcp", "--fixture-catalog", "/absolute/path/to/catalog.json"]` | Deterministic durable-session smoke |
 
-The equivalent runtime-backed child-process command is:
+The default child-process command is:
 
 ```bash
-you server mcp --runtime
+you server mcp
 ```
 
-Fixture-backed mode searches upward from the working directory for
-`pkg/transports/http/testdata/durable-session-contract-fixtures.json`.
-When the catalog is elsewhere, pass its path explicitly:
+To use fixture-backed mode, pass the catalog path explicitly:
 
 ```json
 "args": ["server", "mcp", "--fixture-catalog", "/absolute/path/to/durable-session-contract-fixtures.json"]
@@ -109,14 +150,12 @@ source root, add `--project-root`:
 ```json
 {
   "command": "/absolute/path/to/you",
-  "args": ["server", "mcp", "--runtime", "--project-root", "/absolute/path/to/project"],
+  "args": ["server", "mcp", "--project-root", "/absolute/path/to/project"],
   "cwd": "/absolute/path/to/project"
 }
 ```
 
-Do not combine `--runtime` with `--fixture-catalog`. Use runtime mode for real
-`INLINE_WORKFLOW` or named-source execution; the default mode resolves only the
-deterministic catalog scenarios.
+Use the default runtime mode for real `INLINE_WORKFLOW` or named-source execution.
 
 ## Use Canonical Factory Session Tools
 
@@ -192,9 +231,8 @@ go test ./tests/functional/smoke -run TestDocsCommandSmoke
 |--------------------|--------|
 | Host cannot start `you` | Use an absolute executable path, confirm it is executable, and keep `server` and `mcp` as separate arguments. |
 | No tools appear | Reload the host, inspect child-process stderr, and confirm stdout is not receiving logs or shell banners. |
-| `fixture catalog not found` | Start from the repository/project root that contains the catalog or pass an absolute `--fixture-catalog` path. |
-| Named workflow or source is not found | Set `cwd` to the project root or use runtime mode with an explicit `--project-root`; confirm the source exists under a supported source location. |
-| `cannot combine --runtime with --fixture-catalog` | Choose exactly one backing mode and remove the other mode's flag. |
+| `fixture catalog not found` | Pass an absolute `--fixture-catalog` path to an existing catalog. |
+| Named workflow or source is not found | Set `cwd` to the project root or use an explicit `--project-root`; confirm the source exists under a supported source location. |
 | `factory_session.result.not_ready` with `retryable: true` | Keep the same `sessionId` and poll status/result with backoff; do not start duplicate Work. |
 | `factory_session.session.not_found` | Stop polling the bad id and restore the exact `sessionId` returned by start; reconnecting does not create a replacement session. |
 | Event reconnect cursor is not found | Keep the same Factory Session, restore a known event id or sequence, and do not assume missed events were processed. |

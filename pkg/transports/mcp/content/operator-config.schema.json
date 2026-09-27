@@ -1,0 +1,355 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "you://operator/config/schema",
+  "title": "Operator configuration",
+  "type": "object",
+  "additionalProperties": true,
+  "description": "Shared operator configuration stored in .you-agent-factory/config.json.",
+  "properties": {
+    "backendScopeID": {
+      "type": "string",
+      "description": "Stable identifier for the local provider-backed runtime boundary."
+    },
+    "defaults": {
+      "$ref": "#/$defs/GlobalConfigDefaults"
+    },
+    "priceTable": {
+      "$ref": "#/$defs/GlobalConfigPriceTable"
+    },
+    "runtime": {
+      "$ref": "#/$defs/GlobalConfigRuntime"
+    },
+    "models": {
+      "$ref": "#/$defs/GlobalConfigModels"
+    },
+    "workers": {
+      "$ref": "#/$defs/GlobalConfigWorkers"
+    },
+    "workerPresets": {
+      "type": "array",
+      "description": "Named worker model presets loaded from the shared configuration file.",
+      "items": {
+        "$ref": "#/$defs/GlobalConfigWorkerPreset"
+      }
+    }
+  },
+  "$defs": {
+    "GlobalConfigWorkerPreset": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Named worker model selection available to Factory Session runtime opening.",
+      "required": [
+        "id",
+        "modelProvider"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": ".*[^\t-\r    -     　].*",
+          "description": "Non-empty preset identifier after surrounding whitespace is trimmed."
+        },
+        "modelProvider": {
+          "$ref": "#/$defs/GlobalConfigWorkerPresetModelProvider"
+        },
+        "model": {
+          "type": "string",
+          "description": "Optional model name, trimmed when present."
+        },
+        "reasoningEffort": {
+          "$ref": "#/$defs/GlobalConfigWorkerPresetReasoningEffort"
+        }
+      }
+    },
+    "GlobalConfigWorkerPresetReasoningEffort": {
+      "type": "string",
+      "description": "Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.",
+      "pattern": "^[\t-\r    -     　]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH]|[xX][hH][iI][gG][hH]|[mM][aA][xX])?[\t-\r    -     　]*$"
+    },
+    "GlobalConfigWorkerPresetModelProvider": {
+      "type": "string",
+      "description": "Canonical provider identity or built-in compatibility alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.",
+      "pattern": "^[\t-\r    -     　]*(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|OPENAI)[\t-\r    -     　]*$"
+    },
+    "GlobalConfigWorkers": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "acp": {
+          "$ref": "#/$defs/GlobalConfigACPSettings"
+        }
+      }
+    },
+    "GlobalConfigACPSettings": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "integrations": {
+          "type": "array",
+          "description": "Operator-selected ACP provider integrations. Availability is derived by the Providers catalog and is never persisted here.",
+          "items": {
+            "$ref": "#/$defs/GlobalConfigACPIntegration"
+          }
+        },
+        "agentProfile": {
+          "$ref": "#/$defs/GlobalConfigACPAgentProfile"
+        }
+      }
+    },
+    "GlobalConfigACPAgentProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultTarget"
+      ],
+      "properties": {
+        "defaultTarget": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unversioned namespaced Factory target reference, such as factory:@you/factory-builder. Factory Definitions owns enumeration and canonical reference resolution."
+        },
+        "allowedTargets": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Optional ordered allowlist of unversioned namespaced Factory target references. Order is authored and preserved. Omit this property to leave the profile unrestricted, which makes every installed Factory selectable. An explicitly empty array is rejected, so omission is the only way to express \"no restriction\".",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "GlobalConfigACPIntegration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "transport",
+        "command"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Stable settings-entry identity. This is distinct from the provider name selected by a Worker."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$",
+          "description": "Canonical Providers catalog identity, such as cursor-acp."
+        },
+        "transport": {
+          "type": "string",
+          "enum": [
+            "stdio"
+          ],
+          "description": "ACP transport. P0 supports stdio only."
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "Operator-authored ACP launch command preserved as one settings value. It contains no permission or timeout policy."
+        }
+      }
+    },
+    "GlobalConfigModels": {
+      "type": "object",
+      "description": "Optional operator model overlays keyed by model name. A model entry may override one or more built-in fields or fully describe a new model name.",
+      "additionalProperties": {
+        "$ref": "#/$defs/GlobalConfigModel"
+      }
+    },
+    "GlobalConfigModel": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional operator overlay for one model. Omitted fields preserve a built-in definition; new model names must provide every field.",
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Model source path or provider-neutral source URI."
+        },
+        "backend": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Provider-neutral backend identity selected for this model."
+        },
+        "loadPolicy": {
+          "$ref": "#/$defs/GlobalConfigModelLoadPolicy"
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Ordered generic operation names supported by this model.",
+          "items": {
+            "$ref": "#/$defs/GlobalConfigModelOperation"
+          }
+        }
+      }
+    },
+    "GlobalConfigModelOperation": {
+      "type": "string",
+      "description": "Generic provider-neutral operation contract name.",
+      "enum": [
+        "OMNI",
+        "EMBED",
+        "TTS",
+        "ASR"
+      ]
+    },
+    "GlobalConfigModelLoadPolicy": {
+      "type": "string",
+      "description": "Operator model load policy. Runtime activation is owned by Models.",
+      "enum": [
+        "ON_DEMAND"
+      ]
+    },
+    "GlobalConfigRuntime": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Runtime observability settings loaded from operator configuration before command-line overrides.",
+      "properties": {
+        "logging": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/GlobalConfigRuntimeArtifactSettings"
+            }
+          ],
+          "description": "Structured runtime log storage settings. Omitted values use the documented production defaults."
+        },
+        "metrics": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/GlobalConfigRuntimeArtifactSettings"
+            }
+          ],
+          "description": "Runtime metrics storage settings. Omitted values use the documented production defaults."
+        }
+      }
+    },
+    "GlobalConfigRuntimeArtifactSettings": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Rolling-file storage settings for one runtime observability artifact.",
+      "properties": {
+        "directory": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional artifact root. Omission uses the runtime-owned directory below the operator home."
+        },
+        "maxSizeMB": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 100,
+          "description": "Maximum artifact file size in megabytes before rotation."
+        },
+        "maxBackups": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 20,
+          "description": "Maximum number of rotated artifact files to retain."
+        },
+        "maxAgeDays": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 30,
+          "description": "Maximum age in days for rotated artifact files."
+        },
+        "compress": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether rotated artifact files are gzip-compressed."
+        }
+      }
+    },
+    "GlobalConfigPriceTable": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Operator-authored USD rates per one million tokens. Omit this property to use an empty table; no provider or model prices are supplied by default.",
+      "required": [
+        "currency",
+        "models"
+      ],
+      "properties": {
+        "currency": {
+          "type": "string",
+          "enum": [
+            "USD"
+          ],
+          "description": "Currency used by every configured rate. This contract supports USD only."
+        },
+        "models": {
+          "type": "array",
+          "description": "Deterministic provider/model price entries.",
+          "items": {
+            "$ref": "#/$defs/GlobalConfigPriceTableModel"
+          }
+        }
+      }
+    },
+    "GlobalConfigPriceTableModel": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Exact operator-authored rates for one provider and model identity.",
+      "required": [
+        "provider",
+        "model",
+        "inputPerMillionTokens",
+        "outputPerMillionTokens"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Canonical provider identity or a supported built-in alias; the Operator Settings decoder trims and canonicalizes this value."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Exact model identifier. It is trimmed but never guessed or aliased."
+        },
+        "inputPerMillionTokens": {
+          "type": "string",
+          "pattern": "^[0-9]+(?:\\.[0-9]+)?$",
+          "description": "Non-negative USD rate per one million uncached input tokens."
+        },
+        "outputPerMillionTokens": {
+          "type": "string",
+          "pattern": "^[0-9]+(?:\\.[0-9]+)?$",
+          "description": "Non-negative USD rate per one million non-reasoning output tokens."
+        },
+        "cachedInputPerMillionTokens": {
+          "type": "string",
+          "pattern": "^[0-9]+(?:\\.[0-9]+)?$",
+          "description": "Optional non-negative USD rate per one million cached input tokens."
+        },
+        "reasoningOutputPerMillionTokens": {
+          "type": "string",
+          "pattern": "^[0-9]+(?:\\.[0-9]+)?$",
+          "description": "Optional non-negative USD rate per one million reasoning output tokens."
+        }
+      }
+    },
+    "GlobalConfigDefaults": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Operator defaults that participate independently in file, environment, and flag precedence.",
+      "properties": {
+        "workerModelProvider": {
+          "type": "string",
+          "description": "Default worker model provider, including supported aliases and symbolic DEFAULT resolution."
+        },
+        "workerModel": {
+          "type": "string",
+          "description": "Default worker model name."
+        }
+      }
+    }
+  }
+}

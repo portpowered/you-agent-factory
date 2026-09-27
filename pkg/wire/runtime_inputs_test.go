@@ -176,7 +176,7 @@ func TestStdioApplicationOpenerMapsOnlyInvocationEdgeValues(t *testing.T) {
 	output := &strings.Builder{}
 	opening := &recordingStdioOpening{result: testStdioApplication{}}
 	owner := factorysessionwire.NewOpeningPresentationOwner()
-	adapter, err := provideStdioApplicationOpener(opening, owner)
+	adapter, err := provideStdioApplicationOpener(opening, owner, func(context.Context, string) error { return nil })
 	if err != nil {
 		t.Fatalf("provideStdioApplicationOpener(): %v", err)
 	}
@@ -209,7 +209,7 @@ func TestStdioApplicationOpenerMapsOnlyInvocationEdgeValues(t *testing.T) {
 func TestStdioApplicationOpenerRequiresOwnerOperation(t *testing.T) {
 	t.Parallel()
 
-	adapter, err := provideStdioApplicationOpener(nil, nil)
+	adapter, err := provideStdioApplicationOpener(nil, nil, nil)
 	if err == nil || adapter != nil {
 		t.Fatalf("provideStdioApplicationOpener(nil) = (%v, %v), want nil and error", adapter, err)
 	}

@@ -35,7 +35,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
-	factorysessionmcp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
@@ -46,7 +45,6 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
-	recordingmcp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
@@ -55,8 +53,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
-	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"go.uber.org/zap"
 )
@@ -647,44 +643,6 @@ func provideManagedRunnerFactory() runtimeapplication.ManagedRunnerFactory {
 	return runtimeapplication.NewManagedRunner
 }
 
-type mcpServerBuilder func(
-	factorysessionwire.DurableExecutionService,
-	recordings.Service,
-	factorysessionwire.RequestPreparation,
-	factoryruntime.WorkflowPreviewOperation,
-	factorysessions.TargetExecutionService,
-) (*mcpserver.Server, error)
-
-// provideMCPServerBuilder composes owner adapters at the Wire boundary. The
-// protocol stdio package receives only the resulting inert server and caller
-// streams; it does not construct Factory Sessions, Recordings, or workflow
-// services while an opening is being selected.
-func provideMCPServerBuilder(workingDirectory platformfilesystem.WorkingDirectory) mcpServerBuilder {
-	return func(
-		execution factorysessionwire.DurableExecutionService,
-		recordingsService recordings.Service,
-		prepare factorysessionwire.RequestPreparation,
-		workflowPreview factoryruntime.WorkflowPreviewOperation,
-		target factorysessions.TargetExecutionService,
-	) (*mcpserver.Server, error) {
-		workingRoot, err := workingDirectory.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("resolve MCP working directory: %w", err)
-		}
-		inspection := factorysessionmcp.RecordingsInspection(recordingsService)
-		if inspection == nil {
-			if bridge := factorysessionmapping.NewDurableInspectionBridge(execution); bridge != nil {
-				inspection = recordingmcp.NewLegacyFactorySessionInspection(bridge)
-			}
-		}
-		return mcpserver.New(mcpserver.Options{
-			ToolOperation: mcpserver.ToolOperation(factorysessionmcp.BindToolOperation(
-				execution, inspection, prepare, workflowPreview, target, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString),
-			)),
-		})
-	}
-}
-
 func provideFixtureStdioApplicationBuilder(
 	build initializerapplication.StdioRunnerBuilder,
 	newRunner lifecycle.RunnerFactory,
@@ -787,12 +745,18 @@ func stdioLifecycleOpening(
 type stdioApplicationOpener struct {
 	open          factorysessionwire.StdioOpeningOperation
 	presentations factorysessions.OpeningPresentationOwner
+	configureProviders mcpProviderConfigurer
 }
 
 func (adapter stdioApplicationOpener) OpenStdio(
 	ctx context.Context,
 	intent processcontract.MCPIntent,
 ) (initializer.RunApplication, error) {
+	if intent.RuntimeBacked {
+		if err := adapter.configureProviders(ctx, intent.HomeDir); err != nil {
+			return nil, fmt.Errorf("configure MCP providers: %w", err)
+		}
+	}
 	request := factorysessions.StdioOpeningRequest{
 		FixtureCatalogPath: intent.FixtureCatalogPath,
 		RuntimeBacked:      intent.RuntimeBacked,
@@ -848,11 +812,15 @@ func (application scopedRunApplication) Run(ctx context.Context) error {
 func provideStdioApplicationOpener(
 	open factorysessionwire.StdioOpeningOperation,
 	presentations factorysessions.OpeningPresentationOwner,
+	configureProviders mcpProviderConfigurer,
 ) (processcontract.StdioApplicationOpener, error) {
 	if open == nil {
 		return nil, errors.New("Factory Session stdio opening operation is required")
 	}
-	return stdioApplicationOpener{open: open, presentations: presentations}, nil
+	if configureProviders == nil {
+		return nil, errors.New("MCP provider configuration is required")
+	}
+	return stdioApplicationOpener{open: open, presentations: presentations, configureProviders: configureProviders}, nil
 }
 
 func provideLifecycleRunnerFactory() lifecycle.RunnerFactory {

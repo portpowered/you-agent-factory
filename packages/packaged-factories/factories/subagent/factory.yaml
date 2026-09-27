@@ -63,7 +63,7 @@ resources: []
 workers:
   - name: subagent-worker
     type: AGENT_WORKER
-    skipPermissions: true
+    skipPermissions: false
     modelProvider: ${workerProvider}
     model: ${workerModel}
     reasoningEffort: ${workerReasoningEffort}

@@ -28,17 +28,14 @@ func TestCanonicalServerMCPContractIsAuthoritative(t *testing.T) {
 	flags := serve["flags"].(map[string]any)
 	for _, flagID := range []string{
 		"you.server.mcp.flag.fixture-catalog",
-		"you.server.mcp.flag.runtime",
 		"you.server.mcp.flag.project-root",
 	} {
 		if _, ok := flags[flagID]; !ok {
 			t.Fatalf("you.server.mcp missing %s", flagID)
 		}
 	}
-	relationships := serve["relationships"].(map[string]any)
-	mutex := relationships["you.server.mcp.relationship.runtime-source"].(map[string]any)
-	if got := mutex["kind"]; got != "mutually-exclusive" {
-		t.Fatalf("runtime source relationship kind = %v, want mutually-exclusive", got)
+	if _, ok := serve["flags"].(map[string]any)["you.server.mcp.flag.runtime"]; ok {
+		t.Fatal("you.server.mcp must not require the removed --runtime flag")
 	}
 	channels := serve["channels"].(map[string]any)
 	if got := stringSlice(channels["input"]); !slices.Contains(got, "stdin") {

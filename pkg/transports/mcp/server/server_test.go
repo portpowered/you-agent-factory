@@ -7,12 +7,68 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 )
+
+func TestMCPToolCallRemainsOpenForLongSubagentWait(t *testing.T) {
+	t.Parallel()
+	simulatedWork := 1200 * time.Millisecond
+	if os.Getenv("YOU_MCP_LONG_DURATION_TEST") == "1" {
+		simulatedWork = 70 * time.Second
+	}
+	server, err := New(Options{ToolOperation: func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+		if name != mcpfactorysession.ToolSubagent {
+			return nil, errors.New("unexpected tool")
+		}
+		var request struct {
+			TimeoutMillis int64 `json:"timeoutMillis"`
+		}
+		if err := json.Unmarshal(input, &request); err != nil || request.TimeoutMillis != 3_600_000 {
+			return nil, errors.New("one-hour timeout was not forwarded")
+		}
+		select {
+		case <-time.After(simulatedWork):
+			return json.RawMessage(`{"result":{"sessionId":"long-session","status":"COMPLETED","text":"done"}}`), nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	serverCtx, stopServer := context.WithCancel(context.Background())
+	defer stopServer()
+	go func() { _ = server.Serve(serverCtx, serverTransport) }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "duration-test", Version: "1"}, nil)
+	clientBudget := 5 * time.Second
+	if simulatedWork > clientBudget {
+		clientBudget = simulatedWork + 15*time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), clientBudget)
+	defer cancel()
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	start := time.Now()
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: mcpfactorysession.ToolSubagent, Arguments: map[string]any{
+		"prompt": "long task", "timeoutMillis": int64(3_600_000),
+	}})
+	if err != nil || result.IsError {
+		t.Fatalf("long MCP call = %#v, %v", result, err)
+	}
+	if elapsed := time.Since(start); elapsed < simulatedWork {
+		t.Fatalf("MCP call returned after %v, before simulated work ended", elapsed)
+	}
+}
 
 type recordedToolCall struct {
 	name      string
@@ -150,13 +206,75 @@ func TestSDKProtocolErrors(t *testing.T) {
 		},
 		{
 			request: `{"jsonrpc":"2.0","id":3,"method":"nope"}`,
-			want:    `{"jsonrpc":"2.0","id":3,"error":{"code":0,"message":"JSON RPC not handled: \"nope\" unsupported"}}`,
+			want:    `{"jsonrpc":"2.0","id":3,"error":{"code":-32601,"message":"method not found: \"nope\""}}`,
 		},
 	} {
 		response := runRawRequest(t, server, test.request)
 		if response != test.want {
 			t.Fatalf("response = %s, want %s", response, test.want)
 		}
+	}
+}
+
+func TestSkillsMethodsAndResources(t *testing.T) {
+	t.Parallel()
+	entry := SkillEntry{
+		URI:         "skill://operator-settings/SKILL.md",
+		Frontmatter: map[string]any{"name": "operator-settings", "description": "Configure subagents"},
+		Resources:   []SkillResource{{URI: "skill://operator-settings/SKILL.md", Digest: "sha256:abc", Size: 42}},
+	}
+	server, err := New(Options{
+		ToolOperation: scriptedToolOperation(nil, nil),
+		Skills:        []SkillEntry{entry},
+		Resources: []ResourceRegistration{{
+			Resource: &mcp.Resource{URI: "you://operator/config", Name: "Operator config", MIMEType: "application/json"},
+			Read: func(_ context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+				return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: req.Params.URI, MIMEType: "application/json", Text: `{}`}}}, nil
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	for _, test := range []struct{ request, contains string }{
+		{`{"jsonrpc":"2.0","id":10,"method":"skills/list","params":{}}`, `"cacheScope":"public"`},
+		{`{"jsonrpc":"2.0","id":11,"method":"skills/get","params":{"uri":"skill://operator-settings/SKILL.md"}}`, `"name":"operator-settings"`},
+		{`{"jsonrpc":"2.0","id":12,"method":"resources/list","params":{}}`, `you://operator/config`},
+		{`{"jsonrpc":"2.0","id":14,"method":"resources/read","params":{"uri":"you://operator/config"}}`, `"text":"{}"`},
+	} {
+		response := runRawRequest(t, server, test.request)
+		if !strings.Contains(response, test.contains) {
+			t.Fatalf("response = %s, want substring %q", response, test.contains)
+		}
+	}
+	list := runRawRequest(t, server, `{"jsonrpc":"2.0","id":15,"method":"skills/list","params":{}}`)
+	if !strings.Contains(list, `"ttlMs":300000`) || !strings.Contains(list, `"resultType":"complete"`) {
+		t.Fatalf("skills/list result = %s, want complete result with ttlMs 300000", list)
+	}
+	missing := runRawRequest(t, server, `{"jsonrpc":"2.0","id":13,"method":"skills/get","params":{"uri":"skill://missing/SKILL.md"}}`)
+	if !strings.Contains(missing, `"code":-32602`) {
+		t.Fatalf("unknown skills/get response = %s, want invalid params", missing)
+	}
+}
+
+func TestSkillsCapabilityAdvertisedFor2026Protocol(t *testing.T) {
+	t.Parallel()
+	server, err := New(Options{
+		ToolOperation: scriptedToolOperation(nil, nil),
+		Skills: []SkillEntry{{
+			URI: "skill://test/SKILL.md", Frontmatter: map[string]any{"name": "test", "description": "Test skill"}, Resources: "dynamic",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	initialize, _ := runRawRequestAtVersion(t, server, "2026-07-28", `{"jsonrpc":"2.0","id":21,"method":"ping"}`)
+	if !strings.Contains(initialize, skillsExtension) {
+		t.Fatalf("initialize response = %s, want skills extension declaration", initialize)
+	}
+	discover, _ := runRawRequestAtVersion(t, server, "2026-07-28", `{"jsonrpc":"2.0","id":22,"method":"server/discover","params":{}}`)
+	if !strings.Contains(discover, skillsExtension) {
+		t.Fatalf("server/discover response = %s, want skills extension declaration", discover)
 	}
 }
 
@@ -170,6 +288,11 @@ func scriptedToolOperation(
 }
 
 func runRawRequest(t *testing.T, server *Server, request string) string {
+	_, response := runRawRequestAtVersion(t, server, "2024-11-05", request)
+	return response
+}
+
+func runRawRequestAtVersion(t *testing.T, server *Server, version, request string) (string, string) {
 	t.Helper()
 	inputReader, inputWriter := io.Pipe()
 	outputReader, outputWriter := io.Pipe()
@@ -178,10 +301,12 @@ func runRawRequest(t *testing.T, server *Server, request string) string {
 	done := make(chan error, 1)
 	go func() { done <- server.ServeStdio(ctx, inputReader, outputWriter) }()
 	scanner := bufio.NewScanner(outputReader)
-	_, _ = io.WriteString(inputWriter, `{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`+"\n")
+	initializeRequest := `{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"` + version + `","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
+	_, _ = io.WriteString(inputWriter, initializeRequest+"\n")
 	if !scanner.Scan() {
 		t.Fatalf("read initialize response: %v", scanner.Err())
 	}
+	initializeResponse := scanner.Text()
 	_, _ = io.WriteString(inputWriter, `{"jsonrpc":"2.0","method":"notifications/initialized"}`+"\n"+request+"\n")
 	if !scanner.Scan() {
 		t.Fatalf("read response: %v", scanner.Err())
@@ -191,7 +316,7 @@ func runRawRequest(t *testing.T, server *Server, request string) string {
 	if err := <-done; err != nil {
 		t.Fatalf("ServeStdio() error = %v", err)
 	}
-	return response
+	return initializeResponse, response
 }
 
 func assertToolListed(t *testing.T, tools []*mcp.Tool, name string) {

@@ -208,16 +208,6 @@ func TestValidateRejectsMigratedInputSetAndMetadataDriftIndependently(t *testing
 			path:     "you docs",
 			field:    "completion",
 		},
-		{
-			name: "missing relationship",
-			mutate: func(input *Input) {
-				input.ProductionInputs.Relationships = nil
-			},
-			kind:     KindMissingInput,
-			stableID: "you.server.mcp.relationship.runtime-source",
-			path:     "you server mcp",
-			field:    "relationship",
-		},
 	}
 
 	for _, test := range tests {

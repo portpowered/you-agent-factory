@@ -10,7 +10,6 @@ import (
 
 const (
 	fixtureCatalogInputID = "you.server.mcp.flag.fixture-catalog"
-	runtimeInputID        = "you.server.mcp.flag.runtime"
 	projectRootInputID    = "you.server.mcp.flag.project-root"
 )
 
@@ -37,10 +36,6 @@ func ResolvedServeHandler(
 		if err != nil {
 			return fmt.Errorf("read MCP fixture catalog input: %w", err)
 		}
-		runtimeBacked, err := inputs.Bool(runtimeInputID)
-		if err != nil {
-			return fmt.Errorf("read MCP runtime input: %w", err)
-		}
 		projectRoot, err := inputs.String(projectRootInputID)
 		if err != nil {
 			return fmt.Errorf("read MCP project root input: %w", err)
@@ -49,6 +44,7 @@ func ResolvedServeHandler(
 			return fmt.Errorf("MCP stdio initializer is required")
 		}
 		homeDir := ""
+		runtimeBacked := fixtureCatalogPath == ""
 		if runtimeBacked {
 			if binding.HomeDir == nil {
 				return fmt.Errorf("process home directory resolver is required")

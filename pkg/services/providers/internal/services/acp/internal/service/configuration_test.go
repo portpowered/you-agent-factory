@@ -2,10 +2,27 @@ package service
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
+
+func TestParseACPCommandPreservesWindowsExecutablePath(t *testing.T) {
+	for _, test := range []struct {
+		command string
+		want    []string
+	}{
+		{`C:\Users\andre\.bun\bin\opencode.exe acp`, []string{`C:\Users\andre\.bun\bin\opencode.exe`, "acp"}},
+		{`"C:\Program Files\OpenCode\opencode.exe" acp`, []string{`C:\Program Files\OpenCode\opencode.exe`, "acp"}},
+		{`npx -y opencode-ai acp`, []string{"npx", "-y", "opencode-ai", "acp"}},
+	} {
+		got, err := parseACPCommand(test.command)
+		if err != nil || !reflect.DeepEqual(got, test.want) {
+			t.Fatalf("parseACPCommand(%q) = %#v, %v; want %#v", test.command, got, err, test.want)
+		}
+	}
+}
 
 func TestConfigureRetainsUnchangedDaemonAndReplacesChangedCommand(t *testing.T) {
 	serviceValue, err := New([]providers.ACPIntegration{{

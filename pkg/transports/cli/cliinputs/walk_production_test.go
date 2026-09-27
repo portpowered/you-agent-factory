@@ -528,6 +528,7 @@ func assertModelsCommandCharacterization(
 		// the current public enum exposed by this CLI.
 		wantFlags = append(wantFlags,
 			modelsCharacterizationFlag{long: "input", scope: "local", valueType: "stringArray", defaultValue: "[]", repeatable: true, visibility: "visible"},
+			modelsCharacterizationFlag{long: "offline", scope: "local", valueType: "bool", defaultValue: "false", noOptionDefault: "true", visibility: "visible"},
 			modelsCharacterizationFlag{long: "operation", scope: "local", valueType: "string", defaultValue: "TTS", enum: []string{"ASR", "EMBED", "OMNI", "TTS"}, normalization: "trim", completionKind: "static", visibility: "visible"},
 			modelsCharacterizationFlag{long: "output", scope: "local", valueType: "stringArray", defaultValue: "[]", repeatable: true, visibility: "visible"},
 			modelsCharacterizationFlag{long: "output-map", scope: "local", valueType: "stringArray", defaultValue: "[]", repeatable: true, visibility: "visible"},

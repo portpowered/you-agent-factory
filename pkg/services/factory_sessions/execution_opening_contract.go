@@ -10,6 +10,7 @@ type ProviderIdentityResolver func(string) (string, error)
 // open a runtime-backed durable execution service without ambient discovery.
 type ExecutionRuntimeOpeningRequest struct {
 	ProjectRoot       string
+	FactoryConfigPath string
 	SystemConfigHome  string
 	FactorySessionID  string
 	ReplayPath        string
@@ -35,6 +36,7 @@ type StdioOpeningRequest struct {
 	FixtureCatalogPath string
 	RuntimeBacked      bool
 	ProjectRoot        string
+	FactoryConfigPath  string
 	SystemConfigHome   string
 	ScopeID            OpeningScopeID
 }

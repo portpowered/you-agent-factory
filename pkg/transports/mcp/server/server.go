@@ -27,9 +27,20 @@ type ToolOperation func(context.Context, string, json.RawMessage) (json.RawMessa
 // Options configures one MCP server instance around the exact injected raw
 // tool operation used by production and protocol tests.
 type Options struct {
-	ToolOperation ToolOperation
-	ServerName    string
-	ServerVersion string
+	ToolOperation   ToolOperation
+	AdditionalTools []ToolRegistration
+	ServerName      string
+	ServerVersion   string
+	Resources       []ResourceRegistration
+	Skills          []SkillEntry
+}
+
+// ToolRegistration adds an owner-composed tool to the generated catalog.
+type ToolRegistration struct {
+	Name        string
+	Description string
+	InputSchema json.RawMessage
+	Call        ToolOperation
 }
 
 // Server owns protocol and tool registration. Stream selection and lifecycle
@@ -44,7 +55,14 @@ func New(opts Options) (*Server, error) {
 	if opts.ToolOperation == nil {
 		return nil, fmt.Errorf("mcp server requires a tool operation")
 	}
+	sdk, err := newSDKServer(opts)
+	if err != nil {
+		return nil, err
+	}
+	return &Server{sdk: sdk}, nil
+}
 
+func newSDKServer(opts Options) (*mcp.Server, error) {
 	name := strings.TrimSpace(opts.ServerName)
 	if name == "" {
 		name = defaultServerName
@@ -54,18 +72,58 @@ func New(opts Options) (*Server, error) {
 		version = defaultServerVersion
 	}
 
+	capabilities := &mcp.ServerCapabilities{Tools: &mcp.ToolCapabilities{}}
+	if len(opts.Resources) > 0 {
+		capabilities.Resources = &mcp.ResourceCapabilities{}
+	}
+	if len(opts.Skills) > 0 {
+		capabilities.AddExtension(skillsExtension, nil)
+	}
 	sdk := mcp.NewServer(
 		&mcp.Implementation{Name: name, Version: version},
 		&mcp.ServerOptions{
-			Capabilities: &mcp.ServerCapabilities{
-				Tools: &mcp.ToolCapabilities{},
-			},
+			Capabilities: capabilities,
 		},
 	)
+	if err := registerResources(sdk, opts.Resources); err != nil {
+		return nil, err
+	}
 	if err := registerTools(sdk, toolCaller(opts.ToolOperation)); err != nil {
 		return nil, err
 	}
-	return &Server{sdk: sdk}, nil
+	if err := registerAdditionalTools(sdk, opts.AdditionalTools); err != nil {
+		return nil, err
+	}
+	if len(opts.Skills) > 0 {
+		if err := registerSkills(sdk, opts.Skills); err != nil {
+			return nil, err
+		}
+	}
+	return sdk, nil
+}
+
+func registerResources(server *mcp.Server, resources []ResourceRegistration) error {
+	for _, resource := range resources {
+		if resource.Resource == nil || resource.Read == nil {
+			return fmt.Errorf("mcp server resource registration requires resource and read handler")
+		}
+		server.AddResource(resource.Resource, resource.Read)
+	}
+	return nil
+}
+
+func registerAdditionalTools(server *mcp.Server, tools []ToolRegistration) error {
+	for _, tool := range tools {
+		if tool.Name == "" || tool.Call == nil || len(tool.InputSchema) == 0 {
+			return fmt.Errorf("mcp additional tool requires name, schema, and handler")
+		}
+		var schema map[string]any
+		if err := json.Unmarshal(tool.InputSchema, &schema); err != nil || schema["type"] != "object" {
+			return fmt.Errorf("mcp additional tool %s requires an object input schema", tool.Name)
+		}
+		addTool(server, tool.Name, tool.Description, tool.InputSchema, toolCaller(tool.Call))
+	}
+	return nil
 }
 
 type toolCaller func(context.Context, string, json.RawMessage) (json.RawMessage, error)

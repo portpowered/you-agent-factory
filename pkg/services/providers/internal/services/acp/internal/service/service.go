@@ -20,7 +20,6 @@ import (
 	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
-	"github.com/mattn/go-shellwords"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
@@ -153,7 +152,7 @@ func (service *Service) Configure(ctx context.Context, integrations []providers.
 		if integration.Transport != "stdio" {
 			return fmt.Errorf("configure ACP provider %q: unsupported transport %q", integration.Name, integration.Transport)
 		}
-		parts, err := shellwords.Parse(integration.Command)
+		parts, err := parseACPCommand(integration.Command)
 		if err != nil || len(parts) == 0 {
 			return fmt.Errorf("configure ACP provider %q: invalid command", integration.Name)
 		}

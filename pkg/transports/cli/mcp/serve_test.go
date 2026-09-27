@@ -15,7 +15,7 @@ import (
 
 func TestResolvedServeHandlerRequiresInjectedStdioInitializer(t *testing.T) {
 	handler := ResolvedServeHandler(ServeBinding{})
-	err := handler(&cobra.Command{Use: "serve"}, resolvedServeInputs(t, "", false, ""), resolvedinput.Inputs{})
+	err := handler(&cobra.Command{Use: "serve"}, resolvedServeInputs(t, "", ""), resolvedinput.Inputs{})
 	if err == nil || !strings.Contains(err.Error(), "MCP stdio initializer is required") {
 		t.Fatalf("handler error = %v, want missing injected initializer", err)
 	}
@@ -37,7 +37,7 @@ func TestResolvedServeHandlerDelegatesCanonicalIntentToStdioInitializer(t *testi
 	cmd.SetOut(&stdout)
 	if err := handler(
 		cmd,
-		resolvedServeInputs(t, "fixtures.json", false, "/workspace/project"),
+		resolvedServeInputs(t, "fixtures.json", "/workspace/project"),
 		resolvedinput.Inputs{},
 	); err != nil {
 		t.Fatalf("handler error = %v", err)
@@ -50,7 +50,7 @@ func TestResolvedServeHandlerDelegatesCanonicalIntentToStdioInitializer(t *testi
 	}
 }
 
-func TestResolvedServeHandlerRuntimeCarriesInjectedHomeToInitializer(t *testing.T) {
+func TestResolvedServeHandlerDefaultsToRuntimeAndCarriesInjectedHome(t *testing.T) {
 	var got startupcli.MCPIntent
 	handler := ResolvedServeHandler(ServeBinding{
 		HomeDir: func() (string, error) { return "/home/test", nil },
@@ -64,7 +64,7 @@ func TestResolvedServeHandlerRuntimeCarriesInjectedHomeToInitializer(t *testing.
 	cmd.SetOut(io.Discard)
 	if err := handler(
 		cmd,
-		resolvedServeInputs(t, "", true, "/workspace/project"),
+		resolvedServeInputs(t, "", "/workspace/project"),
 		resolvedinput.Inputs{},
 	); err != nil {
 		t.Fatalf("handler error = %v", err)
@@ -82,7 +82,7 @@ func TestResolvedServeHandlerPreservesHomeResolutionFailure(t *testing.T) {
 	})
 	err := handler(
 		&cobra.Command{Use: "serve"},
-		resolvedServeInputs(t, "", true, ""),
+		resolvedServeInputs(t, "", ""),
 		resolvedinput.Inputs{},
 	)
 	if !errors.Is(err, want) || !strings.Contains(err.Error(), "resolve process home directory") {
@@ -108,13 +108,8 @@ func TestResolvedServeHandlerReportsMissingCanonicalInputs(t *testing.T) {
 			wantErr: "read MCP fixture catalog input",
 		},
 		{
-			name:    "runtime",
-			inputs:  resolvedServePartialInputs(t, true, false, false),
-			wantErr: "read MCP runtime input",
-		},
-		{
 			name:    "project root",
-			inputs:  resolvedServePartialInputs(t, true, true, false),
+			inputs:  resolvedServePartialInputs(t, true, false),
 			wantErr: "read MCP project root input",
 		},
 	}
@@ -137,7 +132,7 @@ func TestResolvedServeHandlerRequiresHomeResolverForRuntime(t *testing.T) {
 	})
 	err := handler(
 		&cobra.Command{Use: "serve"},
-		resolvedServeInputs(t, "", true, "/workspace/project"),
+		resolvedServeInputs(t, "", "/workspace/project"),
 		resolvedinput.Inputs{},
 	)
 	if err == nil || !strings.Contains(err.Error(), "process home directory resolver is required") {
@@ -152,7 +147,7 @@ func TestResolvedServeHandlerPreservesInitializerFailure(t *testing.T) {
 	})
 	err := handler(
 		&cobra.Command{Use: "serve"},
-		resolvedServeInputs(t, "fixtures.json", false, ""),
+		resolvedServeInputs(t, "fixtures.json", ""),
 		resolvedinput.Inputs{},
 	)
 	if !errors.Is(err, want) {
@@ -163,12 +158,11 @@ func TestResolvedServeHandlerPreservesInitializerFailure(t *testing.T) {
 func resolvedServePartialInputs(
 	t *testing.T,
 	includeFixtureCatalog bool,
-	includeRuntime bool,
 	includeProjectRoot bool,
 ) resolvedinput.Inputs {
 	t.Helper()
-	definitions := make([]resolvedinput.Definition, 0, 3)
-	candidates := make([]resolvedinput.Candidate, 0, 3)
+	definitions := make([]resolvedinput.Definition, 0, 2)
+	candidates := make([]resolvedinput.Candidate, 0, 2)
 	if includeFixtureCatalog {
 		definitions = append(definitions, resolvedinput.Definition{
 			ID: fixtureCatalogInputID, Kind: resolvedinput.ValueKindString,
@@ -177,16 +171,6 @@ func resolvedServePartialInputs(
 		candidates = append(candidates, resolvedinput.Candidate{
 			InputID: fixtureCatalogInputID, Source: resolvedinput.SourceManifestDefault,
 			Value: resolvedinput.StringValue("fixtures.json"),
-		})
-	}
-	if includeRuntime {
-		definitions = append(definitions, resolvedinput.Definition{
-			ID: runtimeInputID, Kind: resolvedinput.ValueKindBool,
-			Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault},
-		})
-		candidates = append(candidates, resolvedinput.Candidate{
-			InputID: runtimeInputID, Source: resolvedinput.SourceManifestDefault,
-			Value: resolvedinput.BoolValue(false),
 		})
 	}
 	if includeProjectRoot {
@@ -209,18 +193,15 @@ func resolvedServePartialInputs(
 func resolvedServeInputs(
 	t *testing.T,
 	fixtureCatalog string,
-	runtimeBacked bool,
 	projectRoot string,
 ) resolvedinput.Inputs {
 	t.Helper()
 	definitions := []resolvedinput.Definition{
 		{ID: fixtureCatalogInputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault}},
-		{ID: runtimeInputID, Kind: resolvedinput.ValueKindBool, Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault}},
 		{ID: projectRootInputID, Kind: resolvedinput.ValueKindString, Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault}},
 	}
 	inputs, err := resolvedinput.Resolve(definitions, []resolvedinput.Candidate{
 		{InputID: fixtureCatalogInputID, Source: resolvedinput.SourceManifestDefault, Value: resolvedinput.StringValue(fixtureCatalog)},
-		{InputID: runtimeInputID, Source: resolvedinput.SourceManifestDefault, Value: resolvedinput.BoolValue(runtimeBacked)},
 		{InputID: projectRootInputID, Source: resolvedinput.SourceManifestDefault, Value: resolvedinput.StringValue(projectRoot)},
 	})
 	if err != nil {

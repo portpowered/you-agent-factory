@@ -196,11 +196,11 @@ func executeGeneratedMCPServe(
 	root.SetOut(stdout)
 	root.SetErr(io.Discard)
 	args := []string{"server", "mcp"}
-	if wantRuntime {
-		args = append(args, "--runtime")
-		if wantProjectRoot != "" {
-			args = append(args, "--project-root", wantProjectRoot)
-		}
+	if !wantRuntime {
+		args = append(args, "--fixture-catalog", "test-fixtures.json")
+	}
+	if wantProjectRoot != "" {
+		args = append(args, "--project-root", wantProjectRoot)
 	}
 	root.SetArgs(args)
 	return root.ExecuteContext(ctx)
