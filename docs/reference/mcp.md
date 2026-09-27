@@ -55,8 +55,10 @@ The MCP tool catalog contains `you.subagent`. Call it with a short prompt:
 The tool runs one packaged `@you/subagent` invocation and returns its answer as
 `result.text`. Optional `provider`, `model`, and `reasoningEffort` fields select
 the route for that call. Omit them to use the operator's configured defaults.
-The packaged subagent requests permission skipping by default. Providers that
-support ACP permissions can approve permission requests during the call.
+The packaged subagent requests permission skipping by default. Built-in
+OpenCode ACP supports this through permission requests; custom ACP integrations
+without a declared bypass capability ignore the request and retain their
+normal permission handling.
 
 The optional `timeoutMillis` is a wait budget in milliseconds. For example,
 `3600000` requests one hour; the MCP host must also allow a call of that

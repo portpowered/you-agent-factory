@@ -4,7 +4,7 @@
     "mcp.tool.you.subagent": {
       "id": "mcp.tool.you.subagent",
       "name": "you.subagent",
-      "description": "Run one bounded read-only subagent using packaged @you/subagent; omitted model options use operator and provider defaults.",
+      "description": "Run one bounded subagent using packaged @you/subagent; omitted model options use operator and provider defaults.",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,

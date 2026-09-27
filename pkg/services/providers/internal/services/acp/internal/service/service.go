@@ -1185,7 +1185,8 @@ func (c *client) RequestPermission(ctx context.Context, request acpsdk.RequestPe
 	c.mu.Unlock()
 	for _, option := range request.Options {
 		allow := option.Kind == acpsdk.PermissionOptionKindAllowOnce || option.Kind == acpsdk.PermissionOptionKindAllowAlways
-		if allow == want {
+		reject := option.Kind == acpsdk.PermissionOptionKindRejectOnce || option.Kind == acpsdk.PermissionOptionKindRejectAlways
+		if (want && allow) || (!want && reject) {
 			return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeSelected(option.OptionId)}, nil
 		}
 	}

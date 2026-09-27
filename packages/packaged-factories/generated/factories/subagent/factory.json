@@ -1,7 +1,7 @@
 {
   "description": {
     "type": "LOCALIZABLE_ASSET",
-    "value": "Runs one bounded read-only subagent and returns its result."
+    "value": "Runs one bounded subagent and returns its result."
   },
   "examples": [
     {

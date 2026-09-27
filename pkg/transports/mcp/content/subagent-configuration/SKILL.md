@@ -120,8 +120,10 @@ verify the integration.
 ACP integration entries do not contain timeout or permission policy. Use the
 normal worker or Factory Session limits for execution timeouts and the
 invocation's supported permission setting for permission behavior. The
-packaged `@you/subagent` worker sets `skipPermissions: true`; the ACP client
-selects an allow option when the provider sends an ACP permission request.
+packaged `@you/subagent` worker sets `skipPermissions: true`. Built-in OpenCode
+ACP can select an allow option when its peer requests permission. Custom ACP
+integrations without a declared bypass capability retain normal permission
+handling.
 
 ## Existing MCP capabilities
 

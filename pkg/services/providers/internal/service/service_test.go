@@ -337,6 +337,7 @@ var _ acp.Service = (*stubACPService)(nil)
 
 type stubACPService struct {
 	provider        providers.ID
+	integrations    []providers.ACPIntegration
 	executeCalls    int
 	skipPermissions bool
 }
@@ -348,6 +349,13 @@ func (service *stubACPService) Configure(context.Context, []providers.ACPIntegra
 }
 
 func (service *stubACPService) Integrations() []providers.ACPIntegration {
+	if service.integrations != nil {
+		integrations := make([]providers.ACPIntegration, len(service.integrations))
+		for index := range service.integrations {
+			integrations[index] = service.integrations[index].Clone()
+		}
+		return integrations
+	}
 	return []providers.ACPIntegration{{Name: service.provider}}
 }
 
@@ -375,7 +383,7 @@ func (service *stubACPService) TryCancel(context.Context, acp.Generation) (bool,
 	return false, nil
 }
 
-func TestRootACPUsesAdvertisedPermissionBypass(t *testing.T) {
+func TestRootACPIgnoresUnsupportedPermissionBypass(t *testing.T) {
 	t.Parallel()
 
 	catalogService, err := catalogwire.NewService(catalogwire.WithDescriptors(providers.Descriptor{
@@ -407,9 +415,9 @@ func TestRootACPUsesAdvertisedPermissionBypass(t *testing.T) {
 		Model:           "cursor-grok-4.5-medium-fast",
 		SkipPermissions: true,
 	})
-	if executeErr != nil || result.Content != "acp result" || !acpService.skipPermissions || acpService.executeCalls != 1 {
+	if executeErr != nil || result.Content != "acp result" || acpService.skipPermissions || acpService.executeCalls != 1 {
 		t.Fatalf(
-			"Execute(ACP bypass) = (%#v, %v, skip=%v, calls=%d), want delegated bypass request",
+			"Execute(ACP bypass) = (%#v, %v, skip=%v, calls=%d), want successful request with bypass disabled",
 			result,
 			executeErr,
 			acpService.skipPermissions,
@@ -418,7 +426,7 @@ func TestRootACPUsesAdvertisedPermissionBypass(t *testing.T) {
 	}
 }
 
-func TestRootCustomACPUsesInterpreterPermissionPolicy(t *testing.T) {
+func TestRootCustomACPIgnoresSkipPermissions(t *testing.T) {
 	t.Parallel()
 
 	catalogService, err := catalogwire.NewService()
@@ -446,8 +454,8 @@ func TestRootCustomACPUsesInterpreterPermissionPolicy(t *testing.T) {
 			break
 		}
 	}
-	if !slices.Contains(custom.Capabilities, providers.CapabilityPermissionBypass) {
-		t.Fatalf("custom ACP capabilities = %v, want interpreter-mediated permission bypass", custom.Capabilities)
+	if slices.Contains(custom.Capabilities, providers.CapabilityPermissionBypass) {
+		t.Fatalf("custom ACP capabilities = %v, must not advertise permission bypass", custom.Capabilities)
 	}
 
 	result, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
@@ -455,8 +463,82 @@ func TestRootCustomACPUsesInterpreterPermissionPolicy(t *testing.T) {
 		AttemptID:       "custom-acp-bypass",
 		SkipPermissions: true,
 	})
+	if executeErr != nil || result.Content != "acp result" || acpService.skipPermissions || acpService.executeCalls != 1 {
+		t.Fatalf("Execute(custom ACP bypass) = (%#v, %v, skip=%v, calls=%d), want successful execution with bypass disabled", result, executeErr, acpService.skipPermissions, acpService.executeCalls)
+	}
+}
+
+func TestRootOpenCodeACPAllowsSkipPermissions(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(catalogService)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	acpService := &stubACPService{
+		provider: "opencode-acp",
+		integrations: []providers.ACPIntegration{{
+			ID: "opencode-acp", Name: "opencode-acp", Transport: "stdio", Command: "npx -y opencode-ai acp",
+			Arguments: []string{"-y", "opencode-ai", "acp"}, RuntimePosture: "package_runner",
+			ImplementationProfile: "opencode-acp",
+		}},
+	}
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewWithACP() = %v", err)
+	}
+
+	result, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider: acpService.provider, AttemptID: "opencode-acp-bypass", SkipPermissions: true,
+	})
 	if executeErr != nil || result.Content != "acp result" || !acpService.skipPermissions || acpService.executeCalls != 1 {
-		t.Fatalf("Execute(custom ACP bypass) = (%#v, %v, skip=%v, calls=%d), want successful delegated policy", result, executeErr, acpService.skipPermissions, acpService.executeCalls)
+		t.Fatalf("Execute(OpenCode ACP bypass) = (%#v, %v, skip=%v, calls=%d), want bypass delegated", result, executeErr, acpService.skipPermissions, acpService.executeCalls)
+	}
+}
+
+func TestRootCustomReplacementForOpenCodeACPIgnoresSkipPermissions(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(catalogService)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	acpService := &stubACPService{
+		provider: "opencode-acp",
+		integrations: []providers.ACPIntegration{{
+			ID: "opencode-acp", Name: "opencode-acp", Transport: "stdio", Command: "custom-opencode-wrapper",
+			Arguments: []string{"acp"}, RuntimePosture: "installed_executable",
+			ImplementationProfile: "custom-opencode-acp",
+		}},
+	}
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil, logging.NoopLogger{})
+	if err != nil {
+		t.Fatalf("NewWithACP() = %v", err)
+	}
+
+	listed, err := root.ListProviders(context.Background(), providers.ListProvidersRequest{})
+	if err != nil {
+		t.Fatalf("ListProviders() = %v", err)
+	}
+	for _, descriptor := range listed.Providers {
+		if descriptor.ID == acpService.provider && slices.Contains(descriptor.Capabilities, providers.CapabilityPermissionBypass) {
+			t.Fatalf("custom OpenCode replacement capabilities = %v, must not advertise permission bypass", descriptor.Capabilities)
+		}
+	}
+
+	result, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider: acpService.provider, AttemptID: "custom-opencode-acp-bypass", SkipPermissions: true,
+	})
+	if executeErr != nil || result.Content != "acp result" || acpService.skipPermissions || acpService.executeCalls != 1 {
+		t.Fatalf("Execute(custom OpenCode replacement) = (%#v, %v, skip=%v, calls=%d), want bypass disabled", result, executeErr, acpService.skipPermissions, acpService.executeCalls)
 	}
 }
 

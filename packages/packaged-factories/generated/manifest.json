@@ -531,15 +531,15 @@
       "slug": "subagent",
       "json": {
         "locator": "generated/factories/subagent/factory.json",
-        "sha256": "95c9d41e00d096d2dd133f1d7887e608cf75b2010c2ff5f084fa45c19412f8e6"
+        "sha256": "7d8a896a873f8af7a969d5380c52c68b5f8b00f0b7b6570e54261d2050e2ade3"
       },
       "yaml": {
         "locator": "generated/factories/subagent/factory.yaml",
-        "sha256": "5d996868b3ed6a6b685e46b2fa51b62c7b2d9745cf456bc6b7c65dae362b7a38"
+        "sha256": "e5d20bd21e6df1dabd36e6426f3131a913a5dcfb4c66acea749ee0544be7bba3"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
-        "value": "Runs one bounded read-only subagent and returns its result."
+        "value": "Runs one bounded subagent and returns its result."
       },
       "examples": [
         {
