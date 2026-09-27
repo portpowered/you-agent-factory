@@ -1,13 +1,107 @@
 package stdio_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 )
+
+type functionalSkillsListParams struct {
+	mcp.ParamsBase
+	Cursor string `json:"cursor,omitempty"`
+}
+
+type functionalSkillsListResult struct {
+	mcp.ResultBase
+	ResultType string `json:"resultType"`
+	mcp.Cacheable
+	NextCursor string           `json:"nextCursor,omitempty"`
+	Skills     []map[string]any `json:"skills"`
+}
+
+type functionalSkillsGetParams struct {
+	mcp.ParamsBase
+	URI string `json:"uri"`
+}
+
+type functionalSkillsGetResult struct {
+	mcp.ResultBase
+	ResultType string `json:"resultType"`
+	mcp.Cacheable
+	Skill map[string]any `json:"skill"`
+}
+
+// TestMCPServerSkillsPaginationAndInvalidRequests exercises the server's
+// pagination and parameter validation through the exported server and MCP
+// client APIs, including a full second page rather than only the common
+// single-skill catalog.
+func TestMCPServerSkillsPaginationAndInvalidRequests(t *testing.T) {
+	entries := make([]mcpserver.SkillEntry, 101)
+	for i := range entries {
+		entries[i] = mcpserver.SkillEntry{
+			URI:         "skill://functional-" + fmt.Sprint(i) + "/SKILL.md",
+			Frontmatter: map[string]any{"name": fmt.Sprintf("functional-%d", i), "description": "functional pagination fixture"},
+			Resources:   []mcpserver.SkillResource{{URI: "skill://functional-" + fmt.Sprint(i) + "/SKILL.md", Digest: "sha256:" + strings.Repeat("a", 64), Size: 1}},
+		}
+	}
+	resource := &mcp.Resource{URI: "you://functional/config", Name: "config", MIMEType: "text/plain"}
+	server, err := mcpserver.New(mcpserver.Options{
+		ToolOperation: func(context.Context, string, json.RawMessage) (json.RawMessage, error) {
+			return json.RawMessage(`{}`), nil
+		},
+		Resources: []mcpserver.ResourceRegistration{{
+			Resource: resource,
+			Read: func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+				return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: resource.URI, MIMEType: resource.MIMEType, Text: "active config"}}}, nil
+			},
+		}},
+		Skills: entries,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = server.Serve(ctx, serverTransport) }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "functional-skills", Version: "test"}, nil)
+	if err := mcp.AddSendingCustomMethod[*functionalSkillsListParams, *functionalSkillsListResult](client, "skills/list"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mcp.AddSendingCustomMethod[*functionalSkillsGetParams, *functionalSkillsGetResult](client, "skills/get"); err != nil {
+		t.Fatal(err)
+	}
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+
+	first, err := mcp.CallCustomMethod[*functionalSkillsListParams, *functionalSkillsListResult](ctx, session, "skills/list", &functionalSkillsListParams{})
+	if err != nil || len(first.Skills) != 100 || first.NextCursor != "100" {
+		t.Fatalf("skills/list first page = %#v, %v; want 100 entries and cursor 100", first, err)
+	}
+	second, err := mcp.CallCustomMethod[*functionalSkillsListParams, *functionalSkillsListResult](ctx, session, "skills/list", &functionalSkillsListParams{Cursor: first.NextCursor})
+	if err != nil || len(second.Skills) != 1 || second.NextCursor != "" {
+		t.Fatalf("skills/list second page = %#v, %v; want final entry", second, err)
+	}
+	if _, err := mcp.CallCustomMethod[*functionalSkillsListParams, *functionalSkillsListResult](ctx, session, "skills/list", &functionalSkillsListParams{Cursor: "invalid"}); err == nil {
+		t.Fatal("skills/list accepted an invalid cursor")
+	}
+	if _, err := mcp.CallCustomMethod[*functionalSkillsGetParams, *functionalSkillsGetResult](ctx, session, "skills/get", &functionalSkillsGetParams{URI: "skill://unknown/SKILL.md"}); err == nil {
+		t.Fatal("skills/get accepted an unknown URI")
+	}
+	if _, err := session.ReadResource(ctx, &mcp.ReadResourceParams{URI: resource.URI}); err != nil {
+		t.Fatalf("resources/read custom resource: %v", err)
+	}
+}
 
 // TestMCPSkillsExtensionListsGetsAndReadsPublishedSkills proves legacy
 // 2024-11-05 clients can still call the Skills methods and read published
