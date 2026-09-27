@@ -1,11 +1,11 @@
-id: opencode-acp
+id: cursor
 aliases: []
 displayName:
   type: LOCALIZABLE_ASSET
-  value: OpenCode ACP
+  value: Cursor ACP
 description:
   type: LOCALIZABLE_ASSET
-  value: OpenCode ACP is a package-owned ACP stdio integration.
+  value: Cursor ACP is a package-owned ACP stdio integration.
 documentation:
   - kind: reference
     url: https://github.com/agentclientprotocol/registry
@@ -13,10 +13,10 @@ technicalSupportLevel: experimental
 implementationAvailability: externally-supplied
 maximumExecutionCapabilities:
   promptSubmission: true
-  imageInput: false
+  imageInput: true
   sessionResume: false
   structuredOutput: false
-  permissionBypass: false
+  permissionBypass: true
   toolExecution: false
   workingDirectory: false
   worktree: false
@@ -33,16 +33,16 @@ maximumResponseFidelityCapabilities:
   stableItemIds: false
   providerReconnect: false
 discovery:
-  executableNames: [npx]
+  executableNames: [cursor-agent]
   endpointKinds: [stdio]
   configurationKeys: []
   prerequisites:
     - kind: executable
-      name: npx
-      description: Install the OpenCode ACP launch executable before execution.
+      name: cursor-agent
+      description: Install the Cursor ACP launch executable before execution.
     - kind: authentication
       name: account-authentication
-      description: Authenticate the OpenCode ACP account before execution.
+      description: Authenticate the Cursor ACP account before execution.
     - kind: workspace
       name: writable-workspace
       description: Select a writable workspace before execution.
@@ -51,8 +51,8 @@ harness:
   acpSupport:
     support: supported
     protocolVersion: "1"
-    resourceDelivery: unknown
-    evidenceRefs: [opencode-acp-protocol]
+    resourceDelivery: implemented
+    evidenceRefs: [cursor-acp-protocol]
 modelCatalogPosture: unknown
 harnessRoutes:
   - direction: input
@@ -61,13 +61,14 @@ harnessRoutes:
     transport: none
   - direction: input
     modality: image
-    support: unknown
-    transport: none
+    support: supported
+    transport: acp_resource
+    evidenceRefs: [cursor-acp-protocol]
   - direction: input
     modality: text
     support: supported
     transport: inline
-    evidenceRefs: [opencode-acp-protocol]
+    evidenceRefs: [cursor-acp-protocol]
   - direction: input
     modality: video
     support: unknown
@@ -84,18 +85,19 @@ harnessRoutes:
     modality: text
     support: supported
     transport: inline
-    evidenceRefs: [opencode-acp-protocol]
+    evidenceRefs: [cursor-acp-protocol]
   - direction: output
     modality: video
     support: unknown
     transport: none
 evidence:
-  - id: opencode-acp-protocol
+  - id: cursor-acp-protocol
     kind: conformance_fixture
     verifiedOn: "2026-08-11"
     factRefs:
       - model_catalog
       - harness/acp
+      - harness/input/image
       - harness/input/text
       - harness/output/text
 models: []

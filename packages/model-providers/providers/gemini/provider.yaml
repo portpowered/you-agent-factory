@@ -1,11 +1,11 @@
-id: kiro-acp
+id: gemini
 aliases: []
 displayName:
   type: LOCALIZABLE_ASSET
-  value: Kiro ACP
+  value: Gemini ACP
 description:
   type: LOCALIZABLE_ASSET
-  value: Kiro ACP is a package-owned ACP stdio integration.
+  value: Gemini ACP is a package-owned ACP stdio integration.
 documentation:
   - kind: reference
     url: https://github.com/agentclientprotocol/registry
@@ -33,16 +33,16 @@ maximumResponseFidelityCapabilities:
   stableItemIds: false
   providerReconnect: false
 discovery:
-  executableNames: [kiro-cli-chat]
+  executableNames: [gemini]
   endpointKinds: [stdio]
   configurationKeys: []
   prerequisites:
     - kind: executable
-      name: kiro-cli-chat
-      description: Install the Kiro ACP launch executable before execution.
+      name: gemini
+      description: Install the Gemini ACP launch executable before execution.
     - kind: authentication
       name: account-authentication
-      description: Authenticate the Kiro ACP account before execution.
+      description: Authenticate the Gemini ACP account before execution.
     - kind: workspace
       name: writable-workspace
       description: Select a writable workspace before execution.
@@ -52,7 +52,7 @@ harness:
     support: supported
     protocolVersion: "1"
     resourceDelivery: unknown
-    evidenceRefs: [kiro-acp-protocol]
+    evidenceRefs: [gemini-acp-protocol]
 modelCatalogPosture: unknown
 harnessRoutes:
   - direction: input
@@ -67,7 +67,7 @@ harnessRoutes:
     modality: text
     support: supported
     transport: inline
-    evidenceRefs: [kiro-acp-protocol]
+    evidenceRefs: [gemini-acp-protocol]
   - direction: input
     modality: video
     support: unknown
@@ -84,13 +84,13 @@ harnessRoutes:
     modality: text
     support: supported
     transport: inline
-    evidenceRefs: [kiro-acp-protocol]
+    evidenceRefs: [gemini-acp-protocol]
   - direction: output
     modality: video
     support: unknown
     transport: none
 evidence:
-  - id: kiro-acp-protocol
+  - id: gemini-acp-protocol
     kind: conformance_fixture
     verifiedOn: "2026-08-11"
     factRefs:

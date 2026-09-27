@@ -79,8 +79,8 @@ func TestRunServe_SubagentProtocolUsesTargetExecutionService(t *testing.T) {
 	if target.start.Source.FactoryID != "@you/subagent" || target.start.Source.Kind != factory.WorkflowSourceKindFactoryID {
 		t.Fatalf("target start source = %#v", target.start.Source)
 	}
-	if target.invoke.Args == nil || (*target.invoke.Args)["input"] != "Summarize this" || len(*target.invoke.Args) != 1 {
-		t.Fatalf("target invocation args = %#v, want prompt only and defaults omitted", target.invoke.Args)
+	if target.invoke.Args == nil || (*target.invoke.Args)["input"] != "Summarize this" || (*target.invoke.Args)["workingRoot"] != "" || len(*target.invoke.Args) != 2 {
+		t.Fatalf("target invocation args = %#v, want prompt, empty server root, and model defaults omitted", target.invoke.Args)
 	}
 	closeRunServeSmokeServer(t, stdinWrite, serveErr)
 }

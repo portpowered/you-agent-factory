@@ -1,6 +1,6 @@
 {
   "protocol": "acp",
   "protocolVersion": "1",
-  "provider": "cursor-acp",
+  "provider": "gemini",
   "fixture": "initialize-conformance"
 }

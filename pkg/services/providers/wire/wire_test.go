@@ -95,10 +95,10 @@ func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *test
 		canonical string
 		aliases   []string
 	}{
-		{canonical: "pi-acp"},
+		{canonical: "pi"},
 		{canonical: "openclaw-acp"},
-		{canonical: "gemini-acp"},
-		{canonical: "cursor-acp"},
+		{canonical: "gemini"},
+		{canonical: "cursor"},
 		{canonical: "copilot-acp"},
 		{canonical: "droid-acp", aliases: []string{"factory-droid", "factorydroid"}},
 		{canonical: "fast-agent-acp"},
@@ -106,9 +106,9 @@ func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *test
 		{canonical: "iflow-acp"},
 		{canonical: "kilocode-acp"},
 		{canonical: "kimi-acp"},
-		{canonical: "kiro-acp"},
+		{canonical: "kiro"},
 		{canonical: "mux-acp"},
-		{canonical: "opencode-acp"},
+		{canonical: "opencode"},
 		{canonical: "pool-acp"},
 		{canonical: "qoder-acp"},
 		{canonical: "qwen-acp"},
@@ -129,7 +129,7 @@ func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *test
 				t.Fatalf("GetProvider(%q) readiness = %q, want unverified", test.canonical, canonical.Provider.Readiness)
 			}
 			wantCapabilities := []providers.Capability{providers.CapabilityPromptSubmission}
-			if test.canonical == "cursor-acp" {
+			if test.canonical == "cursor" {
 				wantCapabilities = append(
 					wantCapabilities,
 					providers.CapabilityImageInput,
@@ -257,23 +257,23 @@ func TestACPWireOptionsComposeConfiguredCatalogAndValidateCommands(t *testing.T)
 	}
 
 	replaced := effectiveACPIntegrations(
-		[]providers.ACPIntegration{{ID: "cursor-acp", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp"}},
-		[]providers.ACPIntegration{{ID: "replacement", Name: "cursor-acp", Transport: "stdio", Command: "replacement acp"}},
+		[]providers.ACPIntegration{{ID: "cursor", Name: "cursor", Transport: "stdio", Command: "cursor-agent acp"}},
+		[]providers.ACPIntegration{{ID: "replacement", Name: "cursor", Transport: "stdio", Command: "replacement acp"}},
 	)
 	if len(replaced) != 1 || replaced[0].ID != "replacement" {
 		t.Fatalf("effectiveACPIntegrations(replacement) = %#v", replaced)
 	}
 	legacySaved := effectiveACPIntegrations(
 		[]providers.ACPIntegration{{
-			ID: "entry-1", Name: "cursor-acp", Aliases: []string{"cursor"},
+			ID: "entry-1", Name: "cursor",
 			Transport: "stdio", Command: "cursor-agent acp", Arguments: []string{"acp"},
 			RuntimePosture: "installed_executable", ImplementationProfile: "cursor-acp",
 		}},
 		[]providers.ACPIntegration{{
-			ID: "saved-entry", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+			ID: "saved-entry", Name: "cursor", Transport: "stdio", Command: "cursor-agent acp",
 		}},
 	)
-	if len(legacySaved) != 1 || legacySaved[0].ImplementationProfile != "cursor-acp" || legacySaved[0].RuntimePosture != "installed_executable" || !reflect.DeepEqual(legacySaved[0].Arguments, []string{"acp"}) || !reflect.DeepEqual(legacySaved[0].Aliases, []string{"cursor"}) {
+	if len(legacySaved) != 1 || legacySaved[0].ImplementationProfile != "cursor-acp" || legacySaved[0].RuntimePosture != "installed_executable" || !reflect.DeepEqual(legacySaved[0].Arguments, []string{"acp"}) || len(legacySaved[0].Aliases) != 0 {
 		t.Fatalf("effectiveACPIntegrations(legacy package command) = %#v, want package runtime metadata preserved", legacySaved)
 	}
 

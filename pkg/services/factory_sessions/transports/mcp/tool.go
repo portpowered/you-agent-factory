@@ -119,6 +119,7 @@ type SubagentInput struct {
 	Provider        string `json:"provider,omitempty"`
 	Model           string `json:"model,omitempty"`
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	WorkingRoot     string `json:"workingRoot,omitempty"`
 	TimeoutMillis   *int64 `json:"timeoutMillis,omitempty"`
 }
 
@@ -143,6 +144,9 @@ func Subagent(ctx context.Context, target factorysessionexecution.TargetExecutio
 		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
 	requestID := generateID()
+	if input.WorkingRoot != "" {
+		workingRoot = input.WorkingRoot
+	}
 	startArgs := map[string]any{"workingRoot": workingRoot}
 	started, err := target.StartAsync(ctx, factorysessionexecution.StartRequest{
 		RequestID: requestID,
@@ -159,6 +163,7 @@ func Subagent(ctx context.Context, target factorysessionexecution.TargetExecutio
 		return subagentExecutionFailure(fmt.Errorf("subagent Factory Session identity is missing"))
 	}
 	args := subagentInvocationArgs(input)
+	args["workingRoot"] = workingRoot
 	invocationRequest := factorysessionexecution.InvocationRequest{
 		Args: &args, RequestID: &requestID,
 		TimeoutMillis: input.TimeoutMillis,

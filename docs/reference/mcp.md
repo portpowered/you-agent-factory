@@ -72,8 +72,11 @@ The tool runs one bounded `@you/subagent` Factory invocation and returns its
 answer as `result.text`. Optional `provider`, `model`, and `reasoningEffort`
 fields select the worker route for that call. Omit them to use the operator's
 configured provider and model and the provider's default reasoning effort.
-The subagent can inspect the workspace with read-only tools. Each call opens
-and closes its own Factory Session.
+The subagent can inspect and edit its workspace with agent tools. Workspace
+editing is enabled by default and requires no edit flag. Set
+`workingRoot` to an absolute project directory when the MCP server's working
+directory is not the project being edited; otherwise the server's working
+directory is used. Each call opens and closes its own Factory Session.
 
 If no provider default is configured, run `you init --provider codex` or supply
 `provider` in the tool call. `you.subagent` is available in both MCP backing

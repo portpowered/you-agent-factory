@@ -206,7 +206,7 @@ func DiscoverTools() []ToolDefinition {
 func subagentTool() ToolDefinition {
 	return ToolDefinition{
 		Name: ToolSubagent,
-		Description: "Run one bounded read-only subagent using the packaged @you/subagent Factory. " +
+		Description: "Run one bounded subagent using the packaged @you/subagent Factory. " +
 			"Omitted provider, model, and reasoning effort use operator and provider defaults.",
 		InputSchema: subagentInputSchema(),
 		OutputSchema: toolResponseSchema(objectSchema(map[string]any{

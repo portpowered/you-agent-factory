@@ -23,17 +23,27 @@ func TestHandlerFromRoot_OpenFactorySessionEncodesRootResult(t *testing.T) {
 	t.Parallel()
 
 	root := &httpSessionsRootFake{
-		onOpen: func(_ context.Context, request factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
+		onStart: func(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 			if request.FolderPath != "/workspace/alpha" {
 				t.Fatalf("folderPath = %q, want /workspace/alpha", request.FolderPath)
 			}
-			return &factorysessions.OpenResult{
+			if request.Mode != factorysessions.SessionOperationModeLive {
+				t.Fatalf("mode = %q, want live", request.Mode)
+			}
+			return factorysessions.SessionStartResult{
 				SessionID: "session-open-alpha",
-				Session: &factorysessions.ScopedLiveSessionSummary{
-					ID:         "session-open-alpha",
-					FolderPath: "/workspace/alpha",
+				Mode:      factorysessions.SessionOperationModeLive,
+				Live: &factorysessions.SessionOpenResult{
+					SessionID: "session-open-alpha",
+					Session: &factorysessions.SessionView{
+						SessionID: "session-open-alpha", FolderPath: "/workspace/alpha",
+					},
 				},
 			}, nil
+		},
+		onOpen: func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
+			t.Fatal("legacy opener must not be called when canonical Start succeeds")
+			return nil, nil
 		},
 	}
 	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
@@ -59,11 +69,19 @@ func TestHandlerFromRoot_OpenFactorySessionAcceptsUnknownFieldsWithWarning(t *te
 
 	core, logs := observer.New(zap.WarnLevel)
 	root := &httpSessionsRootFake{
-		onOpen: func(_ context.Context, request factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
+		onStart: func(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 			if request.FolderPath != "/workspace/alpha" {
 				t.Fatalf("folderPath = %q, want /workspace/alpha", request.FolderPath)
 			}
-			return &factorysessions.OpenResult{SessionID: "session-open-alpha"}, nil
+			return factorysessions.SessionStartResult{
+				SessionID: "session-open-alpha",
+				Mode:      factorysessions.SessionOperationModeLive,
+				Live:      &factorysessions.SessionOpenResult{SessionID: "session-open-alpha"},
+			}, nil
+		},
+		onOpen: func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
+			t.Fatal("legacy opener must not be called when canonical Start succeeds")
+			return nil, nil
 		},
 	}
 	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.New(core))
@@ -101,6 +119,10 @@ func TestHandlerFromRoot_OpenFactorySessionMissingFolderPathReturnsBadRequestWit
 	t.Parallel()
 
 	root := &httpSessionsRootFake{
+		onStart: func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+			t.Fatal("canonical Start must not be invoked when folderPath is missing")
+			return factorysessions.SessionStartResult{}, nil
+		},
 		onOpen: func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
 			t.Fatal("fake root must not be invoked when folderPath is missing")
 			return nil, nil

@@ -2679,7 +2679,7 @@
           "transport": "none"
         }
       ],
-      "id": "cursor-acp",
+      "id": "cursor",
       "implementationAvailability": "externally-supplied",
       "knownLimits": [],
       "maximumExecutionCapabilities": {
@@ -3141,7 +3141,7 @@
           "transport": "none"
         }
       ],
-      "id": "gemini-acp",
+      "id": "gemini",
       "implementationAvailability": "externally-supplied",
       "knownLimits": [],
       "maximumExecutionCapabilities": {
@@ -3906,7 +3906,7 @@
           "transport": "none"
         }
       ],
-      "id": "kiro-acp",
+      "id": "kiro",
       "implementationAvailability": "externally-supplied",
       "knownLimits": [],
       "maximumExecutionCapabilities": {
@@ -4293,7 +4293,7 @@
             "harness/input/text",
             "harness/output/text"
           ],
-          "id": "opencode-acp-protocol",
+          "id": "opencode-protocol",
           "kind": "conformance_fixture",
           "verifiedOn": "2026-08-11"
         }
@@ -4301,7 +4301,7 @@
       "harness": {
         "acpSupport": {
           "evidenceRefs": [
-            "opencode-acp-protocol"
+            "opencode-protocol"
           ],
           "protocolVersion": "1",
           "resourceDelivery": "unknown",
@@ -4325,7 +4325,7 @@
         {
           "direction": "input",
           "evidenceRefs": [
-            "opencode-acp-protocol"
+            "opencode-protocol"
           ],
           "modality": "text",
           "support": "supported",
@@ -4352,7 +4352,7 @@
         {
           "direction": "output",
           "evidenceRefs": [
-            "opencode-acp-protocol"
+            "opencode-protocol"
           ],
           "modality": "text",
           "support": "supported",
@@ -4365,7 +4365,7 @@
           "transport": "none"
         }
       ],
-      "id": "opencode-acp",
+      "id": "opencode",
       "implementationAvailability": "externally-supplied",
       "knownLimits": [],
       "maximumExecutionCapabilities": {
@@ -4518,7 +4518,7 @@
           "transport": "none"
         }
       ],
-      "id": "pi-acp",
+      "id": "pi",
       "implementationAvailability": "externally-supplied",
       "knownLimits": [],
       "maximumExecutionCapabilities": {

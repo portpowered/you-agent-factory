@@ -13,15 +13,15 @@ func TestFilterACPProvidersKeepsPresetsAndConfiguredIdentities(t *testing.T) {
 
 	result := filterACPProviders(providers.ListProvidersResult{Providers: []providers.Descriptor{
 		{ID: "codex"},
-		{ID: "cursor-acp"},
+		{ID: "cursor"},
 		{ID: "customer-agent"},
-		{ID: "opencode-acp"},
+		{ID: "opencode"},
 	}}, []operatorsettings.ACPIntegration{{Name: "customer-agent"}})
 
 	want := []providers.Descriptor{
-		{ID: "cursor-acp"},
+		{ID: "cursor"},
 		{ID: "customer-agent"},
-		{ID: "opencode-acp"},
+		{ID: "opencode"},
 	}
 	if !reflect.DeepEqual(result.Providers, want) {
 		t.Fatalf("filtered providers = %#v, want %#v", result.Providers, want)

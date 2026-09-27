@@ -162,13 +162,22 @@ func TestProviderCatalogContract_UsesClosedPublicationVocabulary(t *testing.T) {
 	assertSchemaEnum("ProviderImplementationAvailability", []any{"bundled", "externally-supplied", "catalog-only"})
 }
 
+func isBareCanonicalACPProvider(id string) bool {
+	switch id {
+	case "cursor", "gemini", "kiro", "opencode", "pi":
+		return true
+	default:
+		return false
+	}
+}
+
 func TestProviderManifestContract_FirstPartyCatalogIsEvidenceConservative(t *testing.T) {
 	t.Parallel()
 
 	wantIDs := []string{
-		"antigravity", "claude", "codex", "copilot-acp", "cursor-acp", "droid-acp",
-		"fast-agent-acp", "gemini-acp", "grok-build-acp", "iflow-acp", "kilocode-acp",
-		"kimi-acp", "kiro-acp", "mux-acp", "openclaw-acp", "opencode-acp", "pi-acp",
+		"antigravity", "claude", "codex", "copilot-acp", "cursor", "droid-acp",
+		"fast-agent-acp", "gemini", "grok-build-acp", "iflow-acp", "kilocode-acp",
+		"kimi-acp", "kiro", "mux-acp", "openclaw-acp", "opencode", "pi",
 		"pool-acp", "qoder-acp", "qwen-acp", "reasonix-acp", "trae-acp", "zeroclaw-acp",
 	}
 	wantPosture := map[string]providerPublicationPosture{
@@ -177,7 +186,7 @@ func TestProviderManifestContract_FirstPartyCatalogIsEvidenceConservative(t *tes
 		"codex":       {factoryapi.ProviderTechnicalSupportLevelProduction, factoryapi.ProviderImplementationAvailabilityBundled},
 	}
 	for _, id := range wantIDs {
-		if strings.HasSuffix(id, "-acp") {
+		if strings.HasSuffix(id, "-acp") || isBareCanonicalACPProvider(id) {
 			wantPosture[id] = providerPublicationPosture{
 				factoryapi.ProviderTechnicalSupportLevelExperimental,
 				factoryapi.ProviderImplementationAvailabilityExternallySupplied,

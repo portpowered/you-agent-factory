@@ -67,6 +67,17 @@ func (operations Operations) Delete(ctx context.Context, home, name string) erro
 	return operations.DeleteOperation(ctx, home, name)
 }
 
+// bareCanonicalACPProviders are canonical built-in IDs that no longer carry
+// the "-acp" suffix while retaining "-acp" runtime implementation profiles.
+func isBareCanonicalACPProvider(id string) bool {
+	switch id {
+	case "cursor", "gemini", "kiro", "opencode", "pi":
+		return true
+	default:
+		return false
+	}
+}
+
 // FilterACPProviders retains descriptors selected by the effective ACP
 // configuration. Providers owns the effective application; this function only
 // projects its detached catalog for the existing CLI table shape.
@@ -81,7 +92,7 @@ func FilterACPProviders(
 	filtered := make([]providers.Descriptor, 0, len(result.Providers))
 	for _, descriptor := range result.Providers {
 		_, configuredProvider := identities[descriptor.ID]
-		if configuredProvider || strings.HasSuffix(descriptor.ID.String(), "-acp") {
+		if configuredProvider || strings.HasSuffix(descriptor.ID.String(), "-acp") || isBareCanonicalACPProvider(descriptor.ID.String()) {
 			filtered = append(filtered, descriptor)
 		}
 	}

@@ -34,6 +34,38 @@ func OpenRequestFromAPI(request factoryapi.OpenFactorySessionRequest) factoryses
 	}
 }
 
+// SessionOpenResultToAPI maps the canonical live Start outcome to the public
+// open response without exposing legacy runtime projections.
+func SessionOpenResultToAPI(result *factorysessions.SessionOpenResult) factoryapi.OpenFactorySessionResponse {
+	response := factoryapi.OpenFactorySessionResponse{}
+	if result == nil {
+		return response
+	}
+	if result.InitializedNewFactory {
+		initialized := true
+		response.InitsNewFactory = &initialized
+		if folderPath := strings.TrimSpace(result.FolderPath); folderPath != "" {
+			response.FolderPath = &folderPath
+		}
+	}
+	if len(result.Targets) > 0 {
+		targets := TargetsToAPI(result.Targets)
+		response.Targets = &targets
+	}
+	if result.Session != nil {
+		view := result.Session
+		response.Session = &factoryapi.FactorySessionSummary{
+			Id: view.SessionID, FactoryDir: view.FactoryDir, FolderPath: view.FolderPath,
+			Project: view.Project, IsDefault: view.IsDefault,
+			Target: factoryapi.FactorySessionTargetRef{
+				Kind: factoryapi.FactorySessionTargetRefKind(view.Target.Kind),
+				Name: optionalTrimmedString(view.Target.Name),
+			},
+		}
+	}
+	return response
+}
+
 // OpenResultToAPI maps an owner-defined open result to the generated public
 // response without re-deriving Factory Session identity policy.
 func OpenResultToAPI(result *factorysessions.OpenResult) factoryapi.OpenFactorySessionResponse {

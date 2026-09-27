@@ -42,7 +42,7 @@ func TestBuildProducesDeterministicValidatedSortedArtifacts(t *testing.T) {
 	for _, value := range providers {
 		ids = append(ids, value.(map[string]any)["id"].(string))
 	}
-	want := "antigravity, claude, codex, copilot-acp, cursor-acp, droid-acp, fast-agent-acp, gemini-acp, grok-build-acp, iflow-acp, kilocode-acp, kimi-acp, kiro-acp, mux-acp, openclaw-acp, opencode-acp, pi-acp, pool-acp, qoder-acp, qwen-acp, reasonix-acp, trae-acp, zeroclaw-acp"
+	want := "antigravity, claude, codex, copilot-acp, cursor, droid-acp, fast-agent-acp, gemini, grok-build-acp, iflow-acp, kilocode-acp, kimi-acp, kiro, mux-acp, openclaw-acp, opencode, pi, pool-acp, qoder-acp, qwen-acp, reasonix-acp, trae-acp, zeroclaw-acp"
 	if got := strings.Join(ids, ", "); got != want {
 		t.Fatalf("provider order = %s, want %s", got, want)
 	}
@@ -87,10 +87,10 @@ func TestBuildRejectsInvalidAuthoredManifestValues(t *testing.T) {
 func TestBuildRejectsACPProviderWithoutRuntimeDefinition(t *testing.T) {
 	source := repositoryFixture(t)
 	codex := string(source["packages/model-providers/providers/codex/provider.yaml"].Data)
-	codex = strings.Replace(codex, "id: codex", "id: cursor-acp", 1)
+	codex = strings.Replace(codex, "id: codex", "id: cursor", 1)
 	codex = strings.Replace(codex, "kind: native_cli", "kind: acp\n  acpSupport:\n    support: unknown", 1)
-	source["packages/model-providers/providers/cursor-acp/provider.yaml"] = &fstest.MapFile{Data: []byte(codex), Mode: 0o644}
-	delete(source, "packages/model-providers/providers/cursor-acp/harness.yaml")
+	source["packages/model-providers/providers/cursor/provider.yaml"] = &fstest.MapFile{Data: []byte(codex), Mode: 0o644}
+	delete(source, "packages/model-providers/providers/cursor/harness.yaml")
 
 	_, err := Build(source)
 	if err == nil || !strings.Contains(err.Error(), "requires harness.yaml") {

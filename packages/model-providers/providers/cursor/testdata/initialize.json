@@ -1,6 +1,6 @@
 {
   "protocol": "acp",
   "protocolVersion": "1",
-  "provider": "pi-acp",
+  "provider": "cursor",
   "fixture": "initialize-conformance"
 }

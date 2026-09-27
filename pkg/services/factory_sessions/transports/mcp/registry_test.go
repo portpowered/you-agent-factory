@@ -937,11 +937,27 @@ func TestSubagentRunsPackagedFactoryWithDefaultsAndReturnsText(t *testing.T) {
 	if target.start.Args["workingRoot"] != "C:/project" {
 		t.Fatalf("workingRoot = %#v", target.start.Args)
 	}
-	if got := *target.invoke.Args; len(got) != 1 || got["input"] != "Summarize this" {
+	if got := *target.invoke.Args; len(got) != 2 || got["input"] != "Summarize this" || got["workingRoot"] != "C:/project" {
 		t.Fatalf("default invocation args = %#v", got)
 	}
 	if !target.started || !target.closed {
 		t.Fatalf("lifecycle start=%t close=%t", target.started, target.closed)
+	}
+}
+
+func TestSubagentUsesRequestedWorkingRoot(t *testing.T) {
+	target := &subagentTargetFake{}
+	response := mcpfactorysession.Subagent(context.Background(), target, "server-root", func() string { return "request-3" }, mcpfactorysession.SubagentInput{
+		Prompt: "Inspect this repository", WorkingRoot: "selected-root",
+	})
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("Subagent response = %#v", response)
+	}
+	if got := target.start.Args["workingRoot"]; got != "selected-root" {
+		t.Fatalf("workingRoot = %#v, want selected-root", got)
+	}
+	if got := (*target.invoke.Args)["workingRoot"]; got != "selected-root" {
+		t.Fatalf("invocation workingRoot = %#v, want selected-root", got)
 	}
 }
 

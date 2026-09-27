@@ -36,16 +36,16 @@ you run --named @you/goal --provider codex --model gpt-5 \
 ## Packaged ACP stdio integrations
 
 ACP harnesses use `executorProvider: ACP` on an agent worker and name the
-integration in `modelProvider` (for example `cursor-acp`). The packaged stdio
+integration in `modelProvider` (for example `cursor`). The packaged stdio
 catalog is data-backed at
 `pkg/services/providers/internal/services/builtins/wire/catalog.json`.
 
 | Identity | Launch command | Aliases |
 |----------|----------------|---------|
-| `pi-acp` | `npx pi-acp` | |
+| `pi` | `npx pi-acp` | |
 | `openclaw-acp` | `openclaw acp` | |
-| `gemini-acp` | `gemini --acp` | |
-| `cursor-acp` | `cursor-agent acp` | |
+| `gemini` | `gemini --acp` | |
+| `cursor` | `cursor-agent acp` | |
 | `copilot-acp` | `copilot --acp --stdio` | |
 | `droid-acp` | `droid exec --output-format acp` | `factory-droid`, `factorydroid` |
 | `fast-agent-acp` | `uvx fast-agent-mcp acp` | |
@@ -53,9 +53,9 @@ catalog is data-backed at
 | `iflow-acp` | `iflow --experimental-acp` | |
 | `kilocode-acp` | `npx -y @kilocode/cli acp` | |
 | `kimi-acp` | `kimi acp` | |
-| `kiro-acp` | `kiro-cli-chat acp` | |
+| `kiro` | `kiro-cli-chat acp` | |
 | `mux-acp` | `mux acp` | |
-| `opencode-acp` | `npx -y opencode-ai acp` | |
+| `opencode` | `npx -y opencode-ai acp` | |
 | `pool-acp` | `pool acp` | |
 | `qoder-acp` | `qodercli --acp` | |
 | `qwen-acp` | `qwen --acp` | |
@@ -69,7 +69,7 @@ above. Operators can add more with `you workers acp add`.
 Representative ACP run after the agent is installed and authenticated:
 
 ```bash
-you run --named @you/goal --provider cursor-acp --model auto --skip-permissions \
+you run --named @you/goal --provider cursor --model auto --skip-permissions \
   --to "Add a simple unit test, run it, and finish the goal"
 ```
 

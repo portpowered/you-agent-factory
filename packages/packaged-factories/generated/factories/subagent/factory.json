@@ -1,7 +1,7 @@
 {
   "description": {
     "type": "LOCALIZABLE_ASSET",
-    "value": "Runs one bounded read-only subagent and returns its result."
+    "value": "Runs one bounded subagent with workspace tools and returns its result."
   },
   "examples": [
     {
@@ -84,6 +84,19 @@
         "description": "Optional reasoning effort for the subagent; omitted values use the provider default.",
         "externalName": "worker-reasoning-effort",
         "name": "workerReasoningEffort"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Workspace directory for the subagent.",
+        "externalName": "working-root",
+        "name": "workingRoot"
       }
     ]
   },
@@ -113,13 +126,12 @@
   "workers": [
     {
       "agentTools": {
-        "policy": "READ_ONLY"
+        "policy": "ENABLED"
       },
       "model": "${workerModel}",
       "modelProvider": "${workerProvider}",
       "name": "subagent-worker",
       "reasoningEffort": "${workerReasoningEffort}",
-      "skipPermissions": true,
       "type": "AGENT_WORKER"
     }
   ],
@@ -147,7 +159,8 @@
       ],
       "promptFile": "prompts/run-subagent.md",
       "type": "AGENT_RUN",
-      "worker": "subagent-worker"
+      "worker": "subagent-worker",
+      "workingDirectory": "${workingRoot}"
     }
   ]
 }

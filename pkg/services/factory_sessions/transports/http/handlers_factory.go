@@ -240,31 +240,29 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.liveControl != nil {
-		if s.guardSessionsRequestContext(w, r) {
-			return
-		}
-		result, err := s.liveControl.OpenFactorySession(r.Context(), factorysession.OpenRequestFromAPI(req))
-		if err != nil {
-			s.writeOpenFactorySessionRejected(w, err)
-			return
-		}
-		s.writeCompatibilityWarning(w, "open_factory_session", decoded.Diagnostics.Paths())
-		s.writeJSON(w, http.StatusOK, factorysession.OpenResultToAPI(result))
+	if s.sessionsRoot == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "factory session service is unavailable", "SERVICE_UNAVAILABLE")
 		return
 	}
-
-	sessionRuntime, ok := s.requireSessionRuntime(w)
-	if !ok {
+	if s.guardSessionsRequestContext(w, r) {
 		return
 	}
-	response, err := sessionRuntime.OpenFactorySession(r.Context(), req)
+	opened := factorysession.OpenRequestFromAPI(req)
+	start, err := s.sessionsRoot.Start(r.Context(), factorysessionexecution.SessionStartRequest{
+		Mode: factorysessionexecution.SessionOperationModeLive, FolderPath: opened.FolderPath,
+		Target: opened.Target, ValidateOnly: opened.ValidateOnly, InitNewFactory: opened.InitNewFactory,
+	})
 	if err != nil {
 		s.writeOpenFactorySessionRejected(w, err)
 		return
 	}
+	if start.Live == nil {
+		s.logger.Error("canonical factory session start returned no live result")
+		s.writeError(w, http.StatusInternalServerError, "failed to open factory session", "INTERNAL_ERROR")
+		return
+	}
 	s.writeCompatibilityWarning(w, "open_factory_session", decoded.Diagnostics.Paths())
-	s.writeJSON(w, http.StatusOK, response)
+	s.writeJSON(w, http.StatusOK, factorysession.SessionOpenResultToAPI(start.Live))
 }
 
 func (s *Server) writeOpenFactorySessionRejected(w http.ResponseWriter, err error) {

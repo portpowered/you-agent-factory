@@ -35,6 +35,23 @@ func newLiveSessionTestServer(sessions apisurface.LiveSessionAPI) *Server {
 	return newFactorySessionRolesTestServer(sessions, nil, nil, nil)
 }
 
+type canonicalOpenSessionsRootFake struct {
+	factorysessions.Service
+	start func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error)
+}
+
+func (fake canonicalOpenSessionsRootFake) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	return fake.start(ctx, request)
+}
+
+func newCanonicalOpenTestServer(start func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error)) *Server {
+	srv := newLiveSessionTestServer(nil)
+	srv.factorySessionsAdapter.Adapter = factorysessionshttp.NewHandler(
+		factorysessionshttp.Dependencies{SessionsRoot: canonicalOpenSessionsRootFake{start: start}}, zap.NewNop(),
+	)
+	return srv
+}
+
 type httpRequestPreparationFake struct {
 	factorysessionshttp.RequestPreparation
 }
@@ -932,23 +949,23 @@ func TestFactorySessionsAPI_ListFactorySessions(t *testing.T) {
 }
 
 func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
-	var opened []factoryapi.OpenFactorySessionRequest
-	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{open: func(_ context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+	var opened []factorysessions.SessionStartRequest
+	srv := newCanonicalOpenTestServer(func(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 		opened = append(opened, request)
-		return factoryapi.OpenFactorySessionResponse{
-			Session: &factoryapi.FactorySessionSummary{
+		return factorysessions.SessionStartResult{Live: &factorysessions.SessionOpenResult{
+			Session: &factorysessions.SessionView{
+				SessionID:  "session-beta",
 				FactoryDir: "/workspace/fleet/beta",
 				FolderPath: "/workspace/fleet",
-				Id:         "session-beta",
 				IsDefault:  false,
 				Project:    "beta",
-				Target: factoryapi.FactorySessionTargetRef{
-					Kind: factoryapi.FactorySessionTargetRefKindNamed,
-					Name: stringPointerForAPITest("beta"),
+				Target: factorysessions.TargetRef{
+					Kind: factorysessions.TargetKindNamed,
+					Name: "beta",
 				},
 			},
-		}, nil
-	}})
+		}}, nil
+	})
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions", bytes.NewBufferString(`{"folderPath":"/workspace/fleet","target":{"kind":"named","name":"beta"}}`))
 	rec := httptest.NewRecorder()
@@ -963,10 +980,9 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 	if opened[0].FolderPath != "/workspace/fleet" {
 		t.Fatalf("opened session folder = %q, want /workspace/fleet", opened[0].FolderPath)
 	}
-	if opened[0].Target == nil ||
-		opened[0].Target.Kind != factoryapi.FactorySessionTargetRefKindNamed ||
-		opened[0].Target.Name == nil ||
-		*opened[0].Target.Name != "beta" {
+	if opened[0].Mode != factorysessions.SessionOperationModeLive || opened[0].Target == nil ||
+		opened[0].Target.Kind != factorysessions.TargetKindNamed ||
+		opened[0].Target.Name != "beta" {
 		t.Fatalf("opened session target = %#v, want named beta", opened[0].Target)
 	}
 	var response factoryapi.OpenFactorySessionResponse
@@ -979,8 +995,8 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 }
 
 func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
-	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{open: func(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
-		return factoryapi.OpenFactorySessionResponse{}, apiTestSessionValidationError{
+	srv := newCanonicalOpenTestServer(func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+		return factorysessions.SessionStartResult{}, apiTestSessionValidationError{
 			message: "folder validation failed",
 			targets: []factoryapi.FactoryValidationTarget{{
 				Code:     "factory.session.field.missing",
@@ -993,7 +1009,7 @@ func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
 				},
 			}},
 		}
-	}})
+	})
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions", bytes.NewBufferString(`{"folderPath":"/workspace/missing","validateOnly":true}`))
 	rec := httptest.NewRecorder()
@@ -1023,8 +1039,8 @@ func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
 }
 
 func TestFactorySessionsAPI_OpenFactorySession_ConfigLoadFailureTargets(t *testing.T) {
-	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{open: func(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
-		return factoryapi.OpenFactorySessionResponse{}, apiTestSessionValidationError{
+	srv := newCanonicalOpenTestServer(func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+		return factorysessions.SessionStartResult{}, apiTestSessionValidationError{
 			message: "factory configuration could not be loaded from the selected folder",
 			code:    "FACTORY_SESSION_CONFIG_LOAD_FAILED",
 			targets: []factoryapi.FactoryValidationTarget{
@@ -1035,7 +1051,7 @@ func TestFactorySessionsAPI_OpenFactorySession_ConfigLoadFailureTargets(t *testi
 				)),
 			},
 		}
-	}})
+	})
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions", bytes.NewBufferString(`{"folderPath":"/workspace/fleet","validateOnly":true}`))
 	rec := httptest.NewRecorder()

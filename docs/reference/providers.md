@@ -193,10 +193,16 @@ a broad, data-backed stdio catalog. Representative entries are:
 
 | Provider identity | Launch command |
 |-------------------|----------------|
-| `cursor-acp` | `cursor-agent acp` |
-| `kiro-acp` | `kiro-cli-chat acp` |
-| `opencode-acp` | `npx -y opencode-ai acp` |
-| `gemini-acp` | `gemini --acp` |
+| `cursor` | `cursor-agent acp` |
+| `gemini` | `gemini --acp` |
+| `kiro` | `kiro-cli-chat acp` |
+| `opencode` | `npx -y opencode-ai acp` |
+| `pi` | `npx pi-acp` |
+
+The canonical built-in IDs `cursor`, `gemini`, `kiro`, `opencode`, and `pi`
+have no aliases. Their runtime implementation profiles retain the `-acp`
+names (`cursor-acp`, `gemini-acp`, `kiro-acp`, `opencode-acp`, `pi-acp`).
+Catalog output, worker configuration, and dispatch records use these short IDs.
 
 For Cursor, confirm that the command is installed and that the account is
 authenticated:
@@ -281,8 +287,8 @@ you workers list
 ```
 
 P0 supports stdio only. The command may include arguments; `you` parses it when
-the Providers service is constructed. Adding `cursor-acp`, `kiro-acp`, or
-`opencode-acp` overrides that preset's launch command. Deleting such an override
+the Providers service is constructed. Adding `cursor`, `kiro`, or
+`opencode` overrides that preset's launch command. Deleting such an override
 restores the built-in preset.
 
 ACP integrations are operator settings in:
@@ -323,7 +329,7 @@ In a split Factory, select the provider in `workers/<name>/AGENTS.md`:
 ---
 type: AGENT_WORKER
 executorProvider: ACP
-modelProvider: cursor-acp
+modelProvider: cursor
 skipPermissions: true
 ---
 
@@ -347,7 +353,7 @@ stream visible until it reaches a terminal result:
 
 ```bash
 you factory config validate ./factory
-you run --factory ./factory/factory.json --provider cursor-acp --model auto --skip-permissions "Add one table-driven test and run the focused test command."
+you run --factory ./factory/factory.json --provider cursor --model auto --skip-permissions "Add one table-driven test and run the focused test command."
 ```
 
 `--skip-permissions` is invocation-only. Omit it when the ACP agent should ask
@@ -360,7 +366,7 @@ For a portable JSON or YAML Factory, set the same identity on its worker:
   "name": "executor",
   "type": "AGENT_WORKER",
   "executorProvider": "ACP",
-  "modelProvider": "cursor-acp",
+  "modelProvider": "cursor",
   "skipPermissions": true
 }
 ```
@@ -377,11 +383,11 @@ name:
 you factory list
 you run --named @you/goal --help
 you factory config validate ~/.you-agent-factory/factories/@you/goal
-you run --named @you/goal --provider cursor-acp --model auto --skip-permissions "Add a simple unit test, run it, and finish the goal."
+you run --named @you/goal --provider cursor --model auto --skip-permissions "Add a simple unit test, run it, and finish the goal."
 ```
 
 For `@you/goal`, set `"executorProvider": "ACP"` and
-`"modelProvider": "cursor-acp"` on the `goal-executor` worker in its
+`"modelProvider": "cursor"` on the `goal-executor` worker in its
 materialized `factory.json`. On Windows, the same
 Factory is under `%USERPROFILE%\.you-agent-factory\factories\@you\goal`.
 
@@ -396,7 +402,7 @@ return (async function () {
   return await agent.run({
     label: "cursor-test-author",
     executorProvider: "ACP",
-    modelProvider: "cursor-acp",
+    modelProvider: "cursor",
     prompt: "Add one table-driven unit test and run the focused test command."
   });
 })();

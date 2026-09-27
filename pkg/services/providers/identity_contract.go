@@ -30,8 +30,8 @@ const (
 	IDClaude      ID = "claude"
 	IDCodex       ID = "codex"
 	IDCursor      ID = "cursor"
-	// Retired identities remain typed for persisted-data decoding and errors,
-	// but are not present in the built-in catalog or execution registry.
+	// Canonical ACP built-in identities. Their runtime implementation
+	// profiles retain the "-acp" names.
 	IDGemini   ID = "gemini"
 	IDKiro     ID = "kiro"
 	IDOpenCode ID = "opencode"

@@ -3742,7 +3742,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Run one bounded read-only subagent using packaged @you/subagent; omitted model options use operator and provider defaults.",
+            "canonicalEnglish": "Run one bounded subagent using packaged @you/subagent; omitted model options use operator and provider defaults.",
             "id": "mcp.tool.you.subagent.description"
           },
           "title": {
@@ -3908,6 +3908,34 @@
             "name": "timeoutMillis",
             "required": false,
             "sensitivity": "public"
+          },
+          "mcp.arg.you.subagent.working_root": {
+            "documentation": {
+              "documentation": {
+                "description": {
+                  "canonicalEnglish": "Absolute workspace directory for the subagent. Omit to use the MCP server workspace.",
+                  "id": "mcp.arg.you.subagent.working_root.description"
+                },
+                "title": {
+                  "canonicalEnglish": "Working root",
+                  "id": "mcp.arg.you.subagent.working_root.title"
+                }
+              },
+              "examples": [
+                "C:/workspace"
+              ],
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.subagent.working_root",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "visibility": "public"
+            },
+            "examples": [
+              "C:/workspace"
+            ],
+            "id": "mcp.arg.you.subagent.working_root",
+            "name": "workingRoot",
+            "required": false,
+            "sensitivity": "public"
           }
         },
         "schema": {
@@ -3933,6 +3961,10 @@
             "timeoutMillis": {
               "description": "Optional maximum wait time in milliseconds.",
               "type": "integer"
+            },
+            "workingRoot": {
+              "description": "Absolute workspace directory for the subagent. Omit to use the MCP server workspace.",
+              "type": "string"
             }
           },
           "required": [

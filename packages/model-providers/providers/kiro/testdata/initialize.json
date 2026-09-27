@@ -1,6 +1,6 @@
 {
   "protocol": "acp",
   "protocolVersion": "1",
-  "provider": "opencode-acp",
+  "provider": "kiro",
   "fixture": "initialize-conformance"
 }

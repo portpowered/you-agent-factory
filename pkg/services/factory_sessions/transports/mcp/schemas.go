@@ -156,6 +156,7 @@ func subagentInputSchema() map[string]any {
 		"provider":        stringProperty("Model provider. Omit to use operator defaults."),
 		"model":           stringProperty("Model name. Omit to use operator defaults."),
 		"reasoningEffort": stringProperty("Reasoning effort. Omit to use the provider default."),
+		"workingRoot":     stringProperty("Absolute workspace directory for the subagent. Omit to use the MCP server workspace."),
 		"timeoutMillis":   integerProperty("Optional maximum wait time for the subagent result."),
 	}, "prompt")
 }

@@ -1,11 +1,11 @@
-id: gemini-acp
+id: opencode
 aliases: []
 displayName:
   type: LOCALIZABLE_ASSET
-  value: Gemini ACP
+  value: OpenCode ACP
 description:
   type: LOCALIZABLE_ASSET
-  value: Gemini ACP is a package-owned ACP stdio integration.
+  value: OpenCode ACP is a package-owned ACP stdio integration.
 documentation:
   - kind: reference
     url: https://github.com/agentclientprotocol/registry
@@ -33,16 +33,16 @@ maximumResponseFidelityCapabilities:
   stableItemIds: false
   providerReconnect: false
 discovery:
-  executableNames: [gemini]
+  executableNames: [npx]
   endpointKinds: [stdio]
   configurationKeys: []
   prerequisites:
     - kind: executable
-      name: gemini
-      description: Install the Gemini ACP launch executable before execution.
+      name: npx
+      description: Install the OpenCode ACP launch executable before execution.
     - kind: authentication
       name: account-authentication
-      description: Authenticate the Gemini ACP account before execution.
+      description: Authenticate the OpenCode ACP account before execution.
     - kind: workspace
       name: writable-workspace
       description: Select a writable workspace before execution.
@@ -52,7 +52,7 @@ harness:
     support: supported
     protocolVersion: "1"
     resourceDelivery: unknown
-    evidenceRefs: [gemini-acp-protocol]
+    evidenceRefs: [opencode-protocol]
 modelCatalogPosture: unknown
 harnessRoutes:
   - direction: input
@@ -67,7 +67,7 @@ harnessRoutes:
     modality: text
     support: supported
     transport: inline
-    evidenceRefs: [gemini-acp-protocol]
+    evidenceRefs: [opencode-protocol]
   - direction: input
     modality: video
     support: unknown
@@ -84,13 +84,13 @@ harnessRoutes:
     modality: text
     support: supported
     transport: inline
-    evidenceRefs: [gemini-acp-protocol]
+    evidenceRefs: [opencode-protocol]
   - direction: output
     modality: video
     support: unknown
     transport: none
 evidence:
-  - id: gemini-acp-protocol
+  - id: opencode-protocol
     kind: conformance_fixture
     verifiedOn: "2026-08-11"
     factRefs:
