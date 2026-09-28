@@ -1699,3 +1699,13 @@ associate the exact prompt outcome, and parsing English retry text remains
 unsound. No edit was made. Focused ACP failure-classification tests passed;
 the full ACP service package had an existing dirty Pi preflight failure in
 `TestPiPreflight_CanceledContext` (`Canceled` expected, `misconfigured` seen).
+
+A deliberately narrow OpenCode MCP read-only audit (session
+`1fc6ea28-03db-41d9-a646-7eea7ee74ea7`) completed with a primary result
+in under a minute under a ten-minute explicit deadline. Independent source
+inspection confirmed its core finding: direct Models TTS already accepts a
+PCM WAV `voice` input and a `ref_text` parameter, carries them through the
+codec, stages the voice file, and sends the reference transcript in the LocalAI
+TTS protobuf parameters. This was already validated with managed WSL Qwen3
+and IndexTTS GPU runs in `localai-tts-reference-audio-audit-2026-09-28.md`;
+the new audit is useful harness success evidence, not new inference proof.
