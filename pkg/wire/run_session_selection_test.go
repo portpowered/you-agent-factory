@@ -28,12 +28,25 @@ func TestRunSessionStartRequestPreservesCLISelections(t *testing.T) {
 		AutoPort: true, Pprof: true, RecordPath: "record.json", ReplayPath: "replay.json",
 		ResumePath: "resume.json", Workflow: "workflow",
 	}, mocks)
+	assertRunSessionRequest(t, request)
+	selection := request.RuntimeSelection
+	assertRunRuntimeSelection(t, selection)
+	assertRunDefinitionArguments(t, selection, arguments)
+	assertRunHostSelection(t, selection)
+	assertRunWorkerAndRecordingSelection(t, selection, mocks, &skip)
+}
+
+func assertRunSessionRequest(t *testing.T, request factorysessions.SessionStartRequest) {
+	t.Helper()
 	if request.Mode != factorysessions.SessionOperationModeLive || request.ActivationOnly ||
 		request.Persistence != factorysessions.PersistencePolicyEnabled || request.SessionID != "session-1" ||
 		request.FolderPath != "factory" {
 		t.Fatalf("start request = %+v", request)
 	}
-	selection := request.RuntimeSelection
+}
+
+func assertRunRuntimeSelection(t *testing.T, selection *factorysessions.SessionRuntimeSelection) {
+	t.Helper()
 	if selection == nil || selection.DefinitionSourcePath != "factory/custom.json" ||
 		selection.ExecutionBaseDir != "execution" || selection.CanonicalSessionID != "canonical-1" ||
 		selection.SystemConfigHome != "home" || selection.WorkFile != "work.json" ||
@@ -43,17 +56,29 @@ func TestRunSessionStartRequestPreservesCLISelections(t *testing.T) {
 		selection.MetricsPolicy != factorysessions.SessionArtifactPolicyEnabled {
 		t.Fatalf("runtime selection = %+v", selection)
 	}
+}
+
+func assertRunDefinitionArguments(t *testing.T, selection *factorysessions.SessionRuntimeSelection, arguments *work.InvocationArguments) {
+	t.Helper()
 	if selection.DefinitionInvocationArguments == arguments ||
 		selection.DefinitionInvocationArguments.Arguments["topic"].Values[0] != "session" {
 		t.Fatalf("definition invocation arguments were not copied: %+v", selection.DefinitionInvocationArguments)
 	}
+}
+
+func assertRunHostSelection(t *testing.T, selection *factorysessions.SessionRuntimeSelection) {
+	t.Helper()
 	if selection.Host.Directory != "factory" || selection.Host.Host != "127.0.0.1" ||
 		selection.Host.Port != 8080 || !selection.Host.AutoPort || !selection.Host.Pprof || !selection.Host.MockWorkers {
 		t.Fatalf("host selection = %+v", selection.Host)
 	}
+}
+
+func assertRunWorkerAndRecordingSelection(t *testing.T, selection *factorysessions.SessionRuntimeSelection, mocks *workers.MockWorkersConfig, skip *bool) {
+	t.Helper()
 	if selection.Workers.MockWorkers != mocks || selection.Workers.RunnerID != "runner" ||
 		selection.Workers.Worktree != "branch" || selection.Workers.WorkerReasoningEffort != "high" ||
-		selection.Workers.InvocationSkipPermissionsOverride != &skip {
+		selection.Workers.InvocationSkipPermissionsOverride != skip {
 		t.Fatalf("worker selection = %+v", selection.Workers)
 	}
 	if selection.Recording.RecordPath != "record.json" || selection.Recording.ReplayPath != "replay.json" ||

@@ -52,27 +52,71 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 }
 
 func (r *Root) startLive(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
-	selected := request
 	selectedID, err := r.sessionIDForStart(request)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
-	var previousControl *runtimebinding.SessionState
-	if request.ActivationOnly && strings.TrimSpace(request.SessionID) != "" {
-		if existing := r.Resolve(selectedID); existing != nil {
-			bound := runtimebinding.SessionStateFrom(existing)
-			if bound == nil || !bound.CanReplaceTerminatedSession() {
-				return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: session %q is already active", selectedID)
-			}
-			if _, err := r.Control(ctx, factorysessions.SessionControlRequest{
-				SessionID: selectedID, Mode: factorysessions.SessionOperationModeLive,
-				Operation: factorysessions.SessionControlClose,
-			}); err != nil {
-				return factorysessions.SessionStartResult{}, fmt.Errorf("replace Factory Session %q: %w", selectedID, err)
-			}
-			previousControl = bound
-		}
+	previousControl, err := r.closeReplacedSession(ctx, request, selectedID)
+	if err != nil {
+		return factorysessions.SessionStartResult{}, err
 	}
+	selected, err := r.prepareLiveStartRequest(ctx, request, selectedID)
+	if err != nil {
+		return factorysessions.SessionStartResult{}, err
+	}
+	products, err := r.openForRequest(ctx, selected)
+	if err != nil {
+		return factorysessions.SessionStartResult{}, err
+	}
+	if request.ValidateOnly || request.InitNewFactory {
+		if products.sessions == nil {
+			return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: validation service is unavailable")
+		}
+		return products.sessions.Start(ctx, selected)
+	}
+	activation, err := startSessionLifecycle(ctx, products)
+	if err != nil {
+		return factorysessions.SessionStartResult{}, err
+	}
+	session := r.Resolve(selectedID)
+	if session == nil {
+		_ = activation.Close(ctx)
+		_ = activation.lifecycle.StopLifecycle(ctx)
+		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: activated session %q is unavailable", selectedID)
+	}
+	bound := runtimebinding.SessionStateFrom(session)
+	if bound == nil {
+		_ = activation.Close(ctx)
+		_ = activation.lifecycle.StopLifecycle(ctx)
+		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: session runtime state is unavailable")
+	}
+	bindSessionProducts(bound, products, activation, request.Correlation.RequestID, previousControl)
+	return liveStartResult(session), nil
+}
+
+func (r *Root) closeReplacedSession(ctx context.Context, request factorysessions.SessionStartRequest, selectedID string) (*runtimebinding.SessionState, error) {
+	if !request.ActivationOnly || strings.TrimSpace(request.SessionID) == "" {
+		return nil, nil
+	}
+	existing := r.Resolve(selectedID)
+	if existing == nil {
+		return nil, nil
+	}
+	bound := runtimebinding.SessionStateFrom(existing)
+	if bound == nil || !bound.CanReplaceTerminatedSession() {
+		return nil, fmt.Errorf("start Factory Session: session %q is already active", selectedID)
+	}
+	if _, err := r.Control(ctx, factorysessions.SessionControlRequest{
+		SessionID: selectedID, Mode: factorysessions.SessionOperationModeLive,
+		Operation: factorysessions.SessionControlClose,
+	}); err != nil {
+		return nil, fmt.Errorf("replace Factory Session %q: %w", selectedID, err)
+	}
+	return bound, nil
+}
+
+func (r *Root) prepareLiveStartRequest(ctx context.Context, request factorysessions.SessionStartRequest, selectedID string) (factorysessions.SessionStartRequest, error) {
+	selected := request
 	selected.SessionID = selectedID
 	runtimeSelection := factorysessions.SessionRuntimeSelection{}
 	if request.RuntimeSelection != nil {
@@ -81,13 +125,13 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 	if strings.TrimSpace(runtimeSelection.SystemConfigHome) == "" && r.resolveHome != nil {
 		home, homeErr := r.resolveHome()
 		if homeErr != nil {
-			return factorysessions.SessionStartResult{}, fmt.Errorf("resolve Factory Sessions home: %w", homeErr)
+			return factorysessions.SessionStartRequest{}, fmt.Errorf("resolve Factory Sessions home: %w", homeErr)
 		}
 		runtimeSelection.SystemConfigHome = home
 	}
 	selectedFolder, resolveErr := r.resolveStartFolder(ctx, request, runtimeSelection)
 	if resolveErr != nil {
-		return factorysessions.SessionStartResult{}, resolveErr
+		return factorysessions.SessionStartRequest{}, resolveErr
 	}
 	selected.FolderPath = selectedFolder
 	if strings.TrimSpace(runtimeSelection.ExecutionBaseDir) == "" {
@@ -100,21 +144,15 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		runtimeSelection.MetricsPolicy = factorysessions.SessionArtifactPolicyDisabled
 	}
 	selected.RuntimeSelection = &runtimeSelection
-	products, err := r.openForRequest(ctx, selected)
-	if err != nil {
-		return factorysessions.SessionStartResult{}, err
-	}
-	if request.ValidateOnly || request.InitNewFactory {
-		if products.sessions == nil {
-			return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: validation service is unavailable")
-		}
-		return products.sessions.Start(ctx, selected)
-	}
+	return selected, nil
+}
+
+func startSessionLifecycle(ctx context.Context, products runtimeProducts) (*sessionActivation, error) {
 	if products.lifecycle == nil {
 		if products.closeArtifacts != nil {
 			_ = products.closeArtifacts()
 		}
-		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: lifecycle is unavailable")
+		return nil, fmt.Errorf("start Factory Session: lifecycle is unavailable")
 	}
 	runContext, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	activation := &sessionActivation{
@@ -122,28 +160,20 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		cancel:         cancel,
 		closeArtifacts: products.closeArtifacts,
 	}
-	if err := activation.lifecycle.StartLifecycle(ctx, runContext); err == nil {
+	err := activation.lifecycle.StartLifecycle(ctx, runContext)
+	if err == nil {
 		activation.stopWorker, err = activation.lifecycle.StartWorkerLifecycle(ctx)
 		if err == nil {
 			err = activation.lifecycle.CompleteStartup(ctx)
 		}
 	}
 	if err != nil {
-		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session lifecycle: %w", errors.Join(err, activation.Close(ctx), activation.lifecycle.StopLifecycle(ctx)))
+		return nil, fmt.Errorf("start Factory Session lifecycle: %w", errors.Join(err, activation.Close(ctx), activation.lifecycle.StopLifecycle(ctx)))
 	}
-	sessionID := selectedID
-	session := r.Resolve(sessionID)
-	if session == nil {
-		_ = activation.Close(ctx)
-		_ = activation.lifecycle.StopLifecycle(ctx)
-		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: activated session %q is unavailable", sessionID)
-	}
-	bound := runtimebinding.SessionStateFrom(session)
-	if bound == nil {
-		_ = activation.Close(ctx)
-		_ = activation.lifecycle.StopLifecycle(ctx)
-		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: session runtime state is unavailable")
-	}
+	return activation, nil
+}
+
+func bindSessionProducts(bound *runtimebinding.SessionState, products runtimeProducts, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) {
 	bound.Activation = activation
 	bound.Process = products.process
 	bound.Diagnostics = products.diagnostics
@@ -161,8 +191,11 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 	bound.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...)
 	bound.ResumeRecoveryMetadata = products.resumeRecoveryMetadata
 	bound.OrderlyStop = products.orderlyStop
-	bound.SetStartRequestID(strings.TrimSpace(request.Correlation.RequestID))
+	bound.SetStartRequestID(strings.TrimSpace(requestID))
 	bound.InheritTerminalControl(previousControl)
+}
+
+func liveStartResult(session *livesession.LiveSession) factorysessions.SessionStartResult {
 	status := "RUNNING"
 	view := factorysessions.SessionView{
 		SessionID: livesession.CanonicalID(session), Mode: factorysessions.SessionOperationModeLive,
@@ -173,7 +206,7 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 	return factorysessions.SessionStartResult{
 		SessionID: view.SessionID, Mode: factorysessions.SessionOperationModeLive, Status: status,
 		Live: &factorysessions.SessionOpenResult{SessionID: view.SessionID, Session: &view, FolderPath: session.FolderPath},
-	}, nil
+	}
 }
 
 func (r *Root) startedForRequestID(requestID string) (factorysessions.SessionStartResult, bool) {

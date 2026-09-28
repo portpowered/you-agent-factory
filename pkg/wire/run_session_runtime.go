@@ -213,8 +213,42 @@ func buildCanonicalRunSession(
 		return runSessionRunner{}, errors.New("run Factory Session: process root and presentation operations are required")
 	}
 	process := newRunSessionProcess(root, request)
+	visualizationComponent := newRunVisualizationComponent(process, sinkID, root, edges, visualizationFactory, visualizationSinks)
+	transport := newRunner(func(ctx context.Context) error {
+		handler, err := httpBinding(root, process.ID(), cancellation)
+		if err != nil {
+			return err
+		}
+		return process.RunTransport(ctx, handler)
+	})
+	plan, err := planLifecycle(factorysessionwire.LifecyclePlanRequest{
+		Runtime:     process,
+		Components:  factorysessions.BoundProcessComponents{Transport: transport, Visualization: visualizationComponent},
+		Close:       process.close,
+		OrderlyStop: func(ctx context.Context) error { return root.StopApplicationOrderly(ctx, process.ID()) },
+	})
+	if err != nil {
+		return runSessionRunner{}, fmt.Errorf("plan Factory Session application lifecycle: %w", err)
+	}
+	managed, err := runtimeapplication.NewManagedRunner(plan, runtimeartifact.Diagnostics{})
+	if err != nil {
+		return runSessionRunner{}, err
+	}
+	managed.SetRuntimeHostReady(process.RuntimeHostReady())
+	runner := runSessionRunner{ManagedRunner: managed, root: root, process: process}
+	return runner, nil
+}
+
+func newRunVisualizationComponent(
+	process *runSessionProcess,
+	sinkID factorysessions.VisualizationSinkID,
+	root *factorysessionwire.Root,
+	edges serviceedges.Edges,
+	visualizationFactory factoryvisualization.RuntimeFactory,
+	visualizationSinks factoryvisualization.RuntimeSinkOwner,
+) lifecycle.Functions {
 	var visualization factoryvisualization.Service
-	visualizationComponent := lifecycle.Functions{
+	return lifecycle.Functions{
 		StartFunc: func(context.Context) error {
 			sink, err := selectVisualizationSink(visualizationSinks, sinkID)
 			if err != nil {
@@ -251,29 +285,6 @@ func buildCanonicalRunSession(
 			return err
 		},
 	}
-	transport := newRunner(func(ctx context.Context) error {
-		handler, err := httpBinding(root, process.ID(), cancellation)
-		if err != nil {
-			return err
-		}
-		return process.RunTransport(ctx, handler)
-	})
-	plan, err := planLifecycle(factorysessionwire.LifecyclePlanRequest{
-		Runtime:     process,
-		Components:  factorysessions.BoundProcessComponents{Transport: transport, Visualization: visualizationComponent},
-		Close:       process.close,
-		OrderlyStop: func(ctx context.Context) error { return root.StopApplicationOrderly(ctx, process.ID()) },
-	})
-	if err != nil {
-		return runSessionRunner{}, fmt.Errorf("plan Factory Session application lifecycle: %w", err)
-	}
-	managed, err := runtimeapplication.NewManagedRunner(plan, runtimeartifact.Diagnostics{})
-	if err != nil {
-		return runSessionRunner{}, err
-	}
-	managed.SetRuntimeHostReady(process.RuntimeHostReady())
-	runner := runSessionRunner{ManagedRunner: managed, root: root, process: process}
-	return runner, nil
 }
 
 type historicalRunProcess struct{}
