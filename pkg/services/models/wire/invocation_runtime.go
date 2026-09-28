@@ -29,6 +29,23 @@ func (runtime backendInvocationRuntime) Invoke(
 	}, nil
 }
 
+func invocationArtifactSources(artifacts []models.InferenceArtifact) []inference.InvocationArtifactSource {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	sources := make([]inference.InvocationArtifactSource, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		sources = append(sources, inference.InvocationArtifactSource{
+			RefValue:   artifact.Artifact.String(),
+			Name:       artifact.Name,
+			MediaType:  artifact.MediaType,
+			SizeBytes:  artifact.SizeBytes,
+			Properties: artifact.Properties,
+		})
+	}
+	return sources
+}
+
 type operationInvocationRuntime struct {
 	generic   invocationRuntime
 	omni      invocationRuntime
@@ -146,6 +163,33 @@ func genericInvocationRuntime(backend InvocationBackend) invocationRuntime {
 		return failClosedInvocationRuntime{}
 	}
 	return backendInvocationRuntime{backend: backend}
+}
+
+// failClosedInvocationRuntime is the production default when no operation
+// adapter was composed. It intentionally emits no content, preserving the
+// distinction between an unavailable backend and generated model output.
+type failClosedInvocationRuntime struct{}
+
+func (failClosedInvocationRuntime) Invoke(
+	ctx context.Context,
+	request inference.InvocationRuntimeRequest,
+) (inference.InvocationRuntimeResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return inference.InvocationRuntimeResult{}, err
+	}
+	operation := strings.TrimSpace(request.Operation.Name)
+	if operation == "" {
+		operation = strings.TrimSpace(request.Request.Operation)
+	}
+	return inference.InvocationRuntimeResult{}, &models.InvocationFailure{
+		Class:     models.InvocationFailureClassConfiguration,
+		Operation: operation,
+		Message:   "model operation backend is unavailable",
+		Cause:     models.ErrUnavailable,
+	}
 }
 
 func newASRInvocationRuntime(backend ASRBackend) (invocationRuntime, error) {

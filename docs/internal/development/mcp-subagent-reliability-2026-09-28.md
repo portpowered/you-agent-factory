@@ -737,3 +737,25 @@ backend name. Neither audit changed files. MCP completion and a plausible
 primary result therefore cannot be treated as implementation correctness;
 the managed model design requires source and live runtime verification before
 editing.
+
+A full `make lint` attempt through Windows `bash.exe` actually ran in WSL,
+where Node was unavailable and the Windows worktree Git path was invalid.
+The lane reported six failures; native Windows reruns confirmed
+`pkg-boundary` passes and `pkg-file-count` had five real package count
+findings. The WSL UI, model-provider-package, and formatting results are
+environment failures, not verified code defects. `go vet`, maintainability,
+deadcode, and most other backend lint targets passed in that lane.
+
+Narrow OpenCode `space-bunny-free` mechanical edits consolidated related
+files without changing their test bodies: permission tests into elicitation
+tests (`5fb47e23-62aa-4f0a-bbfb-6a11e030355a`), CUDA selection tests
+into gRPC projector tests (`dfbf4667-80d2-4baa-9660-0fb08272ae1c`),
+VibeVoice layout tests into TTS protocol tests
+(`388d61af-92ed-47de-aac2-2217348840db`), two small Models wire runtime
+files into `invocation_runtime.go` (`f67447ce-6a5d-48ad-9e0e-39986094913c`,
+`8f304d65-88de-4a96-a568-b1c13a28eaca`), and gallery/published resolver
+tests into default resolver tests (`94c949ac-1a78-4c34-9e56-15d9f4fda971`,
+`dc8d233b-4ead-4a20-bf61-e742ce84725f`). All seven calls returned
+primary results. Focused Go tests and `make pkg-maint` passed. Native
+`pkg-file-count` improved from five findings to two; the remaining packages
+are `pkg/services/models/internal/service` and `pkg/wire`.

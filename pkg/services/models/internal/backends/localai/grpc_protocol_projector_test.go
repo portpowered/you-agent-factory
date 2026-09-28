@@ -308,6 +308,39 @@ func TestPinnedGRPCHostNegotiatorPropagatesDeadlineToBlockedLoadModel(t *testing
 	t.Logf("LOCALAI-PROTOCOL-DEADLINE endpoint=%s health=%s load_model=%s peer_deadline=%s server_cancel=%s result=%T ready=false", listener.Addr(), healthAt.UTC().Format(time.RFC3339Nano), loadModelAt.UTC().Format(time.RFC3339Nano), deadlineAt.UTC().Format(time.RFC3339Nano), serverCanceledAt.UTC().Format(time.RFC3339Nano), outcome.err)
 }
 
+func TestPinnedGRPCHostProtocolNegotiatorUsesSelectedArchiveAccelerator(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range []struct {
+		name, accelerator string
+		gpuLayers         int32
+	}{
+		{name: "CPU archive on CUDA host", accelerator: "cpu", gpuLayers: 0},
+		{name: "CUDA archive on CUDA host", accelerator: "cuda", gpuLayers: 99},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			connection := &recordingGRPCConnection{}
+			connection.response, _ = proto.Marshal(&Result{Success: true})
+			negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
+			_, err := negotiator.Negotiate(context.Background(), "grpc://127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
+				Configuration: modelseffects.ResolvedHostConfiguration{
+					ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+					Backend:         "localai-llamacpp", ModelName: models.BuiltInModelNameEmbed,
+					ModelPath:       "/models/embed.gguf",
+					Platform:        models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64", CUDAAvailable: true},
+					BackendArtifact: modelseffects.BackendArtifactSelection{Accelerator: testCase.accelerator},
+				},
+			})
+			if err != nil {
+				t.Fatalf("negotiate %s: %v", testCase.name, err)
+			}
+			if got := connection.loadRequest.GetNGPULayers(); got != testCase.gpuLayers {
+				t.Fatalf("GPU layers = %d, want %d", got, testCase.gpuLayers)
+			}
+		})
+	}
+}
+
 func awaitProtocolNegotiationOutcome(
 	t *testing.T,
 	result <-chan protocolNegotiationOutcome,
