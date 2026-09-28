@@ -1377,3 +1377,60 @@ diff was the expected authored description change. After commit `5c73b77925`,
 functional test, and docs-reference smoke also passed. The lesson is to keep
 the exact command exit status in the primary result and distinguish a gate
 that will pass after committing from one that already passed.
+
+The next concurrent MCP exercise submitted three bounded jobs in one
+workspace: two OpenCode lint repairs and one Pi formatting repair. Pi returned
+primary `COMPLETED` for Factory Session
+`f07fee01-800c-4ad5-a1a2-caed554d127b`, but its entire answer was retry
+progress and `Retry finished, resuming.`; `make fmt-check` still failed on the
+same three files. Pi's session JSONL recorded four assistant messages with
+`stopReason=error` and `errorMessage=Connection error.`. Its selected local
+model was `llama-cpp/qwen-3.8-uncensored` at `http://localhost:8080/v1`, and
+TCP port 8080 was closed. This is a confirmed false-success terminal outcome:
+the provider failed to connect, while the Factory invocation treated retry
+notices as the answer. An OpenCode task is tracing the missing ACP/provider
+failure classification.
+
+The two OpenCode jobs both reached their explicit 20-minute bounds and
+returned typed `factory_session.subagent.timed_out`, with request IDs,
+`partialEffectsPossible=true`, `inFlightDispatches=1`, and confirmed cleanup.
+The Models lint task (session `db7eb48f-600a-4aa7-9768-4d7c396e2a0e`)
+left a compiling partial refactor: `backend-size` and `pkg-maint` passed, but
+`pkg-file-count` still failed in two packages. The package-boundary task
+(session `29262435-2572-4150-a377-52fd3b7c1055`) made no file edits.
+The ACP service currently retains one daemon per provider and gates its
+execution, so these accepted sessions do not prove simultaneous OpenCode
+turns. The OpenCode provider-failure-classification task (session
+`e2fd1cf3-ad14-4453-8656-da4953cfedcf`) also reached its 20-minute bound
+without editing. The Codex-provider continuation (session
+`0f9966cb-d637-4895-8419-b6157b9bc664`) completed the Models file-size,
+complexity, and package-count repair; independently rerun focused Go tests
+and all three gates passed. Commit `0d47d528d4` records the repair.
+
+A Codex-provider MCP boundary/fmt repair (session
+`b07865a9-6cc8-4d48-9ae3-af9c085e5f08`) returned a primary result and
+removed five test-only peer wire imports. Its claim that `make fmt-check`
+passed required qualification: with three deleted `TestMain` files still
+unstaged, the gate enumerated them through `git ls-files --cached` and failed
+to open them. Staging the deletion made `make pkg-boundary fmt-check` pass.
+Focused runtime, system-initialization, and worker-session Go tests passed;
+commit `f49004df3b` records the boundary edit. Full lint then exposed one
+new runtime test file beyond the package-count limit. A narrow Codex-provider
+MCP follow-up (session `617fdba6-a9f9-4a64-9029-52fc970410b2`) merged that
+helper into its existing test file. Independent `make pkg-file-count` and the
+two focused runtime tests passed; commit `6fe9728a77` records the follow-up.
+Full `make lint` then passed all 24 targets.
+
+An OpenCode-provider MCP media audit (session
+`7a0695ea-517a-46c2-bc57-b01ab5b5edc0`) returned a primary report, but
+its text repeated one progress sentence several times and called the OMNI
+path sound without live semantic proof. Independent offline probes established
+audio understanding (`zero` for a known spoken-digit WAV) and one-frame
+video understanding (correct red background and `PHASE 1` label). A four-second
+100-frame MP4 returned empty text or a generic invoke failure. Removing its
+audio track and reducing it to four frames did not resolve the failure. A
+Codex-provider MCP experiment (session `6a6bc658-e9e3-405e-84c0-3b805a3cde29`)
+raised only the video generation-token budget from 256 to 1024; the live
+four-second probe still failed, so the subagent reverted the experiment.
+This distinguishes protocol acceptance and projector readiness from the
+longer-video behavior actually observed on this Windows backend.
