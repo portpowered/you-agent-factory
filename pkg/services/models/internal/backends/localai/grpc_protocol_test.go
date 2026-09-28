@@ -89,6 +89,9 @@ func TestPinnedGRPCProtocolClientMapsOrderedOmniValuesToPinnedFields(t *testing.
 		t.Fatalf("transport facts = method %q, closed %d, want Predict and one close", connection.method, connection.closed)
 	}
 	assertPredictChatDefaults(t, &connection.request, request.Prompt)
+	if containsWireField(t, connection.predictPayload, 4) {
+		t.Fatalf("Predict wire payload %x includes the default Tokens field", connection.predictPayload)
+	}
 	if connection.request.Prompt != request.Prompt ||
 		!equalStrings(connection.request.Images, []string{
 			base64.StdEncoding.EncodeToString([]byte("image-a.png")),
@@ -105,7 +108,7 @@ func TestPinnedGRPCProtocolClientMapsOrderedOmniValuesToPinnedFields(t *testing.
 
 func assertPredictChatDefaults(t *testing.T, options *PredictOptions, prompt string) {
 	t.Helper()
-	if options.Tokens != localAIDefaultPredictTokens || !options.UseTokenizerTemplate {
+	if options.Tokens != 0 || !options.UseTokenizerTemplate {
 		t.Fatalf("chat defaults = tokens:%d template:%t", options.Tokens, options.UseTokenizerTemplate)
 	}
 	if len(options.Messages) != 1 || options.Messages[0].GetRole() != "user" || options.Messages[0].GetContent() != prompt {
@@ -169,6 +172,7 @@ func TestPinnedEmbeddingBackendMapsTextParametersAndResponse(t *testing.T) {
 	}
 	if connection.embeddingRequest.GetPrompt() != "Find similar work" ||
 		connection.embeddingRequest.GetEmbeddings() != "Find similar work" ||
+		connection.embeddingRequest.GetTokens() != 0 ||
 		connection.embeddingRequest.GetMetadata()["normalize"] != "true" ||
 		connection.embeddingRequest.GetMetadata()["dimensions"] != "3" {
 		t.Fatalf("embedding request prompt=%q embeddings=%q metadata=%v, want dedicated embedding text and JSON metadata", connection.embeddingRequest.GetPrompt(), connection.embeddingRequest.GetEmbeddings(), connection.embeddingRequest.GetMetadata())
@@ -297,9 +301,9 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 		connection.loadRequest.GetModelPath() != filepath.Dir(modelFile) ||
 		connection.loadRequest.GetNBatch() != localAIModelBatchSize ||
 		connection.loadRequest.GetThreads() != 4 ||
-		!equalStrings(connection.loadRequest.GetOptions(), []string{localAIDisableGemmaThinkingOption}) {
+		len(connection.loadRequest.GetOptions()) != 0 {
 		t.Fatalf(
-			"load request model=%q context=%d modelFile=%q mmproj=%q modelPath=%q nBatch=%d options=%v, want built-in LLM paths and reasoning budget",
+			"load request model=%q context=%d modelFile=%q mmproj=%q modelPath=%q nBatch=%d options=%v, want built-in LLM paths without load options",
 			connection.loadRequest.GetModel(), connection.loadRequest.GetContextSize(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetMMProj(), connection.loadRequest.GetModelPath(), connection.loadRequest.GetNBatch(), connection.loadRequest.GetOptions(),
 		)
 	}
@@ -309,9 +313,8 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 	expected = appendStringField(expected, 21, modelFile)
 	expected = appendStringField(expected, 41, mmprojFile)
 	expected = appendStringField(expected, 59, filepath.Dir(modelFile))
-	expected = appendStringField(expected, 62, localAIDisableGemmaThinkingOption)
 	if !bytes.Equal(connection.loadPayload, expected) {
-		t.Fatalf("non-EMBED LoadModel wire bytes = %x, want model-specific reasoning budget bytes %x", connection.loadPayload, expected)
+		t.Fatalf("non-EMBED LoadModel wire bytes = %x, want no reasoning override %x", connection.loadPayload, expected)
 	}
 }
 
@@ -359,20 +362,15 @@ func TestPinnedGRPCHostProtocolNegotiatorKeepsVibeVoiceOptionsPrivateToBuiltinTT
 				t.Fatalf("Negotiate() error = %v", err)
 			}
 			wantOptions := []string(nil)
-			if modelName == models.BuiltInModelNameLLM {
-				wantOptions = []string{localAIDisableGemmaThinkingOption}
-			}
 			if !equalStrings(connection.loadRequest.GetOptions(), wantOptions) || connection.loadRequest.GetMMProj() != "" {
 				t.Fatalf("%s LoadModel options/mmproj = %#v/%q, want %q and no projector", modelName, connection.loadRequest.GetOptions(), connection.loadRequest.GetMMProj(), wantOptions)
 			}
-			wantContextSize := int32(0)
 			wantEmbeddings := false
 			if modelName == models.BuiltInModelNameEmbed {
-				wantContextSize = localAIEmbedContextSize
 				wantEmbeddings = true
 			}
-			if connection.loadRequest.GetContextSize() != wantContextSize || connection.loadRequest.GetEmbeddings() != wantEmbeddings {
-				t.Fatalf("%s LoadModel context/embeddings = %d/%t, want %d/%t", modelName, connection.loadRequest.GetContextSize(), connection.loadRequest.GetEmbeddings(), wantContextSize, wantEmbeddings)
+			if connection.loadRequest.GetContextSize() != 0 || connection.loadRequest.GetEmbeddings() != wantEmbeddings {
+				t.Fatalf("%s LoadModel context/embeddings = %d/%t, want 0/%t", modelName, connection.loadRequest.GetContextSize(), connection.loadRequest.GetEmbeddings(), wantEmbeddings)
 			}
 		})
 	}
@@ -498,17 +496,16 @@ func TestPinnedGRPCHostProtocolNegotiatorEnablesEmbeddingModeForBuiltinEmbed(t *
 		t.Fatalf("Negotiate() error = %v", err)
 	}
 	modelFile := `C:\models\embed\model.gguf`
-	if connection.loadRequest.GetContextSize() != localAIEmbedContextSize ||
+	if connection.loadRequest.GetContextSize() != 0 ||
 		!connection.loadRequest.GetEmbeddings() ||
 		connection.loadRequest.GetModelFile() != modelFile ||
 		connection.loadRequest.GetModelPath() != filepath.Dir(modelFile) {
 		t.Fatalf(
-			"embedding load request model=%q context=%d embeddings=%t modelFile=%q modelPath=%q, want bounded context, embedding mode, and unchanged model paths",
+			"embedding load request model=%q context=%d embeddings=%t modelFile=%q modelPath=%q, want default context, embedding mode, and unchanged model paths",
 			connection.loadRequest.GetModel(), connection.loadRequest.GetContextSize(), connection.loadRequest.GetEmbeddings(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetModelPath(),
 		)
 	}
 	expected := appendStringField(nil, 1, models.BuiltInModelNameEmbed)
-	expected = appendVarintField(expected, 2, localAIEmbedContextSize)
 	expected = appendVarintField(expected, 4, localAIModelBatchSize)
 	expected = appendVarintField(expected, 10, 1)
 	expected = appendVarintField(expected, 15, 4)
@@ -720,7 +717,7 @@ func assertControlledImageObservation(
 	}
 	if observation.load.ModelFile != modelFile || observation.load.ModelPath != modelRoot ||
 		observation.load.MMProj != mmprojFile || observation.load.Model != models.BuiltInModelNameLLM ||
-		!equalStrings(observation.load.Options, []string{localAIDisableProjectorGPUOption, localAIDisableGemmaThinkingOption}) {
+		!equalStrings(observation.load.Options, []string{localAIDisableProjectorGPUOption}) {
 		t.Fatalf("server LoadModel = %#v, want exact model/projector paths", observation.load)
 	}
 	if observation.imageCount != wantImageCount || observation.imageSHA256 != wantImageSHA256 {
@@ -746,6 +743,7 @@ type recordingGRPCConnection struct {
 	method           string
 	methods          []string
 	request          PredictOptions
+	predictPayload   []byte
 	embeddingRequest PredictOptions
 	loadRequest      ModelOptions
 	loadPayload      []byte
@@ -765,6 +763,7 @@ func (connection *recordingGRPCConnection) Invoke(
 		return nil, connection.invokeErr
 	}
 	if method == localAIPredictMethod {
+		connection.predictPayload = append([]byte(nil), payload...)
 		if err := proto.Unmarshal(payload, &connection.request); err != nil {
 			return nil, err
 		}

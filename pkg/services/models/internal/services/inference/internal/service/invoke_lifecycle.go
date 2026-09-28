@@ -21,6 +21,9 @@ func (s *service) putInvocation(invocation models.ModelInvocationRef, result mod
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.invocations[invocation] = result.Clone()
+	if result.Status != models.ModelInvocationStatusAccepted {
+		delete(s.running, invocation)
+	}
 }
 
 func (s *service) invokeWithDeadline(parent context.Context) (context.Context, context.CancelFunc) {

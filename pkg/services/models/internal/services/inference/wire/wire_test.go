@@ -230,6 +230,14 @@ func (recordingRuntimeHostService) ReleaseModelLease(
 	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
 }
 
+func (recordingRuntimeHostService) ClaimInvocationLease(context.Context, models.InvokeModelRequest) (models.ModelLease, error) {
+	return models.ModelLease{}, models.ErrUnsupportedOperation
+}
+
+func (recordingRuntimeHostService) ReleaseInvocationLease(context.Context, models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error) {
+	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
 type recordingAssetsService struct{}
 
 var _ scopedassets.Service = recordingAssetsService{}

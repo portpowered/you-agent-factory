@@ -45,6 +45,14 @@ func (s *service) CancelInvocation(
 		invocation.LeaseDisposition = models.InvocationLeaseRetained
 		invocation.CancellationOutcome = models.InvocationCancellationRequested
 		s.invocations[request.Invocation] = invocation
+		if cancel := s.running[request.Invocation]; cancel != nil {
+			s.mu.Unlock()
+			cancel()
+			result.Status = models.ModelInvocationStatusCancelled
+			result.LeaseDisposition = models.InvocationLeaseRetained
+			result.Outcome = models.InvocationCancellationRequested
+			return result, nil
+		}
 		s.mu.Unlock()
 
 		disposition, releaseErr := s.releaseInvocationLease(ctx, models.InvokeModelRequest{

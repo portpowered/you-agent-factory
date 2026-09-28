@@ -846,6 +846,19 @@ func (host *recordingInferenceHost) GetModelLease(
 	return models.GetModelLeaseResult{Lease: lease}, nil
 }
 
+func (host *recordingInferenceHost) ClaimInvocationLease(
+	ctx context.Context, request models.InvokeModelRequest,
+) (models.ModelLease, error) {
+	result, err := host.GetModelLease(ctx, models.GetModelLeaseRequest{Scope: request.Scope, Lease: request.Lease})
+	return result.Lease, err
+}
+
+func (host *recordingInferenceHost) ReleaseInvocationLease(
+	ctx context.Context, request models.ReleaseModelLeaseRequest,
+) (models.ReleaseModelLeaseResult, error) {
+	return host.ReleaseModelLease(ctx, request)
+}
+
 func (host *recordingInferenceHost) ReleaseModelLease(
 	_ context.Context,
 	request models.ReleaseModelLeaseRequest,

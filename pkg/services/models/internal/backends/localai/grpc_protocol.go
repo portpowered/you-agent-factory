@@ -17,16 +17,13 @@ import (
 )
 
 const (
-	localAIHealthMethod                     = "/backend.Backend/Health"
-	localAILoadModelMethod                  = "/backend.Backend/LoadModel"
-	localAIPredictMethod                    = "/backend.Backend/Predict"
-	localAIEmbeddingMethod                  = "/backend.Backend/Embedding"
-	localAIModelBatchSize                   = 512
-	localAIEmbedContextSize           int32 = 512
-	localAIDefaultPredictTokens       int32 = 256
-	localAIDisableProjectorGPUOption        = "mmproj_use_gpu:false"
-	localAIDisableGemmaThinkingOption       = "reasoning_budget:0"
-	localAIAudioCPPBackendOption            = "backend:best"
+	localAIHealthMethod              = "/backend.Backend/Health"
+	localAILoadModelMethod           = "/backend.Backend/LoadModel"
+	localAIPredictMethod             = "/backend.Backend/Predict"
+	localAIEmbeddingMethod           = "/backend.Backend/Embedding"
+	localAIModelBatchSize            = 512
+	localAIDisableProjectorGPUOption = "mmproj_use_gpu:false"
+	localAIAudioCPPBackendOption     = "backend:best"
 )
 
 type invocationEndpointContextKey struct{}
@@ -156,20 +153,10 @@ func loadModel(
 		)
 	}
 	options = append(options, projectorLoadOptions(configuration)...)
-	// The managed Gemma 4 LLM otherwise spends the default Predict token budget
-	// on hidden reasoning before producing text, especially for video input.
-	if configuration.Backend == "localai-llamacpp" &&
-		strings.EqualFold(strings.TrimSpace(configuration.ModelName), models.BuiltInModelNameLLM) {
-		options = append(options, localAIDisableGemmaThinkingOption)
-	}
 	if configuration.Backend == "localai-audio-cpp" {
 		options = append(options, localAIAudioCPPBackendOption)
 	}
 	isBuiltInEmbed := strings.EqualFold(configuration.ModelName, models.BuiltInModelNameEmbed)
-	contextSize := int32(0)
-	if isBuiltInEmbed {
-		contextSize = localAIEmbedContextSize
-	}
 	threads := int32(0)
 	gpuLayers := int32(0)
 	if configuration.Backend == "localai-llamacpp" {
@@ -182,17 +169,17 @@ func loadModel(
 			gpuLayers = 99
 		}
 	}
+	// ContextSize stays zero so llama.cpp derives the context from the model.
 	payload, err := proto.Marshal(&ModelOptions{
-		Model:       configuration.ModelName,
-		ContextSize: contextSize,
-		NBatch:      localAIModelBatchSize,
-		Embeddings:  isBuiltInEmbed,
-		Threads:     threads,
-		NGPULayers:  gpuLayers,
-		ModelFile:   modelFile,
-		MMProj:      strings.TrimSpace(configuration.MMProjPath),
-		ModelPath:   filepath.Dir(modelFile),
-		Options:     options,
+		Model:      configuration.ModelName,
+		NBatch:     localAIModelBatchSize,
+		Embeddings: isBuiltInEmbed,
+		Threads:    threads,
+		NGPULayers: gpuLayers,
+		ModelFile:  modelFile,
+		MMProj:     strings.TrimSpace(configuration.MMProjPath),
+		ModelPath:  filepath.Dir(modelFile),
+		Options:    options,
 	})
 	if err != nil {
 		return fmt.Errorf(
@@ -410,7 +397,8 @@ func embeddingOptions(request models.EmbeddingBackendRequest) (*PredictOptions, 
 func predictOptions(request PredictRequest) (*PredictOptions, error) {
 	options := &PredictOptions{Prompt: request.Prompt}
 	if strings.TrimSpace(request.Prompt) != "" {
-		options.Tokens = localAIDefaultPredictTokens
+		// The pinned llama backend interprets zero Tokens as n_predict=-1.
+		// Leave generation length uncapped by this adapter, including reasoning.
 		options.UseTokenizerTemplate = true
 		options.Messages = []*Message{{Role: "user", Content: request.Prompt}}
 	}

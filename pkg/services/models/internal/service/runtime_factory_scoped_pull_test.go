@@ -576,6 +576,14 @@ func (host *removeGuardHost) ReleaseModelLease(context.Context, models.ReleaseMo
 	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
 }
 
+func (host *removeGuardHost) ClaimInvocationLease(context.Context, models.InvokeModelRequest) (models.ModelLease, error) {
+	return models.ModelLease{}, models.ErrUnsupportedOperation
+}
+
+func (host *removeGuardHost) ReleaseInvocationLease(context.Context, models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error) {
+	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
 func TestRootInvokeModelRecordsOneTerminalForInvocationFailure(t *testing.T) {
 	t.Parallel()
 
@@ -948,6 +956,14 @@ func (host *joinedHostService) ReleaseModelLease(context.Context, models.Release
 	*host.events = append(*host.events, "release")
 	host.lease.Status = models.ModelLeaseStatusReleased
 	return models.ReleaseModelLeaseResult{Lease: host.lease, Outcome: models.ModelLeaseReleased}, nil
+}
+
+func (host *joinedHostService) ClaimInvocationLease(context.Context, models.InvokeModelRequest) (models.ModelLease, error) {
+	return host.lease, nil
+}
+
+func (host *joinedHostService) ReleaseInvocationLease(ctx context.Context, request models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error) {
+	return host.ReleaseModelLease(ctx, request)
 }
 
 type joinedInferenceService struct {

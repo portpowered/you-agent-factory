@@ -1753,3 +1753,20 @@ The user asked that probes stop opening browser tabs. Subsequent server probes
 used `YOU_NO_BROWSER_OPEN=1`, whose wired opener is a no-op; no further
 automatic browser opens are intended. The server startup line still says
 `Opening dashboard` despite the no-op and should be corrected separately.
+
+A Codex MCP edit (session `337b4a83-ac7b-4080-bbae-e197adba9a6e`)
+implemented invocation-owned managed leases. Inference atomically claims a
+detached lease before backend execution; claimed capacity stays reserved past
+the one-minute detached-lease TTL and returns only when invocation cleanup
+finishes. Unclaimed leases still expire. Cancellation retains capacity until
+the backend exits, and an external release cannot free an in-flight claim.
+Fake-clock and cancellation tests cover expiration, admission, and cleanup.
+The full Models Go suite, repeated targeted race tests, file-count check, and
+diff check passed. An independent focused package rerun passed.
+
+A fresh Windows binary with the no-cap and lease changes completed the same
+direct Models two-frame video request in 111 seconds with HTTP 200. Its text
+was `Red, Red`, whereas the fixture is red then blue. This proves the lease
+failure is fixed but leaves a video-understanding accuracy issue. The server
+was launched hidden with `YOU_NO_BROWSER_OPEN=1` and stopped gracefully; no
+dashboard tab was opened.
