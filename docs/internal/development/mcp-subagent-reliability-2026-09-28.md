@@ -673,3 +673,12 @@ at response time or ten seconds later while the MCP server stayed alive.
 This confirms no late write in that run, but a two-second deadline may have
 expired before the model attempted any write, so it does not resolve the
 earlier observed late-write failure.
+
+Two narrow OpenCode `space-bunny-free` edits then bounded the MCP tool's
+detached Factory Session close context to 15 seconds and asserted the
+deadline in its test fake. The code edit completed in Factory Session
+`51f87e8a-54d7-4ed3-bd85-4ad32a786527` in about 32 seconds; the test edit
+completed in `0e3d0d2d-134b-430d-91c0-bad8bdd9572b` in about 38 seconds.
+Focused MCP and invocation package tests and `go vet` passed. As with the
+cancel-on-timeout deadline, this only bounds downstream close operations
+that honor context cancellation.

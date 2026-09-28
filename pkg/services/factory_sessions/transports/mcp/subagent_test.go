@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -17,14 +18,16 @@ import (
 
 type subagentTargetFake struct {
 	factorysessions.Service
-	start        factorysessions.SessionStartRequest
-	invoke       factorysessions.SessionInvokeRequest
-	control      factorysessions.SessionControlRequest
-	started      bool
-	closed       bool
-	invokeErr    error
-	closeErr     error
-	invokeResult *factorysessions.InvocationResult
+	start                 factorysessions.SessionStartRequest
+	invoke                factorysessions.SessionInvokeRequest
+	control               factorysessions.SessionControlRequest
+	started               bool
+	closed                bool
+	controlHasDeadline    bool
+	controlTimeToDeadline time.Duration
+	invokeErr             error
+	closeErr              error
+	invokeResult          *factorysessions.InvocationResult
 }
 
 func (fake *subagentTargetFake) Start(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
@@ -47,9 +50,13 @@ func (fake *subagentTargetFake) Invoke(_ context.Context, request factorysession
 	}, nil
 }
 
-func (fake *subagentTargetFake) Control(_ context.Context, request factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
+func (fake *subagentTargetFake) Control(ctx context.Context, request factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
 	fake.control = request
 	fake.closed = request.SessionID == "session-1" && request.Operation == factorysessions.SessionControlClose
+	if deadline, ok := ctx.Deadline(); ok {
+		fake.controlHasDeadline = true
+		fake.controlTimeToDeadline = time.Until(deadline)
+	}
 	return factorysessions.SessionControlResult{}, fake.closeErr
 }
 
@@ -104,6 +111,12 @@ func assertSubagentInvocationAndClose(t *testing.T, target *subagentTargetFake) 
 	}
 	if !target.started || !target.closed {
 		t.Fatalf("lifecycle start=%t close=%t", target.started, target.closed)
+	}
+	if !target.controlHasDeadline {
+		t.Fatal("close context has no deadline")
+	}
+	if target.controlTimeToDeadline < 14*time.Second || target.controlTimeToDeadline > 16*time.Second {
+		t.Fatalf("close context deadline = %s, want about 15s", target.controlTimeToDeadline)
 	}
 }
 

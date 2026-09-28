@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -32,6 +33,10 @@ const (
 	ToolReadEvents     = "you.factory_session.read_events"
 	ToolSubagent       = "you.subagent"
 )
+
+// subagentCloseTimeout gives the detached close call a deadline that
+// cooperative cleanup paths can honor.
+const subagentCloseTimeout = 15 * time.Second
 
 // Stable error envelope fields shared by every dynamic workflow MCP tool.
 var sharedErrorStableFields = []string{
@@ -184,11 +189,15 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 		Args:        args,
 		Wait:        factorysessionexecution.SessionOperationWait{TimeoutMillis: timeoutMillis, CancelOnTimeout: true},
 	})
-	_, closeErr := target.Control(context.WithoutCancel(ctx), factorysessionexecution.SessionControlRequest{
+	// Close runs on a detached context so caller cancellation cannot skip
+	// cleanup. The deadline keeps cooperative close paths from waiting forever.
+	closeCtx, cancelClose := context.WithTimeout(context.WithoutCancel(ctx), subagentCloseTimeout)
+	_, closeErr := target.Control(closeCtx, factorysessionexecution.SessionControlRequest{
 		SessionID: started.SessionID,
 		Mode:      factorysessionexecution.SessionOperationModeLive,
 		Operation: factorysessionexecution.SessionControlClose,
 	})
+	cancelClose()
 	if closeErr != nil {
 		return subagentCleanupFailure(started.SessionID, requestID)
 	}
