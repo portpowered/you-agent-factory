@@ -40,7 +40,6 @@ type Root struct {
 	orchestration orchestration.Service
 	instanceHost  instancehost.Service
 	dispatchPlan  dispatchplanning.Service
-	activation    factoryruntime.RuntimeActivationOperation
 
 	mu           sync.RWMutex
 	active       map[string]*runtimeActivationState
@@ -77,7 +76,6 @@ func NewRoot(
 	clock factoryruntime.Clock,
 	workersPublisher dispatchplanning.WorkersPublisher,
 	workersCanceler dispatchplanning.WorkersCanceler,
-	activation ...factoryruntime.RuntimeActivationOperation,
 ) (*Root, error) {
 	if newID == nil {
 		return nil, fmt.Errorf("construct Factory Runtime: ID generator is required")
@@ -92,18 +90,10 @@ func NewRoot(
 	if err != nil {
 		return nil, err
 	}
-	var activationOperation factoryruntime.RuntimeActivationOperation
-	if len(activation) > 1 {
-		return nil, fmt.Errorf("construct Factory Runtime: at most one activation operation is supported")
-	}
-	if len(activation) == 1 {
-		activationOperation = activation[0]
-	}
 	return &Root{
 		orchestration: orchestrationwire.New(newID, workflows, workflowRuntime),
 		instanceHost:  instanceHost,
 		dispatchPlan:  dispatchplanningwire.New(workersPublisher, workersCanceler),
-		activation:    activationOperation,
 		active:        make(map[string]*runtimeActivationState),
 		failed:        make(map[string]*runtimeActivationCleanupState),
 		activating:    make(map[string]bool),
@@ -112,13 +102,14 @@ func NewRoot(
 }
 
 // Activate validates and atomically publishes one initialized Runtime. The
-// activation operation is the only construction-time route to a live
+// per-call activation operation is the only route to a live
 // delegate; failed operations never become observable through this root. If
 // failed-start cleanup also fails, the cleanup remains explicitly retryable
 // through Deactivate for the same Runtime ID.
 func (r *Root) Activate(
 	ctx context.Context,
 	request factoryruntime.RuntimeActivationRequest,
+	start factoryruntime.RuntimeActivationOperation,
 ) (factoryruntime.RuntimeActivationResult, error) {
 	if err := validateActivationContext(ctx); err != nil {
 		return factoryruntime.RuntimeActivationResult{}, err
@@ -130,7 +121,7 @@ func (r *Root) Activate(
 	if r == nil {
 		return factoryruntime.RuntimeActivationResult{}, fmt.Errorf("activate Factory Runtime: root is required")
 	}
-	operation, err := r.beginActivation(normalized)
+	operation, err := r.beginActivation(normalized, start)
 	if err != nil {
 		return factoryruntime.RuntimeActivationResult{}, err
 	}
@@ -170,6 +161,7 @@ func validateActivationContext(ctx context.Context) error {
 
 func (r *Root) beginActivation(
 	request factoryruntime.RuntimeActivationRequest,
+	operation factoryruntime.RuntimeActivationOperation,
 ) (factoryruntime.RuntimeActivationOperation, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -200,7 +192,7 @@ func (r *Root) beginActivation(
 			Message:   "activate Factory Runtime: lifecycle transition is already in progress",
 		}
 	}
-	if r.activation == nil {
+	if operation == nil {
 		return nil, &factoryruntime.RuntimeActivationError{
 			Kind:      factoryruntime.RuntimeActivationErrorUnavailable,
 			RuntimeID: request.RuntimeID,
@@ -208,7 +200,7 @@ func (r *Root) beginActivation(
 		}
 	}
 	r.activating[request.RuntimeID] = true
-	return r.activation, nil
+	return operation, nil
 }
 
 func (r *Root) finishActivation(
