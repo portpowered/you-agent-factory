@@ -1,7 +1,6 @@
 package wire
 
 import (
-	"context"
 	"io/fs"
 	"runtime"
 	"testing"
@@ -70,8 +69,8 @@ func TestNewServiceFromAssemblyConstructsPublishedRoot(t *testing.T) {
 	if root == nil {
 		t.Fatal("constructed root is nil")
 	}
-	liveControl, ok := service.(factorysessions.LiveControlService)
-	if !ok {
+	var liveControl factorysessions.LiveControlService = service
+	if liveControl == nil {
 		t.Fatal("constructed root does not publish the live-control capability")
 	}
 	if liveControl == nil {
@@ -80,8 +79,8 @@ func TestNewServiceFromAssemblyConstructsPublishedRoot(t *testing.T) {
 	if any(liveControl) != any(root) {
 		t.Fatalf("LiveControlService = %T, want the same authoritative Service instance %T", liveControl, root)
 	}
-	deletion, ok := service.(factorysessions.LiveDeletionService)
-	if !ok || deletion == nil {
+	var deletion factorysessions.LiveDeletionService = service
+	if deletion == nil {
 		t.Fatal("constructed root does not publish the live deletion capability")
 	}
 	if any(deletion) != any(root) {
@@ -101,8 +100,8 @@ func TestNewServiceFromAssemblyRetainsOneRuntimeAssemblyOnThePublishedRoot(t *te
 	if err != nil {
 		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}
-	retained, ok := service.(RuntimeAssembly)
-	if !ok || retained == nil {
+	var retained RuntimeAssembly = service
+	if retained == nil {
 		t.Fatalf("published service = %T, want the retained runtime assembly capability", service)
 	}
 	if any(retained) != any(service) {
@@ -126,10 +125,10 @@ func TestNewServiceFromAssemblyRetainsTheInjectedOpening(t *testing.T) {
 	if service == nil {
 		t.Fatal("NewServiceFromAssembly() returned nil service")
 	}
-	retained, ok := service.(interface {
+	var retained interface {
 		RuntimeOpening() RuntimeOpeningCapability
-	})
-	if !ok || retained == nil {
+	} = service
+	if retained == nil {
 		t.Fatal("published service does not expose the owner-private runtime opening")
 	}
 	if got := retained.RuntimeOpening(); any(got) != any(opening) {
@@ -137,42 +136,24 @@ func TestNewServiceFromAssemblyRetainsTheInjectedOpening(t *testing.T) {
 	}
 }
 
-func TestNewRuntimeOpeningAdapterDelegatesThroughThePublishedServiceRoot(t *testing.T) {
+func TestNewServiceFromAssemblyReturnsDirectRootIdentity(t *testing.T) {
 	t.Parallel()
 
-	owner := &runtimeOpeningOwnerService{}
-	adapter, err := NewRuntimeOpeningAdapter(owner)
+	inputs := validNewServiceInputs()
+	assembly, err := inputs.callNewRuntimeAssembly()
 	if err != nil {
-		t.Fatalf("NewRuntimeOpeningAdapter() error = %v", err)
+		t.Fatalf("NewRuntimeAssembly() error = %v", err)
 	}
-	if adapter == nil {
-		t.Fatal("NewRuntimeOpeningAdapter() returned nil adapter")
+	root, err := NewServiceFromAssembly(assembly, &RuntimeOpening{}, inputs.liveChangeCoordinator)
+	if err != nil {
+		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}
-	if any(adapter.owner) != any(owner) {
-		t.Fatalf("adapter owner = %T(%[1]v), want the published Service root %T(%[2]v)", adapter.owner, owner)
-	}
-
-	request := &factorysessions.RuntimeOpeningRequest{}
-	if _, err := adapter.OpenApplicationRuntime(context.Background(), request); err != nil {
-		t.Fatalf("OpenApplicationRuntime() error = %v", err)
-	}
-	if _, err := adapter.OpenInvocationRuntime(context.Background(), request); err != nil {
-		t.Fatalf("OpenInvocationRuntime() error = %v", err)
-	}
-	if _, err := adapter.OpenExecutionRuntime(context.Background(), request); err != nil {
-		t.Fatalf("OpenExecutionRuntime() error = %v", err)
-	}
-	if owner.applicationCalls != 1 || owner.invocationCalls != 1 || owner.executionCalls != 1 {
-		t.Fatalf("root opening calls = application:%d invocation:%d execution:%d, want one delegated call each", owner.applicationCalls, owner.invocationCalls, owner.executionCalls)
-	}
-}
-
-func TestNewRuntimeOpeningAdapterRejectsAnIncompleteServiceRoot(t *testing.T) {
-	t.Parallel()
-
-	adapter, err := NewRuntimeOpeningAdapter(&incompleteRuntimeOpeningOwnerService{})
-	if adapter != nil || err == nil {
-		t.Fatalf("NewRuntimeOpeningAdapter(incomplete root) = (%#v, %v), want nil adapter and error", adapter, err)
+	var service factorysessions.Service = root
+	var app ApplicationRuntimeOpening = root
+	var inv InvocationRuntimeOpening = root
+	var exe ExecutionRuntimeOpening = root
+	if any(service) != any(root) || any(app) != any(root) || any(inv) != any(root) || any(exe) != any(root) {
+		t.Fatal("Service and opening views are not the exact same *Root instance")
 	}
 }
 
@@ -347,30 +328,6 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 }
 
 type recordingClock struct{ calls int }
-
-type runtimeOpeningOwnerService struct {
-	factorysessions.Service
-	applicationCalls int
-	invocationCalls  int
-	executionCalls   int
-}
-
-func (service *runtimeOpeningOwnerService) OpenApplicationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (OpenedApplicationRuntime, error) {
-	service.applicationCalls++
-	return OpenedApplicationRuntime{}, nil
-}
-
-func (service *runtimeOpeningOwnerService) OpenInvocationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (OpenedInvocationRuntime, error) {
-	service.invocationCalls++
-	return OpenedInvocationRuntime{}, nil
-}
-
-func (service *runtimeOpeningOwnerService) OpenExecutionRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (OpenedExecutionRuntime, error) {
-	service.executionCalls++
-	return OpenedExecutionRuntime{}, nil
-}
-
-type incompleteRuntimeOpeningOwnerService struct{ factorysessions.Service }
 
 func (c *recordingClock) Now() time.Time {
 	c.calls++

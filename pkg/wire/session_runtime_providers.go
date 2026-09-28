@@ -629,17 +629,8 @@ func provideFactorySessionsService(
 	assembly factorysessionwire.RuntimeAssembly,
 	opening *factorysessionwire.RuntimeOpening,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
-) (factorysessions.Service, error) {
+) (*factorysessionwire.Root, error) {
 	return factorysessionwire.NewServiceFromAssembly(assembly, opening, liveChangeCoordinator)
-}
-
-// provideFactorySessionRuntimeOpeningAdapter binds the temporary opening
-// seams to the already-published Factory Sessions root. The adapter is a
-// value-only compatibility view and does not own another graph or lifecycle.
-func provideFactorySessionRuntimeOpeningAdapter(
-	service factorysessions.Service,
-) (*factorysessionwire.RuntimeOpeningAdapter, error) {
-	return factorysessionwire.NewRuntimeOpeningAdapter(service)
 }
 
 // provideFactorySessionDetachedOperations publishes the one detached value
@@ -734,7 +725,7 @@ func (capability runtimeMetricsQueryCapability) RuntimeMetricsQuery() any {
 }
 
 func provideFactorySessionExecutionRuntimeOpening(
-	opening *factorysessionwire.RuntimeOpeningAdapter,
+	opening *factorysessionwire.Root,
 ) (processcontract.ExecutionRuntimeOpeningCapability, error) {
 	if opening == nil {
 		return nil, errors.New("construct execution runtime opening capability: opening is required")

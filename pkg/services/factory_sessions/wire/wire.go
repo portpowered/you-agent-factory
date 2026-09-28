@@ -124,13 +124,13 @@ func NewRuntimeAssembly(
 }
 
 // NewServiceFromAssembly seals the already-composed owner assembly with the
-// process-scoped opening capability. The wrapper is the only published
-// Factory Sessions root and retains the exact assembly supplied to its peers.
+// process-scoped opening capability. It returns the existing concrete root;
+// callers bind narrow views directly to that same instance.
 func NewServiceFromAssembly(
 	assembly RuntimeAssembly,
 	runtimeOpening RuntimeOpeningCapability,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-) (factorysessions.Service, error) {
+) (*factorysessionroot.Root, error) {
 	service, err := factorysessionroot.NewRootFromAssembly(
 		assembly,
 		runtimeOpening,
