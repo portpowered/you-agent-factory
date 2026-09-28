@@ -2,7 +2,6 @@ package factorysession
 
 import (
 	"context"
-	"encoding/json"
 	"reflect"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -190,101 +189,4 @@ func (bridge *DurableHistoryBridge) GetDurableFactorySessionArtifact(
 	artifactID string,
 ) (factoryapi.FactorySessionArtifactDetail, error) {
 	return bridge.source.GetDurableFactorySessionArtifact(ctx, sessionID, artifactID)
-}
-
-// DurableArtifactFact is one artifact fact read from durable Factory Session
-// execution by a transport that does not own the Factory Sessions contract.
-type DurableArtifactFact struct {
-	ID          string
-	Kind        string
-	Visibility  string
-	Label       string
-	ContentHash string
-	SizeBytes   int64
-	DispatchID  string
-}
-
-// DurableInspectionSource is the durable Factory Session inspection capability
-// this package bridges for compatibility transports.
-type DurableInspectionSource interface {
-	QueryDispatches(context.Context, factorysessionexecution.DispatchQueryRequest) (factorysessionexecution.ListDispatchesResult, error)
-	ListArtifacts(context.Context, string) (factorysessionexecution.ListArtifactsResult, error)
-	ReadEvents(context.Context, string, factorysessionexecution.EventReconnectRequest) (factorysessionexecution.EventReadResult, error)
-}
-
-// DurableInspectionBridge restates durable session inspection in
-// transport-resolved vocabulary.
-type DurableInspectionBridge struct {
-	source DurableInspectionSource
-}
-
-// NewDurableInspectionBridge wraps one durable inspection capability when the
-// supplied value provides it, and returns nil otherwise so the caller keeps its
-// own "no compatibility inspection available" behavior.
-func NewDurableInspectionBridge(value any) *DurableInspectionBridge {
-	source, ok := value.(DurableInspectionSource)
-	if !ok || isAbsentSource(source) {
-		return nil
-	}
-	return &DurableInspectionBridge{source: source}
-}
-
-// QueryDispatches reads the detached dispatch facts of one session.
-func (bridge *DurableInspectionBridge) QueryDispatches(
-	ctx context.Context,
-	sessionID string,
-) ([]HistoricalDispatchInput, error) {
-	result, err := bridge.source.QueryDispatches(ctx, factorysessionexecution.DispatchQueryRequest{
-		SessionID: sessionID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	dispatches := make([]HistoricalDispatchInput, 0, len(result.Dispatches))
-	for _, dispatch := range result.Dispatches {
-		dispatches = append(dispatches, HistoricalDispatchInput{
-			ID:                dispatch.ID,
-			Status:            string(dispatch.Status),
-			DispatchKind:      dispatch.DispatchKind,
-			ConfirmationState: string(dispatch.ConfirmationState),
-		})
-	}
-	return dispatches, nil
-}
-
-// ListArtifacts reads the artifact facts of one session.
-func (bridge *DurableInspectionBridge) ListArtifacts(
-	ctx context.Context,
-	sessionID string,
-) ([]DurableArtifactFact, error) {
-	result, err := bridge.source.ListArtifacts(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	artifacts := make([]DurableArtifactFact, 0, len(result.Artifacts))
-	for _, artifact := range result.Artifacts {
-		artifacts = append(artifacts, DurableArtifactFact{
-			ID: artifact.ID, Kind: artifact.Kind, Visibility: artifact.Visibility,
-			Label: artifact.Label, ContentHash: artifact.ContentHash,
-			SizeBytes: artifact.SizeBytes, DispatchID: artifact.DispatchID,
-		})
-	}
-	return artifacts, nil
-}
-
-// ReadEvents reads the retained event payloads of one session.
-func (bridge *DurableInspectionBridge) ReadEvents(
-	ctx context.Context,
-	sessionID string,
-	input DurableEventReconnectInput,
-) ([]json.RawMessage, error) {
-	request, err := EventReconnectRequestFromInput(input)
-	if err != nil {
-		return nil, err
-	}
-	result, err := bridge.source.ReadEvents(ctx, sessionID, request)
-	if err != nil {
-		return nil, err
-	}
-	return result.Events, nil
 }

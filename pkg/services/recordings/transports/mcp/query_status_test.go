@@ -9,10 +9,8 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	mcprecording "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 const missingRecordingID = "recording-mcp-missing-001"
@@ -529,104 +527,4 @@ func assertQueryHistorySafeErrors(t *testing.T, input mcprecording.QueryHistoryI
 	if internalError.Error == nil || internalError.Error.Code != "recording.execution.internal" {
 		t.Fatalf("internal error = %#v, want sanitized internal envelope", internalError)
 	}
-}
-
-func TestLegacyFactorySessionInspectionAdaptsStandaloneReads(t *testing.T) {
-	t.Parallel()
-
-	service, sessionID := newLegacyInspectionService(t)
-	assertLegacyStatus(t, service, sessionID)
-	assertLegacyHistory(t, service, sessionID)
-	assertLegacyPortableArtifact(t, service, sessionID)
-	assertLegacyWorldState(t, service, sessionID)
-	assertLegacySubscription(t, service, sessionID)
-}
-
-func newLegacyInspectionService(t *testing.T) (mcprecording.FactorySessionInspectionService, string) {
-	t.Helper()
-	sessionID := "standalone-session-001"
-	event := json.RawMessage(`{"context":{"eventTime":"2026-08-16T03:00:00Z","sequence":2,"tick":4,"sessionId":"` + sessionID + `"},"id":"event-standalone-001","payload":{"status":"COMPLETED"},"schemaVersion":"agent-factory.event.v1","type":"RUN_RESPONSE"}`)
-	legacy := &legacyInspectionFake{
-		events:     []json.RawMessage{event},
-		dispatches: []factorysessions.DispatchSummary{{ID: "dispatch-standalone-001", Status: factorysessions.DispatchStatus("COMPLETED"), DispatchKind: "JAVASCRIPT_SCRIPT"}},
-		artifacts:  []factorysessions.ArtifactSummary{{ID: "artifact-standalone-001", Kind: "LOG", Visibility: "PUBLIC", Label: "log", ContentHash: "hash", SizeBytes: 9, DispatchID: "dispatch-standalone-001"}},
-	}
-	service := mcprecording.NewLegacyFactorySessionInspection(
-		factorysessionmapping.NewDurableInspectionBridge(legacy),
-	)
-	if service == nil || mcprecording.NewLegacyFactorySessionInspection(nil) != nil || mcprecording.NewLegacyFactorySessionInspection(struct{}{}) != nil {
-		t.Fatal("legacy inspection adapter should accept only the legacy inspection contract")
-	}
-	if factorysessionmapping.NewDurableInspectionBridge(struct{}{}) != nil {
-		t.Fatal("durable inspection bridge should accept only the durable inspection contract")
-	}
-	return service, sessionID
-}
-
-func assertLegacyStatus(t *testing.T, service mcprecording.FactorySessionInspectionService, sessionID string) {
-	t.Helper()
-	status, err := service.QueryRecordingStatus(recordings.RecordingStatusRequest{RecordingID: recordings.RecordingID(sessionID)})
-	if err != nil || string(status.Status.Artifact) != "standalone://"+sessionID || status.Status.LastEvent == nil || status.Status.LastEvent.Sequence != 2 {
-		t.Fatalf("legacy status = %#v err=%v, want artifact and last cursor", status, err)
-	}
-}
-
-func assertLegacyHistory(t *testing.T, service mcprecording.FactorySessionInspectionService, sessionID string) {
-	t.Helper()
-	history, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: recordings.HistoricalRecordingIdentity{
-		RecordingID: recordings.RecordingID(sessionID), Artifact: "artifact-standalone-001", Scope: recordings.CanonicalEventScope{FactorySessionID: sessionID},
-	}})
-	if err != nil || len(history.Events) != 1 || len(history.Dispatches) != 1 || history.Dispatches[0].ID != "dispatch-standalone-001" {
-		t.Fatalf("legacy history = %#v err=%v, want event and dispatch", history, err)
-	}
-}
-
-func assertLegacyPortableArtifact(t *testing.T, service mcprecording.FactorySessionInspectionService, sessionID string) {
-	t.Helper()
-	portable, err := service.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{RecordingID: recordings.RecordingID(sessionID)})
-	if err != nil || portable.Artifact.Summary.EventCount != 1 || portable.Artifact.Summary.FirstCursor == nil || portable.Artifact.Summary.LastCursor == nil {
-		t.Fatalf("legacy portable artifact = %#v err=%v, want cursor bounds", portable, err)
-	}
-}
-
-func assertLegacyWorldState(t *testing.T, service mcprecording.FactorySessionInspectionService, sessionID string) {
-	t.Helper()
-	world, err := service.ReconstructWorldState(recordings.ReconstructWorldStateRequest{Scope: recordings.CanonicalEventScope{FactorySessionID: sessionID}})
-	if err != nil || !strings.Contains(world.WorldState.Payload, "artifact-standalone-001") {
-		t.Fatalf("legacy world state = %#v err=%v, want artifact projection", world, err)
-	}
-}
-
-func assertLegacySubscription(t *testing.T, service mcprecording.FactorySessionInspectionService, sessionID string) {
-	t.Helper()
-
-	cursor := recordings.CanonicalEventCursor{Sequence: 1}
-	subscribed, err := service.SubscribeFrom(context.Background(), recordings.SubscribeRequest{Scope: recordings.CanonicalEventScope{FactorySessionID: sessionID}, Cursor: &cursor})
-	if err != nil || subscribed.RetainedEventCount != 1 || subscribed.Subscription == nil {
-		t.Fatalf("legacy subscription = %#v err=%v, want retained event subscription", subscribed, err)
-	}
-	if outcome := subscribed.Subscription(context.Background()); outcome.Kind != recordings.SubscriptionEvent || outcome.Event.ID != "event-standalone-001" {
-		t.Fatalf("legacy subscription outcome = %#v, want standalone event", outcome)
-	}
-	if outcome := subscribed.Subscription(context.Background()); outcome.Kind != recordings.SubscriptionClosed {
-		t.Fatalf("legacy exhausted subscription outcome = %#v, want closed", outcome)
-	}
-}
-
-type legacyInspectionFake struct {
-	events     []json.RawMessage
-	dispatches []factorysessions.DispatchSummary
-	artifacts  []factorysessions.ArtifactSummary
-}
-
-func (fake *legacyInspectionFake) QueryDispatches(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
-	return factorysessions.ListDispatchesResult{Dispatches: fake.dispatches}, nil
-}
-
-func (fake *legacyInspectionFake) ListArtifacts(context.Context, string) (factorysessions.ListArtifactsResult, error) {
-	return factorysessions.ListArtifactsResult{Artifacts: fake.artifacts}, nil
-}
-
-func (fake *legacyInspectionFake) ReadEvents(context.Context, string, factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error) {
-	return factorysessions.EventReadResult{Events: fake.events}, nil
 }
