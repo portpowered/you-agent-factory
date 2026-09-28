@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -17,15 +18,15 @@ type testClient struct {
 }
 
 func newTestClient() *testClient {
-	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, nil, nil, nil, "", nil)}
+	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, nil, nil, ".", nil)}
 }
 
 func newTestClientWithWorkflows(workflows factoryruntime.WorkflowPreviewOperation) *testClient {
-	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, nil, workflows, nil, "", nil)}
+	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, workflows, nil, ".", nil)}
 }
 
 func newTestClientWithService(
-	service mcpfactorysession.DurableExecution,
+	service factorysessions.Service,
 	prepare mcpfactorysession.RequestPreparation,
 	workflows ...factoryruntime.WorkflowPreviewOperation,
 ) *testClient {
@@ -33,11 +34,11 @@ func newTestClientWithService(
 	if len(workflows) > 0 {
 		workflow = workflows[0]
 	}
-	return &testClient{call: mcpfactorysession.BindToolOperation(service, nil, prepare, workflow, nil, "", nil)}
+	return &testClient{call: mcpfactorysession.BindToolOperation(nil, prepare, workflow, service, ".", nil)}
 }
 
 func newTestClientWithRecordings(
-	service mcpfactorysession.DurableExecution,
+	service factorysessions.Service,
 	prepare mcpfactorysession.RequestPreparation,
 	recordingRoot recordings.Service,
 	workflows ...factoryruntime.WorkflowPreviewOperation,
@@ -46,7 +47,7 @@ func newTestClientWithRecordings(
 	if len(workflows) > 0 {
 		workflow = workflows[0]
 	}
-	return &testClient{call: mcpfactorysession.BindToolOperation(service, recordingRoot, prepare, workflow, nil, "", nil)}
+	return &testClient{call: mcpfactorysession.BindToolOperation(recordingRoot, prepare, workflow, service, ".", nil)}
 }
 
 func (c *testClient) CallTool(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {

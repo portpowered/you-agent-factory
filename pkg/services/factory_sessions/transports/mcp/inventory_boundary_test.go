@@ -347,7 +347,15 @@ func newResultPolicyFixtureMCPClient(t *testing.T) *testClient {
 }
 
 type resultPolicyExecutionScript struct {
-	mcpfactorysession.DurableExecution
+	factorysessions.Service
+}
+
+func (resultPolicyExecutionScript) List(context.Context, factorysessions.SessionListRequest) (factorysessions.SessionListResult, error) {
+	return factorysessions.SessionListResult{Mode: factorysessions.SessionOperationModeLive}, nil
+}
+
+func (resultPolicyExecutionScript) Get(context.Context, factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
+	return factorysessions.SessionGetResult{}, factorysessions.ErrDurableSessionNotFound
 }
 
 func (resultPolicyExecutionScript) ListSessions(

@@ -589,11 +589,10 @@ func TestToolOperationPropagatesCallerContextAndCancellation(t *testing.T) {
 
 func TestToolOperationRejectsMissingContext(t *testing.T) {
 	operation := mcpfactorysession.BindToolOperation(
-		scriptedExecutionService{},
 		nil,
 		canonicalMCPRequestPreparation,
 		nil,
-		nil,
+		scriptedExecutionService{},
 		"",
 		nil,
 	)
@@ -603,7 +602,7 @@ func TestToolOperationRejectsMissingContext(t *testing.T) {
 }
 
 type scriptedExecutionService struct {
-	mcpfactorysession.DurableExecution
+	factorysessions.Service
 	startAsync      func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
 	startSync       func(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error)
 	getSession      func(context.Context, string) (factorysessions.SessionReadResult, error)
@@ -617,6 +616,72 @@ type scriptedExecutionService struct {
 	resume          func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 	cancel          func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 	terminate       func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+}
+
+func (service scriptedExecutionService) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	legacy := factorysessions.StartRequest{
+		RequestID: request.Correlation.RequestID, Source: request.Source, Args: request.Args,
+		RequestedPolicy: request.Policy, Orchestrator: request.Orchestrator, Runtime: request.RuntimeOptions,
+		ProjectRoot: request.FolderPath,
+	}
+	if request.Synchronous {
+		result, err := service.startSync(ctx, legacy)
+		return factorysessions.SessionStartResult{SessionID: result.SessionID, Mode: factorysessions.SessionOperationModeDurable, Sync: &result}, err
+	}
+	result, err := service.startAsync(ctx, legacy)
+	return factorysessions.SessionStartResult{SessionID: result.SessionID, Mode: factorysessions.SessionOperationModeDurable, Async: &result}, err
+}
+
+func (service scriptedExecutionService) Get(ctx context.Context, request factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
+	result, err := service.getSession(ctx, request.SessionID)
+	return factorysessions.SessionGetResult{Session: factorysessions.SessionView{SessionID: result.SessionID, Mode: request.Mode, Status: string(result.Status)}, Durable: &result}, err
+}
+
+func (service scriptedExecutionService) ReadResult(ctx context.Context, request factorysessions.SessionResultReadRequest) (factorysessions.SessionResultReadResult, error) {
+	result, err := service.getResult(ctx, request.SessionID, request.Request)
+	return factorysessions.SessionResultReadResult{SessionID: result.SessionID, Mode: request.Mode, Durable: &factorysessions.SessionDurableResult{
+		SessionID: result.SessionID, Status: result.ResultStatus, SessionStatus: result.SessionStatus,
+		Mode: result.Mode, IncludeArtifacts: result.IncludeArtifacts, PrimaryResult: result.PrimaryResult,
+		ArtifactIDs: result.ArtifactIDs, ArtifactRefs: result.ArtifactRefs, Failure: result.Failure, Availability: result.Availability,
+	}}, err
+}
+
+func (service scriptedExecutionService) List(ctx context.Context, request factorysessions.SessionListRequest) (factorysessions.SessionListResult, error) {
+	scope := factorysessions.SessionListScopeLive
+	switch request.Mode {
+	case factorysessions.SessionOperationModeDurable:
+		scope = factorysessions.SessionListScopePersisted
+	case factorysessions.SessionOperationModeAll:
+		scope = factorysessions.SessionListScopeAll
+	}
+	result, err := service.listSessions(ctx, factorysessions.ListSessionsRequest{Scope: scope, Filters: request.Filters})
+	view := factorysessions.SessionListResult{Mode: request.Mode, DurableSessions: result.DurableSessions}
+	for _, live := range result.LiveSessions {
+		view.Sessions = append(view.Sessions, factorysessions.SessionView{SessionID: live.ID, Mode: factorysessions.SessionOperationModeLive, FactoryDir: live.FactoryDir, FolderPath: live.FolderPath, Project: live.Project, IsDefault: live.IsDefault})
+	}
+	return view, err
+}
+
+func (service scriptedExecutionService) Control(ctx context.Context, request factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
+	var result factorysessions.LifecycleControlResult
+	var err error
+	switch request.Operation {
+	case factorysessions.SessionControlPause:
+		result, err = service.pause(ctx, request.SessionID, request.Control)
+	case factorysessions.SessionControlResume:
+		result, err = service.resume(ctx, request.SessionID, request.Control)
+	case factorysessions.SessionControlCancel:
+		result, err = service.cancel(ctx, request.SessionID, request.Control)
+	case factorysessions.SessionControlTerminate:
+		result, err = service.terminate(ctx, request.SessionID, request.Control)
+	default:
+		panic("unexpected canonical control")
+	}
+	return factorysessions.SessionControlResult{
+		SessionID: result.SessionID, Mode: request.Mode, Operation: request.Operation, Outcome: result.Outcome,
+		Status: result.Status, Detail: result.Detail, ApprovalPreviewID: result.ApprovalPreviewID,
+		DispatchID: result.DispatchID, RetryDispatchID: result.RetryDispatchID, Links: result.Links,
+	}, err
 }
 
 func (service scriptedExecutionService) StartAsync(

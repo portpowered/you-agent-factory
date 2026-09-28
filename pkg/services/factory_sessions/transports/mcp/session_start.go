@@ -2,14 +2,47 @@ package factorysession
 
 import (
 	"context"
+	"errors"
+	"strings"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apifactorysession "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
-// StartAsync runs the durable async Factory Session contract for the
-// you.factory_session.start_async MCP tool through the shared execution service.
-func StartAsync(ctx context.Context, service DurableExecution, prepare RequestPreparation, input factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionExecutionResponse] {
+func canonicalStartRequest(prepare RequestPreparation, workingRoot string, input factoryapi.FactorySessionExecutionRequest, synchronous bool) (factorysessions.SessionStartRequest, error) {
+	legacy, err := apifactorysession.StartRequestFromAPI(input)
+	if err != nil {
+		return factorysessions.SessionStartRequest{}, err
+	}
+	if prepare == nil {
+		return factorysessions.SessionStartRequest{}, errors.New("Factory Session request preparation is required")
+	}
+	legacy, err = prepare.PrepareStart(legacy)
+	if err != nil {
+		return factorysessions.SessionStartRequest{}, err
+	}
+	request := factorysessions.SessionStartRequest{
+		Mode:           factorysessions.SessionOperationModeDurable,
+		Correlation:    factorysessions.SessionOperationCorrelation{RequestID: legacy.RequestID},
+		FolderPath:     strings.TrimSpace(workingRoot),
+		Source:         legacy.Source,
+		Args:           legacy.Args,
+		Policy:         legacy.RequestedPolicy,
+		Orchestrator:   legacy.Orchestrator,
+		RuntimeOptions: legacy.Runtime,
+		Synchronous:    synchronous,
+	}
+	if legacy.Wait != nil {
+		request.Wait.CancelOnTimeout = legacy.Wait.CancelOnTimeout
+		if legacy.Wait.TimeoutMillis != nil {
+			request.Wait.TimeoutMillis = *legacy.Wait.TimeoutMillis
+		}
+	}
+	return request, nil
+}
+
+func startAsyncCanonical(ctx context.Context, sessions factorysessions.Service, prepare RequestPreparation, workingRoot string, input factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionExecutionResponse] {
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{Error: &envelope}
@@ -17,33 +50,29 @@ func StartAsync(ctx context.Context, service DurableExecution, prepare RequestPr
 	if response, done := requestContextErrorResponse[factoryapi.FactorySessionExecutionResponse](ctx); done {
 		return response
 	}
-	if service == nil {
+	if sessions == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{Error: &envelope}
 	}
-
-	startReq, err := apifactorysession.StartRequestFromAPI(input)
-	if err == nil {
-		startReq, err = prepare.PrepareStart(startReq)
-	}
+	request, err := canonicalStartRequest(prepare, workingRoot, input, false)
 	if err != nil {
 		envelope := requestValidationErrorEnvelope(err)
 		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{Error: &envelope}
 	}
-
-	result, err := service.StartAsync(ctx, startReq)
+	result, err := sessions.Start(ctx, request)
 	if err != nil {
 		envelope := executionErrorEnvelope(err)
 		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{Error: &envelope}
 	}
-
-	mapped := apifactorysession.AsyncStartResponseToAPI(result)
+	if result.Async == nil {
+		envelope := executionErrorEnvelope(errors.New("canonical durable start returned no async result"))
+		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{Error: &envelope}
+	}
+	mapped := apifactorysession.AsyncStartResponseToAPI(*result.Async)
 	return ToolResponse[factoryapi.FactorySessionExecutionResponse]{Result: &mapped}
 }
 
-// StartSync runs the durable sync Factory Session contract for the
-// you.factory_session.start_sync MCP tool through the shared execution service.
-func StartSync(ctx context.Context, service DurableExecution, prepare RequestPreparation, input factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionSyncExecutionResponse] {
+func startSyncCanonical(ctx context.Context, sessions factorysessions.Service, prepare RequestPreparation, workingRoot string, input factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionSyncExecutionResponse] {
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{Error: &envelope}
@@ -51,26 +80,24 @@ func StartSync(ctx context.Context, service DurableExecution, prepare RequestPre
 	if response, done := requestContextErrorResponse[factoryapi.FactorySessionSyncExecutionResponse](ctx); done {
 		return response
 	}
-	if service == nil {
+	if sessions == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{Error: &envelope}
 	}
-
-	startReq, err := apifactorysession.StartRequestFromAPI(input)
-	if err == nil {
-		startReq, err = prepare.PrepareStart(startReq)
-	}
+	request, err := canonicalStartRequest(prepare, workingRoot, input, true)
 	if err != nil {
 		envelope := requestValidationErrorEnvelope(err)
 		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{Error: &envelope}
 	}
-
-	result, err := service.StartSync(ctx, startReq)
+	result, err := sessions.Start(ctx, request)
 	if err != nil {
 		envelope := executionErrorEnvelope(err)
 		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{Error: &envelope}
 	}
-
-	mapped := apifactorysession.SyncStartResponseToAPI(result)
+	if result.Sync == nil {
+		envelope := executionErrorEnvelope(errors.New("canonical durable start returned no sync result"))
+		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{Error: &envelope}
+	}
+	mapped := apifactorysession.SyncStartResponseToAPI(*result.Sync)
 	return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{Result: &mapped}
 }
