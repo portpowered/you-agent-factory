@@ -7,6 +7,7 @@ import (
 	"fmt"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 	"strings"
@@ -559,6 +560,15 @@ type SessionOperationWait struct {
 	CancelOnTimeout bool
 }
 
+// SessionRuntimeSelection carries value-only runtime selections for
+// process-owned activation.
+type SessionRuntimeSelection struct {
+	SystemConfigHome string
+	LogDirectory     string
+	MetricsDirectory string
+	OperatorDefaults operatorsettings.ResolvedDefaults
+}
+
 // SessionStartRequest is the detached start/open vocabulary for both live and
 // durable Factory Sessions. Its fields are immutable selections and normalized
 // values only: its RuntimeOptions field is configuration data and it carries no
@@ -581,6 +591,10 @@ type SessionStartRequest struct {
 	ValidateOnly   bool
 	InitNewFactory bool
 	Synchronous    bool
+	// RuntimeSelection carries value-only runtime selections for process-owned activation.
+	RuntimeSelection *SessionRuntimeSelection
+	// ActivationOnly starts lifecycle without dispatching Work (ACP target).
+	ActivationOnly bool
 }
 
 // SessionInvokeRequest carries normalized Work input into an existing
