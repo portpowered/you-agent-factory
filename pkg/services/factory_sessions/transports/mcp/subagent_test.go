@@ -472,17 +472,33 @@ func TestSubagentReportsEmptyResultWhenCompletedWithoutText(t *testing.T) {
 	}
 }
 
-func TestSubagentForwardsCancelOnTimeout(t *testing.T) {
-	target := &subagentTargetFake{}
-	timeout := int64(30_000)
-	mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-cancel" }, mcpfactorysession.SubagentInput{
-		Prompt: "Run this", TimeoutMillis: &timeout,
-	})
-	if !target.invoke.Wait.CancelOnTimeout {
-		t.Fatalf("CancelOnTimeout not forwarded: Wait = %#v", target.invoke.Wait)
-	}
-	if target.invoke.Wait.TimeoutMillis != timeout {
-		t.Fatalf("TimeoutMillis = %d, want %d", target.invoke.Wait.TimeoutMillis, timeout)
+func TestSubagentWaitTimeoutAndCancellation(t *testing.T) {
+	tenMinutes := int64(600_000)
+	twentyMinutes := int64(1_200_000)
+	for _, test := range []struct {
+		name          string
+		timeoutMillis *int64
+		wantMillis    int64
+	}{
+		{name: "omitted", wantMillis: twentyMinutes},
+		{name: "explicit ten minutes", timeoutMillis: &tenMinutes, wantMillis: tenMinutes},
+		{name: "explicit twenty minutes", timeoutMillis: &twentyMinutes, wantMillis: twentyMinutes},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			target := &subagentTargetFake{}
+			response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-cancel" }, mcpfactorysession.SubagentInput{
+				Prompt: "Run this", TimeoutMillis: test.timeoutMillis,
+			})
+			if response.Error != nil || response.Result == nil {
+				t.Fatalf("Subagent response = %#v", response)
+			}
+			if !target.invoke.Wait.CancelOnTimeout {
+				t.Fatalf("CancelOnTimeout not forwarded: Wait = %#v", target.invoke.Wait)
+			}
+			if target.invoke.Wait.TimeoutMillis != test.wantMillis {
+				t.Fatalf("TimeoutMillis = %d, want %d", target.invoke.Wait.TimeoutMillis, test.wantMillis)
+			}
+		})
 	}
 }
 

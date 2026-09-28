@@ -42,6 +42,9 @@ const subagentCloseTimeout = 15 * time.Second
 // capturing it never materially delays cleanup.
 const subagentSnapshotTimeout = 2 * time.Second
 
+// subagentDefaultTimeoutMillis bounds a subagent wait when the caller omits timeoutMillis.
+const subagentDefaultTimeoutMillis = int64((20 * time.Minute) / time.Millisecond)
+
 // Stable error envelope fields shared by every dynamic workflow MCP tool.
 var sharedErrorStableFields = []string{
 	"error.code",
@@ -178,7 +181,7 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 	}
 	args := subagentInvocationArgs(input)
 	args["workingRoot"] = workingRoot
-	var timeoutMillis int64
+	timeoutMillis := subagentDefaultTimeoutMillis
 	if input.TimeoutMillis != nil {
 		timeoutMillis = *input.TimeoutMillis
 	}
