@@ -39,18 +39,15 @@ type ConductorInvocationWithProgressFactory = func(
 	workers.ProgressPublisher,
 ) (workers.InvocationExecutor, error)
 
-// RuntimeRootFactory constructs the inert process-scoped Factory Runtime root
-// with the opening operation supplied by this owner. The root constructor is
-// selected by the canonical process composition package, while the activation
-// callback remains owned by Factory Sessions because it assembles the session
-// product handoff.
+// FactoryRuntimeRoot is the process-scoped Runtime capability. Factory
+// Sessions supplies its activation operation per call while the root owns
+// publication and lifecycle state.
 type FactoryRuntimeRoot interface {
 	factoryruntime.Service
-	Activate(context.Context, factoryruntime.RuntimeActivationRequest) (factoryruntime.RuntimeActivationResult, error)
+	Activate(context.Context, factoryruntime.RuntimeActivationRequest, factoryruntime.RuntimeActivationOperation) (factoryruntime.RuntimeActivationResult, error)
 	Deactivate(context.Context, factoryruntime.RuntimeDeactivationRequest) (factoryruntime.RuntimeDeactivationResult, error)
 }
 
-type RuntimeRootFactory func(factoryruntime.RuntimeActivationOperation) (FactoryRuntimeRoot, error)
 
 type DurableExecution struct {
 	Service         durableexecution.Service

@@ -807,6 +807,7 @@ type resumeRoutingRoot struct {
 func (root *resumeRoutingRoot) Activate(
 	_ context.Context,
 	request factoryruntime.RuntimeActivationRequest,
+	_ factoryruntime.RuntimeActivationOperation,
 ) (factoryruntime.RuntimeActivationResult, error) {
 	root.activations++
 	root.activation = request
@@ -850,6 +851,7 @@ type replayRoutingRoot struct {
 func (root *replayRoutingRoot) Activate(
 	context.Context,
 	factoryruntime.RuntimeActivationRequest,
+	factoryruntime.RuntimeActivationOperation,
 ) (factoryruntime.RuntimeActivationResult, error) {
 	root.activations++
 	return factoryruntime.RuntimeActivationResult{

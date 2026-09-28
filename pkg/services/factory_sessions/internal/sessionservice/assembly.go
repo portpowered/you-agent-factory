@@ -632,33 +632,22 @@ func (a *Assembly) detachedOwner(sessionID string) (factorysessions.Service, err
 	return owner, nil
 }
 
-type sessionStatusObserver interface {
-	ObserveForSession(
-		context.Context,
-		string,
-		factoryruntime.ObserveRequest,
-	) (factoryruntime.ObserveResult, error)
-}
-
-// ObserveForSession preserves the session identity while routing observation
-// to the runtime gateway that owns that session.
+// ObserveForSession derives observation from the canonical state registry
+// without routing through detached gateways.
 func (a *Assembly) ObserveForSession(
 	ctx context.Context,
 	sessionID string,
 	request factoryruntime.ObserveRequest,
 ) (factoryruntime.ObserveResult, error) {
-	owner, err := a.detachedOwner(sessionID)
-	if err != nil {
-		return factoryruntime.ObserveResult{}, err
+	session := a.Resolve(strings.TrimSpace(sessionID))
+	if session == nil {
+		return factoryruntime.ObserveResult{}, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
 	}
-	observer, ok := owner.(sessionStatusObserver)
-	if !ok {
-		return factoryruntime.ObserveResult{}, fmt.Errorf(
-			"%w: session observation capability unavailable",
-			factorysessions.ErrDetachedServiceUnavailable,
-		)
+	runtime := runtimebinding.ServiceForSession(session)
+	if runtime == nil {
+		return factoryruntime.ObserveResult{}, fmt.Errorf("%w: %s", factorysessions.ErrRuntimeNotAvailable, strings.TrimSpace(sessionID))
 	}
-	return observer.ObserveForSession(ctx, sessionID, request)
+	return runtime.Observe(ctx, request)
 }
 
 func (a *Assembly) detachedLiveControlOwner(sessionID string) (factorysessions.LiveControlService, error) {

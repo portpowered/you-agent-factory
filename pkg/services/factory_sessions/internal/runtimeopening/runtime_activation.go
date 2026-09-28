@@ -317,7 +317,7 @@ func (f *Factory) openActivatedRuntimeWithInputs(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	result, err := f.runtimeRoot.Activate(ctx, activationRequest)
+	result, err := f.runtimeRoot.Activate(ctx, activationRequest, f.activateRuntime)
 	if err != nil {
 		return runtimeProducts{}, err
 	}

@@ -86,7 +86,7 @@ type FactoryRuntimePorts struct {
 	WorkflowPreview                 factoryruntime.WorkflowPreviewOperation
 	WorkersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory
 	FactoryRuntimeAssembler         FactoryRuntimeAssembler
-	RuntimeRootFactory              RuntimeRootFactory
+	RuntimeRoot                     FactoryRuntimeRoot
 	ResolveClock                    factoryruntime.ClockResolver
 	NewSessionLogger                factoryruntime.SessionLoggerFactory
 	Clock                           factoryruntime.Clock
@@ -311,13 +311,7 @@ func NewFactory(
 		submissionRecorder:               factoryRuntime.SubmissionRecorder,
 		dispatchRecorder:                 factoryRuntime.DispatchRecorder,
 	}
-	if factoryRuntime.RuntimeRootFactory != nil {
-		runtimeRoot, err := factoryRuntime.RuntimeRootFactory(factory.activateRuntime)
-		if err != nil {
-			return nil, fmt.Errorf("construct Factory Runtime root: %w", err)
-		}
-		factory.runtimeRoot = runtimeRoot
-	}
+	factory.runtimeRoot = factoryRuntime.RuntimeRoot
 	return factory, nil
 }
 

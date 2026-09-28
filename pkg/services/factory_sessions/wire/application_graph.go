@@ -109,7 +109,6 @@ type (
 	ProviderFromCommandRunnerFactory       = runtimeopening.ProviderFromCommandRunnerFactory
 	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
 	FactoryRuntimeRoot                     = runtimeopening.FactoryRuntimeRoot
-	RuntimeRootFactory                     = runtimeopening.RuntimeRootFactory
 	RuntimeOpening                         = runtimeopening.Factory
 	RuntimeRoot                            = runtimeopening.RuntimeRoot
 	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder

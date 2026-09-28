@@ -319,6 +319,7 @@ type cleanupRoutingRoot struct {
 func (root *cleanupRoutingRoot) Activate(
 	context.Context,
 	factoryruntime.RuntimeActivationRequest,
+	factoryruntime.RuntimeActivationOperation,
 ) (factoryruntime.RuntimeActivationResult, error) {
 	root.activations++
 	return factoryruntime.RuntimeActivationResult{
