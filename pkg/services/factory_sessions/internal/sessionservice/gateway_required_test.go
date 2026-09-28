@@ -689,6 +689,7 @@ type canonicalSessionInvokerFake struct {
 	legacyCalls     int
 	calls           int
 	mutateInput     bool
+	contentProvided bool
 }
 
 func (fake *canonicalSessionInvokerFake) Invoke(
@@ -722,6 +723,7 @@ func (fake *canonicalSessionInvokerFake) recordInvocation(
 		fake.timeout = *request.TimeoutMillis
 	}
 	fake.cancelOnTimeout = request.CancelOnTimeout
+	fake.contentProvided = request.ContentProvided
 	fake.input = request.PreparedInvocationInput.Clone()
 	if fake.mutateInput && request.PreparedInvocationInput != nil && request.PreparedInvocationInput.ResolvedInput != nil {
 		request.PreparedInvocationInput.ResolvedInput.Text = "owner mutation"
@@ -933,6 +935,9 @@ func assertCanonicalInvokeRequest(t *testing.T, fake *canonicalSessionInvokerFak
 	}
 	if fake.input == nil || fake.input.ResolvedInput == nil || fake.input.ResolvedInput.Text != "caller input" {
 		t.Fatalf("invoker input = %#v, want cloned prepared input", fake.input)
+	}
+	if fake.contentProvided {
+		t.Fatal("prepared input was marked as additional content")
 	}
 }
 

@@ -465,7 +465,6 @@ func canonicalInvocationRequest(
 	}
 	if request.Input != nil {
 		legacy.PreparedInvocationInput = request.Input.Clone()
-		legacy.ContentProvided = true
 		sourceKind := factorysessions.InvocationInputSourceKind(request.Input.Source)
 		legacy.SourceKind = &sourceKind
 	}
