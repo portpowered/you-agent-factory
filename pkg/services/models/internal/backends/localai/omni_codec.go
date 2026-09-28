@@ -28,11 +28,17 @@ type PredictRequest struct {
 	Parameters []models.OperationParameter
 }
 
-// PredictResponse is the detached text response returned by LocalAI's
-// protocol adapter.
+// PredictResponse is the detached text response and safe reply-shape counts
+// returned by LocalAI's protocol adapter.
 type PredictResponse struct {
-	Text  string
-	Usage string
+	Text            string
+	Usage           string
+	ReplyBytes      int
+	MessageBytes    int
+	ChatDeltaCount  int
+	GeneratedTokens int32
+	PromptTokens    int32
+	AudioBytes      int
 }
 
 // OmniInvocationResult is private LocalAI/Models output. Artifact identity is
@@ -155,7 +161,11 @@ func (codec *OmniCodec) Invoke(
 			Model:     request.Model,
 			Operation: models.OperationOMNI,
 			Slot:      "text",
-			Message:   "OMNI response did not contain text output",
+			Message: fmt.Sprintf(
+				"OMNI response did not contain text output (reply_bytes=%d message_bytes=%d chat_delta_count=%d generated_tokens=%d prompt_tokens=%d audio_bytes=%d)",
+				response.ReplyBytes, response.MessageBytes, response.ChatDeltaCount,
+				response.GeneratedTokens, response.PromptTokens, response.AudioBytes,
+			),
 		}
 	}
 	content := []models.InferenceContent{{

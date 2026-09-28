@@ -410,6 +410,24 @@ func TestOmniCodecPreservesArtifactReferenceAndRejectsMalformedResponse(t *testi
 	}
 }
 
+func TestOmniCodecEmptyTextErrorContainsOnlyReplyShape(t *testing.T) {
+	t.Parallel()
+	fixture := &protocolFixture{response: PredictResponse{
+		Text: " \t", Usage: `{"secret":"private-usage"}`,
+		ReplyBytes: 42, MessageBytes: 2, ChatDeltaCount: 3,
+		GeneratedTokens: 5, PromptTokens: 7, AudioBytes: 11,
+	}}
+	_, err := invokeSemanticOmni(t, fixture)
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMalformedResponse {
+		t.Fatalf("Invoke error = %v, want malformed response", err)
+	}
+	const want = "OMNI response did not contain text output (reply_bytes=42 message_bytes=2 chat_delta_count=3 generated_tokens=5 prompt_tokens=7 audio_bytes=11)"
+	if failure.Message != want || err.Error() != want {
+		t.Fatalf("failure message = %q, error = %q, want %q", failure.Message, err.Error(), want)
+	}
+}
+
 func hasOperationSlot(operation models.Operation, name string) bool {
 	for _, slot := range operation.Inputs {
 		if slot.Name == name {

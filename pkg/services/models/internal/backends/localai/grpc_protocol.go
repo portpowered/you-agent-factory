@@ -300,8 +300,14 @@ func decodePredictResponse(responsePayload []byte) (PredictResponse, error) {
 		text = builder.String()
 	}
 	return PredictResponse{
-		Text:  text,
-		Usage: usageJSON(response),
+		Text:            text,
+		Usage:           usageJSON(response),
+		ReplyBytes:      len(responsePayload),
+		MessageBytes:    len(response.Message),
+		ChatDeltaCount:  len(response.GetChatDeltas()),
+		GeneratedTokens: response.GetTokens(),
+		PromptTokens:    response.GetPromptTokens(),
+		AudioBytes:      len(response.GetAudio()),
 	}, nil
 }
 

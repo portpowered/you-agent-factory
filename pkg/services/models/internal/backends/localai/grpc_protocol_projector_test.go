@@ -470,3 +470,22 @@ func TestPinnedGRPCProtocolClientUsesChatDeltaTextWhenLegacyMessageIsEmpty(t *te
 		t.Fatalf("Predict() text = %q, want concatenated chat-delta content", response.Text)
 	}
 }
+
+func TestDecodePredictResponseRecordsReplyShape(t *testing.T) {
+	t.Parallel()
+	payload, err := proto.Marshal(&Reply{
+		Message: []byte("text"), Tokens: 7, PromptTokens: 11,
+		Audio: []byte{1, 2, 3}, ChatDeltas: []*ChatDelta{{Content: "private"}, {}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := decodePredictResponse(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Text != "text" || response.ReplyBytes != len(payload) || response.MessageBytes != 4 ||
+		response.ChatDeltaCount != 2 || response.GeneratedTokens != 7 || response.PromptTokens != 11 || response.AudioBytes != 3 {
+		t.Fatalf("decoded reply shape = %#v, want wire and field counts", response)
+	}
+}
