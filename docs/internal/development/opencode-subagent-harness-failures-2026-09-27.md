@@ -149,8 +149,11 @@ tree before retrying, and never re-issue the same request blind.
   which rejected the local V2 `permissions` configuration. The installed
   `opencode` command is V2.0.16 and `opencode debug config` loads that
   configuration. The authored harness and generated catalog were subsequently
-  changed to launch installed `opencode acp`; a live V2 permission read has not
-  yet been verified after that change.
+  changed to launch installed `opencode acp`. A fresh CLI probe at
+  2026-09-28T03:43:31Z then logged `version=2.0.16` with `args=["acp"]`,
+  passed initialization, and reached `session/prompt`; OpenCode returned
+  `Rate limit exceeded` in 5.5 s before any tool call. A live V2 permission
+  read remains unverified.
 
 ## Limitations of this note
 
