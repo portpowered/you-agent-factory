@@ -3,10 +3,12 @@ package factorysession_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -218,5 +220,84 @@ func assertMissingSessionEnvelope(
 		envelope.SessionID != "dur-sess-missing-999" ||
 		envelope.Retryable {
 		t.Fatalf("error = %#v, want non-retryable missing-session envelope", envelope)
+	}
+}
+
+func TestSubagentTerminalFailureClassification(t *testing.T) {
+	const secret = "private-provider-token-123"
+	tests := []struct {
+		name       string
+		reason     string
+		code       string
+		retryable  bool
+		actionText string
+	}{
+		{
+			name: "permanent bad request", reason: string(workers.WorkFailureTypePermanentBadRequest),
+			code: "factory_session.subagent.provider_request_rejected", actionText: "selected model against the provider's advertised models and request settings",
+		},
+		{
+			name: "internal server error", reason: string(workers.WorkFailureTypeInternalServerError),
+			code: "factory_session.subagent.provider_internal_error", retryable: true, actionText: "Check provider status and logs",
+		},
+		{
+			name: "unknown", reason: string(workers.WorkFailureTypeUnknown),
+			code: "factory_session.subagent.provider_unknown_failure", actionText: "Check provider logs and configuration",
+		},
+		{
+			name: "empty reason", code: "factory_session.subagent.execution_failed",
+			actionText: "Check provider logs and configuration",
+		},
+		{
+			name: "unrecognized reason", reason: "unrecognized-" + secret,
+			code: "factory_session.subagent.execution_failed", actionText: "Inspect the workspace for partial edits",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertSubagentTerminalFailureClassification(t, tt.reason, tt.code, tt.retryable, tt.actionText, secret)
+		})
+	}
+}
+
+func assertSubagentTerminalFailureClassification(t *testing.T, reason, code string, retryable bool, actionText, secret string) {
+	t.Helper()
+	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
+		Status:        factorysessions.InvocationTerminalStatusFailed,
+		ErrorCode:     "INVOCATION_RUNTIME_FAILURE",
+		Message:       "sensitive output " + secret,
+		FailureReason: reason,
+	}}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-classification" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
+	if response.Result != nil || response.Error == nil {
+		t.Fatalf("response = %#v", response)
+	}
+	if got := response.Error; got.Code != code || got.Retryable != retryable {
+		t.Fatalf("code = %q, retryable = %t; want %q, %t", got.Code, got.Retryable, code, retryable)
+	}
+	if action, ok := response.Error.Details["suggestedAction"].(string); !ok || !strings.Contains(action, actionText) {
+		t.Fatalf("suggestedAction = %#v, want text %q", response.Error.Details["suggestedAction"], actionText)
+	}
+	assertSubagentFailureReason(t, response.Error.Details, reason, secret)
+	encoded, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), secret) {
+		t.Fatalf("response leaked provider text: %s", encoded)
+	}
+	if !target.closed || target.control.Operation != factorysessions.SessionControlClose || response.Error.Details["sessionClosed"] != true {
+		t.Fatalf("session cleanup missing: closed=%t, control=%#v, details=%#v", target.closed, target.control, response.Error.Details)
+	}
+}
+
+func assertSubagentFailureReason(t *testing.T, details map[string]any, reason, secret string) {
+	t.Helper()
+	if reason == "" || strings.Contains(reason, secret) {
+		if _, ok := details["failureReason"]; ok {
+			t.Fatalf("unexpected failureReason = %#v", details["failureReason"])
+		}
+	} else if got := details["failureReason"]; got != reason {
+		t.Fatalf("failureReason = %#v, want %q", got, reason)
 	}
 }

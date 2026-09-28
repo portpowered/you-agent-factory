@@ -1471,3 +1471,40 @@ docs. Commit `cd2c464910` records this direct endpoint change. The timeout
 is another bounded OpenCode harness failure, not evidence that the requested
 edit was performed. Focused HTTP and contract tests, dashboard typecheck,
 docs-reference smoke, all 24 lint targets, and post-commit API smoke passed.
+
+An OpenCode MCP probe with explicit model `big-pickle` (session
+`b8d91515-091a-49fc-bd6f-579aef127d41`) closed quickly with generic
+`factory_session.subagent.execution_failed`, `INVOCATION_RUNTIME_FAILURE`, no
+`failureReason`, and no edit. The available OpenCode log showed startup but did
+not establish whether the model was rejected or another provider failure
+occurred. A Codex MCP audit (session
+`4c0f9cef-84f4-4158-96a1-e5f80c6240ce`) traced a concrete classification
+gap: Workers maps provider invalid requests to `permanent_bad_request`, while
+the MCP terminal handler omitted that reason; Factory Sessions can also leave
+the reason empty if no Work ID matches and more than one failure detail exists.
+A Codex MCP edit (session `80fa86c5-8fe1-4247-bb9b-db8eaf6d4310`) added
+safe terminal classifications for permanent bad request, internal server error,
+and unknown failure, plus guidance for an empty reason. Focused MCP tests pass
+and assert that sensitive provider text is never copied to the response.
+
+A bounded OpenCode MCP read-only audit of direct Models multipart upload
+(session `d6523b15-ea35-4046-88c4-97764bcaf07b`) returned a primary result,
+but falsely claimed that the multipart handler had zero direct test coverage.
+Its four-file limit omitted `handler_test.go`, which already tests audio/video
+upload, matching, and invalid parts. This is an audit accuracy failure, not an
+execution failure. A follow-up audit was sent to that exact test file to check
+whether OpenCode corrects its conclusion from source evidence.
+
+The follow-up OpenCode audit (session `99e8b2b4-1546-4e03-a184-bc9f5bb54109`)
+correctly listed multipart audio/video and invalid-input coverage after
+reading `handler_test.go`, but its proposed replacement gap was also false:
+`invoke_operations_test.go` already contains direct `InvokeGenericModel` JSON
+handler tests, including media bytes and invalid input. Narrow file limits
+made the audits fast and completed, but conclusions about absent coverage need
+an explicit repository-wide search before they can be trusted.
+
+The first classification edit passed focused Go tests but failed the package
+complexity and file-count lint gates. A second Codex MCP edit (session
+`9ccbed93-e36d-4cfd-a9b6-60b5d4197f76`) moved the tests into an existing
+file and split the terminal classification helper. Focused Go tests, the two
+previously failing lint targets, and `git diff --check` then passed.

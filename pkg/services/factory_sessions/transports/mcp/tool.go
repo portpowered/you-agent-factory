@@ -653,7 +653,12 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		subagentAttachProgress(envelope.Details, progress)
 		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
-	switch workers.WorkFailureType(result.FailureReason) {
+	subagentClassifyFailure(&envelope, workers.WorkFailureType(result.FailureReason), input.Provider)
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentClassifyFailure(envelope *ToolErrorEnvelope, reason workers.WorkFailureType, provider string) {
+	switch reason {
 	case workers.WorkFailureTypeThrottled:
 		envelope.Code = "factory_session.subagent.provider_throttled"
 		envelope.Message = "provider is temporarily unavailable due to usage or capacity limits"
@@ -663,6 +668,12 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		envelope.Code = "factory_session.subagent.provider_auth_failure"
 		envelope.Message = "provider authentication failed"
 		envelope.Details["failureReason"] = string(workers.WorkFailureTypeAuthFailure)
+	case workers.WorkFailureTypePermanentBadRequest:
+		envelope.Code = "factory_session.subagent.provider_request_rejected"
+		envelope.Message = "provider rejected the subagent request"
+		envelope.Retryable = false
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypePermanentBadRequest)
+		envelope.Details["suggestedAction"] = "Verify the selected model against the provider's advertised models and request settings before retrying."
 	case workers.WorkFailureTypeTimeout:
 		envelope.Code = "factory_session.subagent.provider_timeout"
 		envelope.Message = "provider request timed out"
@@ -673,7 +684,7 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		envelope.Message = "subagent provider is misconfigured; check provider setup and capabilities"
 		envelope.Retryable = false
 		envelope.Details["failureReason"] = string(workers.WorkFailureTypeMisconfigured)
-		if input.Provider == "pi" {
+		if provider == "pi" {
 			envelope.Details["suggestedAction"] = "Run `pi --version` to verify Pi version; pi-acp requires Pi 0.81.0+. Upgrade via `npm install -g @earendil-works/pi-coding-agent@latest`. Check Pi's selected model endpoint if the version is current."
 		} else {
 			envelope.Details["suggestedAction"] = "Verify the provider configuration and ensure the required executable or model is available"
@@ -684,6 +695,19 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		envelope.Retryable = false
 		envelope.Details["failureReason"] = string(workers.WorkFailureTypeMissingExecutable)
 		envelope.Details["suggestedAction"] = "Install the provider command on PATH or update its configured executable path, then retry."
+	case workers.WorkFailureTypeInternalServerError:
+		envelope.Code = "factory_session.subagent.provider_internal_error"
+		envelope.Message = "provider encountered an internal error"
+		envelope.Retryable = true
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeInternalServerError)
+		envelope.Details["suggestedAction"] = "Check provider status and logs, then retry when the provider is available."
+	case workers.WorkFailureTypeUnknown:
+		envelope.Code = "factory_session.subagent.provider_unknown_failure"
+		envelope.Message = "provider failed for an unknown reason"
+		envelope.Retryable = false
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeUnknown)
+		envelope.Details["suggestedAction"] = "Check provider logs and configuration before retrying."
+	case "":
+		envelope.Details["suggestedAction"] = "Check provider logs and configuration before retrying."
 	}
-	return ToolResponse[SubagentResult]{Error: &envelope}
 }
