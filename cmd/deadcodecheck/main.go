@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -128,11 +129,37 @@ func normalizeReport(report string) string {
 	}
 
 	lines := strings.Split(report, "\n")
-	for index, line := range lines {
-		lines[index] = positionPattern.ReplaceAllString(strings.TrimSpace(line), ":")
+	portable := lines[:0]
+	for _, line := range lines {
+		line = positionPattern.ReplaceAllString(strings.TrimSpace(line), ":")
+		if !platformSpecificFinding(line) {
+			portable = append(portable, line)
+		}
 	}
-	slices.Sort(lines)
-	return strings.Join(lines, "\n") + "\n"
+	slices.Sort(portable)
+	if len(portable) == 0 {
+		return ""
+	}
+	return strings.Join(portable, "\n") + "\n"
+}
+
+func platformSpecificFinding(line string) bool {
+	source, _, ok := strings.Cut(line, ".go:")
+	if !ok {
+		return false
+	}
+	base := path.Base(source)
+	for _, suffix := range []string{
+		"windows", "linux", "darwin", "freebsd", "netbsd", "openbsd", "dragonfly",
+		"solaris", "aix", "illumos", "android", "ios", "plan9", "js", "wasip1", "unix",
+		"amd64", "386", "arm", "arm64", "riscv64", "ppc64", "ppc64le", "s390x",
+		"loong64", "mips", "mipsle", "mips64", "mips64le", "wasm",
+	} {
+		if strings.HasSuffix(base, "_"+suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func countFindings(report string) int {
