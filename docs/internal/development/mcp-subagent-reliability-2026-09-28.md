@@ -383,3 +383,36 @@ activity for this attempt; it still does not identify the failing component.
 A Codex MCP task then extracted the invocation error branch to a helper in
 Factory Session `719e7a2d-8720-48f2-8e60-f3b758fb7929`. Full MCP package
 tests and `make pkg-maint` passed on independent rerun.
+
+A direct stdio MCP call through a rebuilt `you-next.exe` completed an OpenCode
+read-only probe in Factory Session
+`99d94e64-cb41-428c-a45a-dabf90caad20`, returning the README heading; its
+stderr peer connection closed line appeared after the client closed stdin.
+This does not fix the OpenCode edit timeouts observed earlier.
+
+The same rebuilt binary then completed a one-file OpenCode documentation edit
+through direct stdio MCP in Factory Session
+`33bb2559-3107-40c9-a846-3fb532c79bce`. The requested paragraph appeared
+in the worktree. The `peer connection closed` stderr line again arrived only
+after the test client closed stdin following the result.
+
+An app-connector OpenCode task to update the LocalAI GPU audit timed out after
+120 seconds in Factory Session `c74736c5-7138-499e-ac8e-0244680e289a`.
+It added the requested ASR bullet but left the limitation paragraph unchanged;
+no snapshot lock was present. The rebuilt binary then completed the remaining
+one-file paragraph edit through direct stdio in Factory Session
+`8b114fcb-85d2-4e09-99a7-fb53c38a7cb2`. Its first draft contradicted the
+verified managed ASR installation, so a second direct stdio OpenCode call
+corrected that exact paragraph in Factory Session
+`39d3ba02-7cdd-492e-a29e-08a96eef5ac3`. The final diff was reviewed.
+These probes show that fresh direct stdio invocations can complete bounded
+edits while the current long-lived app connector still times out on some edit
+tasks; different task scope and wait length prevent a causal conclusion.
+
+The Codex MCP server configuration was changed from the locked
+`C:\Users\andre\bin\you.exe` to the rebuilt
+`C:\Users\andre\.local\bin\you.exe` for future connector launches. Existing
+`you.exe server mcp` processes remain on the old binary until they exit; they
+were not terminated because their live Factory Sessions may belong to other
+tasks. The rebuilt binary's direct stdio read and edit probes above verify the
+new executable independently of that connector lifecycle.

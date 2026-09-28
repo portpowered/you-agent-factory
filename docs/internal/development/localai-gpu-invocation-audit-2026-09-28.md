@@ -15,6 +15,9 @@ Docker. Gallery CUDA backends and models were installed under
 - `nvidia-smi` showed the backend GPU process at PID 708.
 - Repository `NewPinnedASRBackend` live gRPC returned `Zero.` and one segment;
   staging was cleaned.
+- A WSL-built `you` binary invoked built-in `asr` through managed
+  `cuda12-whisper` and returned transcript `Zero.`; the invocation repeated
+  successfully with `--offline`.
 
 ## Embeddings — `qwen3-embedding-0.6b` (`cuda12-llama-cpp`)
 
@@ -43,5 +46,6 @@ TTS Qwen3 and IndexTTS results are in
 
 ## Limitation
 
-These are live protocol adapter/LocalAI GPU checks. They are not proof of
-managed artifact installation, Windows first-use, or all models.
+The WSL-built `you` ASR invocation proves managed CUDA backend first-use and
+offline reuse for ASR only. Managed end-to-end `you` invocations for TTS, LLM,
+embeddings, and native Windows GPU remain unverified.
