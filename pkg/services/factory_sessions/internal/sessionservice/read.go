@@ -165,6 +165,7 @@ func (s *Service) Get(
 		}
 		return factorysessions.SessionGetResult{
 			Session: canonicalDurableSessionView(projection),
+			Durable: &projection,
 		}, nil
 	default:
 		return factorysessions.SessionGetResult{}, canonicalRequestError(

@@ -158,6 +158,9 @@ func assertCanonicalDurableSessionRead(t *testing.T, service *Service) {
 	if got.Session.SourceRef != "factory.js" {
 		t.Fatalf("durable source ref = %q, want factory.js", got.Session.SourceRef)
 	}
+	if got.Durable == nil || got.Durable.SessionID != "durable-1" || got.Durable.ResolvedSource.SourceRef != "factory.js" {
+		t.Fatalf("complete durable read projection = %#v", got.Durable)
+	}
 }
 
 func assertCanonicalDurableSessionList(t *testing.T, service *Service, durable *canonicalInspectionDurableFake) factorysessions.ListSessionsRequest {

@@ -793,6 +793,8 @@ type SessionView struct {
 
 type SessionGetResult struct {
 	Session SessionView
+	// Durable carries the complete value-only durable inspection projection.
+	Durable *SessionReadResult
 }
 
 type SessionListResult struct {
