@@ -1253,3 +1253,28 @@ from the same commit returned a readable first MCP text message,
 `isError=true`, and the typed `structuredContent` for an invalid subagent
 request over a real stdio MCP connection. The installed user binary has not
 yet been replaced while other standalone MCP sessions remain live.
+
+The 20-minute OpenCode matched-reference Qwen probe returned a typed
+`factory_session.subagent.timed_out` envelope (session
+`769ae091-71f0-4d00-8871-40c7e8702fc7`, one in-flight dispatch). Managed
+ASR did transcribe the 6.435-second reference as 15 spoken "zero" words,
+showing that the prior `ref_text="Zero."` was incomplete. The worker then
+repeatedly used `--parameter "parameters.ref_text=..."`, which the CLI rejected
+with `parse --parameter 1: invalid JSON`. No matched synthesis ran or output
+WAV was created. A tighter retry must supply the known working `--input
+parameters=json:...` form explicitly; this is a prompt/tool-use failure,
+not evidence of a TTS backend failure.
+
+A fresh 10-minute OpenCode MCP retry included the exact working
+`--input 'parameters=json:{...}'` form. It returned a primary `COMPLETED`
+result (Factory Session `deb3fdf4-dd11-4e52-876c-4fbb6c90bcf1`). Managed
+Qwen3 TTS and ASR exited successfully. The persistent matched-reference WAV
+was PCM mono 16-bit 24 kHz, 11.6 seconds, and non-silent. ASR returned
+`The quick brown fox jumps over the lady dog.` for requested `... lazy dog.`;
+one word differs in the transcript. GPU utilization peaked at 77% while VRAM
+rose from 3854 to 7346 MiB during the run, without direct process
+attribution. The improvement over the earlier repeated-zero output strongly
+supports reference-text mismatch as the earlier content failure, but does not
+prove that as the sole cause. The OpenCode primary result overclaimed exact
+content and miscounted words; independent artifact checks supplied the figures
+above. The task made no repository edits.
