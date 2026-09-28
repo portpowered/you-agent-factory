@@ -627,3 +627,12 @@ still block. Focused package tests and `go vet` passed. This split shows that
 the prior 120-second timeout was strongly affected by task breadth and the
 model's search behavior, while the exact OpenCode timeout cause remains
 unproven.
+
+The committed build `97b4e5b8c4` was rebuilt and copied to the configured
+`C:\Users\andre\.local\bin\you.exe`; candidate and installed SHA-256 both
+equal `77A9956B3180801FB53767126247705321F4BD7BEDE22A8F094EF925ABC92CC6`.
+A fresh OpenCode `space-bunny-free` README-heading MCP probe completed in
+Factory Session `4aff8f97-c9a7-4b4c-99f7-ddaece4672e6` in about five
+seconds and returned exactly `# you-agent-factory`. The live probe verifies
+the basic configured MCP invoke path after installation; it does not itself
+exercise the new cancel deadline.
