@@ -259,7 +259,7 @@ func (s *service) ensureModelHostWithResolvedConfiguration(
 		}, nil
 	}
 
-	worker, err := localWorkerForModel(runtimeCfg, configuration.ModelName)
+	worker, err := localWorkerForModel(runtimeCfg, binding.OperatorModels, configuration.ModelName)
 	if err != nil {
 		return models.EnsureModelHostResult{}, err
 	}

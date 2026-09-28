@@ -73,6 +73,7 @@ func canonicalPinnedBackend(backend string) string {
 
 func localWorkerForModel(
 	runtimeCfg *models.RuntimeConfig,
+	overlays map[string]models.ModelOverlay,
 	modelName string,
 ) (*models.RuntimeWorker, error) {
 	target := canonicalModelKey(modelName)
@@ -93,6 +94,14 @@ func localWorkerForModel(
 			Name:          definition.Name,
 			Type:          models.RuntimeWorkerTypeInference,
 			Model:         definition.Name,
+			ModelLocality: models.RuntimeModelLocalityLocal,
+		}, nil
+	}
+	if _, ok := modelOverlay(overlays, modelName); ok {
+		return &models.RuntimeWorker{
+			Name:          strings.TrimSpace(modelName),
+			Type:          models.RuntimeWorkerTypeInference,
+			Model:         strings.TrimSpace(modelName),
 			ModelLocality: models.RuntimeModelLocalityLocal,
 		}, nil
 	}

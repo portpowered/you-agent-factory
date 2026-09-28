@@ -25,6 +25,7 @@ const (
 	localAIEmbedContextSize          int32 = 512
 	localAIDefaultPredictTokens      int32 = 256
 	localAIDisableProjectorGPUOption       = "mmproj_use_gpu:false"
+	localAIAudioCPPBackendOption           = "backend:best"
 )
 
 type invocationEndpointContextKey struct{}
@@ -154,6 +155,9 @@ func loadModel(
 		)
 	}
 	options = append(options, projectorLoadOptions(configuration)...)
+	if configuration.Backend == "localai-audio-cpp" {
+		options = append(options, localAIAudioCPPBackendOption)
+	}
 	isBuiltInEmbed := strings.EqualFold(configuration.ModelName, models.BuiltInModelNameEmbed)
 	contextSize := int32(0)
 	if isBuiltInEmbed {

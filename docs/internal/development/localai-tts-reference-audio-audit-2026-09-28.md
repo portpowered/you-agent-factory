@@ -105,12 +105,18 @@ Notes:
 - The `voice` path must be visible to the LocalAI process.
 - These commands are for standalone LocalAI validation, not managed `you models pull` support.
 
-## Unverified
+## Managed WSL verification
 
-- Managed WSL `you models pull index-tts2.5` now installs `cuda12-audio-cpp`
-  and the 7,885,093,568-byte GGUF, reporting `READY`. An offline managed
-  reference-audio invoke still fails with `local model worker not found for
-  "index-tts2.5"`; managed synthesis remains unverified.
+- Managed WSL `you models pull index-tts2.5` installed `cuda12-audio-cpp`
+  and the 7,885,093,568-byte GGUF, reporting `READY`. A subsequent offline
+  managed reference-audio invoke completed through the CUDA backend after
+  passing audio.cpp's `backend:best` load option. The output was a non-silent
+  56,364-byte mono WAV at 22,050 Hz (1.277 seconds); runtime evidence
+  reported `INVOKE` and terminal `COMPLETED`. `nvidia-smi` showed GPU memory
+  rise during the request. Speech content and voice similarity were not
+  evaluated.
+
+## Unverified
 
 - Speech content and voice similarity for either backend.
 - Backend consumption of `ref_text` beyond protocol delivery.
@@ -118,8 +124,8 @@ Notes:
   lifecycle for Qwen/Index (registry still only publishes VibeVoice).
 - Native Windows GPU execution remains unverified. Managed built-in VibeVoice
   TTS on WSL is verified separately in [the invocation
-  audit](localai-gpu-invocation-audit-2026-09-28.md); it does not verify managed
-  Qwen3 or IndexTTS reference-audio synthesis.
+  audit](localai-gpu-invocation-audit-2026-09-28.md); managed Qwen3
+  reference-audio synthesis remains unverified.
 
 ## Upstream configuration evidence
 

@@ -20,6 +20,27 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func TestPinnedGRPCHostProtocolNegotiatorSelectsAudioCPPBackend(t *testing.T) {
+	t.Parallel()
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&Result{Success: true})
+	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
+	_, err := negotiator.Negotiate(context.Background(), "grpc://127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
+		Configuration: modelseffects.ResolvedHostConfiguration{
+			ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+			Backend:         "localai-audio-cpp", ModelName: "index-tts2.5",
+			ModelPath: "/models/index-tts2_5-orig.gguf",
+			Platform:  models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64", Accelerator: "cuda"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Negotiate audio.cpp: %v", err)
+	}
+	if got := connection.loadRequest.GetOptions(); len(got) != 1 || got[0] != localAIAudioCPPBackendOption {
+		t.Fatalf("audio.cpp LoadModel options = %v, want backend:best", got)
+	}
+}
+
 func TestPinnedGRPCHostProtocolNegotiatorSendsWindowsCPUProjectorPlacementOption(t *testing.T) {
 	t.Parallel()
 

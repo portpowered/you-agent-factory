@@ -13,7 +13,7 @@ func TestBuiltInLLMResolvesPackagedGRPCHostStartSpec(t *testing.T) {
 	t.Parallel()
 
 	runtimeConfig := &models.RuntimeConfig{}
-	worker, err := localWorkerForModel(runtimeConfig, models.BuiltInModelNameLLM)
+	worker, err := localWorkerForModel(runtimeConfig, nil, models.BuiltInModelNameLLM)
 	if err != nil {
 		t.Fatalf("localWorkerForModel: %v", err)
 	}
@@ -50,6 +50,46 @@ func TestBuiltInLLMResolvesPackagedGRPCHostStartSpec(t *testing.T) {
 		t.Fatalf("defaultGRPCServerStartBuilderWithSymlinkResolver: %v", err)
 	}
 	assertBuiltInLLMStartSpec(t, spec, identity, inspection)
+}
+
+func TestOperatorOverlaySuppliesWorkerForStandalonePinnedHost(t *testing.T) {
+	t.Parallel()
+
+	const name = "index-tts2.5"
+	source := "file:///models/index-tts2_5.gguf"
+	backend := "localai-audio-cpp"
+	overlays := map[string]models.ModelOverlay{
+		" INDEX-TTS2.5 ": {Source: &source, Backend: &backend},
+	}
+	worker, err := localWorkerForModel(&models.RuntimeConfig{}, overlays, name)
+	if err != nil {
+		t.Fatalf("localWorkerForModel: %v", err)
+	}
+	if worker.Name != name || worker.Model != name || worker.Type != models.RuntimeWorkerTypeInference ||
+		worker.ModelLocality != models.RuntimeModelLocalityLocal || worker.Command != "" {
+		t.Fatalf("operator worker = %#v, want local inference worker using packaged backend", worker)
+	}
+	configuration := modelseffects.ResolvedHostConfiguration{
+		ModelName: name, Backend: backend,
+		ModelCachePath: "/models/cache", BackendFiles: []string{"/backends/audio-cpp"},
+	}
+	spec, err := defaultGRPCServerStartBuilderWithSymlinkResolver(configuration, worker)
+	if err != nil || spec.Command != "" || spec.Configuration.Backend != backend {
+		t.Fatalf("packaged backend start spec = %#v, error = %v", spec, err)
+	}
+	if _, err := localWorkerForModel(&models.RuntimeConfig{}, nil, name); err == nil {
+		t.Fatal("unconfigured model unexpectedly received a worker")
+	}
+
+	authored := models.RuntimeWorker{
+		Name: "authored", Type: models.RuntimeWorkerTypeInference,
+		Model: name, ModelLocality: models.RuntimeModelLocalityLocal,
+		Command: "custom-backend",
+	}
+	worker, err = localWorkerForModel(&models.RuntimeConfig{Workers: []models.RuntimeWorker{authored}}, overlays, name)
+	if err != nil || worker.Command != authored.Command {
+		t.Fatalf("authored worker = %#v, error = %v, want explicit command", worker, err)
+	}
 }
 
 func assertBuiltInLLMStartSpec(
@@ -143,7 +183,7 @@ func TestBuiltInTTSResolvesAllVerifiedModelFilesForPrivateHostNegotiation(t *tes
 	t.Parallel()
 
 	runtimeConfig := &models.RuntimeConfig{}
-	worker, err := localWorkerForModel(runtimeConfig, models.BuiltInModelNameTTS)
+	worker, err := localWorkerForModel(runtimeConfig, nil, models.BuiltInModelNameTTS)
 	if err != nil {
 		t.Fatalf("localWorkerForModel: %v", err)
 	}

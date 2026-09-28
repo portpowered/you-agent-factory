@@ -1030,3 +1030,21 @@ the 7,885,093,568-byte IndexTTS GGUF to managed cache with
 `INSTALLED_SUCCESSFULLY` and `READY`. The next offline reference-audio
 invocation failed at a distinct boundary: `local model worker not found for
 "index-tts2.5"`. Managed inference remains unverified.
+
+Codex MCP subagent `c28264d0-7c82-4ac5-9760-95db71b3b972` completed a
+narrow Runtime Host edit and test for the standalone operator worker lookup.
+The next WSL offline IndexTTS invocation started the `cuda12-audio-cpp` gRPC
+server, then failed at `INVOKE (INVOCATION_FAILED)` with no WAV output. This
+is a separate inference-stage failure; the exact backend response is not yet
+proven by the CLI error.
+
+The WSL failure was reproduced with private runtime evidence. `PROTOCOL_LOAD`
+completed, but the request spent CPU time with no corresponding GPU memory
+rise and eventually failed at `INVOKE`. The installed LocalAI IndexTTS model
+configuration declares `options: [backend:best]`; the managed `LoadModel`
+request omitted it. After adding that audio.cpp option, the same offline
+managed invocation completed in about 34 seconds and produced a non-silent
+56,364-byte, 22,050 Hz WAV. Runtime evidence recorded `INVOKE` and terminal
+`COMPLETED`, and GPU memory rose during the request. An intermediate test
+raised the Factory Sessions default one-shot timeout from 10 seconds to five
+minutes, but the failure persisted; that speculative change was reverted.
