@@ -984,3 +984,14 @@ Go suites passed, and full native Windows Git Bash `make lint` passed all 24
 targets. The timeout snapshot still needs validation against a fresh installed
 stdio MCP binary; the in-process MCP connector can retain an older server
 process after binary replacement.
+
+The timeout-snapshot change was committed as `d90a2cdbc6`, then the Windows
+binary was rebuilt and installed at `C:\Users\andre\.local\bin\you.exe`
+(SHA-256 `9F57E38A7CD08E74B3636B5C1F3768AE515A72AA69375FB306C77AF44280AD68`).
+A fresh stdio MCP process received a forced one-second Codex `you.subagent`
+timeout. Its response contained `sessionClosed: true`, request/trace/work IDs,
+and `progress: {available: true, inFlightDispatches: 1}`. The workspace remained
+clean. The OpenCode log for the earlier five-minute partial-edit timeout shows
+continued repository tool activity near the deadline; this argues against a
+silent peer disconnect in that attempt, but does not establish why all
+OpenCode tasks take as long as they do or explain other timeout cases.
