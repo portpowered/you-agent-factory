@@ -440,7 +440,9 @@ func providePackagedFactoryInstallation(
 func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLoader) factorysessionwire.DurableExecutionFactory {
 	return func(
 		definition factorydefinitions.RuntimeOpeningRequest,
-		session factorysessions.SessionRuntimeOpeningRequest,
+		persistence factorysessions.PersistencePolicy,
+		systemConfigHome string,
+		systemConfigPath string,
 		defaults operatorsettings.ResolvedDefaults,
 		root factorysessionwire.RuntimeRoot,
 		clock factoryruntime.Clock,
@@ -452,7 +454,9 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 		return factorysessionwire.NewDurableExecutionRuntime(
 			loadOperatorConfig,
 			definition,
-			session,
+			persistence,
+			systemConfigHome,
+			systemConfigPath,
 			defaults,
 			root,
 			clock,
