@@ -318,9 +318,13 @@ func (daemon *daemon) execute(
 	if err != nil {
 		return providers.ExecuteResult{}, invalidFailure(err)
 	}
+	environment := requestEnvironment(request)
+	if err := daemon.preflight(ctx, id, cwd, environment); err != nil {
+		return providers.ExecuteResult{}, err
+	}
 	prompt := promptBlocks(request)
 
-	if err := daemon.ensureStarted(ctx, id, cwd, requestEnvironment(request), request); err != nil {
+	if err := daemon.ensureStarted(ctx, id, cwd, environment, request); err != nil {
 		return providers.ExecuteResult{}, err
 	}
 	daemon.client.reset(request.ProgressObserver)
@@ -332,6 +336,7 @@ func (daemon *daemon) execute(
 	if err != nil {
 		return providers.ExecuteResult{}, err
 	}
+	client.suppressStartupChunk(providerStartupInfo(id, session.Meta))
 	daemon.client.setSessionID(string(session.SessionId))
 	request.ObserveSession(providers.SessionRef{
 		Provider: id,
@@ -408,6 +413,47 @@ func (daemon *daemon) openSession(
 		return acpsdk.NewSessionResponse{}, daemon.sessionOpenFailure(ctx, id, "session/new", err, initialized, request)
 	}
 	return session, nil
+}
+
+const (
+	// piAcpMetaKey and piAcpStartupInfoField address the `_meta.piAcp.startupInfo`
+	// value pi-acp attaches to its session/new (and session/load) response. ACP
+	// reserves `_meta` for agent-defined metadata, so this is a pi-acp
+	// extension rather than a protocol guarantee.
+	piAcpMetaKey          = "piAcp"
+	piAcpStartupInfoField = "startupInfo"
+)
+
+func (daemon *daemon) preflight(ctx context.Context, id providers.ID, cwd string, environment []string) error {
+	if id != providers.IDPi {
+		return nil
+	}
+	return piPreflight(ctx, daemon.newCommand, daemon.locator, cwd, environment)
+}
+
+// pi-acp replays this session metadata as an agent message outside the prompt
+// turn. It must not become the primary result when no model answer follows.
+func providerStartupInfo(id providers.ID, meta map[string]any) string {
+	if id != providers.IDPi {
+		return ""
+	}
+	return piStartupInfo(meta)
+}
+
+// piStartupInfo returns the exact startup banner text an agent published under
+// `_meta.piAcp.startupInfo`, or "" when the agent published none. The value is
+// read from a freshly decoded JSON object, so the nested object arrives as
+// map[string]any; the map[string]string case is accepted so a caller that
+// built the response in process is not silently ignored.
+func piStartupInfo(meta map[string]any) string {
+	switch fields := meta[piAcpMetaKey].(type) {
+	case map[string]any:
+		startup, _ := fields[piAcpStartupInfoField].(string)
+		return startup
+	case map[string]string:
+		return fields[piAcpStartupInfoField]
+	}
+	return ""
 }
 
 const (
@@ -988,7 +1034,11 @@ type client struct {
 	permissionWasDenied bool
 	text                strings.Builder
 	sessionID           string
-	stream              *promptProgressStream
+	// startupChunk is the exact startup banner text this turn's session
+	// metadata identified, empty when the provider published none. Chunks
+	// matching it are never accumulated as result content.
+	startupChunk string
+	stream       *promptProgressStream
 }
 
 // reset begins one turn's progress stream. observe may be nil, in which case
@@ -1000,13 +1050,53 @@ func (c *client) reset(observe providers.ProgressObserver) {
 	c.permissionWasDenied = false
 	c.text.Reset()
 	c.sessionID = ""
+	c.startupChunk = ""
 	c.stream = newPromptProgressStream(observe)
+}
+
+// suppressStartupChunk records the exact startup banner text the session
+// metadata identified and removes it from the text this turn has accumulated
+// so far.
+//
+// Order matters and both orders are handled. The banner reaches the client as
+// an ordinary agent_message_chunk, and an agent that emits it outside the
+// prompt turn can deliver that notification before session/new has returned -
+// that chunk is already inside c.text and can only be withdrawn here. A
+// notification that arrives later is dropped by SessionUpdate instead, because
+// this call has already recorded the text. Both paths mutate only c.text, so
+// real prompt output and the source-native progress facts the observer
+// receives are untouched either way.
+func (c *client) suppressStartupChunk(value string) {
+	if strings.TrimSpace(value) == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.startupChunk = strings.TrimSpace(value)
+	accumulated := c.text.String()
+	remainder := strings.Replace(accumulated, value, "", 1)
+	if remainder == accumulated {
+		return
+	}
+	c.text.Reset()
+	// A turn whose only accumulated text was the banner must read as empty, not
+	// as the banner's trailing whitespace, so a caller judging whether the
+	// provider produced any output at all is not misled.
+	if strings.TrimSpace(remainder) != "" {
+		c.text.WriteString(remainder)
+	}
+}
+
+// isStartupChunkLocked reports whether text is the exact startup banner this
+// turn's session metadata identified. Callers must hold c.mu.
+func (c *client) isStartupChunkLocked(text string) bool {
+	return c.startupChunk != "" && strings.TrimSpace(text) == c.startupChunk
 }
 
 func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) error {
 	p, text := mapSessionUpdate(n.Update)
 	c.mu.Lock()
-	if text != "" {
+	if text != "" && !c.isStartupChunkLocked(text) {
 		c.text.WriteString(text)
 	}
 	stream := c.stream

@@ -374,7 +374,11 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		envelope.Message = "subagent provider is misconfigured; check provider setup and capabilities"
 		envelope.Retryable = false
 		envelope.Details["failureReason"] = string(workers.WorkFailureTypeMisconfigured)
-		envelope.Details["suggestedAction"] = "Verify the provider configuration and ensure the required executable or model is available"
+		if input.Provider == "pi" {
+			envelope.Details["suggestedAction"] = "Run `pi --version` to verify Pi version; pi-acp requires Pi 0.81.0+. Upgrade via `npm install -g @earendil-works/pi-coding-agent@latest`. Check Pi's selected model endpoint if the version is current."
+		} else {
+			envelope.Details["suggestedAction"] = "Verify the provider configuration and ensure the required executable or model is available"
+		}
 	case workers.WorkFailureTypeMissingExecutable:
 		envelope.Code = "factory_session.subagent.provider_executable_missing"
 		envelope.Message = "required provider executable is unavailable"

@@ -522,3 +522,68 @@ provider execution. This was an overbroad audit for that deadline; it does not
 show that the endpoint error was available to MCP, nor establish why the Pi
 probe itself timed out. A subsequent task should name the exact execution
 boundary and test only that error propagation.
+
+A later live `pi` MCP probe timed out after 45 seconds in Factory Session
+`93d39508-aaad-461d-8397-d618e97d637c`. The configured local model
+endpoint on port 8080 had no listener, and the spawned Pi RPC child remained
+alive after the timeout. Native Pi RPC probes with the installed Pi 0.74.2
+emitted `message_end` with `Connection error.`, `turn_end`, and `agent_end`,
+but never `agent_settled`, even when auto-retry was disabled in an isolated
+temporary agent configuration. Installed `pi-acp` 0.0.34 waits for
+`agent_settled` to finish `session/prompt`, and its README requires Pi
+0.81.0 or newer. Pi 0.74.2 contains no `agent_settled` event implementation.
+An isolated Pi 0.87.1 native RPC probe emitted `agent_settled` for the same
+connection error. This establishes the version mismatch as the cause of the
+observed Pi ACP hang; the missing model endpoint is the underlying provider
+failure.
+
+A fresh stdio MCP probe using temporary Pi 0.87.1 and its unreachable model
+endpoint exposed a second defect: with Pi startup output enabled, the tool
+reported `COMPLETED` and returned only Pi's `## Context` startup text as the
+primary result, despite no model answer. With `quietStartup` enabled in the
+temporary configuration, the same call returned
+`INVOCATION_PRIMARY_RESULT_UNRESOLVED` instead. Startup notifications must
+not count as a completed subagent answer.
+
+Further bounded OpenCode probes exercised editing and read-only paths. A Pi
+startup-filter edit (`3056ca0c-b01f-42e3-8287-ba4a5e7a817a`) timed out
+after writing a new test file and modifying the ACP client. A managed LocalAI
+resolver edit (`8852de90-2927-40b2-b68e-62edca5eff6d`) timed out without
+writing a file. A read-only CUDA-path audit
+(`02ae2913-1b7c-416a-9d61-0d2b01625fda`) completed with a primary result.
+A bounded Windows CUDA-detection edit
+(`00af9473-03f1-4750-82f4-382f34a5edde`) timed out after changing the
+runtime platform selector but before writing its requested test. These results
+show that a timed-out editing dispatch can leave a partial change, while a
+small read-only task can complete normally; they do not establish the timeout
+root cause.
+
+The first Pi version-preflight build incorrectly required an injected
+executable locator. Normal composition leaves that optional edge nil, so
+every default Pi call failed as misconfigured before launching Pi. A direct
+stdio MCP probe exposed the error; the preflight now uses the command factory
+when no locator is supplied, and a focused test covers that construction
+shape. After rebuilding the installed binary, a global Pi 0.74.2 call failed
+in about one second with `provider_misconfigured` and a version-check action.
+With temporary Pi 0.87.1, startup output enabled, and an unreachable model
+endpoint, the same read request failed with
+`INVOCATION_PRIMARY_RESULT_UNRESOLVED` after about eight seconds rather than
+returning startup context as a successful primary answer.
+
+After the installed-binary rebuild, an OpenCode read-only README-heading
+probe (`46fa3d87-7bff-4a37-b778-a90c2dd951c0`) completed with the requested
+primary result `# you-agent-factory`. This verifies that the ACP/Pi repair did
+not break the basic OpenCode MCP path; OpenCode editing timeouts remain
+unexplained.
+
+A later read-only review of the new LocalAI publication resolver
+(`ad57a8e1-e032-49dd-800f-dc79b70ddfac`) timed out after 90 seconds
+without a primary result or file edit. This is another bounded read-only
+timeout, so the successful README-heading probe does not establish that all
+small OpenCode audits complete reliably.
+The timed-out review also left an empty file literally named `$paths_file` at
+the workspace root despite its read-only prompt. The file was inspected and
+removed. This demonstrates that a read-only instruction to an editing-capable
+agent is not an enforced read-only boundary.
+The file reappeared once after the MCP timeout and was removed again after
+the late write; the process listing then showed no matching OpenCode child.

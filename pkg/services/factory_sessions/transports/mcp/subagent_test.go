@@ -181,6 +181,23 @@ func TestSubagentSurfacesProviderMisconfiguredFailure(t *testing.T) {
 	}
 }
 
+func TestSubagentPiMisconfigurationSuggestsVersionCheck(t *testing.T) {
+	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
+		Status:        factorysessions.InvocationTerminalStatusFailed,
+		ErrorCode:     "INVOCATION_RUNTIME_FAILURE",
+		Message:       "sensitive local model endpoint",
+		FailureReason: string(workers.WorkFailureTypeMisconfigured),
+	}}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-pi-misconfigured" }, mcpfactorysession.SubagentInput{Prompt: "Read README", Provider: "pi"})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.provider_misconfigured" {
+		t.Fatalf("Pi misconfigured response = %#v", response)
+	}
+	action := fmt.Sprint(response.Error.Details["suggestedAction"])
+	if !strings.Contains(action, "pi --version") || !strings.Contains(action, "0.81.0") || strings.Contains(fmt.Sprint(response.Error), "sensitive") {
+		t.Fatalf("Pi suggested action = %q; response = %#v", action, response.Error)
+	}
+}
+
 func TestSubagentSurfacesProviderExecutableMissingFailure(t *testing.T) {
 	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
 		Status:        factorysessions.InvocationTerminalStatusFailed,
