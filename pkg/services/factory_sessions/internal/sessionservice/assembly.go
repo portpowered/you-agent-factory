@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
 
@@ -52,8 +51,6 @@ type Assembly struct {
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
 	responseStreams              responsestreamservice.Service
-	detachedMu                   sync.RWMutex
-	detachedGateways             map[string]factorysessions.Service
 	workAdmissionsMu             sync.Mutex
 	workAdmissions               map[string][]*workAdmissionProjection
 	// beforeWorkAdmissionProjectionRegistration is only populated by the
@@ -61,7 +58,6 @@ type Assembly struct {
 	// scheduler-dependent capture/registration gap deterministic without
 	// changing the production dependency graph.
 	beforeWorkAdmissionProjectionRegistration func()
-	detachedGatewayOrder                      []string
 }
 
 type streamManager interface {
@@ -119,7 +115,6 @@ func NewAssembly(
 		initialWorkFiles:             initialWorkFiles,
 		identity:                     identityService,
 		responseStreams:              responseStreamService,
-		detachedGateways:             make(map[string]factorysessions.Service),
 		workAdmissions:               make(map[string][]*workAdmissionProjection),
 	}
 }
@@ -483,7 +478,6 @@ func (a *Assembly) Complete(
 	bound.Invoker = invoker
 	a.registry.Upsert(session, true)
 	gateway.bindRootCapabilities(invoker, runtime.ActivateNamedFactory, runtime.DefinitionActivationGateway())
-	a.registerDetachedGateway(identity.id, gateway)
 	// The per-runtime gateway is returned to the operation caller. The
 	// process-scoped assembly keeps its original stable service slot so
 	// concurrent session completions cannot replace or race the shared root.
@@ -602,42 +596,6 @@ func (h definitionHost) liveSession(
 	}
 }
 
-// registerDetachedGateway records the runtime gateway that owns one session.
-// The process root retains this routing table; it never replaces its service
-// slot and never constructs a second runtime-bound service.
-func (a *Assembly) registerDetachedGateway(sessionID string, owner factorysessions.Service) {
-	if a == nil || owner == nil {
-		return
-	}
-	id := strings.TrimSpace(sessionID)
-	if id == "" {
-		return
-	}
-	a.detachedMu.Lock()
-	defer a.detachedMu.Unlock()
-	if a.detachedGateways == nil {
-		a.detachedGateways = make(map[string]factorysessions.Service)
-	}
-	if _, exists := a.detachedGateways[id]; !exists {
-		a.detachedGatewayOrder = append(a.detachedGatewayOrder, id)
-	}
-	a.detachedGateways[id] = owner
-}
-
-func (a *Assembly) detachedOwner(sessionID string) (factorysessions.Service, error) {
-	if a == nil {
-		return nil, factorysessions.ErrDetachedServiceUnavailable
-	}
-	id := strings.TrimSpace(sessionID)
-	a.detachedMu.RLock()
-	owner, ok := a.detachedGateways[id]
-	a.detachedMu.RUnlock()
-	if !ok || owner == nil {
-		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, id)
-	}
-	return owner, nil
-}
-
 // ObserveForSession derives observation from the canonical state registry
 // without routing through detached gateways.
 func (a *Assembly) ObserveForSession(
@@ -654,102 +612,6 @@ func (a *Assembly) ObserveForSession(
 		return factoryruntime.ObserveResult{}, fmt.Errorf("%w: %s", factorysessions.ErrRuntimeNotAvailable, strings.TrimSpace(sessionID))
 	}
 	return runtime.Observe(ctx, request)
-}
-
-func (a *Assembly) activeDetachedOwner() (factorysessions.Service, error) {
-	if a == nil {
-		return nil, factorysessions.ErrDetachedServiceUnavailable
-	}
-	a.detachedMu.RLock()
-	defer a.detachedMu.RUnlock()
-	for index := len(a.detachedGatewayOrder) - 1; index >= 0; index-- {
-		owner := a.detachedGateways[a.detachedGatewayOrder[index]]
-		if owner != nil {
-			return owner, nil
-		}
-	}
-	return nil, factorysessions.ErrDetachedServiceUnavailable
-}
-
-func (a *Assembly) detachedOwners() []factorysessions.Service {
-	if a == nil {
-		return nil
-	}
-	a.detachedMu.RLock()
-	defer a.detachedMu.RUnlock()
-	owners := make([]factorysessions.Service, 0, len(a.detachedGatewayOrder))
-	for _, id := range a.detachedGatewayOrder {
-		owner := a.detachedGateways[id]
-		if owner == nil || containsDetachedOwner(owners, owner) {
-			continue
-		}
-		owners = append(owners, owner)
-	}
-	return owners
-}
-
-func containsDetachedOwner(owners []factorysessions.Service, candidate factorysessions.Service) bool {
-	candidateValue := reflect.ValueOf(candidate)
-	for _, owner := range owners {
-		ownerValue := reflect.ValueOf(owner)
-		if !candidateValue.IsValid() || !ownerValue.IsValid() || candidateValue.Type() != ownerValue.Type() {
-			continue
-		}
-		if candidateValue.Type().Comparable() {
-			if candidateValue.Interface() == ownerValue.Interface() {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (a *Assembly) StartAsync(ctx context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
-	owner, err := a.activeDetachedOwner()
-	if err != nil {
-		return factorysessions.AsyncStartResult{}, err
-	}
-	result, err := owner.StartAsync(ctx, request)
-	if err == nil {
-		a.registerDetachedGateway(result.SessionID, owner)
-	}
-	return result, err
-}
-
-func (a *Assembly) StartSync(ctx context.Context, request factorysessions.StartRequest) (factorysessions.SyncStartResult, error) {
-	owner, err := a.activeDetachedOwner()
-	if err != nil {
-		return factorysessions.SyncStartResult{}, err
-	}
-	result, err := owner.StartSync(ctx, request)
-	if err == nil {
-		a.registerDetachedGateway(result.SessionID, owner)
-	}
-	return result, err
-}
-
-func (a *Assembly) ResumeInterruptedSession(ctx context.Context, sessionID string, request factorysessions.ResumeSessionRequest) (factorysessions.AsyncStartResult, error) {
-	owner, err := a.detachedOwner(sessionID)
-	if err != nil {
-		return factorysessions.AsyncStartResult{}, err
-	}
-	result, err := owner.ResumeInterruptedSession(ctx, sessionID, request)
-	if err == nil {
-		a.registerDetachedGateway(result.SessionID, owner)
-	}
-	return result, err
-}
-
-func (a *Assembly) OpenFactorySession(ctx context.Context, request factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
-	owner, err := a.activeDetachedOwner()
-	if err != nil {
-		return nil, err
-	}
-	result, err := owner.OpenFactorySession(ctx, request)
-	if err == nil && result != nil {
-		a.registerDetachedGateway(result.SessionID, owner)
-	}
-	return result, err
 }
 
 func (a *Assembly) InvokeFactorySession(ctx context.Context, sessionID string, request factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
@@ -799,14 +661,6 @@ func (a *Assembly) GetFactorySession(ctx context.Context, sessionID string) (fac
 	return controlplane.GetLiveFactorySession(ctx, a, sessionID)
 }
 
-func (a *Assembly) GetSession(ctx context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
-	owner, err := a.detachedOwner(sessionID)
-	if err != nil {
-		return factorysessions.SessionReadResult{}, err
-	}
-	return owner.GetSession(ctx, sessionID)
-}
-
 func (a *Assembly) ListFactorySessions(ctx context.Context) ([]factorysessions.ReadProjection, error) {
 	return controlplane.ListLiveFactorySessions(ctx, a)
 }
@@ -844,67 +698,6 @@ func (a *Assembly) TerminateLiveFactorySession(ctx context.Context, sessionID st
 
 func (a *Assembly) CloseFactorySession(ctx context.Context, sessionID string) error {
 	return a.CloseSession(ctx, sessionID)
-}
-
-func (a *Assembly) Pause(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	return a.forwardDurableControl(sessionID, func(owner factorysessions.Service) (factorysessions.LifecycleControlResult, error) {
-		return owner.Pause(ctx, sessionID, request)
-	})
-}
-
-func (a *Assembly) Resume(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	return a.forwardDurableControl(sessionID, func(owner factorysessions.Service) (factorysessions.LifecycleControlResult, error) {
-		return owner.Resume(ctx, sessionID, request)
-	})
-}
-
-func (a *Assembly) Cancel(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	return a.forwardDurableControl(sessionID, func(owner factorysessions.Service) (factorysessions.LifecycleControlResult, error) {
-		return owner.Cancel(ctx, sessionID, request)
-	})
-}
-
-func (a *Assembly) Terminate(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	return a.forwardDurableControl(sessionID, func(owner factorysessions.Service) (factorysessions.LifecycleControlResult, error) {
-		return owner.Terminate(ctx, sessionID, request)
-	})
-}
-
-func (a *Assembly) Approve(ctx context.Context, sessionID string, request factorysessions.ApproveRequest) (factorysessions.LifecycleControlResult, error) {
-	return a.forwardDurableControl(sessionID, func(owner factorysessions.Service) (factorysessions.LifecycleControlResult, error) {
-		return owner.Approve(ctx, sessionID, request)
-	})
-}
-
-func (a *Assembly) RetryDispatch(ctx context.Context, sessionID string, request factorysessions.RetryDispatchRequest) (factorysessions.LifecycleControlResult, error) {
-	return a.forwardDurableControl(sessionID, func(owner factorysessions.Service) (factorysessions.LifecycleControlResult, error) {
-		return owner.RetryDispatch(ctx, sessionID, request)
-	})
-}
-
-func (a *Assembly) InterruptDispatch(ctx context.Context, sessionID string, request factorysessions.InterruptDispatchRequest) (factorysessions.LifecycleControlResult, error) {
-	return a.forwardDurableControl(sessionID, func(owner factorysessions.Service) (factorysessions.LifecycleControlResult, error) {
-		return owner.InterruptDispatch(ctx, sessionID, request)
-	})
-}
-
-func (a *Assembly) forwardDurableControl(
-	sessionID string,
-	operation func(factorysessions.Service) (factorysessions.LifecycleControlResult, error),
-) (factorysessions.LifecycleControlResult, error) {
-	owner, err := a.detachedOwner(sessionID)
-	if err != nil {
-		return factorysessions.LifecycleControlResult{}, err
-	}
-	return operation(owner)
-}
-
-func (a *Assembly) GetResult(ctx context.Context, sessionID string, request factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
-	owner, err := a.detachedOwner(sessionID)
-	if err != nil {
-		return factorysessions.ResultReadResult{}, err
-	}
-	return owner.GetResult(ctx, sessionID, request)
 }
 
 func (a *Assembly) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryruntime.LiveSessionResult, error) {

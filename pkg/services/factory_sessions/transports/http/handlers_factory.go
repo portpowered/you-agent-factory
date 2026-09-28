@@ -251,6 +251,8 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	start, err := s.sessionsRoot.Start(r.Context(), factorysessionexecution.SessionStartRequest{
 		Mode: factorysessionexecution.SessionOperationModeLive, FolderPath: opened.FolderPath,
 		Target: opened.Target, ValidateOnly: opened.ValidateOnly, InitNewFactory: opened.InitNewFactory,
+		ActivationOnly:   true,
+		RuntimeSelection: &factorysessionexecution.SessionRuntimeSelection{Mode: factorysessionexecution.SessionRuntimeModeService},
 	})
 	if err != nil {
 		s.writeOpenFactorySessionRejected(w, err)

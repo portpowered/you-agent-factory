@@ -19,6 +19,38 @@ type projectionOwnerStub struct {
 	cfg    *factorydefinitions.FactoryConfig
 }
 
+type durableListStub struct {
+	factorysessions.Service
+	requests []factorysessions.ListSessionsRequest
+}
+
+func (stub *durableListStub) ListSessions(_ context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	stub.requests = append(stub.requests, request)
+	return factorysessions.ListSessionsResult{DurableSessions: []factorysessions.DurableSessionListSummary{{SessionID: "durable"}}}, nil
+}
+
+func TestAssemblyListsCanonicalRegistryAndProcessDurableSessions(t *testing.T) {
+	state := newWorkResolverSessionState()
+	durable := &durableListStub{}
+	assembly := &Assembly{Service: durable, state: state, registry: state.Registry()}
+	assembly.registry.Upsert(&livesession.LiveSession{ID: "first", SessionState: livesession.SessionState{FolderPath: "first-dir"}}, true)
+	assembly.registry.Upsert(&livesession.LiveSession{ID: "second", SessionState: livesession.SessionState{FolderPath: "second-dir"}}, false)
+
+	result, err := assembly.ListSessions(context.Background(), factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopeAll})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(result.LiveSessions) != 2 || result.LiveSessions[0].ID != "first" || result.LiveSessions[1].ID != "second" {
+		t.Fatalf("live sessions = %#v, want both canonical registry records", result.LiveSessions)
+	}
+	if len(result.DurableSessions) != 1 || result.DurableSessions[0].SessionID != "durable" {
+		t.Fatalf("durable sessions = %#v, want process durable owner", result.DurableSessions)
+	}
+	if len(durable.requests) != 1 || durable.requests[0].Scope != factorysessions.SessionListScopePersisted || !durable.requests[0].ExcludeRecordedHistory {
+		t.Fatalf("durable requests = %#v, want one persisted-only read", durable.requests)
+	}
+}
+
 func TestAssemblyInvokesOwnerOfSelectedCanonicalSession(t *testing.T) {
 	state := newWorkResolverSessionState()
 	assembly := &Assembly{state: state, registry: state.Registry()}

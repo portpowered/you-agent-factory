@@ -857,8 +857,6 @@ type SessionResponseSubscriptionResult struct {
 	Cursor *ResponseEventCursor
 }
 
-var ErrDetachedServiceUnavailable = errors.New("factory session detached operations are unavailable")
-
 // DetachedRequestError is returned before any legacy implementation is called
 // when a detached operation is missing a required value.
 type DetachedRequestError struct {

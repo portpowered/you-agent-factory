@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -143,7 +144,35 @@ func (a *Assembly) ListSessions(ctx context.Context, request factorysessions.Lis
 	if scope == factorysessions.SessionListScopeHistory {
 		return result, nil
 	}
-	return a.mergeDetachedSessionList(ctx, request, result)
+	if a == nil {
+		return factorysessions.ListSessionsResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	if scope == factorysessions.SessionListScopeLive || scope == factorysessions.SessionListScopeAll {
+		for _, id := range a.ListLiveSessionIDs() {
+			session := a.Resolve(id)
+			if session == nil {
+				continue
+			}
+			result.LiveSessions = append(result.LiveSessions, factorysessions.LiveSessionSummary{
+				ID: livesession.CanonicalID(session), FactoryDir: session.FactoryDir,
+				FolderPath: session.FolderPath, Project: session.Project, IsDefault: session.IsDefault,
+			})
+		}
+	}
+	if scope == factorysessions.SessionListScopePersisted || scope == factorysessions.SessionListScopeAll {
+		if a.Service == nil {
+			return factorysessions.ListSessionsResult{}, factorysessions.ErrExecutionServiceNotConfigured
+		}
+		durable, err := a.Service.ListSessions(ctx, factorysessions.ListSessionsRequest{
+			Scope: factorysessions.SessionListScopePersisted, Filters: request.Filters,
+			ExcludeRecordedHistory: true,
+		})
+		if err != nil && !(scope == factorysessions.SessionListScopeAll && errors.Is(err, factorysessions.ErrExecutionServiceNotConfigured)) {
+			return factorysessions.ListSessionsResult{}, err
+		}
+		result.DurableSessions = durable.DurableSessions
+	}
+	return result, nil
 }
 
 func shouldIncludeRecordedHistory(scope factorysessions.SessionListScope, excluded bool) bool {
@@ -181,62 +210,6 @@ func (a *Assembly) listRecordedSessions() ([]factorysessions.RecordedSessionList
 		return result[left].ArtifactReference < result[right].ArtifactReference
 	})
 	return result, nil
-}
-
-func (a *Assembly) mergeDetachedSessionList(
-	ctx context.Context,
-	request factorysessions.ListSessionsRequest,
-	result factorysessions.ListSessionsResult,
-) (factorysessions.ListSessionsResult, error) {
-	owners := a.detachedOwners()
-	if len(owners) == 0 {
-		if a != nil && a.recordedSessionInventory != nil && request.Scope == factorysessions.SessionListScopeAll {
-			return result, nil
-		}
-		return factorysessions.ListSessionsResult{}, factorysessions.ErrDetachedServiceUnavailable
-	}
-	seenLive := make(map[string]struct{})
-	seenDurable := make(map[string]struct{})
-	for _, owner := range owners {
-		listed, err := owner.ListSessions(ctx, request)
-		if err != nil {
-			return factorysessions.ListSessionsResult{}, err
-		}
-		if result.Scope == "" {
-			result.Scope = listed.Scope
-		}
-		appendUniqueLiveSessions(&result, seenLive, listed.LiveSessions)
-		appendUniqueDurableSessions(&result, seenDurable, listed.DurableSessions)
-	}
-	return result, nil
-}
-
-func appendUniqueLiveSessions(
-	result *factorysessions.ListSessionsResult,
-	seen map[string]struct{},
-	sessions []factorysessions.LiveSessionSummary,
-) {
-	for _, session := range sessions {
-		if _, exists := seen[session.ID]; exists {
-			continue
-		}
-		seen[session.ID] = struct{}{}
-		result.LiveSessions = append(result.LiveSessions, session)
-	}
-}
-
-func appendUniqueDurableSessions(
-	result *factorysessions.ListSessionsResult,
-	seen map[string]struct{},
-	sessions []factorysessions.DurableSessionListSummary,
-) {
-	for _, session := range sessions {
-		if _, exists := seen[session.SessionID]; exists {
-			continue
-		}
-		seen[session.SessionID] = struct{}{}
-		result.DurableSessions = append(result.DurableSessions, session)
-	}
 }
 
 // ReadDurableFactorySessionEventStream reads and materializes one finite
