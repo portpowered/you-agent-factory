@@ -108,6 +108,31 @@ func provideACPServerFactoryTargetRuntimeResolver(
 	}
 }
 
+// mapACPFactorySessionStart is a bounded pure value mapper for the future
+// ACP -> canonical Factory Sessions Start path. It performs no I/O, opens no
+// runtime, and stores no state; production callers are not switched to it yet.
+func mapACPFactorySessionStart(requestID, factoryTargetID, workingRoot, factoryDir, homeDir string, artifacts factoryruntime.RuntimeArtifactRoots, defaults operatorsettings.ResolvedDefaults) factorysessions.SessionStartRequest {
+	return factorysessions.SessionStartRequest{
+		Mode:           factorysessions.SessionOperationModeLive,
+		ActivationOnly: true,
+		Correlation:    factorysessions.SessionOperationCorrelation{RequestID: requestID},
+		Definition:     factorysessions.SessionDefinitionSelection{FactoryID: factoryTargetID},
+		Source: factorysessions.Source{
+			Kind:      factoryruntime.WorkflowSourceKindFactoryID,
+			FactoryID: factoryTargetID,
+		},
+		Args:       map[string]any{"workingRoot": workingRoot},
+		FolderPath: factoryDir,
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+			SystemConfigHome: homeDir,
+			LogDirectory:     artifacts.Logs,
+			MetricsDirectory: artifacts.Metrics,
+			OperatorDefaults: defaults,
+			Mode:             factorysessions.SessionRuntimeModeService,
+		},
+	}
+}
+
 // acpOperatorDefaultsEnvironment reads the operator-default environment layer
 // for an ACP-selected Factory target runtime.
 //
