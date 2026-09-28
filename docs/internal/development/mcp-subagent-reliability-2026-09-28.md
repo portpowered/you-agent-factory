@@ -416,3 +416,16 @@ The Codex MCP server configuration was changed from the locked
 were not terminated because their live Factory Sessions may belong to other
 tasks. The rebuilt binary's direct stdio read and edit probes above verify the
 new executable independently of that connector lifecycle.
+
+Two further app-connector OpenCode tasks timed out after 240 seconds without
+leaving edits: a CUDA artifact-resolver task in Factory Session
+`ca5878cb-e8f4-4f34-985f-219b85bb173b` and a focused LocalAI protobuf
+thread-field task in Factory Session `bb718e8d-cc4b-4201-9e0e-496d05939461`.
+Both returned `partialEffectsPossible=true`, so the worktree was inspected
+before the source changes were completed directly. The underlying OpenCode
+timeout cause remains unproven; these outcomes do not establish a resolver
+or filesystem defect. A preceding Codex MCP task in Factory Session
+`398767f2-b26e-4f65-b62e-f6d9be1fe1cd` completed an opt-in live embedding
+diagnostic test. Its follow-on production launcher task in Factory Session
+`c098f4a1-7dba-413e-ab61-185dd2bf3bb6` timed out after leaving partial
+edits, which were reviewed and completed before validation.

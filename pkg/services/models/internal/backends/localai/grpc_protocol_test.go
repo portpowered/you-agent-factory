@@ -46,10 +46,17 @@ func TestPinnedLocalAIModelOptionsDescriptorMatchesField62Contract(t *testing.T)
 		mmproj.Cardinality() != protoreflect.Optional || mmproj.Kind() != protoreflect.StringKind {
 		t.Fatalf("MMProj descriptor = %#v, want optional string field 41", mmproj)
 	}
-	for _, number := range []protoreflect.FieldNumber{15, 38} {
-		if field := fields.ByNumber(number); field != nil {
-			t.Fatalf("unexpected speculative ModelOptions field %d: %v", number, field)
-		}
+	assertModelOptionInt32Field(t, fields.ByName("NGPULayers"), 12)
+	assertModelOptionInt32Field(t, fields.ByName("Threads"), 15)
+	if field := fields.ByNumber(38); field != nil {
+		t.Fatalf("unexpected speculative ModelOptions field 38: %v", field)
+	}
+}
+
+func assertModelOptionInt32Field(t *testing.T, field protoreflect.FieldDescriptor, number protoreflect.FieldNumber) {
+	t.Helper()
+	if field == nil || field.Number() != number || field.Kind() != protoreflect.Int32Kind {
+		t.Fatalf("descriptor = %v, want int32 field %d", field, number)
 	}
 }
 
@@ -304,6 +311,7 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 		connection.loadRequest.GetMMProj() != mmprojFile ||
 		connection.loadRequest.GetModelPath() != filepath.Dir(modelFile) ||
 		connection.loadRequest.GetNBatch() != localAIModelBatchSize ||
+		connection.loadRequest.GetThreads() != 4 ||
 		len(connection.loadRequest.GetOptions()) != 0 {
 		t.Fatalf(
 			"load request model=%q context=%d modelFile=%q mmproj=%q modelPath=%q nBatch=%d options=%v, want non-EMBED zero context, model name, file/projector paths, model directory, nonzero batch size, and no VibeVoice option",
@@ -312,11 +320,33 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 	}
 	expected := appendStringField(nil, 1, "llm")
 	expected = appendVarintField(expected, 4, localAIModelBatchSize)
+	expected = appendVarintField(expected, 15, 4)
 	expected = appendStringField(expected, 21, modelFile)
 	expected = appendStringField(expected, 41, mmprojFile)
 	expected = appendStringField(expected, 59, filepath.Dir(modelFile))
 	if !bytes.Equal(connection.loadPayload, expected) {
 		t.Fatalf("non-EMBED LoadModel wire bytes = %x, want prior compatible bytes %x", connection.loadPayload, expected)
+	}
+}
+
+func TestPinnedGRPCHostProtocolNegotiatorRequestsCUDAOffload(t *testing.T) {
+	t.Parallel()
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&Result{Success: true})
+	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
+	_, err := negotiator.Negotiate(context.Background(), "grpc://127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
+		Configuration: modelseffects.ResolvedHostConfiguration{
+			ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+			Backend:         "localai-llamacpp", ModelName: models.BuiltInModelNameEmbed,
+			ModelPath: "/models/embed.gguf",
+			Platform:  models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64", Accelerator: "cuda"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Negotiate CUDA model: %v", err)
+	}
+	if connection.loadRequest.GetThreads() != 4 || connection.loadRequest.GetNGPULayers() != 99 {
+		t.Fatalf("CUDA LoadModel threads/layers = %d/%d, want 4/99", connection.loadRequest.GetThreads(), connection.loadRequest.GetNGPULayers())
 	}
 }
 
@@ -491,6 +521,7 @@ func TestPinnedGRPCHostProtocolNegotiatorEnablesEmbeddingModeForBuiltinEmbed(t *
 	expected = appendVarintField(expected, 2, localAIEmbedContextSize)
 	expected = appendVarintField(expected, 4, localAIModelBatchSize)
 	expected = appendVarintField(expected, 10, 1)
+	expected = appendVarintField(expected, 15, 4)
 	expected = appendStringField(expected, 21, modelFile)
 	expected = appendStringField(expected, 59, filepath.Dir(modelFile))
 	if !bytes.Equal(connection.loadPayload, expected) {

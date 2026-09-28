@@ -57,7 +57,7 @@ func assertWindowsCPUProjectorRequest(t *testing.T, request *ModelOptions, model
 	t.Helper()
 	if request.GetModel() != models.BuiltInModelNameLLM || request.GetEmbeddings() ||
 		request.GetModelFile() != modelFile || request.GetMMProj() != mmprojFile ||
-		request.GetModelPath() != filepath.Dir(modelFile) || request.GetNBatch() != localAIModelBatchSize {
+		request.GetModelPath() != filepath.Dir(modelFile) || request.GetNBatch() != localAIModelBatchSize || request.GetThreads() != 4 {
 		t.Fatalf("load request model=%q modelFile=%q mmproj=%q modelPath=%q nBatch=%d options=%v, want unchanged model, paths, directory, and batch size", request.GetModel(), request.GetModelFile(), request.GetMMProj(), request.GetModelPath(), request.GetNBatch(), request.GetOptions())
 	}
 	assertProjectorOption(t, request.GetOptions())
@@ -67,6 +67,7 @@ func assertWindowsCPUProjectorWire(t *testing.T, payload []byte, modelFile, mmpr
 	t.Helper()
 	expected := appendStringField(nil, 1, models.BuiltInModelNameLLM)
 	expected = appendVarintField(expected, 4, localAIModelBatchSize)
+	expected = appendVarintField(expected, 15, 4)
 	expected = appendStringField(expected, 21, modelFile)
 	expected = appendStringField(expected, 41, mmprojFile)
 	expected = appendStringField(expected, 59, filepath.Dir(modelFile))

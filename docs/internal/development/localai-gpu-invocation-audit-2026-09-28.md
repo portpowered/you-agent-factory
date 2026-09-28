@@ -24,6 +24,16 @@ Docker. Gallery CUDA backends and models were installed under
 - HTTP `/v1/embeddings` returned 1024 values.
 - Repository `NewPinnedEmbeddingBackend` live gRPC also returned 1024 values.
 - GPU process at PID 1335.
+- Managed `you models invoke embed --operation EMBED --input text="Find similar work"`
+  now returns 1024 values from the Linux CUDA gallery backend. The same call
+  with `--offline` returns 1024 values from the installed backend and model.
+- The first managed attempt failed at `LoadModel`: `run.sh` needed
+  `LLAMACPP_GRPC_SERVERS=1` to choose gRPC, but the gRPC executable parsed
+  that value as an invalid RPC endpoint. Direct launch then exposed
+  `GGML_ASSERT(cplan->n_threads > 0)` because the protobuf subset omitted
+  LocalAI's `ModelOptions.Threads` field 15. The direct executable, absent
+  launcher switch, positive thread count, and CUDA GPU-layer request are now
+  exercised by the opt-in live load test and full CLI invocation.
 
 ## LLM — `gemma-4-e4b-it-qat-q4_0` (`cuda12-llama-cpp`)
 
@@ -46,6 +56,7 @@ TTS Qwen3 and IndexTTS results are in
 
 ## Limitation
 
-The WSL-built `you` ASR invocation proves managed CUDA backend first-use and
-offline reuse for ASR only. Managed end-to-end `you` invocations for TTS, LLM,
-embeddings, and native Windows GPU remain unverified.
+The WSL-built `you` binary proves managed CUDA backend first-use and offline
+reuse for ASR and embeddings. Managed end-to-end `you` invocations for TTS,
+LLM, and native Windows GPU remain unverified. The host is Windows; the CUDA
+backend process in this audit ran under WSL Ubuntu.

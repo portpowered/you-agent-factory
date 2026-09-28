@@ -112,7 +112,16 @@ func resolveManagedBackendLaunch(
 	args = append(args, "--addr="+address)
 	environment := managedBackendEnvironment(backend, root)
 	if installed && backend == "localai-llamacpp" {
-		environment = append(environment, "LLAMACPP_GRPC_SERVERS=1")
+		grpcExecutable := filepath.Join(root, "llama-cpp-grpc")
+		if executable != grpcExecutable {
+			args = append([]string{grpcExecutable}, args...)
+		}
+		libraryPath := filepath.Join(root, "lib")
+		previous := managedBackendEnvironmentValue(spec.Env, "LD_LIBRARY_PATH")
+		if previous != "" {
+			libraryPath += ":" + previous
+		}
+		environment = append(environment, "LD_LIBRARY_PATH="+libraryPath)
 	}
 	return ManagedBackendLaunch{
 		Command: executable, Args: args,
@@ -147,7 +156,13 @@ func materializeManagedBackend(
 		return "", "", false, func() error { return nil }, WrapBackendExtractFailure(runtimeSubcauseArchiveSelection, err)
 	}
 	if installedDirectory != "" {
-		script, scriptErr := installedBackendEntrypoint(installedDirectory)
+		var script string
+		var scriptErr error
+		if backend == "localai-llamacpp" {
+			script, scriptErr = installedLlamaCPPEntrypoint(installedDirectory)
+		} else {
+			script, scriptErr = installedBackendEntrypoint(installedDirectory)
+		}
 		if scriptErr != nil {
 			return "", "", false, func() error { return nil }, WrapBackendExtractFailure(runtimeSubcauseExecutableDiscovery, scriptErr)
 		}
@@ -186,13 +201,42 @@ func materializeManagedBackend(
 }
 
 func installedBackendEntrypoint(directory string) (string, error) {
+	return installedExecutable(directory, "run.sh")
+}
+
+func installedLlamaCPPEntrypoint(directory string) (string, error) {
+	executable, err := installedExecutable(directory, "llama-cpp-grpc")
+	if err != nil {
+		return "", err
+	}
+	libraryDirectory := filepath.Join(directory, "lib")
+	if info, err := os.Lstat(libraryDirectory); err == nil {
+		if !info.IsDir() {
+			return "", fmt.Errorf("installed backend library directory must be a directory")
+		}
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("inspect installed backend library directory: %w", err)
+	}
+	loader := filepath.Join(directory, "lib", "ld.so")
+	if _, err := os.Lstat(loader); os.IsNotExist(err) {
+		return executable, nil
+	} else if err != nil {
+		return "", fmt.Errorf("inspect installed backend loader: %w", err)
+	}
+	if _, err := installedExecutable(directory, filepath.Join("lib", "ld.so")); err != nil {
+		return "", fmt.Errorf("invalid installed backend loader: %w", err)
+	}
+	return loader, nil
+}
+
+func installedExecutable(directory, name string) (string, error) {
 	if runtime.GOOS == "windows" {
 		return "", fmt.Errorf("installed shell backend cannot run on Windows")
 	}
 	if !filepath.IsAbs(directory) {
 		return "", fmt.Errorf("installed backend directory must be absolute")
 	}
-	script := filepath.Join(directory, "run.sh")
+	script := filepath.Join(directory, name)
 	info, err := os.Lstat(script)
 	if err != nil {
 		return "", fmt.Errorf("inspect installed backend entrypoint: %w", err)
@@ -201,6 +245,19 @@ func installedBackendEntrypoint(directory string) (string, error) {
 		return "", fmt.Errorf("installed backend entrypoint must be a regular executable file")
 	}
 	return script, nil
+}
+
+func managedBackendEnvironmentValue(environment []string, key string) string {
+	for _, entry := range environment {
+		name, value, ok := strings.Cut(entry, "=")
+		if ok && name == key {
+			return value
+		}
+	}
+	if len(environment) == 0 {
+		return os.Getenv(key)
+	}
+	return ""
 }
 
 func newManagedBackendCleanup(root string, removeAll func(string) error) func() error {

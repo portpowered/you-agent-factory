@@ -57,10 +57,7 @@ func TestLocalAIGalleryCUDAInstalledBackendLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve installed CUDA backend launch: %v", err)
 	}
-	if launch.Command != filepath.Join(directory, "run.sh") || launch.WorkDir != directory ||
-		len(launch.Env) != 1 || launch.Env[0] != "LLAMACPP_GRPC_SERVERS=1" {
-		t.Fatalf("CUDA backend launch = %#v", launch)
-	}
+	assertLocalAICUDALaunch(t, launch, directory)
 	startCtx, stop := context.WithTimeout(ctx, 30*time.Second)
 	defer stop()
 	command := exec.CommandContext(startCtx, launch.Command, launch.Args...)
@@ -83,6 +80,15 @@ func TestLocalAIGalleryCUDAInstalledBackendLive(t *testing.T) {
 			t.Fatalf("CUDA backend did not listen at %s: %v", address, dialErr)
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+func assertLocalAICUDALaunch(t *testing.T, launch managedbackend.ManagedBackendLaunch, directory string) {
+	t.Helper()
+	if launch.WorkDir != directory ||
+		(launch.Command != filepath.Join(directory, "llama-cpp-grpc") && launch.Command != filepath.Join(directory, "lib", "ld.so")) ||
+		len(launch.Env) != 1 || !strings.HasPrefix(launch.Env[0], "LD_LIBRARY_PATH="+filepath.Join(directory, "lib")) {
+		t.Fatalf("CUDA backend launch = %#v", launch)
 	}
 }
 

@@ -15,6 +15,8 @@ message ModelOptions {
   int32 ContextSize = 2;
   int32 NBatch = 4;
   bool Embeddings = 10;
+  int32 NGPULayers = 12;
+  int32 Threads = 15;
   string ModelFile = 21;
   string MMProj = 41;
   string ModelPath = 59;

@@ -17,37 +17,71 @@ import (
 
 func TestResolveManagedBackendLaunchUsesInstalledLinuxEntrypoint(t *testing.T) {
 	if runtime.GOOS != "linux" {
-		t.Skip("LocalAI gallery run.sh is a Linux entrypoint")
+		t.Skip("installed LocalAI executable requires Linux")
 	}
-	t.Parallel()
 
 	directory := t.TempDir()
-	script := filepath.Join(directory, "run.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\n"), 0o755); err != nil {
+	executable := filepath.Join(directory, "llama-cpp-grpc")
+	if err := os.WriteFile(executable, []byte("backend"), 0o755); err != nil {
 		t.Fatalf("write backend entrypoint: %v", err)
 	}
+	if err := os.Mkdir(filepath.Join(directory, "lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	loader := filepath.Join(directory, "lib", "ld.so")
+	if err := os.WriteFile(loader, []byte("loader"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LD_LIBRARY_PATH", "existing/lib")
 	launch, err := ResolveManagedBackendLaunch(context.Background(), serviceedges.HostProcessStartSpec{
-		Backend: "localai-llamacpp", BackendFiles: []string{directory},
+		Backend: "localai-llamacpp", BackendFiles: []string{directory}, Args: []string{"--threads=2"},
 	})
 	if err != nil {
 		t.Fatalf("ResolveManagedBackendLaunch: %v", err)
 	}
-	if launch.Command != script || launch.WorkDir != directory ||
-		len(launch.Args) != 1 || !strings.HasPrefix(launch.Args[0], "--addr=") ||
-		len(launch.Env) != 1 || launch.Env[0] != "LLAMACPP_GRPC_SERVERS=1" {
-		t.Fatalf("installed backend launch = %#v", launch)
-	}
+	assertInstalledLlamaCPPLaunch(t, launch, directory, executable, loader)
 	if err := launch.Cleanup(); err != nil {
 		t.Fatalf("cleanup installed backend: %v", err)
 	}
-	if _, err := os.Stat(script); err != nil {
+	if _, err := os.Stat(executable); err != nil {
 		t.Fatalf("installed backend entrypoint after cleanup: %v", err)
+	}
+}
+
+func assertInstalledLlamaCPPLaunch(t *testing.T, launch ManagedBackendLaunch, directory, executable, loader string) {
+	t.Helper()
+	if launch.Command != loader || launch.WorkDir != directory ||
+		len(launch.Args) != 3 || launch.Args[0] != executable || launch.Args[1] != "--threads=2" || !strings.HasPrefix(launch.Args[2], "--addr=") ||
+		len(launch.Env) != 1 || launch.Env[0] != "LD_LIBRARY_PATH="+filepath.Join(directory, "lib")+":existing/lib" {
+		t.Fatalf("installed backend launch = %#v", launch)
+	}
+}
+
+func TestResolveManagedBackendLaunchWithoutInstalledLoader(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("installed LocalAI executable requires Linux")
+	}
+	t.Parallel()
+	directory := t.TempDir()
+	executable := filepath.Join(directory, "llama-cpp-grpc")
+	if err := os.WriteFile(executable, []byte("backend"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	launch, err := ResolveManagedBackendLaunch(context.Background(), serviceedges.HostProcessStartSpec{
+		Backend: "localai-llamacpp", BackendFiles: []string{directory}, Env: []string{"LD_LIBRARY_PATH=custom/lib"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if launch.Command != executable || len(launch.Args) != 1 || !strings.HasPrefix(launch.Args[0], "--addr=") ||
+		len(launch.Env) != 1 || launch.Env[0] != "LD_LIBRARY_PATH="+filepath.Join(directory, "lib")+":custom/lib" {
+		t.Fatalf("installed backend launch = %#v", launch)
 	}
 }
 
 func TestResolveManagedBackendLaunchRejectsMissingOrUnsafeInstalledEntrypoint(t *testing.T) {
 	if runtime.GOOS != "linux" {
-		t.Skip("LocalAI gallery run.sh is a Linux entrypoint")
+		t.Skip("installed LocalAI executable requires Linux")
 	}
 	t.Parallel()
 
@@ -58,17 +92,17 @@ func TestResolveManagedBackendLaunchRejectsMissingOrUnsafeInstalledEntrypoint(t 
 		{name: "missing"},
 		{name: "not executable", setup: func(t *testing.T, directory string) {
 			t.Helper()
-			if err := os.WriteFile(filepath.Join(directory, "run.sh"), []byte("#!/bin/sh\n"), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(directory, "llama-cpp-grpc"), []byte("backend"), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}},
 		{name: "symlink", setup: func(t *testing.T, directory string) {
 			t.Helper()
-			outside := filepath.Join(t.TempDir(), "outside.sh")
+			outside := filepath.Join(t.TempDir(), "outside")
 			if err := os.WriteFile(outside, []byte("#!/bin/sh\n"), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.Symlink(outside, filepath.Join(directory, "run.sh")); err != nil {
+			if err := os.Symlink(outside, filepath.Join(directory, "llama-cpp-grpc")); err != nil {
 				t.Fatal(err)
 			}
 		}},
@@ -80,11 +114,54 @@ func TestResolveManagedBackendLaunchRejectsMissingOrUnsafeInstalledEntrypoint(t 
 				testCase.setup(t, directory)
 			}
 			_, err := ResolveManagedBackendLaunch(context.Background(), serviceedges.HostProcessStartSpec{
-				Backend: "localai-whisper", BackendFiles: []string{directory},
+				Backend: "localai-llamacpp", BackendFiles: []string{directory},
 			})
 			var classified interface{ ModelRuntimeFailureSubcause() string }
 			if !errors.As(err, &classified) || classified.ModelRuntimeFailureSubcause() != runtimeSubcauseExecutableDiscovery {
 				t.Fatalf("invalid installed backend entrypoint error = %v, want bounded discovery failure", err)
+			}
+		})
+	}
+}
+
+func TestResolveManagedBackendLaunchRejectsUnsafeInstalledLoader(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("installed LocalAI loader requires Linux")
+	}
+	for _, testCase := range []struct {
+		name  string
+		setup func(*testing.T, string)
+	}{
+		{name: "not executable", setup: func(t *testing.T, loader string) {
+			if err := os.WriteFile(loader, []byte("loader"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "symlink", setup: func(t *testing.T, loader string) {
+			outside := filepath.Join(t.TempDir(), "outside")
+			if err := os.WriteFile(outside, []byte("loader"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(outside, loader); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			directory := t.TempDir()
+			if err := os.WriteFile(filepath.Join(directory, "llama-cpp-grpc"), []byte("backend"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Mkdir(filepath.Join(directory, "lib"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			testCase.setup(t, filepath.Join(directory, "lib", "ld.so"))
+			_, err := ResolveManagedBackendLaunch(context.Background(), serviceedges.HostProcessStartSpec{
+				Backend: "localai-llamacpp", BackendFiles: []string{directory},
+			})
+			var classified interface{ ModelRuntimeFailureSubcause() string }
+			if !errors.As(err, &classified) || classified.ModelRuntimeFailureSubcause() != runtimeSubcauseExecutableDiscovery {
+				t.Fatalf("unsafe installed loader error = %v, want bounded discovery failure", err)
 			}
 		})
 	}

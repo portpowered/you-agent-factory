@@ -63,6 +63,8 @@ type ModelOptions struct {
 	ContextSize   int32                  `protobuf:"varint,2,opt,name=ContextSize,proto3" json:"ContextSize,omitempty"`
 	NBatch        int32                  `protobuf:"varint,4,opt,name=NBatch,proto3" json:"NBatch,omitempty"`
 	Embeddings    bool                   `protobuf:"varint,10,opt,name=Embeddings,proto3" json:"Embeddings,omitempty"`
+	NGPULayers    int32                  `protobuf:"varint,12,opt,name=NGPULayers,proto3" json:"NGPULayers,omitempty"`
+	Threads       int32                  `protobuf:"varint,15,opt,name=Threads,proto3" json:"Threads,omitempty"`
 	ModelFile     string                 `protobuf:"bytes,21,opt,name=ModelFile,proto3" json:"ModelFile,omitempty"`
 	MMProj        string                 `protobuf:"bytes,41,opt,name=MMProj,proto3" json:"MMProj,omitempty"`
 	ModelPath     string                 `protobuf:"bytes,59,opt,name=ModelPath,proto3" json:"ModelPath,omitempty"`
@@ -127,6 +129,20 @@ func (x *ModelOptions) GetEmbeddings() bool {
 		return x.Embeddings
 	}
 	return false
+}
+
+func (x *ModelOptions) GetNGPULayers() int32 {
+	if x != nil {
+		return x.NGPULayers
+	}
+	return 0
+}
+
+func (x *ModelOptions) GetThreads() int32 {
+	if x != nil {
+		return x.Threads
+	}
+	return 0
 }
 
 func (x *ModelOptions) GetModelFile() string {
@@ -958,7 +974,7 @@ var File_pkg_services_models_internal_backends_localai_backend_subset_proto prot
 const file_pkg_services_models_internal_backends_localai_backend_subset_proto_rawDesc = "" +
 	"\n" +
 	"Bpkg/services/models/internal/backends/localai/backend_subset.proto\x12\abackend\"\x0f\n" +
-	"\rHealthMessage\"\xec\x01\n" +
+	"\rHealthMessage\"\xa6\x02\n" +
 	"\fModelOptions\x12\x14\n" +
 	"\x05Model\x18\x01 \x01(\tR\x05Model\x12 \n" +
 	"\vContextSize\x18\x02 \x01(\x05R\vContextSize\x12\x16\n" +
@@ -966,7 +982,11 @@ const file_pkg_services_models_internal_backends_localai_backend_subset_proto_ra
 	"\n" +
 	"Embeddings\x18\n" +
 	" \x01(\bR\n" +
-	"Embeddings\x12\x1c\n" +
+	"Embeddings\x12\x1e\n" +
+	"\n" +
+	"NGPULayers\x18\f \x01(\x05R\n" +
+	"NGPULayers\x12\x18\n" +
+	"\aThreads\x18\x0f \x01(\x05R\aThreads\x12\x1c\n" +
 	"\tModelFile\x18\x15 \x01(\tR\tModelFile\x12\x16\n" +
 	"\x06MMProj\x18) \x01(\tR\x06MMProj\x12\x1c\n" +
 	"\tModelPath\x18; \x01(\tR\tModelPath\x12\x18\n" +

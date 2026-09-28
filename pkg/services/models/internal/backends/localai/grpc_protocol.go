@@ -159,11 +159,21 @@ func loadModel(
 	if isBuiltInEmbed {
 		contextSize = localAIEmbedContextSize
 	}
+	threads := int32(0)
+	gpuLayers := int32(0)
+	if configuration.Backend == "localai-llamacpp" {
+		threads = 4
+		if configuration.Platform.Accelerator == "cuda" {
+			gpuLayers = 99
+		}
+	}
 	payload, err := proto.Marshal(&ModelOptions{
 		Model:       configuration.ModelName,
 		ContextSize: contextSize,
 		NBatch:      localAIModelBatchSize,
 		Embeddings:  isBuiltInEmbed,
+		Threads:     threads,
+		NGPULayers:  gpuLayers,
 		ModelFile:   modelFile,
 		MMProj:      strings.TrimSpace(configuration.MMProjPath),
 		ModelPath:   filepath.Dir(modelFile),
