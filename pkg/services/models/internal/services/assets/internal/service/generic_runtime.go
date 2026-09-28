@@ -537,18 +537,8 @@ func (s *service) inspectGenericRuntimeCache(
 	inspection.ManifestPresent = true
 	inspection.ManifestValid = true
 	inspection.ExpectedArtifacts = genericRuntimeRequirements(metadata)
-	if isBuiltInGemmaLLMSource(source) &&
-		genericRuntimeSourceMatchesMetadata(source, metadata) &&
-		!genericRuntimeRequirementsSatisfy(builtInGemmaLLMRequirements(), inspection.ExpectedArtifacts) {
-		required := builtInGemmaLLMRequirements()
-		inspection.ExpectedArtifacts = required
-		cached := make([]models.AssetArtifact, len(metadata.Files))
-		for index, file := range metadata.Files {
-			cached[index].Name = file.Path
-		}
-		inspection.MissingAssets = missingAssetNames(required, cached)
-		inspection.FailureReason = "managed cache does not satisfy configured model requirements"
-		return inspection, true, nil
+	if adjusted, handled := s.inspectBuiltInGemmaLLMCache(inspection, source, metadata); handled {
+		return adjusted, true, nil
 	}
 	revisionPath, err := managedCacheChildPath(root, metadata.Revision, "revision")
 	if err != nil {
@@ -593,6 +583,30 @@ func (s *service) inspectGenericRuntimeCache(
 		return assets.RuntimeCacheInspection{}, true, err
 	}
 	return inspection, true, nil
+}
+
+// inspectBuiltInGemmaLLMCache applies the built-in Gemma LLM requirement
+// override when the configured source matches the persisted metadata but the
+// cached artifacts do not satisfy the built-in model requirements.
+func (s *service) inspectBuiltInGemmaLLMCache(
+	inspection assets.RuntimeCacheInspection,
+	source genericSource,
+	metadata cacheMetadata,
+) (assets.RuntimeCacheInspection, bool) {
+	if !isBuiltInGemmaLLMSource(source) ||
+		!genericRuntimeSourceMatchesMetadata(source, metadata) ||
+		genericRuntimeRequirementsSatisfy(builtInGemmaLLMRequirements(), inspection.ExpectedArtifacts) {
+		return inspection, false
+	}
+	required := builtInGemmaLLMRequirements()
+	inspection.ExpectedArtifacts = required
+	cached := make([]models.AssetArtifact, len(metadata.Files))
+	for index, file := range metadata.Files {
+		cached[index].Name = file.Path
+	}
+	inspection.MissingAssets = missingAssetNames(required, cached)
+	inspection.FailureReason = "managed cache does not satisfy configured model requirements"
+	return inspection, true
 }
 
 func (s *service) readGenericRuntimeMetadataForInspection(
@@ -963,45 +977,4 @@ func genericRuntimeExpectedArtifacts(source genericSource) []models.AssetRequire
 		return []models.AssetRequirement{{Name: name}}
 	}
 	return nil
-}
-
-func (s *service) inspectConfiguredRuntimeCache(
-	ctx context.Context,
-	scope models.RuntimeScopeConfig,
-	modelName string,
-	active activePullState,
-	isActive bool,
-	pullFailure string,
-) (assets.RuntimeCacheInspection, bool, error) {
-	spec, source, supported, err := s.resolveRuntimeCacheSource(scope.Runtime, modelName)
-	if err != nil {
-		return assets.RuntimeCacheInspection{}, true, err
-	}
-	if !supported {
-		return assets.RuntimeCacheInspection{}, false, nil
-	}
-	expected := assetRequirementsForSpec(spec)
-	cacheRoot, err := s.modelCacheRoot(scope.CacheDirectory, spec.modelName)
-	if err != nil {
-		return assets.RuntimeCacheInspection{}, true, err
-	}
-	metadata, manifestPresent, err := s.readMetadata(
-		ctx, filepath.Join(cacheRoot, metadataFileName),
-	)
-	if err != nil {
-		inspection, inspectionErr := s.invalidRuntimeCacheInspection(
-			ctx, expected, active, isActive, pullFailure,
-		)
-		return inspection, true, inspectionErr
-	}
-	if manifestPresent {
-		expected = requirementsFromMetadata(spec, metadata)
-	}
-	result, err := s.inspectRuntimeCacheFiles(
-		ctx, scope.CacheDirectory, spec, source, expected, cacheRoot, metadata, manifestPresent,
-	)
-	if err != nil {
-		return assets.RuntimeCacheInspection{}, true, err
-	}
-	return s.applyActivePullFacts(result, active, isActive, pullFailure), true, nil
 }

@@ -133,73 +133,7 @@ func TestDefaultBackendArtifactResolverFallsBackToPublishedLinuxCPU(t *testing.T
 
 func TestDefaultBackendArtifactResolverPrefersCUDAWhenAvailable(t *testing.T) {
 	t.Parallel()
-	// Use the Windows CUDA variant manifest which has both CPU and CUDA artifacts
-	cudaManifest, err := os.ReadFile(filepath.Join("..", "internal", "artifacts", "testdata", "windows-cuda-variant-manifest.json"))
-	if err != nil {
-		t.Fatalf("read CUDA manifest fixture: %v", err)
-	}
-	cudaManifestDecoded, err := artifacts.Decode(cudaManifest)
-	if err != nil {
-		t.Fatalf("decode CUDA manifest fixture: %v", err)
-	}
-	// The checked-in publication has Windows CPU archives for all three backends.
-	cpuManifestDecoded, err := artifacts.DefaultManifest()
-	if err != nil {
-		t.Fatalf("decode checked-in manifest: %v", err)
-	}
-
-	resolveCUDA := backendArtifactResolver(cudaManifestDecoded)
-	resolveCPU := backendArtifactResolver(cpuManifestDecoded)
-
-	// The Windows fixture publishes a CUDA archive for llama.cpp only.
-	for _, testCase := range []struct {
-		backend, expectedAccelerator, expectedTarget string
-	}{
-		{"localai-llamacpp", "cuda", "windows-amd64-cuda"},
-	} {
-		t.Run(testCase.backend, func(t *testing.T) {
-			selection, err := resolveCUDA(context.Background(), ResolvedHostConfiguration{
-				Backend: testCase.backend, Platform: models.AssetHostPlatform{
-					OperatingSystem: "windows", Architecture: "amd64",
-					Accelerator: "cuda",
-				},
-				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-			}, false)
-			if err != nil {
-				t.Fatalf("resolve %s explicit CUDA: %v", testCase.backend, err)
-			}
-			if selection.Accelerator != testCase.expectedAccelerator || selection.Name == "" ||
-				!strings.Contains(selection.Name, testCase.expectedTarget) {
-				t.Fatalf("selection for %s = %#v, want accelerator=%s target=%s", testCase.backend, selection, testCase.expectedAccelerator, testCase.expectedTarget)
-			}
-		})
-	}
-	// An explicit CUDA request cannot fall back to a CPU-only archive.
-	for _, testCase := range []struct {
-		backend string
-	}{
-		{"localai-llamacpp"},
-		{"localai-whisper"},
-		{"localai-vibevoice"},
-	} {
-		t.Run(testCase.backend, func(t *testing.T) {
-			selection, err := resolveCPU(context.Background(), ResolvedHostConfiguration{
-				Backend: testCase.backend, Platform: models.AssetHostPlatform{
-					OperatingSystem: "windows", Architecture: "amd64",
-					Accelerator: "cuda",
-				},
-				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-			}, false)
-			if err == nil {
-				t.Fatalf("resolve %s explicit CUDA: expected error, got selection %#v", testCase.backend, selection)
-			}
-			var failure *artifacts.Failure
-			if !errors.As(err, &failure) || failure.Kind != artifacts.FailureIncompatibleAccelerator {
-				t.Fatalf("resolve %s explicit CUDA: expected ErrIncompatibleAccelerator, got %v", testCase.backend, err)
-			}
-		})
-	}
-	// Automatic selection prefers CUDA where published and CPU otherwise.
+	resolveCUDA := backendArtifactResolver(decodeCUDAManifest(t))
 	platform := models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64", CUDAAvailable: true}
 	for _, testCase := range []struct {
 		backend, expectedAccelerator, expectedTarget string
@@ -209,20 +143,47 @@ func TestDefaultBackendArtifactResolverPrefersCUDAWhenAvailable(t *testing.T) {
 		{"localai-vibevoice", "cpu", "windows-amd64"},
 	} {
 		t.Run(testCase.backend, func(t *testing.T) {
-			selection, err := resolveCUDA(context.Background(), ResolvedHostConfiguration{
-				Backend: testCase.backend, Platform: platform,
+			selection := resolveBackend(t, resolveCUDA, testCase.backend, platform)
+			assertBackendSelection(t, testCase.backend, selection, testCase.expectedAccelerator, testCase.expectedTarget)
+		})
+	}
+}
+
+func TestDefaultBackendArtifactResolverExplicitCUDAWithCUDAManifest(t *testing.T) {
+	t.Parallel()
+	resolveCUDA := backendArtifactResolver(decodeCUDAManifest(t))
+	selection := resolveBackend(t, resolveCUDA, "localai-llamacpp", models.AssetHostPlatform{
+		OperatingSystem: "windows", Architecture: "amd64", Accelerator: "cuda",
+	})
+	assertBackendSelection(t, "localai-llamacpp", selection, "cuda", "windows-amd64-cuda")
+}
+
+func TestDefaultBackendArtifactResolverRejectsExplicitCUDAFallback(t *testing.T) {
+	t.Parallel()
+	resolveCPU := backendArtifactResolver(decodeDefaultManifest(t))
+	for _, backend := range []string{"localai-llamacpp", "localai-whisper", "localai-vibevoice"} {
+		t.Run(backend, func(t *testing.T) {
+			_, err := resolveCPU(context.Background(), ResolvedHostConfiguration{
+				Backend: backend, Platform: models.AssetHostPlatform{
+					OperatingSystem: "windows", Architecture: "amd64", Accelerator: "cuda",
+				},
 				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 			}, false)
-			if err != nil {
-				t.Fatalf("resolve %s CUDAAvailable no accelerator: %v", testCase.backend, err)
+			if err == nil {
+				t.Fatalf("resolve %s explicit CUDA: expected error", backend)
 			}
-			if selection.Accelerator != testCase.expectedAccelerator || selection.Name == "" ||
-				!strings.Contains(selection.Name, testCase.expectedTarget) {
-				t.Fatalf("selection for %s = %#v, want accelerator=%s target=%s", testCase.backend, selection, testCase.expectedAccelerator, testCase.expectedTarget)
+			var failure *artifacts.Failure
+			if !errors.As(err, &failure) || failure.Kind != artifacts.FailureIncompatibleAccelerator {
+				t.Fatalf("resolve %s explicit CUDA: expected ErrIncompatibleAccelerator, got %v", backend, err)
 			}
 		})
 	}
-	// A CUDA-capable Windows host falls back to the checked-in CPU archives.
+}
+
+func TestDefaultBackendArtifactResolverCUDAFallbackOnCPU(t *testing.T) {
+	t.Parallel()
+	resolveCPU := backendArtifactResolver(decodeDefaultManifest(t))
+	platform := models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64", CUDAAvailable: true}
 	for _, testCase := range []struct {
 		backend, expectedAccelerator, expectedTarget string
 	}{
@@ -231,18 +192,51 @@ func TestDefaultBackendArtifactResolverPrefersCUDAWhenAvailable(t *testing.T) {
 		{"localai-vibevoice", "cpu", "windows-amd64"},
 	} {
 		t.Run(testCase.backend, func(t *testing.T) {
-			selection, err := resolveCPU(context.Background(), ResolvedHostConfiguration{
-				Backend: testCase.backend, Platform: platform,
-				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-			}, false)
-			if err != nil {
-				t.Fatalf("resolve %s CUDAAvailable fallback: %v", testCase.backend, err)
-			}
-			if selection.Accelerator != testCase.expectedAccelerator || selection.Name == "" ||
-				!strings.Contains(selection.Name, testCase.expectedTarget) {
-				t.Fatalf("selection for %s = %#v, want accelerator=%s target=%s (fallback)", testCase.backend, selection, testCase.expectedAccelerator, testCase.expectedTarget)
-			}
+			selection := resolveBackend(t, resolveCPU, testCase.backend, platform)
+			assertBackendSelection(t, testCase.backend, selection, testCase.expectedAccelerator, testCase.expectedTarget)
 		})
+	}
+}
+
+func decodeCUDAManifest(t *testing.T) artifacts.Manifest {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "internal", "artifacts", "testdata", "windows-cuda-variant-manifest.json"))
+	if err != nil {
+		t.Fatalf("read CUDA manifest fixture: %v", err)
+	}
+	manifest, err := artifacts.Decode(data)
+	if err != nil {
+		t.Fatalf("decode CUDA manifest fixture: %v", err)
+	}
+	return manifest
+}
+
+func decodeDefaultManifest(t *testing.T) artifacts.Manifest {
+	t.Helper()
+	manifest, err := artifacts.DefaultManifest()
+	if err != nil {
+		t.Fatalf("decode checked-in manifest: %v", err)
+	}
+	return manifest
+}
+
+func resolveBackend(t *testing.T, resolve BackendArtifactResolver, backend string, platform models.AssetHostPlatform) BackendArtifactSelection {
+	t.Helper()
+	selection, err := resolve(context.Background(), ResolvedHostConfiguration{
+		Backend: backend, Platform: platform,
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+	}, false)
+	if err != nil {
+		t.Fatalf("resolve %s: %v", backend, err)
+	}
+	return selection
+}
+
+func assertBackendSelection(t *testing.T, backend string, selection BackendArtifactSelection, expectedAccelerator, expectedTarget string) {
+	t.Helper()
+	if selection.Accelerator != expectedAccelerator || selection.Name == "" ||
+		!strings.Contains(selection.Name, expectedTarget) {
+		t.Fatalf("selection for %s = %#v, want accelerator=%s target=%s", backend, selection, expectedAccelerator, expectedTarget)
 	}
 }
 
