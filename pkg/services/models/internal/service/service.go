@@ -302,13 +302,6 @@ func resolveModelReference(
 	if strings.ContainsRune(raw, '\x00') {
 		return models.ResolvedModelReference{}, invalidReferenceFailure()
 	}
-	if source, isSource, err := parseModelSource(raw); isSource {
-		if err != nil {
-			return models.ResolvedModelReference{}, err
-		}
-		return resolveSourceReference(ctx, source, revisionResolver)
-	}
-
 	canonicalName := strings.ToLower(raw)
 	overlayName, overlay, hasOverlay, duplicateOverlay := findOverlay(overlays, canonicalName)
 	builtIn, isBuiltIn := models.BuiltInCatalog{}.ModelDefinitionFor(canonicalName)
@@ -324,6 +317,12 @@ func resolveModelReference(
 			)
 		}
 		return resolveNamedReference(ctx, canonicalName, builtIn, isBuiltIn, overlay, hasOverlay, revisionResolver)
+	}
+	if source, isSource, err := parseModelSource(raw); isSource {
+		if err != nil {
+			return models.ResolvedModelReference{}, err
+		}
+		return resolveSourceReference(ctx, source, revisionResolver)
 	}
 	if looksLikeLocalPath(raw) {
 		source := modelSourceReference{

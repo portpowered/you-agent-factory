@@ -107,6 +107,11 @@ Notes:
 
 ## Unverified
 
+- Managed WSL `you models pull index-tts2.5` now installs `cuda12-audio-cpp`
+  and the 7,885,093,568-byte GGUF, reporting `READY`. An offline managed
+  reference-audio invoke still fails with `local model worker not found for
+  "index-tts2.5"`; managed synthesis remains unverified.
+
 - Speech content and voice similarity for either backend.
 - Backend consumption of `ref_text` beyond protocol delivery.
 - This repository's pinned artifact publication and Windows first-use

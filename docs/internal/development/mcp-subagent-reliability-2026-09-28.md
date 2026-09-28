@@ -1007,3 +1007,26 @@ selection to prefer a published CUDA archive and retain the gallery CUDA
 fallback. A live release-index check found no published Linux CUDA archive;
 the new archive path is fixture-tested, while the gallery remains the
 available GPU path.
+
+A broader Codex MCP audit of the custom IndexTTS pull failure
+(`c2beeeae-5f70-4d4b-b7bd-578417bc7294`) reached its 300-second timeout
+without a primary result or source edit. It left an isolated probe directory
+in the workspace. An independent WSL file trace showed the CLI trying to
+stat the relative name `index-tts2.5` while never opening the configured
+GGUF path. A narrower follow-up targets the scoped pull routing directly;
+the broad audit's timeout cause remains unproven.
+
+The narrower Codex MCP follow-up (`854559d8-baf4-4ba7-bc46-79719add6a3c`)
+also timed out at 300 seconds, leaving a partial scoped-pull edit and test.
+Independent testing found that the partial test failed: the canonical resolver
+interpreted dotted operator name `index-tts2.5` as a local path before it
+checked configured names. The implementation was completed locally by giving
+configured names precedence, retaining the scoped-pull routing for operator
+overlays, and correcting the test to assert private source handling. The
+focused and broader Models Go tests passed, as did all 24 lint targets. A
+second relative-path classification in Models Assets was then fixed with a
+focused regression. A rebuilt WSL CLI installed `cuda12-audio-cpp` and pulled
+the 7,885,093,568-byte IndexTTS GGUF to managed cache with
+`INSTALLED_SUCCESSFULLY` and `READY`. The next offline reference-audio
+invocation failed at a distinct boundary: `local model worker not found for
+"index-tts2.5"`. Managed inference remains unverified.

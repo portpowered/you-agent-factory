@@ -302,6 +302,16 @@ func (o *Root) PullModelForScope(
 	if !ok {
 		return models.PullResult{}, models.ErrUnsupportedOperation
 	}
+	if o.runtimeScopes != nil {
+		binding, err := o.runtimeScopes.Resolve(runtimescopes.Reference(request.Scope.String()))
+		if err != nil {
+			return models.PullResult{}, runtimeScopeError(err)
+		}
+		_, _, hasOverlay, _ := findOverlay(binding.OperatorModels, strings.ToLower(strings.TrimSpace(request.Name)))
+		if hasOverlay {
+			return o.pullResolvedModelAfterCatalogMiss(ctx, request, models.ErrNotFound)
+		}
+	}
 	result, err := puller.PullModel(ctx, request.Name)
 	if err == nil || !errors.Is(err, models.ErrNotFound) {
 		return result, err

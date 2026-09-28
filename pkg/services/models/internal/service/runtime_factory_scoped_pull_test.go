@@ -134,15 +134,19 @@ func TestRootPullModelForScopeKeepsExistingFactoryPullResult(t *testing.T) {
 	}
 }
 
-func newPullFallbackRoot(t *testing.T, modelName string) (*Root, models.RuntimeScopeRef, *preparationAssetService) {
+func newPullFallbackRoot(t *testing.T, modelName string, overlays ...map[string]models.ModelOverlay) (*Root, models.RuntimeScopeRef, *preparationAssetService) {
 	t.Helper()
 	scopes, err := runtimescopeswire.NewService(func() string { return "pull-fallback-test" })
 	if err != nil {
 		t.Fatalf("construct runtime scopes: %v", err)
 	}
-	ref, err := scopes.Open(models.RuntimeBinding{
+	binding := models.RuntimeBinding{
 		RuntimeConfig: func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
-	})
+	}
+	if len(overlays) != 0 {
+		binding.OperatorModels = overlays[0]
+	}
+	ref, err := scopes.Open(binding)
 	if err != nil {
 		t.Fatalf("open runtime scope: %v", err)
 	}
@@ -178,11 +182,13 @@ func firstPullFallbackScope(t *testing.T, root *Root) models.RuntimeScopeRef {
 
 type pullCatalogMissRuntime struct {
 	models.Service
-	result models.PullResult
-	err    error
+	result    models.PullResult
+	err       error
+	pullCalls int
 }
 
 func (runtime *pullCatalogMissRuntime) PullModel(context.Context, string) (models.PullResult, error) {
+	runtime.pullCalls++
 	return runtime.result, runtime.err
 }
 

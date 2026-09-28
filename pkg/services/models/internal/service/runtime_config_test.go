@@ -560,3 +560,40 @@ func TestCustomAudioCPPFileTTSReachesAssetPreparation(t *testing.T) {
 		t.Fatalf("visible local source requirements = %#v, want one GGUF without VibeVoice roles", visible)
 	}
 }
+
+func TestRootPullModelForScopeRoutesDottedOperatorNameBeforeLegacyCatalogPull(t *testing.T) {
+	t.Parallel()
+
+	const name = "index-tts2.5"
+	source := "file:///models/audio-cpp/index-tts2_5-orig.gguf"
+	backend := "localai-audio-cpp"
+	loadPolicy := models.LoadPolicyOnDemand
+	root, scope, assets := newPullFallbackRoot(t, name, map[string]models.ModelOverlay{
+		name: {Source: &source, Backend: &backend, LoadPolicy: &loadPolicy, Operations: []string{models.OperationTTS}},
+	})
+	runtime := root.runtimeByScope[scope].(*pullCatalogMissRuntime)
+	runtime.err = models.ErrAssetSourceMissing
+	resolved, err := root.ResolveModelReference(context.Background(), models.ResolveModelReferenceRequest{
+		Scope: scope, Reference: models.ModelReference{NameOrURI: name},
+	})
+	if err != nil || resolved.Resolved.Definition.Name != name || resolved.Resolved.Definition.Backend != backend ||
+		resolved.Resolved.Provenance.SourceKind != models.ModelReferenceSourceFileURI {
+		t.Fatalf("operator resolution = %#v, error = %v, want named file source", resolved, err)
+	}
+
+	result, err := root.PullModelForScope(context.Background(), models.PullModelRequest{Scope: scope, Name: name})
+	if err != nil {
+		t.Fatalf("PullModelForScope(%q): %v", name, err)
+	}
+	if runtime.pullCalls != 0 {
+		t.Fatalf("legacy catalog pull calls = %d, want zero", runtime.pullCalls)
+	}
+	if result.ModelName != name || result.ManagedPullOutcome != "INSTALLED_SUCCESSFULLY" {
+		t.Fatalf("pull result = %#v, want installed operator model", result)
+	}
+	if assets.request.Scope != scope || assets.request.Name != name ||
+		assets.request.Reference.NameOrURI != name || assets.request.Backend != backend ||
+		len(assets.request.Artifacts) != 0 {
+		t.Fatalf("asset preparation request = %#v, want private source resolution and configured backend", assets.request)
+	}
+}

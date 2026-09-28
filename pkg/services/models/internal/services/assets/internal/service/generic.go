@@ -914,28 +914,26 @@ func (s *service) resolveGenericSource(
 	raw string,
 ) (genericSource, error) {
 	raw = strings.TrimSpace(raw)
-	if !isGenericSourceReference(raw) {
-		canonical := strings.ToLower(raw)
-		definition, builtIn := (models.BuiltInCatalog{}).ModelDefinitionFor(canonical)
-		overlayName, overlay, hasOverlay := genericOverlay(scope.OperatorModels, canonical)
-		if hasOverlay {
-			if !builtIn {
-				definition = models.ModelDefinition{Name: canonical}
-			}
-			if overlay.Source != nil {
-				definition.Source = strings.TrimSpace(*overlay.Source)
-			}
-			if strings.TrimSpace(definition.Source) == "" {
-				return genericSource{}, models.ModelConfigurationFailure{
-					ModelName: overlayName, Field: "source", Message: "is required",
-				}
-			}
-			raw = definition.Source
-		} else if builtIn {
-			raw = definition.Source
-		} else {
-			return genericSource{}, fmt.Errorf("%w: model name is unknown", models.ErrAssetSourceMissing)
+	canonical := strings.ToLower(raw)
+	definition, builtIn := (models.BuiltInCatalog{}).ModelDefinitionFor(canonical)
+	overlayName, overlay, hasOverlay := genericOverlay(scope.OperatorModels, canonical)
+	if hasOverlay {
+		if !builtIn {
+			definition = models.ModelDefinition{Name: canonical}
 		}
+		if overlay.Source != nil {
+			definition.Source = strings.TrimSpace(*overlay.Source)
+		}
+		if strings.TrimSpace(definition.Source) == "" {
+			return genericSource{}, models.ModelConfigurationFailure{
+				ModelName: overlayName, Field: "source", Message: "is required",
+			}
+		}
+		raw = definition.Source
+	} else if builtIn {
+		raw = definition.Source
+	} else if !isGenericSourceReference(raw) {
+		return genericSource{}, fmt.Errorf("%w: model name is unknown", models.ErrAssetSourceMissing)
 	}
 	source, err := parseGenericSource(raw)
 	if err != nil {
