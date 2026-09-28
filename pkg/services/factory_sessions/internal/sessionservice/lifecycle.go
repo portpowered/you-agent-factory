@@ -83,18 +83,3 @@ func (s *Service) DeleteFactorySession(ctx context.Context, sessionID string) er
 	}
 	return deleter.Delete(ctx, sessionID)
 }
-
-// DeleteFactorySession routes the public deletion policy to the selected
-// detached live-session owner. The assembly never substitutes the destructive
-// close lifecycle operation for this capability.
-func (a *Assembly) DeleteFactorySession(ctx context.Context, sessionID string) error {
-	owner, err := a.detachedLiveControlOwner(sessionID)
-	if err != nil {
-		return err
-	}
-	deletion, ok := owner.(factorysessions.LiveDeletionService)
-	if !ok {
-		return fmt.Errorf("%w: live deletion capability unavailable", factorysessions.ErrDetachedServiceUnavailable)
-	}
-	return deletion.DeleteFactorySession(ctx, sessionID)
-}

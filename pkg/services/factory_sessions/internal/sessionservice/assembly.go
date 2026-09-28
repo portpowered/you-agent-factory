@@ -656,30 +656,6 @@ func (a *Assembly) ObserveForSession(
 	return runtime.Observe(ctx, request)
 }
 
-func (a *Assembly) detachedLiveControlOwner(sessionID string) (factorysessions.LiveControlService, error) {
-	owner, err := a.detachedOwner(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	control, ok := owner.(factorysessions.LiveControlService)
-	if !ok {
-		return nil, fmt.Errorf("%w: live control capability unavailable", factorysessions.ErrDetachedServiceUnavailable)
-	}
-	return control, nil
-}
-
-func (a *Assembly) detachedLiveResultOwner(sessionID string) (factorysessions.LiveResultService, error) {
-	owner, err := a.detachedOwner(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	results, ok := owner.(factorysessions.LiveResultService)
-	if !ok {
-		return nil, fmt.Errorf("%w: live result capability unavailable", factorysessions.ErrDetachedServiceUnavailable)
-	}
-	return results, nil
-}
-
 func (a *Assembly) activeDetachedOwner() (factorysessions.Service, error) {
 	if a == nil {
 		return nil, factorysessions.ErrDetachedServiceUnavailable
@@ -810,7 +786,9 @@ func (a *Assembly) ActivateNamedFactory(ctx context.Context, name string) error 
 	if bound == nil {
 		return factorysessions.ErrRuntimeNotAvailable
 	}
-	owner, ok := bound.Owner.(interface { ActivateNamedFactory(context.Context, string) error })
+	owner, ok := bound.Owner.(interface {
+		ActivateNamedFactory(context.Context, string) error
+	})
 	if !ok || owner == nil {
 		return fmt.Errorf("%w: session activation owner is unavailable", factorysessions.ErrRuntimeNotAvailable)
 	}
@@ -866,18 +844,6 @@ func (a *Assembly) TerminateLiveFactorySession(ctx context.Context, sessionID st
 
 func (a *Assembly) CloseFactorySession(ctx context.Context, sessionID string) error {
 	return a.CloseSession(ctx, sessionID)
-}
-
-func (a *Assembly) detachedLiveLifecycleControlOwner(sessionID string) (factorysessions.LiveLifecycleControlService, error) {
-	owner, err := a.detachedOwner(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	control, ok := owner.(factorysessions.LiveLifecycleControlService)
-	if !ok {
-		return nil, fmt.Errorf("%w: live lifecycle control capability unavailable", factorysessions.ErrDetachedServiceUnavailable)
-	}
-	return control, nil
 }
 
 func (a *Assembly) Pause(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
