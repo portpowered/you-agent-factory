@@ -545,7 +545,15 @@ func (r *Root) openRuntimeWithOptions(
 	replayInput *recordings.LoadReplayInputResult,
 ) (runtimeProducts, error) {
 	return openRuntime(
-		ctx, request, logger,
+		ctx,
+		request.FactoryDefinition,
+		request.FactoryRuntime,
+		&request.FactorySession,
+		request.Workers,
+		request.Recordings,
+		request.ModelCacheDirectory,
+		request.OperatorDefaults,
+		logger,
 		r.clock,
 		r.providerOverride,
 		r.invocationMetricsRecorder,

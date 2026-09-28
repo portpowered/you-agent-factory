@@ -35,7 +35,13 @@ import (
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func openRuntime(
 	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
+	definitionRequest factorydefinitions.RuntimeOpeningRequest,
+	runtimeRequest factoryruntime.RuntimeOpeningRequest,
+	sessionRequest *factorysessions.SessionRuntimeOpeningRequest,
+	workerRequest workers.RuntimeOpeningRequest,
+	recordingRequest recordings.RuntimeOpeningRequest,
+	modelCacheDirectory string,
+	operatorDefaults operatorsettings.ResolvedDefaults,
 	baseLogger *zap.Logger,
 	clockEdge factoryruntime.Clock,
 	providerOverride providers.Service,
@@ -81,8 +87,8 @@ func openRuntime(
 	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
 	replayInput *recordings.LoadReplayInputResult,
 ) (products runtimeProducts, err error) {
-	if request == nil {
-		return runtimeProducts{}, fmt.Errorf("runtime opening request is required")
+	if sessionRequest == nil {
+		return runtimeProducts{}, fmt.Errorf("Factory Session runtime selection is required")
 	}
 	if recordingsService == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings service is required")
@@ -90,25 +96,18 @@ func openRuntime(
 	if recordingsRuntime == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime opening is required")
 	}
-	providedCanonicalSessionID := strings.TrimSpace(request.FactorySession.CanonicalSessionID)
-	canonicalSessionIDGenerated := request.FactorySession.CanonicalSessionIDGenerated
-	definitionRequest := request.FactoryDefinition
-	runtimeRequest := request.FactoryRuntime
-	sessionRequest := request.FactorySession
+	providedCanonicalSessionID := strings.TrimSpace(sessionRequest.CanonicalSessionID)
+	canonicalSessionIDGenerated := sessionRequest.CanonicalSessionIDGenerated
 	sessionID := strings.TrimSpace(sessionRequest.FactorySessionID)
 	if sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
 	}
 	sessionRequest.FactorySessionID = sessionID
-	workerRequest := request.Workers
-	recordingRequest := request.Recordings
-	modelCacheDirectory := request.ModelCacheDirectory
-	operatorDefaults := request.OperatorDefaults
 	configured, root, load, clock, logger, err := PrepareRuntime(
 		ctx,
 		definitionRequest,
 		runtimeRequest,
-		sessionRequest,
+		*sessionRequest,
 		workerRequest,
 		recordingRequest,
 		modelCacheDirectory,
@@ -141,12 +140,12 @@ func openRuntime(
 	// canonical metrics identity. Invalid Current Factory or working-directory
 	// input must not consume a Factory Session identity or create a product
 	// lifecycle effect.
-	if err := ensureDefaultCanonicalSessionID(request, generateRuntimeInstanceID); err != nil {
+	if err := ensureDefaultCanonicalSessionID(sessionRequest, recordingRequest.ReplayPath, generateRuntimeInstanceID); err != nil {
 		return runtimeProducts{}, err
 	}
 	canonicalSessionIDGenerated = canonicalSessionIDGenerated ||
-		(providedCanonicalSessionID == "" && strings.TrimSpace(request.FactorySession.CanonicalSessionID) != "")
-	configured.Session.CanonicalSessionID = request.FactorySession.CanonicalSessionID
+		(providedCanonicalSessionID == "" && strings.TrimSpace(sessionRequest.CanonicalSessionID) != "")
+	configured.Session.CanonicalSessionID = sessionRequest.CanonicalSessionID
 	configured.Session.CanonicalSessionIDGenerated = canonicalSessionIDGenerated
 	metricsSessionID := strings.TrimSpace(configured.Session.CanonicalSessionID)
 	if metricsSessionID == "" {

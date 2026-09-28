@@ -59,7 +59,7 @@ func (r *Root) activateRuntime(
 		return nil, err
 	}
 	canonicalSessionIDProvided := strings.TrimSpace(openingRequest.FactorySession.CanonicalSessionID) != ""
-	if err := ensureDefaultCanonicalSessionID(openingRequest, r.canonicalSessionIDGenerator()); err != nil {
+	if err := ensureDefaultCanonicalSessionID(&openingRequest.FactorySession, openingRequest.Recordings.ReplayPath, r.canonicalSessionIDGenerator()); err != nil {
 		return nil, err
 	}
 	canonicalSessionIDGenerated := !canonicalSessionIDProvided &&
@@ -488,17 +488,18 @@ func (r *Root) canonicalSessionIDGenerator() func() string {
 }
 
 func ensureDefaultCanonicalSessionID(
-	request *factorysessions.RuntimeOpeningRequest,
+	session *factorysessions.SessionRuntimeOpeningRequest,
+	replayPath string,
 	generateID func() string,
 ) error {
-	if request == nil || strings.TrimSpace(request.Recordings.ReplayPath) != "" {
+	if session == nil || strings.TrimSpace(replayPath) != "" {
 		return nil
 	}
-	sessionID := strings.TrimSpace(request.FactorySession.FactorySessionID)
+	sessionID := strings.TrimSpace(session.FactorySessionID)
 	if sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
 	}
-	if sessionID != factorysessions.DefaultSessionID || strings.TrimSpace(request.FactorySession.CanonicalSessionID) != "" {
+	if sessionID != factorysessions.DefaultSessionID || strings.TrimSpace(session.CanonicalSessionID) != "" {
 		return nil
 	}
 	if generateID == nil {
@@ -508,7 +509,7 @@ func ensureDefaultCanonicalSessionID(
 	if canonicalID == "" {
 		return fmt.Errorf("open Factory Session: canonical session ID generator returned an empty identity")
 	}
-	request.FactorySession.CanonicalSessionID = canonicalID
+	session.CanonicalSessionID = canonicalID
 	return nil
 }
 
