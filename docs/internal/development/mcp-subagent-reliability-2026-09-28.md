@@ -75,3 +75,8 @@ subsequent lint gate exposed one new `Subagent` complexity violation, a stale
 model-provider package hash, three stale ownership rows from opener cleanup,
 and existing Go formatting drift. Those were corrected; `make lint` passed
 with Git's POSIX shell and tools on `PATH` for the format target.
+The final committed build was reinstalled and direct stdio probes passed:
+unknown input returned `BAD_REQUEST`, and OpenCode Longcat returned the
+repository name with a primary result (`289c43e7-d54e-45ce-b05e-94e0a627c79e`).
+Concurrent server startup emitted packaged-installation `active-contention`
+warnings for existing owner processes but did not prevent completion.
