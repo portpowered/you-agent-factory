@@ -1333,3 +1333,26 @@ first-content errors with `isError=true` and typed `structuredContent` for
 both invalid input and a 1 ms start-phase timeout. Existing Codex app MCP
 processes using the old `.local\bin\you.exe` remain live; the configured
 command for new connections points at the rebuilt `C:\Users\andre\bin\you.exe`.
+
+During the LLM media audit, one OpenCode MCP read-only audit closed before
+returning a primary result (session `8b72385a-e675-448b-8e73-2b1d42e282ca`).
+A separate OpenCode MCP audio probe first hit a 120-second cold-start bound;
+its 300-second retry completed and transcribed the known WAV exactly as
+`The quick brown fox jumps over the lazy dog.`. Independent CLI probes from a
+current-source Windows binary returned `Green` for a green PNG, `Blue` for a
+blue MP4, and the same exact WAV transcript. The installed binary also
+distinguished red and blue MP4 clips under the same prompt. These semantic
+controls verify media understanding on this host; protocol field acceptance
+alone did not establish it.
+
+The first source-built Windows CLI failed before inference because automatic
+NVIDIA detection populated an explicit CUDA accelerator while no compatible
+published Windows CUDA archive was available. Commit `797801406e` leaves
+Windows accelerator selection automatic, allowing the published resolver to
+try CUDA and fall back to CPU. A fresh source build then pulled the built-in
+LLM with both model and projector verified and completed the media probes.
+The rebuilt binary was installed at `C:\Users\andre\bin\you.exe` (SHA-256
+`97BF73C5CEA0E229D8AC0722597FCDB752D3202CCA0A54ADCFB30F52A1B81E0E`).
+Its `models inspect llm` reported `READY`, two installed assets, and
+`videoReadiness=verified-projector`. Already-running MCP processes retain
+their executable until restarted.
