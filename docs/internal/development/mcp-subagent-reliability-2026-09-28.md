@@ -890,3 +890,21 @@ inspection guidance. In that same server process,
 `factory_session.session.not_found`. The worktree remained clean after the
 cancelled probe. This verifies the customer diagnostic and explains the
 earlier failed lookups; it does not identify the OpenCode timeout cause.
+
+A subsequent read-only Codex MCP audit of timeout progress sources timed out
+at the caller's 120-second deadline (Factory Session
+`19fe1190-ef92-45f9-b004-f1d8467315cb`) without a primary result.
+Immediate Git inspection showed no workspace edits. This demonstrates that
+the short bounded deadline can also expire on a Codex research task; it is
+not evidence specific to OpenCode. The next probe should compare a realistic
+longer deadline or inspect progress through a service read before assigning
+the timeout to a provider or transport fault.
+The same narrow question, capped at 300 seconds and limited to the MCP tool
+and Factory Sessions service contract, completed via Codex MCP subagent
+`1499003f-877a-446c-b41d-14bc3efb9848` in about 49 seconds. Source
+review confirmed `Service.GetFactorySession` can read a live projection
+before close, but its `Runtime.Progress` only offers Factory state/counts;
+`Runtime.Lifecycle.UpdatedAt` is not a precise last-worker-activity time.
+This narrows the next diagnostic design: a coarse progress snapshot is
+available now, while identifying a stalled provider/tool step requires a
+source-native Worker observation read or a new owner-level contract.
