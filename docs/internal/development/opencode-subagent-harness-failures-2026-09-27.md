@@ -154,6 +154,16 @@ tree before retrying, and never re-issue the same request blind.
   passed initialization, and reached `session/prompt`; OpenCode returned
   `Rate limit exceeded` in 5.5 s before any tool call. A live V2 permission
   read remains unverified.
+- A later freshly rebuilt CLI edit probe selected another advertised free
+  model, `opencode/ling-3.0-flash-fin-free`. OpenCode again returned
+  `Rate limit exceeded` at `session/prompt`, this time in 3.4 s, and the
+  requested probe file was not created. This did not exercise tool editing,
+  ACP permission selection, or form elicitation.
+- The ACP client now advertises form elicitation and automatically answers
+  schema-backed boolean approvals and choice fields, preferring affirmative
+  choices or a declared default. It cancels forms that require free text and
+  does not advertise URL elicitation. Focused provider tests cover these
+  decisions; no live OpenCode form request was observed.
 
 ## Limitations of this note
 
