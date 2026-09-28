@@ -163,7 +163,11 @@ func loadModel(
 	gpuLayers := int32(0)
 	if configuration.Backend == "localai-llamacpp" {
 		threads = 4
-		if configuration.Platform.Accelerator == "cuda" {
+		accelerator := configuration.BackendArtifact.Accelerator
+		if accelerator == "" {
+			accelerator = configuration.Platform.Accelerator
+		}
+		if accelerator == "cuda" {
 			gpuLayers = 99
 		}
 	}

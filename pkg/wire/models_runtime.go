@@ -279,7 +279,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 				backendArtifactResolver, resolverErr = modelswire.NewGalleryBackendArtifactResolver(installer)
 			}
 		} else {
-			backendArtifactResolver, resolverErr = modelswire.NewDefaultBackendArtifactResolver()
+			backendArtifactResolver, resolverErr = modelswire.NewPublishedBackendArtifactResolver(assetHTTP)
 		}
 		if resolverErr != nil {
 			return nil, fmt.Errorf("construct Models backend artifact selector: %w", resolverErr)
@@ -639,12 +639,22 @@ func provideModelAssetHostPlatform(edges serviceedges.Edges) models.AssetHostPla
 	if strings.TrimSpace(platform.Architecture) == "" {
 		platform.Architecture = runtime.GOARCH
 	}
-	if platform.Accelerator == "" && runtime.GOOS == "linux" &&
-		platform.OperatingSystem == "linux" && platform.Architecture == "amd64" &&
-		linuxCUDAAvailable(os.Stat, func(ctx context.Context) ([]byte, error) {
-			return exec.CommandContext(ctx, "nvidia-smi", "-L").Output()
-		}) {
-		platform.Accelerator = "cuda"
+	if platform.Accelerator == "cuda" {
+		platform.CUDAAvailable = true
+	}
+	if platform.Accelerator == "" {
+		if !platform.CUDAAvailable && runtime.GOOS == "linux" && platform.OperatingSystem == "linux" && platform.Architecture == "amd64" {
+			platform.CUDAAvailable = linuxCUDAAvailable(os.Stat, func(ctx context.Context) ([]byte, error) {
+				return exec.CommandContext(ctx, "nvidia-smi", "-L").Output()
+			})
+		} else if !platform.CUDAAvailable && runtime.GOOS == "windows" && platform.OperatingSystem == "windows" && platform.Architecture == "amd64" {
+			platform.CUDAAvailable = windowsCUDAAvailable(func(ctx context.Context) ([]byte, error) {
+				return exec.CommandContext(ctx, "nvidia-smi", "-L").Output()
+			})
+		}
+		if platform.CUDAAvailable && platform.OperatingSystem == "linux" {
+			platform.Accelerator = "cuda"
+		}
 	}
 	return platform
 }
@@ -661,7 +671,24 @@ func linuxCUDAAvailable(
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	output, err := probe(ctx)
-	return err == nil && strings.TrimSpace(string(output)) != ""
+	return err == nil && nvidiaGPUListed(output)
+}
+
+func windowsCUDAAvailable(probe func(context.Context) ([]byte, error)) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	output, err := probe(ctx)
+	return err == nil && nvidiaGPUListed(output)
+}
+
+func nvidiaGPUListed(output []byte) bool {
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "GPU ") && strings.Contains(line, ":") {
+			return true
+		}
+	}
+	return false
 }
 
 type modelsClock struct{ source platformclock.Source }

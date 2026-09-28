@@ -169,16 +169,17 @@ func TestModelAssetHostPlatformPreservesOverrideAndSelectsProcessDefault(t *test
 
 	if got := provideModelAssetHostPlatform(serviceedges.Edges{}); got.OperatingSystem != runtime.GOOS ||
 		got.Architecture != runtime.GOARCH ||
-		(got.Accelerator != "" && !(runtime.GOOS == "linux" && runtime.GOARCH == "amd64" && got.Accelerator == "cuda")) {
+		(got.Accelerator != "" && !(runtime.GOOS == "linux" && runtime.GOARCH == "amd64" && got.Accelerator == "cuda")) ||
+		(got.Accelerator == "cuda" && !got.CUDAAvailable) {
 		t.Fatalf("default model asset host platform = %#v, want current process platform and optional detected CUDA", got)
 	}
 
-	override := models.AssetHostPlatform{OperatingSystem: "customer-os", Architecture: "customer-arch", Accelerator: "cuda"}
+	override := models.AssetHostPlatform{OperatingSystem: "customer-os", Architecture: "customer-arch", Accelerator: "cuda", CUDAAvailable: true}
 	if got := provideModelAssetHostPlatform(serviceedges.Edges{ModelAssetHostPlatform: override}); got != override {
 		t.Fatalf("model asset host platform override = %#v, want %#v", got, override)
 	}
 	if got := provideModelAssetHostPlatform(serviceedges.Edges{ModelAssetHostPlatform: models.AssetHostPlatform{Accelerator: "cuda"}}); got != (models.AssetHostPlatform{
-		OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH, Accelerator: "cuda",
+		OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH, Accelerator: "cuda", CUDAAvailable: true,
 	}) {
 		t.Fatalf("model asset host platform with accelerator override = %#v, want process OS and architecture with CUDA", got)
 	}

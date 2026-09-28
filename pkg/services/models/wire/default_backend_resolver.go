@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -18,6 +19,10 @@ func NewDefaultBackendArtifactResolver() (BackendArtifactResolver, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode default backend artifact manifest: %w", err)
 	}
+	return backendArtifactResolver(manifest), nil
+}
+
+func backendArtifactResolver(manifest artifacts.Manifest) BackendArtifactResolver {
 	return func(ctx context.Context, request ResolvedHostConfiguration, _ bool) (BackendArtifactSelection, error) {
 		if err := ctx.Err(); err != nil {
 			return BackendArtifactSelection{}, err
@@ -29,23 +34,35 @@ func NewDefaultBackendArtifactResolver() (BackendArtifactResolver, error) {
 				request.ProtocolVersion,
 			)
 		}
-		descriptor, err := manifest.Select(artifacts.SelectionRequest{
+		accelerator := defaultBackendAccelerator(request.Platform)
+		preferCUDA := request.Platform.Accelerator == "" && request.Platform.CUDAAvailable &&
+			request.Platform.OperatingSystem == "windows" && request.Platform.Architecture == "amd64"
+		if preferCUDA {
+			accelerator = "cuda"
+		}
+		selection := artifacts.SelectionRequest{
 			Backend:          request.Backend,
 			OperatingSystem:  request.Platform.OperatingSystem,
 			Architecture:     request.Platform.Architecture,
 			ProtocolRevision: manifest.ProtocolRevision(),
-			Accelerator:      defaultBackendAccelerator(request.Platform),
-		})
+			Accelerator:      accelerator,
+		}
+		descriptor, err := manifest.Select(selection)
+		if preferCUDA && errors.Is(err, artifacts.ErrIncompatibleAccelerator) {
+			selection.Accelerator = "cpu"
+			descriptor, err = manifest.Select(selection)
+		}
 		if err != nil {
 			return BackendArtifactSelection{}, err
 		}
 		return BackendArtifactSelection{
-			Name:     descriptor.Artifact.Name,
-			Location: descriptor.Artifact.Location,
-			Bytes:    descriptor.Artifact.SizeBytes,
-			SHA256:   descriptor.Artifact.SHA256,
+			Name:        descriptor.Artifact.Name,
+			Location:    descriptor.Artifact.Location,
+			Bytes:       descriptor.Artifact.SizeBytes,
+			SHA256:      descriptor.Artifact.SHA256,
+			Accelerator: selection.Accelerator,
 		}, nil
-	}, nil
+	}
 }
 
 func defaultBackendAccelerator(platform models.AssetHostPlatform) string {

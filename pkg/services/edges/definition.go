@@ -360,6 +360,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	if replacements.ModelAssetHostPlatform.Accelerator != "" {
 		defaults.ModelAssetHostPlatform.Accelerator = replacements.ModelAssetHostPlatform.Accelerator
 	}
+	if replacements.ModelAssetHostPlatform.CUDAAvailable {
+		defaults.ModelAssetHostPlatform.CUDAAvailable = true
+	}
 	if replacements.ModelResolveHuggingFaceRevision != nil {
 		defaults.ModelResolveHuggingFaceRevision = replacements.ModelResolveHuggingFaceRevision
 	}

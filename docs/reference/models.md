@@ -137,8 +137,16 @@ user cache for later use.
 neither is available, it downloads the latest official Linux amd64 LocalAI
 binary and verifies its size and SHA-256 against that release's checksums.
 The first install needs access to GitHub, LocalAI's backend gallery, and its
-backend image registry. Run `you` inside WSL Ubuntu to use an NVIDIA GPU on a
-Windows host; a native Windows `you` process selects the Windows CPU archive.
+backend image registry. Run `you` inside WSL Ubuntu to use the current CUDA
+gallery builds on a Windows host.
+
+On native Windows, `you` checks for an NVIDIA GPU and, when online, reads the
+latest compatible backend archive manifest from the project's published
+releases. It selects a CUDA archive for each backend that has one, then uses
+the CPU archive for backends without a CUDA build. The current publication
+has no native Windows CUDA archive, so native Windows uses the CPU archive
+today. Offline first use uses the bundled archive manifest. A publication
+loaded earlier in the same process remains available to offline requests.
 
 ### Built-in TTS bundle identity
 

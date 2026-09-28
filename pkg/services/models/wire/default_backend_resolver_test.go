@@ -3,12 +3,69 @@ package wire
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
+
+func TestBackendArtifactResolverPrefersAvailableWindowsCUDAArchive(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(filepath.Join("..", "internal", "artifacts", "testdata", "windows-cuda-variant-manifest.json"))
+	if err != nil {
+		t.Fatalf("read CUDA manifest fixture: %v", err)
+	}
+	manifest, err := artifacts.Decode(data)
+	if err != nil {
+		t.Fatalf("decode CUDA manifest fixture: %v", err)
+	}
+	resolve := backendArtifactResolver(manifest)
+	platform := models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64", CUDAAvailable: true}
+	for _, testCase := range []struct {
+		backend, accelerator, target string
+	}{
+		{"localai-llamacpp", "cuda", "windows-amd64-cuda"},
+		{"localai-whisper", "cpu", "windows-amd64"},
+		{"localai-vibevoice", "cpu", "windows-amd64"},
+	} {
+		selection, err := resolve(context.Background(), ResolvedHostConfiguration{
+			Backend: testCase.backend, Platform: platform,
+			ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+		}, false)
+		if err != nil {
+			t.Fatalf("resolve %s: %v", testCase.backend, err)
+		}
+		if selection.Accelerator != testCase.accelerator || selection.Name == "" ||
+			!strings.Contains(selection.Name, testCase.target) {
+			t.Fatalf("selection for %s = %#v, want %s", testCase.backend, selection, testCase.target)
+		}
+	}
+}
+
+func TestDefaultBackendArtifactResolverFallsBackToPublishedWindowsCPU(t *testing.T) {
+	t.Parallel()
+	resolve, err := NewDefaultBackendArtifactResolver()
+	if err != nil {
+		t.Fatalf("construct default resolver: %v", err)
+	}
+	selection, err := resolve(context.Background(), ResolvedHostConfiguration{
+		Backend: "localai-llamacpp",
+		Platform: models.AssetHostPlatform{
+			OperatingSystem: "windows", Architecture: "amd64", CUDAAvailable: true,
+		},
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+	}, false)
+	if err != nil {
+		t.Fatalf("resolve Windows backend: %v", err)
+	}
+	if selection.Accelerator != "cpu" || strings.Contains(selection.Name, "windows-amd64-cuda") {
+		t.Fatalf("published archive selection = %#v, want CPU fallback", selection)
+	}
+}
 
 func TestNewDefaultBackendArtifactResolverSelectsPinnedMatrix(t *testing.T) {
 	t.Parallel()

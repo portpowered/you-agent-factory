@@ -200,6 +200,7 @@ type BackendArtifactSelection struct {
 	Bytes         int64
 	SHA256        string
 	InstalledPath string
+	Accelerator   string
 }
 
 // BackendArtifactResolver selects a backend archive or an installed LocalAI

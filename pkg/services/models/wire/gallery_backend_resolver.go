@@ -29,7 +29,8 @@ func NewGalleryBackendArtifactResolver(install GalleryBackendInstaller) (Backend
 		if request.Platform.OperatingSystem != "linux" || request.Platform.Architecture != "amd64" {
 			return BackendArtifactSelection{}, fmt.Errorf("%w: LocalAI gallery backend requires linux/amd64", artifacts.ErrUnsupportedPlatform)
 		}
-		name, err := galleryBackendName(request.Backend, defaultBackendAccelerator(request.Platform))
+		accelerator := defaultBackendAccelerator(request.Platform)
+		name, err := galleryBackendName(request.Backend, accelerator)
 		if err != nil {
 			return BackendArtifactSelection{}, err
 		}
@@ -37,7 +38,7 @@ func NewGalleryBackendArtifactResolver(install GalleryBackendInstaller) (Backend
 		if err != nil {
 			return BackendArtifactSelection{}, fmt.Errorf("install LocalAI gallery backend %q: %w", name, err)
 		}
-		return BackendArtifactSelection{InstalledPath: path}, nil
+		return BackendArtifactSelection{InstalledPath: path, Accelerator: accelerator}, nil
 	}, nil
 }
 

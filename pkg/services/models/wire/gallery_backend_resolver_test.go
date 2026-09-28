@@ -13,9 +13,9 @@ import (
 func TestGalleryBackendArtifactResolverSelectsCUDAWithoutCPUFallback(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		backend        string
-		expectedCUDA   string
-		expectedPath   string
+		backend      string
+		expectedCUDA string
+		expectedPath string
 	}{
 		{"localai-llamacpp", "cuda12-llama-cpp", "/cache/backends/cuda12-llama-cpp"},
 		{"localai-whisper", "cuda12-whisper", "/cache/backends/cuda12-whisper"},
@@ -42,7 +42,7 @@ func TestGalleryBackendArtifactResolverSelectsCUDAWithoutCPUFallback(t *testing.
 			if err != nil {
 				t.Fatalf("resolve CUDA backend %s: %v", tt.backend, err)
 			}
-			if installed != tt.expectedCUDA || selection.InstalledPath != tt.expectedPath {
+			if installed != tt.expectedCUDA || selection.InstalledPath != tt.expectedPath || selection.Accelerator != "cuda" {
 				t.Fatalf("installed = %q, selection = %#v, want installed = %q, path = %q", installed, selection, tt.expectedCUDA, tt.expectedPath)
 			}
 		})
