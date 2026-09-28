@@ -1676,3 +1676,5 @@ observations. The installed Windows binary was rebuilt as
 `C:\Users\andre\bin\you-04fdf3a21d.exe` (SHA-256
 `7A2E19ECEB41599EF5F6B0C2DF19AE6C406942AEC6011C202F530B20948A7B41`),
 and the Codex MCP command for new connections points to it.
+A fresh standalone MCP stdio handshake from this binary returned the expected
+protocol initialization and advertised `you.subagent` in `tools/list`.
