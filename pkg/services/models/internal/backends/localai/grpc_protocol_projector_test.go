@@ -423,3 +423,50 @@ func (backend *blockedLoadModelBackend) LoadModel(ctx context.Context, _ *ModelO
 func (*blockedLoadModelBackend) Predict(context.Context, *PredictOptions) (*Reply, error) {
 	return nil, status.Error(codes.Unimplemented, "not used by readiness witness")
 }
+
+func TestPinnedGRPCProtocolClientFailsOnEmptyPredictResponse(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingGRPCConnection{}
+	client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
+	response, err := client.Predict(
+		WithInvocationEndpoint(context.Background(), "127.0.0.1:50051"),
+		PredictRequest{Prompt: "describe"},
+	)
+	if err == nil {
+		t.Fatal("Predict() error = nil, want typed failure for empty response")
+	}
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Predict() error = %v, want typed InvocationFailure", err)
+	}
+	if failure.Class != models.InvocationFailureClassBackendProtocol {
+		t.Fatalf("failure.Class = %v, want BackendProtocol", failure.Class)
+	}
+	if !strings.Contains(failure.Message, "LocalAI Predict response was empty") {
+		t.Fatalf("failure.Message = %q, want it to contain %q", failure.Message, "LocalAI Predict response was empty")
+	}
+	if response.Text != "" {
+		t.Fatalf("Predict() response.Text = %q, want empty", response.Text)
+	}
+}
+
+func TestPinnedGRPCProtocolClientUsesChatDeltaTextWhenLegacyMessageIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&Reply{ChatDeltas: []*ChatDelta{
+		{Content: "generated "}, {Content: "from chat deltas"},
+	}})
+	client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
+	response, err := client.Predict(
+		WithInvocationEndpoint(context.Background(), "127.0.0.1:50051"),
+		PredictRequest{Prompt: "describe"},
+	)
+	if err != nil {
+		t.Fatalf("Predict() error = %v", err)
+	}
+	if response.Text != "generated from chat deltas" {
+		t.Fatalf("Predict() text = %q, want concatenated chat-delta content", response.Text)
+	}
+}

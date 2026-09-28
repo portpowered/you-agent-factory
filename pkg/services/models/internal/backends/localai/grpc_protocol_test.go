@@ -117,6 +117,11 @@ func TestPinnedGRPCProtocolClientPreservesBinaryMediaThroughBase64Fields(t *test
 	t.Parallel()
 
 	connection := &recordingGRPCConnection{}
+	payload, err := proto.Marshal(&Reply{Message: []byte("ok")})
+	if err != nil {
+		t.Fatalf("Marshal(Reply) error = %v", err)
+	}
+	connection.response = payload
 	client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
 	image := string([]byte{0x00, 0xff, 0x10, 0x80, 0x7f})
 	if _, err := client.Predict(
@@ -134,26 +139,6 @@ func TestPinnedGRPCProtocolClientPreservesBinaryMediaThroughBase64Fields(t *test
 	}
 	if string(decoded) != image {
 		t.Fatalf("decoded image = %v, want original bytes %v", decoded, []byte(image))
-	}
-}
-
-func TestPinnedGRPCProtocolClientUsesChatDeltaTextWhenLegacyMessageIsEmpty(t *testing.T) {
-	t.Parallel()
-
-	connection := &recordingGRPCConnection{}
-	connection.response, _ = proto.Marshal(&Reply{ChatDeltas: []*ChatDelta{
-		{Content: "generated "}, {Content: "from chat deltas"},
-	}})
-	client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
-	response, err := client.Predict(
-		WithInvocationEndpoint(context.Background(), "127.0.0.1:50051"),
-		PredictRequest{Prompt: "describe"},
-	)
-	if err != nil {
-		t.Fatalf("Predict() error = %v", err)
-	}
-	if response.Text != "generated from chat deltas" {
-		t.Fatalf("Predict() text = %q, want concatenated chat-delta content", response.Text)
 	}
 }
 

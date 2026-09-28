@@ -275,6 +275,16 @@ func (client grpcProtocolClient) Predict(
 		}
 		return PredictResponse{}, protocolFailure("LocalAI Predict request failed", err)
 	}
+	return decodePredictResponse(responsePayload)
+}
+
+// decodePredictResponse converts the pinned LocalAI Predict wire payload into
+// the public response, preferring the legacy message bytes and falling back to
+// concatenated chat deltas. An empty payload is a typed protocol failure.
+func decodePredictResponse(responsePayload []byte) (PredictResponse, error) {
+	if len(responsePayload) == 0 {
+		return PredictResponse{}, protocolFailure("LocalAI Predict response was empty", nil)
+	}
 	response := &Reply{}
 	if err := proto.Unmarshal(responsePayload, response); err != nil {
 		return PredictResponse{}, protocolFailure("LocalAI Predict response was malformed", err)

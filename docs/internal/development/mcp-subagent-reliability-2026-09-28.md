@@ -1563,3 +1563,32 @@ unadvertised model `does-not-exist`. The provider/Worker path recorded
 and guidance to verify the selected model. This end-to-end check confirms the
 new typed classification works for an actual invalid-model failure. It does
 not explain the separate `big-pickle` generic failure.
+
+An OpenCode MCP edit (session `d7859fe6-9d31-4cd4-86df-decae60566ec`)
+added a typed LocalAI Predict failure for an empty gRPC response payload.
+This separates a zero-byte response from a decoded reply with no text, which
+the prior protobuf decoder conflated. Focused tests initially passed, but
+`pkg-maint` found a new complexity violation and an oversized test file. The
+bounded OpenCode lint repair (session `8b336e18-f3eb-4cf8-96b7-bc8dd6a5f050`)
+timed out after partial edits, leaving one test uncompilable and the file two
+lines over the limit. A Codex MCP continuation (session
+`8080888d-1cd8-427b-b37a-c1e85b30d08b`) repaired the declaration, moved
+the focused tests into an existing smaller test file, and retained the
+response-decoding helper. Independent LocalAI package tests, `pkg-maint`,
+`pkg-file-count`, `fmt-check`, and `git diff --check` passed. The observed
+red-then-blue video only proved that no text reached the codec; a repeat with
+this guard is needed to distinguish a zero-byte payload from a decoded reply
+with empty text. The guard does not claim to fix that content failure.
+
+A Codex MCP read-only audit (session `d98cce9c-1f8f-43c8-88c7-6bcc44d1b792`)
+traced the earlier Pi false success through the ACP adapter: a non-error
+`session/prompt` response and nonempty retry text become a successful worker
+result. Inspection of installed `pi-acp` 0.0.34 source then found that its
+`PiAcpAgent.prompt` maps an internal `result === "error"` to ACP
+`stopReason: "end_turn"`; its turn settlement path also resolves `end_turn`.
+The Pi session JSONL retained `stopReason="error"` for the earlier failure,
+but that typed status was not represented in the ACP facts consumed by this
+adapter. The next safe fix must preserve a typed Pi failure signal across the
+provider boundary (or use a direct Pi protocol) rather than classify the
+English retry-status text as an error. The installed package is the current
+published 0.0.34 version at the time of this audit.
