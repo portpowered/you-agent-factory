@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
 
 // Control applies live closure through the owner attached to the canonical
@@ -27,38 +26,8 @@ func (r *Root) Control(ctx context.Context, request factorysessions.SessionContr
 	if session == nil {
 		return factorysessions.SessionControlResult{}, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
 	}
-	bound := runtimebinding.SessionStateFrom(session)
-	if bound == nil || bound.Owner == nil {
-		return factorysessions.SessionControlResult{}, fmt.Errorf("%w: session owner is unavailable", factorysessions.ErrRuntimeNotAvailable)
-	}
 	if request.Operation != factorysessions.SessionControlClose {
-		owner, ok := bound.Owner.(interface {
-			ApplyOwnedControl(context.Context, string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
-		})
-		if !ok {
-			return factorysessions.SessionControlResult{}, fmt.Errorf("%w: session control is unavailable", factorysessions.ErrRuntimeNotAvailable)
-		}
-		control := request.Control
-		if control.RequestID == "" {
-			control.RequestID = strings.TrimSpace(request.Correlation.RequestID)
-		}
-		if control.TurnID == "" {
-			control.TurnID = strings.TrimSpace(request.Correlation.TurnID)
-		}
-		key := ""
-		if control.RequestID != "" {
-			key = string(request.Operation) + ":" + control.RequestID + ":" + control.TurnID
-		}
-		return bound.ApplyControlOnce(key, func() (factorysessions.SessionControlResult, error) {
-			applied, err := owner.ApplyOwnedControl(ctx, sessionID, factorysessions.LifecycleControlKind(request.Operation), control)
-			if err != nil {
-				return factorysessions.SessionControlResult{}, err
-			}
-			return factorysessions.SessionControlResult{
-				SessionID: sessionID, Mode: request.Mode, Operation: request.Operation,
-				Outcome: applied.Outcome, Status: applied.Status, Links: applied.Links,
-			}, nil
-		})
+		return r.Assembly.ApplyLiveControl(ctx, request)
 	}
 	if err := r.Assembly.CloseSession(ctx, sessionID); err != nil {
 		return factorysessions.SessionControlResult{}, err

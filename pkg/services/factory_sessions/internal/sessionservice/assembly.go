@@ -777,17 +777,42 @@ func (a *Assembly) OpenFactorySession(ctx context.Context, request factorysessio
 }
 
 func (a *Assembly) InvokeFactorySession(ctx context.Context, sessionID string, request factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
-	owner, err := a.detachedOwner(sessionID)
+	session := a.Resolve(sessionID)
+	if session == nil {
+		return factorysessions.InvocationResult{}, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
+	}
+	bound := runtimebinding.SessionStateFrom(session)
+	if bound == nil || bound.Invoker == nil {
+		return factorysessions.InvocationResult{}, fmt.Errorf("%w: session invocation owner is unavailable", factorysessions.ErrRuntimeNotAvailable)
+	}
+	result, err := bound.Invoker.Invoke(ctx, sessionID, request)
 	if err != nil {
 		return factorysessions.InvocationResult{}, err
 	}
-	return owner.InvokeFactorySession(ctx, sessionID, request)
+	return factorysessions.InvocationResult{
+		RequestID: result.RequestID, TraceID: result.TraceID,
+		Status:        factorysessions.InvocationTerminalStatus(result.Status),
+		PrimaryResult: result.PrimaryResult, ErrorCode: result.ErrorCode,
+		Message: result.Message, SessionID: result.SessionID, WorkID: result.WorkID,
+		WorkName: result.WorkName, WorkState: result.WorkState,
+	}, nil
 }
 
 func (a *Assembly) ActivateNamedFactory(ctx context.Context, name string) error {
-	owner, err := a.activeDetachedOwner()
-	if err != nil {
-		return err
+	if a == nil || a.state == nil {
+		return factorysessions.ErrRuntimeNotAvailable
+	}
+	session := a.state.Current()
+	if session == nil {
+		return factorysessions.ErrSessionNotFound
+	}
+	bound := runtimebinding.SessionStateFrom(session)
+	if bound == nil {
+		return factorysessions.ErrRuntimeNotAvailable
+	}
+	owner, ok := bound.Owner.(interface { ActivateNamedFactory(context.Context, string) error })
+	if !ok || owner == nil {
+		return fmt.Errorf("%w: session activation owner is unavailable", factorysessions.ErrRuntimeNotAvailable)
 	}
 	return owner.ActivateNamedFactory(ctx, name)
 }
@@ -824,43 +849,23 @@ func (a *Assembly) recordingRoot() (string, error) {
 }
 
 func (a *Assembly) PauseLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	owner, err := a.detachedLiveControlOwner(sessionID)
-	if err != nil {
-		return factorysessions.LifecycleControlResult{}, err
-	}
-	return owner.PauseLiveFactorySession(ctx, sessionID, request)
+	return a.applyLiveControlLegacy(ctx, sessionID, factorysessions.SessionControlPause, request)
 }
 
 func (a *Assembly) ResumeLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	owner, err := a.detachedLiveControlOwner(sessionID)
-	if err != nil {
-		return factorysessions.LifecycleControlResult{}, err
-	}
-	return owner.ResumeLiveFactorySession(ctx, sessionID, request)
+	return a.applyLiveControlLegacy(ctx, sessionID, factorysessions.SessionControlResume, request)
 }
 
 func (a *Assembly) CancelLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	owner, err := a.detachedLiveLifecycleControlOwner(sessionID)
-	if err != nil {
-		return factorysessions.LifecycleControlResult{}, err
-	}
-	return owner.CancelLiveFactorySession(ctx, sessionID, request)
+	return a.applyLiveControlLegacy(ctx, sessionID, factorysessions.SessionControlCancel, request)
 }
 
 func (a *Assembly) TerminateLiveFactorySession(ctx context.Context, sessionID string, request factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error) {
-	owner, err := a.detachedLiveLifecycleControlOwner(sessionID)
-	if err != nil {
-		return factorysessions.LifecycleControlResult{}, err
-	}
-	return owner.TerminateLiveFactorySession(ctx, sessionID, request)
+	return a.applyLiveControlLegacy(ctx, sessionID, factorysessions.SessionControlTerminate, request)
 }
 
 func (a *Assembly) CloseFactorySession(ctx context.Context, sessionID string) error {
-	owner, err := a.detachedLiveControlOwner(sessionID)
-	if err != nil {
-		return err
-	}
-	return owner.CloseFactorySession(ctx, sessionID)
+	return a.CloseSession(ctx, sessionID)
 }
 
 func (a *Assembly) detachedLiveLifecycleControlOwner(sessionID string) (factorysessions.LiveLifecycleControlService, error) {

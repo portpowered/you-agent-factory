@@ -479,6 +479,12 @@ func canonicalInvocationRequest(
 		sourceKind := factorysessions.InvocationInputSourceKind(request.Input.Source)
 		legacy.SourceKind = &sourceKind
 	}
+	if request.ContentProvided {
+		legacy.Content = work.CloneWorkContentParts(request.Content)
+		legacy.ContentProvided = true
+		sourceKind := factorysessions.InvocationInputSourceKindText
+		legacy.SourceKind = &sourceKind
+	}
 	if requestID := strings.TrimSpace(request.Correlation.RequestID); requestID != "" {
 		legacy.RequestID = &requestID
 	}
