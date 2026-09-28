@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
@@ -15,6 +16,7 @@ import (
 
 type projectionOwnerStub struct {
 	status string
+	cfg    *factorydefinitions.FactoryConfig
 }
 
 func TestAssemblyInvokesOwnerOfSelectedCanonicalSession(t *testing.T) {
@@ -65,7 +67,33 @@ func (owner projectionOwnerStub) BuildSessionProjectionContext(_ context.Context
 		},
 		LifecycleControlStatus: owner.status,
 		BackendScopeID:         "backend-" + session.ID,
+		FactoryCfg:             owner.cfg,
 	}, nil
+}
+
+func TestAssemblyReadsLiveResultFromCanonicalSession(t *testing.T) {
+	state := newWorkResolverSessionState()
+	assembly := &Assembly{state: state, registry: state.Registry(), sessionResultProjection: &canonicalInspectionResultProjectionFake{
+		result: factoryruntime.SessionResultProjection{Live: factoryruntime.LiveSessionResult{SessionID: "result-1", Status: "SUCCEEDED"}},
+	}}
+	checkpoint := &canonicalInspectionCheckpointStore{records: []factorydefinitions.JavaScriptCheckpointRecord{{ID: "checkpoint-1", ArtifactID: "artifact-1"}}}
+	assembly.registry.Upsert(&livesession.LiveSession{
+		ID: "result-1", JavaScriptCheckpoints: checkpoint,
+		Handle: &runtimebinding.SessionState{Owner: projectionOwnerStub{cfg: &factorydefinitions.FactoryConfig{
+			Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{Kind: factorydefinitions.OrchestratorKindJavaScript},
+		}}},
+	}, true)
+	complete, err := assembly.ReadResult(context.Background(), factorysessions.SessionResultReadRequest{SessionID: "result-1", Mode: factorysessions.SessionOperationModeLive})
+	if err != nil || complete.Live == nil || complete.Live.Status != "SUCCEEDED" {
+		t.Fatalf("complete result = %#v, error %v", complete, err)
+	}
+	partial, err := assembly.ReadResult(context.Background(), factorysessions.SessionResultReadRequest{
+		SessionID: "result-1", Mode: factorysessions.SessionOperationModeLive,
+		Request: factorysessions.ResultRequest{Mode: factorysessions.ResultModePartial},
+	})
+	if err != nil || partial.Live == nil || len(partial.Live.CheckpointRefs) != 1 || partial.Live.CheckpointRefs[0].ID != "checkpoint-1" {
+		t.Fatalf("partial result = %#v, error %v", partial, err)
+	}
 }
 
 func TestAssemblyReadsFullProjectionFromCanonicalSessionRegistry(t *testing.T) {

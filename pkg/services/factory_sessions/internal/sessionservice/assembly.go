@@ -937,25 +937,17 @@ func (a *Assembly) GetResult(ctx context.Context, sessionID string, request fact
 }
 
 func (a *Assembly) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryruntime.LiveSessionResult, error) {
-	owner, err := a.detachedLiveResultOwner(sessionID)
-	if err != nil {
-		return factoryruntime.LiveSessionResult{}, err
-	}
-	return owner.GetFactorySessionResult(ctx, sessionID)
+	return controlplane.GetLiveFactorySessionResult(ctx, a, a.sessionResultProjection, sessionID)
 }
 
 func (a *Assembly) GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryruntime.PartialSessionResult, error) {
-	owner, err := a.detachedLiveResultOwner(sessionID)
-	if err != nil {
-		return factoryruntime.PartialSessionResult{}, err
-	}
-	return owner.GetFactorySessionPartialResult(ctx, sessionID)
+	return controlplane.GetLiveFactorySessionPartialResult(ctx, a, sessionID)
 }
 
 func (a *Assembly) SubscribeFactoryResponseEvents(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {
-	owner, err := a.detachedOwner(request.SessionID)
-	if err != nil {
-		return nil, err
+	session := a.Resolve(request.SessionID)
+	if session == nil {
+		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, request.SessionID)
 	}
-	return owner.SubscribeFactoryResponseEvents(ctx, request)
+	return subscribeLiveResponses(ctx, a.responseStreams, session, request)
 }

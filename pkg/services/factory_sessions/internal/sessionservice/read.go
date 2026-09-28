@@ -515,8 +515,18 @@ func (s *Service) readCanonicalLiveResult(
 			"%w: live result host is required", factorysessions.ErrRuntimeNotAvailable,
 		)
 	}
+	return readCanonicalLiveResult(ctx, s.host, s.results, sessionID, request)
+}
+
+func readCanonicalLiveResult(
+	ctx context.Context,
+	host controlplane.ResultReadHost,
+	projection workflowresult.SessionResultProjectionOperation,
+	sessionID string,
+	request factorysessions.ResultRequest,
+) (factorysessions.SessionResultReadResult, error) {
 	if request.Mode == factorysessions.ResultModePartial {
-		result, err := controlplane.GetLiveFactorySessionPartialResult(ctx, s.host, sessionID)
+		result, err := controlplane.GetLiveFactorySessionPartialResult(ctx, host, sessionID)
 		if err != nil {
 			return factorysessions.SessionResultReadResult{}, err
 		}
@@ -532,12 +542,12 @@ func (s *Service) readCanonicalLiveResult(
 			},
 		}, nil
 	}
-	if s.results == nil {
+	if projection == nil {
 		return factorysessions.SessionResultReadResult{}, fmt.Errorf(
 			"%w: live result projection is required", factorysessions.ErrRuntimeNotAvailable,
 		)
 	}
-	result, err := controlplane.GetLiveFactorySessionResult(ctx, s.host, s.results, sessionID)
+	result, err := controlplane.GetLiveFactorySessionResult(ctx, host, projection, sessionID)
 	if err != nil {
 		return factorysessions.SessionResultReadResult{}, err
 	}
