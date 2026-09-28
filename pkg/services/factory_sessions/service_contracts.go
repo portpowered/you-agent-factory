@@ -587,27 +587,28 @@ type SessionArtifactStorageConfig struct {
 // SessionRuntimeSelection carries value-only runtime selections for
 // process-owned activation.
 type SessionRuntimeSelection struct {
-	SystemConfigHome     string
-	LogDirectory         string
-	MetricsDirectory     string
-	OperatorDefaults     operatorsettings.ResolvedDefaults
-	DefinitionSourcePath string
-	ExecutionBaseDir     string
-	CanonicalSessionID   string
-	BackendScopeID       string
-	SystemConfigPath     string
-	WorkFile             string
-	ModelCacheDirectory  string
-	Mode                 SessionRuntimeMode
-	Verbose              bool
-	RuntimeInstanceID    string
-	LogPolicy            SessionArtifactPolicy
-	LogConfig            SessionArtifactStorageConfig
-	MetricsPolicy        SessionArtifactPolicy
-	MetricsConfig        SessionArtifactStorageConfig
-	Host                 RuntimeHostRequest
-	Workers              SessionWorkerSelection
-	Recording            SessionRecordingSelection
+	SystemConfigHome              string
+	LogDirectory                  string
+	MetricsDirectory              string
+	OperatorDefaults              operatorsettings.ResolvedDefaults
+	DefinitionSourcePath          string
+	DefinitionInvocationArguments *work.InvocationArguments
+	ExecutionBaseDir              string
+	CanonicalSessionID            string
+	BackendScopeID                string
+	SystemConfigPath              string
+	WorkFile                      string
+	ModelCacheDirectory           string
+	Mode                          SessionRuntimeMode
+	Verbose                       bool
+	RuntimeInstanceID             string
+	LogPolicy                     SessionArtifactPolicy
+	LogConfig                     SessionArtifactStorageConfig
+	MetricsPolicy                 SessionArtifactPolicy
+	MetricsConfig                 SessionArtifactStorageConfig
+	Host                          RuntimeHostRequest
+	Workers                       SessionWorkerSelection
+	Recording                     SessionRecordingSelection
 }
 
 // SessionWorkerSelection carries worker-side selections for one session.

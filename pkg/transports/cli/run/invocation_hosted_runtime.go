@@ -273,10 +273,14 @@ func (runner hostedInvocationRunner) HostedInvocation() HostedInvocationOperatio
 
 func (runner hostedInvocationRunner) ResumeRecoveryMetadata() *recordings.ResumeRecoveryMetadata {
 	if runner.recovery == nil {
-		return nil
+		return resumeRecoveryMetadataForRunner(runner.runner)
 	}
 	clone := *runner.recovery
 	return &clone
+}
+
+func (runner hostedInvocationRunner) ReplayMetadataWarnings() []recordings.MetadataMismatchWarning {
+	return replayMetadataWarningsForRunner(runner.runner)
 }
 
 func (runner hostedInvocationRunner) RuntimeHostBinding(ctx context.Context) (initializer.RuntimeHostBinding, error) {
@@ -320,7 +324,10 @@ func WithHostedInvocation(
 
 type cleanInvocationSnapshotRunner struct {
 	runner   initializer.LocalRuntimeRunner
-	provider factoryruntime.Service
+	provider interface {
+		CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error)
+		ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult
+	}
 }
 
 func (runner cleanInvocationSnapshotRunner) Run(ctx context.Context) error {
@@ -389,6 +396,10 @@ func (runner cleanInvocationSnapshotRunner) ResumeRecoveryMetadata() *recordings
 	return resumeRecoveryMetadataForRunner(runner.runner)
 }
 
+func (runner cleanInvocationSnapshotRunner) ReplayMetadataWarnings() []recordings.MetadataMismatchWarning {
+	return replayMetadataWarningsForRunner(runner.runner)
+}
+
 func (runner cleanInvocationSnapshotRunner) HistoricalReplay() *factorysessions.HistoricalReplayInspection {
 	provider, ok := runner.runner.(interface {
 		HistoricalReplay() *factorysessions.HistoricalReplayInspection
@@ -403,7 +414,10 @@ func (runner cleanInvocationSnapshotRunner) HistoricalReplay() *factorysessions.
 // beside the neutral lifecycle runner for finite --work batch reporting.
 func WithCleanInvocationSnapshot(
 	runner initializer.LocalRuntimeRunner,
-	provider factoryruntime.Service,
+	provider interface {
+		CleanInvocationSnapshot(context.Context) (factoryruntime.CleanInvocationSnapshot, error)
+		ControlWaitToComplete(factoryruntime.WaitToCompleteRequest) factoryruntime.WaitToCompleteResult
+	},
 ) initializer.LocalRuntimeRunner {
 	if runner == nil || provider == nil {
 		return runner

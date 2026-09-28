@@ -7,6 +7,7 @@ import (
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
@@ -31,18 +32,18 @@ func runSessionStartRequest(cfg runcli.RunConfig, mocks *workers.MockWorkersConf
 		Mode:           factorysessions.SessionOperationModeLive,
 		FolderPath:     cfg.Dir,
 		Persistence:    factorysessions.PersistencePolicyEnabled,
-		ActivationOnly: true,
 		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
-			SystemConfigHome:     cfg.HomeDir,
-			DefinitionSourcePath: cfg.FactoryConfigPath,
-			ExecutionBaseDir:     cfg.ExecutionBaseDir,
-			CanonicalSessionID:   cfg.CanonicalSessionID,
-			WorkFile:             cfg.WorkFile,
-			ModelCacheDirectory:  cfg.ModelCacheDir,
-			Mode:                 mode,
-			Verbose:              cfg.Verbose,
-			LogDirectory:         logDirectory,
-			LogPolicy:            factorysessions.SessionArtifactPolicyEnabled,
+			SystemConfigHome:              cfg.HomeDir,
+			DefinitionSourcePath:          cfg.FactoryConfigPath,
+			DefinitionInvocationArguments: work.CloneInvocationArguments(cfg.InvocationArguments),
+			ExecutionBaseDir:              cfg.ExecutionBaseDir,
+			CanonicalSessionID:            cfg.CanonicalSessionID,
+			WorkFile:                      cfg.WorkFile,
+			ModelCacheDirectory:           cfg.ModelCacheDir,
+			Mode:                          mode,
+			Verbose:                       cfg.Verbose,
+			LogDirectory:                  logDirectory,
+			LogPolicy:                     factorysessions.SessionArtifactPolicyEnabled,
 			LogConfig: factorysessions.SessionArtifactStorageConfig{
 				MaxSize: cfg.RuntimeLogConfig.MaxSize, MaxBackups: cfg.RuntimeLogConfig.MaxBackups,
 				MaxAge: cfg.RuntimeLogConfig.MaxAge, Compress: cfg.RuntimeLogConfig.Compress,

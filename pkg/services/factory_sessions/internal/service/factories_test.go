@@ -221,24 +221,21 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 	if err != nil {
 		t.Fatalf("NewFactory() error = %v", err)
 	}
-	opened, err := factory.OpenApplicationRuntime(
-		t.Context(),
-		&factorysessions.RuntimeOpeningRequest{
-			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
-			Recordings:        recordings.RuntimeOpeningRequest{ReplayPath: "recording.json"},
-		},
-	)
+	opened, historical, err := factory.InspectHistoricalApplication(t.Context(), factorysessions.SessionStartRequest{
+		FolderPath: t.TempDir(),
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{Recording: factorysessions.SessionRecordingSelection{ReplayPath: "recording.json"}},
+	})
 	if err != nil {
-		t.Fatalf("OpenApplicationRuntime() error = %v", err)
+		t.Fatalf("InspectHistoricalApplication() error = %v", err)
 	}
-	if opened.HistoricalReplay == nil {
-		t.Fatal("OpenApplicationRuntime() HistoricalReplay = nil, want inspection-only replay")
+	if !historical || opened.Replay == nil {
+		t.Fatal("InspectHistoricalApplication() Replay = nil, want inspection-only replay")
 	}
-	if opened.Process == nil {
-		t.Fatal("OpenApplicationRuntime() Process = nil, want historical replay lifecycle")
+	if opened.Close == nil {
+		t.Fatal("InspectHistoricalApplication() Close = nil, want historical replay cleanup")
 	}
-	if !slices.Equal(events, []string{"runtime-instance-id", "session-logger", "replay-input"}) {
-		t.Fatalf("historical replay opening events = %v, want no live runtime collaborators", events)
+	if !slices.Equal(events, []string{"replay-input", "runtime-instance-id", "session-logger"}) {
+		t.Fatalf("historical replay inspection events = %v, want one replay input before inspection resources", events)
 	}
 	if len(replayInputs.requests) != 1 || replayInputs.requests[0].Path != "recording.json" {
 		t.Fatalf("replay input requests = %#v, want recording.json once", replayInputs.requests)

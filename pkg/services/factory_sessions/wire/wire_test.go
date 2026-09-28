@@ -125,14 +125,8 @@ func TestNewServiceFromAssemblyRetainsTheInjectedOpening(t *testing.T) {
 	if service == nil {
 		t.Fatal("NewServiceFromAssembly() returned nil service")
 	}
-	var retained interface {
-		RuntimeOpening() RuntimeOpeningCapability
-	} = service
-	if retained == nil {
-		t.Fatal("published service does not expose the owner-private runtime opening")
-	}
-	if got := retained.RuntimeOpening(); any(got) != any(opening) {
-		t.Fatalf("retained runtime opening = %T(%[1]v), want injected opening %T(%[2]v)", got, opening)
+	if service != opening {
+		t.Fatal("published service changed the process root identity")
 	}
 }
 
@@ -149,10 +143,9 @@ func TestNewServiceFromAssemblyReturnsDirectRootIdentity(t *testing.T) {
 		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}
 	var service factorysessions.Service = root
-	var app ApplicationRuntimeOpening = root
 	var inv InvocationRuntimeOpening = root
 	var exe ExecutionRuntimeOpening = root
-	if any(service) != any(root) || any(app) != any(root) || any(inv) != any(root) || any(exe) != any(root) {
+	if any(service) != any(root) || any(inv) != any(root) || any(exe) != any(root) {
 		t.Fatal("Service and opening views are not the exact same *Root instance")
 	}
 }

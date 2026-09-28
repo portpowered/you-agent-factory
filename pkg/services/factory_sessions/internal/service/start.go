@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -150,6 +151,20 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 	bound.Activation = activation
 	bound.Process = products.application.Process
 	bound.Diagnostics = products.application.Resources.Diagnostics
+	bound.ModelInvoker = products.invocation.ModelInvoker
+	bound.InputResolver = products.invocation.InputResolver
+	bound.FactoryRuntime = products.application.FactoryRuntime
+	bound.ModelsScope = products.application.ModelsScope
+	bound.WorkerSessions = products.application.WorkerSessions
+	bound.Logger = products.application.Logger
+	bound.Reader = products.application.Visualization.Reader
+	bound.Projections = products.application.Visualization.Projections
+	bound.Clock = products.application.Resources.Clock
+	bound.OperatorSettingsPath = products.application.OperatorSettingsPath
+	bound.Recordings = products.application.Recordings
+	bound.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), products.application.ReplayMetadataWarnings...)
+	bound.ResumeRecoveryMetadata = products.application.ResumeRecoveryMetadata
+	bound.OrderlyStop = products.application.OrderlyStop
 	bound.SetStartRequestID(strings.TrimSpace(request.Correlation.RequestID))
 	bound.InheritTerminalControl(previousControl)
 	status := "RUNNING"
@@ -249,7 +264,8 @@ func runtimeRequestForStart(request factorysessions.SessionStartRequest) (factor
 	return factorysessions.RuntimeOpeningRequest{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
 			Directory: folder, SourcePath: selection.DefinitionSourcePath,
-			ExecutionBaseDir: selection.ExecutionBaseDir,
+			InvocationArguments: work.CloneInvocationArguments(selection.DefinitionInvocationArguments),
+			ExecutionBaseDir:    selection.ExecutionBaseDir,
 		},
 		FactoryRuntime: factoryruntime.RuntimeOpeningRequest{
 			Mode: mode, Verbose: selection.Verbose, RuntimeInstanceID: selection.RuntimeInstanceID,

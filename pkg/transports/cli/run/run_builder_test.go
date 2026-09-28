@@ -22,7 +22,6 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -75,10 +74,10 @@ type testRuntimeSelections struct {
 func testRuntimeOpeningRequestFactory(
 	cfg RunConfig,
 	mockWorkers *workers.MockWorkersConfig,
-) *factorysessions.RuntimeOpeningRequest {
-	mode := interfaces.RuntimeModeBatch
+) *factorysessions.SessionStartRequest {
+	mode := factorysessions.SessionRuntimeModeBatch
 	if cfg.Continuously {
-		mode = interfaces.RuntimeModeService
+		mode = factorysessions.SessionRuntimeModeService
 	}
 	logDirectory := cfg.RuntimeLogDir
 	metricsDirectory := cfg.RuntimeMetricsDir
@@ -90,69 +89,74 @@ func testRuntimeOpeningRequestFactory(
 			metricsDirectory = metrics.RuntimeMetricsRoot(cfg.HomeDir)
 		}
 	}
-	return &factorysessions.RuntimeOpeningRequest{
-		FactoryDefinition: interfaces.RuntimeOpeningRequest{
-			Directory: cfg.Dir, ExecutionBaseDir: cfg.ExecutionBaseDir,
-		},
-		FactoryRuntime: factoryruntime.RuntimeOpeningRequest{
-			Mode: mode, Verbose: cfg.Verbose,
-			LogDirectory: logDirectory, LogConfig: factoryruntime.RuntimeLogStorageConfig{
+	return &factorysessions.SessionStartRequest{
+		Mode:        factorysessions.SessionOperationModeLive,
+		FolderPath:  cfg.Dir,
+		Persistence: factorysessions.PersistencePolicyEnabled,
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+			ExecutionBaseDir: cfg.ExecutionBaseDir,
+			Mode:             mode, Verbose: cfg.Verbose,
+			LogDirectory: logDirectory, LogPolicy: factorysessions.SessionArtifactPolicyEnabled,
+			LogConfig: factorysessions.SessionArtifactStorageConfig{
 				MaxSize: cfg.RuntimeLogConfig.MaxSize, MaxBackups: cfg.RuntimeLogConfig.MaxBackups,
 				MaxAge: cfg.RuntimeLogConfig.MaxAge, Compress: cfg.RuntimeLogConfig.Compress,
 			},
-			MetricsDirectory: metricsDirectory, MetricsConfig: factoryruntime.RuntimeMetricsStorageConfig{
+			MetricsDirectory: metricsDirectory, MetricsPolicy: factorysessions.SessionArtifactPolicyEnabled,
+			MetricsConfig: factorysessions.SessionArtifactStorageConfig{
 				MaxSize: cfg.RuntimeMetricsConfig.MaxSize, MaxBackups: cfg.RuntimeMetricsConfig.MaxBackups,
 				MaxAge: cfg.RuntimeMetricsConfig.MaxAge, Compress: cfg.RuntimeMetricsConfig.Compress,
 			},
-		},
-		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
 			SystemConfigHome: cfg.HomeDir, WorkFile: cfg.WorkFile,
 			Host: factorysessions.RuntimeHostRequest{
-				Directory: cfg.Dir, RuntimeMode: mode, WorkFile: cfg.WorkFile,
+				Directory: cfg.Dir, RuntimeMode: interfaces.RuntimeMode(mode), WorkFile: cfg.WorkFile,
 				MockWorkers: mockWorkers != nil, Port: cfg.Port, AutoPort: cfg.AutoPort,
 			},
+			Workers: factorysessions.SessionWorkerSelection{
+				RunnerID: cfg.RunnerID, WorkerReasoningEffort: cfg.WorkerReasoningEffort, MockWorkers: mockWorkers,
+				InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
+			},
+			Recording: factorysessions.SessionRecordingSelection{
+				RecordPath: cfg.RecordPath, ReplayPath: cfg.ReplayPath, ResumePath: cfg.ResumePath, WorkflowID: cfg.Workflow,
+			},
+			ModelCacheDirectory: cfg.ModelCacheDir,
+			OperatorDefaults:    cfg.OperatorDefaults,
 		},
-		Workers: workers.RuntimeOpeningRequest{
-			RunnerID: cfg.RunnerID, WorkerReasoningEffort: cfg.WorkerReasoningEffort, MockWorkers: mockWorkers,
-			InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
-		},
-		Recordings: recordings.RuntimeOpeningRequest{
-			RecordPath: cfg.RecordPath, ReplayPath: cfg.ReplayPath, ResumePath: cfg.ResumePath, WorkflowID: cfg.Workflow,
-		},
-		ModelCacheDirectory: cfg.ModelCacheDir,
-		OperatorDefaults:    cfg.OperatorDefaults,
 	}
 }
 
-func flattenTestRuntimeRequest(request *factorysessions.RuntimeOpeningRequest) *testRuntimeSelections {
+func flattenTestRuntimeRequest(request *factorysessions.SessionStartRequest) *testRuntimeSelections {
 	if request == nil {
 		return nil
 	}
+	selection := request.RuntimeSelection
+	if selection == nil {
+		selection = &factorysessions.SessionRuntimeSelection{}
+	}
 	return &testRuntimeSelections{
-		Dir: request.FactoryDefinition.Directory, ExecutionBaseDir: request.FactoryDefinition.ExecutionBaseDir,
-		RunnerID: request.Workers.RunnerID, OperatorDefaults: request.OperatorDefaults,
-		DurableSessionPersistencePolicy: request.FactorySession.PersistencePolicy,
-		RuntimeMode:                     request.FactoryRuntime.Mode, Port: request.FactorySession.Host.Port,
-		AutoPort: request.FactorySession.Host.AutoPort,
-		Verbose:  request.FactoryRuntime.Verbose, RuntimeInstanceID: request.FactoryRuntime.RuntimeInstanceID,
-		BackendScopeID:      request.FactorySession.BackendScopeID,
-		SystemConfigHomeDir: request.FactorySession.SystemConfigHome, SystemConfigPath: request.FactorySession.SystemConfigPath,
-		RuntimeLogDir: request.FactoryRuntime.LogDirectory, RuntimeFileLoggingPolicy: request.FactoryRuntime.FileLoggingPolicy,
+		Dir: request.FolderPath, ExecutionBaseDir: selection.ExecutionBaseDir,
+		RunnerID: selection.Workers.RunnerID, OperatorDefaults: selection.OperatorDefaults,
+		DurableSessionPersistencePolicy: request.Persistence,
+		RuntimeMode:                     interfaces.RuntimeMode(selection.Mode), Port: selection.Host.Port,
+		AutoPort: selection.Host.AutoPort,
+		Verbose:  selection.Verbose, RuntimeInstanceID: selection.RuntimeInstanceID,
+		BackendScopeID:      selection.BackendScopeID,
+		SystemConfigHomeDir: selection.SystemConfigHome, SystemConfigPath: selection.SystemConfigPath,
+		RuntimeLogDir: selection.LogDirectory, RuntimeFileLoggingPolicy: factoryruntime.RuntimeFileLoggingPolicy(selection.LogPolicy),
 		RuntimeLogConfig: logging.RuntimeLogConfig{
-			MaxSize: request.FactoryRuntime.LogConfig.MaxSize, MaxBackups: request.FactoryRuntime.LogConfig.MaxBackups,
-			MaxAge: request.FactoryRuntime.LogConfig.MaxAge, Compress: request.FactoryRuntime.LogConfig.Compress,
-		}, RuntimeMetricsPolicy: request.FactoryRuntime.MetricsPolicy,
-		RuntimeMetricsDir: request.FactoryRuntime.MetricsDirectory, RuntimeMetricsConfig: platformmetrics.RuntimeMetricsConfig{
-			MaxSize: request.FactoryRuntime.MetricsConfig.MaxSize, MaxBackups: request.FactoryRuntime.MetricsConfig.MaxBackups,
-			MaxAge: request.FactoryRuntime.MetricsConfig.MaxAge, Compress: request.FactoryRuntime.MetricsConfig.Compress,
+			MaxSize: selection.LogConfig.MaxSize, MaxBackups: selection.LogConfig.MaxBackups,
+			MaxAge: selection.LogConfig.MaxAge, Compress: selection.LogConfig.Compress,
+		}, RuntimeMetricsPolicy: factoryruntime.RuntimeMetricsPolicy(selection.MetricsPolicy),
+		RuntimeMetricsDir: selection.MetricsDirectory, RuntimeMetricsConfig: platformmetrics.RuntimeMetricsConfig{
+			MaxSize: selection.MetricsConfig.MaxSize, MaxBackups: selection.MetricsConfig.MaxBackups,
+			MaxAge: selection.MetricsConfig.MaxAge, Compress: selection.MetricsConfig.Compress,
 		},
-		WorkFile: request.FactorySession.WorkFile, RecordPath: request.Recordings.RecordPath,
-		ReplayPath: request.Recordings.ReplayPath, ResumePath: request.Recordings.ResumePath, WorkflowID: request.Recordings.WorkflowID,
-		MockWorkersConfig:                       request.Workers.MockWorkers,
-		InvocationSkipPermissionsOverride:       request.Workers.InvocationSkipPermissionsOverride,
-		RecordFlushInterval:                     request.Recordings.FlushInterval,
-		SkipBuiltInRunnerPrerequisiteValidation: request.Workers.SkipBuiltInPrerequisiteValidation,
-		ModelCacheDir:                           request.ModelCacheDirectory,
+		WorkFile: selection.WorkFile, RecordPath: selection.Recording.RecordPath,
+		ReplayPath: selection.Recording.ReplayPath, ResumePath: selection.Recording.ResumePath, WorkflowID: selection.Recording.WorkflowID,
+		MockWorkersConfig:                       selection.Workers.MockWorkers,
+		InvocationSkipPermissionsOverride:       selection.Workers.InvocationSkipPermissionsOverride,
+		RecordFlushInterval:                     selection.Recording.FlushInterval,
+		SkipBuiltInRunnerPrerequisiteValidation: selection.Workers.SkipBuiltInPrerequisiteValidation,
+		ModelCacheDir:                           selection.ModelCacheDirectory,
 	}
 }
 
@@ -193,7 +197,7 @@ type testRunnerOpeners struct {
 
 func (f testRunnerOpeners) BuildRunner(
 	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
+	request *factorysessions.SessionStartRequest,
 	_ initializer.InvocationCancellation,
 	_ factorysessions.VisualizationSinkID,
 ) (initializer.LocalRuntimeRunner, error) {

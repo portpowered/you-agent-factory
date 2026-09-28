@@ -589,21 +589,18 @@ func TestNewFactorySelectsLegacyHistoricalReplayBeforeLiveRuntimeAssembly(t *tes
 	if err != nil {
 		t.Fatalf("NewFactory: %v", err)
 	}
-	opened, err := factory.OpenApplicationRuntime(
-		t.Context(),
-		&factorysessions.RuntimeOpeningRequest{
-			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
-			Recordings:        recordings.RuntimeOpeningRequest{ReplayPath: "legacy-replay.jsonl"},
-		},
-	)
+	opened, historical, err := factory.InspectHistoricalApplication(t.Context(), factorysessions.SessionStartRequest{
+		FolderPath: t.TempDir(),
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{Recording: factorysessions.SessionRecordingSelection{ReplayPath: "legacy-replay.jsonl"}},
+	})
 	if err != nil {
-		t.Fatalf("OpenApplicationRuntime: %v", err)
+		t.Fatalf("InspectHistoricalApplication: %v", err)
 	}
-	if opened.HistoricalReplay == nil || opened.HistoricalReplay.FactoryProjection.Availability != factorysessions.HistoricalReplayFactoryProjectionAvailable {
-		t.Fatalf("opened legacy replay = %#v, want AVAILABLE historical projection", opened.HistoricalReplay)
+	if !historical || opened.Replay == nil || opened.Replay.FactoryProjection.Availability != factorysessions.HistoricalReplayFactoryProjectionAvailable {
+		t.Fatalf("opened legacy replay = %#v, want AVAILABLE historical projection", opened.Replay)
 	}
-	if opened.Process == nil {
-		t.Fatalf("opened historical roles = %#v, want inert process role", opened)
+	if opened.Close == nil {
+		t.Fatalf("opened historical inspection = %#v, want cleanup", opened)
 	}
 	if loader.loadCalls != 1 || len(loader.reconstructTicks) != 1 || loader.reconstructTicks[0] != 9 {
 		t.Fatalf("legacy selection calls/ticks = %d/%v, want one load and selected tick 9", loader.loadCalls, loader.reconstructTicks)

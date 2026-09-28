@@ -46,15 +46,15 @@ func TestOpenHostedRuntimePreparesHomeBeforeRuntimeOpening(t *testing.T) {
 		0,
 		func(
 			_ context.Context,
-			_ *factorysessions.RuntimeOpeningRequest,
+			_ *factorysessions.SessionStartRequest,
 			_ initializer.InvocationCancellation,
 			_ factorysessions.VisualizationSinkID,
 		) (initializer.LocalRuntimeRunner, error) {
 			events = append(events, "runtime log and metrics")
 			return runFuncRunner(func(context.Context) error { return nil }), nil
 		},
-		func(RunConfig, *workers.MockWorkersConfig) *factorysessions.RuntimeOpeningRequest {
-			return &factorysessions.RuntimeOpeningRequest{}
+		func(RunConfig, *workers.MockWorkersConfig) *factorysessions.SessionStartRequest {
+			return &factorysessions.SessionStartRequest{}
 		},
 		nil,
 		nil,
@@ -92,14 +92,14 @@ func TestOpenHostedRuntimeUsesOpenedHostedInvocationCapability(t *testing.T) {
 		0,
 		func(
 			_ context.Context,
-			_ *factorysessions.RuntimeOpeningRequest,
+			_ *factorysessions.SessionStartRequest,
 			_ initializer.InvocationCancellation,
 			_ factorysessions.VisualizationSinkID,
 		) (initializer.LocalRuntimeRunner, error) {
 			return WithHostedInvocation(hostedInvocationCompletionRunner{}, sessions), nil
 		},
-		func(RunConfig, *workers.MockWorkersConfig) *factorysessions.RuntimeOpeningRequest {
-			return &factorysessions.RuntimeOpeningRequest{}
+		func(RunConfig, *workers.MockWorkersConfig) *factorysessions.SessionStartRequest {
+			return &factorysessions.SessionStartRequest{}
 		},
 		nil,
 		nil,

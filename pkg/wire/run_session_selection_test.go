@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
@@ -12,6 +13,9 @@ func TestRunSessionStartRequestPreservesCLISelections(t *testing.T) {
 	t.Parallel()
 	skip := true
 	mocks := workers.NewEmptyMockWorkersConfig()
+	arguments := &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"topic": {Values: []string{"session"}},
+	}}
 	request := runSessionStartRequest(runcli.RunConfig{
 		Dir: "factory", FactoryConfigPath: "factory/custom.json", ExecutionBaseDir: "execution",
 		FactorySessionID: "session-1", CanonicalSessionID: "canonical-1",
@@ -19,11 +23,12 @@ func TestRunSessionStartRequestPreservesCLISelections(t *testing.T) {
 		RuntimeLogDir: "logs", RuntimeMetricsDir: "metrics",
 		RunnerID: "runner", Worktree: "branch", WorkerReasoningEffort: "high",
 		InvocationSkipPermissionsOverride: &skip,
+		InvocationArguments:               arguments,
 		Continuously:                      true, Verbose: true, BindHost: "127.0.0.1", Port: 8080,
 		AutoPort: true, Pprof: true, RecordPath: "record.json", ReplayPath: "replay.json",
 		ResumePath: "resume.json", Workflow: "workflow",
 	}, mocks)
-	if request.Mode != factorysessions.SessionOperationModeLive || !request.ActivationOnly ||
+	if request.Mode != factorysessions.SessionOperationModeLive || request.ActivationOnly ||
 		request.Persistence != factorysessions.PersistencePolicyEnabled || request.SessionID != "session-1" ||
 		request.FolderPath != "factory" {
 		t.Fatalf("start request = %+v", request)
@@ -37,6 +42,10 @@ func TestRunSessionStartRequestPreservesCLISelections(t *testing.T) {
 		selection.LogPolicy != factorysessions.SessionArtifactPolicyEnabled ||
 		selection.MetricsPolicy != factorysessions.SessionArtifactPolicyEnabled {
 		t.Fatalf("runtime selection = %+v", selection)
+	}
+	if selection.DefinitionInvocationArguments == arguments ||
+		selection.DefinitionInvocationArguments.Arguments["topic"].Values[0] != "session" {
+		t.Fatalf("definition invocation arguments were not copied: %+v", selection.DefinitionInvocationArguments)
 	}
 	if selection.Host.Directory != "factory" || selection.Host.Host != "127.0.0.1" ||
 		selection.Host.Port != 8080 || !selection.Host.AutoPort || !selection.Host.Pprof || !selection.Host.MockWorkers {

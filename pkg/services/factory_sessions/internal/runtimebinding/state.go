@@ -8,6 +8,11 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 // SessionProjectionOwner is the existing per-session runtime state needed to
@@ -125,16 +130,30 @@ func runtimeContext(fallback context.Context, active *ActiveRuntime) context.Con
 // SessionState is the opaque Factory Runtime payload retained by a live
 // Factory Session.
 type SessionState struct {
-	Instance RuntimeInstance
-	Handle   RuntimeHandle
-	Spec     any
-	Owner    SessionProjectionOwner
-	Invoker  roles.CanonicalSessionInvoker
+	Instance      RuntimeInstance
+	Handle        RuntimeHandle
+	Spec          any
+	Owner         SessionProjectionOwner
+	Invoker       roles.CanonicalSessionInvoker
+	ModelInvoker  workers.ModelInvoker
+	InputResolver roles.InvocationInputResolver
 	// Process and Diagnostics are application lifecycle values owned by this
 	// canonical session record. The process root routes transport commands by
 	// session ID instead of retaining another runtime-opening graph.
-	Process     roles.ProcessRuntime
-	Diagnostics factoryruntime.RuntimeLogDiagnostics
+	Process                roles.ProcessRuntime
+	Diagnostics            factoryruntime.RuntimeLogDiagnostics
+	FactoryRuntime         factoryruntime.Service
+	ModelsScope            models.RuntimeScopeRef
+	WorkerSessions         workersessions.ObservationService
+	Logger                 *zap.Logger
+	Reader                 roles.RuntimeReader
+	Projections            recordings.ProjectionService
+	Clock                  factoryruntime.Clock
+	OperatorSettingsPath   string
+	Recordings             recordings.Service
+	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
+	ResumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
+	OrderlyStop            func(context.Context) error
 	// Activation retains lifecycle cleanup on the canonical session record.
 	Activation        interface{ Close(context.Context) error }
 	startRequestMu    sync.RWMutex
@@ -142,6 +161,27 @@ type SessionState struct {
 	controlMu         sync.Mutex
 	lastControlKey    string
 	lastControlResult factorysessions.SessionControlResult
+}
+
+func (s *SessionState) inheritApplicationValues(previous *SessionState) {
+	if s == nil || previous == nil {
+		return
+	}
+	s.FactoryRuntime = previous.FactoryRuntime
+	s.ModelsScope = previous.ModelsScope
+	s.WorkerSessions = previous.WorkerSessions
+	s.Logger = previous.Logger
+	s.Reader = previous.Reader
+	s.Projections = previous.Projections
+	s.Clock = previous.Clock
+	s.OperatorSettingsPath = previous.OperatorSettingsPath
+	s.Recordings = previous.Recordings
+	s.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), previous.ReplayMetadataWarnings...)
+	if previous.ResumeRecoveryMetadata != nil {
+		metadata := *previous.ResumeRecoveryMetadata
+		s.ResumeRecoveryMetadata = &metadata
+	}
+	s.OrderlyStop = previous.OrderlyStop
 }
 
 func (s *SessionState) SetStartRequestID(requestID string) {

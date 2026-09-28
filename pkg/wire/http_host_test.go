@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -19,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -329,23 +327,6 @@ func (root *stubVisualizationRoot) StopDrain(
 	return factoryvisualization.StopDrainResult{}, nil
 }
 
-// stubTransportRuntime captures the handler the bound transport component runs.
-type stubTransportRuntime struct {
-	factorysessionwire.ProcessRuntime
-	handler http.Handler
-	runs    int
-}
-
-func (runtime *stubTransportRuntime) RunTransport(_ context.Context, handler http.Handler) error {
-	runtime.runs++
-	runtime.handler = handler
-	return nil
-}
-
-type stubVisualizationClock struct{}
-
-func (stubVisualizationClock) Now() time.Time { return time.Unix(0, 0).UTC() }
-
 // recordedVisualizationBuild is one observed call into the injected Factory
 // Visualization runtime factory.
 type recordedVisualizationBuild struct {
@@ -371,15 +352,7 @@ func recordingVisualizationFactory(build *recordedVisualizationBuild) factoryvis
 	}
 }
 
-func openedRuntimeForAdapter(runtime *stubTransportRuntime) factorysessionwire.OpenedApplicationRuntime {
-	return factorysessionwire.OpenedApplicationRuntime{
-		Process:   runtime,
-		Resources: factorysessionwire.RuntimeResources{Clock: stubVisualizationClock{}},
-	}
-}
-
-// stubSinkOwner is the composition-root sink registry that the adapter
-// resolves an opening request opaque sink selection against.
+// stubSinkOwner is the composition-root sink registry.
 type stubSinkOwner struct {
 	factoryvisualization.RuntimeSinkOwner
 	sinks map[factoryvisualization.RuntimeSinkID]factoryvisualization.Sink
@@ -392,12 +365,6 @@ func (owner stubSinkOwner) RuntimeSink(
 	return sink, ok
 }
 
-func sinkOwnerHolding(id string, sink factoryvisualization.Sink) stubSinkOwner {
-	return stubSinkOwner{sinks: map[factoryvisualization.RuntimeSinkID]factoryvisualization.Sink{
-		factoryvisualization.RuntimeSinkID(id): sink,
-	}}
-}
-
 // markerHandler is a comparable owner handler so a test can assert the exact
 // handler instance the bound transport runs.
 type markerHandler struct{}
@@ -405,138 +372,9 @@ type markerHandler struct{}
 func (*markerHandler) ServeHTTP(http.ResponseWriter, *http.Request) {}
 
 func boundHandlerAdapter(handler http.Handler) httpRuntimeBinding {
-	return func(factorysessionwire.OpenedApplicationRuntime) (http.Handler, error) { return handler, nil }
-}
-
-func TestBindWireProcessComponentsOmitsTheVisualizationRoleWithoutASink(t *testing.T) {
-	t.Parallel()
-
-	build := &recordedVisualizationBuild{}
-	handler := &markerHandler{}
-	runtime := &stubTransportRuntime{}
-	components, err := bindWireProcessComponents(
-		openedRuntimeForAdapter(runtime),
-		"",
-		serviceedges.Edges{},
-		recordingVisualizationFactory(build),
-		stubSinkOwner{},
-		boundHandlerAdapter(handler),
-		lifecycle.NewRunner,
-	)
-	if err != nil {
-		t.Fatalf("bindWireProcessComponents: %v", err)
+	return func(*factorysessionwire.Root, string, initializer.InvocationCancellation) (http.Handler, error) {
+		return handler, nil
 	}
-	if components.Visualization != nil {
-		t.Fatal("visualization role was bound without a selected sink")
-	}
-	if build.calls != 0 {
-		t.Fatalf("visualization factory calls = %d, want 0 without a sink", build.calls)
-	}
-	if components.Transport == nil {
-		t.Fatal("transport component = nil, want the bound owner transport")
-	}
-	waiter, ok := components.Transport.(lifecycle.Waiter)
-	if !ok {
-		t.Fatal("transport component is not a Waiter; the lifecycle plan needs a blocking primary")
-	}
-	if err := components.Transport.Start(t.Context()); err != nil {
-		t.Fatalf("transport start: %v", err)
-	}
-	if err := waiter.Wait(t.Context()); err != nil {
-		t.Fatalf("transport wait: %v", err)
-	}
-	if runtime.runs != 1 || runtime.handler != handler {
-		t.Fatalf("RunTransport calls = %d, bound handler matches = %t", runtime.runs, runtime.handler == handler)
-	}
-}
-
-func TestBindWireProcessComponentsBindsAnInertVisualizationRoleForASelectedSink(t *testing.T) {
-	t.Parallel()
-
-	build := &recordedVisualizationBuild{}
-	sink := factoryvisualization.SinkFunc(func(factoryvisualization.View) {})
-	components, err := bindWireProcessComponents(
-		openedRuntimeForAdapter(&stubTransportRuntime{}),
-		"live-sink",
-		serviceedges.Edges{},
-		recordingVisualizationFactory(build),
-		sinkOwnerHolding("live-sink", sink),
-		boundHandlerAdapter(&markerHandler{}),
-		lifecycle.NewRunner,
-	)
-	if err != nil {
-		t.Fatalf("bind with a sink: %v", err)
-	}
-	if build.calls != 1 {
-		t.Fatalf("visualization factory calls = %d, want 1", build.calls)
-	}
-	if build.sink == nil || build.clock == nil {
-		t.Fatalf("visualization inputs: sink bound = %t, clock bound = %t", build.sink != nil, build.clock != nil)
-	}
-	if components.Visualization == nil {
-		t.Fatal("visualization role = nil, want a bound role for the selected sink")
-	}
-	if err := components.Visualization.Start(t.Context()); err != nil {
-		t.Fatalf("visualization role start: %v", err)
-	}
-	if build.root.activations != 0 {
-		t.Fatalf("Activate calls = %d, want 0; the role stays inert until explicit activation", build.root.activations)
-	}
-	if err := components.Visualization.Stop(t.Context()); err != nil {
-		t.Fatalf("visualization role stop: %v", err)
-	}
-	if build.root.drains != 1 {
-		t.Fatalf("StopDrain calls = %d, want exactly 1 on role shutdown", build.root.drains)
-	}
-}
-
-func TestBindWireProcessComponentsHonorsRootVisualizationEdgeOverrides(t *testing.T) {
-	t.Parallel()
-
-	build := &recordedVisualizationBuild{}
-	fixed := factoryvisualization.SinkFunc(func(factoryvisualization.View) {})
-	var observed factoryvisualization.Root
-	components, err := bindWireProcessComponents(
-		openedRuntimeForAdapter(&stubTransportRuntime{}),
-		"",
-		serviceedges.Edges{
-			FactoryVisualizationSink:         fixed,
-			FactoryVisualizationRootObserver: func(root factoryvisualization.Root) { observed = root },
-		},
-		recordingVisualizationFactory(build),
-		stubSinkOwner{},
-		boundHandlerAdapter(&markerHandler{}),
-		lifecycle.NewRunner,
-	)
-	if err != nil {
-		t.Fatalf("bind with a fixed root sink: %v", err)
-	}
-	if components.Visualization == nil {
-		t.Fatal("root FactoryVisualizationSink override did not bind a visualization role")
-	}
-	if build.root == nil || observed != factoryvisualization.Root(build.root) {
-		t.Fatal("root FactoryVisualizationRootObserver did not receive the composed visualization root")
-	}
-}
-
-// stubRunRuntimeOpener satisfies the Factory Session opening operation the run
-// runner builder validates without opening a real runtime.
-type stubRunRuntimeOpener struct {
-	factorysessionwire.ProcessRuntime
-}
-
-func (stubRunRuntimeOpener) OpenApplicationRuntime(
-	context.Context,
-	*factorysessions.RuntimeOpeningRequest,
-) (factorysessionwire.OpenedApplicationRuntime, error) {
-	return factorysessionwire.OpenedApplicationRuntime{}, nil
-}
-
-func stubRunRuntimeBuilder(
-	context.Context,
-	initializer.ApplicationOpeningOperation,
-) (initializer.LocalRuntimeRunner, error) {
-	return nil, nil
 }
 
 func stubRunRuntimePlanLifecycle(
@@ -552,86 +390,26 @@ func TestProvideRunRuntimeRunnerBuilderRejectsMissingDependencies(t *testing.T) 
 	binding := boundHandlerAdapter(&markerHandler{})
 	missing := []struct {
 		name    string
-		build   initializer.RuntimeRunnerBuilder
-		open    factorysessionwire.ApplicationRuntimeOpening
+		root    *factorysessionwire.Root
 		factory factoryvisualization.RuntimeFactory
 		sinks   factoryvisualization.RuntimeSinkOwner
 		binding httpRuntimeBinding
 		runner  lifecycle.RunnerFactory
 		plan    factorysessionwire.LifecyclePlanOperation
 	}{
-		{"lifecycle builder", nil, stubRunRuntimeOpener{}, factory, stubSinkOwner{}, binding, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
-		{"runtime opener", stubRunRuntimeBuilder, nil, factory, stubSinkOwner{}, binding, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
-		{"visualization factory", stubRunRuntimeBuilder, stubRunRuntimeOpener{}, nil, stubSinkOwner{}, binding, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
-		{"visualization sink owner", stubRunRuntimeBuilder, stubRunRuntimeOpener{}, factory, nil, binding, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
-		{"HTTP binding", stubRunRuntimeBuilder, stubRunRuntimeOpener{}, factory, stubSinkOwner{}, nil, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
-		{"runner factory", stubRunRuntimeBuilder, stubRunRuntimeOpener{}, factory, stubSinkOwner{}, binding, nil, stubRunRuntimePlanLifecycle},
-		{"lifecycle plan operation", stubRunRuntimeBuilder, stubRunRuntimeOpener{}, factory, stubSinkOwner{}, binding, lifecycle.NewRunner, nil},
+		{"process root", nil, factory, stubSinkOwner{}, binding, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
+		{"visualization factory", &factorysessionwire.Root{}, nil, stubSinkOwner{}, binding, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
+		{"visualization sink owner", &factorysessionwire.Root{}, factory, nil, binding, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
+		{"HTTP binding", &factorysessionwire.Root{}, factory, stubSinkOwner{}, nil, lifecycle.NewRunner, stubRunRuntimePlanLifecycle},
+		{"runner factory", &factorysessionwire.Root{}, factory, stubSinkOwner{}, binding, nil, stubRunRuntimePlanLifecycle},
+		{"lifecycle plan operation", &factorysessionwire.Root{}, factory, stubSinkOwner{}, binding, lifecycle.NewRunner, nil},
 	}
 	for _, operation := range missing {
 		if _, err := provideRunRuntimeRunnerBuilder(
-			operation.build, operation.open, serviceedges.Edges{}, operation.factory, operation.sinks, operation.binding, operation.runner, operation.plan,
+			operation.root, serviceedges.Edges{}, operation.factory, operation.sinks, operation.binding, operation.runner, operation.plan,
 		); err == nil {
 			t.Fatalf("missing %s = nil error, want a construction failure", operation.name)
 		}
-	}
-}
-
-func TestBindWireProcessComponentsFailsClosedOnComponentFailures(t *testing.T) {
-	t.Parallel()
-
-	build := &recordedVisualizationBuild{}
-	factory := recordingVisualizationFactory(build)
-	binding := boundHandlerAdapter(&markerHandler{})
-
-	visualizationFailure := errors.New("visualization factory failed")
-	if _, err := bindWireProcessComponents(
-		openedRuntimeForAdapter(&stubTransportRuntime{}),
-		"live-sink",
-		serviceedges.Edges{},
-		func(factoryvisualization.RuntimeReader, recordings.ProjectionService, factoryvisualization.Clock, factoryvisualization.Sink, factoryvisualization.ErrorReporter) (factoryvisualization.Service, error) {
-			return nil, visualizationFailure
-		},
-		sinkOwnerHolding("live-sink", factoryvisualization.SinkFunc(func(factoryvisualization.View) {})),
-		binding,
-		lifecycle.NewRunner,
-	); !errors.Is(err, visualizationFailure) {
-		t.Fatalf("bind with a failing visualization factory = %v, want the factory failure", err)
-	}
-
-	bindingFailure := errors.New("owner HTTP binding failed")
-	if _, err := bindWireProcessComponents(
-		openedRuntimeForAdapter(&stubTransportRuntime{}),
-		"",
-		serviceedges.Edges{},
-		factory,
-		stubSinkOwner{},
-		func(factorysessionwire.OpenedApplicationRuntime) (http.Handler, error) { return nil, bindingFailure },
-		lifecycle.NewRunner,
-	); !errors.Is(err, bindingFailure) {
-		t.Fatalf("bind with a failing HTTP binding = %v, want the binding failure", err)
-	}
-}
-
-func TestBindWireProcessComponentsRejectsAnUnavailableVisualizationSink(t *testing.T) {
-	t.Parallel()
-
-	build := &recordedVisualizationBuild{}
-	runtime := &stubTransportRuntime{}
-	_, err := bindWireProcessComponents(
-		openedRuntimeForAdapter(runtime),
-		factorysessions.VisualizationSinkID("stale-sink"),
-		serviceedges.Edges{},
-		recordingVisualizationFactory(build),
-		sinkOwnerHolding("live-sink", factoryvisualization.SinkFunc(func(factoryvisualization.View) {})),
-		boundHandlerAdapter(&markerHandler{}),
-		lifecycle.NewRunner,
-	)
-	if err == nil || !strings.Contains(err.Error(), "Factory Visualization sink \"stale-sink\" is unavailable") {
-		t.Fatalf("bind with a stale sink selection = %v, want an unavailable-sink failure naming it", err)
-	}
-	if build.calls != 0 || runtime.runs != 0 {
-		t.Fatalf("stale sink built %d roles and ran %d transports, want none", build.calls, runtime.runs)
 	}
 }
 

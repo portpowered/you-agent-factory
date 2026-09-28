@@ -81,9 +81,6 @@ func TestNewRootFromAssemblyRetainsOneAssemblyAndOpening(t *testing.T) {
 	if any(root.Assembly) != any(assembly) {
 		t.Fatalf("root assembly = %T(%[1]v), want injected assembly %T(%[2]v)", root.Assembly, assembly)
 	}
-	if got := root.RuntimeOpening(); got != opening {
-		t.Fatalf("root runtime opening = %T(%[1]v), want injected opening %T(%[2]v)", got, opening)
-	}
 }
 
 func TestNewRootFromAssemblyRejectsMissingRequiredDependencies(t *testing.T) {

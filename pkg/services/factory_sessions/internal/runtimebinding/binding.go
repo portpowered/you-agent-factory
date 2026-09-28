@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	sessionstream "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -214,27 +215,34 @@ func registerReplacementSession(
 	state.RotateResponseStreams(session)
 	var projectionOwner SessionProjectionOwner
 	var invoker roles.CanonicalSessionInvoker
+	var modelInvoker workers.ModelInvoker
+	var inputResolver roles.InvocationInputResolver
 	var activation interface{ Close(context.Context) error }
 	var process roles.ProcessRuntime
 	var diagnostics factory.RuntimeLogDiagnostics
-	if previous := SessionStateFrom(session); previous != nil {
+	previous := SessionStateFrom(session)
+	if previous != nil {
 		projectionOwner = previous.Owner
 		invoker = previous.Invoker
+		modelInvoker = previous.ModelInvoker
+		inputResolver = previous.InputResolver
 		activation = previous.Activation
 		process = previous.Process
 		diagnostics = previous.Diagnostics
 	}
+	handle := &SessionState{
+		Handle: replacementHandle, Instance: replacement,
+		Spec: preparedSpec, Owner: projectionOwner, Invoker: invoker, ModelInvoker: modelInvoker, InputResolver: inputResolver, Activation: activation,
+		Process: process, Diagnostics: diagnostics,
+	}
+	handle.inheritApplicationValues(previous)
 	state.Register(sessionruntime.Registration{
 		SessionID: session.ID, FactoryDir: replacement.Directory(),
 		FolderPath: session.FolderPath, ExecutionBaseDir: executionBaseDir,
 		RuntimeFactorySessionID: session.RuntimeFactorySessionID,
 		RuntimeEventSessionID:   session.RuntimeEventSessionID,
 		Target:                  session.Target,
-		Handle: &SessionState{
-			Handle: replacementHandle, Instance: replacement,
-			Spec: preparedSpec, Owner: projectionOwner, Invoker: invoker, Activation: activation,
-			Process: process, Diagnostics: diagnostics,
-		},
+		Handle:                  handle,
 		Runtime: &factorysessions.LiveRuntime{
 			Factory: replacement.RuntimeService(), BackendScopeID: replacement.BackendScope(),
 			WorkAndEventIngress:   DeclaredWorkAndEventIngress(replacement.RuntimeService()),
@@ -348,20 +356,27 @@ func Register(state *sessionruntime.Service, input Registration) string {
 	})
 	var projectionOwner SessionProjectionOwner
 	var invoker roles.CanonicalSessionInvoker
+	var modelInvoker workers.ModelInvoker
+	var inputResolver roles.InvocationInputResolver
 	var activation interface{ Close(context.Context) error }
 	var process roles.ProcessRuntime
 	var diagnostics factory.RuntimeLogDiagnostics
-	if previous := SessionStateFrom(state.Resolve(input.SessionID)); previous != nil {
+	previous := SessionStateFrom(state.Resolve(input.SessionID))
+	if previous != nil {
 		projectionOwner = previous.Owner
 		invoker = previous.Invoker
+		modelInvoker = previous.ModelInvoker
+		inputResolver = previous.InputResolver
 		activation = previous.Activation
 		process = previous.Process
 		diagnostics = previous.Diagnostics
 	}
+	handle := &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec, Owner: projectionOwner, Invoker: invoker, ModelInvoker: modelInvoker, InputResolver: inputResolver, Activation: activation, Process: process, Diagnostics: diagnostics}
+	handle.inheritApplicationValues(previous)
 	return state.Register(sessionruntime.Registration{
 		SessionID: input.SessionID, FactoryDir: metadata.FactoryDir, FolderPath: metadata.FolderPath,
 		ExecutionBaseDir: metadata.ExecutionBaseDir, Target: metadata.Target,
-		Handle: &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec, Owner: projectionOwner, Invoker: invoker, Activation: activation, Process: process, Diagnostics: diagnostics},
+		Handle: handle,
 		Runtime: &factorysessions.LiveRuntime{
 			Factory: runtimeService, Binding: input.Binding, BackendScopeID: bundle.BackendScope(),
 			WorkAndEventIngress:   DeclaredWorkAndEventIngress(runtimeService),

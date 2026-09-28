@@ -54,7 +54,7 @@ func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 			t.Fatal("regular run opener called for direct JavaScript")
 			return nil, nil
 		},
-		func(context.Context, *factorysessions.RuntimeOpeningRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
+		func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
 		testInvocationOperation{},
@@ -102,7 +102,7 @@ func TestRunSelectionCarriesInvocationCancellationToDirectJavaScriptHost(t *test
 			t.Fatal("regular run opener called for direct JavaScript")
 			return nil, nil
 		},
-		func(context.Context, *factorysessions.RuntimeOpeningRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
+		func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
 		testInvocationOperation{}, testResponsePresentation(), direct,
@@ -185,7 +185,7 @@ func TestRunSelectionDirectJavaScriptCleansPresentationOnOpenFailures(t *testing
 					t.Fatal("regular run opener called for direct JavaScript")
 					return nil, nil
 				},
-				func(context.Context, *factorysessions.RuntimeOpeningRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
+				func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 					return nil, nil
 				},
 				testInvocationOperation{}, testResponsePresentation(), direct,
@@ -225,7 +225,7 @@ func TestRunSelectionSupportsDirectJavaScriptWithoutPresentationOwner(t *testing
 			t.Fatal("regular run opener called for direct JavaScript")
 			return nil, nil
 		},
-		func(context.Context, *factorysessions.RuntimeOpeningRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
+		func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
 		testInvocationOperation{}, testResponsePresentation(), direct,

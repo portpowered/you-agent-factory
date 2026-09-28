@@ -32,16 +32,6 @@ import (
 // privately at its own service boundary.
 type WorkerCommandRunnerAdapter func(platformprocess.CommandRunner) platformprocess.CommandRunner
 
-// ApplicationRuntimeOpening opens the application view of one Factory Sessions
-// runtime. Consumers receive this narrow operation rather than the
-// process-scoped grouped construction type.
-type ApplicationRuntimeOpening interface {
-	OpenApplicationRuntime(
-		context.Context,
-		*factorysessions.RuntimeOpeningRequest,
-	) (roles.OpenedApplicationRuntime, error)
-}
-
 // InvocationRuntimeOpening opens the invocation-only view of one Factory
 // Sessions runtime. Consumers receive this narrow operation rather than the
 // process-scoped grouped construction type.
@@ -236,7 +226,6 @@ type Root struct {
 }
 
 var (
-	_ ApplicationRuntimeOpening = (*Root)(nil)
 	_ InvocationRuntimeOpening  = (*Root)(nil)
 	_ ExecutionRuntimeOpening   = (*Root)(nil)
 )
@@ -626,16 +615,6 @@ func (r *Root) openRuntimeWithOptions(
 		definitionSnapshot,
 		replayInput,
 	)
-}
-
-// OpenApplicationRuntime opens one Factory Session and returns only the roles
-// required to assemble its process lifecycle and customer transports.
-func (r *Root) OpenApplicationRuntime(
-	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
-) (roles.OpenedApplicationRuntime, error) {
-	opened, err := r.openForRequest(ctx, request)
-	return opened.application, err
 }
 
 func (r *Root) openForRequest(

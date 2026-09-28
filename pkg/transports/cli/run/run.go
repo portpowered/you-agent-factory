@@ -287,7 +287,7 @@ type RuntimeRunner = factoryServiceRunner
 // opening owner before this value-only request is built.
 type RuntimeRunnerBuilder func(
 	context.Context,
-	*factorysessions.RuntimeOpeningRequest,
+	*factorysessions.SessionStartRequest,
 	initializer.InvocationCancellation,
 	factorysessions.VisualizationSinkID,
 ) (initializer.LocalRuntimeRunner, error)
@@ -297,7 +297,7 @@ type RuntimeRunnerBuilder func(
 type RuntimeOpeningRequestFactory func(
 	RunConfig,
 	*workers.MockWorkersConfig,
-) *factorysessions.RuntimeOpeningRequest
+) *factorysessions.SessionStartRequest
 
 type Opener func(
 	context.Context,
@@ -537,7 +537,11 @@ func (operation *Operation) Run(ctx context.Context) error {
 	if operation.cfg.JSONOutput {
 		return nil
 	}
-	return emitReplayMetadataWarnings(replayMetadataOutput(operation.cfg), operation.replayMetadataWarnings)
+	warnings := operation.replayMetadataWarnings
+	if len(warnings) == 0 {
+		warnings = replayMetadataWarningsForRunner(operation.runner)
+	}
+	return emitReplayMetadataWarnings(replayMetadataOutput(operation.cfg), warnings)
 }
 
 func (operation *Operation) runHistoricalReplay(ctx context.Context) error {

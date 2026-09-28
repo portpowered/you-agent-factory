@@ -85,13 +85,11 @@ func NewAssembly(
 	return assembly, nil
 }
 
-// NewRootFromAssembly wraps the already-composed assembly in the one
-// process-scoped Factory Sessions root. The opening capability is required at
-// this boundary so the root cannot be returned with an incomplete data-plane
-// graph.
+// NewRootFromAssembly binds the already-composed assembly to the one
+// process-scoped Factory Sessions root.
 func NewRootFromAssembly(
 	assembly roles.RuntimeAssembly,
-	opening roles.RuntimeOpening,
+	processRoot *Root,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (*Root, error) {
 	if assembly == nil {
@@ -104,8 +102,8 @@ func NewRootFromAssembly(
 	if !ok || concrete == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: runtime assembly implementation rejected")
 	}
-	root, ok := opening.(*Root)
-	if !ok || root == nil {
+	root := processRoot
+	if root == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: process root is required")
 	}
 	if root.Assembly != nil && root.Assembly != concrete {
@@ -123,15 +121,6 @@ func NewRootFromAssembly(
 	root.Assembly = concrete
 	root.liveChangeCoordinator = liveChangeCoordinator
 	return root, nil
-}
-
-// RuntimeOpening returns the owner-private opening capability retained by the
-// canonical root. It is intentionally not part of factorysessions.Service.
-func (r *Root) RuntimeOpening() roles.RuntimeOpening {
-	if r == nil {
-		return nil
-	}
-	return r
 }
 
 func validateRootDependencies(
