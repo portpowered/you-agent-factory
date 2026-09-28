@@ -19,6 +19,29 @@ func NewDefaultHostCompatibilityChecker() (HostCompatibilityChecker, error) {
 	return defaultHostCompatibilityChecker{resolve: resolver}, nil
 }
 
+// NewGalleryHostCompatibilityChecker validates a Linux gallery backend choice
+// without starting a download during capability checks.
+func NewGalleryHostCompatibilityChecker() HostCompatibilityChecker {
+	return galleryHostCompatibilityChecker{}
+}
+
+type galleryHostCompatibilityChecker struct{}
+
+func (galleryHostCompatibilityChecker) Check(ctx context.Context, request HostCompatibilityRequest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	configuration := request.Configuration
+	if configuration.Platform.OperatingSystem != "linux" || configuration.Platform.Architecture != "amd64" {
+		return fmt.Errorf("LocalAI gallery backend requires linux/amd64")
+	}
+	if configuration.ProtocolVersion != "" && configuration.ProtocolVersion != modelseffects.PinnedHostProtocolVersion {
+		return fmt.Errorf("LocalAI backend protocol %q is unsupported", configuration.ProtocolVersion)
+	}
+	_, err := galleryBackendName(configuration.Backend, defaultBackendAccelerator(configuration.Platform))
+	return err
+}
+
 type defaultHostCompatibilityChecker struct {
 	resolve BackendArtifactResolver
 }
@@ -31,7 +54,7 @@ func (checker defaultHostCompatibilityChecker) Check(
 	if configuration.ProtocolVersion == "" {
 		configuration.ProtocolVersion = modelseffects.PinnedHostProtocolVersion
 	}
-	_, err := checker.resolve(ctx, configuration)
+	_, err := checker.resolve(ctx, configuration, false)
 	if err != nil {
 		return fmt.Errorf(
 			"select pinned backend %q for model %q: %w",

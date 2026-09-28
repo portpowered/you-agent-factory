@@ -123,6 +123,22 @@ builds, backend startup, transcription, offline reuse, or cleanup. For another
 build, inspect that build's selected manifest entry and verify its artifact
 identity before reusing this host policy.
 
+### Linux LocalAI backend installation
+
+On Linux amd64, `you` installs managed LocalAI backends from LocalAI's current
+backend gallery on first use. It selects a CUDA 12 backend when an NVIDIA GPU
+device and `nvidia-smi` are available. Otherwise it selects the CPU backend.
+The `localai-llamacpp`, `localai-whisper`, and `localai-vibevoice` identities
+map to the corresponding gallery backends. The installed backend stays in the
+user cache for later use.
+
+`you` uses `LOCALAI_BINARY` when it is set, then `local-ai` on `PATH`. If
+neither is available, it downloads the latest official Linux amd64 LocalAI
+binary and verifies its size and SHA-256 against that release's checksums.
+The first install needs access to GitHub, LocalAI's backend gallery, and its
+backend image registry. Run `you` inside WSL Ubuntu to use an NVIDIA GPU on a
+Windows host; a native Windows `you` process selects the Windows CPU archive.
+
 ### Built-in TTS bundle identity
 
 The built-in `tts` model uses one immutable three-file bundle. The bundle contains one model, one tokenizer, and one voice.
@@ -144,12 +160,12 @@ The LocalAI source commit is `b224c96db6f4b87306a33a808650bfce63b12588`.
 The protocol source is `backend/backend.proto` at revision
 `ad62c6df07ae1169eb14411a565a689cd996b19c`.
 
-The published backend artifacts use these target identities:
+The packaged backend publication used by native Windows and macOS includes
+these target identities. Linux amd64 uses the LocalAI gallery described above.
 
 | Target | Artifact | Size in bytes | SHA-256 | Accelerator |
 | --- | --- | ---: | --- | --- |
 | `darwin-arm64` | `localai-backend-localai-vibevoice-darwin-arm64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz` | `9200265` | `624385483a7c67804ff546ed8649e35c4e7122b833f318ff4d1cf2d44d9f2752` | `metal` |
-| `linux-amd64` | `localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz` | `14976678` | `8a8ae6b816e4eb4b7088a7e5c7ef291dbd657f6f38f930b5471b9a73fb056bcb` | `cpu` |
 | `windows-amd64` | `localai-backend-localai-vibevoice-windows-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.zip` | `10757902` | `8f3c14212948be34c930e9a790af7757460cb2f6bb6a0de80d5b9f95b71e8646` | `cpu` |
 
 The role manifest is authored at

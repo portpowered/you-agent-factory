@@ -838,6 +838,11 @@ func (host *recordingInferenceHost) GetModelLease(
 	if lease.Status == models.ModelLeaseStatusExpired {
 		return models.GetModelLeaseResult{Lease: lease}, models.ErrHostLeaseExpired
 	}
+	if host.warmHosts == nil {
+		host.warmHosts = make(map[string]bool)
+	}
+	// A valid lease is issued only after its model host became ready.
+	host.warmHosts[host.hostKey(lease.Scope, lease.ModelName)] = true
 	return models.GetModelLeaseResult{Lease: lease}, nil
 }
 

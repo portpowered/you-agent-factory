@@ -615,7 +615,7 @@ func (o *Root) prepareJoinedInvocation(
 	}
 	plan.prepared.ModelName = plan.modelName
 
-	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, plan.configuration)
+	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, plan.configuration, request.Offline)
 	if err != nil {
 		return plan, modelseffects.RuntimeStageArtifactResolve, err
 	}
@@ -694,39 +694,6 @@ func joinedAssetRuntimeStage(err error) modelseffects.RuntimeStage {
 	}
 }
 
-func (o *Root) resolveJoinedBackendArtifact(
-	ctx context.Context,
-	configuration modelseffects.ResolvedHostConfiguration,
-) (modelseffects.BackendArtifactSelection, error) {
-	if !isJoinedPinnedBackend(configuration.Backend) {
-		return modelseffects.BackendArtifactSelection{}, nil
-	}
-	if o == nil || o.resolveBackendArtifact == nil {
-		return modelseffects.BackendArtifactSelection{}, fmt.Errorf(
-			"%w: pinned backend artifact selector is unavailable",
-			models.ErrHostMissingAssets,
-		)
-	}
-	selection, err := o.resolveBackendArtifact(ctx, configuration.Clone())
-	if err != nil {
-		return modelseffects.BackendArtifactSelection{}, fmt.Errorf(
-			"%w: pinned backend artifact selection failed",
-			models.ErrHostMissingAssets,
-		)
-	}
-	requirement := models.AssetRequirement{
-		Name: selection.Name, Bytes: selection.Bytes, SHA256: selection.SHA256,
-	}
-	if strings.TrimSpace(selection.Location) == "" || strings.TrimSpace(selection.SHA256) == "" ||
-		selection.Bytes <= 0 || requirement.Validate() != nil {
-		return modelseffects.BackendArtifactSelection{}, fmt.Errorf(
-			"%w: pinned backend artifact facts are invalid",
-			models.ErrHostMissingAssets,
-		)
-	}
-	return selection, nil
-}
-
 func joinedHostConfiguration(
 	request models.InvokeModelRequest,
 	resolved models.ResolvedModelReference,
@@ -774,6 +741,10 @@ func (o *Root) enrichJoinedHostConfiguration(
 	configuration.BackendCachePath = strings.TrimSpace(layout.BackendCachePath)
 	configuration.ModelFiles = append([]string(nil), layout.Files...)
 	configuration.BackendFiles = append([]string(nil), layout.BackendFiles...)
+	if installedPath := configuration.BackendArtifact.InstalledPath; installedPath != "" {
+		configuration.BackendCachePath = installedPath
+		configuration.BackendFiles = []string{installedPath}
+	}
 	configuration.ModelPath, configuration.MMProjPath = joinedHostModelPaths(layout.Files)
 	if configuration.ModelPath == "" {
 		return fmt.Errorf(
@@ -781,7 +752,7 @@ func (o *Root) enrichJoinedHostConfiguration(
 			models.ErrHostMissingAssets,
 		)
 	}
-	if isJoinedPinnedBackend(configuration.Backend) && configuration.BackendArtifact.Name != "" &&
+	if isJoinedManagedBackend(configuration.Backend) && configuration.BackendArtifact.Name != "" &&
 		(strings.TrimSpace(configuration.BackendCachePath) == "" || len(configuration.BackendFiles) == 0) {
 		return fmt.Errorf(
 			"%w: resolved backend cache facts are incomplete",

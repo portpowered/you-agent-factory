@@ -32,7 +32,7 @@ func TestNewDefaultBackendArtifactResolverSelectsPinnedMatrix(t *testing.T) {
 			selection, err := resolver(context.Background(), ResolvedHostConfiguration{
 				Backend: test.backend, Platform: test.platform,
 				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-			})
+			}, false)
 			if err != nil {
 				t.Fatalf("resolve %s: %v", test.backend, err)
 			}
@@ -59,7 +59,7 @@ func TestNewDefaultBackendArtifactResolverPreservesAcceleratorRequest(t *testing
 				Backend: "localai-llamacpp", Platform: platform,
 				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 			}
-			_, err := resolver(context.Background(), request)
+			_, err := resolver(context.Background(), request, false)
 			if !errors.Is(err, artifacts.ErrIncompatibleAccelerator) {
 				t.Fatalf("resolve explicit CUDA error = %v, want ErrIncompatibleAccelerator", err)
 			}
@@ -69,12 +69,12 @@ func TestNewDefaultBackendArtifactResolverPreservesAcceleratorRequest(t *testing
 			}
 
 			request.Platform.Accelerator = ""
-			selection, err := resolver(context.Background(), request)
+			selection, err := resolver(context.Background(), request, false)
 			if err != nil {
 				t.Fatalf("resolve omitted accelerator: %v", err)
 			}
 			request.Platform.Accelerator = "cpu"
-			cpuSelection, err := resolver(context.Background(), request)
+			cpuSelection, err := resolver(context.Background(), request, false)
 			if err != nil {
 				t.Fatalf("resolve explicit CPU: %v", err)
 			}
@@ -110,7 +110,7 @@ func TestNewDefaultBackendArtifactResolverRejectsIncompatibleRequests(t *testing
 		t.Run(test.name, func(t *testing.T) {
 			request := base
 			test.edit(&request)
-			_, err := resolver(context.Background(), request)
+			_, err := resolver(context.Background(), request, false)
 			if !errors.Is(err, test.want) {
 				t.Fatalf("resolve error = %v, want %v", err, test.want)
 			}
@@ -119,7 +119,7 @@ func TestNewDefaultBackendArtifactResolverRejectsIncompatibleRequests(t *testing
 
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := resolver(cancelled, base); !errors.Is(err, context.Canceled) {
+	if _, err := resolver(cancelled, base, false); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled resolve error = %v, want context.Canceled", err)
 	}
 }

@@ -167,11 +167,10 @@ func TestModelInvocationEdgesPreserveOverridesAndSelectPlatformDefaults(t *testi
 func TestModelAssetHostPlatformPreservesOverrideAndSelectsProcessDefault(t *testing.T) {
 	t.Parallel()
 
-	if got := provideModelAssetHostPlatform(serviceedges.Edges{}); got != (models.AssetHostPlatform{
-		OperatingSystem: runtime.GOOS,
-		Architecture:    runtime.GOARCH,
-	}) {
-		t.Fatalf("default model asset host platform = %#v, want current process platform", got)
+	if got := provideModelAssetHostPlatform(serviceedges.Edges{}); got.OperatingSystem != runtime.GOOS ||
+		got.Architecture != runtime.GOARCH ||
+		(got.Accelerator != "" && !(runtime.GOOS == "linux" && runtime.GOARCH == "amd64" && got.Accelerator == "cuda")) {
+		t.Fatalf("default model asset host platform = %#v, want current process platform and optional detected CUDA", got)
 	}
 
 	override := models.AssetHostPlatform{OperatingSystem: "customer-os", Architecture: "customer-arch", Accelerator: "cuda"}

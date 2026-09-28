@@ -43,11 +43,11 @@ func TestInvokeModelWithLeaseReusesWarmHostSlotForConsecutiveInvokes(t *testing.
 	if err != nil {
 		t.Fatalf("second invoke: %v", err)
 	}
-	if host.ensureCalls != 1 {
-		t.Fatalf("ensure calls = %d, want 1 shared host slot", host.ensureCalls)
+	if host.ensureCalls != 0 {
+		t.Fatalf("ensure calls = %d, want no duplicate host starts for leased invocations", host.ensureCalls)
 	}
-	if runtime.reusedHostSlots != 1 {
-		t.Fatalf("reused host slots = %d, want 1", runtime.reusedHostSlots)
+	if runtime.reusedHostSlots != 2 {
+		t.Fatalf("reused host slots = %d, want 2", runtime.reusedHostSlots)
 	}
 }
 

@@ -299,7 +299,7 @@ func TestResolveJoinedBackendArtifactReceivesOneDetachedConfiguration(t *testing
 	}
 	var observed modelseffects.ResolvedHostConfiguration
 	root := &Root{
-		resolveBackendArtifact: func(_ context.Context, request modelseffects.ResolvedHostConfiguration) (modelseffects.BackendArtifactSelection, error) {
+		resolveBackendArtifact: func(_ context.Context, request modelseffects.ResolvedHostConfiguration, _ bool) (modelseffects.BackendArtifactSelection, error) {
 			observed = request.Clone()
 			request.ModelFiles[0] = "mutated-by-selector"
 			request.Source.NameOrURI = "mutated-by-selector"
@@ -309,7 +309,7 @@ func TestResolveJoinedBackendArtifactReceivesOneDetachedConfiguration(t *testing
 			}, nil
 		},
 	}
-	selection, err := root.resolveJoinedBackendArtifact(context.Background(), configuration)
+	selection, err := root.resolveJoinedBackendArtifact(context.Background(), configuration, false)
 	if err != nil {
 		t.Fatalf("resolveJoinedBackendArtifact: %v", err)
 	}
@@ -344,9 +344,11 @@ func TestRootInvokeUsesConfigurationForArtifactAndOfflineAssetProjection(t *test
 	)
 	platform := models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"}
 	var observed modelseffects.ResolvedHostConfiguration
+	var observedOffline bool
 	root.process = modelseffects.ProcessDependencies{BackendArtifactPlatform: platform}
-	root.resolveBackendArtifact = func(_ context.Context, configuration modelseffects.ResolvedHostConfiguration) (modelseffects.BackendArtifactSelection, error) {
+	root.resolveBackendArtifact = func(_ context.Context, configuration modelseffects.ResolvedHostConfiguration, offline bool) (modelseffects.BackendArtifactSelection, error) {
 		observed = configuration.Clone()
+		observedOffline = offline
 		return modelseffects.BackendArtifactSelection{
 			Name: "backend.tar.gz", Location: "https://example.invalid/backend.tar.gz",
 			Bytes: 1, SHA256: "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172",
@@ -362,6 +364,9 @@ func TestRootInvokeUsesConfigurationForArtifactAndOfflineAssetProjection(t *test
 		observed.Backend != "localai-llamacpp" || observed.Platform != platform ||
 		observed.ProtocolVersion != modelseffects.PinnedHostProtocolVersion {
 		t.Fatalf("artifact resolver configuration = %#v, want resolved source/backend/platform/protocol", observed)
+	}
+	if !observedOffline {
+		t.Fatal("artifact resolver did not receive offline policy")
 	}
 	if len(assetRequests) != 1 || !assetRequests[0].Offline ||
 		assetRequests[0].BackendReference.NameOrURI != "https://example.invalid/backend.tar.gz" ||
@@ -390,10 +395,10 @@ func TestResolveJoinedBackendArtifactRejectsInvalidFactsBeforeHostStart(t *testi
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			root := &Root{resolveBackendArtifact: func(context.Context, modelseffects.ResolvedHostConfiguration) (modelseffects.BackendArtifactSelection, error) {
+			root := &Root{resolveBackendArtifact: func(context.Context, modelseffects.ResolvedHostConfiguration, bool) (modelseffects.BackendArtifactSelection, error) {
 				return test.selection, nil
 			}}
-			_, err := root.resolveJoinedBackendArtifact(context.Background(), base)
+			_, err := root.resolveJoinedBackendArtifact(context.Background(), base, false)
 			if !errors.Is(err, models.ErrHostMissingAssets) {
 				t.Fatalf("resolve error = %v, want ErrHostMissingAssets before host start", err)
 			}

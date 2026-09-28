@@ -513,8 +513,8 @@ func newASRLiveCorrelationModelsService(
 	if err != nil {
 		t.Fatalf("load pinned LocalAI backend manifest: %v", err)
 	}
-	backendResolver := modelswire.BackendArtifactResolver(func(ctx context.Context, configuration modelseffects.ResolvedHostConfiguration) (modelseffects.BackendArtifactSelection, error) {
-		selection, resolveErr := baseBackendResolver(ctx, configuration)
+	backendResolver := modelswire.BackendArtifactResolver(func(ctx context.Context, configuration modelseffects.ResolvedHostConfiguration, offline bool) (modelseffects.BackendArtifactSelection, error) {
+		selection, resolveErr := baseBackendResolver(ctx, configuration, offline)
 		if resolveErr != nil {
 			return modelseffects.BackendArtifactSelection{}, resolveErr
 		}

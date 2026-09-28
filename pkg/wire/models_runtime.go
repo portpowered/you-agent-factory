@@ -256,24 +256,33 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 			protocolDialer, platformfilesystem.Local{}.EvalSymlinks,
 		)
 	}
-	compatibilityChecker, compatibilityErr := provideModelHostCompatibilityChecker(edges)
-	if compatibilityErr != nil {
-		return nil, compatibilityErr
-	}
-	backendArtifactResolver := adaptModelBackendArtifactResolver(edges.ModelResolveBackendArtifact)
-	if backendArtifactResolver == nil {
-		var resolverErr error
-		backendArtifactResolver, resolverErr = modelswire.NewDefaultBackendArtifactResolver()
-		if resolverErr != nil {
-			return nil, fmt.Errorf("construct Models backend artifact selector: %w", resolverErr)
-		}
-	}
 	runtimeRunner := edges.ModelRuntimeCommandRunner
 	if runtimeRunner == nil {
 		var runnerErr error
 		runtimeRunner, runnerErr = providePlatformProcessCommandRunner(edges)
 		if runnerErr != nil {
 			return nil, runnerErr
+		}
+	}
+	useGallery := runtime.GOOS == "linux" && runtime.GOARCH == "amd64"
+	compatibilityChecker, compatibilityErr := provideModelHostCompatibilityChecker(edges, useGallery)
+	if compatibilityErr != nil {
+		return nil, compatibilityErr
+	}
+	backendArtifactResolver := adaptModelBackendArtifactResolver(edges.ModelResolveBackendArtifact)
+	if backendArtifactResolver == nil {
+		var resolverErr error
+		if useGallery {
+			var installer modelswire.GalleryBackendInstaller
+			installer, resolverErr = newLocalAIGalleryInstaller(runtimeRunner, assetHTTP)
+			if resolverErr == nil {
+				backendArtifactResolver, resolverErr = modelswire.NewGalleryBackendArtifactResolver(installer)
+			}
+		} else {
+			backendArtifactResolver, resolverErr = modelswire.NewDefaultBackendArtifactResolver()
+		}
+		if resolverErr != nil {
+			return nil, fmt.Errorf("construct Models backend artifact selector: %w", resolverErr)
 		}
 	}
 	runtimeHTTP := edges.ModelRuntimeHTTPClient
@@ -357,10 +366,14 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 
 func provideModelHostCompatibilityChecker(
 	edges serviceedges.Edges,
+	useGallery bool,
 ) (modelswire.HostCompatibilityChecker, error) {
 	checker := adaptModelHostCompatibilityChecker(edges.ModelHostCompatibilityChecker)
 	if checker != nil {
 		return checker, nil
+	}
+	if useGallery {
+		return modelswire.NewGalleryHostCompatibilityChecker(), nil
 	}
 	checker, err := modelswire.NewDefaultHostCompatibilityChecker()
 	if err != nil {
@@ -431,17 +444,20 @@ func adaptModelBackendArtifactResolver(
 	return func(
 		ctx context.Context,
 		request modelswire.ResolvedHostConfiguration,
+		offline bool,
 	) (modelswire.BackendArtifactSelection, error) {
 		selection, err := next(ctx, serviceedges.ModelBackendArtifactSelectionRequest{
 			Backend:         request.Backend,
+			Offline:         offline,
 			Platform:        request.Platform,
 			ProtocolVersion: request.ProtocolVersion,
 		})
 		return modelswire.BackendArtifactSelection{
-			Name:     selection.Name,
-			Location: selection.Location,
-			Bytes:    selection.Bytes,
-			SHA256:   selection.SHA256,
+			Name:          selection.Name,
+			Location:      selection.Location,
+			Bytes:         selection.Bytes,
+			SHA256:        selection.SHA256,
+			InstalledPath: selection.InstalledPath,
 		}, err
 	}
 }
@@ -623,7 +639,29 @@ func provideModelAssetHostPlatform(edges serviceedges.Edges) models.AssetHostPla
 	if strings.TrimSpace(platform.Architecture) == "" {
 		platform.Architecture = runtime.GOARCH
 	}
+	if platform.Accelerator == "" && runtime.GOOS == "linux" &&
+		platform.OperatingSystem == "linux" && platform.Architecture == "amd64" &&
+		linuxCUDAAvailable(os.Stat, func(ctx context.Context) ([]byte, error) {
+			return exec.CommandContext(ctx, "nvidia-smi", "-L").Output()
+		}) {
+		platform.Accelerator = "cuda"
+	}
 	return platform
+}
+
+func linuxCUDAAvailable(
+	stat func(string) (os.FileInfo, error),
+	probe func(context.Context) ([]byte, error),
+) bool {
+	if _, err := stat("/dev/nvidiactl"); err != nil {
+		if _, wslErr := stat("/dev/dxg"); wslErr != nil {
+			return false
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	output, err := probe(ctx)
+	return err == nil && strings.TrimSpace(string(output)) != ""
 }
 
 type modelsClock struct{ source platformclock.Source }

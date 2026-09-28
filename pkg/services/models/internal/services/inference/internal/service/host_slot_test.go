@@ -8,7 +8,7 @@ import (
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 )
 
-func TestAcquireHostSlotRefreshesEndpointAfterHostIsReplaced(t *testing.T) {
+func TestAcquireHostSlotInspectsLeasedHostAndRefreshesEndpoint(t *testing.T) {
 	t.Parallel()
 
 	host := &rotatingHost{
@@ -28,35 +28,30 @@ func TestAcquireHostSlotRefreshesEndpointAfterHostIsReplaced(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second acquireHostSlot: %v", err)
 	}
-	if first.Reused || first.Endpoint != host.endpoints[0] {
-		t.Fatalf("first host slot = %#v, want new first endpoint", first)
+	if !first.Reused || first.Endpoint != host.endpoints[0] {
+		t.Fatalf("first host slot = %#v, want first endpoint", first)
 	}
 	if !second.Reused || second.Endpoint != host.endpoints[1] {
 		t.Fatalf("second host slot = %#v, want reused replacement endpoint", second)
 	}
-	if host.ensureCalls != 2 {
-		t.Fatalf("EnsureModelHost calls = %d, want one call per host state", host.ensureCalls)
+	if host.inspectCalls != 2 {
+		t.Fatalf("InspectModelHost calls = %d, want one call per host state", host.inspectCalls)
 	}
 }
 
 type rotatingHost struct {
 	runtimehost.Service
-	endpoints   []string
-	ensureCalls int
+	endpoints    []string
+	inspectCalls int
 }
 
-func (host *rotatingHost) EnsureModelHost(
+func (host *rotatingHost) InspectModelHost(
 	context.Context,
-	models.EnsureModelHostRequest,
-) (models.EnsureModelHostResult, error) {
-	outcome := models.HostEnsureBecameReady
-	if host.ensureCalls > 0 {
-		outcome = models.HostEnsureAlreadyReady
-	}
-	host.ensureCalls++
-	return models.EnsureModelHostResult{
-		Host:    models.ModelHostSnapshot{ReadinessState: models.ReadinessStateReady},
-		Outcome: outcome,
+	models.InspectModelHostRequest,
+) (models.InspectModelHostResult, error) {
+	host.inspectCalls++
+	return models.InspectModelHostResult{
+		Host: models.ModelHostSnapshot{ReadinessState: models.ReadinessStateReady},
 	}, nil
 }
 
@@ -65,8 +60,8 @@ func (host *rotatingHost) InvocationEndpoint(
 	models.RuntimeScopeRef,
 	string,
 ) (string, error) {
-	if host.ensureCalls == 0 {
+	if host.inspectCalls == 0 {
 		return "", models.ErrHostRuntimeNotReady
 	}
-	return host.endpoints[host.ensureCalls-1], nil
+	return host.endpoints[host.inspectCalls-1], nil
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,6 +14,81 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 )
+
+func TestResolveManagedBackendLaunchUsesInstalledLinuxEntrypoint(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("LocalAI gallery run.sh is a Linux entrypoint")
+	}
+	t.Parallel()
+
+	directory := t.TempDir()
+	script := filepath.Join(directory, "run.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write backend entrypoint: %v", err)
+	}
+	launch, err := ResolveManagedBackendLaunch(context.Background(), serviceedges.HostProcessStartSpec{
+		Backend: "localai-llamacpp", BackendFiles: []string{directory},
+	})
+	if err != nil {
+		t.Fatalf("ResolveManagedBackendLaunch: %v", err)
+	}
+	if launch.Command != script || launch.WorkDir != directory ||
+		len(launch.Args) != 1 || !strings.HasPrefix(launch.Args[0], "--addr=") ||
+		len(launch.Env) != 1 || launch.Env[0] != "LLAMACPP_GRPC_SERVERS=1" {
+		t.Fatalf("installed backend launch = %#v", launch)
+	}
+	if err := launch.Cleanup(); err != nil {
+		t.Fatalf("cleanup installed backend: %v", err)
+	}
+	if _, err := os.Stat(script); err != nil {
+		t.Fatalf("installed backend entrypoint after cleanup: %v", err)
+	}
+}
+
+func TestResolveManagedBackendLaunchRejectsMissingOrUnsafeInstalledEntrypoint(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("LocalAI gallery run.sh is a Linux entrypoint")
+	}
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name  string
+		setup func(*testing.T, string)
+	}{
+		{name: "missing"},
+		{name: "not executable", setup: func(t *testing.T, directory string) {
+			t.Helper()
+			if err := os.WriteFile(filepath.Join(directory, "run.sh"), []byte("#!/bin/sh\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "symlink", setup: func(t *testing.T, directory string) {
+			t.Helper()
+			outside := filepath.Join(t.TempDir(), "outside.sh")
+			if err := os.WriteFile(outside, []byte("#!/bin/sh\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(outside, filepath.Join(directory, "run.sh")); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			directory := t.TempDir()
+			if testCase.setup != nil {
+				testCase.setup(t, directory)
+			}
+			_, err := ResolveManagedBackendLaunch(context.Background(), serviceedges.HostProcessStartSpec{
+				Backend: "localai-whisper", BackendFiles: []string{directory},
+			})
+			var classified interface{ ModelRuntimeFailureSubcause() string }
+			if !errors.As(err, &classified) || classified.ModelRuntimeFailureSubcause() != runtimeSubcauseExecutableDiscovery {
+				t.Fatalf("invalid installed backend entrypoint error = %v, want bounded discovery failure", err)
+			}
+		})
+	}
+}
 
 func TestBackendRuntimeFailureWrapsWithoutLeakingCause(t *testing.T) {
 	t.Parallel()

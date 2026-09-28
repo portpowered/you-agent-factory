@@ -327,3 +327,17 @@ The tool returned `factory_session.subagent.timed_out` with
 test edit was present in the workspace afterward. This adds another timeout
 observation without establishing whether model, ACP, or harness continuation
 caused it.
+
+A narrower OpenCode Longcat task to update one CUDA target diagnostic and add
+one manifest test ended as `factory_session.subagent.execution_failed` in
+Factory Session `f70c037e-530d-4e47-b706-b0cbb38d8dac`. The MCP result
+contained no primary agent output or root-cause detail, and the worktree had
+no edits. This failure differs from the Nemotron timeout but is likewise not
+enough to identify the failing layer.
+
+A Codex MCP bridge edit later timed out after 180 seconds in Factory Session
+`d2a6a138-8daf-4a9d-9d3c-690528811495`. It left partial edits to the
+Models selection contract, service runtime, and wire mapping, but returned no
+primary result or focused test outcome. The agent could not safely be retried
+blindly. Manual review completed the bridge and its focused tests; the root
+cause of this timeout remains unproven.

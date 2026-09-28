@@ -134,9 +134,9 @@ func (o *Root) pullResolvedModelAfterCatalogMiss(
 				resolved,
 				o.process.BackendArtifactPlatform,
 			)
-			if o.resolveBackendArtifact != nil && isJoinedPinnedBackend(resolved.Definition.Backend) {
+			if o.resolveBackendArtifact != nil && isJoinedManagedBackend(resolved.Definition.Backend) {
 				var resolveErr error
-				configuration.BackendArtifact, resolveErr = o.resolveJoinedBackendArtifact(ctx, configuration)
+				configuration.BackendArtifact, resolveErr = o.resolveJoinedBackendArtifact(ctx, configuration, false)
 				if resolveErr != nil {
 					return models.PrepareModelAssetsRequest{}, resolveErr
 				}

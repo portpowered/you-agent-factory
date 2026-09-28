@@ -408,7 +408,7 @@ func validateProtocol(raw wireProtocol, field string) (ProtocolIdentity, error) 
 func validateTarget(raw wireTarget, field string) (TargetCompatibility, error) {
 	facts, ok := supportedTargets[raw.ID]
 	if !ok || raw.OperatingSystem != facts.operatingSystem || raw.Architecture != facts.architecture {
-		return TargetCompatibility{}, failure(FailureUnsupportedPlatform, field, raw.ID, "target is outside the supported darwin-arm64, linux-amd64, windows-amd64 set")
+		return TargetCompatibility{}, failure(FailureUnsupportedPlatform, field, raw.ID, "target is outside the supported Darwin, Linux, and Windows CPU/CUDA set")
 	}
 	if !sameStrings(raw.Accelerators, facts.accelerators) {
 		return TargetCompatibility{}, failure(FailureUnsupportedPlatform, field+".accelerators", strings.Join(raw.Accelerators, ","), "accelerators do not match the pinned target")

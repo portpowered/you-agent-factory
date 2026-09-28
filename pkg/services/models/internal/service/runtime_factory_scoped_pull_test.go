@@ -714,6 +714,24 @@ func TestJoinedAssetPreparationRequestKeepsNamedBackendAndRepositorySource(t *te
 	}
 }
 
+func TestJoinedAssetPreparationRequestSkipsArchiveForInstalledBackend(t *testing.T) {
+	t.Parallel()
+	request := models.InvokeModelRequest{Model: models.ModelReference{NameOrURI: "llm"}}
+	resolved := models.ResolvedModelReference{Definition: models.ModelDefinition{
+		Name: "llm", Source: "hf://owner/repository/weights.gguf@revision-1", Backend: "localai-llamacpp",
+	}}
+	configuration := modelseffects.ResolvedHostConfiguration{
+		Backend: "localai-llamacpp", BackendArtifact: modelseffects.BackendArtifactSelection{InstalledPath: "/cache/backends/cuda12-llama-cpp"},
+	}
+	prepared, err := joinedAssetPreparationRequestWithConfiguration(request, configuration, resolved)
+	if err != nil {
+		t.Fatalf("prepare installed backend request: %v", err)
+	}
+	if len(prepared.BackendArtifacts) != 0 || !prepared.BackendReference.IsZero() {
+		t.Fatalf("installed backend requested an archive: %#v", prepared)
+	}
+}
+
 func TestJoinedAssetPreparationRequestCarriesSelectedBackendArtifact(t *testing.T) {
 	t.Parallel()
 

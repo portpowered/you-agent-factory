@@ -54,23 +54,24 @@ type ModelCLIOutputCreateTempFile func(string, string) (interface {
 // while preparing the content.
 type ModelCLIInputReadFile func(context.Context, string, int64) ([]byte, error)
 
-// ModelBackendArtifactSelectionRequest contains the safe host facts needed by
-// the pinned backend publication selector. The edge owns manifest lookup;
-// Models receives only the selected immutable archive facts.
+// ModelBackendArtifactSelectionRequest contains the host facts needed to
+// select a managed backend. The edge owns gallery or archive resolution;
+// Models receives only the selected installation facts.
 type ModelBackendArtifactSelectionRequest struct {
 	Backend         string
+	Offline         bool
 	Platform        models.AssetHostPlatform
 	ProtocolVersion string
 }
 
-// ModelBackendArtifactSelection is the detached archive identity passed into
-// Models asset preparation. Location is consumed only inside the composition
-// graph and is never returned by the Models service.
+// ModelBackendArtifactSelection identifies a detached archive or installed
+// backend directory for Models. Neither path is returned by the Models service.
 type ModelBackendArtifactSelection struct {
-	Name     string
-	Location string
-	Bytes    int64
-	SHA256   string
+	Name          string
+	Location      string
+	Bytes         int64
+	SHA256        string
+	InstalledPath string
 }
 
 type ModelResolveBackendArtifact func(

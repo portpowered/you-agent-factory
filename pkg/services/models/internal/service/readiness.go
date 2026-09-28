@@ -321,7 +321,7 @@ func joinedModelAssetRequirements(
 	return requirements, nil
 }
 
-func isJoinedPinnedBackend(value string) bool {
+func isJoinedManagedBackend(value string) bool {
 	canonical := strings.ToLower(strings.TrimSpace(value))
 	return strings.HasPrefix(canonical, "localai-") || canonical == "localai" ||
 		canonical == "localai_grpc" || canonical == "localai-grpc"

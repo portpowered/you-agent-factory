@@ -222,7 +222,7 @@ func (o *Root) normalizeAssetPreflightRequest(
 		resolution.Resolved,
 		o.process.BackendArtifactPlatform,
 	)
-	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, configuration)
+	backendArtifact, err := o.resolveJoinedBackendArtifact(ctx, configuration, request.Offline)
 	if err != nil {
 		return models.PrepareModelAssetsRequest{}, err
 	}
