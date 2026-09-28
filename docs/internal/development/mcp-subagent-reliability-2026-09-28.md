@@ -1775,3 +1775,21 @@ Commit `4823783075` records the no-cap model settings and the lease fix. The
 Windows MCP binary was installed as `C:\Users\andre\bin\you-4823783075.exe`
 (SHA-256 `7EBF5DCA35A103B572FF0BBEB7ED2F21A138CE6C5339FD68736746F1A96FA117`),
 and the Codex MCP command for new connections points to it.
+
+A local decoder validation of the fixture `.tmp/video-red-blue.mp4` with
+ffprobe/ffmpeg 7.0 (essentials build) found it well-formed, not malformed: a
+1644-byte H.264 High-profile MP4, 160x120 yuv420p, 1 fps, 2 frames, 2.000 s
+duration, probe score 100, decoding with no errors or warnings. Frame 0
+(pts 0.000000, I-frame) decodes to a single uniform color RGB (253,0,0) red
+and frame 1 (pts 1.000000, P-frame) to RGB (0,0,254) blue, 19200/19200 pixels
+each with one distinct color per frame. The repeated `Red, Red` answers are
+therefore LocalAI frame-sampling/model behavior, not fixture corruption. This
+recorded a prior completed OpenCode audit (session
+`f5a6a649-8724-41cc-bf68-9a16c0a6a8a5`) whose finding was that the Models
+mapping treats the MP4 as opaque bytes through `grpc_protocol.go` `Videos[0]`
+(`predictInputValue` base64-encodes the content and `predictOptions` appends it
+to the repeated `options.Videos` field), and that a direct raw gRPC probe
+against the loaded backend also answered `Red, Red`. Remaining inference, not
+proven by the decoder: which frame(s) the backend sampled and why the model
+reported red twice; the decoder establishes fixture content and the mapping
+path only.
