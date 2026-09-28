@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -43,7 +44,7 @@ func (process *runtimeApplicationProcessStub) RuntimeHostReady() <-chan factorys
 	return process.ready
 }
 
-func TestOpenWireApplicationPublishesCancellationToAdapter(t *testing.T) {
+func TestOpenWireApplicationPublishesCancellationToHTTPBinding(t *testing.T) {
 	t.Parallel()
 
 	want := &runtimeApplicationCancelStub{}
@@ -51,15 +52,15 @@ func TestOpenWireApplicationPublishesCancellationToAdapter(t *testing.T) {
 	opener := runtimeApplicationOpenerStub{open: func(context.Context, *factorysessions.RuntimeOpeningRequest) (factorysessionwire.OpenedApplicationRuntime, error) {
 		return factorysessionwire.OpenedApplicationRuntime{}, nil
 	}}
-	adapt := runRuntimeAdapter(func(opened factorysessionwire.OpenedApplicationRuntime, _ factorysessions.VisualizationSinkID) (factorysessions.BoundProcessComponents, error) {
+	bindHTTP := httpRuntimeBinding(func(opened factorysessionwire.OpenedApplicationRuntime) (http.Handler, error) {
 		got = opened.Cancellation
-		return factorysessions.BoundProcessComponents{}, nil
+		return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), nil
 	})
 	plan := factorysessionwire.LifecyclePlanOperation(func(factorysessionwire.LifecyclePlanRequest) (lifecycle.Plan, error) {
 		return lifecycle.Plan{}, nil
 	})
 
-	if _, err := openWireApplicationWithCancellation(context.Background(), &factorysessions.RuntimeOpeningRequest{}, want, "", opener, adapt, plan); err != nil {
+	if _, err := openWireApplicationWithCancellation(context.Background(), &factorysessions.RuntimeOpeningRequest{}, want, "", opener, serviceedges.Edges{}, nil, nil, bindHTTP, lifecycle.NewRunner, plan); err != nil {
 		t.Fatalf("openWireApplicationWithCancellation: %v", err)
 	}
 	if got != want {
@@ -78,15 +79,15 @@ func TestBindWireLiveApplicationFailureClosesOnceWithCause(t *testing.T) {
 		closes++
 		return closeErr
 	}
-	adapt := runRuntimeAdapter(func(factorysessionwire.OpenedApplicationRuntime, factorysessions.VisualizationSinkID) (factorysessions.BoundProcessComponents, error) {
-		return factorysessions.BoundProcessComponents{}, cause
+	bindHTTP := httpRuntimeBinding(func(factorysessionwire.OpenedApplicationRuntime) (http.Handler, error) {
+		return nil, cause
 	})
 	plan := factorysessionwire.LifecyclePlanOperation(func(factorysessionwire.LifecyclePlanRequest) (lifecycle.Plan, error) {
-		t.Fatal("plan must not run after adapter failure")
+		t.Fatal("plan must not run after HTTP binding failure")
 		return lifecycle.Plan{}, nil
 	})
 
-	_, err := bindWireLiveApplication(opened, "", adapt, plan)
+	_, err := bindWireLiveApplication(opened, "", serviceedges.Edges{}, nil, nil, bindHTTP, lifecycle.NewRunner, plan)
 	if !errors.Is(err, cause) {
 		t.Fatalf("bind error = %v, want cause %v", err, cause)
 	}
@@ -98,7 +99,7 @@ func TestBindWireLiveApplicationFailureClosesOnceWithCause(t *testing.T) {
 	}
 }
 
-func TestOpenWireHistoricalReplayBypassesAdapter(t *testing.T) {
+func TestOpenWireHistoricalReplayBypassesHTTPBinding(t *testing.T) {
 	t.Parallel()
 
 	replay := &factorysessions.HistoricalReplayInspection{}
@@ -113,15 +114,15 @@ func TestOpenWireHistoricalReplayBypassesAdapter(t *testing.T) {
 			ResumeRecoveryMetadata: metadata,
 		}, nil
 	}}
-	adapt := runRuntimeAdapter(func(factorysessionwire.OpenedApplicationRuntime, factorysessions.VisualizationSinkID) (factorysessions.BoundProcessComponents, error) {
-		t.Fatal("adapter must not run for historical replay")
-		return factorysessions.BoundProcessComponents{}, nil
+	bindHTTP := httpRuntimeBinding(func(factorysessionwire.OpenedApplicationRuntime) (http.Handler, error) {
+		t.Fatal("HTTP binding must not run for historical replay")
+		return nil, nil
 	})
 	plan := factorysessionwire.LifecyclePlanOperation(func(factorysessionwire.LifecyclePlanRequest) (lifecycle.Plan, error) {
 		return lifecycle.Plan{}, nil
 	})
 
-	got, err := openWireApplicationWithCancellation(context.Background(), &factorysessions.RuntimeOpeningRequest{}, nil, "", opener, adapt, plan)
+	got, err := openWireApplicationWithCancellation(context.Background(), &factorysessions.RuntimeOpeningRequest{}, nil, "", opener, serviceedges.Edges{}, nil, nil, bindHTTP, lifecycle.NewRunner, plan)
 	if err != nil {
 		t.Fatalf("openWireApplicationWithCancellation: %v", err)
 	}

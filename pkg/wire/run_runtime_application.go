@@ -9,19 +9,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	"github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication"
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	"go.uber.org/zap"
 )
-
-// runRuntimeAdapter binds the exact HTTP and optional visualization components
-// selected by Wire to one opened Factory Session.
-type runRuntimeAdapter func(
-	factorysessionwire.OpenedApplicationRuntime,
-	factorysessions.VisualizationSinkID,
-) (factorysessions.BoundProcessComponents, error)
 
 type openedProcessApplication struct {
 	Plan                   lifecycle.Plan
@@ -39,11 +35,18 @@ type openedProcessApplication struct {
 func provideRunRuntimeRunnerBuilder(
 	build initializer.RuntimeRunnerBuilder,
 	openRuntime factorysessionwire.ApplicationRuntimeOpening,
-	adaptRuntime runRuntimeAdapter,
+	edges serviceedges.Edges,
+	visualizationFactory factoryvisualization.RuntimeFactory,
+	visualizationSinks factoryvisualization.RuntimeSinkOwner,
+	httpBinding httpRuntimeBinding,
+	newRunner lifecycle.RunnerFactory,
 	planLifecycle factorysessionwire.LifecyclePlanOperation,
 ) (runcli.RuntimeRunnerBuilder, error) {
-	if build == nil || openRuntime == nil || adaptRuntime == nil || planLifecycle == nil {
+	if build == nil || openRuntime == nil || planLifecycle == nil {
 		return nil, errors.New("run application lifecycle builder and Factory Session opener are required")
+	}
+	if visualizationFactory == nil || visualizationSinks == nil || httpBinding == nil || newRunner == nil {
+		return nil, errors.New("Factory visualization, HTTP binding, and lifecycle component operations are required")
 	}
 	return func(
 		ctx context.Context,
@@ -61,7 +64,7 @@ func provideRunRuntimeRunnerBuilder(
 			return nil, errors.New("build run application: opening request is required")
 		}
 
-		opened, err := openWireApplicationWithCancellation(ctx, request, cancellation, sinkID, openRuntime, adaptRuntime, planLifecycle)
+		opened, err := openWireApplicationWithCancellation(ctx, request, cancellation, sinkID, openRuntime, edges, visualizationFactory, visualizationSinks, httpBinding, newRunner, planLifecycle)
 		if err != nil {
 			return nil, err
 		}
@@ -115,10 +118,14 @@ func openWireApplicationWithCancellation(
 	cancellation initializer.InvocationCancellation,
 	sinkID factorysessions.VisualizationSinkID,
 	openRuntime factorysessionwire.ApplicationRuntimeOpening,
-	adaptRuntime runRuntimeAdapter,
+	edges serviceedges.Edges,
+	visualizationFactory factoryvisualization.RuntimeFactory,
+	visualizationSinks factoryvisualization.RuntimeSinkOwner,
+	httpBinding httpRuntimeBinding,
+	newRunner lifecycle.RunnerFactory,
 	planLifecycle factorysessionwire.LifecyclePlanOperation,
 ) (openedProcessApplication, error) {
-	if openRuntime == nil || adaptRuntime == nil || planLifecycle == nil {
+	if openRuntime == nil || planLifecycle == nil {
 		return openedProcessApplication{}, errors.New("open Factory Session application: service is required")
 	}
 	opened, err := openWireRuntimeForRequest(ctx, request, openRuntime)
@@ -129,7 +136,7 @@ func openWireApplicationWithCancellation(
 	if opened.HistoricalReplay != nil {
 		return openWireHistoricalReplayApplication(opened, planLifecycle)
 	}
-	return bindWireLiveApplication(opened, sinkID, adaptRuntime, planLifecycle)
+	return bindWireLiveApplication(opened, sinkID, edges, visualizationFactory, visualizationSinks, httpBinding, newRunner, planLifecycle)
 }
 
 func openWireRuntimeForRequest(
@@ -165,13 +172,74 @@ func copyWireRuntimeOpeningRequest(
 	}
 }
 
+func bindWireProcessComponents(
+	opened factorysessionwire.OpenedApplicationRuntime,
+	sinkID factorysessions.VisualizationSinkID,
+	edges serviceedges.Edges,
+	visualizationFactory factoryvisualization.RuntimeFactory,
+	visualizationSinks factoryvisualization.RuntimeSinkOwner,
+	httpBinding httpRuntimeBinding,
+	newRunner lifecycle.RunnerFactory,
+) (factorysessions.BoundProcessComponents, error) {
+	sink, err := selectVisualizationSink(visualizationSinks, sinkID)
+	if err != nil {
+		return factorysessions.BoundProcessComponents{}, err
+	}
+	if fixedSink := edges.FactoryVisualizationSink; fixedSink != nil {
+		sink = fixedSink
+	}
+	var visualization lifecycle.Component
+	if sink != nil {
+		logger := opened.Resources.Logger
+		if logger == nil {
+			logger = zap.NewNop()
+		}
+		visualized, err := visualizationFactory(
+			opened.Visualization.Reader, opened.Visualization.Projections, opened.Resources.Clock, sink,
+			func(err error) {
+				logger.Error("Factory visualization failed", zap.Error(err))
+			},
+		)
+		if err != nil {
+			return factorysessions.BoundProcessComponents{}, err
+		}
+		if fixedRootObserver := edges.FactoryVisualizationRootObserver; fixedRootObserver != nil {
+			fixedRootObserver(visualized)
+		}
+		// Factory Session lifecycle must not auto-activate Visualization.
+		// Peers leave the composed root inert until explicit Activate.
+		visualization = lifecycle.Functions{
+			StartFunc: func(context.Context) error { return nil },
+			StopFunc: func(ctx context.Context) error {
+				_, err := visualized.StopDrain(ctx, factoryvisualization.StopDrainRequest{})
+				return err
+			},
+		}
+	}
+	handler, err := httpBinding(opened)
+	if err != nil {
+		return factorysessions.BoundProcessComponents{}, err
+	}
+	transport := newRunner(func(ctx context.Context) error {
+		return opened.Process.RunTransport(ctx, handler)
+	})
+	return factorysessions.BoundProcessComponents{
+		Transport:     transport,
+		Visualization: visualization,
+	}, nil
+}
+
 func bindWireLiveApplication(
 	opened factorysessionwire.OpenedApplicationRuntime,
 	sinkID factorysessions.VisualizationSinkID,
-	adaptRuntime runRuntimeAdapter,
+	edges serviceedges.Edges,
+	visualizationFactory factoryvisualization.RuntimeFactory,
+	visualizationSinks factoryvisualization.RuntimeSinkOwner,
+	httpBinding httpRuntimeBinding,
+	newRunner lifecycle.RunnerFactory,
 	planLifecycle factorysessionwire.LifecyclePlanOperation,
 ) (openedProcessApplication, error) {
-	components, err := adaptRuntime(opened, sinkID)
+	components, err := bindWireProcessComponents(opened, sinkID, edges, visualizationFactory, visualizationSinks, httpBinding, newRunner)
 	if err != nil {
 		err = closeWireOpenedRuntime(opened, err)
 		return openedProcessApplication{}, fmt.Errorf("bind Factory Session application: %w", err)
