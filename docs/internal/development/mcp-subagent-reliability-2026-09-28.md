@@ -235,3 +235,28 @@ on a one-second timeout in session `8a82574e-c722-4c66-a613-8605f7cab85d`.
 A separate fresh launch completed a normal Longcat read-only request in
 session `3dfa17a8-6f17-4221-b6b1-11fd2d4c167d`, returning
 `you-agent-factory` with empty stderr.
+
+The same broad ACP service audit prompt completed through direct OpenCode CLI
+in about 69 seconds but timed out through `you.subagent` after 120 seconds
+(Factory Session `86f31d6c-b50f-4f02-9fb6-b757a0f866a8`, native OpenCode
+session `ses_f18e04808ffeMyvoLMX4uTMW76`). Sanitized native session exports
+show that both runs completed their first `read` tool call. The CLI run then
+continued through two more assistant turns and finished; the ACP run produced
+no second assistant turn. This narrows that timeout to continuation after a
+completed tool result. The OpenCode snapshot `index.lock` warning appeared in
+both runs, so it does not by itself explain the difference. There is no
+evidence in this run of a pending permission request or blocked file read.
+
+A second narrow one-file OpenCode MCP audit timed out after 90 seconds
+(Factory Session `fe1993c2-d225-4ff5-bc5f-f02cd17febe8`, native OpenCode
+session `ses_f18dbd40effestF2lgkRdfqqen`). Its sanitized export again has
+only a user message and an assistant turn ending in a completed `read` tool
+call, with no continuation. The equivalent one-file MCP audit through the
+plain `codex` provider completed in Factory Session
+`3b9316b3-a974-465b-a7ca-1f6d7964f254`. It confirmed that the ACP provider
+captures progress in `client.SessionUpdate` and attaches it on a failed
+`session/prompt` return through `withPartial`, while the Factory Session wait
+can time out before that provider result is available. This provider comparison
+supports an OpenCode ACP continuation problem on this host; it does not yet
+prove whether the upstream model API, OpenCode's ACP bridge, or our response
+handling stops the continuation.
