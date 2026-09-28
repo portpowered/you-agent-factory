@@ -538,7 +538,10 @@ func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd st
 	go func() { finished <- cmd.Wait() }()
 	client := &client{}
 	connection := acpsdk.NewClientSideConnection(client, stdin, stdout)
-	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{ProtocolVersion: acpsdk.ProtocolVersionNumber, ClientCapabilities: acpsdk.ClientCapabilities{}})
+	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{
+		ProtocolVersion:    acpsdk.ProtocolVersionNumber,
+		ClientCapabilities: acpClientCapabilities(),
+	})
 	if err != nil {
 		daemon.cmd, daemon.stdin, daemon.finished, daemon.tree = cmd, stdin, finished, tree
 		_ = daemon.stopLocked(context.Background())
