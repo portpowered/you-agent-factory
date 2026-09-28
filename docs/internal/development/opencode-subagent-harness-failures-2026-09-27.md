@@ -35,6 +35,18 @@ visible in the working tree afterward. This confirms that a timeout can have
 either partial side effects or none; it does not establish whether the worker
 started, where it waited, or whether cancellation reached it.
 
+A later direct MCP documentation edit with free Nemotron returned `TIMED_OUT`
+at its requested 60 s `you.subagent.timeoutMillis` limit, after writing two
+hunks to `docs/architecture/packaged-structure.md`. The probe client's own
+response wait was 75 s, so it did not impose this deadline. The MCP tool passes
+`timeoutMillis` into `SessionInvokeRequest.Wait`; Factory Sessions converts it
+to the invocation wait context deadline and returns `INVOCATION_TIMED_OUT`.
+The MCP tool now reports a distinct `factory_session.subagent.timed_out` error
+with `partialEffectsPossible: true` and the configured duration. It cannot
+assert whether edits occurred for a particular timed-out call; inspect the
+workspace before retrying. The documentation edit was reviewed and committed
+after the timeout.
+
 After the binary/config repair, two CLI OpenCode audits exited with code 0 but
 no primary result and no requested edit. Their stdout contained only an initial
 progress sentence and an ACP `peer connection closed` line. A prior CLI

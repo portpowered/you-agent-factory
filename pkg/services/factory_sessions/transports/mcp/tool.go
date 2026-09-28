@@ -193,7 +193,7 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 		return subagentExecutionFailure(err)
 	}
 	if result.Status != factorysessionexecution.InvocationTerminalStatusCompleted {
-		return subagentTerminalFailure(started.SessionID, result)
+		return subagentTerminalFailure(started.SessionID, result, timeoutMillis)
 	}
 	response := SubagentResult{SessionID: started.SessionID, Status: string(result.Status)}
 	for _, part := range result.PrimaryResult {
@@ -245,7 +245,7 @@ func subagentExecutionFailure(err error) ToolResponse[SubagentResult] {
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }
 
-func subagentTerminalFailure(sessionID string, result factorysessionexecution.InvocationResult) ToolResponse[SubagentResult] {
+func subagentTerminalFailure(sessionID string, result factorysessionexecution.InvocationResult, timeoutMillis int64) ToolResponse[SubagentResult] {
 	envelope := ToolErrorEnvelope{
 		Code:      "factory_session.subagent.execution_failed",
 		Message:   "subagent execution failed before producing a result",
@@ -254,6 +254,15 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 	}
 	if result.ErrorCode != "" {
 		envelope.Details["invocationCode"] = result.ErrorCode
+	}
+	if result.Status == factorysessionexecution.InvocationTerminalStatusTimedOut {
+		envelope.Code = "factory_session.subagent.timed_out"
+		envelope.Message = "subagent timed out before producing a result; workspace edits may have occurred"
+		envelope.Details["partialEffectsPossible"] = true
+		if timeoutMillis > 0 {
+			envelope.Details["timeoutMillis"] = timeoutMillis
+		}
+		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
 	switch workers.WorkFailureType(result.FailureReason) {
 	case workers.WorkFailureTypeThrottled:

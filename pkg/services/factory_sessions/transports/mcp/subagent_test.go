@@ -155,3 +155,24 @@ func TestSubagentSurfacesSafeProviderThrottleFailure(t *testing.T) {
 		t.Fatalf("terminal failure leaked provider text or skipped close: %#v", response.Error)
 	}
 }
+
+func TestSubagentTimeoutReportsPossibleWorkspaceEdits(t *testing.T) {
+	timeout := int64(60_000)
+	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
+		Status:    factorysessions.InvocationTerminalStatusTimedOut,
+		ErrorCode: "INVOCATION_TIMED_OUT",
+		Message:   "private provider output",
+	}}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-timeout" }, mcpfactorysession.SubagentInput{
+		Prompt: "Edit one file", TimeoutMillis: &timeout,
+	})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" || response.Error.Retryable {
+		t.Fatalf("timeout response = %#v", response)
+	}
+	if response.Error.SessionID != "session-1" || response.Error.Details["timeoutMillis"] != timeout || response.Error.Details["partialEffectsPossible"] != true {
+		t.Fatalf("timeout diagnostic = %#v", response.Error)
+	}
+	if !strings.Contains(response.Error.Message, "workspace edits may have occurred") || strings.Contains(response.Error.Message, "private") || !target.closed {
+		t.Fatalf("timeout message or cleanup = %#v", response.Error)
+	}
+}
