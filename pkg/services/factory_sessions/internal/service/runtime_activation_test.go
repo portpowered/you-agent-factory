@@ -557,7 +557,10 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 
 	activation := factoryruntime.RuntimeActivationRequest{
 		Snapshot: activationSnapshot(),
-		Inputs:   runtimeActivationInputs(request, &resumeInput),
+		Inputs: runtimeActivationInputs(
+			request.FactoryDefinition, request.FactorySession, request.Workers,
+			request.Recordings, request.ModelCacheDirectory, request.OperatorDefaults, &resumeInput,
+		),
 	}
 	opening, err := runtimeOpeningRequestFromActivation(activation)
 	if err != nil {

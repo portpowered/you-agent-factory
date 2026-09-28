@@ -400,7 +400,15 @@ func (r *Root) activationRequestWithInputs(
 		sessionID,
 		opening.Recordings.WorkflowID,
 	)
-	inputs := runtimeActivationInputs(opening, resumeInput)
+	inputs := runtimeActivationInputs(
+		opening.FactoryDefinition,
+		opening.FactorySession,
+		opening.Workers,
+		opening.Recordings,
+		opening.ModelCacheDirectory,
+		opening.OperatorDefaults,
+		resumeInput,
+	)
 	// Runtime root activation must receive the same resolved source identity
 	// that Definitions used. In particular, named paths and directory-backed
 	// authored files cannot be rediscovered from the caller's shorthand after
@@ -821,54 +829,59 @@ func runtimeSnapshotResolverUnavailable() error {
 }
 
 func runtimeActivationInputs(
-	request factorysessions.RuntimeOpeningRequest,
+	definition factorydefinitions.RuntimeOpeningRequest,
+	session factorysessions.SessionRuntimeOpeningRequest,
+	worker workers.RuntimeOpeningRequest,
+	recording recordings.RuntimeOpeningRequest,
+	modelCacheDirectory string,
+	operatorDefaults operatorsettings.ResolvedDefaults,
 	resumeInput *recordings.LoadResumeInputResult,
 ) factoryruntime.RuntimeActivationInputs {
 	inputs := factoryruntime.RuntimeActivationInputs{
 		Definition: factoryruntime.RuntimeActivationDefinitionInputs{
-			Directory:        request.FactoryDefinition.Directory,
-			SourcePath:       request.FactoryDefinition.SourcePath,
-			ExecutionBaseDir: request.FactoryDefinition.ExecutionBaseDir,
+			Directory:        definition.Directory,
+			SourcePath:       definition.SourcePath,
+			ExecutionBaseDir: definition.ExecutionBaseDir,
 		},
 		Session: factoryruntime.RuntimeActivationSessionInputs{
-			CanonicalSessionID:          request.FactorySession.CanonicalSessionID,
-			CanonicalSessionIDGenerated: request.FactorySession.CanonicalSessionIDGenerated,
-			PersistencePolicy:           string(request.FactorySession.PersistencePolicy),
-			BackendScopeID:              request.FactorySession.BackendScopeID,
-			SystemConfigHome:            request.FactorySession.SystemConfigHome,
-			SystemConfigPath:            request.FactorySession.SystemConfigPath,
-			WorkFile:                    request.FactorySession.WorkFile,
+			CanonicalSessionID:          session.CanonicalSessionID,
+			CanonicalSessionIDGenerated: session.CanonicalSessionIDGenerated,
+			PersistencePolicy:           string(session.PersistencePolicy),
+			BackendScopeID:              session.BackendScopeID,
+			SystemConfigHome:            session.SystemConfigHome,
+			SystemConfigPath:            session.SystemConfigPath,
+			WorkFile:                    session.WorkFile,
 			Host: factoryruntime.RuntimeActivationHostInputs{
-				Directory:   request.FactorySession.Host.Directory,
-				RuntimeMode: request.FactorySession.Host.RuntimeMode,
-				WorkFile:    request.FactorySession.Host.WorkFile,
-				MockWorkers: request.FactorySession.Host.MockWorkers,
-				Host:        request.FactorySession.Host.Host,
-				Port:        request.FactorySession.Host.Port,
-				AutoPort:    request.FactorySession.Host.AutoPort,
-				Pprof:       request.FactorySession.Host.Pprof,
+				Directory:   session.Host.Directory,
+				RuntimeMode: session.Host.RuntimeMode,
+				WorkFile:    session.Host.WorkFile,
+				MockWorkers: session.Host.MockWorkers,
+				Host:        session.Host.Host,
+				Port:        session.Host.Port,
+				AutoPort:    session.Host.AutoPort,
+				Pprof:       session.Host.Pprof,
 			},
 		},
 		Workers: factoryruntime.RuntimeActivationWorkerInputs{
-			RunnerID:                          request.Workers.RunnerID,
-			Worktree:                          request.Workers.Worktree,
-			WorkerReasoningEffort:             request.Workers.WorkerReasoningEffort,
-			MockWorkers:                       runtimeActivationMockWorkers(request.Workers.MockWorkers),
-			InvocationSkipPermissionsOverride: request.Workers.InvocationSkipPermissionsOverride,
-			SkipBuiltInPrerequisiteValidation: request.Workers.SkipBuiltInPrerequisiteValidation,
+			RunnerID:                          worker.RunnerID,
+			Worktree:                          worker.Worktree,
+			WorkerReasoningEffort:             worker.WorkerReasoningEffort,
+			MockWorkers:                       runtimeActivationMockWorkers(worker.MockWorkers),
+			InvocationSkipPermissionsOverride: worker.InvocationSkipPermissionsOverride,
+			SkipBuiltInPrerequisiteValidation: worker.SkipBuiltInPrerequisiteValidation,
 		},
 		Recordings: factoryruntime.RuntimeActivationRecordingInputs{
-			RecordPath:    request.Recordings.RecordPath,
-			ReplayPath:    request.Recordings.ReplayPath,
-			ResumePath:    request.Recordings.ResumePath,
-			WorkflowID:    request.Recordings.WorkflowID,
-			FlushInterval: request.Recordings.FlushInterval,
+			RecordPath:    recording.RecordPath,
+			ReplayPath:    recording.ReplayPath,
+			ResumePath:    recording.ResumePath,
+			WorkflowID:    recording.WorkflowID,
+			FlushInterval: recording.FlushInterval,
 		},
-		ModelCacheDirectory: request.ModelCacheDirectory,
+		ModelCacheDirectory: modelCacheDirectory,
 		OperatorDefaults: factoryruntime.RuntimeActivationOperatorDefaults{
-			WorkerModelProvider: request.OperatorDefaults.WorkerModelProvider,
-			WorkerModel:         request.OperatorDefaults.WorkerModel,
-			ConfigPath:          request.OperatorDefaults.ConfigPath,
+			WorkerModelProvider: operatorDefaults.WorkerModelProvider,
+			WorkerModel:         operatorDefaults.WorkerModel,
+			ConfigPath:          operatorDefaults.ConfigPath,
 		},
 	}
 	if resumeInput != nil {
