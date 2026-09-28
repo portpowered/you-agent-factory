@@ -276,7 +276,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 			var installer modelswire.GalleryBackendInstaller
 			installer, resolverErr = newLocalAIGalleryInstaller(runtimeRunner, assetHTTP)
 			if resolverErr == nil {
-				backendArtifactResolver, resolverErr = modelswire.NewGalleryBackendArtifactResolver(installer)
+				backendArtifactResolver, resolverErr = newLinuxBackendArtifactResolver(installer, assetHTTP)
 			}
 		} else {
 			backendArtifactResolver, resolverErr = modelswire.NewPublishedBackendArtifactResolver(assetHTTP)

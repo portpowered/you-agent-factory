@@ -566,11 +566,7 @@ func (composition modelsCLIComposition) CompositionModelsRoot() modelservice.Ser
 func (composition modelsCLIComposition) CompositionOpenCatalogScope(
 	ctx context.Context,
 ) (modelscli.InvokeRuntimeScope, error) {
-	opened, err := composition.source.OpenModelsCatalogScope(ctx)
-	if err != nil {
-		return modelscli.InvokeRuntimeScope{}, err
-	}
-	return modelscli.InvokeRuntimeScope{Scope: opened.Scope, Close: opened.Close}, nil
+	return composition.openCatalogModelsScope(ctx, "")
 }
 
 func (composition modelsCLIComposition) CompositionOpenCatalogScopeWithModelCache(

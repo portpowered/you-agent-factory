@@ -95,10 +95,9 @@ const (
 
 var backendReleaseTag = regexp.MustCompile(`^localai-backends-v1-[0-9a-f]{64}$`)
 
-// NewPublishedBackendArtifactResolver checks published Windows archive
-// manifests on first online use. Linux uses the current
-// LocalAI gallery; this resolver keeps the checked-in publication as the
-// fallback when the release index is unavailable or has no compatible
+// NewPublishedBackendArtifactResolver checks published Windows and Linux amd64
+// archive manifests on first online use. It keeps the checked-in publication
+// as the fallback when the release index is unavailable or has no compatible
 // archive. Offline calls never access the network.
 func NewPublishedBackendArtifactResolver(client AssetHTTPDoer) (BackendArtifactResolver, error) {
 	if client == nil {
@@ -116,12 +115,12 @@ func NewPublishedBackendArtifactResolver(client AssetHTTPDoer) (BackendArtifactR
 		if err := ctx.Err(); err != nil {
 			return BackendArtifactSelection{}, err
 		}
-		if request.Platform.OperatingSystem != "windows" || request.Platform.Architecture != "amd64" {
+		if (request.Platform.OperatingSystem != "windows" && request.Platform.OperatingSystem != "linux") ||
+			request.Platform.Architecture != "amd64" {
 			return baselineResolver(ctx, request, offline)
 		}
-		if _, err := baselineResolver(ctx, request, offline); err != nil &&
-			!(request.Platform.Accelerator == "cuda" && errors.Is(err, artifacts.ErrIncompatibleAccelerator)) {
-			return BackendArtifactSelection{}, err
+		if request.ProtocolVersion != modelseffects.PinnedHostProtocolVersion {
+			return baselineResolver(ctx, request, offline)
 		}
 		mu.Lock()
 		if !offline && !checked {
@@ -145,6 +144,9 @@ func NewPublishedBackendArtifactResolver(client AssetHTTPDoer) (BackendArtifactR
 }
 
 func selectPublishedBackend(ctx context.Context, manifests []artifacts.Manifest, request ResolvedHostConfiguration, offline bool) BackendArtifactSelection {
+	if request.Platform.Accelerator != "" && request.Platform.Accelerator != "cpu" && request.Platform.Accelerator != "cuda" {
+		return BackendArtifactSelection{}
+	}
 	if request.Platform.Accelerator == "" && request.Platform.CUDAAvailable {
 		if selection := selectPublishedBackendAccelerator(ctx, manifests, request, offline, "cuda"); selection.Name != "" {
 			return selection

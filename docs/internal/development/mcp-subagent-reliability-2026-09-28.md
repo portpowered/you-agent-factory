@@ -995,3 +995,15 @@ clean. The OpenCode log for the earlier five-minute partial-edit timeout shows
 continued repository tool activity near the deadline; this argues against a
 silent peer disconnect in that attempt, but does not establish why all
 OpenCode tasks take as long as they do or explain other timeout cases.
+
+An OpenCode MCP subagent (`27b27be4-d462-4e73-9240-16542951c011`) was
+assigned a bounded Linux CUDA publication-resolver edit with a 300-second
+deadline. It timed out without a primary result and left no resolver edits.
+The timeout's underlying cause remains unproven. Codex MCP subagent
+`e095dcf7-cf36-459e-bb6a-7d698420cb5b` completed the same narrow
+resolver task with synthetic Linux CUDA publication tests. Codex MCP subagent
+`0fec9c41-28b3-4c45-b11e-8c53e023bbbd` then wired Linux production
+selection to prefer a published CUDA archive and retain the gallery CUDA
+fallback. A live release-index check found no published Linux CUDA archive;
+the new archive path is fixture-tested, while the gallery remains the
+available GPU path.

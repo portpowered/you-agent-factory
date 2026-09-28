@@ -15,8 +15,76 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	managedchild "github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"github.com/portpowered/infinite-you/pkg/wire/internal/managedbackend"
 )
+
+func TestLinuxBackendPrefersPublishedCUDAAndKeepsGalleryFallback(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name           string
+		accelerator    string
+		cudaAvailable  bool
+		offline        bool
+		publishedCUDA  bool
+		publicationErr bool
+		wantPublished  bool
+		wantCalls      int
+	}{
+		{name: "published CUDA", cudaAvailable: true, publishedCUDA: true, wantPublished: true, wantCalls: 1},
+		{name: "missing CUDA archive", cudaAvailable: true, wantCalls: 1},
+		{name: "release unavailable", cudaAvailable: true, publicationErr: true, wantCalls: 1},
+		{name: "explicit CUDA without archive", accelerator: "cuda", wantCalls: 1},
+		{name: "offline CUDA", cudaAvailable: true, offline: true, publishedCUDA: true},
+		{name: "CPU host", publishedCUDA: true},
+		{name: "explicit CPU", accelerator: "cpu", cudaAvailable: true, publishedCUDA: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			publishedCalls, galleryCalls := 0, 0
+			published := func(_ context.Context, request modelswire.ResolvedHostConfiguration, offline bool) (modelswire.BackendArtifactSelection, error) {
+				publishedCalls++
+				if offline || request.Platform.Accelerator != "cuda" {
+					t.Fatalf("published request = %#v, offline = %t", request, offline)
+				}
+				if test.publicationErr {
+					return modelswire.BackendArtifactSelection{}, errors.New("release unavailable")
+				}
+				if !test.publishedCUDA {
+					return modelswire.BackendArtifactSelection{Accelerator: "cpu", Name: "pinned-cpu"}, nil
+				}
+				return modelswire.BackendArtifactSelection{Accelerator: "cuda", Name: "published-cuda"}, nil
+			}
+			gallery := func(_ context.Context, request modelswire.ResolvedHostConfiguration, offline bool) (modelswire.BackendArtifactSelection, error) {
+				galleryCalls++
+				if offline != test.offline || request.Platform.Accelerator != test.accelerator {
+					t.Fatalf("gallery request = %#v, offline = %t", request, offline)
+				}
+				return modelswire.BackendArtifactSelection{Accelerator: "cuda", InstalledPath: "cuda12-gallery"}, nil
+			}
+			request := modelswire.ResolvedHostConfiguration{Platform: models.AssetHostPlatform{
+				OperatingSystem: "linux", Architecture: "amd64", CUDAAvailable: test.cudaAvailable, Accelerator: test.accelerator,
+			}}
+			selection, err := preferPublishedLinuxCUDA(published, gallery)(context.Background(), request, test.offline)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertLinuxBackendSelection(t, selection, publishedCalls, galleryCalls, test.wantPublished, test.wantCalls)
+		})
+	}
+}
+
+func assertLinuxBackendSelection(t *testing.T, selection modelswire.BackendArtifactSelection, publishedCalls, galleryCalls int, wantPublished bool, wantCalls int) {
+	t.Helper()
+	if wantPublished {
+		if selection.Name != "published-cuda" || publishedCalls != 1 || galleryCalls != 0 {
+			t.Fatalf("selection = %#v, published calls = %d, gallery calls = %d", selection, publishedCalls, galleryCalls)
+		}
+	} else if selection.InstalledPath != "cuda12-gallery" || galleryCalls != 1 || publishedCalls != wantCalls {
+		t.Fatalf("selection = %#v, published calls = %d, gallery calls = %d", selection, publishedCalls, galleryCalls)
+	}
+}
 
 type galleryInstallRunner struct {
 	run func(platformprocess.CommandRequest) (platformprocess.CommandResult, error)

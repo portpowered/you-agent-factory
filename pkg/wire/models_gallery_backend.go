@@ -17,6 +17,39 @@ import (
 
 const localAIBinaryEnvironment = "LOCALAI_BINARY"
 
+func newLinuxBackendArtifactResolver(
+	installer modelswire.GalleryBackendInstaller,
+	client modelswire.AssetHTTPDoer,
+) (modelswire.BackendArtifactResolver, error) {
+	gallery, err := modelswire.NewGalleryBackendArtifactResolver(installer)
+	if err != nil {
+		return nil, err
+	}
+	published, err := modelswire.NewPublishedBackendArtifactResolver(client)
+	if err != nil {
+		return nil, err
+	}
+	return preferPublishedLinuxCUDA(published, gallery), nil
+}
+
+func preferPublishedLinuxCUDA(published, gallery modelswire.BackendArtifactResolver) modelswire.BackendArtifactResolver {
+	return func(ctx context.Context, request modelswire.ResolvedHostConfiguration, offline bool) (modelswire.BackendArtifactSelection, error) {
+		platform := request.Platform
+		if !offline && (platform.Accelerator == "cuda" || (platform.Accelerator == "" && platform.CUDAAvailable)) {
+			cudaRequest := request
+			cudaRequest.Platform.Accelerator = "cuda"
+			selection, err := published(ctx, cudaRequest, false)
+			if err == nil && selection.Accelerator == "cuda" && selection.Name != "" {
+				return selection, nil
+			}
+			if ctx.Err() != nil {
+				return modelswire.BackendArtifactSelection{}, ctx.Err()
+			}
+		}
+		return gallery(ctx, request, offline)
+	}
+}
+
 // newLocalAIGalleryInstaller delegates OCI image resolution, integrity, and
 // extraction to LocalAI's own backend gallery command. The returned directory
 // is consumed by the managed backend launcher without copying a mutable image

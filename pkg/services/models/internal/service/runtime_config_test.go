@@ -502,3 +502,61 @@ func TestResolveJoinedBackendArtifactPreservesOfflineFailure(t *testing.T) {
 		t.Fatalf("offline backend error = %v, want ErrAssetOffline", err)
 	}
 }
+
+func TestCustomAudioCPPFileTTSReachesAssetPreparation(t *testing.T) {
+	t.Parallel()
+	var events []string
+	var assetRequests []models.PrepareModelAssetsRequest
+	inference := &joinedInferenceService{events: &events, result: joinedCompletedResult(t)}
+	root, _, _ := newJoinedInvocationRootWithModel(t, &events, inference, "./unused.gguf", "fixture-backend", &assetRequests)
+	source := "file:///models/custom-voice.gguf"
+	backend := "localai-audio-cpp"
+	loadPolicy := models.LoadPolicyOnDemand
+	ref, err := root.runtimeScopes.Open(models.RuntimeBinding{
+		OperatorModels: map[string]models.ModelOverlay{
+			"custom-voice": {
+				Source: &source, Backend: &backend, LoadPolicy: &loadPolicy,
+				Operations: []string{models.OperationTTS},
+			},
+		},
+		RuntimeConfig: func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+	})
+	if err != nil {
+		t.Fatalf("open custom TTS scope: %v", err)
+	}
+	scope, err := (models.RuntimeScopeRef{}).Parse(string(ref))
+	if err != nil {
+		t.Fatalf("parse custom TTS scope: %v", err)
+	}
+	root.process = modelseffects.ProcessDependencies{BackendArtifactPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64", CUDAAvailable: true}}
+	installedBackend := t.TempDir()
+	root.resolveBackendArtifact = func(_ context.Context, configuration modelseffects.ResolvedHostConfiguration, _ bool) (modelseffects.BackendArtifactSelection, error) {
+		if configuration.Backend != backend {
+			t.Fatalf("resolved backend = %q, want %q", configuration.Backend, backend)
+		}
+		return modelseffects.BackendArtifactSelection{InstalledPath: installedBackend, Accelerator: "cuda"}, nil
+	}
+	request := models.InvokeModelRequest{
+		Scope: scope, Holder: "custom-tts-holder", Model: models.ModelReference{NameOrURI: "custom-voice"},
+		Operation: models.OperationTTS,
+		Inputs:    []models.InferenceInput{{Name: "text", Modality: models.ModalityText, Content: "hello"}},
+	}
+	_, invokeErr := root.InvokeModel(context.Background(), request)
+	if len(assetRequests) != 1 {
+		t.Fatalf("asset preparation requests = %#v, invoke error = %v, want one custom TTS request", assetRequests, invokeErr)
+	}
+	prepared := assetRequests[0]
+	if prepared.Scope != scope || prepared.Name != "custom-voice" || prepared.Backend != backend ||
+		prepared.Reference.NameOrURI != "custom-voice" || len(prepared.Artifacts) != 0 {
+		t.Fatalf("asset preparation = %#v, want private local source without VibeVoice roles", prepared)
+	}
+	visible, err := joinedAssetPreparationRequest(request, "custom-voice", models.ResolvedModelReference{
+		Definition: models.ModelDefinition{Name: "custom-voice", Source: source, Backend: backend},
+	})
+	if err != nil {
+		t.Fatalf("prepare visible local GGUF source: %v", err)
+	}
+	if visible.Reference.NameOrURI != source || len(visible.Artifacts) != 1 || visible.Artifacts[0].Name != "custom-voice.gguf" {
+		t.Fatalf("visible local source requirements = %#v, want one GGUF without VibeVoice roles", visible)
+	}
+}

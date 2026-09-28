@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -67,6 +68,51 @@ func TestProcessModelsList_UsesServerFlagAndReturnsCatalogJSON(t *testing.T) {
 		response.Results[0].ManagedRuntime.CacheBytes == nil ||
 		*response.Results[0].ManagedRuntime.CacheBytes != 1234 {
 		t.Fatalf("managed runtime cache facts = revision=%v bytes=%v, want rev1/1234", response.Results[0].ManagedRuntime.Revision, response.Results[0].ManagedRuntime.CacheBytes)
+	}
+}
+
+func TestProcessModelsCatalogDiscoversCustomOperatorModel(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	configDir := filepath.Join(home, ".you-agent-factory")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config := `{"models":{"index-tts2.5":{"source":"file:///models/index-tts2_5-orig.gguf","backend":"localai-audio-cpp","loadPolicy":"ON_DEMAND","operations":["TTS"]}}}`
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	workingDirectory := t.TempDir()
+	invoke := func(args ...string) string {
+		t.Helper()
+		inputs := support.FakeInputs(t.Context(), args)
+		inputs.Input.WorkingDirectory = workingDirectory
+		inputs.Input.Env = append(inputs.Input.Env, "USERPROFILE="+home, "HOME="+home)
+		if err := modelListProcess.Execute(inputs.Input); err != nil {
+			t.Fatalf("Process.Execute(%v) error = %v\nstderr=%s", args, err, inputs.Stderr())
+		}
+		return inputs.Stdout()
+	}
+	var listed factoryapi.ListModelsResponse
+	if err := json.Unmarshal([]byte(invoke("you", "--json", "models", "list")), &listed); err != nil {
+		t.Fatalf("decode models list: %v", err)
+	}
+	found := false
+	for _, model := range listed.Results {
+		if model.Name == "index-tts2.5" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("models list omitted index-tts2.5: %#v", listed.Results)
+	}
+	var inspected factoryapi.ModelDetail
+	if err := json.Unmarshal([]byte(invoke("you", "--json", "models", "inspect", "index-tts2.5")), &inspected); err != nil {
+		t.Fatalf("decode models inspect: %v", err)
+	}
+	if inspected.Name != "index-tts2.5" {
+		t.Fatalf("models inspect name = %q, want index-tts2.5", inspected.Name)
 	}
 }
 

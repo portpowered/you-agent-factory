@@ -313,6 +313,31 @@ func TestGalleryBackendArtifactResolverSelectsCUDAWithoutCPUFallback(t *testing.
 	}
 }
 
+func TestGalleryAudioCPPSelectsCUDA12WhenAvailable(t *testing.T) {
+	t.Parallel()
+	var installed string
+	resolver, err := NewGalleryBackendArtifactResolver(func(_ context.Context, name string, offline bool) (string, error) {
+		installed = name
+		if offline {
+			t.Fatal("gallery installer unexpectedly received offline request")
+		}
+		return "/cache/backends/" + name, nil
+	})
+	if err != nil {
+		t.Fatalf("construct gallery resolver: %v", err)
+	}
+	selection, err := resolver(context.Background(), ResolvedHostConfiguration{
+		Backend: "localai-audio-cpp", ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+		Platform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64", CUDAAvailable: true},
+	}, false)
+	if err != nil {
+		t.Fatalf("resolve audio-cpp gallery artifact: %v", err)
+	}
+	if installed != "cuda12-audio-cpp" || selection.InstalledPath != "/cache/backends/cuda12-audio-cpp" || selection.Accelerator != "cuda" {
+		t.Fatalf("installed = %q, selection = %#v, want cuda12-audio-cpp gallery installation", installed, selection)
+	}
+}
+
 func TestGalleryBackendArtifactResolverSelectsExplicitCPUVariant(t *testing.T) {
 	t.Parallel()
 	for _, testCase := range []struct {
