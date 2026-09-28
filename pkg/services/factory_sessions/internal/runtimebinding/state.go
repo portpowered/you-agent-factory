@@ -184,3 +184,23 @@ func (s *SessionState) CanReplaceTerminatedSession() bool {
 	return (s.lastControlResult.Operation == factorysessions.SessionControlCancel || s.lastControlResult.Operation == factorysessions.SessionControlTerminate) &&
 		s.lastControlResult.Status == factorysessions.LifecycleStatusSucceeded
 }
+
+// InheritTerminalControl carries the committed cancellation fence across a
+// same-ID replacement. Retried Chat controls then replay the old outcome
+// instead of terminating the newly started runtime.
+func (s *SessionState) InheritTerminalControl(previous *SessionState) {
+	if s == nil || previous == nil || s == previous {
+		return
+	}
+	previous.controlMu.Lock()
+	key := previous.lastControlKey
+	result := previous.lastControlResult
+	previous.controlMu.Unlock()
+	if key == "" || (result.Operation != factorysessions.SessionControlCancel && result.Operation != factorysessions.SessionControlTerminate) {
+		return
+	}
+	s.controlMu.Lock()
+	s.lastControlKey = key
+	s.lastControlResult = result
+	s.controlMu.Unlock()
+}

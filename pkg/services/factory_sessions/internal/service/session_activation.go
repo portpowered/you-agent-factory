@@ -12,14 +12,13 @@ import (
 // sessionActivation follows the canonical live-session record. Each cleanup
 // phase is retried only until it succeeds, including after a canceled caller.
 type sessionActivation struct {
-	mu               sync.Mutex
-	lifecycle        roles.LifecycleRuntime
-	stopWorker       factorysessions.RuntimeStop
-	cancel           context.CancelFunc
-	closeArtifacts   func() error
-	workerStopped    bool
-	lifecycleStopped bool
-	artifactsClosed  bool
+	mu              sync.Mutex
+	lifecycle       roles.LifecycleRuntime
+	stopWorker      factorysessions.RuntimeStop
+	cancel          context.CancelFunc
+	closeArtifacts  func() error
+	workerStopped   bool
+	artifactsClosed bool
 }
 
 func (a *sessionActivation) Close(ctx context.Context) error {
@@ -34,13 +33,6 @@ func (a *sessionActivation) Close(ctx context.Context) error {
 			result = errors.Join(result, err)
 		} else {
 			a.workerStopped = true
-		}
-	}
-	if a.lifecycle != nil && !a.lifecycleStopped {
-		if err := a.lifecycle.StopLifecycle(ctx); err != nil {
-			result = errors.Join(result, err)
-		} else {
-			a.lifecycleStopped = true
 		}
 	}
 	if a.cancel != nil {

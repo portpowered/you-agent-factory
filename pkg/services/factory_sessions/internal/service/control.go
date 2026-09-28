@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -61,18 +60,8 @@ func (r *Root) Control(ctx context.Context, request factorysessions.SessionContr
 			}, nil
 		})
 	}
-	owner, ok := bound.Owner.(interface {
-		CloseOwnedSession(context.Context, string) error
-	})
-	if !ok {
-		return factorysessions.SessionControlResult{}, fmt.Errorf("%w: session close is unavailable", factorysessions.ErrRuntimeNotAvailable)
-	}
-	closeErr := owner.CloseOwnedSession(ctx, sessionID)
-	if bound.Activation != nil {
-		closeErr = errors.Join(closeErr, bound.Activation.Close(ctx))
-	}
-	if closeErr != nil {
-		return factorysessions.SessionControlResult{}, closeErr
+	if err := r.Assembly.CloseSession(ctx, sessionID); err != nil {
+		return factorysessions.SessionControlResult{}, err
 	}
 	return factorysessions.SessionControlResult{
 		SessionID: sessionID, Mode: request.Mode, Operation: request.Operation, Closed: true,

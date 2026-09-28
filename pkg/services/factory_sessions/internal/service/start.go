@@ -56,6 +56,7 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
+	var previousControl *runtimebinding.SessionState
 	if request.ActivationOnly && strings.TrimSpace(request.SessionID) != "" {
 		if existing := r.Resolve(selectedID); existing != nil {
 			bound := runtimebinding.SessionStateFrom(existing)
@@ -68,6 +69,7 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 			}); err != nil {
 				return factorysessions.SessionStartResult{}, fmt.Errorf("replace Factory Session %q: %w", selectedID, err)
 			}
+			previousControl = bound
 		}
 	}
 	selected.SessionID = selectedID
@@ -130,21 +132,24 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		}
 	}
 	if err != nil {
-		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session lifecycle: %w", errors.Join(err, activation.Close(ctx)))
+		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session lifecycle: %w", errors.Join(err, activation.Close(ctx), activation.lifecycle.StopLifecycle(ctx)))
 	}
 	sessionID := selectedID
 	session := r.Resolve(sessionID)
 	if session == nil {
 		_ = activation.Close(ctx)
+		_ = activation.lifecycle.StopLifecycle(ctx)
 		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: activated session %q is unavailable", sessionID)
 	}
 	bound := runtimebinding.SessionStateFrom(session)
 	if bound == nil {
 		_ = activation.Close(ctx)
+		_ = activation.lifecycle.StopLifecycle(ctx)
 		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: session runtime state is unavailable")
 	}
 	bound.Activation = activation
 	bound.SetStartRequestID(strings.TrimSpace(request.Correlation.RequestID))
+	bound.InheritTerminalControl(previousControl)
 	status := "RUNNING"
 	view := factorysessions.SessionView{
 		SessionID: livesession.CanonicalID(session), Mode: factorysessions.SessionOperationModeLive,

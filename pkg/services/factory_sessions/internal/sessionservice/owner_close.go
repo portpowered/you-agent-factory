@@ -9,9 +9,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
 
-// CloseOwnedSession retires the session owned by this runtime directly from
-// the canonical registry, without looking up a per-session gateway.
-func (fs *SessionRuntime) CloseOwnedSession(ctx context.Context, sessionID string) error {
+// PrepareOwnedSessionClose terminates the session without removing its record.
+// The record remains available when later cleanup needs a retry.
+func (fs *SessionRuntime) PrepareOwnedSessionClose(ctx context.Context, sessionID string) error {
 	if fs == nil {
 		return fmt.Errorf("Factory Session runtime is required")
 	}
@@ -27,6 +27,15 @@ func (fs *SessionRuntime) CloseOwnedSession(ctx context.Context, sessionID strin
 		if err != nil && !errors.Is(err, factoryruntime.ErrAlreadyStopped) && !errors.Is(err, factoryruntime.ErrNotRunning) {
 			return fmt.Errorf("terminate live Factory Session: %w", err)
 		}
+	}
+	return nil
+}
+
+// RetireOwnedSession removes the canonical record only after all other
+// shutdown effects have succeeded.
+func (fs *SessionRuntime) RetireOwnedSession(sessionID string) error {
+	if fs == nil {
+		return fmt.Errorf("Factory Session runtime is required")
 	}
 	return fs.stopFactorySession(sessionID)
 }
