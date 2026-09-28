@@ -4255,13 +4255,13 @@
           "stdio"
         ],
         "executableNames": [
-          "npx"
+          "opencode"
         ],
         "prerequisites": [
           {
-            "description": "Install the OpenCode ACP launch executable before execution.",
+            "description": "Install the opencode executable before execution.",
             "kind": "executable",
-            "name": "npx"
+            "name": "opencode"
           },
           {
             "description": "Authenticate the OpenCode ACP account before execution.",

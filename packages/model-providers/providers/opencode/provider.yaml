@@ -33,13 +33,13 @@ maximumResponseFidelityCapabilities:
   stableItemIds: false
   providerReconnect: false
 discovery:
-  executableNames: [npx]
+  executableNames: [opencode]
   endpointKinds: [stdio]
   configurationKeys: []
   prerequisites:
     - kind: executable
-      name: npx
-      description: Install the OpenCode ACP launch executable before execution.
+      name: opencode
+      description: Install the opencode executable before execution.
     - kind: authentication
       name: account-authentication
       description: Authenticate the OpenCode ACP account before execution.

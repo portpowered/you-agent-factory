@@ -25,6 +25,8 @@ the agent's text response.
 | Nemotron concise rewrite | Replace the audit with a fact-only note; 120-second limit | `factory_session.subagent.timed_out`, session `39184710-bed0-4095-9d32-413f6591a70e` | The file had partial edits and still contained speculative statements. | Inspected before another attempt; no blind retry. |
 | Ling free rewrite | Replace the same audit; 120-second limit | `factory_session.subagent.provider_throttled`, session `1dd53be9-7520-4f99-94b3-e4847b34786f`, `retryable:true` | No new edit from this attempt. | Try a different available model or wait for provider capacity. |
 | Longcat free rewrite | Replace the audit with at most 350 words; 120-second limit | `COMPLETED`, session `81e7ea79-8167-4c88-a310-bcb652ceb410` | It produced a concise file at the requested path, but reported a different filename in its final text and mislabeled `TEXT`/`AUDIO`/`JSON` modalities as MIME types. The file was corrected and focused LocalAI tests passed. | Keep the response/file verification step even after successful MCP completion. |
+| Mimo default-selection audit | Inspect and fix prompt-only provider/model selection; 180-second limit | `factory_session.subagent.timed_out`, session `b560f791-97dc-49dc-911c-f03b4d28d116` | No source edit or primary result. | Probe a prompt-only invocation directly; keep future audits smaller. |
+| Nemotron Ultra LocalAI test task | Add focused reference-audio test; 240-second limit | `factory_session.subagent.timed_out`, session `dd5a0168-893b-4a98-9194-d5e9f737df74` | Four partial tests appeared in two files. All passed, but duplicated existing codec and protocol assertions and froze an unsupported reference-transcript behavior. The partial edits were removed after review. | Scope the next implementation task to one concrete missing behavior. |
 
 Two `you.subagent` calls ran concurrently and appeared as two live Factory
 Sessions. This demonstrates concurrent dispatch, while the code task's timeout
@@ -44,3 +46,11 @@ It now also validates `you.subagent` JSON arguments at the public MCP boundary
 (ported from `ce8fd74079`). The focused MCP package test passes. A full merge
 of `codex/mcp-invocation-hardening` would restore deleted runtime-opening
 packages, so its customer-facing features are being ported selectively.
+A fresh-built integration MCP server rejected an `unknownOption` argument with
+`BAD_REQUEST` before dispatch. Its direct stdio `you.subagent` probe also
+completed a workspace documentation edit using OpenCode Longcat. An app MCP
+invocation using OpenCode Nemotron corrected the authored OpenCode provider
+executable from `npx` to `opencode`; the generated catalog was updated and its
+check and focused package tests passed. Neither probe required a special edit
+flag. A broad `make verify-fast` attempt stopped at dashboard typechecking
+because this isolated worktree has no Bun type dependencies installed.
