@@ -152,9 +152,10 @@ identity for the UI.
   introduce a separate workflow-run object model when comparing outputs.
 - Ordinary live `you run` and packaged-factory invocations keep Factory Session
   durable execution in memory for now. They do not create or update
-  project-local `.you-agent-factory/durable-sessions`. Explicit restart/resume
-  snapshot persistence remains available when callers or tests opt in with
-  `PersistencePolicyEnabled`.
+  `$HOME/.you-agent-factory/durable-sessions`. Explicit restart/resume snapshot
+  persistence remains available when callers or tests opt in with
+  `PersistencePolicyEnabled`. Each snapshot stores its Factory project root, so
+  one process can restore sessions from multiple Factory directories by session id.
 
 ### Bounded operator verification matrix
 
