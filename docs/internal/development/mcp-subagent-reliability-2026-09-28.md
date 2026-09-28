@@ -1290,3 +1290,34 @@ error text, `isError=true`, and typed `structuredContent` for an invalid
 subagent request. The Codex MCP configuration now points at this binary for
 new connections; existing live Codex MCP processes still use their original
 executable until they reconnect.
+
+Further MCP subagent runs fixed two concrete defects. A Codex-provider MCP
+edit (session `3d7b1d28-4e07-4fa8-89d2-704a2854a3a8`) removed the
+non-built-in cache-inspection gate for operator-defined models. A clean Linux
+binary from commit `cb36e47a43` reported Qwen pull `ALREADY_READY/READY`,
+then immediate inspect `READY/INSTALLED` with the same revision, cache path,
+valid manifest, and two installed files. The preceding binary had returned
+`MISSING/NOT_INSTALLED` on inspect despite that manifest. A later Codex MCP
+edit (session `483d5ba0-def0-4ef9-a823-6b37baf6a5cf`) reduced test
+complexity without changing the production fix. The Windows binary still
+needs rebuilding from those later commits.
+
+A Codex-provider MCP edit (session `3475ef21-2a7c-4a76-846b-8563becd7ad1`)
+added bounded subagent Start, Invoke, snapshot, cancellation, and close
+response paths; a second MCP edit (session
+`09104b30-68df-4946-adda-c3b806485758`) refactored the implementation to
+pass size and complexity gates. A late Start returns a typed timeout and
+retains one admission slot until it can close any session created afterward.
+Sixteen process-wide admission slots cap exposure if dependencies never
+return, and capacity exhaustion rejects new starts. Confirmed close is the
+only path that reports `sessionClosed=true`. The canonical invocation owner
+now checks expired context before submitting Work. A clean checkout at commit
+`942d93ada3` passed all 24 lint targets and the focused Factory Sessions,
+Models, and MCP functional tests. The final Windows binary was installed at
+`C:\Users\andre\bin\you.exe` (SHA-256
+`83616D0C2F2193E02B3908E1FA935A1178A1A280D1D1A2F2354B07C4464953A6`).
+A fresh stdio MCP call with omitted timeout completed in 27 seconds and
+returned `you-agent-factory`. A separate 1 ms request returned a readable
+typed `factory_session.subagent.timed_out` with `phase=start`, request ID,
+and no false session-closed claim. These probes validate fast success and
+early timeout; they do not reproduce a 20-minute non-cooperative dependency.
