@@ -20,6 +20,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -180,9 +181,8 @@ func TestStdioHandlerUsesProcessSessionsAndInvocationStreams(t *testing.T) {
 	ran := false
 	handler, err := provideStdioHandler(
 		sessions, nil,
-		func(ctx context.Context, open initializer.StdioSessionOpener, in io.Reader, out io.Writer) (initializer.LocalRuntimeRunner, error) {
-			_, err := open(ctx, in, out)
-			return testStdioRunner{ran: &ran}, err
+		func(_ context.Context, _ lifecycle.Plan, _ runtimeartifact.Diagnostics, _ <-chan initializer.RuntimeHostBinding) (initializer.LocalRuntimeRunner, error) {
+			return testStdioRunner{ran: &ran}, nil
 		},
 		lifecycle.NewRunner,
 		func(_ *mcpserver.Server, in io.Reader, out io.Writer) (mcpstdio.Session, error) {

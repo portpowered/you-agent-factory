@@ -89,7 +89,7 @@ func NewSelectionFactory(
 	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 	directJavaScript DirectJavaScriptRunOperation,
-	buildApplication initializer.RuntimeRunnerBuilder,
+	buildApplication initializer.LifecycleRunnerBuilder,
 	presentations ...factorysessions.OpeningPresentationOwner,
 ) (SelectionFactory, error) {
 	if open == nil || buildRunner == nil || invocation == nil || presentation == nil ||
@@ -116,7 +116,7 @@ type selection struct {
 	invocation       InvocationOperation
 	presentation     factoryvisualization.ResponsePresentation
 	directJavaScript DirectJavaScriptRunOperation
-	buildApplication initializer.RuntimeRunnerBuilder
+	buildApplication initializer.LifecycleRunnerBuilder
 	presentations    factorysessions.OpeningPresentationOwner
 }
 
@@ -172,13 +172,14 @@ func (s *selection) openDirectJavaScript(
 		}
 		request.ScopeID = scopeID
 	}
-	runner, err := s.buildApplication(ctx, func(openCtx context.Context) (initializer.OpenedApplication, error) {
-		opened, err := s.directJavaScript.Open(openCtx, request, cfg.Cancellation)
-		if err != nil && s.presentations != nil {
+	opened, err := s.directJavaScript.Open(ctx, request, cfg.Cancellation)
+	if err != nil {
+		if s.presentations != nil {
 			s.presentations.Close(scopeID)
 		}
-		return initializer.OpenedApplication{Plan: opened.Plan}, err
-	})
+		return nil, err
+	}
+	runner, err := s.buildApplication(ctx, opened.Plan, runtimeartifact.Diagnostics{}, nil)
 	if err != nil {
 		if s.presentations != nil {
 			s.presentations.Close(scopeID)

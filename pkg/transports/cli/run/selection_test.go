@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	runtimeapplication "github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 )
@@ -60,12 +61,8 @@ func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 		testInvocationOperation{},
 		testResponsePresentation(),
 		direct,
-		func(ctx context.Context, open initializer.ApplicationOpeningOperation) (initializer.LocalRuntimeRunner, error) {
-			opened, err := open(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return runtimeapplication.NewManagedRunner(opened.Plan, opened.Diagnostics)
+		func(_ context.Context, plan lifecycle.Plan, diagnostics runtimeartifact.Diagnostics, _ <-chan initializer.RuntimeHostBinding) (initializer.LocalRuntimeRunner, error) {
+			return runtimeapplication.NewManagedRunner(plan, diagnostics)
 		},
 		owner,
 	)
@@ -106,12 +103,8 @@ func TestRunSelectionCarriesInvocationCancellationToDirectJavaScriptHost(t *test
 			return nil, nil
 		},
 		testInvocationOperation{}, testResponsePresentation(), direct,
-		func(ctx context.Context, open initializer.ApplicationOpeningOperation) (initializer.LocalRuntimeRunner, error) {
-			opened, err := open(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return runtimeapplication.NewManagedRunner(opened.Plan, opened.Diagnostics)
+		func(_ context.Context, plan lifecycle.Plan, diagnostics runtimeartifact.Diagnostics, _ <-chan initializer.RuntimeHostBinding) (initializer.LocalRuntimeRunner, error) {
+			return runtimeapplication.NewManagedRunner(plan, diagnostics)
 		},
 	)
 	if err != nil {
@@ -189,11 +182,7 @@ func TestRunSelectionDirectJavaScriptCleansPresentationOnOpenFailures(t *testing
 					return nil, nil
 				},
 				testInvocationOperation{}, testResponsePresentation(), direct,
-				func(ctx context.Context, open initializer.ApplicationOpeningOperation) (initializer.LocalRuntimeRunner, error) {
-					_, err := open(ctx)
-					if err != nil {
-						return nil, err
-					}
+				func(_ context.Context, _ lifecycle.Plan, _ runtimeartifact.Diagnostics, _ <-chan initializer.RuntimeHostBinding) (initializer.LocalRuntimeRunner, error) {
 					if testCase.builderErr != nil {
 						return nil, testCase.builderErr
 					}
@@ -229,10 +218,7 @@ func TestRunSelectionSupportsDirectJavaScriptWithoutPresentationOwner(t *testing
 			return nil, nil
 		},
 		testInvocationOperation{}, testResponsePresentation(), direct,
-		func(ctx context.Context, open initializer.ApplicationOpeningOperation) (initializer.LocalRuntimeRunner, error) {
-			if _, err := open(ctx); err != nil {
-				return nil, err
-			}
+		func(_ context.Context, _ lifecycle.Plan, _ runtimeartifact.Diagnostics, _ <-chan initializer.RuntimeHostBinding) (initializer.LocalRuntimeRunner, error) {
 			return runFuncRunner(func(context.Context) error { return nil }), nil
 		},
 	)

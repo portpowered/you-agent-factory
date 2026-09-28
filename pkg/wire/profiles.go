@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net"
 	"os"
@@ -617,26 +616,16 @@ func provideMCPServerBuilder(workingDirectory platformfilesystem.WorkingDirector
 	}
 }
 
-func stdioLifecycleOpening(
-	transport lifecycle.Component,
-	diagnostics runtimeartifact.Diagnostics,
-	close func() error,
-) initializer.OpenedApplication {
-	plan := lifecycle.Plan{Components: []lifecycle.NamedComponent{{
+func stdioLifecyclePlan(transport lifecycle.Component) lifecycle.Plan {
+	return lifecycle.Plan{Components: []lifecycle.NamedComponent{{
 		Name: "stdio transport", Component: transport, Primary: true,
 	}}}
-	if close != nil {
-		plan.Resources = []lifecycle.NamedResource{{
-			Name: "runtime application", Resource: lifecycle.CloserFunc(close),
-		}}
-	}
-	return initializer.OpenedApplication{Plan: plan, Diagnostics: diagnostics}
 }
 
 func provideStdioHandler(
 	sessions factorysessions.Service,
 	recordingsRoot recordings.Service,
-	build initializerapplication.StdioRunnerBuilder,
+	build initializer.LifecycleRunnerBuilder,
 	newRunner lifecycle.RunnerFactory,
 	open mcpstdio.Opener,
 	buildServer mcpServerBuilder,
@@ -647,24 +636,24 @@ func provideStdioHandler(
 		return nil, errors.New("MCP stdio requires Factory Sessions root, lifecycle, transport, and server")
 	}
 	return func(ctx context.Context, intent processcontract.MCPIntent) error {
-		openSession := initializer.StdioSessionOpener(func(sessionCtx context.Context, input io.Reader, output io.Writer) (initializer.OpenedApplication, error) {
-			if sessionCtx == nil {
-				return initializer.OpenedApplication{}, errors.New("MCP stdio context is required")
-			}
-			if err := sessionCtx.Err(); err != nil {
-				return initializer.OpenedApplication{}, err
-			}
-			server, err := buildServer(intent.ProjectRoot, sessions, recordingsRoot, prepare, workflowPreview, sessions)
-			if err != nil {
-				return initializer.OpenedApplication{}, err
-			}
-			transport, err := open(server, input, output)
-			if err != nil {
-				return initializer.OpenedApplication{}, err
-			}
-			return stdioLifecycleOpening(newRunner(transport.Run), runtimeartifact.Diagnostics{}, nil), nil
-		})
-		runner, err := build(ctx, openSession, intent.Stdin, intent.Stdout)
+		if ctx == nil {
+			return errors.New("MCP stdio context is required")
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if intent.Stdin == nil || intent.Stdout == nil {
+			return errors.New("MCP stdio input and output are required")
+		}
+		server, err := buildServer(intent.ProjectRoot, sessions, recordingsRoot, prepare, workflowPreview, sessions)
+		if err != nil {
+			return err
+		}
+		transport, err := open(server, intent.Stdin, intent.Stdout)
+		if err != nil {
+			return err
+		}
+		runner, err := build(ctx, stdioLifecyclePlan(newRunner(transport.Run)), runtimeartifact.Diagnostics{}, nil)
 		if err != nil {
 			return err
 		}
@@ -691,7 +680,7 @@ func provideRunSelectionFactory(
 	invocation factorysessionwire.InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 	directJavaScript runcli.DirectJavaScriptRunOperation,
-	buildApplication initializer.RuntimeRunnerBuilder,
+	buildApplication initializer.LifecycleRunnerBuilder,
 	presentations factorysessions.OpeningPresentationOwner,
 ) (runcli.SelectionFactory, error) {
 	return runcli.NewSelectionFactory(

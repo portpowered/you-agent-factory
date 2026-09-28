@@ -578,11 +578,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	managedRunnerFactory := provideManagedRunnerFactory()
-	initializerRuntimeRunnerBuilder, err := application.NewRuntimeRunnerBuilder(managedRunnerFactory)
+	lifecycleRunnerBuilder, err := application.NewLifecycleRunnerBuilder(managedRunnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	selectionFactory, err := provideRunSelectionFactory(runOpener, runtimeRunnerBuilder, v66, v81, directJavaScriptRunOperation, initializerRuntimeRunnerBuilder, openingPresentationOwner)
+	selectionFactory, err := provideRunSelectionFactory(runOpener, runtimeRunnerBuilder, v66, v81, directJavaScriptRunOperation, lifecycleRunnerBuilder, openingPresentationOwner)
 	if err != nil {
 		return nil, err
 	}
@@ -686,13 +686,9 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		ServerStopCLI:                     serverstopOperation,
 	}
 	commandFactory := provideCLICommandFactory(commandOperations)
-	stdioRunnerBuilder, err := application.NewStdioRunnerBuilder(managedRunnerFactory)
-	if err != nil {
-		return nil, err
-	}
 	stdioOpener := stdio.NewOpener()
 	wireMcpServerBuilder := provideMCPServerBuilder(workingDirectory)
-	stdioHandler, err := provideStdioHandler(factorysessionsService, recordingsService, stdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v67, workflowPreviewOperation)
+	stdioHandler, err := provideStdioHandler(factorysessionsService, recordingsService, lifecycleRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v67, workflowPreviewOperation)
 	if err != nil {
 		return nil, err
 	}
@@ -1163,9 +1159,10 @@ var BundleSet = wire5.NewSet(
 	provideSystemInitializationOperation, wire5.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)), wire5.Bind(new(process.ACPServer), new(acp.Server)), provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,
 	provideRuntimeOpeningRequestFactory,
-	provideRunOpener, application.NewRuntimeRunnerBuilder, provideRunRuntimeRunnerBuilder,
+	provideRunOpener, application.NewLifecycleRunnerBuilder, provideRunRuntimeRunnerBuilder,
 	provideRunSelectionFactory,
-	provideInvocationOperation, application.NewStdioRunnerBuilder, provideMCPServerBuilder,
+	provideInvocationOperation,
+	provideMCPServerBuilder,
 	provideStdioHandler,
 	provideDirectJavaScriptHostAdapter, run.NewDirectJavaScriptRunOperation, application.NewInitializer, provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
