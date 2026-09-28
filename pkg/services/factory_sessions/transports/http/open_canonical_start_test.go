@@ -69,6 +69,11 @@ func TestOpenFactorySession_UsesCanonicalStartAndMapsLiveResult(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
+	assertCanonicalLiveOpenResponse(t, response)
+}
+
+func assertCanonicalLiveOpenResponse(t *testing.T, response factoryapi.OpenFactorySessionResponse) {
+	t.Helper()
 	if response.Session == nil || response.Session.Id != "session-live" || response.Session.Project != "demo" {
 		t.Fatalf("session = %#v, want mapped session-live", response.Session)
 	}

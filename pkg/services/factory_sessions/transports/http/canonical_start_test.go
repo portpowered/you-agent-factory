@@ -58,32 +58,37 @@ func TestHandlerFromRoot_CanonicalStartMapsArgsSourceWait(t *testing.T) {
 	}
 
 	for name, got := range map[string]factorysessions.SessionStartRequest{"async": gotAsync, "sync": gotSync} {
-		if got.Mode != factorysessions.SessionOperationModeDurable {
-			t.Fatalf("%s mode = %q, want durable", name, got.Mode)
-		}
-		if got.Correlation.RequestID != "req-map-1" {
-			t.Fatalf("%s requestID = %q, want req-map-1", name, got.Correlation.RequestID)
-		}
-		if got.Source.FactoryID != "factory-alpha" {
-			t.Fatalf("%s source factory = %q", name, got.Source.FactoryID)
-		}
-		if got.FolderPath != "/test-factory" {
-			t.Fatalf("%s project root = %q, want current Factory directory", name, got.FolderPath)
-		}
-		if got.Args["branch"] != "main" {
-			t.Fatalf("%s args = %#v, want branch=main", name, got.Args)
-		}
-		if got.Policy["priority"] != "high" {
-			t.Fatalf("%s policy = %#v", name, got.Policy)
-		}
-		if got.Wait.TimeoutMillis != 5000 || !got.Wait.CancelOnTimeout {
-			t.Fatalf("%s wait = %+v, want 5000/cancel", name, got.Wait)
-		}
+		assertCanonicalDurableStartRequest(t, name, got)
 	}
 	if gotAsync.Synchronous {
 		t.Fatal("async Synchronous = true, want false")
 	}
 	if !gotSync.Synchronous {
 		t.Fatal("sync Synchronous = false, want true")
+	}
+}
+
+func assertCanonicalDurableStartRequest(t *testing.T, name string, got factorysessions.SessionStartRequest) {
+	t.Helper()
+	if got.Mode != factorysessions.SessionOperationModeDurable {
+		t.Fatalf("%s mode = %q, want durable", name, got.Mode)
+	}
+	if got.Correlation.RequestID != "req-map-1" {
+		t.Fatalf("%s requestID = %q, want req-map-1", name, got.Correlation.RequestID)
+	}
+	if got.Source.FactoryID != "factory-alpha" {
+		t.Fatalf("%s source factory = %q", name, got.Source.FactoryID)
+	}
+	if got.FolderPath != "/test-factory" {
+		t.Fatalf("%s project root = %q, want current Factory directory", name, got.FolderPath)
+	}
+	if got.Args["branch"] != "main" {
+		t.Fatalf("%s args = %#v, want branch=main", name, got.Args)
+	}
+	if got.Policy["priority"] != "high" {
+		t.Fatalf("%s policy = %#v", name, got.Policy)
+	}
+	if got.Wait.TimeoutMillis != 5000 || !got.Wait.CancelOnTimeout {
+		t.Fatalf("%s wait = %+v, want 5000/cancel", name, got.Wait)
 	}
 }
