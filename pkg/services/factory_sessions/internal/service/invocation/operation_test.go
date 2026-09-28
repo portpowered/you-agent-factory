@@ -31,7 +31,7 @@ func TestJavaScriptStartRequestPreservesWorkflowFileDefaultPolicy(t *testing.T) 
 	}
 	started, err := javaScriptStartRequest(projection, roles.InvocationTarget{
 		FactoryDir: factoryDir,
-	}, factorysessions.InvocationRequest{}, invocationInputResolver{}, func() string { return "session-policy-test" })
+	}, factorysessions.InvocationRequest{}, factorysessions.ResolvedInvocationInput{}, func() string { return "session-policy-test" })
 	if err != nil {
 		t.Fatalf("javaScriptStartRequest: %v", err)
 	}
@@ -68,14 +68,12 @@ func TestJavaScriptStartRequestUsesDefinitionAndNormalizedArguments(t *testing.T
 	}
 	started, err := javaScriptStartRequest(projection, roles.InvocationTarget{
 		FactoryDir: factoryDir, MockWorkersConfig: &workers.MockWorkersConfig{},
-	}, factorysessions.InvocationRequest{Args: &args, RequestID: &requestID}, invocationInputResolver{
-		resolved: factorysessions.ResolvedInvocationInput{NormalizedArguments: &work.NormalizedArguments{
-			Arguments: map[string]work.NormalizedArgument{
-				"topic": {Values: []string{"injection boundaries"}}, "researchDepth": {Values: []string{"3"}},
-				"maxSubagents": {Values: []string{"2"}}, "enabled": {Values: []string{"true"}},
-			},
-		}},
-	}, func() string { return "session-test-id" })
+	}, factorysessions.InvocationRequest{Args: &args, RequestID: &requestID}, factorysessions.ResolvedInvocationInput{NormalizedArguments: &work.NormalizedArguments{
+		Arguments: map[string]work.NormalizedArgument{
+			"topic": {Values: []string{"injection boundaries"}}, "researchDepth": {Values: []string{"3"}},
+			"maxSubagents": {Values: []string{"2"}}, "enabled": {Values: []string{"true"}},
+		},
+	}}, func() string { return "session-test-id" })
 	if err != nil {
 		t.Fatalf("javaScriptStartRequest: %v", err)
 	}
@@ -98,17 +96,6 @@ func TestJavaScriptStartRequestUsesDefinitionAndNormalizedArguments(t *testing.T
 	if started.Runtime == nil || started.Runtime.ChildExecutorMode != factorysessions.ChildExecutorModeFake {
 		t.Fatalf("runtime = %#v, want fake child executor", started.Runtime)
 	}
-}
-
-type invocationInputResolver struct {
-	resolved factorysessions.ResolvedInvocationInput
-}
-
-func (r invocationInputResolver) ResolveInvocationInput(
-	cfg *factorydefinitions.FactoryConfig,
-	request factorysessions.InvocationRequest,
-) (factorysessions.ResolvedInvocationInput, error) {
-	return r.resolved, nil
 }
 
 func TestJavaScriptInvocationResultDecodesCanonicalWorkContent(t *testing.T) {

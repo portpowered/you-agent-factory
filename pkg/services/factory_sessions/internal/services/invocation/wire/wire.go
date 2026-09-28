@@ -3,7 +3,6 @@
 package wire
 
 import (
-	"context"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -17,19 +16,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// NewOperation is the service-owned construction entrypoint for process-scoped
-// one-shot invocation lifecycle. The implementation remains private to Factory
-// Sessions and root Wire depends only on this service-local constructor.
-// invocationRuntimeOpening is the narrow opening capability consumed by
-// one-shot invocation. It mirrors service.InvocationRuntimeOpening without
-// importing the service package (which would close an import cycle through
-// sessionservice).
-type invocationRuntimeOpening interface {
-	OpenInvocationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedInvocationRuntime, error)
-}
-
+// NewOperation binds one-shot invocation to the process-owned Factory Sessions
+// service. The implementation remains private to Factory Sessions.
 func NewOperation(
-	openRuntime invocationRuntimeOpening,
+	sessions factorysessions.Service,
 	modelsRoot models.Service,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
@@ -41,7 +31,7 @@ func NewOperation(
 	presentations factorysessions.OpeningPresentationOwner,
 ) (roles.InvocationOperation, error) {
 	return legacyopening.NewOperation(
-		openRuntime,
+		sessions,
 		modelsRoot,
 		workingDirectory,
 		resolveCurrentDir,

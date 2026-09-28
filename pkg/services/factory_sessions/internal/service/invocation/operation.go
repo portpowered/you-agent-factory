@@ -15,35 +15,41 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
 
-type operation struct {
-	openRuntime       invocationRuntimeOpening
-	logger            *zap.Logger
-	modelsRoot        models.Service
-	workingDirectory  platformfilesystem.WorkingDirectory
-	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver
-	artifactExporter  factorysessioncontracts.InvocationArtifactExporter
-	modelTimeout      factorysessions.ModelInvocationTimeout
-	artifactRoots     factoryruntime.RuntimeArtifactRootResolver
-	generateSessionID factorysessions.SessionIDGenerator
-	presentations     factorysessions.OpeningPresentationOwner
+type sessionModelInvoker interface {
+	InvokeModelForSession(context.Context, string, string, models.Request) (models.Result, error)
 }
 
-// NewOperation binds the stable process graph used by all one-shot
-// invocations. Each call opens dynamic Factory Session state without rebuilding
-// or selecting application dependencies.
-type invocationRuntimeOpening interface {
-	OpenInvocationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedInvocationRuntime, error)
+type sessionModelScopeReader interface {
+	ModelsScopeForSession(context.Context, string) (models.RuntimeScopeRef, error)
+}
+
+type sessionInputReader interface {
+	ResolveInvocationInputForSession(context.Context, string, factorysessions.InvocationRequest) (factorysessions.ResolvedInvocationInput, error)
+}
+
+type operation struct {
+	sessions           factorysessions.Service
+	sessionModels      sessionModelInvoker
+	sessionModelScopes sessionModelScopeReader
+	sessionInput       sessionInputReader
+	modelsRoot         models.Service
+	logger             *zap.Logger
+	workingDirectory   platformfilesystem.WorkingDirectory
+	resolveCurrentDir  factorydefinitions.CurrentFactoryDirectoryResolver
+	artifactExporter   factorysessioncontracts.InvocationArtifactExporter
+	modelTimeout       factorysessions.ModelInvocationTimeout
+	artifactRoots      factoryruntime.RuntimeArtifactRootResolver
+	generateSessionID  factorysessions.SessionIDGenerator
+	presentations      factorysessions.OpeningPresentationOwner
 }
 
 func NewOperation(
-	openRuntime invocationRuntimeOpening,
+	sessions factorysessions.Service,
 	modelsRoot models.Service,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
@@ -54,8 +60,8 @@ func NewOperation(
 	logger *zap.Logger,
 	presentations factorysessions.OpeningPresentationOwner,
 ) (roles.InvocationOperation, error) {
-	if openRuntime == nil {
-		return nil, errors.New("invocation runtime opening factory is required")
+	if sessions == nil {
+		return nil, errors.New("invocation session service is required")
 	}
 	if workingDirectory == nil {
 		return nil, errors.New("invocation working directory is required")
@@ -81,17 +87,32 @@ func NewOperation(
 	if presentations == nil {
 		return nil, errors.New("invocation presentation owner is required")
 	}
+	sessionModels, ok := sessions.(sessionModelInvoker)
+	if !ok {
+		return nil, errors.New("invocation session service does not support session model invocation")
+	}
+	sessionModelScopes, ok := sessions.(sessionModelScopeReader)
+	if !ok {
+		return nil, errors.New("invocation session service does not support session model scopes")
+	}
+	sessionInput, ok := sessions.(sessionInputReader)
+	if !ok {
+		return nil, errors.New("invocation session service does not support session input resolution")
+	}
 	return &operation{
-		openRuntime:       openRuntime,
-		logger:            logger,
-		modelsRoot:        modelsRoot,
-		workingDirectory:  workingDirectory,
-		resolveCurrentDir: resolveCurrentDir,
-		artifactExporter:  artifactExporter,
-		modelTimeout:      modelTimeout,
-		artifactRoots:     artifactRoots,
-		generateSessionID: generateSessionID,
-		presentations:     presentations,
+		sessions:           sessions,
+		sessionModels:      sessionModels,
+		sessionModelScopes: sessionModelScopes,
+		sessionInput:       sessionInput,
+		modelsRoot:         modelsRoot,
+		logger:             logger,
+		workingDirectory:   workingDirectory,
+		resolveCurrentDir:  resolveCurrentDir,
+		artifactExporter:   artifactExporter,
+		modelTimeout:       modelTimeout,
+		artifactRoots:      artifactRoots,
+		generateSessionID:  generateSessionID,
+		presentations:      presentations,
 	}, nil
 }
 
@@ -103,25 +124,20 @@ func (o *operation) InvokeModel(
 ) (result models.Result, resultErr error) {
 	invokeCtx, cancel := modelInvocationContext(ctx, o.modelTimeout)
 	defer cancel()
-	opened, lifecycle, err := o.open(invokeCtx, target)
-	if err != nil {
+	sessionID := invocationTargetSessionID(target)
+	if _, err := o.sessions.Start(invokeCtx, ActivationOnlyStartRequest(target, o.artifactRoots(target.HomeDir))); err != nil {
 		return models.Result{}, err
 	}
 	defer func() {
-		resultErr = errors.Join(resultErr, lifecycle.close(ctx, opened))
-	}()
-	modelInvoker := opened.ModelInvoker
-	if modelInvoker == nil {
-		// Keep lightweight opening fakes and older callers usable while the
-		// opened runtime remains the authoritative model-invocation capability.
-		modelInvoker = modelinvocation.NewRuntimeModelInvoker(modelinvocation.RuntimeModelInvokerConfig{
-			Models: o.modelsRoot, Scope: opened.ModelsScope,
-			Sessions: opened.Sessions, Workers: opened.Workers,
-			RuntimeID: opened.RuntimeID, GenerationID: opened.GenerationID,
-			FactoryDirectory: target.FactoryDir, WorkingDirectory: target.Worktree,
+		cleanupCtx := context.WithoutCancel(ctx)
+		_, controlErr := o.sessions.Control(cleanupCtx, factorysessions.SessionControlRequest{
+			SessionID: sessionID,
+			Mode:      factorysessions.SessionOperationModeLive,
+			Operation: factorysessions.SessionControlClose,
 		})
-	}
-	result, resultErr = modelInvoker.InvokeModel(lifecycle.runContext, modelName, request)
+		resultErr = errors.Join(resultErr, controlErr)
+	}()
+	result, resultErr = o.sessionModels.InvokeModelForSession(invokeCtx, sessionID, modelName, request)
 	return result, resultErr
 }
 
@@ -177,14 +193,103 @@ func (o *operation) InvokeFactory(
 	target roles.InvocationTarget,
 	request factorysessions.InvocationRequest,
 ) (outcome roles.FactoryInvocationOutcome, resultErr error) {
-	opened, lifecycle, err := o.open(ctx, target)
-	if err != nil {
+	if o == nil || o.sessions == nil {
+		return outcome, errors.New("invocation session service is required")
+	}
+	sessionID := invocationTargetSessionID(target)
+	if _, err := o.sessions.Start(ctx, ActivationOnlyStartRequest(target, o.artifactRoots(target.HomeDir))); err != nil {
 		return outcome, err
 	}
 	defer func() {
-		resultErr = errors.Join(resultErr, lifecycle.close(ctx, opened))
+		cleanupCtx := context.WithoutCancel(ctx)
+		_, controlErr := o.sessions.Control(cleanupCtx, factorysessions.SessionControlRequest{
+			SessionID: sessionID,
+			Mode:      factorysessions.SessionOperationModeLive,
+			Operation: factorysessions.SessionControlClose,
+		})
+		resultErr = errors.Join(resultErr, controlErr)
 	}()
-	return o.invokeFactoryOnOpenedRuntime(ctx, opened, lifecycle.runContext, target, request)
+	bridge, err := o.startFactoryEventBridge(ctx, o.sessions, target)
+	if err != nil {
+		return outcome, err
+	}
+	projection, projectionErr := o.sessions.GetFactorySession(ctx, sessionID)
+	if projectionErr != nil && ctx.Err() != nil {
+		return outcome, ctx.Err()
+	}
+	if projectionErr == nil && factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
+		result, err := o.invokeJavaScriptFactoryViaSessions(ctx, sessionID, projection.Context, target, request)
+		outcome.Result = result
+		if bridge != nil {
+			err = joinTeardownErrorUnlessResultDetermined(outcome, err, bridge.Finish(ctx, o.sessions, outcome), o.logger)
+		}
+		return outcome, err
+	}
+	invocationResult, err := o.sessions.Invoke(ctx, sessionInvokeRequest(sessionID, request))
+	outcome.Result = factoryInvocationResultFromSessionInvocation(invocationResult)
+	resultErr = err
+	if bridge != nil {
+		resultErr = joinTeardownErrorUnlessResultDetermined(
+			outcome, resultErr, bridge.Finish(ctx, o.sessions, outcome), o.logger,
+		)
+	}
+	return outcome, resultErr
+}
+
+func sessionInvokeRequest(sessionID string, request factorysessions.InvocationRequest) factorysessions.SessionInvokeRequest {
+	invoke := factorysessions.SessionInvokeRequest{
+		SessionID:       sessionID,
+		Input:           request.PreparedInvocationInput,
+		Content:         request.Content,
+		ContentProvided: request.ContentProvided,
+	}
+	if request.RequestID != nil {
+		invoke.Correlation.RequestID = strings.TrimSpace(*request.RequestID)
+	}
+	if request.Args != nil {
+		invoke.Args = *request.Args
+	}
+	if request.TimeoutMillis != nil {
+		invoke.Wait.TimeoutMillis = *request.TimeoutMillis
+	}
+	invoke.Wait.CancelOnTimeout = request.CancelOnTimeout
+	return invoke
+}
+
+func (o *operation) invokeJavaScriptFactoryViaSessions(
+	ctx context.Context,
+	sessionID string,
+	projection factorysessions.ProjectionContext,
+	target roles.InvocationTarget,
+	request factorysessions.InvocationRequest,
+) (factorydefinitions.FactoryInvocationResult, error) {
+	resolved, err := o.sessionInput.ResolveInvocationInputForSession(ctx, sessionID, request)
+	if err != nil {
+		return factorydefinitions.FactoryInvocationResult{}, err
+	}
+	startRequest, err := javaScriptStartRequest(
+		projection, target, request, resolved, o.generateSessionID,
+	)
+	if err != nil {
+		return factorydefinitions.FactoryInvocationResult{}, err
+	}
+	started, err := o.sessions.StartSync(ctx, startRequest)
+	if err != nil {
+		return factorydefinitions.FactoryInvocationResult{}, err
+	}
+	result, err := o.sessions.GetResult(ctx, started.SessionID, factorysessions.ResultRequest{
+		Mode: factorysessions.ResultModeFinal,
+	})
+	if err != nil {
+		return factorydefinitions.FactoryInvocationResult{}, err
+	}
+	var sessionFailure *factorysessions.FailureSummary
+	if result.Failure == nil && !javaScriptInvocationSucceeded(result) {
+		if session, sessionErr := o.sessions.GetSession(ctx, started.SessionID); sessionErr == nil {
+			sessionFailure = session.Failure
+		}
+	}
+	return javaScriptInvocationResult(startRequest.RequestID, result, sessionFailure), nil
 }
 
 // joinTeardownErrorUnlessResultDetermined merges a post-result error from a
@@ -218,46 +323,6 @@ func joinTeardownErrorUnlessResultDetermined(
 	return resultErr
 }
 
-func (o *operation) invokeFactoryOnHostedLiveRuntime(
-	ctx context.Context,
-	hosted roles.HostedInvocationOperation,
-	target roles.InvocationTarget,
-	request factorysessions.InvocationRequest,
-) (outcome roles.FactoryInvocationOutcome, resultErr error) {
-	if hosted == nil {
-		return outcome, errors.New("hosted live invocation runtime is incomplete")
-	}
-	sessionID := invocationTargetSessionID(target)
-	if projectionReader, ok := hosted.(interface {
-		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
-	}); ok {
-		projection, projectionErr := projectionReader.GetFactorySession(
-			ctx, sessionID,
-		)
-		if projectionErr != nil && ctx.Err() != nil {
-			return outcome, ctx.Err()
-		}
-		if projectionErr == nil && factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
-			return o.invokeFactoryOnEphemeralRuntime(ctx, target, request)
-		}
-	}
-	bridge, err := o.startFactoryEventBridge(ctx, hosted, target)
-	if err != nil {
-		return outcome, err
-	}
-	invocationResult, err := hosted.InvokeFactorySession(
-		ctx, sessionID, request,
-	)
-	outcome.Result = factoryInvocationResultFromSessionInvocation(invocationResult)
-	resultErr = err
-	if bridge != nil {
-		resultErr = joinTeardownErrorUnlessResultDetermined(
-			outcome, resultErr, bridge.Finish(ctx, hosted, outcome), o.logger,
-		)
-	}
-	return outcome, resultErr
-}
-
 func factoryInvocationResultFromSessionInvocation(
 	result factorysessions.InvocationResult,
 ) factorydefinitions.FactoryInvocationResult {
@@ -268,63 +333,6 @@ func factoryInvocationResultFromSessionInvocation(
 		Message: result.Message, SessionID: result.SessionID, WorkID: result.WorkID,
 		WorkName: result.WorkName, WorkState: result.WorkState,
 	}
-}
-
-func (o *operation) invokeFactoryOnEphemeralRuntime(
-	ctx context.Context,
-	target roles.InvocationTarget,
-	request factorysessions.InvocationRequest,
-) (outcome roles.FactoryInvocationOutcome, resultErr error) {
-	opened, lifecycle, err := o.open(ctx, target)
-	if err != nil {
-		return outcome, err
-	}
-	defer func() {
-		resultErr = errors.Join(resultErr, lifecycle.close(ctx, opened))
-	}()
-	return o.invokeFactoryOnOpenedRuntime(ctx, opened, lifecycle.runContext, target, request)
-}
-
-func (o *operation) invokeFactoryOnOpenedRuntime(
-	ctx context.Context,
-	opened roles.OpenedInvocationRuntime,
-	runContext context.Context,
-	target roles.InvocationTarget,
-	request factorysessions.InvocationRequest,
-) (outcome roles.FactoryInvocationOutcome, resultErr error) {
-	sessionID := invocationTargetSessionID(target)
-	bridge, err := o.startFactoryEventBridge(runContext, opened.Sessions, target)
-	if err != nil {
-		return outcome, err
-	}
-	projection, projectionErr := opened.Sessions.GetFactorySession(
-		runContext, sessionID,
-	)
-	if projectionErr != nil && runContext.Err() != nil {
-		return outcome, runContext.Err()
-	}
-	if projectionErr == nil && factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
-		result, err := invokeJavaScriptFactory(
-			runContext, opened, projection.Context, target, request, o.generateSessionID,
-		)
-		outcome.Result = result
-		if bridge != nil {
-			err = joinTeardownErrorUnlessResultDetermined(
-				outcome, err, bridge.Finish(runContext, opened.Sessions, outcome), o.logger,
-			)
-		}
-		return outcome, err
-	}
-
-	outcome.Result, resultErr = opened.Invoker.InvokeFactorySession(
-		runContext, sessionID, request,
-	)
-	if bridge != nil {
-		resultErr = joinTeardownErrorUnlessResultDetermined(
-			outcome, resultErr, bridge.Finish(runContext, opened.Sessions, outcome), o.logger,
-		)
-	}
-	return outcome, resultErr
 }
 
 func (o *operation) startFactoryEventBridge(
@@ -343,65 +351,6 @@ func (o *operation) startFactoryEventBridge(
 	return o.presentations.StartFactoryEventBridge(ctx, reader, target.EventScopeID)
 }
 
-// InvokeOpenedJavaScriptFactory invokes one already-opened
-// JavaScript-orchestrator Factory runtime through durable workflow execution.
-//
-// A JavaScript Factory's whole workflow is its program, so it declares no work
-// types and cannot be invoked through the Work-submission path, which begins
-// by resolving the single work type carrying handlingBehavior DEFAULT. Every
-// consumer that invokes an opened runtime therefore has to branch on
-// factorydefinitions.IsJavaScriptOrchestratorFactory first, and this is the
-// one implementation of the branch's JavaScript side -- exported so the
-// on-demand target activation ACP dispatch uses reaches exactly the path this
-// package's own one-shot operation uses, rather than growing a second copy
-// that can drift from it.
-func InvokeOpenedJavaScriptFactory(
-	ctx context.Context,
-	opened roles.OpenedInvocationRuntime,
-	projection factorysessions.ProjectionContext,
-	target roles.InvocationTarget,
-	request factorysessions.InvocationRequest,
-	generateSessionID factorysessions.SessionIDGenerator,
-) (factorydefinitions.FactoryInvocationResult, error) {
-	return invokeJavaScriptFactory(ctx, opened, projection, target, request, generateSessionID)
-}
-
-func invokeJavaScriptFactory(
-	ctx context.Context,
-	opened roles.OpenedInvocationRuntime,
-	projection factorysessions.ProjectionContext,
-	target roles.InvocationTarget,
-	request factorysessions.InvocationRequest,
-	generateSessionID factorysessions.SessionIDGenerator,
-) (factorydefinitions.FactoryInvocationResult, error) {
-	resolver := opened.InputResolver
-	if resolver == nil {
-		return factorydefinitions.FactoryInvocationResult{}, errors.New("Factory Session invocation input resolver is required")
-	}
-	startRequest, err := javaScriptStartRequest(projection, target, request, resolver, generateSessionID)
-	if err != nil {
-		return factorydefinitions.FactoryInvocationResult{}, err
-	}
-	started, err := opened.Execution.StartSync(ctx, startRequest)
-	if err != nil {
-		return factorydefinitions.FactoryInvocationResult{}, err
-	}
-	result, err := opened.Execution.GetResult(ctx, started.SessionID, factorysessions.ResultRequest{
-		Mode: factorysessions.ResultModeFinal,
-	})
-	if err != nil {
-		return factorydefinitions.FactoryInvocationResult{}, err
-	}
-	var sessionFailure *factorysessions.FailureSummary
-	if result.Failure == nil && !javaScriptInvocationSucceeded(result) {
-		session, sessionErr := opened.Execution.GetSession(ctx, started.SessionID)
-		if sessionErr == nil {
-			sessionFailure = session.Failure
-		}
-	}
-	return javaScriptInvocationResult(startRequest.RequestID, result, sessionFailure), nil
-}
-
 func javaScriptInvocationSucceeded(result factorysessions.ResultReadResult) bool {
 	return result.SessionStatus == factorysessions.LifecycleStatusSucceeded &&
 		result.ResultStatus == factorysessions.ResultStatusFinal
@@ -411,7 +360,7 @@ func javaScriptStartRequest(
 	projection factorysessions.ProjectionContext,
 	target roles.InvocationTarget,
 	request factorysessions.InvocationRequest,
-	resolver roles.InvocationInputResolver,
+	resolved factorysessions.ResolvedInvocationInput,
 	generateSessionID factorysessions.SessionIDGenerator,
 ) (factorysessions.StartRequest, error) {
 	if projection.FactoryCfg == nil || projection.FactoryCfg.Orchestrator == nil || projection.FactoryCfg.Orchestrator.JavaScript == nil {
@@ -422,10 +371,7 @@ func javaScriptStartRequest(
 	if err != nil {
 		return factorysessions.StartRequest{}, err
 	}
-	args, err := javaScriptInvocationArgs(projection.FactoryCfg, request, js.ArgsSchema, resolver)
-	if err != nil {
-		return factorysessions.StartRequest{}, err
-	}
+	args := javaScriptInvocationArgs(js.ArgsSchema, resolved)
 	requestID := ""
 	if request.RequestID != nil {
 		requestID = strings.TrimSpace(*request.RequestID)
@@ -519,20 +465,11 @@ func factoryDefaultPolicyMap(raw json.RawMessage) map[string]any {
 }
 
 func javaScriptInvocationArgs(
-	cfg *factorydefinitions.FactoryConfig,
-	request factorysessions.InvocationRequest,
 	argsSchema json.RawMessage,
-	resolver roles.InvocationInputResolver,
-) (map[string]any, error) {
-	if resolver == nil {
-		return nil, errors.New("Factory Session invocation input resolver is required")
-	}
-	resolved, err := resolver.ResolveInvocationInput(cfg, request)
-	if err != nil {
-		return nil, err
-	}
+	resolved factorysessions.ResolvedInvocationInput,
+) map[string]any {
 	if resolved.NormalizedArguments == nil {
-		return map[string]any{}, nil
+		return map[string]any{}
 	}
 	types := javaScriptArgumentTypes(argsSchema)
 	args := make(map[string]any, len(resolved.NormalizedArguments.Arguments))
@@ -547,7 +484,7 @@ func javaScriptInvocationArgs(
 			args[name] = values
 		}
 	}
-	return args, nil
+	return args
 }
 
 func javaScriptArgumentTypes(raw json.RawMessage) map[string]string {
@@ -648,131 +585,9 @@ func cloneJavaScriptAgents(values map[string]factorydefinitions.FactoryOrchestra
 	return cloned
 }
 
-type lifecycle struct {
-	runContext context.Context
-	cancel     context.CancelFunc
-	stopWorker factorysessions.RuntimeStop
-	sessionID  string
-}
-
-func (o *operation) open(
-	ctx context.Context,
-	target roles.InvocationTarget,
-) (roles.OpenedInvocationRuntime, *lifecycle, error) {
-	if o == nil || o.openRuntime == nil {
-		return roles.OpenedInvocationRuntime{}, nil, errors.New("invocation operation is required")
-	}
-	config := o.runtimeConfig(target)
-	opened, err := o.openRuntime.OpenInvocationRuntime(ctx, &config)
-	if err != nil {
-		return roles.OpenedInvocationRuntime{}, nil, fmt.Errorf("open invocation runtime: %w", err)
-	}
-	runContext, cancel := context.WithCancel(ctx)
-	active := &lifecycle{
-		runContext: runContext,
-		cancel:     cancel,
-		sessionID:  invocationTargetSessionID(target),
-	}
-	err = opened.Lifecycle.StartLifecycle(ctx, runContext)
-	if err == nil {
-		active.stopWorker, err = opened.Lifecycle.StartWorkerLifecycle(ctx)
-	}
-	if err == nil {
-		err = opened.Lifecycle.CompleteStartup(ctx)
-	}
-	if err != nil {
-		return roles.OpenedInvocationRuntime{}, nil, errors.Join(err, active.close(ctx, opened))
-	}
-	return opened, active, nil
-}
-
-func (o *operation) runtimeConfig(target roles.InvocationTarget) factorysessions.RuntimeOpeningRequest {
-	config := factorysessions.RuntimeOpeningRequest{}
-	config.FactoryDefinition.Directory = target.FactoryDir
-	config.FactoryDefinition.SourcePath = target.FactorySourcePath
-	config.FactoryDefinition.ExecutionBaseDir = target.ExecutionBaseDir
-	config.FactoryDefinition.InvocationArguments = work.CloneInvocationArguments(target.InvocationArguments)
-	config.OperatorDefaults = target.OperatorDefaults
-	config.FactoryRuntime.Mode = factorydefinitions.RuntimeModeService
-	config.FactoryRuntime.Verbose = target.Verbose
-	config.FactoryRuntime.LogDirectory = target.RuntimeLogDir
-	roots := o.artifactRoots(target.HomeDir)
-	if config.FactoryRuntime.LogDirectory == "" {
-		config.FactoryRuntime.LogDirectory = roots.Logs
-	}
-	config.FactoryRuntime.LogConfig = target.RuntimeLogConfig
-	config.FactoryRuntime.MetricsDirectory = target.RuntimeMetricsDir
-	if config.FactoryRuntime.MetricsDirectory == "" {
-		config.FactoryRuntime.MetricsDirectory = roots.Metrics
-	}
-	config.FactoryRuntime.MetricsConfig = target.RuntimeMetricsConfig
-	config.FactorySession.SystemConfigHome = target.HomeDir
-	config.FactorySession.FactorySessionID = invocationTargetSessionID(target)
-	config.FactorySession.CanonicalSessionID = target.CanonicalSessionID
-	config.FactorySession.WorkFile = ""
-	config.FactorySession.Host.Port = 0
-	config.FactorySession.Host.RuntimeMode = factorydefinitions.RuntimeModeService
-	config.Workers.RunnerID = target.RunnerID
-	config.Workers.Worktree = target.Worktree
-	config.Workers.WorkerReasoningEffort = target.WorkerReasoningEffort
-	config.Workers.MockWorkers = target.MockWorkersConfig
-	config.Workers.InvocationSkipPermissionsOverride = target.SkipPermissionsOverride
-	config.Workers.SkipBuiltInPrerequisiteValidation = target.SkipRunnerPrerequisiteValidation
-	config.Recordings.RecordPath = target.RecordPath
-	config.Recordings.ReplayPath = target.ReplayPath
-	config.Recordings.ResumePath = target.ResumePath
-	config.Recordings.WorkflowID = target.WorkflowID
-	config.ModelCacheDirectory = target.ModelCacheDir
-	return config
-}
-
-func (l *lifecycle) close(ctx context.Context, opened roles.OpenedInvocationRuntime) error {
-	if l == nil {
-		return closeArtifacts(opened)
-	}
-	cleanupContext := context.WithoutCancel(ctx)
-	var result error
-	var closeSession func(context.Context, string) error
-	if opened.LiveControl != nil {
-		closeSession = opened.LiveControl.CloseFactorySession
-	} else if opened.Sessions != nil {
-		if closer, ok := opened.Sessions.(interface {
-			CloseFactorySession(context.Context, string) error
-		}); ok {
-			closeSession = closer.CloseFactorySession
-		}
-	}
-	if closeSession != nil {
-		if err := closeSession(cleanupContext, l.sessionID); err != nil {
-			if !errors.Is(err, factorysessions.ErrSessionNotFound) {
-				result = errors.Join(result, err)
-			}
-		}
-	}
-	if l.stopWorker != nil {
-		result = errors.Join(result, l.stopWorker(cleanupContext))
-	}
-	result = errors.Join(result, opened.Lifecycle.StopLifecycle(cleanupContext))
-	l.cancel()
-	if err := opened.Lifecycle.WaitForRuntime(cleanupContext); err != nil && !errors.Is(err, context.Canceled) {
-		result = errors.Join(result, err)
-	}
-	result = errors.Join(result, closeArtifacts(opened))
-	return result
-}
-
 func invocationTargetSessionID(target roles.InvocationTarget) string {
 	if sessionID := strings.TrimSpace(target.FactorySessionID); sessionID != "" {
 		return sessionID
 	}
 	return factorysessions.DefaultSessionID
 }
-
-func closeArtifacts(opened roles.OpenedInvocationRuntime) error {
-	if opened.CloseArtifacts == nil {
-		return nil
-	}
-	return opened.CloseArtifacts()
-}
-
-var _ roles.InvocationOperation = (*operation)(nil)

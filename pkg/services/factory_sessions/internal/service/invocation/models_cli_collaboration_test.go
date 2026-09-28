@@ -3,15 +3,12 @@ package invocation
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-		"github.com/portpowered/infinite-you/pkg/services/models"
-	"go.uber.org/zap"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 func TestResolvedOperatorDefaultsFromPresentationPreservesModelDefaults(t *testing.T) {
@@ -39,20 +36,10 @@ func TestOpenModelsCatalogScope_RequiresOperation(t *testing.T) {
 	}
 }
 
-func TestOpenModelsCatalogScope_RequiresOpenRuntime(t *testing.T) {
-	t.Parallel()
-
-	op := &operation{}
-	_, err := op.OpenModelsCatalogScope(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "invocation operation is required") {
-		t.Fatalf("error = %v, want required open runtime", err)
-	}
-}
-
 func TestOpenModelsCatalogScope_RequiresModelsRoot(t *testing.T) {
 	t.Parallel()
 
-	op := &operation{openRuntime: &runtimeOpeningStub{}}
+	op := &operation{}
 	_, err := op.OpenModelsCatalogScope(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "models presentation root is unavailable") {
 		t.Fatalf("error = %v, want unavailable models root", err)
@@ -81,37 +68,24 @@ func TestOpenModelsPresentationScope_PropagatesFactoryDirResolutionFailure(t *te
 	}
 }
 
-func TestOpenModelsPresentationScope_PropagatesRuntimeOpenFailure(t *testing.T) {
-	t.Parallel()
+type failingPresentationSessions struct {
+	invocationSessionStub
+	err error
+}
 
-	factoryDir := t.TempDir()
-	op, err := NewOperation(
-		&runtimeOpeningStub{},
-		nil,
-		workingDirectoryStub{dir: factoryDir},
-		func(root string) (string, error) {
-			return filepath.Join(root, factorydefinitions.FactoryDir, "active"), nil
-		},
-		artifactExporterStub{},
-		factorysessions.DefaultModelInvocationTimeout,
-		func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} },
-		func() string { return "presentation-scope-test" },
-		zap.NewNop(),
-		invocationPresentationOwnerStub{},
-	)
-	if err != nil {
-		t.Fatalf("NewOperation() error = %v", err)
+func (s *failingPresentationSessions) Start(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	return factorysessions.SessionStartResult{}, s.err
+}
+
+func TestOpenModelsPresentationScopePropagatesSessionStartFailure(t *testing.T) {
+	startErr := errors.New("session start failed")
+	service := &failingPresentationSessions{err: startErr}
+	op := &operation{
+		sessions:      service,
+		artifactRoots: func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} },
 	}
-	scopeOpener, ok := op.(interface {
-		OpenModelsPresentationScope(context.Context, models.PresentationScopeRequest) (models.PresentationScope, error)
-	})
-	if !ok {
-		t.Fatal("NewOperation() must retain the internal Models scope opener")
-	}
-	_, err = scopeOpener.OpenModelsPresentationScope(context.Background(), models.PresentationScopeRequest{
-		FactoryDir: factoryDir,
-	})
-	if err == nil {
-		t.Fatal("OpenModelsPresentationScope() error = nil, want runtime open failure")
+	_, err := op.OpenModelsPresentationScope(context.Background(), models.PresentationScopeRequest{FactoryDir: "factory"})
+	if !errors.Is(err, startErr) {
+		t.Fatalf("OpenModelsPresentationScope() error = %v, want session start failure", err)
 	}
 }

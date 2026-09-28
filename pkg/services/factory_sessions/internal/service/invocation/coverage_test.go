@@ -13,7 +13,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-		"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -45,7 +45,7 @@ func TestNewOperationRequiresRemainingDependencies(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := NewOperation(
-				&runtimeOpeningStub{}, nil, workingDirectoryStub{}, resolver,
+				&invocationSessionStub{}, nil, workingDirectoryStub{}, resolver,
 				artifactExporterStub{}, factorysessions.DefaultModelInvocationTimeout,
 				test.artifactRoots, test.generator, test.logger, test.presentations,
 			)
@@ -103,7 +103,7 @@ func TestOpenModelsCatalogScopeOwnsAnIndependentScopePerCaller(t *testing.T) {
 	t.Parallel()
 
 	root := &catalogScopeModelsStub{}
-	op := &operation{openRuntime: &runtimeOpeningStub{}, modelsRoot: root}
+	op := &operation{modelsRoot: root}
 	first, err := op.OpenModelsCatalogScope(context.Background())
 	if err != nil {
 		t.Fatalf("first OpenModelsCatalogScope: %v", err)
@@ -123,41 +123,6 @@ func TestOpenModelsCatalogScopeOwnsAnIndependentScopePerCaller(t *testing.T) {
 	}
 	if root.closes != 2 {
 		t.Fatalf("catalog scope closes = %d, want one per caller", root.closes)
-	}
-}
-
-func TestHostedInvocationFinishesThroughPresentationOwnedEventBridge(t *testing.T) {
-	t.Parallel()
-
-	projection := factorysessions.SessionProjection{
-		Context: factorysessions.ProjectionContext{FactoryCfg: &factorydefinitions.FactoryConfig{
-			Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
-				Kind: factorydefinitions.OrchestratorKindPetri,
-			},
-		}},
-	}
-	sessions := newHostedLiveSessionsFake(projection)
-	sessions.invokeResult = factorysessions.InvocationResult{
-		Status: factorysessions.InvocationTerminalStatusCompleted,
-	}
-	bridge := &recordingInvocationEventBridge{err: errors.New("post-result bridge failure")}
-	op := &operation{
-		logger:        zap.NewNop(),
-		presentations: invocationPresentationOwnerWithBridge{bridge: bridge},
-	}
-	outcome, err := op.invokeFactoryOnHostedLiveRuntime(
-		context.Background(), sessions,
-		roles.InvocationTarget{EventScopeID: "scope-1"},
-		factorysessions.InvocationRequest{},
-	)
-	if err != nil {
-		t.Fatalf("invokeFactoryOnHostedLiveRuntime: %v", err)
-	}
-	if outcome.Result.Status != factorydefinitions.InvocationTerminalStatusCompleted {
-		t.Fatalf("outcome status = %q, want completed", outcome.Result.Status)
-	}
-	if bridge.finishCalls != 1 {
-		t.Fatalf("event bridge finish calls = %d, want one", bridge.finishCalls)
 	}
 }
 
@@ -207,7 +172,7 @@ func TestJavaScriptInvocationArgsPreservesMultiplicityAndCoercesValues(t *testin
 	t.Parallel()
 	t.Run("preserves repeated values", testJavaScriptInvocationArgsPreservesRepeatedValues)
 	t.Run("coerces typed values", testJavaScriptInvocationArgsCoercesTypedValues)
-	t.Run("handles empty and missing resolvers", testJavaScriptInvocationArgsHandlesResolverBranches)
+	t.Run("handles empty arguments", testJavaScriptInvocationArgsHandlesEmpty)
 }
 
 func testJavaScriptInvocationArgsPreservesRepeatedValues(t *testing.T) {
@@ -217,14 +182,7 @@ func testJavaScriptInvocationArgsPreservesRepeatedValues(t *testing.T) {
 			"tags": {Values: []string{"one", "two"}},
 		},
 	}}
-	args, err := javaScriptInvocationArgs(
-		&factorydefinitions.FactoryConfig{}, factorysessions.InvocationRequest{},
-		nil,
-		invocationInputResolver{resolved: resolved},
-	)
-	if err != nil {
-		t.Fatalf("javaScriptInvocationArgs: %v", err)
-	}
+	args := javaScriptInvocationArgs(nil, resolved)
 	if got, ok := args["tags"].([]any); !ok || len(got) != 2 || got[0] != "one" || got[1] != "two" {
 		t.Fatalf("tags = %#v, want two values", args["tags"])
 	}
@@ -240,14 +198,10 @@ func testJavaScriptInvocationArgsCoercesTypedValues(t *testing.T) {
 			"raw":     {Values: []string{"plain"}},
 		},
 	}}
-	args, err := javaScriptInvocationArgs(
-		&factorydefinitions.FactoryConfig{}, factorysessions.InvocationRequest{},
+	args := javaScriptInvocationArgs(
 		json.RawMessage(`{"properties":{"count":{"type":"integer"},"ratio":{"type":"number"},"enabled":{"type":"boolean"}}}`),
-		invocationInputResolver{resolved: resolved},
+		resolved,
 	)
-	if err != nil {
-		t.Fatalf("javaScriptInvocationArgs: %v", err)
-	}
 	if got, ok := args["count"].(string); !ok || got != "not-an-integer" {
 		t.Fatalf("invalid integer = %#v, want original string", args["count"])
 	}
@@ -262,14 +216,11 @@ func testJavaScriptInvocationArgsCoercesTypedValues(t *testing.T) {
 	}
 }
 
-func testJavaScriptInvocationArgsHandlesResolverBranches(t *testing.T) {
+func testJavaScriptInvocationArgsHandlesEmpty(t *testing.T) {
 	t.Helper()
-	empty, err := javaScriptInvocationArgs(&factorydefinitions.FactoryConfig{}, factorysessions.InvocationRequest{}, nil, invocationInputResolver{})
-	if err != nil || len(empty) != 0 {
-		t.Fatalf("nil normalized arguments = %#v, error = %v, want empty map", empty, err)
-	}
-	if _, err := javaScriptInvocationArgs(&factorydefinitions.FactoryConfig{}, factorysessions.InvocationRequest{}, nil, nil); err == nil {
-		t.Fatal("nil resolver error = nil, want required resolver")
+	empty := javaScriptInvocationArgs(nil, factorysessions.ResolvedInvocationInput{})
+	if len(empty) != 0 {
+		t.Fatalf("nil normalized arguments = %#v, want empty map", empty)
 	}
 }
 
@@ -305,102 +256,6 @@ func TestJavaScriptInvocationResultReportsDecodeAndAvailabilityFailures(t *testi
 	}
 }
 
-func TestInvocationOpenClosesRuntimeAfterStartupFailure(t *testing.T) {
-	t.Parallel()
-
-	startupErr := errors.New("startup failed")
-	closeErr := errors.New("artifact close failed")
-	opening := &invocationRuntimeOpeningStub{opened: roles.OpenedInvocationRuntime{
-		Sessions:       &hostedLiveSessionsFake{},
-		Lifecycle:      coverageLifecycleStub{startErr: startupErr},
-		CloseArtifacts: func() error { return closeErr },
-	}}
-	op := &operation{
-		openRuntime:   opening,
-		artifactRoots: func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} },
-	}
-	_, _, err := op.open(context.Background(), roles.InvocationTarget{})
-	if !errors.Is(err, startupErr) || !errors.Is(err, closeErr) {
-		t.Fatalf("open() error = %v, want startup and cleanup errors", err)
-	}
-}
-
-func TestInvocationLifecycleCloseAggregatesCleanupFailures(t *testing.T) {
-	t.Parallel()
-
-	workerErr := errors.New("worker stop failed")
-	lifecycleErr := errors.New("lifecycle stop failed")
-	waitErr := errors.New("runtime wait failed")
-	artifactErr := errors.New("artifact close failed")
-	cancelled := false
-	active := &lifecycle{
-		cancel:     func() { cancelled = true },
-		stopWorker: func(context.Context) error { return workerErr },
-	}
-	opened := roles.OpenedInvocationRuntime{
-		Sessions: &hostedLiveSessionsFake{}, Lifecycle: coverageLifecycleStub{stopErr: lifecycleErr, waitErr: waitErr},
-		CloseArtifacts: func() error { return artifactErr },
-	}
-	err := active.close(context.Background(), opened)
-	if !cancelled || !errors.Is(err, workerErr) || !errors.Is(err, lifecycleErr) || !errors.Is(err, waitErr) || !errors.Is(err, artifactErr) {
-		t.Fatalf("close() cancelled=%v error=%v, want all cleanup failures", cancelled, err)
-	}
-}
-
-func TestInvokeJavaScriptFactoryUsesExecutionResultAndSessionFailure(t *testing.T) {
-	t.Parallel()
-
-	primary, err := json.Marshal([]work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "done"}})
-	if err != nil {
-		t.Fatalf("marshal primary result: %v", err)
-	}
-	projection := factorysessions.ProjectionContext{
-		FactoryCfg: &factorydefinitions.FactoryConfig{Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
-			Kind:       factorydefinitions.OrchestratorKindJavaScript,
-			JavaScript: &factorydefinitions.FactoryOrchestratorJavaScriptConfig{InlineSource: &factorydefinitions.FactoryOrchestratorJavaScriptInlineSource{Inline: "return 1"}},
-		}},
-	}
-	execution := &javascriptExecutionStub{
-		start:  factorysessions.SyncStartResult{AsyncStartResult: factorysessions.AsyncStartResult{SessionID: "session-js"}},
-		result: factorysessions.ResultReadResult{SessionID: "session-js", SessionStatus: factorysessions.LifecycleStatusSucceeded, ResultStatus: factorysessions.ResultStatusFinal, PrimaryResult: primary},
-	}
-	opened := roles.OpenedInvocationRuntime{InputResolver: invocationInputResolver{}, Execution: execution}
-	result, err := invokeJavaScriptFactory(context.Background(), opened, projection, roles.InvocationTarget{}, factorysessions.InvocationRequest{}, func() string { return "generated" })
-	if err != nil || result.Status != factorydefinitions.InvocationTerminalStatusCompleted || len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != "done" {
-		t.Fatalf("success result = %#v, error = %v", result, err)
-	}
-	if execution.request.RequestID != "run-generated" {
-		t.Fatalf("start request id = %q, want generated request id", execution.request.RequestID)
-	}
-
-	failureMessage := "workflow failed before result"
-	execution = &javascriptExecutionStub{
-		start:   factorysessions.SyncStartResult{AsyncStartResult: factorysessions.AsyncStartResult{SessionID: "session-failed"}},
-		result:  factorysessions.ResultReadResult{SessionID: "session-failed", SessionStatus: factorysessions.LifecycleStatusFailed, ResultStatus: factorysessions.ResultStatusUnavailable},
-		session: factorysessions.SessionReadResult{Failure: &factorysessions.FailureSummary{Message: failureMessage}},
-	}
-	opened.Execution = execution
-	result, err = invokeJavaScriptFactory(context.Background(), opened, projection, roles.InvocationTarget{}, factorysessions.InvocationRequest{}, func() string { return "generated" })
-	if err != nil || result.Status != factorydefinitions.InvocationTerminalStatusFailed || result.Message != failureMessage {
-		t.Fatalf("failure result = %#v, error = %v", result, err)
-	}
-}
-
-func TestInvokeJavaScriptFactoryRejectsMissingInputResolver(t *testing.T) {
-	t.Parallel()
-
-	_, err := invokeJavaScriptFactory(context.Background(), roles.OpenedInvocationRuntime{}, factorysessions.ProjectionContext{}, roles.InvocationTarget{}, factorysessions.InvocationRequest{}, func() string { return "id" })
-	if err == nil || !strings.Contains(err.Error(), "input resolver is required") {
-		t.Fatalf("error = %v, want input-resolver error", err)
-	}
-}
-
-type coverageLifecycleStub struct {
-	startErr error
-	stopErr  error
-	waitErr  error
-}
-
 type catalogScopeModelsStub struct {
 	models.Service
 	opens  int
@@ -416,67 +271,4 @@ func (stub *catalogScopeModelsStub) OpenRuntimeScope(context.Context, models.Ope
 func (stub *catalogScopeModelsStub) CloseRuntimeScope(_ context.Context, request models.CloseRuntimeScopeRequest) (models.CloseRuntimeScopeResult, error) {
 	stub.closes++
 	return models.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
-}
-
-type recordingInvocationEventBridge struct {
-	finishCalls int
-	err         error
-}
-
-func (bridge *recordingInvocationEventBridge) Finish(context.Context, roles.FactoryEventReader, factorysessions.FactoryInvocationOutcome) error {
-	bridge.finishCalls++
-	return bridge.err
-}
-
-type invocationPresentationOwnerWithBridge struct {
-	invocationPresentationOwnerStub
-	bridge *recordingInvocationEventBridge
-}
-
-func (owner invocationPresentationOwnerWithBridge) StartFactoryEventBridge(context.Context, roles.FactoryEventReader, factorysessions.OpeningScopeID) (interface {
-	Finish(context.Context, roles.FactoryEventReader, factorysessions.FactoryInvocationOutcome) error
-}, error) {
-	return owner.bridge, nil
-}
-
-func (stub coverageLifecycleStub) StartLifecycle(context.Context, context.Context) error {
-	return stub.startErr
-}
-
-func (coverageLifecycleStub) StartWorkerLifecycle(context.Context) (factorysessions.RuntimeStop, error) {
-	return nil, nil
-}
-
-func (coverageLifecycleStub) CompleteStartup(context.Context) error { return nil }
-
-func (stub coverageLifecycleStub) WaitForRuntime(context.Context) error { return stub.waitErr }
-
-func (stub coverageLifecycleStub) StopLifecycle(context.Context) error { return stub.stopErr }
-
-func (coverageLifecycleStub) FailStartup(error) error { return nil }
-
-func (coverageLifecycleStub) CurrentRuntimeBundle() factoryruntime.RuntimeRecord { return nil }
-
-type javascriptExecutionStub struct {
-	executionMethodsStub
-	start      factorysessions.SyncStartResult
-	startErr   error
-	request    factorysessions.StartRequest
-	result     factorysessions.ResultReadResult
-	resultErr  error
-	session    factorysessions.SessionReadResult
-	sessionErr error
-}
-
-func (stub *javascriptExecutionStub) StartSync(_ context.Context, request factorysessions.StartRequest) (factorysessions.SyncStartResult, error) {
-	stub.request = request
-	return stub.start, stub.startErr
-}
-
-func (stub *javascriptExecutionStub) GetResult(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
-	return stub.result, stub.resultErr
-}
-
-func (stub *javascriptExecutionStub) GetSession(context.Context, string) (factorysessions.SessionReadResult, error) {
-	return stub.session, stub.sessionErr
 }

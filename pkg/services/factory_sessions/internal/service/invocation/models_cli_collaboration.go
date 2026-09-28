@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -12,7 +13,7 @@ import (
 func (o *operation) OpenModelsCatalogScope(
 	ctx context.Context,
 ) (models.PresentationScope, error) {
-	if o == nil || o.openRuntime == nil {
+	if o == nil {
 		return models.PresentationScope{}, errors.New("invocation operation is required")
 	}
 	root := o.modelsRoot
@@ -57,22 +58,31 @@ func (o *operation) OpenModelsPresentationScope(
 		Verbose:          request.Verbose,
 		ModelCacheDir:    request.ModelCacheDir,
 	}
-	opened, lifecycle, err := o.open(ctx, target)
-	if err != nil {
+	sessionID := invocationTargetSessionID(target)
+	if _, err := o.sessions.Start(ctx, ActivationOnlyStartRequest(target, o.artifactRoots(target.HomeDir))); err != nil {
 		return models.PresentationScope{}, err
 	}
-	if opened.ModelsScope.IsZero() {
-		closeErr := lifecycle.close(ctx, opened)
+	closeSession := func(closeCtx context.Context) error {
+		_, err := o.sessions.Control(context.WithoutCancel(closeCtx), factorysessions.SessionControlRequest{
+			SessionID: sessionID, Mode: factorysessions.SessionOperationModeLive,
+			Operation: factorysessions.SessionControlClose,
+		})
+		return err
+	}
+	scope, err := o.sessionModelScopes.ModelsScopeForSession(ctx, sessionID)
+	if err != nil {
+		return models.PresentationScope{}, errors.Join(err, closeSession(ctx))
+	}
+	if scope.IsZero() {
+		closeErr := closeSession(ctx)
 		return models.PresentationScope{}, errors.Join(
 			errors.New("models presentation scope is unavailable"),
 			closeErr,
 		)
 	}
 	return models.PresentationScope{
-		Scope: opened.ModelsScope,
-		Close: func(closeCtx context.Context) error {
-			return lifecycle.close(closeCtx, opened)
-		},
+		Scope: scope,
+		Close: closeSession,
 	}, nil
 }
 

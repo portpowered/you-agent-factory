@@ -14,8 +14,19 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-		"go.uber.org/zap"
+	"github.com/portpowered/infinite-you/pkg/services/models"
+	"go.uber.org/zap"
 )
+
+type invocationSessionStub struct{ factorysessions.Service }
+
+func (*invocationSessionStub) InvokeModelForSession(context.Context, string, string, models.Request) (models.Result, error) {
+	return models.Result{}, nil
+}
+
+func (*invocationSessionStub) ModelsScopeForSession(context.Context, string) (models.RuntimeScopeRef, error) {
+	return models.RuntimeScopeRef{}, nil
+}
 
 type invocationPresentationOwnerStub struct{}
 
@@ -175,7 +186,7 @@ func TestResolveModelsInvokeFactoryDir_ReportsWorkingDirectoryFailure(t *testing
 func TestNewOperation_RequiresModelInvocationBoundaryDependencies(t *testing.T) {
 	t.Parallel()
 
-	openRuntime := &runtimeOpeningStub{}
+	sessions := &invocationSessionStub{}
 	resolver := factorydefinitions.CurrentFactoryDirectoryResolver(func(root string) (string, error) { return root, nil })
 	tests := []struct {
 		name       string
@@ -192,105 +203,13 @@ func TestNewOperation_RequiresModelInvocationBoundaryDependencies(t *testing.T) 
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := NewOperation(openRuntime, nil, test.workingDir, test.resolver, test.exporter, test.timeout, func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} }, func() string { return "session-test-id" }, zap.NewNop(), nil)
+			_, err := NewOperation(sessions, nil, test.workingDir, test.resolver, test.exporter, test.timeout, func(string) factoryruntime.RuntimeArtifactRoots { return factoryruntime.RuntimeArtifactRoots{} }, func() string { return "session-test-id" }, zap.NewNop(), nil)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("NewOperation() error = %v, want %q", err, test.want)
 			}
 		})
 	}
 }
-
-// TestInvocationOperationOpensItsNarrowRuntimeView proves the invocation
-// operation uses the grouped Factory Sessions opening capability supplied by
-// Wire without requiring the concrete grouped construction type.
-func TestInvocationOperationOpensItsNarrowRuntimeView(t *testing.T) {
-	t.Parallel()
-
-	opening := &invocationRuntimeOpeningStub{
-		opened: roles.OpenedInvocationRuntime{Lifecycle: invocationLifecycleStub{}},
-	}
-	invocation, err := NewOperation(
-		opening,
-		nil,
-		workingDirectoryStub{},
-		factorydefinitions.CurrentFactoryDirectoryResolver(func(root string) (string, error) { return root, nil }),
-		artifactExporterStub{},
-		factorysessions.DefaultModelInvocationTimeout,
-		func(string) factoryruntime.RuntimeArtifactRoots {
-			return factoryruntime.RuntimeArtifactRoots{Logs: "logs", Metrics: "metrics"}
-		},
-		func() string { return "session-id" },
-		zap.NewNop(),
-		invocationPresentationOwnerStub{},
-	)
-	if err != nil {
-		t.Fatalf("NewOperation: %v", err)
-	}
-
-	concrete, ok := invocation.(*operation)
-	if !ok {
-		t.Fatalf("NewOperation returned %T, want *operation", invocation)
-	}
-	opened, active, err := concrete.open(t.Context(), roles.InvocationTarget{
-		FactorySessionID: "session-explicit",
-		FactoryDir:       "factory", HomeDir: "home", RunnerID: "runner",
-		CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
-	})
-	if err != nil {
-		t.Fatalf("open invocation runtime: %v", err)
-	}
-	if active == nil || opened.Lifecycle == nil {
-		t.Fatalf("opened invocation runtime = %#v, lifecycle = %#v", opened, active)
-	}
-	active.cancel()
-	if opening.calls != 1 {
-		t.Fatalf("invocation runtime openings = %d, want 1", opening.calls)
-	}
-	if opening.request == nil || opening.request.FactoryDefinition.Directory != "factory" ||
-		opening.request.Workers.RunnerID != "runner" ||
-		opening.request.FactorySession.FactorySessionID != "session-explicit" ||
-		opening.request.FactorySession.CanonicalSessionID != "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba" ||
-		opening.request.FactoryRuntime.LogDirectory != "logs" ||
-		opening.request.FactoryRuntime.MetricsDirectory != "metrics" {
-		t.Fatalf("invocation runtime request = %#v", opening.request)
-	}
-	if active.sessionID != "session-explicit" {
-		t.Fatalf("lifecycle session = %q, want explicit selector", active.sessionID)
-	}
-}
-
-type invocationRuntimeOpeningStub struct {
-	calls   int
-	request *factorysessions.RuntimeOpeningRequest
-	opened  roles.OpenedInvocationRuntime
-}
-
-func (stub *invocationRuntimeOpeningStub) OpenInvocationRuntime(
-	_ context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
-) (roles.OpenedInvocationRuntime, error) {
-	stub.calls++
-	stub.request = request
-	return stub.opened, nil
-}
-
-type invocationLifecycleStub struct{}
-
-func (invocationLifecycleStub) StartLifecycle(context.Context, context.Context) error { return nil }
-
-func (invocationLifecycleStub) StartWorkerLifecycle(context.Context) (factorysessions.RuntimeStop, error) {
-	return nil, nil
-}
-
-func (invocationLifecycleStub) CompleteStartup(context.Context) error { return nil }
-
-func (invocationLifecycleStub) WaitForRuntime(context.Context) error { return nil }
-
-func (invocationLifecycleStub) StopLifecycle(context.Context) error { return nil }
-
-func (invocationLifecycleStub) FailStartup(error) error { return nil }
-
-func (invocationLifecycleStub) CurrentRuntimeBundle() factoryruntime.RuntimeRecord { return nil }
 
 func TestModelInvocationContextAppliesOwnerTimeout(t *testing.T) {
 	t.Parallel()
