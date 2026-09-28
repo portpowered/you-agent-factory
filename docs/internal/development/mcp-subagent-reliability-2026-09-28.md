@@ -1508,3 +1508,13 @@ complexity and file-count lint gates. A second Codex MCP edit (session
 `9ccbed93-e36d-4cfd-a9b6-60b5d4197f76`) moved the tests into an existing
 file and split the terminal classification helper. Focused Go tests, the two
 previously failing lint targets, and `git diff --check` then passed.
+
+Commit `6cc66b3254` records the safe classification repair. A rebuilt Windows
+binary (SHA-256 `7C517C387A9A158E6F167173B02B800338933C15317F2D011B8B466C8E254886`)
+initialized a fresh stdio MCP process and listed all 11 tools. Several active
+MCP processes held the old `C:\Users\andre\bin\you.exe` open, so copying over
+that file failed with Windows sharing violation. To avoid interrupting those
+connections, the rebuilt binary was installed at
+`C:\Users\andre\bin\you-6cc66b3254.exe`, and the configured command for new
+Codex MCP connections now points to that versioned executable. Existing
+connections keep their prior process image until they close.
