@@ -486,7 +486,7 @@ func runProtocolFailurePeer(mode string, stdin io.Reader, stdout, stderr io.Writ
 		case "session/prompt":
 			if mode == "permission-denied-empty" {
 				pendingPromptID = append(json.RawMessage(nil), request.ID...)
-				_, err := fmt.Fprintln(writer, `{"jsonrpc":"2.0","id":"permission-1","method":"session/request_permission","params":{"sessionId":"acp-session-service-1","toolCall":{"toolCallId":"tool-1","title":"Read outside workspace"},"options":[{"optionId":"allow","kind":"allow_once","name":"Allow"},{"optionId":"deny","kind":"reject_once","name":"Deny"}]}}`)
+				_, err := fmt.Fprintln(writer, `{"jsonrpc":"2.0","id":"permission-1","method":"session/request_permission","params":{"sessionId":"acp-session-service-1","toolCall":{"toolCallId":"tool-1","title":"Read outside workspace"},"options":[{"optionId":"deny","kind":"reject_once","name":"Deny"}]}}`)
 				if err != nil {
 					return err
 				}

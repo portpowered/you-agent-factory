@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -320,10 +321,10 @@ func (daemon *daemon) execute(
 	}
 	prompt := promptBlocks(request)
 
-	if err := daemon.ensureStarted(ctx, id, cwd, requestEnvironment(request), request); err != nil {
+	if err := daemon.ensureStarted(ctx, id, cwd, requestEnvironment(id, request), request); err != nil {
 		return providers.ExecuteResult{}, err
 	}
-	daemon.client.reset(request.SkipPermissions, request.ProgressObserver)
+	daemon.client.reset(request.ProgressObserver)
 	client := daemon.client
 	connection := daemon.connection
 	initialized := daemon.initialized
@@ -624,13 +625,28 @@ func (daemon *daemon) clearProcess() {
 	daemon.tree = platformprocess.SubprocessTree{}
 }
 
-func requestEnvironment(request providers.ExecuteRequest) []string {
-	if request.EnvVars == nil {
-		return append([]string(nil), request.ProcessEnvironment...)
-	}
+func requestEnvironment(id providers.ID, request providers.ExecuteRequest) []string {
 	values := append([]string(nil), request.ProcessEnvironment...)
+	if id == providers.IDOpenCode && request.ProcessEnvironment == nil {
+		// Adding an override requires a concrete environment. Preserve the
+		// process environment that exec.Cmd would otherwise inherit.
+		values = os.Environ()
+	}
+	hasOpenCodePermission := false
+	for _, value := range values {
+		name, _, _ := strings.Cut(value, "=")
+		if strings.EqualFold(name, "OPENCODE_PERMISSION") {
+			hasOpenCodePermission = true
+		}
+	}
 	for key, value := range request.EnvVars {
+		if strings.EqualFold(key, "OPENCODE_PERMISSION") {
+			hasOpenCodePermission = true
+		}
 		values = append(values, key+"="+value)
+	}
+	if id == providers.IDOpenCode && !hasOpenCodePermission {
+		values = append(values, `OPENCODE_PERMISSION={"*":"allow"}`)
 	}
 	return values
 }
@@ -972,7 +988,6 @@ func sensitiveEnvironmentName(name string) bool {
 
 type client struct {
 	mu                  sync.Mutex
-	skipPermissions     bool
 	permissionWasDenied bool
 	text                strings.Builder
 	sessionID           string
@@ -982,10 +997,9 @@ type client struct {
 // reset begins one turn's progress stream. observe may be nil, in which case
 // the turn still normalizes its facts but delivers them only in the returned
 // diagnostics.
-func (c *client) reset(skipPermissions bool, observe providers.ProgressObserver) {
+func (c *client) reset(observe providers.ProgressObserver) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.skipPermissions = skipPermissions
 	c.permissionWasDenied = false
 	c.text.Reset()
 	c.sessionID = ""
@@ -1197,21 +1211,23 @@ func (c *client) RequestPermission(ctx context.Context, request acpsdk.RequestPe
 	if ctx.Err() != nil {
 		return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeCancelled()}, nil
 	}
-	// The SDK invokes this callback from its connection reader while the
-	// per-turn policy is reset by the execution goroutine. Snapshot the policy
-	// under the same lock as reset so a permission request cannot observe an
-	// unsynchronized or stale turn value.
-	c.mu.Lock()
-	want := c.skipPermissions
-	c.mu.Unlock()
-	for _, option := range request.Options {
-		allow := option.Kind == acpsdk.PermissionOptionKindAllowOnce || option.Kind == acpsdk.PermissionOptionKindAllowAlways
-		if allow == want {
-			if !allow {
-				c.mu.Lock()
-				c.permissionWasDenied = true
-				c.mu.Unlock()
+	// ACP invocations are noninteractive. Grant the broadest advertised allow
+	// choice so the peer can continue without a permission prompt.
+	for _, kind := range []acpsdk.PermissionOptionKind{
+		acpsdk.PermissionOptionKindAllowAlways,
+		acpsdk.PermissionOptionKindAllowOnce,
+	} {
+		for _, option := range request.Options {
+			if option.Kind == kind {
+				return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeSelected(option.OptionId)}, nil
 			}
+		}
+	}
+	for _, option := range request.Options {
+		if option.Kind == acpsdk.PermissionOptionKindRejectOnce || option.Kind == acpsdk.PermissionOptionKindRejectAlways {
+			c.mu.Lock()
+			c.permissionWasDenied = true
+			c.mu.Unlock()
 			return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeSelected(option.OptionId)}, nil
 		}
 	}

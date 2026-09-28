@@ -95,7 +95,7 @@ func TestSharedConformanceCorpusSessionUpdateMatchesInboundMapper(t *testing.T) 
 			var observedMu sync.Mutex
 			var observed []providers.ExecuteProgress
 			mapperClient := &client{}
-			mapperClient.reset(false, func(fact providers.ExecuteProgress) {
+			mapperClient.reset(func(fact providers.ExecuteProgress) {
 				observedMu.Lock()
 				observed = append(observed, fact)
 				observedMu.Unlock()
