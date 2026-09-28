@@ -12,6 +12,7 @@ import (
 	"reflect"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -20,9 +21,17 @@ import (
 // Adapter maps Recordings service values at the outward HTTP boundary.
 type Adapter struct {
 	root              recordings.Service
+	sessions          factorysessions.Service
+	inspection        factorysessions.SessionInspectionService
 	legacyHistory     LegacyHistory
 	legacyPreparation LegacyRequestPreparation
 	legacyLiveEvents  LegacyLiveEvents
+}
+
+// NewAdapterWithSessions combines finalized recording reads with active
+// Factory Session inspection through their canonical service roots.
+func NewAdapterWithSessions(root recordings.Service, sessions factorysessions.Service, inspection factorysessions.SessionInspectionService) *Adapter {
+	return &Adapter{root: root, sessions: sessions, inspection: inspection}
 }
 
 // LegacyHistory is the narrow compatibility seam used only by standalone

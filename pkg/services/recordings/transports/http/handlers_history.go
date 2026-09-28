@@ -148,12 +148,20 @@ func (a *Adapter) factorySessionResult(
 	sessionID string,
 	params factoryapi.GetFactorySessionResultsParams,
 ) (factoryapi.FactorySessionResult, error, bool) {
+	if a.sessions != nil && a.root == nil {
+		result, err := a.sessionResult(ctx, sessionID, params)
+		return result, err, true
+	}
 	if a.root == nil && a.hasLegacyHistory() {
 		result, err := a.legacyResult(ctx, sessionID, params)
 		return result, err, true
 	}
 	history, err := a.historicalRecording(ctx, sessionID)
 	if err != nil {
+		if isExpectedLiveFallback(err) && a.sessions != nil {
+			result, readErr := a.sessionResult(ctx, sessionID, params)
+			return result, readErr, true
+		}
 		if isExpectedLiveFallback(err) && a.hasLegacyHistory() {
 			result, legacyErr := a.legacyResult(ctx, sessionID, params)
 			return result, legacyErr, true
@@ -169,12 +177,20 @@ func (a *Adapter) factorySessionDispatches(
 	sessionID string,
 	params factoryapi.ListFactorySessionDispatchesParams,
 ) (factoryapi.ListFactorySessionDispatchesResponse, error, bool) {
+	if a.sessions != nil && a.root == nil {
+		result, err := a.sessionDispatches(ctx, sessionID, params)
+		return result, err, true
+	}
 	if a.root == nil && a.hasLegacyHistory() {
 		result, err := a.legacyDispatches(ctx, sessionID, params)
 		return result, err, true
 	}
 	history, err := a.historicalRecording(ctx, sessionID)
 	if err != nil {
+		if isExpectedLiveFallback(err) && a.sessions != nil {
+			result, readErr := a.sessionDispatches(ctx, sessionID, params)
+			return result, readErr, true
+		}
 		if isExpectedLiveFallback(err) && a.hasLegacyHistory() {
 			result, legacyErr := a.legacyDispatches(ctx, sessionID, params)
 			return result, legacyErr, true
@@ -196,12 +212,20 @@ func (a *Adapter) factorySessionDispatch(
 	sessionID string,
 	dispatchID string,
 ) (factoryapi.FactoryDispatch, error, bool) {
+	if a.inspection != nil && a.root == nil {
+		result, err := a.sessionDispatch(ctx, sessionID, dispatchID)
+		return result, err, true
+	}
 	if a.root == nil && a.hasLegacyHistory() {
 		result, err := a.legacyDispatch(ctx, sessionID, dispatchID)
 		return result, err, true
 	}
 	history, err := a.historicalRecording(ctx, sessionID)
 	if err != nil {
+		if isExpectedLiveFallback(err) && a.inspection != nil {
+			result, readErr := a.sessionDispatch(ctx, sessionID, dispatchID)
+			return result, readErr, true
+		}
 		if isExpectedLiveFallback(err) && a.hasLegacyHistory() {
 			result, legacyErr := a.legacyDispatch(ctx, sessionID, dispatchID)
 			return result, legacyErr, true

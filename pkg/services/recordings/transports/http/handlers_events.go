@@ -2,10 +2,12 @@ package http
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -43,6 +45,9 @@ func (a *Adapter) GetEventsBySessionId(
 		Params:             params,
 		StreamGenerationID: r.Header.Get(SessionEventStreamGenerationHeader),
 	}
+	if a.handleSessionDurableEvents(w, r, input) {
+		return
+	}
 	if a.handleLegacyDurableEvents(w, r, input) {
 		return
 	}
@@ -59,6 +64,44 @@ func (a *Adapter) GetEventsBySessionId(
 		return
 	}
 	a.handleLiveEvents(w, r, input)
+}
+
+func (a *Adapter) handleSessionDurableEvents(w http.ResponseWriter, r *http.Request, input EventSubscribeInput) bool {
+	if !isDurableHistorySession(input.SessionID) || a.inspection == nil {
+		return false
+	}
+	if a.root != nil {
+		_, err := a.historicalRecording(r.Context(), input.SessionID)
+		if err == nil || !isExpectedLiveFallback(err) {
+			return false
+		}
+	}
+	if requestsJSONEventRecoveryProbe(r) {
+		err := a.sessionProbeEvents(r.Context(), input.SessionID, input.Params)
+		outcome := factoryapi.FactorySessionEventStreamRecoveryOutcomeSTREAMREADY
+		omitCursor := false
+		if err != nil {
+			outcome = factoryapi.FactorySessionEventStreamRecoveryOutcomeINTERNALERROR
+			if errors.Is(err, factorysessions.ErrDurableSessionNotFound) || errors.Is(err, factorysessions.ErrSessionNotFound) {
+				outcome = factoryapi.FactorySessionEventStreamRecoveryOutcomeUNKNOWNSESSION
+			} else if errors.Is(err, factorysessions.ErrReconnectCursorNotFound) {
+				outcome = factoryapi.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE
+				omitCursor = true
+			}
+		}
+		a.writeJSON(w, http.StatusOK, EventStreamRecoveryToAPI(input.SessionID, outcome, omitCursor))
+		return true
+	}
+	result, err := a.sessionEvents(r.Context(), input.SessionID, input.Params)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return true
+	}
+	if err != nil {
+		a.writeLegacyError(w, err, "failed to subscribe to factory events")
+		return true
+	}
+	a.streamLegacyFactoryEvents(w, r, factorysessions.MaterializeEventReadStream(*result), input.SessionID)
+	return true
 }
 
 func (a *Adapter) handleLegacyDurableEvents(

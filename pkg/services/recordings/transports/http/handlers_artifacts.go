@@ -24,7 +24,7 @@ func (a *Adapter) ListFactorySessionArtifacts(
 	sessionID factoryapi.SessionID,
 ) {
 	input := ArtifactListInput{SessionID: string(sessionID)}
-	if a.root == nil && a.legacyHistory == nil {
+	if a.root == nil && a.inspection == nil && a.legacyHistory == nil {
 		a.writeError(w, http.StatusNotFound, "factory session artifact not found", "NOT_FOUND")
 		return
 	}
@@ -64,7 +64,7 @@ func (a *Adapter) GetFactorySessionArtifact(
 		SessionID:  string(sessionID),
 		ArtifactID: string(artifactID),
 	}
-	if a.root == nil && a.legacyHistory == nil {
+	if a.root == nil && a.inspection == nil && a.legacyHistory == nil {
 		a.writeError(w, http.StatusNotFound, "factory session artifact not found", "NOT_FOUND")
 		return
 	}
@@ -107,12 +107,20 @@ func (a *Adapter) factorySessionArtifact(
 	recordingID recordings.RecordingID,
 	artifactID string,
 ) (factoryapi.FactorySessionArtifactDetail, error, bool) {
+	if isDurableHistorySession(sessionID) && a.root == nil && a.inspection != nil {
+		result, err := a.sessionArtifact(ctx, sessionID, artifactID)
+		return result, err, true
+	}
 	if a.shouldUseLegacyArtifact(sessionID) {
 		response, err := a.legacyArtifact(ctx, sessionID, artifactID)
 		return response, err, true
 	}
 	artifacts, err := a.loadArtifactProjections(ctx, recordingID)
 	if err != nil {
+		if isDurableHistorySession(sessionID) && isExpectedLiveFallback(err) && a.inspection != nil {
+			result, readErr := a.sessionArtifact(ctx, sessionID, artifactID)
+			return result, readErr, true
+		}
 		return a.fallbackArtifact(ctx, sessionID, artifactID, err)
 	}
 	artifact, ok := findArtifactStateByID(artifacts, artifactID)
@@ -144,12 +152,20 @@ func (a *Adapter) factorySessionArtifacts(
 	sessionID string,
 	recordingID recordings.RecordingID,
 ) (factoryapi.ListFactorySessionArtifactsResponse, error, bool) {
+	if isDurableHistorySession(sessionID) && a.root == nil && a.inspection != nil {
+		result, err := a.sessionArtifacts(ctx, sessionID)
+		return result, err, true
+	}
 	if isDurableHistorySession(sessionID) && a.root == nil && a.hasLegacyHistory() {
 		result, err := a.legacyArtifacts(ctx, sessionID)
 		return result, err, true
 	}
 	artifacts, err := a.loadArtifactProjections(ctx, recordingID)
 	if err != nil {
+		if isDurableHistorySession(sessionID) && isExpectedLiveFallback(err) && a.inspection != nil {
+			result, readErr := a.sessionArtifacts(ctx, sessionID)
+			return result, readErr, true
+		}
 		if isDurableHistorySession(sessionID) && isExpectedLiveFallback(err) && a.hasLegacyHistory() {
 			result, legacyErr := a.legacyArtifacts(ctx, sessionID)
 			return result, legacyErr, true
