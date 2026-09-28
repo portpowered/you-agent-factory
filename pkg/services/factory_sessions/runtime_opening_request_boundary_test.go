@@ -7,9 +7,9 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
-func TestRuntimeOpeningRequestContainsOnlyImmutableValueSelections(t *testing.T) {
+func TestSessionRuntimeSelectionContainsOnlyImmutableValueSelections(t *testing.T) {
 	t.Parallel()
-	assertValueOnlyRuntimeRequest(t, reflect.TypeOf(factorysessions.RuntimeOpeningRequest{}), map[reflect.Type]bool{})
+	assertValueOnlyRuntimeRequest(t, reflect.TypeOf(factorysessions.SessionRuntimeSelection{}), map[reflect.Type]bool{})
 }
 
 func TestInvocationTargetContainsOnlyDetachedValueSelections(t *testing.T) {
@@ -30,7 +30,7 @@ func assertValueOnlyRuntimeRequest(t *testing.T, typ reflect.Type, visiting map[
 
 	switch typ.Kind() {
 	case reflect.Func, reflect.Interface, reflect.Chan:
-		t.Fatalf("RuntimeOpeningRequest contains non-value dependency %s", typ)
+		t.Fatalf("session request contains non-value dependency %s", typ)
 	case reflect.Struct:
 		for index := 0; index < typ.NumField(); index++ {
 			assertValueOnlyRuntimeRequest(t, typ.Field(index).Type, visiting)

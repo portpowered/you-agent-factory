@@ -511,41 +511,6 @@ func missingRuntimeOpeningDependency(value any) bool {
 	}
 }
 
-func (r *Root) openRuntime(
-	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
-	logger *zap.Logger,
-) (runtimeProducts, error) {
-	if request == nil {
-		return runtimeProducts{}, fmt.Errorf("Factory Session runtime selection is required")
-	}
-	return r.openRuntimeWithOptions(ctx, request.FactoryDefinition, request.FactoryRuntime, &request.FactorySession, request.Workers, request.Recordings, request.ModelCacheDirectory, request.OperatorDefaults, logger, nil, nil)
-}
-
-func (r *Root) openRuntimeWithSnapshot(
-	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
-	logger *zap.Logger,
-	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
-) (runtimeProducts, error) {
-	if request == nil {
-		return runtimeProducts{}, fmt.Errorf("Factory Session runtime selection is required")
-	}
-	return r.openRuntimeWithOptions(ctx, request.FactoryDefinition, request.FactoryRuntime, &request.FactorySession, request.Workers, request.Recordings, request.ModelCacheDirectory, request.OperatorDefaults, logger, definitionSnapshot, nil)
-}
-
-func (r *Root) openRuntimeWithReplayInput(
-	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
-	logger *zap.Logger,
-	replayInput *recordings.LoadReplayInputResult,
-) (runtimeProducts, error) {
-	if request == nil {
-		return runtimeProducts{}, fmt.Errorf("Factory Session runtime selection is required")
-	}
-	return r.openRuntimeWithOptions(ctx, request.FactoryDefinition, request.FactoryRuntime, &request.FactorySession, request.Workers, request.Recordings, request.ModelCacheDirectory, request.OperatorDefaults, logger, nil, replayInput)
-}
-
 func (r *Root) openRuntimeWithOptions(
 	ctx context.Context,
 	definition factorydefinitions.RuntimeOpeningRequest,
@@ -617,21 +582,30 @@ func (r *Root) openRuntimeWithOptions(
 
 func (r *Root) openForRequest(
 	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
+	request factorysessions.SessionStartRequest,
 ) (runtimeProducts, error) {
+	if strings.TrimSpace(request.FolderPath) == "" {
+		return runtimeProducts{}, &factorysessions.DetachedRequestError{Field: "folderPath", Message: "folder path is required"}
+	}
+	selection := runtimeSelectionForStart(request)
+	recording := recordingRequestForStart(request)
+	open := func(replayInput *recordings.LoadReplayInputResult) (runtimeProducts, error) {
+		session := sessionRequestForStart(request)
+		return r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, workerRequestForStart(request), recording, selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, replayInput)
+	}
 	// Historical replay, whether portable or legacy, is an inspection-only
 	// product and must select its detached projection before live Factory
 	// Runtime assembly. Resume remains an explicit live successor path below.
-	if request != nil && request.Recordings.ReplayPath != "" {
+	if recording.ReplayPath != "" {
 		// A compatibility Factory without a Runtime root still needs the direct
 		// historical/replay opener used by narrow tests and migration callers.
 		// Canonical Wire always supplies the root, so classify the input there
 		// before deciding whether activation is required.
 		if r.runtimeRoot == nil || r.replayInputs == nil {
-			return r.openRuntime(ctx, request, r.baseLogger)
+			return open(nil)
 		}
 		input, err := r.replayInputs.LoadReplayInput(
-			recordings.LoadReplayInputRequest{Path: request.Recordings.ReplayPath},
+			recordings.LoadReplayInputRequest{Path: recording.ReplayPath},
 		)
 		if err != nil {
 			// The loader has already classified and safely detached the
@@ -646,8 +620,8 @@ func (r *Root) openForRequest(
 		// API and metrics surfaces. Keeping that distinction here prevents the
 		// inspection-only product from being wrapped in host-readiness or live
 		// transport lifecycle requirements.
-		if replayRequestsHistoricalInspection(request) && selectsHistoricalReplayInspection(input) {
-			return r.openRuntimeWithReplayInput(ctx, request, r.baseLogger, &input)
+		if replayRequestsHistoricalInspection(selection.Host) && selectsHistoricalReplayInspection(input) {
+			return open(&input)
 		}
 		// Hosted replay and legacy V1 JSON retain the ordinary activated runtime
 		// path. Keep intentionally incomplete synthetic inputs used by narrow
@@ -655,12 +629,12 @@ func (r *Root) openForRequest(
 		// reports the format before this branch.
 		return r.openActivatedRuntimeWithReplayInput(ctx, request, &input)
 	}
-	if request != nil && strings.TrimSpace(request.Recordings.ResumePath) != "" {
+	if strings.TrimSpace(recording.ResumePath) != "" {
 		if r.recordingsRuntime == nil {
 			return runtimeProducts{}, fmt.Errorf("open Factory Runtime: Recordings resume input capability is required")
 		}
 		input, err := r.recordingsRuntime.LoadResumeInput(recordings.LoadResumeInputRequest{
-			Path: request.Recordings.ResumePath,
+			Path: recording.ResumePath,
 		})
 		if err != nil {
 			return runtimeProducts{}, fmt.Errorf("open Factory Runtime: load resume input: %w", err)
@@ -670,11 +644,7 @@ func (r *Root) openForRequest(
 	return r.openActivatedRuntime(ctx, request)
 }
 
-func replayRequestsHistoricalInspection(request *factorysessions.RuntimeOpeningRequest) bool {
-	if request == nil {
-		return false
-	}
-	host := request.FactorySession.Host
+func replayRequestsHistoricalInspection(host factorysessions.RuntimeHostRequest) bool {
 	// The CLI clears Port when the API transport is disabled but retains the
 	// parsed AutoPort default. AutoPort is meaningful only with a concrete
 	// listener request, so the effective hosting decision is the resolved port.

@@ -100,11 +100,7 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		runtimeSelection.MetricsPolicy = factorysessions.SessionArtifactPolicyDisabled
 	}
 	selected.RuntimeSelection = &runtimeSelection
-	opening, err := runtimeRequestForStart(selected)
-	if err != nil {
-		return factorysessions.SessionStartResult{}, err
-	}
-	products, err := r.openForRequest(ctx, &opening)
+	products, err := r.openForRequest(ctx, selected)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
@@ -248,50 +244,62 @@ func (r *Root) resolveStartFolder(ctx context.Context, request factorysessions.S
 	return resolved.Resolution.FactoryDir, nil
 }
 
-func runtimeRequestForStart(request factorysessions.SessionStartRequest) (factorysessions.RuntimeOpeningRequest, error) {
-	folder := strings.TrimSpace(request.FolderPath)
-	if folder == "" {
-		return factorysessions.RuntimeOpeningRequest{}, &factorysessions.DetachedRequestError{Field: "folderPath", Message: "folder path is required"}
+func runtimeSelectionForStart(request factorysessions.SessionStartRequest) factorysessions.SessionRuntimeSelection {
+	if request.RuntimeSelection == nil {
+		return factorysessions.SessionRuntimeSelection{}
 	}
-	selection := request.RuntimeSelection
-	if selection == nil {
-		selection = &factorysessions.SessionRuntimeSelection{}
+	return *request.RuntimeSelection
+}
+
+func definitionRequestForStart(request factorysessions.SessionStartRequest) factorydefinitions.RuntimeOpeningRequest {
+	selection := runtimeSelectionForStart(request)
+	return factorydefinitions.RuntimeOpeningRequest{
+		Directory: strings.TrimSpace(request.FolderPath), SourcePath: selection.DefinitionSourcePath,
+		InvocationArguments: work.CloneInvocationArguments(selection.DefinitionInvocationArguments),
+		ExecutionBaseDir:    selection.ExecutionBaseDir,
 	}
+}
+
+func runtimeOwnerRequestForStart(request factorysessions.SessionStartRequest) factoryruntime.RuntimeOpeningRequest {
+	selection := runtimeSelectionForStart(request)
 	mode := factorydefinitions.RuntimeMode(selection.Mode)
 	if mode == "" {
 		mode = factorydefinitions.RuntimeModeBatch
 	}
-	return factorysessions.RuntimeOpeningRequest{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
-			Directory: folder, SourcePath: selection.DefinitionSourcePath,
-			InvocationArguments: work.CloneInvocationArguments(selection.DefinitionInvocationArguments),
-			ExecutionBaseDir:    selection.ExecutionBaseDir,
-		},
-		FactoryRuntime: factoryruntime.RuntimeOpeningRequest{
-			Mode: mode, Verbose: selection.Verbose, RuntimeInstanceID: selection.RuntimeInstanceID,
-			LogDirectory: selection.LogDirectory, FileLoggingPolicy: factoryruntime.RuntimeFileLoggingPolicy(selection.LogPolicy),
-			LogConfig:        factoryruntime.RuntimeLogStorageConfig(selection.LogConfig),
-			MetricsDirectory: selection.MetricsDirectory, MetricsPolicy: factoryruntime.RuntimeMetricsPolicy(selection.MetricsPolicy),
-			MetricsConfig: factoryruntime.RuntimeMetricsStorageConfig(selection.MetricsConfig),
-		},
-		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-			FactorySessionID: request.SessionID, CanonicalSessionID: selection.CanonicalSessionID,
-			PersistencePolicy: request.Persistence, BackendScopeID: selection.BackendScopeID,
-			SystemConfigHome: selection.SystemConfigHome, SystemConfigPath: selection.SystemConfigPath,
-			WorkFile: selection.WorkFile, Host: selection.Host,
-		},
-		Workers: workers.RuntimeOpeningRequest{
-			RunnerID: selection.Workers.RunnerID, Worktree: selection.Workers.Worktree,
-			WorkerReasoningEffort: selection.Workers.WorkerReasoningEffort, MockWorkers: selection.Workers.MockWorkers,
-			InvocationSkipPermissionsOverride: selection.Workers.InvocationSkipPermissionsOverride,
-			SkipBuiltInPrerequisiteValidation: selection.Workers.SkipBuiltInPrerequisiteValidation,
-		},
-		Recordings: recordings.RuntimeOpeningRequest{
-			RecordPath: selection.Recording.RecordPath, ReplayPath: selection.Recording.ReplayPath,
-			ResumePath: selection.Recording.ResumePath, WorkflowID: selection.Recording.WorkflowID,
-			FlushInterval: selection.Recording.FlushInterval,
-		},
-		ModelCacheDirectory: selection.ModelCacheDirectory,
-		OperatorDefaults:    selection.OperatorDefaults,
-	}, nil
+	return factoryruntime.RuntimeOpeningRequest{
+		Mode: mode, Verbose: selection.Verbose, RuntimeInstanceID: selection.RuntimeInstanceID,
+		LogDirectory: selection.LogDirectory, FileLoggingPolicy: factoryruntime.RuntimeFileLoggingPolicy(selection.LogPolicy),
+		LogConfig:        factoryruntime.RuntimeLogStorageConfig(selection.LogConfig),
+		MetricsDirectory: selection.MetricsDirectory, MetricsPolicy: factoryruntime.RuntimeMetricsPolicy(selection.MetricsPolicy),
+		MetricsConfig: factoryruntime.RuntimeMetricsStorageConfig(selection.MetricsConfig),
+	}
+}
+
+func sessionRequestForStart(request factorysessions.SessionStartRequest) factorysessions.SessionRuntimeOpeningRequest {
+	selection := runtimeSelectionForStart(request)
+	return factorysessions.SessionRuntimeOpeningRequest{
+		FactorySessionID: request.SessionID, CanonicalSessionID: selection.CanonicalSessionID,
+		PersistencePolicy: request.Persistence, BackendScopeID: selection.BackendScopeID,
+		SystemConfigHome: selection.SystemConfigHome, SystemConfigPath: selection.SystemConfigPath,
+		WorkFile: selection.WorkFile, Host: selection.Host,
+	}
+}
+
+func workerRequestForStart(request factorysessions.SessionStartRequest) workers.RuntimeOpeningRequest {
+	selection := runtimeSelectionForStart(request)
+	return workers.RuntimeOpeningRequest{
+		RunnerID: selection.Workers.RunnerID, Worktree: selection.Workers.Worktree,
+		WorkerReasoningEffort: selection.Workers.WorkerReasoningEffort, MockWorkers: selection.Workers.MockWorkers,
+		InvocationSkipPermissionsOverride: selection.Workers.InvocationSkipPermissionsOverride,
+		SkipBuiltInPrerequisiteValidation: selection.Workers.SkipBuiltInPrerequisiteValidation,
+	}
+}
+
+func recordingRequestForStart(request factorysessions.SessionStartRequest) recordings.RuntimeOpeningRequest {
+	selection := runtimeSelectionForStart(request)
+	return recordings.RuntimeOpeningRequest{
+		RecordPath: selection.Recording.RecordPath, ReplayPath: selection.Recording.ReplayPath,
+		ResumePath: selection.Recording.ResumePath, WorkflowID: selection.Recording.WorkflowID,
+		FlushInterval: selection.Recording.FlushInterval,
+	}
 }

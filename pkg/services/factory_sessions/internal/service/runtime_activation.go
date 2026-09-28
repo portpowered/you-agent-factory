@@ -247,14 +247,14 @@ func activationMockWorkers(input *factoryruntime.RuntimeActivationMockWorkersCon
 
 func (r *Root) openActivatedRuntime(
 	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
+	request factorysessions.SessionStartRequest,
 ) (runtimeProducts, error) {
 	return r.openActivatedRuntimeWithInputs(ctx, request, nil, nil)
 }
 
 func (r *Root) openActivatedRuntimeWithReplayInput(
 	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
+	request factorysessions.SessionStartRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
 ) (runtimeProducts, error) {
 	return r.openActivatedRuntimeWithInputs(ctx, request, preloadedReplayInput, nil)
@@ -262,7 +262,7 @@ func (r *Root) openActivatedRuntimeWithReplayInput(
 
 func (r *Root) openActivatedRuntimeWithResumeInput(
 	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
+	request factorysessions.SessionStartRequest,
 	resumeInput *recordings.LoadResumeInputResult,
 ) (runtimeProducts, error) {
 	return r.openActivatedRuntimeWithInputs(ctx, request, nil, resumeInput)
@@ -270,7 +270,7 @@ func (r *Root) openActivatedRuntimeWithResumeInput(
 
 func (r *Root) openActivatedRuntimeWithInputs(
 	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
+	request factorysessions.SessionStartRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
 	resumeInput *recordings.LoadResumeInputResult,
 ) (runtimeProducts, error) {
@@ -361,30 +361,32 @@ func runtimeBindingPublicationError(bindErr, cleanupErr error) error {
 
 func (r *Root) activationRequest(
 	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
+	request factorysessions.SessionStartRequest,
 ) (factoryruntime.RuntimeActivationRequest, error) {
 	return r.activationRequestWithInputs(ctx, request, nil, nil)
 }
 
 func (r *Root) activationRequestWithInputs(
 	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
+	request factorysessions.SessionStartRequest,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
 	resumeInput *recordings.LoadResumeInputResult,
 ) (factoryruntime.RuntimeActivationRequest, error) {
-	if request == nil {
-		return factoryruntime.RuntimeActivationRequest{}, fmt.Errorf("activate Factory Runtime: session selection is required")
-	}
-	opening := *request
-	runtimeID, err := r.ensureActivationRuntimeID(&opening.FactoryRuntime)
+	definition := definitionRequestForStart(request)
+	runtimeRequest := runtimeOwnerRequestForStart(request)
+	session := sessionRequestForStart(request)
+	worker := workerRequestForStart(request)
+	recording := recordingRequestForStart(request)
+	selection := runtimeSelectionForStart(request)
+	runtimeID, err := r.ensureActivationRuntimeID(&runtimeRequest)
 	if err != nil {
 		return factoryruntime.RuntimeActivationRequest{}, err
 	}
-	sessionID := sessionIDForSelection(opening.FactorySession)
+	sessionID := sessionIDForSelection(session)
 	resolution, err := r.resolveActivationSnapshot(
 		ctx,
-		opening.FactoryDefinition,
-		opening.Recordings,
+		definition,
+		recording,
 		preloadedReplayInput,
 		resumeInput,
 		sessionID,
@@ -398,15 +400,15 @@ func (r *Root) activationRequestWithInputs(
 		resolution.sourcePath,
 		resolution.runtimeBaseDir,
 		sessionID,
-		opening.Recordings.WorkflowID,
+		recording.WorkflowID,
 	)
 	inputs := runtimeActivationInputs(
-		opening.FactoryDefinition,
-		opening.FactorySession,
-		opening.Workers,
-		opening.Recordings,
-		opening.ModelCacheDirectory,
-		opening.OperatorDefaults,
+		definition,
+		session,
+		worker,
+		recording,
+		selection.ModelCacheDirectory,
+		selection.OperatorDefaults,
 		resumeInput,
 	)
 	// Runtime root activation must receive the same resolved source identity
@@ -422,7 +424,7 @@ func (r *Root) activationRequestWithInputs(
 		RuntimeID:        runtimeID,
 		FactorySessionID: sessionID,
 		Snapshot:         resolution.snapshot,
-		Runtime:          opening.FactoryRuntime,
+		Runtime:          runtimeRequest,
 		Inputs:           inputs,
 	}, nil
 }

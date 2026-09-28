@@ -43,10 +43,7 @@ func TestReplayRequestsHistoricalInspectionUsesEffectiveListenerPort(t *testing.
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			request := &factorysessions.RuntimeOpeningRequest{
-				FactorySession: factorysessions.SessionRuntimeOpeningRequest{Host: testCase.host},
-			}
-			if got := replayRequestsHistoricalInspection(request); got != testCase.want {
+			if got := replayRequestsHistoricalInspection(testCase.host); got != testCase.want {
 				t.Fatalf("replayRequestsHistoricalInspection() = %t, want %t", got, testCase.want)
 			}
 		})
@@ -93,8 +90,8 @@ func TestActivationRequestDefersCanonicalIdentityUntilRuntimeActivation(t *testi
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
 	}
-	activation, err := factory.activationRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+	activation, err := factory.activationRequest(context.Background(), factorysessions.SessionStartRequest{
+		FolderPath: "/factory",
 	})
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
@@ -122,26 +119,17 @@ func TestActivationOpeningDefersCanonicalIdentityUntilDefinitionAdmission(t *tes
 		},
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 	}
-	opening := factorysessions.RuntimeOpeningRequest{
-		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-			FactorySessionID: factorysessions.DefaultSessionID,
-		},
-		Recordings: recordings.RuntimeOpeningRequest{
-			ResumePath: "source.recording.json",
-			ResumeInput: recordings.LoadResumeInputResult{
-				SourceCanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
-			},
-		},
-	}
-	runtimeID, err := factory.ensureActivationRuntimeID(&opening.FactoryRuntime)
+	runtimeSelection := factoryruntime.RuntimeOpeningRequest{}
+	session := factorysessions.SessionRuntimeOpeningRequest{FactorySessionID: factorysessions.DefaultSessionID}
+	runtimeID, err := factory.ensureActivationRuntimeID(&runtimeSelection)
 	if err != nil {
 		t.Fatalf("ensureActivationRuntimeID(resume) error = %v", err)
 	}
 	if runtimeID != "runtime-1" {
 		t.Fatalf("runtime ID = %q, want runtime-1", runtimeID)
 	}
-	if opening.FactorySession.CanonicalSessionID != "" {
-		t.Fatalf("successor canonical session ID = %q, want empty before definition admission", opening.FactorySession.CanonicalSessionID)
+	if session.CanonicalSessionID != "" {
+		t.Fatalf("successor canonical session ID = %q, want empty before definition admission", session.CanonicalSessionID)
 	}
 	if got := canonicalCalls.Load(); got != 0 {
 		t.Fatalf("canonical session ID generator calls = %d, want 0 before definition admission", got)
@@ -155,15 +143,14 @@ func TestActivationOpeningDefersCanonicalIdentityForAliasOnlyResume(t *testing.T
 	factory := &Root{
 		generateRuntimeInstanceID: func() string { return canonicalID },
 	}
-	opening := factorysessions.RuntimeOpeningRequest{
-		Recordings: recordings.RuntimeOpeningRequest{ResumePath: "alias-only.recording.json"},
-	}
-	_, err := factory.ensureActivationRuntimeID(&opening.FactoryRuntime)
+	runtimeSelection := factoryruntime.RuntimeOpeningRequest{}
+	session := factorysessions.SessionRuntimeOpeningRequest{}
+	_, err := factory.ensureActivationRuntimeID(&runtimeSelection)
 	if err != nil {
 		t.Fatalf("ensureActivationRuntimeID(alias-only resume) error = %v", err)
 	}
-	if opening.FactorySession.CanonicalSessionID != "" {
-		t.Fatalf("alias-only successor canonical session ID = %q, want empty before definition admission", opening.FactorySession.CanonicalSessionID)
+	if session.CanonicalSessionID != "" {
+		t.Fatalf("alias-only successor canonical session ID = %q, want empty before definition admission", session.CanonicalSessionID)
 	}
 }
 
@@ -262,8 +249,8 @@ func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *test
 		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
 	}
 
-	products, err := factory.openActivatedRuntime(context.Background(), &factorysessions.RuntimeOpeningRequest{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+	products, err := factory.openActivatedRuntime(context.Background(), factorysessions.SessionStartRequest{
+		FolderPath: "/factory",
 	})
 	if err != nil {
 		t.Fatalf("openActivatedRuntime() error = %v", err)

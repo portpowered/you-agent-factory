@@ -480,7 +480,7 @@ func (service *activationServiceFake) SubscribeFactoryEvents(
 func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 	t.Parallel()
 	skipPermissions := true
-	request := &factorysessions.RuntimeOpeningRequest{
+	request := &runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
 			Directory:        "/factory",
 			SourcePath:       "/source",
@@ -505,7 +505,7 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
 	}
-	activation, err := factory.activationRequest(context.Background(), request)
+	activation, err := factory.activationRequest(context.Background(), request.startRequest())
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
@@ -544,7 +544,7 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 			},
 		},
 	}
-	request := factorysessions.RuntimeOpeningRequest{
+	request := runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
 			CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
@@ -581,7 +581,7 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 func TestActivationRequestDetachesMockWorkerInputs(t *testing.T) {
 	t.Parallel()
 
-	request := &factorysessions.RuntimeOpeningRequest{
+	request := &runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
 		Workers: workers.RuntimeOpeningRequest{
 			MockWorkers: &workers.MockWorkersConfig{
@@ -604,7 +604,7 @@ func TestActivationRequestDetachesMockWorkerInputs(t *testing.T) {
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
 	}
-	activation, err := factory.activationRequest(context.Background(), request)
+	activation, err := factory.activationRequest(context.Background(), request.startRequest())
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
@@ -632,12 +632,12 @@ func TestActivationRequestCarriesFactorySessionCorrelation(t *testing.T) {
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
 	}
-	activation, err := factory.activationRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+	activation, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
 			FactorySessionID: "session-1",
 		},
-	})
+	}).startRequest())
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
@@ -657,9 +657,9 @@ func TestActivationRequestDerivesDirectoryForSourceOnlySnapshot(t *testing.T) {
 			DefinitionVersion: &factorydefinitions.FactoryVersion{Logical: 1},
 		}},
 	}
-	activation, err := factory.activationRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+	activation, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{SourcePath: sourcePath},
-	})
+	}).startRequest())
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
 	}
@@ -683,9 +683,9 @@ func TestActivationRequestReturnsTypedDefinitionsFailureBeforeRuntimeActivation(
 		factoryDefinitions:        activationDefinitionsStub{err: want},
 		generateSessionID:         func() string { return "" },
 	}
-	_, err := factory.activationRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+	_, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
-	})
+	}).startRequest())
 	if !errors.Is(err, factorydefinitions.ErrInvalidRuntimeSnapshotDefinition) {
 		t.Fatalf("activationRequest() error = %v, want typed Definitions failure", err)
 	}
@@ -744,10 +744,10 @@ func TestOpenForRequestRoutesLegacyReplayThroughRuntimeRoot(t *testing.T) {
 			return replayRuntimeConfigStub{}, nil
 		},
 	}
-	_, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
 		Recordings:        recordings.RuntimeOpeningRequest{ReplayPath: "legacy.json"},
-	})
+	}).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest(legacy replay) error = %v", err)
 	}
@@ -778,9 +778,10 @@ func TestOpenForRequestResumeInputFailureStopsBeforeActivationAndDoesNotRetry(t 
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 	}
 
-	_, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
-		Recordings: recordings.RuntimeOpeningRequest{ResumePath: "source.recording.json"},
-	})
+	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
+		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+		Recordings:        recordings.RuntimeOpeningRequest{ResumePath: "source.recording.json"},
+	}).startRequest())
 	var replayInputErr *recordings.ReplayInputError
 	if !errors.As(err, &replayInputErr) || replayInputErr != inputErr {
 		t.Fatalf("openForRequest error = %T %v, want original ReplayInputError", err, err)

@@ -43,7 +43,7 @@ func TestCheckpointPortableReplayApplicationCleanupClosesOwnerBeforeArtifacts(t 
 		},
 	}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	products, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	products, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest() error = %v", err)
 	}
@@ -110,7 +110,7 @@ func testPortableReplayResumeInterruptedSession(t *testing.T) {
 		},
 	}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest() error = %v", err)
 	}
@@ -149,7 +149,7 @@ func testPortableReplayResume(t *testing.T) {
 		},
 	}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest() error = %v", err)
 	}
@@ -190,7 +190,7 @@ func testPortableReplayTypedRestorationFailure(t *testing.T) {
 	}
 	owner := &portableReplayRuntimeOwner{probeErr: want}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest() error = %v", err)
 	}
@@ -213,7 +213,7 @@ func testPortableReplayTypedRestorationFailure(t *testing.T) {
 func testPortableReplayWithoutRestorableState(t *testing.T) {
 	owner := &portableReplayRuntimeOwner{}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest() error = %v", err)
 	}
@@ -256,7 +256,7 @@ func TestCheckpointPortableReplayWiresPublicDispatchHandoff(t *testing.T) {
 		},
 	}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest() error = %v", err)
 	}
@@ -349,9 +349,9 @@ func assertPortableReplayControlWalled(t *testing.T, execution factorysessions.D
 	}
 }
 
-func portableCheckpointRuntimeOpeningRequest(t *testing.T) *factorysessions.RuntimeOpeningRequest {
+func portableCheckpointRuntimeOpeningRequest(t *testing.T) *runtimeOwnerFixture {
 	t.Helper()
-	return &factorysessions.RuntimeOpeningRequest{
+	return &runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
 		Recordings:        recordings.RuntimeOpeningRequest{ReplayPath: "checkpoint.json"},
 	}
@@ -735,13 +735,13 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 			return replayRuntimeConfigStub{}, nil
 		},
 	}
-	opened, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+	opened, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
 		Recordings: recordings.RuntimeOpeningRequest{
 			RecordPath: "successor.recording.json",
 			ResumePath: "source.recording.json",
 		},
-	})
+	}).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest(resume) error = %v", err)
 	}

@@ -33,9 +33,8 @@ func (r *Root) InspectHistoricalApplication(
 		request.RuntimeSelection.Host.Port > 0 {
 		return HistoricalApplicationInspection{}, false, nil
 	}
-	opening, err := runtimeRequestForStart(request)
-	if err != nil {
-		return HistoricalApplicationInspection{}, false, err
+	if strings.TrimSpace(request.FolderPath) == "" {
+		return HistoricalApplicationInspection{}, false, &factorysessions.DetachedRequestError{Field: "folderPath", Message: "folder path is required"}
 	}
 	input, err := r.replayInputs.LoadReplayInput(recordings.LoadReplayInputRequest{
 		Path: request.RuntimeSelection.Recording.ReplayPath,
@@ -46,7 +45,9 @@ func (r *Root) InspectHistoricalApplication(
 	if !selectsHistoricalReplayInspection(input) {
 		return HistoricalApplicationInspection{}, false, nil
 	}
-	products, err := r.openRuntimeWithReplayInput(ctx, &opening, r.baseLogger, &input)
+	session := sessionRequestForStart(request)
+	selection := runtimeSelectionForStart(request)
+	products, err := r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, workerRequestForStart(request), recordingRequestForStart(request), selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, &input)
 	if err != nil {
 		return HistoricalApplicationInspection{}, false, err
 	}

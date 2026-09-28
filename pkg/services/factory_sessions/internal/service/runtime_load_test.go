@@ -934,7 +934,7 @@ func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
 		},
 	}
 
-	_, err := factory.openForRequest(context.Background(), &factorysessions.RuntimeOpeningRequest{
+	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
 			Directory:        "/authored-b",
 			SourcePath:       "/authored-b/factory.json",
@@ -944,7 +944,7 @@ func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
 			RecordPath: "successor.recording.json",
 			ResumePath: "source.recording.json",
 		},
-	})
+	}).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest(bare resume) error = %v", err)
 	}
