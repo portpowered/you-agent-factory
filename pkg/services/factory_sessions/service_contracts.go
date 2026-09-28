@@ -134,6 +134,17 @@ type Service interface {
 	RecoverLiveChange(context.Context, string, string) (LiveChangeResult, error)
 }
 
+// SessionInspectionService reads active durable Factory Session history and
+// inspection facts through session-keyed, value-only requests. It is a narrow
+// capability for transports that also read finalized history from Recordings.
+type SessionInspectionService interface {
+	QueryEvents(context.Context, SessionEventQueryRequest) (EventReadResult, error)
+	ProbeEvents(context.Context, SessionEventQueryRequest) error
+	InspectDispatch(context.Context, SessionDispatchInspectRequest) (DispatchDetail, error)
+	QueryArtifacts(context.Context, SessionArtifactQueryRequest) (ListArtifactsResult, error)
+	InspectArtifact(context.Context, SessionArtifactInspectRequest) (ArtifactDetail, error)
+}
+
 // --- merged from live_control_contract.go ---
 
 // Live-control root slice freezes open, list, get/snapshot, pause, resume, and
@@ -734,6 +745,27 @@ type SessionResultReadRequest struct {
 	SessionID string
 	Mode      SessionOperationMode
 	Request   ResultRequest
+}
+
+// SessionEventQueryRequest selects durable Factory Events after a reconnect
+// cursor. Its response is a finite value-only event batch.
+type SessionEventQueryRequest struct {
+	SessionID string
+	Reconnect EventReconnectRequest
+}
+
+type SessionDispatchInspectRequest struct {
+	SessionID  string
+	DispatchID string
+}
+
+type SessionArtifactQueryRequest struct {
+	SessionID string
+}
+
+type SessionArtifactInspectRequest struct {
+	SessionID  string
+	ArtifactID string
 }
 
 // SessionSyncPreparationRequest asks the Sessions owner to normalize a sync

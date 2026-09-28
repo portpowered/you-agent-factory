@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -343,6 +344,85 @@ func (s *Service) queryCanonicalDispatches(
 		return factorysessions.ListDispatchesResult{}, err
 	}
 	return cloneCanonicalDispatchesResult(result), nil
+}
+
+// QueryEvents reads a finite batch of active durable Factory Events. A
+// finalized recording is read from Recordings by the caller instead.
+func (s *Service) QueryEvents(ctx context.Context, request factorysessions.SessionEventQueryRequest) (factorysessions.EventReadResult, error) {
+	if err := validateCanonicalSessionID(request.SessionID); err != nil {
+		return factorysessions.EventReadResult{}, err
+	}
+	reconnect, err := factorysessionexecution.NormalizeEventReconnectRequest(request.Reconnect)
+	if err != nil {
+		return factorysessions.EventReadResult{}, err
+	}
+	execution, err := s.durableExecution()
+	if err != nil {
+		return factorysessions.EventReadResult{}, err
+	}
+	result, err := execution.ReadEvents(ctx, strings.TrimSpace(request.SessionID), reconnect)
+	if err != nil {
+		return factorysessions.EventReadResult{}, err
+	}
+	result.Events = cloneEventPayloads(result.Events)
+	return result, nil
+}
+
+func cloneEventPayloads(events []json.RawMessage) []json.RawMessage {
+	if events == nil {
+		return nil
+	}
+	clone := make([]json.RawMessage, len(events))
+	for index, event := range events {
+		clone[index] = append(json.RawMessage(nil), event...)
+	}
+	return clone
+}
+
+// ProbeEvents validates an active durable event reconnect cursor without
+// returning its events to the caller.
+func (s *Service) ProbeEvents(ctx context.Context, request factorysessions.SessionEventQueryRequest) error {
+	_, err := s.QueryEvents(ctx, request)
+	return err
+}
+
+func (s *Service) InspectDispatch(ctx context.Context, request factorysessions.SessionDispatchInspectRequest) (factorysessions.DispatchDetail, error) {
+	if err := validateCanonicalSessionID(request.SessionID); err != nil {
+		return factorysessions.DispatchDetail{}, err
+	}
+	if strings.TrimSpace(request.DispatchID) == "" {
+		return factorysessions.DispatchDetail{}, canonicalRequestError("dispatchId", "dispatch id is required")
+	}
+	execution, err := s.durableExecution()
+	if err != nil {
+		return factorysessions.DispatchDetail{}, err
+	}
+	return execution.GetDispatch(ctx, strings.TrimSpace(request.SessionID), strings.TrimSpace(request.DispatchID))
+}
+
+func (s *Service) QueryArtifacts(ctx context.Context, request factorysessions.SessionArtifactQueryRequest) (factorysessions.ListArtifactsResult, error) {
+	if err := validateCanonicalSessionID(request.SessionID); err != nil {
+		return factorysessions.ListArtifactsResult{}, err
+	}
+	execution, err := s.durableExecution()
+	if err != nil {
+		return factorysessions.ListArtifactsResult{}, err
+	}
+	return execution.ListArtifacts(ctx, strings.TrimSpace(request.SessionID))
+}
+
+func (s *Service) InspectArtifact(ctx context.Context, request factorysessions.SessionArtifactInspectRequest) (factorysessions.ArtifactDetail, error) {
+	if err := validateCanonicalSessionID(request.SessionID); err != nil {
+		return factorysessions.ArtifactDetail{}, err
+	}
+	if strings.TrimSpace(request.ArtifactID) == "" {
+		return factorysessions.ArtifactDetail{}, canonicalRequestError("artifactId", "artifact id is required")
+	}
+	execution, err := s.durableExecution()
+	if err != nil {
+		return factorysessions.ArtifactDetail{}, err
+	}
+	return execution.GetArtifact(ctx, strings.TrimSpace(request.SessionID), strings.TrimSpace(request.ArtifactID))
 }
 
 // SubscribeResponses opens a retained-then-live cursor for either a live or
