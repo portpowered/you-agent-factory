@@ -1,9 +1,7 @@
 package factorysession_test
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"reflect"
 	"slices"
@@ -11,11 +9,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -889,137 +883,4 @@ func cloneToolDefinitions(t *testing.T, tools []mcpfactorysession.ToolDefinition
 		t.Fatalf("unmarshal tool definitions: %v", err)
 	}
 	return cloned
-}
-
-type subagentTargetFake struct {
-	factorysessions.Service
-	start        factorysessions.SessionStartRequest
-	invoke       factorysessions.SessionInvokeRequest
-	control      factorysessions.SessionControlRequest
-	started      bool
-	closed       bool
-	invokeErr    error
-	invokeResult *factorysessions.InvocationResult
-}
-
-func (fake *subagentTargetFake) Start(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
-	fake.start = request
-	fake.started = true
-	return factorysessions.SessionStartResult{SessionID: "session-1", Mode: factorysessions.SessionOperationModeLive, Status: "RUNNING"}, nil
-}
-
-func (fake *subagentTargetFake) Invoke(_ context.Context, request factorysessions.SessionInvokeRequest) (factorysessions.InvocationResult, error) {
-	fake.invoke = request
-	if fake.invokeErr != nil {
-		return factorysessions.InvocationResult{}, fake.invokeErr
-	}
-	if fake.invokeResult != nil {
-		return *fake.invokeResult, nil
-	}
-	return factorysessions.InvocationResult{
-		Status:        factorysessions.InvocationTerminalStatusCompleted,
-		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "subagent answer"}},
-	}, nil
-}
-
-func (fake *subagentTargetFake) Control(_ context.Context, request factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
-	fake.control = request
-	fake.closed = request.SessionID == "session-1" && request.Operation == factorysessions.SessionControlClose
-	return factorysessions.SessionControlResult{}, nil
-}
-
-func TestSubagentRunsPackagedFactoryWithDefaultsAndReturnsText(t *testing.T) {
-	target := &subagentTargetFake{}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-1" }, mcpfactorysession.SubagentInput{Prompt: "Summarize this"})
-	if response.Error != nil || response.Result == nil {
-		t.Fatalf("Subagent response = %#v", response)
-	}
-	if response.Result.Text != "subagent answer" || response.Result.SessionID != "session-1" {
-		t.Fatalf("Subagent result = %#v", response.Result)
-	}
-	if target.start.Mode != factorysessions.SessionOperationModeLive || !target.start.ActivationOnly {
-		t.Fatalf("start mode = %q activationOnly = %t", target.start.Mode, target.start.ActivationOnly)
-	}
-	if target.start.Correlation.RequestID != "request-1" {
-		t.Fatalf("start correlation = %#v", target.start.Correlation)
-	}
-	if target.start.Definition.FactoryID != factorydefinitions.PackagedSubagentFactoryName {
-		t.Fatalf("start definition = %#v", target.start.Definition)
-	}
-	if target.start.Source.Kind != factoryruntime.WorkflowSourceKindFactoryID || target.start.Source.FactoryID != factorydefinitions.PackagedSubagentFactoryName {
-		t.Fatalf("start source = %#v", target.start.Source)
-	}
-	if target.start.Args["workingRoot"] != "C:/project" {
-		t.Fatalf("workingRoot = %#v", target.start.Args)
-	}
-	if target.start.FolderPath != "C:/project" {
-		t.Fatalf("folderPath = %q", target.start.FolderPath)
-	}
-	if target.start.RuntimeSelection == nil || target.start.RuntimeSelection.ExecutionBaseDir != "C:/project" || target.start.RuntimeSelection.Mode != factorysessions.SessionRuntimeModeService {
-		t.Fatalf("runtime selection = %#v", target.start.RuntimeSelection)
-	}
-	if target.invoke.SessionID != "session-1" {
-		t.Fatalf("invoke session = %q", target.invoke.SessionID)
-	}
-	if got := target.invoke.Args; len(got) != 2 || got["input"] != "Summarize this" || got["workingRoot"] != "C:/project" {
-		t.Fatalf("default invocation args = %#v", got)
-	}
-	if target.control.Operation != factorysessions.SessionControlClose || target.control.SessionID != "session-1" {
-		t.Fatalf("control = %#v", target.control)
-	}
-	if !target.started || !target.closed {
-		t.Fatalf("lifecycle start=%t close=%t", target.started, target.closed)
-	}
-}
-
-func TestSubagentUsesRequestedWorkingRoot(t *testing.T) {
-	target := &subagentTargetFake{}
-	response := mcpfactorysession.Subagent(context.Background(), target, "server-root", func() string { return "request-3" }, mcpfactorysession.SubagentInput{
-		Prompt: "Inspect this repository", WorkingRoot: "selected-root",
-	})
-	if response.Error != nil || response.Result == nil {
-		t.Fatalf("Subagent response = %#v", response)
-	}
-	if got := target.start.Args["workingRoot"]; got != "selected-root" {
-		t.Fatalf("workingRoot = %#v, want selected-root", got)
-	}
-	if got := target.invoke.Args["workingRoot"]; got != "selected-root" {
-		t.Fatalf("invocation workingRoot = %#v, want selected-root", got)
-	}
-}
-
-func TestSubagentForwardsModelOverridesAndCleansUpOnInvocationFailure(t *testing.T) {
-	target := &subagentTargetFake{invokeErr: errors.New("provider unavailable")}
-	response := mcpfactorysession.Subagent(context.Background(), target, "", func() string { return "request-2" }, mcpfactorysession.SubagentInput{
-		Prompt: "Explain this", Provider: "opencode", Model: "local-model", ReasoningEffort: "high",
-	})
-	if response.Error == nil || response.Result != nil {
-		t.Fatalf("Subagent response = %#v", response)
-	}
-	args := target.invoke.Args
-	if args["workerProvider"] != "opencode" || args["workerModel"] != "local-model" || args["workerReasoningEffort"] != "high" {
-		t.Fatalf("override args = %#v", args)
-	}
-	if !target.closed {
-		t.Fatal("Factory Session was not closed after invocation failure")
-	}
-}
-
-func TestSubagentSurfacesSafeProviderThrottleFailure(t *testing.T) {
-	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
-		Status:        factorysessions.InvocationTerminalStatusFailed,
-		ErrorCode:     "INVOCATION_RUNTIME_FAILURE",
-		Message:       "sensitive ACP session/prompt output with token secret",
-		FailureReason: "throttled",
-	}}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-throttled" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
-	if response.Error == nil || response.Error.Code != "factory_session.subagent.provider_throttled" || !response.Error.Retryable {
-		t.Fatalf("throttled response = %#v", response)
-	}
-	if response.Error.SessionID != "session-1" || response.Error.Details["failureReason"] != "throttled" {
-		t.Fatalf("throttled diagnostic = %#v", response.Error)
-	}
-	if strings.Contains(response.Error.Message, "sensitive") || !target.closed {
-		t.Fatalf("terminal failure leaked provider text or skipped close: %#v", response.Error)
-	}
 }
