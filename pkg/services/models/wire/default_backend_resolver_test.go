@@ -282,6 +282,8 @@ func TestGalleryBackendArtifactResolverSelectsCUDAWithoutCPUFallback(t *testing.
 		{"localai-llamacpp", "cuda12-llama-cpp", "/cache/backends/cuda12-llama-cpp"},
 		{"localai-whisper", "cuda12-whisper", "/cache/backends/cuda12-whisper"},
 		{"localai-vibevoice", "cuda12-vibevoice-cpp", "/cache/backends/cuda12-vibevoice-cpp"},
+		{"localai-qwen3-tts-cpp", "cuda12-qwen3-tts-cpp", "/cache/backends/cuda12-qwen3-tts-cpp"},
+		{"localai-audio-cpp", "cuda12-audio-cpp", "/cache/backends/cuda12-audio-cpp"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.backend, func(t *testing.T) {
@@ -306,6 +308,42 @@ func TestGalleryBackendArtifactResolverSelectsCUDAWithoutCPUFallback(t *testing.
 			}
 			if installed != tt.expectedCUDA || selection.InstalledPath != tt.expectedPath || selection.Accelerator != "cuda" {
 				t.Fatalf("installed = %q, selection = %#v, want installed = %q, path = %q", installed, selection, tt.expectedCUDA, tt.expectedPath)
+			}
+		})
+	}
+}
+
+func TestGalleryBackendArtifactResolverSelectsExplicitCPUVariant(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range []struct {
+		backend      string
+		expectedCPU  string
+		expectedPath string
+	}{
+		{"localai-qwen3-tts-cpp", "cpu-qwen3-tts-cpp", "/cache/backends/cpu-qwen3-tts-cpp"},
+		{"localai-audio-cpp", "cpu-audio-cpp", "/cache/backends/cpu-audio-cpp"},
+	} {
+		t.Run(testCase.backend, func(t *testing.T) {
+			t.Parallel()
+			var installed string
+			resolver, err := NewGalleryBackendArtifactResolver(func(_ context.Context, name string, _ bool) (string, error) {
+				installed = name
+				return "/cache/backends/" + name, nil
+			})
+			if err != nil {
+				t.Fatalf("construct gallery resolver: %v", err)
+			}
+			selection, err := resolver(context.Background(), modelseffects.ResolvedHostConfiguration{
+				Backend: testCase.backend, ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+				Platform: models.AssetHostPlatform{
+					OperatingSystem: "linux", Architecture: "amd64", CUDAAvailable: true, Accelerator: "cpu",
+				},
+			}, false)
+			if err != nil {
+				t.Fatalf("resolve CPU backend %s: %v", testCase.backend, err)
+			}
+			if installed != testCase.expectedCPU || selection.InstalledPath != testCase.expectedPath || selection.Accelerator != "cpu" {
+				t.Fatalf("installed = %q, selection = %#v, want installed = %q, path = %q", installed, selection, testCase.expectedCPU, testCase.expectedPath)
 			}
 		})
 	}
@@ -698,5 +736,56 @@ func publishedWindowsRequest(backend string) modelseffects.ResolvedHostConfigura
 	return modelseffects.ResolvedHostConfiguration{
 		Backend: backend, ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
 		Platform: models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64", CUDAAvailable: true},
+	}
+}
+
+func TestDefaultHostCompatibilityCheckerAllowsPublishedWindowsCUDA(t *testing.T) {
+	t.Parallel()
+	checker, err := NewDefaultHostCompatibilityChecker()
+	if err != nil {
+		t.Fatalf("construct compatibility checker: %v", err)
+	}
+	base := ResolvedHostConfiguration{
+		Backend: "localai-llamacpp",
+		Platform: models.AssetHostPlatform{
+			OperatingSystem: "windows", Architecture: "amd64", Accelerator: "cuda",
+		},
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+	}
+	for _, test := range []struct {
+		name string
+		edit func(*ResolvedHostConfiguration)
+		want error
+	}{
+		{name: "explicit CUDA"},
+		{name: "unknown backend", edit: func(request *ResolvedHostConfiguration) {
+			request.Backend = "localai-unknown"
+		}, want: artifacts.ErrUnknownBackend},
+		{name: "unsupported protocol", edit: func(request *ResolvedHostConfiguration) {
+			request.ProtocolVersion = "localai-backend-v0"
+		}, want: artifacts.ErrIncompatibleProtocol},
+		{name: "unsupported accelerator", edit: func(request *ResolvedHostConfiguration) {
+			request.Platform.Accelerator = "metal"
+		}, want: artifacts.ErrIncompatibleAccelerator},
+		{name: "unsupported platform", edit: func(request *ResolvedHostConfiguration) {
+			request.Platform.Architecture = "arm64"
+		}, want: artifacts.ErrUnsupportedPlatform},
+		{name: "non-Windows CUDA remains pinned", edit: func(request *ResolvedHostConfiguration) {
+			request.Platform.OperatingSystem = "linux"
+		}, want: artifacts.ErrIncompatibleAccelerator},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := base.Clone()
+			if test.edit != nil {
+				test.edit(&request)
+			}
+			err := checker.Check(context.Background(), HostCompatibilityRequest{Configuration: request})
+			if test.want == nil && err != nil {
+				t.Fatalf("compatibility check: %v", err)
+			}
+			if test.want != nil && !errors.Is(err, test.want) {
+				t.Fatalf("compatibility check error = %v, want %v", err, test.want)
+			}
+		})
 	}
 }

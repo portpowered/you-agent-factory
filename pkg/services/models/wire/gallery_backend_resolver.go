@@ -51,6 +51,10 @@ func galleryBackendName(backend, accelerator string) (string, error) {
 		base = "whisper"
 	case "localai-vibevoice":
 		base = "vibevoice-cpp"
+	case "localai-qwen3-tts-cpp":
+		base = "qwen3-tts-cpp"
+	case "localai-audio-cpp":
+		base = "audio-cpp"
 	default:
 		return "", fmt.Errorf("%w: backend %q", artifacts.ErrUnknownBackend, backend)
 	}

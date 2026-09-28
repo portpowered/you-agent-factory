@@ -908,3 +908,49 @@ before close, but its `Runtime.Progress` only offers Factory state/counts;
 This narrows the next diagnostic design: a coarse progress snapshot is
 available now, while identifying a stalled provider/tool step requires a
 source-native Worker observation read or a new owner-level contract.
+
+An OpenCode Space Bunny MCP subagent (`7deb1c76-977d-408f-9ca0-df44e8b73897`)
+completed a bounded Models gallery edit with a 300-second deadline in about
+195 seconds. It added Qwen3 TTS and audio-cpp gallery backend names and CUDA/CPU
+selection tests, and returned a primary result. Independent Models wire tests,
+package maintenance checks, and `git diff --check` passed. Earlier 90- and
+120-second Space Bunny research tasks expired without edits. The longer
+deadline allowed this edit to complete; it does not by itself prove why the
+shorter calls stalled or timed out.
+
+Another OpenCode Space Bunny MCP subagent
+(`151253f0-63ca-4eba-b622-c82290dac7cf`) reached its 300-second timeout
+while auditing and editing Windows published backend selection. It returned
+no primary result and left no source changes in the worktree. The cause
+remains unproven; a narrower resolver edit was delegated through the same MCP
+infrastructure to Codex for comparison.
+
+The narrower Codex MCP subagent (`6dd14a41-4166-422c-b3a0-ed2dc1de0f3a`)
+completed the Windows published-resolver edit and returned a primary result.
+It changed online selection to fetch validated publications for CPU and both
+implicit and explicit CUDA requests, with offline cache reuse and a checked-in
+fallback. Focused and race Models wire tests passed in the subagent; independent
+Models wire, artifact, and application wire tests passed afterward. Review
+identified a separate compatibility gate that still rejects explicit Windows
+CUDA before the resolver; that follow-up is in progress.
+
+Codex MCP subagent `7b057768-6dd4-4741-99c7-53a8ec6f5c21` completed that
+compatibility gate follow-up. It permits a supported explicit Windows CUDA
+request to reach publication selection while still checking backend, protocol,
+platform, and accelerator. Independent Models wire, artifacts, and application
+wire Go suites passed after both edits. The current public release index still
+has no Windows CUDA archive, so this proves selection behavior with validated
+fixtures rather than native Windows GPU first use.
+
+The first full `make lint` failed only at `pkg-file-count`: two new wire test
+files raised the Models wire package from its 15-file limit to 17. Codex MCP
+subagent `bab1cc86-b5f0-49b4-b9c4-1131888061b0` consolidated the published
+resolver with the default resolver and folded host compatibility tests into
+the existing resolver test file. The package returned to 15 files. Independent
+`pkg-file-count`, `backend-size`, focused Go tests, and `git diff --check`
+passed; a full lint rerun follows.
+
+The first full lint rerun after consolidation failed only because the deleted
+resolver file was still in Git's index and `fmt-check` enumerated that path.
+After staging the intended deletion and edits, full native Windows Git Bash
+`make lint` passed all 24 targets.
