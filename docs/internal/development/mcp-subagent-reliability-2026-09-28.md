@@ -1434,3 +1434,28 @@ raised only the video generation-token budget from 256 to 1024; the live
 four-second probe still failed, so the subagent reverted the experiment.
 This distinguishes protocol acceptance and projector readiness from the
 longer-video behavior actually observed on this Windows backend.
+
+An OpenCode-provider MCP implementation task for VIDEO Work content (session
+`87657a4c-3081-42af-9ed5-3bca5155e2a9`) reached its 20-minute bound and
+returned typed timeout with partial edits. Its focused tests passed, but two
+maintainability checks still failed. A Codex-provider MCP continuation
+(session `28b2f3d2-d5e5-4b83-89e8-36a63efc65d7`) completed the refactor;
+commit `6f71ac44f5` records VIDEO Work content and generated contracts.
+
+The next Codex-provider MCP task (session
+`51070abe-c959-49f5-8eda-821e4da1e0fb`) completed Workers inference
+media-byte materialization and tests. Independent review extended its URL
+handling to `http`, `https`, and `data` Work content, then focused Go tests
+and full lint passed. A concurrent, read-only OpenCode MCP audit (session
+`8b031ff9-9041-4c69-8b5c-8b7482cfe596`) returned a primary result but
+asserted that the multi-frame video failure was inside the pinned backend
+without backend logs. That boundary remains unproven. An independent
+two-frame, 160x120, no-audio MP4 invoke also failed with a generic internal
+server error. The live observations therefore show one-frame success and
+failure at two or more frames in these fixtures, not a confirmed root cause.
+Repeating the two-frame probe with `--debug` reported only
+`model runtime stage failed: INVOKE (INVOCATION_FAILED)` beneath the generic
+CLI error; it did not expose the backend's underlying error or response.
+Commit `ce336bbbc3` records the Work media-byte repair and Factory VIDEO
+capability mapping. Focused Go tests, dashboard typecheck, docs-reference
+smoke, all 24 lint targets, and post-commit API smoke passed.
