@@ -9,6 +9,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"strings"
 	"time"
@@ -563,10 +564,46 @@ type SessionOperationWait struct {
 // SessionRuntimeSelection carries value-only runtime selections for
 // process-owned activation.
 type SessionRuntimeSelection struct {
-	SystemConfigHome string
-	LogDirectory     string
-	MetricsDirectory string
-	OperatorDefaults operatorsettings.ResolvedDefaults
+	SystemConfigHome     string
+	LogDirectory         string
+	MetricsDirectory     string
+	OperatorDefaults     operatorsettings.ResolvedDefaults
+	DefinitionSourcePath string
+	ExecutionBaseDir     string
+	CanonicalSessionID   string
+	BackendScopeID       string
+	SystemConfigPath     string
+	WorkFile             string
+	ModelCacheDirectory  string
+	Mode                 factorydefinitions.RuntimeMode
+	Verbose              bool
+	RuntimeInstanceID    string
+	LogPolicy            factoryruntime.RuntimeFileLoggingPolicy
+	LogConfig            factoryruntime.RuntimeLogStorageConfig
+	MetricsPolicy        factoryruntime.RuntimeMetricsPolicy
+	MetricsConfig        factoryruntime.RuntimeMetricsStorageConfig
+	Host                 RuntimeHostRequest
+	Workers              SessionWorkerSelection
+	Recording            SessionRecordingSelection
+}
+
+// SessionWorkerSelection carries worker-side selections for one session.
+type SessionWorkerSelection struct {
+	RunnerID                          string
+	Worktree                          string
+	WorkerReasoningEffort             string
+	MockWorkers                       *workers.MockWorkersConfig
+	InvocationSkipPermissionsOverride *bool
+	SkipBuiltInPrerequisiteValidation bool
+}
+
+// SessionRecordingSelection carries recording selections for one session.
+type SessionRecordingSelection struct {
+	RecordPath    string
+	ReplayPath    string
+	ResumePath    string
+	WorkflowID    string
+	FlushInterval time.Duration
 }
 
 // SessionStartRequest is the detached start/open vocabulary for both live and
