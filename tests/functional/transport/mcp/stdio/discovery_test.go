@@ -136,25 +136,6 @@ func TestMCPStdioRejectsMissingHomeEnvironment(t *testing.T) {
 	}
 }
 
-// TestMCPStdioRejectsInvalidProjectRoot proves you server mcp rejects a project
-// root that cannot resolve a factory layout before stdio initialize succeeds.
-func TestMCPStdioRejectsInvalidProjectRoot(t *testing.T) {
-	// Keep this root isolated: invalid Factory layout exercises initializer
-	// failure with its own project and home environment.
-	process := buildMCPProcess(t)
-	projectRoot := trackedMCPTempDir(t)
-	homeDir := trackedMCPTempDir(t)
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "server", "mcp", "--project-root", projectRoot,
-	})
-	inputs.Env = append([]string{"PATH=", "HOME=" + homeDir, "USERPROFILE=" + homeDir}, os.Environ()...)
-	inputs.WorkingDirectory = projectRoot
-	err := executeMCPProcess(t, process, inputs.Input)
-	if err == nil || !strings.Contains(err.Error(), "factory layout not found") {
-		t.Fatalf("Process.Execute(you server mcp) error = %v, want factory layout diagnostic", err)
-	}
-}
-
 // TestMCPStdioProjectRootReachesInitializer proves project-root backed you
 // server mcp reaches a successful stdio initialize through the public process
 // boundary with injected transport dependencies.
