@@ -112,6 +112,9 @@ func publicFactoryEnumNormalizerProviderCases() []publicFactoryEnumNormalizerCas
 func TestStrictPublicFactoryWorkerModelProviderAcceptsCanonicalExtensionIdentity(t *testing.T) {
 	t.Parallel()
 
+	if got := interfaces.StrictPublicFactoryWorkerModelProvider("OPENCODE"); got != "OPENCODE" {
+		t.Fatalf("StrictPublicFactoryWorkerModelProvider(OPENCODE) = %q, want canonical identity", got)
+	}
 	const identity = "customer.provider-v2"
 	if got := interfaces.StrictPublicFactoryWorkerModelProvider(identity); got != identity {
 		t.Fatalf("StrictPublicFactoryWorkerModelProvider(%q) = %q, want preserved identity", identity, got)

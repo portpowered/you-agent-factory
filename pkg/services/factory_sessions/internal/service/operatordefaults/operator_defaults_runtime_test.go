@@ -42,6 +42,30 @@ func TestApplyOperatorDefaultsToLoadedConfig_FillsOmittedModelWorkerFields(t *te
 	}
 }
 
+func TestApplyOperatorDefaultsToLoadedConfigAcceptsCanonicalOpenCodeProvider(t *testing.T) {
+	loaded := newOperatorDefaultsRuntimeFixture(t, map[string]any{
+		"workers": []map[string]any{{
+			"name": "executor",
+			"type": "MODEL_WORKER",
+			"body": "You are the executor.",
+		}},
+	})
+
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+		WorkerModelProvider: "OPENCODE",
+		WorkerModel:         "muse-spark-1.3-contributor-free",
+	}); err != nil {
+		t.Fatalf("ApplyOperatorDefaultsToLoadedConfig: %v", err)
+	}
+	worker, ok := loaded.Worker("executor")
+	if !ok {
+		t.Fatal("expected executor worker")
+	}
+	if worker.ModelProvider != "OPENCODE" {
+		t.Fatalf("modelProvider = %q, want OPENCODE", worker.ModelProvider)
+	}
+}
+
 func TestApplyOperatorDefaultsToLoadedConfig_PreservesAuthoredModelWorkerFields(t *testing.T) {
 	loaded := newOperatorDefaultsRuntimeFixture(t, map[string]any{
 		"workers": []map[string]any{{

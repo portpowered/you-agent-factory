@@ -302,6 +302,7 @@ var internalFactoryWorkerModelProviderAliases = map[string]string{
 	"kiro-cli": "KIRO",
 	"opencode": "OPENCODE",
 	"pi":       "PI",
+	"OPENCODE": "OPENCODE",
 }
 
 var internalFactoryWorkerProviderAliases = map[string]string{
