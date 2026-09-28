@@ -894,12 +894,13 @@ func cloneToolDefinitions(t *testing.T, tools []mcpfactorysession.ToolDefinition
 
 type subagentTargetFake struct {
 	factorysessions.TargetExecutionService
-	start     factorysessions.StartRequest
-	invoke    factorysessions.InvocationRequest
-	started   bool
-	closed    bool
-	invokeErr error
-	wait      <-chan struct{}
+	start        factorysessions.StartRequest
+	invoke       factorysessions.InvocationRequest
+	started      bool
+	closed       bool
+	invokeErr    error
+	invokeResult *factorysessions.InvocationResult
+	wait         <-chan struct{}
 }
 
 func (fake *subagentTargetFake) StartAsync(_ context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
@@ -919,6 +920,9 @@ func (fake *subagentTargetFake) InvokeFactorySession(ctx context.Context, _ stri
 	}
 	if fake.invokeErr != nil {
 		return factorysessions.InvocationResult{}, fake.invokeErr
+	}
+	if fake.invokeResult != nil {
+		return *fake.invokeResult, nil
 	}
 	return factorysessions.InvocationResult{
 		Status:        factorysessions.InvocationTerminalStatusCompleted,
@@ -995,5 +999,29 @@ func TestSubagentForwardsModelOverridesAndCleansUpOnInvocationFailure(t *testing
 	}
 	if !target.closed {
 		t.Fatal("Factory Session was not closed after invocation failure")
+	}
+}
+
+func TestSubagentTimeoutReportsPossibleWorkspaceEffects(t *testing.T) {
+	timeout := int64(180000)
+	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
+		Status:    factorysessions.InvocationTerminalStatusTimedOut,
+		ErrorCode: string(factorysessions.InvocationErrorCodeTimedOut),
+		Message:   "sensitive provider transcript",
+	}}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-timeout" }, mcpfactorysession.SubagentInput{
+		Prompt: "Edit a file", TimeoutMillis: &timeout,
+	})
+	if response.Result != nil || response.Error == nil {
+		t.Fatalf("timeout response = %#v", response)
+	}
+	if response.Error.Code != "factory_session.subagent.timed_out" || response.Error.Retryable || response.Error.SessionID != "session-1" {
+		t.Fatalf("timeout envelope = %#v", response.Error)
+	}
+	if response.Error.Details["partialEffectsPossible"] != true || response.Error.Details["timeoutMillis"] != timeout || response.Error.Details["invocationCode"] != string(factorysessions.InvocationErrorCodeTimedOut) {
+		t.Fatalf("timeout details = %#v", response.Error.Details)
+	}
+	if strings.Contains(response.Error.Message, "sensitive") || !target.closed {
+		t.Fatalf("timeout leaked provider text or skipped close: %#v", response.Error)
 	}
 }
