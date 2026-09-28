@@ -809,6 +809,63 @@ func TestPublishedBackendResolverRejectsIncompleteRelease(t *testing.T) {
 	assertPublishedResolution(t, resolver, publishedWindowsRequest("localai-llamacpp"), false, "cpu", "windows-amd64")
 }
 
+func TestPublishedBackendResolverSkipsNewerReleaseWithoutWindowsCUDA(t *testing.T) {
+	t.Parallel()
+	cudaManifest := windowsCUDAPublicationFixture(t)
+	cudaTag := publicationTag(t, cudaManifest)
+	// Drop the trailing CUDA archive from a copy so the newer release publishes a
+	// valid, fully listed CPU-only manifest, then give it its own pin.
+	fingerprint := strings.TrimPrefix(cudaTag, "localai-backends-v1-")
+	cudaEntry := []byte("{\n      \"id\": \"localai-llamacpp/windows-amd64-cuda\"")
+	cudaStart := bytes.Index(cudaManifest, cudaEntry)
+	if cudaStart < 0 {
+		t.Fatal("CUDA archive missing from publication fixture")
+	}
+	truncated := bytes.TrimRight(append([]byte(nil), cudaManifest[:cudaStart]...), " \n")
+	truncated = bytes.TrimSuffix(truncated, []byte(","))
+	cpuManifest := bytes.ReplaceAll(append(truncated, []byte("\n  ]\n}\n")...),
+		[]byte(fingerprint), []byte(strings.Repeat("c", 64)))
+	cpuTag := publicationTag(t, cpuManifest)
+	if cpuTag == cudaTag {
+		t.Fatal("newer CPU-only release reused the CUDA release tag")
+	}
+	// The release index lists the newest release first, so the CPU-only manifest
+	// is offered before the older release that carries the Windows CUDA archive.
+	releases := make([]map[string]any, 0, 2)
+	for _, manifest := range [][]byte{cpuManifest, cudaManifest} {
+		var listed []map[string]any
+		if err := json.Unmarshal(publicationIndex(t, publicationTag(t, manifest), manifest), &listed); err != nil {
+			t.Fatalf("decode publication index: %v", err)
+		}
+		releases = append(releases, listed...)
+	}
+	index, err := json.Marshal(releases)
+	if err != nil {
+		t.Fatalf("encode publication index: %v", err)
+	}
+	published := map[string][]byte{
+		backendReleaseBase + cpuTag + "/manifest.json":  cpuManifest,
+		backendReleaseBase + cudaTag + "/manifest.json": cudaManifest,
+	}
+	resolver, err := NewPublishedBackendArtifactResolver(backendPublicationDoer(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() == backendReleasesURL {
+			return publicationResponse(index), nil
+		}
+		if body, ok := published[request.URL.String()]; ok {
+			return publicationResponse(body), nil
+		}
+		return publicationResponse(nil), fmt.Errorf("unexpected publication request")
+	}))
+	if err != nil {
+		t.Fatalf("construct published resolver: %v", err)
+	}
+	assertPublishedResolution(t, resolver, publishedWindowsRequest("localai-llamacpp"), false, "cuda", "windows-amd64-cuda")
+	selection, err := resolver(context.Background(), publishedWindowsRequest("localai-llamacpp"), false)
+	if err != nil || !strings.Contains(selection.Location, cudaTag) {
+		t.Fatalf("selected location = %q, %v, want the CUDA release %s", selection.Location, err, cudaTag)
+	}
+}
+
 func TestFetchPublishedBackendManifestLive(t *testing.T) {
 	if os.Getenv("YOU_LOCALAI_PUBLICATION_LIVE") != "1" {
 		t.Skip("opt in to the published backend manifest check")

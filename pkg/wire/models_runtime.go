@@ -643,11 +643,11 @@ func provideModelAssetHostPlatform(edges serviceedges.Edges) models.AssetHostPla
 		platform.CUDAAvailable = true
 	}
 	if platform.Accelerator == "" {
-		if !platform.CUDAAvailable && runtime.GOOS == "linux" && platform.OperatingSystem == "linux" && platform.Architecture == "amd64" {
+		if runtime.GOOS == "linux" && platform.OperatingSystem == "linux" && platform.Architecture == "amd64" {
 			platform.CUDAAvailable = linuxCUDAAvailable(os.Stat, func(ctx context.Context) ([]byte, error) {
 				return exec.CommandContext(ctx, "nvidia-smi", "-L").Output()
 			})
-		} else if !platform.CUDAAvailable && runtime.GOOS == "windows" && platform.OperatingSystem == "windows" && platform.Architecture == "amd64" {
+		} else if runtime.GOOS == "windows" && platform.OperatingSystem == "windows" && platform.Architecture == "amd64" {
 			platform.CUDAAvailable = windowsCUDAAvailable(func(ctx context.Context) ([]byte, error) {
 				return exec.CommandContext(ctx, "nvidia-smi", "-L").Output()
 			})
@@ -655,6 +655,9 @@ func provideModelAssetHostPlatform(edges serviceedges.Edges) models.AssetHostPla
 		if platform.CUDAAvailable && platform.OperatingSystem == "linux" {
 			platform.Accelerator = "cuda"
 		}
+		// Leave Windows accelerator selection automatic. The published backend
+		// resolver prefers CUDA when an archive exists and can fall back to CPU
+		// when the current publication has no Windows CUDA archive.
 	}
 	return platform
 }

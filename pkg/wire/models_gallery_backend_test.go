@@ -224,15 +224,17 @@ func TestWindowsCUDAAvailableRequiresWorkingNvidiaProbe(t *testing.T) {
 	}
 }
 
-func TestWindowsHostRecordsCUDAWithoutSelectingUnpublishedArchive(t *testing.T) {
+func TestWindowsHostSelectsPublishedCUDAAccelerator(t *testing.T) {
 	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
 		t.Skip("native Windows host probe")
 	}
 	expected := windowsCUDAAvailable(func(ctx context.Context) ([]byte, error) {
 		return exec.CommandContext(ctx, "nvidia-smi", "-L").Output()
 	})
+	// Keep the accelerator automatic so backend resolution can fall back to CPU
+	// when no compatible Windows CUDA archive has been published.
 	platform := provideModelAssetHostPlatform(serviceedges.Edges{})
 	if platform.CUDAAvailable != expected || platform.Accelerator != "" {
-		t.Fatalf("Windows host platform = %#v, want CUDA capability %t and no selected archive", platform, expected)
+		t.Fatalf("Windows host platform = %#v, want CUDA capability %t and automatic accelerator", platform, expected)
 	}
 }

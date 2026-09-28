@@ -20,8 +20,8 @@ func NewDefaultHostCompatibilityChecker() (HostCompatibilityChecker, error) {
 	return defaultHostCompatibilityChecker{resolve: resolver}, nil
 }
 
-// NewGalleryHostCompatibilityChecker validates a Linux gallery backend choice
-// without starting a download during capability checks.
+// NewGalleryHostCompatibilityChecker validates a Linux or Windows gallery
+// backend choice without starting a download during capability checks.
 func NewGalleryHostCompatibilityChecker() HostCompatibilityChecker {
 	return galleryHostCompatibilityChecker{}
 }
@@ -33,13 +33,14 @@ func (galleryHostCompatibilityChecker) Check(ctx context.Context, request HostCo
 		return err
 	}
 	configuration := request.Configuration
-	if configuration.Platform.OperatingSystem != "linux" || configuration.Platform.Architecture != "amd64" {
-		return fmt.Errorf("LocalAI gallery backend requires linux/amd64")
+	accelerator := defaultBackendAccelerator(configuration.Platform)
+	if err := validateGalleryPlatform(configuration.Platform, accelerator); err != nil {
+		return err
 	}
 	if configuration.ProtocolVersion != "" && configuration.ProtocolVersion != modelseffects.PinnedHostProtocolVersion {
 		return fmt.Errorf("LocalAI backend protocol %q is unsupported", configuration.ProtocolVersion)
 	}
-	_, err := galleryBackendName(configuration.Backend, defaultBackendAccelerator(configuration.Platform))
+	_, err := galleryBackendName(configuration.Backend, accelerator)
 	return err
 }
 

@@ -171,9 +171,14 @@ func TestModelInvocationEdgesPreserveOverridesAndSelectPlatformDefaults(t *testi
 func TestModelAssetHostPlatformPreservesOverrideAndSelectsProcessDefault(t *testing.T) {
 	t.Parallel()
 
+	// Managed backend selection now accepts published CUDA archives on both
+	// desktop platforms, so a detected GPU selects the CUDA accelerator
+	// everywhere a CUDA-capable archive can be published.
+	selectsCUDA := runtime.GOARCH == "amd64" &&
+		(runtime.GOOS == "linux" || runtime.GOOS == "windows")
 	if got := provideModelAssetHostPlatform(serviceedges.Edges{}); got.OperatingSystem != runtime.GOOS ||
 		got.Architecture != runtime.GOARCH ||
-		(got.Accelerator != "" && !(runtime.GOOS == "linux" && runtime.GOARCH == "amd64" && got.Accelerator == "cuda")) ||
+		(got.Accelerator != "" && !(selectsCUDA && got.Accelerator == "cuda")) ||
 		(got.Accelerator == "cuda" && !got.CUDAAvailable) {
 		t.Fatalf("default model asset host platform = %#v, want current process platform and optional detected CUDA", got)
 	}

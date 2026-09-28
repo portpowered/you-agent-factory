@@ -140,6 +140,34 @@ func TestPublishedBackendResolverLinuxCUDARequiresPublishedArchive(t *testing.T)
 	}
 }
 
+func TestPublishedBackendResolverLinuxFallsBackToBaselineWhenPublicationHasNoCompatibleArchive(t *testing.T) {
+	t.Parallel()
+	baseline := windowsCUDAPublicationFixture(t)
+	oldTag := publicationTag(t, baseline)
+	manifest := publicationWithoutArchive(t, baseline, "localai-llamacpp/linux-amd64")
+	tag := publicationTag(t, manifest)
+	index := publicationIndex(t, tag, manifest)
+	resolver, err := NewPublishedBackendArtifactResolver(backendPublicationDoer(func(request *http.Request) (*http.Response, error) {
+		if request.URL.String() == backendReleasesURL {
+			return publicationResponse(index), nil
+		}
+		if request.URL.String() == backendReleaseBase+tag+"/manifest.json" {
+			return publicationResponse(manifest), nil
+		}
+		return nil, fmt.Errorf("unexpected publication request: %s", request.URL)
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := publishedLinuxRequest("localai-llamacpp")
+	request.Platform.Accelerator = "cpu"
+	selection, err := resolver(context.Background(), request, false)
+	if err != nil || selection.Accelerator != "cpu" || !strings.Contains(selection.Location, "/"+oldTag+"/") {
+		t.Fatalf("fallback selection = %#v, error = %v, want checked-in CPU archive", selection, err)
+	}
+	assertUnpinnedSelection(t, resolver, request, true, "cpu", oldTag)
+}
+
 func TestPublishedBackendResolverRejectsUnsupportedLinuxAccelerator(t *testing.T) {
 	t.Parallel()
 	manifest := publicationWithLinuxCUDA(t, windowsCUDAPublicationFixture(t))
