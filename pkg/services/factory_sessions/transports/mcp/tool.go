@@ -532,7 +532,10 @@ func subagentCapacityFailure(sessionID, requestID string) ToolResponse[SubagentR
 		Message:   "subagent execution capacity is temporarily exhausted",
 		Retryable: true,
 		SessionID: sessionID,
-		Details:   map[string]any{"requestId": requestID},
+		Details: map[string]any{
+			"requestId":       requestID,
+			"suggestedAction": "Wait for active calls to finish and retry. If capacity remains exhausted, inspect or restart the MCP server.",
+		},
 	}
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }

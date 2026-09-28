@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -95,5 +96,9 @@ func TestSubagentFullAdmissionCapacityDoesNotStartSession(t *testing.T) {
 	response := Subagent(context.Background(), target, "", func() string { return "full-admission" }, SubagentInput{Prompt: "Do work"})
 	if response.Error == nil || response.Error.Code != "factory_session.subagent.capacity_exhausted" || !response.Error.Retryable || target.started {
 		t.Fatalf("full admission response = %#v, started = %t", response, target.started)
+	}
+	action, ok := response.Error.Details["suggestedAction"].(string)
+	if !ok || !strings.Contains(action, "Wait for active calls to finish and retry") || !strings.Contains(action, "inspect or restart the MCP server") {
+		t.Fatalf("capacity suggestedAction = %q", action)
 	}
 }
