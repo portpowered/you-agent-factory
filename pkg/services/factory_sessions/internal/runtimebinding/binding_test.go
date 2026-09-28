@@ -307,6 +307,24 @@ type replacementFactory struct {
 	factory.Service
 }
 
+func TestWorkAndEventIngressRequiresDeclaredSessionCapability(t *testing.T) {
+	t.Parallel()
+	ingress := struct{ factory.APIFactory }{}
+	runtime := &factorysessions.LiveRuntime{
+		Factory: struct {
+			factory.Service
+			factory.APIFactory
+		}{},
+	}
+	if got, ok := runtimebinding.WorkAndEventIngressForLiveRuntime(runtime); ok || got != nil {
+		t.Fatalf("undeclared ingress = (%v, %v), want unavailable", got, ok)
+	}
+	runtime.WorkAndEventIngress = ingress
+	if got, ok := runtimebinding.WorkAndEventIngressForLiveRuntime(runtime); !ok || got != ingress {
+		t.Fatalf("declared ingress = (%v, %v), want declared capability", got, ok)
+	}
+}
+
 func (replacementFactory) Run(ctx context.Context) error {
 	<-ctx.Done()
 	return ctx.Err()

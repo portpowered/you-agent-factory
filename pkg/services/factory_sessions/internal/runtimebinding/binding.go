@@ -440,16 +440,12 @@ func DeclaredWorkAndEventIngress(runtime factory.Service) factory.APIFactory {
 }
 
 // WorkAndEventIngressForLiveRuntime returns the ingress declared when Factory
-// Sessions bound the runtime, falling back to the bound Runtime capability
-// while older openings that predate the declared field are still in flight.
+// Sessions bound the runtime.
 func WorkAndEventIngressForLiveRuntime(runtime *factorysessions.LiveRuntime) (factory.APIFactory, bool) {
-	if runtime == nil {
+	if runtime == nil || runtime.WorkAndEventIngress == nil {
 		return nil, false
 	}
-	if runtime.WorkAndEventIngress != nil {
-		return runtime.WorkAndEventIngress, true
-	}
-	return WorkAndEventIngressForService(ServiceForLiveRuntime(runtime))
+	return runtime.WorkAndEventIngress, true
 }
 
 // BindingForSession returns the opaque binding published for a live session.
