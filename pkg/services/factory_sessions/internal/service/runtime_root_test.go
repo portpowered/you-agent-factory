@@ -122,7 +122,7 @@ func TestActivationOpeningDefersCanonicalIdentityUntilDefinitionAdmission(t *tes
 		},
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 	}
-	opening, runtimeID, err := factory.activationOpening(&factorysessions.RuntimeOpeningRequest{
+	opening := factorysessions.RuntimeOpeningRequest{
 		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
 			FactorySessionID: factorysessions.DefaultSessionID,
 		},
@@ -132,9 +132,10 @@ func TestActivationOpeningDefersCanonicalIdentityUntilDefinitionAdmission(t *tes
 				SourceCanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
 			},
 		},
-	})
+	}
+	runtimeID, err := factory.ensureActivationRuntimeID(&opening.FactoryRuntime)
 	if err != nil {
-		t.Fatalf("activationOpening(resume) error = %v", err)
+		t.Fatalf("ensureActivationRuntimeID(resume) error = %v", err)
 	}
 	if runtimeID != "runtime-1" {
 		t.Fatalf("runtime ID = %q, want runtime-1", runtimeID)
@@ -154,11 +155,12 @@ func TestActivationOpeningDefersCanonicalIdentityForAliasOnlyResume(t *testing.T
 	factory := &Root{
 		generateRuntimeInstanceID: func() string { return canonicalID },
 	}
-	opening, _, err := factory.activationOpening(&factorysessions.RuntimeOpeningRequest{
+	opening := factorysessions.RuntimeOpeningRequest{
 		Recordings: recordings.RuntimeOpeningRequest{ResumePath: "alias-only.recording.json"},
-	})
+	}
+	_, err := factory.ensureActivationRuntimeID(&opening.FactoryRuntime)
 	if err != nil {
-		t.Fatalf("activationOpening(alias-only resume) error = %v", err)
+		t.Fatalf("ensureActivationRuntimeID(alias-only resume) error = %v", err)
 	}
 	if opening.FactorySession.CanonicalSessionID != "" {
 		t.Fatalf("alias-only successor canonical session ID = %q, want empty before definition admission", opening.FactorySession.CanonicalSessionID)

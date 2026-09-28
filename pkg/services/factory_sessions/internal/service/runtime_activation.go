@@ -376,11 +376,15 @@ func (r *Root) activationRequestWithInputs(
 	preloadedReplayInput *recordings.LoadReplayInputResult,
 	resumeInput *recordings.LoadResumeInputResult,
 ) (factoryruntime.RuntimeActivationRequest, error) {
-	opening, runtimeID, err := r.activationOpening(request)
+	if request == nil {
+		return factoryruntime.RuntimeActivationRequest{}, fmt.Errorf("activate Factory Runtime: session selection is required")
+	}
+	opening := *request
+	runtimeID, err := r.ensureActivationRuntimeID(&opening.FactoryRuntime)
 	if err != nil {
 		return factoryruntime.RuntimeActivationRequest{}, err
 	}
-	sessionID := sessionIDForOpening(opening)
+	sessionID := sessionIDForSelection(opening.FactorySession)
 	resolution, err := r.resolveActivationSnapshot(
 		ctx,
 		opening.FactoryDefinition,
@@ -434,26 +438,23 @@ type activationSnapshotResolution struct {
 	runtimeBaseDir string
 }
 
-func (r *Root) activationOpening(
-	request *factorysessions.RuntimeOpeningRequest,
-) (factorysessions.RuntimeOpeningRequest, string, error) {
-	if request == nil {
-		return factorysessions.RuntimeOpeningRequest{}, "", fmt.Errorf("open Factory Runtime: runtime opening request is required")
+func (r *Root) ensureActivationRuntimeID(runtime *factoryruntime.RuntimeOpeningRequest) (string, error) {
+	if runtime == nil {
+		return "", fmt.Errorf("activate Factory Runtime: runtime selection is required")
 	}
-	opening := *request
-	runtimeID := strings.TrimSpace(opening.FactoryRuntime.RuntimeInstanceID)
+	runtimeID := strings.TrimSpace(runtime.RuntimeInstanceID)
 	if runtimeID != "" {
-		return opening, runtimeID, nil
+		return runtimeID, nil
 	}
 	if r.generateRuntimeInstanceID == nil {
-		return factorysessions.RuntimeOpeningRequest{}, "", fmt.Errorf("open Factory Runtime: runtime instance ID generator is required")
+		return "", fmt.Errorf("open Factory Runtime: runtime instance ID generator is required")
 	}
 	runtimeID = strings.TrimSpace(r.generateRuntimeInstanceID())
 	if runtimeID == "" {
-		return factorysessions.RuntimeOpeningRequest{}, "", fmt.Errorf("open Factory Runtime: runtime instance ID generator returned an empty identity")
+		return "", fmt.Errorf("open Factory Runtime: runtime instance ID generator returned an empty identity")
 	}
-	opening.FactoryRuntime.RuntimeInstanceID = runtimeID
-	return opening, runtimeID, nil
+	runtime.RuntimeInstanceID = runtimeID
+	return runtimeID, nil
 }
 
 func (r *Root) canonicalSessionIDGenerator() func() string {
@@ -614,8 +615,8 @@ func firstNonEmptyString(values ...string) string {
 	return ""
 }
 
-func sessionIDForOpening(opening factorysessions.RuntimeOpeningRequest) string {
-	if sessionID := strings.TrimSpace(opening.FactorySession.FactorySessionID); sessionID != "" {
+func sessionIDForSelection(session factorysessions.SessionRuntimeOpeningRequest) string {
+	if sessionID := strings.TrimSpace(session.FactorySessionID); sessionID != "" {
 		return sessionID
 	}
 	return factorysessions.DefaultSessionID
