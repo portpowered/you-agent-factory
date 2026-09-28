@@ -1,8 +1,11 @@
 package apiserver_test
 
 import (
+	"context"
+
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -40,14 +43,20 @@ func newAPIServerFromRoles(
 	requestPreparation work.RequestPreparationService,
 	sessionRequests factorysessionshttp.RequestPreparation,
 	logger *zap.Logger,
+	sessionsRoots ...factorysessions.Service,
 ) *api.Server {
+	var sessionsRoot factorysessions.Service
+	if len(sessionsRoots) > 0 {
+		sessionsRoot = sessionsRoots[0]
+	}
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		Runtime: runtime, FactoryStatus: factoryStatus,
+		SessionsRoot: sessionsRoot,
+		Runtime:      runtime, FactoryStatus: factoryStatus,
 		Sessions: sessions, Invocation: invocation,
 		FactoryDefinitions: factoryDefinitions, FactoryValidation: factoryValidation,
 		WorkflowPreview:  workflowPreview,
-		DurableExecution: durableExecution, DurableLifecycle: durableLifecycle,
-		DurableListing: durableListing, DurableResponseEvents: durableResponseEvents,
+		DurableLifecycle: durableLifecycle,
+		DurableListing:   durableListing, DurableResponseEvents: durableResponseEvents,
 		DurableLister: durableLister, LiveSessionLister: liveSessionLister,
 		WorkerPrompts:   workerPrompts,
 		SessionRequests: sessionRequests,
@@ -68,4 +77,11 @@ func newAPIServerFromRoles(
 		handler, workhttp.NewAdapterFromRoles(workRoot, workRoot, workAPI, workRead),
 		modelsHTTP, providerSessionsHTTP, nil, logger,
 	)
+}
+
+type canonicalOpenTestRoot struct{ factorysessions.Service }
+
+func (canonicalOpenTestRoot) Start(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	return factorysessions.SessionStartResult{SessionID: "opened", Mode: factorysessions.SessionOperationModeLive,
+		Live: &factorysessions.SessionOpenResult{SessionID: "opened", FolderPath: request.FolderPath}}, nil
 }

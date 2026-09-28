@@ -181,11 +181,56 @@ func newDurableAndLiveAPITestServer(execution factorysessionmapping.DurableExecu
 		durable = factorysessionmapping.NewDurableAPI(execution)
 	}
 	liveLister, _ := live.(factorysessionshttp.LiveSessionListReader)
+	var sessionsRoot factorysessions.Service
+	if execution != nil {
+		sessionsRoot = canonicalDurableStartTestRoot{execution: execution}
+	}
 	return newAPIServerFromRoles(
 		nil, nil, live, nil, nil, nil, nil, nil, nil, nil,
 		durable, durable, durable, durable, execution, liveLister, nil, nil,
-		nil, nil, preparation, zap.NewNop(),
+		nil, nil, preparation, zap.NewNop(), sessionsRoot,
 	)
+}
+
+// canonicalDurableStartTestRoot exercises the HTTP Start boundary with the
+// existing scripted execution fixture; it has no production construction path.
+type canonicalDurableStartTestRoot struct {
+	factorysessions.Service
+	execution factorysessionmapping.DurableExecution
+}
+
+func (root canonicalDurableStartTestRoot) ListFactorySessions(context.Context) ([]factorysessions.ReadProjection, error) {
+	return nil, nil
+}
+
+func (root canonicalDurableStartTestRoot) CloseFactorySession(context.Context, string) error {
+	return nil
+}
+
+func (root canonicalDurableStartTestRoot) ListSessions(ctx context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	return root.execution.ListSessions(ctx, request)
+}
+
+func (root canonicalDurableStartTestRoot) Get(_ context.Context, request factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
+	return factorysessions.SessionGetResult{Session: factorysessions.SessionView{SessionID: request.SessionID, FactoryDir: "."}}, nil
+}
+
+func (root canonicalDurableStartTestRoot) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	legacy := factorysessions.StartRequest{
+		RequestID: request.Correlation.RequestID, Source: request.Source, Args: request.Args,
+		Orchestrator: request.Orchestrator, RequestedPolicy: request.Policy,
+		Runtime: request.RuntimeOptions, ProjectRoot: request.FolderPath, PersistencePolicy: request.Persistence,
+	}
+	if request.Wait.TimeoutMillis != 0 || request.Wait.CancelOnTimeout {
+		timeout := request.Wait.TimeoutMillis
+		legacy.Wait = &factorysessions.WaitOptions{TimeoutMillis: &timeout, CancelOnTimeout: request.Wait.CancelOnTimeout}
+	}
+	if request.Synchronous {
+		result, err := root.execution.StartSync(ctx, legacy)
+		return factorysessions.SessionStartResult{SessionID: result.SessionID, Mode: factorysessions.SessionOperationModeDurable, Sync: &result}, err
+	}
+	result, err := root.execution.StartAsync(ctx, legacy)
+	return factorysessions.SessionStartResult{SessionID: result.SessionID, Mode: factorysessions.SessionOperationModeDurable, Async: &result}, err
 }
 
 func newWorkAPITestServer(work apisurface.WorkAPI) *api.Server {

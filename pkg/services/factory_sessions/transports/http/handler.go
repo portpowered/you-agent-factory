@@ -35,7 +35,6 @@ type Adapter struct {
 	factoryDefinitions    apisurface.FactorySaveAPI
 	factoryValidation     factorydefinitions.SubmittedDefinitionValidationOperation
 	workflowPreview       factoryruntime.WorkflowPreviewOperation
-	durableExecution      apisurface.DurableSessionExecutionAPI
 	durableLifecycle      apisurface.DurableSessionLifecycleAPI
 	durableListing        apisurface.DurableSessionListingAPI
 	durableResponseEvents DurableResponseEventsAPI
@@ -60,7 +59,6 @@ type Dependencies struct {
 	FactoryDefinitions    apisurface.FactorySaveAPI
 	FactoryValidation     factorydefinitions.SubmittedDefinitionValidationOperation
 	WorkflowPreview       factoryruntime.WorkflowPreviewOperation
-	DurableExecution      apisurface.DurableSessionExecutionAPI
 	DurableLifecycle      apisurface.DurableSessionLifecycleAPI
 	DurableListing        apisurface.DurableSessionListingAPI
 	DurableResponseEvents DurableResponseEventsAPI
@@ -106,8 +104,8 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 		invocation:         deps.Invocation,
 		factoryDefinitions: deps.FactoryDefinitions, factoryValidation: deps.FactoryValidation,
 		workflowPreview:  deps.WorkflowPreview,
-		durableExecution: deps.DurableExecution, durableLifecycle: deps.DurableLifecycle,
-		durableListing: deps.DurableListing, durableResponseEvents: deps.DurableResponseEvents,
+		durableLifecycle: deps.DurableLifecycle,
+		durableListing:   deps.DurableListing, durableResponseEvents: deps.DurableResponseEvents,
 		durableLister: deps.DurableLister, liveSessionLister: deps.LiveSessionLister,
 		workerPrompts: deps.WorkerPrompts, invocationWorkType: deps.InvocationWorkType,
 		sessionRequests: deps.SessionRequests,

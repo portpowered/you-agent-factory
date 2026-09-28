@@ -26,6 +26,10 @@ import (
 
 func newAPITestServer(roles any) *api.Server {
 	logger, _ := zap.NewDevelopment()
+	var sessionsRoot factorysessions.Service
+	if _, ok := roles.(apiOpenFactorySessionScript); ok {
+		sessionsRoot = canonicalOpenTestRoot{}
+	}
 	modelsHandler := &modelshttp.Handler{}
 	modelsService := apiTestRole[modelcontract.Service](roles)
 	if modelsService != nil {
@@ -56,7 +60,7 @@ func newAPITestServer(roles any) *api.Server {
 		nil, nil,
 		apiPromptTemplatesFake{},
 		nil, nil, nil,
-		logger,
+		logger, sessionsRoot,
 	)
 }
 
