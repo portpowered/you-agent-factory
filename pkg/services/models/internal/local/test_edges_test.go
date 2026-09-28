@@ -143,6 +143,26 @@ func TestScopedAssetPullerInspectsOperatorModelWithoutFactoryWorker(t *testing.T
 	runtimeConfig := &models.RuntimeConfig{Workers: []models.RuntimeWorker{{
 		Name: "unrelated-cloud-worker", Model: "cloud-custom-model", ModelLocality: models.RuntimeModelLocalityCloud,
 	}}}
+	t.Run("operator model inspects scoped cache", func(t *testing.T) {
+		assertOperatorModelScopedCacheInspection(t, puller, runtimeConfig, assetService, scope, modelName)
+	})
+	t.Run("operator model projects ready and installed", func(t *testing.T) {
+		assertOperatorModelReadyAndInstalled(t, puller, runtimeConfig, modelName)
+	})
+	t.Run("unrelated cloud worker skips cache inspection", func(t *testing.T) {
+		assertCloudWorkerSkipsCacheInspection(t, puller, runtimeConfig, assetService)
+	})
+}
+
+func assertOperatorModelScopedCacheInspection(
+	t *testing.T,
+	puller AssetPuller,
+	runtimeConfig *models.RuntimeConfig,
+	assetService *recordingRuntimeCacheAssets,
+	scope models.RuntimeScopeRef,
+	modelName string,
+) {
+	t.Helper()
 	inspection, err := puller.InspectRuntimeCache(t.Context(), runtimeConfig, modelName)
 	if err != nil {
 		t.Fatalf("InspectRuntimeCache operator model: %v", err)
@@ -153,6 +173,12 @@ func TestScopedAssetPullerInspectsOperatorModelWithoutFactoryWorker(t *testing.T
 	if len(assetService.requests) != 1 || assetService.requests[0].Scope != scope || assetService.requests[0].Name != modelName {
 		t.Fatalf("scoped inspection requests = %#v, want one name-only operator model request", assetService.requests)
 	}
+}
+
+func assertOperatorModelReadyAndInstalled(
+	t *testing.T, puller AssetPuller, runtimeConfig *models.RuntimeConfig, modelName string,
+) {
+	t.Helper()
 	readiness, err := ManagedRuntimeReadinessForEffectiveDefinitionContext(
 		t.Context(),
 		models.Runtime{Identity: modelName, Locality: models.LocalityLocal},
@@ -166,7 +192,15 @@ func TestScopedAssetPullerInspectsOperatorModelWithoutFactoryWorker(t *testing.T
 	if readiness.ReadinessState != models.ReadinessStateReady || readiness.LifecycleState != models.LifecycleStateInstalled {
 		t.Fatalf("operator model readiness = (%s, %s), want READY/INSTALLED", readiness.ReadinessState, readiness.LifecycleState)
 	}
+}
 
+func assertCloudWorkerSkipsCacheInspection(
+	t *testing.T,
+	puller AssetPuller,
+	runtimeConfig *models.RuntimeConfig,
+	assetService *recordingRuntimeCacheAssets,
+) {
+	t.Helper()
 	skipped, err := puller.InspectRuntimeCache(t.Context(), runtimeConfig, "cloud-custom-model")
 	if err != nil {
 		t.Fatalf("InspectRuntimeCache cloud worker: %v", err)
