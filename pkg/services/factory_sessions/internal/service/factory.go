@@ -189,7 +189,6 @@ type Root struct {
 	startFlights                     singleflight.Group
 	liveChangeCoordinator            factorysessioncontracts.LiveChangeCoordinator
 	durableExecutionFactory          DurableExecutionFactory
-	processDurableExecution          durableexecution.Service
 	workerService                    workers.Service
 	modelService                     models.Service
 	automationService                automations.Service
@@ -321,10 +320,10 @@ func NewRoot(
 	return root, nil
 }
 
-func (r *Root) buildProcessDurableExecution() error {
+func (r *Root) buildProcessDurableExecution() (durableexecution.Service, error) {
 	home, err := r.resolveHome()
 	if err != nil {
-		return fmt.Errorf("construct Factory Sessions durable owner: resolve home: %w", err)
+		return nil, fmt.Errorf("construct Factory Sessions durable owner: resolve home: %w", err)
 	}
 	processDurable, err := r.factorySessionExecutionFactory(
 		home,
@@ -337,7 +336,7 @@ func (r *Root) buildProcessDurableExecution() error {
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("construct Factory Sessions durable owner: %w", err)
+		return nil, fmt.Errorf("construct Factory Sessions durable owner: %w", err)
 	}
 	if binder, ok := processDurable.(interface {
 		SetWorkerExecution(interface {
@@ -346,8 +345,7 @@ func (r *Root) buildProcessDurableExecution() error {
 	}); ok {
 		binder.SetWorkerExecution(r.workerService, nil, "", "", r.providerOverride, nil, nil)
 	}
-	r.processDurableExecution = processDurable
-	return nil
+	return processDurable, nil
 }
 
 // validateOwnerPorts checks the fixed owner contracts in declaration order.
