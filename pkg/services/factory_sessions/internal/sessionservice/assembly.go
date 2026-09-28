@@ -11,6 +11,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -416,8 +417,6 @@ func (a *Assembly) Complete(
 			a.responseStreams.Complete(session.ResponseEvents)
 		}
 	})
-	a.registry.Upsert(session, true)
-
 	runtime := NewSessionRuntime(
 		factoryRootDir,
 		clock,
@@ -456,6 +455,12 @@ func (a *Assembly) Complete(
 	if runtime == nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
 	}
+	bound := runtimebinding.SessionStateFrom(session)
+	if bound == nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Session runtime state is required")
+	}
+	bound.Owner = runtime
+	a.registry.Upsert(session, true)
 	runtime.startupSessionID = identity.id
 	runtime.bindRuntimeReadMetrics(startupRuntime)
 	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
@@ -787,11 +792,7 @@ func (a *Assembly) ActivateNamedFactory(ctx context.Context, name string) error 
 }
 
 func (a *Assembly) GetFactorySession(ctx context.Context, sessionID string) (factorysessions.SessionProjection, error) {
-	owner, err := a.detachedOwner(sessionID)
-	if err != nil {
-		return factorysessions.SessionProjection{}, err
-	}
-	return owner.GetFactorySession(ctx, sessionID)
+	return controlplane.GetLiveFactorySession(ctx, a, sessionID)
 }
 
 func (a *Assembly) GetSession(ctx context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
@@ -803,29 +804,7 @@ func (a *Assembly) GetSession(ctx context.Context, sessionID string) (factoryses
 }
 
 func (a *Assembly) ListFactorySessions(ctx context.Context) ([]factorysessions.ReadProjection, error) {
-	owners := a.detachedOwners()
-	if len(owners) == 0 {
-		return nil, factorysessions.ErrDetachedServiceUnavailable
-	}
-	result := make([]factorysessions.ReadProjection, 0)
-	seen := make(map[string]struct{})
-	for _, owner := range owners {
-		projections, err := owner.ListFactorySessions(ctx)
-		if err != nil {
-			return nil, err
-		}
-		for _, projection := range projections {
-			id := projection.Context.FactorySessionID
-			if id != "" {
-				if _, exists := seen[id]; exists {
-					continue
-				}
-				seen[id] = struct{}{}
-			}
-			result = append(result, projection)
-		}
-	}
-	return result, nil
+	return controlplane.ListLiveFactorySessions(ctx, a)
 }
 
 func (a *Assembly) recordingRoot() (string, error) {

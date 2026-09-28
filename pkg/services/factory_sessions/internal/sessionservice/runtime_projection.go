@@ -135,6 +135,15 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 	})
 }
 
+// BuildSessionProjectionContext exposes the existing projection on the
+// session-owned runtime stored with its canonical registry entry.
+func (fs *SessionRuntime) BuildSessionProjectionContext(
+	ctx context.Context,
+	session *livesession.LiveSession,
+) (factorysessions.ProjectionContext, error) {
+	return fs.buildSessionProjectionContext(ctx, session)
+}
+
 func (fs *SessionRuntime) sessionPersistenceScopeFromSession(
 	ctx context.Context,
 	session *livesession.LiveSession,

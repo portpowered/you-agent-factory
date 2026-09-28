@@ -235,14 +235,6 @@ func TestAssemblyLegacyRouterRoutesSessionOperationsToOwningGateway(t *testing.T
 		{name: "second", session: "session-second", owner: second, other: first},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := assembly.GetFactorySession(context.Background(), test.session)
-			if err != nil {
-				t.Fatalf("get session: %v", err)
-			}
-			if got.Context.FactorySessionID != test.session {
-				t.Fatalf("session id = %q, want %q", got.Context.FactorySessionID, test.session)
-			}
-
 			otherInvokedBefore := test.other.invokedSessionID
 			if _, err := assembly.InvokeFactorySession(context.Background(), test.session, factorysessions.InvocationRequest{}); err != nil {
 				t.Fatalf("invoke session: %v", err)
@@ -261,7 +253,7 @@ func TestAssemblyLegacyRouterRoutesSessionOperationsToOwningGateway(t *testing.T
 		})
 	}
 
-	if _, err := assembly.GetFactorySession(context.Background(), "missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+	if _, err := assembly.InvokeFactorySession(context.Background(), "missing", factorysessions.InvocationRequest{}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("missing session error = %v, want ErrSessionNotFound", err)
 	}
 }

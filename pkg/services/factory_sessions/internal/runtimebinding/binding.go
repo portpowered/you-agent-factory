@@ -211,6 +211,10 @@ func registerReplacementSession(
 		}
 	}
 	state.RotateResponseStreams(session)
+	var projectionOwner SessionProjectionOwner
+	if previous := SessionStateFrom(session); previous != nil {
+		projectionOwner = previous.Owner
+	}
 	state.Register(sessionruntime.Registration{
 		SessionID: session.ID, FactoryDir: replacement.Directory(),
 		FolderPath: session.FolderPath, ExecutionBaseDir: executionBaseDir,
@@ -219,7 +223,7 @@ func registerReplacementSession(
 		Target:                  session.Target,
 		Handle: &SessionState{
 			Handle: replacementHandle, Instance: replacement,
-			Spec: preparedSpec,
+			Spec: preparedSpec, Owner: projectionOwner,
 		},
 		Runtime: &factorysessions.LiveRuntime{
 			Factory: replacement.RuntimeService(), BackendScopeID: replacement.BackendScope(),
@@ -332,10 +336,14 @@ func Register(state *sessionruntime.Service, input Registration) string {
 		RuntimeBaseDir: runtimeBaseDir, Target: input.Target,
 		PreparedSpec: PreparedSpecFromSession(state.Resolve(input.SessionID)),
 	})
+	var projectionOwner SessionProjectionOwner
+	if previous := SessionStateFrom(state.Resolve(input.SessionID)); previous != nil {
+		projectionOwner = previous.Owner
+	}
 	return state.Register(sessionruntime.Registration{
 		SessionID: input.SessionID, FactoryDir: metadata.FactoryDir, FolderPath: metadata.FolderPath,
 		ExecutionBaseDir: metadata.ExecutionBaseDir, Target: metadata.Target,
-		Handle: &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec},
+		Handle: &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec, Owner: projectionOwner},
 		Runtime: &factorysessions.LiveRuntime{
 			Factory: runtimeService, Binding: input.Binding, BackendScopeID: bundle.BackendScope(),
 			WorkAndEventIngress:   DeclaredWorkAndEventIngress(runtimeService),

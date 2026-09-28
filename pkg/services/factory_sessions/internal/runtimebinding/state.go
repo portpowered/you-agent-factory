@@ -3,7 +3,16 @@ package runtimebinding
 import (
 	"context"
 	"sync"
+
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 )
+
+// SessionProjectionOwner is the existing per-session runtime state needed to
+// project a live session. It is retained on the canonical session record.
+type SessionProjectionOwner interface {
+	BuildSessionProjectionContext(context.Context, *livesession.LiveSession) (factorysessions.ProjectionContext, error)
+}
 
 // ActiveRuntime is Factory Session's selection of one running runtime handle.
 type ActiveRuntime struct {
@@ -117,4 +126,5 @@ type SessionState struct {
 	Instance RuntimeInstance
 	Handle   RuntimeHandle
 	Spec     any
+	Owner    SessionProjectionOwner
 }
