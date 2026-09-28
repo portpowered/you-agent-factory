@@ -359,6 +359,33 @@ func (s *Server) writeDurableExecutionError(w http.ResponseWriter, err error) bo
 	return false
 }
 
+func durableSessionStartRequest(raw factorysessionexecution.StartRequest, synchronous bool) (factorysessionexecution.SessionStartRequest, error) {
+	if raw.EventConsumer != nil {
+		return factorysessionexecution.SessionStartRequest{}, &factorysessionexecution.ValidationError{
+			Field:   "eventConsumer",
+			Message: "eventConsumer is not supported over HTTP",
+		}
+	}
+	wait := factorysessionexecution.SessionOperationWait{}
+	if raw.Wait != nil {
+		if raw.Wait.TimeoutMillis != nil {
+			wait.TimeoutMillis = *raw.Wait.TimeoutMillis
+		}
+		wait.CancelOnTimeout = raw.Wait.CancelOnTimeout
+	}
+	return factorysessionexecution.SessionStartRequest{
+		Mode:           factorysessionexecution.SessionOperationModeDurable,
+		Synchronous:    synchronous,
+		Correlation:    factorysessionexecution.SessionOperationCorrelation{RequestID: raw.RequestID},
+		Source:         raw.Source,
+		Args:           raw.Args,
+		Policy:         raw.RequestedPolicy,
+		Orchestrator:   raw.Orchestrator,
+		RuntimeOptions: raw.Runtime,
+		Wait:           wait,
+	}, nil
+}
+
 func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
 	raw, diagnostics, err := decodeStartFactorySessionRequestWithDiagnostics(r.Body, s.sessionRequests)
 	if err != nil {
@@ -377,7 +404,12 @@ func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.
 		if s.guardSessionsRequestContext(w, r) {
 			return
 		}
-		result, err := s.sessionsRoot.StartAsync(r.Context(), raw)
+		mapped, err := durableSessionStartRequest(raw, false)
+		if err != nil {
+			s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+			return
+		}
+		started, err := s.sessionsRoot.Start(r.Context(), mapped)
 		if err != nil {
 			if s.writeSessionsRootError(w, "", err) {
 				return
@@ -386,8 +418,13 @@ func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.
 			s.writeSessionsRootErrorOrInternal(w, "", err, "durable factory session execution failed")
 			return
 		}
+		if started.Async == nil {
+			s.logger.Error("canonical factory session start returned no async result")
+			s.writeError(w, http.StatusInternalServerError, "durable factory session execution failed", "INTERNAL_ERROR")
+			return
+		}
 		s.writeCompatibilityWarning(w, "start_durable_factory_session_async", diagnostics.Paths())
-		s.writeJSON(w, http.StatusOK, factorysession.AsyncStartResponseToAPI(result))
+		s.writeJSON(w, http.StatusOK, factorysession.AsyncStartResponseToAPI(*started.Async))
 		return
 	}
 
@@ -425,7 +462,12 @@ func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.R
 		if s.guardSessionsRequestContext(w, r) {
 			return
 		}
-		result, err := s.sessionsRoot.StartSync(r.Context(), raw)
+		mapped, err := durableSessionStartRequest(raw, true)
+		if err != nil {
+			s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+			return
+		}
+		started, err := s.sessionsRoot.Start(r.Context(), mapped)
 		if err != nil {
 			if s.writeSessionsRootError(w, "", err) {
 				return
@@ -434,8 +476,13 @@ func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.R
 			s.writeSessionsRootErrorOrInternal(w, "", err, "durable factory session execution failed")
 			return
 		}
+		if started.Sync == nil {
+			s.logger.Error("canonical factory session start returned no sync result")
+			s.writeError(w, http.StatusInternalServerError, "durable factory session execution failed", "INTERNAL_ERROR")
+			return
+		}
 		s.writeCompatibilityWarning(w, "start_durable_factory_session_sync", diagnostics.Paths())
-		s.writeJSON(w, http.StatusOK, factorysession.SyncStartResponseToAPI(result))
+		s.writeJSON(w, http.StatusOK, factorysession.SyncStartResponseToAPI(*started.Sync))
 		return
 	}
 

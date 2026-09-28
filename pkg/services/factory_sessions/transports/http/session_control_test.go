@@ -150,14 +150,14 @@ func TestHandlerFromRoot_StartDurableFactorySessionAsyncInvokesRootWithDecodedRe
 	t.Parallel()
 
 	root := &httpSessionsRootFake{
-		onStartAsync: func(_ context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
-			if request.RequestID != "req-async-alpha" {
-				t.Fatalf("requestId = %q, want req-async-alpha", request.RequestID)
+		onStart: func(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+			if request.Correlation.RequestID != "req-async-alpha" {
+				t.Fatalf("requestId = %q, want req-async-alpha", request.Correlation.RequestID)
 			}
-			return factorysessions.AsyncStartResult{
+			return factorysessions.SessionStartResult{Async: &factorysessions.AsyncStartResult{
 				SessionID: "dur-sess-async-alpha",
 				Status:    string(factorysessions.LifecycleStatusRunning),
-			}, nil
+			}}, nil
 		},
 	}
 	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
@@ -185,9 +185,9 @@ func TestHandlerFromRoot_StartDurableFactorySessionAsyncInvalidSourceReturnsBadR
 	t.Parallel()
 
 	root := &httpSessionsRootFake{
-		onStartAsync: func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+		onStart: func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 			t.Fatal("fake root must not be invoked for invalid execution source")
-			return factorysessions.AsyncStartResult{}, nil
+			return factorysessions.SessionStartResult{}, nil
 		},
 	}
 	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
