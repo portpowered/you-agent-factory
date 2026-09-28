@@ -67,10 +67,10 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 	if buildServer == nil {
 		t.Fatal("provideMCPServerBuilder() returned nil")
 	}
-	if server, err := buildServer("", nil, nil, nil, nil, nil); err != nil || server == nil {
+	if server, err := buildServer("", nil, nil, nil, nil); err != nil || server == nil {
 		t.Fatalf("buildServer(nil roles) = %v, %v; want inert protocol server", server, err)
 	}
-	if server, err := buildServer("", nil, root, nil, nil, nil); err != nil || server == nil {
+	if server, err := buildServer("", root, nil, nil, nil); err != nil || server == nil {
 		t.Fatalf("buildServer(recordings root) = %v, %v; want owner-backed protocol server", server, err)
 	}
 

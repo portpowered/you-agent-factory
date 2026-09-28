@@ -189,10 +189,10 @@ func TestStdioHandlerUsesProcessSessionsAndInvocationStreams(t *testing.T) {
 			selectedInput, selectedOutput = in, out
 			return testStdioApplication{}, nil
 		},
-		func(projectRoot string, execution factorysessionwire.DurableExecutionService, _ recordings.Service, _ factorysessionwire.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, bound factorysessions.Service) (*mcpserver.Server, error) {
+		func(projectRoot string, _ recordings.Service, _ factorysessionwire.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, bound factorysessions.Service) (*mcpserver.Server, error) {
 			selectedRoot = projectRoot
-			if execution != sessions || bound != sessions {
-				t.Fatalf("MCP roots = (%T, %T), want same process root", execution, bound)
+			if bound != sessions {
+				t.Fatalf("MCP root = %T, want process root", bound)
 			}
 			return &mcpserver.Server{}, nil
 		},

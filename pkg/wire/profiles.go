@@ -45,7 +45,6 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
-	recordingmcp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
@@ -54,7 +53,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"go.uber.org/zap"
@@ -574,7 +572,6 @@ func provideManagedRunnerFactory() runtimeapplication.ManagedRunnerFactory {
 
 type mcpServerBuilder func(
 	string,
-	factorysessionwire.DurableExecutionService,
 	recordings.Service,
 	factorysessionwire.RequestPreparation,
 	factoryruntime.WorkflowPreviewOperation,
@@ -588,7 +585,6 @@ type mcpServerBuilder func(
 func provideMCPServerBuilder(workingDirectory platformfilesystem.WorkingDirectory) mcpServerBuilder {
 	return func(
 		projectRoot string,
-		execution factorysessionwire.DurableExecutionService,
 		recordingsService recordings.Service,
 		prepare factorysessionwire.RequestPreparation,
 		workflowPreview factoryruntime.WorkflowPreviewOperation,
@@ -603,14 +599,9 @@ func provideMCPServerBuilder(workingDirectory platformfilesystem.WorkingDirector
 			}
 		}
 		inspection := factorysessionmcp.RecordingsInspection(recordingsService)
-		if inspection == nil {
-			if bridge := factorysessionmapping.NewDurableInspectionBridge(execution); bridge != nil {
-				inspection = recordingmcp.NewLegacyFactorySessionInspection(bridge)
-			}
-		}
 		return mcpserver.New(mcpserver.Options{
 			ToolOperation: mcpserver.ToolOperation(factorysessionmcp.BindToolOperation(
-				execution, inspection, prepare, workflowPreview, sessions, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString),
+				inspection, prepare, workflowPreview, sessions, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString),
 			)),
 		})
 	}
@@ -645,7 +636,7 @@ func provideStdioHandler(
 		if intent.Stdin == nil || intent.Stdout == nil {
 			return errors.New("MCP stdio input and output are required")
 		}
-		server, err := buildServer(intent.ProjectRoot, sessions, recordingsRoot, prepare, workflowPreview, sessions)
+		server, err := buildServer(intent.ProjectRoot, recordingsRoot, prepare, workflowPreview, sessions)
 		if err != nil {
 			return err
 		}
