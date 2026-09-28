@@ -17814,7 +17814,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Start the dynamic workflow Factory Session MCP server over stdio.\n\nHosts launch this command as a child process and communicate through newline-delimited JSON-RPC on stdin and stdout. The default backing service is the deterministic durable session fixture catalog used by workflow CLI commands.\n\nUse --runtime to select the shared durable JavaScript runtime execution service instead of the fixture catalog. Runtime mode requires workflow sources to resolve from the MCP host working directory or an explicit --project-root.\n\nSet the MCP host working directory to the project root where workflow sources and the fixture catalog resolve. See `you docs mcp` for host configuration, serve modes, smoke, and troubleshooting.",
+            "canonicalEnglish": "Start the Factory Session MCP server over stdio.\n\nHosts launch this command as a child process and communicate through newline-delimited JSON-RPC on stdin and stdout. Factory Session execution uses the process-owned Sessions service.\n\nWorkflow sources resolve from the MCP host working directory or an explicit --project-root. See `you docs mcp` for host configuration and troubleshooting.",
             "id": "you.server.mcp.description"
           },
           "title": {
@@ -17824,8 +17824,7 @@
         },
         "examples": [
           "you server mcp",
-          "you server mcp --fixture-catalog ./pkg/transports/http/testdata/durable-session-contract-fixtures.json",
-          "you server mcp --runtime"
+          "you server mcp --project-root /absolute/path/to/project"
         ],
         "formatVersion": "1.0.0",
         "itemId": "you.server.mcp",
@@ -17877,38 +17876,6 @@
           "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.server.mcp.flag.fixture-catalog": {
-          "acceptedSources": [
-            "cli",
-            "manifest-default"
-          ],
-          "aliases": [],
-          "completion": "none",
-          "defaultValue": {
-            "string": ""
-          },
-          "handlerBindingId": "you.server.mcp.binding.fixture-catalog",
-          "id": "you.server.mcp.flag.fixture-catalog",
-          "kind": "named",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.server.mcp.flag.fixture-catalog",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "fixture-catalog",
-          "maxCardinality": 1,
-          "minCardinality": 0,
-          "normalization": "trim",
-          "repeatable": false,
-          "required": false,
-          "scope": "local",
-          "sensitivity": "public",
-          "shorthand": "",
-          "usage": "optional path to durable-session contract fixtures; defaults to the catalog discovered from the current working directory",
-          "valueType": "string",
           "visibility": "visible"
         },
         "you.server.mcp.flag.json": {
@@ -17963,43 +17930,8 @@
           "scope": "local",
           "sensitivity": "public",
           "shorthand": "",
-          "usage": "project root for workflow source resolution in --runtime mode; defaults to the current working directory",
+          "usage": "project root for Factory Session execution; defaults to the current working directory",
           "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.server.mcp.flag.runtime": {
-          "acceptedSources": [
-            "cli",
-            "manifest-default"
-          ],
-          "aliases": [],
-          "completion": "none",
-          "defaultValue": {
-            "boolean": false
-          },
-          "handlerBindingId": "you.server.mcp.binding.runtime",
-          "id": "you.server.mcp.flag.runtime",
-          "kind": "named",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.server.mcp.flag.runtime",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "runtime",
-          "maxCardinality": 1,
-          "minCardinality": 0,
-          "noOptionDefaultValue": {
-            "boolean": true
-          },
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "local",
-          "sensitivity": "public",
-          "shorthand": "",
-          "usage": "select the shared durable JavaScript runtime execution service instead of the fixture catalog",
-          "valueType": "bool",
           "visibility": "visible"
         },
         "you.server.mcp.flag.remote": {
@@ -18079,17 +18011,9 @@
         "id": "you.server.mcp.handler"
       },
       "handlerBindings": {
-        "you.server.mcp.binding.fixture-catalog": {
-          "id": "you.server.mcp.binding.fixture-catalog",
-          "inputId": "you.server.mcp.flag.fixture-catalog"
-        },
         "you.server.mcp.binding.project-root": {
           "id": "you.server.mcp.binding.project-root",
           "inputId": "you.server.mcp.flag.project-root"
-        },
-        "you.server.mcp.binding.runtime": {
-          "id": "you.server.mcp.binding.runtime",
-          "inputId": "you.server.mcp.flag.runtime"
         }
       },
       "id": "you.server.mcp",
@@ -18129,22 +18053,6 @@
         "acrossTiers": "replace",
         "multipleBindings": "reject"
       },
-      "relationships": {
-        "you.server.mcp.relationship.runtime-source": {
-          "id": "you.server.mcp.relationship.runtime-source",
-          "kind": "mutually-exclusive",
-          "participants": [
-            {
-              "type": "flag",
-              "id": "you.server.mcp.flag.runtime"
-            },
-            {
-              "type": "flag",
-              "id": "you.server.mcp.flag.fixture-catalog"
-            }
-          ]
-        }
-      },
       "runnable": true,
       "placement": "local-only",
       "sideEffects": {
@@ -18162,7 +18070,7 @@
         }
       },
       "usage": {
-        "example": "  # Typical MCP host child-process launch.\n  you server mcp\n\n  # Explicit fixture catalog for offline smoke outside the repository root.\n  you server mcp --fixture-catalog ./pkg/transports/http/testdata/durable-session-contract-fixtures.json\n\n  # Runtime-backed serve against live durable JavaScript execution.\n  you server mcp --runtime",
+        "example": "  # Typical MCP host child-process launch.\n  you server mcp\n\n  # Resolve workflow sources from an explicit project root.\n  you server mcp --project-root /absolute/path/to/project",
         "line": "mcp"
       },
       "visibility": "visible"
