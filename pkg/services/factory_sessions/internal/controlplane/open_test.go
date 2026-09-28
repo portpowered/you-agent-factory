@@ -20,6 +20,10 @@ type openControlHost struct {
 	targets     []factorysessions.Target
 	discoverErr error
 	scaffoldErr error
+	sessionID   string
+	startErr    error
+	startCalls  int
+	started     factorysessions.Target
 }
 
 func (h *openControlHost) DiscoverTargets(_ string) ([]factorysessions.Target, error) {
@@ -45,14 +49,11 @@ func (h *openControlHost) ResolveSessionFolder(folder string) (string, error) {
 	return logicaltarget.ResolveSessionFolder(folder, func() (string, error) { return "", errors.New("unused home") }, platformfilesystem.Local{})
 }
 
-type liveOpenHost struct {
-	sessionID string
-	err       error
-}
-
-func (h *liveOpenHost) OpenForTarget(_ context.Context, _ factorysessions.Target) (string, error) {
-	if h.err != nil {
-		return "", h.err
+func (h *openControlHost) OpenLiveSessionForTarget(_ context.Context, target factorysessions.Target) (string, error) {
+	h.startCalls++
+	h.started = target
+	if h.startErr != nil {
+		return "", h.startErr
 	}
 	return h.sessionID, nil
 }
@@ -61,18 +62,16 @@ func TestOpenFromFolder_ValidateOnlyNotRunnableReturnsInitNewFactoryHint(t *test
 	t.Parallel()
 
 	host := &openControlHost{
+		startErr: errors.New("start should not run"),
 		discoverErr: sessionvalidation.New(
 			factorysessions.ValidationReasonNotRunnable,
 			"folderPath",
 			errors.New("no runnable targets"),
 		),
 	}
-	opener := &liveOpenHost{err: errors.New("open should not run")}
-
 	result, err := controlplane.OpenFromFolder(
 		context.Background(),
 		host,
-		opener,
 		t.TempDir(),
 		nil,
 		true,
@@ -95,12 +94,9 @@ func TestOpenFromFolder_PropagatesTargetSelectionError(t *testing.T) {
 			{Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"}},
 		},
 	}
-	opener := &liveOpenHost{}
-
 	_, err := controlplane.OpenFromFolder(
 		context.Background(),
 		host,
-		opener,
 		"/tmp",
 		&factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "missing"},
 		false,
@@ -119,17 +115,15 @@ func TestOpenFromFolder_OpensSelectedTarget(t *testing.T) {
 	t.Parallel()
 
 	host := &openControlHost{
+		sessionID: "sess-opened",
 		targets: []factorysessions.Target{{
 			Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
 			FactoryDir: "/tmp/factory",
 		}},
 	}
-	opener := &liveOpenHost{sessionID: "sess-opened"}
-
 	result, err := controlplane.OpenFromFolder(
 		context.Background(),
 		host,
-		opener,
 		"/tmp",
 		nil,
 		false,
@@ -141,6 +135,9 @@ func TestOpenFromFolder_OpensSelectedTarget(t *testing.T) {
 	if result.SessionID != "sess-opened" {
 		t.Fatalf("session id = %q, want sess-opened", result.SessionID)
 	}
+	if host.startCalls != 1 || host.started.FactoryDir != "/tmp/factory" {
+		t.Fatalf("host start = (%d, %+v), want selected target once", host.startCalls, host.started)
+	}
 }
 
 type initNewFactoryHost struct {
@@ -148,6 +145,8 @@ type initNewFactoryHost struct {
 	initialDiscoverErr error
 	targets            []factorysessions.Target
 	scaffoldErr        error
+	sessionID          string
+	startErr           error
 }
 
 func (h *initNewFactoryHost) DiscoverTargets(_ string) ([]factorysessions.Target, error) {
@@ -181,21 +180,26 @@ func (h *initNewFactoryHost) ResolveSessionFolder(folder string) (string, error)
 	return logicaltarget.ResolveSessionFolder(folder, func() (string, error) { return "", errors.New("unused home") }, platformfilesystem.Local{})
 }
 
+func (h *initNewFactoryHost) OpenLiveSessionForTarget(_ context.Context, _ factorysessions.Target) (string, error) {
+	if h.startErr != nil {
+		return "", h.startErr
+	}
+	return h.sessionID, nil
+}
+
 func TestOpenFromFolder_InitNewFactoryScaffoldsAndOpens(t *testing.T) {
 	t.Parallel()
 
 	host := &initNewFactoryHost{
+		sessionID: "sess-init",
 		targets: []factorysessions.Target{{
 			Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
 			FactoryDir: "/tmp/factory",
 		}},
 	}
-	opener := &liveOpenHost{sessionID: "sess-init"}
-
 	result, err := controlplane.OpenFromFolder(
 		context.Background(),
 		host,
-		opener,
 		t.TempDir(),
 		nil,
 		false,
@@ -216,6 +220,7 @@ func TestOpenFromFolder_InitNewFactoryAcceptsMissingNestedFactory(t *testing.T) 
 	t.Parallel()
 
 	host := &initNewFactoryHost{
+		sessionID: "sess-init",
 		initialDiscoverErr: sessionvalidation.New(
 			factorysessions.ValidationReasonConfigLoadFailed,
 			"folderPath",
@@ -230,7 +235,6 @@ func TestOpenFromFolder_InitNewFactoryAcceptsMissingNestedFactory(t *testing.T) 
 	result, err := controlplane.OpenFromFolder(
 		context.Background(),
 		host,
-		&liveOpenHost{sessionID: "sess-init"},
 		t.TempDir(),
 		nil,
 		false,
@@ -252,7 +256,6 @@ func TestOpenFromFolder_InitNewFactoryPropagatesResolveFolderError(t *testing.T)
 	_, err := controlplane.OpenFromFolder(
 		context.Background(),
 		host,
-		&liveOpenHost{sessionID: "sess-init"},
 		t.TempDir(),
 		nil,
 		false,
@@ -276,7 +279,6 @@ func TestOpenFromFolder_InitNewFactoryPropagatesUnrecoverableDiscoveryError(t *t
 	_, err := controlplane.OpenFromFolder(
 		context.Background(),
 		host,
-		&liveOpenHost{sessionID: "sess-init"},
 		t.TempDir(),
 		nil,
 		false,
@@ -284,33 +286,6 @@ func TestOpenFromFolder_InitNewFactoryPropagatesUnrecoverableDiscoveryError(t *t
 	)
 	if !errors.Is(err, discoverErr) {
 		t.Fatalf("OpenFromFolder error = %v, want %v", err, discoverErr)
-	}
-}
-
-func TestOpenFromFolder_InitNewFactoryRequiresLiveOpenerAfterScaffold(t *testing.T) {
-	t.Parallel()
-
-	host := &initNewFactoryHost{
-		targets: []factorysessions.Target{{
-			Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-			FactoryDir: "/tmp/factory",
-		}},
-	}
-
-	_, err := controlplane.OpenFromFolder(
-		context.Background(),
-		host,
-		nil,
-		t.TempDir(),
-		nil,
-		false,
-		true,
-	)
-	if err == nil {
-		t.Fatal("OpenFromFolder = nil, want live opener required")
-	}
-	if !containsSubstring(err.Error(), "live session dataplane opener is required") {
-		t.Fatalf("OpenFromFolder error = %q, want live opener required", err)
 	}
 }
 
@@ -328,7 +303,6 @@ func TestOpenFromFolder_IdempotentInitNewFactoryPropagatesSelectTargetError(t *t
 	_, err := controlplane.OpenFromFolder(
 		context.Background(),
 		&openControlHost{targets: nil},
-		&liveOpenHost{sessionID: "sess-reinit"},
 		t.TempDir(),
 		nil,
 		false,
@@ -352,7 +326,6 @@ func TestOpenFromFolder_IdempotentInitNewFactoryRequiresRunnableTarget(t *testin
 	_, err := controlplane.OpenFromFolder(
 		context.Background(),
 		host,
-		&liveOpenHost{sessionID: "sess-reinit"},
 		t.TempDir(),
 		nil,
 		false,
@@ -380,7 +353,6 @@ func TestOpenFromFolder_IdempotentInitNewFactoryPropagatesScaffoldError(t *testi
 	_, err := controlplane.OpenFromFolder(
 		context.Background(),
 		host,
-		&liveOpenHost{sessionID: "sess-reinit"},
 		t.TempDir(),
 		nil,
 		false,
@@ -388,33 +360,6 @@ func TestOpenFromFolder_IdempotentInitNewFactoryPropagatesScaffoldError(t *testi
 	)
 	if err == nil || err.Error() != "scaffold failed" {
 		t.Fatalf("OpenFromFolder error = %v, want scaffold failed", err)
-	}
-}
-
-func TestOpenFromFolder_IdempotentInitNewFactoryRequiresLiveOpener(t *testing.T) {
-	t.Parallel()
-
-	host := &openControlHost{
-		targets: []factorysessions.Target{{
-			Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-			FactoryDir: "/tmp/factory",
-		}},
-	}
-
-	_, err := controlplane.OpenFromFolder(
-		context.Background(),
-		host,
-		nil,
-		t.TempDir(),
-		nil,
-		false,
-		true,
-	)
-	if err == nil {
-		t.Fatal("OpenFromFolder = nil, want live opener required")
-	}
-	if !containsSubstring(err.Error(), "live session dataplane opener is required") {
-		t.Fatalf("OpenFromFolder error = %q, want live opener required", err)
 	}
 }
 
@@ -427,12 +372,12 @@ func TestOpenFromFolder_IdempotentInitNewFactoryPropagatesOpenForTargetError(t *
 			FactoryDir: "/tmp/factory",
 		}},
 	}
-	openErr := errors.New("open failed")
+	openErr := errors.New("start failed")
+	host.startErr = openErr
 
 	_, err := controlplane.OpenFromFolder(
 		context.Background(),
 		host,
-		&liveOpenHost{err: openErr},
 		t.TempDir(),
 		nil,
 		false,
@@ -461,7 +406,8 @@ func TestOpenFromFolder_InitNewFactoryReinitializesExistingRunnableTargetIdempot
 		FactoryDir: factoryDir,
 	}
 	host := &openControlHost{
-		targets: []factorysessions.Target{target},
+		sessionID: "sess-reinit",
+		targets:   []factorysessions.Target{target},
 	}
 	var scaffoldDirs []string
 	hostWithScaffoldTracking := &idempotentReinitHost{
@@ -472,7 +418,6 @@ func TestOpenFromFolder_InitNewFactoryReinitializesExistingRunnableTargetIdempot
 	result, err := controlplane.OpenFromFolder(
 		context.Background(),
 		hostWithScaffoldTracking,
-		&liveOpenHost{sessionID: "sess-reinit"},
 		workspaceDir,
 		nil,
 		false,

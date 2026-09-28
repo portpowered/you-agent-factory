@@ -330,15 +330,9 @@ func (s *Service) startCanonicalLive(
 	if s.host == nil {
 		return factorysessions.SessionStartResult{}, fmt.Errorf("Factory Sessions gateway is required")
 	}
-	if s.liveRuntime == nil {
-		return factorysessions.SessionStartResult{}, fmt.Errorf(
-			"%w: live session service is required", factorysessions.ErrRuntimeNotAvailable,
-		)
-	}
 	opened, err := controlplane.OpenFromFolder(
 		ctx,
 		s.host,
-		s.liveRuntime,
 		strings.TrimSpace(request.FolderPath),
 		cloneCanonicalTarget(request.Target),
 		request.ValidateOnly,

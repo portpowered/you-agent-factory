@@ -11,10 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 )
 
-type LiveOpener interface {
-	OpenForTarget(context.Context, factorysessions.Target) (string, error)
-}
-
 // ScaffoldHost materializes a new factory scaffold for init-new-factory opens.
 type ScaffoldHost interface {
 	InitializeFactoryScaffold(factoryDir string) error
@@ -33,6 +29,7 @@ type OpenControlHost interface {
 	NestedFactoryDirectoryValidator
 	ResolveSessionFolder(string) (string, error)
 	SelectTarget([]factorysessions.Target, *factorysessions.TargetRef) (*factorysessions.Target, error)
+	OpenLiveSessionForTarget(context.Context, factorysessions.Target) (string, error)
 }
 
 // OpenFromFolder applies session open policy: target discovery, selection,
@@ -40,7 +37,6 @@ type OpenControlHost interface {
 func OpenFromFolder(
 	ctx context.Context,
 	host OpenControlHost,
-	liveOpener LiveOpener,
 	folderPath string,
 	target *factorysessions.TargetRef,
 	validateOnly bool,
@@ -50,7 +46,7 @@ func OpenFromFolder(
 		return nil, fmt.Errorf("factory session open control host is required")
 	}
 	if initNewFactory {
-		return initNewFactoryAndOpenSession(ctx, host, liveOpener, folderPath)
+		return initNewFactoryAndOpenSession(ctx, host, folderPath)
 	}
 
 	targets, err := host.DiscoverTargets(folderPath)
@@ -80,11 +76,7 @@ func OpenFromFolder(
 	if validateOnly {
 		return &factorysessions.OpenResult{Targets: logicaltarget.Clone(targets)}, nil
 	}
-	if liveOpener == nil {
-		return nil, fmt.Errorf("live session dataplane opener is required")
-	}
-
-	sessionID, err := liveOpener.OpenForTarget(ctx, *selectedTarget)
+	sessionID, err := host.OpenLiveSessionForTarget(ctx, *selectedTarget)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +86,6 @@ func OpenFromFolder(
 func initNewFactoryAndOpenSession(
 	ctx context.Context,
 	host OpenControlHost,
-	liveOpener LiveOpener,
 	folderPath string,
 ) (*factorysessions.OpenResult, error) {
 	resolvedFolder, err := host.ResolveSessionFolder(folderPath)
@@ -104,7 +95,7 @@ func initNewFactoryAndOpenSession(
 
 	targets, discoverErr := host.DiscoverTargets(folderPath)
 	if discoverErr == nil {
-		return idempotentInitNewFactoryAndOpenSession(ctx, host, liveOpener, resolvedFolder, targets)
+		return idempotentInitNewFactoryAndOpenSession(ctx, host, resolvedFolder, targets)
 	}
 	reason, _, ok := sessionvalidation.ReasonFromError(discoverErr)
 	if !ok ||
@@ -133,11 +124,7 @@ func initNewFactoryAndOpenSession(
 	if selectedTarget == nil {
 		return nil, fmt.Errorf("initialized factory folder %q did not resolve to a runnable target", resolvedFolder)
 	}
-	if liveOpener == nil {
-		return nil, fmt.Errorf("live session dataplane opener is required")
-	}
-
-	sessionID, err := liveOpener.OpenForTarget(ctx, *selectedTarget)
+	sessionID, err := host.OpenLiveSessionForTarget(ctx, *selectedTarget)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +134,6 @@ func initNewFactoryAndOpenSession(
 func idempotentInitNewFactoryAndOpenSession(
 	ctx context.Context,
 	host OpenControlHost,
-	liveOpener LiveOpener,
 	resolvedFolder string,
 	targets []factorysessions.Target,
 ) (*factorysessions.OpenResult, error) {
@@ -161,11 +147,7 @@ func idempotentInitNewFactoryAndOpenSession(
 	if err := host.InitializeFactoryScaffold(selectedTarget.FactoryDir); err != nil {
 		return nil, err
 	}
-	if liveOpener == nil {
-		return nil, fmt.Errorf("live session dataplane opener is required")
-	}
-
-	sessionID, err := liveOpener.OpenForTarget(ctx, *selectedTarget)
+	sessionID, err := host.OpenLiveSessionForTarget(ctx, *selectedTarget)
 	if err != nil {
 		return nil, err
 	}
