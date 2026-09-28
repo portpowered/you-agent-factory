@@ -9,7 +9,7 @@ the agent's text response.
 - Checkout: `codex/mcp-subagent` at `a16ff10223` when probing began.
 - MCP connector: `you.factory_session.list` responded successfully.
 - Installed server: `C:\Users\andre\bin\you.exe` (built from source commit
-  `75ebaca91f` at the latest probe). Existing MCP connector processes may
+  `4bd24f1142` at the latest probe). Existing MCP connector processes may
   retain an earlier binary until they restart.
 - Provider/model for the first probes below: `opencode` /
   `opencode/nemotron-3.5-lightning-free`. Later rows name their
@@ -191,3 +191,11 @@ contains OS and architecture only, and the default resolver hardcodes CPU for
 Linux and Windows amd64. The audit suggested adding an accelerator field, but
 that alone would not wire host detection or publish CUDA artifacts; the
 manifest also lacks a Linux CUDA target today.
+
+Commit `4bd24f1142` was installed as `C:\Users\andre\bin\you.exe`. A fresh
+stdio launch returned the typed one-second timeout with request and trace IDs
+in session `8dc1465d-eed7-47ba-8665-8f13006428b2`; a separate fresh launch
+completed a normal Longcat read-only request in session
+`82e6e1ad-4065-4d9b-9dcf-3b1fabbc6faf`, returning `you-agent-factory` with
+empty stderr. The new cleanup and invocation failure branches were covered by
+focused fakes, not triggered by these live probes.
