@@ -1592,3 +1592,14 @@ adapter. The next safe fix must preserve a typed Pi failure signal across the
 provider boundary (or use a direct Pi protocol) rather than classify the
 English retry-status text as an error. The installed package is the current
 published 0.0.34 version at the time of this audit.
+
+Commit `4e8ac01594` records the LocalAI Predict guard. A new Windows binary
+was built at `C:\Users\andre\bin\you-4e8ac01594.exe` (SHA-256
+`98C8620BE9956A2CD1467A8FDDAF4302F05206BD9D36B53DB227E8BA419D1521`),
+and the configured MCP command for new connections points to it. A fresh
+HTTP server from that binary repeated the exact red-then-blue two-frame
+multipart request and again returned HTTP 502 `OMNI response did not contain
+text output`. Because the new zero-byte guard did not fire, this attempt
+returned a nonempty, decodable protobuf payload with no usable text in its
+legacy message or chat deltas. The payload's other field values are still
+unknown. The server was stopped gracefully after the probe.
