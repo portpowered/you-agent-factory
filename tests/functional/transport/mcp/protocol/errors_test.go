@@ -24,6 +24,7 @@ const (
 	jsonRPCInvalidParamsCode   = -32602
 	factorySessionNotFoundCode = "factory_session.session.not_found"
 	missingFactorySessionID    = "dur-sess-missing-999"
+	missingFactorySessionText  = "factory session not found"
 	factorySessionGetToolName  = "you.factory_session.get"
 	mcpProtocolStopTimeout     = 5 * time.Second
 )
@@ -68,7 +69,8 @@ type mcpToolsCallResult struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	} `json:"content"`
-	IsError bool `json:"isError"`
+	IsError           bool            `json:"isError"`
+	StructuredContent json.RawMessage `json:"structuredContent"`
 }
 
 type mcpToolErrorEnvelope struct {
@@ -95,8 +97,11 @@ func TestMCPMalformedParametersReturnInvalidParams(t *testing.T) {
 }
 
 // TestMCPMissingFactorySessionReturnsCanonicalNotFound proves a well-formed Factory
-// Session tools/call for a missing session id returns the canonical not-found
-// result at the public MCP stdio/protocol boundary.
+// Session tools/call for a missing session id returns the canonical typed
+// ToolResponse not-found error at the public MCP stdio/protocol boundary: no
+// JSON-RPC protocol error, MCP IsError=true, one readable text content equal to
+// the typed error.message, and structuredContent retaining the canonical error
+// envelope.
 func TestMCPMissingFactorySessionReturnsCanonicalNotFound(t *testing.T) {
 	withSharedMCPProtocolServer(t, func(server *projectRootBackedMCPServer) {
 		assertInitializeHandshake(t, server)
@@ -105,26 +110,29 @@ func TestMCPMissingFactorySessionReturnsCanonicalNotFound(t *testing.T) {
 		response := server.exchange(request)
 		assertMCPResponseID(t, response, float64(1))
 		if response.Error != nil {
-			t.Fatalf("tools/call for missing session returned JSON-RPC error %#v, want typed domain result", response.Error)
+			t.Fatalf("tools/call for missing session returned JSON-RPC protocol error %#v, want typed ToolResponse result", response.Error)
 		}
 		if response.Result == nil {
 			t.Fatal("tools/call for missing session returned nil result")
 		}
-		if response.Result.IsError {
-			t.Fatalf("tools/call isError = true, want typed domain error in success envelope %#v", response.Result)
+		if !response.Result.IsError {
+			t.Fatalf("tools/call isError = false, want true for typed ToolResponse error %#v", response.Result)
 		}
 		if len(response.Result.Content) != 1 || response.Result.Content[0].Type != "text" {
 			t.Fatalf("tools/call content = %#v, want one text item", response.Result.Content)
+		}
+		if response.Result.Content[0].Text != missingFactorySessionText {
+			t.Fatalf("tools/call text = %q, want %q", response.Result.Content[0].Text, missingFactorySessionText)
 		}
 
 		var payload struct {
 			Error *mcpToolErrorEnvelope `json:"error"`
 		}
-		if err := json.Unmarshal([]byte(response.Result.Content[0].Text), &payload); err != nil {
-			t.Fatalf("unmarshal tools/call domain error payload: %v", err)
+		if err := json.Unmarshal(response.Result.StructuredContent, &payload); err != nil {
+			t.Fatalf("unmarshal tools/call structured content: %v", err)
 		}
 		if payload.Error == nil {
-			t.Fatalf("tools/call payload = %q, want typed error envelope", response.Result.Content[0].Text)
+			t.Fatalf("tools/call structured content = %s, want typed error envelope", response.Result.StructuredContent)
 		}
 		if payload.Error.Code != factorySessionNotFoundCode {
 			t.Fatalf("error code = %q, want %q", payload.Error.Code, factorySessionNotFoundCode)
