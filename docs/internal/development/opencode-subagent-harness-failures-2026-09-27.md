@@ -30,6 +30,11 @@ Separate from the above, several calls ended with
 | Comparison point | Read-only audits of comparable size sometimes finished in roughly 67-100 s, i.e. near the same limits without timing out. |
 | Root cause | Not established. The exact-limit pattern is consistent with a client-side deadline that does not observe completion, but no trace confirms where the time is spent. |
 
+Later bounded OpenCode MCP calls also hit a 90 s deadline with **zero edits**
+visible in the working tree afterward. This confirms that a timeout can have
+either partial side effects or none; it does not establish whether the worker
+started, where it waited, or whether cancellation reached it.
+
 After the binary/config repair, two CLI OpenCode audits exited with code 0 but
 no primary result and no requested edit. Their stdout contained only an initial
 progress sentence and an ACP `peer connection closed` line. A prior CLI
@@ -37,8 +42,9 @@ OpenCode dispatch completed a documentation edit and returned a primary result.
 The OpenCode log explains the empty audits: they tried to read paths outside
 `workingRoot` and reached `external_directory` permission requests with action
 `ask`. The harness did not surface a useful pending-approval outcome before
-closing. Keep bounded editing tasks inside the workspace until that permission
-bridge and terminal classification are fixed.
+closing. Subsequent changes classify an empty turn after a denied permission
+as failure and grant advertised ACP allow choices by default. A live
+outside-workspace read with these changes has not yet completed.
 
 ## Fresh verified facts (September 28, 2026)
 
@@ -60,6 +66,20 @@ bridge and terminal classification are fixed.
   `opencode/muse-spark-1.3-contributor-free`. A fresh CLI dispatch with that
   identity completed `OK` in about 9 seconds, and the OpenCode log confirmed
   the requested Muse Spark build model.
+- The ACP client now selects `allow_always` when offered, falling back to
+  `allow_once`, without requiring `--skip-permissions`. Reject-only options
+  remain rejected, and unknown options are cancelled. Focused provider tests
+  cover these outcomes. For OpenCode, the launcher supplies
+  `OPENCODE_PERMISSION={"*":"allow"}` by default so its own permission rules
+  allow tools and external directories. An explicit setting in the inherited
+  process or request environment is preserved; focused tests cover both.
+- A fresh CLI binary launched an outside-workspace read using the requested
+  Muse Spark model, but OpenCode reported `Rate limit exceeded` before any
+  file tool or permission request. A shorter retry with an explicit
+  `OPENCODE_PERMISSION` setting hit the same limit. A concurrent `big-pickle`
+  run in the OpenCode log was rate limited too. The live read and the effective
+  OpenCode permission behavior therefore remain **unverified**; the tests
+  verify the environment passed to the subprocess and ACP choice handling.
 
 A timeout is therefore not evidence that no edit occurred. Always inspect the
 tree before retrying, and never re-issue the same request blind.
@@ -104,7 +124,9 @@ tree before retrying, and never re-issue the same request blind.
    `permission=external_directory` and `action=ask` in
    `~/.local/share/opencode/log/opencode.log`. This condition previously
    produced a success result with no primary output; the ACP adapter now
-   classifies a denied permission as failure.
+   classifies a denied permission as failure and grants advertised allow
+   choices. Check for provider rate-limit errors before attributing an empty
+   result to permission handling.
 
 ## Adjacent CLI invocation findings
 
@@ -125,5 +147,8 @@ tree before retrying, and never re-issue the same request blind.
   outer MCP dispatch and CLI dispatch kept `ENABLED` and `workingRoot`.
 - No trace, transcript, or worker log was captured for the timeouts, so the
   timeout section stays at hypothesis level.
+- The default-grant policy has focused tests, but the live outside-workspace
+  read was blocked by model rate limits before it could exercise permission
+  handling.
 - This note documents a single-operator desktop environment. Results may differ
   on other hosts.
