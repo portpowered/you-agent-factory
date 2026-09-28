@@ -63,9 +63,10 @@ cmd/factory
 connects concrete providers once. `pkg/initializer` owns activation and
 shutdown; it does not serve as a second dependency-injection graph.
 
-Factory Session startup is a domain operation over the injected Factory
-Sessions and Factory Runtime capabilities. It creates session-owned runtime
-state through the same constructed service root.
+Factory Session startup uses the injected Factory Sessions and Factory Runtime
+capabilities. The canonical Factory Sessions `Start(ctx, SessionStartRequest)`
+operation activates session-owned runtime state through the constructed service
+root; there is no separate application opener.
 
 Functional application tests follow the same path through `root.BuildProcess`
 and `Process.Execute`. Replaceable process, filesystem, provider, clock, and
@@ -165,7 +166,8 @@ session behavior the product selects.
 - `cli` for command-tree composition, flags, presentation, and CLI protocol
   mechanics;
 - `http` for generated server/client contracts, route composition, and shared
-  HTTP boundary behavior;
+  HTTP boundary behavior. Top-level `pkg/transports/http` composes Recordings
+  HTTP routes with Factory Sessions session-keyed inspection;
 - `mcp` for MCP tool and server composition; and
 - `mapping` for representation conversion at public boundaries.
 
