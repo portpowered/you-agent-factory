@@ -380,6 +380,211 @@ func TestPublishedBackendResolverSelectsCurrentWindowsCUDAAndKeepsOfflineSelecti
 	assertPublicationRequests(t, requests, 2)
 }
 
+func TestPublishedBackendResolverKeepsOlderWindowsCUDAWhenLaterReleaseIsBroken(t *testing.T) {
+	t.Parallel()
+	olderManifest := windowsCUDAPublicationFixture(t)
+	olderTag := publicationTag(t, olderManifest)
+	brokenTag := "localai-backends-v1-" + strings.Repeat("c", 64)
+	newerManifest := bytes.ReplaceAll(olderManifest,
+		[]byte(strings.TrimPrefix(olderTag, "localai-backends-v1-")), []byte(strings.Repeat("b", 64)))
+	newerTag := publicationTag(t, newerManifest)
+
+	newerManifest = publicationWithoutArchive(t, newerManifest, "localai-llamacpp/windows-amd64-cuda")
+	index := publicationReleaseIndex(t, []publicationFixture{
+		{newerTag, newerManifest}, {olderTag, olderManifest}, {brokenTag, olderManifest},
+	})
+	requests := 0
+	resolver, err := NewPublishedBackendArtifactResolver(backendPublicationDoer(func(request *http.Request) (*http.Response, error) {
+		requests++
+		switch request.URL.String() {
+		case backendReleasesURL:
+			return publicationResponse(index), nil
+		case backendReleaseBase + newerTag + "/manifest.json":
+			return publicationResponse(newerManifest), nil
+		case backendReleaseBase + olderTag + "/manifest.json":
+			return publicationResponse(olderManifest), nil
+		case backendReleaseBase + brokenTag + "/manifest.json":
+			return publicationResponse([]byte("{")), nil
+		default:
+			return nil, fmt.Errorf("unexpected publication request: %s", request.URL)
+		}
+	}))
+	if err != nil {
+		t.Fatalf("construct published resolver: %v", err)
+	}
+	selection, err := resolver(context.Background(), publishedWindowsRequest("localai-llamacpp"), false)
+	if err != nil {
+		t.Fatalf("resolve published Windows CUDA archive: %v", err)
+	}
+	if selection.Accelerator != "cuda" || !strings.Contains(selection.Name, "windows-amd64-cuda") ||
+		!strings.Contains(selection.Location, olderTag) {
+		t.Fatalf("published selection = %#v, want older Windows CUDA archive from %s", selection, olderTag)
+	}
+	assertPublicationRequests(t, requests, 4)
+}
+
+func TestPublishedBackendResolverSelectsCUDAFromDifferentReleasesAcrossRequests(t *testing.T) {
+	t.Parallel()
+	olderManifest := windowsCUDAPublicationFixture(t)
+	olderTag := publicationTag(t, olderManifest)
+	newerManifest := bytes.ReplaceAll(olderManifest,
+		[]byte(strings.TrimPrefix(olderTag, "localai-backends-v1-")), []byte(strings.Repeat("b", 64)))
+	newerTag := publicationTag(t, newerManifest)
+
+	newerManifest = publicationWithWhisperCUDA(t, newerManifest)
+	index := publicationReleaseIndex(t, []publicationFixture{{newerTag, newerManifest}, {olderTag, olderManifest}})
+	requests := 0
+	resolver, err := NewPublishedBackendArtifactResolver(backendPublicationDoer(func(request *http.Request) (*http.Response, error) {
+		requests++
+		switch request.URL.String() {
+		case backendReleasesURL:
+			return publicationResponse(index), nil
+		case backendReleaseBase + newerTag + "/manifest.json":
+			return publicationResponse(newerManifest), nil
+		case backendReleaseBase + olderTag + "/manifest.json":
+			return publicationResponse(olderManifest), nil
+		default:
+			return nil, fmt.Errorf("unexpected publication request: %s", request.URL)
+		}
+	}))
+	if err != nil {
+		t.Fatalf("construct published resolver: %v", err)
+	}
+	for _, test := range []struct {
+		backend string
+		tag     string
+	}{{"localai-llamacpp", olderTag}, {"localai-whisper", newerTag}} {
+		selection, err := resolver(context.Background(), publishedWindowsRequest(test.backend), false)
+		if err != nil || selection.Accelerator != "cuda" ||
+			!strings.Contains(selection.Name, test.backend+"-windows-amd64-cuda") ||
+			!strings.Contains(selection.Location, "/"+test.tag+"/") {
+			t.Fatalf("%s selection = %#v, %v, want CUDA archive from %s", test.backend, selection, err, test.tag)
+		}
+	}
+	assertPublicationRequests(t, requests, 3)
+}
+
+type publicationFixture struct {
+	tag      string
+	manifest []byte
+}
+
+func publicationReleaseIndex(t *testing.T, fixtures []publicationFixture) []byte {
+	t.Helper()
+	var releases []json.RawMessage
+	for _, fixture := range fixtures {
+		var entry []json.RawMessage
+		if err := json.Unmarshal(publicationIndex(t, fixture.tag, fixture.manifest), &entry); err != nil {
+			t.Fatalf("decode publication index: %v", err)
+		}
+		releases = append(releases, entry...)
+	}
+	index, err := json.Marshal(releases)
+	if err != nil {
+		t.Fatalf("encode publication index: %v", err)
+	}
+	return index
+}
+
+func decodePublicationFixture(t *testing.T, data []byte) (map[string]json.RawMessage, []json.RawMessage) {
+	t.Helper()
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatalf("decode publication fixture: %v", err)
+	}
+	var archives []json.RawMessage
+	if err := json.Unmarshal(document["artifacts"], &archives); err != nil {
+		t.Fatalf("decode publication archives: %v", err)
+	}
+	return document, archives
+}
+
+func encodePublicationFixture(t *testing.T, document map[string]json.RawMessage, archives []json.RawMessage) []byte {
+	t.Helper()
+	var err error
+	document["artifacts"], err = json.Marshal(archives)
+	if err != nil {
+		t.Fatalf("encode publication archives: %v", err)
+	}
+	data, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("encode publication: %v", err)
+	}
+	return data
+}
+
+func publicationArchiveID(t *testing.T, archive json.RawMessage) string {
+	t.Helper()
+	var identity struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(archive, &identity); err != nil {
+		t.Fatalf("decode archive identity: %v", err)
+	}
+	return identity.ID
+}
+
+func publicationWithoutArchive(t *testing.T, data []byte, omittedID string) []byte {
+	t.Helper()
+	document, archives := decodePublicationFixture(t, data)
+	kept := make([]json.RawMessage, 0, len(archives))
+	for _, archive := range archives {
+		if publicationArchiveID(t, archive) != omittedID {
+			kept = append(kept, archive)
+		}
+	}
+	if len(kept) != len(archives)-1 {
+		t.Fatalf("expected one %s archive in publication fixture", omittedID)
+	}
+	return encodePublicationFixture(t, document, kept)
+}
+
+func publicationWithWhisperCUDA(t *testing.T, data []byte) []byte {
+	t.Helper()
+	document, archives := decodePublicationFixture(t, data)
+	var whisperCPU json.RawMessage
+	for _, archive := range archives {
+		if publicationArchiveID(t, archive) == "localai-whisper/windows-amd64" {
+			whisperCPU = archive
+			break
+		}
+	}
+	if whisperCPU == nil {
+		t.Fatal("expected Whisper CPU archive in publication fixture")
+	}
+	whisperCUDA := whisperCUDAArchive(t, whisperCPU)
+	withoutLlama := publicationWithoutArchive(t, data, "localai-llamacpp/windows-amd64-cuda")
+	document, archives = decodePublicationFixture(t, withoutLlama)
+	return encodePublicationFixture(t, document, append(archives, whisperCUDA))
+}
+
+func whisperCUDAArchive(t *testing.T, cpu json.RawMessage) json.RawMessage {
+	t.Helper()
+	var archive map[string]json.RawMessage
+	if err := json.Unmarshal(cpu, &archive); err != nil {
+		t.Fatalf("decode Whisper archive: %v", err)
+	}
+	archive["id"] = json.RawMessage(`"localai-whisper/windows-amd64-cuda"`)
+	archive["target"] = json.RawMessage(`{"id":"windows-amd64-cuda","operatingSystem":"windows","architecture":"amd64","accelerators":["cuda"]}`)
+	var artifact map[string]json.RawMessage
+	if err := json.Unmarshal(archive["artifact"], &artifact); err != nil {
+		t.Fatalf("decode Whisper archive artifact: %v", err)
+	}
+	for _, field := range []string{"name", "location"} {
+		artifact[field] = bytes.Replace(artifact[field], []byte("windows-amd64"), []byte("windows-amd64-cuda"), 1)
+	}
+	var err error
+	archive["artifact"], err = json.Marshal(artifact)
+	if err != nil {
+		t.Fatalf("encode Whisper CUDA artifact: %v", err)
+	}
+	encoded, err := json.Marshal(archive)
+	if err != nil {
+		t.Fatalf("encode Whisper CUDA archive: %v", err)
+	}
+	return encoded
+}
+
 func assertPublishedResolution(t *testing.T, resolver BackendArtifactResolver, request ResolvedHostConfiguration, offline bool, accelerator, target string) {
 	t.Helper()
 	selection, err := resolver(context.Background(), request, offline)
@@ -434,11 +639,11 @@ func TestFetchPublishedBackendManifestLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode baseline manifest: %v", err)
 	}
-	manifest, err := fetchPublishedBackendManifest(context.Background(), &http.Client{Timeout: 15 * time.Second}, baseline.ProtocolRevision())
+	manifests, err := fetchPublishedBackendManifests(context.Background(), &http.Client{Timeout: 15 * time.Second}, baseline.ProtocolRevision())
 	if err != nil {
 		t.Fatalf("fetch current publication: %v", err)
 	}
-	selection, err := backendArtifactResolver(manifest)(context.Background(), publishedWindowsRequest("localai-llamacpp"), false)
+	selection, err := backendArtifactResolver(manifests[0])(context.Background(), publishedWindowsRequest("localai-llamacpp"), false)
 	if err != nil || selection.Name == "" || selection.Location == "" || len(selection.SHA256) != 64 {
 		t.Fatalf("current publication selection = %#v, %v", selection, err)
 	}

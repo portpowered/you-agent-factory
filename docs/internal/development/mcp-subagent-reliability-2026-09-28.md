@@ -802,3 +802,63 @@ session.
 After the wire consolidations were committed, the full native Windows Git
 Bash `make lint` lane passed all 24 targets. The zero-byte `$paths_file` was
 removed after its size was checked; its creator remains unknown.
+
+An OpenCode `space-bunny-free` request to fix published Windows CUDA release
+selection and add a test timed out after 120 seconds with
+`factory_session.subagent.timed_out` (Factory Session
+`9612fb6f-641e-47f5-9d72-9d5a6aa3bf7d`). The tool marked it
+nonretryable because partial workspace effects were possible. Immediate Git
+inspection found a clean tree and no requested edit. OpenCode's log showed
+repository searches and snapshot commands during the call; it did not prove
+why no edit was produced before the deadline. Both exposed Factory Session
+inspection methods returned `factory_session.session.not_found` for the
+returned ID, so the timeout's session identifier was not independently
+inspectable through this MCP server instance. The next probe should use a
+single-file edit and compare its completion with this broader request.
+
+A narrower `space-bunny-free` request to add only that regression test in
+`default_backend_resolver_test.go` also timed out at 90 seconds (Factory
+Session `234620f4-cc8e-4d44-be00-09fe0a83406c`). Git inspection showed
+only this reliability-log edit; OpenCode made no test edit. The log shows it
+searching the manifest decoder and fixture near the deadline. Session lookup
+again returned `factory_session.session.not_found`. Two different task sizes
+on the same model timed out without primary results, so the next comparison
+should use a different available OpenCode model on a small edit.
+
+Three alternative OpenCode models (`mimo-v2.6-flash-free`,
+`ling-3.0-flash-fin-free`, and `big-pickle`) each failed in about 21 seconds
+with the actionable `factory_session.subagent.provider_throttled` envelope,
+`retryable: true`, and `failureReason: throttled` (sessions
+`8b18a778-001b-4826-8fa7-e42c45b2c929`,
+`d3016dd3-f170-46d7-94b5-1a04d09ae782`, and
+`644d0c99-22ea-4610-97d3-80549fc6407a`). These were capacity failures,
+not evidence that the requested edit or repository code failed. No requested
+test edit appeared in the worktree.
+
+The same `you.subagent` MCP operation with provider `codex` completed the
+bounded regression-test edit in Factory Session
+`f4a0e6db-ad43-40fb-aca6-1b67e3da67ed`. Independent execution of the
+exact new test failed as expected: the resolver chose the newer CPU archive
+instead of the older published CUDA archive. A second Codex subagent
+(`d017aba2-7cac-48fc-8347-eb4136d4612d`) implemented per-backend search
+through validated release manifests; the Models wire suite passed. Review
+found that a later malformed release could discard earlier valid candidates,
+so a third bounded Codex subagent
+(`9ea9054a-a0ae-400a-9618-b290dd10c014`) retained usable candidates and
+added a malformed-later-release regression case. The Models wire, artifacts,
+and application wire Go suites passed after the change. This comparison
+shows the MCP route can complete a real test-to-fix cycle with another
+provider, while the two Space Bunny timeout causes remain unproven.
+
+A fourth bounded Codex MCP subagent
+(`45959ba4-49ee-4869-b772-fa8dab897bdb`) added a same-resolver test for
+llama.cpp and Whisper CUDA archives from different validated releases.
+Independent execution of the Models wire, artifacts, and application wire
+Go suites passed. This covers release selection across two backend requests
+without a new publication fetch for the second request.
+
+The first full `make lint` pass exposed size and complexity violations in
+the new tests and resolver, plus one test-only helper left in production
+code. Codex MCP subagent `fd9d2df1-4888-4412-83d5-d9600882c2ec`
+refactored those same files; focused Go suites passed independently, and
+the full native Windows Git Bash `make lint` then passed all 24 targets.

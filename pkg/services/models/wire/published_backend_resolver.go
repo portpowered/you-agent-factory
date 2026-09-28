@@ -23,8 +23,8 @@ const (
 
 var backendReleaseTag = regexp.MustCompile(`^localai-backends-v1-[0-9a-f]{64}$`)
 
-// NewPublishedBackendArtifactResolver checks for a newer published Windows
-// archive manifest on first online CUDA-capable use. Linux uses the current
+// NewPublishedBackendArtifactResolver checks published Windows archive
+// manifests on first online CUDA-capable use. Linux uses the current
 // LocalAI gallery; this resolver keeps the checked-in publication as the
 // fallback when the release index is unavailable or has no compatible CUDA
 // archive. Offline calls never access the network.
@@ -39,7 +39,7 @@ func NewPublishedBackendArtifactResolver(client AssetHTTPDoer) (BackendArtifactR
 	baselineResolver := backendArtifactResolver(baseline)
 	var mu sync.Mutex
 	checked := false
-	current := baseline
+	var published []artifacts.Manifest
 	return func(ctx context.Context, request ResolvedHostConfiguration, offline bool) (BackendArtifactSelection, error) {
 		if err := ctx.Err(); err != nil {
 			return BackendArtifactSelection{}, err
@@ -53,20 +53,33 @@ func NewPublishedBackendArtifactResolver(client AssetHTTPDoer) (BackendArtifactR
 		}
 		mu.Lock()
 		if !offline && !checked {
-			candidate, fetchErr := fetchPublishedBackendManifest(ctx, client, baseline.ProtocolRevision())
+			candidates, fetchErr := fetchPublishedBackendManifests(ctx, client, baseline.ProtocolRevision())
 			if ctx.Err() != nil {
 				mu.Unlock()
 				return BackendArtifactSelection{}, ctx.Err()
 			}
 			checked = true
 			if fetchErr == nil {
-				current = candidate
+				published = candidates
 			}
 		}
-		selected := current
+		selection := selectPublishedBackendCUDA(ctx, published, request, offline)
 		mu.Unlock()
-		return backendArtifactResolver(selected)(ctx, request, offline)
+		if selection.Name != "" {
+			return selection, nil
+		}
+		return baselineResolver(ctx, request, offline)
 	}, nil
+}
+
+func selectPublishedBackendCUDA(ctx context.Context, manifests []artifacts.Manifest, request ResolvedHostConfiguration, offline bool) BackendArtifactSelection {
+	for _, manifest := range manifests {
+		candidate, err := backendArtifactResolver(manifest)(ctx, request, offline)
+		if err == nil && candidate.Accelerator == "cuda" {
+			return candidate
+		}
+	}
+	return BackendArtifactSelection{}
 }
 
 type backendRelease struct {
@@ -84,35 +97,42 @@ type backendArchiveEntry struct {
 	} `json:"artifact"`
 }
 
-func fetchPublishedBackendManifest(ctx context.Context, client AssetHTTPDoer, protocol string) (artifacts.Manifest, error) {
+func fetchPublishedBackendManifests(ctx context.Context, client AssetHTTPDoer, protocol string) ([]artifacts.Manifest, error) {
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	index, err := readBackendPublication(ctx, client, backendReleasesURL, backendReleaseLimit)
 	if err != nil {
-		return artifacts.Manifest{}, err
+		return nil, err
 	}
 	var releases []backendRelease
 	if err := json.Unmarshal(index, &releases); err != nil {
-		return artifacts.Manifest{}, fmt.Errorf("decode backend publication index: %w", err)
+		return nil, fmt.Errorf("decode backend publication index: %w", err)
 	}
+	var manifests []artifacts.Manifest
 	for _, release := range releases {
 		if release.Draft || release.Prerelease || !backendReleaseTag.MatchString(release.TagName) || !hasBackendManifest(release) {
 			continue
 		}
 		data, err := readBackendPublication(ctx, client, backendReleaseBase+release.TagName+"/manifest.json", backendManifestLimit)
 		if err != nil {
-			return artifacts.Manifest{}, err
+			if ctx.Err() != nil {
+				break
+			}
+			continue
 		}
 		manifest, err := decodePublishedBackendManifest(data, release)
 		if err != nil {
-			return artifacts.Manifest{}, err
+			continue
 		}
 		if manifest.ProtocolRevision() != protocol {
 			continue
 		}
-		return manifest, nil
+		manifests = append(manifests, manifest)
 	}
-	return artifacts.Manifest{}, fmt.Errorf("no backend publication manifest was found")
+	if len(manifests) == 0 {
+		return nil, fmt.Errorf("no backend publication manifest was found")
+	}
+	return manifests, nil
 }
 
 func decodePublishedBackendManifest(data []byte, release backendRelease) (artifacts.Manifest, error) {
