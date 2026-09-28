@@ -425,6 +425,22 @@ Content-Type: application/json
 The HTTP response uses the same `embedding` slot, `JSON` modality,
 `application/json` media type, and canonical JSON vector content.
 
+For a direct HTTP invocation with local media files, send a multipart request.
+The `request` part contains the generic invocation JSON. Each `files` part
+fills the next image, audio, video, or binary input that has no inline content
+or artifact reference, in input order:
+
+```bash
+curl -X POST http://localhost:7437/models/invocations \
+  -F 'request={"scope":"factory-session:example","holder":"example","model":{"nameOrUri":"llm"},"operation":"OMNI","inputs":[{"name":"prompt","modality":"TEXT","content":"Describe the audio and video."},{"name":"audio","modality":"AUDIO","mediaType":"audio/wav"},{"name":"video","modality":"VIDEO","mediaType":"video/mp4"}]};type=application/json' \
+  -F 'files=@speech.wav;type=audio/wav' \
+  -F 'files=@clip.mp4;type=video/mp4'
+```
+
+Each uploaded file must be nonempty and no larger than 8 MiB. The complete
+multipart body is limited to 64 MiB. JSON callers can continue to use
+`contentBase64` with the file bytes and `mediaType` for each media input.
+
 `ASR` preserves backend segment timestamps in the `segments` JSON output. Each
 segment contains `id`, `start`, `end`, and `text` fields.
 

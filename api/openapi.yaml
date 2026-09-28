@@ -1106,6 +1106,24 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/GenericModelInvocationRequest'
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - request
+              properties:
+                request:
+                  $ref: '#/components/schemas/GenericModelInvocationRequest'
+                files:
+                  type: array
+                  description: Binary uploads in the order of media inputs without content, contentBase64, or artifactRef. Each file is limited to 8 MiB.
+                  items:
+                    type: string
+                    format: binary
+            encoding:
+              request:
+                contentType: application/json
       responses:
         '200':
           description: Successful generic model invocation result.

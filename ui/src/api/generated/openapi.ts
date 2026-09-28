@@ -9264,6 +9264,11 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["GenericModelInvocationRequest"];
+        "multipart/form-data": {
+          request: components["schemas"]["GenericModelInvocationRequest"];
+          /** @description Binary uploads in the order of media inputs without content, contentBase64, or artifactRef. Each file is limited to 8 MiB. */
+          files?: string[];
+        };
       };
     };
     responses: {

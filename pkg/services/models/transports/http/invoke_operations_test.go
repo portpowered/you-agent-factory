@@ -646,6 +646,46 @@ func TestHandler_InvokeGenericModelUsesModelsRootAndPreservesNamedOutputs(t *tes
 	}
 }
 
+func TestHandler_InvokeGenericModelPreservesAudioAndVideoFileBytes(t *testing.T) {
+	t.Parallel()
+	audio := []byte{0, 255, 1, 128}
+	video := []byte{0, 0, 0, 1, 255}
+	prompt := "Describe the recording and video."
+	audioType, videoType := "audio/wav", "video/mp4"
+	operation := factoryapi.ModelOperationName(models.OperationOMNI)
+	inputs := []factoryapi.ModelInvocationInput{
+		{Name: "prompt", Modality: factoryapi.ModelInvocationContentTypeText, Content: &prompt},
+		{Name: "audio", Modality: factoryapi.ModelInvocationContentTypeAudio, MediaType: &audioType, ContentBase64: &audio},
+		{Name: "video", Modality: factoryapi.ModelInvocationContentTypeVideo, MediaType: &videoType, ContentBase64: &video},
+	}
+	encoded, err := json.Marshal(factoryapi.GenericModelInvocationRequest{
+		Scope: "factory-session:http-test", Holder: "operator",
+		Model: factoryapi.ModelReference{NameOrUri: "llm"}, Operation: &operation, Inputs: &inputs,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var captured models.InvokeModelRequest
+	root := &rootFake{invokeGeneric: func(_ context.Context, request models.InvokeModelRequest) (models.InvokeModelResult, error) {
+		captured = request
+		return models.InvokeModelResult{}, nil
+	}}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	httpRequest := httptest.NewRequest(http.MethodPost, "/models/invocations", bytes.NewReader(encoded))
+	httpRequest.Header.Set("Content-Type", "application/json")
+	handler.InvokeGenericModel(recorder, httpRequest)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("response = %d %s", recorder.Code, recorder.Body.String())
+	}
+	if len(captured.Inputs) != 3 || captured.Inputs[0].Content != prompt ||
+		!bytes.Equal([]byte(captured.Inputs[1].Content), audio) ||
+		!bytes.Equal([]byte(captured.Inputs[2].Content), video) ||
+		captured.Inputs[1].MediaType != audioType || captured.Inputs[2].MediaType != videoType {
+		t.Fatalf("ordered media inputs = %#v", captured.Inputs)
+	}
+}
+
 func TestHandler_InvokeGenericModelRejectsInvalidRequestBeforeRoot(t *testing.T) {
 	t.Parallel()
 

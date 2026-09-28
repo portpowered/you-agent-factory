@@ -1,10 +1,14 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"strings"
 	"testing"
 
@@ -493,3 +497,106 @@ const (
 	characterizationHTTPNotFoundBody           = `{"code":"NOT_FOUND","family":"NOT_FOUND","message":"model not found"}\n`
 	characterizationHTTPInvocationNotFoundBody = `{"code":"MODEL_INFERENCE_RUNTIME_FAILURE","family":"INTERNAL_SERVER_ERROR","message":"inference failed for model \"MISSING\" operation \"TTS\": model not found: MISSING"}\n`
 )
+
+type multipartTestPart struct {
+	name, contentType string
+	data              []byte
+}
+
+func genericMultipartRequest(t *testing.T, parts []multipartTestPart) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for _, value := range parts {
+		header := textproto.MIMEHeader{}
+		header.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q`, value.name))
+		if value.contentType != "" {
+			header.Set("Content-Type", value.contentType)
+		}
+		part, err := writer.CreatePart(header)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(value.data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/models/invocations", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	return request
+}
+
+func TestGenericMultipartPreservesAudioVideoAndRepeatedSlotOrder(t *testing.T) {
+	t.Parallel()
+	audio := []byte{0, 255, 1, 128}
+	video1 := []byte{0, 0, 0, 1, 255}
+	video2 := []byte{255, 0, 33, 128}
+	requestJSON := `{"scope":"factory-session:http-test","holder":"operator","model":{"nameOrUri":"omni"},"operation":"OMNI","inputs":[{"name":"prompt","modality":"TEXT","content":"compare"},{"name":"audio","modality":"AUDIO","mediaType":"audio/wav","contentType":"audio/wav"},{"name":"video","modality":"VIDEO"},{"name":"video","modality":"VIDEO","mediaType":"video/mp4"}]}`
+	parts := []multipartTestPart{
+		{name: "files", contentType: "audio/wav", data: audio},
+		{name: "request", contentType: "application/json", data: []byte(requestJSON)},
+		{name: "files", contentType: "video/mp4", data: video1},
+		{name: "files", contentType: "video/mp4", data: video2},
+	}
+	var captured modelcontract.InvokeModelRequest
+	root := &rootFake{invokeGeneric: func(_ context.Context, request modelcontract.InvokeModelRequest) (modelcontract.InvokeModelResult, error) {
+		captured = request
+		return modelcontract.InvokeModelResult{}, nil
+	}}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.InvokeGenericModel(recorder, genericMultipartRequest(t, parts))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", recorder.Code, recorder.Body.String())
+	}
+	if len(captured.Inputs) != 4 || captured.Inputs[0].Content != "compare" ||
+		!bytes.Equal([]byte(captured.Inputs[1].Content), audio) ||
+		!bytes.Equal([]byte(captured.Inputs[2].Content), video1) ||
+		!bytes.Equal([]byte(captured.Inputs[3].Content), video2) ||
+		captured.Inputs[1].MediaType != "audio/wav" || captured.Inputs[2].MediaType != "video/mp4" {
+		t.Fatalf("mapped multipart inputs = %#v", captured.Inputs)
+	}
+}
+
+func TestGenericMultipartRejectsInvalidPartsBeforeRoot(t *testing.T) {
+	t.Parallel()
+	base := `{"scope":"factory-session:http-test","holder":"operator","model":{"nameOrUri":"omni"},"operation":"OMNI","inputs":[{"name":"audio","modality":"AUDIO","mediaType":"audio/wav"}]}`
+	requestPart := multipartTestPart{name: "request", contentType: "application/json", data: []byte(base)}
+	filePart := multipartTestPart{name: "files", contentType: "audio/wav", data: []byte{0, 255}}
+	cases := []struct {
+		name, message string
+		parts         []multipartTestPart
+	}{
+		{name: "missing file", message: "required", parts: []multipartTestPart{requestPart}},
+		{name: "extra file", message: "no matching", parts: []multipartTestPart{requestPart, filePart, filePart}},
+		{name: "missing request", message: "request part is required", parts: []multipartTestPart{filePart}},
+		{name: "duplicate request", message: "must occur once", parts: []multipartTestPart{requestPart, requestPart, filePart}},
+		{name: "unexpected field", message: "unexpected multipart field", parts: []multipartTestPart{requestPart, {name: "other", data: []byte("x")}}},
+		{name: "malformed JSON", message: "invalid request payload", parts: []multipartTestPart{{name: "request", data: []byte("{")}, filePart}},
+		{name: "unknown JSON field", message: "invalid request payload", parts: []multipartTestPart{{name: "request", data: []byte(strings.Replace(base, `"holder":`, `"unexpected":true,"holder":`, 1))}, filePart}},
+		{name: "media mismatch", message: "does not match", parts: []multipartTestPart{requestPart, {name: "files", contentType: "video/mp4", data: []byte("x")}}},
+		{name: "content type mismatch", message: "does not match input contentType", parts: []multipartTestPart{{name: "request", data: []byte(strings.Replace(base, `"mediaType":"audio/wav"`, `"mediaType":"audio/wav","contentType":"audio/mpeg"`, 1))}, filePart}},
+		{name: "empty file", message: "must not be empty", parts: []multipartTestPart{requestPart, {name: "files", contentType: "audio/wav"}}},
+		{name: "ambiguous carrier", message: "only one content carrier", parts: []multipartTestPart{{name: "request", data: []byte(strings.Replace(base, `"mediaType":"audio/wav"`, `"mediaType":"audio/wav","content":"a","artifactRef":"models:asset"`, 1))}}},
+		{name: "file with existing carrier", message: "no matching", parts: []multipartTestPart{{name: "request", data: []byte(strings.Replace(base, `"mediaType":"audio/wav"`, `"mediaType":"audio/wav","content":"a"`, 1))}, filePart}},
+		{name: "oversized file", message: "exceeds 8 MiB", parts: []multipartTestPart{requestPart, {name: "files", contentType: "audio/wav", data: make([]byte, maxGenericFilePart+1)}}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root := &rootFake{invokeGeneric: func(context.Context, modelcontract.InvokeModelRequest) (modelcontract.InvokeModelResult, error) {
+				t.Fatal("root invoked for invalid multipart request")
+				return modelcontract.InvokeModelResult{}, nil
+			}}
+			handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+			recorder := httptest.NewRecorder()
+			handler.InvokeGenericModel(recorder, genericMultipartRequest(t, test.parts))
+			if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), test.message) {
+				t.Fatalf("response = %d %s, want 400 containing %q", recorder.Code, recorder.Body.String(), test.message)
+			}
+		})
+	}
+}

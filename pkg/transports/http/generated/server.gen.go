@@ -10044,6 +10044,15 @@ type GetMetricsCostsParams struct {
 	SessionId *string `form:"session_id,omitempty" json:"session_id,omitempty"`
 }
 
+// InvokeGenericModelMultipartBody defines parameters for InvokeGenericModel.
+type InvokeGenericModelMultipartBody struct {
+	// Files Binary uploads in the order of media inputs without content, contentBase64, or artifactRef. Each file is limited to 8 MiB.
+	Files *[]openapi_types.File `json:"files,omitempty"`
+
+	// Request Provider-neutral generic model invocation request. Inputs and parameters retain authored order. When operation is omitted, Models infers the sole operation exposed by the resolved model.
+	Request GenericModelInvocationRequest `json:"request"`
+}
+
 // RemoveModelParams defines parameters for RemoveModel.
 type RemoveModelParams struct {
 	// ReclaimUnusedCache Also reclaim proven unreferenced model and backend cache assets. The default preserves them.
@@ -10154,6 +10163,9 @@ type ValidateFactoryJSONRequestBody = Factory
 
 // InvokeGenericModelJSONRequestBody defines body for InvokeGenericModel for application/json ContentType.
 type InvokeGenericModelJSONRequestBody = GenericModelInvocationRequest
+
+// InvokeGenericModelMultipartRequestBody defines body for InvokeGenericModel for multipart/form-data ContentType.
+type InvokeGenericModelMultipartRequestBody InvokeGenericModelMultipartBody
 
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
