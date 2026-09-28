@@ -429,7 +429,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v63 := &wire.OperatorSettingsRuntimeOpeningPorts{
 		EnsureBackendScope: backendScopeEnsurer,
 	}
-	v64, err := wire.NewRuntimeOpening(v16, v28, v43, v55, v56, v57, v58, v60, v61, v62, v63)
+	v64, err := wire.NewRoot(v16, v28, v43, v55, v56, v57, v58, v60, v61, v62, v63)
 	if err != nil {
 		return nil, err
 	}
@@ -711,12 +711,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	stdioOpener := stdio.NewOpener()
 	wireMcpServerBuilder := provideMCPServerBuilder(workingDirectory)
-	v94 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v73, workflowPreviewOperation, targetExecutionService)
+	v94 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v73, workflowPreviewOperation, v65)
 	openedStdioRunnerBuilder, err := application.NewOpenedStdioRunnerBuilder(managedRunnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v95 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v73, targetExecutionService)
+	v95 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v73, v65)
 	v96, err := wire.NewStdioOpeningService(v69, v94, v95, openingPresentationOwner)
 	if err != nil {
 		return nil, err
@@ -755,15 +755,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	processExecutionRuntimeOpeningCapability, err := provideFactorySessionExecutionRuntimeOpening(v65)
-	if err != nil {
-		return nil, err
-	}
 	processRuntimeCostsQueryCapability, err := provideCostsQueryCapability(costsQuery)
 	if err != nil {
 		return nil, err
 	}
-	process, err := application.NewProcessWithRuntimeCostsAndExecution(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader, processFactorySessionsCapability, processRuntimeMetricsQueryCapability, processExecutionRuntimeOpeningCapability, processRuntimeCostsQueryCapability)
+	process, err := application.NewProcessWithRuntimeCosts(commandFactory, initializer, providerRegistry, processLifecycle, server, workerRecordingReader, processFactorySessionsCapability, processRuntimeMetricsQueryCapability, processRuntimeCostsQueryCapability)
 	if err != nil {
 		return nil, err
 	}
@@ -957,8 +953,7 @@ var servicesSet = wire5.NewSet(
 	provideAutomationsRoot, wire5.Bind(new(automations.Service), new(automations.Root)), provideFactorySessionsAssembly,
 	provideFactorySessionsCapability,
 	provideFactoryVisualizationMetricsQuery,
-	provideRuntimeMetricsQueryCapability, wire5.Bind(new(factorysessions.Service), new(*wire.Root)), wire5.Bind(new(wire.ApplicationRuntimeOpening), new(*wire.Root)), wire5.Bind(new(wire.InvocationRuntimeOpening), new(*wire.Root)), wire5.Bind(new(wire.ExecutionRuntimeOpening), new(*wire.Root)), provideFactorySessionExecutionRuntimeOpening,
-	provideProviderPriceTableReader,
+	provideRuntimeMetricsQueryCapability, wire5.Bind(new(factorysessions.Service), new(*wire.Root)), wire5.Bind(new(wire.ApplicationRuntimeOpening), new(*wire.Root)), wire5.Bind(new(wire.InvocationRuntimeOpening), new(*wire.Root)), wire5.Bind(new(wire.ExecutionRuntimeOpening), new(*wire.Root)), provideProviderPriceTableReader,
 	provideCostsQuery,
 	provideCostsQueryCapability,
 	provideFactoryWebhooksService,
@@ -1032,7 +1027,7 @@ var servicesSet = wire5.NewSet(
 	provideInitialFactorySnapshotFactory, wire2.NewRuntimeFactory, wire2.NewAssembly, provideFactoryRuntimeRoot, wire5.Bind(new(wire.FactoryRuntimeAssembler), new(*wire2.Assembly)), wire5.Struct(new(wire.ProviderSessionsRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.FactoryRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.FactoryDefinitionsRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.FactorySessionsRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.WorkRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.AutomationsRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.ModelsRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.RecordingsRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.WebhooksRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.WorkersRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.OperatorSettingsRuntimeOpeningPorts), "*"), provideLoadedFactorySourceFactory,
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
-	provideReplayRuntimeConfigDecoder, wire.NewRuntimeOpening, provideFactorySessionsService,
+	provideReplayRuntimeConfigDecoder, wire.NewRoot, provideFactorySessionsService,
 )
 
 var providerSessionServiceSet = wire5.NewSet(
@@ -1211,5 +1206,5 @@ var BundleSet = wire5.NewSet(
 	provideDirectJavaScriptHostAdapter, wire.NewDirectJavaScriptRunOperation, application.NewInitializer, wire.NewExecutionServiceBuilder, provideCLIExecutionServiceBuilder,
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
-	provideCLICommandFactory, application.NewProcessWithRuntimeCostsAndExecution, wire5.Bind(new(process.Initializer), new(*application.Initializer)), wire5.Bind(new(process.CommandFactory), new(cli.CommandFactory)),
+	provideCLICommandFactory, application.NewProcessWithRuntimeCosts, wire5.Bind(new(process.Initializer), new(*application.Initializer)), wire5.Bind(new(process.CommandFactory), new(cli.CommandFactory)),
 )

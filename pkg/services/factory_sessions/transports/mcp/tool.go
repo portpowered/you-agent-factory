@@ -132,8 +132,8 @@ type SubagentResult struct {
 }
 
 // Subagent invokes the packaged @you/subagent Factory through the canonical
-// on-demand target execution service.
-func Subagent(ctx context.Context, target factorysessionexecution.TargetExecutionService, workingRoot string, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) ToolResponse[SubagentResult] {
+// Factory Sessions Service.
+func Subagent(ctx context.Context, target factorysessionexecution.Service, workingRoot string, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) ToolResponse[SubagentResult] {
 	if err := validateSubagentRequest(ctx, target, generateID, input); err != nil {
 		var envelope ToolErrorEnvelope
 		if errors.Is(err, errMissingRequestContext) || ctx == nil || ctx.Err() != nil || target == nil {
@@ -147,14 +147,23 @@ func Subagent(ctx context.Context, target factorysessionexecution.TargetExecutio
 	if input.WorkingRoot != "" {
 		workingRoot = input.WorkingRoot
 	}
-	startArgs := map[string]any{"workingRoot": workingRoot}
-	started, err := target.StartAsync(ctx, factorysessionexecution.StartRequest{
-		RequestID: requestID,
+	started, err := target.Start(ctx, factorysessionexecution.SessionStartRequest{
+		Mode:           factorysessionexecution.SessionOperationModeLive,
+		ActivationOnly: true,
+		Correlation:    factorysessionexecution.SessionOperationCorrelation{RequestID: requestID},
+		Definition: factorysessionexecution.SessionDefinitionSelection{
+			FactoryID: factorydefinitions.PackagedSubagentFactoryName,
+		},
 		Source: factorysessionexecution.Source{
 			Kind:      factoryruntime.WorkflowSourceKindFactoryID,
 			FactoryID: factorydefinitions.PackagedSubagentFactoryName,
 		},
-		Args: startArgs,
+		Args:       map[string]any{"workingRoot": workingRoot},
+		FolderPath: workingRoot,
+		RuntimeSelection: &factorysessionexecution.SessionRuntimeSelection{
+			ExecutionBaseDir: workingRoot,
+			Mode:             factorysessionexecution.SessionRuntimeModeService,
+		},
 	})
 	if err != nil {
 		return subagentExecutionFailure(err)
@@ -164,12 +173,21 @@ func Subagent(ctx context.Context, target factorysessionexecution.TargetExecutio
 	}
 	args := subagentInvocationArgs(input)
 	args["workingRoot"] = workingRoot
-	invocationRequest := factorysessionexecution.InvocationRequest{
-		Args: &args, RequestID: &requestID,
-		TimeoutMillis: input.TimeoutMillis,
+	var timeoutMillis int64
+	if input.TimeoutMillis != nil {
+		timeoutMillis = *input.TimeoutMillis
 	}
-	result, invokeErr := target.InvokeFactorySession(ctx, started.SessionID, invocationRequest)
-	closeErr := target.CloseFactorySession(context.WithoutCancel(ctx), started.SessionID)
+	result, invokeErr := target.Invoke(ctx, factorysessionexecution.SessionInvokeRequest{
+		SessionID:   started.SessionID,
+		Correlation: factorysessionexecution.SessionOperationCorrelation{RequestID: requestID},
+		Args:        args,
+		Wait:        factorysessionexecution.SessionOperationWait{TimeoutMillis: timeoutMillis},
+	})
+	_, closeErr := target.Control(context.WithoutCancel(ctx), factorysessionexecution.SessionControlRequest{
+		SessionID: started.SessionID,
+		Mode:      factorysessionexecution.SessionOperationModeLive,
+		Operation: factorysessionexecution.SessionControlClose,
+	})
 	if err := errors.Join(invokeErr, closeErr); err != nil {
 		return subagentExecutionFailure(err)
 	}
@@ -206,7 +224,7 @@ func subagentInvocationArgs(input SubagentInput) map[string]any {
 	return args
 }
 
-func validateSubagentRequest(ctx context.Context, target factorysessionexecution.TargetExecutionService, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) error {
+func validateSubagentRequest(ctx context.Context, target factorysessionexecution.Service, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) error {
 	switch {
 	case ctx == nil:
 		return errMissingRequestContext

@@ -627,7 +627,7 @@ func provideFactorySessionsAssembly(
 
 func provideFactorySessionsService(
 	assembly factorysessionwire.RuntimeAssembly,
-	opening *factorysessionwire.RuntimeOpening,
+	opening factorysessionwire.RuntimeOpening,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 ) (*factorysessionwire.Root, error) {
 	return factorysessionwire.NewServiceFromAssembly(assembly, opening, liveChangeCoordinator)
@@ -721,55 +721,6 @@ type runtimeMetricsQueryCapability struct {
 
 func (capability runtimeMetricsQueryCapability) RuntimeMetricsQuery() any {
 	return capability.query
-}
-
-func provideFactorySessionExecutionRuntimeOpening(
-	opening *factorysessionwire.Root,
-) (processcontract.ExecutionRuntimeOpeningCapability, error) {
-	if opening == nil {
-		return nil, errors.New("construct execution runtime opening capability: opening is required")
-	}
-	return executionRuntimeOpeningCapability{
-		opening: func(
-			ctx context.Context,
-			request factorysessions.ExecutionRuntimeOpeningRequest,
-		) (factorysessions.OpenedExecutionRuntime, error) {
-			projectRoot := request.ProjectRoot
-			opened, err := opening.OpenExecutionRuntime(ctx, &factorysessions.RuntimeOpeningRequest{
-				FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
-					Directory:        projectRoot,
-					ExecutionBaseDir: projectRoot,
-				},
-				FactoryRuntime: factoryruntime.RuntimeOpeningRequest{
-					LogDirectory:      filepath.Join(projectRoot, ".you-agent-factory", "runtime-logs"),
-					FileLoggingPolicy: factoryruntime.RuntimeFileLoggingPolicyDisabled,
-					MetricsDirectory:  filepath.Join(projectRoot, ".you-agent-factory", "runtime-metrics"),
-					MetricsPolicy:     factoryruntime.RuntimeMetricsPolicyDisabled,
-				},
-				FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-					FactorySessionID:  request.FactorySessionID,
-					PersistencePolicy: request.PersistencePolicy,
-					SystemConfigHome:  request.SystemConfigHome,
-				},
-				Recordings: recordings.RuntimeOpeningRequest{ReplayPath: request.ReplayPath},
-			})
-			if err != nil {
-				return factorysessions.OpenedExecutionRuntime{}, err
-			}
-			return factorysessions.OpenedExecutionRuntime{
-				Execution: opened.Execution,
-				Close:     opened.Resources.Close,
-			}, nil
-		},
-	}, nil
-}
-
-type executionRuntimeOpeningCapability struct {
-	opening factorysessions.ExecutionRuntimeOpeningFunc
-}
-
-func (capability executionRuntimeOpeningCapability) ExecutionRuntimeOpening() any {
-	return capability.opening
 }
 
 func provideOrchestrationJavaScriptExecution(

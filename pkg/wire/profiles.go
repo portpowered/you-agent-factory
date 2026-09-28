@@ -652,7 +652,7 @@ type mcpServerBuilder func(
 	recordings.Service,
 	factorysessionwire.RequestPreparation,
 	factoryruntime.WorkflowPreviewOperation,
-	factorysessions.TargetExecutionService,
+	factorysessions.Service,
 ) (*mcpserver.Server, error)
 
 // provideMCPServerBuilder composes owner adapters at the Wire boundary. The
@@ -665,7 +665,7 @@ func provideMCPServerBuilder(workingDirectory platformfilesystem.WorkingDirector
 		recordingsService recordings.Service,
 		prepare factorysessionwire.RequestPreparation,
 		workflowPreview factoryruntime.WorkflowPreviewOperation,
-		target factorysessions.TargetExecutionService,
+		sessions factorysessions.Service,
 	) (*mcpserver.Server, error) {
 		workingRoot, err := workingDirectory.Getwd()
 		if err != nil {
@@ -679,7 +679,7 @@ func provideMCPServerBuilder(workingDirectory platformfilesystem.WorkingDirector
 		}
 		return mcpserver.New(mcpserver.Options{
 			ToolOperation: mcpserver.ToolOperation(factorysessionmcp.BindToolOperation(
-				execution, inspection, prepare, workflowPreview, target, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString),
+				execution, inspection, prepare, workflowPreview, sessions, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString),
 			)),
 		})
 	}
@@ -692,7 +692,7 @@ func provideFixtureStdioApplicationBuilder(
 	buildServer mcpServerBuilder,
 	prepare factorysessionwire.RequestPreparation,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	target factorysessions.TargetExecutionService,
+	sessions factorysessions.Service,
 ) factorysessionwire.FixtureStdioApplicationBuilder {
 	return func(
 		ctx context.Context,
@@ -711,7 +711,7 @@ func provideFixtureStdioApplicationBuilder(
 			if err := sessionCtx.Err(); err != nil {
 				return initializer.OpenedApplication{}, err
 			}
-			server, err := buildServer(execution, nil, prepare, workflowPreview, target)
+			server, err := buildServer(execution, nil, prepare, workflowPreview, sessions)
 			if err != nil {
 				return initializer.OpenedApplication{}, err
 			}
@@ -731,7 +731,7 @@ func provideRuntimeStdioApplicationBuilder(
 	open mcpstdio.Opener,
 	buildServer mcpServerBuilder,
 	prepare factorysessionwire.RequestPreparation,
-	target factorysessions.TargetExecutionService,
+	sessions factorysessions.Service,
 ) factorysessionwire.RuntimeStdioApplicationBuilder {
 	return func(
 		ctx context.Context,
@@ -751,7 +751,7 @@ func provideRuntimeStdioApplicationBuilder(
 				if err := sessionCtx.Err(); err != nil {
 					return initializer.OpenedApplication{}, err
 				}
-				server, err := buildServer(opened.Execution, opened.Recordings, prepare, opened.WorkflowPreview, target)
+				server, err := buildServer(opened.Execution, opened.Recordings, prepare, opened.WorkflowPreview, sessions)
 				if err != nil {
 					return initializer.OpenedApplication{}, err
 				}

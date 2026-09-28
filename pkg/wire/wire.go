@@ -160,7 +160,6 @@ var servicesSet = wire.NewSet(
 	wire.Bind(new(factorysessionwire.ApplicationRuntimeOpening), new(*factorysessionwire.Root)),
 	wire.Bind(new(factorysessionwire.InvocationRuntimeOpening), new(*factorysessionwire.Root)),
 	wire.Bind(new(factorysessionwire.ExecutionRuntimeOpening), new(*factorysessionwire.Root)),
-	provideFactorySessionExecutionRuntimeOpening,
 	provideProviderPriceTableReader,
 	provideCostsQuery,
 	provideCostsQueryCapability,
@@ -252,7 +251,7 @@ var servicesSet = wire.NewSet(
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
 	provideReplayRuntimeConfigDecoder,
-	factorysessionwire.NewRuntimeOpening,
+	factorysessionwire.NewRoot,
 	provideFactorySessionsService,
 )
 
@@ -455,7 +454,7 @@ var BundleSet = wire.NewSet(
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
 	provideCLICommandFactory,
-	initializerapplication.NewProcessWithRuntimeCostsAndExecution,
+	initializerapplication.NewProcessWithRuntimeCosts,
 	wire.Bind(new(processcontract.Initializer), new(*initializerapplication.Initializer)),
 	wire.Bind(new(processcontract.CommandFactory), new(cli.CommandFactory)),
 )

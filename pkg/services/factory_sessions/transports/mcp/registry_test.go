@@ -892,21 +892,22 @@ func cloneToolDefinitions(t *testing.T, tools []mcpfactorysession.ToolDefinition
 }
 
 type subagentTargetFake struct {
-	factorysessions.TargetExecutionService
-	start     factorysessions.StartRequest
-	invoke    factorysessions.InvocationRequest
+	factorysessions.Service
+	start     factorysessions.SessionStartRequest
+	invoke    factorysessions.SessionInvokeRequest
+	control   factorysessions.SessionControlRequest
 	started   bool
 	closed    bool
 	invokeErr error
 }
 
-func (fake *subagentTargetFake) StartAsync(_ context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+func (fake *subagentTargetFake) Start(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 	fake.start = request
 	fake.started = true
-	return factorysessions.AsyncStartResult{SessionID: "session-1", Status: "RUNNING"}, nil
+	return factorysessions.SessionStartResult{SessionID: "session-1", Mode: factorysessions.SessionOperationModeLive, Status: "RUNNING"}, nil
 }
 
-func (fake *subagentTargetFake) InvokeFactorySession(_ context.Context, _ string, request factorysessions.InvocationRequest) (factorysessions.InvocationResult, error) {
+func (fake *subagentTargetFake) Invoke(_ context.Context, request factorysessions.SessionInvokeRequest) (factorysessions.InvocationResult, error) {
 	fake.invoke = request
 	if fake.invokeErr != nil {
 		return factorysessions.InvocationResult{}, fake.invokeErr
@@ -917,9 +918,10 @@ func (fake *subagentTargetFake) InvokeFactorySession(_ context.Context, _ string
 	}, nil
 }
 
-func (fake *subagentTargetFake) CloseFactorySession(_ context.Context, sessionID string) error {
-	fake.closed = sessionID == "session-1"
-	return nil
+func (fake *subagentTargetFake) Control(_ context.Context, request factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
+	fake.control = request
+	fake.closed = request.SessionID == "session-1" && request.Operation == factorysessions.SessionControlClose
+	return factorysessions.SessionControlResult{}, nil
 }
 
 func TestSubagentRunsPackagedFactoryWithDefaultsAndReturnsText(t *testing.T) {
@@ -931,14 +933,35 @@ func TestSubagentRunsPackagedFactoryWithDefaultsAndReturnsText(t *testing.T) {
 	if response.Result.Text != "subagent answer" || response.Result.SessionID != "session-1" {
 		t.Fatalf("Subagent result = %#v", response.Result)
 	}
+	if target.start.Mode != factorysessions.SessionOperationModeLive || !target.start.ActivationOnly {
+		t.Fatalf("start mode = %q activationOnly = %t", target.start.Mode, target.start.ActivationOnly)
+	}
+	if target.start.Correlation.RequestID != "request-1" {
+		t.Fatalf("start correlation = %#v", target.start.Correlation)
+	}
+	if target.start.Definition.FactoryID != factorydefinitions.PackagedSubagentFactoryName {
+		t.Fatalf("start definition = %#v", target.start.Definition)
+	}
 	if target.start.Source.Kind != factoryruntime.WorkflowSourceKindFactoryID || target.start.Source.FactoryID != factorydefinitions.PackagedSubagentFactoryName {
 		t.Fatalf("start source = %#v", target.start.Source)
 	}
 	if target.start.Args["workingRoot"] != "C:/project" {
 		t.Fatalf("workingRoot = %#v", target.start.Args)
 	}
-	if got := *target.invoke.Args; len(got) != 2 || got["input"] != "Summarize this" || got["workingRoot"] != "C:/project" {
+	if target.start.FolderPath != "C:/project" {
+		t.Fatalf("folderPath = %q", target.start.FolderPath)
+	}
+	if target.start.RuntimeSelection == nil || target.start.RuntimeSelection.ExecutionBaseDir != "C:/project" || target.start.RuntimeSelection.Mode != factorysessions.SessionRuntimeModeService {
+		t.Fatalf("runtime selection = %#v", target.start.RuntimeSelection)
+	}
+	if target.invoke.SessionID != "session-1" {
+		t.Fatalf("invoke session = %q", target.invoke.SessionID)
+	}
+	if got := target.invoke.Args; len(got) != 2 || got["input"] != "Summarize this" || got["workingRoot"] != "C:/project" {
 		t.Fatalf("default invocation args = %#v", got)
+	}
+	if target.control.Operation != factorysessions.SessionControlClose || target.control.SessionID != "session-1" {
+		t.Fatalf("control = %#v", target.control)
 	}
 	if !target.started || !target.closed {
 		t.Fatalf("lifecycle start=%t close=%t", target.started, target.closed)
@@ -956,7 +979,7 @@ func TestSubagentUsesRequestedWorkingRoot(t *testing.T) {
 	if got := target.start.Args["workingRoot"]; got != "selected-root" {
 		t.Fatalf("workingRoot = %#v, want selected-root", got)
 	}
-	if got := (*target.invoke.Args)["workingRoot"]; got != "selected-root" {
+	if got := target.invoke.Args["workingRoot"]; got != "selected-root" {
 		t.Fatalf("invocation workingRoot = %#v, want selected-root", got)
 	}
 }
@@ -969,7 +992,7 @@ func TestSubagentForwardsModelOverridesAndCleansUpOnInvocationFailure(t *testing
 	if response.Error == nil || response.Result != nil {
 		t.Fatalf("Subagent response = %#v", response)
 	}
-	args := *target.invoke.Args
+	args := target.invoke.Args
 	if args["workerProvider"] != "opencode" || args["workerModel"] != "local-model" || args["workerReasoningEffort"] != "high" {
 		t.Fatalf("override args = %#v", args)
 	}

@@ -48,19 +48,37 @@ func TestFSCP02DetachedCanonicalProcessBoundary(t *testing.T) {
 		t.Fatalf("factory sessions capability type = %T, want factorysessions.Service", capability.FactorySessions())
 	}
 	assertDetachedLiveBoundary(t, detached, factoryDir)
-	assertProcessComposedDurableOwner(t, process.ExecutionRuntimeOpening(), factoryDir, home)
+	assertProcessComposedDurableOwner(t, detached, factoryDir, home)
 }
 
 func assertDetachedLiveBoundary(t *testing.T, detached factorysessions.Service, factoryDir string) {
 	t.Helper()
-	_, err := detached.Start(t.Context(), factorysessions.SessionStartRequest{
+	started, err := detached.Start(t.Context(), factorysessions.SessionStartRequest{
 		Mode:       factorysessions.SessionOperationModeLive,
 		FolderPath: factoryDir,
 	})
-	if err == nil || err.Error() != "Factory Sessions gateway is required" {
-		t.Fatalf("detached canonical Start(live) error = %v, want excluded assembly boundary", err)
+	if err != nil || started.SessionID == "" || started.Mode != factorysessions.SessionOperationModeLive {
+		t.Fatalf("canonical Start(live) = %#v, error = %v, want live session", started, err)
 	}
-	t.Logf("FSCP-02 F1/F2/F3/F4/F5/F6/F7/F8/F9/F10/F11/F12/F14 INCONCLUSIVE: root-built detached live start reached excluded assembly boundary: %v", err)
+	got, err := detached.Get(t.Context(), factorysessions.SessionGetRequest{SessionID: started.SessionID, Mode: factorysessions.SessionOperationModeLive})
+	if err != nil || got.Session.SessionID != started.SessionID {
+		t.Fatalf("canonical Get(live) = %#v, error = %v", got, err)
+	}
+	listed, err := detached.List(t.Context(), factorysessions.SessionListRequest{Mode: factorysessions.SessionOperationModeLive})
+	if err != nil {
+		t.Fatalf("canonical List(live) error = %v", err)
+	}
+	found := false
+	for _, session := range listed.Sessions {
+		found = found || session.SessionID == started.SessionID
+	}
+	if !found {
+		t.Fatalf("canonical List(live) omitted %q: %#v", started.SessionID, listed.Sessions)
+	}
+	closed, err := detached.Control(t.Context(), factorysessions.SessionControlRequest{SessionID: started.SessionID, Mode: factorysessions.SessionOperationModeLive, Operation: factorysessions.SessionControlClose})
+	if err != nil || !closed.Closed {
+		t.Fatalf("canonical Control(CLOSE) = %#v, error = %v", closed, err)
+	}
 
 	_, err = detached.Start(t.Context(), factorysessions.SessionStartRequest{Mode: factorysessions.SessionOperationMode("invalid")})
 	var requestErr *factorysessions.DetachedRequestError
@@ -72,54 +90,32 @@ func assertDetachedLiveBoundary(t *testing.T, detached factorysessions.Service, 
 	if !errors.As(err, &requestErr) || requestErr.Field != "sessionId" {
 		t.Fatalf("detached canonical invalid Get() error = %v, want sessionId-scoped DetachedRequestError", err)
 	}
-	t.Log("FSCP-02 F13 PASS: detached invalid requests returned canonical field-scoped errors before the excluded live gateway")
-
-	t.Log("FSCP-02 durable detached calls remain INCONCLUSIVE at the excluded late-bound assembly boundary")
+	t.Log("FSCP-02 live canonical Start/Get/List/Close and field validation PASS")
 }
 
 func assertProcessComposedDurableOwner(
 	t *testing.T,
-	openingCapability executionRuntimeOpeningCapability,
+	canonical factorysessions.Service,
 	factoryDir, home string,
 ) {
 	t.Helper()
-	if openingCapability == nil {
-		t.Fatal("root process returned no execution runtime opening capability")
-	}
-	opening, ok := openingCapability.ExecutionRuntimeOpening().(factorysessions.ExecutionRuntimeOpeningFunc)
-	if !ok || opening == nil {
-		t.Fatalf("execution runtime opening type = %T, want factorysessions.ExecutionRuntimeOpeningFunc", openingCapability.ExecutionRuntimeOpening())
-	}
-	opened, err := opening(t.Context(), factorysessions.ExecutionRuntimeOpeningRequest{
-		ProjectRoot:       factoryDir,
-		SystemConfigHome:  home,
-		FactorySessionID:  "fscp02-owner-probe",
-		PersistencePolicy: factorysessions.PersistencePolicyDisabled,
-	})
-	if err != nil {
-		t.Fatalf("process execution runtime opening error = %v", err)
-	}
-	if opened.Execution == nil {
-		t.Fatal("process execution runtime opening returned no durable owner")
-	}
-	if opened.Close != nil {
-		t.Cleanup(func() {
-			if err := opened.Close(); err != nil {
-				t.Errorf("close process execution runtime: %v", err)
-			}
-		})
-	}
-
-	canonical, ok := opened.Execution.(canonicalSessionsOperations)
-	if !ok {
-		t.Fatalf("process-composed execution type = %T, want canonical Sessions operations", opened.Execution)
+	if canonical == nil {
+		t.Fatal("root process returned no factory sessions Service")
 	}
 
 	ownerProbeID := "fscp02-owner-missing-session"
 	if _, err := canonical.Start(t.Context(), factorysessions.SessionStartRequest{
 		Mode:        factorysessions.SessionOperationModeDurable,
+		FolderPath:  factoryDir,
+		Persistence: factorysessions.PersistencePolicyDisabled,
 		Correlation: factorysessions.SessionOperationCorrelation{RequestID: "fscp02-owner-start"},
 		Definition:  factorysessions.SessionDefinitionSelection{FactoryID: "fscp02-missing-factory"},
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+			SystemConfigHome: home,
+			ExecutionBaseDir: factoryDir,
+			LogPolicy:        factorysessions.SessionArtifactPolicyDisabled,
+			MetricsPolicy:    factorysessions.SessionArtifactPolicyDisabled,
+		},
 	}); err == nil {
 		t.Fatal("canonical durable Start() unexpectedly succeeded for a missing factory")
 	}
@@ -169,20 +165,6 @@ func assertProcessComposedDurableOwner(
 		t.Fatalf("canonical durable SubscribeResponses() error = %v, want ErrDurableSessionNotFound", err)
 	}
 	t.Log("FSCP-02 durable canonical wrapper methods executed through the process-composed runtime owner")
-}
-
-type canonicalSessionsOperations interface {
-	Start(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error)
-	List(context.Context, factorysessions.SessionListRequest) (factorysessions.SessionListResult, error)
-	Get(context.Context, factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error)
-	Control(context.Context, factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error)
-	ReadResult(context.Context, factorysessions.SessionResultReadRequest) (factorysessions.SessionResultReadResult, error)
-	QueryDispatches(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
-	SubscribeResponses(context.Context, factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error)
-}
-
-type executionRuntimeOpeningCapability interface {
-	ExecutionRuntimeOpening() any
 }
 
 func isolatedEnvironment(home string) []string {

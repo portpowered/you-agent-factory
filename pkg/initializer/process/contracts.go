@@ -147,13 +147,6 @@ type RuntimeMetricsQueryCapability interface {
 	RuntimeMetricsQuery() any
 }
 
-// ExecutionRuntimeOpeningCapability is the neutral process handoff for the
-// canonical Factory Sessions durable-execution opening. The initializer keeps
-// the capability opaque; pkg/root reifies its public service-owned contract.
-type ExecutionRuntimeOpeningCapability interface {
-	ExecutionRuntimeOpening() any
-}
-
 // RuntimeCostsQueryCapability is the neutral process handoff for the
 // stateless Costs valuation operation. The initializer retains the selected
 // capability without importing either Operator Settings or Factory

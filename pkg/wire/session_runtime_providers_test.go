@@ -285,7 +285,7 @@ func TestProvideApplicationProcessLifecycle_ComposesProvidersAndFactoryTargetClo
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
 
-	var opening factorysessionwire.InvocationRuntimeOpening = &factorysessionwire.RuntimeOpening{}
+	var opening factorysessionwire.InvocationRuntimeOpening = &factorysessionwire.Root{}
 	factoryTarget, err := factorysessionwire.NewOnDemandFactoryTargetService(
 		opening,
 		func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
@@ -390,7 +390,7 @@ func TestProcessCloseContinuesThroughEveryLifecycleOwnerAfterFailure(t *testing.
 			return targetCloseErr
 		},
 	}}
-	process, err := initializerapplication.NewProcess(nil, nil, wireTestProviderRegistry{}, lifecycle, nil, nil, nil, nil, nil)
+	process, err := initializerapplication.NewProcess(nil, nil, wireTestProviderRegistry{}, lifecycle, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}

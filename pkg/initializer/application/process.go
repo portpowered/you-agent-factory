@@ -35,7 +35,6 @@ type Process struct {
 	workerReader    processcontract.WorkerRecordingReader
 	factorySessions processcontract.FactorySessionsCapability
 	runtimeMetrics  processcontract.RuntimeMetricsQueryCapability
-	executionOpen   processcontract.ExecutionRuntimeOpeningCapability
 	runtimeCosts    processcontract.RuntimeCostsQueryCapability
 }
 
@@ -64,14 +63,13 @@ func NewProcess(
 	workerReader processcontract.WorkerRecordingReader,
 	factorySessions processcontract.FactorySessionsCapability,
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
-	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 ) (*Process, error) {
-	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, factorySessions, runtimeMetrics, executionOpen, nil)
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, factorySessions, runtimeMetrics, nil)
 }
 
-// NewProcessWithRuntimeCostsAndExecution constructs the canonical process
-// with both the Costs query and durable Factory Session opening capabilities.
-func NewProcessWithRuntimeCostsAndExecution(
+// NewProcessWithRuntimeCosts constructs the canonical process
+// with the Costs query capability.
+func NewProcessWithRuntimeCosts(
 	commandFactory processcontract.CommandFactory,
 	initializer processcontract.Initializer,
 	providers ProviderRegistry,
@@ -80,10 +78,9 @@ func NewProcessWithRuntimeCostsAndExecution(
 	workerReader processcontract.WorkerRecordingReader,
 	factorySessions processcontract.FactorySessionsCapability,
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
-	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 	runtimeCosts processcontract.RuntimeCostsQueryCapability,
 ) (*Process, error) {
-	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, factorySessions, runtimeMetrics, executionOpen, runtimeCosts)
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, factorySessions, runtimeMetrics, runtimeCosts)
 }
 
 func newProcess(
@@ -95,7 +92,6 @@ func newProcess(
 	workerReader processcontract.WorkerRecordingReader,
 	factorySessions processcontract.FactorySessionsCapability,
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
-	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 	runtimeCosts processcontract.RuntimeCostsQueryCapability,
 ) (*Process, error) {
 	if providers == nil {
@@ -113,7 +109,6 @@ func newProcess(
 		workerReader:    workerReader,
 		factorySessions: factorySessions,
 		runtimeMetrics:  runtimeMetrics,
-		executionOpen:   executionOpen,
 		runtimeCosts:    runtimeCosts,
 	}, nil
 }
@@ -174,15 +169,6 @@ func (p *Process) RuntimeMetricsQuery() processcontract.RuntimeMetricsQueryCapab
 		return nil
 	}
 	return p.runtimeMetrics
-}
-
-// ExecutionRuntimeOpening returns the canonical Factory Sessions durable
-// execution opening capability composed for this process.
-func (p *Process) ExecutionRuntimeOpening() processcontract.ExecutionRuntimeOpeningCapability {
-	if p == nil {
-		return nil
-	}
-	return p.executionOpen
 }
 
 // RuntimeCostsQuery returns the opaque stateless Costs capability composed for
