@@ -55,7 +55,7 @@ catalog is data-backed at
 | `kimi-acp` | `kimi acp` | |
 | `kiro` | `kiro-cli-chat acp` | |
 | `mux-acp` | `mux acp` | |
-| `opencode` | `npx -y opencode-ai acp` | |
+| `opencode` | `opencode acp` | |
 | `pool-acp` | `pool acp` | |
 | `qoder-acp` | `qodercli --acp` | |
 | `qwen-acp` | `qwen --acp` | |

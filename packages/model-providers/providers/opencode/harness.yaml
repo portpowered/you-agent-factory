@@ -2,10 +2,8 @@ implementation:
   kind: acp_agent
   profile: opencode-acp
 launch:
-  posture: package_runner
+  posture: installed_executable
   transport: stdio
-  command: npx
+  command: opencode
   arguments:
-    - -y
-    - opencode-ai
     - acp

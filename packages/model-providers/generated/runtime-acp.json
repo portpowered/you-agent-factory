@@ -182,14 +182,12 @@
     {
       "name": "opencode",
       "transport": "stdio",
-      "executable": "npx",
-      "command": "npx -y opencode-ai acp",
+      "executable": "opencode",
+      "command": "opencode acp",
       "arguments": [
-        "-y",
-        "opencode-ai",
         "acp"
       ],
-      "posture": "package_runner",
+      "posture": "installed_executable",
       "implementation": {
         "kind": "acp_agent",
         "profile": "opencode-acp"

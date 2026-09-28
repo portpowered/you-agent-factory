@@ -196,7 +196,7 @@ a broad, data-backed stdio catalog. Representative entries are:
 | `cursor` | `cursor-agent acp` |
 | `gemini` | `gemini --acp` |
 | `kiro` | `kiro-cli-chat acp` |
-| `opencode` | `npx -y opencode-ai acp` |
+| `opencode` | `opencode acp` |
 | `pi` | `npx pi-acp` |
 
 The canonical built-in IDs `cursor`, `gemini`, `kiro`, `opencode`, and `pi`

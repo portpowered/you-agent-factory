@@ -31,7 +31,7 @@ func TestPackagedACPCatalogIsExactAndDetached(t *testing.T) {
 		{name: "kiro", transport: "stdio", command: "kiro-cli-chat acp", profile: "kiro-acp"},
 		{name: "mux-acp", transport: "stdio", command: "mux acp"},
 		{name: "openclaw-acp", transport: "stdio", command: "openclaw acp"},
-		{name: "opencode", transport: "stdio", command: "npx -y opencode-ai acp", profile: "opencode-acp"},
+		{name: "opencode", transport: "stdio", command: "opencode acp", profile: "opencode-acp"},
 		{name: "pi", transport: "stdio", command: "npx pi-acp", profile: "pi-acp"},
 		{name: "pool-acp", transport: "stdio", command: "pool acp"},
 		{name: "qoder-acp", transport: "stdio", command: "qodercli --acp"},
@@ -71,7 +71,7 @@ func TestPackagedACPCatalogIsExactAndDetached(t *testing.T) {
 
 func wantPosture(name string) string {
 	switch name {
-	case "fast-agent-acp", "kilocode-acp", "opencode", "pi":
+	case "fast-agent-acp", "kilocode-acp", "pi":
 		return "package_runner"
 	default:
 		return "installed_executable"
