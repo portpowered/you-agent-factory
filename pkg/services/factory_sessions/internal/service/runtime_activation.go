@@ -25,17 +25,25 @@ func (r *Root) activateRuntime(
 	if err := ctx.Err(); err != nil {
 		return runtimeProducts{}, err
 	}
-	openingRequest, err := runtimeOpeningRequestFromActivation(request)
+	definition, err := definitionRequestFromActivation(request)
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	canonicalSessionIDProvided := strings.TrimSpace(openingRequest.FactorySession.CanonicalSessionID) != ""
-	if err := ensureDefaultCanonicalSessionID(&openingRequest.FactorySession, openingRequest.Recordings.ReplayPath, r.canonicalSessionIDGenerator()); err != nil {
+	session := sessionRequestFromActivation(request)
+	worker := workerRequestFromActivation(request.Inputs.Workers)
+	recording := recordingsRuntimeOpeningRequest(request)
+	defaults := operatorsettings.ResolvedDefaults{
+		WorkerModelProvider: request.Inputs.OperatorDefaults.WorkerModelProvider,
+		WorkerModel:         request.Inputs.OperatorDefaults.WorkerModel,
+		ConfigPath:          request.Inputs.OperatorDefaults.ConfigPath,
+	}
+	canonicalSessionIDProvided := strings.TrimSpace(session.CanonicalSessionID) != ""
+	if err := ensureDefaultCanonicalSessionID(&session, recording.ReplayPath, r.canonicalSessionIDGenerator()); err != nil {
 		return runtimeProducts{}, err
 	}
 	canonicalSessionIDGenerated := !canonicalSessionIDProvided &&
-		strings.TrimSpace(openingRequest.FactorySession.CanonicalSessionID) != ""
-	openingRequest.FactorySession.CanonicalSessionIDGenerated = canonicalSessionIDGenerated
+		strings.TrimSpace(session.CanonicalSessionID) != ""
+	session.CanonicalSessionIDGenerated = canonicalSessionIDGenerated
 	// Runtime Root validates the caller context before it invokes this
 	// activation operation. A generated canonical identity is allocated at the
 	// session-product boundary for compatibility with the historical session-ID
@@ -47,7 +55,7 @@ func (r *Root) activateRuntime(
 	if canonicalSessionIDGenerated && ctx.Err() != nil {
 		openingContext = context.WithoutCancel(ctx)
 	}
-	products, err := r.openRuntimeWithSnapshot(openingContext, openingRequest, r.baseLogger, &request.Snapshot)
+	products, err := r.openRuntimeWithOptions(openingContext, definition, request.Runtime, &session, worker, recording, request.Inputs.ModelCacheDirectory, defaults, r.baseLogger, &request.Snapshot, nil)
 	if err != nil {
 		return runtimeProducts{}, err
 	}
@@ -91,9 +99,7 @@ func runtimeEngineService(products runtimeProducts) factoryruntime.Service {
 	return products.engine
 }
 
-func runtimeOpeningRequestFromActivation(
-	request factoryruntime.RuntimeActivationRequest,
-) (*factorysessions.RuntimeOpeningRequest, error) {
+func definitionRequestFromActivation(request factoryruntime.RuntimeActivationRequest) (factorydefinitions.RuntimeOpeningRequest, error) {
 	definitionDirectory := strings.TrimSpace(request.Inputs.Definition.Directory)
 	if definitionDirectory == "" {
 		definitionDirectory = request.Snapshot.FactoryDir
@@ -103,53 +109,43 @@ func runtimeOpeningRequestFromActivation(
 		executionBaseDir = request.Snapshot.RuntimeBaseDir
 	}
 	if definitionDirectory == "" {
-		return nil, fmt.Errorf("runtime activation inputs: Factory Definition directory is required")
+		return factorydefinitions.RuntimeOpeningRequest{}, fmt.Errorf("runtime activation inputs: Factory Definition directory is required")
 	}
+	return factorydefinitionsRuntimeOpeningRequest(definitionDirectory, request.Inputs.Definition.SourcePath, executionBaseDir, request.Snapshot.Invocation.Arguments), nil
+}
 
-	return &factorysessions.RuntimeOpeningRequest{
-		FactoryDefinition: factorydefinitionsRuntimeOpeningRequest(
-			definitionDirectory,
-			request.Inputs.Definition.SourcePath,
-			executionBaseDir,
-			request.Snapshot.Invocation.Arguments,
-		),
-		FactoryRuntime: request.Runtime,
-		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-			FactorySessionID:            request.FactorySessionID,
-			CanonicalSessionID:          request.Inputs.Session.CanonicalSessionID,
-			CanonicalSessionIDGenerated: request.Inputs.Session.CanonicalSessionIDGenerated,
-			PersistencePolicy:           factorysessions.PersistencePolicy(request.Inputs.Session.PersistencePolicy),
-			BackendScopeID:              request.Inputs.Session.BackendScopeID,
-			SystemConfigHome:            request.Inputs.Session.SystemConfigHome,
-			SystemConfigPath:            request.Inputs.Session.SystemConfigPath,
-			WorkFile:                    request.Inputs.Session.WorkFile,
-			Host: factorysessions.RuntimeHostRequest{
-				Directory:   request.Inputs.Session.Host.Directory,
-				RuntimeMode: request.Inputs.Session.Host.RuntimeMode,
-				WorkFile:    request.Inputs.Session.Host.WorkFile,
-				MockWorkers: request.Inputs.Session.Host.MockWorkers,
-				Host:        request.Inputs.Session.Host.Host,
-				Port:        request.Inputs.Session.Host.Port,
-				AutoPort:    request.Inputs.Session.Host.AutoPort,
-				Pprof:       request.Inputs.Session.Host.Pprof,
-			},
+func sessionRequestFromActivation(request factoryruntime.RuntimeActivationRequest) factorysessions.SessionRuntimeOpeningRequest {
+	return factorysessions.SessionRuntimeOpeningRequest{
+		FactorySessionID:            request.FactorySessionID,
+		CanonicalSessionID:          request.Inputs.Session.CanonicalSessionID,
+		CanonicalSessionIDGenerated: request.Inputs.Session.CanonicalSessionIDGenerated,
+		PersistencePolicy:           factorysessions.PersistencePolicy(request.Inputs.Session.PersistencePolicy),
+		BackendScopeID:              request.Inputs.Session.BackendScopeID,
+		SystemConfigHome:            request.Inputs.Session.SystemConfigHome,
+		SystemConfigPath:            request.Inputs.Session.SystemConfigPath,
+		WorkFile:                    request.Inputs.Session.WorkFile,
+		Host: factorysessions.RuntimeHostRequest{
+			Directory:   request.Inputs.Session.Host.Directory,
+			RuntimeMode: request.Inputs.Session.Host.RuntimeMode,
+			WorkFile:    request.Inputs.Session.Host.WorkFile,
+			MockWorkers: request.Inputs.Session.Host.MockWorkers,
+			Host:        request.Inputs.Session.Host.Host,
+			Port:        request.Inputs.Session.Host.Port,
+			AutoPort:    request.Inputs.Session.Host.AutoPort,
+			Pprof:       request.Inputs.Session.Host.Pprof,
 		},
-		Workers: workers.RuntimeOpeningRequest{
-			RunnerID:                          request.Inputs.Workers.RunnerID,
-			Worktree:                          request.Inputs.Workers.Worktree,
-			WorkerReasoningEffort:             request.Inputs.Workers.WorkerReasoningEffort,
-			MockWorkers:                       activationMockWorkers(request.Inputs.Workers.MockWorkers),
-			InvocationSkipPermissionsOverride: request.Inputs.Workers.InvocationSkipPermissionsOverride,
-			SkipBuiltInPrerequisiteValidation: request.Inputs.Workers.SkipBuiltInPrerequisiteValidation,
-		},
-		Recordings:          recordingsRuntimeOpeningRequest(request),
-		ModelCacheDirectory: request.Inputs.ModelCacheDirectory,
-		OperatorDefaults: operatorsettings.ResolvedDefaults{
-			WorkerModelProvider: request.Inputs.OperatorDefaults.WorkerModelProvider,
-			WorkerModel:         request.Inputs.OperatorDefaults.WorkerModel,
-			ConfigPath:          request.Inputs.OperatorDefaults.ConfigPath,
-		},
-	}, nil
+	}
+}
+
+func workerRequestFromActivation(input factoryruntime.RuntimeActivationWorkerInputs) workers.RuntimeOpeningRequest {
+	return workers.RuntimeOpeningRequest{
+		RunnerID:                          input.RunnerID,
+		Worktree:                          input.Worktree,
+		WorkerReasoningEffort:             input.WorkerReasoningEffort,
+		MockWorkers:                       activationMockWorkers(input.MockWorkers),
+		InvocationSkipPermissionsOverride: input.InvocationSkipPermissionsOverride,
+		SkipBuiltInPrerequisiteValidation: input.SkipBuiltInPrerequisiteValidation,
+	}
 }
 
 func factorydefinitionsRuntimeOpeningRequest(

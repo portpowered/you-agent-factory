@@ -516,7 +516,10 @@ func (r *Root) openRuntime(
 	request *factorysessions.RuntimeOpeningRequest,
 	logger *zap.Logger,
 ) (runtimeProducts, error) {
-	return r.openRuntimeWithOptions(ctx, request, logger, nil, nil)
+	if request == nil {
+		return runtimeProducts{}, fmt.Errorf("Factory Session runtime selection is required")
+	}
+	return r.openRuntimeWithOptions(ctx, request.FactoryDefinition, request.FactoryRuntime, &request.FactorySession, request.Workers, request.Recordings, request.ModelCacheDirectory, request.OperatorDefaults, logger, nil, nil)
 }
 
 func (r *Root) openRuntimeWithSnapshot(
@@ -525,7 +528,10 @@ func (r *Root) openRuntimeWithSnapshot(
 	logger *zap.Logger,
 	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
 ) (runtimeProducts, error) {
-	return r.openRuntimeWithOptions(ctx, request, logger, definitionSnapshot, nil)
+	if request == nil {
+		return runtimeProducts{}, fmt.Errorf("Factory Session runtime selection is required")
+	}
+	return r.openRuntimeWithOptions(ctx, request.FactoryDefinition, request.FactoryRuntime, &request.FactorySession, request.Workers, request.Recordings, request.ModelCacheDirectory, request.OperatorDefaults, logger, definitionSnapshot, nil)
 }
 
 func (r *Root) openRuntimeWithReplayInput(
@@ -534,25 +540,34 @@ func (r *Root) openRuntimeWithReplayInput(
 	logger *zap.Logger,
 	replayInput *recordings.LoadReplayInputResult,
 ) (runtimeProducts, error) {
-	return r.openRuntimeWithOptions(ctx, request, logger, nil, replayInput)
+	if request == nil {
+		return runtimeProducts{}, fmt.Errorf("Factory Session runtime selection is required")
+	}
+	return r.openRuntimeWithOptions(ctx, request.FactoryDefinition, request.FactoryRuntime, &request.FactorySession, request.Workers, request.Recordings, request.ModelCacheDirectory, request.OperatorDefaults, logger, nil, replayInput)
 }
 
 func (r *Root) openRuntimeWithOptions(
 	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
+	definition factorydefinitions.RuntimeOpeningRequest,
+	runtime factoryruntime.RuntimeOpeningRequest,
+	session *factorysessions.SessionRuntimeOpeningRequest,
+	worker workers.RuntimeOpeningRequest,
+	recording recordings.RuntimeOpeningRequest,
+	modelCacheDirectory string,
+	operatorDefaults operatorsettings.ResolvedDefaults,
 	logger *zap.Logger,
 	definitionSnapshot *factorydefinitions.RuntimeSnapshot,
 	replayInput *recordings.LoadReplayInputResult,
 ) (runtimeProducts, error) {
 	return openRuntime(
 		ctx,
-		request.FactoryDefinition,
-		request.FactoryRuntime,
-		&request.FactorySession,
-		request.Workers,
-		request.Recordings,
-		request.ModelCacheDirectory,
-		request.OperatorDefaults,
+		definition,
+		runtime,
+		session,
+		worker,
+		recording,
+		modelCacheDirectory,
+		operatorDefaults,
 		logger,
 		r.clock,
 		r.providerOverride,

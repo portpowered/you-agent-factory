@@ -562,21 +562,19 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 			request.Recordings, request.ModelCacheDirectory, request.OperatorDefaults, &resumeInput,
 		),
 	}
-	opening, err := runtimeOpeningRequestFromActivation(activation)
-	if err != nil {
-		t.Fatalf("runtimeOpeningRequestFromActivation() error = %v", err)
+	recording := recordingsRuntimeOpeningRequest(activation)
+	session := sessionRequestFromActivation(activation)
+	if recording.ResumePath != resumePath {
+		t.Fatalf("Recordings resume path = %q, want %q", recording.ResumePath, resumePath)
 	}
-	if opening.Recordings.ResumePath != resumePath {
-		t.Fatalf("Recordings resume path = %q, want %q", opening.Recordings.ResumePath, resumePath)
+	if recording.RecordPath != request.Recordings.RecordPath {
+		t.Fatalf("Recordings successor path = %q, want %q", recording.RecordPath, request.Recordings.RecordPath)
 	}
-	if opening.Recordings.RecordPath != request.Recordings.RecordPath {
-		t.Fatalf("Recordings successor path = %q, want %q", opening.Recordings.RecordPath, request.Recordings.RecordPath)
+	if session.CanonicalSessionID != request.FactorySession.CanonicalSessionID {
+		t.Fatalf("Factory Session canonical ID = %q, want %q", session.CanonicalSessionID, request.FactorySession.CanonicalSessionID)
 	}
-	if opening.FactorySession.CanonicalSessionID != request.FactorySession.CanonicalSessionID {
-		t.Fatalf("Factory Session canonical ID = %q, want %q", opening.FactorySession.CanonicalSessionID, request.FactorySession.CanonicalSessionID)
-	}
-	if opening.Recordings.ResumeInput != resumeInput {
-		t.Fatalf("Recordings resume input = %#v, want %#v", opening.Recordings.ResumeInput, resumeInput)
+	if recording.ResumeInput != resumeInput {
+		t.Fatalf("Recordings resume input = %#v, want %#v", recording.ResumeInput, resumeInput)
 	}
 }
 
@@ -620,11 +618,8 @@ func TestActivationRequestDetachesMockWorkerInputs(t *testing.T) {
 	if got.GateConfig == nil || got.GateConfig.Timeout != "15s" {
 		t.Fatalf("activation gate inputs retained caller mutation: %#v", got.GateConfig)
 	}
-	opening, err := runtimeOpeningRequestFromActivation(activation)
-	if err != nil {
-		t.Fatalf("runtimeOpeningRequestFromActivation() error = %v", err)
-	}
-	gate := opening.Workers.MockWorkers.MockWorkers[0].GateConfig
+	worker := workerRequestFromActivation(activation.Inputs.Workers)
+	gate := worker.MockWorkers.MockWorkers[0].GateConfig
 	if gate == nil || gate.ArrivedFile != "/tmp/mock-arrived" || gate.ReleaseFile != "/tmp/mock-release" || gate.Timeout != "15s" {
 		t.Fatalf("opening gate config = %#v, want detached activation values", gate)
 	}
