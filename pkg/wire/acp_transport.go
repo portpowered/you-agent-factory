@@ -16,11 +16,9 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	acpwire "github.com/portpowered/infinite-you/pkg/transports/acp/wire"
-	"go.uber.org/zap"
 )
 
 // acpServerResolveHomeDir is the ACP stdio server's own home-directory
@@ -98,42 +96,6 @@ func resolveACPFactoryTargetSelection(
 	}, nil
 }
 
-// provideACPServerFactoryTargetRuntimeResolver constructs the closure that
-// turns one ACP-selected Factory target identity (the same "factory:<name>"
-// reference session/set_config_option's changeTarget already validates and
-// binds) and the requesting Chat Session's exact editor working root into
-// the concrete Runtime Opening request a dynamically-selected Factory
-// Session activation needs -- the same named-Factory cross-root resolution
-// and operator defaults resolution the rest of this graph already composes,
-// not a second independently constructed lookup.
-func provideACPServerFactoryTargetRuntimeResolver(
-	resolveHomeDir acpServerResolveHomeDir,
-	namedFactoryCatalog factorydefinitions.NamedFactoryCatalog,
-	resolveOperatorDefaults operatorsettings.DefaultsResolver,
-	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
-) factorysessionwire.FactoryTargetRuntimeResolver {
-	return func(ctx context.Context, factoryTargetID, workingRoot string) (factorysessions.RuntimeOpeningRequest, error) {
-		sel, err := resolveACPFactoryTargetSelection(ctx, factoryTargetID, workingRoot, resolveHomeDir, namedFactoryCatalog, resolveOperatorDefaults, artifactRoots)
-		if err != nil {
-			return factorysessions.RuntimeOpeningRequest{}, err
-		}
-		return factorysessions.RuntimeOpeningRequest{
-			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
-				Directory: sel.factoryDir,
-			},
-			FactoryRuntime: factoryruntime.RuntimeOpeningRequest{
-				Mode:             factorydefinitions.RuntimeModeService,
-				LogDirectory:     sel.artifacts.Logs,
-				MetricsDirectory: sel.artifacts.Metrics,
-			},
-			FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-				SystemConfigHome: sel.homeDir,
-			},
-			OperatorDefaults: sel.defaults,
-		}, nil
-	}
-}
-
 // provideACPServerFactorySessionStartResolver constructs the canonical
 // Factory Session Start resolver the ACP transport consumes.
 func provideACPServerFactorySessionStartResolver(
@@ -197,57 +159,6 @@ func acpOperatorDefaultsEnvironment() operatorsettings.Defaults {
 		WorkerModelProvider: strings.TrimSpace(os.Getenv(operatorsettings.EnvDefaultWorkerModelProvider)),
 		WorkerModel:         strings.TrimSpace(os.Getenv(operatorsettings.EnvDefaultWorkerModel)),
 	}
-}
-
-// provideACPServerFactoryTarget constructs Factory Sessions' own on-demand
-// activation the production ACP prompt-delegation consumer starts or invokes
-// a Factory Session through. Unlike the CLI daemon's
-// single fixed-project bootstrap, ACP episodes select their Factory target
-// dynamically per session, so this activates one live runtime per target the
-// first time it is needed (through the same invocation-mode Runtime Opening
-// path the CLI's one-shot named invocation already uses) instead of relying
-// on the process-scoped factorysessions.Service, which stays permanently
-// inert outside the CLI daemon bootstrap. Construction alone performs no
-// I/O and opens no runtime.
-//
-// This returns the concrete *factorysessionwire.OnDemandFactoryTargetService
-// (not the narrower factorysessions.TargetExecutionService capability)
-// precisely so a second consumer -- provideApplicationProcessLifecycle --
-// can reach its io.Closer-satisfying Close method and compose it into the
-// process's own reachable shutdown path; see
-// provideACPServerFactoryTargetService for the interface-narrowing provider
-// the ACP transport itself consumes. Wire's own provider memoization
-// guarantees both consumers observe this exact same singleton, not two
-// independently constructed activations.
-func provideACPServerFactoryTarget(
-	openRuntime factorysessionwire.InvocationRuntimeOpening,
-	resolveTarget factorysessionwire.FactoryTargetRuntimeResolver,
-	generateSessionID factorysessions.SessionIDGenerator,
-	logger *zap.Logger,
-) (*factorysessionwire.OnDemandFactoryTargetService, error) {
-	return factorysessionwire.NewOnDemandFactoryTargetService(
-		openRuntime,
-		resolveTarget,
-		generateSessionID,
-		logger,
-	)
-}
-
-// provideACPServerFactoryTargetService exposes the on-demand Factory
-// Sessions activation singleton directly as the production ACP
-// prompt-delegation consumer's Factory Sessions-owned
-// factorysessions.TargetExecutionService dependency -- no adapter changes
-// contexts, identifiers, requests, results, or errors. Wire's own provider
-// memoization guarantees this shares the exact same activation singleton
-// provideApplicationProcessLifecycle reaches for shutdown (see
-// provideACPServerFactoryTarget), since both depend on the identical
-// *factorysessionwire.OnDemandFactoryTargetService type, which satisfies
-// factorysessions.TargetExecutionService structurally (see
-// pkg/services/factory_sessions/wire/on_demand_factory_target.go).
-func provideACPServerFactoryTargetService(
-	target *factorysessionwire.OnDemandFactoryTargetService,
-) factorysessions.TargetExecutionService {
-	return target
 }
 
 // provideACPServer constructs the production ACP stdio Server from the same

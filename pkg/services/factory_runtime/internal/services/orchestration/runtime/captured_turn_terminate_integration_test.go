@@ -9,16 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionswire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -145,13 +141,13 @@ func TestRecordedWorkerSessionObservationReprojectsWhenRestoredHistoryGrows(t *t
 	})
 }
 
-// TestTerminateFactorySession_FansOutCapturedChildrenBeforeTargetCleanup
-// exercises the committed Factory Sessions close boundary against the real
+// TestTerminateCapturedTurn_FansOutChildrenBeforeCleanup
+// exercises Factory Runtime control against the real
 // Runtime selector, Worker Sessions service, and Workers cancellation
 // boundary. The controlled dispatches can only finish through the exact
 // boundary Cancel call, so caller-context cancellation and target cleanup
 // cannot hide a missed child control.
-func TestTerminateFactorySession_FansOutCapturedChildrenBeforeTargetCleanup(t *testing.T) {
+func TestTerminateCapturedTurn_FansOutChildrenBeforeCleanup(t *testing.T) {
 	execution := newSynchronousFanOutExecution("dispatch-a", "dispatch-b", "dispatch-replacement")
 	events, err := eventswire.NewService(logging.NoopLogger{})
 	if err != nil {
@@ -162,27 +158,26 @@ func TestTerminateFactorySession_FansOutCapturedChildrenBeforeTargetCleanup(t *t
 		t.Fatalf("New Worker Sessions service: %v", err)
 	}
 	starts, startErrs := startCapturedTurnWorkerSessions(t, workerSessions, execution)
-	target, lifecycle := newCapturedTurnTarget(t, workerSessions, execution)
-
-	started, err := target.StartAsync(context.Background(), factorysessions.StartRequest{})
-	if err != nil {
-		t.Fatalf("StartAsync: %v", err)
-	}
+	runtimeService, cleanup := newCapturedTurnRuntime(t, workerSessions, execution)
 
 	canceledControlContext, cancelControlContext := context.WithCancel(context.Background())
 	cancelControlContext()
-	err = target.TerminateFactorySession(canceledControlContext, started.SessionID, factorysessions.ControlRequest{
-		RequestID: "control-close-captured",
-		Reason:    "committed ACP close",
-		TurnID:    "turn-captured",
+	_, err = runtimeService.ControlTerminate(context.WithoutCancel(canceledControlContext), factoryruntime.TerminateRequest{
+		ControlID:           "control-close-captured",
+		Reason:              "committed ACP close",
+		TurnID:              "turn-captured",
+		WorkerSessionAction: factoryruntime.WorkerSessionControlActionTerminate,
 	})
 	if err != nil {
-		t.Fatalf("TerminateFactorySession: %v", err)
+		t.Fatalf("ControlTerminate: %v", err)
 	}
-	if lifecycle.stopCallsSnapshot() != 1 {
-		t.Fatalf("target cleanup calls = %d, want exactly one after captured child controls", lifecycle.stopCallsSnapshot())
+	if err := cleanup.verifyAfterControl(); err != nil {
+		t.Fatalf("verify cleanup after control: %v", err)
 	}
-	if got := lifecycle.cleanupCallsSnapshot(); len(got) != 2 {
+	if cleanup.stopCallsSnapshot() != 1 {
+		t.Fatalf("target cleanup calls = %d, want exactly one after captured child controls", cleanup.stopCallsSnapshot())
+	}
+	if got := cleanup.cleanupCallsSnapshot(); len(got) != 2 {
 		t.Fatalf("boundary cancellations before target cleanup = %#v, want both captured children", got)
 	}
 	if execution.observedCanceledControlContext() {
@@ -434,11 +429,11 @@ func startCapturedTurnWorkerSessions(
 	return starts, startErrs
 }
 
-func newCapturedTurnTarget(
+func newCapturedTurnRuntime(
 	t *testing.T,
 	workerSessions workersessions.Service,
 	execution *synchronousFanOutExecution,
-) (*factorysessionswire.OnDemandFactoryTargetService, *capturedTurnTargetLifecycle) {
+) (factoryruntime.Service, *capturedTurnCleanupProbe) {
 	t.Helper()
 	runtimeInstance, ledger, err := newTestFactoryWithScriptedLedger(
 		withNet(buildMoveControlNet()), withInlineDispatch(), withWorkerSessions(workerSessions),
@@ -455,21 +450,11 @@ func newCapturedTurnTarget(
 		workerSessionAssociationEvent(t, 10, "association-a", "turn-captured", "worker-a"),
 		workerSessionAssociationEvent(t, 30, "association-replacement", "turn-replacement", "worker-replacement"),
 	)
-	lifecycle := &capturedTurnTargetLifecycle{
-		runtime: runtimeService, cancellationCalls: execution.cancelCalls,
+	cleanup := &capturedTurnCleanupProbe{
+		cancellationCalls: execution.cancelCalls,
 		expectedDispatches: []string{"dispatch-a", "dispatch-b"},
 	}
-	target, err := factorysessionswire.NewOnDemandFactoryTargetService(
-		capturedTurnTargetOpening{opened: factorysessionswire.OpenedInvocationRuntime{Lifecycle: lifecycle}},
-		func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
-			return factorysessions.RuntimeOpeningRequest{}, nil
-		},
-		func() string { return "target-captured-control" }, zap.NewNop(),
-	)
-	if err != nil {
-		t.Fatalf("New on-demand Factory target: %v", err)
-	}
-	return target, lifecycle
+	return runtimeService, cleanup
 }
 
 func assertCapturedWorkerSessionsTerminated(
@@ -496,19 +481,7 @@ func assertCapturedWorkerSessionsTerminated(
 	}
 }
 
-type capturedTurnTargetOpening struct {
-	opened factorysessionswire.OpenedInvocationRuntime
-}
-
-func (o capturedTurnTargetOpening) OpenInvocationRuntime(
-	context.Context,
-	*factorysessions.RuntimeOpeningRequest,
-) (factorysessionswire.OpenedInvocationRuntime, error) {
-	return o.opened, nil
-}
-
-type capturedTurnTargetLifecycle struct {
-	runtime            factoryruntime.Service
+type capturedTurnCleanupProbe struct {
 	cancellationCalls  <-chan workers.WorkstationDispatchCancelRequest
 	expectedDispatches []string
 
@@ -517,19 +490,7 @@ type capturedTurnTargetLifecycle struct {
 	cleanupCalls []workers.WorkstationDispatchCancelRequest
 }
 
-func (*capturedTurnTargetLifecycle) StartLifecycle(context.Context, context.Context) error {
-	return nil
-}
-
-func (*capturedTurnTargetLifecycle) StartWorkerLifecycle(context.Context) (factorysessions.RuntimeStop, error) {
-	return nil, nil
-}
-
-func (*capturedTurnTargetLifecycle) CompleteStartup(context.Context) error { return nil }
-
-func (*capturedTurnTargetLifecycle) WaitForRuntime(context.Context) error { return nil }
-
-func (l *capturedTurnTargetLifecycle) StopLifecycle(context.Context) error {
+func (l *capturedTurnCleanupProbe) verifyAfterControl() error {
 	observed := make(map[string]struct{}, len(l.expectedDispatches))
 	for range l.expectedDispatches {
 		select {
@@ -554,30 +515,18 @@ func (l *capturedTurnTargetLifecycle) StopLifecycle(context.Context) error {
 	return nil
 }
 
-func (*capturedTurnTargetLifecycle) FailStartup(err error) error { return err }
-
-func (l *capturedTurnTargetLifecycle) CurrentRuntimeBundle() factoryruntime.RuntimeRecord {
-	return capturedTurnTargetHostedInstance{runtime: l.runtime}
-}
-
-func (l *capturedTurnTargetLifecycle) stopCallsSnapshot() int {
+func (l *capturedTurnCleanupProbe) stopCallsSnapshot() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.stopCalls
 }
 
-func (l *capturedTurnTargetLifecycle) cleanupCallsSnapshot() []workers.WorkstationDispatchCancelRequest {
+func (l *capturedTurnCleanupProbe) cleanupCallsSnapshot() []workers.WorkstationDispatchCancelRequest {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return append([]workers.WorkstationDispatchCancelRequest(nil), l.cleanupCalls...)
 }
 
-type capturedTurnTargetHostedInstance struct {
-	factoryruntime.RuntimeRecord
-	runtime factoryruntime.Service
-}
-
-func (i capturedTurnTargetHostedInstance) RuntimeService() factoryruntime.Service { return i.runtime }
 
 // continuationFanOutExecution is a deterministic Workers boundary for the
 // multi-child resume integration. Initial attempts can finish only through

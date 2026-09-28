@@ -52,67 +52,6 @@ func operatorDefaultsResolverForTest(t *testing.T) operatorsettings.DefaultsReso
 	return provideOperatorDefaultsResolver(service)
 }
 
-// TestProvideACPServerFactoryTargetRuntimeResolver proves the closure
-// provideACPServerFactoryTargetRuntimeResolver returns resolves a valid
-// "factory:<name>" target and the Chat Session's working root into a
-// Runtime Opening request carrying the resolved Factory's directory, fails
-// safely for an already-canceled context and for a home-directory lookup
-// failure, and reports factorydefinitions.ErrNamedFactoryNotFound for a
-// target no installed named Factory resolves -- all without opening any
-// runtime (construction and resolution alone perform no runtime I/O).
-func TestProvideACPServerFactoryTargetRuntimeResolver(t *testing.T) {
-	home := t.TempDir()
-	seedInstalledPackagedFactories(t, home, "@you/review")
-
-	resolveHomeDir := func() (string, error) { return home, nil }
-	resolver := provideACPServerFactoryTargetRuntimeResolver(
-		resolveHomeDir,
-		namedFactoryCatalogForTest(t),
-		operatorDefaultsResolverForTest(t),
-		provideRuntimeArtifactRootResolver(),
-	)
-
-	t.Run("canceled context fails without resolving", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		if _, err := resolver(ctx, "factory:@you/review", "/workspace/project"); err == nil {
-			t.Fatal("resolver(canceled ctx) error = nil, want a cancellation error")
-		}
-	})
-
-	t.Run("home directory lookup failure propagates", func(t *testing.T) {
-		wantErr := errors.New("home dir unavailable")
-		failingResolver := provideACPServerFactoryTargetRuntimeResolver(
-			func() (string, error) { return "", wantErr },
-			namedFactoryCatalogForTest(t),
-			operatorDefaultsResolverForTest(t),
-			provideRuntimeArtifactRootResolver(),
-		)
-		if _, err := failingResolver(context.Background(), "factory:@you/review", "/workspace/project"); !errors.Is(err, wantErr) {
-			t.Fatalf("resolver(homeDir error) error = %v, want %v", err, wantErr)
-		}
-	})
-
-	t.Run("unknown target reports ErrNamedFactoryNotFound", func(t *testing.T) {
-		if _, err := resolver(context.Background(), "factory:@you/does-not-exist", "/workspace/project"); !errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
-			t.Fatalf("resolver(unknown target) error = %v, want %v", err, factorydefinitions.ErrNamedFactoryNotFound)
-		}
-	})
-
-	t.Run("known target resolves a Runtime Opening request", func(t *testing.T) {
-		req, err := resolver(context.Background(), "factory:@you/review", "/workspace/project")
-		if err != nil {
-			t.Fatalf("resolver() error = %v, want a resolved Runtime Opening request", err)
-		}
-		if req.FactoryDefinition.Directory == "" {
-			t.Fatal("resolved FactoryDefinition.Directory is blank, want the installed @you/review Factory directory")
-		}
-		if req.FactorySession.SystemConfigHome != home {
-			t.Fatalf("resolved FactorySession.SystemConfigHome = %q, want %q", req.FactorySession.SystemConfigHome, home)
-		}
-	})
-}
-
 func TestProvideACPServerFactorySessionStartResolver(t *testing.T) {
 	home := t.TempDir()
 	seedInstalledPackagedFactories(t, home, "@you/review")
@@ -152,9 +91,19 @@ func TestProvideACPServerFactorySessionStartResolver(t *testing.T) {
 	if _, err := resolver(context.Background(), "factory:@you/does-not-exist", "/workspace/project", "req-3"); !errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
 		t.Fatalf("resolver(unknown target) error = %v, want ErrNamedFactoryNotFound", err)
 	}
+	wantHomeErr := errors.New("home unavailable")
+	failingHome := provideACPServerFactorySessionStartResolver(
+		func() (string, error) { return "", wantHomeErr },
+		namedFactoryCatalogForTest(t),
+		operatorDefaultsResolverForTest(t),
+		provideRuntimeArtifactRootResolver(),
+	)
+	if _, err := failingHome(context.Background(), "factory:@you/review", "/workspace/project", "req-4"); !errors.Is(err, wantHomeErr) {
+		t.Fatalf("resolver(home error) = %v, want %v", err, wantHomeErr)
+	}
 }
 
-// proves the ACP resolver supplies the operator-default environment layer when
+// proves the ACP Start resolver supplies the operator-default environment layer when
 // resolving a Factory target runtime.
 //
 // The CLI has always supplied this layer, so YOU_DEFAULT_WORKER_MODEL_PROVIDER
@@ -165,11 +114,11 @@ func TestProvideACPServerFactorySessionStartResolver(t *testing.T) {
 // provider of their own, so with no operator default their dispatch is
 // rejected before any provider runs. An ACP client cannot pass `--provider`,
 // so the process environment is the only layer it has.
-func TestProvideACPServerFactoryTargetRuntimeResolverAppliesOperatorDefaultsEnvironment(t *testing.T) {
+func TestProvideACPServerFactorySessionStartResolverAppliesOperatorDefaultsEnvironment(t *testing.T) {
 	home := t.TempDir()
 	seedInstalledPackagedFactories(t, home, "@you/review")
 
-	resolver := provideACPServerFactoryTargetRuntimeResolver(
+	resolver := provideACPServerFactorySessionStartResolver(
 		func() (string, error) { return home, nil },
 		namedFactoryCatalogForTest(t),
 		operatorDefaultsResolverForTest(t),
@@ -180,16 +129,16 @@ func TestProvideACPServerFactoryTargetRuntimeResolverAppliesOperatorDefaultsEnvi
 		t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
 		t.Setenv(operatorsettings.EnvDefaultWorkerModel, "gpt-5")
 
-		req, err := resolver(context.Background(), "factory:@you/review", "/workspace/project")
+		req, err := resolver(context.Background(), "factory:@you/review", "/workspace/project", "req-env-1")
 		if err != nil {
 			t.Fatalf("resolver() error = %v", err)
 		}
-		if req.OperatorDefaults.WorkerModelProvider == "" {
+		if req.RuntimeSelection == nil || req.RuntimeSelection.OperatorDefaults.WorkerModelProvider == "" {
 			t.Fatal("resolved OperatorDefaults.WorkerModelProvider is blank, want the value the environment supplied")
 		}
-		if req.OperatorDefaults.WorkerModel != "gpt-5" {
+		if req.RuntimeSelection.OperatorDefaults.WorkerModel != "gpt-5" {
 			t.Fatalf("resolved OperatorDefaults.WorkerModel = %q, want %q",
-				req.OperatorDefaults.WorkerModel, "gpt-5")
+				req.RuntimeSelection.OperatorDefaults.WorkerModel, "gpt-5")
 		}
 	})
 
@@ -197,14 +146,14 @@ func TestProvideACPServerFactoryTargetRuntimeResolverAppliesOperatorDefaultsEnvi
 		t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "")
 		t.Setenv(operatorsettings.EnvDefaultWorkerModel, "")
 
-		req, err := resolver(context.Background(), "factory:@you/review", "/workspace/project")
+		req, err := resolver(context.Background(), "factory:@you/review", "/workspace/project", "req-env-2")
 		if err != nil {
 			t.Fatalf("resolver() error = %v", err)
 		}
 		// An unset variable must not override the persisted Operator Settings
 		// document with a blank, so this asserts the environment contributes
 		// nothing rather than asserting a particular resolved value.
-		if req.OperatorDefaults.WorkerModel == "gpt-5" {
+		if req.RuntimeSelection == nil || req.RuntimeSelection.OperatorDefaults.WorkerModel == "gpt-5" {
 			t.Fatal("resolved OperatorDefaults.WorkerModel = \"gpt-5\" with no environment set, want the environment layer to contribute nothing")
 		}
 	})

@@ -32,13 +32,8 @@ import (
 // ACP session through the real, singular Chat Sessions and Factory Sessions
 // authorities root.BuildProcess composes, not fakes.
 //
-// Before this story's on-demand Factory Sessions activation
-// (factorysessionwire.OnDemandFactoryTargetService), every session/prompt
-// call that reached Factory dispatch through this exact composition path
-// failed with factorysessions.ErrExecutionServiceNotConfigured, because the
-// process-scoped factorysessions.Service root.BuildProcess constructs stays
-// permanently inert outside the CLI daemon's OpenApplication bootstrap. This
-// test is a regression guard for that gap.
+// This guards canonical Factory Sessions activation and invocation from the
+// process root through the customer-facing ACP transport.
 func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
@@ -196,7 +191,7 @@ const internalErrorCode = -32603
 // already succeeded, exactly the window where a concurrent uninstall could
 // leave a session pointed at a target its own catalog snapshot no longer
 // backs -- the real root.BuildProcess composition, through
-// provideACPServerFactoryTargetRuntimeResolver's
+// provideACPServerFactorySessionStartResolver's
 // factorydefinitions.ErrNamedFactoryNotFound path, returns a bounded
 // internal ACP error instead of a crash or a fabricated success, and leaves
 // no turn stranded: a second prompt on the same session is admitted and

@@ -86,9 +86,8 @@ type ResolvedInvocationInput struct {
 // depend on a nested stream interface for peer import.
 // Peers must depend on the smallest owner-published capability it uses: LiveControlService for
 // live control, DurableExecutionService for durable execution,
-// InvocationService for one-shot invocation, or TargetExecutionService for the
-// established combined target behavior. Service remains the singular aggregate
-// authority for callers that genuinely need a combined surface.
+// InvocationService for one-shot invocation. Service is the singular aggregate
+// authority for callers that need live start, invoke, and control together.
 type Service interface {
 	// Canonical Factory Sessions operation vocabulary.
 	Start(context.Context, SessionStartRequest) (SessionStartResult, error)

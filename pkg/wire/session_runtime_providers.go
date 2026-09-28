@@ -87,11 +87,9 @@ func (c *compositeProcessLifecycle) Close(ctx context.Context) error {
 // provideApplicationProcessLifecycle composes the process-wide shutdown path
 // Process.Close reaches: the singular Factory Sessions root, the Models host
 // supervisor, Providers lifecycle (executable/session teardown), the singular
-// Events root (pkg/wire/events_providers.go), and the on-demand Factory
-// Sessions activation the production ACP prompt-delegation consumer lazily
-// opens runtimes through (see provideACPServerFactoryTarget) -- so every
-// runtime retained by the application has a deterministic close on process
-// shutdown.
+// Events root (pkg/wire/events_providers.go). Factory Sessions owns every
+// activated ACP runtime through its canonical process root, so its Close
+// drains those sessions on process shutdown.
 // The process-scoped direct Worker Sessions pool closes first so an admitted
 // local invocation can publish its terminal observation before shared roots
 // are closed.
@@ -100,7 +98,6 @@ func provideApplicationProcessLifecycle(
 	modelsService models.Service,
 	eventsService events.Service,
 	factorySessions factorysessions.Service,
-	factoryTarget *factorysessionwire.OnDemandFactoryTargetService,
 	localWorkerSessions *localWorkerSessionsBoundary,
 	metricsOwner factoryruntime.RuntimeMetricsOwner,
 ) (initializerapplication.ProcessLifecycle, error) {
@@ -145,12 +142,6 @@ func provideApplicationProcessLifecycle(
 			// required: construction returns an error before this lifecycle is
 			// assembled when that boundary cannot be built.
 			return localWorkerSessions.Close(ctx)
-		},
-		func(context.Context) error {
-			if factoryTarget == nil {
-				return nil
-			}
-			return factoryTarget.Close()
 		},
 		factorySessionsLifecycle.Close,
 		modelsLifecycle.Close,

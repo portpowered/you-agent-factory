@@ -48,7 +48,7 @@ func TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll(t *testing.T) {
 	closeRunServeSmokeServer(t, stdinWrite, serveErr)
 }
 
-func TestRunServe_SubagentProtocolUsesTargetExecutionService(t *testing.T) {
+func TestRunServe_SubagentProtocolUsesFactorySessionsService(t *testing.T) {
 	t.Parallel()
 	target := &subagentProtocolTargetFake{}
 	client, stdinWrite, serveErr := startRunServeSmokeServerWithTarget(t, installSmokeExecutionScript{}, target)
@@ -79,7 +79,7 @@ func TestRunServe_SubagentProtocolUsesTargetExecutionService(t *testing.T) {
 	if target.start.Source.FactoryID != "@you/subagent" || target.start.Source.Kind != factory.WorkflowSourceKindFactoryID {
 		t.Fatalf("target start source = %#v", target.start.Source)
 	}
-	if target.invoke.Args == nil || (*target.invoke.Args)["input"] != "Summarize this" || (*target.invoke.Args)["workingRoot"] != "" || len(*target.invoke.Args) != 2 {
+	if target.invoke.Args == nil || target.invoke.Args["input"] != "Summarize this" || target.invoke.Args["workingRoot"] != "" || len(target.invoke.Args) != 2 {
 		t.Fatalf("target invocation args = %#v, want prompt, empty server root, and model defaults omitted", target.invoke.Args)
 	}
 	closeRunServeSmokeServer(t, stdinWrite, serveErr)
@@ -95,7 +95,7 @@ func startRunServeSmokeServer(
 func startRunServeSmokeServerWithTarget(
 	t *testing.T,
 	service mcpfactorysession.DurableExecution,
-	target factorysessions.TargetExecutionService,
+	target factorysessions.Service,
 ) (*stdioMCPClient, *os.File, <-chan error) {
 	t.Helper()
 	stdinRead, stdinWrite, err := os.Pipe()
@@ -126,7 +126,7 @@ func startRunServeSmokeServerWithTarget(
 func executeGeneratedMCPServe(
 	ctx context.Context,
 	service mcpfactorysession.DurableExecution,
-	target factorysessions.TargetExecutionService,
+	target factorysessions.Service,
 	stdin io.Reader,
 	stdout io.Writer,
 	wantRuntime bool,
@@ -506,29 +506,28 @@ type installSmokeExecutionScript struct {
 }
 
 type subagentProtocolTargetFake struct {
-	factorysessions.TargetExecutionService
+	factorysessions.Service
 	operations []string
-	start      factorysessions.StartRequest
-	invoke     factorysessions.InvocationRequest
+	start      factorysessions.SessionStartRequest
+	invoke     factorysessions.SessionInvokeRequest
 }
 
-func (fake *subagentProtocolTargetFake) StartAsync(
+func (fake *subagentProtocolTargetFake) Start(
 	_ context.Context,
-	request factorysessions.StartRequest,
-) (factorysessions.AsyncStartResult, error) {
+	request factorysessions.SessionStartRequest,
+) (factorysessions.SessionStartResult, error) {
 	fake.operations = append(fake.operations, "start")
 	fake.start = request
-	return factorysessions.AsyncStartResult{SessionID: "target-session-1", Status: "RUNNING"}, nil
+	return factorysessions.SessionStartResult{SessionID: "target-session-1", Status: "RUNNING"}, nil
 }
 
-func (fake *subagentProtocolTargetFake) InvokeFactorySession(
+func (fake *subagentProtocolTargetFake) Invoke(
 	_ context.Context,
-	sessionID string,
-	request factorysessions.InvocationRequest,
+	request factorysessions.SessionInvokeRequest,
 ) (factorysessions.InvocationResult, error) {
 	fake.operations = append(fake.operations, "invoke")
-	if sessionID != "target-session-1" {
-		return factorysessions.InvocationResult{}, fmt.Errorf("unexpected target session %q", sessionID)
+	if request.SessionID != "target-session-1" {
+		return factorysessions.InvocationResult{}, fmt.Errorf("unexpected target session %q", request.SessionID)
 	}
 	fake.invoke = request
 	return factorysessions.InvocationResult{
@@ -537,12 +536,12 @@ func (fake *subagentProtocolTargetFake) InvokeFactorySession(
 	}, nil
 }
 
-func (fake *subagentProtocolTargetFake) CloseFactorySession(_ context.Context, sessionID string) error {
+func (fake *subagentProtocolTargetFake) Control(_ context.Context, request factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
 	fake.operations = append(fake.operations, "close")
-	if sessionID != "target-session-1" {
-		return fmt.Errorf("unexpected target session %q", sessionID)
+	if request.SessionID != "target-session-1" || request.Operation != factorysessions.SessionControlClose {
+		return factorysessions.SessionControlResult{}, fmt.Errorf("unexpected target close %#v", request)
 	}
-	return nil
+	return factorysessions.SessionControlResult{SessionID: request.SessionID, Operation: request.Operation, Closed: true}, nil
 }
 
 func (installSmokeExecutionScript) StartAsync(
