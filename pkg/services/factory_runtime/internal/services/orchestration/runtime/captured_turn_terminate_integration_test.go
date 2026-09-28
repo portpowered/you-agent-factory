@@ -11,14 +11,11 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -41,18 +38,14 @@ func TestRecordedWorkerSessionLiveIdentityOnlyRebindsRestoredLineage(t *testing.
 			SessionID: stringPointerForRecordedTest(historicalSession),
 		}}},
 	}
-	fresh := &recordedWorkerSessionObservation{Service: live, factorySessionID: foreignSession}
-	fleet := workersessionswire.NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
-		return []workersessions.Service{restored, fresh}, nil
-	})
-	observation, err := fleet.GetObservationByWorkerSessionID(context.Background(), request)
+	observation, err := restored.GetObservationByWorkerSessionID(context.Background(), request)
 	if err != nil || observation.FactorySessionID != foreignSession {
-		t.Fatalf("foreign fleet observation = %#v, %v; want preserved Factory Session", observation, err)
+		t.Fatalf("foreign observation = %#v, %v; want preserved Factory Session", observation, err)
 	}
 	live.getByWorkerResult.FactorySessionID = historicalSession
-	observation, err = fleet.GetObservationByWorkerSessionID(context.Background(), request)
+	observation, err = restored.GetObservationByWorkerSessionID(context.Background(), request)
 	if err != nil || observation.FactorySessionID != successorSession {
-		t.Fatalf("restored fleet observation = %#v, %v; want successor Factory Session", observation, err)
+		t.Fatalf("restored observation = %#v, %v; want successor Factory Session", observation, err)
 	}
 }
 
@@ -142,27 +135,20 @@ func TestRecordedWorkerSessionObservationReprojectsWhenRestoredHistoryGrows(t *t
 }
 
 // TestTerminateCapturedTurn_FansOutChildrenBeforeCleanup
-// exercises Factory Runtime control against the real
-// Runtime selector, Worker Sessions service, and Workers cancellation
-// boundary. The controlled dispatches can only finish through the exact
+// exercises Factory Runtime control against the Runtime selector, a
+// Worker Sessions contract double, and Workers cancellation boundary.
+// The controlled dispatches can only finish through the exact
 // boundary Cancel call, so caller-context cancellation and target cleanup
 // cannot hide a missed child control.
 func TestTerminateCapturedTurn_FansOutChildrenBeforeCleanup(t *testing.T) {
 	execution := newSynchronousFanOutExecution("dispatch-a", "dispatch-b", "dispatch-replacement")
-	events, err := eventswire.NewService(logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New events service: %v", err)
-	}
-	workerSessions, err := workersessionswire.NewService(execution, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
-	if err != nil {
-		t.Fatalf("New Worker Sessions service: %v", err)
-	}
+	workerSessions := newCapturedTurnWorkerSessions(execution)
 	starts, startErrs := startCapturedTurnWorkerSessions(t, workerSessions, execution)
 	runtimeService, cleanup := newCapturedTurnRuntime(t, workerSessions, execution)
 
 	canceledControlContext, cancelControlContext := context.WithCancel(context.Background())
 	cancelControlContext()
-	_, err = runtimeService.ControlTerminate(context.WithoutCancel(canceledControlContext), factoryruntime.TerminateRequest{
+	_, err := runtimeService.ControlTerminate(context.WithoutCancel(canceledControlContext), factoryruntime.TerminateRequest{
 		ControlID:           "control-close-captured",
 		Reason:              "committed ACP close",
 		TurnID:              "turn-captured",
@@ -204,7 +190,7 @@ func TestTerminateCapturedTurn_FansOutChildrenBeforeCleanup(t *testing.T) {
 }
 
 // TestFactoryResume_IsolatesCapturedChildProviderSessionContinuations enters
-// through the real Factory Runtime fan-out and real Worker Sessions service.
+// through the Factory Runtime fan-out and a Worker Sessions contract double.
 // The controlled Workers edge returns one child failure before the other
 // succeeds, proving each captured child retains its own exact reference and
 // terminal result without reaching the unrelated direct Worker Session.
@@ -213,14 +199,7 @@ func TestTerminateCapturedTurn_FansOutChildrenBeforeCleanup(t *testing.T) {
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestFactoryResume_IsolatesCapturedChildProviderSessionContinuations(t *testing.T) {
 	execution := newContinuationFanOutExecution("dispatch-a", "dispatch-b", "dispatch-direct")
-	events, err := eventswire.NewService(logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New Events service: %v", err)
-	}
-	workerSessions, err := workersessionswire.NewService(execution, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
-	if err != nil {
-		t.Fatalf("New Worker Sessions service: %v", err)
-	}
+	workerSessions := newCapturedTurnWorkerSessions(execution)
 	starts, startErrs := startContinuationFanOutWorkerSessions(t, workerSessions, execution)
 	t.Cleanup(func() { execution.cancelInitial("dispatch-direct") })
 
