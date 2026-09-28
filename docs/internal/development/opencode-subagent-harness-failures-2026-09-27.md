@@ -15,7 +15,7 @@ timeout failure is not.
 | Managed definition regressed after initialization | Reinitializing the package against the then-current binary briefly restored the newer definition; it later reverted to the old shape again. | The managed install tracks the embedded package of whichever binary initialized it, so it reverts whenever a stale binary re-initializes. |
 | OpenCode started a second stale executable | `C:\Users\andre\.config\opencode\opencode.jsonc` pointed its local `you-agent-factory` MCP server at `C:\Users\andre\bin\you-agent-factory-mcp.exe`, dated September 26 at 22:55. The installed definition reverted at 19:26:53 and 19:30:30 during OpenCode child starts, despite the main CLI using a fresh `you.exe`. | This second binary caused the repeat regressions. The config now points to `C:\Users\andre\bin\you.exe`; a subsequent child start kept the installed definition `ENABLED` with `workingRoot`. |
 | Fresh binary resolves the definition gap | A rebuild at 19:22 followed by a fresh install produced a definition with `agentTools.policy: ENABLED` and a `workingRoot` argument, matching `packages/packaged-factories/generated/factories/subagent/factory.json` (`policy: ENABLED`, `workingDirectory: ${workingRoot}`). | Definition/schema failures are closed once the installed binary and the installed definition are both current. |
-| `Transport closed` on MCP calls | The transport dropped when the six stale MCP servers were stopped. The client connection did not re-establish within that task. | Connection lifecycle issue, distinct from worker behavior. A reconnect is required after killing stale servers. |
+| `Transport closed` on MCP calls | The transport dropped when the six stale MCP servers were stopped. | Connection lifecycle event at the time, distinct from worker behavior. A reconnect was required after killing stale servers; a fresh outer MCP call later completed `OK`. |
 
 ## Timeout failures: root cause unknown
 
@@ -38,9 +38,23 @@ The OpenCode log explains the empty audits: they tried to read paths outside
 `workingRoot` and reached `external_directory` permission requests with action
 `ask`. The harness did not surface a useful pending-approval outcome before
 closing. Keep bounded editing tasks inside the workspace until that permission
-bridge and terminal classification are fixed. OpenCode also started several
-nested `you.exe server mcp` processes from its configured MCP connection; their
-startup cost and lifecycle have not been measured.
+bridge and terminal classification are fixed.
+
+## Fresh verified facts (September 28, 2026)
+
+- At the user's request, OpenCode's nested `you-agent-factory` MCP entry was
+  removed: `~/.config/opencode/opencode.jsonc` now contains only its schema
+  key.
+- The five persistent `you.exe server mcp` processes observed afterward had
+  parent `codex.exe`, not OpenCode. One additional process started from
+  OpenCode disappeared on child exit.
+- A fresh outer MCP `you.subagent` call completed `OK` in about 8 seconds.
+  The OpenCode log for that call shows build model
+  `muse-spark-1.3-contributor-free`. The installed `@you/subagent` definition
+  stayed `ENABLED` with `workingRoot`.
+- The earlier CLI fallback used bare `muse-spark-1.3-contributor-free`, but
+  the OpenCode log showed the actual build model was `big-pickle`, so the
+  explicit selection silently fell back. This is being fixed.
 
 A timeout is therefore not evidence that no edit occurred. Always inspect the
 tree before retrying, and never re-issue the same request blind.
@@ -74,9 +88,10 @@ tree before retrying, and never re-issue the same request blind.
 4. **Inspect the diff after every timeout.** Run `git diff` and `git status`
    before retrying, scope the next attempt to one bounded edit, and verify that
    edit independently.
-5. **Inspect OpenCode's own MCP configuration.** A subagent may start a second
-   `you` executable. Keep that path aligned with the canonical binary and
-   compare all live MCP server executable paths when a definition regresses.
+5. **Inspect OpenCode's own MCP configuration.** OpenCode previously started a
+   second `you` executable through its nested MCP entry; that entry has since
+   been removed at the user's request. If a definition regresses, compare all
+   live MCP server executable paths and parent processes.
 6. **Treat a closed transport as a connection problem.** Confirm it separately
    by invoking the same packaged factory through the CLI, provided the binary
    and the invocation catalog are current.
