@@ -69,17 +69,17 @@ outside-workspace read with these changes has not yet completed.
 - The ACP client now selects `allow_always` when offered, falling back to
   `allow_once`, without requiring `--skip-permissions`. Reject-only options
   remain rejected, and unknown options are cancelled. Focused provider tests
-  cover these outcomes. For OpenCode, the launcher supplies
-  `OPENCODE_PERMISSION={"*":"allow"}` by default so its own permission rules
-  allow tools and external directories. An explicit setting in the inherited
-  process or request environment is preserved; focused tests cover both.
+  cover these outcomes. OpenCode V2 uses ordered `permissions` rules; the
+  earlier `OPENCODE_PERMISSION` launch injection used a V1-era setting and was
+  removed. The local global `opencode.jsonc` now has a V2 allow-all rule, with
+  no nested MCP entry; `opencode debug config` confirms that file is loaded.
+  `opencode acp` does not offer `--auto`.
 - A fresh CLI binary launched an outside-workspace read using the requested
   Muse Spark model, but OpenCode reported `Rate limit exceeded` before any
-  file tool or permission request. A shorter retry with an explicit
-  `OPENCODE_PERMISSION` setting hit the same limit. A concurrent `big-pickle`
-  run in the OpenCode log was rate limited too. The live read and the effective
-  OpenCode permission behavior therefore remain **unverified**; the tests
-  verify the environment passed to the subprocess and ACP choice handling.
+  file tool or permission request. A shorter retry also hit the same limit.
+  A concurrent `big-pickle` run in the OpenCode log was rate limited too. The
+  live read and the effective OpenCode V2 permission behavior therefore remain
+  **unverified**; focused tests verify ACP choice handling.
 
 A timeout is therefore not evidence that no edit occurred. Always inspect the
 tree before retrying, and never re-issue the same request blind.
