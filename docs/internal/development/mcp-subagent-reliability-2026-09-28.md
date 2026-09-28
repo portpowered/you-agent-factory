@@ -1518,3 +1518,14 @@ connections, the rebuilt binary was installed at
 `C:\Users\andre\bin\you-6cc66b3254.exe`, and the configured command for new
 Codex MCP connections now points to that versioned executable. Existing
 connections keep their prior process image until they close.
+
+A further Codex MCP edit (session `e318cac9-72ce-4cf1-b85d-7aea3923f410`)
+addressed one source of missing terminal classifications: when primary-result
+selection lacks a matching Work ID but provides a dispatch ID, Factory
+Sessions now carries a failure reason only if exactly one non-nil failure
+detail matches that dispatch. Exact Work ID still takes precedence, and
+ambiguous matches remain unclassified. Focused invocation tests cover both
+cases and confirm that sensitive provider messages remain absent; the package
+tests and maintainability gate passed. This does not prove the cause of the
+`big-pickle` failure, whose retained result did not include the underlying
+failure detail.

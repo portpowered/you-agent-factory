@@ -785,6 +785,37 @@ func TestSessionOwnerWait_CarriesSoleDispatchFailureWhenPrimaryWorkIsUnresolved(
 	}
 }
 
+func TestSessionOwnerWait_MatchesDispatchFailureOnlyWhenUnique(t *testing.T) {
+	tests := []struct {
+		name, reason string
+		details      map[string]interfaces.FactoryWorldFailureDetail
+	}{
+		{"unique", string(workers.WorkFailureTypeThrottled), map[string]interfaces.FactoryWorldFailureDetail{
+			"other-work":  {DispatchID: "dispatch-other", FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeTimeout, Message: "private other response"}},
+			"target-work": {DispatchID: "dispatch-target", FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeThrottled, Message: "sensitive provider text"}},
+		}},
+		{"ambiguous", "", map[string]interfaces.FactoryWorldFailureDetail{
+			"first-work":  {DispatchID: "dispatch-target", FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeThrottled, Message: "sensitive first response"}},
+			"second-work": {DispatchID: "dispatch-target", FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeTimeout, Message: "private second response"}},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			observation := stoppedSessionInvocationObservation()
+			observation.MissingPrimaryResult = &work.PrimaryResultError{
+				Code: work.PrimaryResultErrorCodeUnresolved, Message: "invocation primary result unresolved",
+				Context: work.InvocationFailureContext{WorkID: "work-root", DispatchID: "dispatch-target"},
+			}
+			observation.WorldState.FailureDetailsByWorkID = tt.details
+			result := waitForSessionOwnerObservation(t, observation, nil)
+			assertSessionOwnerEqual(t, "failure reason", result.FailureReason, tt.reason)
+			if strings.Contains(result.Message, "sensitive") || strings.Contains(result.Message, "private") {
+				t.Fatalf("invocation message leaked provider detail: %q", result.Message)
+			}
+		})
+	}
+}
+
 func TestSessionOwnerWait_DefaultWaitNextPollsUntilCompletion(t *testing.T) {
 	observations := 0
 	owner := newTestSessionOwner(sessionOwnerFixture{Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
