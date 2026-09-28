@@ -39,6 +39,11 @@ Docker. Gallery CUDA backends and models were installed under
 
 - HTTP `/v1/chat/completions` returned `READY`.
 - GPU process at PID 1697.
+- Managed `you models pull llm` installed the 5.97 GB model and projector from
+  the built-in source. `you models invoke llm --operation OMNI --input
+  prompt="Reply READY"` returned `READY` through the installed Linux
+  `cuda12-llama-cpp` gallery backend. The same invocation with `--offline`
+  returned `READY` using cached artifacts.
 
 ## OMNI codec
 
@@ -57,6 +62,6 @@ TTS Qwen3 and IndexTTS results are in
 ## Limitation
 
 The WSL-built `you` binary proves managed CUDA backend first-use and offline
-reuse for ASR and embeddings. Managed end-to-end `you` invocations for TTS,
-LLM, and native Windows GPU remain unverified. The host is Windows; the CUDA
-backend process in this audit ran under WSL Ubuntu.
+reuse for ASR, embeddings, and LLM. Managed end-to-end TTS and native Windows
+GPU execution remain unverified. The host is Windows; the CUDA backend
+processes in this audit ran under WSL Ubuntu.

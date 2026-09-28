@@ -111,8 +111,9 @@ Notes:
 - Backend consumption of `ref_text` beyond protocol delivery.
 - This repository's pinned artifact publication and Windows first-use
   lifecycle for Qwen/Index (registry still only publishes VibeVoice).
-- Managed ASR/LLM/embed first-use lifecycle; live protocol and GPU evidence is
-  recorded in [the invocation audit](localai-gpu-invocation-audit-2026-09-28.md).
+- Managed TTS first-use lifecycle and native Windows GPU remain unverified;
+  managed ASR, embeddings, and LLM evidence is recorded in [the invocation
+  audit](localai-gpu-invocation-audit-2026-09-28.md).
 
 ## Upstream configuration evidence
 
