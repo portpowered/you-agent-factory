@@ -7,7 +7,7 @@
   "fieldNotes": {
     "destination": "Committed destination bucket, owner-relative: either <owner> or <owner>/internal or <owner>/internal/services/<subservice>. Validated against the closed destination vocabulary.",
     "successor": "Repository-relative package path that replaces this package once the move lands. Always sits under pkg/services/<owner> for the destination owner.",
-    "deletionCondition": "The named cutover proof that closes this row, when the migration packet named one. Optional: three factory_sessions runtimeopening rows were only ever tracked by package-target-manifest.json, which recorded no condition for them."
+    "deletionCondition": "The named cutover proof that closes this row, when the migration packet named one."
   },
   "moves": [
     {
@@ -63,21 +63,6 @@
       "destination": "factory_runtime/internal",
       "successor": "pkg/services/factory_runtime/internal",
       "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening",
-      "destination": "factory_sessions/internal/services/runtime_opening",
-      "successor": "pkg/services/factory_sessions/internal/services/runtime_opening"
-    },
-    {
-      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening/invocation",
-      "destination": "factory_sessions/internal/services/runtime_opening",
-      "successor": "pkg/services/factory_sessions/internal/services/runtime_opening"
-    },
-    {
-      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening/operatordefaults",
-      "destination": "factory_sessions/internal/services/runtime_opening",
-      "successor": "pkg/services/factory_sessions/internal/services/runtime_opening"
     },
     {
       "packagePath": "pkg/services/operator_settings/internal",
