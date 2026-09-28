@@ -759,3 +759,11 @@ tests into default resolver tests (`94c949ac-1a78-4c34-9e56-15d9f4fda971`,
 primary results. Focused Go tests and `make pkg-maint` passed. Native
 `pkg-file-count` improved from five findings to two; the remaining packages
 are `pkg/services/models/internal/service` and `pkg/wire`.
+
+Two further narrow `space-bunny-free` edits consolidated Models service
+tests: gallery backend tests into runtime configuration tests
+(`4b705c37-b936-4ec0-a081-b69731336120`) and external-package host-lease
+tests into constructor tests (`915c7b1f-3aa9-44ba-9a0d-2937764910c1`).
+Both calls completed and the package tests passed. Native
+`pkg-file-count` now reports only `pkg/wire` (57 files against its recorded
+50-file baseline).
