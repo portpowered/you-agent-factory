@@ -63,6 +63,8 @@ catalog is data-backed at
 | `trae-acp` | `traecli acp serve` | |
 | `zeroclaw-acp` | `zeroclaw acp` | |
 
+The `opencode` identity works without `opencode-acp`. It uses the `opencode` CLI directly. For concurrent ACP runs, You defaults OpenCode v2 filesystem snapshots off to avoid shared snapshot Git lock contention. An operator who needs OpenCode's own undo/revert can set `OPENCODE_CONFIG_CONTENT` to `{"snapshots":true}` while accepting possible contention for simultaneous runs in one worktree.
+
 That is twenty packaged ACP identities, plus the three bundled provider CLIs
 above. Operators can add more with `you workers acp add`.
 

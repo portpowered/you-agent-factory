@@ -599,12 +599,11 @@ func (r *Root) openForRequest(
 	// product and must select its detached projection before live Factory
 	// Runtime assembly. Resume remains an explicit live successor path below.
 	if recording.ReplayPath != "" {
-		// A compatibility Factory without a Runtime root still needs the direct
-		// historical/replay opener used by narrow tests and migration callers.
-		// Canonical Wire always supplies the root, so classify the input there
-		// before deciding whether activation is required.
-		if r.runtimeRoot == nil || r.replayInputs == nil {
-			return open(nil)
+		if r.runtimeRoot == nil {
+			return runtimeProducts{}, fmt.Errorf("open Factory Runtime: Factory Runtime root is required for replay")
+		}
+		if r.replayInputs == nil {
+			return runtimeProducts{}, fmt.Errorf("open Factory Runtime: replay input capability is required for replay")
 		}
 		input, err := r.replayInputs.LoadReplayInput(
 			recordings.LoadReplayInputRequest{Path: recording.ReplayPath},

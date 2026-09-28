@@ -1099,3 +1099,24 @@ listed `you.subagent` and returned `BAD_REQUEST` `workingRoot must not be null`
 for an explicit null. OpenCode MCP session
 `43552c31-04d2-4ad1-816c-8d62ab745bb4` completed an exact README-heading probe
 in about 9 seconds with `# you-agent-factory`.
+
+Two concurrent OpenCode read-only architecture audits in the same workingRoot
+(Factory Sessions `c7912a0b-fcba-4e9d-accc-5063b97a718a` and
+`a602a91c-48c0-44f7-b3b8-e6ad7e6e4056`) both timed out at 150 seconds with no
+source edits. OpenCode logs showed repeated shared snapshot Git `index.lock`
+collisions; no `git.exe` was active and a zero-byte lock remained. Automatic
+approval review rejected removal of that exact lock. Commit `70bd219a32`
+defaulted OpenCode ACP v2 `OPENCODE_CONFIG_CONTENT={"snapshots":false}` unless
+the operator already supplies the variable; full lint passed. The Windows
+installed MCP binary SHA-256 is
+`0F1BF5B56813B4B9508B17CE32A6B653A9EDFDF7C1CB5F7F56463BED286DB1BB`. Two
+simultaneous OpenCode heading probes then both completed in 22 seconds
+(sessions `8aca7beb-7883-4c37-a187-575ac0bb42dc` and
+`d9de89e3-8447-4252-af3e-4fd24166ab7d`) with exact expected headings despite
+the stale lock. A later concurrent backend/docs editing batch lost its tool
+stdout at the host; worktree inspection found scoped partial edits to the replay
+opener and harness docs, and independent tests found six replay fixture
+failures. Codex MCP follow-up `bf98d715-9f7e-4b78-8783-4a7e85e4e059` repaired
+the fixture without weakening assertions; the full Factory Sessions Go suite,
+docs-reference smoke, and all 24 lint targets passed. The observed snapshot
+collision is distinct from the unproven separate model/tool latency.

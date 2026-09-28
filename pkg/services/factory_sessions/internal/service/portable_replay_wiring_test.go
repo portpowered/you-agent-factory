@@ -379,6 +379,7 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 	dependencies := validRuntimeOpeningOwnerPorts(&calls)
 	dependencies.Recordings.Service = recordingsRoot
 	dependencies.Recordings.Runtime = recordingsRoot
+	dependencies.FactoryRuntime.RuntimeRoot = &replayRoutingRoot{}
 	dependencies.FactoryRuntime.ResolveClock = func(clock factoryruntime.Clock) factoryruntime.Clock {
 		return clock
 	}

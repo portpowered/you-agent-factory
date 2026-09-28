@@ -759,6 +759,30 @@ func TestOpenForRequestRoutesLegacyReplayThroughRuntimeRoot(t *testing.T) {
 	}
 }
 
+func TestOpenForRequestReplayRequiresRuntimeRootAndReplayInputs(t *testing.T) {
+	t.Parallel()
+
+	request := (runtimeOwnerFixture{
+		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
+		Recordings:        recordings.RuntimeSelection{ReplayPath: "recording.json"},
+	}).startRequest()
+	for _, test := range []struct {
+		name    string
+		factory *Root
+		want    string
+	}{
+		{"runtime root", &Root{}, "Factory Runtime root is required for replay"},
+		{"replay inputs", &Root{runtimeRoot: &replayRoutingRoot{}}, "replay input capability is required for replay"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := test.factory.openForRequest(t.Context(), request)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("openForRequest() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
 func TestOpenForRequestResumeInputFailureStopsBeforeActivationAndDoesNotRetry(t *testing.T) {
 	t.Parallel()
 
