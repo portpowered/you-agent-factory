@@ -21,6 +21,7 @@ type subagentTargetFake struct {
 	started      bool
 	closed       bool
 	invokeErr    error
+	closeErr     error
 	invokeResult *factorysessions.InvocationResult
 }
 
@@ -47,7 +48,7 @@ func (fake *subagentTargetFake) Invoke(_ context.Context, request factorysession
 func (fake *subagentTargetFake) Control(_ context.Context, request factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
 	fake.control = request
 	fake.closed = request.SessionID == "session-1" && request.Operation == factorysessions.SessionControlClose
-	return factorysessions.SessionControlResult{}, nil
+	return factorysessions.SessionControlResult{}, fake.closeErr
 }
 
 func TestSubagentRunsPackagedFactoryWithDefaultsAndReturnsText(t *testing.T) {
@@ -201,5 +202,65 @@ func TestSubagentReportsEmptyResultWhenCompletedWithoutText(t *testing.T) {
 	}
 	if !target.closed {
 		t.Fatal("Factory Session was not closed after empty result")
+	}
+}
+
+func TestSubagentForwardsCancelOnTimeout(t *testing.T) {
+	target := &subagentTargetFake{}
+	timeout := int64(30_000)
+	mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-cancel" }, mcpfactorysession.SubagentInput{
+		Prompt: "Run this", TimeoutMillis: &timeout,
+	})
+	if !target.invoke.Wait.CancelOnTimeout {
+		t.Fatalf("CancelOnTimeout not forwarded: Wait = %#v", target.invoke.Wait)
+	}
+	if target.invoke.Wait.TimeoutMillis != timeout {
+		t.Fatalf("TimeoutMillis = %d, want %d", target.invoke.Wait.TimeoutMillis, timeout)
+	}
+}
+
+func TestSubagentInvokeErrorIsPrivateAndIncludesSessionID(t *testing.T) {
+	target := &subagentTargetFake{invokeErr: errors.New("sensitive provider token abc123")}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-invoke-err" }, mcpfactorysession.SubagentInput{Prompt: "Do work"})
+	if response.Error == nil || response.Result != nil {
+		t.Fatalf("Subagent response = %#v", response)
+	}
+	if response.Error.Code != "factory_session.subagent.invocation_failed" {
+		t.Fatalf("invoke error code = %q", response.Error.Code)
+	}
+	if response.Error.SessionID != "session-1" {
+		t.Fatalf("invoke error session = %q", response.Error.SessionID)
+	}
+	if response.Error.Details["requestId"] != "request-invoke-err" || response.Error.Details["partialEffectsPossible"] != true {
+		t.Fatalf("invoke error details = %#v", response.Error.Details)
+	}
+	if strings.Contains(response.Error.Message, "sensitive") || strings.Contains(response.Error.Message, "abc123") {
+		t.Fatalf("invoke error leaked raw text: %q", response.Error.Message)
+	}
+	if !target.closed {
+		t.Fatal("Factory Session was not closed after invoke error")
+	}
+}
+
+func TestSubagentCloseErrorIsPrivateAndIncludesSessionID(t *testing.T) {
+	target := &subagentTargetFake{
+		invokeErr: errors.New("sensitive provider token abc123"),
+		closeErr:  errors.New("sensitive close failure xyz789"),
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-close-err" }, mcpfactorysession.SubagentInput{Prompt: "Do work"})
+	if response.Error == nil || response.Result != nil {
+		t.Fatalf("Subagent response = %#v", response)
+	}
+	if response.Error.Code != "factory_session.subagent.cleanup_failed" {
+		t.Fatalf("close error code = %q", response.Error.Code)
+	}
+	if response.Error.SessionID != "session-1" {
+		t.Fatalf("close error session = %q", response.Error.SessionID)
+	}
+	if strings.Contains(response.Error.Message, "sensitive") || strings.Contains(response.Error.Message, "xyz789") || strings.Contains(response.Error.Message, "abc123") {
+		t.Fatalf("close error leaked raw text: %q", response.Error.Message)
+	}
+	if response.Error.Details["requestId"] != "request-close-err" || response.Error.Details["partialEffectsPossible"] != true {
+		t.Fatalf("close error details = %#v", response.Error.Details)
 	}
 }

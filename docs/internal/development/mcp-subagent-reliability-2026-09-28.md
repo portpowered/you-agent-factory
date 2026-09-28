@@ -168,3 +168,26 @@ A concurrent provider-only `codex` read-only README probe completed in
 session `10152e10-a987-4d66-90e3-4b2b82703bbb`, returning
 `you-agent-factory`. This confirms the plain `codex` provider path on this host
 while the Pi probe was running.
+
+A provider-only `you.subagent` call (provider `opencode`, model omitted)
+completed a bounded MCP code edit in session
+`b85328b4-c4dc-4eea-8606-d7bd9c8c97e6`, adding `CancelOnTimeout` and private
+post-start invoke/cleanup errors; focused MCP tests passed.
+
+A second bounded follow-up request to add request IDs timed out with no edits
+in session `2c2147c3-9ef3-46c6-8bb6-a82b8c8c099f`. Root inspected the unchanged
+diff, finished those narrow IDs and tests, and the focused package test passed.
+This does not resolve the underlying model timeout.
+A fresh stdio launch of the rebuilt candidate `you-mcp-safe-close.exe` listed
+11 tools and returned the typed timeout with request and trace IDs after a
+one-second bounded OpenCode call (session
+`88f06ad0-cc45-473e-8fc8-3e99706b47aa`). Its server log had the same IDs;
+the explicit cancel-on-timeout path did not turn this ordinary timeout into a
+cleanup error. `make pkg-maint` and the focused MCP package test passed.
+
+A read-only Models resolver audit completed in OpenCode session
+`6448288b-1ffb-433e-aff5-b421664a1761`. The current host configuration
+contains OS and architecture only, and the default resolver hardcodes CPU for
+Linux and Windows amd64. The audit suggested adding an accelerator field, but
+that alone would not wire host detection or publish CUDA artifacts; the
+manifest also lacks a Linux CUDA target today.

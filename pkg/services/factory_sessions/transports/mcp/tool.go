@@ -182,15 +182,18 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 		SessionID:   started.SessionID,
 		Correlation: factorysessionexecution.SessionOperationCorrelation{RequestID: requestID},
 		Args:        args,
-		Wait:        factorysessionexecution.SessionOperationWait{TimeoutMillis: timeoutMillis},
+		Wait:        factorysessionexecution.SessionOperationWait{TimeoutMillis: timeoutMillis, CancelOnTimeout: true},
 	})
 	_, closeErr := target.Control(context.WithoutCancel(ctx), factorysessionexecution.SessionControlRequest{
 		SessionID: started.SessionID,
 		Mode:      factorysessionexecution.SessionOperationModeLive,
 		Operation: factorysessionexecution.SessionControlClose,
 	})
-	if err := errors.Join(invokeErr, closeErr); err != nil {
-		return subagentExecutionFailure(err)
+	if closeErr != nil {
+		return subagentCleanupFailure(started.SessionID, requestID)
+	}
+	if invokeErr != nil {
+		return subagentInvocationFailure(started.SessionID, requestID)
 	}
 	if result.Status != factorysessionexecution.InvocationTerminalStatusCompleted {
 		return subagentTerminalFailure(started.SessionID, result, timeoutMillis)
@@ -262,6 +265,26 @@ func validateSubagentRequest(ctx context.Context, target factorysessionexecution
 
 func subagentExecutionFailure(err error) ToolResponse[SubagentResult] {
 	envelope := executionErrorEnvelope(err)
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentCleanupFailure(sessionID, requestID string) ToolResponse[SubagentResult] {
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.cleanup_failed",
+		Message:   "subagent session cleanup failed after execution; workspace edits may have occurred",
+		SessionID: sessionID,
+		Details:   map[string]any{"partialEffectsPossible": true, "requestId": requestID},
+	}
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentInvocationFailure(sessionID, requestID string) ToolResponse[SubagentResult] {
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.invocation_failed",
+		Message:   "subagent invocation failed before producing a result",
+		SessionID: sessionID,
+		Details:   map[string]any{"partialEffectsPossible": true, "requestId": requestID},
+	}
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }
 
