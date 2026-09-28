@@ -116,7 +116,7 @@ standards.
   checkpoint recovery. Implementation-specific runtime primitives remain
   behind this customer-facing Factory boundary.
 - `pkg/services/factory_sessions/` owns live and durable Factory Session state,
-  runtime opening, lifecycle gateways, response streams, invocation, controls,
+  startup, lifecycle gateways, response streams, invocation, controls,
   and persisted execution behavior.
 - `pkg/services/recordings/` owns the canonical Factory Event ledger, recording
   lifecycle, replay, artifacts, and read-model projections.
