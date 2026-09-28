@@ -131,12 +131,12 @@ type WorkerRecordingReader interface {
 	LoadWorkerRecording(context.Context, string) (json.RawMessage, error)
 }
 
-// DetachedOperationsCapability is the neutral process handoff for the
-// Factory Sessions detached operation view. The initializer retains the
+// FactorySessionsCapability is the neutral process handoff for the
+// Factory Sessions root. The initializer retains the
 // selected capability without importing the Sessions service; pkg/root
 // reifies the opaque value at the caller-facing boundary.
-type DetachedOperationsCapability interface {
-	DetachedOperations() any
+type FactorySessionsCapability interface {
+	FactorySessions() any
 }
 
 // RuntimeMetricsQueryCapability is the neutral process handoff for the

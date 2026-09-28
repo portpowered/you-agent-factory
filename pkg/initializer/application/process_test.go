@@ -330,20 +330,20 @@ func TestProcessExposesRuntimeMetricsQuery(t *testing.T) {
 	}
 }
 
-func TestProcessExposesDetachedOperations(t *testing.T) {
+func TestProcessExposesFactorySessions(t *testing.T) {
 	t.Parallel()
 
-	if capability := (*Process)(nil).DetachedOperations(); capability != nil {
-		t.Fatalf("nil Process.DetachedOperations() = %#v, want nil", capability)
+	if capability := (*Process)(nil).FactorySessions(); capability != nil {
+		t.Fatalf("nil Process.FactorySessions() = %#v, want nil", capability)
 	}
 
-	want := processTestDetachedOperationsCapability{}
+	want := processTestFactorySessionsCapability{}
 	process, err := NewProcess(nil, nil, processTestProviderRegistry{}, processTestLifecycle{}, nil, nil, want, nil, nil)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}
-	if got := process.DetachedOperations(); got != want {
-		t.Fatalf("DetachedOperations() = %#v, want %#v", got, want)
+	if got := process.FactorySessions(); got != want {
+		t.Fatalf("FactorySessions() = %#v, want %#v", got, want)
 	}
 }
 
@@ -376,9 +376,9 @@ type processTestRuntimeMetricsQueryCapability struct{}
 
 func (processTestRuntimeMetricsQueryCapability) RuntimeMetricsQuery() any { return "query" }
 
-type processTestDetachedOperationsCapability struct{}
+type processTestFactorySessionsCapability struct{}
 
-func (processTestDetachedOperationsCapability) DetachedOperations() any { return "operations" }
+func (processTestFactorySessionsCapability) FactorySessions() any { return "sessions" }
 
 func (processTestWorkerRecordingReader) LoadWorkerRecording(context.Context, string) (json.RawMessage, error) {
 	return json.RawMessage(`{"sessions":[]}`), nil

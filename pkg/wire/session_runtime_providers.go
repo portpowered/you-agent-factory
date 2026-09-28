@@ -633,26 +633,25 @@ func provideFactorySessionsService(
 	return factorysessionwire.NewServiceFromAssembly(assembly, opening, liveChangeCoordinator)
 }
 
-// provideFactorySessionDetachedOperations publishes the one detached value
-// capability from the already-composed Sessions root. The neutral process
-// wrapper keeps initializer/application independent of product services while
-// preserving the concrete Sessions view for pkg/root callers.
-func provideFactorySessionDetachedOperations(
+// provideFactorySessionsCapability publishes the already-composed Sessions root
+// through the neutral process capability. The initializer retains the opaque
+// value without importing the Sessions service; pkg/root reifies it at the
+// caller-facing boundary.
+func provideFactorySessionsCapability(
 	service factorysessions.Service,
-) (processcontract.DetachedOperationsCapability, error) {
-	operations, err := factorysessionwire.NewDetachedOperations(service)
-	if err != nil {
-		return nil, err
+) (processcontract.FactorySessionsCapability, error) {
+	if service == nil {
+		return nil, fmt.Errorf("construct factory sessions capability: service is required")
 	}
-	return detachedOperationsCapability{operations: operations}, nil
+	return factorySessionsCapability{service: service}, nil
 }
 
-type detachedOperationsCapability struct {
-	operations factorysessions.DetachedService
+type factorySessionsCapability struct {
+	service factorysessions.Service
 }
 
-func (capability detachedOperationsCapability) DetachedOperations() any {
-	return capability.operations
+func (capability factorySessionsCapability) FactorySessions() any {
+	return capability.service
 }
 
 // provideFactoryVisualizationMetricsQuery composes the one process-scoped,

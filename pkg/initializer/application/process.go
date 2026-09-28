@@ -27,16 +27,16 @@ type ProcessLifecycle interface {
 // service graphs, or edge bundles; the lazy Initializer owns runtime
 // construction after CLI parsing.
 type Process struct {
-	commandFactory processcontract.CommandFactory
-	initializer    processcontract.Initializer
-	providers      ProviderRegistry
-	lifecycle      ProcessLifecycle
-	acpServer      processcontract.ACPServer
-	workerReader   processcontract.WorkerRecordingReader
-	detachedOps    processcontract.DetachedOperationsCapability
-	runtimeMetrics processcontract.RuntimeMetricsQueryCapability
-	executionOpen  processcontract.ExecutionRuntimeOpeningCapability
-	runtimeCosts   processcontract.RuntimeCostsQueryCapability
+	commandFactory  processcontract.CommandFactory
+	initializer     processcontract.Initializer
+	providers       ProviderRegistry
+	lifecycle       ProcessLifecycle
+	acpServer       processcontract.ACPServer
+	workerReader    processcontract.WorkerRecordingReader
+	factorySessions processcontract.FactorySessionsCapability
+	runtimeMetrics  processcontract.RuntimeMetricsQueryCapability
+	executionOpen   processcontract.ExecutionRuntimeOpeningCapability
+	runtimeCosts    processcontract.RuntimeCostsQueryCapability
 }
 
 // invocationCancellation is owned by one Process.Execute call. It is kept
@@ -62,11 +62,11 @@ func NewProcess(
 	lifecycle ProcessLifecycle,
 	acpServer processcontract.ACPServer,
 	workerReader processcontract.WorkerRecordingReader,
-	detachedOps processcontract.DetachedOperationsCapability,
+	factorySessions processcontract.FactorySessionsCapability,
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 ) (*Process, error) {
-	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, nil)
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, factorySessions, runtimeMetrics, executionOpen, nil)
 }
 
 // NewProcessWithRuntimeCostsAndExecution constructs the canonical process
@@ -78,12 +78,12 @@ func NewProcessWithRuntimeCostsAndExecution(
 	lifecycle ProcessLifecycle,
 	acpServer processcontract.ACPServer,
 	workerReader processcontract.WorkerRecordingReader,
-	detachedOps processcontract.DetachedOperationsCapability,
+	factorySessions processcontract.FactorySessionsCapability,
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 	runtimeCosts processcontract.RuntimeCostsQueryCapability,
 ) (*Process, error) {
-	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, detachedOps, runtimeMetrics, executionOpen, runtimeCosts)
+	return newProcess(commandFactory, initializer, providers, lifecycle, acpServer, workerReader, factorySessions, runtimeMetrics, executionOpen, runtimeCosts)
 }
 
 func newProcess(
@@ -93,7 +93,7 @@ func newProcess(
 	lifecycle ProcessLifecycle,
 	acpServer processcontract.ACPServer,
 	workerReader processcontract.WorkerRecordingReader,
-	detachedOps processcontract.DetachedOperationsCapability,
+	factorySessions processcontract.FactorySessionsCapability,
 	runtimeMetrics processcontract.RuntimeMetricsQueryCapability,
 	executionOpen processcontract.ExecutionRuntimeOpeningCapability,
 	runtimeCosts processcontract.RuntimeCostsQueryCapability,
@@ -105,16 +105,16 @@ func newProcess(
 		return nil, fmt.Errorf("construct application process: lifecycle is required")
 	}
 	return &Process{
-		commandFactory: commandFactory,
-		initializer:    initializer,
-		providers:      providers,
-		lifecycle:      lifecycle,
-		acpServer:      acpServer,
-		workerReader:   workerReader,
-		detachedOps:    detachedOps,
-		runtimeMetrics: runtimeMetrics,
-		executionOpen:  executionOpen,
-		runtimeCosts:   runtimeCosts,
+		commandFactory:  commandFactory,
+		initializer:     initializer,
+		providers:       providers,
+		lifecycle:       lifecycle,
+		acpServer:       acpServer,
+		workerReader:    workerReader,
+		factorySessions: factorySessions,
+		runtimeMetrics:  runtimeMetrics,
+		executionOpen:   executionOpen,
+		runtimeCosts:    runtimeCosts,
 	}, nil
 }
 
@@ -157,13 +157,13 @@ func (p *Process) WorkerRecordingReader() processcontract.WorkerRecordingReader 
 	return p.workerReader
 }
 
-// DetachedOperations returns the opaque Factory Sessions capability composed
+// FactorySessions returns the opaque Factory Sessions capability composed
 // for this process. The root package owns its typed public projection.
-func (p *Process) DetachedOperations() processcontract.DetachedOperationsCapability {
+func (p *Process) FactorySessions() processcontract.FactorySessionsCapability {
 	if p == nil {
 		return nil
 	}
-	return p.detachedOps
+	return p.factorySessions
 }
 
 // RuntimeMetricsQuery returns the opaque read-only Factory Runtime metrics

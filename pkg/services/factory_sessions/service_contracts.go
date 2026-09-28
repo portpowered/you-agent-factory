@@ -777,26 +777,6 @@ type SessionResponseSubscriptionResult struct {
 	Cursor *ResponseEventCursor
 }
 
-// DetachedService is the canonical detached operation view used by callers
-// that need the mode-neutral operation family. The process root remains the
-// Service authority; P5A/P5B transport capabilities stay separate until their
-// owning packets complete the corresponding cutovers.
-type DetachedService = *DetachedOperations
-
-// DetachedStartRequest and related aliases make the new vocabulary easy to
-// discover without renaming the pre-existing durable StartRequest in P4-A.
-type (
-	DetachedStartRequest                = SessionStartRequest
-	DetachedInvokeRequest               = SessionInvokeRequest
-	DetachedActivateRequest             = SessionActivateRequest
-	DetachedGetRequest                  = SessionGetRequest
-	DetachedListRequest                 = SessionListRequest
-	DetachedControlRequest              = SessionControlRequest
-	DetachedResultReadRequest           = SessionResultReadRequest
-	DetachedSyncPreparationRequest      = SessionSyncPreparationRequest
-	DetachedResponseSubscriptionRequest = SessionResponseSubscriptionRequest
-)
-
 var ErrDetachedServiceUnavailable = errors.New("factory session detached operations are unavailable")
 
 // DetachedRequestError is returned before any legacy implementation is called
@@ -827,8 +807,6 @@ func (wait SessionOperationWait) SessionOperationTimeout() time.Duration {
 	}
 	return time.Duration(wait.TimeoutMillis) * time.Millisecond
 }
-
-var _ DetachedService = (*DetachedOperations)(nil)
 
 // ErrSessionDeletionConflict identifies a deletion request that is unsafe for
 // the selected Factory Session's current identity or runtime lifecycle.

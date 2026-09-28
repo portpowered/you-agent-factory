@@ -22,7 +22,6 @@ import (
 type Root struct {
 	*legacyservice.Assembly
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator
-	detachedOperations    factorysessions.DetachedService
 	runtimeOpening        roles.RuntimeOpening
 }
 
@@ -134,11 +133,6 @@ func newRoot(
 		liveChangeCoordinator: liveChangeCoordinator,
 		runtimeOpening:        runtimeOpening,
 	}
-	detachedOperations, err := (&factorysessions.DetachedOperations{}).Bind(assembly)
-	if err != nil {
-		return nil, fmt.Errorf("construct Factory Sessions: bind detached operations: %w", err)
-	}
-	root.detachedOperations = detachedOperations
 	return root, nil
 }
 
@@ -182,16 +176,6 @@ func (r *Root) OpenExecutionRuntime(
 		return roles.OpenedExecutionRuntime{}, fmt.Errorf("Factory Sessions runtime opening is required")
 	}
 	return r.runtimeOpening.OpenExecutionRuntime(ctx, request)
-}
-
-// DetachedOperations returns the one process-scoped operation view bound to
-// the root assembly. It is intentionally a value-operation capability; the
-// runtime gateway routing remains private to the assembly.
-func (r *Root) DetachedOperations() factorysessions.DetachedService {
-	if r == nil {
-		return nil
-	}
-	return r.detachedOperations
 }
 
 func validateRootDependencies(

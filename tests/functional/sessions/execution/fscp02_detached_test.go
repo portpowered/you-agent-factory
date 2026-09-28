@@ -39,19 +39,19 @@ func TestFSCP02DetachedCanonicalProcessBoundary(t *testing.T) {
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(--help) error = %v\nstdout=%s\nstderr=%s", err, inputs.Stdout(), inputs.Stderr())
 	}
-	capability := process.DetachedOperations()
+	capability := process.FactorySessions()
 	if capability == nil {
-		t.Fatal("root process returned no detached capability")
+		t.Fatal("root process returned no factory sessions capability")
 	}
-	detached, ok := capability.DetachedOperations().(factorysessions.DetachedService)
+	detached, ok := capability.FactorySessions().(factorysessions.Service)
 	if !ok || detached == nil {
-		t.Fatalf("detached capability type = %T, want factorysessions.DetachedService", capability.DetachedOperations())
+		t.Fatalf("factory sessions capability type = %T, want factorysessions.Service", capability.FactorySessions())
 	}
 	assertDetachedLiveBoundary(t, detached, factoryDir)
 	assertProcessComposedDurableOwner(t, process.ExecutionRuntimeOpening(), factoryDir, home)
 }
 
-func assertDetachedLiveBoundary(t *testing.T, detached factorysessions.DetachedService, factoryDir string) {
+func assertDetachedLiveBoundary(t *testing.T, detached factorysessions.Service, factoryDir string) {
 	t.Helper()
 	_, err := detached.Start(t.Context(), factorysessions.SessionStartRequest{
 		Mode:       factorysessions.SessionOperationModeLive,
