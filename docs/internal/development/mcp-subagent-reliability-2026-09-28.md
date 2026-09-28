@@ -1678,3 +1678,24 @@ observations. The installed Windows binary was rebuilt as
 and the Codex MCP command for new connections points to it.
 A fresh standalone MCP stdio handshake from this binary returned the expected
 protocol initialization and advertised `you.subagent` in `tools/list`.
+
+Follow-up inspection of OpenCode's local log for timed-out session
+`28a859c9-3865-4ca2-8c40-ca305efbfbd3` found run `58a4d58e` actively
+searching the workspace and issuing `go doc` commands through
+`2026-09-28T22:43:59Z`, shortly before the explicit 240-second MCP deadline.
+The request used a broad ACP audit prompt and an explicit four-minute timeout,
+while the MCP default is twenty minutes. This evidence supports a task overrun
+under the caller's short deadline, not an idle or crashed OpenCode process. It
+does not yet prove whether cleanup preserved any partial answer or whether
+OpenCode would have finished under the default deadline.
+
+A bounded Codex MCP Pi audit (session `58655a37-175a-49a4-a8a4-6bd4aa3b485a`)
+confirmed no reliable typed final Pi failure reaches the current ACP adapter.
+The installed `pi-acp` 0.0.34 turns Pi's final error into ACP `end_turn` and
+emits retry notices as ordinary message chunks. A controlled bridge must retain
+the *settled* Pi outcome, since an earlier failed attempt can be followed by a
+successful retry. Inspecting Pi session JSONL after the fact cannot reliably
+associate the exact prompt outcome, and parsing English retry text remains
+unsound. No edit was made. Focused ACP failure-classification tests passed;
+the full ACP service package had an existing dirty Pi preflight failure in
+`TestPiPreflight_CanceledContext` (`Canceled` expected, `misconfigured` seen).
