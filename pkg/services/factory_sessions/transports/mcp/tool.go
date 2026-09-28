@@ -202,10 +202,10 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 		return subagentCleanupError(closeErr, started.SessionID, requestID)
 	}
 	if invokeErr != nil {
-		return subagentInvokeError(invokeErr, started.SessionID, requestID, timeoutMillis, input)
+		return subagentClosedFailure(subagentInvokeError(invokeErr, started.SessionID, requestID, timeoutMillis, input))
 	}
 	if result.Status != factorysessionexecution.InvocationTerminalStatusCompleted {
-		return subagentTerminalFailure(started.SessionID, result, timeoutMillis, input)
+		return subagentClosedFailure(subagentTerminalFailure(started.SessionID, result, timeoutMillis, input))
 	}
 	response := SubagentResult{
 		SessionID: started.SessionID,
@@ -219,9 +219,26 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 			SessionID: started.SessionID,
 			Details:   map[string]any{"status": string(result.Status)},
 		}
-		return ToolResponse[SubagentResult]{Error: &envelope}
+		return subagentClosedFailure(ToolResponse[SubagentResult]{Error: &envelope})
 	}
 	return ToolResponse[SubagentResult]{Result: &response}
+}
+
+func subagentClosedFailure(response ToolResponse[SubagentResult]) ToolResponse[SubagentResult] {
+	envelope := response.Error
+	envelope.Message += "; you.subagent cleanup closed the live Factory Session"
+	if envelope.Details == nil {
+		envelope.Details = make(map[string]any)
+	}
+	envelope.Details["sessionClosed"] = true
+	envelope.Details["sessionIdPurpose"] = "Use sessionId for log correlation; you.factory_session.get may return session.not_found."
+	const inspectBeforeRetry = "Inspect the workspace for partial edits and check provider logs using sessionId and any requestId, traceId, or workId."
+	if action, ok := envelope.Details["suggestedAction"].(string); ok && action != "" {
+		envelope.Details["suggestedAction"] = inspectBeforeRetry + " " + action
+	} else {
+		envelope.Details["suggestedAction"] = inspectBeforeRetry
+	}
+	return response
 }
 
 // subagentPrimaryText joins the text parts of a completed invocation with
@@ -335,7 +352,7 @@ func subagentInvocationTimeout(sessionID, requestID string, timeoutMillis int64,
 		Details: map[string]any{
 			"partialEffectsPossible": true,
 			"requestId":              requestID,
-			"suggestedAction":        "Inspect the workspace for partial edits before retrying with another configured model or a longer timeout.",
+			"suggestedAction":        "If you retry, use another configured model or a longer timeout.",
 		},
 	}
 	if input.Provider != "" {
@@ -364,7 +381,7 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		envelope.Code = "factory_session.subagent.timed_out"
 		envelope.Message = "subagent timed out before producing a result; workspace edits may have occurred"
 		envelope.Details["partialEffectsPossible"] = true
-		envelope.Details["suggestedAction"] = "Inspect the workspace for partial edits before retrying with another configured model or a longer timeout."
+		envelope.Details["suggestedAction"] = "If you retry, use another configured model or a longer timeout."
 		if input.Provider != "" {
 			envelope.Details["provider"] = input.Provider
 		}

@@ -97,6 +97,9 @@ func TestSubagentToolDocumentsTextResultContract(t *testing.T) {
 	if !ok {
 		t.Fatal("you.subagent tool is missing")
 	}
+	if !strings.Contains(tool.Description, "closed before return") || !strings.Contains(tool.Description, "log correlation, not you.factory_session.get") {
+		t.Fatalf("you.subagent description omits closed-session guidance: %q", tool.Description)
+	}
 	properties := tool.OutputSchema["properties"].(map[string]any)
 	result := properties["result"].(map[string]any)
 	resultProperties := result["properties"].(map[string]any)
@@ -104,6 +107,11 @@ func TestSubagentToolDocumentsTextResultContract(t *testing.T) {
 		if _, exists := resultProperties[field]; !exists {
 			t.Errorf("you.subagent result schema is missing %q", field)
 		}
+	}
+	sessionID := resultProperties["sessionId"].(map[string]any)
+	description := sessionID["description"].(string)
+	if !strings.Contains(description, "closed before this result returns") || !strings.Contains(description, "log correlation, not you.factory_session.get") {
+		t.Fatalf("you.subagent result.sessionId description omits closed-session guidance: %q", description)
 	}
 	if _, exists := resultProperties["syncOutcome"]; exists {
 		t.Fatal("you.subagent result schema exposes the sync execution response")

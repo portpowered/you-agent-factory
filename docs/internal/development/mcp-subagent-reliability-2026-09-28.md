@@ -867,3 +867,17 @@ The updated `you.exe` was rebuilt and installed at
 `7698C21E39C80E7515D4DF26824655D017BC38B9AA1580D667E0BFA1572283D6`).
 A fresh stdio MCP initialization and `tools/list` on that installed binary
 returned 11 tools including `you.subagent`.
+
+The failed timeout-session lookups were traced to `you.subagent` closing its
+live Factory Session before returning. Codex MCP subagent
+`ec5123a1-4b90-45c1-8ccc-7efab168eaa9` updated post-close failure
+envelopes with `sessionClosed: true`, log-correlation guidance, and a
+workspace/provider-log inspection action; cleanup failures do not claim a
+closed session. Follow-up subagent `ccf05932-304e-44d0-9354-c4f276ad27a4`
+documented the same lifecycle for successful results in tool discovery.
+The first full package test found stale MCP inventory output, so subagents
+`7800cbe0-954e-483d-93eb-65b4b2bdee69` and
+`820a84f2-e1dc-4e49-b21e-4ace56c55ab5` regenerated the canonical tool
+inventory and published API contract artifacts. The full Factory Sessions
+MCP package test, contract check, and native Windows `make lint` (24 targets)
+then passed. The underlying OpenCode timeout cause remains unproven.

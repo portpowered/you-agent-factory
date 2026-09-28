@@ -207,10 +207,11 @@ func subagentTool() ToolDefinition {
 	return ToolDefinition{
 		Name: ToolSubagent,
 		Description: "Run one bounded subagent using the packaged @you/subagent Factory. " +
-			"Omitted provider, model, and reasoning effort use operator and provider defaults.",
+			"Omitted provider, model, and reasoning effort use operator and provider defaults. " +
+			"On success, the live Factory Session is closed before return; the sessionId is for log correlation, not you.factory_session.get.",
 		InputSchema: subagentInputSchema(),
 		OutputSchema: toolResponseSchema(objectSchema(map[string]any{
-			"sessionId": stringProperty("Stable identity of the Factory Session used for this subagent invocation."),
+			"sessionId": stringProperty("The live Factory Session is closed before this result returns. Use this ID for log correlation, not you.factory_session.get."),
 			"status":    stringProperty("Terminal status of the subagent invocation."),
 			"text":      stringProperty("Text returned by the subagent."),
 		}, "sessionId", "status")),

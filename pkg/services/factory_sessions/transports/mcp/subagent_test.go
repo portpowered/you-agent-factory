@@ -167,6 +167,7 @@ func TestSubagentSurfacesSafeProviderThrottleFailure(t *testing.T) {
 	if response.Error.SessionID != "session-1" || response.Error.Details["failureReason"] != "throttled" {
 		t.Fatalf("throttled diagnostic = %#v", response.Error)
 	}
+	assertSubagentClosedDiagnostic(t, response.Error)
 	if strings.Contains(response.Error.Message, "sensitive") || !target.closed {
 		t.Fatalf("terminal failure leaked provider text or skipped close: %#v", response.Error)
 	}
@@ -262,6 +263,7 @@ func TestSubagentTimeoutReportsPossibleWorkspaceEdits(t *testing.T) {
 		t.Fatalf("unselected model in timeout details = %#v", response.Error.Details)
 	}
 	assertSubagentTimeoutSuggestedAction(t, response.Error.Details["suggestedAction"])
+	assertSubagentClosedDiagnostic(t, response.Error)
 	if !strings.Contains(response.Error.Message, "workspace edits may have occurred") || strings.Contains(response.Error.Message, "private") || !target.closed {
 		t.Fatalf("timeout message or cleanup = %#v", response.Error)
 	}
@@ -281,18 +283,35 @@ func TestSubagentTimeoutReportsExplicitProviderAndModel(t *testing.T) {
 		t.Fatalf("selected provider and model = %#v", response.Error.Details)
 	}
 	assertSubagentTimeoutSuggestedAction(t, response.Error.Details["suggestedAction"])
+	assertSubagentClosedDiagnostic(t, response.Error)
 }
 
 func assertSubagentTimeoutSuggestedAction(t *testing.T, value any) {
 	t.Helper()
-	if action, ok := value.(string); !ok || !strings.Contains(action, "Inspect the workspace for partial edits") || !strings.Contains(action, "another configured model or a longer timeout") {
+	if action, ok := value.(string); !ok || !strings.Contains(action, "Inspect the workspace for partial edits") || !strings.Contains(action, "provider logs") || !strings.Contains(action, "requestId") || !strings.Contains(action, "If you retry, use another configured model or a longer timeout.") || strings.Contains(action, "before retrying. Then retry") {
 		t.Fatalf("timeout suggested action = %#v", value)
+	}
+}
+
+func assertSubagentClosedDiagnostic(t *testing.T, envelope *mcpfactorysession.ToolErrorEnvelope) {
+	t.Helper()
+	if envelope.Details["sessionClosed"] != true || !strings.Contains(envelope.Message, "you.subagent cleanup closed the live Factory Session") {
+		t.Fatalf("closed-session diagnostic = %#v", envelope)
+	}
+	purpose, ok := envelope.Details["sessionIdPurpose"].(string)
+	if !ok || !strings.Contains(purpose, "log correlation") || !strings.Contains(purpose, "you.factory_session.get may return session.not_found") {
+		t.Fatalf("sessionId purpose = %#v", envelope.Details["sessionIdPurpose"])
+	}
+	action, ok := envelope.Details["suggestedAction"].(string)
+	if !ok || !strings.Contains(action, "workspace") || !strings.Contains(action, "provider logs") || strings.Contains(action, "Inspect the Factory Session") {
+		t.Fatalf("closed-session suggested action = %#v", envelope.Details["suggestedAction"])
 	}
 }
 
 func TestSubagentReportsEmptyResultWhenCompletedWithoutText(t *testing.T) {
 	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
-		Status: factorysessions.InvocationTerminalStatusCompleted,
+		Status:  factorysessions.InvocationTerminalStatusCompleted,
+		Message: "sensitive provider output",
 	}}
 	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-empty" }, mcpfactorysession.SubagentInput{Prompt: "Summarize this"})
 	if response.Error == nil || response.Result != nil {
@@ -306,6 +325,10 @@ func TestSubagentReportsEmptyResultWhenCompletedWithoutText(t *testing.T) {
 	}
 	if !strings.Contains(response.Error.Message, "without returning") {
 		t.Fatalf("empty result message = %q", response.Error.Message)
+	}
+	assertSubagentClosedDiagnostic(t, response.Error)
+	if strings.Contains(fmt.Sprint(response.Error), "sensitive provider output") {
+		t.Fatalf("empty result leaked provider text: %#v", response.Error)
 	}
 	if !target.closed {
 		t.Fatal("Factory Session was not closed after empty result")
@@ -341,6 +364,7 @@ func TestSubagentInvokeErrorIsPrivateAndIncludesSessionID(t *testing.T) {
 	if response.Error.Details["requestId"] != "request-invoke-err" || response.Error.Details["partialEffectsPossible"] != true {
 		t.Fatalf("invoke error details = %#v", response.Error.Details)
 	}
+	assertSubagentClosedDiagnostic(t, response.Error)
 	if strings.Contains(response.Error.Message, "sensitive") || strings.Contains(response.Error.Message, "abc123") {
 		t.Fatalf("invoke error leaked raw text: %q", response.Error.Message)
 	}
@@ -371,6 +395,7 @@ func TestSubagentInvokeDeadlineExceededReportsPossibleWorkspaceEdits(t *testing.
 		t.Fatalf("deadline timeoutMillis = %#v, want %d", response.Error.Details["timeoutMillis"], timeout)
 	}
 	assertSubagentTimeoutSuggestedAction(t, response.Error.Details["suggestedAction"])
+	assertSubagentClosedDiagnostic(t, response.Error)
 	if strings.Contains(response.Error.Message, "sensitive") || strings.Contains(response.Error.Message, "abc123") || !target.closed {
 		t.Fatalf("deadline error leaked raw text or skipped close: %#v", response.Error)
 	}
@@ -397,6 +422,9 @@ func TestSubagentCloseErrorIsPrivateAndIncludesSessionID(t *testing.T) {
 	if response.Error.Details["requestId"] != "request-close-err" || response.Error.Details["partialEffectsPossible"] != true {
 		t.Fatalf("close error details = %#v", response.Error.Details)
 	}
+	if _, ok := response.Error.Details["sessionClosed"]; ok {
+		t.Fatalf("failed cleanup claimed session closed: %#v", response.Error.Details)
+	}
 }
 
 func TestSubagentCloseDeadlineExceededReportsCleanupTimeout(t *testing.T) {
@@ -419,6 +447,9 @@ func TestSubagentCloseDeadlineExceededReportsCleanupTimeout(t *testing.T) {
 	}
 	if response.Error.Details["requestId"] != "request-close-timeout" || response.Error.Details["partialEffectsPossible"] != true {
 		t.Fatalf("close timeout error details = %#v", response.Error.Details)
+	}
+	if _, ok := response.Error.Details["sessionClosed"]; ok {
+		t.Fatalf("timed-out cleanup claimed session closed: %#v", response.Error.Details)
 	}
 	action, ok := response.Error.Details["suggestedAction"].(string)
 	if !ok || strings.TrimSpace(action) == "" {
