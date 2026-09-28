@@ -1459,3 +1459,15 @@ CLI error; it did not expose the backend's underlying error or response.
 Commit `ce336bbbc3` records the Work media-byte repair and Factory VIDEO
 capability mapping. Focused Go tests, dashboard typecheck, docs-reference
 smoke, all 24 lint targets, and post-commit API smoke passed.
+
+The user clarified that the next file-upload scope was the direct Models
+endpoint. A narrow OpenCode-provider MCP task to add direct JSON media tests
+and docs (session `4b34a453-a3c3-44f1-99ae-f69934dc5ee3`) timed out after
+10 minutes without a primary result or requested edit; the tool returned a
+typed `factory_session.subagent.timed_out` with `partialEffectsPossible=true`
+and confirmed session cleanup. A Codex subagent completed direct HTTP
+multipart upload handling, and the root agent added the JSON media proof and
+docs. Commit `cd2c464910` records this direct endpoint change. The timeout
+is another bounded OpenCode harness failure, not evidence that the requested
+edit was performed. Focused HTTP and contract tests, dashboard typecheck,
+docs-reference smoke, all 24 lint targets, and post-commit API smoke passed.
