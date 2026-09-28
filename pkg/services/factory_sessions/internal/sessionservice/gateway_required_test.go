@@ -925,6 +925,20 @@ func TestCanonicalInvocationRequestClonesNamedArguments(t *testing.T) {
 	}
 }
 
+func TestCanonicalInvocationRequestKeepsRawContentForSignatureNormalization(t *testing.T) {
+	t.Parallel()
+
+	content := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello", Metadata: map[string]any{"source": "acp"}}}
+	converted := canonicalInvocationRequest(factorysessions.SessionInvokeRequest{Content: content, ContentProvided: true})
+	if !converted.ContentProvided || converted.SourceKind == nil || *converted.SourceKind != factorysessions.InvocationInputSourceKindText || len(converted.Content) != 1 || converted.Content[0].Text != "hello" {
+		t.Fatalf("raw invocation mapping = %#v, want text content for owner normalization", converted)
+	}
+	converted.Content[0].Metadata["source"] = "owner"
+	if content[0].Metadata["source"] != "acp" {
+		t.Fatal("owner mutation crossed caller-owned raw content")
+	}
+}
+
 func assertCanonicalInvokeRequest(t *testing.T, fake *canonicalSessionInvokerFake, input *work.PreparedInvocationInput) {
 	t.Helper()
 	if fake.canonicalCalls != 1 || fake.legacyCalls != 0 || fake.calls != 1 || fake.sessionID != "session-1" || fake.requestID != "invoke-1" || fake.timeout != 500 || !fake.cancelOnTimeout {

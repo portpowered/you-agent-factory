@@ -823,9 +823,10 @@ func (s *Server) startFactorySessionForEpisode(
 	outcome, liveDelivered, err := s.dispatchFactoryInvocation(ctx, connectionID, startResult.Session.ID, startResult.Session.Version, factorySessionID,
 		func(invokeCtx context.Context) (factorysessions.InvocationResult, error) {
 			return s.factorySessions.Invoke(invokeCtx, factorysessions.SessionInvokeRequest{
-				SessionID:   factorySessionID,
-				Correlation: factorysessions.SessionOperationCorrelation{RequestID: requestID},
-				Input:       preparedPromptInput(turn.Content),
+				SessionID:       factorySessionID,
+				Correlation:     factorysessions.SessionOperationCorrelation{RequestID: requestID},
+				Content:         promptContentToWorkParts(turn.Content),
+				ContentProvided: true,
 			})
 		},
 	)
@@ -936,9 +937,10 @@ func (s *Server) invokeFactorySessionForEpisode(
 	invokeResult, liveDelivered, err := s.dispatchFactoryInvocation(ctx, connectionID, startResult.Session.ID, startResult.Session.Version, startResult.Episode.FactorySessionID,
 		func(invokeCtx context.Context) (factorysessions.InvocationResult, error) {
 			return s.factorySessions.Invoke(invokeCtx, factorysessions.SessionInvokeRequest{
-				SessionID:   startResult.Episode.FactorySessionID,
-				Correlation: factorysessions.SessionOperationCorrelation{RequestID: requestID},
-				Input:       preparedPromptInput(turn.Content),
+				SessionID:       startResult.Episode.FactorySessionID,
+				Correlation:     factorysessions.SessionOperationCorrelation{RequestID: requestID},
+				Content:         promptContentToWorkParts(turn.Content),
+				ContentProvided: true,
 			})
 		},
 	)
@@ -986,19 +988,6 @@ func (s *Server) currentSessionVersion(ctx context.Context, sessionID string, fa
 		return 0, err
 	}
 	return result.Session.Version, nil
-}
-
-// preparedPromptInput maps validated ACP text prompt content into the
-// canonical Work prepared-invocation shape used for Factory Sessions Invoke.
-func preparedPromptInput(content []session.TextContent) *work.PreparedInvocationInput {
-	parts := promptContentToWorkParts(content)
-	return &work.PreparedInvocationInput{
-		Source: work.InputSourcePositionalText,
-		ResolvedInput: &work.ResolvedInput{
-			Source:  work.InputSourcePositionalText,
-			Content: parts,
-		},
-	}
 }
 
 // promptContentToWorkParts converts validated ACP text prompt content into

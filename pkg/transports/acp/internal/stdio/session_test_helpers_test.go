@@ -440,14 +440,13 @@ func (f *fakeFactoryTargetService) Invoke(
 	request factorysessions.SessionInvokeRequest,
 ) (factorysessions.InvocationResult, error) {
 	f.mu.Lock()
-	legacy := factorysessions.InvocationRequest{ContentProvided: true}
-	if request.Input != nil && request.Input.ResolvedInput != nil {
-		legacy.Content = request.Input.ResolvedInput.Content
+	legacy := factorysessions.InvocationRequest{Content: work.CloneWorkContentParts(request.Content), ContentProvided: request.ContentProvided}
+	if request.ContentProvided {
+		sourceKind := factorysessions.InvocationInputSourceKindText
+		legacy.SourceKind = &sourceKind
 	}
 	requestID := request.Correlation.RequestID
 	legacy.RequestID = &requestID
-	sourceKind := factorysessions.InvocationInputSourceKindText
-	legacy.SourceKind = &sourceKind
 	f.invokeCalls = append(f.invokeCalls, invokeFactoryTargetCall{sessionID: request.SessionID, request: legacy})
 	enter, release := f.invokeEnter, f.invokeRelease
 	f.mu.Unlock()

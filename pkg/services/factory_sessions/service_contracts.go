@@ -658,13 +658,15 @@ type SessionStartRequest struct {
 	ActivationOnly bool
 }
 
-// SessionInvokeRequest carries normalized Work input into an existing
-// Factory Session. The owner converts it to the private invocation request only
-// at the owner boundary.
+// SessionInvokeRequest carries invocation values into an existing Factory
+// Session. Raw Content is normalized by the owner against the active Factory
+// signature; Input carries already prepared Work input.
 type SessionInvokeRequest struct {
-	SessionID   string
-	Correlation SessionOperationCorrelation
-	Input       *work.PreparedInvocationInput
+	SessionID       string
+	Correlation     SessionOperationCorrelation
+	Input           *work.PreparedInvocationInput
+	Content         []work.WorkContentPart
+	ContentProvided bool
 	// Args carries normalized named invocation values as request data; transport owns no runtime handle.
 	Args map[string]any
 	Wait SessionOperationWait
