@@ -529,9 +529,14 @@ following named input slots:
 | `video` | `@` file detected as video | No | No |
 | `parameters` | JSON text prefixed with `json:` | No | No |
 
-The pinned-protocol conformance fixture records the `Audios` and `Videos`
-request fields as accepted at the pinned llama.cpp protocol revision. This
-slice therefore supports text, images, audio, and video. The output is text.
+The `OMNI` request can carry text, image, audio, and video inputs to the pinned
+LocalAI protocol. The protocol conformance fixture checks the request fields;
+it does not confirm that a loaded model understands the media. The output is
+text. The built-in `llm` requires a verified multimodal projector for media
+inference. Check `you models inspect llm` before sending media. If
+`videoReadiness` reports that the projector is missing or invalid, video is
+unavailable. Image and audio slots may still appear in the operation list,
+but the managed host cannot load this built-in model from an incomplete cache.
 
 Use a repeatable `--input` flag for each named binding. Set
 `--operation OMNI` to select the built-in operation.
@@ -561,7 +566,8 @@ non-repeatable slot fails before generation.
 
 Prefix a file path with `@` to read its bytes and detect its media type. Common
 extensions map to their concrete types, including `.txt`, `.png`, `.wav`, and
-`.mp4`. Unknown extensions use content detection.
+`.mp4`. Unknown extensions use content detection. Each file must be nonempty
+and no larger than 8 MiB.
 
 ```bash
 you models invoke llm \
@@ -578,6 +584,8 @@ The detected type must match the named slot. For example,
 classifies this as `MEDIA_CAPABILITY`. The CLI reports the safe
 `CLI_COMMAND_FAILED` diagnostic.
 Unsupported modalities are never silently omitted or converted.
+The built-in `OMNI` operation has no general document or binary input slot.
+Convert a document to text or a supported media type before invocation.
 
 Cancel a running invocation with `Ctrl-C`. Cancellation releases model capacity
 and leaves no partial stdout or output file.
