@@ -111,9 +111,10 @@ Notes:
 - Backend consumption of `ref_text` beyond protocol delivery.
 - This repository's pinned artifact publication and Windows first-use
   lifecycle for Qwen/Index (registry still only publishes VibeVoice).
-- Managed TTS first-use lifecycle and native Windows GPU remain unverified;
-  managed ASR, embeddings, and LLM evidence is recorded in [the invocation
-  audit](localai-gpu-invocation-audit-2026-09-28.md).
+- Native Windows GPU execution remains unverified. Managed built-in VibeVoice
+  TTS on WSL is verified separately in [the invocation
+  audit](localai-gpu-invocation-audit-2026-09-28.md); it does not verify managed
+  Qwen3 or IndexTTS reference-audio synthesis.
 
 ## Upstream configuration evidence
 

@@ -45,6 +45,17 @@ Docker. Gallery CUDA backends and models were installed under
   `cuda12-llama-cpp` gallery backend. The same invocation with `--offline`
   returned `READY` using cached artifacts.
 
+## TTS — built-in VibeVoice GGUF (`cuda12-vibevoice-cpp`)
+
+- `you models pull tts` installed the model, tokenizer, and voice files on WSL
+  Ubuntu. The initial gallery mapping selected `cuda12-vibevoice`, a Python
+  Hugging Face backend incompatible with this GGUF bundle; model loading
+  failed after interpreting the literal `tts` as a remote model ID.
+- The resolver now selects `cuda12-vibevoice-cpp` (and `cpu-vibevoice-cpp` for
+  CPU). A rebuilt binary invoked TTS with `--offline` and wrote a valid WAV:
+  mono, 24 kHz, 64,000 frames, 2.67 seconds. This verifies managed first use
+  with the Linux CUDA gallery archive and reuse of cached model artifacts.
+
 ## OMNI codec
 
 - The repository OMNI codec initially failed with empty text.
@@ -62,6 +73,6 @@ TTS Qwen3 and IndexTTS results are in
 ## Limitation
 
 The WSL-built `you` binary proves managed CUDA backend first-use and offline
-reuse for ASR, embeddings, and LLM. Managed end-to-end TTS and native Windows
-GPU execution remain unverified. The host is Windows; the CUDA backend
-processes in this audit ran under WSL Ubuntu.
+reuse for ASR, embeddings, LLM, and TTS. Native Windows GPU execution and
+Qwen3/IndexTTS reference-audio managed path remain unverified. The host is
+Windows; the CUDA gallery backends in this audit ran under WSL Ubuntu.

@@ -19,7 +19,7 @@ func TestGalleryBackendArtifactResolverSelectsCUDAWithoutCPUFallback(t *testing.
 	}{
 		{"localai-llamacpp", "cuda12-llama-cpp", "/cache/backends/cuda12-llama-cpp"},
 		{"localai-whisper", "cuda12-whisper", "/cache/backends/cuda12-whisper"},
-		{"localai-vibevoice", "cuda12-vibevoice", "/cache/backends/cuda12-vibevoice"},
+		{"localai-vibevoice", "cuda12-vibevoice-cpp", "/cache/backends/cuda12-vibevoice-cpp"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.backend, func(t *testing.T) {
@@ -71,7 +71,7 @@ func TestGalleryBackendArtifactResolverRejectsUnsupportedAccelerator(t *testing.
 func TestGalleryBackendNameUsesExplicitCPUVariant(t *testing.T) {
 	t.Parallel()
 	name, err := galleryBackendName("localai-vibevoice", "cpu")
-	if err != nil || name != "cpu-vibevoice" {
-		t.Fatalf("gallery name = %q, error = %v, want cpu-vibevoice", name, err)
+	if err != nil || name != "cpu-vibevoice-cpp" {
+		t.Fatalf("gallery name = %q, error = %v, want cpu-vibevoice-cpp", name, err)
 	}
 }

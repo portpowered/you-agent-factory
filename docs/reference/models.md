@@ -129,7 +129,8 @@ On Linux amd64, `you` installs managed LocalAI backends from LocalAI's current
 backend gallery on first use. It selects a CUDA 12 backend when an NVIDIA GPU
 device and `nvidia-smi` are available. Otherwise it selects the CPU backend.
 The `localai-llamacpp`, `localai-whisper`, and `localai-vibevoice` identities
-map to the corresponding gallery backends. The installed backend stays in the
+map to the corresponding gallery backends. VibeVoice uses the `vibevoice-cpp`
+gallery variant for its GGUF model bundle. The installed backend stays in the
 user cache for later use.
 
 `you` uses `LOCALAI_BINARY` when it is set, then `local-ai` on `PATH`. If
