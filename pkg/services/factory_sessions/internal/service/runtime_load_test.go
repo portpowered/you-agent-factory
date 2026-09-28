@@ -866,7 +866,9 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 			}, nil
 		},
 		factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
-		factorysessions.SessionRuntimeOpeningRequest{SystemConfigHome: t.TempDir()},
+		factorysessions.PersistencePolicyDisabled,
+		t.TempDir(),
+		"",
 		operatorconfig.ResolvedDefaults{WorkerModelProvider: "CODEX", WorkerModel: "operator-model"},
 		RuntimeRoot{FactoryRootDir: t.TempDir()},
 		nil,

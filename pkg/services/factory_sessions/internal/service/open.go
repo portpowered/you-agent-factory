@@ -205,7 +205,7 @@ func openRuntime(
 		)
 		return historicalProducts, nil
 	}
-	operatorSettingsPath, err := operatorConfigPath(configured.Session)
+	operatorSettingsPath, err := operatorConfigPath(configured.Session.SystemConfigPath, configured.Session.SystemConfigHome)
 	if err != nil {
 		return runtimeProducts{}, fmt.Errorf("resolve operator settings path for runtime transport: %w", err)
 	}
@@ -232,7 +232,9 @@ func openRuntime(
 	}
 	durableExecution, err := durableExecutionFactory(
 		configured.Definition,
-		configured.Session,
+		configured.Session.PersistencePolicy,
+		configured.Session.SystemConfigHome,
+		configured.Session.SystemConfigPath,
 		configured.OperatorDefaults,
 		root,
 		clock,

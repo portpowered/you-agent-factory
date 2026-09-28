@@ -403,7 +403,9 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 	dependencies.Workers.Service = &portableReplayWorkerService{}
 	dependencies.FactorySessions.DurableExecutionFactory = func(
 		_ factorydefinitions.RuntimeOpeningRequest,
-		_ factorysessions.SessionRuntimeOpeningRequest,
+		_ factorysessions.PersistencePolicy,
+		_ string,
+		_ string,
 		_ operatorconfig.ResolvedDefaults,
 		_ RuntimeRoot,
 		_ factoryruntime.Clock,

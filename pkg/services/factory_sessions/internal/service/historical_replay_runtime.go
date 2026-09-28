@@ -347,7 +347,9 @@ func constructPortableReplayDurableOwner(
 	}
 	durable, err := durableExecutionFactory(
 		configured.Definition,
-		configured.Session,
+		configured.Session.PersistencePolicy,
+		configured.Session.SystemConfigHome,
+		configured.Session.SystemConfigPath,
 		configured.OperatorDefaults,
 		root,
 		clock,

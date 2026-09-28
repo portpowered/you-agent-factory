@@ -6,14 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 func TestOperatorConfigPathRequiresExplicitProcessHome(t *testing.T) {
 	t.Parallel()
 
-	_, err := operatorConfigPath(factorysessions.SessionRuntimeOpeningRequest{})
+	_, err := operatorConfigPath("", "")
 	if err == nil || !strings.Contains(err.Error(), "operator config home is required") {
 		t.Fatalf("operatorConfigPath() error = %v, want required process home", err)
 	}

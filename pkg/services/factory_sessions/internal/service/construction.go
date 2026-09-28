@@ -170,7 +170,9 @@ func PrepareRuntime(
 func NewDurableExecution(
 	loadOperatorConfig operatorconfig.ConfigLoader,
 	definitionRequest factorydefinitions.RuntimeOpeningRequest,
-	sessionRequest factorysessions.SessionRuntimeOpeningRequest,
+	persistence factorysessions.PersistencePolicy,
+	systemConfigHome string,
+	systemConfigPath string,
 	resolvedDefaults operatorconfig.ResolvedDefaults,
 	root RuntimeRoot,
 	clock factoryruntime.Clock,
@@ -183,7 +185,7 @@ func NewDurableExecution(
 		return DurableExecution{}, fmt.Errorf("compose durable session execution: Factory Sessions execution factory is required")
 	}
 	projectRoot := firstNonEmpty(definitionRequest.ExecutionBaseDir, definitionRequest.Directory, root.FactoryRootDir)
-	configPath, err := operatorConfigPath(sessionRequest)
+	configPath, err := operatorConfigPath(systemConfigPath, systemConfigHome)
 	if err != nil {
 		return DurableExecution{}, err
 	}
@@ -224,7 +226,7 @@ func NewDurableExecution(
 	}
 	execution, err := executionFactory(
 		projectRoot,
-		sessionRequest.PersistencePolicy,
+		persistence,
 		providerOverride,
 		clock,
 		workerPresetIDs,
@@ -310,11 +312,11 @@ func resolveDefinitionPath(
 	return definition.Directory, nil
 }
 
-func operatorConfigPath(request factorysessions.SessionRuntimeOpeningRequest) (string, error) {
-	if strings.TrimSpace(request.SystemConfigPath) != "" {
-		return strings.TrimSpace(request.SystemConfigPath), nil
+func operatorConfigPath(configPath, home string) (string, error) {
+	if strings.TrimSpace(configPath) != "" {
+		return strings.TrimSpace(configPath), nil
 	}
-	homeDir := strings.TrimSpace(request.SystemConfigHome)
+	homeDir := strings.TrimSpace(home)
 	if homeDir == "" {
 		return "", fmt.Errorf("operator config home is required")
 	}
@@ -331,7 +333,7 @@ func ensureBackendScope(ensure operatorconfig.BackendScopeEnsurer, request *fact
 	if ensure == nil {
 		return fmt.Errorf("Operator Settings backend-scope ensurer is required")
 	}
-	configPath, err := operatorConfigPath(*request)
+	configPath, err := operatorConfigPath(request.SystemConfigPath, request.SystemConfigHome)
 	if err != nil {
 		return err
 	}

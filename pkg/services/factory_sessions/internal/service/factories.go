@@ -48,7 +48,6 @@ type FactoryRuntimeRoot interface {
 	Deactivate(context.Context, factoryruntime.RuntimeDeactivationRequest) (factoryruntime.RuntimeDeactivationResult, error)
 }
 
-
 type DurableExecution struct {
 	Service         durableexecution.Service
 	ACPIntegrations []operatorsettings.ACPIntegration
@@ -57,7 +56,9 @@ type DurableExecution struct {
 
 type DurableExecutionFactory func(
 	factorydefinitions.RuntimeOpeningRequest,
-	factorysessions.SessionRuntimeOpeningRequest,
+	factorysessions.PersistencePolicy,
+	string,
+	string,
 	operatorsettings.ResolvedDefaults,
 	RuntimeRoot,
 	factoryruntime.Clock,
