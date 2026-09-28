@@ -204,6 +204,15 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 			response.Text += part.Text
 		}
 	}
+	if strings.TrimSpace(response.Text) == "" {
+		envelope := ToolErrorEnvelope{
+			Code:      "factory_session.subagent.empty_result",
+			Message:   "subagent completed without returning any text result; the ACP peer may have closed without producing output",
+			SessionID: started.SessionID,
+			Details:   map[string]any{"status": string(result.Status)},
+		}
+		return ToolResponse[SubagentResult]{Error: &envelope}
+	}
 	return ToolResponse[SubagentResult]{Result: &response}
 }
 

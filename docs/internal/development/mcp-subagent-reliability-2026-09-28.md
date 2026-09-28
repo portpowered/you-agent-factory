@@ -27,6 +27,8 @@ the agent's text response.
 | Longcat free rewrite | Replace the audit with at most 350 words; 120-second limit | `COMPLETED`, session `81e7ea79-8167-4c88-a310-bcb652ceb410` | It produced a concise file at the requested path, but reported a different filename in its final text and mislabeled `TEXT`/`AUDIO`/`JSON` modalities as MIME types. The file was corrected and focused LocalAI tests passed. | Keep the response/file verification step even after successful MCP completion. |
 | Mimo default-selection audit | Inspect and fix prompt-only provider/model selection; 180-second limit | `factory_session.subagent.timed_out`, session `b560f791-97dc-49dc-911c-f03b4d28d116` | No source edit or primary result. | Probe a prompt-only invocation directly; keep future audits smaller. |
 | Nemotron Ultra LocalAI test task | Add focused reference-audio test; 240-second limit | `factory_session.subagent.timed_out`, session `dd5a0168-893b-4a98-9194-d5e9f737df74` | Four partial tests appeared in two files. All passed, but duplicated existing codec and protocol assertions and froze an unsupported reference-transcript behavior. The partial edits were removed after review. | Scope the next implementation task to one concrete missing behavior. |
+| Prompt-only default selection | Read README with no provider or model; 90-second limit | `COMPLETED`, session `21b5bd11-bf33-41db-84d9-1f324512c1ed` | Returned the correct repository summary from the supplied workspace. A second call with no `workingRoot` also completed (`ecb3e0e7-7235-4068-83d3-cac74abfb560`). | The configured operator default works; a clean-install test is still needed to prove out-of-box selection. |
+| Longcat empty-result classification | Make a completed invocation with no text an explicit MCP error; 180-second limit | `COMPLETED`, session `e076cfc3-e8a0-47e3-b32d-6ec341cabb5c` | It edited only the requested MCP source and test. Review confirmed `factory_session.subagent.empty_result` includes the session ID, and MCP plus CLI MCP package tests pass. | Rebuild and direct-probe the new binary before relying on the installed copy. |
 
 Two `you.subagent` calls ran concurrently and appeared as two live Factory
 Sessions. This demonstrates concurrent dispatch, while the code task's timeout
@@ -54,3 +56,10 @@ executable from `npx` to `opencode`; the generated catalog was updated and its
 check and focused package tests passed. Neither probe required a special edit
 flag. A broad `make verify-fast` attempt stopped at dashboard typechecking
 because this isolated worktree has no Bun type dependencies installed.
+The integrated binary was rebuilt, installed as `C:\Users\andre\bin\you.exe`,
+and independently launched over stdio. It exposed all 11 MCP tools and
+rejected an unknown argument before dispatch. Two pre-existing MCP server
+processes still hold the previous executable image until they restart. A
+second direct stdio launch of the installed binary completed a read-only
+OpenCode Longcat invocation (`f15a7a77-d43b-49a3-b212-721b6a2aa572`) and
+returned the expected primary result, `you-agent-factory`.

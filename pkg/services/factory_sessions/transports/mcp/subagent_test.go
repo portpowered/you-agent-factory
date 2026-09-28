@@ -176,3 +176,25 @@ func TestSubagentTimeoutReportsPossibleWorkspaceEdits(t *testing.T) {
 		t.Fatalf("timeout message or cleanup = %#v", response.Error)
 	}
 }
+
+func TestSubagentReportsEmptyResultWhenCompletedWithoutText(t *testing.T) {
+	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
+		Status: factorysessions.InvocationTerminalStatusCompleted,
+	}}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-empty" }, mcpfactorysession.SubagentInput{Prompt: "Summarize this"})
+	if response.Error == nil || response.Result != nil {
+		t.Fatalf("Subagent response = %#v", response)
+	}
+	if response.Error.Code != "factory_session.subagent.empty_result" || response.Error.Retryable {
+		t.Fatalf("empty result error = %#v", response.Error)
+	}
+	if response.Error.SessionID != "session-1" {
+		t.Fatalf("empty result session = %q", response.Error.SessionID)
+	}
+	if !strings.Contains(response.Error.Message, "without returning") {
+		t.Fatalf("empty result message = %q", response.Error.Message)
+	}
+	if !target.closed {
+		t.Fatal("Factory Session was not closed after empty result")
+	}
+}
