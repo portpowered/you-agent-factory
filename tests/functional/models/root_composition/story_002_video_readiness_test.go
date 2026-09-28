@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,20 +31,30 @@ func TestModelsProjectorAwareVideoReadinessThroughRootBuildProcess(t *testing.T)
 
 	fixture := newProjectorReadinessFixture(t)
 	assertUnavailableProjectorPublicSurfaces(t, fixture, "missing projector")
-	videoPath := filepath.Join(fixture.cliDir, "clip.mp4")
-	if err := os.WriteFile(videoPath, []byte("controlled video"), 0o600); err != nil {
-		t.Fatalf("write controlled video: %v", err)
+	media := []struct{ slot, file, mediaType string }{
+		{"image", "picture.png", "image/png"},
+		{"audio", "voice.wav", "audio/wav"},
+		{"video", "clip.mp4", "video/mp4"},
 	}
-	missingFailure := assertProjectorCLIVideoFailure(t, fixture, videoPath, "missing")
-	assertHTTPProjectorVideoFailure(t, fixture, "missing", missingFailure)
+	for _, input := range media {
+		mediaPath := filepath.Join(fixture.cliDir, input.file)
+		if err := os.WriteFile(mediaPath, []byte("controlled "+input.slot), 0o600); err != nil {
+			t.Fatalf("write controlled %s: %v", input.slot, err)
+		}
+		missingFailure := assertProjectorCLIMediaFailure(t, fixture, input.slot, mediaPath, "missing")
+		assertHTTPProjectorMediaFailure(t, fixture, input.slot, input.mediaType, "missing", missingFailure)
+	}
 	assertMissingProjectorAllowsText(t, fixture)
 	writeVideoReadinessModelSource(t, fixture.modelSource, true)
 	writeVideoReadinessManagedCache(t, fixture.home, true)
 	assertVerifiedProjectorPublicSurfaces(t, fixture)
 	corruptCachedVideoReadinessProjector(t, fixture.home)
 	assertUnavailableProjectorPublicSurfaces(t, fixture, "digest-corrupt projector")
-	corruptFailure := assertProjectorCLIVideoFailure(t, fixture, videoPath, "digest-corrupt")
-	assertHTTPProjectorVideoFailure(t, fixture, "digest-corrupt", corruptFailure)
+	for _, input := range media {
+		mediaPath := filepath.Join(fixture.cliDir, input.file)
+		corruptFailure := assertProjectorCLIMediaFailure(t, fixture, input.slot, mediaPath, "digest-corrupt")
+		assertHTTPProjectorMediaFailure(t, fixture, input.slot, input.mediaType, "digest-corrupt", corruptFailure)
+	}
 	writeVideoReadinessManagedCache(t, fixture.home, true)
 	assertVerifiedProjectorPublicSurfaces(t, fixture)
 }
@@ -125,19 +136,20 @@ func assertUnavailableProjectorPublicSurfaces(
 	}
 }
 
-func assertProjectorCLIVideoFailure(
+func assertProjectorCLIMediaFailure(
 	t *testing.T,
 	fixture *projectorReadinessFixture,
-	videoPath string,
+	slot string,
+	mediaPath string,
 	projectorState string,
 ) *models.InvocationFailure {
 	t.Helper()
-	textOutputPath := filepath.Join(fixture.cliDir, "rejected-video-"+projectorState+"-text.txt")
-	usageOutputPath := filepath.Join(fixture.cliDir, "rejected-video-"+projectorState+"-usage.json")
+	textOutputPath := filepath.Join(fixture.cliDir, "rejected-"+slot+"-"+projectorState+"-text.txt")
+	usageOutputPath := filepath.Join(fixture.cliDir, "rejected-"+slot+"-"+projectorState+"-usage.json")
 	videoInputs := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", "llm", "--operation", "OMNI",
-		"--input", "prompt=" + projectorState + " video should be rejected",
-		"--input", "video=@" + videoPath,
+		"--input", "prompt=" + projectorState + " " + slot + " should be rejected",
+		"--input", slot + "=@" + mediaPath,
 		"--output-map", "text=" + textOutputPath,
 		"--output-map", "usage=" + usageOutputPath,
 	})
@@ -149,8 +161,8 @@ func assertProjectorCLIVideoFailure(
 	before := [3]int{fixture.hostLauncher.Calls(), fixture.protocol.Calls(), fixture.rejectingNetwork.Calls()}
 	videoErr := fixture.server.Execute(t, videoInputs.Input)
 	var failure *models.InvocationFailure
-	if !errors.As(videoErr, &failure) || failure.Class != models.InvocationFailureClassMediaCapability || failure.Slot != "video" {
-		t.Fatalf("%s projector video invocation error = %v, failure=%#v, want typed MEDIA_CAPABILITY/video", projectorState, videoErr, failure)
+	if !errors.As(videoErr, &failure) || failure.Class != models.InvocationFailureClassMediaCapability || failure.Slot != slot {
+		t.Fatalf("%s projector %s invocation error = %v, failure=%#v, want typed MEDIA_CAPABILITY/%s", projectorState, slot, videoErr, failure, slot)
 	}
 	if stdout.Len() != 0 {
 		t.Fatalf("rejected %s video invocation stdout = %q, want no successful output", projectorState, stdout.String())
@@ -164,22 +176,23 @@ func assertProjectorCLIVideoFailure(
 	return failure
 }
 
-func assertHTTPProjectorVideoFailure(
+func assertHTTPProjectorMediaFailure(
 	t *testing.T,
 	fixture *projectorReadinessFixture,
+	slot string,
+	mediaType string,
 	projectorState string,
 	typedFailure *models.InvocationFailure,
 ) {
 	t.Helper()
-	prompt := "video should be rejected"
-	mediaType := "video/mp4"
-	videoContent := []byte("controlled video")
+	prompt := slot + " should be rejected"
+	mediaContent := []byte("controlled " + slot)
 	operation := factoryapi.ModelOperationName(models.OperationOMNI)
 	inputs := []factoryapi.ModelInvocationInput{
 		{Name: "prompt", Modality: factoryapi.ModelInvocationContentTypeText, Content: &prompt},
 		{
-			Name: "video", Modality: factoryapi.ModelInvocationContentTypeVideo,
-			MediaType: &mediaType, ContentBase64: &videoContent,
+			Name: slot, Modality: factoryapi.ModelInvocationContentType(strings.ToUpper(slot)),
+			MediaType: &mediaType, ContentBase64: &mediaContent,
 		},
 	}
 	requestBody, err := json.Marshal(factoryapi.GenericModelInvocationRequest{
@@ -324,8 +337,14 @@ func assertVideoReadinessOmitted(
 	diagnostics *factoryapi.StringMap,
 ) {
 	t.Helper()
-	if modelOperationsHaveVideo(operations) || containsVideoModality(modalities) {
-		t.Fatalf("effective video projection retained VIDEO: operations=%#v modalities=%#v", operations, modalities)
+	for _, modality := range []factoryapi.ModelInvocationContentType{
+		factoryapi.ModelInvocationContentTypeImage,
+		factoryapi.ModelInvocationContentTypeAudio,
+		factoryapi.ModelInvocationContentTypeVideo,
+	} {
+		if modelOperationsHaveModality(operations, modality) || containsModality(modalities, modality) {
+			t.Fatalf("effective media projection retained %s: operations=%#v modalities=%#v", modality, operations, modalities)
+		}
 	}
 	if diagnostics != nil && (*diagnostics)["videoReadiness"] != "required projector artifact is missing or invalid" {
 		t.Fatalf("managed-runtime video diagnostic = %#v, want stable missing-projector reason", diagnostics)
@@ -338,18 +357,24 @@ func assertVideoReadinessPresent(
 	modalities []factoryapi.ModelInvocationContentType,
 ) {
 	t.Helper()
-	if !modelOperationsHaveVideo(operations) || !containsVideoModality(modalities) {
-		t.Fatalf("effective video projection did not restore VIDEO: operations=%#v modalities=%#v", operations, modalities)
+	for _, modality := range []factoryapi.ModelInvocationContentType{
+		factoryapi.ModelInvocationContentTypeImage,
+		factoryapi.ModelInvocationContentTypeAudio,
+		factoryapi.ModelInvocationContentTypeVideo,
+	} {
+		if !modelOperationsHaveModality(operations, modality) || !containsModality(modalities, modality) {
+			t.Fatalf("effective media projection did not restore %s: operations=%#v modalities=%#v", modality, operations, modalities)
+		}
 	}
 }
 
-func modelOperationsHaveVideo(operations []factoryapi.ModelInvocationOperation) bool {
+func modelOperationsHaveModality(operations []factoryapi.ModelInvocationOperation, modality factoryapi.ModelInvocationContentType) bool {
 	for _, operation := range operations {
 		if operation.Inputs == nil {
 			continue
 		}
 		for _, slot := range *operation.Inputs {
-			if slot.Name == "video" || (slot.Modality != nil && *slot.Modality == factoryapi.ModelInvocationContentTypeVideo) {
+			if slot.Name == strings.ToLower(string(modality)) || (slot.Modality != nil && *slot.Modality == modality) {
 				return true
 			}
 		}
@@ -357,9 +382,9 @@ func modelOperationsHaveVideo(operations []factoryapi.ModelInvocationOperation) 
 	return false
 }
 
-func containsVideoModality(modalities []factoryapi.ModelInvocationContentType) bool {
+func containsModality(modalities []factoryapi.ModelInvocationContentType, wanted factoryapi.ModelInvocationContentType) bool {
 	for _, modality := range modalities {
-		if modality == factoryapi.ModelInvocationContentTypeVideo {
+		if modality == wanted {
 			return true
 		}
 	}

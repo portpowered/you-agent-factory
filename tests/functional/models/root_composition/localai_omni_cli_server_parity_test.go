@@ -165,7 +165,7 @@ func runLocalAIOMNIParityCase(
 	// The Factory scaffold is immutable for this row; all external behavior is
 	// supplied by the fixture-backed host and protocol edges.
 	writeGenericConformanceCaches(t, home)
-	if testCase.row.Variant == conformance.VariantVideo {
+	if parityRowNeedsProjector(testCase.row.Variant) {
 		modelSource := filepath.Join(home, "llm-source")
 		writeVideoReadinessModelSource(t, modelSource, true)
 		writeVideoReadinessOperatorConfig(t, home, modelSource)
@@ -173,11 +173,11 @@ func runLocalAIOMNIParityCase(
 	}
 	var recorder localAIOMNIProtocolRecorder
 	recorder.attempts = totalAttempts
-	recorder.preparationCallPending = testCase.row.Variant == conformance.VariantVideo
+	recorder.preparationCallPending = parityRowNeedsProjector(testCase.row.Variant)
 
 	localEdges, localNetwork, _, localLauncher := localAIOMNIParityEdges(home, fixture, &recorder)
 	localProcess := functionalBuildProcess(t, localEdges)
-	if testCase.row.Variant == conformance.VariantVideo {
+	if parityRowNeedsProjector(testCase.row.Variant) {
 		prepare := support.FakeInputs(t.Context(), []string{
 			"you", "--json", "models", "invoke", models.BuiltInModelNameLLM,
 			"--operation", models.OperationOMNI, "--input", "prompt=Prepare the controlled projector cache",
@@ -241,6 +241,12 @@ func runLocalAIOMNIParityCase(
 	if calls := localNetwork.Calls() + hostedNetwork.Calls(); calls != 0 {
 		t.Fatalf("LocalAI model-asset network calls = %d, want zero", calls)
 	}
+}
+
+func parityRowNeedsProjector(variant string) bool {
+	return variant == conformance.VariantSingleImage ||
+		variant == conformance.VariantMultipleImage ||
+		variant == conformance.VariantVideo
 }
 
 func localAIOMNIParityEdges(

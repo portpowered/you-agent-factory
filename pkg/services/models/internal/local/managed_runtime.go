@@ -347,9 +347,8 @@ const (
 )
 
 // ProjectEffectiveVideoDefinition applies verified runtime-artifact facts to
-// a model definition. The built-in LLM's VIDEO input is effective only when
-// the durable cache contains an intact projector artifact. Text and all other
-// operation inputs remain available when VIDEO is omitted.
+// a model definition. The built-in LLM's image, audio, and video inputs require
+// an intact projector artifact; text remains available without it.
 func ProjectEffectiveVideoDefinition(
 	definition models.ModelDefinition,
 	inspection RuntimeCacheInspection,
@@ -362,8 +361,8 @@ func ProjectEffectiveVideoDefinition(
 	return definition, diagnostics, diagnostics[VideoReadinessDiagnostic] == VideoReadinessMissing
 }
 
-// ProjectEffectiveVideoOperations removes only the VIDEO slot from the
-// built-in LLM OMNI contract when the required projector is not verified.
+// ProjectEffectiveVideoOperations removes projector-backed media slots from
+// the built-in LLM OMNI contract when the projector is not verified.
 // The returned operations and diagnostics are detached.
 func ProjectEffectiveVideoOperations(
 	modelName string,
@@ -388,13 +387,13 @@ func ProjectEffectiveVideoOperations(
 		if !strings.EqualFold(strings.TrimSpace(cloned[index].Name), models.OperationOMNI) {
 			continue
 		}
-		cloned[index] = withoutVideoSlots(cloned[index])
+		cloned[index] = withoutProjectorMediaSlots(cloned[index])
 	}
 	return cloned, diagnostics
 }
 
 // VideoProjectorRequired reports whether the named definition has the
-// projector-backed built-in LLM VIDEO capability.
+// projector-backed built-in LLM media capability.
 func VideoProjectorRequired(modelName string, operations []models.Operation) bool {
 	return videoProjectorRequired(modelName, operations)
 }
@@ -433,7 +432,7 @@ func videoProjectorRequired(modelName string, operations []models.Operation) boo
 			continue
 		}
 		for _, slot := range operation.Inputs {
-			if isVideoSlot(slot) {
+			if isProjectorMediaSlot(slot) {
 				return true
 			}
 		}
@@ -478,30 +477,34 @@ func isProjectorArtifact(name string) bool {
 	return strings.Contains(strings.ToLower(path.Base(strings.TrimSpace(name))), projectorArtifactMarker)
 }
 
-func isVideoSlot(slot models.OperationSlot) bool {
-	if slot.Modality == models.ModalityVideo ||
-		strings.EqualFold(strings.TrimSpace(slot.Name), "video") {
-		return true
-	}
-	for _, contentType := range slot.ContentTypes {
-		if strings.EqualFold(strings.TrimSpace(contentType), string(models.ModalityVideo)) ||
-			strings.HasPrefix(strings.ToLower(strings.TrimSpace(contentType)), "video/") {
-			return true
-		}
-	}
-	return false
-}
-
-func withoutVideoSlots(operation models.Operation) models.Operation {
+func withoutProjectorMediaSlots(operation models.Operation) models.Operation {
 	cloned := operation.Clone()
 	inputs := make([]models.OperationSlot, 0, len(cloned.Inputs))
 	for _, slot := range cloned.Inputs {
-		if !isVideoSlot(slot) {
+		if !isProjectorMediaSlot(slot) {
 			inputs = append(inputs, slot)
 		}
 	}
 	cloned.Inputs = inputs
 	return cloned
+}
+
+func isProjectorMediaSlot(slot models.OperationSlot) bool {
+	for _, modality := range []models.Modality{models.ModalityImage, models.ModalityAudio, models.ModalityVideo} {
+		if slot.Modality == modality || strings.EqualFold(strings.TrimSpace(slot.Name), string(modality)) {
+			return true
+		}
+	}
+	for _, contentType := range slot.ContentTypes {
+		canonical := strings.ToLower(strings.TrimSpace(contentType))
+		if canonical == "image" || canonical == "audio" || canonical == "video" {
+			return true
+		}
+		if strings.HasPrefix(canonical, "image/") || strings.HasPrefix(canonical, "audio/") || strings.HasPrefix(canonical, "video/") {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneOperations(operations []models.Operation) []models.Operation {
