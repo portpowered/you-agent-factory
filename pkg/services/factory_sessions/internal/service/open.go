@@ -58,7 +58,7 @@ func openRuntime(
 	factorySessionsRuntimeAssembly roles.RuntimeAssembly,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsService recordings.Service,
-	recordingsRuntime recordings.RuntimeOpening,
+	recordingsRuntime recordings.RuntimeScopeService,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	factoryDefinitions factorydefinitions.Service,
 	definitionRuntimeRouter *factorysessions.DefinitionRuntimeRouter,
@@ -95,7 +95,7 @@ func openRuntime(
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings service is required")
 	}
 	if recordingsRuntime == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime opening is required")
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime scope is required")
 	}
 	selection := sessionRuntimeSelection(sessionRequest)
 	providedCanonicalSessionID := strings.TrimSpace(selection.CanonicalSessionID)

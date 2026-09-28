@@ -25,7 +25,7 @@ func stubWorkerSessionsFactory(workers.Service, platformclock.Source) (workerses
 type stubWorkersService struct{ workers.Service }
 
 type assemblyWorldStateOpening struct {
-	recordings.RuntimeOpening
+	recordings.RuntimeScopeService
 	state   interfaces.FactoryWorldState
 	tick    int
 	events  []interfaces.FactoryEvent
@@ -57,8 +57,8 @@ func TestRuntimeOpeningWithFlushOnlySeedsResumeCanonicalEvents(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			opening := &assemblyWorldStateOpening{}
-			wrapped := runtimeOpeningWithFlush{
-				RuntimeOpening:        opening,
+			wrapped := runtimeScopeWithFlush{
+				RuntimeScopeService:   opening,
 				flushInterval:         time.Second,
 				resumeCanonicalEvents: events,
 			}

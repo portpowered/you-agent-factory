@@ -69,7 +69,7 @@ type (
 
 	ProviderSessionsPorts                  = service.ProviderSessionsPorts
 	ProviderOverrideService                = service.ProviderOverrideService
-	FactoryRuntimeOpeningPorts             = service.FactoryRuntimePorts
+	FactoryRuntimePorts                    = service.FactoryRuntimePorts
 	FactoryDefinitionsPorts                = service.FactoryDefinitionsPorts
 	FactorySessionsPorts                   = service.FactorySessionsPorts
 	WorkPorts                              = service.WorkPorts
@@ -116,7 +116,7 @@ var (
 
 func NewRoot(
 	providerSessions *ProviderSessionsPorts,
-	factoryRuntime *FactoryRuntimeOpeningPorts,
+	factoryRuntime *FactoryRuntimePorts,
 	factoryDefinitions *FactoryDefinitionsPorts,
 	factorySessions *FactorySessionsPorts,
 	workPorts *WorkPorts,

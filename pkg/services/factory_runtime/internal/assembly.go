@@ -99,7 +99,7 @@ func (a *Assembly) Assemble(
 	completionFactory func(string) func(string),
 	petriMutationRecorder factoryruntime.PetriMutationRecorder,
 	worldStateProjector factoryruntime.WorldStateProjector,
-	recordingsRuntime recordings.RuntimeOpening,
+	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot factorydefinitions.InitialFactorySnapshotFactory,
 	dir string,
 	factoryRootDir string,
@@ -260,7 +260,7 @@ func (a *Assembly) configureRestoredWorldState(
 	resumeInput *recordings.LoadResumeInputResult,
 	restoredWorldState *factorydefinitions.FactoryWorldState,
 	restoredEventHistory []factorydefinitions.FactoryEvent,
-	recordingsRuntime recordings.RuntimeOpening,
+	recordingsRuntime recordings.RuntimeScopeService,
 ) error {
 	if spec == nil {
 		return fmt.Errorf("Factory Runtime build spec is required")
@@ -349,7 +349,7 @@ func restoredEventsForOpening(
 }
 
 func reconstructRestoredWorldState(
-	opening recordings.RuntimeOpening,
+	opening recordings.RuntimeScopeService,
 	events []factorydefinitions.FactoryEvent,
 ) (*factorydefinitions.FactoryWorldState, error) {
 	// A replay artifact may contain predecessor and successor generations even
@@ -360,14 +360,14 @@ func reconstructRestoredWorldState(
 }
 
 func reconstructRestoredWorldStateForResume(
-	opening recordings.RuntimeOpening,
+	opening recordings.RuntimeScopeService,
 	events []factorydefinitions.FactoryEvent,
 ) (*factorydefinitions.FactoryWorldState, error) {
 	return reconstructRestoredWorldStateEvents(opening, normalizeRestoredEventTicks(events))
 }
 
 func reconstructRestoredWorldStateEvents(
-	opening recordings.RuntimeOpening,
+	opening recordings.RuntimeScopeService,
 	events []factorydefinitions.FactoryEvent,
 ) (*factorydefinitions.FactoryWorldState, error) {
 	if len(events) == 0 {

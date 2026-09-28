@@ -73,7 +73,7 @@ func NewReplayInputLoader(
 
 // NewRuntimeRoot constructs the singular process-scoped Recordings authority.
 // Runtime ledgers, projection use, replay collaborators, and recording
-// lifecycle state are acquired through the returned root's RuntimeOpening
+// lifecycle state are acquired through the returned root's RuntimeScopeService
 // capability rather than through opening-local constructors.
 func NewRuntimeRoot(
 	targets recordings.LiveRecordingTargetPlanner,

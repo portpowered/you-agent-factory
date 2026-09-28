@@ -55,12 +55,12 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provideRecordingsRoot() error = %v", err)
 	}
-	opening, err := provideRecordingsRuntimeOpening(root)
+	opening, err := provideRecordingsRuntimeScopeService(root)
 	if err != nil || opening == nil {
-		t.Fatalf("provideRecordingsRuntimeOpening(root) = %v, %v; want runtime opening", opening, err)
+		t.Fatalf("provideRecordingsRuntimeScopeService(root) = %v, %v; want runtime opening", opening, err)
 	}
-	if _, err := provideRecordingsRuntimeOpening(nil); err == nil {
-		t.Fatal("provideRecordingsRuntimeOpening(nil) error = nil, want capability validation")
+	if _, err := provideRecordingsRuntimeScopeService(nil); err == nil {
+		t.Fatal("provideRecordingsRuntimeScopeService(nil) error = nil, want capability validation")
 	}
 
 	buildServer := provideMCPServerBuilder(platformfilesystem.Local{})

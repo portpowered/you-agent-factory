@@ -185,7 +185,7 @@ func openPortableReplayDurableOwner(
 	providerIdentities factorysessions.ProviderIdentityResolver,
 	resolveClock factoryruntime.ClockResolver,
 	factoryRuntimeAssembler FactoryRuntimeAssembler,
-	recordingsRuntime recordings.RuntimeOpening,
+	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	automationService automations.Service,
@@ -269,7 +269,7 @@ func preparePortableReplayRuntime(
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
-	recordingsRuntime recordings.RuntimeOpening,
+	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	automationService automations.Service,
@@ -378,7 +378,7 @@ func assemblePortableReplayRuntime(
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	submissionRecorder recordings.SubmissionRecorder,
 	dispatchRecorder recordings.DispatchRecorder,
-	recordingsRuntime recordings.RuntimeOpening,
+	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	automationService automations.Service,
@@ -387,7 +387,7 @@ func assemblePortableReplayRuntime(
 		return nil, fmt.Errorf("construct portable replay runtime: Factory Runtime assembler is required")
 	}
 	if recordingsRuntime == nil {
-		return nil, fmt.Errorf("construct portable replay runtime: Recordings runtime opening is required")
+		return nil, fmt.Errorf("construct portable replay runtime: Recordings runtime scope is required")
 	}
 	projection := recordingsRuntime.Projection()
 	if projection == nil {

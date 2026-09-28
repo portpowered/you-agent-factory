@@ -261,10 +261,10 @@ type ResumeRecoveryMetadata struct {
 	PreviousRecordedAt   time.Time
 }
 
-// RuntimeOpening is the Recordings-owned capability used by Factory Runtime
+// RuntimeScopeService is the Recordings-owned capability used by Factory Runtime
 // and Factory Sessions while opening a runtime. It keeps replay construction,
 // projection selection, and live scope acquisition on the one process root.
-type RuntimeOpening interface {
+type RuntimeScopeService interface {
 	OpenRuntime(context.Context, RuntimeScopeRequest) (RuntimeScopeResult, error)
 	LoadReplayInput(LoadReplayInputRequest) (LoadReplayInputResult, error)
 	// ReconstructCanonicalFactoryWorldState reduces detached canonical Factory
@@ -288,7 +288,7 @@ type RuntimeOpening interface {
 // is an owner capability of this same value, never a second service graph.
 type Root interface {
 	Service
-	RuntimeOpening
+	RuntimeScopeService
 }
 
 // CanonicalEventID is the Recordings-owned identity of one accepted Factory
@@ -1859,7 +1859,7 @@ type RuntimeRecorderWithProvenance interface {
 }
 
 // RuntimeRecorderFactory is retained for the compatibility opening seam until
-// Factory Sessions consumes RuntimeOpening directly.
+// Factory Sessions consumes RuntimeScopeService directly.
 type RuntimeRecorderFactory func(
 	time.Duration,
 	interfaces.LoadedFactorySource,

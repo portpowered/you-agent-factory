@@ -824,7 +824,7 @@ func (root *resumeRoutingRoot) Deactivate(
 }
 
 type resumeInputRuntime struct {
-	recordings.RuntimeOpening
+	recordings.RuntimeScopeService
 	path   string
 	calls  int
 	result recordings.LoadResumeInputResult

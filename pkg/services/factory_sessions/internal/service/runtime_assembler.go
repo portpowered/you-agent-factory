@@ -107,7 +107,7 @@ type FactoryRuntimeAssembler interface {
 		func(string) func(string),
 		factoryruntime.PetriMutationRecorder,
 		factoryruntime.WorldStateProjector,
-		recordings.RuntimeOpening,
+		recordings.RuntimeScopeService,
 		factorydefinitions.InitialFactorySnapshotFactory,
 		string,
 		string,

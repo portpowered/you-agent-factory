@@ -122,7 +122,7 @@ type ModelsPorts struct {
 // RecordingsPorts contains Recordings-owned opening collaborators.
 type RecordingsPorts struct {
 	Service recordings.Service
-	Runtime recordings.RuntimeOpening
+	Runtime recordings.RuntimeScopeService
 }
 
 // WorkersPorts contains Workers-owned opening collaborators.
@@ -164,7 +164,7 @@ type Root struct {
 	automationService                automations.Service
 	factorySessionExecutionFactory   FactorySessionExecutionFactory
 	recordingsService                recordings.Service
-	recordingsRuntime                recordings.RuntimeOpening
+	recordingsRuntime                recordings.RuntimeScopeService
 	replayInputs                     recordings.ReplayInputLoader
 	webhooksService                  webhooks.Service
 	workersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory

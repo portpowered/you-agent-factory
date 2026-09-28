@@ -515,7 +515,7 @@ type processRuntimeFactoryConstructionStub struct{ roles.ProcessRuntimeFactory }
 type modelsConstructionStub struct{ models.Service }
 type recordingsRootConstructionStub struct {
 	recordings.Service
-	recordings.RuntimeOpening
+	recordings.RuntimeScopeService
 	replayInputs recordings.ReplayInputLoader
 }
 
@@ -582,4 +582,4 @@ func (stub *recordingsRootConstructionStub) LoadReplayInput(
 }
 
 var _ recordings.Service = (*recordingsRootConstructionStub)(nil)
-var _ recordings.RuntimeOpening = (*recordingsRootConstructionStub)(nil)
+var _ recordings.RuntimeScopeService = (*recordingsRootConstructionStub)(nil)

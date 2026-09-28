@@ -251,7 +251,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	sessionLoggerFactory := provideFactoryRuntimeSessionLoggerFactory()
 	v26 := provideFactoryRuntimeSubmissionRecorder(edges2)
 	v27 := provideFactoryRuntimeDispatchRecorder(edges2)
-	v28 := &wire.FactoryRuntimeOpeningPorts{
+	v28 := &wire.FactoryRuntimePorts{
 		Logger:                          logger,
 		FactoryWorkflows:                javaScriptWorkflowDefinitions,
 		WorkflowPreview:                 workflowPreviewOperation,
@@ -402,7 +402,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v58 := &wire.ModelsPorts{
 		Service: modelsService,
 	}
-	v59, err := provideRecordingsRuntimeOpening(recordingsService)
+	v59, err := provideRecordingsRuntimeScopeService(recordingsService)
 	if err != nil {
 		return nil, err
 	}
@@ -929,7 +929,7 @@ var servicesSet = wire5.NewSet(
 	provideConductorInvocationWithProgressFactory,
 	provideFactorySessionReplayInputs,
 	provideRecordingsRoot,
-	provideRecordingsRuntimeOpening,
+	provideRecordingsRuntimeScopeService,
 	provideReplayArtifactStorage,
 	provideFactoryRuntimeIDGenerator,
 	provideFactoryRuntimeDirectories,
@@ -989,7 +989,7 @@ var servicesSet = wire5.NewSet(
 	provideFactoryDefinitionsRoot,
 	provideFactoryScaffoldInitializer,
 	provideEditableFactoryValidator,
-	provideInitialFactorySnapshotFactory, wire2.NewRuntimeFactory, wire2.NewAssembly, provideFactoryRuntimeRoot, wire5.Bind(new(wire.FactoryRuntimeAssembler), new(*wire2.Assembly)), wire5.Struct(new(wire.ProviderSessionsPorts), "*"), wire5.Struct(new(wire.FactoryRuntimeOpeningPorts), "*"), wire5.Struct(new(wire.FactoryDefinitionsPorts), "*"), wire5.Struct(new(wire.FactorySessionsPorts), "*"), wire5.Struct(new(wire.WorkPorts), "*"), wire5.Struct(new(wire.AutomationsPorts), "*"), wire5.Struct(new(wire.ModelsPorts), "*"), wire5.Struct(new(wire.RecordingsPorts), "*"), wire5.Struct(new(wire.WebhooksPorts), "*"), wire5.Struct(new(wire.WorkersPorts), "*"), wire5.Struct(new(wire.OperatorSettingsPorts), "*"), provideLoadedFactorySourceFactory,
+	provideInitialFactorySnapshotFactory, wire2.NewRuntimeFactory, wire2.NewAssembly, provideFactoryRuntimeRoot, wire5.Bind(new(wire.FactoryRuntimeAssembler), new(*wire2.Assembly)), wire5.Struct(new(wire.ProviderSessionsPorts), "*"), wire5.Struct(new(wire.FactoryRuntimePorts), "*"), wire5.Struct(new(wire.FactoryDefinitionsPorts), "*"), wire5.Struct(new(wire.FactorySessionsPorts), "*"), wire5.Struct(new(wire.WorkPorts), "*"), wire5.Struct(new(wire.AutomationsPorts), "*"), wire5.Struct(new(wire.ModelsPorts), "*"), wire5.Struct(new(wire.RecordingsPorts), "*"), wire5.Struct(new(wire.WebhooksPorts), "*"), wire5.Struct(new(wire.WorkersPorts), "*"), wire5.Struct(new(wire.OperatorSettingsPorts), "*"), provideLoadedFactorySourceFactory,
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
 	provideReplayRuntimeConfigDecoder, wire.NewRoot, provideFactorySessionsService,

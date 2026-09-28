@@ -350,11 +350,11 @@ type (
 // to import another service's transport package to classify the failure.
 var ErrServiceUnavailable = errors.New("recordings service is required")
 
-// RuntimeOpening is the Recordings-owned capability used while Factory
+// RuntimeScopeService is the Recordings-owned capability used while Factory
 // Runtime opens a private runtime scope. Replay input loading remains on the
 // same process root so Factory Sessions cannot construct a second Recordings
 // graph for historical replay.
-type RuntimeOpening = recordingcontracts.RuntimeOpening
+type RuntimeScopeService = recordingcontracts.RuntimeScopeService
 
 const (
 	CheckpointResumabilityStatusResumable         = recordingcontracts.CheckpointResumabilityStatusResumable

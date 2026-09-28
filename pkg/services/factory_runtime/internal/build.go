@@ -135,7 +135,7 @@ func (f *RuntimeFactory) Build(
 	completionPlanner factory.CompletionDeliveryPlanner,
 	petriMutationRecorder factory.PetriMutationRecorder,
 	worldStateProjector factory.WorldStateProjector,
-	recordingsRuntime recordings.RuntimeOpening,
+	recordingsRuntime recordings.RuntimeScopeService,
 	workerService workers.Service,
 	workerSessionsFactory factory.WorkerSessionsFactory,
 	dispatchCompleted func(string),
