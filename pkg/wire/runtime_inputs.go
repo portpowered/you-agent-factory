@@ -37,7 +37,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -517,7 +516,6 @@ func newDurableExecutionHTTPHandler(
 	if sessions == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || logger == nil {
 		return nil, errors.New("construct durable execution HTTP handler: execution, policies, request preparation, and logger are required")
 	}
-	durable := factorysessionmapping.NewDurableAPI(sessions)
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		SessionsRoot:  sessions,
 		DurableLister: sessions, FactoryValidation: validation,
@@ -528,12 +526,14 @@ func newDurableExecutionHTTPHandler(
 		shutdown = cancellation.Cancel
 	}
 	return transporthttp.NewServerWithRecordingsAndShutdown(
-		recordingshttp.NewLegacyAdapter(
-			factorysessionmapping.NewDurableHistoryBridge(durable),
-			factorysessionshttp.NewDurableRequestPreparation(sessionRequests),
-		),
+		recordingshttp.NewAdapterWithSessions(nil, sessions, sessionInspectionForHTTP(sessions)),
 		sessionsHandler, nil, nil, nil, nil, logger, shutdown,
 	).Handler(), nil
+}
+
+func sessionInspectionForHTTP(sessions factorysessions.Service) factorysessions.SessionInspectionService {
+	inspection, _ := sessions.(factorysessions.SessionInspectionService)
+	return inspection
 }
 
 type workerSessionsFactorySessionScopeResolver struct {

@@ -145,7 +145,7 @@ func newHTTPRuntimeHandlerWithMetrics(
 	if err != nil {
 		return nil, err
 	}
-	recordingsAdapter := newHTTPRecordingsAdapter(root, presentation, sessionRequests)
+	recordingsAdapter := newHTTPRecordingsAdapter(root, presentation)
 	workerSessionsHandler := newHTTPWorkerSessionsHandler(root, presentation)
 	metricsScopeResolver := factorysessionwire.NewRuntimeMetricsScopeResolver(root)
 	if metricsScopeResolver == nil {
@@ -248,14 +248,9 @@ func newHTTPSessionsHandler(
 func newHTTPRecordingsAdapter(
 	root *factorysessionwire.Root,
 	presentation factorysessionwire.SessionPresentation,
-	sessionRequests factorysessionshttp.RequestPreparation,
 ) *recordingshttp.Adapter {
-	legacyDurable := factorysessionmapping.NewDurableAPI(root)
-	return recordingshttp.NewAdapterWithLegacyFallback(
-		presentation.Recordings,
-		factorysessionmapping.NewDurableHistoryBridge(legacyDurable),
-		factorysessionshttp.NewDurableRequestPreparation(sessionRequests),
-		root,
+	return recordingshttp.NewAdapterWithSessions(
+		presentation.Recordings, root, root.SessionInspectionService(),
 	)
 }
 
