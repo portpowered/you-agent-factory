@@ -194,6 +194,18 @@ tree before retrying, and never re-issue the same request blind.
   The dispatch log independently recorded `failure_reason: throttled`. The
   requested file was not edited because the provider rate limit occurred
   before a tool call.
+- A subsequent direct stdio MCP edit probe used the advertised free model
+  `opencode/nemotron-3.5-lightning-free` with a 60 s invocation limit. It
+  initialized, listed 11 tools, and returned a completed `you.subagent`
+  result in about 21 s. The requested workspace file
+  `.tmp/opencode-subagent-free-model-probe.txt` exists and contains exactly
+  `OpenCode MCP edit probe completed`. This verifies editing through the
+  rebuilt binary and MCP harness on that model; it does not establish that
+  every free model currently has capacity.
+- The app's existing `you-agent-factory` MCP connector still returned
+  `Transport closed` on a read-only session-list call after this direct
+  success. No running server process was stopped. The direct probe used its
+  own child stdio process, so app connector reconnection remains unverified.
 - The app's MCP connection reported `Transport closed` after its stale server
   was restarted. This is a connection lifecycle observation, not evidence of
   the provider outcome. The direct stdio probe above initialized separately.
