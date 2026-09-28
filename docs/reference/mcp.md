@@ -91,6 +91,15 @@ Session ID. It includes `requestId`, `traceId`, and `workId` when available,
 plus any explicitly selected `provider` and `model` and a `suggestedAction`.
 The call requests cancellation and closes its live Factory Session on timeout.
 
+Typed tool and domain errors return a readable message in the first MCP content
+text with `isError=true`; `structuredContent` retains the machine-readable
+`code`, `retryable`, `sessionId`, and `details` fields.
+
+For substantial coding edits, request `timeoutMillis` around 600000 to 1200000
+and set the MCP host tool wait longer than that plus cleanup time. Short probes
+can use shorter waits. If `timeoutMillis` is omitted, `You` inherits the caller
+deadline and imposes no hidden cap.
+
 Workspace edits may have occurred. Inspect the workspace before retrying.
 After inspection, choose another configured model or a longer timeout.
 
