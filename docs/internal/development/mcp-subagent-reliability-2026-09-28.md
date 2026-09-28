@@ -1129,3 +1129,127 @@ single call each returned `Transport closed` immediately. This is a separate
 host-connector lifecycle failure, so the new binary still needs a fresh-chat
 MCP smoke test. Rebuild/install procedures should account for active MCP
 connections and avoid claiming tool readiness solely from a successful copy.
+
+A fresh standalone stdio MCP client then initialized the installed Windows
+binary in two separate processes, listed all 11 tools including `you.subagent`,
+and exited cleanly on EOF. One process accepted overlapping OpenCode calls and
+returned two primary `COMPLETED` results in about 9 and 18 seconds (sessions
+`86d4c19b-9513-4516-91b1-34a27063d54d` and
+`9f73242c-4f23-4be9-8818-7fffd5e81236`). A third fresh process ran a real
+OpenCode editing task: session `6a765726-39b7-486c-acdf-e02431afb3f1`
+completed in about 130 seconds, removed the duplicate Factory Session sidecar
+shutdown fallback, and added focused tests. Independent Factory Sessions Go
+tests and `git diff --check` passed; commit `15364a6b62` contains the edit.
+The installed MCP server therefore works through new stdio connections; the
+earlier immediate `Transport closed` failures are specific to this Codex host
+connector's old connection after its process was stopped for replacement.
+
+A follow-up standalone MCP OpenCode edit for ACP peer-disconnect classification
+timed out at 240 seconds (session `79a144dc-a54d-483e-8c35-a74ecaff3fd5`).
+The typed result was `factory_session.subagent.timed_out` with
+`INVOCATION_TIMED_OUT`, `partialEffectsPossible=true`, one in-flight dispatch,
+and a closed Factory Session. There were no edits to its requested files.
+OpenCode logs showed exploration of the ACP SDK module cache as late as 26
+seconds before the deadline; the observed failure is task/model latency, not
+an MCP connector close, permission denial, or snapshot lock. A narrower retry
+was prepared with the exact SDK error shape and a single-file edit.
+
+The narrower single-file OpenCode retry also timed out (session
+`b2133aff-aa23-4a30-bad1-2b32db833ec7`, `timeoutMillis=180000`, response
+after about 190 seconds) without an edit. Its log still showed `go doc`
+exploration of the supplied `RequestError` shape. This repeated limit was too
+short for the observed model/tool pace. A subsequent real editing retry uses a
+15-minute limit; short heading probes remain bounded separately.
+
+An `OpenCode` MCP edit for making typed MCP errors visible in text content
+timed out at 300 seconds (session `ce494547-cdf8-4a21-865e-2a4ea72b9657`).
+It had already made scoped partial edits in the server and result-policy
+inventory, so the caller retained them and dispatched a 15-minute continuation
+instead of restarting or discarding its work. This is another task-duration
+timeout, with the server returning a typed timeout envelope rather than an
+ambiguous transport closure. The model comparison does not establish a root cause.
+
+The 20-minute OpenCode MCP Qwen3 reference-audio content probe completed, but
+the standalone test client's Windows console encoding raised
+`UnicodeEncodeError` while printing the MCP response. The OpenCode session
+export recovered its primary result. The CLI TTS and managed ASR invocations
+both exited successfully. The output WAV was valid mono 24 kHz audio, 7.44
+seconds and non-silent. The generated speech transcript was
+`0, 0, 0, 0, 0, 0, 0, 0, if I was a bitch.` for target text
+`The quick brown fox jumps over the lazy dog.` The recorded TTS command passed
+the requested text separately from reference WAV and `ref_text` (`Zero.`).
+GPU samples from this particular run did not establish utilization. This is
+a content-validation failure, not a proven reference-conditioning root cause;
+ASR and plain Qwen synthesis need comparison. The temporary standalone client
+was changed to UTF-8-safe output for subsequent calls.
+
+The 15-minute OpenCode ACP peer-disconnect edit also timed out after writing a
+partial `service.go` change. A second copy of its helper appeared near the
+deadline, leaving the package temporarily uncompilable. Its server and ACP
+child process tree were confirmed gone before retry. A fresh MCP call through
+the `codex` provider (session `1f2e9dbd-85f9-4754-baec-f04aff392376`)
+completed the scoped repair in about 181 seconds, kept one exact SDK-shape
+classifier, and added positive/negative protocol tests. Commit `eb92eca62e`
+contains it. A clean checkout at commit `3d9e9b0f08` passed ACP service,
+workers wire, MCP server, Factory Sessions MCP transport, and every MCP
+functional package test, independently of unrelated live changes in the
+shared worktree.
+
+The MCP error presentation OpenCode continuation completed (session
+`6fe9c9f0-5eb8-456b-8b5b-d6ddda802523`): typed errors now put their safe
+message in first text content with `isError=true`, retaining the typed envelope
+in `structuredContent`. A protocol test follow-up
+`c1020a44-26df-491b-a39a-20e46a8d6159` and resume decoder follow-ups
+`6f0af534-32f6-46f5-84a8-a1a95ec7f35f` and
+`5fd7df36-4777-4771-b593-ae15de98c867` covered the public stdio response
+and exact message equality. Commits `b54051be6c`, `eb78f8297a`, and
+`0e97ac3cc7` contain these changes; `3d9e9b0f08` added customer timeout/error
+guidance. The installed binary has not yet been replaced because standalone
+MCP sessions are still active.
+
+A second 20-minute OpenCode MCP Qwen content comparison timed out with typed
+`factory_session.subagent.timed_out` (session
+`2d668037-cdb0-4e53-a0f9-a5df3a3206bf`, one in-flight dispatch). Its
+managed ASR control transcribed a known fixture exactly as `Zero.`. The same
+WSL root binary/config reported Qwen `models pull` as `ALREADY_READY`, while
+the immediately following `models inspect` still reported `MISSING` and
+`NOT_INSTALLED`; an online plain Qwen TTS invocation nevertheless succeeded
+and wrote `/tmp/qwen-setup-online.wav` before the deadline. Thus inspect
+readiness disagrees with runnable state. Plain output transcription remains
+outstanding: `/tmp/qwen-setup-online.wav` was absent on the next independent
+read, so the narrower follow-up must write to a persistent probe directory.
+
+The narrowed plain Qwen3 OpenCode MCP call completed (Factory Session
+`403d68d2-0830-4e3f-bf14-9040dea8cf63`) and returned a primary result.
+Managed offline TTS without voice/reference produced persistent
+`/home/andre/you-localai-probe/qwen-plain-probe.wav` (mono 16-bit PCM 24 kHz,
+2.72 seconds, non-silent). Managed ASR transcribed it exactly as the target:
+`The quick brown fox jumps over the lazy dog.` The known `Zero.` fixture also
+transcribed exactly. The prior reference-conditioned run with the same target
+spoke repeated zeroes instead. This comparison localizes the content failure
+to the reference-conditioned request/backend path; it does not yet establish
+which layer is wrong. Sixteen GPU samples during the plain run showed memory
+increasing from 3692 to 6200 MiB and utilization of 7–44%, evidence of GPU
+activity during invocation without direct process attribution. The task made
+no repository edits.
+
+Two 15-minute OpenCode MCP lint edits exposed different terminal behavior.
+The MCP inventory refactor timed out with a typed error after partial edits;
+the worker repeatedly reread the same small verifier before its deadline.
+A fresh Codex-provider MCP continuation completed the baseline repair and
+focused tests. The ACP test refactor made partial edits but returned no MCP
+response even 100 seconds after `timeoutMillis=900000`; its client then closed
+stdin. A fresh Codex-provider MCP continuation repaired the affected test.
+The exact hang location is unproven because no Go goroutine dump was captured.
+The invocation wait, cancel-on-timeout control, progress snapshot, and close
+path each contain synchronous calls whose context deadline does not force a
+noncooperative callee to return.
+
+The OpenCode sidecar test consolidation completed with a primary result and
+removed the extra Factory Sessions package file. At commit `239c55bc7f`, a
+clean checkout passed all 24 `make lint` targets, including backend size,
+maintainability, package file count, and deadcode. A separately built binary
+from the same commit returned a readable first MCP text message,
+`isError=true`, and the typed `structuredContent` for an invalid subagent
+request over a real stdio MCP connection. The installed user binary has not
+yet been replaced while other standalone MCP sessions remain live.
