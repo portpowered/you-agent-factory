@@ -55,7 +55,6 @@ func newAPIServerFromRoles(
 		Sessions: sessions, Invocation: invocation,
 		FactoryDefinitions: factoryDefinitions, FactoryValidation: factoryValidation,
 		WorkflowPreview:       workflowPreview,
-		DurableResponseEvents: durableResponseEvents,
 		DurableLister:         durableLister, LiveSessionLister: liveSessionLister,
 		WorkerPrompts:   workerPrompts,
 		SessionRequests: sessionRequests,

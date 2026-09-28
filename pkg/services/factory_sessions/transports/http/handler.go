@@ -25,44 +25,42 @@ import (
 // Handler owns the generated HTTP operation implementations for Factory
 // Sessions and their session-scoped Factory and Work resources.
 type Adapter struct {
-	sessionsRoot          factorysessions.Service
-	liveControl           factorysessions.LiveControlService
-	sessionDeletion       factorysessions.LiveDeletionService
-	runtime               apisurface.RuntimeAPI
-	factoryStatus         apisurface.FactoryStatusAPI
-	sessions              apisurface.LiveSessionAPI
-	invocation            apisurface.InvocationAPI
-	factoryDefinitions    apisurface.FactorySaveAPI
-	factoryValidation     factorydefinitions.SubmittedDefinitionValidationOperation
-	workflowPreview       factoryruntime.WorkflowPreviewOperation
-	durableResponseEvents DurableResponseEventsAPI
-	durableLister         DurableExecutionSessionLister
-	liveSessionLister     LiveSessionListReader
-	workerPrompts         workers.PromptTemplates
-	invocationWorkType    factorydefinitions.InvocationWorkTypeService
-	sessionRequests       RequestPreparation
-	logger                *zap.Logger
+	sessionsRoot       factorysessions.Service
+	liveControl        factorysessions.LiveControlService
+	sessionDeletion    factorysessions.LiveDeletionService
+	runtime            apisurface.RuntimeAPI
+	factoryStatus      apisurface.FactoryStatusAPI
+	sessions           apisurface.LiveSessionAPI
+	invocation         apisurface.InvocationAPI
+	factoryDefinitions apisurface.FactorySaveAPI
+	factoryValidation  factorydefinitions.SubmittedDefinitionValidationOperation
+	workflowPreview    factoryruntime.WorkflowPreviewOperation
+	durableLister      DurableExecutionSessionLister
+	liveSessionLister  LiveSessionListReader
+	workerPrompts      workers.PromptTemplates
+	invocationWorkType factorydefinitions.InvocationWorkTypeService
+	sessionRequests    RequestPreparation
+	logger             *zap.Logger
 }
 
 // Dependencies are the exact injected roles used by the Factory Sessions HTTP
 // adapter. They are supplied by the already-opened runtime composition.
 type Dependencies struct {
-	SessionsRoot          factorysessions.Service
-	LiveControl           factorysessions.LiveControlService
-	SessionDeletion       factorysessions.LiveDeletionService
-	Runtime               apisurface.RuntimeAPI
-	FactoryStatus         apisurface.FactoryStatusAPI
-	Sessions              apisurface.LiveSessionAPI
-	Invocation            apisurface.InvocationAPI
-	FactoryDefinitions    apisurface.FactorySaveAPI
-	FactoryValidation     factorydefinitions.SubmittedDefinitionValidationOperation
-	WorkflowPreview       factoryruntime.WorkflowPreviewOperation
-	DurableResponseEvents DurableResponseEventsAPI
-	DurableLister         DurableExecutionSessionLister
-	LiveSessionLister     LiveSessionListReader
-	WorkerPrompts         workers.PromptTemplates
-	InvocationWorkType    factorydefinitions.InvocationWorkTypeService
-	SessionRequests       RequestPreparation
+	SessionsRoot       factorysessions.Service
+	LiveControl        factorysessions.LiveControlService
+	SessionDeletion    factorysessions.LiveDeletionService
+	Runtime            apisurface.RuntimeAPI
+	FactoryStatus      apisurface.FactoryStatusAPI
+	Sessions           apisurface.LiveSessionAPI
+	Invocation         apisurface.InvocationAPI
+	FactoryDefinitions apisurface.FactorySaveAPI
+	FactoryValidation  factorydefinitions.SubmittedDefinitionValidationOperation
+	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
+	DurableLister      DurableExecutionSessionLister
+	LiveSessionLister  LiveSessionListReader
+	WorkerPrompts      workers.PromptTemplates
+	InvocationWorkType factorydefinitions.InvocationWorkTypeService
+	SessionRequests    RequestPreparation
 }
 
 type RequestPreparation interface {
@@ -74,17 +72,6 @@ type RequestPreparation interface {
 	PrepareListSessions(factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error)
 	PrepareResult(factorysessions.ResultRequest) (factorysessions.ResultRequest, error)
 	PrepareEventReconnect(factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error)
-}
-
-// DurableResponseEventsAPI is the only durable projection capability retained
-// by the Sessions HTTP adapter. Canonical history, dispatch, and artifact
-// reads are owned by Recordings; this narrow role exists solely for ephemeral
-// FactoryResponseEvent delivery.
-type DurableResponseEventsAPI interface {
-	SubscribeDurableFactoryResponseEvents(
-		context.Context,
-		factorysessions.ResponseEventSubscriptionRequest,
-	) (apisurface.FactoryResponseEventSubscription, error)
 }
 
 // NewHandler constructs an inert Factory Sessions HTTP adapter.
@@ -99,9 +86,8 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 		sessions:           deps.Sessions,
 		invocation:         deps.Invocation,
 		factoryDefinitions: deps.FactoryDefinitions, factoryValidation: deps.FactoryValidation,
-		workflowPreview:       deps.WorkflowPreview,
-		durableResponseEvents: deps.DurableResponseEvents,
-		durableLister:         deps.DurableLister, liveSessionLister: deps.LiveSessionLister,
+		workflowPreview: deps.WorkflowPreview,
+		durableLister:   deps.DurableLister, liveSessionLister: deps.LiveSessionLister,
 		workerPrompts: deps.WorkerPrompts, invocationWorkType: deps.InvocationWorkType,
 		sessionRequests: deps.SessionRequests,
 		logger:          logger,

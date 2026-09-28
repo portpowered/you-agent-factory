@@ -502,26 +502,11 @@ func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.R
 
 }
 
-type durableSessionResponseEventsReader interface {
-	SubscribeDurableFactoryResponseEvents(
-		ctx context.Context,
-		request factorysessionexecution.ResponseEventSubscriptionRequest,
-	) (apisurface.FactoryResponseEventSubscription, error)
-}
-
 type DurableExecutionSessionLister interface {
 	ListSessions(
 		context.Context,
 		factorysessionexecution.ListSessionsRequest,
 	) (factorysessionexecution.ListSessionsResult, error)
-}
-
-func (s *Server) requireDurableSessionResponseEventsReader(w http.ResponseWriter) (durableSessionResponseEventsReader, bool) {
-	if s.durableResponseEvents == nil {
-		s.writeError(w, http.StatusInternalServerError, "durable factory session response-event replay is unavailable", "INTERNAL_ERROR")
-		return nil, false
-	}
-	return s.durableResponseEvents, true
 }
 
 func isDurableExecutionSessionID(sessionID string) bool {

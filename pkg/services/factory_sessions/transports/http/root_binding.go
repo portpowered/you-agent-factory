@@ -29,15 +29,13 @@ func NewHandlerFromRoot(binding RootBinding, logger *zap.Logger) *Adapter {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	durable := factorysessionmapping.NewDurableAPI(binding.Sessions)
 	liveControl, _ := binding.Sessions.(factorysessions.LiveControlService)
 	deletion, _ := binding.Sessions.(factorysessions.LiveDeletionService)
 	return NewHandler(Dependencies{
-		SessionsRoot:          binding.Sessions,
-		LiveControl:           liveControl,
-		SessionDeletion:       deletion,
-		DurableResponseEvents: durable,
-		SessionRequests:       binding.Prepare,
+		SessionsRoot:    binding.Sessions,
+		LiveControl:     liveControl,
+		SessionDeletion: deletion,
+		SessionRequests: binding.Prepare,
 	}, logger)
 }
 

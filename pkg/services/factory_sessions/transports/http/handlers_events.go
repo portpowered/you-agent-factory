@@ -12,6 +12,7 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -93,17 +94,20 @@ func (s *Server) GetFactoryResponseEventsBySessionId(
 	}
 
 	if isDurableExecutionSessionID(string(sessionID)) {
-		reader, ok := s.requireDurableSessionResponseEventsReader(w)
-		if !ok {
+		if s.sessionsRoot == nil {
+			s.writeError(w, http.StatusServiceUnavailable, "factory sessions service is unavailable", "SERVICE_UNAVAILABLE")
 			return
 		}
-		subscription, err := reader.SubscribeDurableFactoryResponseEvents(r.Context(), request)
+		result, err := s.sessionsRoot.SubscribeResponses(r.Context(), factorysessionexecution.SessionResponseSubscriptionRequest{
+			SessionID: request.SessionID, AfterSequence: request.AfterSequence,
+			DispatchID: request.DispatchID, Kinds: request.Kinds,
+		})
 		if err != nil {
-			if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			if errors.Is(err, factorysessionexecution.ErrSessionNotFound) || errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 				s.writeError(w, http.StatusNotFound, "factory response-event session not found", "RESPONSE_EVENT_SESSION_NOT_FOUND")
 				return
 			}
-			if errors.Is(err, apisurface.ErrFactoryResponseEventStreamExpired) {
+			if errors.Is(err, factorysessionexecution.ErrResponseEventStoreExpired) || errors.Is(err, apisurface.ErrFactoryResponseEventStreamExpired) {
 				s.writeError(w, http.StatusGone, "factory response-event stream expired", "RESPONSE_EVENT_STREAM_EXPIRED")
 				return
 			}
@@ -111,6 +115,11 @@ func (s *Server) GetFactoryResponseEventsBySessionId(
 			s.writeError(w, http.StatusInternalServerError, "failed to subscribe to factory response events", "INTERNAL_ERROR")
 			return
 		}
+		if result.Cursor == nil {
+			s.writeError(w, http.StatusInternalServerError, "factory response-event subscription is unavailable", "INTERNAL_ERROR")
+			return
+		}
+		subscription := factorysessionmapping.NewResponseEventSubscription(result.Cursor)
 		defer subscription.Detach()
 		writeResponseEventRetainedCount(w, subscription)
 		streamFactoryResponseEvents(w, r, flusher, subscription, string(sessionID), s.logger)
