@@ -67,18 +67,18 @@ type (
 	ReplayRecordingReader = fileeffects.ReplayRecordingReader
 	InitialWorkReader     = fileeffects.InitialWorkReader
 
-	ProviderSessionsRuntimeOpeningPorts    = service.ProviderSessionsPorts
+	ProviderSessionsPorts                  = service.ProviderSessionsPorts
 	ProviderOverrideService                = service.ProviderOverrideService
 	FactoryRuntimeOpeningPorts             = service.FactoryRuntimePorts
-	FactoryDefinitionsRuntimeOpeningPorts  = service.FactoryDefinitionsPorts
-	FactorySessionsRuntimeOpeningPorts     = service.FactorySessionsPorts
-	WorkRuntimeOpeningPorts                = service.WorkPorts
-	AutomationsRuntimeOpeningPorts         = service.AutomationsPorts
-	ModelsRuntimeOpeningPorts              = service.ModelsPorts
-	RecordingsRuntimeOpeningPorts          = service.RecordingsPorts
-	WebhooksRuntimeOpeningPorts            = service.WebhooksPorts
-	WorkersRuntimeOpeningPorts             = service.WorkersPorts
-	OperatorSettingsRuntimeOpeningPorts    = service.OperatorSettingsPorts
+	FactoryDefinitionsPorts                = service.FactoryDefinitionsPorts
+	FactorySessionsPorts                   = service.FactorySessionsPorts
+	WorkPorts                              = service.WorkPorts
+	AutomationsPorts                       = service.AutomationsPorts
+	ModelsPorts                            = service.ModelsPorts
+	RecordingsPorts                        = service.RecordingsPorts
+	WebhooksPorts                          = service.WebhooksPorts
+	WorkersPorts                           = service.WorkersPorts
+	OperatorSettingsPorts                  = service.OperatorSettingsPorts
 	WorkFactory                            = service.WorkFactory
 	FactorySessionExecutionFactory         = service.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory = service.ConductorInvocationWithProgressFactory
@@ -115,17 +115,17 @@ var (
 )
 
 func NewRoot(
-	providerSessions *ProviderSessionsRuntimeOpeningPorts,
+	providerSessions *ProviderSessionsPorts,
 	factoryRuntime *FactoryRuntimeOpeningPorts,
-	factoryDefinitions *FactoryDefinitionsRuntimeOpeningPorts,
-	factorySessions *FactorySessionsRuntimeOpeningPorts,
-	workPorts *WorkRuntimeOpeningPorts,
-	automations *AutomationsRuntimeOpeningPorts,
-	modelsPorts *ModelsRuntimeOpeningPorts,
-	recordingsPorts *RecordingsRuntimeOpeningPorts,
-	webhooksPorts *WebhooksRuntimeOpeningPorts,
-	workersPorts *WorkersRuntimeOpeningPorts,
-	operatorSettings *OperatorSettingsRuntimeOpeningPorts,
+	factoryDefinitions *FactoryDefinitionsPorts,
+	factorySessions *FactorySessionsPorts,
+	workPorts *WorkPorts,
+	automations *AutomationsPorts,
+	modelsPorts *ModelsPorts,
+	recordingsPorts *RecordingsPorts,
+	webhooksPorts *WebhooksPorts,
+	workersPorts *WorkersPorts,
+	operatorSettings *OperatorSettingsPorts,
 ) (*Root, error) {
 	root, err := service.NewRoot(
 		providerSessions,

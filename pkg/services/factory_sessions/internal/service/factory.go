@@ -349,156 +349,156 @@ func validateOwnerPorts(
 }
 
 func validateProviderSessions(group *ProviderSessionsPorts) error {
-	if err := requireRuntimeOpeningPorts("Provider Sessions", group); err != nil {
+	if err := requirePorts("Provider Sessions", group); err != nil {
 		return err
 	}
-	return validateRuntimeOpeningRequirements("Provider Sessions",
-		runtimeOpeningRequirement{"service", group.Service},
+	return validatePortRequirements("Provider Sessions",
+		portRequirement{"service", group.Service},
 	)
 }
 
 func validateFactoryRuntime(group *FactoryRuntimePorts) error {
-	if err := requireRuntimeOpeningPorts("Factory Runtime", group); err != nil {
+	if err := requirePorts("Factory Runtime", group); err != nil {
 		return err
 	}
-	return validateRuntimeOpeningRequirements("Factory Runtime",
-		runtimeOpeningRequirement{"logger", group.Logger},
-		runtimeOpeningRequirement{"JavaScript workflow definitions", group.FactoryWorkflows},
-		runtimeOpeningRequirement{"workflow preview operation", group.WorkflowPreview},
-		runtimeOpeningRequirement{"Workers mock command runner factory", group.WorkersMockCommandRunnerFactory},
-		runtimeOpeningRequirement{"runtime assembler", group.FactoryRuntimeAssembler},
-		runtimeOpeningRequirement{"clock resolver", group.ResolveClock},
-		runtimeOpeningRequirement{"session logger factory", group.NewSessionLogger},
-		runtimeOpeningRequirement{"clock", group.Clock},
+	return validatePortRequirements("Factory Runtime",
+		portRequirement{"logger", group.Logger},
+		portRequirement{"JavaScript workflow definitions", group.FactoryWorkflows},
+		portRequirement{"workflow preview operation", group.WorkflowPreview},
+		portRequirement{"Workers mock command runner factory", group.WorkersMockCommandRunnerFactory},
+		portRequirement{"runtime assembler", group.FactoryRuntimeAssembler},
+		portRequirement{"clock resolver", group.ResolveClock},
+		portRequirement{"session logger factory", group.NewSessionLogger},
+		portRequirement{"clock", group.Clock},
 	)
 }
 
 func validateFactoryDefinitions(group *FactoryDefinitionsPorts) error {
-	if err := requireRuntimeOpeningPorts("Factory Definitions", group); err != nil {
+	if err := requirePorts("Factory Definitions", group); err != nil {
 		return err
 	}
-	return validateRuntimeOpeningRequirements("Factory Definitions",
-		runtimeOpeningRequirement{"validator", group.Validator},
-		runtimeOpeningRequirement{"named path resolver", group.NamedPaths},
-		runtimeOpeningRequirement{"service", group.Service},
-		runtimeOpeningRequirement{"runtime router", group.RuntimeRouter},
-		runtimeOpeningRequirement{"initial factory snapshot factory", group.InitialFactorySnapshotFactory},
-		runtimeOpeningRequirement{"loaded factory loader", group.LoadFactory},
-		runtimeOpeningRequirement{"loaded factory source factory", group.NewLoadedFactory},
-		runtimeOpeningRequirement{"replay runtime config decoder", group.DecodeReplayConfig},
-		runtimeOpeningRequirement{"loaded factory snapshot capturer", group.CaptureLoadedFactorySnapshot},
+	return validatePortRequirements("Factory Definitions",
+		portRequirement{"validator", group.Validator},
+		portRequirement{"named path resolver", group.NamedPaths},
+		portRequirement{"service", group.Service},
+		portRequirement{"runtime router", group.RuntimeRouter},
+		portRequirement{"initial factory snapshot factory", group.InitialFactorySnapshotFactory},
+		portRequirement{"loaded factory loader", group.LoadFactory},
+		portRequirement{"loaded factory source factory", group.NewLoadedFactory},
+		portRequirement{"replay runtime config decoder", group.DecodeReplayConfig},
+		portRequirement{"loaded factory snapshot capturer", group.CaptureLoadedFactorySnapshot},
 	)
 }
 
 func validateFactorySessions(group *FactorySessionsPorts) error {
-	if err := requireRuntimeOpeningPorts("Factory Sessions", group); err != nil {
+	if err := requirePorts("Factory Sessions", group); err != nil {
 		return err
 	}
-	return validateRuntimeOpeningRequirements("Factory Sessions",
-		runtimeOpeningRequirement{"runtime assembly", group.RuntimeAssembly},
-		runtimeOpeningRequirement{"durable execution factory", group.DurableExecutionFactory},
-		runtimeOpeningRequirement{"session execution factory", group.FactorySessionExecutionFactory},
-		runtimeOpeningRequirement{"factory scaffold initializer", group.FactoryScaffoldInitializer},
-		runtimeOpeningRequirement{"editable factory validator", group.EditableFactoryValidator},
-		runtimeOpeningRequirement{"process runtime factory", group.ProcessRuntimeFactory},
-		runtimeOpeningRequirement{"session ID generator", group.GenerateSessionID},
-		runtimeOpeningRequirement{"runtime instance ID generator", group.GenerateRuntimeInstanceID},
-		runtimeOpeningRequirement{"home directory resolver", group.ResolveHome},
-		runtimeOpeningRequirement{"provider identity resolver", group.ProviderIdentities},
+	return validatePortRequirements("Factory Sessions",
+		portRequirement{"runtime assembly", group.RuntimeAssembly},
+		portRequirement{"durable execution factory", group.DurableExecutionFactory},
+		portRequirement{"session execution factory", group.FactorySessionExecutionFactory},
+		portRequirement{"factory scaffold initializer", group.FactoryScaffoldInitializer},
+		portRequirement{"editable factory validator", group.EditableFactoryValidator},
+		portRequirement{"process runtime factory", group.ProcessRuntimeFactory},
+		portRequirement{"session ID generator", group.GenerateSessionID},
+		portRequirement{"runtime instance ID generator", group.GenerateRuntimeInstanceID},
+		portRequirement{"home directory resolver", group.ResolveHome},
+		portRequirement{"provider identity resolver", group.ProviderIdentities},
 	)
 }
 
 func validateWork(group *WorkPorts) error {
-	if err := requireRuntimeOpeningPorts("Work", group); err != nil {
+	if err := requirePorts("Work", group); err != nil {
 		return err
 	}
-	return validateRuntimeOpeningRequirements("Work",
-		runtimeOpeningRequirement{"service", group.Service},
+	return validatePortRequirements("Work",
+		portRequirement{"service", group.Service},
 	)
 }
 
 func validateAutomations(group *AutomationsPorts) error {
-	if err := requireRuntimeOpeningPorts("Automations", group); err != nil {
+	if err := requirePorts("Automations", group); err != nil {
 		return err
 	}
-	return validateRuntimeOpeningRequirements("Automations",
-		runtimeOpeningRequirement{"service", group.Service},
+	return validatePortRequirements("Automations",
+		portRequirement{"service", group.Service},
 	)
 }
 
 func validateModels(group *ModelsPorts) error {
-	if err := requireRuntimeOpeningPorts("Models", group); err != nil {
+	if err := requirePorts("Models", group); err != nil {
 		return err
 	}
-	return validateRuntimeOpeningRequirements("Models",
-		runtimeOpeningRequirement{"service", group.Service},
+	return validatePortRequirements("Models",
+		portRequirement{"service", group.Service},
 	)
 }
 
 func validateRecordings(group *RecordingsPorts) error {
-	if err := requireRuntimeOpeningPorts("Recordings", group); err != nil {
+	if err := requirePorts("Recordings", group); err != nil {
 		return err
 	}
-	return validateRuntimeOpeningRequirements("Recordings",
-		runtimeOpeningRequirement{"service", group.Service},
-		runtimeOpeningRequirement{"runtime", group.Runtime},
+	return validatePortRequirements("Recordings",
+		portRequirement{"service", group.Service},
+		portRequirement{"runtime", group.Runtime},
 	)
 }
 
 func validateWorkers(group *WorkersPorts) error {
-	if err := requireRuntimeOpeningPorts("Workers", group); err != nil {
+	if err := requirePorts("Workers", group); err != nil {
 		return err
 	}
-	if missingRuntimeOpeningDependency(group.Service) {
+	if missingPortDependency(group.Service) {
 		return fmt.Errorf("Factory Sessions runtime-opening Workers service is required")
 	}
-	return validateRuntimeOpeningRequirements("Workers",
-		runtimeOpeningRequirement{"provider-from-command-runner factory", group.ProviderFromCommandRunnerFactory},
-		runtimeOpeningRequirement{"provider command runner", group.ProviderCommandRunner},
-		runtimeOpeningRequirement{"script command runner", group.ScriptCommandRunner},
+	return validatePortRequirements("Workers",
+		portRequirement{"provider-from-command-runner factory", group.ProviderFromCommandRunnerFactory},
+		portRequirement{"provider command runner", group.ProviderCommandRunner},
+		portRequirement{"script command runner", group.ScriptCommandRunner},
 	)
 }
 
 func validateWebhooks(group *WebhooksPorts) error {
-	if err := requireRuntimeOpeningPorts("Webhooks", group); err != nil {
+	if err := requirePorts("Webhooks", group); err != nil {
 		return err
 	}
-	return validateRuntimeOpeningRequirements("Webhooks",
-		runtimeOpeningRequirement{"service", group.Service},
+	return validatePortRequirements("Webhooks",
+		portRequirement{"service", group.Service},
 	)
 }
 
 func validateOperatorSettings(group *OperatorSettingsPorts) error {
-	if err := requireRuntimeOpeningPorts("Operator Settings", group); err != nil {
+	if err := requirePorts("Operator Settings", group); err != nil {
 		return err
 	}
-	return validateRuntimeOpeningRequirements("Operator Settings",
-		runtimeOpeningRequirement{"backend scope ensurer", group.EnsureBackendScope},
+	return validatePortRequirements("Operator Settings",
+		portRequirement{"backend scope ensurer", group.EnsureBackendScope},
 	)
 }
 
-type runtimeOpeningRequirement struct {
+type portRequirement struct {
 	member string
 	value  any
 }
 
-func requireRuntimeOpeningPorts(owner string, ports any) error {
-	if missingRuntimeOpeningDependency(ports) {
+func requirePorts(owner string, ports any) error {
+	if missingPortDependency(ports) {
 		return fmt.Errorf("Factory Sessions runtime-opening %s owner ports are required", owner)
 	}
 	return nil
 }
 
-func validateRuntimeOpeningRequirements(owner string, requirements ...runtimeOpeningRequirement) error {
+func validatePortRequirements(owner string, requirements ...portRequirement) error {
 	for _, requirement := range requirements {
-		if missingRuntimeOpeningDependency(requirement.value) {
+		if missingPortDependency(requirement.value) {
 			return fmt.Errorf("Factory Sessions runtime-opening %s %s is required", owner, requirement.member)
 		}
 	}
 	return nil
 }
 
-func missingRuntimeOpeningDependency(value any) bool {
+func missingPortDependency(value any) bool {
 	if value == nil {
 		return true
 	}
