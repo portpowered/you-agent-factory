@@ -15,7 +15,6 @@ import (
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
@@ -105,7 +104,6 @@ var servicesSet = wire.NewSet(
 	provideManagedRunnerFactory,
 	provideModelsService,
 	provideFactorySessionsWorkingDirectory,
-	provideFactorySessionExecutionOpeningFileSystem,
 	provideFactorySessionDirectoryInspection,
 	provideFactorySessionResolveLogicalTargetSymlinks,
 	provideFactorySessionContractFixtureReader,
@@ -155,10 +153,6 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionsCapability,
 	provideFactoryVisualizationMetricsQuery,
 	provideRuntimeMetricsQueryCapability,
-	wire.Bind(new(factorysessions.Service), new(*factorysessionwire.Root)),
-	wire.Bind(new(factorysessionwire.ApplicationRuntimeOpening), new(*factorysessionwire.Root)),
-	wire.Bind(new(factorysessionwire.InvocationRuntimeOpening), new(*factorysessionwire.Root)),
-	wire.Bind(new(factorysessionwire.ExecutionRuntimeOpening), new(*factorysessionwire.Root)),
 	provideProviderPriceTableReader,
 	provideCostsQuery,
 	provideCostsQueryCapability,
@@ -259,7 +253,6 @@ var providerSessionServiceSet = wire.NewSet(
 )
 
 var factorySessionsServicesSet = wire.NewSet(
-	provideStandaloneSessionExecutionFactory,
 	provideJavaScriptWorkflows,
 )
 
@@ -424,7 +417,6 @@ var BundleSet = wire.NewSet(
 	provideSystemInitializationOperation,
 	wire.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)),
 	wire.Bind(new(processcontract.ACPServer), new(acp.Server)),
-	wire.Bind(new(factorysessionwire.WorkerExecution), new(workers.Service)),
 	provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,
 	provideRuntimeOpeningRequestFactory,
@@ -434,15 +426,8 @@ var BundleSet = wire.NewSet(
 	provideRunSelectionFactory,
 	provideInvocationOperation,
 	initializerapplication.NewStdioRunnerBuilder,
-	initializerapplication.NewOpenedStdioRunnerBuilder,
-	provideFixtureStdioApplicationBuilder,
-	provideRuntimeStdioApplicationBuilder,
 	provideMCPServerBuilder,
-	provideSessionExecutionOpeningFactory,
-	wire.Bind(new(factorysessionwire.StdioExecutionOpening), new(*factorysessionwire.ExecutionOpeningFactory)),
-	factorysessionwire.NewStdioOpeningService,
-	wire.Bind(new(factorysessionwire.StdioOpeningOperation), new(*factorysessionwire.StdioOpeningService)),
-	provideStdioApplicationOpener,
+	provideStdioHandler,
 	provideDirectJavaScriptHostAdapter,
 	runcli.NewDirectJavaScriptRunOperation,
 	initializerapplication.NewInitializer,

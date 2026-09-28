@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
@@ -133,15 +134,6 @@ func provideFactorySessionsWorkingDirectory(
 ) platformfilesystem.WorkingDirectory {
 	if edges.FactorySessionsWorkingDirectory != nil {
 		return edges.FactorySessionsWorkingDirectory
-	}
-	return platformfilesystem.Local{}
-}
-
-func provideFactorySessionExecutionOpeningFileSystem(
-	edges serviceedges.Edges,
-) factorysessionwire.ExecutionOpeningFileSystem {
-	if edges.FactorySessionExecutionOpeningFileSystem != nil {
-		return edges.FactorySessionExecutionOpeningFileSystem
 	}
 	return platformfilesystem.Local{}
 }
@@ -582,6 +574,7 @@ func provideManagedRunnerFactory() runtimeapplication.ManagedRunnerFactory {
 }
 
 type mcpServerBuilder func(
+	string,
 	factorysessionwire.DurableExecutionService,
 	recordings.Service,
 	factorysessionwire.RequestPreparation,
@@ -595,15 +588,20 @@ type mcpServerBuilder func(
 // services while an opening is being selected.
 func provideMCPServerBuilder(workingDirectory platformfilesystem.WorkingDirectory) mcpServerBuilder {
 	return func(
+		projectRoot string,
 		execution factorysessionwire.DurableExecutionService,
 		recordingsService recordings.Service,
 		prepare factorysessionwire.RequestPreparation,
 		workflowPreview factoryruntime.WorkflowPreviewOperation,
 		sessions factorysessions.Service,
 	) (*mcpserver.Server, error) {
-		workingRoot, err := workingDirectory.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("resolve MCP working directory: %w", err)
+		workingRoot := strings.TrimSpace(projectRoot)
+		if workingRoot == "" {
+			var err error
+			workingRoot, err = workingDirectory.Getwd()
+			if err != nil {
+				return nil, fmt.Errorf("resolve MCP working directory: %w", err)
+			}
 		}
 		inspection := factorysessionmcp.RecordingsInspection(recordingsService)
 		if inspection == nil {
@@ -616,89 +614,6 @@ func provideMCPServerBuilder(workingDirectory platformfilesystem.WorkingDirector
 				execution, inspection, prepare, workflowPreview, sessions, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString),
 			)),
 		})
-	}
-}
-
-func provideFixtureStdioApplicationBuilder(
-	build initializerapplication.StdioRunnerBuilder,
-	newRunner lifecycle.RunnerFactory,
-	open mcpstdio.Opener,
-	buildServer mcpServerBuilder,
-	prepare factorysessionwire.RequestPreparation,
-	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	sessions factorysessions.Service,
-) factorysessionwire.FixtureStdioApplicationBuilder {
-	return func(
-		ctx context.Context,
-		execution factorysessionwire.DurableExecutionService,
-		input io.Reader,
-		output io.Writer,
-	) (factorysessionwire.StdioApplication, error) {
-		openSession := initializer.StdioSessionOpener(func(
-			sessionCtx context.Context,
-			sessionInput io.Reader,
-			sessionOutput io.Writer,
-		) (initializer.OpenedApplication, error) {
-			if sessionCtx == nil {
-				return initializer.OpenedApplication{}, errors.New("MCP stdio context is required")
-			}
-			if err := sessionCtx.Err(); err != nil {
-				return initializer.OpenedApplication{}, err
-			}
-			server, err := buildServer(execution, nil, prepare, workflowPreview, sessions)
-			if err != nil {
-				return initializer.OpenedApplication{}, err
-			}
-			session, err := open(server, sessionInput, sessionOutput)
-			if err != nil {
-				return initializer.OpenedApplication{}, err
-			}
-			return stdioLifecycleOpening(newRunner(session.Run), runtimeartifact.Diagnostics{}, nil), nil
-		})
-		return build(ctx, openSession, input, output)
-	}
-}
-
-func provideRuntimeStdioApplicationBuilder(
-	build initializerapplication.OpenedStdioRunnerBuilder,
-	newRunner lifecycle.RunnerFactory,
-	open mcpstdio.Opener,
-	buildServer mcpServerBuilder,
-	prepare factorysessionwire.RequestPreparation,
-	sessions factorysessions.Service,
-) factorysessionwire.RuntimeStdioApplicationBuilder {
-	return func(
-		ctx context.Context,
-		opened factorysessionwire.OpenedExecutionRuntime,
-		input io.Reader,
-		output io.Writer,
-	) (factorysessionwire.StdioApplication, error) {
-		neutral := initializer.OpenedStdioApplication{
-			OpenSession: func(
-				sessionCtx context.Context,
-				sessionInput io.Reader,
-				sessionOutput io.Writer,
-			) (initializer.OpenedApplication, error) {
-				if sessionCtx == nil {
-					return initializer.OpenedApplication{}, errors.New("MCP stdio context is required")
-				}
-				if err := sessionCtx.Err(); err != nil {
-					return initializer.OpenedApplication{}, err
-				}
-				server, err := buildServer(opened.Execution, opened.Recordings, prepare, opened.WorkflowPreview, sessions)
-				if err != nil {
-					return initializer.OpenedApplication{}, err
-				}
-				session, err := open(server, sessionInput, sessionOutput)
-				if err != nil {
-					return initializer.OpenedApplication{}, err
-				}
-				return stdioLifecycleOpening(
-					newRunner(session.Run), opened.Resources.Diagnostics, opened.Resources.Close,
-				), nil
-			},
-		}
-		return build(ctx, neutral, input, output)
 	}
 }
 
@@ -718,75 +633,46 @@ func stdioLifecycleOpening(
 	return initializer.OpenedApplication{Plan: plan, Diagnostics: diagnostics}
 }
 
-type stdioApplicationOpener struct {
-	open          factorysessionwire.StdioOpeningOperation
-	presentations factorysessions.OpeningPresentationOwner
-}
-
-func (adapter stdioApplicationOpener) OpenStdio(
-	ctx context.Context,
-	intent processcontract.MCPIntent,
-) (initializer.RunApplication, error) {
-	request := factorysessions.StdioOpeningRequest{
-		FixtureCatalogPath: intent.FixtureCatalogPath,
-		RuntimeBacked:      intent.RuntimeBacked,
-		ProjectRoot:        intent.ProjectRoot,
-		SystemConfigHome:   intent.HomeDir,
+func provideStdioHandler(
+	sessions factorysessions.Service,
+	recordingsRoot recordings.Service,
+	build initializerapplication.StdioRunnerBuilder,
+	newRunner lifecycle.RunnerFactory,
+	open mcpstdio.Opener,
+	buildServer mcpServerBuilder,
+	prepare factorysessionwire.RequestPreparation,
+	workflowPreview factoryruntime.WorkflowPreviewOperation,
+) (processcontract.StdioHandler, error) {
+	if sessions == nil || build == nil || newRunner == nil || open == nil || buildServer == nil {
+		return nil, errors.New("MCP stdio requires Factory Sessions root, lifecycle, transport, and server")
 	}
-	var scopeID factorysessions.OpeningScopeID
-	var err error
-	if adapter.presentations != nil {
-		scopeID, err = adapter.presentations.RegisterStdio(factorysessions.StdioOpeningScope{
-			Input: intent.Stdin, Output: intent.Stdout,
+	return func(ctx context.Context, intent processcontract.MCPIntent) error {
+		openSession := initializer.StdioSessionOpener(func(sessionCtx context.Context, input io.Reader, output io.Writer) (initializer.OpenedApplication, error) {
+			if sessionCtx == nil {
+				return initializer.OpenedApplication{}, errors.New("MCP stdio context is required")
+			}
+			if err := sessionCtx.Err(); err != nil {
+				return initializer.OpenedApplication{}, err
+			}
+			server, err := buildServer(intent.ProjectRoot, sessions, recordingsRoot, prepare, workflowPreview, sessions)
+			if err != nil {
+				return initializer.OpenedApplication{}, err
+			}
+			transport, err := open(server, input, output)
+			if err != nil {
+				return initializer.OpenedApplication{}, err
+			}
+			return stdioLifecycleOpening(newRunner(transport.Run), runtimeartifact.Diagnostics{}, nil), nil
 		})
+		runner, err := build(ctx, openSession, intent.Stdin, intent.Stdout)
 		if err != nil {
-			return nil, fmt.Errorf("register stdio opening presentation: %w", err)
+			return err
 		}
-		request.ScopeID = scopeID
-	}
-	application, err := adapter.open.OpenStdio(
-		ctx,
-		request,
-	)
-	if err != nil {
-		if adapter.presentations != nil {
-			adapter.presentations.Close(scopeID)
+		if runner == nil {
+			return errors.New("MCP stdio application is required")
 		}
-		return nil, err
-	}
-	if application == nil {
-		if adapter.presentations != nil {
-			adapter.presentations.Close(scopeID)
-		}
-		return nil, errors.New("stdio opening returned nil application")
-	}
-	if adapter.presentations == nil {
-		return application, nil
-	}
-	return scopedRunApplication{
-		application: application,
-		close:       func() { adapter.presentations.Close(scopeID) },
+		return runner.Run(ctx)
 	}, nil
-}
-
-type scopedRunApplication struct {
-	application initializer.RunApplication
-	close       func()
-}
-
-func (application scopedRunApplication) Run(ctx context.Context) error {
-	defer application.close()
-	return application.application.Run(ctx)
-}
-
-func provideStdioApplicationOpener(
-	open factorysessionwire.StdioOpeningOperation,
-	presentations factorysessions.OpeningPresentationOwner,
-) (processcontract.StdioApplicationOpener, error) {
-	if open == nil {
-		return nil, errors.New("Factory Session stdio opening operation is required")
-	}
-	return stdioApplicationOpener{open: open, presentations: presentations}, nil
 }
 
 func provideLifecycleRunnerFactory() lifecycle.RunnerFactory {

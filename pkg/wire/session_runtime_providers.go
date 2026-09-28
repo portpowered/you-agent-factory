@@ -618,10 +618,10 @@ func provideFactorySessionsAssembly(
 
 func provideFactorySessionsService(
 	assembly factorysessionwire.RuntimeAssembly,
-	opening factorysessionwire.RuntimeOpening,
+	root *factorysessionwire.Root,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
-) (*factorysessionwire.Root, error) {
-	return factorysessionwire.NewServiceFromAssembly(assembly, opening, liveChangeCoordinator)
+) (factorysessions.Service, error) {
+	return factorysessionwire.NewServiceFromAssembly(assembly, root, liveChangeCoordinator)
 }
 
 // provideFactorySessionsCapability publishes the already-composed Sessions root
@@ -787,45 +787,6 @@ func provideFactorySessionExecutionFactory(
 			responseEventIDs,
 			responseEventRetentionLimits,
 			eventsService,
-			liveChangeCoordinator,
-		)
-	}
-}
-
-func provideStandaloneSessionExecutionFactory(
-	workflows factoryruntime.JavaScriptWorkflows,
-	orchestration factoryruntime.OrchestrationJavaScriptExecution,
-	recordingWriter recordings.PortableRecordingWriter,
-	stores factorysessionwire.RuntimePersistenceStoreFactory,
-	syncWaits factorysessionwire.SyncWaitScheduler,
-	sessionIDs factorysessions.SessionIDGenerator,
-	fixtureFiles factorysessionwire.ContractFixtureReader,
-	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
-	execution factorysessionwire.WorkerExecution,
-) factorysessionwire.StandaloneSessionExecutionFactory {
-	return func(
-		provider factorysessions.ExecutionProvider,
-		projectRoot string,
-		fixtureCatalogPath string,
-		childExecutorMode string,
-		workerExecution factorysessionwire.WorkerExecution,
-		clock factoryruntime.Clock,
-	) (factorysessionwire.DurableExecutionService, error) {
-		return factorysessionwire.NewStandaloneExecution(
-			provider,
-			projectRoot,
-			stores,
-			fixtureCatalogPath,
-			childExecutorMode,
-			workerExecution,
-			clock,
-			syncWaits,
-			factoryruntimewire.NewJavaScriptCheckpointSummaries(),
-			workflows,
-			orchestration,
-			recordingWriter,
-			sessionIDs,
-			fixtureFiles,
 			liveChangeCoordinator,
 		)
 	}

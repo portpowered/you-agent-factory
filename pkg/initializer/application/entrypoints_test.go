@@ -45,18 +45,24 @@ func TestInitializerRunAppliesPolicyAndRunsSelectedApplication(t *testing.T) {
 }
 
 func TestInitializerStdioOnlyOpensAndRunsLifecycleReadyApplication(t *testing.T) {
-	wantIntent := startupcli.MCPIntent{RuntimeBacked: true, ProjectRoot: "project", HomeDir: "stdio-home"}
-	opener := &stdioApplicationOpenerStub{}
+	wantIntent := startupcli.MCPIntent{ProjectRoot: "project"}
+	var gotIntent startupcli.MCPIntent
+	ran := false
+	handler := startupcli.StdioHandler(func(_ context.Context, intent startupcli.MCPIntent) error {
+		gotIntent = intent
+		ran = true
+		return nil
+	})
 	system := func(context.Context, string) error { return nil }
-	entrypoint, err := NewInitializer(opener, system)
+	entrypoint, err := NewInitializer(handler, system)
 	if err != nil {
 		t.Fatalf("NewInitializer: %v", err)
 	}
 	if err := entrypoint.Stdio(context.Background(), wantIntent); err != nil {
 		t.Fatalf("Stdio: %v", err)
 	}
-	if opener.intent != wantIntent || !opener.ran {
-		t.Fatalf("stdio opener = intent:%#v ran:%v", opener.intent, opener.ran)
+	if gotIntent != wantIntent || !ran {
+		t.Fatalf("stdio handler = intent:%#v ran:%v", gotIntent, ran)
 	}
 }
 
@@ -87,16 +93,3 @@ func (s *runSelectionStub) Open(_ context.Context, intent startupcli.RunIntent) 
 type runApplicationFunc func(context.Context) error
 
 func (run runApplicationFunc) Run(ctx context.Context) error { return run(ctx) }
-
-type stdioApplicationOpenerStub struct {
-	intent startupcli.MCPIntent
-	ran    bool
-}
-
-func (stub *stdioApplicationOpenerStub) OpenStdio(_ context.Context, intent startupcli.MCPIntent) (initializer.RunApplication, error) {
-	stub.intent = intent
-	return runApplicationFunc(func(context.Context) error {
-		stub.ran = true
-		return nil
-	}), nil
-}

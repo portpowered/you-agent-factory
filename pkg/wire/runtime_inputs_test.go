@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -13,38 +14,37 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
+	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
+	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"go.uber.org/zap"
 )
 
-type recordingStdioOpening struct {
-	request factorysessions.StdioOpeningRequest
-	result  factorysessionwire.StdioApplication
-}
-
-func (opening *recordingStdioOpening) OpenStdio(
-	_ context.Context,
-	request factorysessions.StdioOpeningRequest,
-) (factorysessionwire.StdioApplication, error) {
-	opening.request = request
-	return opening.result, nil
-}
+type canonicalStdioSessionsStub struct{ factorysessions.Service }
 
 type testStdioApplication struct{}
 
 func (testStdioApplication) Run(context.Context) error { return nil }
+
+type testStdioRunner struct{ ran *bool }
+
+func (runner testStdioRunner) Run(context.Context) error {
+	*runner.ran = true
+	return nil
+}
 
 type workerSessionsObservationServiceStub struct {
 	workersessions.Service
@@ -169,49 +169,62 @@ func TestWorkerSessionsScopeResolverForwardsObservationCapability(t *testing.T) 
 	}
 }
 
-func TestStdioApplicationOpenerMapsOnlyInvocationEdgeValues(t *testing.T) {
+func TestStdioHandlerUsesProcessSessionsAndInvocationStreams(t *testing.T) {
 	t.Parallel()
 
 	input := strings.NewReader("request")
 	output := &strings.Builder{}
-	opening := &recordingStdioOpening{result: testStdioApplication{}}
-	owner := factorysessionwire.NewOpeningPresentationOwner()
-	adapter, err := provideStdioApplicationOpener(opening, owner)
+	sessions := &canonicalStdioSessionsStub{}
+	var selectedRoot string
+	var selectedInput, selectedOutput any
+	ran := false
+	handler, err := provideStdioHandler(
+		sessions, nil,
+		func(ctx context.Context, open initializer.StdioSessionOpener, in io.Reader, out io.Writer) (initializer.LocalRuntimeRunner, error) {
+			_, err := open(ctx, in, out)
+			return testStdioRunner{ran: &ran}, err
+		},
+		lifecycle.NewRunner,
+		func(_ *mcpserver.Server, in io.Reader, out io.Writer) (mcpstdio.Session, error) {
+			selectedInput, selectedOutput = in, out
+			return testStdioApplication{}, nil
+		},
+		func(projectRoot string, execution factorysessionwire.DurableExecutionService, _ recordings.Service, _ factorysessionwire.RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, bound factorysessions.Service) (*mcpserver.Server, error) {
+			selectedRoot = projectRoot
+			if execution != sessions || bound != sessions {
+				t.Fatalf("MCP roots = (%T, %T), want same process root", execution, bound)
+			}
+			return &mcpserver.Server{}, nil
+		},
+		nil, nil,
+	)
 	if err != nil {
-		t.Fatalf("provideStdioApplicationOpener(): %v", err)
+		t.Fatalf("provideStdioHandler(): %v", err)
 	}
-	application, err := adapter.OpenStdio(t.Context(), processcontract.MCPIntent{
-		FixtureCatalogPath: "fixtures.json",
-		RuntimeBacked:      true,
-		ProjectRoot:        "/project",
-		HomeDir:            "/home",
-		Stdin:              input,
-		Stdout:             output,
-	})
-	if err != nil {
-		t.Fatalf("OpenStdio(): %v", err)
+	if handler == nil {
+		t.Fatal("provideStdioHandler() returned nil handler")
 	}
-	if application == nil {
-		t.Fatal("OpenStdio() returned a nil lifecycle-ready application")
+	if err := handler(t.Context(), processcontract.MCPIntent{
+		ProjectRoot: "/project",
+		Stdin:       input,
+		Stdout:      output,
+	}); err != nil {
+		t.Fatalf("handler(): %v", err)
 	}
-	request := opening.request
-	presentation, ok := owner.Stdio(request.ScopeID)
-	if !ok {
-		t.Fatalf("stdio opening scope %q was not registered", request.ScopeID)
+	if !ran {
+		t.Fatal("handler() did not run the lifecycle-ready application")
 	}
-	if request.FixtureCatalogPath != "fixtures.json" || !request.RuntimeBacked ||
-		request.ProjectRoot != "/project" || request.SystemConfigHome != "/home" ||
-		presentation.Input != input || presentation.Output != output {
-		t.Fatalf("mapped stdio opening = request:%#v presentation:%#v", request, presentation)
+	if selectedRoot != "/project" || selectedInput != input || selectedOutput != output {
+		t.Fatalf("stdio mapping = root:%q input:%T output:%T", selectedRoot, selectedInput, selectedOutput)
 	}
 }
 
-func TestStdioApplicationOpenerRequiresOwnerOperation(t *testing.T) {
+func TestStdioHandlerRequiresOwnerOperation(t *testing.T) {
 	t.Parallel()
 
-	adapter, err := provideStdioApplicationOpener(nil, nil)
-	if err == nil || adapter != nil {
-		t.Fatalf("provideStdioApplicationOpener(nil) = (%v, %v), want nil and error", adapter, err)
+	handler, err := provideStdioHandler(nil, nil, nil, nil, nil, nil, nil, nil)
+	if err == nil || handler != nil {
+		t.Fatalf("provideStdioHandler(nil) = (%v, %v), want nil and error", handler, err)
 	}
 }
 
@@ -502,21 +515,6 @@ func TestFactorySessionHomeDirectoryUsesExplicitEdgeOrProcessDefault(t *testing.
 	}
 }
 
-func TestFactorySessionExecutionOpeningUsesExplicitEdgeOrPlatformDefault(t *testing.T) {
-	t.Parallel()
-
-	override := &cursorPersistenceTestFileSystem{}
-	if got := provideFactorySessionExecutionOpeningFileSystem(serviceedges.Edges{
-		FactorySessionExecutionOpeningFileSystem: override,
-	}); got != override {
-		t.Fatalf("execution-opening filesystem override = %T, want exact edge", got)
-	}
-	got := provideFactorySessionExecutionOpeningFileSystem(serviceedges.Edges{})
-	if _, ok := got.(platformfilesystem.Local); !ok {
-		t.Fatalf("default execution-opening filesystem = %T, want policy-free local adapter", got)
-	}
-}
-
 func TestFactorySessionRuntimePersistenceUsesExplicitEdgeOrPlatformDefault(t *testing.T) {
 	t.Parallel()
 
@@ -542,157 +540,6 @@ func TestFactorySessionRuntimePersistenceUsesExplicitEdgeOrPlatformDefault(t *te
 	}
 	if _, err := store.Load(sessionID); err != nil {
 		t.Fatalf("load runtime snapshot: %v", err)
-	}
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
-func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.T) {
-	t.Parallel()
-	skip := true
-	mocks := workers.NewEmptyMockWorkersConfig()
-	opening := provideRuntimeOpeningRequestFactory()(runcli.RunConfig{
-		Dir: "factory", FactoryConfigPath: "/tmp/factory.json",
-		ExecutionBaseDir: "execution", RunnerID: "runner", Worktree: "feature-login",
-		HomeDir: "home", WorkFile: "work.json", BindHost: "127.0.0.1",
-		Port: 8080, AutoPort: true,
-		Continuously: true, Verbose: true, RecordPath: "record.json",
-		ReplayPath: "replay.json", ResumePath: "source.recording.json", Workflow: "flow", ModelCacheDir: "models",
-		FactorySessionID:                  "session-explicit",
-		CanonicalSessionID:                "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
-		WorkerReasoningEffort:             "xhigh",
-		InvocationSkipPermissionsOverride: &skip,
-	}, mocks)
-	request := opening
-
-	if request.FactoryDefinition.Directory != "factory" ||
-		request.FactoryDefinition.SourcePath != "/tmp/factory.json" ||
-		request.FactoryDefinition.ExecutionBaseDir != "execution" {
-		t.Fatalf("Factory Definition request = %#v", request.FactoryDefinition)
-	}
-	if request.FactoryRuntime.Mode != factorydefinitions.RuntimeModeService || !request.FactoryRuntime.Verbose {
-		t.Fatalf("Factory Runtime request = %#v", request.FactoryRuntime)
-	}
-	if request.FactorySession.SystemConfigHome != "home" ||
-		request.FactorySession.Host.Host != "127.0.0.1" ||
-		request.FactorySession.Host.Port != 8080 ||
-		!request.FactorySession.Host.AutoPort {
-		t.Fatalf("Factory Session request = %#v", request.FactorySession)
-	}
-	if request.FactorySession.PersistencePolicy != factorysessions.PersistencePolicyEnabled {
-		t.Fatalf("Factory Session persistence policy = %q, want %q", request.FactorySession.PersistencePolicy, factorysessions.PersistencePolicyEnabled)
-	}
-	if request.FactorySession.CanonicalSessionID != "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba" {
-		t.Fatalf("Factory Session canonical ID = %q, want preallocated UUID", request.FactorySession.CanonicalSessionID)
-	}
-	if request.FactorySession.FactorySessionID != "session-explicit" {
-		t.Fatalf("Factory Session public ID = %q, want explicit selector", request.FactorySession.FactorySessionID)
-	}
-	if request.Workers.RunnerID != "runner" || request.Workers.Worktree != "feature-login" ||
-		request.Workers.WorkerReasoningEffort != "xhigh" ||
-		request.Workers.MockWorkers != mocks || request.Workers.InvocationSkipPermissionsOverride != &skip {
-		t.Fatalf("Workers request = %#v", request.Workers)
-	}
-	if request.Recordings.RecordPath != "record.json" || request.Recordings.ReplayPath != "replay.json" ||
-		request.Recordings.ResumePath != "source.recording.json" || request.Recordings.WorkflowID != "flow" {
-		t.Fatalf("Recordings request = %#v", request.Recordings)
-	}
-	if request.ModelCacheDirectory != "models" {
-		t.Fatalf("Model cache directory = %#v", request.ModelCacheDirectory)
-	}
-}
-
-func TestRuntimeOpeningRequestFactorySelectsEnabledPersistenceForBatchAndService(t *testing.T) {
-	t.Parallel()
-	for _, test := range []struct {
-		name         string
-		continuously bool
-		mode         factorydefinitions.RuntimeMode
-	}{
-		{name: "batch", mode: factorydefinitions.RuntimeModeBatch},
-		{name: "service", continuously: true, mode: factorydefinitions.RuntimeModeService},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			request := provideRuntimeOpeningRequestFactory()(runcli.RunConfig{
-				Dir:          "factory",
-				Continuously: test.continuously,
-			}, nil)
-			if request.FactoryRuntime.Mode != test.mode {
-				t.Fatalf("runtime mode = %q, want %q", request.FactoryRuntime.Mode, test.mode)
-			}
-			if request.FactorySession.PersistencePolicy != factorysessions.PersistencePolicyEnabled {
-				t.Fatalf("persistence policy = %q, want %q", request.FactorySession.PersistencePolicy, factorysessions.PersistencePolicyEnabled)
-			}
-		})
-	}
-	assertBatchColdStartOpeningValues(t)
-}
-
-// assertBatchColdStartOpeningValues
-// records the exact request values that distinguish the no-listener batch
-// path from the explicitly hosted path. The later optimization story may
-// change when unused work happens, but it must not change this owner request
-// boundary.
-func assertBatchColdStartOpeningValues(t *testing.T) {
-	t.Helper()
-	opening := provideRuntimeOpeningRequestFactory()
-	mocks := workers.NewEmptyMockWorkersConfig()
-	base := runcli.RunConfig{
-		Dir:               "factory",
-		FactoryConfigPath: "factory/factory.json",
-		ExecutionBaseDir:  "execution",
-		HomeDir:           "isolated-home",
-		WorkFile:          "one-work.json",
-		BindHost:          "127.0.0.1",
-	}
-
-	batch := opening(base, mocks)
-	if batch.FactoryRuntime.Mode != factorydefinitions.RuntimeModeBatch {
-		t.Fatalf("batch runtime mode = %q, want %q", batch.FactoryRuntime.Mode, factorydefinitions.RuntimeModeBatch)
-	}
-	if batch.FactorySession.Host.Directory != base.Dir ||
-		batch.FactorySession.Host.WorkFile != base.WorkFile ||
-		!batch.FactorySession.Host.MockWorkers {
-		t.Fatalf("batch host values = %+v, want directory/work file/mock workers from the batch request", batch.FactorySession.Host)
-	}
-	if batch.FactorySession.Host.Host != "127.0.0.1" || batch.FactorySession.Host.Port != 0 ||
-		batch.FactorySession.Host.AutoPort || batch.FactorySession.Host.Pprof {
-		t.Fatalf("batch host values = %+v, want no listener request", batch.FactorySession.Host)
-	}
-
-	serverConfig := base
-	serverConfig.Port = 8123
-	serverConfig.AutoPort = true
-	serverConfig.Pprof = true
-	server := opening(serverConfig, mocks)
-	if server.FactoryRuntime.Mode != factorydefinitions.RuntimeModeBatch {
-		t.Fatalf("hosted batch runtime mode = %q, want %q", server.FactoryRuntime.Mode, factorydefinitions.RuntimeModeBatch)
-	}
-	if got := server.FactorySession.Host; got.Host != "127.0.0.1" || got.Port != 8123 || !got.AutoPort || !got.Pprof {
-		t.Fatalf("hosted batch host values = %+v, want explicit API host request", got)
-	}
-
-	t.Logf("batch host: directory=%q work=%q mock_workers=%t host=%q port=%d auto_port=%t pprof=%t; hosted host: %+v",
-		batch.FactorySession.Host.Directory, batch.FactorySession.Host.WorkFile,
-		batch.FactorySession.Host.MockWorkers, batch.FactorySession.Host.Host,
-		batch.FactorySession.Host.Port, batch.FactorySession.Host.AutoPort,
-		batch.FactorySession.Host.Pprof, server.FactorySession.Host)
-}
-
-func TestRuntimeInputResolverCopiesRequestWithoutSelectingEffects(t *testing.T) {
-	t.Parallel()
-	request := &factorysessions.RuntimeOpeningRequest{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "factory"},
-	}
-	resolved, err := copyWireRuntimeOpeningRequest(t.Context(), request)
-	if err != nil {
-		t.Fatalf("resolve inputs: %v", err)
-	}
-	if resolved == request || resolved.FactoryDefinition.Directory != "factory" {
-		t.Fatalf("resolved request = %#v; want detached value", resolved)
-	}
-	request.FactoryDefinition.Directory = "mutated"
-	if resolved.FactoryDefinition.Directory != "factory" {
-		t.Fatal("resolved request retained caller mutation")
 	}
 }
 
@@ -748,28 +595,6 @@ func TestFactoryRuntimeEffectProvidersDefaultCommandRunnersWhenUnset(t *testing.
 type runtimeInputMetricsRecorder struct{}
 
 func (*runtimeInputMetricsRecorder) RecordInvocationMetric(factorysessions.InvocationMetric) {}
-
-func TestRuntimeInputResolverRejectsMissingRequiredInputs(t *testing.T) {
-	t.Parallel()
-	request := &factorysessions.RuntimeOpeningRequest{}
-	tests := []struct {
-		name    string
-		ctx     context.Context
-		request *factorysessions.RuntimeOpeningRequest
-		want    string
-	}{
-		{name: "nil context", request: request, want: "context is required"},
-		{name: "nil request", ctx: t.Context(), want: "runtime opening request is required"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			_, err := copyWireRuntimeOpeningRequest(test.ctx, test.request)
-			if err == nil || err.Error() != test.want {
-				t.Fatalf("error = %v, want %q", err, test.want)
-			}
-		})
-	}
-}
 
 type runtimeObservabilityTestOwners struct {
 	logOwner     factoryruntime.RuntimeLogOwner

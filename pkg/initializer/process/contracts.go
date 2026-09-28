@@ -74,12 +74,9 @@ type RunIntent struct {
 }
 
 type MCPIntent struct {
-	FixtureCatalogPath string
-	RuntimeBacked      bool
-	ProjectRoot        string
-	HomeDir            string
-	Stdin              io.Reader
-	Stdout             io.Writer
+	ProjectRoot string
+	Stdin       io.Reader
+	Stdout      io.Writer
 }
 
 // RunSelection is one invocation-local CLI run choice. Initializer forwards
@@ -91,13 +88,6 @@ type RunSelection interface {
 
 type RunHandler func(context.Context, RunIntent, RunSelection) error
 type StdioHandler func(context.Context, MCPIntent) error
-
-// StdioApplicationOpener opens one lifecycle-ready stdio application. Product
-// selection and service opening stay behind the injected operation; the
-// Initializer only activates the returned lifecycle.
-type StdioApplicationOpener interface {
-	OpenStdio(context.Context, MCPIntent) (initializer.RunApplication, error)
-}
 
 type Initializer interface {
 	ProcessContext(context.Context) (context.Context, func())

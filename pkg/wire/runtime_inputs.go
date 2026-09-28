@@ -284,76 +284,9 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 	return func(
 		cfg runcli.RunConfig,
 		mockWorkers *workers.MockWorkersConfig,
-	) *factorysessions.RuntimeOpeningRequest {
-		logDirectory := cfg.RuntimeLogDir
-		if strings.TrimSpace(logDirectory) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
-			logDirectory = logging.RuntimeLogsRoot(cfg.HomeDir)
-		}
-		metricsDirectory := cfg.RuntimeMetricsDir
-		if strings.TrimSpace(metricsDirectory) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
-			metricsDirectory = platformmetrics.RuntimeMetricsRoot(cfg.HomeDir)
-		}
-		mode := factorydefinitions.RuntimeModeBatch
-		if cfg.Continuously {
-			mode = factorydefinitions.RuntimeModeService
-		}
-		request := &factorysessions.RuntimeOpeningRequest{
-			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
-				Directory:        cfg.Dir,
-				SourcePath:       cfg.FactoryConfigPath,
-				ExecutionBaseDir: cfg.ExecutionBaseDir,
-			},
-			FactoryRuntime: factoryruntime.RuntimeOpeningRequest{
-				Mode:         mode,
-				Verbose:      cfg.Verbose,
-				LogDirectory: logDirectory,
-				LogConfig: factoryruntime.RuntimeLogStorageConfig{
-					MaxSize: cfg.RuntimeLogConfig.MaxSize, MaxBackups: cfg.RuntimeLogConfig.MaxBackups,
-					MaxAge: cfg.RuntimeLogConfig.MaxAge, Compress: cfg.RuntimeLogConfig.Compress,
-				},
-				MetricsDirectory: metricsDirectory,
-				MetricsConfig: factoryruntime.RuntimeMetricsStorageConfig{
-					MaxSize: cfg.RuntimeMetricsConfig.MaxSize, MaxBackups: cfg.RuntimeMetricsConfig.MaxBackups,
-					MaxAge: cfg.RuntimeMetricsConfig.MaxAge, Compress: cfg.RuntimeMetricsConfig.Compress,
-				},
-			},
-			FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-				FactorySessionID:   cfg.FactorySessionID,
-				CanonicalSessionID: cfg.CanonicalSessionID,
-				// Public run and service openings use the existing durable
-				// snapshot path explicitly. Empty and disabled remain
-				// memory-only choices for callers that opt into them.
-				PersistencePolicy: factorysessions.PersistencePolicyEnabled,
-				SystemConfigHome:  cfg.HomeDir,
-				WorkFile:          cfg.WorkFile,
-				Host: factorysessions.RuntimeHostRequest{
-					Directory:   cfg.Dir,
-					RuntimeMode: mode,
-					WorkFile:    cfg.WorkFile,
-					MockWorkers: mockWorkers != nil,
-					Host:        cfg.BindHost,
-					Port:        cfg.Port,
-					AutoPort:    cfg.AutoPort,
-					Pprof:       cfg.Pprof,
-				},
-			},
-			Workers: workers.RuntimeOpeningRequest{
-				RunnerID:                          cfg.RunnerID,
-				Worktree:                          cfg.Worktree,
-				WorkerReasoningEffort:             cfg.WorkerReasoningEffort,
-				MockWorkers:                       mockWorkers,
-				InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
-			},
-			Recordings: recordings.RuntimeOpeningRequest{
-				RecordPath: cfg.RecordPath,
-				ReplayPath: cfg.ReplayPath,
-				ResumePath: cfg.ResumePath,
-				WorkflowID: cfg.Workflow,
-			},
-			ModelCacheDirectory: cfg.ModelCacheDir,
-			OperatorDefaults:    cfg.OperatorDefaults,
-		}
-		return request
+	) *factorysessions.SessionStartRequest {
+		request := runSessionStartRequest(cfg, mockWorkers)
+		return &request
 	}
 }
 
@@ -410,22 +343,8 @@ func provideFactoryRuntimeScriptCommandRunner(
 	return runner, nil
 }
 
-func provideSessionExecutionOpeningFactory(
-	runtimes factorysessionwire.ExecutionRuntimeOpening,
-	workerExecution workers.Service,
-	build factorysessionwire.StandaloneSessionExecutionFactory,
-	resolveClock factoryruntime.ClockResolver,
-	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
-	paths factorysessionwire.ExecutionOpeningFileSystem,
-	logger *zap.Logger,
-) (*factorysessionwire.ExecutionOpeningFactory, error) {
-	return factorysessionwire.NewExecutionOpeningFactory(
-		runtimes, workerExecution, build, resolveClock, artifactRoots, paths, logger,
-	)
-}
-
 func provideInvocationOperation(
-	openRuntime factorysessionwire.InvocationRuntimeOpening,
+	sessions factorysessions.Service,
 	modelsRoot models.Service,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
@@ -437,7 +356,7 @@ func provideInvocationOperation(
 	presentations factorysessions.OpeningPresentationOwner,
 ) (factorysessionwire.InvocationOperation, error) {
 	return factorysessionwire.NewInvocationOperation(
-		openRuntime,
+		sessions,
 		modelsRoot,
 		workingDirectory,
 		resolveCurrentDir,
