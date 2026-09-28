@@ -1,6 +1,7 @@
 bin/
 .artifacts/
-.cache/lint-checkers/
+/.cache/
+/.index_tts_probe/
 .playwright-mcp/
 tests/adhoc/.playwright-mcp/
 .DS_Store

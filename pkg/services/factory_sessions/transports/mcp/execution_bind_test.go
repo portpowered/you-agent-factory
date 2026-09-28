@@ -731,6 +731,7 @@ func TestSubagentRejectsInputsOutsidePublishedSchemaBeforeStartingSession(t *tes
 		{name: "null model", input: `{"prompt":"hello","model":null}`, reason: "model must not be null"},
 		{name: "null effort", input: `{"prompt":"hello","reasoningEffort":null}`, reason: "reasoningEffort must not be null"},
 		{name: "null timeout", input: `{"prompt":"hello","timeoutMillis":null}`, reason: "timeoutMillis must not be null"},
+		{name: "null workingRoot", input: `{"prompt":"hello","workingRoot":null}`, reason: "workingRoot must not be null"},
 		{name: "unknown field", input: `{"prompt":"hello","unknownOption":"ignored?"}`, reason: `unknown field "unknownOption"`},
 	}
 	for _, test := range tests {

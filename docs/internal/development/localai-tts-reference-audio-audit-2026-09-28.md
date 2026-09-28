@@ -115,6 +115,18 @@ Notes:
   reported `INVOKE` and terminal `COMPLETED`. `nvidia-smi` showed GPU memory
   rise during the request. Speech content and voice similarity were not
   evaluated.
+- Managed WSL root operator model `qwen3-tts-0.6b` used source directory
+  `file:///home/andre/you-localai-probe/models/qwen3-tts-cpp-0.6b-base-q4`
+  (two GGUF files), backend `localai-qwen3-tts-cpp`, and a managed pull
+  returned `ALREADY_READY`/`READY` with gallery `cuda12-qwen3-tts-cpp`
+  installed. A managed `models invoke --offline --operation TTS` with the
+  `reference-zero-24k.wav` input and `ref_text` `Zero.` returned exit 0,
+  producing a non-silent 103,724-byte mono 24,000 Hz WAV (51,840 frames,
+  2.160 seconds, 50,657 nonzero samples). A concurrent 180-sample
+  `nvidia-smi` probe during a repeat successful invocation saw GPU memory
+  rise from 1,518 MiB to 6,458 MiB and utilization peak at 97%; this is
+  GPU execution evidence. Speech content, voice similarity, and actual use
+  of `ref_text` beyond protocol delivery were not evaluated.
 
 ## Unverified
 
@@ -125,7 +137,9 @@ Notes:
 - Native Windows GPU execution remains unverified. Managed built-in VibeVoice
   TTS on WSL is verified separately in [the invocation
   audit](localai-gpu-invocation-audit-2026-09-28.md); managed Qwen3
-  reference-audio synthesis remains unverified.
+  reference-audio synthesis is verified for protocol delivery and GPU
+  execution, but speech content, voice similarity, and actual use of
+  `ref_text` beyond protocol delivery remain unverified.
 
 ## Upstream configuration evidence
 

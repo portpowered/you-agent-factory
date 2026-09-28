@@ -107,7 +107,7 @@ func callSubagentJSON(input json.RawMessage, handler func(SubagentInput) ToolRes
 		envelope := decodeInputErrorEnvelope("decode subagent input", errors.New("input must be an object"))
 		return json.Marshal(ToolResponse[SubagentResult]{Error: &envelope})
 	}
-	for _, field := range []string{"prompt", "provider", "model", "reasoningEffort", "timeoutMillis"} {
+	for _, field := range []string{"prompt", "provider", "model", "reasoningEffort", "timeoutMillis", "workingRoot"} {
 		if value, present := fields[field]; present && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 			envelope := decodeInputErrorEnvelope("decode subagent input", fmt.Errorf("%s must not be null", field))
 			return json.Marshal(ToolResponse[SubagentResult]{Error: &envelope})

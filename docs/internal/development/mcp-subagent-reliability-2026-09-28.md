@@ -1048,3 +1048,45 @@ managed invocation completed in about 34 seconds and produced a non-silent
 `COMPLETED`, and GPU memory rose during the request. An intermediate test
 raised the Factory Sessions default one-shot timeout from 10 seconds to five
 minutes, but the failure persisted; that speculative change was reverted.
+
+Three further OpenCode MCP outcomes were recorded today. Session
+`bb4555ef-1839-4384-8b7b-d6e6c143c1c8` completed in about 35 seconds, editing
+`callSubagentJSON` to reject `workingRoot:null` and adding a focused test;
+package Go tests passed. Session `3712dcc1-e8d9-463d-8529-dbcee7730ac2`
+completed a read-only bounded tail of
+`C:\Users\andre\.local\share\opencode\log\opencode.log` outside `workingRoot`
+with no permission denial, and found run `32c535d1` stopped gracefully with no
+actual error. Session `dbc2852f-bd98-48ce-a5b6-70ed86aba68c` completed creation
+and read-back of
+`C:\Users\andre\AppData\Local\Temp\you-mcp-external-write-probe-20260928.txt`
+outside `workingRoot` without prompt or denial. These successes validate this
+permission path on the current host but do not prove the cause of the earlier
+timeouts. Automatic approval review rejected the caller's cleanup of the
+temporary probe file, which remains in place; no further attempt was made to
+delete or edit that external file.
+
+Subsequent OpenCode MCP subagent calls were recorded. Session
+`50d8efa4-faca-4841-9dae-ff9eb5fe0f9d` completed in about 42 seconds,
+changing `.gitignore` to ignore generated root cache/probe artifacts. Session
+`942f690c-d217-4b92-b0fe-c4831132a666` completed a WSL readiness read in
+about 49 seconds but incorrectly claimed the Qwen backend was absent and
+supplied invalid `models invoke` flags; caller source and CLI checks found
+the Linux gallery mapping and the correct `--input`/`--parameter` flags.
+Session `d52e84d5-0b19-4ec3-9535-2385c848b43f` timed out at 120 seconds with
+no WSL config edit because the log shows attempts to read `/root` config as
+the default WSL user instead of `-u root`; the exact-root retry
+`b0b34e3e-05de-4837-99fa-e3cfe52bc942` completed in about 67 seconds.
+Session `95555b6f-ed25-4b01-8143-54053522c723` timed out at 300 seconds after
+the real pull populated both GGUFs and the CUDA backend but before a primary
+result; `54013b56-603b-45cf-af63-fa20125cf4f0` used an unsupported
+`--offline` flag on `models pull` and received the exact CLI error; the
+corrected call `92a7da69-1876-4102-bf55-6d8153687ba5` completed with
+`ALREADY_READY`/`READY` in about 22 seconds. The timeout cause for that
+300-second call is not fully proven. Session
+`024fcf86-ba3d-4005-876c-eeb6f0a62af8` completed Qwen synthesis but made an
+unsupported CPU-only inference from post-exit `nvidia-smi` output and left
+two untracked helper scripts despite a no-code-edits instruction; the
+repeated invocation `04630134-939a-4f53-bc7d-a7beb6a8f8aa` completed in
+about 45 seconds while the caller sampled GPU, proving memory rose from
+1518 to 6458 MiB and utilization reached 97%. Automatic approval review
+rejected cleanup of the helper scripts and no deletion was retried.
