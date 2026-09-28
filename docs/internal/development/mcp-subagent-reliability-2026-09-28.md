@@ -615,3 +615,15 @@ unrelated lint style and timeout declarations, through the deadline. The
 requested two-file change had not begun. This is evidence of task execution
 sprawl in that model, not evidence of a transport failure. A smaller edit
 prompt or direct implementation is needed for this specific change.
+
+Splitting that edit into two narrow OpenCode `space-bunny-free` requests
+worked. The production change completed in Factory Session
+`d2af325a-5ee9-45e8-a189-077978c77619` in about 22 seconds, and the
+deadline assertion completed in `6eb9383e-0f4d-4004-affe-f7ea9a12782f`
+in about 37 seconds. The new 15-second detached context bounds the cancel
+control when its downstream operations honor context cancellation. It is not
+a process-kill guarantee; a control implementation that ignores context can
+still block. Focused package tests and `go vet` passed. This split shows that
+the prior 120-second timeout was strongly affected by task breadth and the
+model's search behavior, while the exact OpenCode timeout cause remains
+unproven.

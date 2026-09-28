@@ -560,6 +560,13 @@ func TestSessionOwnerWait_MapsTimeoutAndCancellation(t *testing.T) {
 					if ctx.Err() != nil {
 						t.Fatalf("cancel-on-timeout context error = %v, want detached context", ctx.Err())
 					}
+					deadline, ok := ctx.Deadline()
+					if !ok {
+						t.Fatal("cancel-on-timeout context has no deadline")
+					}
+					if remaining := time.Until(deadline); remaining < 14*time.Second || remaining > 16*time.Second {
+						t.Fatalf("cancel-on-timeout deadline = %v from now, want between 14s and 16s", remaining)
+					}
 					if sessionID != "session-1" {
 						t.Fatalf("cancel-on-timeout session ID = %q, want session-1", sessionID)
 					}

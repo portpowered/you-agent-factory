@@ -288,10 +288,15 @@ func (o *SessionOwner) waitErrorResult(
 	}
 	o.recordFailure(sessionID, input, result, failureClass)
 	if result.Status == interfaces.InvocationTerminalStatusTimedOut && input.CancelOnTimeout && o.cancelOnTimeout != nil {
-		_, cancelErr := o.cancelOnTimeout(context.WithoutCancel(context.Background()), sessionID, factorysessions.ControlRequest{
+		// The cancel-on-timeout control must run even though the invocation wait
+		// already expired, so it detaches from the canceled wait context. Give
+		// cooperative control paths a deadline rather than waiting indefinitely.
+		cancelCtx, stopCancel := context.WithTimeout(context.WithoutCancel(context.Background()), 15*time.Second)
+		_, cancelErr := o.cancelOnTimeout(cancelCtx, sessionID, factorysessions.ControlRequest{
 			RequestID: input.RequestID,
 			Reason:    "invocation wait timed out",
 		})
+		stopCancel()
 		if cancelErr != nil {
 			result.Message = "invocation timed out while waiting for primary result; cancel-on-timeout control failed"
 		}
