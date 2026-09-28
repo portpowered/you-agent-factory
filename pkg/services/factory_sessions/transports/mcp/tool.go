@@ -137,10 +137,10 @@ type SubagentResult struct {
 func Subagent(ctx context.Context, target factorysessionexecution.Service, workingRoot string, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) ToolResponse[SubagentResult] {
 	if err := validateSubagentRequest(ctx, target, generateID, input); err != nil {
 		var envelope ToolErrorEnvelope
-		if errors.Is(err, errMissingRequestContext) || ctx == nil || ctx.Err() != nil || target == nil {
+		if errors.Is(err, errMissingRequestContext) || ctx == nil || ctx.Err() != nil || target == nil || generateID == nil {
 			envelope = executionErrorEnvelope(err)
 		} else {
-			envelope = requestValidationErrorEnvelope(err)
+			envelope = ToolErrorEnvelope{Code: errorCodeBadRequest, Message: err.Error(), Retryable: false}
 		}
 		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
