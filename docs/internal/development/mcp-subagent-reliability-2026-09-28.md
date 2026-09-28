@@ -701,3 +701,13 @@ changed the MCP response classification in about 29 seconds, and
 ID, partial-effects warning, and an explicit inspection action. Other close
 errors retain `cleanup_failed`. The MCP package test passed and confirmed
 that sensitive provider and close-error text does not enter the envelope.
+
+Build `93a99f120b` was rebuilt and copied to the configured
+`.local\bin\you.exe`; candidate and installed SHA-256 both equal
+`951B359BA69881429A7842359ED7BBE46A73B7A90870162CAD3E8B69B67AE5D5`.
+A fresh direct stdio MCP connection negotiated protocol `2024-11-05` and
+completed an OpenCode read from the independent temporary directory in
+Factory Session `5650abde-d907-45ba-bc21-a02506075816`. Its result
+contained the unique expected file content. The live probe covers the
+rebuilt success path; the cleanup deadline classification is covered by the
+focused test.
