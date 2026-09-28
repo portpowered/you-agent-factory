@@ -38,7 +38,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 )
 
 // Service satisfies io.Closer so a process lifecycle plan can register it as
@@ -78,7 +78,7 @@ type RuntimeResolver func(
 // the process-scoped Definition/runtime routers. Callers must treat the
 // returned identity as opaque.
 type Service struct {
-	opening    runtimeopening.InvocationRuntimeOpening
+	opening    service.InvocationRuntimeOpening
 	resolve    RuntimeResolver
 	generateID factorysessions.SessionIDGenerator
 	logger     *zap.Logger
@@ -144,7 +144,7 @@ type capturedTurnControlKey struct {
 // invocation-opening capability. Construction alone performs no I/O and
 // opens no runtime.
 func New(
-	opening runtimeopening.InvocationRuntimeOpening,
+	opening service.InvocationRuntimeOpening,
 	resolve RuntimeResolver,
 	generateID factorysessions.SessionIDGenerator,
 	logger *zap.Logger,
@@ -173,7 +173,7 @@ func New(
 	}, nil
 }
 
-func missingInvocationRuntimeOpening(opening runtimeopening.InvocationRuntimeOpening) bool {
+func missingInvocationRuntimeOpening(opening service.InvocationRuntimeOpening) bool {
 	if opening == nil {
 		return true
 	}

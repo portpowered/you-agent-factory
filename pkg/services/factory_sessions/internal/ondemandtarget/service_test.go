@@ -17,7 +17,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 )
 
 // fakeOpener is a minimal InvocationRuntimeOpening test double: it records
@@ -238,7 +238,7 @@ func (f *fakeSessions) SubscribeFactoryEventsForSession(
 	return f.factoryEventStream, f.factoryEventErr
 }
 
-func newTestService(t *testing.T, opener runtimeopening.InvocationRuntimeOpening, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) *Service {
+func newTestService(t *testing.T, opener service.InvocationRuntimeOpening, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) *Service {
 	t.Helper()
 	return &Service{
 		opening:           opener,
@@ -255,7 +255,7 @@ func newTestService(t *testing.T, opener runtimeopening.InvocationRuntimeOpening
 // newTestServiceWithObservedLogger is newTestService, but with a real,
 // observable logger (instead of a no-op one) for tests that assert on what
 // this Service actually logs.
-func newTestServiceWithObservedLogger(t *testing.T, opener runtimeopening.InvocationRuntimeOpening, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) (*Service, *observer.ObservedLogs) {
+func newTestServiceWithObservedLogger(t *testing.T, opener service.InvocationRuntimeOpening, resolve RuntimeResolver, generateID factorysessions.SessionIDGenerator) (*Service, *observer.ObservedLogs) {
 	t.Helper()
 	core, observed := observer.New(zapcore.DebugLevel)
 	return &Service{
@@ -279,7 +279,7 @@ func sequentialIDs(prefix string) func() string {
 }
 
 func TestNewRejectsMissingRequiredDependencies(t *testing.T) {
-	var factory runtimeopening.InvocationRuntimeOpening = &runtimeopening.Factory{}
+	var factory service.InvocationRuntimeOpening = &service.Root{}
 	resolve := func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
 		return factorysessions.RuntimeOpeningRequest{}, nil
 	}
@@ -288,7 +288,7 @@ func TestNewRejectsMissingRequiredDependencies(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		opening    runtimeopening.InvocationRuntimeOpening
+		opening    service.InvocationRuntimeOpening
 		resolve    RuntimeResolver
 		generateID factorysessions.SessionIDGenerator
 		logger     *zap.Logger
@@ -308,8 +308,8 @@ func TestNewRejectsMissingRequiredDependencies(t *testing.T) {
 	}
 }
 
-func typedNilInvocationRuntimeOpening() runtimeopening.InvocationRuntimeOpening {
-	var opening *runtimeopening.Factory
+func typedNilInvocationRuntimeOpening() service.InvocationRuntimeOpening {
+	var opening *service.Root
 	return opening
 }
 
@@ -321,7 +321,7 @@ func TestNewUsesInvocationOpeningCapabilityLazily(t *testing.T) {
 		Sessions:  &fakeSessions{},
 		Lifecycle: &fakeLifecycle{},
 	}}
-	var opening runtimeopening.InvocationRuntimeOpening = opener
+	var opening service.InvocationRuntimeOpening = opener
 	svc, err := New(
 		opening,
 		func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {

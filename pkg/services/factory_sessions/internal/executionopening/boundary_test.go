@@ -10,7 +10,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"go.uber.org/zap"
 )
@@ -75,7 +75,7 @@ func TestNewFactoryRequiresRuntimeArtifactRootResolver(t *testing.T) {
 	t.Parallel()
 
 	_, err := NewFactory(
-		&runtimeopening.Factory{},
+		&service.Root{},
 		workersRootExecutionProbe{},
 		func(factorysessions.ExecutionProvider, string, string, string, WorkerExecution, factoryruntime.Clock) (durableexecution.Service, error) {
 			return nil, nil
@@ -94,7 +94,7 @@ func TestNewFactoryRequiresExecutionOpeningFileSystem(t *testing.T) {
 	t.Parallel()
 
 	_, err := NewFactory(
-		&runtimeopening.Factory{},
+		&service.Root{},
 		workersRootExecutionProbe{},
 		func(factorysessions.ExecutionProvider, string, string, string, WorkerExecution, factoryruntime.Clock) (durableexecution.Service, error) {
 			return nil, nil

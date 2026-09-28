@@ -58,7 +58,7 @@ func TestNewServiceFromAssemblyConstructsPublishedRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRuntimeAssembly() error = %v", err)
 	}
-	service, err := NewServiceFromAssembly(assembly, &RuntimeOpening{}, inputs.liveChangeCoordinator)
+	service, err := NewServiceFromAssembly(assembly, &Root{}, inputs.liveChangeCoordinator)
 	if err != nil {
 		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}
@@ -96,7 +96,7 @@ func TestNewServiceFromAssemblyRetainsOneRuntimeAssemblyOnThePublishedRoot(t *te
 	if err != nil {
 		t.Fatalf("NewRuntimeAssembly() error = %v", err)
 	}
-	service, err := NewServiceFromAssembly(assembly, &RuntimeOpening{}, inputs.liveChangeCoordinator)
+	service, err := NewServiceFromAssembly(assembly, &Root{}, inputs.liveChangeCoordinator)
 	if err != nil {
 		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}
@@ -117,7 +117,7 @@ func TestNewServiceFromAssemblyRetainsTheInjectedOpening(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRuntimeAssembly() error = %v", err)
 	}
-	opening := &RuntimeOpening{}
+	opening := &Root{}
 	service, err := NewServiceFromAssembly(assembly, opening, inputs.liveChangeCoordinator)
 	if err != nil {
 		t.Fatalf("NewServiceFromAssembly() error = %v", err)
@@ -144,7 +144,7 @@ func TestNewServiceFromAssemblyReturnsDirectRootIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRuntimeAssembly() error = %v", err)
 	}
-	root, err := NewServiceFromAssembly(assembly, &RuntimeOpening{}, inputs.liveChangeCoordinator)
+	root, err := NewServiceFromAssembly(assembly, &Root{}, inputs.liveChangeCoordinator)
 	if err != nil {
 		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}
@@ -160,7 +160,7 @@ func TestNewServiceFromAssemblyReturnsDirectRootIdentity(t *testing.T) {
 func TestNewRuntimeOpeningRejectsIncompleteGroupsAtCompositionBoundary(t *testing.T) {
 	t.Parallel()
 
-	factory, err := NewRuntimeOpening(
+	factory, err := NewRoot(
 		nil,
 		nil,
 		nil,
@@ -226,7 +226,7 @@ func TestNewServiceFromAssemblyConstructsInertRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRuntimeAssembly() error = %v", err)
 	}
-	service, err := NewServiceFromAssembly(assembly, &RuntimeOpening{}, inputs.liveChangeCoordinator)
+	service, err := NewServiceFromAssembly(assembly, &Root{}, inputs.liveChangeCoordinator)
 	if err != nil {
 		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}

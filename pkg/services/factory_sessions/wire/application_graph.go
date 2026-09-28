@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimehosting"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
@@ -83,34 +83,34 @@ type (
 	ReplayRecordingReader = fileeffects.ReplayRecordingReader
 	InitialWorkReader     = fileeffects.InitialWorkReader
 
-	ApplicationRuntimeOpening              = runtimeopening.ApplicationRuntimeOpening
-	InvocationRuntimeOpening               = runtimeopening.InvocationRuntimeOpening
-	ExecutionRuntimeOpening                = runtimeopening.ExecutionRuntimeOpening
-	ProviderSessionsRuntimeOpeningPorts    = runtimeopening.ProviderSessionsPorts
-	ProviderOverrideService                = runtimeopening.ProviderOverrideService
-	FactoryRuntimeOpeningPorts             = runtimeopening.FactoryRuntimePorts
-	FactoryDefinitionsRuntimeOpeningPorts  = runtimeopening.FactoryDefinitionsPorts
-	FactorySessionsRuntimeOpeningPorts     = runtimeopening.FactorySessionsPorts
-	WorkRuntimeOpeningPorts                = runtimeopening.WorkPorts
-	AutomationsRuntimeOpeningPorts         = runtimeopening.AutomationsPorts
-	ModelsRuntimeOpeningPorts              = runtimeopening.ModelsPorts
-	RecordingsRuntimeOpeningPorts          = runtimeopening.RecordingsPorts
-	WebhooksRuntimeOpeningPorts            = runtimeopening.WebhooksPorts
-	WorkersRuntimeOpeningPorts             = runtimeopening.WorkersPorts
-	OperatorSettingsRuntimeOpeningPorts    = runtimeopening.OperatorSettingsPorts
-	WorkFactory                            = runtimeopening.WorkFactory
-	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
-	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
-	DurableExecutionFactory                = runtimeopening.DurableExecutionFactory
-	DurableExecution                       = runtimeopening.DurableExecution
-	WorkerCommandRunnerAdapter             = runtimeopening.WorkerCommandRunnerAdapter
-	ProviderCommandRunner                  = runtimeopening.ProviderCommandRunner
-	ScriptCommandRunner                    = runtimeopening.ScriptCommandRunner
-	ProviderFromCommandRunnerFactory       = runtimeopening.ProviderFromCommandRunnerFactory
-	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
-	FactoryRuntimeRoot                     = runtimeopening.FactoryRuntimeRoot
-	RuntimeOpening                         = runtimeopening.Factory
-	RuntimeRoot                            = runtimeopening.RuntimeRoot
+	ApplicationRuntimeOpening              = service.ApplicationRuntimeOpening
+	InvocationRuntimeOpening               = service.InvocationRuntimeOpening
+	ExecutionRuntimeOpening                = service.ExecutionRuntimeOpening
+	ProviderSessionsRuntimeOpeningPorts    = service.ProviderSessionsPorts
+	ProviderOverrideService                = service.ProviderOverrideService
+	FactoryRuntimeOpeningPorts             = service.FactoryRuntimePorts
+	FactoryDefinitionsRuntimeOpeningPorts  = service.FactoryDefinitionsPorts
+	FactorySessionsRuntimeOpeningPorts     = service.FactorySessionsPorts
+	WorkRuntimeOpeningPorts                = service.WorkPorts
+	AutomationsRuntimeOpeningPorts         = service.AutomationsPorts
+	ModelsRuntimeOpeningPorts              = service.ModelsPorts
+	RecordingsRuntimeOpeningPorts          = service.RecordingsPorts
+	WebhooksRuntimeOpeningPorts            = service.WebhooksPorts
+	WorkersRuntimeOpeningPorts             = service.WorkersPorts
+	OperatorSettingsRuntimeOpeningPorts    = service.OperatorSettingsPorts
+	WorkFactory                            = service.WorkFactory
+	FactorySessionExecutionFactory         = service.FactorySessionExecutionFactory
+	ConductorInvocationWithProgressFactory = service.ConductorInvocationWithProgressFactory
+	DurableExecutionFactory                = service.DurableExecutionFactory
+	DurableExecution                       = service.DurableExecution
+	WorkerCommandRunnerAdapter             = service.WorkerCommandRunnerAdapter
+	ProviderCommandRunner                  = service.ProviderCommandRunner
+	ScriptCommandRunner                    = service.ScriptCommandRunner
+	ProviderFromCommandRunnerFactory       = service.ProviderFromCommandRunnerFactory
+	FactoryRuntimeAssembler                = service.FactoryRuntimeAssembler
+	FactoryRuntimeRoot                     = service.FactoryRuntimeRoot
+	RuntimeOpening                         = roles.RuntimeOpening
+	RuntimeRoot                            = service.RuntimeRoot
 	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder
 	InvocationArtifactFileSystem           = factorysessioncontracts.InvocationArtifactFileSystem
 	InvocationArtifactExporter             = factorysessioncontracts.InvocationArtifactExporter
@@ -135,13 +135,13 @@ var (
 	NewRuntimeProjectStore     = runtimepersist.NewProjectStore
 	NewProcessLifecycleFactory = processlifecycle.NewFactory
 	NewRuntimeHostService      = runtimehosting.New
-	NewDurableExecutionRuntime = runtimeopening.NewDurableExecution
-	ModelHostDiagnosticLogger  = runtimeopening.ModelHostDiagnosticLogger
-	ModelHostDiagnosticMetrics = runtimeopening.ModelHostDiagnosticMetrics
+	NewDurableExecutionRuntime = service.NewDurableExecution
+	ModelHostDiagnosticLogger  = service.ModelHostDiagnosticLogger
+	ModelHostDiagnosticMetrics = service.ModelHostDiagnosticMetrics
 	NewExecutionOpeningFactory = executionopening.NewFactory
 )
 
-func NewRuntimeOpening(
+func NewRoot(
 	providerSessions *ProviderSessionsRuntimeOpeningPorts,
 	factoryRuntime *FactoryRuntimeOpeningPorts,
 	factoryDefinitions *FactoryDefinitionsRuntimeOpeningPorts,
@@ -153,8 +153,8 @@ func NewRuntimeOpening(
 	webhooksPorts *WebhooksRuntimeOpeningPorts,
 	workersPorts *WorkersRuntimeOpeningPorts,
 	operatorSettings *OperatorSettingsRuntimeOpeningPorts,
-) (*RuntimeOpening, error) {
-	return runtimeopening.NewFactory(
+) (RuntimeOpening, error) {
+	root, err := service.NewRoot(
 		providerSessions,
 		factoryRuntime,
 		factoryDefinitions,
@@ -167,6 +167,10 @@ func NewRuntimeOpening(
 		workersPorts,
 		operatorSettings,
 	)
+	if err != nil {
+		return nil, err
+	}
+	return root, nil
 }
 
 func NewLifecyclePlanOperation() LifecyclePlanOperation {

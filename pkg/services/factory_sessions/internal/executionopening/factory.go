@@ -14,7 +14,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -41,7 +41,7 @@ type WorkerInvocationWithProgressFactory = func(
 
 // Factory owns provider selection and lazy runtime-backed execution scopes.
 type Factory struct {
-	runtimes        runtimeopening.ExecutionRuntimeOpening
+	runtimes        service.ExecutionRuntimeOpening
 	workerExecution WorkerExecution
 	standalone      StandaloneSessionExecutionFactory
 	resolveClock    factory.ClockResolver
@@ -53,7 +53,7 @@ type Factory struct {
 var _ roles.StdioExecutionOpening = (*Factory)(nil)
 
 func NewFactory(
-	runtimes runtimeopening.ExecutionRuntimeOpening,
+	runtimes service.ExecutionRuntimeOpening,
 	workerExecution WorkerExecution,
 	build StandaloneSessionExecutionFactory,
 	resolveClock factory.ClockResolver,

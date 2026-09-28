@@ -13,8 +13,8 @@ import (
 )
 
 // Reverse-order partial-failure cleanup for scope/instance binding remains owned by
-// runtimeopening.runtimeOpeningCleanup and is proven in
-// pkg/services/factory_sessions/internal/runtimeopening/models_bind_test.go by
+// service.runtimeOpeningCleanup and is proven in
+// pkg/services/factory_sessions/internal/service/models_bind_test.go by
 // TestRuntimeOpeningCleanupClosesModelsScopeAfterLaterResourceOnFailure and
 // TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails.
 // This test proves the Sessions gateway/live_runtime packaging surface does not

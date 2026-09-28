@@ -14,7 +14,7 @@ import (
 const factoryRuntimeImportRoot = "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 
 var openingProjectionLeaseImportRoots = []string{
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/...",
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service/...",
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection/...",
 }
 

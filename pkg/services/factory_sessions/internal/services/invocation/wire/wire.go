@@ -3,14 +3,14 @@
 package wire
 
 import (
+	"context"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
-	legacyopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/invocation"
+	legacyopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service/invocation"
 	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -20,8 +20,16 @@ import (
 // NewOperation is the service-owned construction entrypoint for process-scoped
 // one-shot invocation lifecycle. The implementation remains private to Factory
 // Sessions and root Wire depends only on this service-local constructor.
+// invocationRuntimeOpening is the narrow opening capability consumed by
+// one-shot invocation. It mirrors service.InvocationRuntimeOpening without
+// importing the service package (which would close an import cycle through
+// sessionservice).
+type invocationRuntimeOpening interface {
+	OpenInvocationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedInvocationRuntime, error)
+}
+
 func NewOperation(
-	openRuntime runtimeopening.InvocationRuntimeOpening,
+	openRuntime invocationRuntimeOpening,
 	modelsRoot models.Service,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
