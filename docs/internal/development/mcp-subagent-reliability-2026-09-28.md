@@ -954,3 +954,9 @@ The first full lint rerun after consolidation failed only because the deleted
 resolver file was still in Git's index and `fmt-check` enumerated that path.
 After staging the intended deletion and edits, full native Windows Git Bash
 `make lint` passed all 24 targets.
+
+The change was committed as `4222cb05ab`. A fresh Windows CLI build was
+installed at `C:\Users\andre\.local\bin\you.exe` (SHA-256
+`A8F05B57AEB957708BA4E6F94BDC030CA8D17433CAA49C2ED35BA6B6DF2E3069`).
+A fresh stdio MCP initialization and `tools/list` returned 11 tools including
+`you.subagent`.
