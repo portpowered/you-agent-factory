@@ -1552,3 +1552,14 @@ neither `Message` nor `ChatDeltas` yielded text. The adapter currently drops
 reply shape and token metadata before the codec checks for empty text, so the
 root cause of this content-sensitive failure remains unproven. The local HTTP
 server was stopped gracefully after the probes.
+
+A fresh standalone MCP process from `you-df7163d36c.exe` then received a
+real `tools/call` for `you.subagent` with provider `opencode` and deliberately
+unadvertised model `does-not-exist`. The provider/Worker path recorded
+`permanent_bad_request`; MCP returned `isError=true`, first content text
+`provider rejected the subagent request`, structured code
+`factory_session.subagent.provider_request_rejected`,
+`failureReason=permanent_bad_request`, `retryable=false`, confirmed cleanup,
+and guidance to verify the selected model. This end-to-end check confirms the
+new typed classification works for an actual invalid-model failure. It does
+not explain the separate `big-pickle` generic failure.
