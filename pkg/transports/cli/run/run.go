@@ -292,14 +292,15 @@ type RuntimeRunnerBuilder func(
 	factorysessions.VisualizationSinkID,
 ) (initializer.LocalRuntimeRunner, error)
 
-// RuntimeOpeningRequestFactory is the Wire-selected mapping from CLI values
+// SessionStartRequestFactory is the Wire-selected mapping from CLI values
 // to one immutable Factory Sessions operation request.
-type RuntimeOpeningRequestFactory func(
+type SessionStartRequestFactory func(
 	RunConfig,
 	*workers.MockWorkersConfig,
 ) *factorysessions.SessionStartRequest
 
-type Opener func(
+// OperationFactory prepares one CLI run operation from value-only inputs.
+type OperationFactory func(
 	context.Context,
 	RunConfig,
 	RuntimeRunnerBuilder,
@@ -379,7 +380,7 @@ func Open(
 	presentation factoryvisualization.ResponsePresentation,
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigLoader,
-	buildRuntimeRequest RuntimeOpeningRequestFactory,
+	buildRuntimeRequest SessionStartRequestFactory,
 	presentations ...factorysessions.OpeningPresentationOwner,
 ) (*Operation, error) {
 	var presentationOwner factorysessions.OpeningPresentationOwner
@@ -403,7 +404,7 @@ func OpenWithVisualizationOwnerAndDiagnostics(
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigLoader,
 	loadMockWorkersWithDiagnostics workers.MockWorkersConfigDiagnosticsLoader,
-	buildRuntimeRequest RuntimeOpeningRequestFactory,
+	buildRuntimeRequest SessionStartRequestFactory,
 	presentations factorysessions.OpeningPresentationOwner,
 	visualizations factoryvisualization.RuntimeSinkOwner,
 ) (*Operation, error) {
@@ -420,7 +421,7 @@ func open(
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigLoader,
 	loadMockWorkersWithDiagnostics workers.MockWorkersConfigDiagnosticsLoader,
-	buildRuntimeRequest RuntimeOpeningRequestFactory,
+	buildRuntimeRequest SessionStartRequestFactory,
 	presentationOwner factorysessions.OpeningPresentationOwner,
 	visualizations factoryvisualization.RuntimeSinkOwner,
 ) (*Operation, error) {

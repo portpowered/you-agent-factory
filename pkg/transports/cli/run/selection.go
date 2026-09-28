@@ -84,7 +84,7 @@ func SplitFlagTerminator(args []string) (flagArgs []string, positional []string,
 }
 
 func NewSelectionFactory(
-	open Opener,
+	buildOperation OperationFactory,
 	buildRunner RuntimeRunnerBuilder,
 	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
@@ -92,7 +92,7 @@ func NewSelectionFactory(
 	buildApplication initializer.LifecycleRunnerBuilder,
 	presentations ...factorysessions.OpeningPresentationOwner,
 ) (SelectionFactory, error) {
-	if open == nil || buildRunner == nil || invocation == nil || presentation == nil ||
+	if buildOperation == nil || buildRunner == nil || invocation == nil || presentation == nil ||
 		directJavaScript == nil || buildApplication == nil {
 		return nil, fmt.Errorf("run transport operations are required")
 	}
@@ -102,7 +102,7 @@ func NewSelectionFactory(
 	}
 	return func(cfg RunConfig) processcontract.RunSelection {
 		return &selection{
-			cfg: cfg, open: open, buildRunner: buildRunner, invocation: invocation,
+			cfg: cfg, buildOperation: buildOperation, buildRunner: buildRunner, invocation: invocation,
 			presentation: presentation, directJavaScript: directJavaScript,
 			buildApplication: buildApplication, presentations: presentationOwner,
 		}
@@ -111,7 +111,7 @@ func NewSelectionFactory(
 
 type selection struct {
 	cfg              RunConfig
-	open             Opener
+	buildOperation   OperationFactory
 	buildRunner      RuntimeRunnerBuilder
 	invocation       InvocationOperation
 	presentation     factoryvisualization.ResponsePresentation
@@ -134,7 +134,7 @@ func (s *selection) Open(
 	if s.directJavaScript.Supports(cfg.FactoryConfigPath) {
 		return s.openDirectJavaScript(ctx, cfg, intent)
 	}
-	return s.open(ctx, cfg, s.buildRunner, s.invocation, s.presentation)
+	return s.buildOperation(ctx, cfg, s.buildRunner, s.invocation, s.presentation)
 }
 
 func (s *selection) openDirectJavaScript(

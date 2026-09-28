@@ -71,7 +71,7 @@ type testRuntimeSelections struct {
 	ModelCacheDir                           string
 }
 
-func testRuntimeOpeningRequestFactory(
+func testSessionStartRequestFactory(
 	cfg RunConfig,
 	mockWorkers *workers.MockWorkersConfig,
 ) *factorysessions.SessionStartRequest {
@@ -498,7 +498,7 @@ func runWithTestRuntimeRunnerAndMockWorkersDiagnosticsLoader(
 		prepareSingleWorkTargetForTest,
 		loadMockWorkers,
 		loadMockWorkersWithDiagnostics,
-		testRuntimeOpeningRequestFactory,
+		testSessionStartRequestFactory,
 		factory.presentations,
 		nil,
 	)

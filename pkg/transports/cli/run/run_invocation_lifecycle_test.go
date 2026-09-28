@@ -53,7 +53,7 @@ func TestOpenInvocationRetainsInjectedOperationWithoutOpeningRuntime(t *testing.
 		StdinIsTTY:               func() bool { return true },
 		Output:                   io.Discard,
 		DisableDefaultRecording:  true,
-	}), factory.BuildRunner, factory.Invocation(), testResponsePresentation(), nil, testMockWorkersConfigLoader, testRuntimeOpeningRequestFactory)
+	}), factory.BuildRunner, factory.Invocation(), testResponsePresentation(), nil, testMockWorkersConfigLoader, testSessionStartRequestFactory)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}

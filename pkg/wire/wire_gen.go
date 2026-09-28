@@ -537,9 +537,9 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	runtimeOpeningRequestFactory := provideRuntimeOpeningRequestFactory()
+	sessionStartRequestFactory := provideSessionStartRequestFactory()
 	v79 := wire3.NewRuntimeSinkOwner()
-	runOpener := provideRunOpener(singleWorkTargetPreparation, mockWorkersConfigDiagnosticsLoader, runtimeOpeningRequestFactory, openingPresentationOwner, v79)
+	operationFactory := provideRunOperationFactory(singleWorkTargetPreparation, mockWorkersConfigDiagnosticsLoader, sessionStartRequestFactory, openingPresentationOwner, v79)
 	runtimeFactory := provideFactoryVisualizationFactory()
 	factoryStatusProjector := factory.NewFactoryStatusProjector()
 	httpAdapter := http.NewAdapter(providersessionsService)
@@ -582,7 +582,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	selectionFactory, err := provideRunSelectionFactory(runOpener, runtimeRunnerBuilder, v66, v81, directJavaScriptRunOperation, lifecycleRunnerBuilder, openingPresentationOwner)
+	selectionFactory, err := provideRunSelectionFactory(operationFactory, runtimeRunnerBuilder, v66, v81, directJavaScriptRunOperation, lifecycleRunnerBuilder, openingPresentationOwner)
 	if err != nil {
 		return nil, err
 	}
@@ -1158,8 +1158,8 @@ var BundleSet = wire5.NewSet(
 	provideSystemInitializationService,
 	provideSystemInitializationOperation, wire5.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)), wire5.Bind(new(process.ACPServer), new(acp.Server)), provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,
-	provideRuntimeOpeningRequestFactory,
-	provideRunOpener, application.NewLifecycleRunnerBuilder, provideRunRuntimeRunnerBuilder,
+	provideSessionStartRequestFactory,
+	provideRunOperationFactory, application.NewLifecycleRunnerBuilder, provideRunRuntimeRunnerBuilder,
 	provideRunSelectionFactory,
 	provideInvocationOperation,
 	provideMCPServerBuilder,

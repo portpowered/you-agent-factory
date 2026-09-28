@@ -670,7 +670,7 @@ func provideRunInvocationOperation(
 }
 
 func provideRunSelectionFactory(
-	open runcli.Opener,
+	buildOperation runcli.OperationFactory,
 	buildRunner runcli.RuntimeRunnerBuilder,
 	invocation factorysessionwire.InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
@@ -679,7 +679,7 @@ func provideRunSelectionFactory(
 	presentations factorysessions.OpeningPresentationOwner,
 ) (runcli.SelectionFactory, error) {
 	return runcli.NewSelectionFactory(
-		open, buildRunner, invocation, presentation, directJavaScript, buildApplication,
+		buildOperation, buildRunner, invocation, presentation, directJavaScript, buildApplication,
 		presentations,
 	)
 }

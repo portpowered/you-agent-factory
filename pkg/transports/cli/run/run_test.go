@@ -659,7 +659,7 @@ func TestOpenSequentialHomesControlDefaultRecordingPath(t *testing.T) {
 				plannedRequest = request
 				return recordings.LiveRecordingTarget{ServicePath: plannedPath, ReportedPath: plannedPath}, nil
 			}),
-		}), factory.BuildRunner, factory.Invocation(), testResponsePresentation(), nil, testMockWorkersConfigLoader, testRuntimeOpeningRequestFactory)
+		}), factory.BuildRunner, factory.Invocation(), testResponsePresentation(), nil, testMockWorkersConfigLoader, testSessionStartRequestFactory)
 		if err != nil {
 			t.Fatalf("Open(home %q) error = %v", homeDir, err)
 		}

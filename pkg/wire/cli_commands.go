@@ -916,13 +916,13 @@ func provideVisualizeWorkOperation(
 	return workcli.NewVisualize(visualize)
 }
 
-func provideRunOpener(
+func provideRunOperationFactory(
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigDiagnosticsLoader,
-	buildRuntimeRequest runcli.RuntimeOpeningRequestFactory,
+	buildRuntimeRequest runcli.SessionStartRequestFactory,
 	presentations factorysessions.OpeningPresentationOwner,
 	visualizations factoryvisualization.RuntimeSinkOwner,
-) runcli.Opener {
+) runcli.OperationFactory {
 	return func(
 		ctx context.Context,
 		cfg runcli.RunConfig,

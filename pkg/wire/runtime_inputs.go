@@ -277,9 +277,9 @@ func (a runtimeMetricRecordWriterAdapter) Close() error {
 	return a.writer.Close()
 }
 
-// provideRuntimeOpeningRequestFactory is the sole mapping from transport
+// provideSessionStartRequestFactory is the sole mapping from transport
 // selections into the bounded owner requests consumed by Factory Sessions.
-func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
+func provideSessionStartRequestFactory() runcli.SessionStartRequestFactory {
 	return func(
 		cfg runcli.RunConfig,
 		mockWorkers *workers.MockWorkersConfig,

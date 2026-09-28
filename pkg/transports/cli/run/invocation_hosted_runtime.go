@@ -438,7 +438,7 @@ func openHostedRuntime(
 	invocationMode bool,
 	requestedPort int,
 	buildRunner RuntimeRunnerBuilder,
-	buildRuntimeRequest RuntimeOpeningRequestFactory,
+	buildRuntimeRequest SessionStartRequestFactory,
 	presentations factorysessions.OpeningPresentationOwner,
 	visualizations factoryvisualization.RuntimeSinkOwner,
 ) (*Operation, error) {
