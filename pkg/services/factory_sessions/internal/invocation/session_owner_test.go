@@ -734,6 +734,17 @@ func TestSessionOwnerWait_CarriesNormalizedFailureReason(t *testing.T) {
 	}
 }
 
+func TestSessionOwnerWait_CarriesSoleDispatchFailureWhenPrimaryWorkIsUnresolved(t *testing.T) {
+	observation := stoppedSessionInvocationObservation()
+	observation.WorldState.FailureDetailsByWorkID = map[string]interfaces.FactoryWorldFailureDetail{
+		"dispatch-work": {FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeThrottled, Message: "private ACP response"}},
+	}
+	result := waitForSessionOwnerObservation(t, observation, nil)
+	if result.Status != interfaces.InvocationTerminalStatusFailed || result.FailureReason != string(workers.WorkFailureTypeThrottled) {
+		t.Fatalf("unresolved dispatch failure = %#v, want typed throttle", result)
+	}
+}
+
 func TestSessionOwnerWait_DefaultWaitNextPollsUntilCompletion(t *testing.T) {
 	observations := 0
 	owner := newTestSessionOwner(sessionOwnerFixture{Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {

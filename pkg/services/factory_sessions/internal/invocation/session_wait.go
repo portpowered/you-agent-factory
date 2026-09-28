@@ -249,6 +249,15 @@ func (o *SessionOwner) failedResult(
 	}
 	if detail, ok := worldState.FailureDetailsByWorkID[result.WorkID]; ok && detail.FailureDetail != nil {
 		result.FailureReason = string(detail.FailureDetail.Reason)
+	} else if len(worldState.FailureDetailsByWorkID) == 1 {
+		// A dispatch can fail before Work reaches a failed place. The primary
+		// result then remains unresolved, but its sole recorded failure still
+		// identifies the provider outcome for this one-shot invocation.
+		for _, detail := range worldState.FailureDetailsByWorkID {
+			if detail.FailureDetail != nil {
+				result.FailureReason = string(detail.FailureDetail.Reason)
+			}
+		}
 	}
 	o.recordFailure(sessionID, input, result, failureClassForPrimaryResultError(primaryErr.Code))
 	return result

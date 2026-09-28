@@ -179,8 +179,21 @@ tree before retrying, and never re-issue the same request blind.
 - The generic MCP error came from invocation primary-result failure
   classification, which omitted the normalized Work failure reason. The MCP
   tool now maps a normalized `throttled` reason to a retryable provider-limit
-  error with a fixed message. This mapping has focused tests; a fresh live
-  rate-limit response through the rebuilt MCP binary has not yet been checked.
+  error with a fixed message. A first rebuilt live rerun still returned
+  `factory_session.subagent.execution_failed`: the ACP provider error was
+  classified as `unknown` upstream, despite the OpenCode rate-limit text in
+  server stderr. The ACP source now classifies rate-limit RPC errors as
+  `throttled` and uses a fixed provider message. A second rerun recorded
+  `failure_reason: throttled` on the dispatch but still returned the generic
+  MCP error because primary Work was unresolved. The invocation wait now
+  carries the sole recorded dispatch failure reason in that case.
+- A final freshly rebuilt direct stdio MCP probe with
+  `opencode/mimo-v2.6-flash-free` initialized, listed all 11 tools, and
+  returned `factory_session.subagent.provider_throttled` from `you.subagent`
+  with `retryable: true`, `failureReason: throttled`, and a fixed safe message.
+  The dispatch log independently recorded `failure_reason: throttled`. The
+  requested file was not edited because the provider rate limit occurred
+  before a tool call.
 - The app's MCP connection reported `Transport closed` after its stale server
   was restarted. This is a connection lifecycle observation, not evidence of
   the provider outcome. The direct stdio probe above initialized separately.

@@ -44,6 +44,7 @@ func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 		{mode: "eof", want: providers.ExecuteFailureKindUnknown},
 		{mode: "fail", want: providers.ExecuteFailureKindUnknown, wantSessionID: "acp-session-service-1"},
 		{mode: "server-failure", want: providers.ExecuteFailureKindDependency, wantSessionID: "acp-session-service-1"},
+		{mode: "rate-limit", want: providers.ExecuteFailureKindThrottled, wantSessionID: "acp-session-service-1"},
 	} {
 		t.Run(test.mode, func(t *testing.T) {
 			var starts atomic.Int32
@@ -69,6 +70,9 @@ func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 			}
 			if failure.Kind != test.want {
 				t.Fatalf("ExecuteFailure.Kind = %q, want %q (message=%q)", failure.Kind, test.want, failure.Message)
+			}
+			if test.mode == "rate-limit" && (strings.Contains(failure.Message, "secret") || !strings.Contains(failure.Message, "usage or capacity limits")) {
+				t.Fatalf("rate-limit failure message = %q, want fixed safe diagnostic", failure.Message)
 			}
 			if test.wantSessionID != "" {
 				if failure.SessionRef == nil || failure.SessionRef.Provider != providers.ID("cursor-acp") || failure.SessionRef.Kind != providers.SessionIDKind || failure.SessionRef.ID != test.wantSessionID {
@@ -500,6 +504,9 @@ func runProtocolFailurePeer(mode string, stdin io.Reader, stdout, stderr io.Writ
 			}
 			if mode == "server-failure" {
 				return writeRPCError(writer, request.ID, -32001, "temporarily unavailable")
+			}
+			if mode == "rate-limit" {
+				return writeRPCError(writer, request.ID, -32603, "Internal error: Rate limit exceeded; secret=private")
 			}
 			if mode == "cancelled-turn" {
 				return writeRPCResult(writer, request.ID, `{"stopReason":"cancelled"}`)

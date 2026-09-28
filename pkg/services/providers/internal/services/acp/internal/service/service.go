@@ -708,18 +708,21 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 	if ctx.Err() != nil {
 		return nativeFailure(ctx.Err())
 	}
-	detail := safeACPStderr(stderr, request.EnvVars)
-	message := fmt.Sprintf("ACP provider %q %s failed: %s", id, method, safeRPCMessage(err))
-	if detail != "" {
-		message += " (stderr: " + detail + ")"
-	}
 	kind := providers.ExecuteFailureKindUnknown
 	var requestErr *acpsdk.RequestError
-	if errors.As(err, &requestErr) && isACPServerFailure(requestErr.Code) {
+	if errors.As(err, &requestErr) && isACPRateLimitFailure(requestErr.Message) {
+		kind = providers.ExecuteFailureKindThrottled
+	} else if requestErr != nil && isACPServerFailure(requestErr.Code) {
 		// A server-side ACP failure is a provider dependency outcome. Workers
 		// classifies that outcome as retryable and, when a session was opened,
 		// retains the exact Provider Session for the retry continuation.
 		kind = providers.ExecuteFailureKindDependency
+	}
+	message := fmt.Sprintf("ACP provider %q %s failed: %s", id, method, safeRPCMessage(err))
+	if kind == providers.ExecuteFailureKindThrottled {
+		message = fmt.Sprintf("ACP provider %q is temporarily unavailable due to usage or capacity limits", id)
+	} else if detail := safeACPStderr(stderr, request.EnvVars); detail != "" {
+		message += " (stderr: " + detail + ")"
 	}
 	if method == "initialize" {
 		native := strings.ToLower(err.Error())
@@ -733,6 +736,13 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 			"error_code": "ACP_" + strings.ToUpper(strings.ReplaceAll(method, "session/", "")) + "_FAILED",
 		},
 	}}}}
+}
+
+func isACPRateLimitFailure(message string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	return strings.Contains(normalized, "rate limit") || strings.Contains(normalized, "too many requests") ||
+		strings.Contains(normalized, "resource exhausted") || strings.Contains(normalized, "at capacity") ||
+		strings.Contains(normalized, "http 429")
 }
 
 func isACPServerFailure(code int) bool {
