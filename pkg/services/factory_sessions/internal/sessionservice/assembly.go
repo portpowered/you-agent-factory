@@ -460,7 +460,6 @@ func (a *Assembly) Complete(
 		return nil, nil, nil, nil, nil, fmt.Errorf("Factory Session runtime state is required")
 	}
 	bound.Owner = runtime
-	a.registry.Upsert(session, true)
 	runtime.startupSessionID = identity.id
 	runtime.bindRuntimeReadMetrics(startupRuntime)
 	runtime.releaseWorkAdmissionProjection = a.releaseWorkAdmissionProjection
@@ -481,6 +480,8 @@ func (a *Assembly) Complete(
 	if err != nil {
 		return nil, nil, nil, nil, nil, err
 	}
+	bound.Invoker = invoker
+	a.registry.Upsert(session, true)
 	gateway.bindRootCapabilities(invoker, runtime.ActivateNamedFactory, runtime.DefinitionActivationGateway())
 	a.registerDetachedGateway(identity.id, gateway)
 	// The per-runtime gateway is returned to the operation caller. The

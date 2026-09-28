@@ -239,17 +239,28 @@ func (s *Service) Invoke(
 	ctx context.Context,
 	request factorysessions.SessionInvokeRequest,
 ) (factorysessions.InvocationResult, error) {
-	if err := validateCanonicalInvokeRequest(request); err != nil {
-		return factorysessions.InvocationResult{}, err
-	}
-	if s == nil || s.invoker == nil {
+	if s == nil {
 		return factorysessions.InvocationResult{}, fmt.Errorf("Factory Session invocation service is required")
 	}
 	canonicalInvoker, ok := s.invoker.(roles.CanonicalSessionInvoker)
-	if !ok || canonicalInvoker == nil {
+	if !ok {
 		return factorysessions.InvocationResult{}, fmt.Errorf("Factory Session canonical invocation service is required")
 	}
-	result, err := canonicalInvoker.Invoke(
+	return invokeCanonicalSession(ctx, canonicalInvoker, request)
+}
+
+func invokeCanonicalSession(
+	ctx context.Context,
+	invoker roles.CanonicalSessionInvoker,
+	request factorysessions.SessionInvokeRequest,
+) (factorysessions.InvocationResult, error) {
+	if err := validateCanonicalInvokeRequest(request); err != nil {
+		return factorysessions.InvocationResult{}, err
+	}
+	if invoker == nil {
+		return factorysessions.InvocationResult{}, fmt.Errorf("Factory Session canonical invocation service is required")
+	}
+	result, err := invoker.Invoke(
 		ctx,
 		strings.TrimSpace(request.SessionID),
 		canonicalInvocationRequest(request),

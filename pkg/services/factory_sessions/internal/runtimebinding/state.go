@@ -6,6 +6,7 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
 
 // SessionProjectionOwner is the existing per-session runtime state needed to
@@ -127,6 +128,7 @@ type SessionState struct {
 	Handle   RuntimeHandle
 	Spec     any
 	Owner    SessionProjectionOwner
+	Invoker  roles.CanonicalSessionInvoker
 	// Activation retains lifecycle cleanup on the canonical session record.
 	Activation interface{ Close(context.Context) error }
 }
