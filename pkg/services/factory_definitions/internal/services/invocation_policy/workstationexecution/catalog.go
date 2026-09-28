@@ -854,7 +854,7 @@ func validateExecutionReference(
 
 func knownExecutionRunner(value string) bool {
 	switch normalizeExecutionRunner(value) {
-	case "codex", "claude", "antigravity":
+	case "codex", "claude", "antigravity", "opencode":
 		return true
 	default:
 		return false
