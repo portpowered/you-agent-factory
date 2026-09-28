@@ -238,11 +238,11 @@ func newHTTPSessionsHandler(
 		Runtime:         runtimeAPI, FactoryStatus: statusAPI,
 		Sessions: liveAPI, Invocation: invocationAPI, FactoryDefinitions: definitionsAPI,
 		FactoryValidation: validation, WorkflowPreview: root.WorkflowPreviewService(),
-		DurableLifecycle: durableAPI,
-		DurableListing:   durableAPI, DurableResponseEvents: durableAPI,
-		DurableLister:     root,
-		LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: root},
-		WorkerPrompts:     root.WorkerPromptsService(), InvocationWorkType: invocationWorkType,
+		DurableLifecycle:      durableAPI,
+		DurableResponseEvents: durableAPI,
+		DurableLister:         root,
+		LiveSessionLister:     factorysessionshttp.ReadProjectionSessionListReader{Reader: root},
+		WorkerPrompts:         root.WorkerPromptsService(), InvocationWorkType: invocationWorkType,
 		SessionRequests: sessionRequests,
 	}, presentation.Logger)
 	return handler, definitionsAPI, nil
