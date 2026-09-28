@@ -146,3 +146,8 @@ the structured server log.
 A separate fresh stdio launch of the installed binary completed a normal
 Longcat read-only request in session `55716500-779e-49be-bb36-607a8e8e048c`,
 returning `you-agent-factory` with empty stderr.
+
+A provider-only `you.subagent` call (provider `opencode`, model omitted)
+completed a read-only README probe in session
+`ceaac4f3-f52f-4e8c-ac5f-92ddb76d203e` and returned `you-agent-factory`.
+This validates the provider-only customer path on this host.
