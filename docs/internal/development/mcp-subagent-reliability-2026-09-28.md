@@ -682,3 +682,12 @@ completed in `0e3d0d2d-134b-430d-91c0-bad8bdd9572b` in about 38 seconds.
 Focused MCP and invocation package tests and `go vet` passed. As with the
 cancel-on-timeout deadline, this only bounds downstream close operations
 that honor context cancellation.
+
+Build `6d0c7e60a4` was rebuilt and copied to the configured
+`.local\bin\you.exe`; the candidate and installed SHA-256 both equal
+`84DC7F5DECDF97475E4C302681D2624D5989F07F2B5EF359B6AD9455837B38A1`.
+A fresh direct stdio MCP connection negotiated protocol `2024-11-05` and
+completed an OpenCode read of the unique temporary file in Factory Session
+`c47446d0-4d1f-4da6-bdc8-2a46482b5c49`. Its result included the expected
+`ROOT_PROBE_7E9C62A4` content. This verifies the rebuilt basic invoke path,
+not the 15-second cleanup deadline under a stalled close.
