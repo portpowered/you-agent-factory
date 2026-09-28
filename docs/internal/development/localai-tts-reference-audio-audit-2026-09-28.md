@@ -26,20 +26,66 @@ Current code evidence for voice input and generated audio through LocalAI. Synth
 
 - `Records` lists `localai-vibevoice` as the published VibeVoice backend artifact. No Qwen3-TTS or IndexTTS backend ID is present.
 
-## Unverified
-
-- Qwen3-TTS and IndexTTS support (no code path, backend wiring, or tests).
-- End-to-end voice cloning with a reference WAV and `ref_text`. LocalAI's [release notes](https://github.com/mudler/LocalAI/releases) specify the cross-backend `params.ref_text` contract and request `voice` precedence. The adapter mapping is tested, but synthesis against a running cloning backend is not.
-- GPU real execution.
+## Live GPU Results — 2026-09-28
 
 The Windows host reports an NVIDIA GeForce RTX 4090, and WSL exposes
-`nvidia-smi`. No `local-ai` binary is installed. Docker Desktop's Linux
-engine reported `stopped` and did not create its engine pipe after startup
-and restart attempts, so no LocalAI process or GPU inference was run.
+`nvidia-smi`. Docker Desktop's Linux engine had remained stopped; this
+test used WSL without Docker. WSL Ubuntu installed the official LocalAI
+v4.10.0 Linux amd64 binary in `/home/andre/you-localai-probe`.
+
+### Qwen3-TTS 0.6B Q4 (`cuda12-qwen3-tts-cpp`)
+
+- Model `localai@qwen3-tts-cpp-0.6b-base-q4` and backend
+  `cuda12-qwen3-tts-cpp` were installed via the LocalAI gallery. The
+  server's `/v1/models` listed it.
+- `POST /v1/audio/speech` with a server-local 24 kHz reference WAV path
+  and `ref_text` returned HTTP 200 and a 130604-byte mono 24 kHz PCM WAV
+  (2.72 seconds, non-silent).
+- `nvidia-smi` showed the `qwen3-tts-cpp` backend PID 1886 using ~6302 MiB.
+
+### IndexTTS 2.5 (`cuda12-audio-cpp`)
+
+- Model `localai@audio-cpp-indextts-2.5` (original dtype GGUF) and backend
+  `cuda12-audio-cpp` were installed via the LocalAI gallery. The server's
+  `/v1/models` listed it.
+- `POST /v1/audio/speech` with a server-local reference WAV path and
+  `ref_text` returned HTTP 200 and a 126508-byte mono 22050 Hz PCM WAV
+  (2.867664 seconds, non-silent).
+- `nvidia-smi` showed the `audio.cpp` backend PID 5576 using ~13824 MiB.
+
+### Repository gRPC probes
+
+Temporary Go probes imported this repository's
+`localai.NewPinnedTTSBackend` and `codecs.TTSRequest`, sent reference
+audio bytes plus `ref_text` to the live backend gRPC endpoints, and
+returned validated WAVs:
+
+| Backend | Bytes | Sample rate | Duration |
+|---------|-------|-------------|----------|
+| Qwen3-TTS | 80684 | 24000 Hz | 1.68 s |
+| IndexTTS 2.5 | 209452 | 22050 Hz | 4.748481 s |
+
+No `.you-model-tts*` staging files remained. The temporary probe source
+was removed.
+
+These results validate upstream LocalAI GPU execution and this
+repository's gRPC adapter against live backends. They do not validate
+speech content or voice similarity, backend consumption of `ref_text`
+beyond protocol delivery, this repository's pinned artifact publication,
+or the Windows first-use lifecycle for Qwen/Index (the registry still
+only publishes VibeVoice).
+
+## Unverified
+
+- Speech content and voice similarity for either backend.
+- Backend consumption of `ref_text` beyond protocol delivery.
+- This repository's pinned artifact publication and Windows first-use
+  lifecycle for Qwen/Index (registry still only publishes VibeVoice).
+- Full ASR/LLM/embed GPU path.
 
 ## Upstream configuration evidence
 
-LocalAI's [model configuration reference](https://github.com/mudler/LocalAI/blob/master/docs/content/advanced/model-configuration.md) describes `tts.voice` and `tts.audio_path` defaults, overridden by a request voice. Its [TTS feature guide](https://localai.io/features/text-to-audio/index.print.html) identifies Qwen3-TTS cloning backends and the `index_tts2` family through audio.cpp. These sources describe LocalAI's current interface; they do not prove compatibility with this repository's pinned VibeVoice artifact or local GPU execution.
+LocalAI's [model configuration reference](https://github.com/mudler/LocalAI/blob/master/docs/content/advanced/model-configuration.md) describes `tts.voice` and `tts.audio_path` defaults, overridden by a request voice. Its [TTS feature guide](https://localai.io/docs/features/text-to-audio/) identifies Qwen3-TTS cloning backends and the `index_tts2` family through audio.cpp. These sources describe LocalAI's current interface; they do not prove compatibility with this repository's pinned VibeVoice artifact.
 
 ## Verification Next Steps
 

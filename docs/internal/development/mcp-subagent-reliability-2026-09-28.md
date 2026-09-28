@@ -8,12 +8,12 @@ the agent's text response.
 
 - Checkout: `codex/mcp-subagent` at `a16ff10223` when probing began.
 - MCP connector: `you.factory_session.list` responded successfully.
-- Installed server: `C:\Users\andre\bin\you.exe` (built from the separate
-  `opencode/application-opener-convergence` branch). The installed binary and
-  this checkout's source are currently out of sync; validation of a source fix
-  requires a fresh build and direct MCP probe before installation.
-- Provider/model for the probes below: `opencode` /
-  `opencode/nemotron-3.5-lightning-free`.
+- Installed server: `C:\Users\andre\bin\you.exe` (built from commit
+  `cc4492754b`). The integrated branch has since rebuilt and installed the
+  binary from this commit; source and installed binary are in sync.
+- Provider/model for the first probes below: `opencode` /
+  `opencode/nemotron-3.5-lightning-free`. Later rows name their
+  other models.
 
 ## Observations
 
@@ -37,6 +37,16 @@ the agent's text response.
 | Longcat LocalAI deadline test | Accept equal Health/LoadModel witness timestamps on Windows; 120-second limit | `COMPLETED`, session `13f6c78c-4861-4329-a9f0-eea4ee985c81` | One test assertion changed. Ten repeated runs and the full LocalAI package passed, including runs with equal witness timestamps. | Keep wall-clock ordering checks tolerant of equal adjacent observations. |
 | Longcat TTS voice staging | Stage reference bytes as a temporary WAV path; 240-second limit | `factory_session.subagent.timed_out`, session `fa587a34-2a0e-432b-b21d-a56c81770f3a` | No edit appeared. The private path and cleanup were implemented after confirming the worktree was unchanged. | Split multi-package wiring tasks into smaller scopes for MCP agents. |
 | Longcat TTS WAV validation | Reject mislabeled or malformed reference audio; 150-second limit | `factory_session.subagent.timed_out`, session `f238fb10-a973-4aef-bbb0-ef888a58d477` | No edit appeared. The codec validation was completed directly and focused tests passed. | Read-only progress without edits should be surfaced before a long timeout. |
+| Mimo backend-registry audit | Read-only audit of the backend registry | `factory_session.subagent.provider_throttled`, session `e3813011-68e0-451c-9ddf-47b93d5c050a` | Read-only probe; no edit expected. | Retry when provider capacity allows. |
+| Nemotron opener audit | Read-only audit of the opener; 150-second limit | `factory_session.subagent.timed_out`, session `21a72736-e64b-4ab8-9de5-695e8dccac6f` | Read-only probe; no edit expected. | Retry with a smaller read-only probe. |
+| Nemotron one-line README probe | Return the repository name in one line; 90-second limit | `factory_session.subagent.timed_out`, session `b676e43f-606e-4135-add9-444c32cb22fe` | No result returned. | The snapshot log repeated `index.lock` failures before the stale lock was cleared; the retry showed no such lock failure, but that did not resolve the timeout. No definitive root cause is asserted. |
+| Longcat one-line README probe | Return the repository name in one line; 90-second limit | `COMPLETED`, session `4543371b-715d-4dc9-bebf-9d7cda4dbd1d` | Returned `# you-agent-factory`. | Same probe completed under Longcat after the Nemotron timeout. |
+| Longcat read-only permission probe | Read `C:\Users\andre\.config\opencode\opencode.jsonc` outside `workingRoot` | `COMPLETED`, session `06643994-e54c-4d59-ba4a-e87e3880502e` | Returned `permissions[0].effect = allow`. | Confirms the installed permission path grants read access to that external config file on this host. |
+| Longcat external-directory edit probe | Edit an agent-owned temp file outside `workingRoot` from `before` to `after` | `COMPLETED`, session `a9d48ccb-eccf-4a5a-863d-fad2286ffe42` | Read-back verified the change; temp file was then removed. | Confirms the installed permission path allows external-directory edits without a special edit flag on this host. |
+
+The two permission probes above verify the installed permission path on this
+host for the specific paths exercised; they do not establish that every
+external path is writable or readable.
 
 Two `you.subagent` calls ran concurrently and appeared as two live Factory
 Sessions. This demonstrates concurrent dispatch, while the code task's timeout
@@ -89,3 +99,6 @@ the larger voice-staging and WAV-validation tasks timed out with no edits and
 were finished after inspection. The resulting LocalAI source passed focused
 tests, `make verify-fast`, and all 24 `make lint` targets. These are protocol
 and harness checks, not proof of a running GPU-backed LocalAI model.
+A fresh direct stdio probe of the installed binary completed a read-only
+OpenCode invocation with session 10d2a44e-00bd-4bdb-a049-1fa15e2572b2 and
+returned you-agent-factory.
