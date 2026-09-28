@@ -290,6 +290,12 @@ func decodePredictResponse(responsePayload []byte) (PredictResponse, error) {
 		return PredictResponse{}, protocolFailure("LocalAI Predict response was malformed", err)
 	}
 	text := string(response.Message)
+	reasoningBytes := 0
+	for _, delta := range response.GetChatDeltas() {
+		if delta != nil {
+			reasoningBytes += len(delta.GetReasoningContent())
+		}
+	}
 	if text == "" {
 		var builder strings.Builder
 		for _, delta := range response.GetChatDeltas() {
@@ -305,6 +311,7 @@ func decodePredictResponse(responsePayload []byte) (PredictResponse, error) {
 		ReplyBytes:      len(responsePayload),
 		MessageBytes:    len(response.Message),
 		ChatDeltaCount:  len(response.GetChatDeltas()),
+		ReasoningBytes:  reasoningBytes,
 		GeneratedTokens: response.GetTokens(),
 		PromptTokens:    response.GetPromptTokens(),
 		AudioBytes:      len(response.GetAudio()),

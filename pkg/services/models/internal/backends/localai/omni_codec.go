@@ -36,6 +36,7 @@ type PredictResponse struct {
 	ReplyBytes      int
 	MessageBytes    int
 	ChatDeltaCount  int
+	ReasoningBytes  int
 	GeneratedTokens int32
 	PromptTokens    int32
 	AudioBytes      int
@@ -162,9 +163,9 @@ func (codec *OmniCodec) Invoke(
 			Operation: models.OperationOMNI,
 			Slot:      "text",
 			Message: fmt.Sprintf(
-				"OMNI response did not contain text output (reply_bytes=%d message_bytes=%d chat_delta_count=%d generated_tokens=%d prompt_tokens=%d audio_bytes=%d)",
+				"OMNI response did not contain text output (reply_bytes=%d message_bytes=%d chat_delta_count=%d generated_tokens=%d prompt_tokens=%d audio_bytes=%d reasoning_bytes=%d)",
 				response.ReplyBytes, response.MessageBytes, response.ChatDeltaCount,
-				response.GeneratedTokens, response.PromptTokens, response.AudioBytes,
+				response.GeneratedTokens, response.PromptTokens, response.AudioBytes, response.ReasoningBytes,
 			),
 		}
 	}

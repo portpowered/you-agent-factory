@@ -475,7 +475,7 @@ func TestDecodePredictResponseRecordsReplyShape(t *testing.T) {
 	t.Parallel()
 	payload, err := proto.Marshal(&Reply{
 		Message: []byte("text"), Tokens: 7, PromptTokens: 11,
-		Audio: []byte{1, 2, 3}, ChatDeltas: []*ChatDelta{{Content: "private"}, {}},
+		Audio: []byte{1, 2, 3}, ChatDeltas: []*ChatDelta{{Content: "private", ReasoningContent: "hidden"}, nil, {ReasoningContent: "think"}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -485,7 +485,28 @@ func TestDecodePredictResponseRecordsReplyShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	if response.Text != "text" || response.ReplyBytes != len(payload) || response.MessageBytes != 4 ||
-		response.ChatDeltaCount != 2 || response.GeneratedTokens != 7 || response.PromptTokens != 11 || response.AudioBytes != 3 {
+		response.ChatDeltaCount != 3 || response.ReasoningBytes != 11 || response.GeneratedTokens != 7 || response.PromptTokens != 11 || response.AudioBytes != 3 {
 		t.Fatalf("decoded reply shape = %#v, want wire and field counts", response)
+	}
+}
+
+func TestDecodePredictResponseReasoningOnly(t *testing.T) {
+	t.Parallel()
+	payload, err := proto.Marshal(&Reply{
+		Tokens: 256,
+		ChatDeltas: []*ChatDelta{
+			{ReasoningContent: "private reasoning"},
+			{ReasoningContent: "more reasoning"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := decodePredictResponse(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Text != "" || response.ReasoningBytes != len("private reasoning")+len("more reasoning") || response.GeneratedTokens != 256 {
+		t.Fatalf("decoded reasoning-only reply shape = %#v", response)
 	}
 }
