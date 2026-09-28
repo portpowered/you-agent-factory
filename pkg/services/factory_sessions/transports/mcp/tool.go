@@ -199,7 +199,7 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 	})
 	cancelClose()
 	if closeErr != nil {
-		return subagentCleanupFailure(started.SessionID, requestID)
+		return subagentCleanupError(closeErr, started.SessionID, requestID)
 	}
 	if invokeErr != nil {
 		return subagentInvokeError(invokeErr, started.SessionID, requestID, timeoutMillis, input)
@@ -274,6 +274,28 @@ func validateSubagentRequest(ctx context.Context, target factorysessionexecution
 
 func subagentExecutionFailure(err error) ToolResponse[SubagentResult] {
 	envelope := executionErrorEnvelope(err)
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentCleanupError(err error, sessionID, requestID string) ToolResponse[SubagentResult] {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return subagentCleanupTimeout(sessionID, requestID)
+	}
+	return subagentCleanupFailure(sessionID, requestID)
+}
+
+func subagentCleanupTimeout(sessionID, requestID string) ToolResponse[SubagentResult] {
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.cleanup_timed_out",
+		Message:   "subagent session cleanup exceeded its deadline after execution; workspace edits may have occurred",
+		Retryable: false,
+		SessionID: sessionID,
+		Details: map[string]any{
+			"partialEffectsPossible": true,
+			"requestId":              requestID,
+			"suggestedAction":        "Inspect the workspace and Factory Session before retrying.",
+		},
+	}
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }
 

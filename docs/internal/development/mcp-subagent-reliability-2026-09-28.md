@@ -691,3 +691,13 @@ completed an OpenCode read of the unique temporary file in Factory Session
 `c47446d0-4d1f-4da6-bdc8-2a46482b5c49`. Its result included the expected
 `ROOT_PROBE_7E9C62A4` content. This verifies the rebuilt basic invoke path,
 not the 15-second cleanup deadline under a stalled close.
+
+Two narrow OpenCode `space-bunny-free` tasks made a cleanup deadline
+actionable. Factory Session `dc12f955-8a73-4cc9-825a-805408f298a1`
+changed the MCP response classification in about 29 seconds, and
+`ce84bd01-7245-4d3d-9a53-93c540ae8fa0` added a focused test in about
+35 seconds. A close error wrapping `context.DeadlineExceeded` now yields
+`factory_session.subagent.cleanup_timed_out`, nonretryable with the session
+ID, partial-effects warning, and an explicit inspection action. Other close
+errors retain `cleanup_failed`. The MCP package test passed and confirmed
+that sensitive provider and close-error text does not enter the envelope.

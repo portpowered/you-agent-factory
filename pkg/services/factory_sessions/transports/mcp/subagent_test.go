@@ -398,3 +398,36 @@ func TestSubagentCloseErrorIsPrivateAndIncludesSessionID(t *testing.T) {
 		t.Fatalf("close error details = %#v", response.Error.Details)
 	}
 }
+
+func TestSubagentCloseDeadlineExceededReportsCleanupTimeout(t *testing.T) {
+	target := &subagentTargetFake{
+		invokeErr: errors.New("sensitive provider token abc123"),
+		closeErr:  fmt.Errorf("sensitive close failure xyz789: %w", context.DeadlineExceeded),
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-close-timeout" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file"})
+	if response.Error == nil || response.Result != nil {
+		t.Fatalf("Subagent response = %#v", response)
+	}
+	if response.Error.Code != "factory_session.subagent.cleanup_timed_out" {
+		t.Fatalf("close timeout error code = %q", response.Error.Code)
+	}
+	if response.Error.Retryable {
+		t.Fatalf("close timeout error is retryable: %#v", response.Error)
+	}
+	if response.Error.SessionID != "session-1" {
+		t.Fatalf("close timeout error session = %q", response.Error.SessionID)
+	}
+	if response.Error.Details["requestId"] != "request-close-timeout" || response.Error.Details["partialEffectsPossible"] != true {
+		t.Fatalf("close timeout error details = %#v", response.Error.Details)
+	}
+	action, ok := response.Error.Details["suggestedAction"].(string)
+	if !ok || strings.TrimSpace(action) == "" {
+		t.Fatalf("close timeout suggested action = %#v", response.Error.Details["suggestedAction"])
+	}
+	leaked := response.Error.Message + fmt.Sprint(response.Error.Details)
+	for _, secret := range []string{"sensitive", "xyz789", "abc123"} {
+		if strings.Contains(leaked, secret) {
+			t.Fatalf("close timeout error leaked %q: %#v", secret, response.Error)
+		}
+	}
+}
