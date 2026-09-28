@@ -784,3 +784,21 @@ model-provider package check, and native formatting check passed. The full
 Git Bash `make lint` lane had only `fmt-check` failing while deleted tracked
 files were still uncommitted; the formatter attempted to stat their old
 paths. The lane should be rerun after committing the deletions.
+
+A read-only `space-bunny-free` OpenCode audit of the Linux CUDA capability
+caller path completed in Factory Session
+`01a1431c-9835-4a6e-a7cc-1e4a585f397e` with a primary result and no
+source edits. Source review confirmed that `cmd/factory/main.go` passes the
+environment edges through `root.BuildProcess`, while
+`pkg/wire/models_runtime.go` derives CUDA availability from the Linux device
+and `nvidia-smi` probe before passing the platform into Models. The gallery
+resolver then selects the accelerator from that platform. The concurrent
+change to `pkg/services/models/wire/default_backend_resolver.go` addresses
+Linux CUDA selection; this audit found no additional missing caller input.
+The untracked, zero-byte root file named `$paths_file` was present before and
+after this call. Its creator is unconfirmed, so it is not attributed to this
+session.
+
+After the wire consolidations were committed, the full native Windows Git
+Bash `make lint` lane passed all 24 targets. The zero-byte `$paths_file` was
+removed after its size was checked; its creator remains unknown.

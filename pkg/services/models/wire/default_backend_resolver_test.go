@@ -52,6 +52,43 @@ func TestBackendArtifactResolverPrefersAvailableWindowsCUDAArchive(t *testing.T)
 	}
 }
 
+func TestBackendArtifactResolverPrefersAvailableLinuxCUDAArchive(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(filepath.Join("..", "internal", "artifacts", "testdata", "windows-cuda-variant-manifest.json"))
+	if err != nil {
+		t.Fatalf("read CUDA manifest fixture: %v", err)
+	}
+	marker := []byte(`"id": "localai-llamacpp/windows-amd64-cuda"`)
+	start := bytes.Index(data, marker)
+	if start < 0 {
+		t.Fatal("CUDA archive missing from manifest fixture")
+	}
+	// Move only the fixture's CUDA archive to Linux, retaining its Linux CPU
+	// archive so the resolver has two valid choices for this backend.
+	cudaArchive := bytes.ReplaceAll(data[start:], []byte("windows-amd64-cuda"), []byte("linux-amd64-cuda"))
+	cudaArchive = bytes.ReplaceAll(cudaArchive, []byte(`"operatingSystem": "windows"`), []byte(`"operatingSystem": "linux"`))
+	cudaArchive = bytes.ReplaceAll(cudaArchive, []byte(".zip"), []byte(".tar.gz"))
+	data = append(data[:start:start], cudaArchive...)
+	manifest, err := artifacts.Decode(data)
+	if err != nil {
+		t.Fatalf("decode Linux CUDA manifest fixture: %v", err)
+	}
+	resolve := backendArtifactResolver(manifest)
+	selection, err := resolve(context.Background(), ResolvedHostConfiguration{
+		Backend: "localai-llamacpp",
+		Platform: models.AssetHostPlatform{
+			OperatingSystem: "linux", Architecture: "amd64", CUDAAvailable: true,
+		},
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+	}, false)
+	if err != nil {
+		t.Fatalf("resolve Linux CUDA archive: %v", err)
+	}
+	if selection.Accelerator != "cuda" || !strings.Contains(selection.Name, "linux-amd64-cuda") {
+		t.Fatalf("selection = %#v, want Linux CUDA archive", selection)
+	}
+}
+
 func TestDefaultBackendArtifactResolverFallsBackToPublishedWindowsCPU(t *testing.T) {
 	t.Parallel()
 	resolve, err := NewDefaultBackendArtifactResolver()
@@ -69,6 +106,27 @@ func TestDefaultBackendArtifactResolverFallsBackToPublishedWindowsCPU(t *testing
 		t.Fatalf("resolve Windows backend: %v", err)
 	}
 	if selection.Accelerator != "cpu" || strings.Contains(selection.Name, "windows-amd64-cuda") {
+		t.Fatalf("published archive selection = %#v, want CPU fallback", selection)
+	}
+}
+
+func TestDefaultBackendArtifactResolverFallsBackToPublishedLinuxCPU(t *testing.T) {
+	t.Parallel()
+	resolve, err := NewDefaultBackendArtifactResolver()
+	if err != nil {
+		t.Fatalf("construct default resolver: %v", err)
+	}
+	selection, err := resolve(context.Background(), ResolvedHostConfiguration{
+		Backend: "localai-llamacpp",
+		Platform: models.AssetHostPlatform{
+			OperatingSystem: "linux", Architecture: "amd64", CUDAAvailable: true,
+		},
+		ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+	}, false)
+	if err != nil {
+		t.Fatalf("resolve Linux backend: %v", err)
+	}
+	if selection.Accelerator != "cpu" || strings.Contains(selection.Name, "linux-amd64-cuda") {
 		t.Fatalf("published archive selection = %#v, want CPU fallback", selection)
 	}
 }
@@ -241,7 +299,7 @@ func TestGalleryBackendArtifactResolverSelectsCUDAWithoutCPUFallback(t *testing.
 			}
 			selection, err := resolver(context.Background(), modelseffects.ResolvedHostConfiguration{
 				Backend: tt.backend, ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-				Platform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64", Accelerator: "cuda"},
+				Platform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64", CUDAAvailable: true},
 			}, false)
 			if err != nil {
 				t.Fatalf("resolve CUDA backend %s: %v", tt.backend, err)

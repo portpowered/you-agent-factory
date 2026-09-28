@@ -35,11 +35,7 @@ func backendArtifactResolver(manifest artifacts.Manifest) BackendArtifactResolve
 			)
 		}
 		accelerator := defaultBackendAccelerator(request.Platform)
-		preferCUDA := request.Platform.Accelerator == "" && request.Platform.CUDAAvailable &&
-			request.Platform.OperatingSystem == "windows" && request.Platform.Architecture == "amd64"
-		if preferCUDA {
-			accelerator = "cuda"
-		}
+		preferCUDA := request.Platform.Accelerator == "" && accelerator == "cuda"
 		selection := artifacts.SelectionRequest{
 			Backend:          request.Backend,
 			OperatingSystem:  request.Platform.OperatingSystem,
@@ -68,6 +64,10 @@ func backendArtifactResolver(manifest artifacts.Manifest) BackendArtifactResolve
 func defaultBackendAccelerator(platform models.AssetHostPlatform) string {
 	if platform.Accelerator != "" {
 		return platform.Accelerator
+	}
+	if platform.CUDAAvailable && platform.Architecture == "amd64" &&
+		(platform.OperatingSystem == "linux" || platform.OperatingSystem == "windows") {
+		return "cuda"
 	}
 	if platform.OperatingSystem == "darwin" && platform.Architecture == "arm64" {
 		return "metal"
