@@ -960,3 +960,27 @@ installed at `C:\Users\andre\.local\bin\you.exe` (SHA-256
 `A8F05B57AEB957708BA4E6F94BDC030CA8D17433CAA49C2ED35BA6B6DF2E3069`).
 A fresh stdio MCP initialization and `tools/list` returned 11 tools including
 `you.subagent`.
+
+An OpenCode Space Bunny MCP subagent
+(`f6be8da4-9497-463d-ac29-fa91d7a6c74c`) was assigned a bounded timeout
+progress-snapshot edit with a 300-second deadline. The OpenCode log showed
+ongoing repository reads, and the worktree gained a partial `tool.go` edit
+before the call returned `factory_session.subagent.timed_out` without a primary
+result. The edit had no tests yet. This is a concrete partial-effect timeout:
+the workspace must be inspected and the patch reviewed before any retry. The
+provider-side reason for the long research and timeout remains unproven.
+
+Codex MCP subagent `384e73da-e226-433a-bdab-e7fc3bfd9c28` completed the
+partial patch. The timeout envelope now captures numeric live progress before
+session close and omits arbitrary projection strings; tests cover both timeout
+forms, snapshot failure, cleanup failure, and sensitive-text exclusion.
+Independent MCP transport Go tests passed. `pkg-maint` then found two small
+complexity violations in the new code/test, which are being refactored through
+another MCP subagent.
+
+Codex MCP subagent `ba2df20d-ca21-4045-9c25-25e02cce3272` refactored both
+violations. Independent Factory Sessions MCP, MCP transport, and sessionservice
+Go suites passed, and full native Windows Git Bash `make lint` passed all 24
+targets. The timeout snapshot still needs validation against a fresh installed
+stdio MCP binary; the in-process MCP connector can retain an older server
+process after binary replacement.

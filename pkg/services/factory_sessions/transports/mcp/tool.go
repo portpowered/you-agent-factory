@@ -38,6 +38,10 @@ const (
 // cooperative cleanup paths can honor.
 const subagentCloseTimeout = 15 * time.Second
 
+// subagentSnapshotTimeout bounds the best-effort timeout progress snapshot so
+// capturing it never materially delays cleanup.
+const subagentSnapshotTimeout = 2 * time.Second
+
 // Stable error envelope fields shared by every dynamic workflow MCP tool.
 var sharedErrorStableFields = []string{
 	"error.code",
@@ -141,12 +145,7 @@ type SubagentResult struct {
 // Factory Sessions Service.
 func Subagent(ctx context.Context, target factorysessionexecution.Service, workingRoot string, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) ToolResponse[SubagentResult] {
 	if err := validateSubagentRequest(ctx, target, generateID, input); err != nil {
-		var envelope ToolErrorEnvelope
-		if errors.Is(err, errMissingRequestContext) || ctx == nil || ctx.Err() != nil || target == nil || generateID == nil {
-			envelope = executionErrorEnvelope(err)
-		} else {
-			envelope = ToolErrorEnvelope{Code: errorCodeBadRequest, Message: err.Error(), Retryable: false}
-		}
+		envelope := subagentRequestErrorEnvelope(err, ctx, target, generateID)
 		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
 	requestID := generateID()
@@ -189,6 +188,12 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 		Args:        args,
 		Wait:        factorysessionexecution.SessionOperationWait{TimeoutMillis: timeoutMillis, CancelOnTimeout: true},
 	})
+	// A timeout snapshot is taken before cleanup closes the live Factory
+	// Session, because the closed session can no longer report live progress.
+	var progress map[string]any
+	if subagentInvocationTimedOut(invokeErr, result) {
+		progress = subagentProgressSnapshot(ctx, target, started.SessionID)
+	}
 	// Close runs on a detached context so caller cancellation cannot skip
 	// cleanup. The deadline keeps cooperative close paths from waiting forever.
 	closeCtx, cancelClose := context.WithTimeout(context.WithoutCancel(ctx), subagentCloseTimeout)
@@ -202,10 +207,10 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 		return subagentCleanupError(closeErr, started.SessionID, requestID)
 	}
 	if invokeErr != nil {
-		return subagentClosedFailure(subagentInvokeError(invokeErr, started.SessionID, requestID, timeoutMillis, input))
+		return subagentClosedFailure(subagentInvokeError(invokeErr, started.SessionID, requestID, timeoutMillis, input, progress))
 	}
 	if result.Status != factorysessionexecution.InvocationTerminalStatusCompleted {
-		return subagentClosedFailure(subagentTerminalFailure(started.SessionID, result, timeoutMillis, input))
+		return subagentClosedFailure(subagentTerminalFailure(started.SessionID, result, timeoutMillis, input, progress))
 	}
 	response := SubagentResult{
 		SessionID: started.SessionID,
@@ -224,6 +229,13 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 	return ToolResponse[SubagentResult]{Result: &response}
 }
 
+func subagentRequestErrorEnvelope(err error, ctx context.Context, target factorysessionexecution.Service, generateID factorysessionexecution.SessionIDGenerator) ToolErrorEnvelope {
+	if errors.Is(err, errMissingRequestContext) || ctx == nil || ctx.Err() != nil || target == nil || generateID == nil {
+		return executionErrorEnvelope(err)
+	}
+	return ToolErrorEnvelope{Code: errorCodeBadRequest, Message: err.Error(), Retryable: false}
+}
+
 func subagentClosedFailure(response ToolResponse[SubagentResult]) ToolResponse[SubagentResult] {
 	envelope := response.Error
 	envelope.Message += "; you.subagent cleanup closed the live Factory Session"
@@ -239,6 +251,80 @@ func subagentClosedFailure(response ToolResponse[SubagentResult]) ToolResponse[S
 		envelope.Details["suggestedAction"] = inspectBeforeRetry
 	}
 	return response
+}
+
+// subagentInvocationTimedOut reports whether one invocation outcome is a
+// timeout, covering both a returned context deadline and a terminal TIMED_OUT
+// invocation result.
+func subagentInvocationTimedOut(invokeErr error, result factorysessionexecution.InvocationResult) bool {
+	if invokeErr != nil {
+		return errors.Is(invokeErr, context.DeadlineExceeded)
+	}
+	return result.Status == factorysessionexecution.InvocationTerminalStatusTimedOut
+}
+
+// subagentProgressSnapshot reads a best-effort live Factory Session progress
+// projection through the owner contract so a timeout keeps bounded runtime
+// context after cleanup closes the session. The read runs on a short detached
+// context, and any failure degrades to an unavailable marker instead of
+// changing the reported outcome or delaying cleanup.
+func subagentProgressSnapshot(ctx context.Context, target factorysessionexecution.Service, sessionID string) map[string]any {
+	snapshotCtx, cancelSnapshot := context.WithTimeout(context.WithoutCancel(ctx), subagentSnapshotTimeout)
+	defer cancelSnapshot()
+	projection, err := target.GetFactorySession(snapshotCtx, sessionID)
+	if err != nil || snapshotCtx.Err() != nil {
+		return map[string]any{"available": false}
+	}
+	return subagentProgressDetails(projection)
+}
+
+// subagentProgressDetails copies numeric counts and an allowlisted script
+// status. Projection strings can contain authored or provider-controlled text.
+func subagentProgressDetails(projection factorysessionexecution.SessionProjection) map[string]any {
+	details := map[string]any{"available": true}
+	runtime := projection.Runtime
+	if runtime.Progress.InFlightCount > 0 {
+		details["inFlightDispatches"] = runtime.Progress.InFlightCount
+	}
+	if counts := subagentProgressWorkCounts(runtime.Progress.Categories); counts != nil {
+		details["workCounts"] = counts
+	}
+	if runtime.JavaScript != nil {
+		switch runtime.JavaScript.ScriptStatus {
+		case "IDLE", "RUNNING", "PAUSED", "FINISHED", "FAILED":
+			details["scriptStatus"] = string(runtime.JavaScript.ScriptStatus)
+		}
+		children := runtime.JavaScript.ChildDispatchCounts
+		if children.Completed > 0 || children.Queued > 0 || children.Running > 0 {
+			details["childDispatchCounts"] = map[string]any{
+				"completed": children.Completed,
+				"queued":    children.Queued,
+				"running":   children.Running,
+			}
+		}
+	}
+	return details
+}
+
+// subagentProgressWorkCounts returns work counts only when the live
+// projection reports at least one item in any category.
+func subagentProgressWorkCounts(categories factorysessionexecution.RuntimeStatusCategories) map[string]any {
+	if categories.Initial == 0 && categories.Processing == 0 && categories.Terminal == 0 && categories.Failed == 0 {
+		return nil
+	}
+	return map[string]any{
+		"initial":    categories.Initial,
+		"processing": categories.Processing,
+		"terminal":   categories.Terminal,
+		"failed":     categories.Failed,
+	}
+}
+
+// subagentAttachProgress records one captured snapshot on a timeout envelope.
+func subagentAttachProgress(details map[string]any, progress map[string]any) {
+	if len(progress) > 0 {
+		details["progress"] = progress
+	}
 }
 
 // subagentPrimaryText joins the text parts of a completed invocation with
@@ -336,14 +422,14 @@ func subagentInvocationFailure(sessionID, requestID string) ToolResponse[Subagen
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }
 
-func subagentInvokeError(err error, sessionID, requestID string, timeoutMillis int64, input SubagentInput) ToolResponse[SubagentResult] {
+func subagentInvokeError(err error, sessionID, requestID string, timeoutMillis int64, input SubagentInput, progress map[string]any) ToolResponse[SubagentResult] {
 	if errors.Is(err, context.DeadlineExceeded) {
-		return subagentInvocationTimeout(sessionID, requestID, timeoutMillis, input)
+		return subagentInvocationTimeout(sessionID, requestID, timeoutMillis, input, progress)
 	}
 	return subagentInvocationFailure(sessionID, requestID)
 }
 
-func subagentInvocationTimeout(sessionID, requestID string, timeoutMillis int64, input SubagentInput) ToolResponse[SubagentResult] {
+func subagentInvocationTimeout(sessionID, requestID string, timeoutMillis int64, input SubagentInput, progress map[string]any) ToolResponse[SubagentResult] {
 	envelope := ToolErrorEnvelope{
 		Code:      "factory_session.subagent.timed_out",
 		Message:   "subagent timed out before producing a result; workspace edits may have occurred",
@@ -364,10 +450,11 @@ func subagentInvocationTimeout(sessionID, requestID string, timeoutMillis int64,
 	if timeoutMillis > 0 {
 		envelope.Details["timeoutMillis"] = timeoutMillis
 	}
+	subagentAttachProgress(envelope.Details, progress)
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }
 
-func subagentTerminalFailure(sessionID string, result factorysessionexecution.InvocationResult, timeoutMillis int64, input SubagentInput) ToolResponse[SubagentResult] {
+func subagentTerminalFailure(sessionID string, result factorysessionexecution.InvocationResult, timeoutMillis int64, input SubagentInput, progress map[string]any) ToolResponse[SubagentResult] {
 	envelope := ToolErrorEnvelope{
 		Code:      "factory_session.subagent.execution_failed",
 		Message:   "subagent execution failed before producing a result",
@@ -400,6 +487,7 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		if result.WorkID != "" {
 			envelope.Details["workId"] = result.WorkID
 		}
+		subagentAttachProgress(envelope.Details, progress)
 		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
 	switch workers.WorkFailureType(result.FailureReason) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,12 @@ type subagentTargetFake struct {
 	invokeErr             error
 	closeErr              error
 	invokeResult          *factorysessions.InvocationResult
+	projection            factorysessions.SessionProjection
+	projectionErr         error
+	getCalls              int
+	getBeforeClose        bool
+	getContextActive      bool
+	getHasDeadline        bool
 }
 
 func (fake *subagentTargetFake) Start(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
@@ -60,6 +67,14 @@ func (fake *subagentTargetFake) Control(ctx context.Context, request factorysess
 	return factorysessions.SessionControlResult{}, fake.closeErr
 }
 
+func (fake *subagentTargetFake) GetFactorySession(ctx context.Context, sessionID string) (factorysessions.SessionProjection, error) {
+	fake.getCalls++
+	fake.getBeforeClose = !fake.closed && sessionID == "session-1"
+	fake.getContextActive = ctx.Err() == nil
+	_, fake.getHasDeadline = ctx.Deadline()
+	return fake.projection, fake.projectionErr
+}
+
 func TestSubagentRunsPackagedFactoryWithDefaultsAndReturnsText(t *testing.T) {
 	target := &subagentTargetFake{}
 	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-1" }, mcpfactorysession.SubagentInput{Prompt: "Summarize this"})
@@ -71,6 +86,9 @@ func TestSubagentRunsPackagedFactoryWithDefaultsAndReturnsText(t *testing.T) {
 	}
 	assertSubagentStart(t, target)
 	assertSubagentInvocationAndClose(t, target)
+	if target.getCalls != 0 {
+		t.Fatalf("successful invocation read timeout snapshot %d times", target.getCalls)
+	}
 }
 
 func assertSubagentStart(t *testing.T, target *subagentTargetFake) {
@@ -150,6 +168,9 @@ func TestSubagentForwardsModelOverridesAndCleansUpOnInvocationFailure(t *testing
 	}
 	if !target.closed {
 		t.Fatal("Factory Session was not closed after invocation failure")
+	}
+	if target.getCalls != 0 {
+		t.Fatalf("non-timeout failure read timeout snapshot %d times", target.getCalls)
 	}
 }
 
@@ -266,6 +287,122 @@ func TestSubagentTimeoutReportsPossibleWorkspaceEdits(t *testing.T) {
 	assertSubagentClosedDiagnostic(t, response.Error)
 	if !strings.Contains(response.Error.Message, "workspace edits may have occurred") || strings.Contains(response.Error.Message, "private") || !target.closed {
 		t.Fatalf("timeout message or cleanup = %#v", response.Error)
+	}
+}
+
+func TestSubagentTimeoutSnapshotPrecedesCloseAndExcludesProjectionText(t *testing.T) {
+	secret := "sensitive prompt and provider output"
+	projection := factorysessions.SessionProjection{
+		Context: factorysessions.ProjectionContext{LifecycleControlStatus: secret},
+		Runtime: factorysessions.RuntimeProjection{
+			Status:                 secret,
+			LifecycleControlStatus: &secret,
+			Progress: factorysessions.RuntimeProgress{
+				FactoryState: secret, InFlightCount: 2,
+				Categories: factorysessions.RuntimeStatusCategories{Initial: 1, Processing: 2, Terminal: 3, Failed: 4},
+			},
+			JavaScript: &factorysessions.JavaScriptRuntimeProjection{
+				Phase: &secret, ScriptStatus: factorydefinitions.FactorySessionJavaScriptScriptStatusRunning,
+			},
+		},
+	}
+	projection.Runtime.JavaScript.ChildDispatchCounts.Completed = 5
+	projection.Runtime.JavaScript.ChildDispatchCounts.Queued = 6
+	projection.Runtime.JavaScript.ChildDispatchCounts.Running = 7
+	for _, tc := range []struct {
+		name      string
+		invokeErr error
+		result    *factorysessions.InvocationResult
+	}{
+		{name: "terminal timed out", result: &factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusTimedOut}},
+		{name: "deadline exceeded", invokeErr: fmt.Errorf("private: %w", context.DeadlineExceeded)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			target := &subagentTargetFake{invokeErr: tc.invokeErr, invokeResult: tc.result, projection: projection}
+			response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-snapshot" }, mcpfactorysession.SubagentInput{Prompt: secret})
+			if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" {
+				t.Fatalf("timeout response = %#v", response)
+			}
+			if target.getCalls != 1 || !target.getBeforeClose || !target.getContextActive || !target.getHasDeadline || !target.closed {
+				t.Fatalf("snapshot and close sequence: calls=%d beforeClose=%t active=%t deadline=%t closed=%t", target.getCalls, target.getBeforeClose, target.getContextActive, target.getHasDeadline, target.closed)
+			}
+			assertSubagentTimeoutSnapshot(t, response.Error, secret)
+		})
+	}
+}
+
+func assertSubagentTimeoutSnapshot(t *testing.T, envelope *mcpfactorysession.ToolErrorEnvelope, secret string) {
+	t.Helper()
+	progress, ok := envelope.Details["progress"].(map[string]any)
+	if !ok || progress["available"] != true || progress["inFlightDispatches"] != 2 || progress["scriptStatus"] != "RUNNING" {
+		t.Fatalf("progress = %#v", envelope.Details["progress"])
+	}
+	if got := progress["workCounts"]; !reflect.DeepEqual(got, map[string]any{"initial": 1, "processing": 2, "terminal": 3, "failed": 4}) {
+		t.Fatalf("work counts = %#v", got)
+	}
+	if got := progress["childDispatchCounts"]; !reflect.DeepEqual(got, map[string]any{"completed": 5, "queued": 6, "running": 7}) {
+		t.Fatalf("child dispatch counts = %#v", got)
+	}
+	for _, key := range []string{"runtimeState", "factoryState", "lifecycleControlStatus", "phase"} {
+		if _, ok := progress[key]; ok {
+			t.Fatalf("unsafe progress key %q in %#v", key, progress)
+		}
+	}
+	if strings.Contains(fmt.Sprint(envelope), secret) {
+		t.Fatalf("timeout leaked projection text: %#v", envelope)
+	}
+	assertSubagentClosedDiagnostic(t, envelope)
+}
+
+func TestSubagentTimeoutSnapshotFailureStillCloses(t *testing.T) {
+	target := &subagentTargetFake{
+		invokeResult:  &factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusTimedOut},
+		projectionErr: errors.New("sensitive projection failure"),
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-snapshot-error" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file"})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" || !target.closed || target.getCalls != 1 {
+		t.Fatalf("snapshot failure response = %#v, target = %#v", response, target)
+	}
+	if got := response.Error.Details["progress"]; !reflect.DeepEqual(got, map[string]any{"available": false}) {
+		t.Fatalf("progress = %#v", got)
+	}
+	if strings.Contains(fmt.Sprint(response.Error), "sensitive projection failure") {
+		t.Fatalf("snapshot failure leaked read error: %#v", response.Error)
+	}
+}
+
+func TestSubagentTimeoutSnapshotRejectsUnknownScriptStatus(t *testing.T) {
+	secret := "sensitive provider output"
+	target := &subagentTargetFake{
+		invokeResult: &factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusTimedOut},
+		projection: factorysessions.SessionProjection{Runtime: factorysessions.RuntimeProjection{
+			JavaScript: &factorysessions.JavaScriptRuntimeProjection{ScriptStatus: factorydefinitions.FactorySessionJavaScriptScriptStatus(secret)},
+		}},
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-unknown-status" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file"})
+	progress, ok := response.Error.Details["progress"].(map[string]any)
+	if !ok || progress["available"] != true {
+		t.Fatalf("progress = %#v", response.Error.Details["progress"])
+	}
+	if _, ok := progress["scriptStatus"]; ok || strings.Contains(fmt.Sprint(response.Error), secret) {
+		t.Fatalf("unknown script status leaked: %#v", response.Error)
+	}
+}
+
+func TestSubagentTimeoutCloseFailureDoesNotClaimClosedSession(t *testing.T) {
+	target := &subagentTargetFake{
+		invokeErr: fmt.Errorf("private: %w", context.DeadlineExceeded),
+		closeErr:  errors.New("private close failure"),
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-close-failure" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file"})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.cleanup_failed" || target.getCalls != 1 || !target.getBeforeClose {
+		t.Fatalf("close failure response = %#v, target = %#v", response, target)
+	}
+	if _, ok := response.Error.Details["sessionClosed"]; ok {
+		t.Fatalf("failed close claimed session closed: %#v", response.Error)
+	}
+	if strings.Contains(fmt.Sprint(response.Error), "private") {
+		t.Fatalf("close failure leaked error: %#v", response.Error)
 	}
 }
 
