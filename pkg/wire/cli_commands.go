@@ -916,14 +916,6 @@ func provideVisualizeWorkOperation(
 	return workcli.NewVisualize(visualize)
 }
 
-func provideCLIExecutionServiceBuilder(
-	build factorysessionwire.ExecutionServiceBuilder,
-) cli.ExecutionServiceBuilder {
-	return func(ctx context.Context, provider, projectRoot, fixtureCatalogPath, childExecutorMode string) (cli.OwnedExecutionService, error) {
-		return build(ctx, provider, projectRoot, fixtureCatalogPath, childExecutorMode)
-	}
-}
-
 func provideRunOpener(
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigDiagnosticsLoader,

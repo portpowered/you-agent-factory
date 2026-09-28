@@ -673,7 +673,7 @@ func newBatchColdStartApplicationProcess(
 	lifecycle := &batchColdStartProcessLifecycle{}
 	process, err := initializerapplication.NewProcess(
 		withTestInjectedPlatformRoles(CommandFactory{}), initializer,
-		batchColdStartProcessProviderRegistry{}, lifecycle, nil, nil, nil, nil, nil,
+		batchColdStartProcessProviderRegistry{}, lifecycle, nil, nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)

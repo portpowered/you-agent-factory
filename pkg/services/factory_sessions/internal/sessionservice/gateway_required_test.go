@@ -185,6 +185,9 @@ func assertCanonicalDurableSessionList(t *testing.T, service *Service, durable *
 	if row.ResultStatus != "PARTIAL" {
 		t.Fatalf("durable list result status = %q, want PARTIAL", row.ResultStatus)
 	}
+	if len(got.DurableSessions) != 1 || got.DurableSessions[0].SessionID != "durable-2" {
+		t.Fatalf("durable summaries = %#v, want canonical owner projection", got.DurableSessions)
+	}
 	durable.mu.Lock()
 	defer durable.mu.Unlock()
 	return durable.lastList
@@ -210,6 +213,9 @@ func assertCanonicalAllSessionList(t *testing.T, service *Service, live *canonic
 	}
 	if got.Sessions[1].SessionID != "durable-2" {
 		t.Fatalf("all list second session ID = %q, want durable-2", got.Sessions[1].SessionID)
+	}
+	if len(got.DurableSessions) != 1 || got.DurableSessions[0].SessionID != "durable-2" {
+		t.Fatalf("all list durable summaries = %#v, want canonical owner projection", got.DurableSessions)
 	}
 	live.mu.Lock()
 	defer live.mu.Unlock()
@@ -745,7 +751,8 @@ func TestService_CanonicalStartDurableMapsAndClonesAsyncRequest(t *testing.T) {
 	}
 	service := &Service{durable: fake}
 	request := factorysessions.SessionStartRequest{
-		Mode: factorysessions.SessionOperationModeDurable,
+		Mode:       factorysessions.SessionOperationModeDurable,
+		FolderPath: "/test-factory",
 		Correlation: factorysessions.SessionOperationCorrelation{
 			RequestID: "  start-async-1  ",
 		},
@@ -856,6 +863,7 @@ func TestService_CanonicalStartDurableSelectsSyncFromRequestValue(t *testing.T) 
 	service := &Service{durable: fake}
 	got, err := service.Start(context.Background(), factorysessions.SessionStartRequest{
 		Mode:        factorysessions.SessionOperationModeDurable,
+		FolderPath:  "/test-factory",
 		Correlation: factorysessions.SessionOperationCorrelation{RequestID: "sync-1"},
 		Synchronous: true,
 	})

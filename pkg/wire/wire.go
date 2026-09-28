@@ -447,7 +447,6 @@ var BundleSet = wire.NewSet(
 	factorysessionwire.NewDirectJavaScriptRunOperation,
 	initializerapplication.NewInitializer,
 	factorysessionwire.NewExecutionServiceBuilder,
-	provideCLIExecutionServiceBuilder,
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
 	provideCLICommandFactory,

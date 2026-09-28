@@ -83,16 +83,6 @@ type LocalSessionsCLIService interface {
 	sessioncli.Service
 }
 
-// OwnedExecutionService adds execution-local cleanup to the Factory
-// Sessions-owned durable execution and scoped inventory capabilities. The CLI
-// builder owns this cleanup boundary, while the Factory Sessions root remains
-// the sole owner of durable operations and session inventory.
-type OwnedExecutionService interface {
-	factorysessions.DurableExecutionService
-	factorysessions.SessionInventoryService
-	Close() error
-}
-type ExecutionServiceBuilder func(context.Context, string, string, string, string) (OwnedExecutionService, error)
 type FlattenFactoryConfigOperation func(configcli.FactoryConfigFlattenConfig) error
 type ExpandFactoryConfigOperation func(configcli.FactoryConfigExpandConfig) error
 type ConfigureInitOperation func(initsetup.Config) error
@@ -148,7 +138,7 @@ type CommandOperations struct {
 	BrowserOpener                     platformbrowser.Opener
 	ResolveOperatorDefaults           operatorconfig.DefaultsResolver
 	LoadOperatorConfig                operatorconfig.ConfigLoader
-	BuildExecution                    ExecutionServiceBuilder
+	FactorySessions                   factorysessions.Service
 	ModelsCLI                         modelscli.Service
 	ProvidersCLI                      providerscli.Service
 	SessionsCLI                       sessioncli.Service
@@ -231,7 +221,7 @@ type CommandFactory struct {
 	SubmitBatch                func(submitcli.BatchConfig) error
 	SessionsCLI                sessioncli.Service
 	LocalSessionsCLI           sessioncli.Service
-	BuildExecution             ExecutionServiceBuilder
+	FactorySessions            factorysessions.Service
 	ModelsCLI                  modelscli.Service
 	ProvidersCLI               providerscli.Service
 	FlattenFactoryConfig       func(configcli.FactoryConfigFlattenConfig) error
@@ -307,7 +297,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		SubmitBatch:                       operations.SubmitBatch,
 		SessionsCLI:                       operations.SessionsCLI,
 		LocalSessionsCLI:                  operations.LocalSessionsCLI,
-		BuildExecution:                    operations.BuildExecution,
+		FactorySessions:                   operations.FactorySessions,
 		ModelsCLI:                         operations.ModelsCLI,
 		ProvidersCLI:                      operations.ProvidersCLI,
 		FlattenFactoryConfig:              operations.FlattenFactoryConfig,
@@ -523,33 +513,6 @@ func writeDebugFailure(diagnostics io.Writer, err error) {
 	if clidiag.DebugEnabled(diagnostics) {
 		clidiag.WriteDebugFailure(diagnostics, err)
 	}
-}
-
-func buildWorkflowExecutionService(
-	ctx context.Context,
-	options CommandFactory,
-	provider string,
-	projectRoot string,
-	fixtureCatalogPath string,
-	childExecutorMode string,
-) (OwnedExecutionService, error) {
-	if options.BuildExecution == nil {
-		return nil, fmt.Errorf("construct workflow execution: durable execution builder is required")
-	}
-	service, err := options.BuildExecution(
-		ctx,
-		provider,
-		projectRoot,
-		fixtureCatalogPath,
-		childExecutorMode,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("construct workflow execution: %w", err)
-	}
-	if service == nil {
-		return nil, fmt.Errorf("construct workflow execution: builder returned nil service")
-	}
-	return service, nil
 }
 
 type cliDiagnosticsOptions struct {

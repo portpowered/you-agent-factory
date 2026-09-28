@@ -210,6 +210,7 @@ func (s *Service) List(
 			return factorysessions.SessionListResult{}, err
 		}
 		result.Sessions = canonicalDurableSessionViews(projections.DurableSessions)
+		result.DurableSessions = projections.DurableSessions
 		return result, nil
 	case factorysessions.SessionOperationModeAll:
 		live, err := s.canonicalLiveRuntime()
@@ -234,6 +235,7 @@ func (s *Service) List(
 		result.Sessions = make([]factorysessions.SessionView, 0, len(liveProjections)+len(durableProjections.DurableSessions))
 		result.Sessions = append(result.Sessions, canonicalLiveSessionViews(liveProjections)...)
 		result.Sessions = append(result.Sessions, canonicalDurableSessionViews(durableProjections.DurableSessions)...)
+		result.DurableSessions = durableProjections.DurableSessions
 		return result, nil
 	default:
 		return factorysessions.SessionListResult{}, canonicalRequestError(

@@ -773,9 +773,7 @@ type SessionOpenResult struct {
 	FolderPath            string
 }
 
-// SessionView is the common detached session inventory shape. Durable-only
-// details remain available through the durable owner projection in later
-// migration slices; this first slice keeps identity and readiness stable.
+// SessionView is the common Factory Session inventory shape.
 type SessionView struct {
 	SessionID        string
 	Mode             SessionOperationMode
@@ -797,8 +795,9 @@ type SessionGetResult struct {
 }
 
 type SessionListResult struct {
-	Mode     SessionOperationMode
-	Sessions []SessionView
+	Mode            SessionOperationMode
+	Sessions        []SessionView
+	DurableSessions []DurableSessionListSummary
 }
 
 type SessionControlResult struct {
