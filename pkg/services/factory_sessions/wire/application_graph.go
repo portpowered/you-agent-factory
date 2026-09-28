@@ -47,9 +47,6 @@ type (
 	RuntimeStdioApplicationBuilder       = roles.RuntimeStdioApplicationBuilder
 	StdioExecutionOpening                = roles.StdioExecutionOpening
 	StdioOpeningOperation                = roles.StdioOpeningOperation
-	DirectJavaScriptRunOperation         = roles.DirectJavaScriptRunOperation
-	DirectJavaScriptSyncRunner           = roles.DirectJavaScriptSyncRunner
-	DirectJavaScriptHostAdapter          = roles.DirectJavaScriptHostAdapter
 	RequestPreparation                   = roles.RequestPreparation
 	Registry                             = roles.Registry
 	RuntimePersistenceStore              = roles.RuntimePersistenceStore
@@ -205,16 +202,6 @@ func NewInvocationOperation(
 
 func NewExecutionServiceBuilder(factory *ExecutionOpeningFactory) ExecutionServiceBuilder {
 	return factory.Builder()
-}
-
-func NewDirectJavaScriptRunOperation(
-	build ExecutionServiceBuilder,
-	runSync DirectJavaScriptSyncRunner,
-	generateSessionID factorysessions.SessionIDGenerator,
-	host roles.DirectJavaScriptHostAdapter,
-	presentations OpeningPresentationOwner,
-) (DirectJavaScriptRunOperation, error) {
-	return executionopening.NewDirectJavaScriptRunOperation(build, runSync, generateSessionID, host, presentations)
 }
 
 func NewStdioOpeningService(

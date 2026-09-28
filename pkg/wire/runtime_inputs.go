@@ -555,18 +555,18 @@ func provideDirectJavaScriptHostAdapter(
 	start platformhttpserver.Starter,
 	newRunner lifecycle.RunnerFactory,
 	logger *zap.Logger,
-) (factorysessionwire.DirectJavaScriptHostAdapter, error) {
+) (runcli.DirectJavaScriptHost, error) {
 	if validation == nil || invocationWorkType == nil || sessionRequests == nil || start == nil || newRunner == nil || logger == nil {
 		return nil, errors.New("direct JavaScript HTTP handler, starter, and lifecycle runner are required")
 	}
 	return func(
-		execution factorysessionwire.OwnedExecutionService,
+		sessions factorysessions.Service,
 		host factorysessions.RuntimeHostRequest,
 		cancellation initializer.InvocationCancellation,
 		observer factorysessions.RuntimeHostObserver,
 	) (lifecycle.Component, error) {
 		handler, err := newDurableExecutionHTTPHandler(
-			execution, validation, invocationWorkType, sessionRequests, logger, cancellation,
+			sessions, validation, invocationWorkType, sessionRequests, logger, cancellation,
 		)
 		if err != nil {
 			return nil, err
@@ -588,21 +588,22 @@ func provideDirectJavaScriptHostAdapter(
 }
 
 func newDurableExecutionHTTPHandler(
-	execution factorysessionwire.OwnedExecutionService,
+	sessions factorysessions.Service,
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
 	invocationWorkType factorydefinitions.InvocationWorkTypeService,
 	sessionRequests factorysessionshttp.RequestPreparation,
 	logger *zap.Logger,
 	cancellation initializer.InvocationCancellation,
 ) (http.Handler, error) {
-	if execution == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || logger == nil {
+	if sessions == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || logger == nil {
 		return nil, errors.New("construct durable execution HTTP handler: execution, policies, request preparation, and logger are required")
 	}
-	durable := factorysessionmapping.NewDurableAPI(execution)
+	durable := factorysessionmapping.NewDurableAPI(sessions)
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
+		SessionsRoot:     sessions,
 		DurableExecution: durable, DurableLifecycle: durable,
 		DurableListing: durable, DurableResponseEvents: durable,
-		DurableLister: execution, FactoryValidation: validation,
+		DurableLister: sessions, FactoryValidation: validation,
 		InvocationWorkType: invocationWorkType, SessionRequests: sessionRequests,
 	}, logger)
 	var shutdown transporthttp.ShutdownOperation

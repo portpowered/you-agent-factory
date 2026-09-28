@@ -33,7 +33,6 @@ import (
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factorysessionmcp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -805,7 +804,7 @@ func provideRunSelectionFactory(
 	buildRunner runcli.RuntimeRunnerBuilder,
 	invocation factorysessionwire.InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
-	directJavaScript factorysessionwire.DirectJavaScriptRunOperation,
+	directJavaScript runcli.DirectJavaScriptRunOperation,
 	buildApplication initializer.RuntimeRunnerBuilder,
 	presentations factorysessions.OpeningPresentationOwner,
 ) (runcli.SelectionFactory, error) {
@@ -827,8 +826,4 @@ func provideWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector 
 
 func provideResponsePresentation() factoryvisualization.ResponsePresentation {
 	return factoryvisualizationwire.NewResponsePresentation()
-}
-
-func provideDirectJavaScriptSyncRunner() factorysessionwire.DirectJavaScriptSyncRunner {
-	return sessionexecutioncli.RunNormalizedSync
 }

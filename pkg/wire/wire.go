@@ -24,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 )
 
@@ -442,11 +443,9 @@ var BundleSet = wire.NewSet(
 	factorysessionwire.NewStdioOpeningService,
 	wire.Bind(new(factorysessionwire.StdioOpeningOperation), new(*factorysessionwire.StdioOpeningService)),
 	provideStdioApplicationOpener,
-	provideDirectJavaScriptSyncRunner,
 	provideDirectJavaScriptHostAdapter,
-	factorysessionwire.NewDirectJavaScriptRunOperation,
+	runcli.NewDirectJavaScriptRunOperation,
 	initializerapplication.NewInitializer,
-	factorysessionwire.NewExecutionServiceBuilder,
 	provideRunInvocationOperation,
 	provideModelsCLIInvocationOperation,
 	provideCLICommandFactory,

@@ -203,30 +203,6 @@ type StdioOpeningOperation interface {
 	) (StdioApplication, error)
 }
 
-type DirectJavaScriptRunOperation interface {
-	Supports(string) bool
-	Open(
-		context.Context,
-		factorysessions.DirectJavaScriptRunRequest,
-		initializer.InvocationCancellation,
-	) (factorysessions.DirectJavaScriptApplication, error)
-}
-
-type DirectJavaScriptHostAdapter func(
-	OwnedExecutionService,
-	factorysessions.RuntimeHostRequest,
-	initializer.InvocationCancellation,
-	factorysessions.RuntimeHostObserver,
-) (lifecycle.Component, error)
-
-type DirectJavaScriptSyncRunner func(
-	context.Context,
-	durableexecution.Service,
-	factorysessions.StartRequest,
-	bool,
-	io.Writer,
-) error
-
 type RequestPreparation interface {
 	PrepareStart(factorysessions.StartRequest) (factorysessions.StartRequest, error)
 	PrepareControl(factorysessions.ControlRequest) (factorysessions.ControlRequest, error)
