@@ -144,12 +144,6 @@ func (f *Factory) Builder() roles.ExecutionServiceBuilder {
 	}
 }
 
-// NewServiceBuilder exposes the lazy durable-session constructor owned by the
-// session execution initializer.
-func NewServiceBuilder(factory *Factory) roles.ExecutionServiceBuilder {
-	return factory.Builder()
-}
-
 func (f *Factory) build(
 	ctx context.Context,
 	providerName string,

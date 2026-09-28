@@ -201,7 +201,7 @@ func NewInvocationOperation(
 }
 
 func NewExecutionServiceBuilder(factory *ExecutionOpeningFactory) ExecutionServiceBuilder {
-	return executionopening.NewServiceBuilder(factory)
+	return factory.Builder()
 }
 
 func NewDirectJavaScriptRunOperation(
