@@ -237,11 +237,6 @@ func (fs *SessionRuntime) StartLiveRuntimeSidecars(ctx context.Context, handle l
 func (fs *SessionRuntime) StopLiveRuntimeSidecars(handle liveRuntimeHandle) {
 	if fs != nil && fs.runtimeSidecars != nil {
 		fs.runtimeSidecars.Stop(handle)
-		return
-	}
-	if fs != nil && fs.runtimeLifecycle != nil {
-		fs.runtimeLifecycle.StopSidecars(handle)
-		return
 	}
 }
 
