@@ -15,10 +15,12 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
 	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -935,4 +937,36 @@ func provideRunOperationFactory(
 			prepareWorkTarget, nil, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
 		)
 	}
+}
+
+func provideInstallPackagedFactoryOperation(
+	catalog factorydefinitions.PackagedFactoryCatalogOperations,
+	installer factorydefinitions.PackagedFactoryInstallationOperations,
+) factorydefinitions.InstallPackagedFactoryOperation {
+	return factorydefinitions.NewInstallPackagedFactoryOperation(catalog, installer)
+}
+
+func providePackagedFactoryNameCompletionOperation(
+	catalog factorydefinitions.PackagedFactoryCatalogOperations,
+) cobracompletion.PackagedFactoryNamesOperation {
+	return cobracompletion.NewPackagedFactoryNames(catalog)
+}
+
+func provideInstallPackagedFactoryCLI(
+	install factorydefinitions.InstallPackagedFactoryOperation,
+) cli.InstallPackagedFactoryOperation {
+	if install == nil {
+		return nil
+	}
+	return func(cfg factorydefinitionscli.InstallPackagedFactoryConfig) error {
+		return factorydefinitionscli.InstallPackagedFactory(cfg, install)
+	}
+}
+
+func provideCLIObserver(edges serviceedges.Edges) platformprocess.CLIObserver {
+	return edges.CLIObserver
+}
+
+func provideCLICommandFactory(operations cli.CommandOperations) cli.CommandFactory {
+	return cli.NewCommandFactory(operations)
 }

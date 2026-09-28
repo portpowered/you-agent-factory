@@ -2,12 +2,20 @@ package wire
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	managedchild "github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/wire/internal/managedbackend"
 )
 
 type galleryInstallRunner struct {
@@ -70,5 +78,93 @@ func TestLocalAIGalleryInstallerOfflineUsesOnlyInstalledBackend(t *testing.T) {
 	})
 	if path, err := installer(context.Background(), "cuda12-whisper", true); err != nil || path != filepath.Join(root, "cuda12-whisper") {
 		t.Fatalf("offline installed backend = %q, error = %v", path, err)
+	}
+}
+
+func TestModelsProcessLauncherRemovesInheritedLlamaCPPLauncherSwitch(t *testing.T) {
+	t.Setenv("LLAMACPP_GRPC_SERVERS", "1")
+	var childEnvironment []string
+	launcher := modelsProcessLauncher{
+		resolveLaunch: func(context.Context, serviceedges.HostProcessStartSpec) (managedbackend.ManagedBackendLaunch, error) {
+			return managedbackend.ManagedBackendLaunch{
+				Command: "llama-cpp-grpc", Endpoint: "grpc://127.0.0.1:1",
+				Env: []string{"LD_LIBRARY_PATH=/managed/lib"}, Cleanup: func() error { return nil },
+			}, nil
+		},
+		startProcess: func(_ context.Context, spec managedchild.Spec) (*managedchild.Process, error) {
+			childEnvironment = spec.Env
+			return nil, errors.New("controlled stop before launch")
+		},
+	}
+	_, _ = launcher.Start(context.Background(), serviceedges.HostProcessStartSpec{Backend: "localai-llamacpp"})
+	if len(childEnvironment) == 0 {
+		t.Fatal("managed child environment was not captured")
+	}
+	for _, entry := range childEnvironment {
+		key, _, ok := strings.Cut(entry, "=")
+		if ok && strings.EqualFold(key, "LLAMACPP_GRPC_SERVERS") {
+			t.Fatalf("managed llama-cpp child inherited launcher switch: %q", entry)
+		}
+	}
+}
+
+func TestLinuxCUDAAvailableRequiresDeviceAndWorkingNvidiaProbe(t *testing.T) {
+	t.Parallel()
+	device := func(path string) (os.FileInfo, error) {
+		if path == "/dev/dxg" {
+			return nil, nil
+		}
+		return nil, fs.ErrNotExist
+	}
+	if !linuxCUDAAvailable(device, func(context.Context) ([]byte, error) {
+		return []byte("GPU 0: NVIDIA GeForce RTX 4090"), nil
+	}) {
+		t.Fatal("WSL NVIDIA device and probe were not recognized")
+	}
+	if linuxCUDAAvailable(device, func(context.Context) ([]byte, error) {
+		return nil, errors.New("nvidia-smi failed")
+	}) {
+		t.Fatal("failed NVIDIA probe was accepted")
+	}
+	if linuxCUDAAvailable(func(string) (os.FileInfo, error) { return nil, fs.ErrNotExist },
+		func(context.Context) ([]byte, error) { t.Fatal("probe called without a GPU device"); return nil, nil }) {
+		t.Fatal("missing NVIDIA device was accepted")
+	}
+}
+
+func TestWindowsCUDAAvailableRequiresWorkingNvidiaProbe(t *testing.T) {
+	t.Parallel()
+	if !windowsCUDAAvailable(func(context.Context) ([]byte, error) {
+		return []byte("GPU 0: NVIDIA GeForce RTX 4090"), nil
+	}) {
+		t.Fatal("Windows NVIDIA device was not recognized")
+	}
+	if windowsCUDAAvailable(func(context.Context) ([]byte, error) {
+		return nil, errors.New("nvidia-smi failed")
+	}) {
+		t.Fatal("failed NVIDIA probe was accepted")
+	}
+	if windowsCUDAAvailable(func(context.Context) ([]byte, error) {
+		return []byte("  \n"), nil
+	}) {
+		t.Fatal("empty NVIDIA device list was accepted")
+	}
+	if windowsCUDAAvailable(func(context.Context) ([]byte, error) {
+		return []byte("No devices were found"), nil
+	}) {
+		t.Fatal("non-GPU output was accepted")
+	}
+}
+
+func TestWindowsHostRecordsCUDAWithoutSelectingUnpublishedArchive(t *testing.T) {
+	if runtime.GOOS != "windows" || runtime.GOARCH != "amd64" {
+		t.Skip("native Windows host probe")
+	}
+	expected := windowsCUDAAvailable(func(ctx context.Context) ([]byte, error) {
+		return exec.CommandContext(ctx, "nvidia-smi", "-L").Output()
+	})
+	platform := provideModelAssetHostPlatform(serviceedges.Edges{})
+	if platform.CUDAAvailable != expected || platform.Accelerator != "" {
+		t.Fatalf("Windows host platform = %#v, want CUDA capability %t and no selected archive", platform, expected)
 	}
 }
