@@ -51,7 +51,7 @@ func TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll(t *testing.T) {
 func TestRunServe_SubagentProtocolUsesFactorySessionsService(t *testing.T) {
 	t.Parallel()
 	target := &subagentProtocolTargetFake{}
-	client, stdinWrite, serveErr := startRunServeSmokeServerWithTarget(t, installSmokeExecutionScript{}, target)
+	client, stdinWrite, serveErr := startRunServeSmokeServer(t, target)
 	initResult := client.call("initialize", map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]any{},
@@ -87,15 +87,7 @@ func TestRunServe_SubagentProtocolUsesFactorySessionsService(t *testing.T) {
 
 func startRunServeSmokeServer(
 	t *testing.T,
-	service mcpfactorysession.DurableExecution,
-) (*stdioMCPClient, *os.File, <-chan error) {
-	return startRunServeSmokeServerWithTarget(t, service, nil)
-}
-
-func startRunServeSmokeServerWithTarget(
-	t *testing.T,
-	service mcpfactorysession.DurableExecution,
-	target factorysessions.Service,
+	service factorysessions.Service,
 ) (*stdioMCPClient, *os.File, <-chan error) {
 	t.Helper()
 	stdinRead, stdinWrite, err := os.Pipe()
@@ -118,15 +110,14 @@ func startRunServeSmokeServerWithTarget(
 
 	serveErr := make(chan error, 1)
 	go func() {
-		serveErr <- executeGeneratedMCPServe(ctx, service, target, stdinRead, stdoutWrite, "")
+		serveErr <- executeGeneratedMCPServe(ctx, service, stdinRead, stdoutWrite, "")
 	}()
 	return newStdioMCPClient(t, stdinWrite, stdoutRead), stdinWrite, serveErr
 }
 
 func executeGeneratedMCPServe(
 	ctx context.Context,
-	service mcpfactorysession.DurableExecution,
-	target factorysessions.Service,
+	service factorysessions.Service,
 	stdin io.Reader,
 	stdout io.Writer,
 	wantProjectRoot string,
@@ -141,7 +132,7 @@ func executeGeneratedMCPServe(
 		}
 		server, err := mcpserver.New(mcpserver.Options{
 			ToolOperation: mcpserver.ToolOperation(mcpfactorysession.BindToolOperation(
-				service, nil, installSmokeRequestPreparation(), installSmokeWorkflowDefinitions(), target, "", func() string { return "mcp-subagent-test-id" },
+				nil, installSmokeRequestPreparation(), installSmokeWorkflowDefinitions(), service, "", func() string { return "mcp-subagent-test-id" },
 			)),
 		})
 		if err != nil {
@@ -497,7 +488,7 @@ func decodeToolResponse[T any](t *testing.T, response mcpJSONRPCResponse) mcpfac
 }
 
 type installSmokeExecutionScript struct {
-	mcpfactorysession.DurableExecution
+	factorysessions.Service
 }
 
 type subagentProtocolTargetFake struct {
@@ -539,12 +530,15 @@ func (fake *subagentProtocolTargetFake) Control(_ context.Context, request facto
 	return factorysessions.SessionControlResult{SessionID: request.SessionID, Operation: request.Operation, Closed: true}, nil
 }
 
-func (installSmokeExecutionScript) StartAsync(
-	context.Context,
-	factorysessions.StartRequest,
-) (factorysessions.AsyncStartResult, error) {
+func (installSmokeExecutionScript) Start(
+	_ context.Context,
+	request factorysessions.SessionStartRequest,
+) (factorysessions.SessionStartResult, error) {
+	if request.Mode != factorysessions.SessionOperationModeDurable || request.Synchronous {
+		return factorysessions.SessionStartResult{}, fmt.Errorf("unexpected smoke start %#v", request)
+	}
 	const sessionID = "dur-sess-js-run-n-001"
-	return factorysessions.AsyncStartResult{
+	async := factorysessions.AsyncStartResult{
 		SessionID: sessionID,
 		Status:    string(factorysessions.LifecycleStatusRunning),
 		Links: factorysessions.InspectionLinks{
@@ -552,14 +546,18 @@ func (installSmokeExecutionScript) StartAsync(
 			Status:  "/factory-sessions/" + sessionID,
 			Results: "/factory-sessions/" + sessionID + "/results",
 		},
-	}, nil
+	}
+	return factorysessions.SessionStartResult{SessionID: sessionID, Mode: request.Mode, Async: &async}, nil
 }
 
-func (installSmokeExecutionScript) GetSession(
-	context.Context,
-	string,
-) (factorysessions.SessionReadResult, error) {
-	return factorysessions.SessionReadResult{
+func (installSmokeExecutionScript) Get(
+	_ context.Context,
+	request factorysessions.SessionGetRequest,
+) (factorysessions.SessionGetResult, error) {
+	if request.Mode != factorysessions.SessionOperationModeDurable || request.SessionID != "dur-sess-js-run-n-001" {
+		return factorysessions.SessionGetResult{}, fmt.Errorf("unexpected smoke get %#v", request)
+	}
+	durable := factorysessions.SessionReadResult{
 		SessionID: "dur-sess-js-run-n-001",
 		Status:    factorysessions.LifecycleStatusRunning,
 		Links: factorysessions.InspectionLinks{
@@ -567,22 +565,26 @@ func (installSmokeExecutionScript) GetSession(
 			Status:  "/factory-sessions/dur-sess-js-run-n-001",
 			Results: "/factory-sessions/dur-sess-js-run-n-001/results",
 		},
-	}, nil
+	}
+	return factorysessions.SessionGetResult{Session: factorysessions.SessionView{SessionID: request.SessionID, Mode: request.Mode, Status: string(durable.Status)}, Durable: &durable}, nil
 }
 
-func (installSmokeExecutionScript) GetResult(
-	context.Context,
-	string,
-	factorysessions.ResultRequest,
-) (factorysessions.ResultReadResult, error) {
-	return factorysessions.ResultReadResult{
+func (installSmokeExecutionScript) ReadResult(
+	_ context.Context,
+	request factorysessions.SessionResultReadRequest,
+) (factorysessions.SessionResultReadResult, error) {
+	if request.Mode != factorysessions.SessionOperationModeDurable || request.SessionID != "dur-sess-js-run-n-001" {
+		return factorysessions.SessionResultReadResult{}, fmt.Errorf("unexpected smoke result read %#v", request)
+	}
+	durable := factorysessions.SessionDurableResult{
 		SessionID:     "dur-sess-js-run-n-001",
 		SessionStatus: factorysessions.LifecycleStatusRunning,
-		ResultStatus:  factorysessions.ResultStatusNotReady,
+		Status:        factorysessions.ResultStatusNotReady,
 		Availability: &factorysessions.ResultAvailabilityDetail{
 			Retryable: true,
 		},
-	}, nil
+	}
+	return factorysessions.SessionResultReadResult{SessionID: request.SessionID, Mode: request.Mode, Durable: &durable}, nil
 }
 
 func writeValidWorkflowFixture(t *testing.T) string {
