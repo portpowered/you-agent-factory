@@ -711,3 +711,15 @@ Factory Session `5650abde-d907-45ba-bc21-a02506075816`. Its result
 contained the unique expected file content. The live probe covers the
 rebuilt success path; the cleanup deadline classification is covered by the
 focused test.
+
+A stronger isolated cancel probe used the rebuilt `.local\bin\you.exe` and
+asked OpenCode to run a PowerShell command that wrote `started.txt`, slept
+20 seconds, then wrote `late.txt`. The first marker existed when the
+12-second MCP deadline returned `factory_session.subagent.timed_out` in
+Factory Session `2a4c2e69-0a57-4a67-970d-babc7ceee1bb` after about
+12.05 seconds. The second marker was absent at response time and 22 seconds
+later while the MCP server was still alive. Process inspection after server
+shutdown showed no new OpenCode or matching PowerShell child; only the
+older in-app OpenCode process tree remained. This proves cancellation
+stopped that in-flight shell command before its delayed write, while the
+earlier late-write observation remains a separate unresolved case.
