@@ -1356,3 +1356,24 @@ The rebuilt binary was installed at `C:\Users\andre\bin\you.exe` (SHA-256
 Its `models inspect llm` reported `READY`, two installed assets, and
 `videoReadiness=verified-projector`. Already-running MCP processes retain
 their executable until restarted.
+
+An OpenCode-provider `you.subagent` edit (Factory Session
+`1233753a-4609-45bd-89fb-f95980cf1ddd`) renamed the projector diagnostic
+from `videoReadiness` to `mediaReadiness` across Models, the authored OpenAPI
+description, generated clients, tests, and the model guide. The MCP call
+returned a primary `COMPLETED` result after the multi-file edit. The Codex
+MCP connection serving it still ran the older `.local\bin\you.exe` process,
+despite the configured command pointing at `C:\Users\andre\bin\you.exe` for
+new connections. A concurrent `factory_session_list` showed the live session,
+while `factory_session_get` and `read_events` returned `session.not_found` for
+its ID. This may be a tool-surface mismatch; the original invocation handle
+remained live and completed successfully.
+
+The subagent's final report described `make api-smoke` as passing while also
+noting generated drift. Independently rerunning the gate before commit returned
+exit 1 because its drift check compares generated artifacts with `HEAD`; the
+diff was the expected authored description change. After commit `5c73b77925`,
+`make api-smoke` returned exit 0. Models Go tests, the focused projector
+functional test, and docs-reference smoke also passed. The lesson is to keep
+the exact command exit status in the primary result and distinguish a gate
+that will pass after committing from one that already passed.
