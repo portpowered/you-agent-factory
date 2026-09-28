@@ -11,15 +11,6 @@
       "deletionGate": "inject the already-constructed service role from pkg/wire or move the invariant to the owning service"
     },
     {
-      "owner": "factory_sessions",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire",
-      "symbol": "NewOnDemandFactoryTargetService",
-      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime/captured_turn_terminate_integration_test.go",
-      "count": 1,
-      "stage": "wire-injection-full-blow",
-      "deletionGate": "inject the already-constructed service role from pkg/wire or move the invariant to the owning service"
-    },
-    {
       "owner": "events",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/events/wire",
       "symbol": "NewService",
