@@ -218,6 +218,17 @@ tree before retrying, and never re-issue the same request blind.
   `Transport closed` on a read-only session-list call after this direct
   success. No running server process was stopped. The direct probe used its
   own child stdio process, so app connector reconnection remains unverified.
+- A bounded real code rename with the same Nemotron model and a 120 s
+  `timeoutMillis` returned `factory_session.subagent.timed_out` with
+  `partialEffectsPossible: true`. The only touched file was the requested
+  `pkg/services/factory_runtime/internal/build_test.go`, but OpenCode left a
+  missing closing brace and mixed old/new identifiers, so the package did not
+  compile at that point. The direct MCP server child exited after the
+  response; process inventory showed no newly running OpenCode ACP child.
+  The rename was completed locally, including two dependent test callsites,
+  and the focused Factory Runtime internal tests passed. This confirms that
+  a timeout can leave syntactically broken partial code even when the requested
+  operation is a mechanical rename.
 - The app's MCP connection reported `Transport closed` after its stale server
   was restarted. This is a connection lifecycle observation, not evidence of
   the provider outcome. The direct stdio probe above initialized separately.
