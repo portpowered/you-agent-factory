@@ -1261,8 +1261,8 @@ ASR did transcribe the 6.435-second reference as 15 spoken "zero" words,
 showing that the prior `ref_text="Zero."` was incomplete. The worker then
 repeatedly used `--parameter "parameters.ref_text=..."`, which the CLI rejected
 with `parse --parameter 1: invalid JSON`. No matched synthesis ran or output
-WAV was created. A tighter retry must supply the known working `--input
-parameters=json:...` form explicitly; this is a prompt/tool-use failure,
+WAV was created. A tighter retry must supply the known working
+`--input 'parameters=json:{...}'` form explicitly; this is a prompt/tool-use failure,
 not evidence of a TTS backend failure.
 
 A fresh 10-minute OpenCode MCP retry included the exact working
@@ -1278,3 +1278,15 @@ supports reference-text mismatch as the earlier content failure, but does not
 prove that as the sole cause. The OpenCode primary result overclaimed exact
 content and miscounted words; independent artifact checks supplied the figures
 above. The task made no repository edits.
+
+Commit `e642113f48` changed omitted `you.subagent.timeoutMillis` to a named
+20-minute default while preserving explicit 10- and 20-minute values. A clean
+checkout passed all 24 lint targets, docs-reference smoke, and the focused
+ACP/Factory Sessions/MCP functional suites. The Windows CLI binary was rebuilt
+and installed at `C:\Users\andre\bin\you.exe` (SHA-256
+`948649B9D0D52408FDE85EF9F9E3921A3FACEFE522F4FE88E1FFBE2057DBF7F2`).
+A fresh stdio MCP process from that binary returned first-content readable
+error text, `isError=true`, and typed `structuredContent` for an invalid
+subagent request. The Codex MCP configuration now points at this binary for
+new connections; existing live Codex MCP processes still use their original
+executable until they reconnect.
