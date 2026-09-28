@@ -193,7 +193,7 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 		return subagentCleanupFailure(started.SessionID, requestID)
 	}
 	if invokeErr != nil {
-		return subagentInvocationFailure(started.SessionID, requestID)
+		return subagentInvokeError(invokeErr, started.SessionID, requestID, timeoutMillis, input)
 	}
 	if result.Status != factorysessionexecution.InvocationTerminalStatusCompleted {
 		return subagentTerminalFailure(started.SessionID, result, timeoutMillis, input)
@@ -284,6 +284,37 @@ func subagentInvocationFailure(sessionID, requestID string) ToolResponse[Subagen
 		Message:   "subagent invocation failed before producing a result",
 		SessionID: sessionID,
 		Details:   map[string]any{"partialEffectsPossible": true, "requestId": requestID},
+	}
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentInvokeError(err error, sessionID, requestID string, timeoutMillis int64, input SubagentInput) ToolResponse[SubagentResult] {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return subagentInvocationTimeout(sessionID, requestID, timeoutMillis, input)
+	}
+	return subagentInvocationFailure(sessionID, requestID)
+}
+
+func subagentInvocationTimeout(sessionID, requestID string, timeoutMillis int64, input SubagentInput) ToolResponse[SubagentResult] {
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.timed_out",
+		Message:   "subagent timed out before producing a result; workspace edits may have occurred",
+		Retryable: false,
+		SessionID: sessionID,
+		Details: map[string]any{
+			"partialEffectsPossible": true,
+			"requestId":              requestID,
+			"suggestedAction":        "Inspect the workspace for partial edits before retrying with another configured model or a longer timeout.",
+		},
+	}
+	if input.Provider != "" {
+		envelope.Details["provider"] = input.Provider
+	}
+	if input.Model != "" {
+		envelope.Details["model"] = input.Model
+	}
+	if timeoutMillis > 0 {
+		envelope.Details["timeoutMillis"] = timeoutMillis
 	}
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }

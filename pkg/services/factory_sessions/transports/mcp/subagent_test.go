@@ -3,6 +3,7 @@ package factorysession_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -270,6 +271,33 @@ func TestSubagentInvokeErrorIsPrivateAndIncludesSessionID(t *testing.T) {
 	}
 	if !target.closed {
 		t.Fatal("Factory Session was not closed after invoke error")
+	}
+}
+
+func TestSubagentInvokeDeadlineExceededReportsPossibleWorkspaceEdits(t *testing.T) {
+	timeout := int64(45_000)
+	target := &subagentTargetFake{invokeErr: fmt.Errorf("sensitive provider token abc123: %w", context.DeadlineExceeded)}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-deadline" }, mcpfactorysession.SubagentInput{
+		Prompt: "Edit a file", Provider: "opencode", Model: "local-model", TimeoutMillis: &timeout,
+	})
+	if response.Error == nil || response.Result != nil {
+		t.Fatalf("Subagent response = %#v", response)
+	}
+	if response.Error.Code != "factory_session.subagent.timed_out" || response.Error.Retryable {
+		t.Fatalf("deadline error = %#v", response.Error)
+	}
+	if response.Error.SessionID != "session-1" || response.Error.Details["requestId"] != "request-deadline" || response.Error.Details["partialEffectsPossible"] != true {
+		t.Fatalf("deadline diagnostic = %#v", response.Error)
+	}
+	if response.Error.Details["provider"] != "opencode" || response.Error.Details["model"] != "local-model" {
+		t.Fatalf("deadline provider/model = %#v", response.Error.Details)
+	}
+	if response.Error.Details["timeoutMillis"] != timeout {
+		t.Fatalf("deadline timeoutMillis = %#v, want %d", response.Error.Details["timeoutMillis"], timeout)
+	}
+	assertSubagentTimeoutSuggestedAction(t, response.Error.Details["suggestedAction"])
+	if strings.Contains(response.Error.Message, "sensitive") || strings.Contains(response.Error.Message, "abc123") || !target.closed {
+		t.Fatalf("deadline error leaked raw text or skipped close: %#v", response.Error)
 	}
 }
 

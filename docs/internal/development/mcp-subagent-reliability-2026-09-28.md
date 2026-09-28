@@ -341,3 +341,45 @@ Models selection contract, service runtime, and wire mapping, but returned no
 primary result or focused test outcome. The agent could not safely be retried
 blindly. Manual review completed the bridge and its focused tests; the root
 cause of this timeout remains unproven.
+
+An OpenCode MCP task to classify `you.subagent` invocation-context deadlines
+timed out after 120 seconds in Factory Session
+`0041860e-7ca7-43ff-91db-d35ee305bea0`. It returned
+`factory_session.subagent.timed_out`, `retryable: false`, and
+`partialEffectsPossible: true`. A worktree diff immediately afterward showed
+no source or test edits. This is another bounded edit timeout; it does not
+identify whether OpenCode, its model, ACP, or the Factory harness stopped
+progress.
+
+The OpenCode log for that attempt showed repeated snapshot failures on a
+zero-byte `index.lock` created several hours earlier. A second zero-byte lock
+from the previous day was also present. With no `git.exe` process running,
+both exact stale lock files were removed from the OpenCode snapshot cache.
+A subsequent 60-second OpenCode MCP read probe completed in Factory Session
+`fa24d9b7-08bb-478c-ac87-0e01c6b752f7`, returning the exact README heading
+`# you-agent-factory`. The before/after observation makes the stale locks a
+plausible contributor, but does not prove they caused the earlier timeout.
+
+The same deadline-classification edit completed through Codex MCP in Factory
+Session `9d19a205-dbf3-46a2-9501-6e0d646c79e3`. It changed only the
+requested MCP source and test files; the focused package tests passed on
+independent rerun.
+
+After lock cleanup, an OpenCode MCP task to add provider, model, and timeout
+facts to the new deadline error timed out after 90 seconds in Factory Session
+`8439e615-6c6b-464f-a4cc-4fdd5735379c`. It left the requested source and
+test edits. The focused test passed on independent rerun, but `make pkg-maint`
+reported `Subagent` cyclomatic complexity 16 against the limit of 15. No
+snapshot lock was present after this attempt, and the native log showed
+snapshot commands running. Thus stale locks alone do not explain all MCP
+OpenCode timeouts; a completed edit without a primary MCP result remains an
+observed failure mode.
+
+The sanitized native OpenCode export for that edit (`ses_f18896c52ffeulANUBYsktLseS`)
+ended with repeated assistant `tool-calls` turns and no terminal `stop` turn.
+The adjacent one-line read probe (`ses_f1889eff6ffebje2VizfN7mGIE`) had a
+terminal `stop` turn. This narrows the symptom to continuation after tool
+activity for this attempt; it still does not identify the failing component.
+A Codex MCP task then extracted the invocation error branch to a helper in
+Factory Session `719e7a2d-8720-48f2-8e60-f3b758fb7929`. Full MCP package
+tests and `make pkg-maint` passed on independent rerun.
