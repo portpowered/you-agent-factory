@@ -135,6 +135,35 @@ func TestGeneratedPtrFromPartsPreservesExtendedContentFields(t *testing.T) {
 	assertGeneratedWorkContentPartsEqual(t, got, parts)
 }
 
+func TestVideoPartConversionPreservesFieldsAndOrder(t *testing.T) {
+	video := work.WorkContentPart{
+		Type:        work.WorkContentPartTypeVideo,
+		URL:         testContentURL("fixtures/clip.mp4"),
+		File:        "legacy-clip.mp4",
+		Slot:        "preview",
+		Label:       "clip",
+		Role:        "assistant",
+		ContentType: "video/mp4",
+		ArtifactID:  "artifact-video-1",
+		Metadata:    map[string]any{"frameRate": 24},
+	}
+	parts := []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "before"},
+		video,
+		{Type: work.WorkContentPartTypeText, Text: "after"},
+	}
+
+	generated := GeneratedPtrFromParts(parts)
+	assertGeneratedWorkContentPartsEqual(t, generated, parts)
+	encodedVideo, err := (*generated)[1].AsWorkVideoContentPart()
+	if err != nil {
+		t.Fatalf("decode generated video part: %v", err)
+	}
+	if encodedVideo.Type != factoryapi.VIDEO {
+		t.Fatalf("generated video type = %q, want %q", encodedVideo.Type, factoryapi.VIDEO)
+	}
+}
+
 func mustGeneratedTextPart(t *testing.T, text string) factoryapi.WorkContentPart {
 	t.Helper()
 

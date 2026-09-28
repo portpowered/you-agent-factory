@@ -608,18 +608,21 @@ func assertWorkContentSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	assertSchemaOneOfRefs(t, workContentPartSchema, "WorkContentPart", []string{
 		"#/components/schemas/WorkTextContentPart",
 		"#/components/schemas/WorkImageContentPart",
+		"#/components/schemas/WorkVideoContentPart",
 		"#/components/schemas/WorkAudioContentPart",
 		"#/components/schemas/WorkJsonContentPart",
 		"#/components/schemas/WorkBinaryContentPart",
 	})
-	assertEnumValues(t, schemaObject(t, schemas, "WorkContentPartType"), "WorkContentPartType", []string{"text", "image", "TEXT", "IMAGE", "AUDIO", "JSON", "BINARY"})
+	assertEnumValues(t, schemaObject(t, schemas, "WorkContentPartType"), "WorkContentPartType", []string{"text", "image", "TEXT", "IMAGE", "AUDIO", "JSON", "BINARY", "VIDEO"})
 
 	assertWorkContentPartSchemaVariant(t, schemas, "WorkTextContentPart", "type", "text")
 	assertWorkContentPartSchemaVariant(t, schemas, "WorkImageContentPart", "type", "url")
+	assertWorkContentPartSchemaVariant(t, schemas, "WorkVideoContentPart", "type", "url")
 	assertWorkContentPartSchemaVariant(t, schemas, "WorkAudioContentPart", "type", "url")
 	assertWorkContentPartSchemaVariant(t, schemas, "WorkJsonContentPart", "type", "json")
 	assertWorkContentPartSchemaVariant(t, schemas, "WorkBinaryContentPart", "type", "url")
 	assertDeprecatedWorkContentFileProperty(t, schemas, "WorkImageContentPart")
+	assertDeprecatedWorkContentFileProperty(t, schemas, "WorkVideoContentPart")
 	assertDeprecatedWorkContentFileProperty(t, schemas, "WorkAudioContentPart")
 	assertDeprecatedWorkContentFileProperty(t, schemas, "WorkBinaryContentPart")
 	assertSchemaPropertiesPresent(t, schemaProperties(t, schemaObject(t, schemas, "WorkContentCommonFields"), "WorkContentCommonFields"), "WorkContentCommonFields", "slot", "label", "role", "contentType", "artifactId", "metadata")

@@ -159,6 +159,8 @@ func (s *Service) prepareItem(
 	switch strings.ToLower(item.ItemType) {
 	case "image":
 		partType = work.WorkContentPartTypeImage
+	case "video":
+		partType = work.WorkContentPartTypeVideo
 	case "audio":
 		partType = work.WorkContentPartTypeAudio
 	}

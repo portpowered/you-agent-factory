@@ -86,6 +86,10 @@ func inferenceInputFromWorkPart(slot string, part work.WorkContentPart) (models.
 		input.Modality = models.ModalityImage
 		content = firstNonEmpty(part.URL, part.File, part.Text)
 		input.ContentType, input.MediaType = inputContentMetadata(part.ContentType, "")
+	case work.WorkContentPartTypeVideo:
+		input.Modality = models.ModalityVideo
+		content = firstNonEmpty(part.URL, part.File, part.Text)
+		input.ContentType, input.MediaType = inputContentMetadata(part.ContentType, "")
 	case work.WorkContentPartTypeAudio:
 		input.Modality = models.ModalityAudio
 		content = firstNonEmpty(part.URL, part.File, part.Text)
@@ -240,6 +244,8 @@ func workContentPartFromModelOutput(output models.InferenceOutput, index int) (w
 		return textWorkContentPart(part, output), nil
 	case strings.EqualFold(string(modality), string(models.ModalityJSON)):
 		return jsonWorkContentPart(part, output)
+	case strings.EqualFold(string(modality), string(models.ModalityVideo)):
+		return videoWorkContentPart(part, output)
 	case strings.EqualFold(string(modality), string(models.ModalityAudio)):
 		return audioWorkContentPart(part, output)
 	case strings.EqualFold(string(modality), string(models.ModalityImage)):
@@ -294,6 +300,21 @@ func jsonWorkContentPart(part work.WorkContentPart, output models.InferenceOutpu
 	}
 	if part.ContentType == "" {
 		part.ContentType = "application/json"
+	}
+	return part, nil
+}
+
+func videoWorkContentPart(part work.WorkContentPart, output models.InferenceOutput) (work.WorkContentPart, error) {
+	part.Type = work.WorkContentPartTypeVideo
+	part.URL = inlineOutputURL(output.Content, firstNonEmpty(output.MediaType, output.ContentType, "video/mp4"))
+	if part.URL == "" {
+		return work.WorkContentPart{}, badRequest(
+			fmt.Sprintf("Models returned empty video output %q", part.Slot),
+			models.ErrInferenceFailed,
+		)
+	}
+	if part.ContentType == "" {
+		part.ContentType = firstNonEmpty(output.MediaType, output.ContentType, "video/mp4")
 	}
 	return part, nil
 }
@@ -361,6 +382,8 @@ func modalityFromMediaType(values ...string) models.Modality {
 		switch {
 		case strings.HasPrefix(value, "text/"):
 			return models.ModalityText
+		case strings.HasPrefix(value, "video/"):
+			return models.ModalityVideo
 		case strings.HasPrefix(value, "audio/"):
 			return models.ModalityAudio
 		case strings.HasPrefix(value, "image/"):
@@ -374,6 +397,8 @@ func modalityFromMediaType(values ...string) models.Modality {
 
 func defaultOutputName(modality models.Modality, index int) string {
 	switch {
+	case strings.EqualFold(string(modality), string(models.ModalityVideo)):
+		return "video"
 	case strings.EqualFold(string(modality), string(models.ModalityAudio)):
 		return "audio"
 	case strings.EqualFold(string(modality), string(models.ModalityText)):

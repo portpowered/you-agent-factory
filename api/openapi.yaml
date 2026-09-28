@@ -14842,6 +14842,7 @@ components:
       oneOf:
         - $ref: '#/components/schemas/WorkTextContentPart'
         - $ref: '#/components/schemas/WorkImageContentPart'
+        - $ref: '#/components/schemas/WorkVideoContentPart'
         - $ref: '#/components/schemas/WorkAudioContentPart'
         - $ref: '#/components/schemas/WorkJsonContentPart'
         - $ref: '#/components/schemas/WorkBinaryContentPart'
@@ -14856,6 +14857,7 @@ components:
         - AUDIO
         - JSON
         - BINARY
+        - VIDEO
     WorkContentMetadata:
       type: object
       additionalProperties: true
@@ -15009,6 +15011,24 @@ components:
     WorkContentDeprecatedFileProperty:
       type: string
       description: Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
+    WorkVideoContentPart:
+      description: Ordered video content for one work item.
+      allOf:
+        - $ref: '#/components/schemas/WorkContentCommonFields'
+        - type: object
+          required:
+            - type
+            - url
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/WorkContentPartType'
+              enum:
+                - VIDEO
+            url:
+              $ref: '#/components/schemas/WorkContentURLProperty'
+            file:
+              $ref: '#/components/schemas/WorkContentDeprecatedFileProperty'
     SubmitWorkContentURLProperty:
       type: string
       minLength: 1
