@@ -297,9 +297,9 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 		connection.loadRequest.GetModelPath() != filepath.Dir(modelFile) ||
 		connection.loadRequest.GetNBatch() != localAIModelBatchSize ||
 		connection.loadRequest.GetThreads() != 4 ||
-		len(connection.loadRequest.GetOptions()) != 0 {
+		!equalStrings(connection.loadRequest.GetOptions(), []string{localAIDisableGemmaThinkingOption}) {
 		t.Fatalf(
-			"load request model=%q context=%d modelFile=%q mmproj=%q modelPath=%q nBatch=%d options=%v, want non-EMBED zero context, model name, file/projector paths, model directory, nonzero batch size, and no VibeVoice option",
+			"load request model=%q context=%d modelFile=%q mmproj=%q modelPath=%q nBatch=%d options=%v, want built-in LLM paths and reasoning budget",
 			connection.loadRequest.GetModel(), connection.loadRequest.GetContextSize(), connection.loadRequest.GetModelFile(), connection.loadRequest.GetMMProj(), connection.loadRequest.GetModelPath(), connection.loadRequest.GetNBatch(), connection.loadRequest.GetOptions(),
 		)
 	}
@@ -309,8 +309,9 @@ func TestPinnedGRPCHostProtocolNegotiatorLoadsDeclaredModelAfterHealth(t *testin
 	expected = appendStringField(expected, 21, modelFile)
 	expected = appendStringField(expected, 41, mmprojFile)
 	expected = appendStringField(expected, 59, filepath.Dir(modelFile))
+	expected = appendStringField(expected, 62, localAIDisableGemmaThinkingOption)
 	if !bytes.Equal(connection.loadPayload, expected) {
-		t.Fatalf("non-EMBED LoadModel wire bytes = %x, want prior compatible bytes %x", connection.loadPayload, expected)
+		t.Fatalf("non-EMBED LoadModel wire bytes = %x, want model-specific reasoning budget bytes %x", connection.loadPayload, expected)
 	}
 }
 
@@ -357,8 +358,12 @@ func TestPinnedGRPCHostProtocolNegotiatorKeepsVibeVoiceOptionsPrivateToBuiltinTT
 			if err != nil {
 				t.Fatalf("Negotiate() error = %v", err)
 			}
-			if len(connection.loadRequest.GetOptions()) != 0 || connection.loadRequest.GetMMProj() != "" {
-				t.Fatalf("%s LoadModel options/mmproj = %#v/%q, want no private option or projector", modelName, connection.loadRequest.GetOptions(), connection.loadRequest.GetMMProj())
+			wantOptions := []string(nil)
+			if modelName == models.BuiltInModelNameLLM {
+				wantOptions = []string{localAIDisableGemmaThinkingOption}
+			}
+			if !equalStrings(connection.loadRequest.GetOptions(), wantOptions) || connection.loadRequest.GetMMProj() != "" {
+				t.Fatalf("%s LoadModel options/mmproj = %#v/%q, want %q and no projector", modelName, connection.loadRequest.GetOptions(), connection.loadRequest.GetMMProj(), wantOptions)
 			}
 			wantContextSize := int32(0)
 			wantEmbeddings := false
@@ -715,7 +720,7 @@ func assertControlledImageObservation(
 	}
 	if observation.load.ModelFile != modelFile || observation.load.ModelPath != modelRoot ||
 		observation.load.MMProj != mmprojFile || observation.load.Model != models.BuiltInModelNameLLM ||
-		!equalStrings(observation.load.Options, []string{localAIDisableProjectorGPUOption}) {
+		!equalStrings(observation.load.Options, []string{localAIDisableProjectorGPUOption, localAIDisableGemmaThinkingOption}) {
 		t.Fatalf("server LoadModel = %#v, want exact model/projector paths", observation.load)
 	}
 	if observation.imageCount != wantImageCount || observation.imageSHA256 != wantImageSHA256 {

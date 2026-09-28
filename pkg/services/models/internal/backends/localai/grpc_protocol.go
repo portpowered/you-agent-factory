@@ -17,15 +17,16 @@ import (
 )
 
 const (
-	localAIHealthMethod                    = "/backend.Backend/Health"
-	localAILoadModelMethod                 = "/backend.Backend/LoadModel"
-	localAIPredictMethod                   = "/backend.Backend/Predict"
-	localAIEmbeddingMethod                 = "/backend.Backend/Embedding"
-	localAIModelBatchSize                  = 512
-	localAIEmbedContextSize          int32 = 512
-	localAIDefaultPredictTokens      int32 = 256
-	localAIDisableProjectorGPUOption       = "mmproj_use_gpu:false"
-	localAIAudioCPPBackendOption           = "backend:best"
+	localAIHealthMethod                     = "/backend.Backend/Health"
+	localAILoadModelMethod                  = "/backend.Backend/LoadModel"
+	localAIPredictMethod                    = "/backend.Backend/Predict"
+	localAIEmbeddingMethod                  = "/backend.Backend/Embedding"
+	localAIModelBatchSize                   = 512
+	localAIEmbedContextSize           int32 = 512
+	localAIDefaultPredictTokens       int32 = 256
+	localAIDisableProjectorGPUOption        = "mmproj_use_gpu:false"
+	localAIDisableGemmaThinkingOption       = "reasoning_budget:0"
+	localAIAudioCPPBackendOption            = "backend:best"
 )
 
 type invocationEndpointContextKey struct{}
@@ -155,6 +156,12 @@ func loadModel(
 		)
 	}
 	options = append(options, projectorLoadOptions(configuration)...)
+	// The managed Gemma 4 LLM otherwise spends the default Predict token budget
+	// on hidden reasoning before producing text, especially for video input.
+	if configuration.Backend == "localai-llamacpp" &&
+		strings.EqualFold(strings.TrimSpace(configuration.ModelName), models.BuiltInModelNameLLM) {
+		options = append(options, localAIDisableGemmaThinkingOption)
+	}
 	if configuration.Backend == "localai-audio-cpp" {
 		options = append(options, localAIAudioCPPBackendOption)
 	}

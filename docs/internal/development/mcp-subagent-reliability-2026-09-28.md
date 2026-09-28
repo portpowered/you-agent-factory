@@ -1636,3 +1636,37 @@ bridge that emits a typed prompt failure, or a direct Pi RPC provider, rather
 than interpreting retry prose. The current configured MCP command points to
 `C:\Users\andre\bin\you-f107bace18.exe` (SHA-256
 `F7A72BA4BF1083DB866EC89B71DD107C38D95077EBB07324345E7291968F4B66`).
+
+A further Codex MCP edit (session `36a3a0c9-e461-42a7-91ef-1e62d536f46c`)
+counted `ChatDelta.ReasoningContent` bytes in the safe empty-text diagnostic;
+commit `e993bfa890` records it. Focused LocalAI tests and maintainability,
+file-count, and formatting checks passed. A fresh Windows binary repeated the
+same red-then-blue two-frame direct Models multipart request. The HTTP 502
+reported `reply_bytes=984 message_bytes=0 chat_delta_count=1
+generated_tokens=256 prompt_tokens=451 audio_bytes=0 reasoning_bytes=954`.
+All 256 generated tokens were spent on reasoning content with no visible answer
+before the request cap. The server was stopped gracefully. A targeted fix should
+control thinking for this managed model or request and then repeat the live
+video probe; merely raising the global cap to 1024 had already failed.
+
+A bounded Codex MCP edit (session `722ebce3-b9e9-4d58-856c-82073e007221`)
+added `reasoning_budget:0` only to the managed built-in Gemma 4 LLM's
+`LoadModel` options. The pinned LocalAI llama.cpp backend accepts this option
+and treats zero as disabling the reasoning budget. Exact wire and scope tests,
+the LocalAI package suite, `pkg-maint`, `pkg-file-count`, `fmt-check`, and
+`git diff --check` passed. A fresh Windows build sent the same red-then-blue
+two-frame MP4 through direct `POST /models/invocations` multipart and received
+HTTP 200 with text `Red blue`. The known WAV fixture returned HTTP 200 with
+`zero `, and the single red frame returned HTTP 200 with `Red`. The test server
+was stopped gracefully. These three live probes confirm the focused managed
+model setting fixes the observed video failure while retaining the previously
+working audio and single-frame paths.
+
+A concurrent bounded OpenCode MCP read-only audit of the Pi ACP false success
+(session `28a859c9-3865-4ca2-8c40-ca305efbfbd3`, request
+`43b23c8f-f8f2-480d-821c-258c08aacc63`) timed out at 240 seconds with no
+primary result. MCP returned `factory_session.subagent.timed_out`,
+`partialEffectsPossible=true`, `inFlightDispatches=1`, and
+`sessionClosed=true`. The audit was instructed not to edit and no new
+Pi-related tracked diffs appeared; the working tree still has unrelated
+preexisting dirty files. This is another OpenCode harness timeout to investigate.

@@ -93,6 +93,7 @@ func assertWindowsCPUProjectorWire(t *testing.T, payload []byte, modelFile, mmpr
 	expected = appendStringField(expected, 41, mmprojFile)
 	expected = appendStringField(expected, 59, filepath.Dir(modelFile))
 	expected = appendStringField(expected, 62, localAIDisableProjectorGPUOption)
+	expected = appendStringField(expected, 62, localAIDisableGemmaThinkingOption)
 	if !bytes.Equal(payload, expected) {
 		t.Fatalf("Windows CPU projector LoadModel wire bytes = %x, want exact field-62 option bytes %x", payload, expected)
 	}
@@ -112,8 +113,8 @@ func assertWindowsCPUProjectorWire(t *testing.T, payload []byte, modelFile, mmpr
 // consumes mmproj_use_gpu=false as the projector setting.
 func assertProjectorOption(t *testing.T, options []string) {
 	t.Helper()
-	if len(options) != 1 {
-		t.Fatalf("projector options = %q, want exactly one option", options)
+	if len(options) != 2 || options[1] != localAIDisableGemmaThinkingOption {
+		t.Fatalf("projector options = %q, want projector placement and Gemma reasoning budget", options)
 	}
 	optionName, optionValue, ok := strings.Cut(options[0], ":")
 	if !ok || optionName != "mmproj_use_gpu" || optionValue != "false" {
@@ -225,11 +226,15 @@ func assertProjectorPlacementRequest(t *testing.T, payload []byte, test projecto
 		decoded.GetModelPath() != filepath.Dir(modelFile) || decoded.GetNBatch() != localAIModelBatchSize {
 		t.Fatalf("%s decoded LoadModel = %#v, want unchanged fields and no projector option", test.name, decoded)
 	}
-	if len(decoded.GetOptions()) != 0 {
-		t.Fatalf("%s decoded LoadModel options = %q, want none", test.name, decoded.GetOptions())
+	wantOptions := []string(nil)
+	if test.backend == "localai-llamacpp" && test.modelName == models.BuiltInModelNameLLM {
+		wantOptions = []string{localAIDisableGemmaThinkingOption}
 	}
-	if containsWireField(t, payload, 62) {
-		t.Fatalf("%s LoadModel wire unexpectedly contains private field 62: %x", test.name, payload)
+	if !equalStrings(decoded.GetOptions(), wantOptions) {
+		t.Fatalf("%s decoded LoadModel options = %q, want %q", test.name, decoded.GetOptions(), wantOptions)
+	}
+	if containsWireField(t, payload, 62) != (len(wantOptions) > 0) {
+		t.Fatalf("%s LoadModel field 62 presence does not match options: %x", test.name, payload)
 	}
 }
 
