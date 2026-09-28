@@ -535,8 +535,9 @@ it does not confirm that a loaded model understands the media. The output is
 text. The built-in `llm` requires a verified multimodal projector for media
 inference. Check `you models inspect llm` before sending media. If
 `videoReadiness` reports that the projector is missing or invalid, video is
-unavailable. Image and audio slots may still appear in the operation list,
-but the managed host cannot load this built-in model from an incomplete cache.
+unavailable. The effective operation also omits `image` and `audio`. Requests
+for any of these media inputs fail before backend execution. Pull the model to
+repair an incomplete cache, then inspect it again.
 
 Use a repeatable `--input` flag for each named binding. Set
 `--operation OMNI` to select the built-in operation.
