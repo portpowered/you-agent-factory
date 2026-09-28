@@ -131,6 +131,121 @@ func TestDefaultBackendArtifactResolverFallsBackToPublishedLinuxCPU(t *testing.T
 	}
 }
 
+func TestDefaultBackendArtifactResolverPrefersCUDAWhenAvailable(t *testing.T) {
+	t.Parallel()
+	// Use the Windows CUDA variant manifest which has both CPU and CUDA artifacts
+	cudaManifest, err := os.ReadFile(filepath.Join("..", "internal", "artifacts", "testdata", "windows-cuda-variant-manifest.json"))
+	if err != nil {
+		t.Fatalf("read CUDA manifest fixture: %v", err)
+	}
+	cudaManifestDecoded, err := artifacts.Decode(cudaManifest)
+	if err != nil {
+		t.Fatalf("decode CUDA manifest fixture: %v", err)
+	}
+	// The checked-in publication has Windows CPU archives for all three backends.
+	cpuManifestDecoded, err := artifacts.DefaultManifest()
+	if err != nil {
+		t.Fatalf("decode checked-in manifest: %v", err)
+	}
+
+	resolveCUDA := backendArtifactResolver(cudaManifestDecoded)
+	resolveCPU := backendArtifactResolver(cpuManifestDecoded)
+
+	// The Windows fixture publishes a CUDA archive for llama.cpp only.
+	for _, testCase := range []struct {
+		backend, expectedAccelerator, expectedTarget string
+	}{
+		{"localai-llamacpp", "cuda", "windows-amd64-cuda"},
+	} {
+		t.Run(testCase.backend, func(t *testing.T) {
+			selection, err := resolveCUDA(context.Background(), ResolvedHostConfiguration{
+				Backend: testCase.backend, Platform: models.AssetHostPlatform{
+					OperatingSystem: "windows", Architecture: "amd64",
+					Accelerator: "cuda",
+				},
+				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+			}, false)
+			if err != nil {
+				t.Fatalf("resolve %s explicit CUDA: %v", testCase.backend, err)
+			}
+			if selection.Accelerator != testCase.expectedAccelerator || selection.Name == "" ||
+				!strings.Contains(selection.Name, testCase.expectedTarget) {
+				t.Fatalf("selection for %s = %#v, want accelerator=%s target=%s", testCase.backend, selection, testCase.expectedAccelerator, testCase.expectedTarget)
+			}
+		})
+	}
+	// An explicit CUDA request cannot fall back to a CPU-only archive.
+	for _, testCase := range []struct {
+		backend string
+	}{
+		{"localai-llamacpp"},
+		{"localai-whisper"},
+		{"localai-vibevoice"},
+	} {
+		t.Run(testCase.backend, func(t *testing.T) {
+			selection, err := resolveCPU(context.Background(), ResolvedHostConfiguration{
+				Backend: testCase.backend, Platform: models.AssetHostPlatform{
+					OperatingSystem: "windows", Architecture: "amd64",
+					Accelerator: "cuda",
+				},
+				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+			}, false)
+			if err == nil {
+				t.Fatalf("resolve %s explicit CUDA: expected error, got selection %#v", testCase.backend, selection)
+			}
+			var failure *artifacts.Failure
+			if !errors.As(err, &failure) || failure.Kind != artifacts.FailureIncompatibleAccelerator {
+				t.Fatalf("resolve %s explicit CUDA: expected ErrIncompatibleAccelerator, got %v", testCase.backend, err)
+			}
+		})
+	}
+	// Automatic selection prefers CUDA where published and CPU otherwise.
+	platform := models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64", CUDAAvailable: true}
+	for _, testCase := range []struct {
+		backend, expectedAccelerator, expectedTarget string
+	}{
+		{"localai-llamacpp", "cuda", "windows-amd64-cuda"},
+		{"localai-whisper", "cpu", "windows-amd64"},
+		{"localai-vibevoice", "cpu", "windows-amd64"},
+	} {
+		t.Run(testCase.backend, func(t *testing.T) {
+			selection, err := resolveCUDA(context.Background(), ResolvedHostConfiguration{
+				Backend: testCase.backend, Platform: platform,
+				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+			}, false)
+			if err != nil {
+				t.Fatalf("resolve %s CUDAAvailable no accelerator: %v", testCase.backend, err)
+			}
+			if selection.Accelerator != testCase.expectedAccelerator || selection.Name == "" ||
+				!strings.Contains(selection.Name, testCase.expectedTarget) {
+				t.Fatalf("selection for %s = %#v, want accelerator=%s target=%s", testCase.backend, selection, testCase.expectedAccelerator, testCase.expectedTarget)
+			}
+		})
+	}
+	// A CUDA-capable Windows host falls back to the checked-in CPU archives.
+	for _, testCase := range []struct {
+		backend, expectedAccelerator, expectedTarget string
+	}{
+		{"localai-llamacpp", "cpu", "windows-amd64"},
+		{"localai-whisper", "cpu", "windows-amd64"},
+		{"localai-vibevoice", "cpu", "windows-amd64"},
+	} {
+		t.Run(testCase.backend, func(t *testing.T) {
+			selection, err := resolveCPU(context.Background(), ResolvedHostConfiguration{
+				Backend: testCase.backend, Platform: platform,
+				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+			}, false)
+			if err != nil {
+				t.Fatalf("resolve %s CUDAAvailable fallback: %v", testCase.backend, err)
+			}
+			if selection.Accelerator != testCase.expectedAccelerator || selection.Name == "" ||
+				!strings.Contains(selection.Name, testCase.expectedTarget) {
+				t.Fatalf("selection for %s = %#v, want accelerator=%s target=%s (fallback)", testCase.backend, selection, testCase.expectedAccelerator, testCase.expectedTarget)
+			}
+		})
+	}
+}
+
 func TestNewDefaultBackendArtifactResolverSelectsPinnedMatrix(t *testing.T) {
 	t.Parallel()
 
