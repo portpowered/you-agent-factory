@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -129,6 +130,11 @@ type SessionState struct {
 	Spec     any
 	Owner    SessionProjectionOwner
 	Invoker  roles.CanonicalSessionInvoker
+	// Process and Diagnostics are application lifecycle values owned by this
+	// canonical session record. The process root routes transport commands by
+	// session ID instead of retaining another runtime-opening graph.
+	Process     roles.ProcessRuntime
+	Diagnostics factoryruntime.RuntimeLogDiagnostics
 	// Activation retains lifecycle cleanup on the canonical session record.
 	Activation        interface{ Close(context.Context) error }
 	startRequestMu    sync.RWMutex

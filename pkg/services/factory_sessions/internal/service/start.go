@@ -148,6 +148,8 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: session runtime state is unavailable")
 	}
 	bound.Activation = activation
+	bound.Process = products.application.Process
+	bound.Diagnostics = products.application.Resources.Diagnostics
 	bound.SetStartRequestID(strings.TrimSpace(request.Correlation.RequestID))
 	bound.InheritTerminalControl(previousControl)
 	status := "RUNNING"
