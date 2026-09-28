@@ -50,7 +50,6 @@ func newServerFromRoles(
 		Sessions: sessions, Invocation: invocation,
 		FactoryDefinitions: factoryDefinitions, FactoryValidation: factoryValidation,
 		WorkflowPreview:       workflowPreview,
-		DurableLifecycle:      durableLifecycle,
 		DurableResponseEvents: durableResponseEvents,
 		DurableLister:         durableLister, LiveSessionLister: liveSessionLister,
 		WorkerPrompts:   workerPrompts,

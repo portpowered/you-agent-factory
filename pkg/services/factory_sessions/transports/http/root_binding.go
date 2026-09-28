@@ -36,7 +36,6 @@ func NewHandlerFromRoot(binding RootBinding, logger *zap.Logger) *Adapter {
 		SessionsRoot:          binding.Sessions,
 		LiveControl:           liveControl,
 		SessionDeletion:       deletion,
-		DurableLifecycle:      durable,
 		DurableResponseEvents: durable,
 		SessionRequests:       binding.Prepare,
 	}, logger)

@@ -174,12 +174,16 @@ func (fake *httpSessionsRootFake) Invoke(_ context.Context, _ factorysessions.Se
 	return factorysessions.InvocationResult{}, factorysessions.ErrSessionNotFound
 }
 
-func (fake *httpSessionsRootFake) Get(_ context.Context, request factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
+func (fake *httpSessionsRootFake) Get(ctx context.Context, request factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
 	if request.SessionID == factorysessions.DefaultSessionID && request.Mode == factorysessions.SessionOperationModeLive {
 		return factorysessions.SessionGetResult{Session: factorysessions.SessionView{
 			SessionID: factorysessions.DefaultSessionID, Mode: factorysessions.SessionOperationModeLive,
 			FactoryDir: "/test-factory",
 		}}, nil
+	}
+	if request.Mode == factorysessions.SessionOperationModeDurable {
+		read, err := fake.GetSession(ctx, request.SessionID)
+		return factorysessions.SessionGetResult{Durable: &read}, err
 	}
 	return factorysessions.SessionGetResult{}, factorysessions.ErrSessionNotFound
 }
@@ -188,7 +192,14 @@ func (fake *httpSessionsRootFake) List(_ context.Context, _ factorysessions.Sess
 	return factorysessions.SessionListResult{}, factorysessions.ErrSessionNotFound
 }
 
-func (fake *httpSessionsRootFake) Control(_ context.Context, _ factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
+func (fake *httpSessionsRootFake) Control(ctx context.Context, request factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
+	if request.Mode == factorysessions.SessionOperationModeDurable && request.Operation == factorysessions.SessionControlPause && fake.onPauseDurable != nil {
+		result, err := fake.onPauseDurable(ctx, request.SessionID, request.Control)
+		return factorysessions.SessionControlResult{
+			SessionID: result.SessionID, Mode: request.Mode, Operation: request.Operation,
+			Outcome: result.Outcome, Status: result.Status, Detail: result.Detail, Links: result.Links,
+		}, err
+	}
 	return factorysessions.SessionControlResult{}, factorysessions.ErrSessionNotFound
 }
 

@@ -211,7 +211,11 @@ func (root canonicalDurableStartTestRoot) ListSessions(ctx context.Context, requ
 	return root.execution.ListSessions(ctx, request)
 }
 
-func (root canonicalDurableStartTestRoot) Get(_ context.Context, request factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
+func (root canonicalDurableStartTestRoot) Get(ctx context.Context, request factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
+	if request.Mode == factorysessions.SessionOperationModeDurable {
+		read, err := root.execution.GetSession(ctx, request.SessionID)
+		return factorysessions.SessionGetResult{Durable: &read}, err
+	}
 	return factorysessions.SessionGetResult{Session: factorysessions.SessionView{SessionID: request.SessionID, FactoryDir: "."}}, nil
 }
 
@@ -231,6 +235,35 @@ func (root canonicalDurableStartTestRoot) Start(ctx context.Context, request fac
 	}
 	result, err := root.execution.StartAsync(ctx, legacy)
 	return factorysessions.SessionStartResult{SessionID: result.SessionID, Mode: factorysessions.SessionOperationModeDurable, Async: &result}, err
+}
+
+func (root canonicalDurableStartTestRoot) Control(ctx context.Context, request factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
+	var result factorysessions.LifecycleControlResult
+	var err error
+	switch request.Operation {
+	case factorysessions.SessionControlPause:
+		result, err = root.execution.Pause(ctx, request.SessionID, request.Control)
+	case factorysessions.SessionControlResume:
+		result, err = root.execution.Resume(ctx, request.SessionID, request.Control)
+	case factorysessions.SessionControlCancel:
+		result, err = root.execution.Cancel(ctx, request.SessionID, request.Control)
+	case factorysessions.SessionControlTerminate:
+		result, err = root.execution.Terminate(ctx, request.SessionID, request.Control)
+	case factorysessions.SessionControlApprove:
+		result, err = root.execution.Approve(ctx, request.SessionID, *request.Approve)
+	case factorysessions.SessionControlRetryDispatch:
+		result, err = root.execution.RetryDispatch(ctx, request.SessionID, *request.Retry)
+	case factorysessions.SessionControlInterruptDispatch:
+		result, err = root.execution.InterruptDispatch(ctx, request.SessionID, *request.Interrupt)
+	default:
+		panic("unexpected canonical control operation in HTTP script")
+	}
+	return factorysessions.SessionControlResult{
+		SessionID: result.SessionID, Mode: factorysessions.SessionOperationModeDurable,
+		Operation: request.Operation, Outcome: result.Outcome, Status: result.Status,
+		Detail: result.Detail, ApprovalPreviewID: result.ApprovalPreviewID,
+		DispatchID: result.DispatchID, RetryDispatchID: result.RetryDispatchID, Links: result.Links,
+	}, err
 }
 
 func newWorkAPITestServer(work apisurface.WorkAPI) *api.Server {
