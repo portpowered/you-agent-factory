@@ -1720,3 +1720,36 @@ named *observed* because filtered ACP fragments can be newer than the last
 retained Factory Session event. The full MCP transport package and
 maintainability/file-count/format checks passed; an independent package rerun
 also passed.
+
+The user then directed removal of arbitrary default reasoning, output-token,
+and context-input caps. A Codex MCP edit (session
+`a697c91d-cb01-43ed-9fca-989c935fc61c`) removed the fixed 256-token
+Predict default and the Gemma `reasoning_budget:0` load option, preserving
+reasoning. The pinned llama.cpp backend maps zero Predict tokens to
+`n_predict=-1`. A scoped OpenCode MCP edit (session
+`312d2a05-92e0-40d0-ada8-f09401a4008d`) then removed the built-in
+embedding model's 512-token context override, so the backend/model chooses
+context. Focused tests passed. Byte bounds for uploads and returned media
+remain because they protect process memory; these are not context-token caps.
+
+Live Windows direct Models probes with the no-cap build returned HTTP 200 for
+plain text (`READY`) and a single red video frame (`Red`), but the same
+red-then-blue multipart MP4 returned HTTP 500. A bounded Codex MCP raw-error
+audit (session `38e13935-5958-4724-94a5-bd0c97d739cb`) timed out at ten
+minutes without a primary result or tracked edits. Independent raw gRPC probes
+against the loaded backend then completed in about 67 seconds with a nonempty
+reply (376 generated tokens, 451 prompt tokens, visible text `Red, Red`, and
+reasoning content); the visual answer itself is inaccurate for the desired
+two-color sequence, so this is protocol evidence rather than semantic success.
+Temporary diagnostic binaries found that the HTTP path's LocalAI Predict RPC
+also succeeds with a 1405-byte reply. The later Models invocation fails after
+the one-minute host lease expires: the lease owner releases capacity at TTL,
+and inference completion reports a failed cleanup. The elapsed wall time also
+includes model startup. A correct fix needs to pin an active invocation's
+lease until it finishes while retaining expiration for abandoned leases; a
+Codex MCP implementation task is in progress. Temporary diagnostic source
+changes were reverted and were not committed. Test servers were stopped.
+The user asked that probes stop opening browser tabs. Subsequent server probes
+used `YOU_NO_BROWSER_OPEN=1`, whose wired opener is a no-op; no further
+automatic browser opens are intended. The server startup line still says
+`Opening dashboard` despite the no-op and should be corrected separately.
