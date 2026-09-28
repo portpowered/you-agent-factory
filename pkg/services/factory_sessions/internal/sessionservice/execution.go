@@ -275,6 +275,7 @@ func invokeCanonicalSession(
 		PrimaryResult: work.CloneWorkContentParts(result.PrimaryResult),
 		ErrorCode:     result.ErrorCode,
 		Message:       result.Message,
+		FailureReason: result.FailureReason,
 		SessionID:     result.SessionID,
 		WorkID:        result.WorkID,
 		WorkName:      result.WorkName,

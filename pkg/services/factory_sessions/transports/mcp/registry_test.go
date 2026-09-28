@@ -893,12 +893,13 @@ func cloneToolDefinitions(t *testing.T, tools []mcpfactorysession.ToolDefinition
 
 type subagentTargetFake struct {
 	factorysessions.Service
-	start     factorysessions.SessionStartRequest
-	invoke    factorysessions.SessionInvokeRequest
-	control   factorysessions.SessionControlRequest
-	started   bool
-	closed    bool
-	invokeErr error
+	start        factorysessions.SessionStartRequest
+	invoke       factorysessions.SessionInvokeRequest
+	control      factorysessions.SessionControlRequest
+	started      bool
+	closed       bool
+	invokeErr    error
+	invokeResult *factorysessions.InvocationResult
 }
 
 func (fake *subagentTargetFake) Start(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
@@ -911,6 +912,9 @@ func (fake *subagentTargetFake) Invoke(_ context.Context, request factorysession
 	fake.invoke = request
 	if fake.invokeErr != nil {
 		return factorysessions.InvocationResult{}, fake.invokeErr
+	}
+	if fake.invokeResult != nil {
+		return *fake.invokeResult, nil
 	}
 	return factorysessions.InvocationResult{
 		Status:        factorysessions.InvocationTerminalStatusCompleted,
@@ -998,5 +1002,24 @@ func TestSubagentForwardsModelOverridesAndCleansUpOnInvocationFailure(t *testing
 	}
 	if !target.closed {
 		t.Fatal("Factory Session was not closed after invocation failure")
+	}
+}
+
+func TestSubagentSurfacesSafeProviderThrottleFailure(t *testing.T) {
+	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
+		Status:        factorysessions.InvocationTerminalStatusFailed,
+		ErrorCode:     "INVOCATION_RUNTIME_FAILURE",
+		Message:       "sensitive ACP session/prompt output with token secret",
+		FailureReason: "throttled",
+	}}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-throttled" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.provider_throttled" || !response.Error.Retryable {
+		t.Fatalf("throttled response = %#v", response)
+	}
+	if response.Error.SessionID != "session-1" || response.Error.Details["failureReason"] != "throttled" {
+		t.Fatalf("throttled diagnostic = %#v", response.Error)
+	}
+	if strings.Contains(response.Error.Message, "sensitive") || !target.closed {
+		t.Fatalf("terminal failure leaked provider text or skipped close: %#v", response.Error)
 	}
 }

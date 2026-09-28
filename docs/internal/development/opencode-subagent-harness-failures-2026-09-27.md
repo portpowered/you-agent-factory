@@ -165,6 +165,26 @@ tree before retrying, and never re-issue the same request blind.
   does not advertise URL elicitation. Focused provider tests cover these
   decisions; no live OpenCode form request was observed.
 
+## Direct MCP stdio probe (September 28, 2026)
+
+- A freshly installed `you` binary launched directly as an MCP stdio server,
+  initialized successfully, and listed 11 tools, including `you.subagent`.
+  This confirms tool discovery and the direct MCP transport worked for that
+  process.
+- A bounded OpenCode edit request through `you.subagent` returned a generic
+  `BAD_REQUEST` saying work reached a failed state before a primary result.
+  The same server's stderr recorded `ACP provider "opencode" session/prompt
+  failed: Internal error: Rate limit exceeded`. The provider rate limit is
+  confirmed; editing and permission behavior were not exercised by this call.
+- The generic MCP error came from invocation primary-result failure
+  classification, which omitted the normalized Work failure reason. The MCP
+  tool now maps a normalized `throttled` reason to a retryable provider-limit
+  error with a fixed message. This mapping has focused tests; a fresh live
+  rate-limit response through the rebuilt MCP binary has not yet been checked.
+- The app's MCP connection reported `Transport closed` after its stale server
+  was restarted. This is a connection lifecycle observation, not evidence of
+  the provider outcome. The direct stdio probe above initialized separately.
+
 ## Limitations of this note
 
 - Re-reading the installed definition after the 19:22 build showed

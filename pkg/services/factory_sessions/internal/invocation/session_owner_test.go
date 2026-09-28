@@ -11,6 +11,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -717,6 +718,20 @@ func TestSessionOwnerWait_ReturnsFailedWhileActiveWorkHasScopedFailure(t *testin
 	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusFailed)
 	assertSessionOwnerEqual(t, "error code", result.ErrorCode, string(work.PrimaryResultErrorCodeFailed))
 	assertSessionOwnerEqual(t, "work state", result.WorkState, "quorum-branch-b:failed")
+}
+
+func TestSessionOwnerWait_CarriesNormalizedFailureReason(t *testing.T) {
+	observation := failedSessionInvocationObservation()
+	observation.WorldState.FailureDetailsByWorkID = map[string]interfaces.FactoryWorldFailureDetail{
+		"work-root": {FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeThrottled, Message: "sensitive provider text"}},
+	}
+	result := waitForSessionOwnerObservation(t, observation, nil)
+	if result.FailureReason != string(workers.WorkFailureTypeThrottled) {
+		t.Fatalf("failure reason = %q, want throttled", result.FailureReason)
+	}
+	if strings.Contains(result.Message, "sensitive") {
+		t.Fatalf("invocation message leaked provider detail: %q", result.Message)
+	}
 }
 
 func TestSessionOwnerWait_DefaultWaitNextPollsUntilCompletion(t *testing.T) {

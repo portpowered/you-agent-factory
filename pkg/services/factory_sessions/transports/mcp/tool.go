@@ -13,6 +13,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -192,11 +193,7 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 		return subagentExecutionFailure(err)
 	}
 	if result.Status != factorysessionexecution.InvocationTerminalStatusCompleted {
-		message := result.Message
-		if message == "" {
-			message = fmt.Sprintf("subagent finished with status %s", result.Status)
-		}
-		return subagentExecutionFailure(errors.New(message))
+		return subagentTerminalFailure(started.SessionID, result)
 	}
 	response := SubagentResult{SessionID: started.SessionID, Status: string(result.Status)}
 	for _, part := range result.PrimaryResult {
@@ -245,5 +242,34 @@ func validateSubagentRequest(ctx context.Context, target factorysessionexecution
 
 func subagentExecutionFailure(err error) ToolResponse[SubagentResult] {
 	envelope := executionErrorEnvelope(err)
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentTerminalFailure(sessionID string, result factorysessionexecution.InvocationResult) ToolResponse[SubagentResult] {
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.execution_failed",
+		Message:   "subagent execution failed before producing a result",
+		SessionID: sessionID,
+		Details:   map[string]any{"status": string(result.Status)},
+	}
+	if result.ErrorCode != "" {
+		envelope.Details["invocationCode"] = result.ErrorCode
+	}
+	switch workers.WorkFailureType(result.FailureReason) {
+	case workers.WorkFailureTypeThrottled:
+		envelope.Code = "factory_session.subagent.provider_throttled"
+		envelope.Message = "provider is temporarily unavailable due to usage or capacity limits"
+		envelope.Retryable = true
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeThrottled)
+	case workers.WorkFailureTypeAuthFailure:
+		envelope.Code = "factory_session.subagent.provider_auth_failure"
+		envelope.Message = "provider authentication failed"
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeAuthFailure)
+	case workers.WorkFailureTypeTimeout:
+		envelope.Code = "factory_session.subagent.provider_timeout"
+		envelope.Message = "provider request timed out"
+		envelope.Retryable = true
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeTimeout)
+	}
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }

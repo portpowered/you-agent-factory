@@ -119,13 +119,13 @@ func (o *SessionOwner) resolveObservation(
 		return FactoryInvocationResult{}, true, err
 	}
 	if observation.MissingPrimaryResult != nil {
-		return o.failedResult(sessionID, input, observation.MissingPrimaryResult), true, nil
+		return o.failedResult(sessionID, input, observation.MissingPrimaryResult, observation.WorldState), true, nil
 	}
 	if classified, ok := work.ClassifyInvocationControlState(sessionID, observation.FactoryState, selectionInput); ok {
-		return o.failedResult(sessionID, input, classified), true, nil
+		return o.failedResult(sessionID, input, classified, observation.WorldState), true, nil
 	}
 	if classified, ok := work.ClassifyMissingPrimaryResult(selectionInput); ok {
-		return o.failedResult(sessionID, input, classified), true, nil
+		return o.failedResult(sessionID, input, classified, observation.WorldState), true, nil
 	}
 	if packaged {
 		worldState, _ := selectionInput.WorldState.(interfaces.FactoryWorldState)
@@ -134,7 +134,7 @@ func (o *SessionOwner) resolveObservation(
 		}
 	}
 	if classified, ok := work.ClassifyFailedInvocation(sessionID, selectionInput); ok {
-		return o.failedResult(sessionID, input, classified), true, nil
+		return o.failedResult(sessionID, input, classified, observation.WorldState), true, nil
 	}
 	if _, exists := observation.WorldState.WorkRequestsByID[input.RequestID]; !exists || observation.ActiveWork {
 		return FactoryInvocationResult{}, false, nil
@@ -169,22 +169,22 @@ func (o *SessionOwner) resolveStoppedInvocation(
 	primaryErr *work.PrimaryResultError,
 	packaged bool,
 ) FactoryInvocationResult {
+	worldState, _ := selectionInput.WorldState.(interfaces.FactoryWorldState)
 	if packaged {
-		worldState, _ := selectionInput.WorldState.(interfaces.FactoryWorldState)
 		if result, ok := o.packagedTerminalFailureResult(sessionID, input, worldState); ok {
 			return result
 		}
 	}
 	if classified, ok := work.ClassifyInvocationControlState(sessionID, "", selectionInput); ok {
-		return o.failedResult(sessionID, input, classified)
+		return o.failedResult(sessionID, input, classified, worldState)
 	}
 	if classified, ok := work.ClassifyFailedInvocation(sessionID, selectionInput); ok {
-		return o.failedResult(sessionID, input, classified)
+		return o.failedResult(sessionID, input, classified, worldState)
 	}
 	if classified, ok := work.ClassifyMissingPrimaryResult(selectionInput); ok {
-		return o.failedResult(sessionID, input, classified)
+		return o.failedResult(sessionID, input, classified, worldState)
 	}
-	return o.failedResult(sessionID, input, primaryErr)
+	return o.failedResult(sessionID, input, primaryErr, worldState)
 }
 
 func (o *SessionOwner) packagedTerminalFailureResult(
@@ -235,6 +235,7 @@ func (o *SessionOwner) failedResult(
 	sessionID string,
 	input SessionInvocationWaitInput,
 	primaryErr *work.PrimaryResultError,
+	worldState interfaces.FactoryWorldState,
 ) FactoryInvocationResult {
 	result := FactoryInvocationResult{
 		RequestID: input.RequestID, TraceID: input.TraceID,
@@ -245,6 +246,9 @@ func (o *SessionOwner) failedResult(
 		ApprovalID: primaryErr.Context.ApprovalID, DispatchID: primaryErr.Context.DispatchID,
 		WorkstationID: primaryErr.Context.WorkstationID, WorkstationName: primaryErr.Context.WorkstationName,
 		Decisions: append([]string(nil), primaryErr.Context.Decisions...),
+	}
+	if detail, ok := worldState.FailureDetailsByWorkID[result.WorkID]; ok && detail.FailureDetail != nil {
+		result.FailureReason = string(detail.FailureDetail.Reason)
 	}
 	o.recordFailure(sessionID, input, result, failureClassForPrimaryResultError(primaryErr.Code))
 	return result

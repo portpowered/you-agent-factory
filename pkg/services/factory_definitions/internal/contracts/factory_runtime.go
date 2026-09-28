@@ -193,6 +193,7 @@ type FactoryInvocationResult struct {
 	PrimaryResult   []work.WorkContentPart
 	ErrorCode       string
 	Message         string
+	FailureReason   string
 	SessionID       string
 	WorkID          string
 	WorkName        string

@@ -38,7 +38,7 @@ func (s *Service) InvokeFactorySession(
 		RequestID: result.RequestID, TraceID: result.TraceID,
 		Status:        factorysessions.InvocationTerminalStatus(result.Status),
 		PrimaryResult: result.PrimaryResult, ErrorCode: result.ErrorCode,
-		Message: result.Message, SessionID: result.SessionID, WorkID: result.WorkID,
+		Message: result.Message, FailureReason: result.FailureReason, SessionID: result.SessionID, WorkID: result.WorkID,
 		WorkName: result.WorkName, WorkState: result.WorkState,
 	}, nil
 }
