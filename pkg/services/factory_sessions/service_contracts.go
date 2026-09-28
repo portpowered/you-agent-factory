@@ -561,6 +561,30 @@ type SessionOperationWait struct {
 	CancelOnTimeout bool
 }
 
+// SessionRuntimeMode selects batch or service execution.
+type SessionRuntimeMode string
+
+const (
+	SessionRuntimeModeBatch   SessionRuntimeMode = "BATCH"
+	SessionRuntimeModeService SessionRuntimeMode = "SERVICE"
+)
+
+// SessionArtifactPolicy controls artifact sink creation.
+type SessionArtifactPolicy string
+
+const (
+	SessionArtifactPolicyEnabled  SessionArtifactPolicy = "enabled"
+	SessionArtifactPolicyDisabled SessionArtifactPolicy = "disabled"
+)
+
+// SessionArtifactStorageConfig is the bounded rolling-file request.
+type SessionArtifactStorageConfig struct {
+	MaxSize    int
+	MaxBackups int
+	MaxAge     int
+	Compress   bool
+}
+
 // SessionRuntimeSelection carries value-only runtime selections for
 // process-owned activation.
 type SessionRuntimeSelection struct {
@@ -575,13 +599,13 @@ type SessionRuntimeSelection struct {
 	SystemConfigPath     string
 	WorkFile             string
 	ModelCacheDirectory  string
-	Mode                 factorydefinitions.RuntimeMode
+	Mode                 SessionRuntimeMode
 	Verbose              bool
 	RuntimeInstanceID    string
-	LogPolicy            factoryruntime.RuntimeFileLoggingPolicy
-	LogConfig            factoryruntime.RuntimeLogStorageConfig
-	MetricsPolicy        factoryruntime.RuntimeMetricsPolicy
-	MetricsConfig        factoryruntime.RuntimeMetricsStorageConfig
+	LogPolicy            SessionArtifactPolicy
+	LogConfig            SessionArtifactStorageConfig
+	MetricsPolicy        SessionArtifactPolicy
+	MetricsConfig        SessionArtifactStorageConfig
 	Host                 RuntimeHostRequest
 	Workers              SessionWorkerSelection
 	Recording            SessionRecordingSelection
