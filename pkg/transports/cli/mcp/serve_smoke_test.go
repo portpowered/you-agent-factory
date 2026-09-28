@@ -118,7 +118,7 @@ func startRunServeSmokeServerWithTarget(
 
 	serveErr := make(chan error, 1)
 	go func() {
-		serveErr <- executeGeneratedMCPServe(ctx, service, target, stdinRead, stdoutWrite, false, "")
+		serveErr <- executeGeneratedMCPServe(ctx, service, target, stdinRead, stdoutWrite, "")
 	}()
 	return newStdioMCPClient(t, stdinWrite, stdoutRead), stdinWrite, serveErr
 }
@@ -129,15 +129,13 @@ func executeGeneratedMCPServe(
 	target factorysessions.Service,
 	stdin io.Reader,
 	stdout io.Writer,
-	wantRuntime bool,
 	wantProjectRoot string,
 ) error {
 	initializeStdio := func(ctx context.Context, intent startupcli.MCPIntent) error {
-		if intent.RuntimeBacked != wantRuntime || intent.ProjectRoot != wantProjectRoot {
+		if intent.ProjectRoot != wantProjectRoot {
 			return fmt.Errorf(
-				"generated command MCP intent = %#v, want runtime=%t project-root=%q",
+				"generated command MCP intent = %#v, want project-root=%q",
 				intent,
-				wantRuntime,
 				wantProjectRoot,
 			)
 		}
@@ -196,11 +194,8 @@ func executeGeneratedMCPServe(
 	root.SetOut(stdout)
 	root.SetErr(io.Discard)
 	args := []string{"server", "mcp"}
-	if wantRuntime {
-		args = append(args, "--runtime")
-		if wantProjectRoot != "" {
-			args = append(args, "--project-root", wantProjectRoot)
-		}
+	if wantProjectRoot != "" {
+		args = append(args, "--project-root", wantProjectRoot)
 	}
 	root.SetArgs(args)
 	return root.ExecuteContext(ctx)

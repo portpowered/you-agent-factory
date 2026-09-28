@@ -13,13 +13,10 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/requestpreparation"
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
-	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
-	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	identitywire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/wire"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
@@ -123,17 +120,16 @@ func NewRuntimeAssembly(
 	return assembly, nil
 }
 
-// NewServiceFromAssembly seals the already-composed owner assembly with the
-// process-scoped opening capability. It returns the existing concrete root;
-// callers bind narrow views directly to that same instance.
+// NewServiceFromAssembly binds the already-composed owner assembly to the
+// existing process root.
 func NewServiceFromAssembly(
 	assembly RuntimeAssembly,
-	runtimeOpening RuntimeOpeningCapability,
+	root *factorysessionroot.Root,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
 ) (*factorysessionroot.Root, error) {
 	service, err := factorysessionroot.NewRootFromAssembly(
 		assembly,
-		runtimeOpening,
+		root,
 		liveChangeCoordinator,
 	)
 	if err != nil {
@@ -199,69 +195,4 @@ func newOwnerServices(
 		return nil, nil, err
 	}
 	return identityService, responseStreams, nil
-}
-
-// TODO(btrc-p4-sessions-lifecycle-003): remove after application Wire callers
-// use the root-owned detached capability.
-// NewDurableExecution constructs the configured durable execution capability
-// without exposing its implementation package to application Wire.
-func NewDurableExecution(
-	projectRoot string,
-	persistencePolicy factorysessions.PersistencePolicy,
-	stores RuntimePersistenceStoreFactory,
-	childExecutorMode string,
-	clock factoryruntime.Clock,
-	syncWaits factorysessionexecution.SyncWaitScheduler,
-	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
-	workflows factoryruntime.JavaScriptWorkflows,
-	orchestration factoryruntime.OrchestrationJavaScriptExecution,
-	workerPresetIDs map[string]struct{},
-	workerSettings factoryruntime.JavaScriptWorkerSettings,
-	recordingWriter recordings.PortableRecordingWriter,
-	generateSessionID factorysessions.SessionIDGenerator,
-	generateResponseEventID factorysessions.ResponseEventIDGenerator,
-	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
-	eventsService events.Service,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-) (durableexecution.Service, error) {
-	responseStreams, err := responsestreamwire.NewService(generateResponseEventID, responseEventRetentionLimits, eventsService)
-	if err != nil {
-		return nil, err
-	}
-	return durableexecutionwire.NewDurable(
-		projectRoot, persistencePolicy, stores, childExecutorMode, clock, syncWaits,
-		checkpointSummaries, workflows, orchestration, workflows,
-		workerPresetIDs, workerSettings,
-		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
-		liveChangeCoordinator,
-	)
-}
-
-// TODO(btrc-p4-sessions-lifecycle-003): remove after application Wire callers
-// use the root-owned detached capability.
-// NewStandaloneExecution constructs the configured standalone execution
-// capability without exposing its implementation package to application Wire.
-func NewStandaloneExecution(
-	provider factorysessions.ExecutionProvider,
-	projectRoot string,
-	stores RuntimePersistenceStoreFactory,
-	fixtureCatalogPath string,
-	childExecutorMode string,
-	execution factorysessionexecution.WorkerExecution,
-	clock factoryruntime.Clock,
-	syncWaits factorysessionexecution.SyncWaitScheduler,
-	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
-	workflows factoryruntime.JavaScriptWorkflows,
-	orchestration factoryruntime.OrchestrationJavaScriptExecution,
-	recordingWriter recordings.PortableRecordingWriter,
-	generateSessionID factorysessions.SessionIDGenerator,
-	fixtureFiles fileeffects.ContractFixtureReader,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-) (durableexecution.Service, error) {
-	return durableexecutionwire.NewStandalone(
-		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,
-		execution,
-		clock, syncWaits, checkpointSummaries, workflows, orchestration, workflows,
-		recordingWriter, generateSessionID, fixtureFiles, liveChangeCoordinator,
-	)
 }

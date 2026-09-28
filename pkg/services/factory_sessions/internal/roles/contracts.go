@@ -5,7 +5,6 @@ package roles
 
 import (
 	"context"
-	"io"
 	"net/http"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -156,52 +155,6 @@ type CursorPersistenceTemporaryFile = factorysessions.CursorPersistenceTemporary
 type CursorPersistenceCreateTemporaryFile = factorysessions.CursorPersistenceCreateTemporaryFile
 
 type CursorStoreFactory func(string) (factorysessions.CursorStore, error)
-
-type ExecutionOpeningFileSystem = factorysessions.ExecutionOpeningFileSystem
-
-type OwnedExecutionService interface {
-	durableexecution.Service
-	Close() error
-}
-
-type ExecutionServiceBuilder func(
-	context.Context,
-	string,
-	string,
-	string,
-	string,
-) (OwnedExecutionService, error)
-
-type StdioApplication interface {
-	Run(context.Context) error
-}
-
-type FixtureStdioApplicationBuilder func(
-	context.Context,
-	durableexecution.Service,
-	io.Reader,
-	io.Writer,
-) (StdioApplication, error)
-
-type RuntimeStdioApplicationBuilder func(
-	context.Context,
-	OpenedExecutionRuntime,
-	io.Reader,
-	io.Writer,
-) (StdioApplication, error)
-
-type StdioExecutionOpening interface {
-	ResolveProjectRoot(string) (string, error)
-	OpenExecutionRuntime(context.Context, factorysessions.ExecutionRuntimeOpeningRequest) (OpenedExecutionRuntime, error)
-	Build(context.Context, string, string, string, string) (OwnedExecutionService, error)
-}
-
-type StdioOpeningOperation interface {
-	OpenStdio(
-		context.Context,
-		factorysessions.StdioOpeningRequest,
-	) (StdioApplication, error)
-}
 
 type RequestPreparation interface {
 	PrepareStart(factorysessions.StartRequest) (factorysessions.StartRequest, error)

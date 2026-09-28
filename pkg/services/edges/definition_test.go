@@ -156,7 +156,6 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 		},
 		FactorySessionCursorPersistenceFileSystem:  platformfilesystem.Local{},
 		FactorySessionRuntimePersistenceFileSystem: platformfilesystem.Local{},
-		FactorySessionExecutionOpeningFileSystem:   platformfilesystem.Local{},
 		FactorySessionDirectoryInspection:          platformfilesystem.Local{},
 		FactorySessionContractFixtureReader: func(string) ([]byte, error) {
 			contractFixtureRead = true
@@ -314,9 +313,6 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	}
 	if got := merged.FactorySessionIDGenerator(); got != "session-edge-id" || !sessionIDGenerated {
 		t.Fatalf("FactorySessionIDGenerator replacement = (%q, %v)", got, sessionIDGenerated)
-	}
-	if _, ok := merged.FactorySessionExecutionOpeningFileSystem.(platformfilesystem.Local); !ok {
-		t.Fatalf("FactorySessionExecutionOpeningFileSystem = %T, want explicit replacement", merged.FactorySessionExecutionOpeningFileSystem)
 	}
 	if _, err := merged.FactorySessionCursorCreateTemporaryFile("ignored", "ignored"); !errors.Is(err, cursorTemporaryFileError) || !cursorTemporaryFileRequested {
 		t.Fatalf("FactorySessionCursorCreateTemporaryFile replacement = (%v, %v), want injected call", err, cursorTemporaryFileRequested)

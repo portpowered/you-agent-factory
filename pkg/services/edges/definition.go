@@ -152,7 +152,6 @@ type Edges struct {
 	// messages stay behind the Models wire boundary.
 	ModelInvocationGRPCDialer                  platformgrpc.Dialer
 	FactorySessionsWorkingDirectory            platformfilesystem.WorkingDirectory
-	FactorySessionExecutionOpeningFileSystem   factorysessions.ExecutionOpeningFileSystem
 	FactorySessionDirectoryInspection          factorysessions.DirectoryInspection
 	FactorySessionResolveHomeDirectory         factorysessions.HomeDirectoryResolver
 	FactorySessionResolveLogicalTargetSymlinks factorysessions.LogicalTargetResolveSymlinks
@@ -468,9 +467,6 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.FactorySessionsWorkingDirectory != nil {
 		defaults.FactorySessionsWorkingDirectory = replacements.FactorySessionsWorkingDirectory
-	}
-	if replacements.FactorySessionExecutionOpeningFileSystem != nil {
-		defaults.FactorySessionExecutionOpeningFileSystem = replacements.FactorySessionExecutionOpeningFileSystem
 	}
 	if replacements.FactorySessionDirectoryInspection != nil {
 		defaults.FactorySessionDirectoryInspection = replacements.FactorySessionDirectoryInspection

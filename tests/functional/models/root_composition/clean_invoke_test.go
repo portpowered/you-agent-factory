@@ -3,12 +3,9 @@ package root_composition_test
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
 	"net/http"
 	"strings"
-	"sync"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -51,9 +48,7 @@ func TestModelsInvokeCleanDirectoryUsesStandaloneModelsRoot(t *testing.T) {
 	hostProtocol := &joinedProtocolNegotiator{}
 	compatibility := &joinedCompatibilityChecker{}
 	protocol := &omniTextProtocolFixture{response: generated}
-	factoryOpening := &cleanDirectoryFactoryOpeningProbe{}
 	process := functionalBuildProcess(t, serviceedges.Edges{
-		FactorySessionExecutionOpeningFileSystem: factoryOpening,
 		FactorySessionResolveHomeDirectory: func() (string, error) {
 			return home, nil
 		},
@@ -104,9 +99,6 @@ func TestModelsInvokeCleanDirectoryUsesStandaloneModelsRoot(t *testing.T) {
 	if rejectingNetwork.Calls() != 0 {
 		t.Fatalf("clean-directory asset network calls = %d, want zero", rejectingNetwork.Calls())
 	}
-	if got := factoryOpening.Calls(); got != 0 {
-		t.Fatalf("Factory execution-opening calls = %d, want zero for standalone invocation", got)
-	}
 	request := protocol.Request()
 	if request.Operation != models.OperationOMNI || request.Prompt != "clean standalone invocation" || len(request.Inputs) != 1 ||
 		request.Inputs[0].Slot != "prompt" || request.Inputs[0].Modality != models.ModalityText ||
@@ -119,7 +111,7 @@ func TestModelsInvokeCleanDirectoryUsesStandaloneModelsRoot(t *testing.T) {
 	if got := protocol.Calls(); got != 1 {
 		t.Fatalf("clean-directory protocol calls = %d, want one controlled invocation", got)
 	}
-	t.Logf("clean-directory runtime proof: root=BuildProcess command=you models invoke %s --input prompt=<controlled> output=semantic text response=%q factoryExecutionOpens=%d assetNetworkCalls=%d hostStarts=%d activeHosts=%t protocolInvokes=%d", models.BuiltInModelNameLLM, stdout.String(), factoryOpening.Calls(), rejectingNetwork.Calls(), host.Calls(), host.Active(), protocol.Calls())
+	t.Logf("clean-directory runtime proof: root=BuildProcess command=you models invoke %s --input prompt=<controlled> output=semantic text response=%q assetNetworkCalls=%d hostStarts=%d activeHosts=%t protocolInvokes=%d", models.BuiltInModelNameLLM, stdout.String(), rejectingNetwork.Calls(), host.Calls(), host.Active(), protocol.Calls())
 }
 
 func cleanModelsEnvironment(home string) []string {
@@ -139,31 +131,4 @@ func (launcher *recordingModelHostLauncher) Active() bool {
 	launcher.mu.Lock()
 	defer launcher.mu.Unlock()
 	return launcher.active
-}
-
-type cleanDirectoryFactoryOpeningProbe struct {
-	mu    sync.Mutex
-	calls int
-}
-
-func (probe *cleanDirectoryFactoryOpeningProbe) Getwd() (string, error) {
-	probe.record()
-	return "", errors.New("clean-directory test must not open Factory runtime")
-}
-
-func (probe *cleanDirectoryFactoryOpeningProbe) Stat(string) (fs.FileInfo, error) {
-	probe.record()
-	return nil, errors.New("clean-directory test must not inspect Factory runtime")
-}
-
-func (probe *cleanDirectoryFactoryOpeningProbe) record() {
-	probe.mu.Lock()
-	probe.calls++
-	probe.mu.Unlock()
-}
-
-func (probe *cleanDirectoryFactoryOpeningProbe) Calls() int {
-	probe.mu.Lock()
-	defer probe.mu.Unlock()
-	return probe.calls
 }

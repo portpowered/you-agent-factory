@@ -9,7 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors/persistence"
 	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	runtimepersist "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
-	executionopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/executionopening"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -33,20 +32,12 @@ type (
 	CursorPersistenceTemporaryFile       = roles.CursorPersistenceTemporaryFile
 	CursorPersistenceCreateTemporaryFile = roles.CursorPersistenceCreateTemporaryFile
 	CursorStoreFactory                   = roles.CursorStoreFactory
-	ExecutionOpeningFileSystem           = roles.ExecutionOpeningFileSystem
 	InvocationMetricsRecorder            = roles.InvocationMetricsRecorder
 	RuntimeResolver                      = roles.RuntimeResolver
 	CurrentRuntimeResolver               = roles.CurrentRuntimeResolver
 	RuntimeAssembly                      = roles.RuntimeAssembly
 	RuntimeReader                        = roles.RuntimeReader
-	OwnedExecutionService                = roles.OwnedExecutionService
-	ExecutionServiceBuilder              = roles.ExecutionServiceBuilder
 	DurableExecutionService              = durableexecution.Service
-	StdioApplication                     = roles.StdioApplication
-	FixtureStdioApplicationBuilder       = roles.FixtureStdioApplicationBuilder
-	RuntimeStdioApplicationBuilder       = roles.RuntimeStdioApplicationBuilder
-	StdioExecutionOpening                = roles.StdioExecutionOpening
-	StdioOpeningOperation                = roles.StdioOpeningOperation
 	RequestPreparation                   = roles.RequestPreparation
 	Registry                             = roles.Registry
 	RuntimePersistenceStore              = roles.RuntimePersistenceStore
@@ -69,6 +60,8 @@ type (
 	RuntimeResources                     = roles.RuntimeResources
 	RuntimeVisualizationServices         = roles.RuntimeVisualizationServices
 	OpenedApplicationRuntime             = roles.OpenedApplicationRuntime
+	HistoricalApplicationInspection      = service.HistoricalApplicationInspection
+	SessionPresentation                  = service.SessionPresentation
 	OpenedInvocationRuntime              = roles.OpenedInvocationRuntime
 	OpenedExecutionRuntime               = roles.OpenedExecutionRuntime
 	RuntimeOpeningCapability             = roles.RuntimeOpening
@@ -80,7 +73,6 @@ type (
 	ReplayRecordingReader = fileeffects.ReplayRecordingReader
 	InitialWorkReader     = fileeffects.InitialWorkReader
 
-	ApplicationRuntimeOpening              = service.ApplicationRuntimeOpening
 	InvocationRuntimeOpening               = service.InvocationRuntimeOpening
 	ExecutionRuntimeOpening                = service.ExecutionRuntimeOpening
 	ProviderSessionsRuntimeOpeningPorts    = service.ProviderSessionsPorts
@@ -113,12 +105,6 @@ type (
 	InvocationArtifactExporter             = factorysessioncontracts.InvocationArtifactExporter
 
 	Root = factorysessionroot.Root
-
-	StandaloneSessionExecutionFactory   = executionopening.StandaloneSessionExecutionFactory
-	WorkerExecution                     = executionopening.WorkerExecution
-	WorkerInvocationWithProgressFactory = executionopening.WorkerInvocationWithProgressFactory
-	ExecutionOpeningFactory             = executionopening.Factory
-	StdioOpeningService                 = executionopening.StdioOpeningService
 )
 
 // NewDefinitionRuntimeRouter returns the zero-value, inert Definitions
@@ -135,7 +121,6 @@ var (
 	NewDurableExecutionRuntime = service.NewDurableExecution
 	ModelHostDiagnosticLogger  = service.ModelHostDiagnosticLogger
 	ModelHostDiagnosticMetrics = service.ModelHostDiagnosticMetrics
-	NewExecutionOpeningFactory = executionopening.NewFactory
 )
 
 func NewRoot(
@@ -150,7 +135,7 @@ func NewRoot(
 	webhooksPorts *WebhooksRuntimeOpeningPorts,
 	workersPorts *WorkersRuntimeOpeningPorts,
 	operatorSettings *OperatorSettingsRuntimeOpeningPorts,
-) (RuntimeOpening, error) {
+) (*Root, error) {
 	root, err := service.NewRoot(
 		providerSessions,
 		factoryRuntime,
@@ -175,7 +160,7 @@ func NewLifecyclePlanOperation() LifecyclePlanOperation {
 }
 
 func NewInvocationOperation(
-	openRuntime InvocationRuntimeOpening,
+	sessions factorysessions.Service,
 	modelsRoot models.Service,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
@@ -187,7 +172,7 @@ func NewInvocationOperation(
 	presentations OpeningPresentationOwner,
 ) (InvocationOperation, error) {
 	return invocationwire.NewOperation(
-		openRuntime,
+		sessions,
 		modelsRoot,
 		workingDirectory,
 		resolveCurrentDir,
@@ -198,17 +183,4 @@ func NewInvocationOperation(
 		logger,
 		presentations,
 	)
-}
-
-func NewExecutionServiceBuilder(factory *ExecutionOpeningFactory) ExecutionServiceBuilder {
-	return factory.Builder()
-}
-
-func NewStdioOpeningService(
-	opening StdioExecutionOpening,
-	buildFixture FixtureStdioApplicationBuilder,
-	buildRuntime RuntimeStdioApplicationBuilder,
-	presentations OpeningPresentationOwner,
-) (*StdioOpeningService, error) {
-	return executionopening.NewStdioOpeningService(opening, buildFixture, buildRuntime, presentations)
 }

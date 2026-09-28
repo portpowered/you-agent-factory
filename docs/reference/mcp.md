@@ -19,7 +19,7 @@ you server mcp
 
 The server speaks MCP JSON-RPC over stdin and stdout. Keep stdout reserved for
 protocol messages; process diagnostics use stderr. HTTP and SSE MCP transports
-are not supported, and neither documented mode connects to a live Factory HTTP
+are not supported, and the stdio server does not connect to a live Factory HTTP
 server.
 
 Configure these three host fields explicitly:
@@ -28,7 +28,7 @@ Configure these three host fields explicitly:
 |-------|-------|
 | Executable | `you` on the host `PATH`, or an absolute path to the installed binary |
 | Arguments | `server`, `mcp` |
-| Working directory | Absolute project root used to find workflow sources or the fixture catalog |
+| Working directory | Absolute project root used to find workflow sources |
 
 No extra environment variables are required. A generic host configuration is:
 
@@ -79,47 +79,21 @@ directory is not the project being edited; otherwise the server's working
 directory is used. Each call opens and closes its own Factory Session.
 
 If no provider default is configured, run `you init --provider codex` or supply
-`provider` in the tool call. `you.subagent` is available in both MCP backing
-modes; the mode controls the separate durable JavaScript Factory Session tools.
+`provider` in the tool call. Factory Session tools use the same process-owned
+Sessions service.
 
-## Choose A Backing Mode
+## Choose A Project Root
 
-Both modes expose the same canonical `you.factory_session.*` tools. They differ
-only in how Factory Sessions execute.
-
-| Mode | Host arguments | Use it for |
-|------|----------------|------------|
-| Fixture-backed (default) | `["server", "mcp"]` | Deterministic durable-session smoke and live `you.subagent` calls |
-| Runtime-backed | `["server", "mcp", "--runtime"]` | Live durable JavaScript workflow execution |
-
-The equivalent runtime-backed child-process command is:
-
-```bash
-you server mcp --runtime
-```
-
-Fixture-backed mode searches upward from the working directory for
-`pkg/transports/http/testdata/durable-session-contract-fixtures.json`.
-When the catalog is elsewhere, pass its path explicitly:
-
-```json
-"args": ["server", "mcp", "--fixture-catalog", "/absolute/path/to/durable-session-contract-fixtures.json"]
-```
-
-Runtime-backed mode resolves workflow sources from `cwd`. To use a different
-source root, add `--project-root`:
+Workflow sources resolve from `cwd`. To use a different source root, add
+`--project-root`:
 
 ```json
 {
   "command": "/absolute/path/to/you",
-  "args": ["server", "mcp", "--runtime", "--project-root", "/absolute/path/to/project"],
+  "args": ["server", "mcp", "--project-root", "/absolute/path/to/project"],
   "cwd": "/absolute/path/to/project"
 }
 ```
-
-Do not combine `--runtime` with `--fixture-catalog`. Use runtime mode for real
-`INLINE_WORKFLOW` or named-source execution; the default mode resolves only the
-deterministic catalog scenarios.
 
 ## Use Canonical Factory Session Tools
 
@@ -160,10 +134,8 @@ After saving the host configuration:
 6. When the workflow creates child Work, inspect dispatches, artifacts, and
    ordered events using the same `sessionId`.
 
-For the repository fixture catalog, workflow `release-train` with request id
-`req-js-run-n-001` is the published asynchronous smoke scenario. A not-ready
-result while its status is running is expected and proves that polling stays on
-the original Factory Session.
+For an asynchronous workflow, a not-ready result while its status is running
+is expected. Poll the original Factory Session id.
 
 ## Know What Is Proven
 
@@ -171,10 +143,9 @@ The repository automates the shared server behavior that every host depends on:
 
 | Check | Automated proof |
 |-------|-----------------|
-| Fixture-backed initialize, discovery, validate, async start, status, and not-ready result | `pkg/transports/cli/mcp/serve_smoke_test.go` |
-| Runtime-backed async start, status, and result | `pkg/transports/cli/mcp/serve_runtime_smoke_test.go` |
-| Runtime-backed resume and dispatch continuity | `pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go` |
-| Additive fixture/runtime regression after resume | `pkg/transports/cli/mcp/serve_runtime_resume_non_regression_test.go` |
+| Initialize, discovery, validate, async start, status, and not-ready result | `pkg/transports/cli/mcp/serve_smoke_test.go` |
+| Async start, status, and result | `pkg/transports/cli/mcp/serve_runtime_smoke_test.go` |
+| Resume and dispatch continuity | `pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go` |
 
 These tests prove the stdio protocol and Factory Session tool behavior, not a
 specific host UI or configuration parser. Manually confirm that the selected
@@ -195,14 +166,12 @@ go test ./tests/functional/smoke -run TestDocsCommandSmoke
 |--------------------|--------|
 | Host cannot start `you` | Use an absolute executable path, confirm it is executable, and keep `server` and `mcp` as separate arguments. |
 | No tools appear | Reload the host, inspect child-process stderr, and confirm stdout is not receiving logs or shell banners. |
-| `fixture catalog not found` | Start from the repository/project root that contains the catalog or pass an absolute `--fixture-catalog` path. |
-| Named workflow or source is not found | Set `cwd` to the project root or use runtime mode with an explicit `--project-root`; confirm the source exists under a supported source location. |
-| `cannot combine --runtime with --fixture-catalog` | Choose exactly one backing mode and remove the other mode's flag. |
+| Named workflow or source is not found | Set `cwd` to the project root or pass an explicit `--project-root`; confirm the source exists under a supported source location. |
 | `factory_session.result.not_ready` with `retryable: true` | Keep the same `sessionId` and poll status/result with backoff; do not start duplicate Work. |
 | `factory_session.session.not_found` | Stop polling the bad id and restore the exact `sessionId` returned by start; reconnecting does not create a replacement session. |
 | Event reconnect cursor is not found | Keep the same Factory Session, restore a known event id or sequence, and do not assume missed events were processed. |
 | `factory_session.start.request_id_conflict` | Reuse a request id only with its original source and arguments; use a new id for a genuinely different request. |
-| `factory_session.service.unavailable` | Restore or respawn the selected fixture/runtime service, then retry the same safe read or idempotent start tuple. |
+| `factory_session.service.unavailable` | Restart the MCP child process, then retry the same safe read or idempotent start tuple. |
 | Host expects an HTTP URL | Configure a stdio child process instead; HTTP and SSE are unsupported. |
 
 ## Related Topics

@@ -209,8 +209,6 @@ type sessionWorkAdmissionResponseStreamRecorder struct {
 	home             string
 	local            platformfilesystem.Local
 	workingDirectory atomic.Int32
-	executionGetwd   atomic.Int32
-	executionStat    atomic.Int32
 	directoryStat    atomic.Int32
 	directoryReadDir atomic.Int32
 	resolveHome      atomic.Int32
@@ -242,7 +240,6 @@ func newSessionWorkAdmissionResponseStreamRecorder(t *testing.T) *sessionWorkAdm
 func (recorder *sessionWorkAdmissionResponseStreamRecorder) edges() serviceedges.Edges {
 	return serviceedges.Edges{
 		FactorySessionsWorkingDirectory:            &sessionWorkAdmissionWorkingDirectory{recorder: recorder},
-		FactorySessionExecutionOpeningFileSystem:   &sessionWorkAdmissionExecutionOpening{recorder: recorder},
 		FactorySessionDirectoryInspection:          &sessionWorkAdmissionDirectoryInspection{recorder: recorder},
 		FactorySessionResolveHomeDirectory:         recorder.resolveHomeDirectory,
 		FactorySessionResolveLogicalTargetSymlinks: recorder.resolveLogicalTargetSymlinks,
@@ -276,20 +273,6 @@ type sessionWorkAdmissionWorkingDirectory struct {
 func (adapter *sessionWorkAdmissionWorkingDirectory) Getwd() (string, error) {
 	adapter.recorder.workingDirectory.Add(1)
 	return adapter.recorder.local.Getwd()
-}
-
-type sessionWorkAdmissionExecutionOpening struct {
-	recorder *sessionWorkAdmissionResponseStreamRecorder
-}
-
-func (adapter *sessionWorkAdmissionExecutionOpening) Getwd() (string, error) {
-	adapter.recorder.executionGetwd.Add(1)
-	return adapter.recorder.local.Getwd()
-}
-
-func (adapter *sessionWorkAdmissionExecutionOpening) Stat(path string) (fs.FileInfo, error) {
-	adapter.recorder.executionStat.Add(1)
-	return adapter.recorder.local.Stat(path)
 }
 
 type sessionWorkAdmissionDirectoryInspection struct {
@@ -408,7 +391,6 @@ func (recorder *sessionWorkAdmissionResponseStreamRecorder) observeRuntimeHost(f
 }
 
 var _ platformfilesystem.WorkingDirectory = (*sessionWorkAdmissionWorkingDirectory)(nil)
-var _ factorysessions.ExecutionOpeningFileSystem = (*sessionWorkAdmissionExecutionOpening)(nil)
 var _ factorysessions.DirectoryInspection = (*sessionWorkAdmissionDirectoryInspection)(nil)
 var _ factorysessions.CursorPersistenceFileSystem = (*sessionWorkAdmissionCursorPersistence)(nil)
 var _ factorysessions.RuntimePersistenceFileSystem = (*sessionWorkAdmissionRuntimePersistence)(nil)

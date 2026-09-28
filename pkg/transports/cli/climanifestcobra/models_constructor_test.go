@@ -492,7 +492,7 @@ func TestMCPCommandIsDetachedAndManifestPresented(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"fixture-catalog", "runtime", "project-root"} {
+	for _, name := range []string{"project-root"} {
 		if serve.Flags().Lookup(name) == nil {
 			t.Fatalf("manifest flag %q was not registered", name)
 		}
@@ -503,7 +503,7 @@ func TestMCPCommandIsDetachedAndManifestPresented(t *testing.T) {
 		t.Fatalf("help: %v", err)
 	}
 	if got := output.String(); !strings.Contains(got, "you docs mcp") ||
-		!strings.Contains(got, "durable-session-contract-fixtures.json") {
+		!strings.Contains(got, "--project-root") {
 		t.Fatalf("manifest help missing canonical details:\n%s", got)
 	}
 }
@@ -516,13 +516,12 @@ func TestMCPCommandResolvesNormalizedInputsAndProvenance(t *testing.T) {
 			return nil
 		},
 	)
-	root.SetArgs([]string{"server", "mcp", "--fixture-catalog", "  fixtures.json  ", "--project-root", "  project  "})
+	root.SetArgs([]string{"server", "mcp", "--project-root", "  project  "})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 	for inputID, want := range map[string]string{
-		"you.server.mcp.flag.fixture-catalog": "fixtures.json",
-		"you.server.mcp.flag.project-root":    "project",
+		"you.server.mcp.flag.project-root": "project",
 	} {
 		got, valueErr := local.String(inputID)
 		if valueErr != nil || got != want {
@@ -532,13 +531,6 @@ func TestMCPCommandResolvesNormalizedInputsAndProvenance(t *testing.T) {
 			Provenance: resolvedinput.SourceCLIFlag, Changed: true,
 		})
 	}
-	runtimeBacked, err := local.Bool("you.server.mcp.flag.runtime")
-	if err != nil || runtimeBacked {
-		t.Fatalf("resolved runtime = %t, %v; want false", runtimeBacked, err)
-	}
-	assertMCPResolvedState(t, local, "you.server.mcp.flag.runtime", resolvedinput.State{
-		Provenance: resolvedinput.SourceManifestDefault, Default: true,
-	})
 }
 
 func newMCPRoot(
@@ -582,27 +574,6 @@ func newMCPRoot(
 		t.Fatal(err)
 	}
 	return root
-}
-
-func TestMCPManifestRelationshipRejectsConflictingSourcesBeforeHandler(t *testing.T) {
-	calls := 0
-	mcp, err := climanifestcobra.NewMCPCommand(
-		func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error {
-			calls++
-			return nil
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mcp.SetArgs([]string{"mcp", "--runtime", "--fixture-catalog", "fixtures.json"})
-	err = mcp.Execute()
-	if err == nil || err.Error() != "cannot combine --runtime with --fixture-catalog" {
-		t.Fatalf("execute error = %v, want manifest relationship rejection", err)
-	}
-	if calls != 0 {
-		t.Fatalf("handler calls = %d, want zero", calls)
-	}
 }
 
 func assertMCPResolvedState(

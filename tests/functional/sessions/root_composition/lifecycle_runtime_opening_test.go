@@ -248,8 +248,6 @@ type sessionActivationRecorder struct {
 	home             string
 	local            platformfilesystem.Local
 	workingDirectory atomic.Int32
-	executionGetwd   atomic.Int32
-	executionStat    atomic.Int32
 	directoryStat    atomic.Int32
 	directoryReadDir atomic.Int32
 	resolveHome      atomic.Int32
@@ -277,7 +275,6 @@ func newSessionActivationRecorder(t *testing.T) *sessionActivationRecorder {
 func (recorder *sessionActivationRecorder) edges() serviceedges.Edges {
 	return serviceedges.Edges{
 		FactorySessionsWorkingDirectory:            &sessionActivationWorkingDirectory{recorder: recorder},
-		FactorySessionExecutionOpeningFileSystem:   &sessionActivationExecutionOpening{recorder: recorder},
 		FactorySessionDirectoryInspection:          &sessionActivationDirectoryInspection{recorder: recorder},
 		FactorySessionResolveHomeDirectory:         recorder.resolveHomeDirectory,
 		FactorySessionResolveLogicalTargetSymlinks: recorder.resolveLogicalTargetSymlinks,
@@ -317,20 +314,6 @@ type sessionActivationWorkingDirectory struct {
 func (adapter *sessionActivationWorkingDirectory) Getwd() (string, error) {
 	adapter.recorder.workingDirectory.Add(1)
 	return adapter.recorder.local.Getwd()
-}
-
-type sessionActivationExecutionOpening struct {
-	recorder *sessionActivationRecorder
-}
-
-func (adapter *sessionActivationExecutionOpening) Getwd() (string, error) {
-	adapter.recorder.executionGetwd.Add(1)
-	return adapter.recorder.local.Getwd()
-}
-
-func (adapter *sessionActivationExecutionOpening) Stat(path string) (fs.FileInfo, error) {
-	adapter.recorder.executionStat.Add(1)
-	return adapter.recorder.local.Stat(path)
 }
 
 type sessionActivationDirectoryInspection struct {
@@ -430,7 +413,6 @@ func (recorder *sessionActivationRecorder) observeRuntimeHost(factorysessions.Ru
 }
 
 var _ platformfilesystem.WorkingDirectory = (*sessionActivationWorkingDirectory)(nil)
-var _ factorysessions.ExecutionOpeningFileSystem = (*sessionActivationExecutionOpening)(nil)
 var _ factorysessions.DirectoryInspection = (*sessionActivationDirectoryInspection)(nil)
 var _ factorysessions.CursorPersistenceFileSystem = (*sessionActivationCursorPersistence)(nil)
 var _ factorysessions.RuntimePersistenceFileSystem = (*sessionActivationRuntimePersistence)(nil)

@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -82,7 +81,7 @@ type mcpToolErrorEnvelope struct {
 // TestMCPMalformedParametersReturnInvalidParams proves malformed MCP parameters
 // return a JSON-RPC invalid-params error at the public stdio/protocol boundary.
 func TestMCPMalformedParametersReturnInvalidParams(t *testing.T) {
-	withSharedMCPProtocolServer(t, func(server *fixtureBackedMCPServer) {
+	withSharedMCPProtocolServer(t, func(server *projectRootBackedMCPServer) {
 		assertInitializeHandshake(t, server)
 		response := server.exchange(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}`)
 		assertMCPResponseID(t, response, float64(1))
@@ -99,7 +98,7 @@ func TestMCPMalformedParametersReturnInvalidParams(t *testing.T) {
 // Session tools/call for a missing session id returns the canonical not-found
 // result at the public MCP stdio/protocol boundary.
 func TestMCPMissingFactorySessionReturnsCanonicalNotFound(t *testing.T) {
-	withSharedMCPProtocolServer(t, func(server *fixtureBackedMCPServer) {
+	withSharedMCPProtocolServer(t, func(server *projectRootBackedMCPServer) {
 		assertInitializeHandshake(t, server)
 		request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + factorySessionGetToolName +
 			`","arguments":{"sessionId":"` + missingFactorySessionID + `"}}}`
@@ -145,14 +144,14 @@ func TestMCPServerShutdownClosesStdioCleanly(t *testing.T) {
 	t.Parallel()
 	// Keep this root isolated: whole-protocol cancellation and stdout EOF are
 	// the lifecycle witness, so sharing the package root would blur ownership.
-	server := startFixtureBackedMCPServer(t)
+	server := startProjectRootBackedMCPServer(t)
 	defer server.cleanup()
 
 	assertInitializeHandshake(t, server)
-	assertFixtureBackedMCPServerShutdownClean(t, server)
+	assertProjectRootBackedMCPServerShutdownClean(t, server)
 }
 
-type fixtureBackedMCPServer struct {
+type projectRootBackedMCPServer struct {
 	t                *testing.T
 	process          support.ApplicationProcess
 	ownsProcess      bool
@@ -172,17 +171,17 @@ type fixtureBackedMCPServer struct {
 	cleanupErr       error
 }
 
-func startFixtureBackedMCPServer(t *testing.T) *fixtureBackedMCPServer {
+func startProjectRootBackedMCPServer(t *testing.T) *projectRootBackedMCPServer {
 	t.Helper()
 
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}
-	return startFixtureBackedMCPServerWithProcess(t, process, true)
+	return startProjectRootBackedMCPServerWithProcess(t, process, true)
 }
 
-func withSharedMCPProtocolServer(t *testing.T, run func(*fixtureBackedMCPServer)) {
+func withSharedMCPProtocolServer(t *testing.T, run func(*projectRootBackedMCPServer)) {
 	t.Helper()
 
 	sharedMCPProtocolFixture.Lock()
@@ -196,7 +195,7 @@ func withSharedMCPProtocolServer(t *testing.T, run func(*fixtureBackedMCPServer)
 		t.Fatalf("BuildProcess() for shared MCP protocol rows: %v", sharedMCPProtocolFixture.buildErr)
 	}
 
-	server := startFixtureBackedMCPServerWithProcess(t, sharedMCPProtocolFixture.process, false)
+	server := startProjectRootBackedMCPServerWithProcess(t, sharedMCPProtocolFixture.process, false)
 	defer server.cleanup()
 	run(server)
 }
@@ -217,14 +216,14 @@ func closeSharedMCPProtocolFixture() error {
 	return sharedMCPProtocolFixture.closeErr
 }
 
-func startFixtureBackedMCPServerWithProcess(
+func startProjectRootBackedMCPServerWithProcess(
 	t *testing.T,
 	process support.ApplicationProcess,
 	ownsProcess bool,
-) *fixtureBackedMCPServer {
+) *projectRootBackedMCPServer {
 	t.Helper()
 	if process == nil {
-		t.Fatal("start fixture-backed MCP server requires an application process")
+		t.Fatal("start project-root backed MCP server requires an application process")
 	}
 
 	stdinRead, stdinWrite, err := os.Pipe()
@@ -241,24 +240,23 @@ func startFixtureBackedMCPServerWithProcess(
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	fixturePath := testutil.MustRepoPath(t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json")
-	workingDirectory := t.TempDir()
+	projectRoot := support.ScaffoldSingleStepFactory(t, "mcp-protocol-errors")
 	homeDirectory := t.TempDir()
 
 	serveErr := make(chan error, 1)
 	var stderr bytes.Buffer
 	go func() {
 		serveErr <- process.Execute(root.Input{
-			Args:             []string{"you", "server", "mcp", "--fixture-catalog", fixturePath},
+			Args:             []string{"you", "server", "mcp", "--project-root", projectRoot},
 			Env:              append(os.Environ(), "HOME="+homeDirectory, "USERPROFILE="+homeDirectory),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
 			Stderr:           &stderr,
 			Context:          ctx,
-			WorkingDirectory: workingDirectory,
+			WorkingDirectory: projectRoot,
 		})
 	}()
-	server := &fixtureBackedMCPServer{
+	server := &projectRootBackedMCPServer{
 		t:                t,
 		process:          process,
 		ownsProcess:      ownsProcess,
@@ -269,14 +267,14 @@ func startFixtureBackedMCPServerWithProcess(
 		stdoutWrite:      stdoutWrite,
 		serveErr:         serveErr,
 		cancel:           cancel,
-		workingDirectory: workingDirectory,
+		workingDirectory: projectRoot,
 		shutdownDone:     make(chan struct{}),
 	}
 	t.Cleanup(server.cleanup)
 	return server
 }
 
-func assertInitializeHandshake(t *testing.T, server *fixtureBackedMCPServer) {
+func assertInitializeHandshake(t *testing.T, server *projectRootBackedMCPServer) {
 	t.Helper()
 
 	initResponse := server.exchange(`{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"protocol-errors-test","version":"test"}}}`)
@@ -296,7 +294,7 @@ func assertMCPResponseID(t *testing.T, response mcpJSONRPCResponse, want any) {
 	}
 }
 
-func (s *fixtureBackedMCPServer) exchange(request string) mcpJSONRPCResponse {
+func (s *projectRootBackedMCPServer) exchange(request string) mcpJSONRPCResponse {
 	s.t.Helper()
 
 	if _, err := s.stdin.Write([]byte(request + "\n")); err != nil {
@@ -333,7 +331,7 @@ func (s *fixtureBackedMCPServer) exchange(request string) mcpJSONRPCResponse {
 // working root, and (for isolated scenarios) application root. It is
 // idempotent because both a scenario defer and testing.T cleanup protect the
 // same real resources.
-func (s *fixtureBackedMCPServer) cleanup() {
+func (s *projectRootBackedMCPServer) cleanup() {
 	s.cleanupOnce.Do(func() {
 		var cleanupErrors []error
 		if err := s.shutdown(); err != nil {
@@ -358,20 +356,20 @@ func (s *fixtureBackedMCPServer) cleanup() {
 	}
 }
 
-func (s *fixtureBackedMCPServer) shutdown() error {
+func (s *projectRootBackedMCPServer) shutdown() error {
 	s.shutdownOnce.Do(func() {
 		s.cancel()
 		_ = s.stdin.Close()
 		select {
 		case err := <-s.serveErr:
 			if err != nil && err != io.EOF && !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "file already closed") {
-				s.shutdownErr = fmt.Errorf("fixture-backed MCP server: %w", err)
+				s.shutdownErr = fmt.Errorf("project-root backed MCP server: %w", err)
 			}
 		// This bounded wait is only a hang guard. A returned serveErr is the
 		// deterministic completion signal; the timeout protects test cleanup
 		// from a genuinely stuck stream without acting as synchronization.
 		case <-time.After(mcpProtocolStopTimeout):
-			s.shutdownErr = fmt.Errorf("fixture-backed MCP server did not shut down after stdin closed")
+			s.shutdownErr = fmt.Errorf("project-root backed MCP server did not shut down after stdin closed")
 		}
 		close(s.shutdownDone)
 	})
@@ -379,7 +377,7 @@ func (s *fixtureBackedMCPServer) shutdown() error {
 	return s.shutdownErr
 }
 
-func (s *fixtureBackedMCPServer) closeStreams() {
+func (s *projectRootBackedMCPServer) closeStreams() {
 	s.streamsOnce.Do(func() {
 		_ = s.stdinRead.Close()
 		_ = s.stdin.Close()
@@ -397,11 +395,11 @@ func closeMCPProcessAfterStartFailure(process support.ApplicationProcess, ownsPr
 	cancel()
 }
 
-func assertFixtureBackedMCPServerShutdownClean(t *testing.T, server *fixtureBackedMCPServer) {
+func assertProjectRootBackedMCPServerShutdownClean(t *testing.T, server *projectRootBackedMCPServer) {
 	t.Helper()
 
 	if err := server.shutdown(); err != nil {
-		t.Fatalf("fixture-backed MCP server shutdown: %v", err)
+		t.Fatalf("project-root backed MCP server shutdown: %v", err)
 	}
 
 	_ = server.stdoutWrite.Close()

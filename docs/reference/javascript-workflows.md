@@ -243,11 +243,9 @@ sync response or fetched later; running sessions can report a not-ready final
 result while their status, partial result, dispatches, artifacts, and events
 remain inspectable.
 
-`you server mcp` is fixture-backed by default for deterministic offline contract
-scenarios. Use `you server mcp --runtime` for live JavaScript execution. Both
-modes expose the same `you.factory_session.*` tool envelopes, but fixture-backed
-calls return catalog scenarios while runtime-backed calls execute resolved
-source.
+`you server mcp` exposes `you.factory_session.*` tools through the process-owned
+Factory Sessions service. Set the MCP host working directory to the project
+root, or pass `--project-root` when launching the child process.
 
 ## Child worker presets
 
@@ -329,6 +327,6 @@ Use the session lifecycle status together with result status and availability.
 
 - `you docs orchestrators` — canonical Factory Session terminology
 - `you docs sessions` — session discovery and inspection
-- `you docs mcp` — fixture-backed and runtime-backed MCP host setup
+- `you docs mcp` — MCP host setup and Factory Session tools
 - `you docs config` — worker preset and operator-default configuration
 - `you docs record-replay` — recording, replay, and resume modes

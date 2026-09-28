@@ -24,7 +24,6 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 	"pkg/services/factory_sessions\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                                               {},
 	"pkg/services/factory_sessions/internal/execution\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                            {},
 	"pkg/services/factory_sessions/internal/runtimeopening\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                       {},
-	"pkg/services/factory_sessions/internal/executionopening\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},
 	"pkg/services/factory_sessions/internal/runtimeopening\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":   {},
 	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                                                     {},
 	"pkg/services/recordings/internal/artifacts\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                                  {},

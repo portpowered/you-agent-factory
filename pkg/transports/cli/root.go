@@ -554,7 +554,6 @@ func newMCPCommand(options CommandFactory) (*cobra.Command, error) {
 		initializeStdio = options.initializer.Stdio
 	}
 	return climanifestcobra.NewMCPCommand(mcpcli.ResolvedServeHandler(mcpcli.ServeBinding{
-		HomeDir:         options.homeDir,
 		InitializeStdio: initializeStdio,
 	}))
 }

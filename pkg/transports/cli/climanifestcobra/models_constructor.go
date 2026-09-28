@@ -566,28 +566,9 @@ func NewMCPCommandFromManifest(
 		return nil, fmt.Errorf("build server MCP command: find projected command: %w", err)
 	}
 	root.RemoveCommand(parent)
-	serve, _, err := parent.Find([]string{serveRecord.Name})
+	_, _, err = parent.Find([]string{serveRecord.Name})
 	if err != nil {
 		return nil, fmt.Errorf("build server MCP command: find projected MCP command: %w", err)
 	}
-	preserveMCPSourceRelationshipDiagnostic(serve, serveRecord)
 	return parent, nil
-}
-
-func preserveMCPSourceRelationshipDiagnostic(
-	command *cobra.Command,
-	record climanifest.Command,
-) {
-	const relationshipID = "you.server.mcp.relationship.runtime-source"
-	if _, declared := record.Relationships[relationshipID]; !declared {
-		return
-	}
-	validate := command.PreRunE
-	command.PreRunE = func(cmd *cobra.Command, args []string) error {
-		err := validate(cmd, args)
-		if err != nil && strings.Contains(err.Error(), `input relationship "`+relationshipID+`"`) {
-			return fmt.Errorf("cannot combine --runtime with --fixture-catalog")
-		}
-		return err
-	}
 }
