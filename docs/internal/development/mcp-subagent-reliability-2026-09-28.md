@@ -723,3 +723,17 @@ shutdown showed no new OpenCode or matching PowerShell child; only the
 older in-app OpenCode process tree remained. This proves cancellation
 stopped that in-flight shell command before its delayed write, while the
 earlier late-write observation remains a separate unresolved case.
+
+Two read-only OpenCode audits of a managed Qwen3-TTS/IndexTTS path returned
+primary results but incorrect implementation advice. A `space-bunny-free`
+audit (`8505372a-3335-41e3-9b47-27ce56ae5814`) suggested using the
+VibeVoice backend for both models, contrary to the live evidence for
+`cuda12-qwen3-tts-cpp` and `cuda12-audio-cpp`. A corrected
+`nemotron-3.5-lightning-free` audit
+(`613ff044-dcd0-4dbe-97b6-fe59daa711c2`) fabricated source paths,
+proposed two definitions with the same built-in `tts` name, and mapped
+IndexTTS to `cuda12-audio-cpp-indextts`, which is not the installed gallery
+backend name. Neither audit changed files. MCP completion and a plausible
+primary result therefore cannot be treated as implementation correctness;
+the managed model design requires source and live runtime verification before
+editing.
