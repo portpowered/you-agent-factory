@@ -319,6 +319,7 @@ func (daemon *daemon) execute(
 		return providers.ExecuteResult{}, invalidFailure(err)
 	}
 	environment := requestEnvironment(request)
+	environment = openCodeEnvironment(id, environment)
 	if err := daemon.preflight(ctx, id, cwd, environment); err != nil {
 		return providers.ExecuteResult{}, err
 	}
@@ -682,6 +683,19 @@ func requestEnvironment(request providers.ExecuteRequest) []string {
 		values = append(values, key+"="+value)
 	}
 	return values
+}
+
+func openCodeEnvironment(id providers.ID, environment []string) []string {
+	if id != providers.IDOpenCode {
+		return environment
+	}
+	for _, entry := range environment {
+		name, _, assigned := strings.Cut(entry, "=")
+		if assigned && strings.EqualFold(name, "OPENCODE_CONFIG_CONTENT") {
+			return environment
+		}
+	}
+	return append(environment, `OPENCODE_CONFIG_CONTENT={"snapshots":false}`)
 }
 
 func absoluteWorkingDirectory(value string) (string, error) {
