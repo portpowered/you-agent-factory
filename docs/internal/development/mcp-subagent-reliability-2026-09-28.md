@@ -137,3 +137,8 @@ session `2f9e2fe3-01bb-46e3-94b9-8b5dbfa82593` and returned both
 `traceId=trace-3862a36f-529b-452d-807a-f4202f6523cc`. The same identifiers
 appeared in the server's structured timeout log, so they provide a usable
 correlation path. This forced timeout does not diagnose sporadic longer calls.
+Commit `75ebaca91f` was installed as `C:\Users\andre\bin\you.exe`; a fresh
+stdio launch of that installed binary again listed 11 tools and returned the
+same correlation fields on a one-second bounded timeout (session
+`424cb3b9-6421-4590-805c-e44c2d5f2d2c`). Its request and trace IDs matched
+the structured server log.
