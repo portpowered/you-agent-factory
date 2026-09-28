@@ -24,7 +24,7 @@ func (a *Adapter) ListFactorySessionArtifacts(
 	sessionID factoryapi.SessionID,
 ) {
 	input := ArtifactListInput{SessionID: string(sessionID)}
-	if a.root == nil && a.inspection == nil && a.legacyHistory == nil {
+	if a.root == nil && a.inspection == nil {
 		a.writeError(w, http.StatusNotFound, "factory session artifact not found", "NOT_FOUND")
 		return
 	}
@@ -36,13 +36,13 @@ func (a *Adapter) ListFactorySessionArtifacts(
 	if requestContextEnded(r.Context()) {
 		return
 	}
-	response, err, legacy := a.factorySessionArtifacts(r.Context(), input.SessionID, statusRequest.RecordingID)
+	response, err, active := a.factorySessionArtifacts(r.Context(), input.SessionID, statusRequest.RecordingID)
 	if shouldEndOnRequestContext(r.Context(), err) {
 		return
 	}
 	if err != nil {
-		if legacy {
-			a.writeLegacyError(w, err, "failed to list factory session artifacts")
+		if active {
+			a.writeSessionReadError(w, err, "failed to list factory session artifacts")
 			return
 		}
 		a.writeRootOrInternalError(w, recordingsHTTPOperationArtifactRead, err)
@@ -64,7 +64,7 @@ func (a *Adapter) GetFactorySessionArtifact(
 		SessionID:  string(sessionID),
 		ArtifactID: string(artifactID),
 	}
-	if a.root == nil && a.inspection == nil && a.legacyHistory == nil {
+	if a.root == nil && a.inspection == nil {
 		a.writeError(w, http.StatusNotFound, "factory session artifact not found", "NOT_FOUND")
 		return
 	}
@@ -80,15 +80,15 @@ func (a *Adapter) GetFactorySessionArtifact(
 	if requestContextEnded(r.Context()) {
 		return
 	}
-	response, err, legacy := a.factorySessionArtifact(
+	response, err, active := a.factorySessionArtifact(
 		r.Context(), input.SessionID, readRequest.RecordingID, input.ArtifactID,
 	)
 	if shouldEndOnRequestContext(r.Context(), err) {
 		return
 	}
 	if err != nil {
-		if legacy {
-			a.writeLegacyError(w, err, "failed to get factory session artifact")
+		if active {
+			a.writeSessionReadError(w, err, "failed to get factory session artifact")
 			return
 		}
 		if errors.Is(err, errHistoricalArtifactNotFound) {
@@ -111,40 +111,19 @@ func (a *Adapter) factorySessionArtifact(
 		result, err := a.sessionArtifact(ctx, sessionID, artifactID)
 		return result, err, true
 	}
-	if a.shouldUseLegacyArtifact(sessionID) {
-		response, err := a.legacyArtifact(ctx, sessionID, artifactID)
-		return response, err, true
-	}
 	artifacts, err := a.loadArtifactProjections(ctx, recordingID)
 	if err != nil {
 		if isDurableHistorySession(sessionID) && isExpectedLiveFallback(err) && a.inspection != nil {
 			result, readErr := a.sessionArtifact(ctx, sessionID, artifactID)
 			return result, readErr, true
 		}
-		return a.fallbackArtifact(ctx, sessionID, artifactID, err)
+		return factoryapi.FactorySessionArtifactDetail{}, err, false
 	}
 	artifact, ok := findArtifactStateByID(artifacts, artifactID)
 	if !ok {
 		return factoryapi.FactorySessionArtifactDetail{}, errHistoricalArtifactNotFound, false
 	}
 	return ArtifactDetailResponseToAPI(sessionID, artifact), nil, false
-}
-
-func (a *Adapter) fallbackArtifact(
-	ctx context.Context,
-	sessionID string,
-	artifactID string,
-	err error,
-) (factoryapi.FactorySessionArtifactDetail, error, bool) {
-	if !isDurableHistorySession(sessionID) || !isExpectedLiveFallback(err) || !a.hasLegacyHistory() {
-		return factoryapi.FactorySessionArtifactDetail{}, err, false
-	}
-	response, legacyErr := a.legacyArtifact(ctx, sessionID, artifactID)
-	return response, legacyErr, true
-}
-
-func (a *Adapter) shouldUseLegacyArtifact(sessionID string) bool {
-	return isDurableHistorySession(sessionID) && a.root == nil && a.hasLegacyHistory()
 }
 
 func (a *Adapter) factorySessionArtifacts(
@@ -156,19 +135,11 @@ func (a *Adapter) factorySessionArtifacts(
 		result, err := a.sessionArtifacts(ctx, sessionID)
 		return result, err, true
 	}
-	if isDurableHistorySession(sessionID) && a.root == nil && a.hasLegacyHistory() {
-		result, err := a.legacyArtifacts(ctx, sessionID)
-		return result, err, true
-	}
 	artifacts, err := a.loadArtifactProjections(ctx, recordingID)
 	if err != nil {
 		if isDurableHistorySession(sessionID) && isExpectedLiveFallback(err) && a.inspection != nil {
 			result, readErr := a.sessionArtifacts(ctx, sessionID)
 			return result, readErr, true
-		}
-		if isDurableHistorySession(sessionID) && isExpectedLiveFallback(err) && a.hasLegacyHistory() {
-			result, legacyErr := a.legacyArtifacts(ctx, sessionID)
-			return result, legacyErr, true
 		}
 		return factoryapi.ListFactorySessionArtifactsResponse{}, err, false
 	}

@@ -16,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -49,13 +48,20 @@ func newAPIServerFromRoles(
 	if len(sessionsRoots) > 0 {
 		sessionsRoot = sessionsRoots[0]
 	}
+	var inspection factorysessions.SessionInspectionService
+	if sessionsRoot != nil {
+		inspection, _ = sessionsRoot.(factorysessions.SessionInspectionService)
+	}
+	if workAPI != nil {
+		sessionsRoot = liveEventsTestRoot{Service: sessionsRoot, source: workAPI}
+	}
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		SessionsRoot: sessionsRoot,
 		Runtime:      runtime, FactoryStatus: factoryStatus,
 		Sessions: sessions, Invocation: invocation,
 		FactoryDefinitions: factoryDefinitions, FactoryValidation: factoryValidation,
-		WorkflowPreview:       workflowPreview,
-		DurableLister:         durableLister, LiveSessionLister: liveSessionLister,
+		WorkflowPreview: workflowPreview,
+		DurableLister:   durableLister, LiveSessionLister: liveSessionLister,
 		WorkerPrompts:   workerPrompts,
 		SessionRequests: sessionRequests,
 	}, logger)
@@ -67,14 +73,23 @@ func newAPIServerFromRoles(
 		)
 	}
 	return api.NewServerWithRecordings(
-		recordingshttp.NewLegacyAdapterWithLive(
-			factorysessionmapping.NewDurableHistoryBridge(durableResponseEvents),
-			factorysessionshttp.NewDurableRequestPreparation(sessionRequests),
-			workAPI,
-		),
+		recordingshttp.NewAdapterWithSessions(nil, sessionsRoot, inspection),
 		handler, workhttp.NewAdapterFromRoles(workRoot, workRoot, workAPI, workRead),
 		modelsHTTP, providerSessionsHTTP, nil, logger,
 	)
+}
+
+type liveEventsTestRoot struct {
+	factorysessions.Service
+	source apisurface.WorkAPI
+}
+
+func (root liveEventsTestRoot) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error) {
+	return root.source.SubscribeFactoryEventsForSession(ctx, sessionID, reconnect)
+}
+
+func (root liveEventsTestRoot) ProbeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *factorydefinitions.FactoryEventReconnectCursor) error {
+	return root.source.ProbeFactoryEventsForSession(ctx, sessionID, reconnect)
 }
 
 type canonicalOpenTestRoot struct{ factorysessions.Service }

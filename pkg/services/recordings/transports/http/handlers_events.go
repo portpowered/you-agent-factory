@@ -48,13 +48,7 @@ func (a *Adapter) GetEventsBySessionId(
 	if a.handleSessionDurableEvents(w, r, input) {
 		return
 	}
-	if a.handleLegacyDurableEvents(w, r, input) {
-		return
-	}
-	if a.handleLegacyLiveFallbackEvents(w, r, input) {
-		return
-	}
-	if a.handleLegacyLiveEvents(w, r, input) {
+	if a.handleSessionLiveEvents(w, r, input) {
 		return
 	}
 	if a.handleEventRecoveryProbe(w, r, input) {
@@ -97,97 +91,42 @@ func (a *Adapter) handleSessionDurableEvents(w http.ResponseWriter, r *http.Requ
 		return true
 	}
 	if err != nil {
-		a.writeLegacyError(w, err, "failed to subscribe to factory events")
+		a.writeSessionReadError(w, err, "failed to subscribe to factory events")
 		return true
 	}
-	a.streamLegacyFactoryEvents(w, r, factorysessions.MaterializeEventReadStream(*result), input.SessionID)
+	a.streamSessionFactoryEvents(w, r, factorysessions.MaterializeEventReadStream(*result), input.SessionID)
 	return true
 }
 
-func (a *Adapter) handleLegacyDurableEvents(
+func (a *Adapter) handleSessionLiveEvents(
 	w http.ResponseWriter,
 	r *http.Request,
 	input EventSubscribeInput,
 ) bool {
-	if !isDurableHistorySession(input.SessionID) || !a.hasLegacyHistory() {
+	if isDurableHistorySession(input.SessionID) || a.sessions == nil {
 		return false
 	}
-	if a.root != nil {
-		_, err := a.historicalRecording(r.Context(), input.SessionID)
-		if err == nil || !isExpectedLiveFallback(err) {
-			return false
-		}
-	}
-	return a.serveLegacyDurableEvents(w, r, input)
+	return a.serveSessionLiveEvents(w, r, input)
 }
 
-func (a *Adapter) serveLegacyDurableEvents(
+func (a *Adapter) serveSessionLiveEvents(
 	w http.ResponseWriter,
 	r *http.Request,
 	input EventSubscribeInput,
 ) bool {
 	if requestsJSONEventRecoveryProbe(r) {
-		a.probeLegacyEventRecovery(w, r, input.SessionID, input.Params)
+		a.probeSessionLiveEventRecovery(w, r, input.SessionID, input.Params)
 		return true
 	}
-	stream, err := a.legacyEvents(r.Context(), input.SessionID, input.Params)
+	stream, err := a.sessionLive(r.Context(), input.SessionID, input.Params)
 	if shouldEndOnRequestContext(r.Context(), err) {
 		return true
 	}
 	if err != nil {
-		a.writeLegacyError(w, err, "failed to subscribe to factory events")
+		a.writeSessionReadError(w, err, "failed to subscribe to factory events")
 		return true
 	}
-	a.streamLegacyFactoryEvents(w, r, stream, input.SessionID)
-	return true
-}
-
-func (a *Adapter) handleLegacyLiveFallbackEvents(
-	w http.ResponseWriter,
-	r *http.Request,
-	input EventSubscribeInput,
-) bool {
-	if !isDurableHistorySession(input.SessionID) || !a.hasLegacyLiveEvents() {
-		return false
-	}
-	if a.root != nil {
-		_, err := a.historicalRecording(r.Context(), input.SessionID)
-		if err == nil || !isExpectedLiveFallback(err) {
-			return false
-		}
-	}
-	return a.serveLegacyLiveEvents(w, r, input)
-}
-
-func (a *Adapter) handleLegacyLiveEvents(
-	w http.ResponseWriter,
-	r *http.Request,
-	input EventSubscribeInput,
-) bool {
-	if isDurableHistorySession(input.SessionID) || !a.hasLegacyLiveEvents() {
-		return false
-	}
-	return a.serveLegacyLiveEvents(w, r, input)
-}
-
-func (a *Adapter) serveLegacyLiveEvents(
-	w http.ResponseWriter,
-	r *http.Request,
-	input EventSubscribeInput,
-) bool {
-	if requestsJSONEventRecoveryProbe(r) {
-		a.probeLegacyLiveEventRecovery(w, r, input.SessionID, input.Params)
-		return true
-	}
-	stream, err := a.legacyLive(r.Context(), input.SessionID, input.Params)
-	if shouldEndOnRequestContext(r.Context(), err) {
-		return true
-	}
-	if err != nil {
-		a.writeLegacyError(w, err, "failed to subscribe to factory events")
-		return true
-	}
-	a.streamLegacyFactoryEvents(w, r, stream, input.SessionID)
+	a.streamSessionFactoryEvents(w, r, stream, input.SessionID)
 	return true
 }
 

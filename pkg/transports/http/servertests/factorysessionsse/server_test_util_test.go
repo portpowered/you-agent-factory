@@ -113,9 +113,22 @@ func newAPITestServer(workAPI apisurface.WorkAPI) *api.Server {
 		SessionRequests: sseRequestPreparation{},
 	}, logger)
 	return api.NewServerWithRecordings(
-		recordingshttp.NewLegacyAdapterWithLive(nil, nil, workAPI),
+		recordingshttp.NewAdapterWithSessions(nil, factorySessionEventsRoot{source: workAPI}, nil),
 		handler, nil, nil, nil, nil, logger,
 	)
+}
+
+type factorySessionEventsRoot struct {
+	factorysessions.Service
+	source apisurface.WorkAPI
+}
+
+func (root factorySessionEventsRoot) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+	return root.source.SubscribeFactoryEventsForSession(ctx, sessionID, reconnect)
+}
+
+func (root factorySessionEventsRoot) ProbeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) error {
+	return root.source.ProbeFactoryEventsForSession(ctx, sessionID, reconnect)
 }
 
 func readBody(t *testing.T, resp *http.Response) string {

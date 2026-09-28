@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 func TestGetEventsBySessionId_DurableHistoryUsesHistoricalQueryAndPreservesOrder(t *testing.T) {
@@ -94,97 +92,6 @@ func TestGetFactorySessionResults_DurableHistoryUsesHistoricalWorldState(t *test
 
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"sessionId":"`+sessionID+`"`) || !strings.Contains(recorder.Body.String(), `"resultStatus":"FINAL"`) {
 		t.Fatalf("response = %d %s, want historical final result", recorder.Code, recorder.Body.String())
-	}
-}
-
-func TestHistoricalAdapter_LiveResultFallsBackToFactorySessions(t *testing.T) {
-	t.Parallel()
-
-	sessionID := "dur-sess-live-fallback-result-001"
-	legacyCalls := 0
-	historicalCalls := 0
-	adapter := NewAdapterWithLegacyFallback(
-		&rootFake{
-			queryRecordingStatus: func(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
-				return recordings.RecordingStatusResult{Status: recordings.RecordingStatusFacts{
-					RecordingID: recordings.RecordingID(sessionID),
-				}}, nil
-			},
-			queryHistoricalRecording: func(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
-				historicalCalls++
-				return recordings.HistoricalRecordingQueryResult{}, nil
-			},
-		},
-		&legacyHistoryFake{
-			result: func(context.Context, string, factorysessionmapping.DurableResultInput) (factoryapi.FactorySessionResult, error) {
-				legacyCalls++
-				return factoryapi.FactorySessionResult{
-					SessionId: sessionID, ResultStatus: factoryapi.FactorySessionResultStatusNotReady,
-				}, nil
-			},
-		}, nil, nil,
-	)
-	recorder := httptest.NewRecorder()
-	adapter.GetFactorySessionResults(
-		recorder,
-		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/results", nil),
-		factoryapi.SessionID(sessionID), factoryapi.GetFactorySessionResultsParams{},
-	)
-
-	if recorder.Code != http.StatusOK ||
-		!strings.Contains(recorder.Body.String(), `"resultStatus":"NOT_READY"`) ||
-		legacyCalls != 1 || historicalCalls != 0 {
-		t.Fatalf("response = %d %s, legacyCalls=%d historicalCalls=%d, want live legacy result only", recorder.Code, recorder.Body.String(), legacyCalls, historicalCalls)
-	}
-}
-
-func TestHistoricalAdapter_LiveDispatchAndArtifactReadsFallbackToFactorySessions(t *testing.T) {
-	t.Parallel()
-
-	sessionID := "dur-sess-live-fallback-inspection-001"
-	legacy := &legacyHistoryFake{
-		dispatches: func(context.Context, string, factoryapi.ListFactorySessionDispatchesParams) (factoryapi.ListFactorySessionDispatchesResponse, error) {
-			return factoryapi.ListFactorySessionDispatchesResponse{
-				SessionId: sessionID,
-				Dispatches: []factoryapi.FactorySessionDispatchSummary{{
-					Id: "dispatch-live-001", Status: factoryapi.FactoryDispatchStatusCOMPLETED,
-				}},
-			}, nil
-		},
-		artifacts: func(context.Context, string) (factoryapi.ListFactorySessionArtifactsResponse, error) {
-			return factoryapi.ListFactorySessionArtifactsResponse{
-				SessionId: sessionID,
-				Artifacts: []factoryapi.FactorySessionArtifactSummary{{Id: "artifact-live-001"}},
-			}, nil
-		},
-	}
-	root := &rootFake{
-		queryRecordingStatus: func(request recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
-			return recordings.RecordingStatusResult{Status: recordings.RecordingStatusFacts{
-				RecordingID: request.RecordingID,
-			}}, nil
-		},
-	}
-	adapter := NewAdapterWithLegacyFallback(root, legacy, nil, nil)
-
-	list := httptest.NewRecorder()
-	adapter.ListFactorySessionDispatches(
-		list,
-		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/dispatches", nil),
-		factoryapi.SessionID(sessionID), factoryapi.ListFactorySessionDispatchesParams{},
-	)
-	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), `"id":"dispatch-live-001"`) {
-		t.Fatalf("dispatch response = %d %s, want legacy live dispatch", list.Code, list.Body.String())
-	}
-
-	artifacts := httptest.NewRecorder()
-	adapter.ListFactorySessionArtifacts(
-		artifacts,
-		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/artifacts", nil),
-		factoryapi.SessionID(sessionID),
-	)
-	if artifacts.Code != http.StatusOK || !strings.Contains(artifacts.Body.String(), `"id":"artifact-live-001"`) {
-		t.Fatalf("artifact response = %d %s, want legacy live artifacts", artifacts.Code, artifacts.Body.String())
 	}
 }
 
@@ -372,85 +279,6 @@ func TestHistoricalResultAndDispatchMapsSelectedWorldState(t *testing.T) {
 	}
 }
 
-func TestLegacyHistoryDispatchAndArtifactDetailsRemainAvailable(t *testing.T) {
-	t.Parallel()
-
-	sessionID := "dur-sess-legacy-details-001"
-	adapter := NewLegacyAdapter(&legacyHistoryFake{
-		dispatch: func(_ context.Context, gotSessionID, dispatchID string) (factoryapi.FactoryDispatch, error) {
-			if gotSessionID != sessionID || dispatchID != "dispatch-legacy-001" {
-				return factoryapi.FactoryDispatch{}, errors.New("unexpected legacy dispatch request")
-			}
-			return factoryapi.FactoryDispatch{Id: dispatchID, SessionId: sessionID, Status: factoryapi.FactoryDispatchStatusCOMPLETED}, nil
-		},
-		artifact: func(_ context.Context, gotSessionID, artifactID string) (factoryapi.FactorySessionArtifactDetail, error) {
-			if gotSessionID != sessionID || artifactID != "artifact-legacy-001" {
-				return factoryapi.FactorySessionArtifactDetail{}, errors.New("unexpected legacy artifact request")
-			}
-			return factoryapi.FactorySessionArtifactDetail{Id: artifactID, SessionId: sessionID}, nil
-		},
-	}, nil)
-
-	dispatch := httptest.NewRecorder()
-	adapter.GetFactorySessionDispatch(
-		dispatch,
-		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/dispatches/dispatch-legacy-001", nil),
-		factoryapi.SessionID(sessionID), factoryapi.DispatchID("dispatch-legacy-001"),
-	)
-	if dispatch.Code != http.StatusOK || !strings.Contains(dispatch.Body.String(), `"id":"dispatch-legacy-001"`) {
-		t.Fatalf("legacy dispatch = %d %s, want stable detail", dispatch.Code, dispatch.Body.String())
-	}
-
-	artifact := httptest.NewRecorder()
-	adapter.GetFactorySessionArtifact(
-		artifact,
-		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/artifacts/artifact-legacy-001", nil),
-		factoryapi.SessionID(sessionID), factoryapi.ArtifactID("artifact-legacy-001"),
-	)
-	if artifact.Code != http.StatusOK || !strings.Contains(artifact.Body.String(), `"id":"artifact-legacy-001"`) {
-		t.Fatalf("legacy artifact = %d %s, want stable detail", artifact.Code, artifact.Body.String())
-	}
-}
-
-func TestLegacyHistoryRecoveryProbeMapsReadyUnknownAndStaleOutcomes(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		err  error
-		want string
-	}{
-		{name: "ready", want: "STREAM_READY"},
-		{name: "unknown", err: factorysessions.ErrSessionNotFound, want: "UNKNOWN_SESSION"},
-		{name: "stale", err: factorysessions.ErrReconnectCursorNotFound, want: "CURSOR_STALE"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			var got factorysessionmapping.DurableEventReconnectInput
-			adapter := NewLegacyAdapter(&legacyHistoryFake{
-				probe: func(_ context.Context, _ string, request factorysessionmapping.DurableEventReconnectInput) error {
-					got = request
-					return test.err
-				},
-			}, nil)
-			request := httptest.NewRequest(http.MethodGet, "/factory-sessions/dur-sess-legacy-probe-001/events", nil)
-			request.Header.Set("Accept", "application/json")
-			recorder := httptest.NewRecorder()
-			afterSequence := factoryapi.AfterSequence(7)
-			adapter.GetEventsBySessionId(
-				recorder, request, factoryapi.SessionID("dur-sess-legacy-probe-001"),
-				factoryapi.GetEventsBySessionIdParams{AfterSequence: &afterSequence},
-			)
-			if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"outcome":"`+test.want+`"`) {
-				t.Fatalf("probe = %d %s, want %s", recorder.Code, recorder.Body.String(), test.want)
-			}
-			if got.AfterSequence == nil || *got.AfterSequence != 7 {
-				t.Fatalf("legacy reconnect request = %#v, want afterSequence=7", got)
-			}
-		})
-	}
-}
-
 func TestGetEventsBySessionId_DurableProbeDistinguishesStaleCursorAndMissingHistory(t *testing.T) {
 	t.Parallel()
 
@@ -499,66 +327,10 @@ func historicalHTTPTestEvent(sessionID, id string, sequence int64) recordings.Ca
 	}
 }
 
-type legacyHistoryFake struct {
-	LegacyHistory
-	result     func(context.Context, string, factorysessionmapping.DurableResultInput) (factoryapi.FactorySessionResult, error)
-	events     func(context.Context, string, factorysessionmapping.DurableEventReconnectInput) (*interfaces.FactoryEventStream, error)
-	probe      func(context.Context, string, factorysessionmapping.DurableEventReconnectInput) error
-	dispatches func(context.Context, string, factoryapi.ListFactorySessionDispatchesParams) (factoryapi.ListFactorySessionDispatchesResponse, error)
-	artifacts  func(context.Context, string) (factoryapi.ListFactorySessionArtifactsResponse, error)
-	dispatch   func(context.Context, string, string) (factoryapi.FactoryDispatch, error)
-	artifact   func(context.Context, string, string) (factoryapi.FactorySessionArtifactDetail, error)
-}
-
-func (fake *legacyHistoryFake) GetDurableFactorySessionResult(ctx context.Context, sessionID string, request factorysessionmapping.DurableResultInput) (factoryapi.FactorySessionResult, error) {
-	return fake.result(ctx, sessionID, request)
-}
-
-func (fake *legacyHistoryFake) ListDurableFactorySessionDispatches(ctx context.Context, sessionID string, params factoryapi.ListFactorySessionDispatchesParams) (factoryapi.ListFactorySessionDispatchesResponse, error) {
-	return fake.dispatches(ctx, sessionID, params)
-}
-
-func (fake *legacyHistoryFake) ListDurableFactorySessionArtifacts(ctx context.Context, sessionID string) (factoryapi.ListFactorySessionArtifactsResponse, error) {
-	return fake.artifacts(ctx, sessionID)
-}
-
-func (fake *legacyHistoryFake) ReadDurableFactorySessionEvents(ctx context.Context, sessionID string, request factorysessionmapping.DurableEventReconnectInput) (*interfaces.FactoryEventStream, error) {
-	if fake.events != nil {
-		return fake.events(ctx, sessionID, request)
-	}
-	return nil, nil
-}
-
-func (fake *legacyHistoryFake) ProbeDurableFactorySessionEvents(ctx context.Context, sessionID string, request factorysessionmapping.DurableEventReconnectInput) error {
-	if fake.probe != nil {
-		return fake.probe(ctx, sessionID, request)
-	}
-	return nil
-}
-
-func (fake *legacyHistoryFake) GetDurableFactorySessionDispatch(ctx context.Context, sessionID, dispatchID string) (factoryapi.FactoryDispatch, error) {
-	if fake.dispatch != nil {
-		return fake.dispatch(ctx, sessionID, dispatchID)
-	}
-	return factoryapi.FactoryDispatch{}, factorysessions.ErrDispatchNotFound
-}
-
-func (fake *legacyHistoryFake) GetDurableFactorySessionArtifact(ctx context.Context, sessionID, artifactID string) (factoryapi.FactorySessionArtifactDetail, error) {
-	if fake.artifact != nil {
-		return fake.artifact(ctx, sessionID, artifactID)
-	}
-	return factoryapi.FactorySessionArtifactDetail{}, factorysessions.ErrArtifactNotFound
-}
-
-// TestWriteLegacyError_MapsEverySessionFailureSentinel pins the complete public
-// error contract of the standalone durable-execution compatibility path. Each
-// sentinel the legacy bridge can return has one status/code/message triple, and
-// this table is what makes a later change to where those sentinels are named
-// provably behavior preserving.
-func TestWriteLegacyError_MapsEverySessionFailureSentinel(t *testing.T) {
+func TestWriteSessionReadError_MapsEverySessionFailureSentinel(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewLegacyAdapter(&legacyHistoryFake{}, nil)
+	adapter := NewAdapterWithSessions(nil, nil, nil)
 	for _, tt := range []struct {
 		name        string
 		err         error
@@ -613,8 +385,8 @@ func TestWriteLegacyError_MapsEverySessionFailureSentinel(t *testing.T) {
 			t.Parallel()
 
 			recorder := httptest.NewRecorder()
-			if !adapter.writeLegacyError(recorder, tt.err, "failed to read durable history") {
-				t.Fatalf("writeLegacyError(%v) = false, want the failure written", tt.err)
+			if !adapter.writeSessionReadError(recorder, tt.err, "failed to read durable history") {
+				t.Fatalf("writeSessionReadError(%v) = false, want the failure written", tt.err)
 			}
 			if recorder.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d", recorder.Code, tt.wantStatus)
@@ -633,25 +405,25 @@ func TestWriteLegacyError_MapsEverySessionFailureSentinel(t *testing.T) {
 	}
 }
 
-// TestWriteLegacyError_IgnoresSuccess pins that a nil failure writes nothing so
+// TestWriteSessionReadError_IgnoresSuccess pins that a nil failure writes nothing so
 // the caller keeps ownership of the success response.
-func TestWriteLegacyError_IgnoresSuccess(t *testing.T) {
+func TestWriteSessionReadError_IgnoresSuccess(t *testing.T) {
 	t.Parallel()
 
 	recorder := httptest.NewRecorder()
-	adapter := NewLegacyAdapter(&legacyHistoryFake{}, nil)
-	if adapter.writeLegacyError(recorder, nil, "failed to read durable history") {
-		t.Fatal("writeLegacyError(nil) = true, want no response written")
+	adapter := NewAdapterWithSessions(nil, nil, nil)
+	if adapter.writeSessionReadError(recorder, nil, "failed to read durable history") {
+		t.Fatal("writeSessionReadError(nil) = true, want no response written")
 	}
 	if recorder.Body.Len() != 0 {
 		t.Fatalf("body = %q, want empty", recorder.Body.String())
 	}
 }
 
-// TestWriteLegacyStreamHeaders_PublishesRetainedCountAndStreamIdentity pins the
-// SSE header contract of the legacy event path, including the retained-event
+// TestWriteSessionStreamHeaders_PublishesRetainedCountAndStreamIdentity pins the
+// SSE header contract of the session event path, including the retained-event
 // count header consumed by dashboard reconnect logic.
-func TestWriteLegacyStreamHeaders_PublishesRetainedCountAndStreamIdentity(t *testing.T) {
+func TestWriteSessionStreamHeaders_PublishesRetainedCountAndStreamIdentity(t *testing.T) {
 	t.Parallel()
 
 	sessionID := "dur-sess-legacy-headers-001"
@@ -668,7 +440,7 @@ func TestWriteLegacyStreamHeaders_PublishesRetainedCountAndStreamIdentity(t *tes
 	}
 
 	recorder := httptest.NewRecorder()
-	writeLegacyStreamHeaders(recorder, stream, sessionID)
+	writeSessionStreamHeaders(recorder, stream, sessionID)
 
 	for header, want := range map[string]string{
 		"Content-Type":                             "text/event-stream",
@@ -686,13 +458,13 @@ func TestWriteLegacyStreamHeaders_PublishesRetainedCountAndStreamIdentity(t *tes
 	}
 }
 
-// TestWriteLegacyStreamHeaders_OmitsAbsentStreamIdentity pins that blank stream
+// TestWriteSessionStreamHeaders_OmitsAbsentStreamIdentity pins that blank stream
 // identity values are not published as empty headers.
-func TestWriteLegacyStreamHeaders_OmitsAbsentStreamIdentity(t *testing.T) {
+func TestWriteSessionStreamHeaders_OmitsAbsentStreamIdentity(t *testing.T) {
 	t.Parallel()
 
 	recorder := httptest.NewRecorder()
-	writeLegacyStreamHeaders(recorder, &interfaces.FactoryEventStream{}, "dur-sess-legacy-headers-002")
+	writeSessionStreamHeaders(recorder, &interfaces.FactoryEventStream{}, "dur-sess-legacy-headers-002")
 
 	if got := recorder.Header().Get(SessionEventStreamRetainedCountHeader); got != "0" {
 		t.Fatalf("retained count header = %q, want 0", got)

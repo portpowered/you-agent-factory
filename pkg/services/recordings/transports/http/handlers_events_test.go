@@ -15,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 func TestGetEventsBySessionId_RejectsInvalidReconnectBeforeFakeRoot(t *testing.T) {
@@ -107,7 +106,7 @@ func TestGetEventsBySessionId_LiveCompatibilityPublishesCompleteStreamIdentity(t
 	const sessionID = "live-sse-identity-001"
 	events := make(chan interfaces.FactoryEvent)
 	close(events)
-	adapter := NewAdapterWithLegacyFallback(nil, nil, nil, &legacyLiveEventsFake{
+	adapter := NewAdapterWithSessions(nil, &sessionLiveEventsFake{
 		subscribe: func(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 			return &interfaces.FactoryEventStream{
 				BackendScopeID:      "backend-sse-001",
@@ -117,7 +116,7 @@ func TestGetEventsBySessionId_LiveCompatibilityPublishesCompleteStreamIdentity(t
 				Events:              events,
 			}, nil
 		},
-	})
+	}, nil)
 	recorder := httptest.NewRecorder()
 
 	adapter.GetEventsBySessionId(
@@ -266,68 +265,16 @@ func TestGetEventsBySessionId_MapsReconnectQueryIntoFakeRootRequest(t *testing.T
 	}
 }
 
-func TestGetEventsBySessionId_DurableCompatibilityPrefersDurableHistoryOverLive(t *testing.T) {
-	t.Parallel()
-
-	const sessionID = "dur-sess-live-compat-http-001"
-	liveCalls := 0
-	durableCalls := 0
-	events := make(chan interfaces.FactoryEvent)
-	close(events)
-	adapter := NewAdapterWithLegacyFallback(
-		&rootFake{
-			queryRecordingStatus: func(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
-				return recordings.RecordingStatusResult{Status: recordings.RecordingStatusFacts{
-					RecordingID: recordings.RecordingID(sessionID),
-				}}, nil
-			},
-		},
-		&legacyHistoryFake{
-			events: func(context.Context, string, factorysessionmapping.DurableEventReconnectInput) (*interfaces.FactoryEventStream, error) {
-				durableCalls++
-				return &interfaces.FactoryEventStream{
-					FactorySessionID: sessionID,
-					History:          []interfaces.FactoryEvent{{Id: "durable-event-1", Type: interfaces.FactoryEventTypeWorkRequest}},
-					Events:           events,
-				}, nil
-			},
-		},
-		nil,
-		&legacyLiveEventsFake{
-			subscribe: func(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
-				liveCalls++
-				return nil, factorysessions.ErrSessionNotFound
-			},
-		},
-	)
-	recorder := httptest.NewRecorder()
-
-	adapter.GetEventsBySessionId(
-		recorder,
-		httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/events", nil),
-		factoryapi.SessionID(sessionID),
-		factoryapi.GetEventsBySessionIdParams{},
-	)
-
-	if recorder.Code != http.StatusOK ||
-		!strings.Contains(recorder.Body.String(), `"id":"durable-event-1"`) ||
-		durableCalls != 1 || liveCalls != 0 {
-		t.Fatalf("response = %d %s, durableCalls=%d liveCalls=%d, want durable compatibility history only", recorder.Code, recorder.Body.String(), durableCalls, liveCalls)
-	}
-}
-
 func TestGetEventsBySessionId_MapsLegacyRecordingsCursorErrorToBadRequest(t *testing.T) {
 	t.Parallel()
 
-	adapter := NewAdapterWithLegacyFallback(
+	adapter := NewAdapterWithSessions(
 		nil,
-		nil,
-		nil,
-		&legacyLiveEventsFake{
+		&sessionLiveEventsFake{
 			subscribe: func(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 				return nil, recordings.ErrReconnectCursorNotFound
 			},
-		},
+		}, nil,
 	)
 	recorder := httptest.NewRecorder()
 
@@ -349,7 +296,7 @@ func TestGetEventsBySessionId_LiveCompatibilityProbeMapsCursorAndReadyOutcome(t 
 	t.Parallel()
 
 	var gotCursor *interfaces.FactoryEventReconnectCursor
-	adapter := NewAdapterWithLegacyFallback(nil, nil, nil, &legacyLiveEventsFake{
+	adapter := NewAdapterWithSessions(nil, &sessionLiveEventsFake{
 		probe: func(_ context.Context, sessionID string, cursor *interfaces.FactoryEventReconnectCursor) error {
 			if sessionID != "session-live-probe-001" {
 				t.Fatalf("probe sessionID = %q, want session-live-probe-001", sessionID)
@@ -357,7 +304,7 @@ func TestGetEventsBySessionId_LiveCompatibilityProbeMapsCursorAndReadyOutcome(t 
 			gotCursor = cursor
 			return nil
 		},
-	})
+	}, nil)
 	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-live-probe-001/events", nil)
 	request.Header.Set("Accept", "application/json")
 	afterSequence := factoryapi.AfterSequence(5)
@@ -374,23 +321,24 @@ func TestGetEventsBySessionId_LiveCompatibilityProbeMapsCursorAndReadyOutcome(t 
 	}
 }
 
-type legacyLiveEventsFake struct {
+type sessionLiveEventsFake struct {
+	factorysessions.Service
 	subscribe func(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
 	probe     func(context.Context, string, *interfaces.FactoryEventReconnectCursor) error
 }
 
-func (fake *legacyLiveEventsFake) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, cursor *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+func (fake *sessionLiveEventsFake) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, cursor *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 	return fake.subscribe(ctx, sessionID, cursor)
 }
 
-func (fake *legacyLiveEventsFake) ProbeFactoryEventsForSession(ctx context.Context, sessionID string, cursor *interfaces.FactoryEventReconnectCursor) error {
+func (fake *sessionLiveEventsFake) ProbeFactoryEventsForSession(ctx context.Context, sessionID string, cursor *interfaces.FactoryEventReconnectCursor) error {
 	if fake.probe == nil {
 		return nil
 	}
 	return fake.probe(ctx, sessionID, cursor)
 }
 
-func TestLegacyFactoryEventWriterProjectsProviderSession(t *testing.T) {
+func TestSessionFactoryEventWriterProjectsProviderSession(t *testing.T) {
 	t.Parallel()
 
 	payload, err := json.Marshal(map[string]any{
@@ -412,8 +360,8 @@ func TestLegacyFactoryEventWriterProjectsProviderSession(t *testing.T) {
 	}
 	recorder := httptest.NewRecorder()
 
-	if err := legacyFactoryEventWriter(recorder)(event); err != nil {
-		t.Fatalf("legacyFactoryEventWriter: %v", err)
+	if err := sessionFactoryEventWriter(recorder)(event); err != nil {
+		t.Fatalf("sessionFactoryEventWriter: %v", err)
 	}
 	body := recorder.Body.String()
 	if !strings.Contains(body, `"providerSession":{"provider":"antigravity","kind":"session_id","id":"provider-session-1"}`) {

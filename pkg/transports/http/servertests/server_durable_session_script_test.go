@@ -12,7 +12,6 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -170,16 +169,12 @@ func (script apiLiveSessionScript) ResumeLiveFactorySession(ctx context.Context,
 	return script.resume(ctx, sessionID, request)
 }
 
-func newDurableAPITestServer(execution factorysessionmapping.DurableExecution) *api.Server {
+func newDurableAPITestServer(execution scriptedDurableExecution) *api.Server {
 	return newDurableAndLiveAPITestServer(execution, nil)
 }
 
-func newDurableAndLiveAPITestServer(execution factorysessionmapping.DurableExecution, live apisurface.LiveSessionAPI) *api.Server {
+func newDurableAndLiveAPITestServer(execution scriptedDurableExecution, live apisurface.LiveSessionAPI) *api.Server {
 	preparation := canonicalAPIRequestPreparation()
-	var durable *factorysessionmapping.DurableAPI
-	if execution != nil {
-		durable = factorysessionmapping.NewDurableAPI(execution)
-	}
 	liveLister, _ := live.(factorysessionshttp.LiveSessionListReader)
 	var sessionsRoot factorysessions.Service
 	if execution != nil {
@@ -187,16 +182,21 @@ func newDurableAndLiveAPITestServer(execution factorysessionmapping.DurableExecu
 	}
 	return newAPIServerFromRoles(
 		nil, nil, live, nil, nil, nil, nil, nil, nil, nil,
-		durable, durable, durable, durable, execution, liveLister, nil, nil,
+		nil, nil, nil, nil, execution, liveLister, nil, nil,
 		nil, nil, preparation, zap.NewNop(), sessionsRoot,
 	)
+}
+
+type scriptedDurableExecution interface {
+	factorysessions.DurableExecutionService
+	factorysessions.SessionInventoryService
 }
 
 // canonicalDurableStartTestRoot exercises the HTTP Start boundary with the
 // existing scripted execution fixture; it has no production construction path.
 type canonicalDurableStartTestRoot struct {
 	factorysessions.Service
-	execution factorysessionmapping.DurableExecution
+	execution scriptedDurableExecution
 }
 
 func (root canonicalDurableStartTestRoot) ListFactorySessions(context.Context) ([]factorysessions.ReadProjection, error) {
@@ -217,6 +217,40 @@ func (root canonicalDurableStartTestRoot) Get(ctx context.Context, request facto
 		return factorysessions.SessionGetResult{Durable: &read}, err
 	}
 	return factorysessions.SessionGetResult{Session: factorysessions.SessionView{SessionID: request.SessionID, FactoryDir: "."}}, nil
+}
+
+func (root canonicalDurableStartTestRoot) ReadResult(ctx context.Context, request factorysessions.SessionResultReadRequest) (factorysessions.SessionResultReadResult, error) {
+	result, err := root.execution.GetResult(ctx, request.SessionID, request.Request)
+	return factorysessions.SessionResultReadResult{SessionID: request.SessionID, Mode: request.Mode, Durable: &factorysessions.SessionDurableResult{
+		SessionID: result.SessionID, Status: result.ResultStatus, SessionStatus: result.SessionStatus,
+		Mode: result.Mode, IncludeArtifacts: result.IncludeArtifacts, PrimaryResult: result.PrimaryResult,
+		ArtifactIDs: result.ArtifactIDs, ArtifactRefs: result.ArtifactRefs, Failure: result.Failure, Availability: result.Availability,
+	}}, err
+}
+
+func (root canonicalDurableStartTestRoot) QueryDispatches(ctx context.Context, request factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
+	return root.execution.QueryDispatches(ctx, request)
+}
+
+func (root canonicalDurableStartTestRoot) QueryEvents(ctx context.Context, request factorysessions.SessionEventQueryRequest) (factorysessions.EventReadResult, error) {
+	return root.execution.ReadEvents(ctx, request.SessionID, request.Reconnect)
+}
+
+func (root canonicalDurableStartTestRoot) ProbeEvents(ctx context.Context, request factorysessions.SessionEventQueryRequest) error {
+	_, err := root.execution.ReadEvents(ctx, request.SessionID, request.Reconnect)
+	return err
+}
+
+func (root canonicalDurableStartTestRoot) InspectDispatch(ctx context.Context, request factorysessions.SessionDispatchInspectRequest) (factorysessions.DispatchDetail, error) {
+	return root.execution.GetDispatch(ctx, request.SessionID, request.DispatchID)
+}
+
+func (root canonicalDurableStartTestRoot) QueryArtifacts(ctx context.Context, request factorysessions.SessionArtifactQueryRequest) (factorysessions.ListArtifactsResult, error) {
+	return root.execution.ListArtifacts(ctx, request.SessionID)
+}
+
+func (root canonicalDurableStartTestRoot) InspectArtifact(ctx context.Context, request factorysessions.SessionArtifactInspectRequest) (factorysessions.ArtifactDetail, error) {
+	return root.execution.GetArtifact(ctx, request.SessionID, request.ArtifactID)
 }
 
 func (root canonicalDurableStartTestRoot) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
@@ -273,7 +307,7 @@ func newWorkAPITestServer(work apisurface.WorkAPI) *api.Server {
 	)
 }
 
-func durableRoleHTTPServer(t *testing.T, execution factorysessionmapping.DurableExecution) string {
+func durableRoleHTTPServer(t *testing.T, execution scriptedDurableExecution) string {
 	t.Helper()
 	server := httptest.NewServer(newDurableAPITestServer(execution).Handler())
 	t.Cleanup(server.Close)
@@ -284,7 +318,7 @@ func durableRoleHTTPServer(t *testing.T, execution factorysessionmapping.Durable
 // execution contract. Tests must install every callback they exercise; it has
 // no storage, reduction, lifecycle, replay, or execution behavior of its own.
 type apiExecutionScript struct {
-	factorysessionmapping.DurableExecution
+	scriptedDurableExecution
 	startAsync               func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
 	startSync                func(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error)
 	resumeInterruptedSession func(context.Context, string, factorysessions.ResumeSessionRequest) (factorysessions.AsyncStartResult, error)

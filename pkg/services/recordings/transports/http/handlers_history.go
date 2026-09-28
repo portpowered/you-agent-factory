@@ -71,13 +71,13 @@ func (a *Adapter) GetFactorySessionResults(
 		a.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 		return
 	}
-	response, err, legacy := a.factorySessionResult(r.Context(), string(sessionID), params)
+	response, err, active := a.factorySessionResult(r.Context(), string(sessionID), params)
 	if shouldEndOnRequestContext(r.Context(), err) {
 		return
 	}
 	if err != nil {
-		if legacy {
-			a.writeLegacyError(w, err, "failed to get factory session result")
+		if active {
+			a.writeSessionReadError(w, err, "failed to get factory session result")
 			return
 		}
 		a.writeRootOrInternalError(w, recordingsHTTPOperationHistoricalRead, err)
@@ -98,13 +98,13 @@ func (a *Adapter) ListFactorySessionDispatches(
 		a.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 		return
 	}
-	response, err, legacy := a.factorySessionDispatches(r.Context(), string(sessionID), params)
+	response, err, active := a.factorySessionDispatches(r.Context(), string(sessionID), params)
 	if shouldEndOnRequestContext(r.Context(), err) {
 		return
 	}
 	if err != nil {
-		if legacy {
-			a.writeLegacyError(w, err, "failed to list factory session dispatches")
+		if active {
+			a.writeSessionReadError(w, err, "failed to list factory session dispatches")
 			return
 		}
 		a.writeRootOrInternalError(w, recordingsHTTPOperationHistoricalRead, err)
@@ -124,13 +124,13 @@ func (a *Adapter) GetFactorySessionDispatch(
 		a.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 		return
 	}
-	response, err, legacy := a.factorySessionDispatch(r.Context(), string(sessionID), string(dispatchID))
+	response, err, active := a.factorySessionDispatch(r.Context(), string(sessionID), string(dispatchID))
 	if shouldEndOnRequestContext(r.Context(), err) {
 		return
 	}
 	if err != nil {
-		if legacy {
-			a.writeLegacyError(w, err, "failed to get factory session dispatch")
+		if active {
+			a.writeSessionReadError(w, err, "failed to get factory session dispatch")
 			return
 		}
 		if errors.Is(err, errHistoricalDispatchNotFound) {
@@ -152,19 +152,11 @@ func (a *Adapter) factorySessionResult(
 		result, err := a.sessionResult(ctx, sessionID, params)
 		return result, err, true
 	}
-	if a.root == nil && a.hasLegacyHistory() {
-		result, err := a.legacyResult(ctx, sessionID, params)
-		return result, err, true
-	}
 	history, err := a.historicalRecording(ctx, sessionID)
 	if err != nil {
 		if isExpectedLiveFallback(err) && a.sessions != nil {
 			result, readErr := a.sessionResult(ctx, sessionID, params)
 			return result, readErr, true
-		}
-		if isExpectedLiveFallback(err) && a.hasLegacyHistory() {
-			result, legacyErr := a.legacyResult(ctx, sessionID, params)
-			return result, legacyErr, true
 		}
 		return factoryapi.FactorySessionResult{}, err, false
 	}
@@ -181,19 +173,11 @@ func (a *Adapter) factorySessionDispatches(
 		result, err := a.sessionDispatches(ctx, sessionID, params)
 		return result, err, true
 	}
-	if a.root == nil && a.hasLegacyHistory() {
-		result, err := a.legacyDispatches(ctx, sessionID, params)
-		return result, err, true
-	}
 	history, err := a.historicalRecording(ctx, sessionID)
 	if err != nil {
 		if isExpectedLiveFallback(err) && a.sessions != nil {
 			result, readErr := a.sessionDispatches(ctx, sessionID, params)
 			return result, readErr, true
-		}
-		if isExpectedLiveFallback(err) && a.hasLegacyHistory() {
-			result, legacyErr := a.legacyDispatches(ctx, sessionID, params)
-			return result, legacyErr, true
 		}
 		return factoryapi.ListFactorySessionDispatchesResponse{}, err, false
 	}
@@ -216,19 +200,11 @@ func (a *Adapter) factorySessionDispatch(
 		result, err := a.sessionDispatch(ctx, sessionID, dispatchID)
 		return result, err, true
 	}
-	if a.root == nil && a.hasLegacyHistory() {
-		result, err := a.legacyDispatch(ctx, sessionID, dispatchID)
-		return result, err, true
-	}
 	history, err := a.historicalRecording(ctx, sessionID)
 	if err != nil {
 		if isExpectedLiveFallback(err) && a.inspection != nil {
 			result, readErr := a.sessionDispatch(ctx, sessionID, dispatchID)
 			return result, readErr, true
-		}
-		if isExpectedLiveFallback(err) && a.hasLegacyHistory() {
-			result, legacyErr := a.legacyDispatch(ctx, sessionID, dispatchID)
-			return result, legacyErr, true
 		}
 		return factoryapi.FactoryDispatch{}, err, false
 	}
