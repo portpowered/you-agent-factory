@@ -41,11 +41,19 @@ message ChatDelta {
 
 message PredictOptions {
   string Prompt = 1;
+  int32 Tokens = 4;
   string Embeddings = 36;
   repeated string Images = 42;
+  bool UseTokenizerTemplate = 43;
+  repeated Message Messages = 44;
   repeated string Videos = 45;
   repeated string Audios = 46;
   map<string, string> Metadata = 52;
+}
+
+message Message {
+  string role = 1;
+  string content = 2;
 }
 
 message Reply {

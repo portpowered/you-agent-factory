@@ -75,13 +75,44 @@ beyond protocol delivery, this repository's pinned artifact publication,
 or the Windows first-use lifecycle for Qwen/Index (the registry still
 only publishes VibeVoice).
 
+## Reproduce with standalone LocalAI
+
+Install both gallery models and start the server:
+
+```sh
+local-ai models install localai@qwen3-tts-cpp-0.6b-base-q4
+local-ai models install localai@audio-cpp-indextts-2.5
+local-ai run --address=127.0.0.1:18080
+```
+
+Then POST to `/v1/audio/speech` with a server-local absolute WAV path for `voice` and a matching `ref_text`:
+
+```sh
+curl -X POST http://127.0.0.1:18080/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-tts-cpp-0.6b-base-q4",
+    "input": "Hello, this is a test.",
+    "voice": "/absolute/path/to/reference.wav",
+    "ref_text": "Reference transcript for voice cloning."
+  }' --output speech.wav
+```
+
+Notes:
+
+- The CUDA backend is chosen by LocalAI's gallery/hardware resolution on this host.
+- To test IndexTTS, use `"model": "audio-cpp-indextts-2.5"` in the request.
+- The `voice` path must be visible to the LocalAI process.
+- These commands are for standalone LocalAI validation, not managed `you models pull` support.
+
 ## Unverified
 
 - Speech content and voice similarity for either backend.
 - Backend consumption of `ref_text` beyond protocol delivery.
 - This repository's pinned artifact publication and Windows first-use
   lifecycle for Qwen/Index (registry still only publishes VibeVoice).
-- Full ASR/LLM/embed GPU path.
+- Managed ASR/LLM/embed first-use lifecycle; live protocol and GPU evidence is
+  recorded in [the invocation audit](localai-gpu-invocation-audit-2026-09-28.md).
 
 ## Upstream configuration evidence
 

@@ -23,6 +23,7 @@ const (
 	localAIEmbeddingMethod                 = "/backend.Backend/Embedding"
 	localAIModelBatchSize                  = 512
 	localAIEmbedContextSize          int32 = 512
+	localAIDefaultPredictTokens      int32 = 256
 	localAIDisableProjectorGPUOption       = "mmproj_use_gpu:false"
 )
 
@@ -360,6 +361,11 @@ func embeddingOptions(request models.EmbeddingBackendRequest) (*PredictOptions, 
 
 func predictOptions(request PredictRequest) (*PredictOptions, error) {
 	options := &PredictOptions{Prompt: request.Prompt}
+	if strings.TrimSpace(request.Prompt) != "" {
+		options.Tokens = localAIDefaultPredictTokens
+		options.UseTokenizerTemplate = true
+		options.Messages = []*Message{{Role: "user", Content: request.Prompt}}
+	}
 	for _, input := range request.Inputs {
 		value := predictInputValue(input)
 		switch input.Modality {

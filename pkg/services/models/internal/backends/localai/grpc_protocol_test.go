@@ -81,6 +81,7 @@ func TestPinnedGRPCProtocolClientMapsOrderedOmniValuesToPinnedFields(t *testing.
 	if connection.method != localAIPredictMethod || connection.closed != 1 {
 		t.Fatalf("transport facts = method %q, closed %d, want Predict and one close", connection.method, connection.closed)
 	}
+	assertPredictChatDefaults(t, &connection.request, request.Prompt)
 	if connection.request.Prompt != request.Prompt ||
 		!equalStrings(connection.request.Images, []string{
 			base64.StdEncoding.EncodeToString([]byte("image-a.png")),
@@ -92,6 +93,16 @@ func TestPinnedGRPCProtocolClientMapsOrderedOmniValuesToPinnedFields(t *testing.
 		}) ||
 		connection.request.Metadata["temperature"] != "0.2" {
 		t.Fatal("pinned request fields do not preserve prompt/media order/metadata")
+	}
+}
+
+func assertPredictChatDefaults(t *testing.T, options *PredictOptions, prompt string) {
+	t.Helper()
+	if options.Tokens != localAIDefaultPredictTokens || !options.UseTokenizerTemplate {
+		t.Fatalf("chat defaults = tokens:%d template:%t", options.Tokens, options.UseTokenizerTemplate)
+	}
+	if len(options.Messages) != 1 || options.Messages[0].GetRole() != "user" || options.Messages[0].GetContent() != prompt {
+		t.Fatalf("chat messages = %#v, want one user prompt", options.Messages)
 	}
 }
 
