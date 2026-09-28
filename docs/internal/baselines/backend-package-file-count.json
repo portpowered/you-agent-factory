@@ -129,7 +129,7 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/service",
-      "fileCount": 35,
+      "fileCount": 36,
       "owner": "backend-maintainers",
       "removalReason": "The single process-owned Factory Sessions root consolidated runtime activation and replay here; extract cohesive stateless helpers while keeping one canonical session registry."
     },
