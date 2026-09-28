@@ -59,7 +59,6 @@ func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 			_, err = serviceValue.Execute(context.Background(), "cursor-acp", providers.ExecuteRequest{
 				Provider:           "cursor-acp",
 				AttemptID:          "attempt-" + test.mode,
-				Model:              "test-model",
 				UserMessage:        "classify ACP failure",
 				WorkingDirectory:   cwd,
 				ProcessEnvironment: protocolHelperProcessEnvironment(test.mode),
@@ -104,7 +103,6 @@ func TestPromptCancelledStopReasonMapsToExecuteFailureKindCanceled(t *testing.T)
 	_, err = serviceValue.Execute(context.Background(), "cursor-acp", providers.ExecuteRequest{
 		Provider:           "cursor-acp",
 		AttemptID:          "attempt-cancelled-turn",
-		Model:              "test-model",
 		UserMessage:        "cancelled turn",
 		WorkingDirectory:   t.TempDir(),
 		ProcessEnvironment: protocolHelperProcessEnvironment("cancelled-turn"),
@@ -115,6 +113,67 @@ func TestPromptCancelledStopReasonMapsToExecuteFailureKindCanceled(t *testing.T)
 	}
 	if failure.Kind != providers.ExecuteFailureKindCanceled {
 		t.Fatalf("ExecuteFailure.Kind = %q, want %q", failure.Kind, providers.ExecuteFailureKindCanceled)
+	}
+}
+
+func TestDeniedPermissionWithEmptyPromptIsFailure(t *testing.T) {
+	cwd := t.TempDir()
+	var starts atomic.Int32
+	serviceValue, err := New([]providers.ACPIntegration{{
+		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+	}}, protocolHelperCommandFactory(&starts), availableLocator{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	t.Cleanup(func() { _ = serviceValue.Close(context.Background()) })
+
+	_, err = serviceValue.Execute(context.Background(), "cursor-acp", providers.ExecuteRequest{
+		Provider:           "cursor-acp",
+		AttemptID:          "attempt-denied-permission",
+		UserMessage:        "read outside the workspace",
+		WorkingDirectory:   cwd,
+		ProcessEnvironment: protocolHelperProcessEnvironment("permission-denied-empty"),
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v (%T), want ExecuteFailure", err, err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindUnknown || !strings.Contains(failure.Message, "permission request was denied") {
+		t.Fatalf("ExecuteFailure = %#v, want denied-permission diagnostic", failure)
+	}
+	if failure.SessionRef == nil || failure.SessionRef.ID != "acp-session-service-1" {
+		t.Fatalf("ExecuteFailure.SessionRef = %#v, want opened ACP session", failure.SessionRef)
+	}
+}
+
+func TestExplicitUnadvertisedModelFailsBeforePrompt(t *testing.T) {
+	cwd := t.TempDir()
+	var starts atomic.Int32
+	serviceValue, err := New([]providers.ACPIntegration{{
+		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+	}}, protocolHelperCommandFactory(&starts), availableLocator{})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	t.Cleanup(func() { _ = serviceValue.Close(context.Background()) })
+
+	_, err = serviceValue.Execute(context.Background(), "cursor-acp", providers.ExecuteRequest{
+		Provider:           "cursor-acp",
+		AttemptID:          "attempt-unadvertised-model",
+		Model:              "muse-spark-1.3-contributor-free",
+		UserMessage:        "use the requested model",
+		WorkingDirectory:   cwd,
+		ProcessEnvironment: protocolHelperProcessEnvironment("model-unadvertised"),
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v (%T), want ExecuteFailure", err, err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindInvalidRequest || !strings.Contains(failure.Message, "muse-spark-1.3-contributor-free") {
+		t.Fatalf("ExecuteFailure = %#v, want explicit unsupported-model diagnostic", failure)
+	}
+	if failure.SessionRef == nil || failure.SessionRef.ID != "acp-session-service-1" {
+		t.Fatalf("ExecuteFailure.SessionRef = %#v, want opened ACP session", failure.SessionRef)
 	}
 }
 
@@ -374,7 +433,17 @@ func runProtocolFailurePeer(mode string, stdin io.Reader, stdout, stderr io.Writ
 	}
 	scanner := bufio.NewScanner(stdin)
 	writer := bufio.NewWriter(stdout)
+	var pendingPromptID json.RawMessage
 	for scanner.Scan() {
+		if mode == "permission-denied-empty" && strings.Contains(scanner.Text(), `"outcome"`) {
+			if !strings.Contains(scanner.Text(), `"optionId":"deny"`) {
+				return fmt.Errorf("permission response did not select reject option: %s", scanner.Text())
+			}
+			if err := writeRPCResult(writer, pendingPromptID, `{"stopReason":"end_turn"}`); err != nil {
+				return err
+			}
+			continue
+		}
 		var request struct {
 			ID     json.RawMessage `json:"id"`
 			Method string          `json:"method"`
@@ -415,6 +484,17 @@ func runProtocolFailurePeer(mode string, stdin io.Reader, stdout, stderr io.Writ
 				return err
 			}
 		case "session/prompt":
+			if mode == "permission-denied-empty" {
+				pendingPromptID = append(json.RawMessage(nil), request.ID...)
+				_, err := fmt.Fprintln(writer, `{"jsonrpc":"2.0","id":"permission-1","method":"session/request_permission","params":{"sessionId":"acp-session-service-1","toolCall":{"toolCallId":"tool-1","title":"Read outside workspace"},"options":[{"optionId":"allow","kind":"allow_once","name":"Allow"},{"optionId":"deny","kind":"reject_once","name":"Deny"}]}}`)
+				if err != nil {
+					return err
+				}
+				if err := writer.Flush(); err != nil {
+					return err
+				}
+				continue
+			}
 			if mode == "fail" {
 				return writeRPCError(writer, request.ID, -32603, "Internal error")
 			}

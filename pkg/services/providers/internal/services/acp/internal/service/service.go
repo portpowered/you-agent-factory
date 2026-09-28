@@ -340,6 +340,10 @@ func (daemon *daemon) execute(
 	})
 	modelConfig, err := applyAdvertisedModel(ctx, connection, session, request.Model)
 	if err != nil {
+		var failure providers.ExecuteFailure
+		if errors.As(err, &failure) {
+			return providers.ExecuteResult{}, withSessionRef(failure, id, string(session.SessionId))
+		}
 		daemon.invalidateDisconnected(ctx)
 		return providers.ExecuteResult{}, withSessionRef(
 			rpcFailure(ctx, "session/set_config_option", id, err, daemon.stderr.String(), request),
@@ -365,6 +369,12 @@ func (daemon *daemon) execute(
 	}
 	if response.StopReason == acpsdk.StopReasonCancelled {
 		return providers.ExecuteResult{}, withPartial(acpControlCanceledFailure(id), client, id)
+	}
+	if client.permissionDenied() && strings.TrimSpace(client.content()) == "" {
+		return providers.ExecuteResult{}, withPartial(providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindUnknown,
+			Message: fmt.Sprintf("ACP provider %q ended the turn without output after a permission request was denied", id),
+		}, client, id)
 	}
 	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: client.completeProgress(), ProgressAlreadyObserved: request.ProgressObserver != nil, Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig, "completion_evidence": "provider_response"}}}, nil
 }
@@ -647,7 +657,10 @@ func applyAdvertisedModel(ctx context.Context, connection *acpsdk.ClientSideConn
 		}
 		return "applied", nil
 	}
-	return "not_advertised", nil
+	return "not_advertised", providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindInvalidRequest,
+		Message: fmt.Sprintf("ACP session does not advertise requested model %q", model),
+	}
 }
 
 func selectOptionContains(options acpsdk.SessionConfigSelectOptions, model acpsdk.SessionConfigValueId) bool {
@@ -958,11 +971,12 @@ func sensitiveEnvironmentName(name string) bool {
 }
 
 type client struct {
-	mu              sync.Mutex
-	skipPermissions bool
-	text            strings.Builder
-	sessionID       string
-	stream          *promptProgressStream
+	mu                  sync.Mutex
+	skipPermissions     bool
+	permissionWasDenied bool
+	text                strings.Builder
+	sessionID           string
+	stream              *promptProgressStream
 }
 
 // reset begins one turn's progress stream. observe may be nil, in which case
@@ -972,6 +986,7 @@ func (c *client) reset(skipPermissions bool, observe providers.ProgressObserver)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.skipPermissions = skipPermissions
+	c.permissionWasDenied = false
 	c.text.Reset()
 	c.sessionID = ""
 	c.stream = newPromptProgressStream(observe)
@@ -1001,6 +1016,11 @@ func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) 
 }
 func (c *client) setSessionID(v string) { c.mu.Lock(); c.sessionID = v; c.mu.Unlock() }
 func (c *client) content() string       { c.mu.Lock(); defer c.mu.Unlock(); return c.text.String() }
+func (c *client) permissionDenied() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.permissionWasDenied
+}
 func (c *client) sessionRef(provider providers.ID) *providers.SessionRef {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1187,9 +1207,17 @@ func (c *client) RequestPermission(ctx context.Context, request acpsdk.RequestPe
 	for _, option := range request.Options {
 		allow := option.Kind == acpsdk.PermissionOptionKindAllowOnce || option.Kind == acpsdk.PermissionOptionKindAllowAlways
 		if allow == want {
+			if !allow {
+				c.mu.Lock()
+				c.permissionWasDenied = true
+				c.mu.Unlock()
+			}
 			return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeSelected(option.OptionId)}, nil
 		}
 	}
+	c.mu.Lock()
+	c.permissionWasDenied = true
+	c.mu.Unlock()
 	return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeCancelled()}, nil
 }
 func (*client) ReadTextFile(context.Context, acpsdk.ReadTextFileRequest) (acpsdk.ReadTextFileResponse, error) {
