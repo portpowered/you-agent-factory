@@ -352,7 +352,7 @@ func TestRuntimeCompositionComposesInertInstanceHost(t *testing.T) {
 	}
 }
 
-func TestBoundRuntimeServiceUsesConcreteDelegateForWideOperations(t *testing.T) {
+func TestBoundRuntimeServiceUsesPublishedEngineForWideOperations(t *testing.T) {
 	t.Parallel()
 
 	root, err := NewRoot(
@@ -367,8 +367,7 @@ func TestBoundRuntimeServiceUsesConcreteDelegateForWideOperations(t *testing.T) 
 		t.Fatalf("NewRoot() error = %v", err)
 	}
 	engine := &wideOperationRuntimeFake{}
-	wrapper := &runtimeDelegateWrapper{Service: engine, delegate: engine}
-	root.active["runtime-1"] = &runtimeActivationState{service: wrapper, ingress: engine}
+	root.active["runtime-1"] = &runtimeActivationState{service: engine, ingress: engine}
 
 	binding := &boundRuntimeService{root: root, runtimeID: "runtime-1"}
 	if _, err := binding.SubmitWorkRequest(context.Background(), work.WorkRequest{}); err != nil {
@@ -380,12 +379,9 @@ func TestBoundRuntimeServiceUsesConcreteDelegateForWideOperations(t *testing.T) 
 	if engine.submitCalls != 1 || engine.eventCalls != 1 {
 		t.Fatalf("engine wide-operation calls = (%d, %d), want (1, 1)", engine.submitCalls, engine.eventCalls)
 	}
-	if wrapper.submitCalls != 0 || wrapper.eventCalls != 0 {
-		t.Fatalf("compatibility wrapper wide-operation calls = (%d, %d), want (0, 0)", wrapper.submitCalls, wrapper.eventCalls)
-	}
 }
 
-func TestBoundRuntimeServiceUsesConcreteDelegateForLegacyWorkSnapshot(t *testing.T) {
+func TestBoundRuntimeServiceUsesPublishedEngineForLegacyWorkSnapshot(t *testing.T) {
 	t.Parallel()
 
 	root, err := NewRoot(
@@ -402,7 +398,7 @@ func TestBoundRuntimeServiceUsesConcreteDelegateForLegacyWorkSnapshot(t *testing
 	snapshot := &interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.RuntimeNet]{}
 	engine := &legacySnapshotRuntimeFake{snapshot: snapshot}
 	root.active["runtime-1"] = &runtimeActivationState{
-		service: &runtimeDelegateWrapper{Service: engine, delegate: engine},
+		service: engine,
 		ingress: engine,
 	}
 
@@ -420,31 +416,6 @@ func TestBoundRuntimeServiceUsesConcreteDelegateForLegacyWorkSnapshot(t *testing
 	if got != snapshot {
 		t.Fatalf("GetEngineStateSnapshot() = %p, want concrete delegate snapshot %p", got, snapshot)
 	}
-}
-
-type runtimeDelegateWrapper struct {
-	factoryruntime.Service
-	delegate    factoryruntime.Service
-	submitCalls int
-	eventCalls  int
-}
-
-func (wrapper *runtimeDelegateWrapper) RuntimeDelegate() factoryruntime.Service {
-	return wrapper.delegate
-}
-
-func (wrapper *runtimeDelegateWrapper) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	wrapper.submitCalls++
-	return work.WorkRequestSubmitResult{}, nil
-}
-
-func (wrapper *runtimeDelegateWrapper) SubscribeFactoryEvents(
-	context.Context,
-	*interfaces.FactoryEventReconnectCursor,
-	interfaces.FactoryEventReconnectScope,
-) (*interfaces.FactoryEventStream, error) {
-	wrapper.eventCalls++
-	return nil, nil
 }
 
 type wideOperationRuntimeFake struct {

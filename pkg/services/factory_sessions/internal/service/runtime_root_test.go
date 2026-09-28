@@ -326,7 +326,7 @@ func (root *cleanupRoutingRoot) Activate(
 		RuntimeID: "runtime-1",
 		Runtime: factoryruntime.RuntimeActivationView{
 			RuntimeID: "runtime-1",
-			Service:   &activatedRuntimeService{products: runtimeProducts{}},
+			Service:   root,
 		},
 	}, nil
 }
@@ -590,7 +590,7 @@ func TestNewFactorySelectsLegacyHistoricalReplayBeforeLiveRuntimeAssembly(t *tes
 		t.Fatalf("NewFactory: %v", err)
 	}
 	opened, historical, err := factory.InspectHistoricalApplication(t.Context(), factorysessions.SessionStartRequest{
-		FolderPath: t.TempDir(),
+		FolderPath:       t.TempDir(),
 		RuntimeSelection: &factorysessions.SessionRuntimeSelection{Recording: factorysessions.SessionRecordingSelection{ReplayPath: "legacy-replay.jsonl"}},
 	})
 	if err != nil {

@@ -18,49 +18,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// activatedRuntimeService is the private handoff stored by the Runtime root.
-// The embedded service is the completed Factory Sessions runtime; the product
-// roles remain private to this opener and are exposed only through the same
-// activation result that published the service. The wrapper deliberately does
-// not carry the widened Work and event operations: those are published as the
-// activation's declared ingress so no peer recovers them from this type.
-type activatedRuntimeService struct {
-	factoryruntime.Service
-	products runtimeProducts
-}
-
-// RuntimeDelegate exposes only the concrete Runtime service to the owning
-// Factory Runtime root. The wrapper still carries opening products for the
-// Factory Sessions handoff, but widened Work and event operations must never
-// resolve through that wrapper again.
-func (s *activatedRuntimeService) RuntimeDelegate() factoryruntime.Service {
-	if s == nil {
-		return nil
-	}
-	return s.Service
-}
-
-func (s *activatedRuntimeService) runtimeProducts() runtimeProducts {
-	if s == nil {
-		return runtimeProducts{}
-	}
-	return s.products
-}
-
 func (r *Root) activateRuntime(
 	ctx context.Context,
 	request factoryruntime.RuntimeActivationRequest,
-) (*factoryruntime.RuntimeActivation, error) {
+) (runtimeProducts, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return runtimeProducts{}, err
 	}
 	openingRequest, err := runtimeOpeningRequestFromActivation(request)
 	if err != nil {
-		return nil, err
+		return runtimeProducts{}, err
 	}
 	canonicalSessionIDProvided := strings.TrimSpace(openingRequest.FactorySession.CanonicalSessionID) != ""
 	if err := ensureDefaultCanonicalSessionID(&openingRequest.FactorySession, openingRequest.Recordings.ReplayPath, r.canonicalSessionIDGenerator()); err != nil {
-		return nil, err
+		return runtimeProducts{}, err
 	}
 	canonicalSessionIDGenerated := !canonicalSessionIDProvided &&
 		strings.TrimSpace(openingRequest.FactorySession.CanonicalSessionID) != ""
@@ -78,9 +49,9 @@ func (r *Root) activateRuntime(
 	}
 	products, err := r.openRuntimeWithSnapshot(openingContext, openingRequest, r.baseLogger, &request.Snapshot)
 	if err != nil {
-		return nil, err
+		return runtimeProducts{}, err
 	}
-	return newRuntimeActivation(products)
+	return products, nil
 }
 
 // newRuntimeActivation publishes the opened engine as the Runtime activation.
@@ -100,10 +71,7 @@ func newRuntimeActivation(products runtimeProducts) (*factoryruntime.RuntimeActi
 		)
 	}
 	return &factoryruntime.RuntimeActivation{
-		Service: &activatedRuntimeService{
-			Service:  service,
-			products: products,
-		},
+		Service:             service,
 		WorkAndEventIngress: ingress,
 		Close: func(closeCtx context.Context) error {
 			if products.closeArtifacts == nil {
@@ -317,7 +285,19 @@ func (r *Root) openActivatedRuntimeWithInputs(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	result, err := r.runtimeRoot.Activate(ctx, activationRequest, r.activateRuntime)
+	var products runtimeProducts
+	result, err := r.runtimeRoot.Activate(ctx, activationRequest, func(activationCtx context.Context, activation factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
+		opened, openErr := r.activateRuntime(activationCtx, activation)
+		if openErr != nil {
+			return nil, openErr
+		}
+		products = opened
+		published, activationErr := newRuntimeActivation(opened)
+		if activationErr != nil && opened.closeArtifacts != nil {
+			activationErr = errors.Join(activationErr, opened.closeArtifacts())
+		}
+		return published, activationErr
+	})
 	if err != nil {
 		return runtimeProducts{}, err
 	}
@@ -325,14 +305,6 @@ func (r *Root) openActivatedRuntimeWithInputs(
 	if binding.IsZero() {
 		binding = result.Runtime.Binding
 	}
-	handoff, ok := result.Runtime.Service.(*activatedRuntimeService)
-	if !ok || handoff == nil {
-		if cleanupErr := r.activationCloser(binding, result.RuntimeID)(); cleanupErr != nil {
-			return runtimeProducts{}, fmt.Errorf("open Factory Runtime: activation handoff is unavailable; cleanup: %w", cleanupErr)
-		}
-		return runtimeProducts{}, fmt.Errorf("open Factory Runtime: activation handoff is unavailable")
-	}
-	products := handoff.runtimeProducts()
 	if resumeInput != nil {
 		metadata := resumeInput.RecoveryMetadata
 		metadata.SuccessorRecordingID = recoveryRecordingID(activationRequest.RuntimeID)

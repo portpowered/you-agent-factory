@@ -383,8 +383,8 @@ func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
 	if got := proxy.submitCalls.Load(); got != 0 {
 		t.Fatalf("session proxy SubmitWorkRequest calls = %d, want 0", got)
 	}
-	if _, ok := activation.Service.(factoryruntime.APIFactory); ok {
-		t.Fatal("published activation service must not expose the migration-only Work and event ingress")
+	if activation.Service != engine {
+		t.Fatalf("published activation service = %T, want concrete engine %T", activation.Service, engine)
 	}
 }
 
@@ -812,7 +812,7 @@ func (root *resumeRoutingRoot) Activate(
 		RuntimeID: "runtime-1",
 		Runtime: factoryruntime.RuntimeActivationView{
 			RuntimeID: "runtime-1",
-			Service:   &activatedRuntimeService{products: runtimeProducts{}},
+			Service:   root,
 		},
 	}, nil
 }
@@ -855,7 +855,7 @@ func (root *replayRoutingRoot) Activate(
 		RuntimeID: "runtime-1",
 		Runtime: factoryruntime.RuntimeActivationView{
 			RuntimeID: "runtime-1",
-			Service:   &activatedRuntimeService{products: runtimeProducts{}},
+			Service:   root,
 		},
 	}, nil
 }

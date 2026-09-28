@@ -18,14 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// runtimeDelegateProvider is the narrow handoff used when an activation
-// retains a compatibility wrapper around the concrete Runtime service. Bound
-// capabilities must route widened legacy operations to that concrete service,
-// not to the wrapper that may resolve back through Factory Sessions.
-type runtimeDelegateProvider interface {
-	RuntimeDelegate() factoryruntime.Service
-}
-
 // workStateSnapshotProvider is the migration-only capability kept out of the
 // published Factory Runtime Service contract. Factory Sessions uses it for
 // Work reads that need runtime tokens without unrelated world-state replay.
@@ -542,7 +534,7 @@ func (r *Root) delegate() factoryruntime.Service {
 		return nil
 	}
 	for _, active := range r.active {
-		return runtimeDelegate(active.service)
+		return active.service
 	}
 	return nil
 }
@@ -557,7 +549,7 @@ func (r *Root) serviceForRuntime(runtimeID string) factoryruntime.Service {
 	if active == nil {
 		return nil
 	}
-	return runtimeDelegate(active.service)
+	return active.service
 }
 
 // activeIngress returns the single active Runtime's declared migration-only
@@ -591,15 +583,6 @@ func (r *Root) ingressForRuntime(runtimeID string) factoryruntime.APIFactory {
 		return nil
 	}
 	return active.ingress
-}
-
-func runtimeDelegate(service factoryruntime.Service) factoryruntime.Service {
-	if provider, ok := service.(runtimeDelegateProvider); ok {
-		if delegate := provider.RuntimeDelegate(); delegate != nil {
-			return delegate
-		}
-	}
-	return service
 }
 
 // boundRuntimeService is the detached capability returned in RuntimeBinding.
