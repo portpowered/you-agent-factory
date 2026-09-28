@@ -359,7 +359,7 @@ func (s *Server) writeDurableExecutionError(w http.ResponseWriter, err error) bo
 	return false
 }
 
-func durableSessionStartRequest(raw factorysessionexecution.StartRequest, synchronous bool) (factorysessionexecution.SessionStartRequest, error) {
+func durableSessionStartRequest(raw factorysessionexecution.StartRequest, synchronous bool, projectRoot string) (factorysessionexecution.SessionStartRequest, error) {
 	if raw.EventConsumer != nil {
 		return factorysessionexecution.SessionStartRequest{}, &factorysessionexecution.ValidationError{
 			Field:   "eventConsumer",
@@ -383,7 +383,26 @@ func durableSessionStartRequest(raw factorysessionexecution.StartRequest, synchr
 		Orchestrator:   raw.Orchestrator,
 		RuntimeOptions: raw.Runtime,
 		Wait:           wait,
+		FolderPath:     projectRoot,
 	}, nil
+}
+
+func (s *Server) durableProjectRoot(ctx context.Context) (string, error) {
+	defaultSession, err := s.sessionsRoot.Get(ctx, factorysessionexecution.SessionGetRequest{
+		SessionID: factorysessionexecution.DefaultSessionID,
+		Mode:      factorysessionexecution.SessionOperationModeLive,
+	})
+	if err != nil {
+		return "", err
+	}
+	root := strings.TrimSpace(defaultSession.Session.FactoryDir)
+	if root == "" {
+		root = strings.TrimSpace(defaultSession.Session.FolderPath)
+	}
+	if root == "" {
+		return "", &factorysessionexecution.ValidationError{Field: "projectRoot", Message: "current Factory project root is required"}
+	}
+	return root, nil
 }
 
 func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
@@ -404,7 +423,12 @@ func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.
 		if s.guardSessionsRequestContext(w, r) {
 			return
 		}
-		mapped, err := durableSessionStartRequest(raw, false)
+		projectRoot, err := s.durableProjectRoot(r.Context())
+		if err != nil {
+			s.writeSessionsRootErrorOrInternal(w, "", err, "current Factory is unavailable")
+			return
+		}
+		mapped, err := durableSessionStartRequest(raw, false, projectRoot)
 		if err != nil {
 			s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 			return
@@ -462,7 +486,12 @@ func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.R
 		if s.guardSessionsRequestContext(w, r) {
 			return
 		}
-		mapped, err := durableSessionStartRequest(raw, true)
+		projectRoot, err := s.durableProjectRoot(r.Context())
+		if err != nil {
+			s.writeSessionsRootErrorOrInternal(w, "", err, "current Factory is unavailable")
+			return
+		}
+		mapped, err := durableSessionStartRequest(raw, true, projectRoot)
 		if err != nil {
 			s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 			return

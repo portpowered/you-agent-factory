@@ -48,6 +48,7 @@ type runtimeSessionState struct {
 	startRequest              *StartRequest
 	resolvedSource            ResolvedSource
 	sourceContent             string
+	projectRoot               string
 	events                    []json.RawMessage
 	runCancel                 context.CancelFunc
 	runDone                   chan struct{} // closed under mu after the async run and terminal persistence return
@@ -103,8 +104,9 @@ func projectRuntimeSessionState(
 	}
 
 	state := runtimeSessionState{
-		session: session,
-		result:  result,
+		session:     session,
+		result:      result,
+		projectRoot: strings.TrimSpace(normalized.ProjectRoot),
 	}
 	if outcome.OK {
 		applyRuntimeSuccessProjection(&state, sessionID, outcome, finishedAt)
@@ -162,8 +164,9 @@ func projectRuntimeRunningSessionState(
 		},
 	}
 	state := runtimeSessionState{
-		session: session,
-		result:  result,
+		session:     session,
+		result:      result,
+		projectRoot: strings.TrimSpace(normalized.ProjectRoot),
 	}
 	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result, RuntimeDispatchEventInput{
 		Dispatches:                state.dispatches,
@@ -191,7 +194,10 @@ func projectRuntimeFailure(session *SessionReadResult, result *ResultReadResult,
 		}
 		result.ResultStatus = ResultStatusUnavailable
 	}
-	if code := strings.TrimSpace(failure.Code); code != "" {
+	if code := strings.TrimSpace(failure.Code); code != "" || strings.TrimSpace(failure.Message) != "" {
+		if code == "" {
+			code = factory.JavaScriptRuntimeCodeScriptError
+		}
 		session.Failure = &FailureSummary{
 			Reason:  code,
 			Message: failure.Message,
@@ -423,6 +429,7 @@ func (s *JavaScriptRuntimeService) startAsync(ctx context.Context, req StartRequ
 	reserved.state.startRequest = cloneStartRequest(normalized)
 	reserved.state.resolvedSource = resolved
 	reserved.state.sourceContent = sourceContent
+	reserved.state.projectRoot = s.resolveRequestProjectRoot(normalized)
 	s.mu.Unlock()
 	if err := s.ensureSessionResponseEventsIfNeeded(reserved.state); err != nil {
 		s.mu.Lock()
@@ -746,9 +753,27 @@ func (s *JavaScriptRuntimeService) executeImmediateSyncSession(
 
 func (s *JavaScriptRuntimeService) prepareStart(normalized StartRequest) (PreparedStart, error) {
 	return PrepareStart(normalized, StartPrepareContext{
-		StartSourceContext: StartSourceContext{ProjectRoot: s.projectRoot},
+		StartSourceContext: StartSourceContext{ProjectRoot: s.resolveRequestProjectRoot(normalized)},
 		WorkerPresetIDs:    s.workerPresetIDs,
 	}, s.workflowDefinitions)
+}
+
+func (s *JavaScriptRuntimeService) resolveRequestProjectRoot(req StartRequest) string {
+	return strings.TrimSpace(req.ProjectRoot)
+}
+
+func (s *JavaScriptRuntimeService) projectRootForSession(sessionID string) string {
+	if s == nil {
+		return ""
+	}
+	s.mu.RLock()
+	state := s.sessions[sessionID]
+	root := ""
+	if state != nil {
+		root = strings.TrimSpace(state.projectRoot)
+	}
+	s.mu.RUnlock()
+	return root
 }
 
 func policyResolutionFromPrepared(prepared PreparedStart) factory.JavaScriptPolicyResolution {

@@ -31,6 +31,7 @@ func TestDurableRestartReconstructsPublishedProjections(t *testing.T) {
 
 	started, err := owner.StartSync(context.Background(), factorysessions.DurableStartRequest{
 		RequestID: "request-restart-owner-001",
+		ProjectRoot: ".",
 		Source: factorysessions.Source{
 			Kind: factoryruntime.WorkflowSourceKindInlineWorkflow,
 			InlineWorkflow: &factorysessions.InlineWorkflowSource{

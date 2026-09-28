@@ -442,7 +442,8 @@ func TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSession
 	waitMillis := int64(50)
 
 	started, err := service.StartSync(context.Background(), StartRequest{
-		RequestID: "req-runtime-sync-wait-timeout-001",
+		RequestID:   "req-runtime-sync-wait-timeout-001",
+		ProjectRoot: service.projectRoot,
 		Source: Source{
 			Kind: factory.WorkflowSourceKindInlineWorkflow,
 			InlineWorkflow: &InlineWorkflowSource{
@@ -822,7 +823,8 @@ func inlineWorkflowStartRequest(
 	requestedPolicy map[string]any,
 ) StartRequest {
 	return StartRequest{
-		RequestID: requestID,
+		RequestID:   requestID,
+		ProjectRoot: ".",
 		Source: Source{
 			Kind: factory.WorkflowSourceKindInlineWorkflow,
 			InlineWorkflow: &InlineWorkflowSource{

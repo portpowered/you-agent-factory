@@ -111,6 +111,14 @@ func NewRootFromAssembly(
 	if root.Assembly != nil && root.Assembly != concrete {
 		return nil, fmt.Errorf("construct Factory Sessions: process root is already bound to another assembly")
 	}
+	if root.factorySessionExecutionFactory != nil {
+		if err := root.buildProcessDurableExecution(); err != nil {
+			return nil, err
+		}
+		if err := concrete.BindProcessDurable(root.processDurableExecution); err != nil {
+			return nil, err
+		}
+	}
 	root.Assembly = concrete
 	root.liveChangeCoordinator = liveChangeCoordinator
 	return root, nil

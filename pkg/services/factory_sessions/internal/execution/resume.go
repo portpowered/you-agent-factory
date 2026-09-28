@@ -38,6 +38,7 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		startRequest:              cloneStartRequestPtr(state.startRequest),
 		resolvedSource:            state.resolvedSource,
 		sourceContent:             state.sourceContent,
+		projectRoot:               state.projectRoot,
 		runCancel:                 state.runCancel,
 		runDone:                   state.runDone,
 		eventConsumer:             state.eventConsumer,
@@ -624,6 +625,7 @@ func applyRuntimeSessionFields(target *runtimeSessionState, source runtimeSessio
 	target.dispatchStatusTransitions = cloneDispatchStatusTransitions(source.dispatchStatusTransitions)
 	target.artifacts = cloneArtifactSummaries(source.artifacts)
 	target.events = source.events
+	target.projectRoot = source.projectRoot
 	restoreRuntimeResumeState(target, preservedResume)
 }
 
@@ -989,6 +991,7 @@ type PersistedRuntimeSessionState struct {
 	StartRequest      *StartRequest
 	ResolvedSource    ResolvedSource
 	SourceContent     string
+	ProjectRoot       string
 }
 
 // persistedSnapshotFromRuntimeStateWithFailureLogCapacity builds a detached
@@ -1010,6 +1013,7 @@ func persistedSnapshotFromRuntimeStateWithFailureLogCapacity(
 		StartRequest:      cloneStartRequestPtr(state.startRequest),
 		ResolvedSource:    state.resolvedSource,
 		SourceContent:     state.sourceContent,
+		ProjectRoot:       state.projectRoot,
 	}
 	if len(state.dispatchJavaScript) > 0 {
 		snapshot.DispatchJavaScript = cloneDispatchJavaScriptProjections(state.dispatchJavaScript)
@@ -1041,6 +1045,7 @@ func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) ru
 		startRequest:      cloneStartRequestPtr(snapshot.StartRequest),
 		resolvedSource:    snapshot.ResolvedSource,
 		sourceContent:     snapshot.SourceContent,
+		projectRoot:       snapshot.ProjectRoot,
 	}
 	if len(snapshot.DispatchJavaScript) > 0 {
 		state.dispatchJavaScript = cloneDispatchJavaScriptProjections(snapshot.DispatchJavaScript)
@@ -1064,6 +1069,9 @@ func (s *JavaScriptRuntimeService) persistTerminalSessionState(state runtimeSess
 
 func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionState) error {
 	if s.persistence == nil {
+		return nil
+	}
+	if state.startRequest != nil && state.startRequest.PersistencePolicy == PersistencePolicyDisabled {
 		return nil
 	}
 	sessionID := strings.TrimSpace(state.session.SessionID)

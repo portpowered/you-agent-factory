@@ -73,6 +73,12 @@ func normalizeIdempotencyDocument(req StartRequest) (map[string]any, error) {
 	document := map[string]any{
 		"source": source,
 	}
+	if root := strings.TrimSpace(req.ProjectRoot); root != "" {
+		document["projectRoot"] = root
+	}
+	if req.PersistencePolicy != "" {
+		document["persistencePolicy"] = string(req.PersistencePolicy)
+	}
 	if len(req.Args) > 0 {
 		args, err := canonicalizeMap(req.Args)
 		if err != nil {
@@ -445,6 +451,7 @@ func (s *JavaScriptRuntimeService) startWaitingSyncSession(
 	reserved.state.startRequest = cloneStartRequest(normalized)
 	reserved.state.resolvedSource = resolved
 	reserved.state.sourceContent = sourceContent
+	reserved.state.projectRoot = s.resolveRequestProjectRoot(normalized)
 	s.mu.Unlock()
 
 	if err := admission.launch(func() {

@@ -826,7 +826,7 @@ func shapePartialModeResult(projected, canonical ResultReadResult, session Sessi
 		projected.Availability = nil
 	case ResultStatusNotReady, ResultStatusUnavailable:
 		projected.PrimaryResult = nil
-		projected.Failure = nil
+		projected.Failure = cloneFailureSummary(canonical.Failure)
 		projected.Availability = cloneResultAvailability(canonical.Availability)
 		if projected.Availability == nil && status == ResultStatusNotReady {
 			projected.Availability = defaultNotReadyAvailability(session)
@@ -860,7 +860,7 @@ func shapeFinalModeResult(projected, canonical ResultReadResult, session Session
 	case ResultStatusNotReady, ResultStatusUnavailable:
 		projected.ResultStatus = status
 		projected.PrimaryResult = nil
-		projected.Failure = nil
+		projected.Failure = cloneFailureSummary(canonical.Failure)
 		projected.Availability = cloneResultAvailability(canonical.Availability)
 		if projected.Availability == nil && status == ResultStatusNotReady {
 			projected.Availability = defaultNotReadyAvailability(session)

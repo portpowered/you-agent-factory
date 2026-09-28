@@ -166,6 +166,7 @@ func TestService_CanonicalOperationsReportTypedAvailabilityFailures(t *testing.T
 	service := &Service{}
 	if _, err := service.Start(context.Background(), factorysessions.SessionStartRequest{
 		Mode:        factorysessions.SessionOperationModeDurable,
+		FolderPath:  "/test-factory",
 		Correlation: factorysessions.SessionOperationCorrelation{RequestID: "request"},
 	}); !errors.Is(err, factorysessions.ErrExecutionServiceNotConfigured) {
 		t.Fatalf("Start() error = %v, want durable availability error", err)
@@ -183,6 +184,7 @@ func TestService_CanonicalOperationsPropagateOwnerFailuresWithoutLegacyCalls(t *
 	service := &Service{durable: durable}
 	if _, err := service.Start(context.Background(), factorysessions.SessionStartRequest{
 		Mode:        factorysessions.SessionOperationModeDurable,
+		FolderPath:  "/test-factory",
 		Correlation: factorysessions.SessionOperationCorrelation{RequestID: "request"},
 	}); !errors.Is(err, startFailure) {
 		t.Fatalf("Start() error = %v, want owner failure %v", err, startFailure)

@@ -292,6 +292,9 @@ func validateCanonicalStartRequest(request factorysessions.SessionStartRequest) 
 		if strings.TrimSpace(request.Correlation.RequestID) == "" {
 			return canonicalRequestError("correlation.requestId", "request id is required")
 		}
+		if strings.TrimSpace(request.FolderPath) == "" {
+			return canonicalRequestError("folderPath", "Factory project root is required")
+		}
 	default:
 		return canonicalRequestError("mode", "mode must be live or durable")
 	}
@@ -446,12 +449,17 @@ func canonicalDurableStartRequest(
 		source.FactoryID = strings.TrimSpace(request.Definition.FactoryID)
 	}
 	legacy := factorysessions.StartRequest{
-		RequestID:       strings.TrimSpace(request.Correlation.RequestID),
-		Source:          source,
-		Args:            cloneCanonicalAnyMap(request.Args),
-		RequestedPolicy: cloneCanonicalAnyMap(request.Policy),
-		Orchestrator:    cloneCanonicalOrchestrator(request.Orchestrator),
-		Runtime:         cloneCanonicalRuntimeOptions(request.RuntimeOptions),
+		RequestID:         strings.TrimSpace(request.Correlation.RequestID),
+		Source:            source,
+		Args:              cloneCanonicalAnyMap(request.Args),
+		RequestedPolicy:   cloneCanonicalAnyMap(request.Policy),
+		Orchestrator:      cloneCanonicalOrchestrator(request.Orchestrator),
+		Runtime:           cloneCanonicalRuntimeOptions(request.RuntimeOptions),
+		ProjectRoot:       strings.TrimSpace(request.FolderPath),
+		PersistencePolicy: request.Persistence,
+	}
+	if legacy.PersistencePolicy == "" {
+		legacy.PersistencePolicy = factorysessions.PersistencePolicyDisabled
 	}
 	if len(legacy.Args) == 0 && request.Input != nil && request.Input.NormalizedArguments != nil {
 		legacy.Args = canonicalNormalizedArgumentsToValues(request.Input.NormalizedArguments)

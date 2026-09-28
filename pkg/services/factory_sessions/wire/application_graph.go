@@ -132,7 +132,7 @@ func NewDefinitionRuntimeRouter() *factorysessions.DefinitionRuntimeRouter {
 
 var (
 	NewCursorFileStore         = persistence.NewFileStore
-	NewRuntimeProjectStore     = runtimepersist.NewProjectStore
+	NewRuntimeProjectStore     = runtimepersist.NewLazyProjectStore
 	NewProcessLifecycleFactory = processlifecycle.NewFactory
 	NewRuntimeHostService      = runtimehosting.New
 	NewDurableExecutionRuntime = service.NewDurableExecution

@@ -632,6 +632,11 @@ type StartRequest struct {
 	Runtime         *RuntimeOptions
 	Wait            *WaitOptions
 	EventConsumer   FactoryEventConsumer `json:"-"`
+	// ProjectRoot and PersistencePolicy are internal-only selections carried
+	// from the canonical SessionStartRequest. They are never part of the
+	// transport-editable API (json:"-") and preserve legacy behavior when empty.
+	ProjectRoot       string            `json:"-"`
+	PersistencePolicy PersistencePolicy `json:"-"`
 }
 
 // SyncOutcome reports how a sync start wait ended.

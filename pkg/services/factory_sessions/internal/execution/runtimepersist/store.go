@@ -42,6 +42,20 @@ type DirectoryStore struct {
 	files FileSystem
 }
 
+// NewLazyProjectStore selects the process-owned snapshot location without
+// creating directories during process construction. Save creates them when
+// the first persistent session publishes a snapshot.
+func NewLazyProjectStore(projectRoot string, files FileSystem) (Store, error) {
+	root := strings.TrimSpace(projectRoot)
+	if root == "" {
+		return nil, errors.New("durable session persistence project root is required")
+	}
+	if files == nil {
+		return nil, errors.New("durable session persistence filesystem is required")
+	}
+	return DirectoryStore{Dir: DirForProjectRoot(root), files: files}, nil
+}
+
 // NewProjectStore constructs the durable snapshot store for one project root.
 // Project path validation and filesystem initialization stay at this persistence
 // boundary rather than leaking into application composition.

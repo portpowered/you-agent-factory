@@ -738,7 +738,8 @@ func TestPrepareStartAndPersistenceHelpers(t *testing.T) {
 	})
 
 	prepared, err := service.prepareStart(StartRequest{
-		RequestID: "req-prepare-start-001",
+		RequestID:   "req-prepare-start-001",
+		ProjectRoot: projectRoot,
 		Source: Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "simple-final",
@@ -791,7 +792,8 @@ func TestJavaScriptRuntimeService_ProjectRootAloneDoesNotEnablePersistence(t *te
 	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{ProjectRoot: projectRoot})
 
 	if _, err := service.StartSync(context.Background(), StartRequest{
-		RequestID: "req-runtime-no-implicit-persistence-001",
+		RequestID:   "req-runtime-no-implicit-persistence-001",
+		ProjectRoot: projectRoot,
 		Source: Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "simple-final",

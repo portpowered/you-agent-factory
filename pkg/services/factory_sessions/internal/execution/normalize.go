@@ -19,6 +19,11 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 	if requestID == "" {
 		return StartRequest{}, NewValidationError("requestId", "requestId is required")
 	}
+	switch req.PersistencePolicy {
+	case "", PersistencePolicyEnabled, PersistencePolicyDisabled:
+	default:
+		return StartRequest{}, NewValidationError("persistence.policy", "unsupported durable session persistence policy")
+	}
 
 	source, err := normalizeSource(req.Source)
 	if err != nil {
@@ -26,11 +31,13 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 	}
 
 	normalized := StartRequest{
-		RequestID:       requestID,
-		Source:          source,
-		Args:            cloneArgs(req.Args),
-		RequestedPolicy: cloneArgs(req.RequestedPolicy),
-		EventConsumer:   req.EventConsumer,
+		RequestID:         requestID,
+		Source:            source,
+		Args:              cloneArgs(req.Args),
+		RequestedPolicy:   cloneArgs(req.RequestedPolicy),
+		EventConsumer:     req.EventConsumer,
+		ProjectRoot:       strings.TrimSpace(req.ProjectRoot),
+		PersistencePolicy: req.PersistencePolicy,
 	}
 	if req.Runtime != nil {
 		runtime := *req.Runtime

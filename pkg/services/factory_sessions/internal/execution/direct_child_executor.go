@@ -421,6 +421,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 		return hooks
 	}
 	hooks.NewChildExecutor = func(childSessionID string, records factory.JavaScriptChildRecordSink, policy factory.JavaScriptPolicy) factory.JavaScriptChildExecutor {
+		workingDir := s.projectRootForSession(sessionID)
 		// Which executor serves a session is decided by which composition built
 		// this service, not by anything on the request. A runtime-backed session
 		// invokes its children as Workers through the already-composed Execute
@@ -433,7 +434,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 				records,
 				s.childValues,
 				s.observeWorkerDispatch,
-				s.projectRoot,
+				workingDir,
 				policy.MaxRetries,
 			)
 			executor.maxWorkerDuration = childWorkerDurationFromPolicy(policy)
@@ -453,7 +454,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 				execution,
 				records,
 				s.childValues,
-				s.projectRoot,
+				workingDir,
 				policy.MaxRetries,
 			)
 			executor.maxWorkerDuration = childWorkerDurationFromPolicy(policy)
@@ -470,7 +471,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 			legacyDirectChildExecution{invocation: s.directChildInvocation},
 			records,
 			s.childValues,
-			s.projectRoot,
+			workingDir,
 			policy.MaxRetries,
 		)
 		executor.maxWorkerDuration = childWorkerDurationFromPolicy(policy)

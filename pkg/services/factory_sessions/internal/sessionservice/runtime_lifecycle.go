@@ -15,14 +15,21 @@ type RuntimeStop = factorysessions.RuntimeStop
 // Close drains every live Factory Session owned by this process root. A
 // command stops only its admitted session; process shutdown owns the rest.
 func (a *Assembly) Close(ctx context.Context) error {
-	if a == nil || a.registry == nil {
+	if a == nil {
 		return nil
 	}
 	var result error
-	ids := a.registry.IDs()
-	for index := len(ids) - 1; index >= 0; index-- {
-		if err := a.CloseSession(ctx, ids[index]); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, factorysessions.ErrSessionNotFound) {
-			result = errors.Join(result, err)
+	if a.registry != nil {
+		ids := a.registry.IDs()
+		for index := len(ids) - 1; index >= 0; index-- {
+			if err := a.CloseSession(ctx, ids[index]); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, factorysessions.ErrSessionNotFound) {
+				result = errors.Join(result, err)
+			}
+		}
+	}
+	if service, ok := a.Service.(*Service); ok && service.durable != nil {
+		if closer, ok := service.durable.(interface{ Close() error }); ok {
+			result = errors.Join(result, closer.Close())
 		}
 	}
 	return result

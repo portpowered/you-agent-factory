@@ -34,7 +34,8 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-agent-run-live-child",
+		RequestID:   "req-runtime-agent-run-live-child",
+		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "agent-run-preset-child",
@@ -178,7 +179,8 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_TimeoutInterruptsProviderInf
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-agent-run-live-child-timeout",
+		RequestID:   "req-runtime-agent-run-live-child-timeout",
+		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "agent-run-fake-child",
@@ -227,7 +229,9 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_TimeoutSettlesSessionAndDisp
 		}),
 	})
 
-	completed, err := service.StartSync(context.Background(), liveChildTimeoutStartRequest())
+	request := liveChildTimeoutStartRequest()
+	request.ProjectRoot = projectRoot
+	completed, err := service.StartSync(context.Background(), request)
 	if err != nil {
 		t.Fatalf("StartSync: %v", err)
 	}
@@ -301,7 +305,8 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_StartAsyncProjectsRunningDis
 	})
 
 	started, err := service.StartAsync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-agent-run-live-child-interrupt",
+		RequestID:   "req-runtime-agent-run-live-child-interrupt",
+		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "agent-run-fake-child",
@@ -445,7 +450,8 @@ func TestJavaScriptRuntimeService_ParallelLiveChildFailure_ProjectsTypedFailureA
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-parallel-live-child-failure",
+		RequestID:   "req-runtime-parallel-live-child-failure",
+		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "parallel-live-child-failure",
@@ -478,7 +484,8 @@ func TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatc
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-agent-run-live-child-failure",
+		RequestID:   "req-runtime-agent-run-live-child-failure",
+		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "agent-run-live-child-failure",
@@ -946,8 +953,8 @@ func TestJavaScriptRuntimeService_ChildExecutorModes_CoexistOnSameWorkflowSource
 		Workflows:         scriptedAgentRunChildWorkflows(),
 	})
 
-	fakeCompleted := startAgentRunFakeChild(t, fakeService, "req-runtime-child-mode-fake")
-	liveCompleted := startAgentRunFakeChild(t, liveService, "req-runtime-child-mode-live")
+	fakeCompleted := startAgentRunFakeChild(t, fakeService, projectRoot, "req-runtime-child-mode-fake")
+	liveCompleted := startAgentRunFakeChild(t, liveService, projectRoot, "req-runtime-child-mode-live")
 
 	fakeDetail := dispatchExecutionMode(t, fakeService, fakeCompleted.SessionID, "dispatch-1")
 	liveDetail := dispatchExecutionMode(t, liveService, liveCompleted.SessionID, "dispatch-1")
@@ -976,7 +983,8 @@ func TestJavaScriptRuntimeService_ExplicitFakeMode_OverridesLiveServiceConfig(t 
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-child-mode-explicit-fake",
+		RequestID:   "req-runtime-child-mode-explicit-fake",
+		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "agent-run-fake-child",
@@ -1102,10 +1110,11 @@ func TestJavaScriptRuntimeService_PipelineFakeChildren_RemainsDeterministicWitho
 	}
 }
 
-func startAgentRunFakeChild(t *testing.T, service fse.Service, requestID string) fse.SyncStartResult {
+func startAgentRunFakeChild(t *testing.T, service fse.Service, projectRoot, requestID string) fse.SyncStartResult {
 	t.Helper()
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
-		RequestID: requestID,
+		RequestID:   requestID,
+		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "agent-run-fake-child",

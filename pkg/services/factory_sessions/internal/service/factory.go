@@ -12,6 +12,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -188,6 +189,7 @@ type Root struct {
 	startFlights                     singleflight.Group
 	liveChangeCoordinator            factorysessioncontracts.LiveChangeCoordinator
 	durableExecutionFactory          DurableExecutionFactory
+	processDurableExecution          durableexecution.Service
 	workerService                    workers.Service
 	modelService                     models.Service
 	automationService                automations.Service
@@ -317,6 +319,35 @@ func NewRoot(
 	}
 	root.runtimeRoot = factoryRuntime.RuntimeRoot
 	return root, nil
+}
+
+func (r *Root) buildProcessDurableExecution() error {
+	home, err := r.resolveHome()
+	if err != nil {
+		return fmt.Errorf("construct Factory Sessions durable owner: resolve home: %w", err)
+	}
+	processDurable, err := r.factorySessionExecutionFactory(
+		home,
+		factorysessions.PersistencePolicyEnabled,
+		r.providerOverride,
+		r.clock,
+		nil,
+		factoryruntime.JavaScriptWorkerSettings{},
+		nil,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("construct Factory Sessions durable owner: %w", err)
+	}
+	if binder, ok := processDurable.(interface {
+		SetWorkerExecution(interface {
+			Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+		}, factoryruntime.ResourceCapacityLeaseAdmission, string, string, providers.Service, *workers.MockWorkersConfig, platformprocess.CommandRunner)
+	}); ok {
+		binder.SetWorkerExecution(r.workerService, nil, "", "", r.providerOverride, nil, nil)
+	}
+	r.processDurableExecution = processDurable
+	return nil
 }
 
 // validateOwnerPorts checks the fixed owner contracts in declaration order.

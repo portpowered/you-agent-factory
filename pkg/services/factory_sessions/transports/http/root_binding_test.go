@@ -174,7 +174,13 @@ func (fake *httpSessionsRootFake) Invoke(_ context.Context, _ factorysessions.Se
 	return factorysessions.InvocationResult{}, factorysessions.ErrSessionNotFound
 }
 
-func (fake *httpSessionsRootFake) Get(_ context.Context, _ factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
+func (fake *httpSessionsRootFake) Get(_ context.Context, request factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
+	if request.SessionID == factorysessions.DefaultSessionID && request.Mode == factorysessions.SessionOperationModeLive {
+		return factorysessions.SessionGetResult{Session: factorysessions.SessionView{
+			SessionID: factorysessions.DefaultSessionID, Mode: factorysessions.SessionOperationModeLive,
+			FactoryDir: "/test-factory",
+		}}, nil
+	}
 	return factorysessions.SessionGetResult{}, factorysessions.ErrSessionNotFound
 }
 

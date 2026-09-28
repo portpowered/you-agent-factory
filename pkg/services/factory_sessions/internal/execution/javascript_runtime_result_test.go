@@ -159,6 +159,29 @@ func TestProjectResultRead_TerminalFinalAndUnavailable(t *testing.T) {
 	}
 }
 
+func TestProjectResultRead_UnavailableRetainsTerminalFailure(t *testing.T) {
+	t.Parallel()
+	failure := &FailureSummary{Reason: "SCRIPT_ERROR", Message: "controlled workflow failure"}
+	session := SessionReadResult{
+		SessionID:     "dur-sess-failure",
+		Status:        LifecycleStatusFailed,
+		ResultSummary: &ResultSummary{ResultStatus: string(ResultStatusUnavailable)},
+	}
+	canonical := ResultReadResult{
+		SessionID: session.SessionID, SessionStatus: LifecycleStatusFailed,
+		ResultStatus: ResultStatusUnavailable, Failure: failure,
+	}
+	for _, mode := range []ResultMode{ResultModeFinal, ResultModePartial} {
+		result, err := ProjectResultRead(canonical, session, nil, ResultRequest{Mode: mode})
+		if err != nil {
+			t.Fatalf("ProjectResultRead(%s): %v", mode, err)
+		}
+		if result.Failure == nil || result.Failure.Message != failure.Message || result.Failure == failure {
+			t.Fatalf("ProjectResultRead(%s) Failure = %#v, want cloned original failure", mode, result.Failure)
+		}
+	}
+}
+
 func TestProjectResultRead_FailedWithPartialHonorsPartialMode(t *testing.T) {
 	t.Parallel()
 	service := newContractFakeService(t)

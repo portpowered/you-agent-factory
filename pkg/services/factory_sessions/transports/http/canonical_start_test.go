@@ -67,6 +67,9 @@ func TestHandlerFromRoot_CanonicalStartMapsArgsSourceWait(t *testing.T) {
 		if got.Source.FactoryID != "factory-alpha" {
 			t.Fatalf("%s source factory = %q", name, got.Source.FactoryID)
 		}
+		if got.FolderPath != "/test-factory" {
+			t.Fatalf("%s project root = %q, want current Factory directory", name, got.FolderPath)
+		}
 		if got.Args["branch"] != "main" {
 			t.Fatalf("%s args = %#v, want branch=main", name, got.Args)
 		}

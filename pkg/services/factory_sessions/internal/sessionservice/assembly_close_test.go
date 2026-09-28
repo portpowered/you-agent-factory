@@ -9,8 +9,32 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 )
+
+type closingDurableOwner struct {
+	durableexecution.Service
+	closed int
+	err    error
+}
+
+func (owner *closingDurableOwner) Close() error {
+	owner.closed++
+	return owner.err
+}
+
+func TestAssemblyCloseDrainsProcessDurableOwner(t *testing.T) {
+	failure := errors.New("durable shutdown failed")
+	owner := &closingDurableOwner{err: failure}
+	assembly := &Assembly{Service: &Service{durable: owner}}
+	if err := assembly.Close(context.Background()); !errors.Is(err, failure) {
+		t.Fatalf("Close error = %v, want %v", err, failure)
+	}
+	if owner.closed != 1 {
+		t.Fatalf("durable owner close calls = %d, want one", owner.closed)
+	}
+}
 
 type closeRegistryOwnerFake struct {
 	registry sessionregistry.Service

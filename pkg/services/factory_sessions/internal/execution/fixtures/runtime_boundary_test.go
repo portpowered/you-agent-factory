@@ -209,6 +209,7 @@ func TestJavaScriptRuntimeService_StartSyncWaitTimeoutReplay_PreservesFirstObser
 	maxRunDurationMs := int64(200)
 	req := fse.StartRequest{
 		RequestID: "req-runtime-sync-replay-wait-timeout-001",
+		ProjectRoot: ".",
 		Source: fse.Source{
 			Kind: factory.WorkflowSourceKindInlineWorkflow,
 			InlineWorkflow: &fse.InlineWorkflowSource{
@@ -332,6 +333,7 @@ func TestJavaScriptRuntimeService_TypedFailures_MissingSessionMissingSourceBadSo
 		})
 		_, err := missingSourceService.StartAsync(context.Background(), fse.StartRequest{
 			RequestID: "req-runtime-missing-source-001",
+			ProjectRoot: ".",
 			Source: fse.Source{
 				Kind:         factory.WorkflowSourceKindWorkflowName,
 				WorkflowName: "does-not-exist",
@@ -362,6 +364,7 @@ func TestJavaScriptRuntimeService_TypedFailures_MissingSessionMissingSourceBadSo
 
 		_, err = runtimeService.StartSync(context.Background(), fse.StartRequest{
 			RequestID: "req-runtime-bad-source-001",
+			ProjectRoot: ".",
 			Source: fse.Source{
 				Kind:         factory.WorkflowSourceKindWorkflowName,
 				WorkflowName: "invalid",
