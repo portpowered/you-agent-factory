@@ -516,6 +516,10 @@ func newDurableExecutionHTTPHandler(
 	if sessions == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || logger == nil {
 		return nil, errors.New("construct durable execution HTTP handler: execution, policies, request preparation, and logger are required")
 	}
+	inspection, err := sessionInspectionForHTTP(sessions)
+	if err != nil {
+		return nil, err
+	}
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		SessionsRoot:  sessions,
 		DurableLister: sessions, FactoryValidation: validation,
@@ -526,14 +530,23 @@ func newDurableExecutionHTTPHandler(
 		shutdown = cancellation.Cancel
 	}
 	return transporthttp.NewServerWithRecordingsAndShutdown(
-		recordingshttp.NewAdapterWithSessions(nil, sessions, sessionInspectionForHTTP(sessions)),
+		recordingshttp.NewAdapterWithSessions(nil, sessions, inspection),
 		sessionsHandler, nil, nil, nil, nil, logger, shutdown,
 	).Handler(), nil
 }
 
-func sessionInspectionForHTTP(sessions factorysessions.Service) factorysessions.SessionInspectionService {
-	inspection, _ := sessions.(factorysessions.SessionInspectionService)
-	return inspection
+func sessionInspectionForHTTP(sessions factorysessions.Service) (factorysessions.SessionInspectionService, error) {
+	owner, ok := sessions.(interface {
+		SessionInspectionService() factorysessions.SessionInspectionService
+	})
+	if !ok {
+		return nil, errors.New("construct durable execution HTTP handler: Factory Sessions root must expose session inspection")
+	}
+	inspection := owner.SessionInspectionService()
+	if inspection == nil {
+		return nil, errors.New("construct durable execution HTTP handler: session inspection is unavailable")
+	}
+	return inspection, nil
 }
 
 type workerSessionsFactorySessionScopeResolver struct {

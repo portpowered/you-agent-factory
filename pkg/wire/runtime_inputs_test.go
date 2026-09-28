@@ -36,6 +36,39 @@ import (
 
 type canonicalStdioSessionsStub struct{ factorysessions.Service }
 
+type inspectionSessionsRootStub struct {
+	factorysessions.Service
+	inspection factorysessions.SessionInspectionService
+}
+
+func (stub inspectionSessionsRootStub) SessionInspectionService() factorysessions.SessionInspectionService {
+	return stub.inspection
+}
+
+type inspectionServiceStub struct {
+	factorysessions.SessionInspectionService
+}
+
+func TestDurableHTTPInspectionUsesProcessRootCapability(t *testing.T) {
+	t.Parallel()
+
+	var _ interface {
+		SessionInspectionService() factorysessions.SessionInspectionService
+	} = (*factorysessionwire.Root)(nil)
+
+	want := &inspectionServiceStub{}
+	got, err := sessionInspectionForHTTP(inspectionSessionsRootStub{inspection: want})
+	if err != nil || got != want {
+		t.Fatalf("session inspection = (%#v, %v), want process-owned capability %#v", got, err, want)
+	}
+	if _, err := sessionInspectionForHTTP(inspectionSessionsRootStub{}); err == nil {
+		t.Fatal("missing process-owned inspection capability was accepted")
+	}
+	if _, err := sessionInspectionForHTTP(canonicalStdioSessionsStub{}); err == nil {
+		t.Fatal("Sessions service without process-root inspection accessor was accepted")
+	}
+}
+
 type testStdioApplication struct{}
 
 func (testStdioApplication) Run(context.Context) error { return nil }
