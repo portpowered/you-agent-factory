@@ -199,3 +199,21 @@ completed a normal Longcat read-only request in session
 `82e6e1ad-4065-4d9b-9dcf-3b1fabbc6faf`, returning `you-agent-factory` with
 empty stderr. The new cleanup and invocation failure branches were covered by
 focused fakes, not triggered by these live probes.
+
+A broad read-only ACP service audit timed out after 120 seconds with no edit or
+primary result (session `8141319d-6b5c-4176-bcf0-705eb8ac0f75`). A narrowed
+lines-940-to-1055 audit completed (session
+`4615eace-9b53-4c4c-9a56-d6b4754b3b03`): `SessionUpdate` observes text/progress
+before `Prompt` returns, while `withPartial` only attaches progress after
+`Execute` returns an error; the higher-level Factory Session wait timeout does
+not itself use that provider diagnostic path. This is source-level evidence,
+not proof of Pi wire behavior.
+
+A read-only OpenCode audit of the durable sync start path completed in session
+`5963fe52-2176-4305-9953-35d3ca6fcbcf`, but the two inspected files did not
+establish that it supports the packaged subagent. A direct
+`you.factory_session.start_sync` request for `@you/subagent` returned
+`BAD_REQUEST`: `factory "@you/subagent" is not a JavaScript workflow factory`.
+The current durable start path therefore cannot replace the live subagent
+invocation without extending its accepted source types or changing the
+packaged factory.
