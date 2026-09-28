@@ -36,6 +36,7 @@ type SessionInvoker = roles.SessionInvoker
 type SessionInvocationWaitInput struct {
 	RequestID        string
 	TraceID          string
+	WorkID           string
 	InputSource      work.InputSourceLabel
 	InvocationReturn *factorydefinitions.InvocationReturnConfig
 	FactoryConfig    *factorydefinitions.FactoryConfig
@@ -157,6 +158,7 @@ func (o *SessionOwner) Invoke(
 	return o.waitForResult(ctx, sessionID, SessionInvocationWaitInput{
 		RequestID:        submitResult.RequestID,
 		TraceID:          submitResult.TraceID,
+		WorkID:           submitResult.WorkID,
 		InputSource:      prepared.resolved.Source,
 		InvocationReturn: prepared.factoryConfig.InvocationReturn,
 		FactoryConfig:    prepared.factoryConfig,

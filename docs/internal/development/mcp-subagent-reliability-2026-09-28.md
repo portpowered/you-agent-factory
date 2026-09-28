@@ -217,3 +217,14 @@ establish that it supports the packaged subagent. A direct
 The current durable start path therefore cannot replace the live subagent
 invocation without extending its accepted source types or changing the
 packaged factory.
+
+An OpenCode Longcat multi-file WorkID change timed out after 180 seconds with no
+edits (session `18897392-e782-4687-b963-1c84cc197d05`). The same bounded change
+through the plain `codex` provider completed (session
+`bc28938a-6747-41de-a935-be2808b251df`). OpenCode Longcat then completed the
+MCP `workId` mapping (session `6b3e9499-7d8f-4239-a5c0-76adf1bc8b0a`); focused
+invocation and MCP tests plus `make pkg-maint` passed. A fresh candidate binary
+one-second timeout returned a nonempty `workId`
+`batch-7d4ba850-6230-4b63-8b1f-886e10e8c150-work-1` in session
+`01ffe7bd-2606-441a-88c6-1a3b5db40408`, alongside request/trace IDs. This
+improves correlation, not the underlying timeout reliability.

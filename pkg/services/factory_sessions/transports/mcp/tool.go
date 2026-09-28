@@ -311,6 +311,9 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		if result.TraceID != "" {
 			envelope.Details["traceId"] = result.TraceID
 		}
+		if result.WorkID != "" {
+			envelope.Details["workId"] = result.WorkID
+		}
 		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
 	switch workers.WorkFailureType(result.FailureReason) {

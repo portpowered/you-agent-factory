@@ -587,6 +587,34 @@ func TestSessionOwnerWait_MapsTimeoutAndCancellation(t *testing.T) {
 	}
 }
 
+func TestSessionOwner_InvokeTimeoutPreservesSubmittedWorkID(t *testing.T) {
+	content := sessionOwnerTextContent(t, "hello")
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	owner := newTestSessionOwner(sessionOwnerFixture{
+		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) {
+			return sessionOwnerFactoryConfig(), nil
+		},
+		SubmitWork: func(context.Context, string, workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
+			return workdomain.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1", WorkID: "work-1"}, nil
+		},
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			return activeSessionInvocationObservation(), nil
+		},
+		WaitNext: func(context.Context) error { return context.DeadlineExceeded },
+	})
+
+	result, err := owner.Invoke(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
+		SourceKind: &sourceKind, Content: &content,
+	}))
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusTimedOut)
+	assertSessionOwnerEqual(t, "request ID", result.RequestID, "request-1")
+	assertSessionOwnerEqual(t, "trace ID", result.TraceID, "trace-1")
+	assertSessionOwnerEqual(t, "work ID", result.WorkID, "work-1")
+}
+
 func TestSessionOwnerWait_CancellationAfterPrimaryResultResolutionWinsOverFailureClassification(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

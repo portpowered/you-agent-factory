@@ -271,7 +271,7 @@ func (o *SessionOwner) waitErrorResult(
 	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		return FactoryInvocationResult{}, err
 	}
-	result := FactoryInvocationResult{RequestID: input.RequestID, TraceID: input.TraceID}
+	result := FactoryInvocationResult{RequestID: input.RequestID, TraceID: input.TraceID, WorkID: input.WorkID}
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		result.Status = interfaces.InvocationTerminalStatusTimedOut
