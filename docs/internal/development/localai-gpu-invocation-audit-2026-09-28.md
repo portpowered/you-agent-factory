@@ -73,6 +73,8 @@ TTS Qwen3 and IndexTTS results are in
 ## Limitation
 
 The WSL-built `you` binary proves managed CUDA backend first-use and offline
-reuse for ASR, embeddings, LLM, and TTS. Native Windows GPU execution and
-Qwen3/IndexTTS reference-audio managed path remain unverified. The host is
+reuse for ASR, embeddings, LLM, and TTS. Native Windows GPU execution
+remains unverified, while managed WSL Qwen3/IndexTTS reference-audio
+synthesis is documented in the linked audit; speech content, voice
+similarity, and actual `ref_text` use are unverified. The host is
 Windows; the CUDA gallery backends in this audit ran under WSL Ubuntu.

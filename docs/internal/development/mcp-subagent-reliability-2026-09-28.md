@@ -1090,3 +1090,12 @@ repeated invocation `04630134-939a-4f53-bc7d-a7beb6a8f8aa` completed in
 about 45 seconds while the caller sampled GPU, proving memory rose from
 1518 to 6458 MiB and utilization reached 97%. Automatic approval review
 rejected cleanup of the helper scripts and no deletion was retried.
+
+After commit `1714a1ca56`, the Windows `you.exe` was rebuilt and copied to
+`C:\Users\andre\.local\bin\you.exe` (SHA-256
+`40956595C05713F1D41FC2CD123E80C91C68C57614A70DD21ACC8E2872C8908C`) after
+stopping the idle MCP process that held the file. A fresh stdio MCP process
+listed `you.subagent` and returned `BAD_REQUEST` `workingRoot must not be null`
+for an explicit null. OpenCode MCP session
+`43552c31-04d2-4ad1-816c-8d62ab745bb4` completed an exact README-heading probe
+in about 9 seconds with `# you-agent-factory`.
