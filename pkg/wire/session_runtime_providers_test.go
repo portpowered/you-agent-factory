@@ -39,6 +39,24 @@ func codexWireTestOutput(content string) []byte {
 	return []byte("{\"type\":\"turn.started\"}\n" + string(item) + "\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")
 }
 
+type wireTestExecutableLocator struct{}
+
+func (*wireTestExecutableLocator) LookPath(string) (string, error) { return "", nil }
+
+func TestProvideProvidersExecutableLocator(t *testing.T) {
+	t.Parallel()
+
+	if _, ok := provideProvidersExecutableLocator(serviceedges.Edges{}).(platformprocess.HostExecutableLocator); !ok {
+		t.Fatal("nil Providers executable locator did not select the host locator")
+	}
+
+	injected := &wireTestExecutableLocator{}
+	got := provideProvidersExecutableLocator(serviceedges.Edges{ProvidersExecutableLocator: injected})
+	if got != injected {
+		t.Fatalf("Providers executable locator = %T %p, want injected locator %p", got, got, injected)
+	}
+}
+
 func TestProvideFactoryVisualizationMetricsQueryConstructsInertCapability(t *testing.T) {
 	t.Parallel()
 

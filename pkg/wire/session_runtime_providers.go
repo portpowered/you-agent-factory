@@ -169,7 +169,7 @@ func provideConfiguredProvidersService(
 		providerswire.WithAgyPTY(agyPTYPlatform),
 		providerswire.WithAgyCommandClock(effectiveProviderCommandClock(edges)),
 		providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
-		providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator),
+		providerswire.WithExecutableLocator(provideProvidersExecutableLocator(edges)),
 		providerswire.WithACPIntegrations(projectACPIntegrations(integrations)...),
 		providerswire.WithCatalogCapabilityOverrides(edges.ProviderCatalogCapabilityOverrides...),
 		providerswire.WithRegistrations(edges.ProviderRegistrations...),
@@ -211,6 +211,13 @@ func provideConfiguredProvidersService(
 		workerswire.NewProviderCommandRunner(loggedRunner),
 	))
 	return newConfiguredProvidersService(options, loggedRunner)
+}
+
+func provideProvidersExecutableLocator(edges serviceedges.Edges) platformprocess.ExecutableLocator {
+	if edges.ProvidersExecutableLocator != nil {
+		return edges.ProvidersExecutableLocator
+	}
+	return platformprocess.HostExecutableLocator{}
 }
 
 func providerCommandRunnerWithLogging(
