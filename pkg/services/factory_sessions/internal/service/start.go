@@ -41,8 +41,13 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 		}
 		runtimeSelection.SystemConfigHome = home
 	}
+	selectedFolder, resolveErr := r.resolveStartFolder(ctx, request, runtimeSelection)
+	if resolveErr != nil {
+		return factorysessions.SessionStartResult{}, resolveErr
+	}
+	selected.FolderPath = selectedFolder
 	if strings.TrimSpace(runtimeSelection.ExecutionBaseDir) == "" {
-		runtimeSelection.ExecutionBaseDir = strings.TrimSpace(request.FolderPath)
+		runtimeSelection.ExecutionBaseDir = strings.TrimSpace(selected.FolderPath)
 	}
 	if runtimeSelection.LogPolicy == "" {
 		runtimeSelection.LogPolicy = factorysessions.SessionArtifactPolicyDisabled
@@ -62,7 +67,7 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 	if products.application.FactorySessions == nil {
 		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: activated session is unavailable")
 	}
-	started, err := products.application.FactorySessions.Start(ctx, request)
+	started, err := products.application.FactorySessions.Start(ctx, selected)
 	if err != nil {
 		if products.application.Resources.Close != nil {
 			_ = products.application.Resources.Close()
@@ -82,6 +87,36 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 		started.Live.Session = &view
 	}
 	return started, nil
+}
+
+func (r *Root) resolveStartFolder(ctx context.Context, request factorysessions.SessionStartRequest, selection factorysessions.SessionRuntimeSelection) (string, error) {
+	name := strings.TrimSpace(request.Source.FactoryID)
+	if name == "" || request.Source.Kind != factoryruntime.WorkflowSourceKindFactoryID ||
+		!strings.HasPrefix(name, "@") || strings.TrimSpace(selection.DefinitionSourcePath) != "" {
+		return request.FolderPath, nil
+	}
+	workingRoot := strings.TrimSpace(request.FolderPath)
+	if value, ok := request.Args["workingRoot"].(string); ok && strings.TrimSpace(value) != "" {
+		workingRoot = strings.TrimSpace(value)
+	}
+	// An already resolved target carries its Factory directory in FolderPath.
+	if strings.TrimSpace(request.FolderPath) != workingRoot {
+		return request.FolderPath, nil
+	}
+	if r.factoryDefinitions == nil {
+		return "", fmt.Errorf("resolve named Factory: Factory Definitions service is required")
+	}
+	roots, err := factorydefinitions.ResolveNamedFactoryRoots(selection.SystemConfigHome, workingRoot)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := r.factoryDefinitions.ResolveNamedFactory(ctx, factorydefinitions.ResolveNamedFactoryRequest{
+		ProjectRoot: roots.Project, GlobalRoot: roots.Global, Name: name,
+	})
+	if err != nil {
+		return "", err
+	}
+	return resolved.Resolution.FactoryDir, nil
 }
 
 func runtimeRequestForStart(request factorysessions.SessionStartRequest) (factorysessions.RuntimeOpeningRequest, error) {
