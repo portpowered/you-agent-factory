@@ -290,6 +290,145 @@ func TestSubagentTimeoutReportsPossibleWorkspaceEdits(t *testing.T) {
 	}
 }
 
+type stalledSubagentTarget struct {
+	*subagentTargetFake
+	blockInvoke, blockSnapshot, blockClose bool
+	release                                chan struct{}
+	entered                                chan struct{}
+	finished                               chan struct{}
+}
+
+type lateStartSubagentTarget struct {
+	*subagentTargetFake
+	entered chan struct{}
+	release chan struct{}
+	closed  chan struct{}
+}
+
+func (target *lateStartSubagentTarget) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	close(target.entered)
+	<-target.release // Simulates a Start that publishes a session after its context expires.
+	return target.subagentTargetFake.Start(ctx, request)
+}
+
+func (target *lateStartSubagentTarget) Control(ctx context.Context, request factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
+	result, err := target.subagentTargetFake.Control(ctx, request)
+	close(target.closed)
+	return result, err
+}
+
+func TestSubagentClosesSessionCreatedAfterStartTimeout(t *testing.T) {
+	timeout := int64(20)
+	target := &lateStartSubagentTarget{
+		subagentTargetFake: &subagentTargetFake{},
+		entered:            make(chan struct{}), release: make(chan struct{}), closed: make(chan struct{}),
+	}
+	released := false
+	defer func() {
+		if !released {
+			close(target.release)
+		}
+	}()
+	returned := make(chan mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult], 1)
+	go func() {
+		returned <- mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "late-start" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", TimeoutMillis: &timeout})
+	}()
+	<-target.entered
+	select {
+	case response := <-returned:
+		if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" || response.Error.Details["phase"] != "start" {
+			t.Fatalf("start timeout response = %#v", response)
+		}
+		if response.Error.Details["sessionClosed"] == true {
+			t.Fatalf("start timeout falsely claimed close: %#v", response.Error)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("stalled Start held the MCP response past its timeout")
+	}
+	close(target.release)
+	released = true
+	select {
+	case <-target.closed:
+		if !target.subagentTargetFake.closed {
+			t.Fatal("late Start did not close its Factory Session")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("late Start did not attempt Factory Session cleanup")
+	}
+}
+
+func (target *stalledSubagentTarget) Invoke(ctx context.Context, request factorysessions.SessionInvokeRequest) (factorysessions.InvocationResult, error) {
+	if target.blockInvoke {
+		defer close(target.finished)
+		close(target.entered)
+		<-target.release // Deliberately ignores ctx, as a stalled downstream dependency can.
+	}
+	return target.subagentTargetFake.Invoke(ctx, request)
+}
+
+func (target *stalledSubagentTarget) GetFactorySession(ctx context.Context, sessionID string) (factorysessions.SessionProjection, error) {
+	if target.blockSnapshot {
+		defer close(target.finished)
+		close(target.entered)
+		<-target.release
+	}
+	return target.subagentTargetFake.GetFactorySession(ctx, sessionID)
+}
+
+func (target *stalledSubagentTarget) Control(ctx context.Context, request factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
+	if target.blockClose {
+		defer close(target.finished)
+		close(target.entered)
+		<-target.release
+	}
+	return target.subagentTargetFake.Control(ctx, request)
+}
+
+func TestSubagentTimeoutReturnsWhenDependencyIgnoresContext(t *testing.T) {
+	for _, step := range []string{"invoke", "snapshot", "close"} {
+		t.Run(step, func(t *testing.T) {
+			timeout := int64(20)
+			target := &stalledSubagentTarget{
+				subagentTargetFake: &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusTimedOut}},
+				blockInvoke:        step == "invoke", blockSnapshot: step == "snapshot", blockClose: step == "close",
+				release: make(chan struct{}), entered: make(chan struct{}), finished: make(chan struct{}),
+			}
+			returned := make(chan mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult], 1)
+			go func() {
+				returned <- mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-stalled" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", TimeoutMillis: &timeout})
+			}()
+			select {
+			case <-target.entered:
+			case <-time.After(time.Second):
+				close(target.release)
+				t.Fatal("stalled dependency was never entered")
+			}
+			defer func() {
+				close(target.release)
+				<-target.finished
+			}()
+			select {
+			case response := <-returned:
+				if response.Error == nil || response.Result != nil {
+					t.Fatalf("%s response = %#v", step, response)
+				}
+				wantCode := "factory_session.subagent.timed_out"
+				if step == "close" {
+					wantCode = "factory_session.subagent.cleanup_timed_out"
+				}
+				if response.Error.Code != wantCode {
+					t.Fatalf("%s error code = %q, want %q", step, response.Error.Code, wantCode)
+				}
+				if step == "close" && response.Error.Details["sessionClosed"] == true {
+					t.Fatalf("unconfirmed close claimed success: %#v", response.Error)
+				}
+			case <-time.After(20 * time.Second):
+				t.Fatalf("%s held the synchronous response past the bounded cleanup window", step)
+			}
+		})
+	}
+}
+
 func TestSubagentTimeoutSnapshotPrecedesCloseAndExcludesProjectionText(t *testing.T) {
 	secret := "sensitive prompt and provider output"
 	projection := factorysessions.SessionProjection{

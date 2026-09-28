@@ -34,16 +34,24 @@ const (
 	ToolSubagent       = "you.subagent"
 )
 
-// subagentCloseTimeout gives the detached close call a deadline that
-// cooperative cleanup paths can honor.
+// Cleanup shares one small budget after invocation termination.
+const subagentCleanupBudget = 17 * time.Second
 const subagentCloseTimeout = 15 * time.Second
 
 // subagentSnapshotTimeout bounds the best-effort timeout progress snapshot so
 // capturing it never materially delays cleanup.
 const subagentSnapshotTimeout = 2 * time.Second
 
+// Non-cooperative service calls cannot be stopped by Go contexts. Keep at most
+// this many abandoned calls of each kind in flight process-wide.
+var subagentAdmissionSlots = make(chan struct{}, 16)
+var subagentInvokeSlots = make(chan struct{}, 16)
+var subagentSnapshotSlots = make(chan struct{}, 16)
+var errSubagentCapacity = errors.New("subagent operation capacity exhausted")
+
 // subagentDefaultTimeoutMillis bounds a subagent wait when the caller omits timeoutMillis.
 const subagentDefaultTimeoutMillis = int64((20 * time.Minute) / time.Millisecond)
+const subagentMaxTimeoutMillis = int64((1<<63 - 1) / time.Millisecond)
 
 // Stable error envelope fields shared by every dynamic workflow MCP tool.
 var sharedErrorStableFields = []string{
@@ -152,10 +160,27 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
 	requestID := generateID()
+	select {
+	case subagentAdmissionSlots <- struct{}{}:
+	default:
+		return subagentCapacityFailure("", requestID)
+	}
+	releaseAdmission := true
+	defer func() {
+		if releaseAdmission {
+			<-subagentAdmissionSlots
+		}
+	}()
 	if input.WorkingRoot != "" {
 		workingRoot = input.WorkingRoot
 	}
-	started, err := target.Start(ctx, factorysessionexecution.SessionStartRequest{
+	timeoutMillis := subagentDefaultTimeoutMillis
+	if input.TimeoutMillis != nil {
+		timeoutMillis = *input.TimeoutMillis
+	}
+	callCtx, stopCall := context.WithTimeout(ctx, time.Duration(timeoutMillis)*time.Millisecond)
+	defer stopCall()
+	started, err, startAbandoned := boundedSubagentStart(callCtx, target, factorysessionexecution.SessionStartRequest{
 		Mode:           factorysessionexecution.SessionOperationModeLive,
 		ActivationOnly: true,
 		Correlation:    factorysessionexecution.SessionOperationCorrelation{RequestID: requestID},
@@ -173,7 +198,18 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 			Mode:             factorysessionexecution.SessionRuntimeModeService,
 		},
 	})
+	if startAbandoned {
+		releaseAdmission = false // The Start goroutine owns the slot and any late cleanup.
+	}
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			response := subagentInvocationTimeout("", requestID, timeoutMillis, input, nil)
+			response.Error.Details["phase"] = "start"
+			return response
+		}
+		if errors.Is(err, errSubagentCapacity) {
+			return subagentCapacityFailure("", requestID)
+		}
 		return subagentExecutionFailure(err)
 	}
 	if started.SessionID == "" {
@@ -181,30 +217,48 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 	}
 	args := subagentInvocationArgs(input)
 	args["workingRoot"] = workingRoot
-	timeoutMillis := subagentDefaultTimeoutMillis
-	if input.TimeoutMillis != nil {
-		timeoutMillis = *input.TimeoutMillis
+	var result factorysessionexecution.InvocationResult
+	var invokeErr error
+	if callCtx.Err() != nil {
+		invokeErr = callCtx.Err()
+	} else {
+		result, invokeErr = boundedSubagentCall(callCtx, subagentInvokeSlots, func() (factorysessionexecution.InvocationResult, error) {
+			return target.Invoke(callCtx, factorysessionexecution.SessionInvokeRequest{
+				SessionID:   started.SessionID,
+				Correlation: factorysessionexecution.SessionOperationCorrelation{RequestID: requestID},
+				Args:        args,
+				Wait:        factorysessionexecution.SessionOperationWait{TimeoutMillis: timeoutMillis, CancelOnTimeout: true},
+			})
+		})
 	}
-	result, invokeErr := target.Invoke(ctx, factorysessionexecution.SessionInvokeRequest{
-		SessionID:   started.SessionID,
-		Correlation: factorysessionexecution.SessionOperationCorrelation{RequestID: requestID},
-		Args:        args,
-		Wait:        factorysessionexecution.SessionOperationWait{TimeoutMillis: timeoutMillis, CancelOnTimeout: true},
-	})
+	cleanupCtx, stopCleanup := context.WithTimeout(context.WithoutCancel(ctx), subagentCleanupBudget)
+	defer stopCleanup()
 	// A timeout snapshot is taken before cleanup closes the live Factory
 	// Session, because the closed session can no longer report live progress.
 	var progress map[string]any
 	if subagentInvocationTimedOut(invokeErr, result) {
-		progress = subagentProgressSnapshot(ctx, target, started.SessionID)
+		progress = subagentProgressSnapshot(cleanupCtx, target, started.SessionID)
 	}
 	// Close runs on a detached context so caller cancellation cannot skip
 	// cleanup. The deadline keeps cooperative close paths from waiting forever.
-	closeCtx, cancelClose := context.WithTimeout(context.WithoutCancel(ctx), subagentCloseTimeout)
-	_, closeErr := target.Control(closeCtx, factorysessionexecution.SessionControlRequest{
-		SessionID: started.SessionID,
-		Mode:      factorysessionexecution.SessionOperationModeLive,
-		Operation: factorysessionexecution.SessionControlClose,
-	})
+	closeCtx, cancelClose := context.WithTimeout(cleanupCtx, subagentCloseTimeout)
+	closeResult := make(chan error, 1)
+	releaseAdmission = false // The close goroutine now owns the admission slot.
+	go func() {
+		defer func() { <-subagentAdmissionSlots }()
+		_, err := target.Control(closeCtx, factorysessionexecution.SessionControlRequest{
+			SessionID: started.SessionID,
+			Mode:      factorysessionexecution.SessionOperationModeLive,
+			Operation: factorysessionexecution.SessionControlClose,
+		})
+		closeResult <- err
+	}()
+	var closeErr error
+	select {
+	case closeErr = <-closeResult:
+	case <-closeCtx.Done():
+		closeErr = closeCtx.Err()
+	}
 	cancelClose()
 	if closeErr != nil {
 		return subagentCleanupError(closeErr, started.SessionID, requestID)
@@ -230,6 +284,43 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 		return subagentClosedFailure(ToolResponse[SubagentResult]{Error: &envelope})
 	}
 	return ToolResponse[SubagentResult]{Result: &response}
+}
+
+// boundedSubagentStart hands a timed-out start's admission slot to its worker.
+// A late successful start is closed there, even after the MCP response returns.
+func boundedSubagentStart(
+	ctx context.Context,
+	target factorysessionexecution.Service,
+	request factorysessionexecution.SessionStartRequest,
+) (factorysessionexecution.SessionStartResult, error, bool) {
+	type outcome struct {
+		value factorysessionexecution.SessionStartResult
+		err   error
+	}
+	completed := make(chan outcome)
+	go func() {
+		started, err := target.Start(ctx, request)
+		select {
+		case completed <- outcome{value: started, err: err}:
+		case <-ctx.Done():
+			defer func() { <-subagentAdmissionSlots }()
+			if started.SessionID == "" {
+				return
+			}
+			closeCtx, stopClose := context.WithTimeout(context.WithoutCancel(ctx), subagentCloseTimeout)
+			defer stopClose()
+			_, _ = target.Control(closeCtx, factorysessionexecution.SessionControlRequest{
+				SessionID: started.SessionID, Mode: factorysessionexecution.SessionOperationModeLive,
+				Operation: factorysessionexecution.SessionControlClose,
+			})
+		}
+	}()
+	select {
+	case got := <-completed:
+		return got.value, got.err, false
+	case <-ctx.Done():
+		return factorysessionexecution.SessionStartResult{}, ctx.Err(), true
+	}
 }
 
 func subagentRequestErrorEnvelope(err error, ctx context.Context, target factorysessionexecution.Service, generateID factorysessionexecution.SessionIDGenerator) ToolErrorEnvelope {
@@ -272,13 +363,49 @@ func subagentInvocationTimedOut(invokeErr error, result factorysessionexecution.
 // context, and any failure degrades to an unavailable marker instead of
 // changing the reported outcome or delaying cleanup.
 func subagentProgressSnapshot(ctx context.Context, target factorysessionexecution.Service, sessionID string) map[string]any {
-	snapshotCtx, cancelSnapshot := context.WithTimeout(context.WithoutCancel(ctx), subagentSnapshotTimeout)
+	snapshotCtx, cancelSnapshot := context.WithTimeout(ctx, subagentSnapshotTimeout)
 	defer cancelSnapshot()
-	projection, err := target.GetFactorySession(snapshotCtx, sessionID)
+	projection, err := boundedSubagentCall(snapshotCtx, subagentSnapshotSlots, func() (factorysessionexecution.SessionProjection, error) {
+		return target.GetFactorySession(snapshotCtx, sessionID)
+	})
 	if err != nil || snapshotCtx.Err() != nil {
 		return map[string]any{"available": false}
 	}
 	return subagentProgressDetails(projection)
+}
+
+func boundedSubagentCall[T any](ctx context.Context, slots chan struct{}, call func() (T, error)) (T, error) {
+	var zero T
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
+	select {
+	case slots <- struct{}{}:
+	case <-ctx.Done():
+		return zero, ctx.Err()
+	default:
+		return zero, errSubagentCapacity
+	}
+	if err := ctx.Err(); err != nil {
+		<-slots
+		return zero, err
+	}
+	type outcome struct {
+		value T
+		err   error
+	}
+	result := make(chan outcome, 1)
+	go func() {
+		defer func() { <-slots }()
+		value, err := call()
+		result <- outcome{value: value, err: err}
+	}()
+	select {
+	case got := <-result:
+		return got.value, got.err
+	case <-ctx.Done():
+		return zero, ctx.Err()
+	}
 }
 
 // subagentProgressDetails copies numeric counts and an allowlisted script
@@ -373,6 +500,8 @@ func validateSubagentRequest(ctx context.Context, target factorysessionexecution
 		return fmt.Errorf("prompt is required")
 	case input.TimeoutMillis != nil && *input.TimeoutMillis <= 0:
 		return fmt.Errorf("timeoutMillis must be greater than zero")
+	case input.TimeoutMillis != nil && *input.TimeoutMillis > subagentMaxTimeoutMillis:
+		return fmt.Errorf("timeoutMillis exceeds the supported range")
 	default:
 		return nil
 	}
@@ -380,6 +509,17 @@ func validateSubagentRequest(ctx context.Context, target factorysessionexecution
 
 func subagentExecutionFailure(err error) ToolResponse[SubagentResult] {
 	envelope := executionErrorEnvelope(err)
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentCapacityFailure(sessionID, requestID string) ToolResponse[SubagentResult] {
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.capacity_exhausted",
+		Message:   "subagent execution capacity is temporarily exhausted",
+		Retryable: true,
+		SessionID: sessionID,
+		Details:   map[string]any{"requestId": requestID},
+	}
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }
 
@@ -426,6 +566,9 @@ func subagentInvocationFailure(sessionID, requestID string) ToolResponse[Subagen
 }
 
 func subagentInvokeError(err error, sessionID, requestID string, timeoutMillis int64, input SubagentInput, progress map[string]any) ToolResponse[SubagentResult] {
+	if errors.Is(err, errSubagentCapacity) {
+		return subagentCapacityFailure(sessionID, requestID)
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return subagentInvocationTimeout(sessionID, requestID, timeoutMillis, input, progress)
 	}

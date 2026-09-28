@@ -17,6 +17,18 @@ import (
 // without turning an idle synchronous invocation into a busy wait.
 const sessionInvocationPollInterval = 250 * time.Millisecond
 
+// A timed-out invocation still owes its Factory Session a cancel-on-timeout
+// control request, and the expired wait context cannot bound that call. The
+// control context stays detached from cancellation so the request is still
+// issued, but it carries a deadline so a stalled lifecycle gateway cannot hold
+// an already-resolved invocation open indefinitely. Tests shorten this bound;
+// production code never reassigns it.
+var sessionTimeoutCancelControlTimeout = 15 * time.Second
+
+// Context cancellation cannot interrupt a non-cooperative lifecycle gateway.
+// Limit outstanding detached cancel calls so repeated timeouts stay bounded.
+var sessionTimeoutCancelSlots = make(chan struct{}, 16)
+
 // SessionInvocationObservation is one event-derived view of invocation state.
 // Runtime adapters populate it without exposing engine or Petri-net types.
 type SessionInvocationObservation struct {
@@ -291,12 +303,28 @@ func (o *SessionOwner) waitErrorResult(
 		// The cancel-on-timeout control must run even though the invocation wait
 		// already expired, so it detaches from the canceled wait context. Give
 		// cooperative control paths a deadline rather than waiting indefinitely.
-		cancelCtx, stopCancel := context.WithTimeout(context.WithoutCancel(context.Background()), 15*time.Second)
-		_, cancelErr := o.cancelOnTimeout(cancelCtx, sessionID, factorysessions.ControlRequest{
-			RequestID: input.RequestID,
-			Reason:    "invocation wait timed out",
-		})
-		stopCancel()
+		cancelCtx, stopCancel := context.WithTimeout(context.WithoutCancel(context.Background()), sessionTimeoutCancelControlTimeout)
+		defer stopCancel()
+		var cancelErr error
+		select {
+		case sessionTimeoutCancelSlots <- struct{}{}:
+			completed := make(chan error, 1)
+			go func() {
+				defer func() { <-sessionTimeoutCancelSlots }()
+				_, err := o.cancelOnTimeout(cancelCtx, sessionID, factorysessions.ControlRequest{
+					RequestID: input.RequestID,
+					Reason:    "invocation wait timed out",
+				})
+				completed <- err
+			}()
+			select {
+			case cancelErr = <-completed:
+			case <-cancelCtx.Done():
+				cancelErr = cancelCtx.Err()
+			}
+		case <-cancelCtx.Done():
+			cancelErr = cancelCtx.Err()
+		}
 		if cancelErr != nil {
 			result.Message = "invocation timed out while waiting for primary result; cancel-on-timeout control failed"
 		}

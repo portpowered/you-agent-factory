@@ -219,6 +219,9 @@ func (o *SessionOwner) submitInvocation(
 	prepared invocationPreparation,
 ) (work.WorkRequestSubmitResult, *FactoryInvocationResult, error) {
 	submissionContextErr := contextError(ctx)
+	if submissionContextErr != nil {
+		return work.WorkRequestSubmitResult{}, nil, submissionContextErr
+	}
 	submitResult, err := o.submitWork(ctx, sessionID, work.SubmitRequest{
 		RequestID:           trimmedStringValue(request.RequestID),
 		WorkTypeID:          prepared.workTypeName,
