@@ -483,6 +483,22 @@ func representativeSessionNotFoundDomainErrorToolResponse() (json.RawMessage, er
 }
 
 func verifyDomainErrorFixture(fixture DomainErrorFixture) error {
+	if err := verifyDomainErrorFixtureRequiredFields(fixture); err != nil {
+		return err
+	}
+	if err := verifyDomainErrorFixtureToolResponse(fixture); err != nil {
+		return err
+	}
+	if err := verifyDomainErrorFixtureCallToolResultEncoding(fixture); err != nil {
+		return err
+	}
+	if err := verifyDomainErrorFixtureDecodedEnvelope(fixture); err != nil {
+		return err
+	}
+	return verifyDomainErrorFixtureDecodedContent(fixture)
+}
+
+func verifyDomainErrorFixtureRequiredFields(fixture DomainErrorFixture) error {
 	if strings.TrimSpace(fixture.Name) == "" {
 		return fmt.Errorf("domain-error fixture name is required")
 	}
@@ -498,7 +514,10 @@ func verifyDomainErrorFixture(fixture DomainErrorFixture) error {
 	if len(fixture.CallToolResult) == 0 {
 		return fmt.Errorf("domain-error fixture %q callToolResult is required", fixture.Name)
 	}
+	return nil
+}
 
+func verifyDomainErrorFixtureToolResponse(fixture DomainErrorFixture) error {
 	var toolResponse struct {
 		Error *ToolErrorEnvelope `json:"error"`
 	}
@@ -514,7 +533,10 @@ func verifyDomainErrorFixture(fixture DomainErrorFixture) error {
 	if strings.TrimSpace(toolResponse.Error.Message) == "" {
 		return fmt.Errorf("domain-error fixture %q error.message is required", fixture.Name)
 	}
+	return nil
+}
 
+func verifyDomainErrorFixtureCallToolResultEncoding(fixture DomainErrorFixture) error {
 	expected, err := MarshalDomainErrorCallToolResultJSON(fixture.ToolResponse)
 	if err != nil {
 		return fmt.Errorf("domain-error fixture %q marshal expected callToolResult: %w", fixture.Name, err)
@@ -522,7 +544,10 @@ func verifyDomainErrorFixture(fixture DomainErrorFixture) error {
 	if string(fixture.CallToolResult) != string(expected) {
 		return fmt.Errorf("domain-error fixture %q callToolResult does not match encoded toolResponse", fixture.Name)
 	}
+	return nil
+}
 
+func verifyDomainErrorFixtureDecodedEnvelope(fixture DomainErrorFixture) error {
 	var decoded map[string]any
 	if err := json.Unmarshal(fixture.CallToolResult, &decoded); err != nil {
 		return fmt.Errorf("domain-error fixture %q callToolResult: %w", fixture.Name, err)
@@ -540,6 +565,14 @@ func verifyDomainErrorFixture(fixture DomainErrorFixture) error {
 	}
 	if !reflect.DeepEqual(wantStructured, structured) {
 		return fmt.Errorf("domain-error fixture %q structuredContent does not match toolResponse", fixture.Name)
+	}
+	return nil
+}
+
+func verifyDomainErrorFixtureDecodedContent(fixture DomainErrorFixture) error {
+	var decoded map[string]any
+	if err := json.Unmarshal(fixture.CallToolResult, &decoded); err != nil {
+		return fmt.Errorf("domain-error fixture %q callToolResult: %w", fixture.Name, err)
 	}
 	content, ok := decoded["content"].([]any)
 	if !ok || len(content) != 1 {
