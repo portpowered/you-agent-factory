@@ -655,3 +655,21 @@ server processes and could not be overwritten on Windows. The current
 `config.toml` points to `.local\bin\you.exe`; a fresh process uses the
 rebuilt file, while this task's in-app MCP connection may remain on the old
 executable until its server restarts.
+
+One direct probe used a nested disposable directory under the repository
+with its own `README.md` containing `# timeout probe`. OpenCode was launched
+with that directory as its location, according to its process log, but
+returned the repository root heading `# you-agent-factory` instead in
+Factory Session `3becb2cb-de82-4229-b095-e6897c3d067a`. The same rebuilt
+binary returned the exact unique content from an independent temporary
+directory in the next probe. The nested result is an answer-fidelity failure;
+the available log does not prove whether OpenCode read the parent file or
+answered from surrounding context.
+
+An isolated delayed-write stress probe on the rebuilt binary timed out
+after about 2.05 seconds in Factory Session
+`30c937fe-c37a-43b1-9cf3-c84113972319`. The requested file did not exist
+at response time or ten seconds later while the MCP server stayed alive.
+This confirms no late write in that run, but a two-second deadline may have
+expired before the model attempted any write, so it does not resolve the
+earlier observed late-write failure.
