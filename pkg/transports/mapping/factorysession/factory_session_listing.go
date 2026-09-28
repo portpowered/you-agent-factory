@@ -34,6 +34,21 @@ func OpenRequestFromAPI(request factoryapi.OpenFactorySessionRequest) factoryses
 	}
 }
 
+// SessionStartRequestFromAPI maps the public open command to canonical live
+// activation. Both HTTP entry points use the same value-only selection.
+func SessionStartRequestFromAPI(request factoryapi.OpenFactorySessionRequest) factorysessions.SessionStartRequest {
+	opened := OpenRequestFromAPI(request)
+	return factorysessions.SessionStartRequest{
+		Mode:             factorysessions.SessionOperationModeLive,
+		FolderPath:       opened.FolderPath,
+		Target:           opened.Target,
+		ValidateOnly:     opened.ValidateOnly,
+		InitNewFactory:   opened.InitNewFactory,
+		ActivationOnly:   true,
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{Mode: factorysessions.SessionRuntimeModeService},
+	}
+}
+
 // SessionOpenResultToAPI maps the canonical live Start outcome to the public
 // open response without exposing legacy runtime projections.
 func SessionOpenResultToAPI(result *factorysessions.SessionOpenResult) factoryapi.OpenFactorySessionResponse {

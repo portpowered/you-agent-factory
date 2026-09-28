@@ -214,34 +214,31 @@ func TestCloneTargets_ReturnsDefensiveCopy(t *testing.T) {
 // --- merged from live_control_contract_characterization_test.go ---
 
 // peerLiveControlFake exercises the owner-published LiveControlService
-// capability. It has exactly the six live-control methods, never embeds the
+// capability. It has exactly the five live-control methods, never embeds the
 // broad Service aggregate, and never imports factory_sessions/internal or
 // live-runtime registry/host types.
 type peerLiveControlFake struct {
-	sessions    map[string]LiveControlSnapshot
-	openResults map[string]*OpenResult
-	listed      []ReadProjection
-	lifecycle   map[string]LifecycleStatus
-	closed      map[string]bool
+	sessions  map[string]LiveControlSnapshot
+	listed    []ReadProjection
+	lifecycle map[string]LifecycleStatus
+	closed    map[string]bool
 }
 
 func newPeerLiveControlFake() *peerLiveControlFake {
 	return &peerLiveControlFake{
-		sessions:    make(map[string]LiveControlSnapshot),
-		openResults: make(map[string]*OpenResult),
-		lifecycle:   make(map[string]LifecycleStatus),
-		closed:      make(map[string]bool),
+		sessions:  make(map[string]LiveControlSnapshot),
+		lifecycle: make(map[string]LifecycleStatus),
+		closed:    make(map[string]bool),
 	}
 }
 
 var _ LiveControlService = (*peerLiveControlFake)(nil)
 
 // exactLiveControlService is a bidirectional compile-time check that the
-// published capability has precisely the six owner-defined live operations.
+// published capability has precisely the five owner-defined live operations.
 // It protects the capability boundary without scanning source or depending on
 // private implementation types.
 type exactLiveControlService interface {
-	OpenFactorySession(context.Context, LiveControlOpenRequest) (*LiveControlOpenResult, error)
 	ListFactorySessions(context.Context) ([]LiveControlListItem, error)
 	GetFactorySession(context.Context, string) (LiveControlSnapshot, error)
 	PauseLiveFactorySession(context.Context, string, LiveControlRequest) (LiveControlResult, error)
@@ -253,16 +250,6 @@ var (
 	_ exactLiveControlService = (LiveControlService)(nil)
 	_ LiveControlService      = (exactLiveControlService)(nil)
 )
-
-func (fake *peerLiveControlFake) OpenFactorySession(
-	_ context.Context,
-	request LiveControlOpenRequest,
-) (*LiveControlOpenResult, error) {
-	if result, ok := fake.openResults[request.FolderPath]; ok {
-		return result, nil
-	}
-	return nil, ErrSessionNotFound
-}
 
 func (fake *peerLiveControlFake) ListFactorySessions(context.Context) ([]LiveControlListItem, error) {
 	out := make([]LiveControlListItem, len(fake.listed))
@@ -381,15 +368,6 @@ func seedRunningLiveControlSession(
 	fake *peerLiveControlFake,
 	sessionID, folder string,
 ) LiveControlSnapshot {
-	fake.openResults[folder] = &LiveControlOpenResult{
-		SessionID:  sessionID,
-		FolderPath: folder,
-		Session: &ScopedLiveSessionSummary{
-			ID:         sessionID,
-			FolderPath: folder,
-			IsDefault:  true,
-		},
-	}
 	snapshot := LiveControlSnapshot{
 		Context: ProjectionContext{
 			FactorySessionID: sessionID,
@@ -411,17 +389,6 @@ func seedRunningLiveControlSession(
 	return snapshot
 }
 
-func requireLiveOpenIdentity(
-	t *testing.T,
-	opened *LiveControlOpenResult,
-	sessionID string,
-) {
-	t.Helper()
-	if opened == nil || opened.SessionID != sessionID || opened.Session == nil || opened.Session.ID != sessionID {
-		t.Fatalf("OpenFactorySession result = %#v, want stable session identity %q", opened, sessionID)
-	}
-}
-
 func requireAcceptedPause(
 	t *testing.T,
 	paused LiveControlResult,
@@ -435,7 +402,7 @@ func requireAcceptedPause(
 	}
 }
 
-func TestLiveControlCapability_OpenListGetStableIdentity(t *testing.T) {
+func TestLiveControlCapability_ListGetStableIdentity(t *testing.T) {
 	t.Parallel()
 
 	fake := newPeerLiveControlFake()
@@ -445,12 +412,6 @@ func TestLiveControlCapability_OpenListGetStableIdentity(t *testing.T) {
 
 	var service LiveControlService = fake
 	ctx := context.Background()
-
-	opened, err := service.OpenFactorySession(ctx, LiveControlOpenRequest{FolderPath: folder})
-	if err != nil {
-		t.Fatalf("OpenFactorySession: %v", err)
-	}
-	requireLiveOpenIdentity(t, opened, sessionID)
 
 	listed, err := service.ListFactorySessions(ctx)
 	if err != nil {

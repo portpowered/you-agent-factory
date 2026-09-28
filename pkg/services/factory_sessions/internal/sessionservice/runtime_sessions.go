@@ -158,16 +158,6 @@ func (fs *SessionRuntime) CloseFactorySession(ctx context.Context, sessionID str
 	return fs.requireSessionGateway().CloseFactorySession(ctx, sessionID)
 }
 
-func (fs *SessionRuntime) OpenFactorySessionFromFolder(
-	ctx context.Context,
-	folderPath string,
-	target *FactorySessionTargetRef,
-	validateOnly bool,
-	initNewFactory bool,
-) (*FactorySessionOpenResult, error) {
-	return fs.requireSessionGateway().OpenFactorySessionFromFolder(ctx, folderPath, target, validateOnly, initNewFactory)
-}
-
 func (fs *SessionRuntime) openFactorySessionForTarget(ctx context.Context, target FactorySessionTarget) (string, error) {
 	if fs == nil {
 		return "", fmt.Errorf("factory service is required")

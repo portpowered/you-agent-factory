@@ -110,13 +110,13 @@ func TestService_ConcurrentOpenThroughLiveRuntimeOwnerAllocatesDistinctActivatio
 	for index := range workers {
 		go func(slot int) {
 			defer wg.Done()
-			result, err := gateway.OpenFactorySessionFromFolder(ctx, "/tmp", nil, false, false)
+			result, err := gateway.OpenFactorySession(ctx, factorysessions.OpenRequest{FolderPath: "/tmp"})
 			if err != nil {
-				t.Errorf("OpenFactorySessionFromFolder: %v", err)
+				t.Errorf("OpenFactorySession: %v", err)
 				return
 			}
 			if result == nil {
-				t.Error("OpenFactorySessionFromFolder returned nil result")
+				t.Error("OpenFactorySession returned nil result")
 				return
 			}
 			ids[slot] = result.SessionID
@@ -147,9 +147,9 @@ func TestService_ConcurrentResolveAndCloseLeavesDeterminateRegistryState(t *test
 
 	gateway, host := newRegistryBackedLiveRuntimeGateway(t)
 	ctx := context.Background()
-	opened, err := gateway.OpenFactorySessionFromFolder(ctx, "/tmp", nil, false, false)
+	opened, err := gateway.OpenFactorySession(ctx, factorysessions.OpenRequest{FolderPath: "/tmp"})
 	if err != nil {
-		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
+		t.Fatalf("OpenFactorySession: %v", err)
 	}
 	sessionID := opened.SessionID
 
@@ -218,9 +218,9 @@ func TestService_OpenFactorySessionCancellationDoesNotPublishActiveRegistryEntry
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := gateway.OpenFactorySessionFromFolder(ctx, "/tmp", nil, false, false)
+	_, err := gateway.OpenFactorySession(ctx, factorysessions.OpenRequest{FolderPath: "/tmp"})
 	if err == nil || !errors.Is(err, context.Canceled) {
-		t.Fatalf("OpenFactorySessionFromFolder error = %v, want context canceled", err)
+		t.Fatalf("OpenFactorySession error = %v, want context canceled", err)
 	}
 	if host.registry.Count() != 0 {
 		t.Fatalf("registry count after cancelled open = %d, want 0", host.registry.Count())

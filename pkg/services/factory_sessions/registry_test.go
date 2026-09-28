@@ -672,12 +672,8 @@ func newPeerRootServiceFake() *peerRootServiceFake {
 
 var _ Service = (*peerRootServiceFake)(nil)
 
-func (fake *peerRootServiceFake) OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error) {
-	return &OpenResult{SessionID: DefaultSessionID}, nil
-}
-
-func (fake *peerRootServiceFake) OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error) {
-	return &OpenResult{SessionID: DefaultSessionID}, nil
+func (fake *peerRootServiceFake) Start(context.Context, SessionStartRequest) (SessionStartResult, error) {
+	return SessionStartResult{Live: &SessionOpenResult{SessionID: DefaultSessionID}}, nil
 }
 
 func (fake *peerRootServiceFake) ListFactorySessions(context.Context) ([]ReadProjection, error) {
@@ -857,11 +853,11 @@ func TestSingularRootServiceAuthority_PeerFakeReadNotFound(t *testing.T) {
 		t.Fatalf("ListFactorySessions len = %d, want empty list", len(listed))
 	}
 
-	opened, err := service.OpenFactorySession(ctx, OpenRequest{FolderPath: "/factories/demo"})
+	opened, err := service.Start(ctx, SessionStartRequest{Mode: SessionOperationModeLive, FolderPath: "/factories/demo"})
 	if err != nil {
-		t.Fatalf("OpenFactorySession error = %v, want nil", err)
+		t.Fatalf("Start error = %v, want nil", err)
 	}
-	if opened == nil || opened.SessionID == "" {
-		t.Fatalf("OpenFactorySession result = %#v, want reachable open path through singular root", opened)
+	if opened.Live == nil || opened.Live.SessionID == "" {
+		t.Fatalf("Start result = %#v, want reachable live start path through singular root", opened)
 	}
 }

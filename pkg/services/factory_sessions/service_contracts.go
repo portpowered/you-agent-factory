@@ -57,8 +57,8 @@ type ResolvedInvocationInput struct {
 // identity slice uses plain IdentityNormalizeRequest,
 // IdentityNormalizeProviderRequest, ResolvedIdentity, and the logical-target
 // typed errors; peers must not import the private identity subservice.
-// The published live-control slice uses OpenRequest/OpenResult,
-// ReadProjection, SessionProjection, ControlRequest, LifecycleControlResult,
+// The published live-control slice uses ReadProjection, SessionProjection,
+// ControlRequest, LifecycleControlResult,
 // ErrSessionNotFound, and *ControlError through LiveControlService; peers
 // that only manage live sessions depend on that narrow capability rather than
 // this broader aggregate and never import private live-runtime registry or
@@ -120,8 +120,6 @@ type Service interface {
 	ListSessions(context.Context, ListSessionsRequest) (ListSessionsResult, error)
 	InvokeFactorySession(context.Context, string, InvocationRequest) (InvocationResult, error)
 	ActivateNamedFactory(context.Context, string) error
-	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
-	OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error)
 	ListFactorySessions(context.Context) ([]ReadProjection, error)
 	GetFactorySession(context.Context, string) (SessionProjection, error)
 	GetFactorySessionSyncPreflight(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor, *factorydefinitions.FactorySessionLogicalResolveHint) (SyncPreflightResult, error)
@@ -148,11 +146,10 @@ type SessionInspectionService interface {
 
 // --- merged from live_control_contract.go ---
 
-// Live-control root slice freezes open, list, get/snapshot, pause, resume, and
+// Live-control root slice freezes list, get/snapshot, pause, resume, and
 // close vocabulary on the singular Service. Peers consume these plain root
 // contracts without importing private live-runtime registry or host types:
 //
-//   - Open: OpenRequest → *OpenResult
 //   - List: []ReadProjection
 //   - Get/snapshot: SessionProjection
 //   - Pause/Resume: ControlRequest → LifecycleControlResult
@@ -168,9 +165,8 @@ type SessionInspectionService interface {
 // depend on the aggregate Service.
 
 // LiveControlService is the owner-published Factory Sessions capability for
-// opening, listing, reading, pausing, resuming, and closing live Factory
-// Sessions. It is retained as the P5A transport compatibility capability
-// while canonical callers use Service's mode-neutral operations. It uses the
+// listing, reading, pausing, resuming, and closing live Factory Sessions.
+// It uses the
 // existing public request, projection, result, and typed-error vocabulary, so
 // the authoritative root implementation satisfies it structurally without an
 // adapter, duplicate registry, or second construction path.
@@ -179,7 +175,6 @@ type SessionInspectionService interface {
 // invocation, response-event streaming, inspection, or runtime-opening
 // operations through its dependency.
 type LiveControlService interface {
-	OpenFactorySession(context.Context, LiveControlOpenRequest) (*LiveControlOpenResult, error)
 	ListFactorySessions(context.Context) ([]LiveControlListItem, error)
 	GetFactorySession(context.Context, string) (LiveControlSnapshot, error)
 	PauseLiveFactorySession(context.Context, string, LiveControlRequest) (LiveControlResult, error)
@@ -194,7 +189,7 @@ type LiveControlService interface {
 // session inspectable so a later delete can apply its own safety policy.
 //
 // It is separate from LiveControlService to preserve the existing narrow
-// capability for callers that only open, inspect, pause, resume, or close live
+// capability for callers that only inspect, pause, resume, or close live
 // sessions. The canonical Factory Sessions root implements both capabilities.
 type LiveLifecycleControlService interface {
 	CancelLiveFactorySession(context.Context, string, LiveControlRequest) (LiveControlResult, error)
@@ -225,14 +220,6 @@ type PartialSessionResult = factoryruntime.PartialSessionResult
 // Factory Sessions surface and callers that only need live changes share one
 // implementation and one admission path.
 var _ LiveChangeService = (Service)(nil)
-
-// LiveControlOpenRequest is the plain root open request for live session control.
-// It is the published name for OpenRequest on the live-control slice.
-type LiveControlOpenRequest = OpenRequest
-
-// LiveControlOpenResult is the plain root open result carrying stable session
-// identity and discovered targets for the live-control slice.
-type LiveControlOpenResult = OpenResult
 
 // LiveControlListItem is one live session row returned by list through the
 // live-control root vocabulary.

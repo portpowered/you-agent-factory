@@ -259,10 +259,6 @@ func (fake *httpSessionsRootFake) OpenFactorySession(ctx context.Context, reques
 	return &factorysessions.OpenResult{SessionID: factorysessions.DefaultSessionID}, nil
 }
 
-func (fake *httpSessionsRootFake) OpenFactorySessionFromFolder(context.Context, string, *factorysessions.TargetRef, bool, bool) (*factorysessions.OpenResult, error) {
-	return &factorysessions.OpenResult{SessionID: factorysessions.DefaultSessionID}, nil
-}
-
 func (fake *httpSessionsRootFake) GetFactorySessionSyncPreflight(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor, *factorydefinitions.FactorySessionLogicalResolveHint) (factorysessions.SyncPreflightResult, error) {
 	return factorysessions.SyncPreflightResult{}, factorysessions.ErrSessionNotFound
 }

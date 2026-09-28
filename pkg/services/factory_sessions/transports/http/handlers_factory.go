@@ -248,13 +248,7 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	if s.guardSessionsRequestContext(w, r) {
 		return
 	}
-	opened := factorysession.OpenRequestFromAPI(req)
-	start, err := s.sessionsRoot.Start(r.Context(), factorysessionexecution.SessionStartRequest{
-		Mode: factorysessionexecution.SessionOperationModeLive, FolderPath: opened.FolderPath,
-		Target: opened.Target, ValidateOnly: opened.ValidateOnly, InitNewFactory: opened.InitNewFactory,
-		ActivationOnly:   true,
-		RuntimeSelection: &factorysessionexecution.SessionRuntimeSelection{Mode: factorysessionexecution.SessionRuntimeModeService},
-	})
+	start, err := s.sessionsRoot.Start(r.Context(), factorysession.SessionStartRequestFromAPI(req))
 	if err != nil {
 		s.writeOpenFactorySessionRejected(w, err)
 		return

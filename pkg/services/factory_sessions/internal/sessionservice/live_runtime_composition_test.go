@@ -229,9 +229,9 @@ func TestService_LiveRegistryPathsDelegateThroughLiveRuntimeOwner(t *testing.T) 
 		t.Fatalf("stop calls = %d, want 1", host.stopCalls)
 	}
 
-	result, err := gateway.OpenFactorySessionFromFolder(ctx, "/tmp", nil, false, false)
+	result, err := gateway.OpenFactorySession(ctx, factorysessions.OpenRequest{FolderPath: "/tmp"})
 	if err != nil {
-		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
+		t.Fatalf("OpenFactorySession: %v", err)
 	}
 	if result == nil || result.SessionID != session.ID {
 		t.Fatalf("open result = %#v, want %s", result, session.ID)

@@ -155,34 +155,13 @@ func (s *Service) OpenFactorySession(
 			fmt.Errorf("initNewFactory cannot be combined with validateOnly"),
 		)
 	}
-	return s.OpenFactorySessionFromFolder(
+	result, err := controlplane.OpenFromFolder(
 		ctx,
+		s.host,
 		request.FolderPath,
 		request.Target,
 		request.ValidateOnly,
 		request.InitNewFactory,
-	)
-}
-
-// OpenFactorySessionFromFolder runs folder-scoped open policy without transport mapping.
-func (s *Service) OpenFactorySessionFromFolder(
-	ctx context.Context,
-	folderPath string,
-	target *factorysessions.TargetRef,
-	validateOnly bool,
-	initNewFactory bool,
-) (*factorysessions.OpenResult, error) {
-	if s == nil || s.host == nil {
-		return nil, fmt.Errorf("factory session gateway is required")
-	}
-	result, err := controlplane.OpenFromFolder(
-		ctx,
-		s.host,
-		s.liveRuntime,
-		folderPath,
-		target,
-		validateOnly,
-		initNewFactory,
 	)
 	if err != nil || result == nil || result.SessionID == "" {
 		return result, err

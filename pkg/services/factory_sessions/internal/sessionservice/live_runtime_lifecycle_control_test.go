@@ -74,17 +74,19 @@ func TestLiveControlCapability_OpenPauseResumePreservesLifecycleResults(t *testi
 		factory: factory,
 	}
 
-	// The client holds only the owner-published live-control capability.
-	var client factorysessions.LiveControlService = newLiveRuntimeCompositionGateway(t, host)
-	opened, err := client.OpenFactorySession(context.Background(), factorysessions.LiveControlOpenRequest{
+	gateway := newLiveRuntimeCompositionGateway(t, host)
+	opened, err := gateway.Start(context.Background(), factorysessions.SessionStartRequest{
+		Mode:       factorysessions.SessionOperationModeLive,
 		FolderPath: target.FolderPath,
 	})
 	if err != nil {
 		t.Fatalf("OpenFactorySession: %v", err)
 	}
-	if opened == nil || opened.SessionID != sessionID {
+	if opened.Live == nil || opened.SessionID != sessionID {
 		t.Fatalf("open result = %#v, want session id %q", opened, sessionID)
 	}
+	// The client holds only the owner-published live-control capability.
+	var client factorysessions.LiveControlService = gateway
 
 	paused, err := client.PauseLiveFactorySession(
 		context.Background(),
@@ -201,17 +203,19 @@ func TestLiveControlCapability_CompletesLifecycleAndRetiresCanonicalSession(t *t
 		},
 	}
 
-	// This client intentionally receives no durable, invocation, stream,
-	// inspection, or runtime-opening operations.
-	var client factorysessions.LiveControlService = newLiveRuntimeCompositionGateway(t, host)
+	gateway := newLiveRuntimeCompositionGateway(t, host)
 	ctx := context.Background()
 
-	opened, err := client.OpenFactorySession(ctx, factorysessions.LiveControlOpenRequest{
+	opened, err := gateway.Start(ctx, factorysessions.SessionStartRequest{
+		Mode:       factorysessions.SessionOperationModeLive,
 		FolderPath: target.FolderPath,
 	})
-	if err != nil || opened == nil || opened.SessionID != sessionID {
+	if err != nil || opened.Live == nil || opened.SessionID != sessionID {
 		t.Fatalf("OpenFactorySession = (%#v, %v), want canonical session %q", opened, err, sessionID)
 	}
+	// This client intentionally receives no durable, invocation, stream,
+	// inspection, or runtime-opening operations after canonical start.
+	var client factorysessions.LiveControlService = gateway
 	listed, err := client.ListFactorySessions(ctx)
 	if err != nil || len(listed) != 1 || listed[0].Context.FactorySessionID != opened.SessionID {
 		t.Fatalf("ListFactorySessions = (%#v, %v), want opened session %q", listed, err, opened.SessionID)

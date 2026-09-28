@@ -40,23 +40,23 @@ func TestLiveControlCapability_OpenListReadPreservesCanonicalIdentity(t *testing
 	}
 	gateway := newLiveRuntimeCompositionGateway(t, host)
 
-	// The client receives only the owner-published capability. All lifecycle
-	// interactions below must stay inside that narrow boundary.
-	var client factorysessions.LiveControlService = gateway
 	ctx := context.Background()
 
-	opened, err := client.OpenFactorySession(ctx, factorysessions.LiveControlOpenRequest{
+	opened, err := gateway.Start(ctx, factorysessions.SessionStartRequest{
+		Mode:       factorysessions.SessionOperationModeLive,
 		FolderPath: target.FolderPath,
 	})
 	if err != nil {
 		t.Fatalf("OpenFactorySession: %v", err)
 	}
-	if opened == nil || opened.SessionID != sessionID {
+	if opened.Live == nil || opened.SessionID != sessionID {
 		t.Fatalf("open result = %#v, want session id %q", opened, sessionID)
 	}
-	if opened.Session == nil || opened.Session.ID != sessionID || opened.Session.Target != target.Ref {
-		t.Fatalf("open session summary = %#v, want canonical identity and target %#v", opened.Session, target.Ref)
+	if opened.Live.Session == nil || opened.Live.Session.SessionID != sessionID || opened.Live.Session.Target != target.Ref {
+		t.Fatalf("open session summary = %#v, want canonical identity and target %#v", opened.Live.Session, target.Ref)
 	}
+	// Subsequent lifecycle interactions stay inside the narrow control capability.
+	var client factorysessions.LiveControlService = gateway
 
 	listed, err := client.ListFactorySessions(ctx)
 	if err != nil {
@@ -111,9 +111,9 @@ func TestService_LiveOpenRecordsCanonicalIdentityThroughLiveRuntimeOwner(t *test
 	}
 	gateway := newLiveRuntimeCompositionGateway(t, host)
 
-	result, err := gateway.OpenFactorySessionFromFolder(context.Background(), "/tmp", nil, false, false)
+	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{FolderPath: "/tmp"})
 	if err != nil {
-		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
+		t.Fatalf("OpenFactorySession: %v", err)
 	}
 	if result == nil || result.SessionID != sessionID {
 		t.Fatalf("open result = %#v, want %q", result, sessionID)

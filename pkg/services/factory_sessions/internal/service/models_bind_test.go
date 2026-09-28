@@ -473,10 +473,6 @@ func (role *runtimeProductsSessionsRole) GetFactorySession(_ context.Context, se
 	return role.readLiveSession(sessionID), nil
 }
 
-func (role *runtimeProductsSessionsRole) OpenFactorySession(context.Context, factorysessions.LiveControlOpenRequest) (*factorysessions.LiveControlOpenResult, error) {
-	return nil, errors.New("not implemented")
-}
-
 func (role *runtimeProductsSessionsRole) ListFactorySessions(context.Context) ([]factorysessions.LiveControlListItem, error) {
 	return nil, errors.New("not implemented")
 }

@@ -201,7 +201,7 @@ func (h *openTestHost) ObserveResponseStreamDegraded(
 ) {
 }
 
-func TestService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T) {
+func TestService_OpenFactorySession_AutoOpensSingleTarget(t *testing.T) {
 	t.Parallel()
 
 	host := &openTestHost{
@@ -222,9 +222,9 @@ func TestService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T
 	}
 	gateway := newServiceTestGateway(host)
 
-	result, err := gateway.OpenFactorySessionFromFolder(context.Background(), "/tmp", nil, false, false)
+	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{FolderPath: "/tmp"})
 	if err != nil {
-		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
+		t.Fatalf("OpenFactorySession: %v", err)
 	}
 	if result.SessionID != "sess-1" {
 		t.Fatalf("session id = %q, want sess-1", result.SessionID)
@@ -234,7 +234,7 @@ func TestService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T
 	}
 }
 
-func TestService_OpenFactorySessionFromFolder_ReturnsTargetPickerMetadata(t *testing.T) {
+func TestService_OpenFactorySession_ReturnsTargetPickerMetadata(t *testing.T) {
 	t.Parallel()
 
 	host := &openTestHost{
@@ -245,9 +245,9 @@ func TestService_OpenFactorySessionFromFolder_ReturnsTargetPickerMetadata(t *tes
 	}
 	gateway := newServiceTestGateway(host)
 
-	result, err := gateway.OpenFactorySessionFromFolder(context.Background(), "/tmp", nil, false, false)
+	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{FolderPath: "/tmp"})
 	if err != nil {
-		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
+		t.Fatalf("OpenFactorySession: %v", err)
 	}
 	if result.SessionID != "" {
 		t.Fatalf("session id = %q, want empty", result.SessionID)
@@ -257,7 +257,7 @@ func TestService_OpenFactorySessionFromFolder_ReturnsTargetPickerMetadata(t *tes
 	}
 }
 
-func TestService_OpenFactorySessionFromFolder_ValidateOnlyReturnsTargetsWithoutOpening(t *testing.T) {
+func TestService_OpenFactorySession_ValidateOnlyReturnsTargetsWithoutOpening(t *testing.T) {
 	t.Parallel()
 
 	host := &openTestHost{
@@ -269,9 +269,9 @@ func TestService_OpenFactorySessionFromFolder_ValidateOnlyReturnsTargetsWithoutO
 	}
 	gateway := newServiceTestGateway(host)
 
-	result, err := gateway.OpenFactorySessionFromFolder(context.Background(), "/tmp", nil, true, false)
+	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{FolderPath: "/tmp", ValidateOnly: true})
 	if err != nil {
-		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
+		t.Fatalf("OpenFactorySession: %v", err)
 	}
 	if len(result.Targets) != 2 {
 		t.Fatalf("targets = %d, want 2", len(result.Targets))
