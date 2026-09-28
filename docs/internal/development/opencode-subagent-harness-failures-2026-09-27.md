@@ -138,6 +138,19 @@ tree before retrying, and never re-issue the same request blind.
   identity`; `knownExecutionRunner` listed only `codex`, `claude`, and
   `antigravity`. `opencode` was added to the runner catalog in
   `pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution/catalog.go`.
+- A later bounded OpenCode edit request failed in about 0.55 s before provider
+  launch with `execution catalog resolution failed: reference identity is
+  invalid` for the qualified Muse Spark model. A fresh CLI build from the
+  subsequent shared tree accepted the same `opencode/muse-spark-1.3-contributor-free`
+  identity and reached provider launch. The earlier catalog failure was not
+  reproduced; its exact cause remains unconfirmed.
+- That fresh run exposed a separate launch mismatch: the embedded provider
+  catalog selected `npx -y opencode-ai acp`. It launched OpenCode V1.18.32,
+  which rejected the local V2 `permissions` configuration. The installed
+  `opencode` command is V2.0.16 and `opencode debug config` loads that
+  configuration. The authored harness and generated catalog were subsequently
+  changed to launch installed `opencode acp`; a live V2 permission read has not
+  yet been verified after that change.
 
 ## Limitations of this note
 
