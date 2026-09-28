@@ -128,6 +128,7 @@
       "agentTools": {
         "policy": "ENABLED"
       },
+      "body": "Begin from zero context and complete the submitted request in one pass. Read the\nentire request before acting. If it concerns a repository, inspect contributor\ninstructions, relevant architecture, source, tests, and working-tree state.\nPreserve unrelated work, run proportional verification, and return a\nself-contained outcome with evidence and limitations.",
       "model": "${workerModel}",
       "modelProvider": "${workerProvider}",
       "name": "subagent-worker",
@@ -137,7 +138,7 @@
   ],
   "workstations": [
     {
-      "body": "Begin from zero context and complete the submitted request in one pass for Work\n{{ (index .Inputs 0).WorkID }}. Read the entire request before acting. If it\nconcerns a repository, inspect contributor instructions, relevant architecture,\nsource, tests, and working-tree state. Preserve unrelated work, run proportional\nverification, and return a self-contained outcome with evidence and limitations.\n\nRequest:\n${input}\n",
+      "body": "${input}",
       "inputs": [
         {
           "state": "init",
@@ -157,7 +158,6 @@
           "workType": "task"
         }
       ],
-      "promptFile": "prompts/run-subagent.md",
       "type": "AGENT_RUN",
       "worker": "subagent-worker",
       "workingDirectory": "${workingRoot}"

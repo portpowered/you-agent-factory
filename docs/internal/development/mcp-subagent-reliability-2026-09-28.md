@@ -292,3 +292,21 @@ equivalent Codex MCP read-only audit completed in Factory Session
 `a97ed1d5-bcc8-4f98-87f4-dd57d6bfe8c5`, confirming that the private
 resolver has no CUDA capability input and the manifest lacks Linux CUDA
 artifacts. This comparison does not establish the timeout's root cause.
+
+Native OpenCode exports exposed a packaged prompt defect: the ACP request
+contained the submitted task twice, once inside a workstation prompt sent as
+system instructions and once in the user turn. It also contained a literal
+`{{ (index .Inputs 0).WorkID }}` placeholder. A Codex MCP edit to split the
+prompt timed out after 180 seconds (Factory Session
+`c2642541-86a2-4a57-8e0d-e0d4a2dbe5e3`) but left partial source and test
+edits. The first candidate omitted the task entirely; the new functional
+assertion caught that failure. A second Codex MCP task completed (Factory
+Session `698936af-ad96-4929-997d-c76826db9844`), placing one-pass
+instructions in the worker body and `${input}` in the workstation body. The
+packaged subagent functional suite, catalog check, and source check passed.
+After rebuilding `you.exe` and replacing the unchanged installed packaged
+Factory, a fresh stdio MCP OpenCode Longcat call completed in Factory Session
+`898e5cb0-8e97-42be-a634-a932ec501a11`, returning `you-agent-factory` with
+empty stderr. Its native session `ses_f18c0118bffeBp4D5E0ZLD5nTE` contains
+the task once and no raw WorkID template. This removes prompt duplication;
+intermittent model continuation still needs further stress testing.

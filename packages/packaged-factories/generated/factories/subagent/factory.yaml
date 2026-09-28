@@ -69,21 +69,19 @@ workTypes:
 workers:
     - agentTools:
         policy: ENABLED
+      body: |-
+        Begin from zero context and complete the submitted request in one pass. Read the
+        entire request before acting. If it concerns a repository, inspect contributor
+        instructions, relevant architecture, source, tests, and working-tree state.
+        Preserve unrelated work, run proportional verification, and return a
+        self-contained outcome with evidence and limitations.
       model: ${workerModel}
       modelProvider: ${workerProvider}
       name: subagent-worker
       reasoningEffort: ${workerReasoningEffort}
       type: AGENT_WORKER
 workstations:
-    - body: |
-        Begin from zero context and complete the submitted request in one pass for Work
-        {{ (index .Inputs 0).WorkID }}. Read the entire request before acting. If it
-        concerns a repository, inspect contributor instructions, relevant architecture,
-        source, tests, and working-tree state. Preserve unrelated work, run proportional
-        verification, and return a self-contained outcome with evidence and limitations.
-
-        Request:
-        ${input}
+    - body: ${input}
       inputs:
         - state: init
           workType: task
@@ -94,7 +92,6 @@ workstations:
       outputs:
         - state: complete
           workType: task
-      promptFile: prompts/run-subagent.md
       type: AGENT_RUN
       worker: subagent-worker
       workingDirectory: ${workingRoot}

@@ -76,6 +76,12 @@ workers:
     reasoningEffort: ${workerReasoningEffort}
     agentTools:
       policy: ENABLED
+    body: |-
+      Begin from zero context and complete the submitted request in one pass. Read the
+      entire request before acting. If it concerns a repository, inspect contributor
+      instructions, relevant architecture, source, tests, and working-tree state.
+      Preserve unrelated work, run proportional verification, and return a
+      self-contained outcome with evidence and limitations.
 workstations:
   - name: run-subagent
     type: AGENT_RUN
@@ -90,4 +96,4 @@ workstations:
     onFailure:
       - workType: task
         state: failed
-    promptFile: prompts/run-subagent.md
+    body: ${input}
