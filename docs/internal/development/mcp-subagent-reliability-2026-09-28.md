@@ -8,8 +8,9 @@ the agent's text response.
 
 - Checkout: `codex/mcp-subagent` at `a16ff10223` when probing began.
 - MCP connector: `you.factory_session.list` responded successfully.
-- Installed server: `C:\Users\andre\bin\you.exe` (built from commit
-  `36b8d92585`). Source and installed binary were in sync at the final probe.
+- Installed server: `C:\Users\andre\bin\you.exe` (built from source commit
+  `75ebaca91f` at the latest probe). Existing MCP connector processes may
+  retain an earlier binary until they restart.
 - Provider/model for the first probes below: `opencode` /
   `opencode/nemotron-3.5-lightning-free`. Later rows name their
   other models.
