@@ -238,7 +238,6 @@ func newHTTPSessionsHandler(
 		Runtime:         runtimeAPI, FactoryStatus: statusAPI,
 		Sessions: liveAPI, Invocation: invocationAPI, FactoryDefinitions: definitionsAPI,
 		FactoryValidation: validation, WorkflowPreview: root.WorkflowPreviewService(),
-		DurableLifecycle:      durableAPI,
 		DurableResponseEvents: durableAPI,
 		DurableLister:         root,
 		LiveSessionLister:     factorysessionshttp.ReadProjectionSessionListReader{Reader: root},

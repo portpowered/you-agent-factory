@@ -520,7 +520,6 @@ func newDurableExecutionHTTPHandler(
 	durable := factorysessionmapping.NewDurableAPI(sessions)
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		SessionsRoot:          sessions,
-		DurableLifecycle:      durable,
 		DurableResponseEvents: durable,
 		DurableLister:         sessions, FactoryValidation: validation,
 		InvocationWorkType: invocationWorkType, SessionRequests: sessionRequests,
