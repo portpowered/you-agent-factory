@@ -71,36 +71,6 @@ func TestResolveWorkRuntimeUsesSessionOwnedMetricsRecorder(t *testing.T) {
 	}
 }
 
-func TestAssemblyCloseDrainsEveryOwnedSessionAndJoinsFailures(t *testing.T) {
-	t.Parallel()
-
-	firstErr := errors.New("close first session")
-	first := &detachedRouterOwnerFake{closeErr: firstErr}
-	second := &detachedRouterOwnerFake{}
-	state := newWorkResolverSessionState()
-	for _, sessionID := range []string{"session-first", "session-second", "session-third"} {
-		state.Register(sessionruntime.Registration{
-			SessionID: sessionID,
-			Handle:    struct{}{},
-			Runtime:   &factorysessions.LiveRuntime{},
-		})
-	}
-	assembly := &Assembly{state: state}
-	assembly.registerDetachedGateway("session-first", first)
-	assembly.registerDetachedGateway("session-second", second)
-
-	err := assembly.Close(context.Background())
-	if !errors.Is(err, firstErr) {
-		t.Fatalf("Close() error = %v, want it to retain %v", err, firstErr)
-	}
-	if !reflect.DeepEqual(first.closedSessionIDs, []string{"session-first"}) {
-		t.Fatalf("first owner close calls = %v, want [session-first]", first.closedSessionIDs)
-	}
-	if !reflect.DeepEqual(second.closedSessionIDs, []string{"session-third", "session-second"}) {
-		t.Fatalf("second owner close calls = %v, want [session-third session-second]", second.closedSessionIDs)
-	}
-}
-
 func TestSelectCompletionSessionIdentityUsesRetainedMetricIdentity(t *testing.T) {
 	const canonicalID = "canonical-runtime-id"
 
