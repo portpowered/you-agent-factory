@@ -537,6 +537,19 @@ func (s *service) inspectGenericRuntimeCache(
 	inspection.ManifestPresent = true
 	inspection.ManifestValid = true
 	inspection.ExpectedArtifacts = genericRuntimeRequirements(metadata)
+	if isBuiltInGemmaLLMSource(source) &&
+		genericRuntimeSourceMatchesMetadata(source, metadata) &&
+		!genericRuntimeRequirementsSatisfy(builtInGemmaLLMRequirements(), inspection.ExpectedArtifacts) {
+		required := builtInGemmaLLMRequirements()
+		inspection.ExpectedArtifacts = required
+		cached := make([]models.AssetArtifact, len(metadata.Files))
+		for index, file := range metadata.Files {
+			cached[index].Name = file.Path
+		}
+		inspection.MissingAssets = missingAssetNames(required, cached)
+		inspection.FailureReason = "managed cache does not satisfy configured model requirements"
+		return inspection, true, nil
+	}
 	revisionPath, err := managedCacheChildPath(root, metadata.Revision, "revision")
 	if err != nil {
 		inspection.ManifestValid = false
@@ -943,6 +956,9 @@ func genericRuntimeRequirements(metadata cacheMetadata) []models.AssetRequiremen
 }
 
 func genericRuntimeExpectedArtifacts(source genericSource) []models.AssetRequirement {
+	if isBuiltInGemmaLLMSource(source) {
+		return builtInGemmaLLMRequirements()
+	}
 	if name := filepath.ToSlash(strings.TrimSpace(source.file)); name != "" {
 		return []models.AssetRequirement{{Name: name}}
 	}

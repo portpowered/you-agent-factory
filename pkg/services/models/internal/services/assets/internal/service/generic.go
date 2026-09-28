@@ -406,18 +406,7 @@ func (s *service) genericModelRequirements(
 	explicit []models.AssetRequirement,
 ) ([]genericArtifact, error) {
 	if isBuiltInGemmaLLMSource(source) {
-		return s.genericArtifactsFromRequirements(source, []models.AssetRequirement{
-			{
-				Name:   builtInGemmaLLMModelName,
-				Bytes:  builtInGemmaLLMModelBytes,
-				SHA256: builtInGemmaLLMModelSHA256,
-			},
-			{
-				Name:   builtInGemmaLLMProjectorName,
-				Bytes:  builtInGemmaLLMProjectorBytes,
-				SHA256: builtInGemmaLLMProjectorSHA256,
-			},
-		}), nil
+		return s.genericArtifactsFromRequirements(source, builtInGemmaLLMRequirements()), nil
 	}
 	if len(explicit) > 0 {
 		return s.genericArtifactsFromRequirements(source, explicit), nil
@@ -436,6 +425,13 @@ func (s *service) genericModelRequirements(
 		return nil, err
 	}
 	return nil, nil
+}
+
+func builtInGemmaLLMRequirements() []models.AssetRequirement {
+	return []models.AssetRequirement{
+		{Name: builtInGemmaLLMModelName, Bytes: builtInGemmaLLMModelBytes, SHA256: builtInGemmaLLMModelSHA256},
+		{Name: builtInGemmaLLMProjectorName, Bytes: builtInGemmaLLMProjectorBytes, SHA256: builtInGemmaLLMProjectorSHA256},
+	}
 }
 
 func isBuiltInGemmaLLMSource(source genericSource) bool {
@@ -939,6 +935,7 @@ func (s *service) resolveGenericSource(
 	if err != nil {
 		return genericSource{}, err
 	}
+	source.modelName = canonical
 	if source.kind != genericSourceHF || isImmutableGenericRevision(source.revision) {
 		return source, nil
 	}
