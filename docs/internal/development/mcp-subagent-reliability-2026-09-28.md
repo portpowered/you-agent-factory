@@ -9,8 +9,7 @@ the agent's text response.
 - Checkout: `codex/mcp-subagent` at `a16ff10223` when probing began.
 - MCP connector: `you.factory_session.list` responded successfully.
 - Installed server: `C:\Users\andre\bin\you.exe` (built from commit
-  `cc4492754b`). The integrated branch has since rebuilt and installed the
-  binary from this commit; source and installed binary are in sync.
+  `36b8d92585`). Source and installed binary were in sync at the final probe.
 - Provider/model for the first probes below: `opencode` /
   `opencode/nemotron-3.5-lightning-free`. Later rows name their
   other models.
@@ -105,4 +104,9 @@ tests, `make verify-fast`, and all 24 `make lint` targets. These are protocol
 and harness checks, not proof of a running GPU-backed LocalAI model.
 A fresh direct stdio probe of the installed binary completed a read-only
 OpenCode invocation with session 10d2a44e-00bd-4bdb-a049-1fa15e2572b2 and
-returned you-agent-factory.
+returned you-agent-factory. Source commit `36b8d92585` was built and installed
+as `C:\Users\andre\bin\you.exe`; a fresh direct stdio MCP launch listed 11
+tools and completed a read-only OpenCode subagent with session
+`9844094a-1e11-4a17-b391-e0017f30a233`, returning `you-agent-factory`, with
+empty stderr. This does not resolve the earlier model-specific timeout
+behavior.
