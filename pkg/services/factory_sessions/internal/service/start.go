@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -64,29 +66,59 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
-	if products.application.FactorySessions == nil {
-		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: activated session is unavailable")
+	if request.ValidateOnly || request.InitNewFactory {
+		if products.application.FactorySessions == nil {
+			return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: validation service is unavailable")
+		}
+		return products.application.FactorySessions.Start(ctx, selected)
 	}
-	started, err := products.application.FactorySessions.Start(ctx, selected)
-	if err != nil {
+	if products.invocation.Lifecycle == nil {
 		if products.application.Resources.Close != nil {
 			_ = products.application.Resources.Close()
 		}
-		return factorysessions.SessionStartResult{}, err
+		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: lifecycle is unavailable")
 	}
-	if request.ActivationOnly {
-		started.Status = "RUNNING"
+	runContext, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	activation := &sessionActivation{
+		lifecycle:      products.invocation.Lifecycle,
+		cancel:         cancel,
+		closeArtifacts: products.application.Resources.Close,
 	}
-	if session := r.Resolve(started.SessionID); session != nil && started.Live != nil {
-		view := factorysessions.SessionView{
-			SessionID: livesession.CanonicalID(session), Mode: factorysessions.SessionOperationModeLive,
-			Status: started.Status, FactoryDir: session.FactoryDir, FolderPath: session.FolderPath,
-			Project: session.Project, IsDefault: session.IsDefault, Target: session.Target,
-			RuntimeAvailable: session.Runtime != nil,
+	if err := activation.lifecycle.StartLifecycle(ctx, runContext); err == nil {
+		activation.stopWorker, err = activation.lifecycle.StartWorkerLifecycle(ctx)
+		if err == nil {
+			err = activation.lifecycle.CompleteStartup(ctx)
 		}
-		started.Live.Session = &view
 	}
-	return started, nil
+	if err != nil {
+		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session lifecycle: %w", errors.Join(err, activation.Close(ctx)))
+	}
+	sessionID := strings.TrimSpace(request.SessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	session := r.Resolve(sessionID)
+	if session == nil {
+		_ = activation.Close(ctx)
+		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: activated session %q is unavailable", sessionID)
+	}
+	bound := runtimebinding.SessionStateFrom(session)
+	if bound == nil {
+		_ = activation.Close(ctx)
+		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: session runtime state is unavailable")
+	}
+	bound.Activation = activation
+	status := "RUNNING"
+	view := factorysessions.SessionView{
+		SessionID: livesession.CanonicalID(session), Mode: factorysessions.SessionOperationModeLive,
+		Status: status, FactoryDir: session.FactoryDir, FolderPath: session.FolderPath,
+		Project: session.Project, IsDefault: session.IsDefault, Target: session.Target,
+		RuntimeAvailable: session.Runtime != nil,
+	}
+	return factorysessions.SessionStartResult{
+		SessionID: view.SessionID, Mode: factorysessions.SessionOperationModeLive, Status: status,
+		Live: &factorysessions.SessionOpenResult{SessionID: view.SessionID, Session: &view, FolderPath: session.FolderPath},
+	}, nil
 }
 
 func (r *Root) resolveStartFolder(ctx context.Context, request factorysessions.SessionStartRequest, selection factorysessions.SessionRuntimeSelection) (string, error) {

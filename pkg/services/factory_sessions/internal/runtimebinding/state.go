@@ -127,4 +127,6 @@ type SessionState struct {
 	Handle   RuntimeHandle
 	Spec     any
 	Owner    SessionProjectionOwner
+	// Activation retains lifecycle cleanup on the canonical session record.
+	Activation interface{ Close(context.Context) error }
 }
