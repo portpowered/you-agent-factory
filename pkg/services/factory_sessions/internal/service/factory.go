@@ -515,7 +515,8 @@ func (r *Root) openRuntimeWithOptions(
 	ctx context.Context,
 	definition factorydefinitions.RuntimeOpeningRequest,
 	runtime factoryruntime.RuntimeOpeningRequest,
-	session *factorysessions.SessionRuntimeOpeningRequest,
+	session *factorysessions.SessionStartRequest,
+	canonicalSessionIDGenerated bool,
 	worker workers.RuntimeOpeningRequest,
 	recording recordings.RuntimeOpeningRequest,
 	modelCacheDirectory string,
@@ -529,6 +530,7 @@ func (r *Root) openRuntimeWithOptions(
 		definition,
 		runtime,
 		session,
+		canonicalSessionIDGenerated,
 		worker,
 		recording,
 		modelCacheDirectory,
@@ -590,8 +592,8 @@ func (r *Root) openForRequest(
 	selection := runtimeSelectionForStart(request)
 	recording := recordingRequestForStart(request)
 	open := func(replayInput *recordings.LoadReplayInputResult) (runtimeProducts, error) {
-		session := sessionRequestForStart(request)
-		return r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, workerRequestForStart(request), recording, selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, replayInput)
+		session := request
+		return r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recording, selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, replayInput)
 	}
 	// Historical replay, whether portable or legacy, is an inspection-only
 	// product and must select its detached projection before live Factory

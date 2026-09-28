@@ -19,14 +19,22 @@ import (
 )
 
 type preparedRuntime struct {
-	Definition          factorydefinitions.RuntimeOpeningRequest
-	DefinitionSnapshot  *factorydefinitions.RuntimeSnapshot
-	Runtime             factoryruntime.RuntimeOpeningRequest
-	Session             factorysessions.SessionRuntimeOpeningRequest
-	Workers             workers.RuntimeOpeningRequest
-	Recordings          recordings.RuntimeOpeningRequest
-	ModelCacheDirectory string
-	OperatorDefaults    operatorconfig.ResolvedDefaults
+	Definition                  factorydefinitions.RuntimeOpeningRequest
+	DefinitionSnapshot          *factorydefinitions.RuntimeSnapshot
+	Runtime                     factoryruntime.RuntimeOpeningRequest
+	Session                     factorysessions.SessionStartRequest
+	CanonicalSessionIDGenerated bool
+	Workers                     workers.RuntimeOpeningRequest
+	Recordings                  recordings.RuntimeOpeningRequest
+	ModelCacheDirectory         string
+	OperatorDefaults            operatorconfig.ResolvedDefaults
+}
+
+func sessionRuntimeSelection(request *factorysessions.SessionStartRequest) *factorysessions.SessionRuntimeSelection {
+	if request.RuntimeSelection == nil {
+		request.RuntimeSelection = &factorysessions.SessionRuntimeSelection{}
+	}
+	return request.RuntimeSelection
 }
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -36,7 +44,8 @@ func PrepareRuntime(
 	ctx context.Context,
 	definitionRequest factorydefinitions.RuntimeOpeningRequest,
 	runtimeRequest factoryruntime.RuntimeOpeningRequest,
-	sessionRequest factorysessions.SessionRuntimeOpeningRequest,
+	sessionRequest factorysessions.SessionStartRequest,
+	canonicalSessionIDGenerated bool,
 	workerRequest workers.RuntimeOpeningRequest,
 	recordingRequest recordings.RuntimeOpeningRequest,
 	modelCacheDirectory string,
@@ -84,7 +93,8 @@ func PrepareRuntime(
 	}
 	prepared = preparedRuntime{
 		Definition: definitionRequest, Runtime: runtimeRequest, Session: sessionRequest,
-		Workers: workerRequest, Recordings: recordingRequest, ModelCacheDirectory: modelCacheDirectory,
+		CanonicalSessionIDGenerated: canonicalSessionIDGenerated,
+		Workers:                     workerRequest, Recordings: recordingRequest, ModelCacheDirectory: modelCacheDirectory,
 		OperatorDefaults: operatorDefaults, DefinitionSnapshot: definitionSnapshot,
 	}
 	root, err = ResolveRuntimeRoot(prepared.Definition.Directory, baseLogger, prepared.Runtime.RuntimeInstanceID, generateRuntimeInstanceID, resolveHome)
@@ -121,8 +131,8 @@ func PrepareRuntime(
 		newSessionLogger,
 		prepared.DefinitionSnapshot,
 		replayInput,
-		prepared.Session.FactorySessionID,
-		prepared.Session.Host.Port <= 0,
+		prepared.Session.SessionID,
+		sessionRuntimeSelection(&prepared.Session).Host.Port <= 0,
 	)
 	if err != nil {
 		return preparedRuntime{}, RuntimeRoot{}, RuntimeLoad{}, nil, nil, err
@@ -323,17 +333,18 @@ func operatorConfigPath(configPath, home string) (string, error) {
 	return operatorconfig.DefaultConfigPath(homeDir), nil
 }
 
-func ensureBackendScope(ensure operatorconfig.BackendScopeEnsurer, request *factorysessions.SessionRuntimeOpeningRequest, logger *zap.Logger) error {
+func ensureBackendScope(ensure operatorconfig.BackendScopeEnsurer, request *factorysessions.SessionStartRequest, logger *zap.Logger) error {
 	if request == nil {
 		return fmt.Errorf("Factory Session request is required to resolve backend scope")
 	}
-	if strings.TrimSpace(request.BackendScopeID) != "" {
+	selection := sessionRuntimeSelection(request)
+	if strings.TrimSpace(selection.BackendScopeID) != "" {
 		return nil
 	}
 	if ensure == nil {
 		return fmt.Errorf("Operator Settings backend-scope ensurer is required")
 	}
-	configPath, err := operatorConfigPath(request.SystemConfigPath, request.SystemConfigHome)
+	configPath, err := operatorConfigPath(selection.SystemConfigPath, selection.SystemConfigHome)
 	if err != nil {
 		return err
 	}
@@ -341,7 +352,7 @@ func ensureBackendScope(ensure operatorconfig.BackendScopeEnsurer, request *fact
 	if err != nil {
 		return err
 	}
-	request.BackendScopeID = resolved.BackendScopeID
+	selection.BackendScopeID = resolved.BackendScopeID
 	if logger != nil {
 		logger.Info("resolved backend scope for local backend", zap.String("diagnostics", resolved.DiagnosticsLine()))
 	}

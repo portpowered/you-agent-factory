@@ -120,7 +120,7 @@ func TestActivationOpeningDefersCanonicalIdentityUntilDefinitionAdmission(t *tes
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 	}
 	runtimeSelection := factoryruntime.RuntimeOpeningRequest{}
-	session := factorysessions.SessionRuntimeOpeningRequest{FactorySessionID: factorysessions.DefaultSessionID}
+	session := sessionOwnerFixture{FactorySessionID: factorysessions.DefaultSessionID}
 	runtimeID, err := factory.ensureActivationRuntimeID(&runtimeSelection)
 	if err != nil {
 		t.Fatalf("ensureActivationRuntimeID(resume) error = %v", err)
@@ -144,7 +144,7 @@ func TestActivationOpeningDefersCanonicalIdentityForAliasOnlyResume(t *testing.T
 		generateRuntimeInstanceID: func() string { return canonicalID },
 	}
 	runtimeSelection := factoryruntime.RuntimeOpeningRequest{}
-	session := factorysessions.SessionRuntimeOpeningRequest{}
+	session := sessionOwnerFixture{}
 	_, err := factory.ensureActivationRuntimeID(&runtimeSelection)
 	if err != nil {
 		t.Fatalf("ensureActivationRuntimeID(alias-only resume) error = %v", err)

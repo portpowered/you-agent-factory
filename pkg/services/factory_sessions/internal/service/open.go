@@ -37,7 +37,8 @@ func openRuntime(
 	ctx context.Context,
 	definitionRequest factorydefinitions.RuntimeOpeningRequest,
 	runtimeRequest factoryruntime.RuntimeOpeningRequest,
-	sessionRequest *factorysessions.SessionRuntimeOpeningRequest,
+	sessionRequest *factorysessions.SessionStartRequest,
+	canonicalSessionIDGenerated bool,
 	workerRequest workers.RuntimeOpeningRequest,
 	recordingRequest recordings.RuntimeOpeningRequest,
 	modelCacheDirectory string,
@@ -96,18 +97,19 @@ func openRuntime(
 	if recordingsRuntime == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime opening is required")
 	}
-	providedCanonicalSessionID := strings.TrimSpace(sessionRequest.CanonicalSessionID)
-	canonicalSessionIDGenerated := sessionRequest.CanonicalSessionIDGenerated
-	sessionID := strings.TrimSpace(sessionRequest.FactorySessionID)
+	selection := sessionRuntimeSelection(sessionRequest)
+	providedCanonicalSessionID := strings.TrimSpace(selection.CanonicalSessionID)
+	sessionID := strings.TrimSpace(sessionRequest.SessionID)
 	if sessionID == "" {
 		sessionID = factorysessions.DefaultSessionID
 	}
-	sessionRequest.FactorySessionID = sessionID
+	sessionRequest.SessionID = sessionID
 	configured, root, load, clock, logger, err := PrepareRuntime(
 		ctx,
 		definitionRequest,
 		runtimeRequest,
 		*sessionRequest,
+		canonicalSessionIDGenerated,
 		workerRequest,
 		recordingRequest,
 		modelCacheDirectory,
@@ -144,10 +146,11 @@ func openRuntime(
 		return runtimeProducts{}, err
 	}
 	canonicalSessionIDGenerated = canonicalSessionIDGenerated ||
-		(providedCanonicalSessionID == "" && strings.TrimSpace(sessionRequest.CanonicalSessionID) != "")
-	configured.Session.CanonicalSessionID = sessionRequest.CanonicalSessionID
-	configured.Session.CanonicalSessionIDGenerated = canonicalSessionIDGenerated
-	metricsSessionID := strings.TrimSpace(configured.Session.CanonicalSessionID)
+		(providedCanonicalSessionID == "" && strings.TrimSpace(selection.CanonicalSessionID) != "")
+	configured.CanonicalSessionIDGenerated = canonicalSessionIDGenerated
+	sessionSelection := sessionRuntimeSelection(&configured.Session)
+	sessionSelection.CanonicalSessionID = selection.CanonicalSessionID
+	metricsSessionID := strings.TrimSpace(sessionSelection.CanonicalSessionID)
 	if metricsSessionID == "" {
 		metricsSessionID = sessionID
 	}
@@ -205,7 +208,7 @@ func openRuntime(
 		)
 		return historicalProducts, nil
 	}
-	operatorSettingsPath, err := operatorConfigPath(configured.Session.SystemConfigPath, configured.Session.SystemConfigHome)
+	operatorSettingsPath, err := operatorConfigPath(sessionSelection.SystemConfigPath, sessionSelection.SystemConfigHome)
 	if err != nil {
 		return runtimeProducts{}, fmt.Errorf("resolve operator settings path for runtime transport: %w", err)
 	}
@@ -232,9 +235,9 @@ func openRuntime(
 	}
 	durableExecution, err := durableExecutionFactory(
 		configured.Definition,
-		configured.Session.PersistencePolicy,
-		configured.Session.SystemConfigHome,
-		configured.Session.SystemConfigPath,
+		configured.Session.Persistence,
+		sessionSelection.SystemConfigHome,
+		sessionSelection.SystemConfigPath,
 		configured.OperatorDefaults,
 		root,
 		clock,
@@ -378,7 +381,7 @@ func openRuntime(
 			configured.Runtime.MetricsDirectory,
 			configured.Runtime.MetricsConfig,
 			configured.Recordings.FlushInterval,
-			configured.Session.BackendScopeID,
+			sessionSelection.BackendScopeID,
 			configured.Workers.RunnerID,
 			configured.Runtime.Verbose,
 			configured.Workers.SkipBuiltInPrerequisiteValidation,
@@ -482,8 +485,8 @@ func openRuntime(
 		configured.Definition.Directory,
 		configured.Definition.ExecutionBaseDir,
 		configured.Runtime.Mode,
-		configured.Session.BackendScopeID,
-		configured.Session.WorkFile,
+		sessionSelection.BackendScopeID,
+		sessionSelection.WorkFile,
 		configured.Recordings.WorkflowID,
 		nil,
 		loadFactory,
@@ -527,9 +530,9 @@ func openRuntime(
 		sessionRuntime,
 		factorysessions.RuntimeHostRequest{
 			Directory: configured.Definition.Directory, RuntimeMode: configured.Runtime.Mode,
-			WorkFile: configured.Session.WorkFile, MockWorkers: configured.Workers.MockWorkers != nil,
-			Host: configured.Session.Host.Host, Port: configured.Session.Host.Port,
-			AutoPort: configured.Session.Host.AutoPort, Pprof: configured.Session.Host.Pprof,
+			WorkFile: sessionSelection.WorkFile, MockWorkers: configured.Workers.MockWorkers != nil,
+			Host: sessionSelection.Host.Host, Port: sessionSelection.Host.Port,
+			AutoPort: sessionSelection.Host.AutoPort, Pprof: sessionSelection.Host.Pprof,
 		},
 		nil,
 		startupRuntime.RuntimeLogger(),
@@ -585,7 +588,7 @@ func openRuntime(
 		recordingProjections,
 		configured.Definition.Directory,
 		configured.Runtime.RuntimeInstanceID,
-		configured.Session.BackendScopeID,
+		sessionSelection.BackendScopeID,
 		cleanup.Close,
 		sessionID,
 	)

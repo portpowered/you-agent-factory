@@ -487,7 +487,7 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 			ExecutionBaseDir: "/runtime",
 		},
 		FactoryRuntime: factoryruntime.RuntimeOpeningRequest{Verbose: true},
-		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
+		FactorySession: sessionOwnerFixture{
 			CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
 			BackendScopeID:     "scope",
 			Host: factorysessions.RuntimeHostRequest{
@@ -546,7 +546,7 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 	}
 	request := runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
-		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
+		FactorySession: sessionOwnerFixture{
 			CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
 		},
 		Recordings: recordings.RuntimeOpeningRequest{
@@ -558,7 +558,7 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 	activation := factoryruntime.RuntimeActivationRequest{
 		Snapshot: activationSnapshot(),
 		Inputs: runtimeActivationInputs(
-			request.FactoryDefinition, request.FactorySession, request.Workers,
+			request.FactoryDefinition, request.startRequest(), false, request.Workers,
 			request.Recordings, request.ModelCacheDirectory, request.OperatorDefaults, &resumeInput,
 		),
 	}
@@ -570,8 +570,8 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 	if recording.RecordPath != request.Recordings.RecordPath {
 		t.Fatalf("Recordings successor path = %q, want %q", recording.RecordPath, request.Recordings.RecordPath)
 	}
-	if session.CanonicalSessionID != request.FactorySession.CanonicalSessionID {
-		t.Fatalf("Factory Session canonical ID = %q, want %q", session.CanonicalSessionID, request.FactorySession.CanonicalSessionID)
+	if session.RuntimeSelection.CanonicalSessionID != request.FactorySession.CanonicalSessionID {
+		t.Fatalf("Factory Session canonical ID = %q, want %q", session.RuntimeSelection.CanonicalSessionID, request.FactorySession.CanonicalSessionID)
 	}
 	if recording.ResumeInput != resumeInput {
 		t.Fatalf("Recordings resume input = %#v, want %#v", recording.ResumeInput, resumeInput)
@@ -634,7 +634,7 @@ func TestActivationRequestCarriesFactorySessionCorrelation(t *testing.T) {
 	}
 	activation, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
 		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
-		FactorySession: factorysessions.SessionRuntimeOpeningRequest{
+		FactorySession: sessionOwnerFixture{
 			FactorySessionID: "session-1",
 		},
 	}).startRequest())

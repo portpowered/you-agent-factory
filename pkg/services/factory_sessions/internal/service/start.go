@@ -275,16 +275,6 @@ func runtimeOwnerRequestForStart(request factorysessions.SessionStartRequest) fa
 	}
 }
 
-func sessionRequestForStart(request factorysessions.SessionStartRequest) factorysessions.SessionRuntimeOpeningRequest {
-	selection := runtimeSelectionForStart(request)
-	return factorysessions.SessionRuntimeOpeningRequest{
-		FactorySessionID: request.SessionID, CanonicalSessionID: selection.CanonicalSessionID,
-		PersistencePolicy: request.Persistence, BackendScopeID: selection.BackendScopeID,
-		SystemConfigHome: selection.SystemConfigHome, SystemConfigPath: selection.SystemConfigPath,
-		WorkFile: selection.WorkFile, Host: selection.Host,
-	}
-}
-
 func workerRequestForStart(request factorysessions.SessionStartRequest) workers.RuntimeOpeningRequest {
 	selection := runtimeSelectionForStart(request)
 	return workers.RuntimeOpeningRequest{

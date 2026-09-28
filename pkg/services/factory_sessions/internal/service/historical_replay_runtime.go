@@ -302,7 +302,7 @@ func preparePortableReplayRuntime(
 		resourceLeaseAdmission = admission
 	}
 	if err := bindDurableExecutionCapabilities(
-		configured.Session.FactorySessionID,
+		configured.Session.SessionID,
 		durableOwner,
 		workerService,
 		runtimeService,
@@ -347,9 +347,9 @@ func constructPortableReplayDurableOwner(
 	}
 	durable, err := durableExecutionFactory(
 		configured.Definition,
-		configured.Session.PersistencePolicy,
-		configured.Session.SystemConfigHome,
-		configured.Session.SystemConfigPath,
+		configured.Session.Persistence,
+		runtimeSelectionForStart(configured.Session).SystemConfigHome,
+		runtimeSelectionForStart(configured.Session).SystemConfigPath,
 		configured.OperatorDefaults,
 		root,
 		clock,
@@ -407,8 +407,8 @@ func assemblePortableReplayRuntime(
 		false,
 		configured.Recordings.RecordPath,
 		configured.Recordings.WorkflowID,
-		configured.Session.FactorySessionID,
-		configured.Session.FactorySessionID,
+		configured.Session.SessionID,
+		configured.Session.SessionID,
 		nil,
 		loadFactory,
 		providerOverride,
@@ -427,7 +427,7 @@ func assemblePortableReplayRuntime(
 		configured.Runtime.MetricsDirectory,
 		configured.Runtime.MetricsConfig,
 		configured.Recordings.FlushInterval,
-		configured.Session.BackendScopeID,
+		runtimeSelectionForStart(configured.Session).BackendScopeID,
 		configured.Workers.RunnerID,
 		configured.Runtime.Verbose,
 		configured.Workers.SkipBuiltInPrerequisiteValidation,

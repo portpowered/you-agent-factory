@@ -15,11 +15,23 @@ import (
 type runtimeOwnerFixture struct {
 	FactoryDefinition   factorydefinitions.RuntimeOpeningRequest
 	FactoryRuntime      factoryruntime.RuntimeOpeningRequest
-	FactorySession      factorysessions.SessionRuntimeOpeningRequest
+	FactorySession      sessionOwnerFixture
 	Workers             workers.RuntimeOpeningRequest
 	Recordings          recordings.RuntimeOpeningRequest
 	ModelCacheDirectory string
 	OperatorDefaults    operatorsettings.ResolvedDefaults
+}
+
+type sessionOwnerFixture struct {
+	FactorySessionID            string
+	CanonicalSessionID          string
+	CanonicalSessionIDGenerated bool
+	PersistencePolicy           factorysessions.PersistencePolicy
+	BackendScopeID              string
+	SystemConfigHome            string
+	SystemConfigPath            string
+	WorkFile                    string
+	Host                        factorysessions.RuntimeHostRequest
 }
 
 func (fixture runtimeOwnerFixture) startRequest() factorysessions.SessionStartRequest {

@@ -45,9 +45,9 @@ func (r *Root) InspectHistoricalApplication(
 	if !selectsHistoricalReplayInspection(input) {
 		return HistoricalApplicationInspection{}, false, nil
 	}
-	session := sessionRequestForStart(request)
+	session := request
 	selection := runtimeSelectionForStart(request)
-	products, err := r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, workerRequestForStart(request), recordingRequestForStart(request), selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, &input)
+	products, err := r.openRuntimeWithOptions(ctx, definitionRequestForStart(request), runtimeOwnerRequestForStart(request), &session, false, workerRequestForStart(request), recordingRequestForStart(request), selection.ModelCacheDirectory, selection.OperatorDefaults, r.baseLogger, nil, &input)
 	if err != nil {
 		return HistoricalApplicationInspection{}, false, err
 	}
