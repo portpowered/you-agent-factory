@@ -260,3 +260,14 @@ can time out before that provider result is available. This provider comparison
 supports an OpenCode ACP continuation problem on this host; it does not yet
 prove whether the upstream model API, OpenCode's ACP bridge, or our response
 handling stops the continuation.
+
+A 120-second `you.subagent` ACP audit with provider `opencode` and model
+`opencode/nemotron-3.5-lightning-free` completed in Factory Session
+`1681aed7-fd10-458d-a5ab-616dfaad55c1`. Its sanitized native OpenCode session
+`ses_f18d9378affeqffM8QDZNIGwZD` shows a completed read tool call followed
+by an assistant `finish=stop`. This contrasts two `Longcat` MCP sessions that
+stopped after a completed read, but the model comparison does not establish a
+root cause. A subsequent `Nemotron` edit correction timed out after 90 seconds
+in Factory Session `c1e71a4d-595b-44e0-891b-0a205d66439b` with no edit;
+sanitized native session `ses_f18d67165ffeK0gt334J5UvsWK` shows a completed
+read but no assistant continuation.
