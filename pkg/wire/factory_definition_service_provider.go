@@ -62,27 +62,21 @@ func provideFactoryDefinitionsRoot(
 	)
 }
 
-// provideFactoryRuntimeRootFactory composes the singular process-scoped
-// Runtime root once. Factory Sessions supplies the explicit activation
-// operation when it constructs its opening capability; no late delegate
-// binder is exposed.
-func provideFactoryRuntimeRootFactory(
+// provideFactoryRuntimeRoot composes the singular process-scoped Runtime root.
+// Factory Sessions supplies the activation operation with each request.
+func provideFactoryRuntimeRoot(
 	newID factoryruntime.IDGenerator,
 	workflows factoryruntime.JavaScriptWorkflowDefinitions,
 	clock factoryruntime.Clock,
-) factorysessionwire.RuntimeRootFactory {
-	return func(activation factoryruntime.RuntimeActivationOperation) (factorysessionwire.FactoryRuntimeRoot, error) {
-		service, err := factoryruntimewire.NewService(
-			newID,
-			workflows,
-			nil,
-			clock,
-			func(context.Context, workers.WorkstationDispatchRequest) error {
-				return factoryruntime.ErrNotRunning
-			},
-			nil,
-			activation,
-		)
-		return service, err
-	}
+) (factorysessionwire.FactoryRuntimeRoot, error) {
+	return factoryruntimewire.NewService(
+		newID,
+		workflows,
+		nil,
+		clock,
+		func(context.Context, workers.WorkstationDispatchRequest) error {
+			return factoryruntime.ErrNotRunning
+		},
+		nil,
+	)
 }
