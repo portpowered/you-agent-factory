@@ -633,6 +633,25 @@ The committed build `97b4e5b8c4` was rebuilt and copied to the configured
 equal `77A9956B3180801FB53767126247705321F4BD7BEDE22A8F094EF925ABC92CC6`.
 A fresh OpenCode `space-bunny-free` README-heading MCP probe completed in
 Factory Session `4aff8f97-c9a7-4b4c-99f7-ddaece4672e6` in about five
-seconds and returned exactly `# you-agent-factory`. The live probe verifies
-the basic configured MCP invoke path after installation; it does not itself
-exercise the new cancel deadline.
+seconds and returned exactly `# you-agent-factory`. Later process inspection
+showed that the in-app MCP tool still used an older running
+`C:\Users\andre\bin\you.exe`, so this probe did not verify the rebuilt
+`.local\bin` executable or exercise the new cancel deadline.
+
+A fresh direct stdio MCP connection to the rebuilt `.local\bin\you.exe`
+negotiated protocol `2024-11-05` and invoked OpenCode from a disposable
+directory outside the repository. Factory Session
+`6059e6da-0263-4c69-bb47-bcf96afb57d2` returned the unique file content
+`ROOT_PROBE_7E9C62A4`. A second direct stdio call with a 2-second deadline
+returned `factory_session.subagent.timed_out` after about 2.06 seconds in
+Factory Session `6beb4969-5938-41c4-8b7a-e77ffa31e934`, with
+`retryable: false`, `partialEffectsPossible: true`, and the request, trace,
+and Work IDs. No new OpenCode process or workspace edit remained after the
+direct probes. This checks the installed binary's success and timeout
+envelopes, but does not prove the new 15-second cancel deadline was reached.
+
+The older `C:\Users\andre\bin\you.exe` is still held open by existing MCP
+server processes and could not be overwritten on Windows. The current
+`config.toml` points to `.local\bin\you.exe`; a fresh process uses the
+rebuilt file, while this task's in-app MCP connection may remain on the old
+executable until its server restarts.
