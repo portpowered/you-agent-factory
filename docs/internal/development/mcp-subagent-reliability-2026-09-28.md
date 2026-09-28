@@ -1536,3 +1536,19 @@ Windows binary was rebuilt at `C:\Users\andre\bin\you-df7163d36c.exe`
 and a fresh stdio MCP initialize request completed successfully. The
 configured MCP command now points to this binary; old active MCP processes
 continue to run their prior image until closed.
+
+The direct Models HTTP file path received live semantic probes through a
+fresh `you-df7163d36c.exe` local server on port 7548. Multipart
+`POST /models/invocations` with the known spoken-digit WAV returned HTTP 200
+and `zero`; a one-frame solid-red MP4 returned HTTP 200 and `Red`; a two-frame
+solid-red MP4 also returned HTTP 200 and `Red`. A two-frame red-then-blue MP4
+returned HTTP 502 `MODEL_BACKEND_FAILURE` with `OMNI response did not contain
+text output`. These are file-upload and inference results, not merely request
+mapping tests. The solid-red two-frame success disproves a universal
+two-frame limit suggested by earlier fixtures. A bounded OpenCode MCP audit
+(session `2d945925-9727-491e-a7d2-f0311e78463f`) traced the 502 to
+`OmniCodec.Invoke`: the gRPC `Reply` decoded without a transport error, but
+neither `Message` nor `ChatDeltas` yielded text. The adapter currently drops
+reply shape and token metadata before the codec checks for empty text, so the
+root cause of this content-sensitive failure remains unproven. The local HTTP
+server was stopped gracefully after the probes.
