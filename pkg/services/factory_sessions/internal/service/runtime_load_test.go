@@ -865,7 +865,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 				}},
 			}, nil
 		},
-		factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
+		factorydefinitions.RuntimeSelection{Directory: t.TempDir()},
 		factorysessions.PersistencePolicyDisabled,
 		t.TempDir(),
 		"",
@@ -935,12 +935,12 @@ func TestOpenForRequestResumeUsesCapturedFactoryDefinition(t *testing.T) {
 	}
 
 	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
+		FactoryDefinition: factorydefinitions.RuntimeSelection{
 			Directory:        "/authored-b",
 			SourcePath:       "/authored-b/factory.json",
 			ExecutionBaseDir: "/authored-b",
 		},
-		Recordings: recordings.RuntimeOpeningRequest{
+		Recordings: recordings.RuntimeSelection{
 			RecordPath: "successor.recording.json",
 			ResumePath: "source.recording.json",
 		},

@@ -2,10 +2,10 @@ package factory
 
 import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
-// RuntimeOpeningRequest contains Factory Runtime lifecycle and observability
+// RuntimeSelection contains Factory Runtime lifecycle and observability
 // values. It intentionally excludes Factory Definition, Worker, Recording,
 // Models, and Factory Session policy.
-type RuntimeOpeningRequest struct {
+type RuntimeSelection struct {
 	Mode              factorydefinitions.RuntimeMode
 	Verbose           bool
 	RuntimeInstanceID string

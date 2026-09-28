@@ -35,12 +35,12 @@ import (
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func openRuntime(
 	ctx context.Context,
-	definitionRequest factorydefinitions.RuntimeOpeningRequest,
-	runtimeRequest factoryruntime.RuntimeOpeningRequest,
+	definitionRequest factorydefinitions.RuntimeSelection,
+	runtimeRequest factoryruntime.RuntimeSelection,
 	sessionRequest *factorysessions.SessionStartRequest,
 	canonicalSessionIDGenerated bool,
-	workerRequest workers.RuntimeOpeningRequest,
-	recordingRequest recordings.RuntimeOpeningRequest,
+	workerRequest workers.RuntimeSelection,
+	recordingRequest recordings.RuntimeSelection,
 	modelCacheDirectory string,
 	operatorDefaults operatorsettings.ResolvedDefaults,
 	baseLogger *zap.Logger,

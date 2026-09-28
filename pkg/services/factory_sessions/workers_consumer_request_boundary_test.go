@@ -218,7 +218,7 @@ func TestFactorySessionsWorkersRootContractsCompileAtSessionsRoot(t *testing.T) 
 	var (
 		_ factorysessions.SessionStartRequest
 		_ factorysessions.InvocationTarget
-		_ workers.RuntimeOpeningRequest
+		_ workers.RuntimeSelection
 		_ workers.ProviderInferenceRequest
 		_ workers.InvocationInput
 		_ platformprocess.CommandRequest

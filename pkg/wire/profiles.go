@@ -439,7 +439,7 @@ func providePackagedFactoryInstallation(
 
 func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLoader) factorysessionwire.DurableExecutionFactory {
 	return func(
-		definition factorydefinitions.RuntimeOpeningRequest,
+		definition factorydefinitions.RuntimeSelection,
 		persistence factorysessions.PersistencePolicy,
 		systemConfigHome string,
 		systemConfigPath string,

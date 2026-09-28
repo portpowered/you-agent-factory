@@ -19,13 +19,13 @@ import (
 )
 
 type preparedRuntime struct {
-	Definition                  factorydefinitions.RuntimeOpeningRequest
+	Definition                  factorydefinitions.RuntimeSelection
 	DefinitionSnapshot          *factorydefinitions.RuntimeSnapshot
-	Runtime                     factoryruntime.RuntimeOpeningRequest
+	Runtime                     factoryruntime.RuntimeSelection
 	Session                     factorysessions.SessionStartRequest
 	CanonicalSessionIDGenerated bool
-	Workers                     workers.RuntimeOpeningRequest
-	Recordings                  recordings.RuntimeOpeningRequest
+	Workers                     workers.RuntimeSelection
+	Recordings                  recordings.RuntimeSelection
 	ModelCacheDirectory         string
 	OperatorDefaults            operatorconfig.ResolvedDefaults
 }
@@ -42,12 +42,12 @@ func sessionRuntimeSelection(request *factorysessions.SessionStartRequest) *fact
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func PrepareRuntime(
 	ctx context.Context,
-	definitionRequest factorydefinitions.RuntimeOpeningRequest,
-	runtimeRequest factoryruntime.RuntimeOpeningRequest,
+	definitionRequest factorydefinitions.RuntimeSelection,
+	runtimeRequest factoryruntime.RuntimeSelection,
 	sessionRequest factorysessions.SessionStartRequest,
 	canonicalSessionIDGenerated bool,
-	workerRequest workers.RuntimeOpeningRequest,
-	recordingRequest recordings.RuntimeOpeningRequest,
+	workerRequest workers.RuntimeSelection,
+	recordingRequest recordings.RuntimeSelection,
 	modelCacheDirectory string,
 	operatorDefaults operatorconfig.ResolvedDefaults,
 	baseLogger *zap.Logger,
@@ -179,7 +179,7 @@ func PrepareRuntime(
 
 func NewDurableExecution(
 	loadOperatorConfig operatorconfig.ConfigLoader,
-	definitionRequest factorydefinitions.RuntimeOpeningRequest,
+	definitionRequest factorydefinitions.RuntimeSelection,
 	persistence factorysessions.PersistencePolicy,
 	systemConfigHome string,
 	systemConfigPath string,
@@ -293,7 +293,7 @@ func cloneStringPointer(value *string) *string {
 }
 
 func resolveDefinitionPath(
-	definition *factorydefinitions.RuntimeOpeningRequest,
+	definition *factorydefinitions.RuntimeSelection,
 	replayPath string,
 	resolveCurrentDir func(string) (string, error),
 	resolveHome factorysessions.HomeDirectoryResolver,

@@ -352,8 +352,8 @@ func assertPortableReplayControlWalled(t *testing.T, execution factorysessions.D
 func portableCheckpointRuntimeOpeningRequest(t *testing.T) *runtimeOwnerFixture {
 	t.Helper()
 	return &runtimeOwnerFixture{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
-		Recordings:        recordings.RuntimeOpeningRequest{ReplayPath: "checkpoint.json"},
+		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: t.TempDir()},
+		Recordings:        recordings.RuntimeSelection{ReplayPath: "checkpoint.json"},
 	}
 }
 
@@ -402,7 +402,7 @@ func newPortableCheckpointRuntimeOpeningFactory(t *testing.T, owner *portableRep
 	}
 	dependencies.Workers.Service = &portableReplayWorkerService{}
 	dependencies.FactorySessions.DurableExecutionFactory = func(
-		_ factorydefinitions.RuntimeOpeningRequest,
+		_ factorydefinitions.RuntimeSelection,
 		_ factorysessions.PersistencePolicy,
 		_ string,
 		_ string,
@@ -736,8 +736,8 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 		},
 	}
 	opened, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
-		Recordings: recordings.RuntimeOpeningRequest{
+		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
+		Recordings: recordings.RuntimeSelection{
 			RecordPath: "successor.recording.json",
 			ResumePath: "source.recording.json",
 		},

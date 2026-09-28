@@ -55,7 +55,7 @@ type DurableExecution struct {
 }
 
 type DurableExecutionFactory func(
-	factorydefinitions.RuntimeOpeningRequest,
+	factorydefinitions.RuntimeSelection,
 	factorysessions.PersistencePolicy,
 	string,
 	string,

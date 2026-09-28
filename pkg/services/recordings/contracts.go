@@ -283,7 +283,7 @@ type (
 	DispatchWorkerSessionExecutionFacts                        = recordingcontracts.DispatchWorkerSessionExecutionFacts
 	DispatchWorkerSessionAssociationRecorder                   = recordingcontracts.DispatchWorkerSessionAssociationRecorder
 	HumanApprovalRequestRecorder                               = recordingcontracts.HumanApprovalRequestRecorder
-	RuntimeOpeningRequest                                      = recordingcontracts.RuntimeOpeningRequest
+	RuntimeSelection                                           = recordingcontracts.RuntimeSelection
 	RuntimeScopeRequest                                        = recordingcontracts.RuntimeScopeRequest
 	RuntimeScopeResult                                         = recordingcontracts.RuntimeScopeResult
 	RuntimeRecorder                                            = recordingcontracts.RuntimeRecorder

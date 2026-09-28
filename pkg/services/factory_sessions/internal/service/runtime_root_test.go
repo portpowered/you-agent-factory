@@ -119,7 +119,7 @@ func TestActivationOpeningDefersCanonicalIdentityUntilDefinitionAdmission(t *tes
 		},
 		generateRuntimeInstanceID: func() string { return "runtime-1" },
 	}
-	runtimeSelection := factoryruntime.RuntimeOpeningRequest{}
+	runtimeSelection := factoryruntime.RuntimeSelection{}
 	session := sessionOwnerFixture{FactorySessionID: factorysessions.DefaultSessionID}
 	runtimeID, err := factory.ensureActivationRuntimeID(&runtimeSelection)
 	if err != nil {
@@ -143,7 +143,7 @@ func TestActivationOpeningDefersCanonicalIdentityForAliasOnlyResume(t *testing.T
 	factory := &Root{
 		generateRuntimeInstanceID: func() string { return canonicalID },
 	}
-	runtimeSelection := factoryruntime.RuntimeOpeningRequest{}
+	runtimeSelection := factoryruntime.RuntimeSelection{}
 	session := sessionOwnerFixture{}
 	_, err := factory.ensureActivationRuntimeID(&runtimeSelection)
 	if err != nil {
@@ -168,14 +168,14 @@ func TestResolveRuntimeRootFailsClosedWithoutRequiredIdentityGenerator(t *testin
 func TestResolveDefinitionPathPreservesReplayAndExplicitSourceSelection(t *testing.T) {
 	t.Parallel()
 
-	replay := factorydefinitions.RuntimeOpeningRequest{Directory: "factory-root"}
+	replay := factorydefinitions.RuntimeSelection{Directory: "factory-root"}
 	got, err := resolveDefinitionPath(&replay, "recording.json", nil, nil)
 	if err != nil || got != "factory-root" {
 		t.Fatalf("replay path = (%q, %v), want (factory-root, nil)", got, err)
 	}
 
 	sourcePath := filepath.Join(t.TempDir(), "factory.yaml")
-	explicit := factorydefinitions.RuntimeOpeningRequest{
+	explicit := factorydefinitions.RuntimeSelection{
 		Directory:  "factory-root",
 		SourcePath: sourcePath,
 	}
@@ -193,7 +193,7 @@ func TestResolveDefinitionPathPreservesReplayAndExplicitSourceSelection(t *testi
 func TestResolveDefinitionPathResolvesCurrentFactoryAndErrors(t *testing.T) {
 	t.Parallel()
 
-	definition := factorydefinitions.RuntimeOpeningRequest{Directory: "factory-root"}
+	definition := factorydefinitions.RuntimeSelection{Directory: "factory-root"}
 	currentDir := filepath.Join(t.TempDir(), "current")
 	got, err := resolveDefinitionPath(
 		&definition,
@@ -211,7 +211,7 @@ func TestResolveDefinitionPathResolvesCurrentFactoryAndErrors(t *testing.T) {
 	}
 
 	if _, err := resolveDefinitionPath(
-		&factorydefinitions.RuntimeOpeningRequest{Directory: "factory-root"},
+		&factorydefinitions.RuntimeSelection{Directory: "factory-root"},
 		"",
 		nil,
 		nil,
@@ -221,7 +221,7 @@ func TestResolveDefinitionPathResolvesCurrentFactoryAndErrors(t *testing.T) {
 
 	want := errors.New("current unavailable")
 	if _, err := resolveDefinitionPath(
-		&factorydefinitions.RuntimeOpeningRequest{Directory: "factory-root"},
+		&factorydefinitions.RuntimeSelection{Directory: "factory-root"},
 		"",
 		func(string) (string, error) { return "", want },
 		nil,
@@ -230,7 +230,7 @@ func TestResolveDefinitionPathResolvesCurrentFactoryAndErrors(t *testing.T) {
 	}
 
 	if _, err := resolveDefinitionPath(
-		&factorydefinitions.RuntimeOpeningRequest{SourcePath: "~\\factory.yaml"},
+		&factorydefinitions.RuntimeSelection{SourcePath: "~\\factory.yaml"},
 		"",
 		nil,
 		func() (string, error) { return "", want },

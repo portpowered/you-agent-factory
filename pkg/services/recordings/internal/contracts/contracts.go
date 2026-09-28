@@ -143,10 +143,9 @@ var ErrInvalidReplayArtifact = errors.New("invalid or corrupt replay artifact")
 // unsupported inputs (for example a missing artifact or empty schema version).
 var ErrUnsupportedReplayBinding = errors.New("unsupported replay binding input")
 
-// RuntimeOpeningRequest contains Recordings-owned artifact selection for one
-// runtime. Recording paths and flush policy do not leak into unrelated service
-// requests.
-type RuntimeOpeningRequest struct {
+// RuntimeSelection contains Recordings-owned artifact values for one
+// runtime. Recording paths and flush policy stay within this owner boundary.
+type RuntimeSelection struct {
 	RecordPath    string
 	ReplayPath    string
 	ResumePath    string

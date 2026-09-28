@@ -481,12 +481,12 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 	t.Parallel()
 	skipPermissions := true
 	request := &runtimeOwnerFixture{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
+		FactoryDefinition: factorydefinitions.RuntimeSelection{
 			Directory:        "/factory",
 			SourcePath:       "/source",
 			ExecutionBaseDir: "/runtime",
 		},
-		FactoryRuntime: factoryruntime.RuntimeOpeningRequest{Verbose: true},
+		FactoryRuntime: factoryruntime.RuntimeSelection{Verbose: true},
 		FactorySession: sessionOwnerFixture{
 			CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
 			BackendScopeID:     "scope",
@@ -496,7 +496,7 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 				Pprof: true,
 			},
 		},
-		Workers: workers.RuntimeOpeningRequest{
+		Workers: workers.RuntimeSelection{
 			RunnerID:                          "runner",
 			InvocationSkipPermissionsOverride: &skipPermissions,
 		},
@@ -545,11 +545,11 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 		},
 	}
 	request := runtimeOwnerFixture{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
 		FactorySession: sessionOwnerFixture{
 			CanonicalSessionID: "7d9d3fb4-6bc9-4df5-a67f-0f504f8ea3ba",
 		},
-		Recordings: recordings.RuntimeOpeningRequest{
+		Recordings: recordings.RuntimeSelection{
 			RecordPath: "successor.recording.json",
 			ResumePath: resumePath,
 		},
@@ -562,7 +562,7 @@ func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testin
 			request.Recordings, request.ModelCacheDirectory, request.OperatorDefaults, &resumeInput,
 		),
 	}
-	recording := recordingsRuntimeOpeningRequest(activation)
+	recording := recordingRuntimeSelection(activation)
 	session := sessionRequestFromActivation(activation)
 	if recording.ResumePath != resumePath {
 		t.Fatalf("Recordings resume path = %q, want %q", recording.ResumePath, resumePath)
@@ -582,8 +582,8 @@ func TestActivationRequestDetachesMockWorkerInputs(t *testing.T) {
 	t.Parallel()
 
 	request := &runtimeOwnerFixture{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
-		Workers: workers.RuntimeOpeningRequest{
+		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
+		Workers: workers.RuntimeSelection{
 			MockWorkers: &workers.MockWorkersConfig{
 				MockWorkers: []workers.MockWorkerConfig{{
 					RunType: workers.MockWorkerRunTypeScript,
@@ -633,7 +633,7 @@ func TestActivationRequestCarriesFactorySessionCorrelation(t *testing.T) {
 		factoryDefinitions:        activationDefinitionsStub{snapshot: activationSnapshot()},
 	}
 	activation, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
 		FactorySession: sessionOwnerFixture{
 			FactorySessionID: "session-1",
 		},
@@ -658,7 +658,7 @@ func TestActivationRequestDerivesDirectoryForSourceOnlySnapshot(t *testing.T) {
 		}},
 	}
 	activation, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{SourcePath: sourcePath},
+		FactoryDefinition: factorydefinitions.RuntimeSelection{SourcePath: sourcePath},
 	}).startRequest())
 	if err != nil {
 		t.Fatalf("activationRequest() error = %v", err)
@@ -684,7 +684,7 @@ func TestActivationRequestReturnsTypedDefinitionsFailureBeforeRuntimeActivation(
 		generateSessionID:         func() string { return "" },
 	}
 	_, err := factory.activationRequest(context.Background(), (runtimeOwnerFixture{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
+		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
 	}).startRequest())
 	if !errors.Is(err, factorydefinitions.ErrInvalidRuntimeSnapshotDefinition) {
 		t.Fatalf("activationRequest() error = %v, want typed Definitions failure", err)
@@ -745,8 +745,8 @@ func TestOpenForRequestRoutesLegacyReplayThroughRuntimeRoot(t *testing.T) {
 		},
 	}
 	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
-		Recordings:        recordings.RuntimeOpeningRequest{ReplayPath: "legacy.json"},
+		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
+		Recordings:        recordings.RuntimeSelection{ReplayPath: "legacy.json"},
 	}).startRequest())
 	if err != nil {
 		t.Fatalf("openForRequest(legacy replay) error = %v", err)
@@ -779,8 +779,8 @@ func TestOpenForRequestResumeInputFailureStopsBeforeActivationAndDoesNotRetry(t 
 	}
 
 	_, err := factory.openForRequest(context.Background(), (runtimeOwnerFixture{
-		FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{Directory: "/factory"},
-		Recordings:        recordings.RuntimeOpeningRequest{ResumePath: "source.recording.json"},
+		FactoryDefinition: factorydefinitions.RuntimeSelection{Directory: "/factory"},
+		Recordings:        recordings.RuntimeSelection{ResumePath: "source.recording.json"},
 	}).startRequest())
 	var replayInputErr *recordings.ReplayInputError
 	if !errors.As(err, &replayInputErr) || replayInputErr != inputErr {

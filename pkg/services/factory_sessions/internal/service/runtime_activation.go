@@ -31,7 +31,7 @@ func (r *Root) activateRuntime(
 	}
 	session := sessionRequestFromActivation(request)
 	worker := workerRequestFromActivation(request.Inputs.Workers)
-	recording := recordingsRuntimeOpeningRequest(request)
+	recording := recordingRuntimeSelection(request)
 	defaults := operatorsettings.ResolvedDefaults{
 		WorkerModelProvider: request.Inputs.OperatorDefaults.WorkerModelProvider,
 		WorkerModel:         request.Inputs.OperatorDefaults.WorkerModel,
@@ -98,7 +98,7 @@ func runtimeEngineService(products runtimeProducts) factoryruntime.Service {
 	return products.engine
 }
 
-func definitionRequestFromActivation(request factoryruntime.RuntimeActivationRequest) (factorydefinitions.RuntimeOpeningRequest, error) {
+func definitionRequestFromActivation(request factoryruntime.RuntimeActivationRequest) (factorydefinitions.RuntimeSelection, error) {
 	definitionDirectory := strings.TrimSpace(request.Inputs.Definition.Directory)
 	if definitionDirectory == "" {
 		definitionDirectory = request.Snapshot.FactoryDir
@@ -108,9 +108,9 @@ func definitionRequestFromActivation(request factoryruntime.RuntimeActivationReq
 		executionBaseDir = request.Snapshot.RuntimeBaseDir
 	}
 	if definitionDirectory == "" {
-		return factorydefinitions.RuntimeOpeningRequest{}, fmt.Errorf("runtime activation inputs: Factory Definition directory is required")
+		return factorydefinitions.RuntimeSelection{}, fmt.Errorf("runtime activation inputs: Factory Definition directory is required")
 	}
-	return factorydefinitionsRuntimeOpeningRequest(definitionDirectory, request.Inputs.Definition.SourcePath, executionBaseDir, request.Snapshot.Invocation.Arguments), nil
+	return definitionRuntimeSelection(definitionDirectory, request.Inputs.Definition.SourcePath, executionBaseDir, request.Snapshot.Invocation.Arguments), nil
 }
 
 func sessionRequestFromActivation(request factoryruntime.RuntimeActivationRequest) factorysessions.SessionStartRequest {
@@ -138,8 +138,8 @@ func sessionRequestFromActivation(request factoryruntime.RuntimeActivationReques
 	}
 }
 
-func workerRequestFromActivation(input factoryruntime.RuntimeActivationWorkerInputs) workers.RuntimeOpeningRequest {
-	return workers.RuntimeOpeningRequest{
+func workerRequestFromActivation(input factoryruntime.RuntimeActivationWorkerInputs) workers.RuntimeSelection {
+	return workers.RuntimeSelection{
 		RunnerID:                          input.RunnerID,
 		Worktree:                          input.Worktree,
 		WorkerReasoningEffort:             input.WorkerReasoningEffort,
@@ -149,11 +149,11 @@ func workerRequestFromActivation(input factoryruntime.RuntimeActivationWorkerInp
 	}
 }
 
-func factorydefinitionsRuntimeOpeningRequest(
+func definitionRuntimeSelection(
 	directory, sourcePath, executionBaseDir string,
 	invocationArguments *work.InvocationArguments,
-) factorydefinitions.RuntimeOpeningRequest {
-	return factorydefinitions.RuntimeOpeningRequest{
+) factorydefinitions.RuntimeSelection {
+	return factorydefinitions.RuntimeSelection{
 		Directory:           directory,
 		SourcePath:          sourcePath,
 		ExecutionBaseDir:    executionBaseDir,
@@ -161,8 +161,8 @@ func factorydefinitionsRuntimeOpeningRequest(
 	}
 }
 
-func recordingsRuntimeOpeningRequest(request factoryruntime.RuntimeActivationRequest) recordings.RuntimeOpeningRequest {
-	return recordings.RuntimeOpeningRequest{
+func recordingRuntimeSelection(request factoryruntime.RuntimeActivationRequest) recordings.RuntimeSelection {
+	return recordings.RuntimeSelection{
 		RecordPath:    request.Inputs.Recordings.RecordPath,
 		ReplayPath:    request.Inputs.Recordings.ReplayPath,
 		ResumePath:    request.Inputs.Recordings.ResumePath,
@@ -438,7 +438,7 @@ type activationSnapshotResolution struct {
 	runtimeBaseDir string
 }
 
-func (r *Root) ensureActivationRuntimeID(runtime *factoryruntime.RuntimeOpeningRequest) (string, error) {
+func (r *Root) ensureActivationRuntimeID(runtime *factoryruntime.RuntimeSelection) (string, error) {
 	if runtime == nil {
 		return "", fmt.Errorf("activate Factory Runtime: runtime selection is required")
 	}
@@ -498,8 +498,8 @@ func ensureDefaultCanonicalSessionID(
 
 func (r *Root) resolveActivationSnapshot(
 	ctx context.Context,
-	definition factorydefinitions.RuntimeOpeningRequest,
-	recording recordings.RuntimeOpeningRequest,
+	definition factorydefinitions.RuntimeSelection,
+	recording recordings.RuntimeSelection,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
 	resumeInput *recordings.LoadResumeInputResult,
 	sessionID string,
@@ -545,7 +545,7 @@ func (r *Root) resolveActivationSnapshot(
 func (r *Root) resolveActivationDefinitionSnapshot(
 	ctx context.Context,
 	sourcePath, runtimeBaseDir string,
-	definition factorydefinitions.RuntimeOpeningRequest,
+	definition factorydefinitions.RuntimeSelection,
 	workflowID string,
 	sessionID string,
 ) (factorydefinitions.RuntimeSnapshot, error) {
@@ -625,8 +625,8 @@ func sessionIDForSelection(session factorysessions.SessionStartRequest) string {
 
 func (r *Root) resolveLegacyReplaySnapshot(
 	ctx context.Context,
-	definition factorydefinitions.RuntimeOpeningRequest,
-	recording recordings.RuntimeOpeningRequest,
+	definition factorydefinitions.RuntimeSelection,
+	recording recordings.RuntimeSelection,
 	sessionID string,
 	preloadedReplayInput *recordings.LoadReplayInputResult,
 ) (factorydefinitions.RuntimeSnapshot, bool, error) {
@@ -649,8 +649,8 @@ func (r *Root) resolveLegacyReplaySnapshot(
 
 func (r *Root) resolveLegacyResumeSnapshot(
 	ctx context.Context,
-	definition factorydefinitions.RuntimeOpeningRequest,
-	recording recordings.RuntimeOpeningRequest,
+	definition factorydefinitions.RuntimeSelection,
+	recording recordings.RuntimeSelection,
 	sessionID string,
 	resumeInput *recordings.LoadResumeInputResult,
 ) (factorydefinitions.RuntimeSnapshot, bool, error) {
@@ -672,7 +672,7 @@ func (r *Root) resolveLegacyResumeSnapshot(
 
 func (r *Root) resolveLegacyFactorySnapshot(
 	ctx context.Context,
-	definition factorydefinitions.RuntimeOpeningRequest,
+	definition factorydefinitions.RuntimeSelection,
 	workflowID string,
 	sessionID string,
 	factoryJSON *factorydefinitions.FactorySnapshot,
@@ -769,7 +769,7 @@ func legacyReplayPaths(
 }
 
 func (r *Root) resolveActivationDefinitionSource(
-	definition factorydefinitions.RuntimeOpeningRequest,
+	definition factorydefinitions.RuntimeSelection,
 ) (string, string, error) {
 	if strings.TrimSpace(definition.SourcePath) != "" {
 		sourcePath := strings.TrimSpace(definition.SourcePath)
@@ -831,11 +831,11 @@ func runtimeSnapshotResolverUnavailable() error {
 }
 
 func runtimeActivationInputs(
-	definition factorydefinitions.RuntimeOpeningRequest,
+	definition factorydefinitions.RuntimeSelection,
 	session factorysessions.SessionStartRequest,
 	canonicalSessionIDGenerated bool,
-	worker workers.RuntimeOpeningRequest,
-	recording recordings.RuntimeOpeningRequest,
+	worker workers.RuntimeSelection,
+	recording recordings.RuntimeSelection,
 	modelCacheDirectory string,
 	operatorDefaults operatorsettings.ResolvedDefaults,
 	resumeInput *recordings.LoadResumeInputResult,

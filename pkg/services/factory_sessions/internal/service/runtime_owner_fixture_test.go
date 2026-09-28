@@ -13,11 +13,11 @@ import (
 // runtimeOwnerFixture keeps the owner-specific values used by the runtime
 // construction tests. Production admission uses SessionStartRequest directly.
 type runtimeOwnerFixture struct {
-	FactoryDefinition   factorydefinitions.RuntimeOpeningRequest
-	FactoryRuntime      factoryruntime.RuntimeOpeningRequest
+	FactoryDefinition   factorydefinitions.RuntimeSelection
+	FactoryRuntime      factoryruntime.RuntimeSelection
 	FactorySession      sessionOwnerFixture
-	Workers             workers.RuntimeOpeningRequest
-	Recordings          recordings.RuntimeOpeningRequest
+	Workers             workers.RuntimeSelection
+	Recordings          recordings.RuntimeSelection
 	ModelCacheDirectory string
 	OperatorDefaults    operatorsettings.ResolvedDefaults
 }

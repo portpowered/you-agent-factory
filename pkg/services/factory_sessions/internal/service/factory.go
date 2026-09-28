@@ -513,12 +513,12 @@ func missingPortDependency(value any) bool {
 
 func (r *Root) openRuntimeWithOptions(
 	ctx context.Context,
-	definition factorydefinitions.RuntimeOpeningRequest,
-	runtime factoryruntime.RuntimeOpeningRequest,
+	definition factorydefinitions.RuntimeSelection,
+	runtime factoryruntime.RuntimeSelection,
 	session *factorysessions.SessionStartRequest,
 	canonicalSessionIDGenerated bool,
-	worker workers.RuntimeOpeningRequest,
-	recording recordings.RuntimeOpeningRequest,
+	worker workers.RuntimeSelection,
+	recording recordings.RuntimeSelection,
 	modelCacheDirectory string,
 	operatorDefaults operatorsettings.ResolvedDefaults,
 	logger *zap.Logger,

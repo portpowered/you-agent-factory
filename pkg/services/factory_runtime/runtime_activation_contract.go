@@ -26,7 +26,7 @@ type RuntimeActivationRequest struct {
 	RuntimeID        string
 	FactorySessionID string
 	Snapshot         factorydefinitions.RuntimeSnapshot
-	Runtime          RuntimeOpeningRequest
+	Runtime          RuntimeSelection
 	Inputs           RuntimeActivationInputs
 }
 

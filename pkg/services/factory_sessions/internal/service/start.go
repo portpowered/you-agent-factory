@@ -251,22 +251,22 @@ func runtimeSelectionForStart(request factorysessions.SessionStartRequest) facto
 	return *request.RuntimeSelection
 }
 
-func definitionRequestForStart(request factorysessions.SessionStartRequest) factorydefinitions.RuntimeOpeningRequest {
+func definitionRequestForStart(request factorysessions.SessionStartRequest) factorydefinitions.RuntimeSelection {
 	selection := runtimeSelectionForStart(request)
-	return factorydefinitions.RuntimeOpeningRequest{
+	return factorydefinitions.RuntimeSelection{
 		Directory: strings.TrimSpace(request.FolderPath), SourcePath: selection.DefinitionSourcePath,
 		InvocationArguments: work.CloneInvocationArguments(selection.DefinitionInvocationArguments),
 		ExecutionBaseDir:    selection.ExecutionBaseDir,
 	}
 }
 
-func runtimeOwnerRequestForStart(request factorysessions.SessionStartRequest) factoryruntime.RuntimeOpeningRequest {
+func runtimeOwnerRequestForStart(request factorysessions.SessionStartRequest) factoryruntime.RuntimeSelection {
 	selection := runtimeSelectionForStart(request)
 	mode := factorydefinitions.RuntimeMode(selection.Mode)
 	if mode == "" {
 		mode = factorydefinitions.RuntimeModeBatch
 	}
-	return factoryruntime.RuntimeOpeningRequest{
+	return factoryruntime.RuntimeSelection{
 		Mode: mode, Verbose: selection.Verbose, RuntimeInstanceID: selection.RuntimeInstanceID,
 		LogDirectory: selection.LogDirectory, FileLoggingPolicy: factoryruntime.RuntimeFileLoggingPolicy(selection.LogPolicy),
 		LogConfig:        factoryruntime.RuntimeLogStorageConfig(selection.LogConfig),
@@ -275,9 +275,9 @@ func runtimeOwnerRequestForStart(request factorysessions.SessionStartRequest) fa
 	}
 }
 
-func workerRequestForStart(request factorysessions.SessionStartRequest) workers.RuntimeOpeningRequest {
+func workerRequestForStart(request factorysessions.SessionStartRequest) workers.RuntimeSelection {
 	selection := runtimeSelectionForStart(request)
-	return workers.RuntimeOpeningRequest{
+	return workers.RuntimeSelection{
 		RunnerID: selection.Workers.RunnerID, Worktree: selection.Workers.Worktree,
 		WorkerReasoningEffort: selection.Workers.WorkerReasoningEffort, MockWorkers: selection.Workers.MockWorkers,
 		InvocationSkipPermissionsOverride: selection.Workers.InvocationSkipPermissionsOverride,
@@ -285,9 +285,9 @@ func workerRequestForStart(request factorysessions.SessionStartRequest) workers.
 	}
 }
 
-func recordingRequestForStart(request factorysessions.SessionStartRequest) recordings.RuntimeOpeningRequest {
+func recordingRequestForStart(request factorysessions.SessionStartRequest) recordings.RuntimeSelection {
 	selection := runtimeSelectionForStart(request)
-	return recordings.RuntimeOpeningRequest{
+	return recordings.RuntimeSelection{
 		RecordPath: selection.Recording.RecordPath, ReplayPath: selection.Recording.ReplayPath,
 		ResumePath: selection.Recording.ResumePath, WorkflowID: selection.Recording.WorkflowID,
 		FlushInterval: selection.Recording.FlushInterval,
