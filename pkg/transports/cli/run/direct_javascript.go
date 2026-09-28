@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
@@ -94,24 +93,20 @@ func (operation *directJavaScriptRun) Open(
 	}
 	var transport lifecycle.Component
 	if request.Host != nil {
-		ready := make(chan struct{})
-		var publish sync.Once
+		readiness := lifecycle.NewReadinessGate()
 		observer := func(binding factorysessions.RuntimeHostBinding) {
-			publish.Do(func() {
+			readiness.Publish(func() {
 				if scope.RuntimeHostObserver != nil {
 					scope.RuntimeHostObserver(binding)
 				}
-				close(ready)
 			})
 		}
 		runAfterReady := completion
 		completion = func(runCtx context.Context) error {
-			select {
-			case <-ready:
-				return runAfterReady(runCtx)
-			case <-runCtx.Done():
-				return runCtx.Err()
+			if err := readiness.Wait(runCtx); err != nil {
+				return err
 			}
+			return runAfterReady(runCtx)
 		}
 		transport, err = operation.host(operation.sessions, *request.Host, cancellation, observer)
 		if err != nil {
