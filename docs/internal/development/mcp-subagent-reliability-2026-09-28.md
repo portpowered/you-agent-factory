@@ -606,3 +606,12 @@ the closed CPU/Metal publication matrix, the Windows llama build's forced
 were verified against the source. Resolver support alone therefore cannot
 make native Windows CUDA first use work until a CUDA archive is built and
 published.
+
+An OpenCode `space-bunny-free` edit to bound the Factory Session
+cancel-on-timeout callback timed out at 120 seconds in Factory Session
+`d9550533-5f63-478d-aab4-2a0a67f233e9`. It left no workspace diff.
+The provider log shows repeated repository searches, including checks for
+unrelated lint style and timeout declarations, through the deadline. The
+requested two-file change had not begun. This is evidence of task execution
+sprawl in that model, not evidence of a transport failure. A smaller edit
+prompt or direct implementation is needed for this specific change.
