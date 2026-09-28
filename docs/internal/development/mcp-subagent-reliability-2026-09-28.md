@@ -477,3 +477,14 @@ single primary text `# you-agent-factory`. The stderr `peer connection closed`
 line appeared only after the probe client closed stdin following the result.
 This verifies the rebuilt prompt and direct stdio path for a small task; it
 does not establish that a broad edit will complete under every model/deadline.
+
+An OpenCode `nemotron-3.5-lightning-free` task to trace the Pi provider's
+unavailable-endpoint timeout through the Factory Session wait path timed out
+after 180 seconds in Factory Session
+`467f5b59-733d-49f1-82a9-cd35fec829f8`. The worktree had no edits afterward.
+Its OpenCode session `ses_f1851426bffe7Twaq2JfZhOROj` recorded completed
+read/search tools and assistant turns until the deadline, still exploring
+provider execution. This was an overbroad audit for that deadline; it does not
+show that the endpoint error was available to MCP, nor establish why the Pi
+probe itself timed out. A subsequent task should name the exact execution
+boundary and test only that error propagation.
