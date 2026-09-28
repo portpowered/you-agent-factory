@@ -1321,3 +1321,15 @@ returned `you-agent-factory`. A separate 1 ms request returned a readable
 typed `factory_session.subagent.timed_out` with `phase=start`, request ID,
 and no false session-closed claim. These probes validate fast success and
 early timeout; they do not reproduce a 20-minute non-cooperative dependency.
+
+A final Codex-provider MCP edit (session
+`2d1ae5af-2d59-428d-9471-c5affdf1c015`) added recovery guidance to the
+typed capacity-exhausted error. At commit `70490643ec`, the clean checkout
+again passed all 24 lint targets. The installed Windows binary was rebuilt
+from that commit (SHA-256
+`F6C8D15E7583406995B7AFBF4988B7EA09F4CEF6FD5C3F4AA42FB19F18E8CC09`).
+Fresh stdio MCP processes from the installed binary returned readable
+first-content errors with `isError=true` and typed `structuredContent` for
+both invalid input and a 1 ms start-phase timeout. Existing Codex app MCP
+processes using the old `.local\bin\you.exe` remain live; the configured
+command for new connections points at the rebuilt `C:\Users\andre\bin\you.exe`.
