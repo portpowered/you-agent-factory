@@ -8,6 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -33,6 +34,24 @@ func TestAssemblyInvokesOwnerOfSelectedCanonicalSession(t *testing.T) {
 	}
 	if _, err := assembly.Invoke(context.Background(), factorysessions.SessionInvokeRequest{SessionID: "missing"}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("missing session error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+func TestAssemblySubscribesToSelectedCanonicalSessionResponses(t *testing.T) {
+	state := newWorkResolverSessionState()
+	cursor := &factorysessions.ResponseEventCursor{}
+	responses := &canonicalInspectionResponseStreamFake{cursor: cursor}
+	assembly := &Assembly{state: state, registry: state.Registry(), responseStreams: responses}
+	assembly.registry.Upsert(&livesession.LiveSession{ID: "first", ResponseEvents: &responseeventstore.SessionResponseEventStore{}}, true)
+	assembly.registry.Upsert(&livesession.LiveSession{ID: "second", ResponseEvents: &responseeventstore.SessionResponseEventStore{}}, false)
+	got, err := assembly.SubscribeResponses(context.Background(), factorysessions.SessionResponseSubscriptionRequest{
+		SessionID: "second", AfterSequence: 3, DispatchID: "dispatch-1", Kinds: []factorysessions.ResponseEventKind{factorysessions.ResponseEventKindMessage},
+	})
+	if err != nil {
+		t.Fatalf("SubscribeResponses: %v", err)
+	}
+	if got.Cursor != cursor || responses.calls != 1 || responses.request.AfterSequence != 3 || responses.request.DispatchID != "dispatch-1" {
+		t.Fatalf("response owner request lost selection or filter: cursor=%p calls=%d request=%#v", got.Cursor, responses.calls, responses.request)
 	}
 }
 

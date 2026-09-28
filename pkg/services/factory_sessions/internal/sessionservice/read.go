@@ -567,10 +567,22 @@ func (s *Service) subscribeCanonicalLiveResponses(
 	session *livesession.LiveSession,
 	request factorysessions.ResponseEventSubscriptionRequest,
 ) (*factorysessions.ResponseEventCursor, error) {
-	if session == nil || session.ResponseEvents == nil || s == nil || s.responseEvents == nil {
+	if s == nil {
 		return nil, factorysessions.ErrRuntimeNotAvailable
 	}
-	cursor, err := s.responseEvents.Subscribe(ctx, session.ResponseEvents, responsestreamservice.SubscriptionRequest{
+	return subscribeLiveResponses(ctx, s.responseEvents, session, request)
+}
+
+func subscribeLiveResponses(
+	ctx context.Context,
+	responses responsestreamservice.Service,
+	session *livesession.LiveSession,
+	request factorysessions.ResponseEventSubscriptionRequest,
+) (*factorysessions.ResponseEventCursor, error) {
+	if session == nil || session.ResponseEvents == nil || responses == nil {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	cursor, err := responses.Subscribe(ctx, session.ResponseEvents, responsestreamservice.SubscriptionRequest{
 		AfterSequence: request.AfterSequence,
 		DispatchID:    request.DispatchID,
 		Kinds:         request.Kinds,
