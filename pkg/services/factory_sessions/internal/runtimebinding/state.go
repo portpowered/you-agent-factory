@@ -130,9 +130,12 @@ type SessionState struct {
 	Owner    SessionProjectionOwner
 	Invoker  roles.CanonicalSessionInvoker
 	// Activation retains lifecycle cleanup on the canonical session record.
-	Activation     interface{ Close(context.Context) error }
-	startRequestMu sync.RWMutex
-	startRequestID string
+	Activation        interface{ Close(context.Context) error }
+	startRequestMu    sync.RWMutex
+	startRequestID    string
+	controlMu         sync.Mutex
+	lastControlKey    string
+	lastControlResult factorysessions.SessionControlResult
 }
 
 func (s *SessionState) SetStartRequestID(requestID string) {
@@ -151,4 +154,33 @@ func (s *SessionState) StartRequestID() string {
 	s.startRequestMu.RLock()
 	defer s.startRequestMu.RUnlock()
 	return s.startRequestID
+}
+
+// ApplyControlOnce serializes controls on one canonical session generation.
+// A repeated committed control ID returns its original result.
+func (s *SessionState) ApplyControlOnce(key string, apply func() (factorysessions.SessionControlResult, error)) (factorysessions.SessionControlResult, error) {
+	if s == nil {
+		return factorysessions.SessionControlResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	s.controlMu.Lock()
+	defer s.controlMu.Unlock()
+	if key != "" && key == s.lastControlKey {
+		return s.lastControlResult, nil
+	}
+	result, err := apply()
+	if err == nil && key != "" {
+		s.lastControlKey = key
+		s.lastControlResult = result
+	}
+	return result, err
+}
+
+func (s *SessionState) CanReplaceTerminatedSession() bool {
+	if s == nil {
+		return false
+	}
+	s.controlMu.Lock()
+	defer s.controlMu.Unlock()
+	return (s.lastControlResult.Operation == factorysessions.SessionControlCancel || s.lastControlResult.Operation == factorysessions.SessionControlTerminate) &&
+		s.lastControlResult.Status == factorysessions.LifecycleStatusSucceeded
 }

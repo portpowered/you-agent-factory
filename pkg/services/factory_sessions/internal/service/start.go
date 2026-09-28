@@ -56,6 +56,20 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
+	if request.ActivationOnly && strings.TrimSpace(request.SessionID) != "" {
+		if existing := r.Resolve(selectedID); existing != nil {
+			bound := runtimebinding.SessionStateFrom(existing)
+			if bound == nil || !bound.CanReplaceTerminatedSession() {
+				return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: session %q is already active", selectedID)
+			}
+			if _, err := r.Control(ctx, factorysessions.SessionControlRequest{
+				SessionID: selectedID, Mode: factorysessions.SessionOperationModeLive,
+				Operation: factorysessions.SessionControlClose,
+			}); err != nil {
+				return factorysessions.SessionStartResult{}, fmt.Errorf("replace Factory Session %q: %w", selectedID, err)
+			}
+		}
+	}
 	selected.SessionID = selectedID
 	runtimeSelection := factorysessions.SessionRuntimeSelection{}
 	if request.RuntimeSelection != nil {
