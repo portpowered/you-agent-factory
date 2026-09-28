@@ -1670,3 +1670,9 @@ primary result. MCP returned `factory_session.subagent.timed_out`,
 `sessionClosed=true`. The audit was instructed not to edit and no new
 Pi-related tracked diffs appeared; the working tree still has unrelated
 preexisting dirty files. This is another OpenCode harness timeout to investigate.
+
+Commit `04fdf3a21d` records the managed Gemma load option, tests, and these
+observations. The installed Windows binary was rebuilt as
+`C:\Users\andre\bin\you-04fdf3a21d.exe` (SHA-256
+`7A2E19ECEB41599EF5F6B0C2DF19AE6C406942AEC6011C202F530B20948A7B41`),
+and the Codex MCP command for new connections points to it.
