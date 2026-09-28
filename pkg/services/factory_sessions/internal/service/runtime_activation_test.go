@@ -525,7 +525,7 @@ func TestActivationRequestCarriesExplicitRuntimeInputs(t *testing.T) {
 	}
 }
 
-func TestRuntimeOpeningRequestRoundTripsResumePathToRecordingsContract(t *testing.T) {
+func TestRuntimeSelectionRoundTripsResumePathToRecordingsContract(t *testing.T) {
 	t.Parallel()
 
 	const resumePath = "source.recording.json"

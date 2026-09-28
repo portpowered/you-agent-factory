@@ -148,7 +148,7 @@ func TestNewServiceFromAssemblyReturnsDirectRootIdentity(t *testing.T) {
 	}
 }
 
-func TestNewRuntimeOpeningRejectsIncompleteGroupsAtCompositionBoundary(t *testing.T) {
+func TestNewRootRejectsIncompleteGroupsAtCompositionBoundary(t *testing.T) {
 	t.Parallel()
 
 	factory, err := NewRoot(
@@ -165,10 +165,10 @@ func TestNewRuntimeOpeningRejectsIncompleteGroupsAtCompositionBoundary(t *testin
 		nil,
 	)
 	if factory != nil {
-		t.Fatalf("NewRuntimeOpening() = %#v, want nil factory", factory)
+		t.Fatalf("NewRoot() = %#v, want nil factory", factory)
 	}
 	if got, want := err.Error(), "Factory Sessions runtime-opening Provider Sessions owner ports are required"; got != want {
-		t.Fatalf("NewRuntimeOpening() error = %q, want %q", got, want)
+		t.Fatalf("NewRoot() error = %q, want %q", got, want)
 	}
 }
 
