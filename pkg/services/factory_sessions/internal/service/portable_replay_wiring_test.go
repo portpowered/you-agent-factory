@@ -48,17 +48,17 @@ func TestCheckpointPortableReplayApplicationCleanupClosesOwnerBeforeArtifacts(t 
 		t.Fatalf("openForRequest() error = %v", err)
 	}
 
-	if _, err := products.execution.Execution.Resume(
+	if _, err := products.execution.Resume(
 		t.Context(),
 		"session-js-checkpoint-001",
 		factorysessions.ControlRequest{RequestID: "resume-application-cleanup"},
 	); err != nil {
 		t.Fatalf("checkpoint Resume() error = %v", err)
 	}
-	if err := products.application.Resources.Close(); err != nil {
+	if err := products.closeArtifacts(); err != nil {
 		t.Fatalf("application cleanup error = %v", err)
 	}
-	if err := products.application.Resources.Close(); err != nil {
+	if err := products.closeArtifacts(); err != nil {
 		t.Fatalf("repeated application cleanup error = %v", err)
 	}
 
@@ -110,11 +110,11 @@ func testPortableReplayResumeInterruptedSession(t *testing.T) {
 		},
 	}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.OpenExecutionRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
 	if err != nil {
-		t.Fatalf("OpenExecutionRuntime() error = %v", err)
+		t.Fatalf("openForRequest() error = %v", err)
 	}
-	var execution factorysessions.DurableExecutionService = opened.Execution
+	var execution factorysessions.DurableExecutionService = opened.execution
 	assertPortableReplayControlWalled(t, execution)
 
 	got, err := execution.ResumeInterruptedSession(
@@ -149,11 +149,11 @@ func testPortableReplayResume(t *testing.T) {
 		},
 	}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.OpenInvocationRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
 	if err != nil {
-		t.Fatalf("OpenInvocationRuntime() error = %v", err)
+		t.Fatalf("openForRequest() error = %v", err)
 	}
-	var execution factorysessions.DurableExecutionService = opened.Execution
+	var execution factorysessions.DurableExecutionService = opened.execution
 	assertPortableReplayControlWalled(t, execution)
 
 	got, err := execution.Resume(
@@ -190,11 +190,11 @@ func testPortableReplayTypedRestorationFailure(t *testing.T) {
 	}
 	owner := &portableReplayRuntimeOwner{probeErr: want}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.OpenExecutionRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
 	if err != nil {
-		t.Fatalf("OpenExecutionRuntime() error = %v", err)
+		t.Fatalf("openForRequest() error = %v", err)
 	}
-	var execution factorysessions.DurableExecutionService = opened.Execution
+	var execution factorysessions.DurableExecutionService = opened.execution
 
 	_, err = execution.ResumeInterruptedSession(
 		t.Context(),
@@ -213,11 +213,11 @@ func testPortableReplayTypedRestorationFailure(t *testing.T) {
 func testPortableReplayWithoutRestorableState(t *testing.T) {
 	owner := &portableReplayRuntimeOwner{}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.OpenExecutionRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
 	if err != nil {
-		t.Fatalf("OpenExecutionRuntime() error = %v", err)
+		t.Fatalf("openForRequest() error = %v", err)
 	}
-	var execution factorysessions.DurableExecutionService = opened.Execution
+	var execution factorysessions.DurableExecutionService = opened.execution
 
 	_, err = execution.ResumeInterruptedSession(
 		t.Context(),
@@ -256,11 +256,11 @@ func TestCheckpointPortableReplayWiresPublicDispatchHandoff(t *testing.T) {
 		},
 	}
 	factory := newPortableCheckpointRuntimeOpeningFactory(t, owner)
-	opened, err := factory.OpenExecutionRuntime(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
+	opened, err := factory.openForRequest(t.Context(), portableCheckpointRuntimeOpeningRequest(t))
 	if err != nil {
-		t.Fatalf("OpenExecutionRuntime() error = %v", err)
+		t.Fatalf("openForRequest() error = %v", err)
 	}
-	var execution factorysessions.DurableExecutionService = opened.Execution
+	var execution factorysessions.DurableExecutionService = opened.execution
 	assertHistoricalDispatchReads(t, execution, owner, sessionID)
 	assertUnknownDispatchReads(t, execution)
 
@@ -768,7 +768,7 @@ func TestOpenForRequestConsumesResumeSourceBeforeLiveSuccessorActivation(t *test
 	if root.activation.Inputs.Recordings.ReplayPath != "" {
 		t.Fatalf("activation replay path = %q, want empty for resume", root.activation.Inputs.Recordings.ReplayPath)
 	}
-	assertResumeRecoveryMetadata(t, opened.application.ResumeRecoveryMetadata, resumeInput.RecoveryMetadata)
+	assertResumeRecoveryMetadata(t, opened.resumeRecoveryMetadata, resumeInput.RecoveryMetadata)
 }
 
 func assertResumeRecoveryMetadata(

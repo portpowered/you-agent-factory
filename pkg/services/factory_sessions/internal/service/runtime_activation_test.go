@@ -18,7 +18,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -361,10 +360,8 @@ func TestRuntimeActivationUsesEngineServiceForDetachedHandoff(t *testing.T) {
 	proxy := &activationServiceFake{}
 	engine := &activationServiceFake{}
 	products := runtimeProducts{
-		application: roles.OpenedApplicationRuntime{
-			FactoryRuntime: proxy,
-		},
-		engine: engine,
+		factoryRuntime: proxy,
+		engine:         engine,
 	}
 
 	if got := runtimeEngineService(products); got != engine {

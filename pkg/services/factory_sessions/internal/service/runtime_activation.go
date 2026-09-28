@@ -106,10 +106,10 @@ func newRuntimeActivation(products runtimeProducts) (*factoryruntime.RuntimeActi
 		},
 		WorkAndEventIngress: ingress,
 		Close: func(closeCtx context.Context) error {
-			if products.application.Resources.Close == nil {
+			if products.closeArtifacts == nil {
 				return nil
 			}
-			return products.application.Resources.Close()
+			return products.closeArtifacts()
 		},
 	}, nil
 }
@@ -336,7 +336,7 @@ func (r *Root) openActivatedRuntimeWithInputs(
 	if resumeInput != nil {
 		metadata := resumeInput.RecoveryMetadata
 		metadata.SuccessorRecordingID = recoveryRecordingID(activationRequest.RuntimeID)
-		products.application.ResumeRecoveryMetadata = &metadata
+		products.resumeRecoveryMetadata = &metadata
 	}
 	closeRuntime := r.activationCloser(binding, result.RuntimeID)
 	if !binding.IsZero() && products.bindRuntime != nil {
@@ -345,13 +345,11 @@ func (r *Root) openActivatedRuntimeWithInputs(
 		}
 	}
 	if binding.Service() != nil {
-		products.application.FactoryRuntime = binding.Service()
+		products.factoryRuntime = binding.Service()
 	} else {
-		products.application.FactoryRuntime = r.runtimeRoot
+		products.factoryRuntime = r.runtimeRoot
 	}
-	products.application.Resources.Close = closeRuntime
-	products.invocation.CloseArtifacts = closeRuntime
-	products.execution.Resources.Close = closeRuntime
+	products.closeArtifacts = closeRuntime
 	return products, nil
 }
 

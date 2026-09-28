@@ -7,7 +7,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -16,11 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -40,98 +35,6 @@ type FactoryEventReader = interface {
 type HostedInvocationOperation interface {
 	factorysessions.InvocationService
 	FactoryEventReader
-}
-
-type RuntimeResources struct {
-	Directory         string
-	RuntimeInstanceID string
-	BackendScopeID    string
-	Clock             factoryruntime.Clock
-	Diagnostics       factoryruntime.RuntimeLogDiagnostics
-	Logger            *zap.Logger
-	Close             func() error
-}
-
-type RuntimeVisualizationServices struct {
-	Reader      RuntimeReader
-	Projections recordings.ProjectionService
-}
-
-type OpenedApplicationRuntime struct {
-	Process ProcessRuntime
-	// Cancellation is the explicit invocation-local stop authority published
-	// into the opened HTTP view by the application-opening operation.
-	Cancellation initializer.InvocationCancellation
-	// OrderlyStop is an already-bound process lifecycle operation. Factory
-	// Sessions supplies the Recordings-owned implementation when a live
-	// recording exists; Initializer only orders and awaits it.
-	OrderlyStop        lifecycle.OrderlyStopOperation
-	FactoryRuntime     factoryruntime.Service
-	FactoryDefinitions factorydefinitions.Service
-	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
-	FactorySessions    factorysessions.Service
-	Recordings         recordings.Service
-	LiveControl        factorysessions.LiveControlService
-	Work               work.Service
-	Models             models.Service
-	ModelsScope        models.RuntimeScopeRef
-	ModelInvoker       workers.ModelInvoker
-	Workers            workers.Service
-	ProviderSessions   providersessions.Service
-	WorkerSessions     workersessions.ObservationService
-	WorkerPrompts      workers.PromptTemplates
-	// OperatorSettingsPath is the resolved document used by the opened
-	// runtime. Transport adapters receive it as data and never resolve or read
-	// configuration themselves.
-	OperatorSettingsPath   string
-	Logger                 *zap.Logger
-	Visualization          RuntimeVisualizationServices
-	Resources              RuntimeResources
-	HistoricalReplay       *factorysessions.HistoricalReplayInspection
-	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
-	ResumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
-}
-
-type OpenedInvocationRuntime struct {
-	Workers        workers.Service
-	ModelInvoker   workers.ModelInvoker
-	Sessions       factorysessions.Service
-	LiveControl    factorysessions.LiveControlService
-	Invoker        SessionInvoker
-	InputResolver  InvocationInputResolver
-	Execution      durableexecution.Service
-	Lifecycle      LifecycleRuntime
-	ModelsScope    models.RuntimeScopeRef
-	RuntimeID      string
-	GenerationID   string
-	CloseArtifacts func() error
-}
-
-type OpenedExecutionRuntime struct {
-	Execution       durableexecution.Service
-	Recordings      recordings.Service
-	WorkflowPreview factoryruntime.WorkflowPreviewOperation
-	Resources       RuntimeResources
-}
-
-// RuntimeOpening is the owner-private, process-scoped opening capability
-// retained by the canonical Factory Sessions root. It is deliberately kept
-// separate from the public Service contract: opening a runtime is a
-// construction/lifecycle role, while callers consume the resulting customer
-// values and operations through Factory Sessions.
-type RuntimeOpening interface {
-	OpenApplicationRuntime(
-		context.Context,
-		*factorysessions.RuntimeOpeningRequest,
-	) (OpenedApplicationRuntime, error)
-	OpenInvocationRuntime(
-		context.Context,
-		*factorysessions.RuntimeOpeningRequest,
-	) (OpenedInvocationRuntime, error)
-	OpenExecutionRuntime(
-		context.Context,
-		*factorysessions.RuntimeOpeningRequest,
-	) (OpenedExecutionRuntime, error)
 }
 
 type RuntimeResolver interface {

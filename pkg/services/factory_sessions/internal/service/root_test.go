@@ -292,25 +292,6 @@ func (rootTestIdentityService) ResolveLogical(sessionregistry.Service, string, s
 
 type rootTestResponseStreams struct{}
 
-type rootRuntimeOpeningStub struct {
-	executionCalls int
-}
-
-func (s *rootRuntimeOpeningStub) OpenApplicationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
-	return roles.OpenedApplicationRuntime{}, nil
-}
-
-func (s *rootRuntimeOpeningStub) OpenInvocationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedInvocationRuntime, error) {
-	return roles.OpenedInvocationRuntime{}, nil
-}
-
-func (s *rootRuntimeOpeningStub) OpenExecutionRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedExecutionRuntime, error) {
-	s.executionCalls++
-	return roles.OpenedExecutionRuntime{}, nil
-}
-
-var _ roles.RuntimeOpening = (*rootRuntimeOpeningStub)(nil)
-
 func (rootTestResponseStreams) NewEventStore(string, factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error) {
 	return nil, nil
 }

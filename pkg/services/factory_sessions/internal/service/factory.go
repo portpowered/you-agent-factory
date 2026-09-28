@@ -32,26 +32,6 @@ import (
 // privately at its own service boundary.
 type WorkerCommandRunnerAdapter func(platformprocess.CommandRunner) platformprocess.CommandRunner
 
-// InvocationRuntimeOpening opens the invocation-only view of one Factory
-// Sessions runtime. Consumers receive this narrow operation rather than the
-// process-scoped grouped construction type.
-type InvocationRuntimeOpening interface {
-	OpenInvocationRuntime(
-		context.Context,
-		*factorysessions.RuntimeOpeningRequest,
-	) (roles.OpenedInvocationRuntime, error)
-}
-
-// ExecutionRuntimeOpening opens the durable-execution view of one Factory
-// Sessions runtime. It keeps direct execution on the same authoritative
-// opening capability while preserving its smaller operation surface.
-type ExecutionRuntimeOpening interface {
-	OpenExecutionRuntime(
-		context.Context,
-		*factorysessions.RuntimeOpeningRequest,
-	) (roles.OpenedExecutionRuntime, error)
-}
-
 // The owner-port contracts below are the Factory Sessions-owned construction
 // vocabulary for the one process-scoped runtime-opening factory. Each
 // contract names one owner and contains only the fixed collaborators selected
@@ -224,11 +204,6 @@ type Root struct {
 	submissionRecorder               recordings.SubmissionRecorder
 	dispatchRecorder                 recordings.DispatchRecorder
 }
-
-var (
-	_ InvocationRuntimeOpening  = (*Root)(nil)
-	_ ExecutionRuntimeOpening   = (*Root)(nil)
-)
 
 func NewRoot(
 	providerSessions *ProviderSessionsPorts,
@@ -694,24 +669,4 @@ func selectsHistoricalReplayInspection(input recordings.LoadReplayInputResult) b
 	// return a legacy artifact without the newer framing metadata. Production
 	// path loaders always identify V1 versus V2 above.
 	return legacyReplayArtifactHasCanonicalEventShape(*input.Legacy)
-}
-
-// OpenInvocationRuntime opens one Factory Session and returns only the roles
-// required by one-shot model or Factory invocation.
-func (r *Root) OpenInvocationRuntime(
-	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
-) (roles.OpenedInvocationRuntime, error) {
-	opened, err := r.openForRequest(ctx, request)
-	return opened.invocation, err
-}
-
-// OpenExecutionRuntime opens one Factory Session and returns only the durable
-// execution and workflow roles required by runtime-backed execution clients.
-func (r *Root) OpenExecutionRuntime(
-	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
-) (roles.OpenedExecutionRuntime, error) {
-	opened, err := r.openForRequest(ctx, request)
-	return opened.execution, err
 }

@@ -50,18 +50,17 @@ func (r *Root) InspectHistoricalApplication(
 	if err != nil {
 		return HistoricalApplicationInspection{}, false, err
 	}
-	view := products.application
-	if view.HistoricalReplay == nil {
-		if view.Resources.Close != nil {
-			_ = view.Resources.Close()
+	if products.historicalReplay == nil {
+		if products.closeArtifacts != nil {
+			_ = products.closeArtifacts()
 		}
 		return HistoricalApplicationInspection{}, false, fmt.Errorf("historical replay inspection is unavailable")
 	}
 	return HistoricalApplicationInspection{
-		Replay:                 view.HistoricalReplay,
-		Diagnostics:            view.Resources.Diagnostics,
-		ReplayMetadataWarnings: append([]recordings.MetadataMismatchWarning(nil), view.ReplayMetadataWarnings...),
-		ResumeRecoveryMetadata: view.ResumeRecoveryMetadata,
-		Close:                  view.Resources.Close,
+		Replay:                 products.historicalReplay,
+		Diagnostics:            products.diagnostics,
+		ReplayMetadataWarnings: append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...),
+		ResumeRecoveryMetadata: products.resumeRecoveryMetadata,
+		Close:                  products.closeArtifacts,
 	}, true, nil
 }

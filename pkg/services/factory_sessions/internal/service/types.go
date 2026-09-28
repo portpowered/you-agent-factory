@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	"github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -31,18 +32,43 @@ func recoveryRecordingID(recordingID string) string {
 	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
-// runtimeProducts is the Factory Sessions side of a completed runtime opening.
-// It retains the opened role bundles, the Runtime binding publication edge, and
-// the opaque Runtime service published by the activation. The hosted-instance,
-// replacement-builder, session build spec, lifecycle, and sidecar handles that
-// opening used to retain are Runtime-owned construction values; Sessions no
-// longer holds them, so it cannot re-enter Runtime construction through them.
+// runtimeProducts is the invocation-local output of Factory Runtime assembly.
+// It is consumed by canonical Start and never stored as another session graph.
 type runtimeProducts struct {
-	application roles.OpenedApplicationRuntime
-	invocation  roles.OpenedInvocationRuntime
-	execution   roles.OpenedExecutionRuntime
-	bindRuntime func(factoryruntime.RuntimeBinding) error
-	engine      factoryruntime.Service
+	process                roles.ProcessRuntime
+	lifecycle              roles.LifecycleRuntime
+	sessions               factorysessions.Service
+	liveControl            factorysessions.LiveControlService
+	execution              durableexecution.Service
+	inputResolver          roles.InvocationInputResolver
+	modelInvoker           workers.ModelInvoker
+	factoryRuntime         factoryruntime.Service
+	factoryDefinitions     factorydefinitions.Service
+	workflowPreview        factoryruntime.WorkflowPreviewOperation
+	work                   work.Service
+	models                 models.Service
+	modelsScope            models.RuntimeScopeRef
+	workers                workers.Service
+	providerSessions       providersessions.Service
+	workerSessions         workersessions.ObservationService
+	workerPrompts          workers.PromptTemplates
+	reader                 roles.RuntimeReader
+	projections            recordings.ProjectionService
+	recordings             recordings.Service
+	clock                  factoryruntime.Clock
+	logger                 *zap.Logger
+	diagnostics            factoryruntime.RuntimeLogDiagnostics
+	directory              string
+	runtimeInstanceID      string
+	backendScopeID         string
+	operatorSettingsPath   string
+	orderlyStop            func(context.Context) error
+	closeArtifacts         func() error
+	historicalReplay       *factorysessions.HistoricalReplayInspection
+	replayMetadataWarnings []recordings.MetadataMismatchWarning
+	resumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
+	bindRuntime            func(factoryruntime.RuntimeBinding) error
+	engine                 factoryruntime.Service
 }
 
 type workerSessionsObservationProvider interface {
@@ -65,22 +91,11 @@ func historicalReplayRuntimeProducts(
 	replay := recordingreplay.NewService(projection, liveOwner)
 	inspection := replay.Inspection()
 	return runtimeProducts{
-		application: roles.OpenedApplicationRuntime{
-			Process:          historicalReplayProcessRuntime{},
-			HistoricalReplay: &inspection,
-			Resources: roles.RuntimeResources{
-				Logger: logger,
-				Close:  closeResources,
-			},
-		},
-		invocation: roles.OpenedInvocationRuntime{
-			Execution:      replay,
-			CloseArtifacts: closeResources,
-		},
-		execution: roles.OpenedExecutionRuntime{
-			Execution: replay,
-			Resources: roles.RuntimeResources{Logger: logger, Close: closeResources},
-		},
+		process:          historicalReplayProcessRuntime{},
+		historicalReplay: &inspection,
+		logger:           logger,
+		closeArtifacts:   closeResources,
+		execution:        replay,
 	}
 }
 
@@ -120,13 +135,6 @@ func assembleRuntimeProducts(
 	liveControl, _ := factorySessionGateway.(factorysessions.LiveControlService)
 	workerSessions := openedWorkerSessionsObservation(factoryRuntime, startup, effectiveFactorySessionID)
 	inputResolver, _ := sessionInvocation.(roles.InvocationInputResolver)
-	resources := roles.RuntimeResources{
-		Logger: startup.RuntimeLogger(), Close: closeResources,
-		Diagnostics: startup.RuntimeDiagnostics(),
-	}
-	resources.Directory = directory
-	resources.RuntimeInstanceID = runtimeInstanceID
-	resources.BackendScopeID = backendScopeID
 	modelInvoker := modelinvocation.NewRuntimeModelInvoker(modelinvocation.RuntimeModelInvokerConfig{
 		Models: modelsBind.Root, Scope: modelsBind.Scope,
 		Sessions: factorySessionGateway, Workers: workerService,
@@ -135,33 +143,18 @@ func assembleRuntimeProducts(
 	})
 	return runtimeProducts{
 		bindRuntime: bindRuntime,
-		application: roles.OpenedApplicationRuntime{
-			Process:        process,
-			FactoryRuntime: factoryRuntime, FactoryDefinitions: factoryDefinitions,
-			WorkflowPreview: workflowPreview,
-			FactorySessions: factorySessionGateway, LiveControl: liveControl,
-			Work: workService, Models: modelsBind.Root, ModelsScope: modelsBind.Scope,
-			ModelInvoker: modelInvoker, Workers: workerService,
-			ProviderSessions: providerSessions, WorkerSessions: workerSessions,
-			WorkerPrompts: workerPrompts, Logger: resources.Logger,
-			Visualization: roles.RuntimeVisualizationServices{
-				Reader: reader, Projections: projections,
-			},
-			Resources: resources,
-		},
-		invocation: roles.OpenedInvocationRuntime{
-			Workers: workerService, Sessions: factorySessionGateway, LiveControl: liveControl,
-			ModelInvoker: modelInvoker,
-			Invoker:      sessionInvocation, InputResolver: inputResolver,
-			Execution: factorySessionGateway, Lifecycle: lifecycle,
-			ModelsScope: modelsBind.Scope,
-			RuntimeID:   runtimeInstanceID, GenerationID: startup.StreamGeneration(),
-			CloseArtifacts: closeResources,
-		},
-		execution: roles.OpenedExecutionRuntime{
-			Execution: factorySessionGateway, WorkflowPreview: workflowPreview,
-			Resources: resources,
-		},
+		process:     process, lifecycle: lifecycle,
+		sessions: factorySessionGateway, liveControl: liveControl, execution: factorySessionGateway,
+		inputResolver: inputResolver, modelInvoker: modelInvoker,
+		factoryRuntime: factoryRuntime, factoryDefinitions: factoryDefinitions,
+		workflowPreview: workflowPreview, work: workService,
+		models: modelsBind.Root, modelsScope: modelsBind.Scope,
+		workers: workerService, providerSessions: providerSessions,
+		workerSessions: workerSessions, workerPrompts: workerPrompts,
+		reader: reader, projections: projections,
+		logger: startup.RuntimeLogger(), diagnostics: startup.RuntimeDiagnostics(),
+		directory: directory, runtimeInstanceID: runtimeInstanceID, backendScopeID: backendScopeID,
+		closeArtifacts: closeResources,
 	}
 }
 

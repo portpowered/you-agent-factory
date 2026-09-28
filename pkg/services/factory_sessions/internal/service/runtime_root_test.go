@@ -274,9 +274,9 @@ func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *test
 		name  string
 		close func() error
 	}{
-		{name: "application", close: products.application.Resources.Close},
-		{name: "invocation", close: products.invocation.CloseArtifacts},
-		{name: "execution", close: products.execution.Resources.Close},
+		{name: "application", close: products.closeArtifacts},
+		{name: "invocation", close: products.closeArtifacts},
+		{name: "execution", close: products.closeArtifacts},
 	}
 	for _, role := range roleCleanups {
 		if role.close == nil {
@@ -301,10 +301,10 @@ func TestOpenActivatedRuntimeRoutesRoleCleanupThroughRuntimeDeactivation(t *test
 
 	// Opening publishes the Runtime root itself; it does not hand callers a
 	// Sessions-retained runtime handle recovered from the opening products.
-	if products.application.FactoryRuntime != factoryruntime.Service(root) {
+	if products.factoryRuntime != factoryruntime.Service(root) {
 		t.Fatalf(
 			"opened application FactoryRuntime = %T, want the Runtime root %T",
-			products.application.FactoryRuntime,
+			products.factoryRuntime,
 			root,
 		)
 	}

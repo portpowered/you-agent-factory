@@ -57,14 +57,8 @@ type (
 	FactoryInvocationOutcome             = roles.FactoryInvocationOutcome
 	LiveChangeCoordinator                = factorysessionwirecontracts.LiveChangeCoordinator
 	OpeningPresentationOwner             = factorysessions.OpeningPresentationOwner
-	RuntimeResources                     = roles.RuntimeResources
-	RuntimeVisualizationServices         = roles.RuntimeVisualizationServices
-	OpenedApplicationRuntime             = roles.OpenedApplicationRuntime
 	HistoricalApplicationInspection      = service.HistoricalApplicationInspection
 	SessionPresentation                  = service.SessionPresentation
-	OpenedInvocationRuntime              = roles.OpenedInvocationRuntime
-	OpenedExecutionRuntime               = roles.OpenedExecutionRuntime
-	RuntimeOpeningCapability             = roles.RuntimeOpening
 
 	SyncWaitScheduler = execution.SyncWaitScheduler
 
@@ -73,8 +67,6 @@ type (
 	ReplayRecordingReader = fileeffects.ReplayRecordingReader
 	InitialWorkReader     = fileeffects.InitialWorkReader
 
-	InvocationRuntimeOpening               = service.InvocationRuntimeOpening
-	ExecutionRuntimeOpening                = service.ExecutionRuntimeOpening
 	ProviderSessionsRuntimeOpeningPorts    = service.ProviderSessionsPorts
 	ProviderOverrideService                = service.ProviderOverrideService
 	FactoryRuntimeOpeningPorts             = service.FactoryRuntimePorts
@@ -98,7 +90,6 @@ type (
 	ProviderFromCommandRunnerFactory       = service.ProviderFromCommandRunnerFactory
 	FactoryRuntimeAssembler                = service.FactoryRuntimeAssembler
 	FactoryRuntimeRoot                     = service.FactoryRuntimeRoot
-	RuntimeOpening                         = roles.RuntimeOpening
 	RuntimeRoot                            = service.RuntimeRoot
 	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder
 	InvocationArtifactFileSystem           = factorysessioncontracts.InvocationArtifactFileSystem

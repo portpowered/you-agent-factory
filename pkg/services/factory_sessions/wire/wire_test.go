@@ -143,10 +143,8 @@ func TestNewServiceFromAssemblyReturnsDirectRootIdentity(t *testing.T) {
 		t.Fatalf("NewServiceFromAssembly() error = %v", err)
 	}
 	var service factorysessions.Service = root
-	var inv InvocationRuntimeOpening = root
-	var exe ExecutionRuntimeOpening = root
-	if any(service) != any(root) || any(inv) != any(root) || any(exe) != any(root) {
-		t.Fatal("Service and opening views are not the exact same *Root instance")
+	if any(service) != any(root) {
+		t.Fatal("Service is not the exact same *Root instance")
 	}
 }
 

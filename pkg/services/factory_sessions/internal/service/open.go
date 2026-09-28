@@ -200,7 +200,7 @@ func openRuntime(
 			liveOwner,
 			replayClose,
 		)
-		historicalProducts.application.ReplayMetadataWarnings = append(
+		historicalProducts.replayMetadataWarnings = append(
 			[]recordings.MetadataMismatchWarning(nil),
 			load.ReplayMetadataWarnings...,
 		)
@@ -589,19 +589,19 @@ func openRuntime(
 		sessionID,
 	)
 	opened.engine = startupRuntime.RuntimeService()
-	opened.application.Resources.Clock = clock
-	opened.application.Recordings = recordingsService
-	opened.application.OrderlyStop = newOrderlyRecordingFlush(
+	opened.clock = clock
+	opened.recordings = recordingsService
+	opened.orderlyStop = newOrderlyRecordingFlush(
 		recordingsService,
-		opened.application.Resources.RuntimeInstanceID,
+		opened.runtimeInstanceID,
 		configured.Recordings.RecordPath,
 	)
-	opened.application.OperatorSettingsPath = operatorSettingsPath
-	opened.application.ReplayMetadataWarnings = append(
+	opened.operatorSettingsPath = operatorSettingsPath
+	opened.replayMetadataWarnings = append(
 		[]recordings.MetadataMismatchWarning(nil),
 		load.ReplayMetadataWarnings...,
 	)
-	opened.execution.Recordings = recordingsService
+	opened.recordings = recordingsService
 	return opened, nil
 }
 

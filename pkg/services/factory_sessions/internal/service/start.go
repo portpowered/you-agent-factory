@@ -109,22 +109,22 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		return factorysessions.SessionStartResult{}, err
 	}
 	if request.ValidateOnly || request.InitNewFactory {
-		if products.application.FactorySessions == nil {
+		if products.sessions == nil {
 			return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: validation service is unavailable")
 		}
-		return products.application.FactorySessions.Start(ctx, selected)
+		return products.sessions.Start(ctx, selected)
 	}
-	if products.invocation.Lifecycle == nil {
-		if products.application.Resources.Close != nil {
-			_ = products.application.Resources.Close()
+	if products.lifecycle == nil {
+		if products.closeArtifacts != nil {
+			_ = products.closeArtifacts()
 		}
 		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: lifecycle is unavailable")
 	}
 	runContext, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	activation := &sessionActivation{
-		lifecycle:      products.invocation.Lifecycle,
+		lifecycle:      products.lifecycle,
 		cancel:         cancel,
-		closeArtifacts: products.application.Resources.Close,
+		closeArtifacts: products.closeArtifacts,
 	}
 	if err := activation.lifecycle.StartLifecycle(ctx, runContext); err == nil {
 		activation.stopWorker, err = activation.lifecycle.StartWorkerLifecycle(ctx)
@@ -149,22 +149,22 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: session runtime state is unavailable")
 	}
 	bound.Activation = activation
-	bound.Process = products.application.Process
-	bound.Diagnostics = products.application.Resources.Diagnostics
-	bound.ModelInvoker = products.invocation.ModelInvoker
-	bound.InputResolver = products.invocation.InputResolver
-	bound.FactoryRuntime = products.application.FactoryRuntime
-	bound.ModelsScope = products.application.ModelsScope
-	bound.WorkerSessions = products.application.WorkerSessions
-	bound.Logger = products.application.Logger
-	bound.Reader = products.application.Visualization.Reader
-	bound.Projections = products.application.Visualization.Projections
-	bound.Clock = products.application.Resources.Clock
-	bound.OperatorSettingsPath = products.application.OperatorSettingsPath
-	bound.Recordings = products.application.Recordings
-	bound.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), products.application.ReplayMetadataWarnings...)
-	bound.ResumeRecoveryMetadata = products.application.ResumeRecoveryMetadata
-	bound.OrderlyStop = products.application.OrderlyStop
+	bound.Process = products.process
+	bound.Diagnostics = products.diagnostics
+	bound.ModelInvoker = products.modelInvoker
+	bound.InputResolver = products.inputResolver
+	bound.FactoryRuntime = products.factoryRuntime
+	bound.ModelsScope = products.modelsScope
+	bound.WorkerSessions = products.workerSessions
+	bound.Logger = products.logger
+	bound.Reader = products.reader
+	bound.Projections = products.projections
+	bound.Clock = products.clock
+	bound.OperatorSettingsPath = products.operatorSettingsPath
+	bound.Recordings = products.recordings
+	bound.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), products.replayMetadataWarnings...)
+	bound.ResumeRecoveryMetadata = products.resumeRecoveryMetadata
+	bound.OrderlyStop = products.orderlyStop
 	bound.SetStartRequestID(strings.TrimSpace(request.Correlation.RequestID))
 	bound.InheritTerminalControl(previousControl)
 	status := "RUNNING"

@@ -278,11 +278,11 @@ func TestAssembleRuntimeProductsCarriesModelsRootAndScopeIntoOpenedRuntime(t *te
 		func() error { return nil },
 	)
 
-	if opened.application.Models != root {
+	if opened.models != root {
 		t.Fatal("opened application runtime did not retain the process-scoped Models root")
 	}
-	if opened.application.ModelsScope != scope {
-		t.Fatalf("opened Models scope = %q, want %q", opened.application.ModelsScope, scope)
+	if opened.modelsScope != scope {
+		t.Fatalf("opened Models scope = %q, want %q", opened.modelsScope, scope)
 	}
 }
 
@@ -317,14 +317,14 @@ func TestAssembleRuntimeProductsBindsHostBoundFactorySessionsGatewayForApplicati
 		func() error { return nil },
 	)
 
-	got, err := opened.application.FactorySessions.GetSession(context.Background(), "session-1")
+	got, err := opened.sessions.GetSession(context.Background(), "session-1")
 	if err != nil {
 		t.Fatalf("FactorySessions.GetSession() error = %v, want host-bound gateway read", err)
 	}
 	if got.SessionID != "host-bound-gateway" {
 		t.Fatalf("FactorySessions.GetSession() = %q, want host-bound gateway result", got.SessionID)
 	}
-	liveRead, err := opened.application.LiveControl.GetFactorySession(context.Background(), "session-1")
+	liveRead, err := opened.liveControl.GetFactorySession(context.Background(), "session-1")
 	if err != nil {
 		t.Fatalf("LiveControl.GetSession() error = %v, want host-bound gateway read", err)
 	}
@@ -369,13 +369,13 @@ func TestAssembledRuntimeResourcesCloseAcquiredResourcesInReverseOrder(t *testin
 		"backend-1",
 		cleanup.Close,
 	)
-	if err := opened.application.Resources.Close(); err != nil {
+	if err := opened.closeArtifacts(); err != nil {
 		t.Fatalf("opened runtime resource Close() error = %v, want nil", err)
 	}
 	if !slices.Equal(events, []string{"workers-close", "models-close"}) {
 		t.Fatalf("runtime close events = %v, want reverse acquisition order", events)
 	}
-	if err := opened.application.Resources.Close(); err != nil {
+	if err := opened.closeArtifacts(); err != nil {
 		t.Fatalf("second opened runtime resource Close() error = %v, want nil", err)
 	}
 	if !slices.Equal(events, []string{"workers-close", "models-close"}) {
