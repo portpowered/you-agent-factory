@@ -29,7 +29,7 @@ import (
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
@@ -234,6 +235,14 @@ func (root canonicalDurableStartTestRoot) QueryDispatches(ctx context.Context, r
 
 func (root canonicalDurableStartTestRoot) QueryEvents(ctx context.Context, request factorysessions.SessionEventQueryRequest) (factorysessions.EventReadResult, error) {
 	return root.execution.ReadEvents(ctx, request.SessionID, request.Reconnect)
+}
+
+func (root canonicalDurableStartTestRoot) QueryEventStream(ctx context.Context, request factorysessions.SessionEventQueryRequest) (*factorydefinitions.FactoryEventStream, error) {
+	result, err := root.QueryEvents(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return factorysessions.MaterializeEventReadStream(result), nil
 }
 
 func (root canonicalDurableStartTestRoot) ProbeEvents(ctx context.Context, request factorysessions.SessionEventQueryRequest) error {

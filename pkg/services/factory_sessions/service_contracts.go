@@ -139,6 +139,7 @@ type Service interface {
 // capability for transports that also read finalized history from Recordings.
 type SessionInspectionService interface {
 	QueryEvents(context.Context, SessionEventQueryRequest) (EventReadResult, error)
+	QueryEventStream(context.Context, SessionEventQueryRequest) (*factorydefinitions.FactoryEventStream, error)
 	ProbeEvents(context.Context, SessionEventQueryRequest) error
 	InspectDispatch(context.Context, SessionDispatchInspectRequest) (DispatchDetail, error)
 	QueryArtifacts(context.Context, SessionArtifactQueryRequest) (ListArtifactsResult, error)

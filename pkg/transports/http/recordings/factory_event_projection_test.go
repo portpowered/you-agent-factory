@@ -7,6 +7,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingsprojection "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -24,7 +25,7 @@ func TestReconstructFactoryWorldStateMapsGeneratedEventsToOwnerReducer(t *testin
 	}
 
 	var reduced []interfaces.FactoryEvent
-	state, err := ReconstructFactoryWorldState(func(events []interfaces.FactoryEvent, selectedTick int) (interfaces.FactoryWorldState, error) {
+	state, err := recordingsprojection.ReconstructFactoryWorldState(func(events []interfaces.FactoryEvent, selectedTick int) (interfaces.FactoryWorldState, error) {
 		reduced = append(reduced, events...)
 		return interfaces.FactoryWorldState{Tick: selectedTick, EventTime: events[0].Context.EventTime}, nil
 	}, []factoryapi.FactoryEvent{event}, 1)
@@ -37,7 +38,7 @@ func TestReconstructFactoryWorldStateMapsGeneratedEventsToOwnerReducer(t *testin
 }
 
 func TestReconstructFactoryWorldStatePreservesEmptyInput(t *testing.T) {
-	state, err := ReconstructFactoryWorldState(func(events []interfaces.FactoryEvent, selectedTick int) (interfaces.FactoryWorldState, error) {
+	state, err := recordingsprojection.ReconstructFactoryWorldState(func(events []interfaces.FactoryEvent, selectedTick int) (interfaces.FactoryWorldState, error) {
 		if len(events) != 0 {
 			t.Fatalf("canonical reducer events = %#v, want empty", events)
 		}
@@ -58,7 +59,7 @@ func TestCanonicalFactoryEventProjectsProviderSessionToContinuation(t *testing.T
 		t.Fatalf("decode provider-session event: %v", err)
 	}
 
-	canonical, err := CanonicalFactoryEvent(event)
+	canonical, err := recordingsprojection.CanonicalFactoryEvent(event)
 	if err != nil {
 		t.Fatalf("canonical event: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestCanonicalFactoryEventRejectsMalformedExecutionPayload(t *testing.T) {
 	if err := json.Unmarshal(encoded, &event); err != nil {
 		t.Fatalf("decode malformed event: %v", err)
 	}
-	if _, err := CanonicalFactoryEvent(event); err == nil {
+	if _, err := recordingsprojection.CanonicalFactoryEvent(event); err == nil {
 		t.Fatal("CanonicalFactoryEvent() error = nil, want malformed payload error")
 	}
 }
@@ -179,7 +180,7 @@ func TestGeneratedWorkstationProjectionMapsOptionalRequestAndResponseFields(t *t
 			},
 		},
 	}
-	generated := Generated(recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{WorkstationRequestsByDispatchId: &projection})
+	generated := recordingsprojection.Generated(recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{WorkstationRequestsByDispatchId: &projection})
 	assertGeneratedWorkstationProjection(t, generated, workstationName, runnerID)
 }
 
@@ -240,11 +241,11 @@ func assertGeneratedWorkstationSparseAndEmpty(
 	if sparse := (*generated.WorkstationRequestsByDispatchId)["dispatch-sparse"]; sparse.Response == nil || sparse.Response.OutputMutations != nil || sparse.Request.InputWorkItems != nil {
 		t.Fatalf("sparse generated projection = %#v, want empty slices omitted", sparse)
 	}
-	if got := Generated(recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{}); got.WorkstationRequestsByDispatchId != nil {
+	if got := recordingsprojection.Generated(recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{}); got.WorkstationRequestsByDispatchId != nil {
 		t.Fatalf("nil projection = %#v, want empty", got)
 	}
 	emptyProjection := map[string]recordings.WorkstationFactoryWorldWorkstationRequestView{}
-	if got := Generated(recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{WorkstationRequestsByDispatchId: &emptyProjection}); got.WorkstationRequestsByDispatchId != nil {
+	if got := recordingsprojection.Generated(recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{WorkstationRequestsByDispatchId: &emptyProjection}); got.WorkstationRequestsByDispatchId != nil {
 		t.Fatalf("empty projection = %#v, want empty", got)
 	}
 }

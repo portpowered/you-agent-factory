@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	"go.uber.org/zap"
 )
 

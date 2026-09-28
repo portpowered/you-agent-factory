@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,7 +17,7 @@ type sessionHistoryRootFake struct {
 	factorysessions.Service
 	readResult      func(factorysessions.SessionResultReadRequest) (factorysessions.SessionResultReadResult, error)
 	queryDispatches func(factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
-	queryEvents     func(factorysessions.SessionEventQueryRequest) (factorysessions.EventReadResult, error)
+	streamEvents    func(factorysessions.SessionEventQueryRequest) (*interfaces.FactoryEventStream, error)
 	probeEvents     func(factorysessions.SessionEventQueryRequest) error
 	inspectDispatch func(factorysessions.SessionDispatchInspectRequest) (factorysessions.DispatchDetail, error)
 	queryArtifacts  func(factorysessions.SessionArtifactQueryRequest) (factorysessions.ListArtifactsResult, error)
@@ -31,8 +30,11 @@ func (f *sessionHistoryRootFake) ReadResult(_ context.Context, request factoryse
 func (f *sessionHistoryRootFake) QueryDispatches(_ context.Context, request factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
 	return f.queryDispatches(request)
 }
-func (f *sessionHistoryRootFake) QueryEvents(_ context.Context, request factorysessions.SessionEventQueryRequest) (factorysessions.EventReadResult, error) {
-	return f.queryEvents(request)
+func (f *sessionHistoryRootFake) QueryEventStream(_ context.Context, request factorysessions.SessionEventQueryRequest) (*interfaces.FactoryEventStream, error) {
+	return f.streamEvents(request)
+}
+func (f *sessionHistoryRootFake) QueryEvents(_ context.Context, _ factorysessions.SessionEventQueryRequest) (factorysessions.EventReadResult, error) {
+	return factorysessions.EventReadResult{}, nil
 }
 func (f *sessionHistoryRootFake) ProbeEvents(_ context.Context, request factorysessions.SessionEventQueryRequest) error {
 	return f.probeEvents(request)
@@ -50,10 +52,6 @@ func (f *sessionHistoryRootFake) InspectArtifact(_ context.Context, request fact
 func TestActiveDurableHistoryUsesCanonicalSessionCommands(t *testing.T) {
 	t.Parallel()
 	const sessionID = "dur-sess-direct-1"
-	event, err := json.Marshal(interfaces.FactoryEvent{Id: "event-1", Type: interfaces.FactoryEventTypeWorkRequest})
-	if err != nil {
-		t.Fatal(err)
-	}
 	root := &sessionHistoryRootFake{
 		readResult: func(request factorysessions.SessionResultReadRequest) (factorysessions.SessionResultReadResult, error) {
 			if request.SessionID != sessionID || request.Mode != factorysessions.SessionOperationModeDurable {
@@ -62,21 +60,17 @@ func TestActiveDurableHistoryUsesCanonicalSessionCommands(t *testing.T) {
 			return factorysessions.SessionResultReadResult{Durable: &factorysessions.SessionDurableResult{SessionID: sessionID, Status: factorysessions.ResultStatus("NOT_READY")}}, nil
 		},
 		queryDispatches: func(request factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
-			if request.SessionID != sessionID {
-				t.Fatalf("dispatch query = %#v", request)
-			}
+			requireHistorySessionID(t, request.SessionID, sessionID, request)
 			return factorysessions.ListDispatchesResult{SessionID: sessionID}, nil
 		},
-		queryEvents: func(request factorysessions.SessionEventQueryRequest) (factorysessions.EventReadResult, error) {
-			if request.SessionID != sessionID {
-				t.Fatalf("event query = %#v", request)
-			}
-			return factorysessions.EventReadResult{SessionID: sessionID, Events: []json.RawMessage{event}}, nil
+		streamEvents: func(request factorysessions.SessionEventQueryRequest) (*interfaces.FactoryEventStream, error) {
+			requireHistorySessionID(t, request.SessionID, sessionID, request)
+			closed := make(chan interfaces.FactoryEvent)
+			close(closed)
+			return &interfaces.FactoryEventStream{Events: closed, History: []interfaces.FactoryEvent{{Id: "event-1", Type: interfaces.FactoryEventTypeWorkRequest}}}, nil
 		},
 		probeEvents: func(request factorysessions.SessionEventQueryRequest) error {
-			if request.SessionID != sessionID {
-				t.Fatalf("event probe = %#v", request)
-			}
+			requireHistorySessionID(t, request.SessionID, sessionID, request)
 			return nil
 		},
 		inspectDispatch: func(request factorysessions.SessionDispatchInspectRequest) (factorysessions.DispatchDetail, error) {
@@ -86,9 +80,7 @@ func TestActiveDurableHistoryUsesCanonicalSessionCommands(t *testing.T) {
 			return factorysessions.DispatchDetail{SessionID: sessionID, DispatchSummary: factorysessions.DispatchSummary{ID: "dispatch-1"}}, nil
 		},
 		queryArtifacts: func(request factorysessions.SessionArtifactQueryRequest) (factorysessions.ListArtifactsResult, error) {
-			if request.SessionID != sessionID {
-				t.Fatalf("artifact query = %#v", request)
-			}
+			requireHistorySessionID(t, request.SessionID, sessionID, request)
 			return factorysessions.ListArtifactsResult{SessionID: sessionID}, nil
 		},
 		inspectArtifact: func(request factorysessions.SessionArtifactInspectRequest) (factorysessions.ArtifactDetail, error) {
@@ -137,5 +129,12 @@ func TestActiveDurableHistoryUsesCanonicalSessionCommands(t *testing.T) {
 	adapter.GetEventsBySessionId(recorder, probe, sessionID, factoryapi.GetEventsBySessionIdParams{})
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "STREAM_READY") {
 		t.Fatalf("probe response = %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func requireHistorySessionID(t *testing.T, got, want string, request any) {
+	t.Helper()
+	if got != want {
+		t.Fatalf("session request = %#v, want session %q", request, want)
 	}
 }

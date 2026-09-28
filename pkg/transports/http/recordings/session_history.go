@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -76,16 +77,12 @@ func (a *Adapter) sessionEventRequest(sessionID string, params factoryapi.GetEve
 	return factorysessions.SessionEventQueryRequest{SessionID: sessionID, Reconnect: reconnect}, err
 }
 
-func (a *Adapter) sessionEvents(ctx context.Context, sessionID string, params factoryapi.GetEventsBySessionIdParams) (*factorysessions.EventReadResult, error) {
+func (a *Adapter) sessionEvents(ctx context.Context, sessionID string, params factoryapi.GetEventsBySessionIdParams) (*factorydefinitions.FactoryEventStream, error) {
 	request, err := a.sessionEventRequest(sessionID, params)
 	if err != nil {
 		return nil, err
 	}
-	result, err := a.inspection.QueryEvents(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	return &result, nil
+	return a.inspection.QueryEventStream(ctx, request)
 }
 
 func (a *Adapter) sessionProbeEvents(ctx context.Context, sessionID string, params factoryapi.GetEventsBySessionIdParams) error {

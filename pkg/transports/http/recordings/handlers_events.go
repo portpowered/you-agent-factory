@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -94,7 +93,7 @@ func (a *Adapter) handleSessionDurableEvents(w http.ResponseWriter, r *http.Requ
 		a.writeSessionReadError(w, err, "failed to subscribe to factory events")
 		return true
 	}
-	a.streamSessionFactoryEvents(w, r, factorysessions.MaterializeEventReadStream(*result), input.SessionID)
+	a.streamSessionFactoryEvents(w, r, result, input.SessionID)
 	return true
 }
 
@@ -142,7 +141,7 @@ func (a *Adapter) handleEventRecoveryProbe(
 		a.probeHistoricalEventStreamRecovery(w, r, input)
 		return true
 	}
-	a.probeEventStreamRecovery(w, input)
+	a.probeEventStreamRecovery(w, r, input)
 	return true
 }
 
@@ -205,7 +204,7 @@ func (a *Adapter) handleLiveEvents(
 	)
 }
 
-func (a *Adapter) probeEventStreamRecovery(w http.ResponseWriter, input EventSubscribeInput) {
+func (a *Adapter) probeEventStreamRecovery(w http.ResponseWriter, r *http.Request, input EventSubscribeInput) {
 	request, err := SubscribeRequestFromAPI(input)
 	if err != nil {
 		a.writeJSON(
@@ -219,7 +218,7 @@ func (a *Adapter) probeEventStreamRecovery(w http.ResponseWriter, input EventSub
 		)
 		return
 	}
-	_, err = a.invokeSubscribeFrom(context.Background(), request)
+	_, err = a.invokeSubscribeFrom(r.Context(), request)
 	if err != nil {
 		if isEventReconnectValidationError(err) {
 			a.writeJSON(
