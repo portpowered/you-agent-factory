@@ -13,7 +13,7 @@ timeout failure is not.
 | `BAD_REQUEST unknown named argument "workingRoot"` | `C:\Users\andre\bin\you.exe` was built at 16:36, before commit `580985d1a3` ("Enable editing subagents and converge session open route") at 16:44. The `@you/subagent` package embedded in that binary carried `agentTools.policy: READ_ONLY` and no `workingRoot`, so the managed definition installed from it also lacked both. | Stale binary. The schema mismatch was an artifact of running pre-16:44 code, not of the packaged source. |
 | Six stale `you.exe server mcp` processes | Six MCP server processes were running, all from the 16:36 binary, alongside newer CLI invocations. | Stale server set. Mixed binary generations were serving MCP and CLI at the same time. |
 | Managed definition regressed after initialization | Reinitializing the package against the then-current binary briefly restored the newer definition; it later reverted to the old shape again. | The managed install tracks the embedded package of whichever binary initialized it, so it reverts whenever a stale binary re-initializes. |
-| OpenCode started a second stale executable | `C:\Users\andre\.config\opencode\opencode.jsonc` pointed its local `you-agent-factory` MCP server at `C:\Users\andre\bin\you-agent-factory-mcp.exe`, dated September 26 at 22:55. The installed definition reverted at 19:26:53 and 19:30:30 during OpenCode child starts, despite the main CLI using a fresh `you.exe`. | This second binary caused the repeat regressions. The config now points to `C:\Users\andre\bin\you.exe`; a subsequent child start kept the installed definition `ENABLED` with `workingRoot`. |
+| OpenCode started a second stale executable | `C:\Users\andre\.config\opencode\opencode.jsonc` pointed its local `you-agent-factory` MCP server at `C:\Users\andre\bin\you-agent-factory-mcp.exe`, dated September 26 at 22:55. The installed definition reverted at 19:26:53 and 19:30:30 during OpenCode child starts, despite the main CLI using a fresh `you.exe`. | This second binary caused the repeat regressions. The nested MCP entry was removed at the user's request; a subsequent child start kept the installed definition `ENABLED` with `workingRoot`. |
 | Fresh binary resolves the definition gap | A rebuild at 19:22 followed by a fresh install produced a definition with `agentTools.policy: ENABLED` and a `workingRoot` argument, matching `packages/packaged-factories/generated/factories/subagent/factory.json` (`policy: ENABLED`, `workingDirectory: ${workingRoot}`). | Definition/schema failures are closed once the installed binary and the installed definition are both current. |
 | `Transport closed` on MCP calls | The transport dropped when the six stale MCP servers were stopped. | Connection lifecycle event at the time, distinct from worker behavior. A reconnect was required after killing stale servers; a fresh outer MCP call later completed `OK`. |
 
@@ -53,8 +53,13 @@ bridge and terminal classification are fixed.
   `muse-spark-1.3-contributor-free`. The installed `@you/subagent` definition
   stayed `ENABLED` with `workingRoot`.
 - The earlier CLI fallback used bare `muse-spark-1.3-contributor-free`, but
-  the OpenCode log showed the actual build model was `big-pickle`, so the
-  explicit selection silently fell back. This is being fixed.
+  the OpenCode log showed the actual build model was `big-pickle`. The ACP
+  adapter now rejects an explicitly requested model that OpenCode does not
+  advertise, and reports a denied permission as a failed turn.
+- The execution model catalog now accepts qualified identities such as
+  `opencode/muse-spark-1.3-contributor-free`. A fresh CLI dispatch with that
+  identity completed `OK` in about 9 seconds, and the OpenCode log confirmed
+  the requested Muse Spark build model.
 
 A timeout is therefore not evidence that no edit occurred. Always inspect the
 tree before retrying, and never re-issue the same request blind.
@@ -97,15 +102,16 @@ tree before retrying, and never re-issue the same request blind.
    and the invocation catalog are current.
 7. **Check OpenCode permission logs after an empty result.** Look for
    `permission=external_directory` and `action=ask` in
-   `~/.local/share/opencode/log/opencode.log`. The caller currently can report
-   success with no primary result when the child waits for this approval.
+   `~/.local/share/opencode/log/opencode.log`. This condition previously
+   produced a success result with no primary output; the ACP adapter now
+   classifies a denied permission as failure.
 
 ## Adjacent CLI invocation findings
 
-- Invoking `opencode/muse-spark-1.3-contributor-free` as one value failed with
-  `reference identity is invalid`; the execution catalog's reference pattern
-  rejects `/`. Passing provider `opencode` and bare model
-  `muse-spark-1.3-contributor-free` passed.
+- Initially, invoking `opencode/muse-spark-1.3-contributor-free` as one value
+  failed with `reference identity is invalid`; the execution catalog's
+  reference pattern rejected `/`. The catalog now accepts a qualified model
+  identity, and a dispatch confirmed the selected Muse Spark model in the log.
 - `opencode` was then rejected with `runner is not a supported built-in
   identity`; `knownExecutionRunner` listed only `codex`, `claude`, and
   `antigravity`. `opencode` was added to the runner catalog in
@@ -115,8 +121,8 @@ tree before retrying, and never re-issue the same request blind.
 
 - Re-reading the installed definition after the 19:22 build showed
   `policy: READ_ONLY` with no `workingRoot` again because OpenCode's separate
-  MCP executable was stale. The config was corrected and one subsequent
-  dispatch preserved `ENABLED`; repeat dispatches should confirm durability.
+  MCP executable was stale. The nested entry has since been removed; a fresh
+  outer MCP dispatch and CLI dispatch kept `ENABLED` and `workingRoot`.
 - No trace, transcript, or worker log was captured for the timeouts, so the
   timeout section stays at hypothesis level.
 - This note documents a single-operator desktop environment. Results may differ

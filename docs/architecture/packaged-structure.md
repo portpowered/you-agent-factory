@@ -63,9 +63,9 @@ cmd/factory
 connects concrete providers once. `pkg/initializer` owns activation and
 shutdown; it does not serve as a second dependency-injection graph.
 
-Factory Session runtime opening is a domain operation over the injected Factory
-Sessions and Factory Runtime capabilities. It can create session-owned runtime
-state, but it is not another application construction pass.
+Factory Session startup is a domain operation over the injected Factory
+Sessions and Factory Runtime capabilities. It creates session-owned runtime
+state through the same constructed service root.
 
 Functional application tests follow the same path through `root.BuildProcess`
 and `Process.Execute`. Replaceable process, filesystem, provider, clock, and
@@ -112,7 +112,7 @@ transports as callers or adapters.
 | --- | --- |
 | `factory_definitions` | Authored Factory loading, validation, compilation, persistence, catalogs, packaged distribution, and invocation policy derived from definitions. |
 | `factory_runtime` | Event-first Factory orchestration, scheduling, dispatch, JavaScript workflows, runtime projections, and checkpoint recovery. Implementation-specific runtime primitives remain behind the customer-facing Factory boundary. |
-| `factory_sessions` | Live and durable Factory Session state, runtime opening, invocation, response streams, lifecycle gateways, controls, and persisted execution behavior. |
+| `factory_sessions` | Live and durable Factory Session state, startup, invocation, response streams, lifecycle gateways, controls, and persisted execution behavior. |
 | `recordings` | Canonical Factory Event ledger, recording lifecycle, replay, artifacts, and historical/read-model projections. |
 | `work` | Work and Work Request admission, content, staging, materialization, lineage, reads, and pure invocation return policy. |
 | `workers` | Request-scoped worker and workstation execution, runner policy, prompts and output shaping, worktrees, mock workers, and worker capability policy. Workers consumes Providers and Models through public contracts; provider inference/execution and hosted polling remain outside Workers. |

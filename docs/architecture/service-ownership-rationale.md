@@ -410,7 +410,7 @@ Nested subservice of `factory_sessions` · `pkg/services/factory_sessions/intern
 | Authority | Open/list/get/snapshot/pause/resume/close; sole owner of live registry, selection, activation lock, cleanup. |
 | State store | Live session registry and mutable live-runtime aggregate. |
 | Lifecycle | Live activation lock and cleanup lifecycle. |
-| Consumers | Factory Sessions root, Runtime Opening, Durable Execution, Response Stream. |
+| Consumers | Factory Sessions root, session startup, durable execution, response stream. |
 | Transaction boundary | Live registry mutations are exclusive to Live Runtime inside Sessions. |
 | Failure recovery | Activation races and cleanup failures recover under Live Runtime. |
 
