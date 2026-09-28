@@ -27,11 +27,8 @@ import (
 // proves the first admitted turn in an unbound episode starts a Factory
 // Session with the episode's canonical target and the session's exact
 // editor working root, then dispatches this turn's validated content into
-// the returned identity via the immediate follow-up InvokeFactorySession call
-// -- StartAsync carries no content of its own, since the shared
-// factorysessions.Service.StartAsync it forwards to has no dedicated content
-// field and cannot dispatch an ordinary packaged Factory at all (see
-// ondemandtarget.Service.StartAsync's own doc comment).
+// the returned identity via canonical Invoke. ActivationOnly Start does not
+// dispatch the turn's Work.
 func TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndContent(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
 		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
@@ -270,9 +267,8 @@ func TestHandleSessionPromptInvokeFactorySessionFailureMakesNoStartCall(t *testi
 // Factory Session for the episode. classifyDependencyFailure collapses every
 // non-context-cancellation dependency error to the same bounded internal
 // error at this transport boundary by design, so this intentionally does not
-// assert errors.Is on the RPC response itself -- see
-// ondemandtarget.Service's own tests for the sentinel's errors.Is-compatible
-// classification at the capability that actually produces it.
+// assert errors.Is on the RPC response itself; the canonical Factory Sessions
+// owner retains the underlying error while this transport bounds its shape.
 func TestHandleSessionPromptInvokeMissingSessionFailureAdvancesTurnToFailed(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
 		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),
