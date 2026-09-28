@@ -393,6 +393,10 @@ func factoryTerminateRequestID(requestID chatsessions.RequestIdentity) string {
 	return factoryControlRequestID("terminate", requestID)
 }
 
+func factoryCloseRequestID(requestID chatsessions.RequestIdentity) string {
+	return factoryControlRequestID("close", requestID)
+}
+
 // factoryControlRequestID avoids logging or forwarding a raw JSON-RPC id
 // while keeping retries of the same intent stable and distinct identities
 // overwhelmingly collision-resistant.

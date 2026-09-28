@@ -104,13 +104,18 @@ func (s *Server) applySessionClose(ctx context.Context, sessionID string, reques
 	}); err != nil {
 		return err
 	}
+	closeRequestID := factoryCloseRequestID(intent.RequestID)
 	if _, err := s.factorySessions.Control(ctx, factorysessions.SessionControlRequest{
 		SessionID: factorySessionID,
 		Mode:      factorysessions.SessionOperationModeLive,
 		Operation: factorysessions.SessionControlClose,
-		Control:   captured,
+		Control: factorysessions.ControlRequest{
+			RequestID: closeRequestID,
+			Reason:    captured.Reason,
+			TurnID:    intent.TurnID,
+		},
 		Correlation: factorysessions.SessionOperationCorrelation{
-			RequestID: captured.RequestID,
+			RequestID: closeRequestID,
 			TurnID:    intent.TurnID,
 		},
 	}); err != nil {

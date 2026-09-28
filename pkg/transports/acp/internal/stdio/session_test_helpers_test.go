@@ -402,6 +402,7 @@ type fakeFactoryTargetService struct {
 	closeCalls     []string
 	closeErr       error
 	terminateCalls []terminateFactoryTargetCall
+	controlCalls   []factorysessions.SessionControlRequest
 	closeEntered   chan struct{}
 	closeRelease   chan struct{}
 }
@@ -545,6 +546,7 @@ func (f *fakeFactoryTargetService) Control(
 	request factorysessions.SessionControlRequest,
 ) (factorysessions.SessionControlResult, error) {
 	f.mu.Lock()
+	f.controlCalls = append(f.controlCalls, request)
 	sessionID, operation := request.SessionID, request.Operation
 	control := request.Control
 	release, closeRelease, closeErr := f.cancelRelease, f.closeRelease, f.closeErr

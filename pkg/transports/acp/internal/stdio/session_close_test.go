@@ -76,9 +76,16 @@ func TestHandleSessionCloseCommitsBeforeFactoryClose(t *testing.T) {
 	}
 	factoryTarget.mu.Lock()
 	closeCalls := append([]string(nil), factoryTarget.closeCalls...)
+	controlCalls := append([]factorysessions.SessionControlRequest(nil), factoryTarget.controlCalls...)
 	factoryTarget.mu.Unlock()
 	if len(closeCalls) != 1 || closeCalls[0] != "fs-close-bound" {
 		t.Fatalf("CloseFactorySession calls = %#v, want only captured fs-close-bound", closeCalls)
+	}
+	if len(controlCalls) != 2 || controlCalls[0].Operation != factorysessions.SessionControlTerminate || controlCalls[1].Operation != factorysessions.SessionControlClose {
+		t.Fatalf("Factory Sessions controls = %#v, want TERMINATE then CLOSE", controlCalls)
+	}
+	if got := controlCalls[1]; got.SessionID != "fs-close-bound" || got.Control.RequestID != factoryCloseRequestID(request.RequestID) || got.Correlation.RequestID != got.Control.RequestID || got.Control.RequestID == controlCalls[0].Control.RequestID {
+		t.Fatalf("Factory Sessions close control = %#v, want same session and distinct stable close identity", got)
 	}
 
 	closed, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
