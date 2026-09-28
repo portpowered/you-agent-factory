@@ -3,8 +3,10 @@ package factorysession_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
@@ -299,5 +301,92 @@ func assertSubagentFailureReason(t *testing.T, details map[string]any, reason, s
 		}
 	} else if got := details["failureReason"]; got != reason {
 		t.Fatalf("failureReason = %#v, want %q", got, reason)
+	}
+}
+
+// The legacy subagent fake embeds Service for methods outside each test. Its
+// response-event read is unavailable unless an activity test overrides it.
+func (*subagentTargetFake) SubscribeFactoryResponseEvents(context.Context, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {
+	return nil, nil
+}
+
+type subagentActivityTarget struct {
+	*subagentTargetFake
+	events []factorysessions.FactoryResponseEvent
+	err    error
+	read   bool
+}
+
+func (target *subagentActivityTarget) SubscribeFactoryResponseEvents(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {
+	if !target.getBeforeClose || target.closed || request.SessionID != "session-1" || ctx.Err() != nil {
+		return nil, errors.New("activity read was not made before close")
+	}
+	target.read = true
+	if target.err != nil {
+		return nil, target.err
+	}
+	return &factorysessions.ResponseEventCursor{
+		DrainEvents:  func() ([]factorysessions.FactoryResponseEvent, error) { return target.events, nil },
+		DetachCursor: func() {},
+	}, nil
+}
+
+func TestSubagentTimeoutReportsOnlyBoundedProviderActivity(t *testing.T) {
+	const secret = "private provider text and metadata"
+	now := time.Now()
+	target := &subagentActivityTarget{
+		subagentTargetFake: &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusTimedOut}},
+		events: []factorysessions.FactoryResponseEvent{
+			{Kind: workers.KindTool, Phase: workers.PhaseStarted, RecordedAt: now.Add(-2 * time.Second), Provenance: workers.Provenance{Provider: secret}, ProviderSessionRef: secret, Payload: json.RawMessage(`{"text":"private provider text and metadata"}`)},
+			{Kind: workers.KindMessage, Phase: workers.PhaseDelta, RecordedAt: now.Add(-time.Second), Provenance: workers.Provenance{Provider: secret}, Payload: json.RawMessage(`{"text":"private provider text and metadata"}`)},
+			{Kind: workers.Kind(secret), Phase: workers.PhaseUpdated, RecordedAt: now, Provenance: workers.Provenance{Provider: secret}},
+		},
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "activity-request" }, mcpfactorysession.SubagentInput{Prompt: "Do work"})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" || !target.closed || !target.read {
+		t.Fatalf("timeout and cleanup = %#v, target = %#v", response, target)
+	}
+	progress := response.Error.Details["progress"].(map[string]any)
+	activity := progress["lastObservedProviderActivity"].(map[string]any)
+	if activity["kind"] != "MESSAGE" || activity["phase"] != "DELTA" || activity["providerSessionObserved"] != true {
+		t.Fatalf("last provider activity = %#v", activity)
+	}
+	age, ok := activity["ageMillis"].(int64)
+	if !ok || age < 900 || age > 3000 {
+		t.Fatalf("ageMillis = %#v", activity["ageMillis"])
+	}
+	encoded, err := json.Marshal(response.Error)
+	if err != nil || strings.Contains(string(encoded), secret) {
+		t.Fatalf("timeout leaked provider data: %s, %v", encoded, err)
+	}
+}
+
+func TestSubagentTimeoutActivityReadFailureStillCloses(t *testing.T) {
+	target := &subagentActivityTarget{
+		subagentTargetFake: &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusTimedOut}},
+		err:                errors.New("private activity read failure"),
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "activity-failure" }, mcpfactorysession.SubagentInput{Prompt: "Do work"})
+	if response.Error == nil || !target.closed || !target.read {
+		t.Fatalf("timeout and cleanup = %#v, target = %#v", response, target)
+	}
+	progress := response.Error.Details["progress"].(map[string]any)
+	if _, exists := progress["lastObservedProviderActivity"]; exists || strings.Contains(response.Error.Message, "private activity") {
+		t.Fatalf("failed activity read leaked: %#v", response.Error)
+	}
+}
+
+func TestSubagentTimeoutWithNoProviderEventsReportsObservationFalse(t *testing.T) {
+	target := &subagentActivityTarget{
+		subagentTargetFake: &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusTimedOut}},
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "activity-empty" }, mcpfactorysession.SubagentInput{Prompt: "Do work"})
+	if response.Error == nil || !target.closed {
+		t.Fatalf("timeout and cleanup = %#v, target = %#v", response, target)
+	}
+	progress := response.Error.Details["progress"].(map[string]any)
+	activity := progress["lastObservedProviderActivity"].(map[string]any)
+	if len(activity) != 1 || activity["providerSessionObserved"] != false {
+		t.Fatalf("empty provider activity = %#v", activity)
 	}
 }

@@ -385,7 +385,11 @@ func subagentProgressSnapshot(ctx context.Context, target factorysessionexecutio
 	if err != nil || snapshotCtx.Err() != nil {
 		return map[string]any{"available": false}
 	}
-	return subagentProgressDetails(projection)
+	details := subagentProgressDetails(projection)
+	if activity := subagentLastProviderActivity(snapshotCtx, target, sessionID, time.Now()); activity != nil {
+		details["lastObservedProviderActivity"] = activity
+	}
+	return details
 }
 
 func boundedSubagentCall[T any](ctx context.Context, slots chan struct{}, call func() (T, error)) (T, error) {
@@ -710,4 +714,40 @@ func subagentClassifyFailure(envelope *ToolErrorEnvelope, reason workers.WorkFai
 	case "":
 		envelope.Details["suggestedAction"] = "Check provider logs and configuration before retrying."
 	}
+}
+
+// subagentLastProviderActivity reads the retained response events already owned
+// by the live Factory Session. Only fixed vocabulary and timing leave this edge.
+func subagentLastProviderActivity(ctx context.Context, target factorysessionexecution.Service, sessionID string, now time.Time) map[string]any {
+	events, err := boundedSubagentCall(ctx, subagentSnapshotSlots, func() ([]factorysessionexecution.FactoryResponseEvent, error) {
+		cursor, err := target.SubscribeFactoryResponseEvents(ctx, factorysessionexecution.ResponseEventSubscriptionRequest{SessionID: sessionID})
+		if err != nil {
+			return nil, err
+		}
+		if cursor == nil {
+			return nil, errors.New("response event cursor unavailable")
+		}
+		defer cursor.Detach()
+		return cursor.Drain()
+	})
+	if err != nil || ctx.Err() != nil {
+		return nil
+	}
+	activity := map[string]any{"providerSessionObserved": false}
+	for _, event := range events {
+		if event.ProviderSessionRef != "" {
+			activity["providerSessionObserved"] = true
+		}
+		if event.Provenance.Provider == "" || event.Kind.Validate() != nil || event.Phase.Validate() != nil || event.RecordedAt.IsZero() {
+			continue
+		}
+		age := now.Sub(event.RecordedAt)
+		if age < 0 {
+			age = 0
+		}
+		activity["kind"] = string(event.Kind)
+		activity["phase"] = string(event.Phase)
+		activity["ageMillis"] = age.Milliseconds()
+	}
+	return activity
 }

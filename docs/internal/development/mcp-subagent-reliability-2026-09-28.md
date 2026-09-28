@@ -1709,3 +1709,14 @@ codec, stages the voice file, and sends the reference transcript in the LocalAI
 TTS protobuf parameters. This was already validated with managed WSL Qwen3
 and IndexTTS GPU runs in `localai-tts-reference-audio-audit-2026-09-28.md`;
 the new audit is useful harness success evidence, not new inference proof.
+
+A Codex MCP edit (session `69eb55bc-6ddd-4571-9019-087b0868ce81`) added
+`progress.lastObservedProviderActivity` to timeout errors by reading the live
+Factory Session's retained response events before cleanup. It reports only
+validated event kind/phase, age in milliseconds, and whether a provider
+session reference was observed; provider text, payloads, and metadata values
+are excluded. A failed read does not change timeout cleanup. The field is
+named *observed* because filtered ACP fragments can be newer than the last
+retained Factory Session event. The full MCP transport package and
+maintainability/file-count/format checks passed; an independent package rerun
+also passed.
