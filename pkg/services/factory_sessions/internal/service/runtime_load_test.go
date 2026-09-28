@@ -15,10 +15,9 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testpath"
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
-	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -26,7 +25,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -41,10 +39,6 @@ type runtimeLoadPortableFailureCase struct {
 type runtimeLoadReplayInputs struct {
 	readFile   func(string) ([]byte, error)
 	loadLegacy recordings.ReplayArtifactLoader
-}
-
-func runtimeLoadedFactorySnapshotCapturer() factorydefinitions.LoadedFactorySnapshotCapturer {
-	return factorydefinitionswire.LoadedFactorySnapshotCapturer()
 }
 
 func newRuntimeLoadReplayInputs(
@@ -421,8 +415,14 @@ func TestLoadRuntimePreservesLegacyReplayInputs(t *testing.T) {
 		nil,
 		RuntimeRoot{FactoryRootDir: t.TempDir(), BaseLogger: zap.NewNop()},
 		nil,
-		factorydefinitionswire.LoadedFactorySourceFactory(),
-		factorydefinitionswire.ReplayRuntimeConfigDecoder(),
+		factorydefinitionfixtures.NewLoadedSource,
+		func(snapshot *factorydefinitions.FactorySnapshot) (factorydefinitions.ReplayRuntimeConfig, error) {
+			var config factorydefinitions.FactoryConfig
+			if err := json.Unmarshal(*snapshot, &config); err != nil {
+				return nil, err
+			}
+			return runtimefixtures.ReplayRuntimeConfigValue(&config, t.TempDir()), nil
+		},
 		capability,
 		nil,
 		func(base *zap.Logger, _, _, _ string) *zap.Logger { return base },
@@ -732,20 +732,6 @@ func runtimeLoadPortablePayload(
 		t.Fatalf("marshal portable recording: %v", err)
 	}
 	return payload
-}
-
-func runtimeLoadFactorySnapshot(t *testing.T) *factorydefinitions.FactorySnapshot {
-	t.Helper()
-
-	config, err := factorymapping.FactoryConfigFromOpenAPIJSON([]byte(factoryfixtures.CrossPathValidAlphaFactoryJSON))
-	if err != nil {
-		t.Fatalf("decode Factory fixture: %v", err)
-	}
-	snapshot, err := factorydefinitionswire.FactorySnapshotCapturer()(t.TempDir(), config, nil, "", nil)
-	if err != nil {
-		t.Fatalf("capture Factory snapshot: %v", err)
-	}
-	return snapshot
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption

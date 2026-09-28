@@ -38,12 +38,14 @@ func TestResolveStartFolderUsesRequestProjectForPackagedFactory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if definitions.calls != 1 || definitions.request.ProjectRoot != factorydefinitions.ProjectFactoriesRoot(project) ||
-		definitions.request.GlobalRoot != factorydefinitions.NamedFactoriesRoot(home) ||
+	projectFactories := filepath.Join(project, "factory")
+	globalFactories := filepath.Join(home, ".you-agent-factory", "factories")
+	if definitions.calls != 1 || definitions.request.ProjectRoot != projectFactories ||
+		definitions.request.GlobalRoot != globalFactories ||
 		definitions.request.Name != "@you/subagent" {
 		t.Fatalf("named Factory resolution = %+v, calls = %d", definitions.request, definitions.calls)
 	}
-	if want := filepath.Join(factorydefinitions.ProjectFactoriesRoot(project), "@you/subagent"); got != want {
+	if want := filepath.Join(projectFactories, "@you/subagent"); got != want {
 		t.Fatalf("Factory directory = %q, want %q", got, want)
 	}
 }

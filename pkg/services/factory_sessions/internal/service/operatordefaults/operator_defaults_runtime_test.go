@@ -11,7 +11,6 @@ import (
 	operatordefaultsruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service/operatordefaults"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 func TestApplyOperatorDefaultsToLoadedConfig_FillsOmittedModelWorkerFields(t *testing.T) {
@@ -71,7 +70,7 @@ func TestApplyOperatorDefaultsToLoadedConfig_PreservesAuthoredModelWorkerFields(
 		"workers": []map[string]any{{
 			"name":          "executor",
 			"type":          "MODEL_WORKER",
-			"modelProvider": "CLAUDE",
+			"modelProvider": string(modelprovider.ProviderClaude),
 			"model":         "claude-sonnet-4-20250514",
 			"body":          "You are the executor.",
 		}},
@@ -357,11 +356,11 @@ func newOperatorDefaultsRuntimeFixture(t *testing.T, factory map[string]any) int
 	if err != nil {
 		t.Fatalf("Marshal(factory): %v", err)
 	}
-	config, err := factorymapping.NewFactoryConfigMapper().Expand(payload)
-	if err != nil {
-		t.Fatalf("Expand(factory): %v", err)
+	var config interfaces.FactoryConfig
+	if err := json.Unmarshal(payload, &config); err != nil {
+		t.Fatalf("Unmarshal(factory): %v", err)
 	}
-	loaded, err := factorydefinitionfixtures.NewLoadedSource(factoryDir, config, nil, nil)
+	loaded, err := factorydefinitionfixtures.NewLoadedSource(factoryDir, &config, nil, nil)
 	if err != nil {
 		t.Fatalf("NewLoadedSource: %v", err)
 	}
