@@ -147,6 +147,17 @@ func TestAssemblyReadsFullProjectionFromCanonicalSessionRegistry(t *testing.T) {
 		}, record.isDefault)
 	}
 
+	assertCanonicalFullProjection(t, assembly)
+	assertCanonicalGetProjection(t, assembly)
+	assertCanonicalListProjection(t, assembly)
+
+	if _, err := assembly.GetFactorySession(context.Background(), "missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("missing session error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+func assertCanonicalFullProjection(t *testing.T, assembly *Assembly) {
+	t.Helper()
 	projection, err := assembly.GetFactorySession(context.Background(), "session-second")
 	if err != nil {
 		t.Fatalf("GetFactorySession: %v", err)
@@ -154,7 +165,10 @@ func TestAssemblyReadsFullProjectionFromCanonicalSessionRegistry(t *testing.T) {
 	if projection.Context.BackendScopeID != "backend-session-second" || projection.Runtime.LifecycleControlStatus == nil || *projection.Runtime.LifecycleControlStatus != "paused" {
 		t.Fatalf("full projection was lost: %#v", projection)
 	}
+}
 
+func assertCanonicalGetProjection(t *testing.T, assembly *Assembly) {
+	t.Helper()
 	got, err := assembly.Get(context.Background(), factorysessions.SessionGetRequest{Mode: factorysessions.SessionOperationModeLive, SessionID: "session-second"})
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -162,7 +176,10 @@ func TestAssemblyReadsFullProjectionFromCanonicalSessionRegistry(t *testing.T) {
 	if got.Session.SessionID != "session-second" || got.Session.FactoryDir != "/factory/session-second" || !got.Session.RuntimeAvailable {
 		t.Fatalf("canonical get lost live session data: %#v", got.Session)
 	}
+}
 
+func assertCanonicalListProjection(t *testing.T, assembly *Assembly) {
+	t.Helper()
 	listed, err := assembly.ListFactorySessions(context.Background())
 	if err != nil {
 		t.Fatalf("ListFactorySessions: %v", err)
@@ -172,9 +189,5 @@ func TestAssemblyReadsFullProjectionFromCanonicalSessionRegistry(t *testing.T) {
 	}
 	if !listed[0].RuntimeAvailable || !listed[1].RuntimeAvailable || listed[0].Context.BackendScopeID == listed[1].Context.BackendScopeID {
 		t.Fatalf("list lost separate runtime projections: %#v", listed)
-	}
-
-	if _, err := assembly.GetFactorySession(context.Background(), "missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
-		t.Fatalf("missing session error = %v, want ErrSessionNotFound", err)
 	}
 }

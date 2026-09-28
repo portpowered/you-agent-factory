@@ -148,31 +148,45 @@ func (a *Assembly) ListSessions(ctx context.Context, request factorysessions.Lis
 		return factorysessions.ListSessionsResult{}, factorysessions.ErrRuntimeNotAvailable
 	}
 	if scope == factorysessions.SessionListScopeLive || scope == factorysessions.SessionListScopeAll {
-		for _, id := range a.ListLiveSessionIDs() {
-			session := a.Resolve(id)
-			if session == nil {
-				continue
-			}
-			result.LiveSessions = append(result.LiveSessions, factorysessions.LiveSessionSummary{
-				ID: livesession.CanonicalID(session), FactoryDir: session.FactoryDir,
-				FolderPath: session.FolderPath, Project: session.Project, IsDefault: session.IsDefault,
-			})
-		}
+		result.LiveSessions = a.listLiveSessions()
 	}
 	if scope == factorysessions.SessionListScopePersisted || scope == factorysessions.SessionListScopeAll {
-		if a.Service == nil {
-			return factorysessions.ListSessionsResult{}, factorysessions.ErrExecutionServiceNotConfigured
-		}
-		durable, err := a.Service.ListSessions(ctx, factorysessions.ListSessionsRequest{
-			Scope: factorysessions.SessionListScopePersisted, Filters: request.Filters,
-			ExcludeRecordedHistory: true,
-		})
-		if err != nil && !(scope == factorysessions.SessionListScopeAll && errors.Is(err, factorysessions.ErrExecutionServiceNotConfigured)) {
+		durable, err := a.listPersistedSessions(ctx, request)
+		if err != nil {
 			return factorysessions.ListSessionsResult{}, err
 		}
-		result.DurableSessions = durable.DurableSessions
+		result.DurableSessions = durable
 	}
 	return result, nil
+}
+
+func (a *Assembly) listLiveSessions() []factorysessions.LiveSessionSummary {
+	var sessions []factorysessions.LiveSessionSummary
+	for _, id := range a.ListLiveSessionIDs() {
+		session := a.Resolve(id)
+		if session == nil {
+			continue
+		}
+		sessions = append(sessions, factorysessions.LiveSessionSummary{
+			ID: livesession.CanonicalID(session), FactoryDir: session.FactoryDir,
+			FolderPath: session.FolderPath, Project: session.Project, IsDefault: session.IsDefault,
+		})
+	}
+	return sessions
+}
+
+func (a *Assembly) listPersistedSessions(ctx context.Context, request factorysessions.ListSessionsRequest) ([]factorysessions.DurableSessionListSummary, error) {
+	if a.Service == nil {
+		return nil, factorysessions.ErrExecutionServiceNotConfigured
+	}
+	durable, err := a.Service.ListSessions(ctx, factorysessions.ListSessionsRequest{
+		Scope: factorysessions.SessionListScopePersisted, Filters: request.Filters,
+		ExcludeRecordedHistory: true,
+	})
+	if err != nil && !(request.Scope == factorysessions.SessionListScopeAll && errors.Is(err, factorysessions.ErrExecutionServiceNotConfigured)) {
+		return nil, err
+	}
+	return durable.DurableSessions, nil
 }
 
 func shouldIncludeRecordedHistory(scope factorysessions.SessionListScope, excluded bool) bool {

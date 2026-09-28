@@ -47,9 +47,15 @@ func (fake *inspectionDurableFake) GetArtifact(_ context.Context, sessionID, art
 }
 
 func TestSessionInspectionCommandsReadOneDurableSession(t *testing.T) {
-	ctx := context.Background()
 	fake := &inspectionDurableFake{eventPayload: json.RawMessage(`{"id":"one"}`)}
 	service := &Service{durable: fake}
+	assertInspectionEvents(t, service, fake)
+	assertInspectionDispatchArtifacts(t, service, fake)
+}
+
+func assertInspectionEvents(t *testing.T, service *Service, fake *inspectionDurableFake) {
+	t.Helper()
+	ctx := context.Background()
 	sequence := 3
 	events, err := service.QueryEvents(ctx, factorysessions.SessionEventQueryRequest{
 		SessionID: " session-1 ", Reconnect: factorysessions.EventReconnectRequest{AfterEventID: " event-2 ", AfterSequence: &sequence},
@@ -64,6 +70,11 @@ func TestSessionInspectionCommandsReadOneDurableSession(t *testing.T) {
 	if err := service.ProbeEvents(ctx, factorysessions.SessionEventQueryRequest{SessionID: "session-1"}); err != nil || fake.eventCalls != 2 {
 		t.Fatalf("ProbeEvents error = %v, calls = %d", err, fake.eventCalls)
 	}
+}
+
+func assertInspectionDispatchArtifacts(t *testing.T, service *Service, fake *inspectionDurableFake) {
+	t.Helper()
+	ctx := context.Background()
 	dispatch, err := service.InspectDispatch(ctx, factorysessions.SessionDispatchInspectRequest{SessionID: " session-1 ", DispatchID: " dispatch-1 "})
 	if err != nil || dispatch.ID != "dispatch-1" || fake.dispatchID != "dispatch-1" {
 		t.Fatalf("InspectDispatch = (%#v, %v), forwarded ID = %q", dispatch, err, fake.dispatchID)
