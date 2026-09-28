@@ -151,3 +151,20 @@ A provider-only `you.subagent` call (provider `opencode`, model omitted)
 completed a read-only README probe in session
 `ceaac4f3-f52f-4e8c-ac5f-92ddb76d203e` and returned `you-agent-factory`.
 This validates the provider-only customer path on this host.
+
+A provider-only `you.subagent` call (provider `pi`, model omitted) reached the
+installed `pi-acp` child but timed out after 90 seconds in session
+`824dea61-0ce4-4e45-8257-f41cb073e2a6`, with no workspace edits. Host Pi
+settings select local llama-cpp model `qwen-3.8-uncensored` at
+`http://localhost:8080/v1`; there was no listener on port 8080 and a direct
+endpoint request timed out. The endpoint is a plausible cause, not proven from
+the MCP result.
+An independent `pi --no-session --no-tools -p 'Reply READY'` run with the same
+Pi settings exited after about 18 seconds with `Connection error.` This
+supports an unreachable configured model endpoint as the cause on this host;
+the MCP timeout still lacks that actionable classification.
+
+A concurrent provider-only `codex` read-only README probe completed in
+session `10152e10-a987-4d66-90e3-4b2b82703bbb`, returning
+`you-agent-factory`. This confirms the plain `codex` provider path on this host
+while the Pi probe was running.
