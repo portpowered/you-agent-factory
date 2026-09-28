@@ -34,6 +34,8 @@ func TestPinnedTTSProtocolUsesConfirmedWireFields(t *testing.T) {
 	}
 }
 
+func ttsTestWriteFile(string, []byte) error { return nil }
+
 func TestPinnedTTSBackendMapsPrivateRequestAndCleansOutput(t *testing.T) {
 	t.Parallel()
 
@@ -41,14 +43,23 @@ func TestPinnedTTSBackendMapsPrivateRequestAndCleansOutput(t *testing.T) {
 	connection.response, _ = proto.Marshal(&Result{Success: true, Message: "private backend detail"})
 	dialer := &ttsProtocolDialer{connection: connection}
 	temporary := &ttsProtocolTempFile{path: `C:\private\.you-model-tts-123.wav`}
+	voiceTemporary := &ttsProtocolTempFile{path: `C:\private\.you-model-tts-voice-123.wav`}
 	audio := ttsProtocolWAV()
-	var createdDirectory, createdPattern, inspectedPath, readPath, removedPath string
+	var createdDirectory, createdPattern, inspectedPath, readPath, removedPath, voiceWritePath, voiceWriteContent string
+	removed := []string{}
 	backend := NewPinnedTTSBackend(
 		dialer,
 		func() string { return `C:\private` },
 		func(directory, pattern string) (TempFile, error) {
+			if pattern == ttsVoiceFilePattern {
+				return voiceTemporary, nil
+			}
 			createdDirectory, createdPattern = directory, pattern
 			return temporary, nil
+		},
+		func(path string, content []byte) error {
+			voiceWritePath, voiceWriteContent = path, string(content)
+			return nil
 		},
 		func(path string) (os.FileInfo, error) {
 			inspectedPath = path
@@ -60,6 +71,7 @@ func TestPinnedTTSBackendMapsPrivateRequestAndCleansOutput(t *testing.T) {
 		},
 		func(path string) error {
 			removedPath = path
+			removed = append(removed, path)
 			return nil
 		},
 	)
@@ -77,7 +89,10 @@ func TestPinnedTTSBackendMapsPrivateRequestAndCleansOutput(t *testing.T) {
 	assertTTSProtocolResponse(t, err, response, audio)
 	assertTTSProtocolOutputLifecycle(t, temporary, createdDirectory, createdPattern, inspectedPath, readPath, removedPath)
 	assertTTSProtocolTransport(t, connection, dialer)
-	assertTTSProtocolRequest(t, &connection.request, temporary.path)
+	assertTTSProtocolRequest(t, &connection.request, temporary.path, voiceTemporary.path)
+	if voiceWritePath != voiceTemporary.path || voiceWriteContent != "voice-bytes" || voiceTemporary.closeCalls != 1 || len(removed) != 2 || removed[0] != voiceTemporary.path || removed[1] != temporary.path {
+		t.Fatalf("voice staging = path:%q content:%q close:%d removed:%v", voiceWritePath, voiceWriteContent, voiceTemporary.closeCalls, removed)
+	}
 }
 
 func assertTTSProtocolResponse(t *testing.T, err error, response codecs.TTSResponse, audio []byte) {
@@ -111,10 +126,75 @@ func assertTTSProtocolTransport(t *testing.T, connection *ttsProtocolConnection,
 	}
 }
 
-func assertTTSProtocolRequest(t *testing.T, request *TTSRequest, destination string) {
+func assertTTSProtocolRequest(t *testing.T, request *TTSRequest, destination, voicePath string) {
 	t.Helper()
-	if request.GetText() != "hello" || request.GetModel() != "tts" || request.GetVoice() != "voice-bytes" || request.GetDst() != destination || request.GetLanguage() != "en" || request.GetInstructions() != "speak clearly" || len(request.GetParams()) != 0 {
+	if request.GetText() != "hello" || request.GetModel() != "tts" || request.GetVoice() != voicePath || request.GetDst() != destination || request.GetLanguage() != "en" || request.GetInstructions() != "speak clearly" || len(request.GetParams()) != 0 {
 		t.Fatalf("private TTS request = %s, want exact text/model/voice/destination/confirmed fields", request.String())
+	}
+}
+
+func TestPinnedTTSBackendMapsRefTextToProtobufParams(t *testing.T) {
+	t.Parallel()
+
+	connection := &ttsProtocolConnection{}
+	connection.response, _ = proto.Marshal(&Result{Success: true})
+	dialer := &ttsProtocolDialer{connection: connection}
+	temporary := &ttsProtocolTempFile{path: `C:\private\.you-model-tts-ref.wav`}
+	audio := ttsProtocolWAV()
+	backend := NewPinnedTTSBackend(
+		dialer,
+		func() string { return `C:\private` },
+		func(string, string) (TempFile, error) { return temporary, nil },
+		ttsTestWriteFile,
+		func(string) (os.FileInfo, error) { return ttsProtocolFileInfo{size: int64(len(audio))}, nil },
+		func(string) ([]byte, error) { return append([]byte(nil), audio...), nil },
+		func(string) error { return nil },
+	)
+	_, err := backend(
+		WithInvocationEndpoint(context.Background(), "127.0.0.1:45912"),
+		codecs.TTSRequest{
+			Text:       "hello",
+			Model:      "tts",
+			Parameters: map[string]any{"ref_text": "reference transcript"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("backend error = %v", err)
+	}
+	params := connection.request.GetParams()
+	if len(params) != 1 || params["ref_text"] != "reference transcript" {
+		t.Fatalf("protobuf params = %v, want exactly ref_text=%q", params, "reference transcript")
+	}
+}
+
+func TestPinnedTTSBackendCleansStagedVoiceWhenWriteFails(t *testing.T) {
+	t.Parallel()
+
+	output := &ttsProtocolTempFile{path: "temp/output.wav"}
+	voice := &ttsProtocolTempFile{path: "temp/voice.wav"}
+	removed := []string{}
+	connection := &ttsProtocolConnection{}
+	backend := NewPinnedTTSBackend(
+		&ttsProtocolDialer{connection: connection},
+		func() string { return "temp" },
+		func(_ string, pattern string) (TempFile, error) {
+			if pattern == ttsVoiceFilePattern {
+				return voice, nil
+			}
+			return output, nil
+		},
+		func(string, []byte) error { return errors.New("private voice write failure") },
+		func(string) (os.FileInfo, error) { t.Fatal("output should not be inspected"); return nil, nil },
+		func(string) ([]byte, error) { t.Fatal("output should not be read"); return nil, nil },
+		func(path string) error { removed = append(removed, path); return nil },
+	)
+	response, err := backend(WithInvocationEndpoint(context.Background(), "127.0.0.1:45913"), codecs.TTSRequest{Text: "hello", Voice: "reference bytes"})
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassBackendProtocol || response.Audio != nil || strings.Contains(err.Error(), "private voice") {
+		t.Fatalf("voice staging failure = response:%#v error:%v", response, err)
+	}
+	if output.closeCalls != 1 || voice.closeCalls != 1 || len(removed) != 2 || removed[0] != voice.path || removed[1] != output.path || connection.invokes != 0 {
+		t.Fatalf("voice failure cleanup = outputClose:%d voiceClose:%d removed:%v invokes:%d", output.closeCalls, voice.closeCalls, removed, connection.invokes)
 	}
 }
 
@@ -135,6 +215,7 @@ func TestPinnedTTSBackendFailureIsAtomicAndRecovers(t *testing.T) {
 			files = append(files, file)
 			return file, nil
 		},
+		ttsTestWriteFile,
 		func(string) (os.FileInfo, error) { return ttsProtocolFileInfo{size: int64(len(audio))}, nil },
 		func(string) ([]byte, error) {
 			readCalls++
@@ -197,6 +278,7 @@ func TestPinnedTTSBackendRejectsMalformedResultAndAudioBounds(t *testing.T) {
 				&ttsProtocolDialer{connection: connection},
 				func() string { return `C:\private` },
 				func(string, string) (TempFile, error) { return temporary, nil },
+				ttsTestWriteFile,
 				func(string) (os.FileInfo, error) {
 					inspectCalls++
 					return ttsProtocolFileInfo{size: test.fileSize}, nil
@@ -237,6 +319,7 @@ func TestPinnedTTSBackendPreservesCancellationAndReadinessClassification(t *test
 				calls++
 				return &ttsProtocolTempFile{path: "temp/out.wav"}, nil
 			},
+			ttsTestWriteFile,
 			func(string) (os.FileInfo, error) { return ttsProtocolFileInfo{size: 1}, nil },
 			func(string) ([]byte, error) { return nil, nil },
 			func(string) error { return nil },
@@ -253,6 +336,7 @@ func TestPinnedTTSBackendPreservesCancellationAndReadinessClassification(t *test
 			ttsUnavailableDialer{},
 			func() string { return "temp" },
 			func(string, string) (TempFile, error) { return &ttsProtocolTempFile{path: "temp/unavailable.wav"}, nil },
+			ttsTestWriteFile,
 			func(string) (os.FileInfo, error) { return ttsProtocolFileInfo{size: 1}, nil },
 			func(string) ([]byte, error) { return nil, nil },
 			func(string) error { return nil },
@@ -272,6 +356,7 @@ func TestPinnedTTSBackendPreservesCancellationAndReadinessClassification(t *test
 			func(string, string) (TempFile, error) {
 				return &ttsProtocolTempFile{path: "temp/incompatible.wav"}, nil
 			},
+			ttsTestWriteFile,
 			func(string) (os.FileInfo, error) { return ttsProtocolFileInfo{size: 1}, nil },
 			func(string) ([]byte, error) { return nil, nil },
 			func(string) error { return nil },
@@ -291,6 +376,7 @@ func TestPinnedTTSBackendPreservesCancellationAndReadinessClassification(t *test
 			&ttsProtocolDialer{connection: connection},
 			func() string { return "temp" },
 			func(string, string) (TempFile, error) { return temporary, nil },
+			ttsTestWriteFile,
 			func(string) (os.FileInfo, error) { return ttsProtocolFileInfo{size: 1}, nil },
 			func(string) ([]byte, error) { return nil, nil },
 			func(string) error { return nil },

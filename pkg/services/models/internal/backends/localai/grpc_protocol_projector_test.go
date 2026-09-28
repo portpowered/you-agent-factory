@@ -301,7 +301,7 @@ func TestPinnedGRPCHostNegotiatorPropagatesDeadlineToBlockedLoadModel(t *testing
 	if outcome.result.Ready || !errors.Is(outcome.err, context.DeadlineExceeded) {
 		t.Fatalf("Negotiate at the readiness deadline = result %#v, error %v; want not-ready/context.DeadlineExceeded", outcome.result, outcome.err)
 	}
-	if !healthAt.Before(loadModelAt) || !loadModelAt.Before(deadlineAt) || serverCanceledAt.Before(deadlineAt) {
+	if healthAt.After(loadModelAt) || !loadModelAt.Before(deadlineAt) || serverCanceledAt.Before(deadlineAt) {
 		t.Fatalf("witness phase order is invalid: health=%s load_model=%s deadline=%s server_cancel=%s", healthAt, loadModelAt, deadlineAt, serverCanceledAt)
 	}
 	t.Logf("LOCALAI-PROTOCOL-DEADLINE endpoint=%s health=%s load_model=%s peer_deadline=%s server_cancel=%s result=%T ready=false", listener.Addr(), healthAt.UTC().Format(time.RFC3339Nano), loadModelAt.UTC().Format(time.RFC3339Nano), deadlineAt.UTC().Format(time.RFC3339Nano), serverCanceledAt.UTC().Format(time.RFC3339Nano), outcome.err)

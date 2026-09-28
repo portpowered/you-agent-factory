@@ -125,6 +125,7 @@ func configureTTSRuntime(runtime *operationInvocationRuntime, options invocation
 		options.Dialer,
 		options.TTSTempDirectory,
 		options.TTSCreateTemp,
+		options.TTSWriteFile,
 		options.TTSInspectFile,
 		options.TTSReadFile,
 		options.TTSRemoveFile,

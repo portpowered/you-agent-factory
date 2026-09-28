@@ -19,7 +19,7 @@ func TestTTSCodecEncodesTextModelAndConfirmedParameters(t *testing.T) {
 		Operation: models.OperationTTS,
 		Inputs: []models.InferenceInput{
 			{Name: "text", Modality: models.ModalityText, ContentType: "text/plain", Content: "hello"},
-			{Name: "voice", Modality: models.ModalityAudio, ContentType: "audio/wav", Content: "voice-bytes"},
+			{Name: "voice", Modality: models.ModalityAudio, ContentType: "audio/wav", Content: string(testWAV())},
 			{Name: "parameters", Modality: models.ModalityJSON, ContentType: "application/json", Content: `{"language":"en"}`},
 		},
 		Parameters: []models.OperationParameter{{Name: "instructions", Value: "speak clearly"}},
@@ -27,13 +27,32 @@ func TestTTSCodecEncodesTextModelAndConfirmedParameters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncodeRequest() error = %v", err)
 	}
-	if request.Text != "hello" || request.Voice != "voice-bytes" || request.Model != "tts" || request.Parameters["language"] != "en" || request.Parameters["instructions"] != "speak clearly" {
+	if request.Text != "hello" || request.Voice != string(testWAV()) || request.Model != "tts" || request.Parameters["language"] != "en" || request.Parameters["instructions"] != "speak clearly" {
 		t.Fatalf("encoded TTS request = %#v, want detached text/model/parameters", request)
 	}
 
 	request.Parameters["language"] = "mutated"
 	if request.Parameters["language"] != "mutated" {
 		t.Fatal("encoded request should be mutable by its owner")
+	}
+}
+
+func TestTTSCodecAcceptsRefTextParameter(t *testing.T) {
+	t.Parallel()
+
+	codec := NewTTSCodec()
+	request, err := codec.EncodeRequest(models.InvokeModelRequest{
+		Operation: models.OperationTTS,
+		Inputs: []models.InferenceInput{
+			{Name: "text", Modality: models.ModalityText, ContentType: "text/plain", Content: "hello"},
+		},
+		Parameters: []models.OperationParameter{{Name: "ref_text", Value: "reference transcript"}},
+	})
+	if err != nil {
+		t.Fatalf("EncodeRequest() error = %v", err)
+	}
+	if request.Parameters["ref_text"] != "reference transcript" {
+		t.Fatalf("encoded TTS request parameters = %#v, want ref_text", request.Parameters)
 	}
 }
 
@@ -54,6 +73,8 @@ func TestTTSCodecRejectsInvalidInputsWithoutProviderValues(t *testing.T) {
 		{name: "unsupported parameter", inputs: []models.InferenceInput{validText}, params: []models.OperationParameter{{Name: "temperature", Value: 0.2}}, want: models.InvocationFailureClassInvalidParameter},
 		{name: "voice requires audio content", inputs: []models.InferenceInput{validText, {Name: "voice", Modality: models.ModalityAudio, ContentType: "audio/wav"}}, want: models.InvocationFailureClassMediaCapability},
 		{name: "voice rejects text media", inputs: []models.InferenceInput{validText, {Name: "voice", Modality: models.ModalityText, Content: "not-audio"}}, want: models.InvocationFailureClassMediaCapability},
+		{name: "voice rejects malformed wav", inputs: []models.InferenceInput{validText, {Name: "voice", Modality: models.ModalityAudio, ContentType: "audio/wav", Content: "not-a-wav"}}, want: models.InvocationFailureClassMediaCapability},
+		{name: "voice rejects non-wav media", inputs: []models.InferenceInput{validText, {Name: "voice", Modality: models.ModalityAudio, ContentType: "audio/mpeg", Content: string(testWAV())}}, want: models.InvocationFailureClassMediaCapability},
 		{name: "repeated parameter", inputs: []models.InferenceInput{validText, {Name: "parameters", Modality: models.ModalityJSON, Content: `{"language":"en"}`}}, params: []models.OperationParameter{{Name: "language", Value: "fr"}}, want: models.InvocationFailureClassInvalidParameter},
 	}
 	for _, test := range cases {

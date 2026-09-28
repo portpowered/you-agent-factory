@@ -31,6 +31,7 @@ func TestInferenceRuntimeRoutesPrivateTTSBeforeGenericBackend(t *testing.T) {
 		TTSCreateTemp: func(directory, pattern string) (localai.TempFile, error) {
 			return os.CreateTemp(directory, pattern)
 		},
+		TTSWriteFile:   func(path string, content []byte) error { return os.WriteFile(path, content, 0o600) },
 		TTSInspectFile: os.Stat,
 		TTSReadFile:    os.ReadFile,
 		TTSRemoveFile:  os.Remove,
@@ -46,7 +47,10 @@ func TestInferenceRuntimeRoutesPrivateTTSBeforeGenericBackend(t *testing.T) {
 		Request: models.InvokeModelRequest{
 			Model:     models.ModelReference{NameOrURI: "vibevoice"},
 			Operation: models.OperationTTS,
-			Inputs:    []models.InferenceInput{{Name: "text", Modality: models.ModalityText, Content: "hello"}},
+			Inputs: []models.InferenceInput{
+				{Name: "text", Modality: models.ModalityText, Content: "hello"},
+				{Name: "voice", Modality: models.ModalityAudio, ContentType: "audio/wav", Content: string(ttsRouteWAV())},
+			},
 		},
 		Operation: operation,
 		HostSlot:  inference.HostHandleSlot{Endpoint: "grpc://tts-fixture"},
@@ -57,6 +61,7 @@ func TestInferenceRuntimeRoutesPrivateTTSBeforeGenericBackend(t *testing.T) {
 	assertPrivateTTSRouteResult(t, genericCalls, result)
 	assertPrivateTTSRouteTransport(t, transport)
 	assertPrivateTTSRouteOutputRemoved(t, transport.request.GetDst())
+	assertPrivateTTSRouteOutputRemoved(t, transport.request.GetVoice())
 }
 
 func assertPrivateTTSRouteResult(t *testing.T, genericCalls int, result inference.InvocationRuntimeResult) {
@@ -73,6 +78,12 @@ func assertPrivateTTSRouteTransport(t *testing.T, transport *ttsRouteTransport) 
 	}
 	if transport.request.GetDst() == "" || transport.request.GetDst() == "grpc://tts-fixture" {
 		t.Fatalf("TTS destination = %q, want private staged path", transport.request.GetDst())
+	}
+	if transport.request.GetVoice() == "" || transport.request.GetVoice() == transport.request.GetDst() {
+		t.Fatalf("TTS voice = %q, want distinct private staged reference path", transport.request.GetVoice())
+	}
+	if string(transport.voiceAudio) != string(ttsRouteWAV()) {
+		t.Fatalf("TTS staged voice = %d bytes, want reference WAV", len(transport.voiceAudio))
 	}
 }
 
@@ -122,6 +133,7 @@ func TestInferenceRuntimePrivateTTSReleasesAndRecoversExactlyOnce(t *testing.T) 
 		TTSCreateTemp: func(directory, pattern string) (localai.TempFile, error) {
 			return os.CreateTemp(directory, pattern)
 		},
+		TTSWriteFile:   func(path string, content []byte) error { return os.WriteFile(path, content, 0o600) },
 		TTSInspectFile: os.Stat,
 		TTSReadFile:    os.ReadFile,
 		TTSRemoveFile: func(path string) error {
@@ -157,13 +169,14 @@ func TestInferenceRuntimePrivateTTSReleasesAndRecoversExactlyOnce(t *testing.T) 
 }
 
 type ttsRouteTransport struct {
-	mu        sync.Mutex
-	audio     []byte
-	failFirst bool
-	invokes   int
-	closes    int
-	method    string
-	request   localai.TTSRequest
+	mu         sync.Mutex
+	audio      []byte
+	failFirst  bool
+	invokes    int
+	closes     int
+	method     string
+	request    localai.TTSRequest
+	voiceAudio []byte
 }
 
 func (transport *ttsRouteTransport) Dial(context.Context, string) (platformgrpc.Connection, error) {
@@ -177,6 +190,13 @@ func (transport *ttsRouteTransport) Invoke(_ context.Context, method string, pay
 	transport.method = method
 	if err := proto.Unmarshal(payload, &transport.request); err != nil {
 		return nil, err
+	}
+	if transport.request.GetVoice() != "" {
+		voiceAudio, err := os.ReadFile(transport.request.GetVoice())
+		if err != nil {
+			return nil, err
+		}
+		transport.voiceAudio = voiceAudio
 	}
 	if transport.failFirst && transport.invokes == 1 {
 		return nil, models.ErrUnavailable

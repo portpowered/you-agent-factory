@@ -107,6 +107,7 @@ type invocationRuntimeOptions struct {
 	ASRRemoveFile    localai.InputFileRemover
 	TTSTempDirectory func() string
 	TTSCreateTemp    localai.TempFileFactory
+	TTSWriteFile     localai.InputFileWriter
 	TTSInspectFile   localai.TTSOutputInspector
 	TTSReadFile      localai.TTSOutputReader
 	TTSRemoveFile    localai.InputFileRemover
@@ -423,7 +424,7 @@ func composeModelsService(
 		runtimeOptions, runtimeTempDir, runtimeTempFile, assetWriteFile, assetRemove,
 	)
 	runtimeOptions = bindTTSStaging(
-		runtimeOptions, runtimeTempDir, runtimeTempFile, runtimeInspect, assetReadFile, assetRemove,
+		runtimeOptions, runtimeTempDir, runtimeTempFile, assetWriteFile, runtimeInspect, assetReadFile, assetRemove,
 	)
 	launcher, clock, createTempFile := adaptConstructionPorts(
 		processLauncher, hostClock, runtimeTempFile,

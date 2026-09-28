@@ -10,6 +10,7 @@ func bindTTSStaging(
 	options invocationRuntimeOptions,
 	tempDirectory RuntimeTempDirectory,
 	tempFile RuntimeCreateTempFile,
+	writeFile AssetWriteFile,
 	inspectFile RuntimeInspectFile,
 	readFile AssetReadFile,
 	removeFile AssetRemovePath,
@@ -19,6 +20,11 @@ func bindTTSStaging(
 	}
 	if options.TTSCreateTemp == nil {
 		options.TTSCreateTemp = adaptTTSTempFile(tempFile)
+	}
+	if options.TTSWriteFile == nil && writeFile != nil {
+		options.TTSWriteFile = func(path string, content []byte) error {
+			return writeFile(path, content, 0o600)
+		}
 	}
 	if options.TTSInspectFile == nil && inspectFile != nil {
 		options.TTSInspectFile = func(path string) (os.FileInfo, error) {
