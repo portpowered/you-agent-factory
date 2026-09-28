@@ -12,26 +12,40 @@ import (
 
 func TestGalleryBackendArtifactResolverSelectsCUDAWithoutCPUFallback(t *testing.T) {
 	t.Parallel()
-	var installed string
-	resolver, err := NewGalleryBackendArtifactResolver(func(_ context.Context, name string, offline bool) (string, error) {
-		installed = name
-		if offline {
-			t.Fatal("online request marked offline")
-		}
-		return "/cache/backends/" + name, nil
-	})
-	if err != nil {
-		t.Fatalf("construct gallery resolver: %v", err)
+	tests := []struct {
+		backend        string
+		expectedCUDA   string
+		expectedPath   string
+	}{
+		{"localai-llamacpp", "cuda12-llama-cpp", "/cache/backends/cuda12-llama-cpp"},
+		{"localai-whisper", "cuda12-whisper", "/cache/backends/cuda12-whisper"},
+		{"localai-vibevoice", "cuda12-vibevoice", "/cache/backends/cuda12-vibevoice"},
 	}
-	selection, err := resolver(context.Background(), modelseffects.ResolvedHostConfiguration{
-		Backend: "localai-llamacpp", ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-		Platform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64", Accelerator: "cuda"},
-	}, false)
-	if err != nil {
-		t.Fatalf("resolve CUDA backend: %v", err)
-	}
-	if installed != "cuda12-llama-cpp" || selection.InstalledPath != "/cache/backends/cuda12-llama-cpp" {
-		t.Fatalf("installed = %q, selection = %#v", installed, selection)
+	for _, tt := range tests {
+		t.Run(tt.backend, func(t *testing.T) {
+			t.Parallel()
+			var installed string
+			resolver, err := NewGalleryBackendArtifactResolver(func(_ context.Context, name string, offline bool) (string, error) {
+				installed = name
+				if offline {
+					t.Fatal("online request marked offline")
+				}
+				return "/cache/backends/" + name, nil
+			})
+			if err != nil {
+				t.Fatalf("construct gallery resolver: %v", err)
+			}
+			selection, err := resolver(context.Background(), modelseffects.ResolvedHostConfiguration{
+				Backend: tt.backend, ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+				Platform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64", Accelerator: "cuda"},
+			}, false)
+			if err != nil {
+				t.Fatalf("resolve CUDA backend %s: %v", tt.backend, err)
+			}
+			if installed != tt.expectedCUDA || selection.InstalledPath != tt.expectedPath {
+				t.Fatalf("installed = %q, selection = %#v, want installed = %q, path = %q", installed, selection, tt.expectedCUDA, tt.expectedPath)
+			}
+		})
 	}
 }
 

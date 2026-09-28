@@ -429,3 +429,51 @@ or filesystem defect. A preceding Codex MCP task in Factory Session
 diagnostic test. Its follow-on production launcher task in Factory Session
 `c098f4a1-7dba-413e-ab61-185dd2bf3bb6` timed out after leaving partial
 edits, which were reviewed and completed before validation.
+
+Read-only inspection of OpenCode's local `session_v2` and `session_message`
+records for those two timed-out calls found completed read/glob/shell tools
+throughout their 240-second windows. The resolver task's last completed tool
+turn was at 10:32:52 UTC after starting at 10:29:06; the protobuf task's last
+completed turn was at 10:33:58 after starting at 10:33:06. Both ended with an
+unfinished assistant message and no final stop. This rules out an initial
+workspace-access or permission prompt for these two calls. It does not prove
+whether the long gaps between turns came from model latency, tool scheduling,
+or another bridge delay.
+
+A subsequent narrow gallery-resolver test edit through the app MCP connector
+returned `provider_throttled` immediately with OpenCode `big-pickle` in Factory
+Session `d134a6ae-e2a7-4282-945c-827cbfc44786`; the worktree was unchanged.
+The same request using OpenCode `nemotron-3.5-lightning-free` completed in
+Factory Session `a948dfcf-2f37-42e3-acb8-56e9a486743f`. Its three CUDA
+backend test cases passed on independent rerun and `make pkg-maint` passed.
+These outcomes show that the provider throttle is now classified distinctly
+from a working bounded edit, while the longer OpenCode task deadlines still
+need better progress diagnostics.
+
+A concurrent `pi` read-only README probe timed out after 120 seconds in Factory
+Session `0b821f09-fefa-4c31-92a8-7dfdff372f02`. The configured Pi default
+model is `llama-cpp/qwen-3.8-uncensored` at `http://localhost:8080/v1`, and a
+TCP probe found no listener on port 8080. Pi ACP created a session-map entry
+but no session transcript file for this invocation. The missing local model
+server is a concrete environment blocker; the MCP timeout still did not name
+that cause. After the tool closed the live Factory Session, its returned
+session ID could not be inspected with `you.factory_session.get` or
+`you.factory_session.list_dispatches` (`session.not_found`). Do not interpret
+this Pi probe as a working provider result.
+
+An OpenCode `nemotron-3.5-lightning-free` task refined the packaged subagent
+worker instructions in Factory Session `37bf7d9a-7265-42dd-ba0a-1b6100d965e5`.
+Its initial generic instructions accidentally hard-coded the two files from
+that task; this was corrected on review before regenerating the packaged
+Factory catalog. The prompt now directs exact-file tasks to read the named
+files and direct tests first, then reserve time for edits, verification, and a
+single final result. A rebuilt-binary probe is needed to measure whether this
+reduces the earlier timeout pattern.
+
+A fresh stdio MCP connection to the rebuilt `you-next.exe` completed an
+OpenCode `nemotron-3.5-lightning-free` README-heading probe in 13.95 seconds,
+Factory Session `093eca12-5c3a-43c2-9471-b4b393ee453a`. It returned the
+single primary text `# you-agent-factory`. The stderr `peer connection closed`
+line appeared only after the probe client closed stdin following the result.
+This verifies the rebuilt prompt and direct stdio path for a small task; it
+does not establish that a broad edit will complete under every model/deadline.

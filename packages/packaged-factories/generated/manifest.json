@@ -531,11 +531,11 @@
       "slug": "subagent",
       "json": {
         "locator": "generated/factories/subagent/factory.json",
-        "sha256": "173a76f35df628046ff48f371a66df06f24cfae94e98489be2175f9bcd31ed93"
+        "sha256": "6ae7d61bff5deb6d777f41d940ce3490e88cb7b1a2a75f037dc0da70671b22c5"
       },
       "yaml": {
         "locator": "generated/factories/subagent/factory.yaml",
-        "sha256": "43a190916c9640b5857084a5177251ec6eb599f2d92cac095c650733d8e2c91b"
+        "sha256": "0d9f30531fcb83f9627f37f2e7927f6b0852f0ddb89ef64496b49508d2e619be"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
