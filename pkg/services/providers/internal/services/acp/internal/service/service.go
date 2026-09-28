@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -321,7 +320,7 @@ func (daemon *daemon) execute(
 	}
 	prompt := promptBlocks(request)
 
-	if err := daemon.ensureStarted(ctx, id, cwd, requestEnvironment(id, request), request); err != nil {
+	if err := daemon.ensureStarted(ctx, id, cwd, requestEnvironment(request), request); err != nil {
 		return providers.ExecuteResult{}, err
 	}
 	daemon.client.reset(request.ProgressObserver)
@@ -625,28 +624,13 @@ func (daemon *daemon) clearProcess() {
 	daemon.tree = platformprocess.SubprocessTree{}
 }
 
-func requestEnvironment(id providers.ID, request providers.ExecuteRequest) []string {
+func requestEnvironment(request providers.ExecuteRequest) []string {
+	if request.EnvVars == nil {
+		return append([]string(nil), request.ProcessEnvironment...)
+	}
 	values := append([]string(nil), request.ProcessEnvironment...)
-	if id == providers.IDOpenCode && request.ProcessEnvironment == nil {
-		// Adding an override requires a concrete environment. Preserve the
-		// process environment that exec.Cmd would otherwise inherit.
-		values = os.Environ()
-	}
-	hasOpenCodePermission := false
-	for _, value := range values {
-		name, _, _ := strings.Cut(value, "=")
-		if strings.EqualFold(name, "OPENCODE_PERMISSION") {
-			hasOpenCodePermission = true
-		}
-	}
 	for key, value := range request.EnvVars {
-		if strings.EqualFold(key, "OPENCODE_PERMISSION") {
-			hasOpenCodePermission = true
-		}
 		values = append(values, key+"="+value)
-	}
-	if id == providers.IDOpenCode && !hasOpenCodePermission {
-		values = append(values, `OPENCODE_PERMISSION={"*":"allow"}`)
 	}
 	return values
 }
