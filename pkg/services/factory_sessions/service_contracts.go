@@ -665,7 +665,9 @@ type SessionInvokeRequest struct {
 	SessionID   string
 	Correlation SessionOperationCorrelation
 	Input       *work.PreparedInvocationInput
-	Wait        SessionOperationWait
+	// Args carries normalized named invocation values as request data; transport owns no runtime handle.
+	Args map[string]any
+	Wait SessionOperationWait
 }
 
 // SessionActivateRequest selects a named Factory definition for an existing
