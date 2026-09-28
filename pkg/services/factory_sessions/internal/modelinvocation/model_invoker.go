@@ -687,6 +687,8 @@ func runtimeModelContentType(part work.WorkContentPart) string {
 		return factorydefinitions.ModelOperationContentTypeImage
 	case work.WorkContentPartTypeAudio:
 		return factorydefinitions.ModelOperationContentTypeAudio
+	case work.WorkContentPartTypeVideo:
+		return factorydefinitions.ModelOperationContentTypeVideo
 	case work.WorkContentPartTypeJSON:
 		return factorydefinitions.ModelOperationContentTypeJSON
 	case work.WorkContentPartTypeBinary:

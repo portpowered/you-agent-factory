@@ -994,6 +994,7 @@ const (
 	ModelOperationContentTypeImage  ModelOperationContentType = "IMAGE"
 	ModelOperationContentTypeJSON   ModelOperationContentType = "JSON"
 	ModelOperationContentTypeText   ModelOperationContentType = "TEXT"
+	ModelOperationContentTypeVideo  ModelOperationContentType = "VIDEO"
 )
 
 // Defines values for ModelPullOutcome.

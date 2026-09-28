@@ -489,6 +489,7 @@ func TestRuntimeModelOperationContentTypeNormalizesSupportedKinds(t *testing.T) 
 		{name: "image", partType: work.WorkContentPartTypeImage, want: interfaces.ModelOperationContentTypeImage},
 		{name: "legacy image", partType: "IMAGE", want: interfaces.ModelOperationContentTypeImage},
 		{name: "audio", partType: work.WorkContentPartTypeAudio, want: interfaces.ModelOperationContentTypeAudio},
+		{name: "video", partType: work.WorkContentPartTypeVideo, want: interfaces.ModelOperationContentTypeVideo},
 		{name: "JSON", partType: work.WorkContentPartTypeJSON, want: interfaces.ModelOperationContentTypeJSON},
 		{name: "binary", partType: work.WorkContentPartTypeBinary, want: interfaces.ModelOperationContentTypeBinary},
 		{name: "custom", partType: "custom", want: "custom"},

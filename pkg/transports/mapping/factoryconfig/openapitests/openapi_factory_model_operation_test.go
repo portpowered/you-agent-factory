@@ -101,3 +101,20 @@ func TestFactoryConfigFromOpenAPIJSON_MapsTypedModelResources(t *testing.T) {
 		t.Fatalf("resource metadata = %#v, want model/backend/loadPolicy preserved", resource)
 	}
 }
+
+func TestFactoryConfigFromOpenAPIJSON_AcceptsVideoOperationContentType(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"video-factory",
+		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers":[{"name":"video-worker","type":"MODEL_WORKER","operations":[{"name":"ANALYZE","inputs":[{"name":"clip","contentTypes":["VIDEO"]}]}]}],
+		"workstations":[{"name":"analyze-story","worker":"video-worker","type":"MODEL_INVOKE","operation":"ANALYZE","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}]}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if got := cfg.Workers[0].Operations[0].Inputs[0].ContentTypes; len(got) != 1 || got[0] != interfaces.ModelOperationContentTypeVideo {
+		t.Fatalf("video input content types = %#v, want [VIDEO]", got)
+	}
+}

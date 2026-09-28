@@ -238,6 +238,7 @@ func TestRuntimeModelSelectorAndContentTypes(t *testing.T) {
 		work.WorkContentPartTypeText:   factorydefinitions.ModelOperationContentTypeText,
 		work.WorkContentPartTypeImage:  factorydefinitions.ModelOperationContentTypeImage,
 		work.WorkContentPartTypeAudio:  factorydefinitions.ModelOperationContentTypeAudio,
+		work.WorkContentPartTypeVideo:  factorydefinitions.ModelOperationContentTypeVideo,
 		work.WorkContentPartTypeJSON:   factorydefinitions.ModelOperationContentTypeJSON,
 		work.WorkContentPartTypeBinary: factorydefinitions.ModelOperationContentTypeBinary,
 		"custom":                       "custom",

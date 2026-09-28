@@ -613,6 +613,12 @@ an agent loop. Legacy `MODEL_WORKER` and `MODEL_INVOKE` values remain migration
 inputs, but new Factory configuration should use `INFERENCE_WORKER` and
 `INFERENCE_RUN`.
 
+For media understanding, stage an image, audio, or video file as Work and bind
+its content to the matching model input slot. The inference worker reads the
+staged file bytes before invoking Models, preserving the file's media type and
+the order of repeated inputs. Each media input is limited to 32 MiB in this
+path. Direct `you models invoke` file inputs use the 8 MiB limit above.
+
 Use `you docs providers` for agent provider/model selection and limits. Use
 `you docs workers` for worker capabilities, `you docs workstations` for routing
 and bindings, `you docs resources` for managed capacity, `you docs config` for

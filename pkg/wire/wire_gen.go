@@ -221,6 +221,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
+	readOpener := provideWorkersInferenceMediaFileReader(edges2)
 	v22, err := provideFactoryRuntimeScriptCommandRunner(edges2)
 	if err != nil {
 		return nil, err
@@ -234,7 +235,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
 	v24 := provideFactoryRuntimeProviderOverride(edges2)
 	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
-	workersService, err := provideStatelessWorkersService(service, modelsService, v22, readFileTree, clock, logger, factoryWorktreePreparer, v23, temporaryFileSystem, v24, agentToolFileSystem, decisionEnvelopeService)
+	workersService, err := provideStatelessWorkersService(service, modelsService, contentMaterializer, readOpener, v22, readFileTree, clock, logger, factoryWorktreePreparer, v23, temporaryFileSystem, v24, agentToolFileSystem, decisionEnvelopeService)
 	if err != nil {
 		return nil, err
 	}
@@ -746,6 +747,12 @@ func BuildStatelessWorkers(ctx context.Context, edges2 edges.Edges) (workers.Ser
 	if err != nil {
 		return nil, err
 	}
+	contentHostPlatform := provideWorkContentHostPlatform(edges2)
+	contentMaterializer, err := provideContentMaterializer(contentHostPlatform, edges2)
+	if err != nil {
+		return nil, err
+	}
+	readOpener := provideWorkersInferenceMediaFileReader(edges2)
 	v, err := provideFactoryRuntimeScriptCommandRunner(edges2)
 	if err != nil {
 		return nil, err
@@ -769,7 +776,7 @@ func BuildStatelessWorkers(ctx context.Context, edges2 edges.Edges) (workers.Ser
 		return nil, err
 	}
 	decisionEnvelopeService := provideDecisionEnvelopeService(invocationPolicyPorts)
-	workersService, err := provideStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, v3, agentToolFileSystem, decisionEnvelopeService)
+	workersService, err := provideStatelessWorkersService(service, modelsService, contentMaterializer, readOpener, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, v3, agentToolFileSystem, decisionEnvelopeService)
 	if err != nil {
 		return nil, err
 	}
@@ -788,6 +795,12 @@ func BuildMockStatelessWorkers(ctx context.Context, edges2 edges.Edges, mockWork
 	if err != nil {
 		return nil, err
 	}
+	contentHostPlatform := provideWorkContentHostPlatform(edges2)
+	contentMaterializer, err := provideContentMaterializer(contentHostPlatform, edges2)
+	if err != nil {
+		return nil, err
+	}
+	readOpener := provideWorkersInferenceMediaFileReader(edges2)
 	v, err := provideFactoryRuntimeScriptCommandRunner(edges2)
 	if err != nil {
 		return nil, err
@@ -811,7 +824,7 @@ func BuildMockStatelessWorkers(ctx context.Context, edges2 edges.Edges, mockWork
 		return nil, err
 	}
 	decisionEnvelopeService := provideDecisionEnvelopeService(invocationPolicyPorts)
-	workersService, err := provideMockStatelessWorkersService(service, modelsService, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, v3, agentToolFileSystem, decisionEnvelopeService, mockWorkers)
+	workersService, err := provideMockStatelessWorkersService(service, modelsService, contentMaterializer, readOpener, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, v3, agentToolFileSystem, decisionEnvelopeService, mockWorkers)
 	if err != nil {
 		return nil, err
 	}
@@ -904,6 +917,7 @@ var servicesSet = wire5.NewSet(
 	provideWorkContentHostPlatform,
 	provideContentMaterializer,
 	provideFactoryInvocationPolicyPorts,
+	provideWorkersInferenceMediaFileReader,
 	provideDecisionEnvelopeService,
 	provideInvocationInterpolationService,
 	provideInvocationOutputShapingService,
@@ -1042,6 +1056,9 @@ var statelessWorkersSet = wire5.NewSet(
 	provideWorkersFactoryDocsFileSystem,
 	provideFactoryRuntimeClock,
 	provideWorkersProviderTemporaryFileSystem,
+	provideWorkContentHostPlatform,
+	provideContentMaterializer,
+	provideWorkersInferenceMediaFileReader,
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,
 	provideFactoryRuntimeProviderOverride,
@@ -1059,6 +1076,9 @@ var mockStatelessWorkersSet = wire5.NewSet(
 	provideWorkersFactoryDocsFileSystem,
 	provideFactoryRuntimeClock,
 	provideWorkersProviderTemporaryFileSystem,
+	provideWorkContentHostPlatform,
+	provideContentMaterializer,
+	provideWorkersInferenceMediaFileReader,
 	provideWorkersWorktree,
 	provideWorkersWorktreeRelease,
 	provideFactoryRuntimeProviderOverride,

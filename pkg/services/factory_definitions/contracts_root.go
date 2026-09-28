@@ -184,6 +184,7 @@ const (
 	AgentToolPolicyEnabled                               = workerconfig.AgentToolPolicyEnabled
 	AgentToolPolicyReadOnly                              = workerconfig.AgentToolPolicyReadOnly
 	ModelOperationContentTypeAudio                       = workerconfig.ModelOperationContentTypeAudio
+	ModelOperationContentTypeVideo                       = workerconfig.ModelOperationContentTypeVideo
 	ModelOperationContentTypeBinary                      = workerconfig.ModelOperationContentTypeBinary
 	ModelOperationContentTypeImage                       = workerconfig.ModelOperationContentTypeImage
 	ModelOperationContentTypeJSON                        = workerconfig.ModelOperationContentTypeJSON

@@ -45,7 +45,7 @@ func TestRunnerInvokesModelsRootGenericOperationExactlyOnce(t *testing.T) {
 			Source: workers.ModelOperationBindingSourceInput,
 			Content: []work.WorkContentPart{{
 				Type:        work.WorkContentPartTypeAudio,
-				URL:         "data:audio/wav;base64,dm9pY2U=",
+				Text:        "voice",
 				ContentType: "audio/wav",
 			}},
 		},

@@ -1539,6 +1539,7 @@
         "TEXT",
         "IMAGE",
         "AUDIO",
+        "VIDEO",
         "JSON",
         "BINARY"
       ],

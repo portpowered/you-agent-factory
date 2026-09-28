@@ -11999,6 +11999,7 @@ export const ModelOperationContentType = {
   TEXT: "TEXT",
   IMAGE: "IMAGE",
   AUDIO: "AUDIO",
+  VIDEO: "VIDEO",
   JSON: "JSON",
   BINARY: "BINARY",
 } as const;

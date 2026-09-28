@@ -45,6 +45,7 @@ import (
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"go.uber.org/zap"
@@ -888,6 +889,8 @@ func provideWorkersWorktreeRelease(
 func provideStatelessWorkersService(
 	providersService providers.Service,
 	modelsService models.Service,
+	contentMaterializer work.ContentMaterializer,
+	mediaFiles platformfilesystem.ReadOpener,
 	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
 	factoryDocsFileSystem platformfilesystem.ReadFileTree,
 	clock factoryruntime.Clock,
@@ -902,6 +905,8 @@ func provideStatelessWorkersService(
 	return provideStatelessWorkersServiceWithMock(
 		providersService,
 		modelsService,
+		contentMaterializer,
+		mediaFiles,
 		scriptCommandRunner,
 		factoryDocsFileSystem,
 		clock,
@@ -922,6 +927,8 @@ func provideStatelessWorkersService(
 func provideMockStatelessWorkersService(
 	providersService providers.Service,
 	modelsService models.Service,
+	contentMaterializer work.ContentMaterializer,
+	mediaFiles platformfilesystem.ReadOpener,
 	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
 	factoryDocsFileSystem platformfilesystem.ReadFileTree,
 	clock factoryruntime.Clock,
@@ -937,6 +944,8 @@ func provideMockStatelessWorkersService(
 	return provideStatelessWorkersServiceWithMock(
 		providersService,
 		modelsService,
+		contentMaterializer,
+		mediaFiles,
 		scriptCommandRunner,
 		factoryDocsFileSystem,
 		clock,
@@ -954,6 +963,8 @@ func provideMockStatelessWorkersService(
 func provideStatelessWorkersServiceWithMock(
 	providersService providers.Service,
 	modelsService models.Service,
+	contentMaterializer work.ContentMaterializer,
+	mediaFiles platformfilesystem.ReadOpener,
 	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
 	factoryDocsFileSystem platformfilesystem.ReadFileTree,
 	clock factoryruntime.Clock,
@@ -996,7 +1007,9 @@ func provideStatelessWorkersServiceWithMock(
 			Type: factorydefinitions.WorkerTypeInference,
 		},
 	}
-	inferenceDependencies := workerswire.InferenceDependencies{Models: modelsService}
+	inferenceDependencies := workerswire.InferenceDependencies{
+		Models: modelsService, ContentMaterializer: contentMaterializer, MediaFiles: mediaFiles,
+	}
 	loggerValue := logging.NewZapLogger(logger, false)
 	if mockWorkers != nil {
 		return workerswire.NewMockService(
@@ -1044,6 +1057,13 @@ func provideWorkersRetryRandomSource(edges serviceedges.Edges) platformrandom.So
 func provideWorkersWorkstationFileSystem(edges serviceedges.Edges) platformfilesystem.ReadFileInspector {
 	if edges.WorkersWorkstationFileSystem != nil {
 		return edges.WorkersWorkstationFileSystem
+	}
+	return platformfilesystem.Local{}
+}
+
+func provideWorkersInferenceMediaFileReader(edges serviceedges.Edges) platformfilesystem.ReadOpener {
+	if edges.WorkersInferenceMediaFileReader != nil {
+		return edges.WorkersInferenceMediaFileReader
 	}
 	return platformfilesystem.Local{}
 }

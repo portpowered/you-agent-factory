@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -36,16 +37,20 @@ type localModelInvoker interface {
 
 // Dependencies are the exact effects used by one Inference Runner.
 type Dependencies struct {
-	Models   ModelInvoker
-	Delegate workers.Runner
+	Models              ModelInvoker
+	Delegate            workers.Runner
+	ContentMaterializer work.ContentMaterializer
+	MediaFiles          platformfilesystem.ReadOpener
 }
 
 type runner struct {
-	worker    models.LocalWorker
-	resources []models.LocalResource
-	scope     models.RuntimeScopeRef
-	models    ModelInvoker
-	delegate  workers.Runner
+	worker              models.LocalWorker
+	resources           []models.LocalResource
+	scope               models.RuntimeScopeRef
+	models              ModelInvoker
+	delegate            workers.Runner
+	contentMaterializer work.ContentMaterializer
+	mediaFiles          platformfilesystem.ReadOpener
 }
 
 var _ workers.Runner = (*runner)(nil)
@@ -60,11 +65,13 @@ func New(config Config, dependencies Dependencies) (workers.Runner, error) {
 		return nil, err
 	}
 	return &runner{
-		worker:    worker,
-		resources: snapshotResources(config.Resources),
-		scope:     config.Scope,
-		models:    dependencies.Models,
-		delegate:  dependencies.Delegate,
+		worker:              worker,
+		resources:           snapshotResources(config.Resources),
+		scope:               config.Scope,
+		models:              dependencies.Models,
+		delegate:            dependencies.Delegate,
+		contentMaterializer: dependencies.ContentMaterializer,
+		mediaFiles:          dependencies.MediaFiles,
 	}, nil
 }
 
@@ -184,6 +191,9 @@ func (r *runner) executeManagedInvocation(
 ) (workers.RunnerExecutionResult, error) {
 	invocation, err := genericInvocationRequest(request, scope, worker)
 	if err != nil {
+		return workers.RunnerExecutionResult{}, err
+	}
+	if err := r.materializeMediaInputs(ctx, invocation.Inputs); err != nil {
 		return workers.RunnerExecutionResult{}, err
 	}
 	if err := invocation.ValidateGeneric(); err != nil {

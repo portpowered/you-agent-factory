@@ -99,6 +99,14 @@ func publicFactoryEnumNormalizerProviderCases() []publicFactoryEnumNormalizerCas
 			strict:     interfaces.StrictPublicFactoryWorkerModelOperationContentType,
 		},
 		{
+			name:       "worker operation video content type",
+			alias:      "VIDEO",
+			unknown:    "movie",
+			want:       workerconfig.ModelOperationContentTypeVideo,
+			permissive: interfaces.PermissivePublicFactoryWorkerModelOperationContentType,
+			strict:     interfaces.StrictPublicFactoryWorkerModelOperationContentType,
+		},
+		{
 			name:       "resource type",
 			alias:      "MODEL",
 			unknown:    "custom-resource",

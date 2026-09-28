@@ -252,6 +252,7 @@ type Edges struct {
 	WorkersExecutableLocator           platformprocess.ExecutableLocator
 	WorkersExecutablePathInspector     platformfilesystem.PathInspector
 	WorkersExecutableFileReader        platformfilesystem.ReadOpener
+	WorkersInferenceMediaFileReader    platformfilesystem.ReadOpener
 	WorkersOperatingSystem             workers.OperatingSystem
 	WorkersWorktreeFileSystem          workers.WorktreeFileSystem
 	WorkersWorktreeGit                 workers.WorktreeGitCommander
@@ -713,6 +714,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.WorkersExecutableFileReader != nil {
 		defaults.WorkersExecutableFileReader = replacements.WorkersExecutableFileReader
+	}
+	if replacements.WorkersInferenceMediaFileReader != nil {
+		defaults.WorkersInferenceMediaFileReader = replacements.WorkersInferenceMediaFileReader
 	}
 	if replacements.WorkersOperatingSystem != "" {
 		defaults.WorkersOperatingSystem = replacements.WorkersOperatingSystem
