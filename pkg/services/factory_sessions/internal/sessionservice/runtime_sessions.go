@@ -26,7 +26,6 @@ type (
 	FactorySessionTargetKind = factorysessions.TargetKind
 	FactorySessionTargetRef  = factorysessions.TargetRef
 	FactorySessionTarget     = factorysessions.Target
-	FactorySessionOpenResult = factorysessions.OpenResult
 	liveFactorySession       = livesession.LiveSession
 )
 
