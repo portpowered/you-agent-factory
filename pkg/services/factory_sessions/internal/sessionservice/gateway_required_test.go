@@ -909,6 +909,20 @@ func TestService_CanonicalInvokeMapsIdentityAndClonesPreparedWork(t *testing.T) 
 	assertCanonicalInvokeResult(t, fake, got)
 }
 
+func TestCanonicalInvocationRequestClonesNamedArguments(t *testing.T) {
+	t.Parallel()
+
+	args := map[string]any{"nested": map[string]any{"items": []any{"original"}}}
+	converted := canonicalInvocationRequest(factorysessions.SessionInvokeRequest{Args: args})
+	if converted.Args == nil {
+		t.Fatal("canonical invocation lost named arguments")
+	}
+	(*converted.Args)["nested"].(map[string]any)["items"].([]any)[0] = "changed"
+	if got := args["nested"].(map[string]any)["items"].([]any)[0]; got != "original" {
+		t.Fatalf("caller arguments mutated through invocation request: %v", got)
+	}
+}
+
 func assertCanonicalInvokeRequest(t *testing.T, fake *canonicalSessionInvokerFake, input *work.PreparedInvocationInput) {
 	t.Helper()
 	if fake.canonicalCalls != 1 || fake.legacyCalls != 0 || fake.calls != 1 || fake.sessionID != "session-1" || fake.requestID != "invoke-1" || fake.timeout != 500 || !fake.cancelOnTimeout {

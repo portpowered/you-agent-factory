@@ -459,6 +459,10 @@ func canonicalInvocationRequest(
 	request factorysessions.SessionInvokeRequest,
 ) factorysessions.InvocationRequest {
 	legacy := factorysessions.InvocationRequest{}
+	if request.Args != nil {
+		args := cloneCanonicalAnyMap(request.Args)
+		legacy.Args = &args
+	}
 	if request.Input != nil {
 		legacy.PreparedInvocationInput = request.Input.Clone()
 		legacy.ContentProvided = true
