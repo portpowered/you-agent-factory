@@ -1770,3 +1770,8 @@ was `Red, Red`, whereas the fixture is red then blue. This proves the lease
 failure is fixed but leaves a video-understanding accuracy issue. The server
 was launched hidden with `YOU_NO_BROWSER_OPEN=1` and stopped gracefully; no
 dashboard tab was opened.
+
+Commit `4823783075` records the no-cap model settings and the lease fix. The
+Windows MCP binary was installed as `C:\Users\andre\bin\you-4823783075.exe`
+(SHA-256 `7EBF5DCA35A103B572FF0BBEB7ED2F21A138CE6C5339FD68736746F1A96FA117`),
+and the Codex MCP command for new connections points to it.
