@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	acpsdk "github.com/coder/acp-go-sdk"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -40,9 +41,10 @@ func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 	}{
 		{mode: "version", want: providers.ExecuteFailureKindMisconfigured},
 		{mode: "init-fail", want: providers.ExecuteFailureKindUnknown},
-		{mode: "malformed", want: providers.ExecuteFailureKindUnknown},
-		{mode: "eof", want: providers.ExecuteFailureKindUnknown},
+		{mode: "malformed", want: providers.ExecuteFailureKindDependency},
+		{mode: "eof", want: providers.ExecuteFailureKindDependency},
 		{mode: "fail", want: providers.ExecuteFailureKindUnknown, wantSessionID: "acp-session-service-1"},
+		{mode: "peer-closed", want: providers.ExecuteFailureKindDependency, wantSessionID: "acp-session-service-1"},
 		{mode: "server-failure", want: providers.ExecuteFailureKindDependency, wantSessionID: "acp-session-service-1"},
 		{mode: "rate-limit", want: providers.ExecuteFailureKindThrottled, wantSessionID: "acp-session-service-1"},
 	} {
@@ -74,6 +76,31 @@ func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 			if test.mode == "rate-limit" && (strings.Contains(failure.Message, "secret") || !strings.Contains(failure.Message, "usage or capacity limits")) {
 				t.Fatalf("rate-limit failure message = %q, want fixed safe diagnostic", failure.Message)
 			}
+			if test.mode == "peer-closed" {
+				wantMessage := `ACP provider "cursor-acp" disconnected before responding; retry the request`
+				if failure.Message != wantMessage {
+					t.Fatalf("peer-closed failure message = %q, want %q", failure.Message, wantMessage)
+				}
+				if failure.Diagnostics == nil || len(failure.Diagnostics.Progress) < 2 {
+					t.Fatalf("peer-closed diagnostics = %#v, want started and failed progress", failure.Diagnostics)
+				}
+				progress := failure.Diagnostics.Progress
+				if progress[0].Phase != "started" || progress[len(progress)-1].Phase != "failed" ||
+					progress[len(progress)-1].Detail != wantMessage ||
+					progress[len(progress)-1].Metadata["error_code"] != "ACP_PEER_CLOSED" {
+					t.Fatalf("peer-closed diagnostics = %#v, want safe message and ACP_PEER_CLOSED", failure.Diagnostics)
+				}
+			}
+			if test.mode == "fail" {
+				if failure.Diagnostics == nil || len(failure.Diagnostics.Progress) == 0 {
+					t.Fatalf("arbitrary -32603 diagnostics = %#v, want RPC failure", failure.Diagnostics)
+				}
+				progress := failure.Diagnostics.Progress
+				if progress[len(progress)-1].Metadata["error_code"] == "ACP_PEER_CLOSED" ||
+					failure.Message == `ACP provider "cursor-acp" disconnected before responding; retry the request` {
+					t.Fatalf("arbitrary -32603 failure = %#v, want distinct RPC failure", failure)
+				}
+			}
 			if test.wantSessionID != "" {
 				if failure.SessionRef == nil || failure.SessionRef.Provider != providers.ID("cursor-acp") || failure.SessionRef.Kind != providers.SessionIDKind || failure.SessionRef.ID != test.wantSessionID {
 					t.Fatalf("ExecuteFailure.SessionRef = %#v, want cursor-acp/%s/%s", failure.SessionRef, providers.SessionIDKind, test.wantSessionID)
@@ -81,6 +108,27 @@ func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 			}
 			if starts.Load() == 0 {
 				t.Fatal("ACP protocol failure did not start the Agent process")
+			}
+		})
+	}
+}
+
+func TestACPPeerClosedFailureRequiresExactSDKShape(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		err  *acpsdk.RequestError
+		want bool
+	}{
+		{name: "before response", err: &acpsdk.RequestError{Code: -32603, Message: "Internal error", Data: map[string]any{"error": "peer disconnected before response"}}, want: true},
+		{name: "before notifications", err: &acpsdk.RequestError{Code: -32603, Message: "Internal error", Data: map[string]any{"error": "peer disconnected while waiting for pre-response notifications"}}, want: true},
+		{name: "provider error", err: &acpsdk.RequestError{Code: -32603, Message: "Internal error"}},
+		{name: "different message", err: &acpsdk.RequestError{Code: -32603, Message: "Provider error", Data: map[string]any{"error": "peer disconnected before response"}}},
+		{name: "different code", err: &acpsdk.RequestError{Code: -32001, Message: "Internal error", Data: map[string]any{"error": "peer disconnected before response"}}},
+		{name: "different data", err: &acpsdk.RequestError{Code: -32603, Message: "Internal error", Data: map[string]any{"error": "peer disconnected after response"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := isACPPeerClosedFailure(test.err); got != test.want {
+				t.Fatalf("isACPPeerClosedFailure(%#v) = %t, want %t", test.err, got, test.want)
 			}
 		})
 	}
@@ -488,6 +536,9 @@ func runProtocolFailurePeer(mode string, stdin io.Reader, stdout, stderr io.Writ
 				return err
 			}
 		case "session/prompt":
+			if mode == "peer-closed" {
+				return nil
+			}
 			if mode == "permission-denied-empty" {
 				pendingPromptID = append(json.RawMessage(nil), request.ID...)
 				_, err := fmt.Fprintln(writer, `{"jsonrpc":"2.0","id":"permission-1","method":"session/request_permission","params":{"sessionId":"acp-session-service-1","toolCall":{"toolCallId":"tool-1","title":"Read outside workspace"},"options":[{"optionId":"deny","kind":"reject_once","name":"Deny"}]}}`)

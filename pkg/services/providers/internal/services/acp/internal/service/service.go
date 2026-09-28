@@ -777,10 +777,18 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 		// classifies that outcome as retryable and, when a session was opened,
 		// retains the exact Provider Session for the retry continuation.
 		kind = providers.ExecuteFailureKindDependency
+	} else if isACPPeerClosedFailure(err) {
+		// The ACP SDK's structured peer-disconnect error is a provider
+		// dependency outcome. It is classified separately from arbitrary
+		// provider-authored -32603 errors so that only the exact SDK shape
+		// is recognized.
+		kind = providers.ExecuteFailureKindDependency
 	}
 	message := fmt.Sprintf("ACP provider %q %s failed: %s", id, method, safeRPCMessage(err))
 	if kind == providers.ExecuteFailureKindThrottled {
 		message = fmt.Sprintf("ACP provider %q is temporarily unavailable due to usage or capacity limits", id)
+	} else if isACPPeerClosedFailure(err) {
+		message = fmt.Sprintf("ACP provider %q disconnected before responding; retry the request", id)
 	} else if detail := safeACPStderr(stderr, request.EnvVars); detail != "" {
 		message += " (stderr: " + detail + ")"
 	}
@@ -790,10 +798,14 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 			kind = providers.ExecuteFailureKindMisconfigured
 		}
 	}
+	errorCode := "ACP_" + strings.ToUpper(strings.ReplaceAll(method, "session/", "")) + "_FAILED"
+	if isACPPeerClosedFailure(err) {
+		errorCode = "ACP_PEER_CLOSED"
+	}
 	return providers.ExecuteFailure{Kind: kind, Message: message, Diagnostics: &providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{{
 		Phase: "failed", Detail: message, Metadata: map[string]string{
 			"kind": "error", "native_type": method,
-			"error_code": "ACP_" + strings.ToUpper(strings.ReplaceAll(method, "session/", "")) + "_FAILED",
+			"error_code": errorCode,
 		},
 	}}}}
 }
@@ -808,6 +820,30 @@ func isACPRateLimitFailure(message string) bool {
 func isACPServerFailure(code int) bool {
 	return code >= acpServerErrorMinimum && code <= acpServerErrorMaximum &&
 		code != -32000 && code != acpErrorCodeResourceNotFound
+}
+
+// isACPPeerClosedFailure reports whether err is the ACP SDK's structured
+// peer-disconnect RequestError: code -32603 with Data carrying the exact
+// "peer disconnected before response" or "peer disconnected while waiting
+// for pre-response notifications" marker.
+func isACPPeerClosedFailure(err error) bool {
+	var requestErr *acpsdk.RequestError
+	if !errors.As(err, &requestErr) {
+		return false
+	}
+	if requestErr.Code != -32603 || requestErr.Message != "Internal error" {
+		return false
+	}
+	data, ok := requestErr.Data.(map[string]any)
+	if !ok {
+		return false
+	}
+	errorValue, _ := data["error"].(string)
+	switch errorValue {
+	case "peer disconnected before response", "peer disconnected while waiting for pre-response notifications":
+		return true
+	}
+	return false
 }
 
 func safeRPCMessage(err error) string {
