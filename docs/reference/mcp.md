@@ -83,6 +83,17 @@ If no provider default is configured, run `you init --provider opencode`,
 `provider` in the tool call. Use these public provider IDs directly. Factory
 Session tools use the same process-owned Sessions service.
 
+### Troubleshoot a subagent timeout
+
+`timeoutMillis` sets the maximum wait for a `you.subagent` result in
+milliseconds. A `factory_session.subagent.timed_out` error includes the Factory
+Session ID. It includes `requestId`, `traceId`, and `workId` when available,
+plus any explicitly selected `provider` and `model` and a `suggestedAction`.
+The call requests cancellation and closes its live Factory Session on timeout.
+
+Workspace edits may have occurred. Inspect the workspace before retrying.
+After inspection, choose another configured model or a longer timeout.
+
 ## Choose A Project Root
 
 Workflow sources resolve from `cwd`. To use a different source root, add
