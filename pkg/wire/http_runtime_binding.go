@@ -231,17 +231,15 @@ func newHTTPSessionsHandler(
 	liveAPI := factorysessionmapping.NewLiveAPI(root, liveGateway)
 	deletion, _ := any(root).(factorysessions.LiveDeletionService)
 	invocationAPI := factorysessionmapping.NewInvocationAPI(root)
-	durableAPI := factorysessionmapping.NewDurableAPI(root)
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		SessionsRoot: root, LiveControl: root,
 		SessionDeletion: deletion,
 		Runtime:         runtimeAPI, FactoryStatus: statusAPI,
 		Sessions: liveAPI, Invocation: invocationAPI, FactoryDefinitions: definitionsAPI,
 		FactoryValidation: validation, WorkflowPreview: root.WorkflowPreviewService(),
-		DurableResponseEvents: durableAPI,
-		DurableLister:         root,
-		LiveSessionLister:     factorysessionshttp.ReadProjectionSessionListReader{Reader: root},
-		WorkerPrompts:         root.WorkerPromptsService(), InvocationWorkType: invocationWorkType,
+		DurableLister:     root,
+		LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: root},
+		WorkerPrompts:     root.WorkerPromptsService(), InvocationWorkType: invocationWorkType,
 		SessionRequests: sessionRequests,
 	}, presentation.Logger)
 	return handler, definitionsAPI, nil

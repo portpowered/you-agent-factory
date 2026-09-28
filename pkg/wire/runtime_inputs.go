@@ -519,9 +519,8 @@ func newDurableExecutionHTTPHandler(
 	}
 	durable := factorysessionmapping.NewDurableAPI(sessions)
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		SessionsRoot:          sessions,
-		DurableResponseEvents: durable,
-		DurableLister:         sessions, FactoryValidation: validation,
+		SessionsRoot:  sessions,
+		DurableLister: sessions, FactoryValidation: validation,
 		InvocationWorkType: invocationWorkType, SessionRequests: sessionRequests,
 	}, logger)
 	var shutdown transporthttp.ShutdownOperation
