@@ -142,3 +142,6 @@ stdio launch of that installed binary again listed 11 tools and returned the
 same correlation fields on a one-second bounded timeout (session
 `424cb3b9-6421-4590-805c-e44c2d5f2d2c`). Its request and trace IDs matched
 the structured server log.
+A separate fresh stdio launch of the installed binary completed a normal
+Longcat read-only request in session `55716500-779e-49be-bb36-607a8e8e048c`,
+returning `you-agent-factory` with empty stderr.
