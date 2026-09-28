@@ -1120,3 +1120,12 @@ failures. Codex MCP follow-up `bf98d715-9f7e-4b78-8783-4a7e85e4e059` repaired
 the fixture without weakening assertions; the full Factory Sessions Go suite,
 docs-reference smoke, and all 24 lint targets passed. The observed snapshot
 collision is distinct from the unproven separate model/tool latency.
+
+After commit `ae089306df`, the Windows binary was rebuilt and copied to the
+configured MCP command path. Replacing it required stopping the idle server
+process holding the executable open. The connector in this already-running
+Codex chat did not reconnect: two concurrent OpenCode MCP calls and a later
+single call each returned `Transport closed` immediately. This is a separate
+host-connector lifecycle failure, so the new binary still needs a fresh-chat
+MCP smoke test. Rebuild/install procedures should account for active MCP
+connections and avoid claiming tool readiness solely from a successful copy.
