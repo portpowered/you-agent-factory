@@ -33,24 +33,24 @@ type Sequencer interface {
 // Service owns the response-event draining lifecycle for the Chat Sessions
 // consumer. Its collaborator is injected once at construction.
 type Service struct {
-	sequencer     Sequencer
-	factoryTarget factorysessions.TargetExecutionService
-	workerEvents  events.Service
-	logger        logging.Logger
+	sequencer       Sequencer
+	factorySessions factorysessions.Service
+	workerEvents    events.Service
+	logger          logging.Logger
 }
 
 // New constructs an inert response-event bridge.
 func New(
 	sequencer Sequencer,
-	factoryTarget factorysessions.TargetExecutionService,
+	factorySessions factorysessions.Service,
 	workerEvents events.Service,
 	logger logging.Logger,
 ) *Service {
 	return &Service{
-		sequencer:     sequencer,
-		factoryTarget: factoryTarget,
-		workerEvents:  workerEvents,
-		logger:        logging.EnsureLogger(logger),
+		sequencer:       sequencer,
+		factorySessions: factorySessions,
+		workerEvents:    workerEvents,
+		logger:          logging.EnsureLogger(logger),
 	}
 }
 
@@ -68,7 +68,7 @@ func (s *Service) Run(
 	liveDrain func(context.Context),
 	invoke func(context.Context) (factorysessions.InvocationResult, error),
 ) (result factorysessions.InvocationResult, err error) {
-	if s == nil || s.sequencer == nil || s.factoryTarget == nil {
+	if s == nil || s.sequencer == nil || s.factorySessions == nil {
 		return invoke(ctx)
 	}
 	s.logStart(chatSessionID, factorySessionID)
@@ -77,7 +77,7 @@ func (s *Service) Run(
 		s.logOutcome(chatSessionID, factorySessionID, result.Status, failureClass)
 	}()
 
-	cursor, subscribeErr := s.factoryTarget.SubscribeFactoryResponseEvents(ctx, factorysessions.ResponseEventSubscriptionRequest{SessionID: factorySessionID})
+	subscription, subscribeErr := s.factorySessions.SubscribeResponses(ctx, factorysessions.SessionResponseSubscriptionRequest{SessionID: factorySessionID})
 	if subscribeErr != nil {
 		result, invokeErr := invoke(ctx)
 		if invokeErr != nil {
@@ -86,6 +86,16 @@ func (s *Service) Run(
 		}
 		failureClass = "response_event_subscription"
 		return result, fmt.Errorf("subscribe factory response events: %w", subscribeErr)
+	}
+	cursor := subscription.Cursor
+	if cursor == nil {
+		result, invokeErr := invoke(ctx)
+		if invokeErr != nil {
+			failureClass = "factory_invocation"
+			return result, invokeErr
+		}
+		failureClass = "response_event_subscription"
+		return result, fmt.Errorf("subscribe factory response events: response cursor is unavailable")
 	}
 	defer cursor.Detach()
 

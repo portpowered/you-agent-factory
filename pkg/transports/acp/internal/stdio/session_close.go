@@ -23,7 +23,7 @@ var errSessionCloseUnexpectedIntent = errors.New("acp: session/close received an
 // intent, and responds only after the exact captured Factory Session has
 // closed and Chat Sessions has atomically terminalized the captured lifecycle.
 func (s *Server) handleSessionClose(ctx context.Context, env envelope.Envelope) (json.RawMessage, *acpsdk.RequestError) {
-	if s.chatSessions == nil || s.factoryTarget == nil {
+	if s.chatSessions == nil || s.factorySessions == nil {
 		return nil, classifyDependencyFailure(errSessionCloseUnavailable)
 	}
 	var req acpsdk.CloseSessionRequest
@@ -87,10 +87,32 @@ func (s *Server) applySessionClose(ctx context.Context, sessionID string, reques
 	if factorySessionID == "" {
 		return errSessionCloseTargetUnavailable
 	}
-	if err := s.factoryTarget.TerminateFactorySession(ctx, factorySessionID, factorysessions.ControlRequest{
+	captured := factorysessions.ControlRequest{
 		RequestID: factoryTerminateRequestID(intent.RequestID),
 		Reason:    "acp session/close",
 		TurnID:    intent.TurnID,
+	}
+	if _, err := s.factorySessions.Control(ctx, factorysessions.SessionControlRequest{
+		SessionID: factorySessionID,
+		Mode:      factorysessions.SessionOperationModeLive,
+		Operation: factorysessions.SessionControlTerminate,
+		Control:   captured,
+		Correlation: factorysessions.SessionOperationCorrelation{
+			RequestID: captured.RequestID,
+			TurnID:    intent.TurnID,
+		},
+	}); err != nil {
+		return err
+	}
+	if _, err := s.factorySessions.Control(ctx, factorysessions.SessionControlRequest{
+		SessionID: factorySessionID,
+		Mode:      factorysessions.SessionOperationModeLive,
+		Operation: factorysessions.SessionControlClose,
+		Control:   captured,
+		Correlation: factorysessions.SessionOperationCorrelation{
+			RequestID: captured.RequestID,
+			TurnID:    intent.TurnID,
+		},
 	}); err != nil {
 		return err
 	}

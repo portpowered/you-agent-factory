@@ -321,7 +321,7 @@ func TestHandleSessionPromptRunningTransitionFailureRecoveryAdmitsLaterPrompt(t 
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
 		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil)
+	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -370,7 +370,7 @@ func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *te
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-pending"},
 		invokeResult: factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	firstServer := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil)
+	firstServer := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -384,7 +384,7 @@ func TestHandleSessionPromptPendingFactorySessionSurvivesNewServerInstance(t *te
 	// A brand-new Server, sharing only the underlying store (not the failed
 	// firstServer instance or its wrapper), stands in for a restarted
 	// transport process.
-	secondServer := New(nil, store, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil)
+	secondServer := New(nil, store, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver)
 
 	secondEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "second message"))
@@ -482,7 +482,7 @@ func TestHandleSessionPromptTerminalTransitionFailureRecoveryAdmitsLaterPrompt(t
 		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-1"},
 		invokeResult: factorysessions.InvocationResult{SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil)
+	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))
@@ -550,7 +550,7 @@ func TestHandleSessionPromptFailedTerminalTransitionFailureRecoveryAdmitsLaterPr
 			SessionID: "fs-1", Status: factorysessions.InvocationTerminalStatusCompleted,
 		},
 	}
-	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil)
+	server := New(nil, faulty, catalog, factoryTarget, nil, func() (string, error) { return "/home/operator", nil }, nil, nil, testStartResolver)
 
 	firstEnv := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams(created.Session.ID, "first message"))

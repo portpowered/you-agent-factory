@@ -113,7 +113,47 @@ func TestProvideACPServerFactoryTargetRuntimeResolver(t *testing.T) {
 	})
 }
 
-// TestProvideACPServerFactoryTargetRuntimeResolverAppliesOperatorDefaultsEnvironment
+func TestProvideACPServerFactorySessionStartResolver(t *testing.T) {
+	home := t.TempDir()
+	seedInstalledPackagedFactories(t, home, "@you/review")
+
+	resolver := provideACPServerFactorySessionStartResolver(
+		func() (string, error) { return home, nil },
+		namedFactoryCatalogForTest(t),
+		operatorDefaultsResolverForTest(t),
+		provideRuntimeArtifactRootResolver(),
+	)
+
+	req, err := resolver(context.Background(), "factory:@you/review", "/workspace/project", "req-1")
+	if err != nil {
+		t.Fatalf("resolver() error = %v", err)
+	}
+	if !req.ActivationOnly {
+		t.Fatal("ActivationOnly = false, want true")
+	}
+	if req.Correlation.RequestID != "req-1" {
+		t.Fatalf("Correlation.RequestID = %q, want req-1", req.Correlation.RequestID)
+	}
+	if req.Definition.FactoryID != "factory:@you/review" {
+		t.Fatalf("Definition.FactoryID = %q", req.Definition.FactoryID)
+	}
+	if req.FolderPath == "" {
+		t.Fatal("FolderPath is blank, want the installed @you/review Factory directory")
+	}
+	if req.RuntimeSelection == nil || req.RuntimeSelection.SystemConfigHome != home {
+		t.Fatalf("RuntimeSelection = %+v, want SystemConfigHome %q", req.RuntimeSelection, home)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := resolver(ctx, "factory:@you/review", "/workspace/project", "req-2"); err == nil {
+		t.Fatal("resolver(canceled ctx) error = nil, want a cancellation error")
+	}
+	if _, err := resolver(context.Background(), "factory:@you/does-not-exist", "/workspace/project", "req-3"); !errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
+		t.Fatalf("resolver(unknown target) error = %v, want ErrNamedFactoryNotFound", err)
+	}
+}
+
 // proves the ACP resolver supplies the operator-default environment layer when
 // resolving a Factory target runtime.
 //

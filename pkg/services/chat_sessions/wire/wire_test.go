@@ -175,7 +175,7 @@ func TestNewFactoryTargetCatalogService_ConstructsFromInjectedRoots(t *testing.T
 type stubResponseBridgeSequencer struct{ chatsessions.Service }
 
 type stubResponseBridgeFactoryTarget struct {
-	factorysessions.TargetExecutionService
+	factorysessions.Service
 }
 
 func TestNewResponseBridgeConstructsFromInjectedSequencer(t *testing.T) {

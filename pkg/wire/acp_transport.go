@@ -40,6 +40,64 @@ func provideACPServerResolveHomeDir(edges serviceedges.Edges) acpServerResolveHo
 	return os.UserHomeDir
 }
 
+type acpFactoryTargetSelection struct {
+	factoryDir string
+	homeDir    string
+	artifacts  factoryruntime.RuntimeArtifactRoots
+	defaults   operatorsettings.ResolvedDefaults
+}
+
+func resolveACPFactoryTargetSelection(
+	ctx context.Context,
+	factoryTargetID, workingRoot string,
+	resolveHomeDir acpServerResolveHomeDir,
+	namedFactoryCatalog factorydefinitions.NamedFactoryCatalog,
+	resolveOperatorDefaults operatorsettings.DefaultsResolver,
+	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
+) (acpFactoryTargetSelection, error) {
+	if err := ctx.Err(); err != nil {
+		return acpFactoryTargetSelection{}, err
+	}
+	profile, hasProfile := acp.InvocationProfileFromContext(ctx)
+	homeDir := strings.TrimSpace(profile.HomeDir)
+	if homeDir == "" {
+		var err error
+		homeDir, err = resolveHomeDir()
+		if err != nil {
+			return acpFactoryTargetSelection{}, err
+		}
+	}
+	roots, err := factorydefinitions.ResolveNamedFactoryRoots(homeDir, workingRoot)
+	if err != nil {
+		return acpFactoryTargetSelection{}, err
+	}
+	bareName := strings.TrimPrefix(factoryTargetID, operatorsettings.ACPFactoryTargetNamespace)
+	resolved, err := namedFactoryCatalog.ResolveNamedFactoryAcrossRoots(roots.Project, roots.Global, bareName)
+	if err != nil {
+		return acpFactoryTargetSelection{}, err
+	}
+	if resolved == nil {
+		return acpFactoryTargetSelection{}, factorydefinitions.ErrNamedFactoryNotFound
+	}
+	environment := acpOperatorDefaultsEnvironment()
+	if hasProfile {
+		environment = operatorsettings.Defaults{
+			WorkerModelProvider: strings.TrimSpace(profile.WorkerModelProvider),
+			WorkerModel:         strings.TrimSpace(profile.WorkerModel),
+		}
+	}
+	defaults, err := resolveOperatorDefaults(homeDir, environment, operatorsettings.FlagOverrides{})
+	if err != nil {
+		return acpFactoryTargetSelection{}, err
+	}
+	return acpFactoryTargetSelection{
+		factoryDir: resolved.FactoryDir,
+		homeDir:    homeDir,
+		artifacts:  artifactRoots(homeDir),
+		defaults:   defaults,
+	}, nil
+}
+
 // provideACPServerFactoryTargetRuntimeResolver constructs the closure that
 // turns one ACP-selected Factory target identity (the same "factory:<name>"
 // reference session/set_config_option's changeTarget already validates and
@@ -55,62 +113,46 @@ func provideACPServerFactoryTargetRuntimeResolver(
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 ) factorysessionwire.FactoryTargetRuntimeResolver {
 	return func(ctx context.Context, factoryTargetID, workingRoot string) (factorysessions.RuntimeOpeningRequest, error) {
-		if err := ctx.Err(); err != nil {
-			return factorysessions.RuntimeOpeningRequest{}, err
-		}
-		profile, hasProfile := acp.InvocationProfileFromContext(ctx)
-		homeDir := strings.TrimSpace(profile.HomeDir)
-		if homeDir == "" {
-			var err error
-			homeDir, err = resolveHomeDir()
-			if err != nil {
-				return factorysessions.RuntimeOpeningRequest{}, err
-			}
-		}
-		roots, err := factorydefinitions.ResolveNamedFactoryRoots(homeDir, workingRoot)
+		sel, err := resolveACPFactoryTargetSelection(ctx, factoryTargetID, workingRoot, resolveHomeDir, namedFactoryCatalog, resolveOperatorDefaults, artifactRoots)
 		if err != nil {
 			return factorysessions.RuntimeOpeningRequest{}, err
 		}
-		bareName := strings.TrimPrefix(factoryTargetID, operatorsettings.ACPFactoryTargetNamespace)
-		resolved, err := namedFactoryCatalog.ResolveNamedFactoryAcrossRoots(roots.Project, roots.Global, bareName)
-		if err != nil {
-			return factorysessions.RuntimeOpeningRequest{}, err
-		}
-		if resolved == nil {
-			return factorysessions.RuntimeOpeningRequest{}, factorydefinitions.ErrNamedFactoryNotFound
-		}
-		environment := acpOperatorDefaultsEnvironment()
-		if hasProfile {
-			environment = operatorsettings.Defaults{
-				WorkerModelProvider: strings.TrimSpace(profile.WorkerModelProvider),
-				WorkerModel:         strings.TrimSpace(profile.WorkerModel),
-			}
-		}
-		defaults, err := resolveOperatorDefaults(homeDir, environment, operatorsettings.FlagOverrides{})
-		if err != nil {
-			return factorysessions.RuntimeOpeningRequest{}, err
-		}
-		artifacts := artifactRoots(homeDir)
 		return factorysessions.RuntimeOpeningRequest{
 			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
-				Directory: resolved.FactoryDir,
+				Directory: sel.factoryDir,
 			},
 			FactoryRuntime: factoryruntime.RuntimeOpeningRequest{
 				Mode:             factorydefinitions.RuntimeModeService,
-				LogDirectory:     artifacts.Logs,
-				MetricsDirectory: artifacts.Metrics,
+				LogDirectory:     sel.artifacts.Logs,
+				MetricsDirectory: sel.artifacts.Metrics,
 			},
 			FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-				SystemConfigHome: homeDir,
+				SystemConfigHome: sel.homeDir,
 			},
-			OperatorDefaults: defaults,
+			OperatorDefaults: sel.defaults,
 		}, nil
 	}
 }
 
-// mapACPFactorySessionStart is a bounded pure value mapper for the future
-// ACP -> canonical Factory Sessions Start path. It performs no I/O, opens no
-// runtime, and stores no state; production callers are not switched to it yet.
+// provideACPServerFactorySessionStartResolver constructs the canonical
+// Factory Session Start resolver the ACP transport consumes.
+func provideACPServerFactorySessionStartResolver(
+	resolveHomeDir acpServerResolveHomeDir,
+	namedFactoryCatalog factorydefinitions.NamedFactoryCatalog,
+	resolveOperatorDefaults operatorsettings.DefaultsResolver,
+	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
+) acp.FactorySessionStartResolver {
+	return func(ctx context.Context, factoryTargetID, workingRoot, requestID string) (factorysessions.SessionStartRequest, error) {
+		sel, err := resolveACPFactoryTargetSelection(ctx, factoryTargetID, workingRoot, resolveHomeDir, namedFactoryCatalog, resolveOperatorDefaults, artifactRoots)
+		if err != nil {
+			return factorysessions.SessionStartRequest{}, err
+		}
+		return mapACPFactorySessionStart(requestID, factoryTargetID, workingRoot, sel.factoryDir, sel.homeDir, sel.artifacts, sel.defaults), nil
+	}
+}
+
+// mapACPFactorySessionStart turns resolved ACP target values into a canonical
+// Factory Sessions Start request without opening a runtime or storing state.
 func mapACPFactorySessionStart(requestID, factoryTargetID, workingRoot, factoryDir, homeDir string, artifacts factoryruntime.RuntimeArtifactRoots, defaults operatorsettings.ResolvedDefaults) factorysessions.SessionStartRequest {
 	return factorysessions.SessionStartRequest{
 		Mode:           factorysessions.SessionOperationModeLive,
@@ -215,15 +257,16 @@ func provideACPServer(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
-	factoryTarget factorysessions.TargetExecutionService,
+	factorySessions factorysessions.Service,
 	eventsService events.Service,
 	resolveHomeDir acpServerResolveHomeDir,
 	responseBridge acp.ResponseBridge,
 	wireRecorder acp.WireRecorder,
+	startResolver acp.FactorySessionStartResolver,
 ) acp.Server {
 	return acpwire.NewServer(
-		logger, chatSessions, catalog, factoryTarget, eventsService,
-		resolveHomeDir, responseBridge, wireRecorder,
+		logger, chatSessions, catalog, factorySessions, eventsService,
+		resolveHomeDir, responseBridge, wireRecorder, startResolver,
 	)
 }
 
@@ -307,11 +350,11 @@ func provideACPServerResponseBridge(bridge *chatsessionswire.ResponseBridge) acp
 // Factory Sessions services, plus the canonical logging abstraction.
 func provideChatSessionsResponseBridge(
 	chatSessions chatsessions.Service,
-	factoryTarget factorysessions.TargetExecutionService,
+	factorySessions factorysessions.Service,
 	eventsService events.Service,
 	logger logging.Logger,
 ) *chatsessionswire.ResponseBridge {
-	return chatsessionswire.NewResponseBridge(chatSessions, factoryTarget, eventsService, logger)
+	return chatsessionswire.NewResponseBridge(chatSessions, factorySessions, eventsService, logger)
 }
 
 // wireTranscriptClock adapts the injected runtime-artifact clock to the

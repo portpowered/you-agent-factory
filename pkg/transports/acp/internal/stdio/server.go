@@ -69,9 +69,9 @@ var errNullInitializeParams = errors.New("acp: initialize params must not be nul
 //
 // chatSessions and catalog are the canonical Chat Sessions collaborators
 // "session/new", "session/set_config_option", the "/factory" fallback
-// command, and ordinary prompt turn admission dispatch to; factoryTarget is
-// the Factory Sessions-owned target-execution capability an admitted prompt
-// starts or invokes against; events is the canonical aggregate stream an
+// command, and ordinary prompt turn admission dispatch to; factorySessions is
+// the process-owned Factory Sessions service an admitted prompt starts or
+// invokes against; events is the canonical aggregate stream an
 // admitted turn drains before falling back to V1 final text. A narrowly
 // constructed Server may omit events, in which case streaming is a no-op.
 //
@@ -84,14 +84,15 @@ var errNullInitializeParams = errors.New("acp: initialize params must not be nul
 // being reconstructed, not just this one instance staying alive -- see
 // startFactorySessionForEpisode.
 type Server struct {
-	logger         logging.Logger
-	chatSessions   chatsessions.Service
-	catalog        chatsessions.FactoryTargetCatalogService
-	factoryTarget  factorysessions.TargetExecutionService
-	events         events.Service
-	resolveHomeDir func() (string, error)
-	responseBridge acp.ResponseBridge
-	wireRecorder   acp.WireRecorder
+	logger          logging.Logger
+	chatSessions    chatsessions.Service
+	catalog         chatsessions.FactoryTargetCatalogService
+	factorySessions factorysessions.Service
+	events          events.Service
+	resolveHomeDir  func() (string, error)
+	responseBridge  acp.ResponseBridge
+	wireRecorder    acp.WireRecorder
+	startResolver   acp.FactorySessionStartResolver
 }
 
 func (s *Server) resolveInvocationHomeDir(ctx context.Context) (string, error) {
@@ -164,21 +165,23 @@ func New(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
-	factoryTarget factorysessions.TargetExecutionService,
+	factorySessions factorysessions.Service,
 	eventsService events.Service,
 	resolveHomeDir func() (string, error),
 	responseBridge acp.ResponseBridge,
 	wireRecorder acp.WireRecorder,
+	startResolver acp.FactorySessionStartResolver,
 ) *Server {
 	return &Server{
-		logger:         logging.EnsureLogger(logger),
-		chatSessions:   chatSessions,
-		catalog:        catalog,
-		factoryTarget:  factoryTarget,
-		events:         eventsService,
-		resolveHomeDir: resolveHomeDir,
-		responseBridge: responseBridge,
-		wireRecorder:   wireRecorder,
+		logger:          logging.EnsureLogger(logger),
+		chatSessions:    chatSessions,
+		catalog:         catalog,
+		factorySessions: factorySessions,
+		events:          eventsService,
+		resolveHomeDir:  resolveHomeDir,
+		responseBridge:  responseBridge,
+		wireRecorder:    wireRecorder,
+		startResolver:   startResolver,
 	}
 }
 

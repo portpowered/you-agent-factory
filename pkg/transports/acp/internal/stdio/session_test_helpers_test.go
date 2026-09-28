@@ -10,6 +10,7 @@ import (
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	chatsessionswire "github.com/portpowered/infinite-you/pkg/services/chat_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/events"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -381,6 +382,7 @@ func (f *fakeFactoryTargetCatalogService) ResolveFactoryTargetCatalog(
 }
 
 type fakeFactoryTargetService struct {
+	factorysessions.Service
 	mu             sync.Mutex
 	startCalls     []factorysessions.StartRequest
 	startResult    factorysessions.AsyncStartResult
@@ -416,6 +418,68 @@ type terminateFactoryTargetCall struct {
 	request   factorysessions.ControlRequest
 }
 
+func (f *fakeFactoryTargetService) Start(
+	_ context.Context,
+	request factorysessions.SessionStartRequest,
+) (factorysessions.SessionStartResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.startCalls = append(f.startCalls, factorysessions.StartRequest{
+		RequestID: request.Correlation.RequestID,
+		Source:    request.Source,
+		Args:      request.Args,
+	})
+	if f.startErr != nil {
+		return factorysessions.SessionStartResult{}, f.startErr
+	}
+	return factorysessions.SessionStartResult{SessionID: f.startResult.SessionID}, nil
+}
+func (f *fakeFactoryTargetService) Invoke(
+	_ context.Context,
+	request factorysessions.SessionInvokeRequest,
+) (factorysessions.InvocationResult, error) {
+	f.mu.Lock()
+	legacy := factorysessions.InvocationRequest{ContentProvided: true}
+	if request.Input != nil && request.Input.ResolvedInput != nil {
+		legacy.Content = request.Input.ResolvedInput.Content
+	}
+	requestID := request.Correlation.RequestID
+	legacy.RequestID = &requestID
+	sourceKind := factorysessions.InvocationInputSourceKindText
+	legacy.SourceKind = &sourceKind
+	f.invokeCalls = append(f.invokeCalls, invokeFactoryTargetCall{sessionID: request.SessionID, request: legacy})
+	enter, release := f.invokeEnter, f.invokeRelease
+	f.mu.Unlock()
+	if enter != nil && release != nil {
+		close(enter)
+		<-release
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.invokeErrs) > 0 {
+		next := f.invokeErrs[0]
+		f.invokeErrs = f.invokeErrs[1:]
+		if next != nil {
+			return factorysessions.InvocationResult{}, next
+		}
+		return f.invokeResult, nil
+	}
+	if f.invokeErr != nil {
+		return factorysessions.InvocationResult{}, f.invokeErr
+	}
+	return f.invokeResult, nil
+}
+func testStartResolver(_ context.Context, factoryTargetID, workingRoot, requestID string) (factorysessions.SessionStartRequest, error) {
+	return factorysessions.SessionStartRequest{
+		Mode:        factorysessions.SessionOperationModeLive,
+		Correlation: factorysessions.SessionOperationCorrelation{RequestID: requestID},
+		Source: factorysessions.Source{
+			Kind:      factoryruntime.WorkflowSourceKindFactoryID,
+			FactoryID: factoryTargetID,
+		},
+		Args: map[string]any{"workingRoot": workingRoot},
+	}, nil
+}
 func (f *fakeFactoryTargetService) StartAsync(
 	_ context.Context,
 	request factorysessions.StartRequest,
@@ -476,6 +540,42 @@ func (f *fakeFactoryTargetService) Cancel(
 	}
 	return factorysessions.LifecycleControlResult{}, nil
 }
+func (f *fakeFactoryTargetService) Control(
+	_ context.Context,
+	request factorysessions.SessionControlRequest,
+) (factorysessions.SessionControlResult, error) {
+	f.mu.Lock()
+	sessionID, operation := request.SessionID, request.Operation
+	control := request.Control
+	release, closeRelease, closeErr := f.cancelRelease, f.closeRelease, f.closeErr
+	err := f.cancelErr
+	switch operation {
+	case factorysessions.SessionControlTerminate:
+		f.terminateCalls = append(f.terminateCalls, terminateFactoryTargetCall{sessionID: sessionID, request: control})
+	case factorysessions.SessionControlClose:
+		f.closeCalls = append(f.closeCalls, sessionID)
+		if len(f.closeCalls) == 1 && f.closeEntered != nil {
+			close(f.closeEntered)
+		}
+		release, err = closeRelease, closeErr
+	case factorysessions.SessionControlCancel:
+		f.cancelCalls = append(f.cancelCalls, cancelFactoryTargetCall{sessionID: sessionID, request: control})
+		if len(f.cancelCalls) == 1 && f.cancelEntered != nil {
+			close(f.cancelEntered)
+		}
+	default:
+		f.mu.Unlock()
+		return factorysessions.SessionControlResult{}, nil
+	}
+	f.mu.Unlock()
+	if release != nil {
+		<-release
+	}
+	if err != nil {
+		return factorysessions.SessionControlResult{}, err
+	}
+	return factorysessions.SessionControlResult{}, nil
+}
 func (f *fakeFactoryTargetService) CloseFactorySession(_ context.Context, sessionID string) error {
 	f.mu.Lock()
 	f.closeCalls = append(f.closeCalls, sessionID)
@@ -496,10 +596,6 @@ func (f *fakeFactoryTargetService) TerminateFactorySession(
 ) error {
 	f.mu.Lock()
 	f.terminateCalls = append(f.terminateCalls, terminateFactoryTargetCall{sessionID: sessionID, request: request})
-	f.closeCalls = append(f.closeCalls, sessionID)
-	if len(f.closeCalls) == 1 && f.closeEntered != nil {
-		close(f.closeEntered)
-	}
 	release, err := f.closeRelease, f.closeErr
 	f.mu.Unlock()
 	if release != nil {
@@ -593,21 +689,21 @@ func newTestServer(chatSessions *fakeChatSessionsService, catalog *fakeFactoryTa
 func newTestServerWithFactoryTarget(
 	chatSessions *fakeChatSessionsService,
 	catalog *fakeFactoryTargetCatalogService,
-	factoryTarget factorysessions.TargetExecutionService,
+	factoryTarget factorysessions.Service,
 	homeDir string,
 ) *Server {
 	resolveHomeDir := func() (string, error) { return homeDir, nil }
-	return New(nil, chatSessions, catalog, factoryTarget, nil, resolveHomeDir, nil, nil)
+	return New(nil, chatSessions, catalog, factoryTarget, nil, resolveHomeDir, nil, nil, testStartResolver)
 }
 func newTestServerWithResponseBridge(
 	chatSessions *fakeChatSessionsService,
 	catalog *fakeFactoryTargetCatalogService,
-	factoryTarget factorysessions.TargetExecutionService,
+	factoryTarget factorysessions.Service,
 	homeDir string,
 	responseBridge acp.ResponseBridge,
 ) *Server {
 	resolveHomeDir := func() (string, error) { return homeDir, nil }
-	return New(nil, chatSessions, catalog, factoryTarget, nil, resolveHomeDir, responseBridge, nil)
+	return New(nil, chatSessions, catalog, factoryTarget, nil, resolveHomeDir, responseBridge, nil, testStartResolver)
 }
 func numberIdentityEnvelope(t *testing.T, connID identity.ConnectionID, wireID int64, method string, params string) envelope.Envelope {
 	t.Helper()
@@ -951,7 +1047,7 @@ func newStreamingTestServer(t *testing.T, factoryTarget *fakeFactoryTargetServic
 	eventsSvc := &fakeEventsService{}
 	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
 	resolveHomeDir := func() (string, error) { return "/home/operator", nil }
-	server := New(nil, chatSessions, catalog, factoryTarget, eventsSvc, resolveHomeDir, nil, nil)
+	server := New(nil, chatSessions, catalog, factoryTarget, eventsSvc, resolveHomeDir, nil, nil, testStartResolver)
 	return server, eventsSvc
 }
 func assistantMessagePayload(text string) workers.MessagePayload {

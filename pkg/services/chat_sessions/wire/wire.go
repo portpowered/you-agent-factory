@@ -87,9 +87,9 @@ type ResponseBridge = responsebridge.Service
 // abstraction; callers that do not need output pass logging.NoopLogger{}.
 func NewResponseBridge(
 	sequencer responsebridge.Sequencer,
-	factoryTarget factorysessions.TargetExecutionService,
+	factorySessions factorysessions.Service,
 	workerEvents events.Service,
 	logger logging.Logger,
 ) *ResponseBridge {
-	return responsebridge.New(sequencer, factoryTarget, workerEvents, logger)
+	return responsebridge.New(sequencer, factorySessions, workerEvents, logger)
 }

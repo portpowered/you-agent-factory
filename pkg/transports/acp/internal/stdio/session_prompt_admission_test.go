@@ -509,7 +509,7 @@ func TestHandleSessionPromptEqualWireIDsAcrossConnectionsRemainDistinct(t *testi
 // configured reports a bounded internal failure rather than panicking or
 // dispatching a Factory effect.
 func TestHandleSessionPromptWithoutCollaboratorsReportsBoundedFailure(t *testing.T) {
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt,
 		promptTextParams("session-1", "hello there"))
 

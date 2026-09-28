@@ -104,7 +104,7 @@ func (s *Service) startWorkerChildren(
 		return children, nil
 	}
 
-	stream, err := s.factoryTarget.SubscribeFactoryEventsForSession(liveCtx, factorySessionID, nil)
+	stream, err := s.factorySessions.SubscribeFactoryEventsForSession(liveCtx, factorySessionID, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (c *workerChildren) finish(ctx context.Context) error {
 
 	tailCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stream, err := c.service.factoryTarget.SubscribeFactoryEventsForSession(tailCtx, c.factorySessionID, nil)
+	stream, err := c.service.factorySessions.SubscribeFactoryEventsForSession(tailCtx, c.factorySessionID, nil)
 	if err != nil {
 		return err
 	}
