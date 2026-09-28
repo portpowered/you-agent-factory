@@ -46,10 +46,17 @@ the agent's text response.
 | Longcat artifact-selection audit | Read only `pkg/services/models/internal/artifacts/selection.go`; 90-second limit | `COMPLETED`, session `223c947e-4d3d-446a-9dfb-d622ece87c80` | Correctly identified `FailureUnknownBackend` for unregistered Qwen3 and audio.cpp IDs. | One-file audit completed where the broader audit timed out. |
 | Longcat protobuf subset | Add PredictOptions `Tokens=4`, `UseTokenizerTemplate=43`, `Messages=44` and regenerate Go; 180-second limit | `factory_session.subagent.timed_out`, session `910e4885-ad97-4bd0-9ea0-a66f147d1588` | Partial edits to `.proto` and generated `pb.go`; no primary MCP result. Root inspected them and focused LocalAI tests compiled. | Neither timeout produced a primary MCP result despite useful edits; edits require post-timeout inspection. |
 | Longcat one-file predictOptions mapping | Apply the requested one-file predictOptions mapping; 150-second limit | `factory_session.subagent.timed_out`, session `73829142-5623-4f41-8dff-9cb54353dfb7` | The requested one-file edit was left in place; no primary MCP result. Root reviewed it; focused tests and a live Gemma GPU gRPC invocation then returned `READY`. | Neither timeout produced a primary MCP result despite useful edits; edits require post-timeout inspection. |
+| Backend registry and artifact selection audit | Read-only audit of the backend registry and artifact selection | `COMPLETED`, session `fcd35b90-50f7-4d0b-a4af-c2be633b4ad6` | No edit requested; none expected. Recognition alone lacks published Qwen/Index artifacts. | Recognized backends without published artifacts are not dispatch-ready; artifact publication remains a separate step. |
+| Longcat reliability-log edit | Add the preceding audit and lock observations to this file; 90-second limit | `factory_session.subagent.timed_out`, session `1c160486-cace-413f-a135-7bc2c60a649d` | The audit row was added, but the lock note was missing and no primary result returned. | Inspect partial edits after timeouts. |
 
 The two permission probes above verify the installed permission path on this
 host for the specific paths exercised; they do not establish that every
 external path is writable or readable.
+
+The OpenCode log again showed snapshot `index.lock` warnings through 07:38 UTC.
+The zero-byte lock predated the current ACP process, but a subsequent removal
+attempt was blocked by local tool policy. The lock's role in model timeouts
+remains unproven.
 
 Two `you.subagent` calls ran concurrently and appeared as two live Factory
 Sessions. This demonstrates concurrent dispatch, while the code task's timeout
