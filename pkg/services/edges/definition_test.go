@@ -112,6 +112,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 		ModelAssetHostPlatform: models.AssetHostPlatform{
 			OperatingSystem: "default-os",
 			Architecture:    "default-arch",
+			Accelerator:     "cpu",
 		},
 		WorkContentHostPlatform: "default-os",
 	}, Edges{
@@ -129,6 +130,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 		ModelAssetHostPlatform: models.AssetHostPlatform{
 			OperatingSystem: "replacement-os",
 			Architecture:    "replacement-arch",
+			Accelerator:     "cuda",
 		},
 		WorkContentHostPlatform:      "replacement-os",
 		ModelInvocationBackend:       invocationBackend,
@@ -236,7 +238,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	if merged.HostedLinearEndpoint != "https://linear.example.test" {
 		t.Fatal("Merge discarded an unreplaced default")
 	}
-	if merged.ModelAssetHostPlatform != (models.AssetHostPlatform{OperatingSystem: "replacement-os", Architecture: "replacement-arch"}) {
+	if merged.ModelAssetHostPlatform != (models.AssetHostPlatform{OperatingSystem: "replacement-os", Architecture: "replacement-arch", Accelerator: "cuda"}) {
 		t.Fatalf("ModelAssetHostPlatform = %#v, want explicit replacement", merged.ModelAssetHostPlatform)
 	}
 	if merged.WorkContentHostPlatform != "replacement-os" {
@@ -511,7 +513,7 @@ func TestMergeAppliesAssetAndHostedEndpointReplacements(t *testing.T) {
 	t.Parallel()
 
 	merged := Merge(
-		Edges{HostedLinearEndpoint: "https://default.example"},
+		Edges{HostedLinearEndpoint: "https://default.example", ModelAssetHostPlatform: models.AssetHostPlatform{Accelerator: "cpu"}},
 		Edges{
 			HostedLinearEndpoint: "https://replacement.example",
 			ModelAssetEndpoints: models.RuntimeAssetEndpoints{
@@ -534,6 +536,9 @@ func TestMergeAppliesAssetAndHostedEndpointReplacements(t *testing.T) {
 	}
 	if merged.ModelAssetHostPlatform.OperatingSystem != "replacement-os" {
 		t.Fatalf("ModelAssetHostPlatform.OperatingSystem = %q, want replacement", merged.ModelAssetHostPlatform.OperatingSystem)
+	}
+	if merged.ModelAssetHostPlatform.Accelerator != "cpu" {
+		t.Fatalf("ModelAssetHostPlatform.Accelerator = %q, want preserved default", merged.ModelAssetHostPlatform.Accelerator)
 	}
 }
 

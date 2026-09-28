@@ -357,6 +357,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	if replacements.ModelAssetHostPlatform.Architecture != "" {
 		defaults.ModelAssetHostPlatform.Architecture = replacements.ModelAssetHostPlatform.Architecture
 	}
+	if replacements.ModelAssetHostPlatform.Accelerator != "" {
+		defaults.ModelAssetHostPlatform.Accelerator = replacements.ModelAssetHostPlatform.Accelerator
+	}
 	if replacements.ModelResolveHuggingFaceRevision != nil {
 		defaults.ModelResolveHuggingFaceRevision = replacements.ModelResolveHuggingFaceRevision
 	}

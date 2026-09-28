@@ -43,6 +43,48 @@ func TestNewDefaultBackendArtifactResolverSelectsPinnedMatrix(t *testing.T) {
 	}
 }
 
+func TestNewDefaultBackendArtifactResolverPreservesAcceleratorRequest(t *testing.T) {
+	t.Parallel()
+
+	resolver, err := NewDefaultBackendArtifactResolver()
+	if err != nil {
+		t.Fatalf("NewDefaultBackendArtifactResolver: %v", err)
+	}
+	for _, operatingSystem := range []string{"windows", "linux"} {
+		t.Run(operatingSystem, func(t *testing.T) {
+			platform := models.AssetHostPlatform{
+				OperatingSystem: operatingSystem, Architecture: "amd64", Accelerator: "cuda",
+			}
+			request := ResolvedHostConfiguration{
+				Backend: "localai-llamacpp", Platform: platform,
+				ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+			}
+			_, err := resolver(context.Background(), request)
+			if !errors.Is(err, artifacts.ErrIncompatibleAccelerator) {
+				t.Fatalf("resolve explicit CUDA error = %v, want ErrIncompatibleAccelerator", err)
+			}
+			var failure *artifacts.Failure
+			if !errors.As(err, &failure) || failure.Detail != "the matching artifact does not declare this accelerator" {
+				t.Fatalf("resolve explicit CUDA error = %v, want selection against the CPU-only manifest", err)
+			}
+
+			request.Platform.Accelerator = ""
+			selection, err := resolver(context.Background(), request)
+			if err != nil {
+				t.Fatalf("resolve omitted accelerator: %v", err)
+			}
+			request.Platform.Accelerator = "cpu"
+			cpuSelection, err := resolver(context.Background(), request)
+			if err != nil {
+				t.Fatalf("resolve explicit CPU: %v", err)
+			}
+			if selection != cpuSelection || selection.Name == "" {
+				t.Fatalf("omitted accelerator selection = %#v, want explicit CPU selection %#v", selection, cpuSelection)
+			}
+		})
+	}
+}
+
 func TestNewDefaultBackendArtifactResolverRejectsIncompatibleRequests(t *testing.T) {
 	t.Parallel()
 

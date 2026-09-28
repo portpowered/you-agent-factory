@@ -49,6 +49,9 @@ func NewDefaultBackendArtifactResolver() (BackendArtifactResolver, error) {
 }
 
 func defaultBackendAccelerator(platform models.AssetHostPlatform) string {
+	if platform.Accelerator != "" {
+		return platform.Accelerator
+	}
 	if platform.OperatingSystem == "darwin" && platform.Architecture == "arm64" {
 		return "metal"
 	}

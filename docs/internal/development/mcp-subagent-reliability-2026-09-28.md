@@ -310,3 +310,20 @@ Factory, a fresh stdio MCP OpenCode Longcat call completed in Factory Session
 empty stderr. Its native session `ses_f18c0118bffeBp4D5E0ZLD5nTE` contains
 the task once and no raw WorkID template. This removes prompt duplication;
 intermittent model continuation still needs further stress testing.
+
+A subsequent Codex MCP editing task for CUDA resolver plumbing hit the outer
+`factory_session.request.timed_out` error after 180 seconds. The response had
+no Factory Session or Work ID and labeled the error retryable, even though the
+agent had already modified seven source and test files. The partial diff
+passed focused Go tests, `make pkg-maint`, and `git diff --check`. This is a
+separate terminal-classification defect: callers cannot safely retry a timed
+out edit with possible partial effects. The cause of the agent timeout remains
+unproven.
+
+An OpenCode Nemotron MCP edit task to detect Linux CUDA capability timed out
+after 120 seconds in Factory Session `e77aaa95-7b42-4fd9-8772-5481f2e44237`.
+The tool returned `factory_session.subagent.timed_out` with
+`partialEffectsPossible: true` and `retryable: false`; no requested source or
+test edit was present in the workspace afterward. This adds another timeout
+observation without establishing whether model, ACP, or harness continuation
+caused it.

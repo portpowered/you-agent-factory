@@ -42,6 +42,11 @@ var supportedTargets = map[string]targetFacts{
 		architecture:    "amd64",
 		accelerators:    []string{"cpu"},
 	},
+	"linux-amd64-cuda": {
+		operatingSystem: "linux",
+		architecture:    "amd64",
+		accelerators:    []string{"cuda"},
+	},
 	"windows-amd64": {
 		operatingSystem: "windows",
 		architecture:    "amd64",

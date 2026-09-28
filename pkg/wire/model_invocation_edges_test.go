@@ -174,9 +174,14 @@ func TestModelAssetHostPlatformPreservesOverrideAndSelectsProcessDefault(t *test
 		t.Fatalf("default model asset host platform = %#v, want current process platform", got)
 	}
 
-	override := models.AssetHostPlatform{OperatingSystem: "customer-os", Architecture: "customer-arch"}
+	override := models.AssetHostPlatform{OperatingSystem: "customer-os", Architecture: "customer-arch", Accelerator: "cuda"}
 	if got := provideModelAssetHostPlatform(serviceedges.Edges{ModelAssetHostPlatform: override}); got != override {
 		t.Fatalf("model asset host platform override = %#v, want %#v", got, override)
+	}
+	if got := provideModelAssetHostPlatform(serviceedges.Edges{ModelAssetHostPlatform: models.AssetHostPlatform{Accelerator: "cuda"}}); got != (models.AssetHostPlatform{
+		OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH, Accelerator: "cuda",
+	}) {
+		t.Fatalf("model asset host platform with accelerator override = %#v, want process OS and architecture with CUDA", got)
 	}
 }
 
