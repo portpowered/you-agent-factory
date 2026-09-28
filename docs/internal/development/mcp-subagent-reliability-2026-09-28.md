@@ -862,3 +862,8 @@ the new tests and resolver, plus one test-only helper left in production
 code. Codex MCP subagent `fd9d2df1-4888-4412-83d5-d9600882c2ec`
 refactored those same files; focused Go suites passed independently, and
 the full native Windows Git Bash `make lint` then passed all 24 targets.
+The updated `you.exe` was rebuilt and installed at
+`C:\Users\andre\.local\bin\you.exe` (SHA-256
+`7698C21E39C80E7515D4DF26824655D017BC38B9AA1580D667E0BFA1572283D6`).
+A fresh stdio MCP initialization and `tools/list` on that installed binary
+returned 11 tools including `you.subagent`.
