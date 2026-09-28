@@ -174,10 +174,16 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 // call it before opening another process against the same directory.
 func (fs *FunctionalAPIServer) Close(t testing.TB) {
 	t.Helper()
-	if fs == nil || fs.closeProcess == nil {
+	if fs == nil {
 		return
 	}
 	fs.closeOnce.Do(func() {
+		if fs.process != nil {
+			fs.process.Stop(t)
+		}
+		if fs.closeProcess == nil {
+			return
+		}
 		closeCtx, cancelClose := context.WithTimeout(context.Background(), processCommandStopTimeout)
 		defer cancelClose()
 		fs.closeErr = fs.closeProcess(closeCtx)
