@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -48,6 +49,15 @@ func TestActivationOnlyStartRequest(t *testing.T) {
 	if got.FolderPath != target.FactoryDir {
 		t.Fatalf("FolderPath = %q", got.FolderPath)
 	}
+	assertActivationRuntimeSelection(t, got)
+	assertActivationClonesInputs(t, target, got)
+	if got.RuntimeSelection.DefinitionSourcePath != target.FactorySourcePath || got.Definition.SourceRef != target.FactorySourcePath {
+		t.Fatalf("definition source = %q %q", got.RuntimeSelection.DefinitionSourcePath, got.Definition.SourceRef)
+	}
+}
+
+func assertActivationRuntimeSelection(t *testing.T, got factorysessions.SessionStartRequest) {
+	t.Helper()
 	sel := got.RuntimeSelection
 	if sel == nil {
 		t.Fatal("RuntimeSelection must not be nil")
@@ -70,6 +80,11 @@ func TestActivationOnlyStartRequest(t *testing.T) {
 	if sel.Host.Port != 0 {
 		t.Fatalf("Host.Port = %d", sel.Host.Port)
 	}
+}
+
+func assertActivationClonesInputs(t *testing.T, target roles.InvocationTarget, got factorysessions.SessionStartRequest) {
+	t.Helper()
+	sel := got.RuntimeSelection
 	if sel.DefinitionInvocationArguments == nil {
 		t.Fatal("DefinitionInvocationArguments must be cloned")
 	}
@@ -88,8 +103,5 @@ func TestActivationOnlyStartRequest(t *testing.T) {
 	*sel.Workers.InvocationSkipPermissionsOverride = false
 	if *target.SkipPermissionsOverride != true {
 		t.Fatal("input SkipPermissionsOverride was mutated")
-	}
-	if sel.DefinitionSourcePath != target.FactorySourcePath || got.Definition.SourceRef != target.FactorySourcePath {
-		t.Fatalf("definition source = %q %q", sel.DefinitionSourcePath, got.Definition.SourceRef)
 	}
 }
