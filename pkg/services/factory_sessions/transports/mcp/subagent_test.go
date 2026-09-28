@@ -162,6 +162,8 @@ func TestSubagentTimeoutReportsPossibleWorkspaceEdits(t *testing.T) {
 		Status:    factorysessions.InvocationTerminalStatusTimedOut,
 		ErrorCode: "INVOCATION_TIMED_OUT",
 		Message:   "private provider output",
+		RequestID: "request-timeout",
+		TraceID:   "trace-abc-123",
 	}}
 	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-timeout" }, mcpfactorysession.SubagentInput{
 		Prompt: "Edit one file", TimeoutMillis: &timeout,
@@ -171,6 +173,9 @@ func TestSubagentTimeoutReportsPossibleWorkspaceEdits(t *testing.T) {
 	}
 	if response.Error.SessionID != "session-1" || response.Error.Details["timeoutMillis"] != timeout || response.Error.Details["partialEffectsPossible"] != true {
 		t.Fatalf("timeout diagnostic = %#v", response.Error)
+	}
+	if response.Error.Details["requestId"] != "request-timeout" || response.Error.Details["traceId"] != "trace-abc-123" {
+		t.Fatalf("timeout IDs = %#v", response.Error.Details)
 	}
 	if !strings.Contains(response.Error.Message, "workspace edits may have occurred") || strings.Contains(response.Error.Message, "private") || !target.closed {
 		t.Fatalf("timeout message or cleanup = %#v", response.Error)

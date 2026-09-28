@@ -118,3 +118,22 @@ tools and completed a read-only OpenCode subagent with session
 `9844094a-1e11-4a17-b391-e0017f30a233`, returning `you-agent-factory`, with
 empty stderr. This does not resolve the earlier model-specific timeout
 behavior.
+
+A read-only timeout-diagnostic audit completed as session
+`208d7d18-0877-4d2f-bde6-b2c54232f656`; its suggestion to expose
+`result.Message` was rejected because that field can contain provider-private
+output.
+
+A bounded edit of `tool.go` and `subagent_test.go` completed as session
+`3cd17741-6f0b-4eff-80d7-b5db3ca0cdf9`; focused MCP Go package tests passed
+and timeout errors now include a nonempty `requestId` and `traceId`. This is a
+diagnostic-improvement observation only and does not fix the underlying
+OpenCode timeout.
+
+A fresh stdio launch of the rebuilt candidate `you-mcp-timeout-ids.exe` listed
+11 MCP tools. A one-second bounded OpenCode call timed out as expected in
+session `2f9e2fe3-01bb-46e3-94b9-8b5dbfa82593` and returned both
+`requestId=3862a36f-529b-452d-807a-f4202f6523cc` and
+`traceId=trace-3862a36f-529b-452d-807a-f4202f6523cc`. The same identifiers
+appeared in the server's structured timeout log, so they provide a usable
+correlation path. This forced timeout does not diagnose sporadic longer calls.

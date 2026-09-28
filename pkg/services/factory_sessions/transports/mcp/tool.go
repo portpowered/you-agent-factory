@@ -282,6 +282,12 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		if timeoutMillis > 0 {
 			envelope.Details["timeoutMillis"] = timeoutMillis
 		}
+		if result.RequestID != "" {
+			envelope.Details["requestId"] = result.RequestID
+		}
+		if result.TraceID != "" {
+			envelope.Details["traceId"] = result.TraceID
+		}
 		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
 	switch workers.WorkFailureType(result.FailureReason) {
