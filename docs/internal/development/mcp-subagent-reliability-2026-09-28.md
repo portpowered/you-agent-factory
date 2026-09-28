@@ -282,3 +282,13 @@ Session `0547e552-78ef-4a04-a039-bd516f82b646`). The response remains
 non-retryable because an edit may have happened before a timeout. This makes
 the failure actionable without claiming the intermittent continuation has
 been fixed.
+
+An OpenCode Nemotron one-file/multi-file read-only audit of the managed CUDA
+resolver timed out after 120 seconds in Factory Session
+`aa07fdec-50f8-4bd5-85c4-ed23b69f3950`, with no edit. Sanitized native
+session `ses_f18cfd445ffeD9CP0LCImb83wm` had three assistant turns ending in
+tool calls, several completed reads/grep/glob calls, and no final answer. The
+equivalent Codex MCP read-only audit completed in Factory Session
+`a97ed1d5-bcc8-4f98-87f4-dd57d6bfe8c5`, confirming that the private
+resolver has no CUDA capability input and the manifest lacks Linux CUDA
+artifacts. This comparison does not establish the timeout's root cause.
