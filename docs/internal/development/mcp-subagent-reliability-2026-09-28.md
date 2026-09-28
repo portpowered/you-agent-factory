@@ -9,7 +9,7 @@ the agent's text response.
 - Checkout: `codex/mcp-subagent` at `a16ff10223` when probing began.
 - MCP connector: `you.factory_session.list` responded successfully.
 - Installed server: `C:\Users\andre\bin\you.exe` (built from source commit
-  `4bd24f1142` at the latest probe). Existing MCP connector processes may
+  `d04ea6a352` at the latest probe). Existing MCP connector processes may
   retain an earlier binary until they restart.
 - Provider/model for the first probes below: `opencode` /
   `opencode/nemotron-3.5-lightning-free`. Later rows name their
@@ -228,3 +228,10 @@ one-second timeout returned a nonempty `workId`
 `batch-7d4ba850-6230-4b63-8b1f-886e10e8c150-work-1` in session
 `01ffe7bd-2606-441a-88c6-1a3b5db40408`, alongside request/trace IDs. This
 improves correlation, not the underlying timeout reliability.
+
+Commit `d04ea6a352` was installed as `C:\Users\andre\bin\you.exe`. A fresh
+stdio launch returned `workId=batch-f491257c-ad19-447d-91fb-c542fa9be09f-work-1`
+on a one-second timeout in session `8a82574e-c722-4c66-a613-8605f7cab85d`.
+A separate fresh launch completed a normal Longcat read-only request in
+session `3dfa17a8-6f17-4221-b6b1-11fd2d4c167d`, returning
+`you-agent-factory` with empty stderr.
