@@ -881,3 +881,12 @@ The first full package test found stale MCP inventory output, so subagents
 inventory and published API contract artifacts. The full Factory Sessions
 MCP package test, contract check, and native Windows `make lint` (24 targets)
 then passed. The underlying OpenCode timeout cause remains unproven.
+The rebuilt installed binary (`C:\Users\andre\.local\bin\you.exe`, SHA-256
+`7C17AD7B50196279214FAF553F3584740C090089B9B7FEFCB6B2417296387A24`)
+was launched as a fresh stdio MCP server. A forced one-second Codex subagent
+timeout returned `sessionClosed: true`, request/trace/work IDs, and the new
+inspection guidance. In that same server process,
+`you.factory_session.get` for the returned ID correctly returned
+`factory_session.session.not_found`. The worktree remained clean after the
+cancelled probe. This verifies the customer diagnostic and explains the
+earlier failed lookups; it does not identify the OpenCode timeout cause.
