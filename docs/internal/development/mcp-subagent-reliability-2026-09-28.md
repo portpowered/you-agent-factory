@@ -478,6 +478,40 @@ line appeared only after the probe client closed stdin following the result.
 This verifies the rebuilt prompt and direct stdio path for a small task; it
 does not establish that a broad edit will complete under every model/deadline.
 
+An OpenCode `nemotron-3.5-lightning-free` MCP edit to classify misconfigured
+providers and missing executables timed out after 180 seconds in Factory
+Session `974520a5-7888-4674-b49c-1048e98e294a`. It left the requested
+source and test edits but no primary result; the partial test did not compile
+because the `workers` import was missing. OpenCode session
+`ses_f183f5011ffeA1tPg26tz0OOAw` recorded completed tools through the
+deadline, including unsuccessful attempts to add that import. A 90-second
+exact-file repair completed in Factory Session
+`0e014f3a-17e3-46b2-a872-8e13ceb55174`, and an independent MCP package
+test passed after review. This reinforces that timed-out edits require
+worktree inspection; it does not establish the first timeout's cause.
+
+A subsequent 90-second OpenCode log-only edit timed out without changing the
+worktree in Factory Session `2e411ab3-4a72-4dec-953a-2d7ae36b4a19`.
+OpenCode session `ses_f183ab131ffezgWptqCRANAPAS` recorded one completed
+read at the start, then resumed planning about 77 seconds later and reached
+the deadline without an edit. The gap's cause remains unproven.
+
+A concurrent pair of read-only README probes tested two other free OpenCode
+models. `muse-spark-1.3-contributor-free` returned a classified
+`provider_throttled` error in Factory Session
+`e750b319-f8cd-4e9f-9e4a-c11865903a7a`. `space-bunny-free` completed in
+Factory Session `3d1ed64c-e4e6-4ca2-999a-97003d87af88`, but prefixed the
+requested single heading with an extra progress sentence. Transport completion
+therefore did not imply exact instruction fidelity for that model.
+
+After rebuilding and copying the binary to the configured MCP path, a fresh
+stdio MCP connection negotiated protocol `2024-11-05` and completed a
+`nemotron-3.5-lightning-free` README-heading probe in Factory Session
+`be3e4371-031e-4218-a4f8-bcf469f8e6e3`. Its primary result was exactly
+`# you-agent-factory`. This verifies the installed binary's simple invoke
+path; the new misconfiguration mappings are covered by package tests rather
+than a live misconfigured provider.
+
 An OpenCode `nemotron-3.5-lightning-free` task to trace the Pi provider's
 unavailable-endpoint timeout through the Factory Session wait path timed out
 after 180 seconds in Factory Session

@@ -12,6 +12,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type subagentTargetFake struct {
@@ -155,6 +156,50 @@ func TestSubagentSurfacesSafeProviderThrottleFailure(t *testing.T) {
 	}
 	if strings.Contains(response.Error.Message, "sensitive") || !target.closed {
 		t.Fatalf("terminal failure leaked provider text or skipped close: %#v", response.Error)
+	}
+}
+
+func TestSubagentSurfacesProviderMisconfiguredFailure(t *testing.T) {
+	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
+		Status:        factorysessions.InvocationTerminalStatusFailed,
+		ErrorCode:     "INVOCATION_RUNTIME_FAILURE",
+		Message:       "sensitive provider configuration token",
+		FailureReason: string(workers.WorkFailureTypeMisconfigured),
+	}}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-misconfigured" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.provider_misconfigured" || response.Error.Retryable {
+		t.Fatalf("misconfigured response = %#v", response)
+	}
+	if response.Error.SessionID != "session-1" || response.Error.Details["failureReason"] != string(workers.WorkFailureTypeMisconfigured) {
+		t.Fatalf("misconfigured diagnostic = %#v", response.Error)
+	}
+	if response.Error.Details["suggestedAction"] == "" {
+		t.Fatal("misconfigured missing suggestedAction")
+	}
+	if strings.Contains(response.Error.Message, "sensitive") || strings.Contains(fmt.Sprint(response.Error.Details), "sensitive") || !target.closed {
+		t.Fatalf("misconfigured terminal failure leaked provider text or skipped close: %#v", response.Error)
+	}
+}
+
+func TestSubagentSurfacesProviderExecutableMissingFailure(t *testing.T) {
+	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
+		Status:        factorysessions.InvocationTerminalStatusFailed,
+		ErrorCode:     "INVOCATION_RUNTIME_FAILURE",
+		Message:       "sensitive provider executable path",
+		FailureReason: string(workers.WorkFailureTypeMissingExecutable),
+	}}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-executable-missing" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.provider_executable_missing" || response.Error.Retryable {
+		t.Fatalf("executable missing response = %#v", response)
+	}
+	if response.Error.SessionID != "session-1" || response.Error.Details["failureReason"] != string(workers.WorkFailureTypeMissingExecutable) {
+		t.Fatalf("executable missing diagnostic = %#v", response.Error)
+	}
+	if response.Error.Details["suggestedAction"] == "" {
+		t.Fatal("executable missing missing suggestedAction")
+	}
+	if strings.Contains(response.Error.Message, "sensitive") || strings.Contains(fmt.Sprint(response.Error.Details), "sensitive") || !target.closed {
+		t.Fatalf("executable missing terminal failure leaked provider text or skipped close: %#v", response.Error)
 	}
 }
 

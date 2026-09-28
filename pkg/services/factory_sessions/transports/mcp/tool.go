@@ -369,6 +369,18 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		envelope.Message = "provider request timed out"
 		envelope.Retryable = true
 		envelope.Details["failureReason"] = string(workers.WorkFailureTypeTimeout)
+	case workers.WorkFailureTypeMisconfigured:
+		envelope.Code = "factory_session.subagent.provider_misconfigured"
+		envelope.Message = "subagent provider is misconfigured; check provider setup and capabilities"
+		envelope.Retryable = false
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeMisconfigured)
+		envelope.Details["suggestedAction"] = "Verify the provider configuration and ensure the required executable or model is available"
+	case workers.WorkFailureTypeMissingExecutable:
+		envelope.Code = "factory_session.subagent.provider_executable_missing"
+		envelope.Message = "required provider executable is unavailable"
+		envelope.Retryable = false
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeMissingExecutable)
+		envelope.Details["suggestedAction"] = "Install the provider command on PATH or update its configured executable path, then retry."
 	}
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }
