@@ -615,19 +615,14 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	wireAcpServerResolveHomeDir := provideACPServerResolveHomeDir(edges2)
-	v90 := provideACPServerFactoryTargetRuntimeResolver(wireAcpServerResolveHomeDir, v, defaultsResolver, runtimeArtifactRootResolver)
-	v91, err := provideACPServerFactoryTarget(v65, v90, v7, logger)
+	v90 := provideChatSessionsResponseBridge(chatsessionsService, v65, eventsService, loggingLogger)
+	responseBridge := provideACPServerResponseBridge(v90)
+	v91, err := provideACPWireRecorder(edges2, reserver, wireRuntimeArtifactClock, wireAcpServerResolveHomeDir)
 	if err != nil {
 		return nil, err
 	}
-	targetExecutionService := provideACPServerFactoryTargetService(v91)
-	v92 := provideChatSessionsResponseBridge(chatsessionsService, targetExecutionService, eventsService, loggingLogger)
-	responseBridge := provideACPServerResponseBridge(v92)
-	v93, err := provideACPWireRecorder(edges2, reserver, wireRuntimeArtifactClock, wireAcpServerResolveHomeDir)
-	if err != nil {
-		return nil, err
-	}
-	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, targetExecutionService, eventsService, wireAcpServerResolveHomeDir, responseBridge, v93)
+	factorySessionStartResolver := provideACPServerFactorySessionStartResolver(wireAcpServerResolveHomeDir, v, defaultsResolver, runtimeArtifactRootResolver)
+	server := provideACPServer(loggingLogger, chatsessionsService, factoryTargetCatalogService, v65, eventsService, wireAcpServerResolveHomeDir, responseBridge, v91, factorySessionStartResolver)
 	operation := provideMetricsCLI()
 	costReportOperation := provideCostsReportCLI()
 	cliOperation := provideCostsCLI()
@@ -711,22 +706,22 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	stdioOpener := stdio.NewOpener()
 	wireMcpServerBuilder := provideMCPServerBuilder(workingDirectory)
-	v94 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v73, workflowPreviewOperation, v65)
+	v92 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v73, workflowPreviewOperation, v65)
 	openedStdioRunnerBuilder, err := application.NewOpenedStdioRunnerBuilder(managedRunnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v95 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v73, v65)
-	v96, err := wire.NewStdioOpeningService(v69, v94, v95, openingPresentationOwner)
+	v93 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v73, v65)
+	v94, err := wire.NewStdioOpeningService(v69, v92, v93, openingPresentationOwner)
 	if err != nil {
 		return nil, err
 	}
-	processStdioApplicationOpener, err := provideStdioApplicationOpener(v96, openingPresentationOwner)
+	processStdioApplicationOpener, err := provideStdioApplicationOpener(v94, openingPresentationOwner)
 	if err != nil {
 		return nil, err
 	}
-	v97 := provideSystemInitializationInspectPath(edges2)
-	systeminitializationService, err := provideSystemInitializationService(v40, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v97, loggingLogger)
+	v95 := provideSystemInitializationInspectPath(edges2)
+	systeminitializationService, err := provideSystemInitializationService(v40, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v95, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -739,7 +734,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	processLifecycle, err := provideApplicationProcessLifecycle(service, modelsService, eventsService, v65, v91, wireLocalWorkerSessionsBoundary, factoryRuntimeMetricsOwner)
+	v96 := provideACPServerFactoryTargetRuntimeResolver(wireAcpServerResolveHomeDir, v, defaultsResolver, runtimeArtifactRootResolver)
+	v97, err := provideACPServerFactoryTarget(v65, v96, v7, logger)
+	if err != nil {
+		return nil, err
+	}
+	processLifecycle, err := provideApplicationProcessLifecycle(service, modelsService, eventsService, v65, v97, wireLocalWorkerSessionsBoundary, factoryRuntimeMetricsOwner)
 	if err != nil {
 		return nil, err
 	}
@@ -875,6 +875,7 @@ var servicesSet = wire5.NewSet(
 	provideOperatorSettingsIDGenerator,
 	provideChatSessionsFactoryTargetCatalogService,
 	provideACPServerFactoryTargetRuntimeResolver,
+	provideACPServerFactorySessionStartResolver,
 	provideACPServerFactoryTarget,
 	provideACPServerFactoryTargetService,
 	provideACPServerResolveHomeDir,
