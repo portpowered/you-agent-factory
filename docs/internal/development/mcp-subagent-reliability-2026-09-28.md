@@ -1529,3 +1529,10 @@ cases and confirm that sensitive provider messages remain absent; the package
 tests and maintainability gate passed. This does not prove the cause of the
 `big-pickle` failure, whose retained result did not include the underlying
 failure detail.
+
+Commit `df7163d36c` records that dispatch correlation change. The final
+Windows binary was rebuilt at `C:\Users\andre\bin\you-df7163d36c.exe`
+(SHA-256 `EFE62DCE70DEE55C64376E6D67DCD496C0513AC4E8DC69D6FCB9DF9D41EE272E`),
+and a fresh stdio MCP initialize request completed successfully. The
+configured MCP command now points to this binary; old active MCP processes
+continue to run their prior image until closed.
