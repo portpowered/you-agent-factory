@@ -587,3 +587,22 @@ removed. This demonstrates that a read-only instruction to an editing-capable
 agent is not an enforced read-only boundary.
 The file reappeared once after the MCP timeout and was removed again after
 the late write; the process listing then showed no matching OpenCode child.
+
+A controlled one-line OpenCode edit using `nemotron-3.5-lightning-free`
+completed in Factory Session `f664d29b-5e2d-4b5a-bc99-cb6afe8a132b` after
+about 50 seconds. It appended this paragraph's predecessor exactly and
+returned the requested path as its primary result. This confirms that the
+installed MCP path can complete a real workspace edit, while showing that a
+90-second deadline gives little margin for a larger audit with this model.
+The OpenCode process log for this probe spans about 50 seconds and records
+dozens of Git snapshot subprocesses; it does not expose enough model timing
+detail to assign the latency to the model or the snapshot work.
+
+A constrained `space-bunny-free` audit of the Windows LocalAI artifact config
+and build script completed in Factory Session
+`c2ea0811-3cd4-4d1b-bc98-74db8a678391` in about 10 seconds. It identified
+the closed CPU/Metal publication matrix, the Windows llama build's forced
+`BUILD_TYPE=cpu`, and the lack of a CUDA build/toolchain path. Those findings
+were verified against the source. Resolver support alone therefore cannot
+make native Windows CUDA first use work until a CUDA archive is built and
+published.
