@@ -13,10 +13,13 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/requestpreparation"
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
+	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	identitywire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/wire"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
@@ -195,4 +198,36 @@ func newOwnerServices(
 		return nil, nil, err
 	}
 	return identityService, responseStreams, nil
+}
+
+func NewDurableExecution(
+	projectRoot string,
+	persistencePolicy factorysessions.PersistencePolicy,
+	stores RuntimePersistenceStoreFactory,
+	childExecutorMode string,
+	clock factoryruntime.Clock,
+	syncWaits factorysessionexecution.SyncWaitScheduler,
+	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
+	workflows factoryruntime.JavaScriptWorkflows,
+	orchestration factoryruntime.OrchestrationJavaScriptExecution,
+	workerPresetIDs map[string]struct{},
+	workerSettings factoryruntime.JavaScriptWorkerSettings,
+	recordingWriter recordings.PortableRecordingWriter,
+	generateSessionID factorysessions.SessionIDGenerator,
+	generateResponseEventID factorysessions.ResponseEventIDGenerator,
+	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
+	eventsService events.Service,
+	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+) (durableexecution.Service, error) {
+	responseStreams, err := responsestreamwire.NewService(generateResponseEventID, responseEventRetentionLimits, eventsService)
+	if err != nil {
+		return nil, err
+	}
+	return durableexecutionwire.NewDurable(
+		projectRoot, persistencePolicy, stores, childExecutorMode, clock, syncWaits,
+		checkpointSummaries, workflows, orchestration, workflows,
+		workerPresetIDs, workerSettings,
+		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
+		liveChangeCoordinator,
+	)
 }
