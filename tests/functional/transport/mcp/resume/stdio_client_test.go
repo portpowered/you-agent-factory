@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -125,6 +126,36 @@ func decodeToolResponse[T any](t *testing.T, response mcpJSONRPCResponse) mcpfac
 	first, ok := content[0].(map[string]any)
 	if !ok {
 		t.Fatalf("tools/call content[0] = %#v, want object", content[0])
+	}
+	isError, _ := response.Result["isError"].(bool)
+	if isError {
+		text, _ := first["text"].(string)
+		if text == "" {
+			t.Fatalf("tools/call domain error missing readable text: %#v", response.Result)
+		}
+		structured, ok := response.Result["structuredContent"].(map[string]any)
+		if !ok {
+			t.Fatalf("tools/call domain error missing structuredContent: %#v", response.Result)
+		}
+		raw, err := json.Marshal(structured)
+		if err != nil {
+			t.Fatalf("marshal structuredContent: %v", err)
+		}
+		var toolResponse mcpfactorysession.ToolResponse[T]
+		if err := json.Unmarshal(raw, &toolResponse); err != nil {
+			t.Fatalf("unmarshal tool response from structuredContent: %v", err)
+		}
+		if toolResponse.Error == nil {
+			t.Fatalf("tools/call domain error missing typed Error: %#v", response.Result)
+		}
+		wantText := toolResponse.Error.Message
+		if strings.TrimSpace(wantText) == "" {
+			wantText = "tool execution failed"
+		}
+		if text != wantText {
+			t.Fatalf("tools/call domain error text = %q, want %q", text, wantText)
+		}
+		return toolResponse
 	}
 	text, _ := first["text"].(string)
 	var toolResponse mcpfactorysession.ToolResponse[T]
