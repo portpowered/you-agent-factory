@@ -337,11 +337,11 @@ const (
 	// projection. It is intentionally diagnostic-only; the public model shape
 	// remains unchanged.
 	EffectiveOperationsDiagnostic = "effectiveOperations"
-	// VideoReadinessDiagnostic is the stable safe explanation for an omitted
-	// VIDEO input capability.
-	VideoReadinessDiagnostic = "videoReadiness"
-	VideoReadinessVerified   = "verified-projector"
-	VideoReadinessMissing    = "required projector artifact is missing or invalid"
+	// MediaReadinessDiagnostic is the stable safe explanation for omitted
+	// IMAGE, AUDIO, and VIDEO input capabilities.
+	MediaReadinessDiagnostic = "mediaReadiness"
+	MediaReadinessVerified   = "verified-projector"
+	MediaReadinessMissing    = "required projector artifact is missing or invalid"
 
 	projectorArtifactMarker = "mmproj"
 )
@@ -358,7 +358,7 @@ func ProjectEffectiveVideoDefinition(
 		definition.Name, definition.Operations, inspection,
 	)
 	definition.Operations = operations
-	return definition, diagnostics, diagnostics[VideoReadinessDiagnostic] == VideoReadinessMissing
+	return definition, diagnostics, diagnostics[MediaReadinessDiagnostic] == MediaReadinessMissing
 }
 
 // ProjectEffectiveVideoOperations removes projector-backed media slots from
@@ -378,11 +378,11 @@ func ProjectEffectiveVideoOperations(
 		EffectiveOperationsDiagnostic: "verified-runtime-assets",
 	}
 	if verifiedProjectorArtifact(inspection) {
-		diagnostics[VideoReadinessDiagnostic] = VideoReadinessVerified
+		diagnostics[MediaReadinessDiagnostic] = MediaReadinessVerified
 		return cloned, diagnostics
 	}
 
-	diagnostics[VideoReadinessDiagnostic] = VideoReadinessMissing
+	diagnostics[MediaReadinessDiagnostic] = MediaReadinessMissing
 	for index := range cloned {
 		if !strings.EqualFold(strings.TrimSpace(cloned[index].Name), models.OperationOMNI) {
 			continue

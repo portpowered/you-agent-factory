@@ -2337,7 +2337,7 @@ export interface components {
       resources: components["schemas"]["ModelResourceSummary"][];
       /** @description Worker-scoped capability declarations that contribute to this discovered model. */
       capabilities: components["schemas"]["ModelCapability"][];
-      /** @description Effective-readiness diagnostics. When VIDEO is omitted because its required projector is missing or invalid, `videoReadiness` contains a stable safe reason. */
+      /** @description Effective-readiness diagnostics. When IMAGE, AUDIO, or VIDEO inputs are omitted because their required projector is missing or invalid, `mediaReadiness` contains a stable safe reason. */
       diagnostics: components["schemas"]["StringMap"];
     };
     /** @description Opaque model name or source URI accepted by the provider-neutral invocation contract. */

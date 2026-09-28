@@ -534,7 +534,7 @@ LocalAI protocol. The protocol conformance fixture checks the request fields;
 it does not confirm that a loaded model understands the media. The output is
 text. The built-in `llm` requires a verified multimodal projector for media
 inference. Check `you models inspect llm` before sending media. If
-`videoReadiness` reports that the projector is missing or invalid, video is
+`mediaReadiness` reports that the projector is missing or invalid, video is
 unavailable. The effective operation also omits `image` and `audio`. Requests
 for any of these media inputs fail before backend execution. Pull the model to
 repair an incomplete cache, then inspect it again.

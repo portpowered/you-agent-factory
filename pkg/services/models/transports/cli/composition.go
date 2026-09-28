@@ -337,7 +337,7 @@ func omittedProjectorCapabilityFailure(
 	mappings []genericCLIInputMapping,
 	catalog modelinference.Detail,
 ) error {
-	if catalog.Diagnostics["videoReadiness"] != "required projector artifact is missing or invalid" {
+	if catalog.Diagnostics["mediaReadiness"] != "required projector artifact is missing or invalid" {
 		return nil
 	}
 	for _, mapping := range mappings {

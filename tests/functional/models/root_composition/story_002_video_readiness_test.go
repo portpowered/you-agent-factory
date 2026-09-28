@@ -122,7 +122,7 @@ func assertUnavailableProjectorPublicSurfaces(
 	assertVideoReadinessOmitted(t, missingHTTPModel.Operations, missingHTTPModel.Modalities, missingHTTPModel.ManagedRuntime.Diagnostics)
 	missingHTTPDetail := support.GetJSON[factoryapi.ModelDetail](t, fixture.server.URL()+"/models/llm")
 	assertVideoReadinessOmitted(t, missingHTTPDetail.Operations, missingHTTPDetail.Modalities, nil)
-	if missingHTTPDetail.Diagnostics["videoReadiness"] != "required projector artifact is missing or invalid" {
+	if missingHTTPDetail.Diagnostics["mediaReadiness"] != "required projector artifact is missing or invalid" {
 		t.Fatalf("HTTP detail video diagnostic with %s = %#v, want stable unavailable-projector reason", projectorState, missingHTTPDetail.Diagnostics)
 	}
 	missingCLIList := executeVideoReadinessJSON[factoryapi.ListModelsResponse](
@@ -131,7 +131,7 @@ func assertUnavailableProjectorPublicSurfaces(
 	missingCLIModel := findVideoReadinessModel(t, missingCLIList.Results, "CLI list with "+projectorState)
 	assertVideoReadinessOmitted(t, missingCLIModel.Operations, missingCLIModel.Modalities, missingCLIModel.ManagedRuntime.Diagnostics)
 	if missingCLIModel.ManagedRuntime.Diagnostics == nil ||
-		(*missingCLIModel.ManagedRuntime.Diagnostics)["videoReadiness"] != "required projector artifact is missing or invalid" {
+		(*missingCLIModel.ManagedRuntime.Diagnostics)["mediaReadiness"] != "required projector artifact is missing or invalid" {
 		t.Fatalf("CLI list video diagnostic with %s = %#v, want stable unavailable-projector reason", projectorState, missingCLIModel.ManagedRuntime.Diagnostics)
 	}
 }
@@ -280,7 +280,7 @@ func assertVerifiedProjectorPublicSurfaces(t *testing.T, fixture *projectorReadi
 	t.Helper()
 	restoredHTTPDetail := support.GetJSON[factoryapi.ModelDetail](t, fixture.server.URL()+"/models/llm")
 	assertVideoReadinessPresent(t, restoredHTTPDetail.Operations, restoredHTTPDetail.Modalities)
-	if restoredHTTPDetail.Diagnostics["videoReadiness"] != "verified-projector" {
+	if restoredHTTPDetail.Diagnostics["mediaReadiness"] != "verified-projector" {
 		t.Fatalf("restored HTTP detail diagnostic = %#v, want verified-projector", restoredHTTPDetail.Diagnostics)
 	}
 	restoredCLIList := executeVideoReadinessJSON[factoryapi.ListModelsResponse](
@@ -346,7 +346,7 @@ func assertVideoReadinessOmitted(
 			t.Fatalf("effective media projection retained %s: operations=%#v modalities=%#v", modality, operations, modalities)
 		}
 	}
-	if diagnostics != nil && (*diagnostics)["videoReadiness"] != "required projector artifact is missing or invalid" {
+	if diagnostics != nil && (*diagnostics)["mediaReadiness"] != "required projector artifact is missing or invalid" {
 		t.Fatalf("managed-runtime video diagnostic = %#v, want stable missing-projector reason", diagnostics)
 	}
 }

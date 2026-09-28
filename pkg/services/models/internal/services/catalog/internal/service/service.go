@@ -156,7 +156,7 @@ func projectEffectiveCapabilities(
 	if summary.ManagedRuntime.Diagnostics[localmodels.EffectiveOperationsDiagnostic] != "verified-runtime-assets" {
 		return capabilities
 	}
-	if summary.ManagedRuntime.Diagnostics[localmodels.VideoReadinessDiagnostic] != localmodels.VideoReadinessMissing {
+	if summary.ManagedRuntime.Diagnostics[localmodels.MediaReadinessDiagnostic] != localmodels.MediaReadinessMissing {
 		return capabilities
 	}
 	projected := make([]models.Capability, len(capabilities))
