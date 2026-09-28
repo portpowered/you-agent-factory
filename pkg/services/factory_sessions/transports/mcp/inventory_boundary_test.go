@@ -146,8 +146,14 @@ func TestProjectResultPolicyInventory_DomainErrorTransportPolicy(t *testing.T) {
 	if policy.FailureClass != mcpfactorysession.FailureClassDomain {
 		t.Fatalf("failureClass = %q, want %q", policy.FailureClass, mcpfactorysession.FailureClassDomain)
 	}
-	if policy.IsError {
-		t.Fatal("isError = true, want false for typed ToolErrorEnvelope payloads")
+	if !policy.IsError {
+		t.Fatal("isError = false, want true for typed ToolErrorEnvelope payloads")
+	}
+	if !policy.HasStructuredContent {
+		t.Fatal("hasStructuredContent = false, want true")
+	}
+	if policy.TextEncoding != mcpfactorysession.DomainErrorTextEncodingMessage {
+		t.Fatalf("textEncoding = %q, want %q", policy.TextEncoding, mcpfactorysession.DomainErrorTextEncodingMessage)
 	}
 	if !slices.Equal(policy.StableEnvelopeFields, []string{
 		"error.code",
@@ -204,9 +210,9 @@ func TestDomainErrorFixture_MatchesServerToolsCallEncoding(t *testing.T) {
 		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"you.factory_session.get","arguments":{"sessionId":"dur-sess-missing-999"}}}`,
 	))
 
-	projected, err := mcpfactorysession.MarshalSuccessCallToolResultJSON(raw)
+	projected, err := mcpfactorysession.MarshalDomainErrorCallToolResultJSON(raw)
 	if err != nil {
-		t.Fatalf("MarshalSuccessCallToolResultJSON() error = %v", err)
+		t.Fatalf("MarshalDomainErrorCallToolResultJSON() error = %v", err)
 	}
 	serverEncoded, err := json.Marshal(result)
 	if err != nil {
@@ -287,6 +293,49 @@ func TestEncodeSuccessCallToolResult_MatchesServerToolsCallSuccessEncoding(t *te
 	}
 	if string(projected) != string(serverEncoded) {
 		t.Fatalf("projected success envelope differs from server:\nprojected=%s\nserver=%s", projected, serverEncoded)
+	}
+}
+
+func TestEncodeDomainErrorCallToolResult_BlankMessageFallsBackToSafeText(t *testing.T) {
+	toolResponse := json.RawMessage(`{"error":{"code":"BAD_REQUEST","message":"   ","retryable":false}}`)
+	encoded := mcpfactorysession.EncodeDomainErrorCallToolResult(toolResponse)
+
+	content, ok := encoded["content"].([]map[string]any)
+	if !ok || len(content) != 1 {
+		t.Fatalf("content = %#v, want one item", encoded["content"])
+	}
+	if content[0]["type"] != "text" {
+		t.Fatalf("content type = %#v, want text", content[0]["type"])
+	}
+	if content[0]["text"] != "tool execution failed" {
+		t.Fatalf("content text = %#v, want safe fallback text", content[0]["text"])
+	}
+	if encoded["isError"] != true {
+		t.Fatalf("isError = %#v, want true", encoded["isError"])
+	}
+	structured, ok := encoded["structuredContent"].(json.RawMessage)
+	if !ok || string(structured) != string(toolResponse) {
+		t.Fatalf("structuredContent = %#v, want raw toolResponse %s", encoded["structuredContent"], toolResponse)
+	}
+}
+
+func TestEncodeDomainErrorCallToolResult_PreservesReadableMessage(t *testing.T) {
+	toolResponse := json.RawMessage(`{"error":{"code":"factory_session.session.not_found","message":"factory session not found","retryable":false,"sessionId":"dur-sess-missing-999"}}`)
+	encoded := mcpfactorysession.EncodeDomainErrorCallToolResult(toolResponse)
+
+	content, ok := encoded["content"].([]map[string]any)
+	if !ok || len(content) != 1 {
+		t.Fatalf("content = %#v, want one item", encoded["content"])
+	}
+	if content[0]["text"] != "factory session not found" {
+		t.Fatalf("content text = %#v, want readable error.message", content[0]["text"])
+	}
+	if encoded["isError"] != true {
+		t.Fatalf("isError = %#v, want true", encoded["isError"])
+	}
+	structured, ok := encoded["structuredContent"].(json.RawMessage)
+	if !ok || string(structured) != string(toolResponse) {
+		t.Fatalf("structuredContent = %#v, want raw toolResponse %s", encoded["structuredContent"], toolResponse)
 	}
 }
 
