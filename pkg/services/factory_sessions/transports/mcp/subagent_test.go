@@ -179,8 +179,38 @@ func TestSubagentTimeoutReportsPossibleWorkspaceEdits(t *testing.T) {
 	if response.Error.Details["requestId"] != "request-timeout" || response.Error.Details["traceId"] != "trace-abc-123" || response.Error.Details["workId"] != "work-42" {
 		t.Fatalf("timeout IDs = %#v", response.Error.Details)
 	}
+	if _, ok := response.Error.Details["provider"]; ok {
+		t.Fatalf("unselected provider in timeout details = %#v", response.Error.Details)
+	}
+	if _, ok := response.Error.Details["model"]; ok {
+		t.Fatalf("unselected model in timeout details = %#v", response.Error.Details)
+	}
+	assertSubagentTimeoutSuggestedAction(t, response.Error.Details["suggestedAction"])
 	if !strings.Contains(response.Error.Message, "workspace edits may have occurred") || strings.Contains(response.Error.Message, "private") || !target.closed {
 		t.Fatalf("timeout message or cleanup = %#v", response.Error)
+	}
+}
+
+func TestSubagentTimeoutReportsExplicitProviderAndModel(t *testing.T) {
+	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
+		Status: factorysessions.InvocationTerminalStatusTimedOut,
+	}}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-timeout" }, mcpfactorysession.SubagentInput{
+		Prompt: "Edit one file", Provider: "opencode", Model: "local-model",
+	})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" || response.Error.Retryable {
+		t.Fatalf("timeout response = %#v", response)
+	}
+	if response.Error.Details["provider"] != "opencode" || response.Error.Details["model"] != "local-model" {
+		t.Fatalf("selected provider and model = %#v", response.Error.Details)
+	}
+	assertSubagentTimeoutSuggestedAction(t, response.Error.Details["suggestedAction"])
+}
+
+func assertSubagentTimeoutSuggestedAction(t *testing.T, value any) {
+	t.Helper()
+	if action, ok := value.(string); !ok || !strings.Contains(action, "Inspect the workspace for partial edits") || !strings.Contains(action, "another configured model or a longer timeout") {
+		t.Fatalf("timeout suggested action = %#v", value)
 	}
 }
 

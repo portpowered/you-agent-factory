@@ -196,7 +196,7 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 		return subagentInvocationFailure(started.SessionID, requestID)
 	}
 	if result.Status != factorysessionexecution.InvocationTerminalStatusCompleted {
-		return subagentTerminalFailure(started.SessionID, result, timeoutMillis)
+		return subagentTerminalFailure(started.SessionID, result, timeoutMillis, input)
 	}
 	response := SubagentResult{
 		SessionID: started.SessionID,
@@ -288,7 +288,7 @@ func subagentInvocationFailure(sessionID, requestID string) ToolResponse[Subagen
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }
 
-func subagentTerminalFailure(sessionID string, result factorysessionexecution.InvocationResult, timeoutMillis int64) ToolResponse[SubagentResult] {
+func subagentTerminalFailure(sessionID string, result factorysessionexecution.InvocationResult, timeoutMillis int64, input SubagentInput) ToolResponse[SubagentResult] {
 	envelope := ToolErrorEnvelope{
 		Code:      "factory_session.subagent.execution_failed",
 		Message:   "subagent execution failed before producing a result",
@@ -302,6 +302,13 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		envelope.Code = "factory_session.subagent.timed_out"
 		envelope.Message = "subagent timed out before producing a result; workspace edits may have occurred"
 		envelope.Details["partialEffectsPossible"] = true
+		envelope.Details["suggestedAction"] = "Inspect the workspace for partial edits before retrying with another configured model or a longer timeout."
+		if input.Provider != "" {
+			envelope.Details["provider"] = input.Provider
+		}
+		if input.Model != "" {
+			envelope.Details["model"] = input.Model
+		}
 		if timeoutMillis > 0 {
 			envelope.Details["timeoutMillis"] = timeoutMillis
 		}

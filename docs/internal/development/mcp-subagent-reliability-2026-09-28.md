@@ -271,3 +271,14 @@ root cause. A subsequent `Nemotron` edit correction timed out after 90 seconds
 in Factory Session `c1e71a4d-595b-44e0-891b-0a205d66439b` with no edit;
 sanitized native session `ses_f18d67165ffeK0gt334J5UvsWK` shows a completed
 read but no assistant continuation.
+
+A Codex MCP subagent then implemented timeout diagnostics in the MCP tool:
+explicitly selected provider and model plus a `suggestedAction` now accompany
+the existing Factory Session, request, trace, and Work IDs. The focused MCP
+package test passed. A rebuilt `you.exe` was installed at
+`C:\Users\andre\bin\you.exe`; a fresh stdio MCP launch listed 11 tools and
+returned all those fields on a forced one-second Longcat timeout (Factory
+Session `0547e552-78ef-4a04-a039-bd516f82b646`). The response remains
+non-retryable because an edit may have happened before a timeout. This makes
+the failure actionable without claiming the intermittent continuation has
+been fixed.
