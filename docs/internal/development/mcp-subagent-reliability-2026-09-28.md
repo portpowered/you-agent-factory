@@ -1603,3 +1603,36 @@ text output`. Because the new zero-byte guard did not fire, this attempt
 returned a nonempty, decodable protobuf payload with no usable text in its
 legacy message or chat deltas. The payload's other field values are still
 unknown. The server was stopped gracefully after the probe.
+
+A Codex MCP edit (session `b826620c-6ad2-4c65-9a51-99bbf40be631`)
+added safe numeric reply-shape counts to the LocalAI empty-text failure.
+Commit `61dfb43650` records that change; LocalAI package tests and the
+package-size, file-count, and formatting gates passed. A fresh Windows build
+repeated the same red-then-blue multipart clip and returned HTTP 502 with
+`reply_bytes=984 message_bytes=0 chat_delta_count=1 generated_tokens=256
+prompt_tokens=451 audio_bytes=0`. The generated token count exactly matched
+the source's 256-token Predict cap. A temporary build with only that cap
+raised to 1024 returned HTTP 500 `model invocation failed` after a longer
+run; its server log recorded `model runtime stage failed: INVOKE
+(INVOCATION_FAILED)` without a lower-level cause. The experimental source
+change was reverted and was not committed. This is evidence that the 256 cap
+may contribute to the empty-text result, but 1024 did not produce a usable
+answer in this controlled clip.
+
+A fresh standalone MCP Pi probe from the rebuilt binary first returned typed
+`provider_misconfigured` because the Providers executable locator was nil,
+even though `pi --version` reported 0.87.0. A Codex MCP edit (session
+`a85e9418-7579-44c5-abf1-6251e3db1ca4`) selected the host locator by
+default while preserving injected overrides; commit `f107bace18` records
+the fix. Focused `pkg/wire` tests and maintainability, file-count, and
+formatting checks passed. The next standalone `you.subagent(provider=pi)`
+advanced past preflight, but returned `COMPLETED` with only three retry
+notices and `Retry finished, resuming.`; the newly written Pi session JSONL
+contained four assistant records with `stopReason=error` and `Connection
+error.`. This independently reproduces the typed-failure loss after fixing
+the OOTB locator. A Codex MCP design audit (session
+`84ce972b-d75c-4d23-b833-c338d360c5e1`) recommended a controlled Pi
+bridge that emits a typed prompt failure, or a direct Pi RPC provider, rather
+than interpreting retry prose. The current configured MCP command points to
+`C:\Users\andre\bin\you-f107bace18.exe` (SHA-256
+`F7A72BA4BF1083DB866EC89B71DD107C38D95077EBB07324345E7291968F4B66`).
