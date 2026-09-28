@@ -147,7 +147,6 @@ type httpSessionsRootFake struct {
 	getSession        func(context.Context, string) (factorysessions.SessionProjection, error)
 	listReads         func(context.Context) ([]factorysessions.ReadProjection, error)
 	listSessions      func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
-	onOpen            func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error)
 	onClose           func(context.Context, string) error
 	onDelete          func(context.Context, string) error
 	onStart           func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error)
@@ -250,13 +249,6 @@ func (fake *httpSessionsRootFake) ListSessions(ctx context.Context, request fact
 		return factorysessions.ListSessionsResult{}, nil
 	}
 	return fake.listSessions(ctx, request)
-}
-
-func (fake *httpSessionsRootFake) OpenFactorySession(ctx context.Context, request factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
-	if fake.onOpen != nil {
-		return fake.onOpen(ctx, request)
-	}
-	return &factorysessions.OpenResult{SessionID: factorysessions.DefaultSessionID}, nil
 }
 
 func (fake *httpSessionsRootFake) GetFactorySessionSyncPreflight(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor, *factorydefinitions.FactorySessionLogicalResolveHint) (factorysessions.SyncPreflightResult, error) {

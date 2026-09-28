@@ -9,7 +9,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
@@ -20,7 +19,6 @@ import (
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
 	liveruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime/wire"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 )
@@ -137,45 +135,6 @@ func NewWithLiveChangeCoordinator(
 		responseEvents: responseEvents,
 		durable:        durable,
 	}
-}
-
-// OpenFactorySession runs an owner-defined open request through control-plane
-// policy and live dataplane startup.
-func (s *Service) OpenFactorySession(
-	ctx context.Context,
-	request factorysessions.OpenRequest,
-) (*factorysessions.OpenResult, error) {
-	if s == nil || s.host == nil {
-		return nil, fmt.Errorf("factory session gateway is required")
-	}
-	if request.ValidateOnly && request.InitNewFactory {
-		return nil, sessionvalidation.New(
-			factorysessions.ValidationReasonRequired,
-			"initNewFactory",
-			fmt.Errorf("initNewFactory cannot be combined with validateOnly"),
-		)
-	}
-	result, err := controlplane.OpenFromFolder(
-		ctx,
-		s.host,
-		request.FolderPath,
-		request.Target,
-		request.ValidateOnly,
-		request.InitNewFactory,
-	)
-	if err != nil || result == nil || result.SessionID == "" {
-		return result, err
-	}
-	session := s.liveRuntime.Resolve(result.SessionID)
-	if session == nil {
-		return result, nil
-	}
-	result.Session = &factorysessions.ScopedLiveSessionSummary{
-		ID: livesession.CanonicalID(session), FactoryDir: session.FactoryDir,
-		FolderPath: session.FolderPath, Project: session.Project,
-		IsDefault: session.IsDefault, Target: session.Target,
-	}
-	return result, nil
 }
 
 func liveRuntimeDependencies(host Host) liveruntime.Dependencies {

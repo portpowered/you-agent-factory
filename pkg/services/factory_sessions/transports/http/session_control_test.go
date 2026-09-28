@@ -41,10 +41,6 @@ func TestHandlerFromRoot_OpenFactorySessionEncodesRootResult(t *testing.T) {
 				},
 			}, nil
 		},
-		onOpen: func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
-			t.Fatal("legacy opener must not be called when canonical Start succeeds")
-			return nil, nil
-		},
 	}
 	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
 	recorder := httptest.NewRecorder()
@@ -78,10 +74,6 @@ func TestHandlerFromRoot_OpenFactorySessionAcceptsUnknownFieldsWithWarning(t *te
 				Mode:      factorysessions.SessionOperationModeLive,
 				Live:      &factorysessions.SessionOpenResult{SessionID: "session-open-alpha"},
 			}, nil
-		},
-		onOpen: func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
-			t.Fatal("legacy opener must not be called when canonical Start succeeds")
-			return nil, nil
 		},
 	}
 	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.New(core))
@@ -122,10 +114,6 @@ func TestHandlerFromRoot_OpenFactorySessionMissingFolderPathReturnsBadRequestWit
 		onStart: func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 			t.Fatal("canonical Start must not be invoked when folderPath is missing")
 			return factorysessions.SessionStartResult{}, nil
-		},
-		onOpen: func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
-			t.Fatal("fake root must not be invoked when folderPath is missing")
-			return nil, nil
 		},
 	}
 	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())

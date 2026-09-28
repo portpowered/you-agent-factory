@@ -38,7 +38,7 @@ func TestService_OpenActivationFailureDoesNotPublishLiveRegistryEntry(t *testing
 	}
 	gateway := newLiveRuntimeCompositionGateway(t, host)
 
-	_, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{FolderPath: "/tmp"})
+	_, err := startLiveSession(gateway, context.Background(), factorysessions.SessionStartRequest{FolderPath: "/tmp"})
 	if err == nil || !errors.Is(err, host.openErr) {
 		t.Fatalf("OpenFactorySession error = %v, want %v", err, host.openErr)
 	}

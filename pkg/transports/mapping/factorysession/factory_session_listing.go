@@ -12,9 +12,9 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-// OpenRequestFromAPI detaches a generated open request before Factory Session
-// policy executes.
-func OpenRequestFromAPI(request factoryapi.OpenFactorySessionRequest) factorysessions.OpenRequest {
+// SessionStartRequestFromAPI maps the public open command to canonical live
+// activation. Both HTTP entry points use the same value-only selection.
+func SessionStartRequestFromAPI(request factoryapi.OpenFactorySessionRequest) factorysessions.SessionStartRequest {
 	var target *factorysessions.TargetRef
 	if request.Target != nil {
 		targetName := ""
@@ -26,24 +26,12 @@ func OpenRequestFromAPI(request factoryapi.OpenFactorySessionRequest) factoryses
 			Name: targetName,
 		}
 	}
-	return factorysessions.OpenRequest{
-		FolderPath:     request.FolderPath,
-		Target:         target,
-		ValidateOnly:   request.ValidateOnly != nil && *request.ValidateOnly,
-		InitNewFactory: request.InitNewFactory != nil && *request.InitNewFactory,
-	}
-}
-
-// SessionStartRequestFromAPI maps the public open command to canonical live
-// activation. Both HTTP entry points use the same value-only selection.
-func SessionStartRequestFromAPI(request factoryapi.OpenFactorySessionRequest) factorysessions.SessionStartRequest {
-	opened := OpenRequestFromAPI(request)
 	return factorysessions.SessionStartRequest{
 		Mode:             factorysessions.SessionOperationModeLive,
-		FolderPath:       opened.FolderPath,
-		Target:           opened.Target,
-		ValidateOnly:     opened.ValidateOnly,
-		InitNewFactory:   opened.InitNewFactory,
+		FolderPath:       request.FolderPath,
+		Target:           target,
+		ValidateOnly:     request.ValidateOnly != nil && *request.ValidateOnly,
+		InitNewFactory:   request.InitNewFactory != nil && *request.InitNewFactory,
 		ActivationOnly:   true,
 		RuntimeSelection: &factorysessions.SessionRuntimeSelection{Mode: factorysessions.SessionRuntimeModeService},
 	}
@@ -77,31 +65,6 @@ func SessionOpenResultToAPI(result *factorysessions.SessionOpenResult) factoryap
 				Name: optionalTrimmedString(view.Target.Name),
 			},
 		}
-	}
-	return response
-}
-
-// OpenResultToAPI maps an owner-defined open result to the generated public
-// response without re-deriving Factory Session identity policy.
-func OpenResultToAPI(result *factorysessions.OpenResult) factoryapi.OpenFactorySessionResponse {
-	response := factoryapi.OpenFactorySessionResponse{}
-	if result == nil {
-		return response
-	}
-	if result.InitsNewFactory {
-		initsNewFactory := true
-		response.InitsNewFactory = &initsNewFactory
-		if folderPath := strings.TrimSpace(result.FolderPath); folderPath != "" {
-			response.FolderPath = &folderPath
-		}
-	}
-	if len(result.Targets) > 0 {
-		targets := TargetsToAPI(result.Targets)
-		response.Targets = &targets
-	}
-	if result.Session != nil {
-		summary := ScopedLiveSessionSummaryToAPI(*result.Session)
-		response.Session = &summary
 	}
 	return response
 }

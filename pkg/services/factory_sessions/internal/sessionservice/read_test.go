@@ -261,15 +261,15 @@ func TestService_OpenFactorySession_MapsInitNewFactoryHint(t *testing.T) {
 	gateway := newServiceTestGateway(host)
 	validateOnly := true
 
-	response, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{
+	response, err := startLiveSession(gateway, context.Background(), factorysessions.SessionStartRequest{
 		FolderPath:   t.TempDir(),
 		ValidateOnly: validateOnly,
 	})
 	if err != nil {
 		t.Fatalf("OpenFactorySession: %v", err)
 	}
-	if response == nil || !response.InitsNewFactory {
-		t.Fatalf("initsNewFactory = %#v, want true", response.InitsNewFactory)
+	if response == nil || !response.InitializedNewFactory {
+		t.Fatalf("initializedNewFactory = %#v, want true", response)
 	}
 }
 func TestService_CanonicalStartLiveReturnsOpaqueProjection(t *testing.T) {

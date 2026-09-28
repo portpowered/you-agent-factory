@@ -20,6 +20,16 @@ import (
 	"go.uber.org/zap"
 )
 
+func startLiveSession(
+	gateway *factorysessionservice.Service,
+	ctx context.Context,
+	request factorysessions.SessionStartRequest,
+) (*factorysessions.SessionOpenResult, error) {
+	request.Mode = factorysessions.SessionOperationModeLive
+	result, err := gateway.Start(ctx, request)
+	return result.Live, err
+}
+
 var serviceTestClock = platformclock.Real{}
 
 func newServiceTestResponseStream() *responsestream.SessionResponseStream {
@@ -222,7 +232,7 @@ func TestService_OpenFactorySession_AutoOpensSingleTarget(t *testing.T) {
 	}
 	gateway := newServiceTestGateway(host)
 
-	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{FolderPath: "/tmp"})
+	result, err := startLiveSession(gateway, context.Background(), factorysessions.SessionStartRequest{FolderPath: "/tmp"})
 	if err != nil {
 		t.Fatalf("OpenFactorySession: %v", err)
 	}
@@ -245,7 +255,7 @@ func TestService_OpenFactorySession_ReturnsTargetPickerMetadata(t *testing.T) {
 	}
 	gateway := newServiceTestGateway(host)
 
-	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{FolderPath: "/tmp"})
+	result, err := startLiveSession(gateway, context.Background(), factorysessions.SessionStartRequest{FolderPath: "/tmp"})
 	if err != nil {
 		t.Fatalf("OpenFactorySession: %v", err)
 	}
@@ -269,7 +279,7 @@ func TestService_OpenFactorySession_ValidateOnlyReturnsTargetsWithoutOpening(t *
 	}
 	gateway := newServiceTestGateway(host)
 
-	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{FolderPath: "/tmp", ValidateOnly: true})
+	result, err := startLiveSession(gateway, context.Background(), factorysessions.SessionStartRequest{FolderPath: "/tmp", ValidateOnly: true})
 	if err != nil {
 		t.Fatalf("OpenFactorySession: %v", err)
 	}
@@ -284,7 +294,7 @@ func TestService_OpenFactorySession_RejectsValidateOnlyWithInitNewFactory(t *tes
 	gateway := newServiceTestGateway(&openTestHost{})
 	validateOnly := true
 	initNewFactory := true
-	_, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{
+	_, err := startLiveSession(gateway, context.Background(), factorysessions.SessionStartRequest{
 		FolderPath:     "/tmp",
 		ValidateOnly:   validateOnly,
 		InitNewFactory: initNewFactory,
@@ -317,7 +327,7 @@ func TestService_OpenFactorySession_ReturnsOpenedSessionIdentity(t *testing.T) {
 	}
 	gateway := newServiceTestGateway(host)
 
-	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{
+	result, err := startLiveSession(gateway, context.Background(), factorysessions.SessionStartRequest{
 		FolderPath: "/tmp",
 	})
 	if err != nil {
@@ -326,7 +336,7 @@ func TestService_OpenFactorySession_ReturnsOpenedSessionIdentity(t *testing.T) {
 	if result == nil || result.SessionID != "sess-1" {
 		t.Fatalf("open result = %#v, want sess-1", result)
 	}
-	if result.Session == nil || result.Session.ID != "sess-1" || result.Session.Project != "demo" {
+	if result.Session == nil || result.Session.SessionID != "sess-1" || result.Session.Project != "demo" {
 		t.Fatalf("open session = %#v, want owner-projected sess-1 summary", result.Session)
 	}
 }
@@ -344,7 +354,7 @@ func TestService_OpenFactorySession_LeavesSummaryAbsentWhenSessionCannotResolve(
 	}
 	gateway := newServiceTestGateway(host)
 
-	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{
+	result, err := startLiveSession(gateway, context.Background(), factorysessions.SessionStartRequest{
 		FolderPath: "/tmp",
 	})
 	if err != nil {

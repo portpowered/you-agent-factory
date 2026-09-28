@@ -111,14 +111,14 @@ func TestService_LiveOpenRecordsCanonicalIdentityThroughLiveRuntimeOwner(t *test
 	}
 	gateway := newLiveRuntimeCompositionGateway(t, host)
 
-	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{FolderPath: "/tmp"})
+	result, err := startLiveSession(gateway, context.Background(), factorysessions.SessionStartRequest{FolderPath: "/tmp"})
 	if err != nil {
 		t.Fatalf("OpenFactorySession: %v", err)
 	}
 	if result == nil || result.SessionID != sessionID {
 		t.Fatalf("open result = %#v, want %q", result, sessionID)
 	}
-	if result.Session == nil || result.Session.ID != sessionID {
+	if result.Session == nil || result.Session.SessionID != sessionID {
 		t.Fatalf("open session summary = %#v, want %q", result.Session, sessionID)
 	}
 	if host.openCalls != 1 {
