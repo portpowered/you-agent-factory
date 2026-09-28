@@ -130,5 +130,25 @@ type SessionState struct {
 	Owner    SessionProjectionOwner
 	Invoker  roles.CanonicalSessionInvoker
 	// Activation retains lifecycle cleanup on the canonical session record.
-	Activation interface{ Close(context.Context) error }
+	Activation     interface{ Close(context.Context) error }
+	startRequestMu sync.RWMutex
+	startRequestID string
+}
+
+func (s *SessionState) SetStartRequestID(requestID string) {
+	if s == nil {
+		return
+	}
+	s.startRequestMu.Lock()
+	s.startRequestID = requestID
+	s.startRequestMu.Unlock()
+}
+
+func (s *SessionState) StartRequestID() string {
+	if s == nil {
+		return ""
+	}
+	s.startRequestMu.RLock()
+	defer s.startRequestMu.RUnlock()
+	return s.startRequestID
 }

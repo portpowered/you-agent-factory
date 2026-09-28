@@ -31,7 +31,32 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 	if request.ValidateOnly && request.InitNewFactory {
 		return factorysessions.SessionStartResult{}, &factorysessions.DetachedRequestError{Field: "initNewFactory", Message: "initNewFactory cannot be combined with validateOnly"}
 	}
+	requestID := strings.TrimSpace(request.Correlation.RequestID)
+	if request.ActivationOnly && requestID != "" {
+		if existing, ok := r.startedForRequestID(requestID); ok {
+			return existing, nil
+		}
+		value, err, _ := r.startFlights.Do(requestID, func() (any, error) {
+			if existing, ok := r.startedForRequestID(requestID); ok {
+				return existing, nil
+			}
+			return r.startLive(ctx, request)
+		})
+		if err != nil {
+			return factorysessions.SessionStartResult{}, err
+		}
+		return value.(factorysessions.SessionStartResult), nil
+	}
+	return r.startLive(ctx, request)
+}
+
+func (r *Root) startLive(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 	selected := request
+	selectedID, err := r.sessionIDForStart(request)
+	if err != nil {
+		return factorysessions.SessionStartResult{}, err
+	}
+	selected.SessionID = selectedID
 	runtimeSelection := factorysessions.SessionRuntimeSelection{}
 	if request.RuntimeSelection != nil {
 		runtimeSelection = *request.RuntimeSelection
@@ -93,10 +118,7 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 	if err != nil {
 		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session lifecycle: %w", errors.Join(err, activation.Close(ctx)))
 	}
-	sessionID := strings.TrimSpace(request.SessionID)
-	if sessionID == "" {
-		sessionID = factorysessions.DefaultSessionID
-	}
+	sessionID := selectedID
 	session := r.Resolve(sessionID)
 	if session == nil {
 		_ = activation.Close(ctx)
@@ -108,6 +130,7 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: session runtime state is unavailable")
 	}
 	bound.Activation = activation
+	bound.SetStartRequestID(strings.TrimSpace(request.Correlation.RequestID))
 	status := "RUNNING"
 	view := factorysessions.SessionView{
 		SessionID: livesession.CanonicalID(session), Mode: factorysessions.SessionOperationModeLive,
@@ -119,6 +142,44 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 		SessionID: view.SessionID, Mode: factorysessions.SessionOperationModeLive, Status: status,
 		Live: &factorysessions.SessionOpenResult{SessionID: view.SessionID, Session: &view, FolderPath: session.FolderPath},
 	}, nil
+}
+
+func (r *Root) startedForRequestID(requestID string) (factorysessions.SessionStartResult, bool) {
+	for _, id := range r.ListLiveSessionIDs() {
+		session := r.Resolve(id)
+		bound := runtimebinding.SessionStateFrom(session)
+		if bound == nil || bound.StartRequestID() != requestID || bound.Activation == nil {
+			continue
+		}
+		view := factorysessions.SessionView{
+			SessionID: livesession.CanonicalID(session), Mode: factorysessions.SessionOperationModeLive,
+			Status: "RUNNING", FactoryDir: session.FactoryDir, FolderPath: session.FolderPath,
+			Project: session.Project, IsDefault: session.IsDefault, Target: session.Target,
+			RuntimeAvailable: session.Runtime != nil,
+		}
+		return factorysessions.SessionStartResult{
+			SessionID: view.SessionID, Mode: factorysessions.SessionOperationModeLive, Status: "RUNNING",
+			Live: &factorysessions.SessionOpenResult{SessionID: view.SessionID, Session: &view, FolderPath: session.FolderPath},
+		}, true
+	}
+	return factorysessions.SessionStartResult{}, false
+}
+
+func (r *Root) sessionIDForStart(request factorysessions.SessionStartRequest) (string, error) {
+	if id := strings.TrimSpace(request.SessionID); id != "" {
+		return id, nil
+	}
+	if !request.ActivationOnly {
+		return factorysessions.DefaultSessionID, nil
+	}
+	if r.generateSessionID == nil {
+		return "", fmt.Errorf("start Factory Session: session ID generator is required")
+	}
+	id := strings.TrimSpace(r.generateSessionID())
+	if id == "" || id == factorysessions.DefaultSessionID {
+		return "", fmt.Errorf("start Factory Session: session ID generator returned an invalid identity")
+	}
+	return id, nil
 }
 
 func (r *Root) resolveStartFolder(ctx context.Context, request factorysessions.SessionStartRequest, selection factorysessions.SessionRuntimeSelection) (string, error) {

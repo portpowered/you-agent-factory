@@ -63,3 +63,28 @@ func TestResolveStartFolderPreservesAlreadyResolvedFactory(t *testing.T) {
 		t.Fatalf("resolved Factory directory = %q, calls = %d, error = %v", got, definitions.calls, err)
 	}
 }
+
+func TestActivationOnlyStartAllocatesDistinctSessionIdentities(t *testing.T) {
+	generated := 0
+	root := &Root{generateSessionID: func() string {
+		generated++
+		return "chat-session-" + string(rune('0'+generated))
+	}}
+	request := factorysessions.SessionStartRequest{ActivationOnly: true}
+	first, err := root.sessionIDForStart(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := root.sessionIDForStart(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second || first == factorysessions.DefaultSessionID || second == factorysessions.DefaultSessionID {
+		t.Fatalf("activation IDs = %q, %q; want distinct non-default IDs", first, second)
+	}
+	request.SessionID = first
+	reused, err := root.sessionIDForStart(request)
+	if err != nil || reused != first || generated != 2 {
+		t.Fatalf("explicit activation ID = %q, generated = %d, error = %v", reused, generated, err)
+	}
+}

@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 )
 
 // WorkerCommandRunnerAdapter is a composition-only identity adapter for the
@@ -184,6 +185,7 @@ type OperatorSettingsPorts struct {
 // Its Assembly is bound after the other process services have been composed.
 type Root struct {
 	*legacyservice.Assembly
+	startFlights                     singleflight.Group
 	liveChangeCoordinator            factorysessioncontracts.LiveChangeCoordinator
 	durableExecutionFactory          DurableExecutionFactory
 	workerService                    workers.Service
