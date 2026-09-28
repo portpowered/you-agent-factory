@@ -258,10 +258,11 @@ func (s *Server) handleSessionCancel(ctx context.Context, env envelope.Envelope)
 	s.applySessionCancel(ctx, string(params.SessionID), requestID)
 }
 
-// applySessionCancel commits one immutable captured CANCEL intent, then
-// delegates only to its captured episode. It returns silently for every
-// rejected or unavailable dependency outcome because its caller is a JSON-RPC
-// notification handler.
+// applySessionCancel commits one immutable captured CANCEL intent, controls
+// only its captured episode, and replaces an accepted terminal runtime under
+// the same Factory Session ID before completing the Chat intent. It returns
+// silently for rejected or unavailable dependencies because its caller is a
+// JSON-RPC notification handler.
 func (s *Server) applySessionCancel(ctx context.Context, sessionID string, requestID chatsessions.RequestIdentity) {
 	intent, ok := s.commitSessionCancel(ctx, sessionID, requestID)
 	if !ok {
@@ -285,7 +286,7 @@ func (s *Server) applySessionCancel(ctx context.Context, sessionID string, reque
 	}
 
 	controlRequestID := factoryCancelRequestID(intent.RequestID)
-	if _, err := s.factorySessions.Control(ctx, factorysessions.SessionControlRequest{
+	controlled, err := s.factorySessions.Control(ctx, factorysessions.SessionControlRequest{
 		SessionID:   factorySessionID,
 		Mode:        factorysessions.SessionOperationModeLive,
 		Operation:   factorysessions.SessionControlCancel,
@@ -295,8 +296,25 @@ func (s *Server) applySessionCancel(ctx context.Context, sessionID string, reque
 			Reason:    "acp session/cancel",
 			TurnID:    intent.TurnID,
 		},
-	}); err != nil {
+	})
+	if err != nil {
 		return
+	}
+	if controlled.Outcome == factorysessions.LifecycleControlOutcomeAccepted {
+		if s.startResolver == nil {
+			return
+		}
+		restart, err := s.startResolver(ctx, current.Episode.Target.Ref, current.Session.WorkingRoot, factoryCancelRestartRequestID(intent.RequestID))
+		if err != nil {
+			return
+		}
+		restart.SessionID = factorySessionID
+		restart.Mode = factorysessions.SessionOperationModeLive
+		restart.ActivationOnly = true
+		activated, err := s.factorySessions.Start(ctx, restart)
+		if err != nil || activated.SessionID != factorySessionID {
+			return
+		}
 	}
 	s.resolveSessionControlIntent(ctx, intent)
 }
@@ -385,6 +403,10 @@ func (s *Server) resolveSessionControlIntent(ctx context.Context, intent chatses
 // the bounded, opaque downstream id for one CANCEL request.
 func factoryCancelRequestID(requestID chatsessions.RequestIdentity) string {
 	return factoryControlRequestID("cancel", requestID)
+}
+
+func factoryCancelRestartRequestID(requestID chatsessions.RequestIdentity) string {
+	return factoryControlRequestID("cancel-restart", requestID)
 }
 
 // factoryTerminateRequestID turns the full immutable Chat control identity

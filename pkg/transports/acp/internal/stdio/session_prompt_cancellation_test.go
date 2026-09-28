@@ -355,8 +355,8 @@ func TestHandleSessionCancelSupersededRaceCannotReachReplacementTurn(t *testing.
 func TestHandleSessionCancelRepeatedIdentityDoesNotDuplicateFactoryCancel(t *testing.T) {
 	base, session, _ := newActiveBoundControlSession(t, "fs-control-repeat")
 	chatSessions := &controlRecordingChatSessions{Service: base}
-	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
+	factoryTarget := &fakeFactoryTargetService{cancelOutcome: factorysessions.LifecycleControlOutcomeAccepted}
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, testStartResolver)
 	env := cancelNotificationEnvelope(t, "cancel-repeat-1", session.ID)
 
 	server.handleSessionCancel(context.Background(), env)
@@ -368,7 +368,16 @@ func TestHandleSessionCancelRepeatedIdentityDoesNotDuplicateFactoryCancel(t *tes
 	if len(cancelCalls) != 1 || cancelCalls[0].sessionID != "fs-control-repeat" {
 		t.Fatalf("Factory Sessions Cancel calls = %#v, want exactly one captured cancellation", cancelCalls)
 	}
+	factoryTarget.mu.Lock()
+	restarts := append([]factorysessions.SessionStartRequest(nil), factoryTarget.sessionStartCalls...)
+	factoryTarget.mu.Unlock()
+	if len(restarts) != 1 || restarts[0].SessionID != "fs-control-repeat" || !restarts[0].ActivationOnly {
+		t.Fatalf("Factory Sessions restarts = %#v, want one activation under the captured identity", restarts)
+	}
 	requests, advances := chatSessions.snapshotControls()
+	if got := restarts[0].Correlation.RequestID; got != factoryCancelRestartRequestID(requests[0].RequestID) || got == cancelCalls[0].request.RequestID {
+		t.Fatalf("restart request ID = %q, want stable ID distinct from CANCEL", got)
+	}
 	if len(requests) != 2 || requests[0].RequestID != requests[1].RequestID {
 		t.Fatalf("RequestControl calls = %#v, want the same identity on retry", requests)
 	}

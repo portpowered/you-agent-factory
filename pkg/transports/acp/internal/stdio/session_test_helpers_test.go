@@ -383,28 +383,30 @@ func (f *fakeFactoryTargetCatalogService) ResolveFactoryTargetCatalog(
 
 type fakeFactoryTargetService struct {
 	factorysessions.Service
-	mu             sync.Mutex
-	startCalls     []factorysessions.StartRequest
-	startResult    factorysessions.AsyncStartResult
-	startErr       error
-	invokeCalls    []invokeFactoryTargetCall
-	invokeResult   factorysessions.InvocationResult
-	invokeErr      error
-	invokeErrs     []error
-	invokeEnter    chan struct{}
-	invokeRelease  chan struct{}
-	cancelCalls    []cancelFactoryTargetCall
-	cancelErr      error
-	responseCursor *factorysessions.ResponseEventCursor
-	responseErr    error
-	cancelEntered  chan struct{}
-	cancelRelease  chan struct{}
-	closeCalls     []string
-	closeErr       error
-	terminateCalls []terminateFactoryTargetCall
-	controlCalls   []factorysessions.SessionControlRequest
-	closeEntered   chan struct{}
-	closeRelease   chan struct{}
+	mu                sync.Mutex
+	startCalls        []factorysessions.StartRequest
+	sessionStartCalls []factorysessions.SessionStartRequest
+	startResult       factorysessions.AsyncStartResult
+	startErr          error
+	invokeCalls       []invokeFactoryTargetCall
+	invokeResult      factorysessions.InvocationResult
+	invokeErr         error
+	invokeErrs        []error
+	invokeEnter       chan struct{}
+	invokeRelease     chan struct{}
+	cancelCalls       []cancelFactoryTargetCall
+	cancelErr         error
+	cancelOutcome     factorysessions.LifecycleControlOutcome
+	responseCursor    *factorysessions.ResponseEventCursor
+	responseErr       error
+	cancelEntered     chan struct{}
+	cancelRelease     chan struct{}
+	closeCalls        []string
+	closeErr          error
+	terminateCalls    []terminateFactoryTargetCall
+	controlCalls      []factorysessions.SessionControlRequest
+	closeEntered      chan struct{}
+	closeRelease      chan struct{}
 }
 type cancelFactoryTargetCall struct {
 	sessionID string
@@ -430,10 +432,14 @@ func (f *fakeFactoryTargetService) Start(
 		Source:    request.Source,
 		Args:      request.Args,
 	})
+	f.sessionStartCalls = append(f.sessionStartCalls, request)
 	if f.startErr != nil {
 		return factorysessions.SessionStartResult{}, f.startErr
 	}
-	return factorysessions.SessionStartResult{SessionID: f.startResult.SessionID}, nil
+	if f.startResult.SessionID != "" {
+		return factorysessions.SessionStartResult{SessionID: f.startResult.SessionID}, nil
+	}
+	return factorysessions.SessionStartResult{SessionID: request.SessionID}, nil
 }
 func (f *fakeFactoryTargetService) Invoke(
 	_ context.Context,
@@ -471,8 +477,9 @@ func (f *fakeFactoryTargetService) Invoke(
 }
 func testStartResolver(_ context.Context, factoryTargetID, workingRoot, requestID string) (factorysessions.SessionStartRequest, error) {
 	return factorysessions.SessionStartRequest{
-		Mode:        factorysessions.SessionOperationModeLive,
-		Correlation: factorysessions.SessionOperationCorrelation{RequestID: requestID},
+		Mode:           factorysessions.SessionOperationModeLive,
+		ActivationOnly: true,
+		Correlation:    factorysessions.SessionOperationCorrelation{RequestID: requestID},
 		Source: factorysessions.Source{
 			Kind:      factoryruntime.WorkflowSourceKindFactoryID,
 			FactoryID: factoryTargetID,
@@ -548,7 +555,7 @@ func (f *fakeFactoryTargetService) Control(
 	f.controlCalls = append(f.controlCalls, request)
 	sessionID, operation := request.SessionID, request.Operation
 	control := request.Control
-	release, closeRelease, closeErr := f.cancelRelease, f.closeRelease, f.closeErr
+	release, closeRelease, closeErr, outcome := f.cancelRelease, f.closeRelease, f.closeErr, f.cancelOutcome
 	err := f.cancelErr
 	switch operation {
 	case factorysessions.SessionControlTerminate:
@@ -575,7 +582,7 @@ func (f *fakeFactoryTargetService) Control(
 	if err != nil {
 		return factorysessions.SessionControlResult{}, err
 	}
-	return factorysessions.SessionControlResult{}, nil
+	return factorysessions.SessionControlResult{Outcome: outcome}, nil
 }
 func (f *fakeFactoryTargetService) CloseFactorySession(_ context.Context, sessionID string) error {
 	f.mu.Lock()
