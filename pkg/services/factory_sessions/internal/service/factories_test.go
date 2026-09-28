@@ -222,7 +222,7 @@ func TestNewFactoryOpensHistoricalReplayWithoutLiveRuntimeCollaborators(t *testi
 		t.Fatalf("NewFactory() error = %v", err)
 	}
 	opened, historical, err := factory.InspectHistoricalApplication(t.Context(), factorysessions.SessionStartRequest{
-		FolderPath: t.TempDir(),
+		FolderPath:       t.TempDir(),
 		RuntimeSelection: &factorysessions.SessionRuntimeSelection{Recording: factorysessions.SessionRecordingSelection{ReplayPath: "recording.json"}},
 	})
 	if err != nil {

@@ -28,10 +28,10 @@ func runSessionStartRequest(cfg runcli.RunConfig, mocks *workers.MockWorkersConf
 		mode = factorysessions.SessionRuntimeModeService
 	}
 	return factorysessions.SessionStartRequest{
-		SessionID:      cfg.FactorySessionID,
-		Mode:           factorysessions.SessionOperationModeLive,
-		FolderPath:     cfg.Dir,
-		Persistence:    factorysessions.PersistencePolicyEnabled,
+		SessionID:   cfg.FactorySessionID,
+		Mode:        factorysessions.SessionOperationModeLive,
+		FolderPath:  cfg.Dir,
+		Persistence: factorysessions.PersistencePolicyEnabled,
 		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
 			SystemConfigHome:              cfg.HomeDir,
 			DefinitionSourcePath:          cfg.FactoryConfigPath,

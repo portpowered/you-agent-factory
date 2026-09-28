@@ -78,9 +78,10 @@ editing is enabled by default and requires no edit flag. Set
 directory is not the project being edited; otherwise the server's working
 directory is used. Each call opens and closes its own Factory Session.
 
-If no provider default is configured, run `you init --provider codex` or supply
-`provider` in the tool call. Factory Session tools use the same process-owned
-Sessions service.
+If no provider default is configured, run `you init --provider opencode`,
+`you init --provider codex`, or `you init --provider pi`; you can also supply
+`provider` in the tool call. Use these public provider IDs directly. Factory
+Session tools use the same process-owned Sessions service.
 
 ## Choose A Project Root
 
@@ -101,16 +102,21 @@ Tool discovery exposes `you.subagent` and this Factory Session catalog:
 
 | Tool | Task |
 |------|------|
-| `you.factory_session.list` | List durable Factory Sessions |
+| `you.factory_session.list` | List live Factory Sessions by default; use `scope: "persisted"` for durable sessions or `scope: "all"` for both |
 | `you.factory_session.validate_source` | Validate JavaScript orchestrator source without execution |
 | `you.factory_session.start_sync` | Start a Factory Session and wait for a terminal or timeout result |
 | `you.factory_session.start_async` | Start a Factory Session for later polling |
-| `you.factory_session.get` | Read status and progress for one Factory Session |
+| `you.factory_session.get` | Read status and progress for one durable Factory Session |
 | `you.factory_session.get_result` | Read a partial, terminal, or not-ready result |
 | `you.factory_session.list_dispatches` | Inspect child dispatches |
 | `you.factory_session.list_artifacts` | Inspect durable artifact metadata |
 | `you.factory_session.read_events` | Read ordered Factory Session events |
 | `you.factory_session.control` | Pause, resume, cancel, or terminate a Factory Session |
+
+`you.subagent` closes its live Factory Session before returning. Its response
+includes the session ID and terminal result. A live ID seen in
+`you.factory_session.list` during execution is not readable through the
+durable-only `you.factory_session.get` tool.
 
 Source validation uses either the host working directory or an explicit
 `projectRoot`. After starting, preserve the caller-supplied `requestId`, the

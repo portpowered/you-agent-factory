@@ -195,14 +195,10 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 	if result.Status != factorysessionexecution.InvocationTerminalStatusCompleted {
 		return subagentTerminalFailure(started.SessionID, result, timeoutMillis)
 	}
-	response := SubagentResult{SessionID: started.SessionID, Status: string(result.Status)}
-	for _, part := range result.PrimaryResult {
-		if part.Type == work.WorkContentPartTypeText {
-			if response.Text != "" {
-				response.Text += "\n"
-			}
-			response.Text += part.Text
-		}
+	response := SubagentResult{
+		SessionID: started.SessionID,
+		Status:    string(result.Status),
+		Text:      subagentPrimaryText(result.PrimaryResult),
 	}
 	if strings.TrimSpace(response.Text) == "" {
 		envelope := ToolErrorEnvelope{
@@ -214,6 +210,21 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
 	return ToolResponse[SubagentResult]{Result: &response}
+}
+
+// subagentPrimaryText joins the text parts of a completed invocation with
+// newlines, ignoring non-text content parts.
+func subagentPrimaryText(parts []work.WorkContentPart) string {
+	text := ""
+	for _, part := range parts {
+		if part.Type == work.WorkContentPartTypeText {
+			if text != "" {
+				text += "\n"
+			}
+			text += part.Text
+		}
+	}
+	return text
 }
 
 func subagentInvocationArgs(input SubagentInput) map[string]any {

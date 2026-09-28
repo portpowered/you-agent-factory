@@ -639,7 +639,7 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_NonInterruptedSession
 		Workflows:   successfulFixtureWorkflows(map[string]any{"status": "done"}),
 	})
 	started, err := service.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-resume-non-interrupted-001",
+		RequestID:   "req-runtime-resume-non-interrupted-001",
 		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
@@ -778,7 +778,7 @@ func TestJavaScriptRuntimeService_NonResumedFakeChild_PreservesShippedTransportS
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-non-resumed-fake-child-001",
+		RequestID:   "req-runtime-non-resumed-fake-child-001",
 		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
@@ -838,7 +838,7 @@ func TestJavaScriptRuntimeService_NonResumedSimpleFinal_PreservesReplayReconnect
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-non-resumed-simple-final-001",
+		RequestID:   "req-runtime-non-resumed-simple-final-001",
 		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
@@ -906,7 +906,7 @@ func TestJavaScriptRuntimeService_NonResumedTerminalSnapshot_OmitsCheckpointSumm
 	})
 
 	completed, err := initial.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-non-resumed-persisted-001",
+		RequestID:   "req-runtime-non-resumed-persisted-001",
 		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,

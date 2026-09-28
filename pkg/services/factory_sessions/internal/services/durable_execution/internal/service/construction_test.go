@@ -80,7 +80,7 @@ func TestNewDurable_DisabledPolicyDoesNotCreateProjectDurableSessions(t *testing
 	}
 
 	_, err = startedOwner.StartSync(context.Background(), factorysessions.DurableStartRequest{
-		RequestID: "req-construction-disabled-persistence-001",
+		RequestID:   "req-construction-disabled-persistence-001",
 		ProjectRoot: projectRoot,
 		Source: factorysessions.Source{
 			Kind: factoryruntime.WorkflowSourceKindInlineWorkflow,
@@ -129,7 +129,7 @@ func TestNewDurable_EnabledPolicyPersistsProjectDurableSessions(t *testing.T) {
 	}
 
 	started, err := owner.StartSync(context.Background(), factorysessions.DurableStartRequest{
-		RequestID: "req-construction-enabled-persistence-001",
+		RequestID:   "req-construction-enabled-persistence-001",
 		ProjectRoot: projectRoot,
 		Source: factorysessions.Source{
 			Kind: factoryruntime.WorkflowSourceKindInlineWorkflow,

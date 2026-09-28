@@ -154,9 +154,9 @@ func TestFSCP02LiveTerminalReplacement(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		if _, err := service.Control(ctx, factorysessions.SessionControlRequest{
-			SessionID: priorID,
-			Mode:      factorysessions.SessionOperationModeLive,
-			Operation: factorysessions.SessionControlCancel,
+			SessionID:   priorID,
+			Mode:        factorysessions.SessionOperationModeLive,
+			Operation:   factorysessions.SessionControlCancel,
 			Correlation: factorysessions.SessionOperationCorrelation{RequestID: "fscp02-terminal-replacement-cancel"},
 		}); err != nil {
 			t.Fatalf("canonical Control(CANCEL) attempt %d error = %v", i+1, err)
@@ -182,7 +182,7 @@ func TestFSCP02LiveTerminalReplacement(t *testing.T) {
 		SessionID:   priorID,
 		Correlation: factorysessions.SessionOperationCorrelation{RequestID: "fscp02-terminal-replacement-invoke"},
 		Input: &work.PreparedInvocationInput{
-			Source: work.InputSourcePositionalText,
+			Source:        work.InputSourcePositionalText,
 			ResolvedInput: &work.ResolvedInput{Source: work.InputSourcePositionalText, Text: "fscp02 terminal replacement"},
 		},
 	})

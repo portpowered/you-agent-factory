@@ -11,9 +11,9 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
-	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )

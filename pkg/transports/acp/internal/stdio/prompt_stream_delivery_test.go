@@ -267,9 +267,9 @@ func TestDispatchFactoryInvocation_CallsInjectedResponseBridge(t *testing.T) {
 	}
 
 	server := &Server{
-		chatSessions:   &fakeChatSessionsService{},
+		chatSessions:    &fakeChatSessionsService{},
 		factorySessions: &fakeFactoryTargetService{},
-		responseBridge: bridge,
+		responseBridge:  bridge,
 	}
 
 	invokeCalls := 0

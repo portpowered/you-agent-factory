@@ -451,7 +451,7 @@ func newCapturedTurnRuntime(
 		workerSessionAssociationEvent(t, 30, "association-replacement", "turn-replacement", "worker-replacement"),
 	)
 	cleanup := &capturedTurnCleanupProbe{
-		cancellationCalls: execution.cancelCalls,
+		cancellationCalls:  execution.cancelCalls,
 		expectedDispatches: []string{"dispatch-a", "dispatch-b"},
 	}
 	return runtimeService, cleanup
@@ -526,7 +526,6 @@ func (l *capturedTurnCleanupProbe) cleanupCallsSnapshot() []workers.WorkstationD
 	defer l.mu.Unlock()
 	return append([]workers.WorkstationDispatchCancelRequest(nil), l.cleanupCalls...)
 }
-
 
 // continuationFanOutExecution is a deterministic Workers boundary for the
 // multi-child resume integration. Initial attempts can finish only through

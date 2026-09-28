@@ -24,7 +24,6 @@ import (
 	factoryvisualizationhttp "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
-	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	work "github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -32,6 +31,7 @@ import (
 	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
 	generatedhttpclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )

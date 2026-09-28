@@ -60,31 +60,7 @@
     {
       "rule": "peer-service-implementation-import",
       "filePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime/captured_turn_terminate_integration_test.go",
-      "target": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire",
-      "class": "test-only",
-      "stage": "wire-injection-full-blow",
-      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
-    },
-    {
-      "rule": "peer-service-implementation-import",
-      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime/captured_turn_terminate_integration_test.go",
       "target": "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire",
-      "class": "test-only",
-      "stage": "wire-injection-full-blow",
-      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
-    },
-    {
-      "rule": "peer-service-implementation-import",
-      "filePath": "pkg/services/factory_sessions/internal/runtimeopening/runtime_load_test.go",
-      "target": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire",
-      "class": "test-only",
-      "stage": "wire-injection-full-blow",
-      "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"
-    },
-    {
-      "rule": "peer-service-implementation-import",
-      "filePath": "pkg/services/factory_sessions/internal/runtimeopening/testmain_test.go",
-      "target": "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire",
       "class": "test-only",
       "stage": "wire-injection-full-blow",
       "deletionGate": "import only the peer service root contract (pkg/services/\u003cpeer\u003e) instead of a peer implementation or nested subservice"

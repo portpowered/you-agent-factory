@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 

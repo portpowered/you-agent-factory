@@ -29,6 +29,10 @@ the agent's text response.
 | Nemotron Ultra LocalAI test task | Add focused reference-audio test; 240-second limit | `factory_session.subagent.timed_out`, session `dd5a0168-893b-4a98-9194-d5e9f737df74` | Four partial tests appeared in two files. All passed, but duplicated existing codec and protocol assertions and froze an unsupported reference-transcript behavior. The partial edits were removed after review. | Scope the next implementation task to one concrete missing behavior. |
 | Prompt-only default selection | Read README with no provider or model; 90-second limit | `COMPLETED`, session `21b5bd11-bf33-41db-84d9-1f324512c1ed` | Returned the correct repository summary from the supplied workspace. A second call with no `workingRoot` also completed (`ecb3e0e7-7235-4068-83d3-cac74abfb560`). | The configured operator default works; a clean-install test is still needed to prove out-of-box selection. |
 | Longcat empty-result classification | Make a completed invocation with no text an explicit MCP error; 180-second limit | `COMPLETED`, session `e076cfc3-e8a0-47e3-b32d-6ec341cabb5c` | It edited only the requested MCP source and test. Review confirmed `factory_session.subagent.empty_result` includes the session ID, and MCP plus CLI MCP package tests pass. | Rebuild and direct-probe the new binary before relying on the installed copy. |
+| Longcat MCP guide correction | Clarify live versus durable session reads; 150-second limit | `factory_session.subagent.timed_out`, session `16eb2140-7735-404b-9968-230584b16518` | No edit. | The guide was corrected after source inspection; packaged docs smoke passed. |
+| Longcat complexity fix | Reduce `Subagent` cyclomatic complexity; 150-second limit | `COMPLETED`, session `762a871f-f977-4e5a-9e83-ccae9c89d00f` | One source file changed; focused MCP tests and maintainability check passed. | Keep this smaller edit scope for future lint tasks. |
+| Nemotron baseline cleanup | Remove stale ownership rows; 150-second limit | `factory_session.subagent.timed_out`, session `ee7949cb-49f5-4123-97d3-d57a30e4669a` | No edit. The prompt named a non-existent baseline path. | Retry with the root file path. |
+| Longcat baseline retry | Remove stale ownership rows from the exact root file; 120-second limit | `factory_session.subagent.timed_out`, session `c4a793a3-a9c4-4db5-853b-f046d90ed992` | Partial edit removed five rows for three file paths; two rows still represented live imports. Restoring those two made `ownershipboundarycheck` pass. | Select rows by both file path and imported target, and review timed-out edits before accepting. |
 
 Two `you.subagent` calls ran concurrently and appeared as two live Factory
 Sessions. This demonstrates concurrent dispatch, while the code task's timeout
@@ -63,3 +67,11 @@ processes still hold the previous executable image until they restart. A
 second direct stdio launch of the installed binary completed a read-only
 OpenCode Longcat invocation (`f15a7a77-d43b-49a3-b212-721b6a2aa572`) and
 returned the expected primary result, `you-agent-factory`.
+After the empty-result change, the binary was rebuilt and installed again.
+Direct stdio probes of that installed build passed argument validation and
+an OpenCode Longcat read (`945a1003-5170-450e-91d2-bf36720c8ffa`).
+`make verify-fast` then passed with locked UI dependencies installed. The
+subsequent lint gate exposed one new `Subagent` complexity violation, a stale
+model-provider package hash, three stale ownership rows from opener cleanup,
+and existing Go formatting drift. Those were corrected; `make lint` passed
+with Git's POSIX shell and tools on `PATH` for the format target.

@@ -10,11 +10,11 @@ import (
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
-	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )

@@ -155,7 +155,7 @@ func indexFactoryEventType(
 
 func simpleFinalSyncStartRequest() fse.StartRequest {
 	return fse.StartRequest{
-		RequestID: "req-runtime-sync-simple-final-001",
+		RequestID:   "req-runtime-sync-simple-final-001",
 		ProjectRoot: ".",
 		Source: fse.Source{
 			Kind: factory.WorkflowSourceKindInlineWorkflow,
@@ -441,7 +441,7 @@ func TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSession
 	service := newJavaScriptRuntimeService(t, blockingFixtureWorkflows())
 	waitMillis := int64(50)
 	started, err := service.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-sync-wait-timeout-001",
+		RequestID:   "req-runtime-sync-wait-timeout-001",
 		ProjectRoot: ".",
 		Source: fse.Source{
 			Kind: factory.WorkflowSourceKindInlineWorkflow,
@@ -660,7 +660,7 @@ func inlineWorkflowStartRequest(
 	requestedPolicy map[string]any,
 ) fse.StartRequest {
 	return fse.StartRequest{
-		RequestID: requestID,
+		RequestID:   requestID,
 		ProjectRoot: ".",
 		Source: fse.Source{
 			Kind: factory.WorkflowSourceKindInlineWorkflow,
