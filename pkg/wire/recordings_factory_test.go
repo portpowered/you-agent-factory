@@ -1,22 +1,14 @@
 package wire
 
 import (
-	"context"
 	"strings"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"go.uber.org/zap"
 )
 
 func TestProvideRecordingsRootConstructsThroughRecordingsWire(t *testing.T) {
@@ -75,10 +67,10 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 	if buildServer == nil {
 		t.Fatal("provideMCPServerBuilder() returned nil")
 	}
-	if server, err := buildServer(nil, nil, nil, nil, nil); err != nil || server == nil {
+	if server, err := buildServer("", nil, nil, nil, nil, nil); err != nil || server == nil {
 		t.Fatalf("buildServer(nil roles) = %v, %v; want inert protocol server", server, err)
 	}
-	if server, err := buildServer(nil, root, nil, nil, nil); err != nil || server == nil {
+	if server, err := buildServer("", nil, root, nil, nil, nil); err != nil || server == nil {
 		t.Fatalf("buildServer(recordings root) = %v, %v; want owner-backed protocol server", server, err)
 	}
 
@@ -87,46 +79,21 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 	}
 }
 
-func TestHTTPRuntimeBindingRejectsMissingOpenedRoles(t *testing.T) {
+func TestHTTPRuntimeBindingRejectsMissingRoot(t *testing.T) {
 	t.Parallel()
 
-	_, err := newHTTPRuntimeHandlerWithMetrics(factorysessionwire.OpenedApplicationRuntime{}, nil, nil, nil, nil, nil, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "opened Factory Session roles") {
-		t.Fatalf("newHTTPRuntimeHandlerWithMetrics() error = %v, want missing opened roles", err)
+	_, err := newHTTPRuntimeHandlerWithMetrics(nil, "session-1", nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "Factory Sessions root is required") {
+		t.Fatalf("newHTTPRuntimeHandlerWithMetrics() error = %v, want missing root", err)
 	}
 }
 
-func TestHTTPRuntimeBindingRejectsUnavailableModels(t *testing.T) {
+func TestHTTPRuntimeBindingRejectsUnknownSession(t *testing.T) {
 	t.Parallel()
 
-	opened := wireHTTPOpenedRuntime(&wireHTTPSessionsRole{})
-	_, err := newHTTPRuntimeHandlerWithMetrics(opened, nil, nil, &wireHTTPContentRole{}, nil, nil, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "Models service") {
-		t.Fatalf("newHTTPRuntimeHandlerWithMetrics() error = %v, want missing Models service", err)
-	}
-}
-
-func TestHTTPRuntimeBindingRejectsMissingSessionStatusCapability(t *testing.T) {
-	t.Parallel()
-
-	opened := wireHTTPOpenedRuntime(&wireHTTPSessionsRole{})
-	opened.Models = &wireHTTPModelsRole{}
-	opened.ModelInvoker = &wireHTTPModelInvokerRole{}
-	_, err := newHTTPRuntimeHandlerWithMetrics(opened, nil, nil, &wireHTTPContentRole{}, nil, nil, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "session-scoped status observation") {
-		t.Fatalf("newHTTPRuntimeHandlerWithMetrics() error = %v, want missing status capability", err)
-	}
-}
-
-func TestHTTPRuntimeBindingRejectsMissingLiveGatewayCapability(t *testing.T) {
-	t.Parallel()
-
-	opened := wireHTTPOpenedRuntime(&wireHTTPStatusOnlySessionsRole{})
-	opened.Models = &wireHTTPModelsRole{}
-	opened.ModelInvoker = &wireHTTPModelInvokerRole{}
-	_, err := newHTTPRuntimeHandlerWithMetrics(opened, nil, nil, &wireHTTPContentRole{}, nil, nil, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "live result gateway") {
-		t.Fatalf("newHTTPRuntimeHandlerWithMetrics() error = %v, want missing live gateway", err)
+	_, err := newHTTPRuntimeHandlerWithMetrics(&factorysessionwire.Root{}, "session-1", nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "process root is required") {
+		t.Fatalf("newHTTPRuntimeHandlerWithMetrics() error = %v, want unavailable session", err)
 	}
 }
 
@@ -138,63 +105,5 @@ func TestDirectJavaScriptHTTPCompositionRejectsMissingRoles(t *testing.T) {
 	}
 	if _, err := newDurableExecutionHTTPHandler(nil, nil, nil, nil, nil, nil); err == nil {
 		t.Fatal("newDurableExecutionHTTPHandler(nil roles) error = nil, want required-role validation")
-	}
-}
-
-type wireHTTPRuntimeRole struct {
-	factoryruntime.Service
-}
-
-func (*wireHTTPRuntimeRole) SubscribeFactoryEvents(
-	context.Context,
-	*factorydefinitions.FactoryEventReconnectCursor,
-	factorydefinitions.FactoryEventReconnectScope,
-) (*factorydefinitions.FactoryEventStream, error) {
-	return nil, nil
-}
-
-type wireHTTPDefinitionsRole struct {
-	factorydefinitions.Service
-}
-
-type wireHTTPSessionsRole struct {
-	factorysessions.Service
-}
-
-type wireHTTPStatusOnlySessionsRole struct {
-	factorysessions.Service
-}
-
-func (*wireHTTPStatusOnlySessionsRole) ObserveForSession(
-	context.Context,
-	string,
-	factoryruntime.ObserveRequest,
-) (factoryruntime.ObserveResult, error) {
-	return factoryruntime.ObserveResult{}, nil
-}
-
-type wireHTTPLiveControlRole struct {
-	factorysessions.LiveControlService
-}
-
-type wireHTTPModelsRole struct {
-	models.Service
-}
-
-type wireHTTPModelInvokerRole struct {
-	workers.ModelInvoker
-}
-
-type wireHTTPContentRole struct {
-	work.ContentPreparation
-}
-
-func wireHTTPOpenedRuntime(sessions factorysessions.Service) factorysessionwire.OpenedApplicationRuntime {
-	return factorysessionwire.OpenedApplicationRuntime{
-		FactoryRuntime:     &wireHTTPRuntimeRole{},
-		FactoryDefinitions: &wireHTTPDefinitionsRole{},
-		FactorySessions:    sessions,
-		LiveControl:        &wireHTTPLiveControlRole{},
-		Logger:             zap.NewNop(),
 	}
 }
