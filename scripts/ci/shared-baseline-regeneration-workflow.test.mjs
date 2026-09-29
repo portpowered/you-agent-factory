@@ -136,11 +136,13 @@ function runFakeRegeneration({ failAt = "", failExit = 17 } = {}) {
 			"UNIT_LATENCY_BUDGET=budget.json",
 			"UNIT_LATENCY_SAMPLES=sample-1.json,sample-2.json,sample-3.json",
 			"GO=node " + fakeGoPath,
+			"BASELINE_REGEN_CLI_UPDATE_ENV=",
 		],
 		{
 			cwd: repositoryRoot,
 			env: {
 				...process.env,
+				UPDATE_CLI_BASELINES: "1",
 				FAKE_WRITER_EXIT: String(failExit),
 				FAKE_WRITER_FAIL_AT: failAt,
 				FAKE_WRITER_LOG: logPath,
@@ -2021,7 +2023,7 @@ test("F-06/F-07 stop the integrated writer spine and never hand off a partial ca
 			"ownershipinventoryfreeze",
 			"commandidentity",
 			"cliinputs",
-		]);
+		], laterFailure.result.stdout + laterFailure.result.stderr);
 		assert.equal(readFileSync(laterFailure.outputPath, "utf8"), "partial snapshot\n");
 		assert.doesNotMatch(laterFailure.result.stdout + laterFailure.result.stderr, /mcptoolinventorygen|publication succeeded/);
 	} finally {
