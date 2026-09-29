@@ -1951,3 +1951,10 @@ OpenCode MCP edit (session `a5b073bc-c658-4cb1-8ad2-ba20be331149`)
 removed only that stale line; `make deadcode` and diff checks passed. Commit
 `fba0b94729` records the CUDA artifact build preparation, still without a
 published archive. The final `make lint` rerun passed all 24 targets.
+
+Commit `a6504a902b` records the deadcode baseline and audit. The Windows
+binary was rebuilt as `C:\Users\andre\bin\you-a6504a902b.exe` (SHA-256
+`782AA47E51B9993BE557C135F451A32B4EDD978BE6EE1546F8438C5C078E10DC`),
+and the Codex MCP command for new connections points to it. A fresh headless
+stdio initialize and `tools/list` advertised all 11 tools including
+`you.subagent`.
