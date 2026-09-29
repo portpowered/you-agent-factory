@@ -525,6 +525,8 @@ func subagentInvocationArgs(input SubagentInput) map[string]any {
 	args := map[string]any{"input": input.Prompt}
 	if input.Provider != "" {
 		args["workerProvider"] = input.Provider
+	} else if strings.HasPrefix(input.Model, "opencode/") {
+		args["workerProvider"] = "opencode"
 	}
 	if input.Model != "" {
 		args["workerModel"] = input.Model
@@ -547,6 +549,8 @@ func validateSubagentRequest(ctx context.Context, target factorysessionexecution
 		return errors.New("subagent request ID generator is unavailable")
 	case strings.TrimSpace(input.Prompt) == "":
 		return fmt.Errorf("prompt is required")
+	case strings.HasPrefix(input.Model, "opencode/") && input.Provider != "" && !strings.EqualFold(strings.TrimSpace(input.Provider), "opencode"):
+		return fmt.Errorf("model %q requires provider opencode, but provider %q was requested", input.Model, input.Provider)
 	case input.TimeoutMillis != nil && *input.TimeoutMillis <= 0:
 		return fmt.Errorf("timeoutMillis must be greater than zero")
 	case input.TimeoutMillis != nil && *input.TimeoutMillis > subagentMaxTimeoutMillis:
