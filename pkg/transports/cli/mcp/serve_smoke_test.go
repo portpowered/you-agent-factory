@@ -471,6 +471,25 @@ func decodeToolResponse[T any](t *testing.T, response mcpJSONRPCResponse) mcpfac
 	if response.Error != nil {
 		t.Fatalf("tools/call protocol error = %#v", response.Error)
 	}
+	isError, _ := response.Result["isError"].(bool)
+	if isError {
+		structured, ok := response.Result["structuredContent"]
+		if !ok {
+			t.Fatalf("tools/call isError = true without structuredContent: %#v", response.Result)
+		}
+		encoded, err := json.Marshal(structured)
+		if err != nil {
+			t.Fatalf("marshal tools/call structuredContent: %v", err)
+		}
+		var toolResponse mcpfactorysession.ToolResponse[T]
+		if err := json.Unmarshal(encoded, &toolResponse); err != nil {
+			t.Fatalf("unmarshal tools/call structuredContent %s: %v", encoded, err)
+		}
+		if toolResponse.Error == nil {
+			t.Fatalf("tools/call isError = true without typed error: structuredContent=%s", encoded)
+		}
+		return toolResponse
+	}
 	content, ok := response.Result["content"].([]any)
 	if !ok || len(content) == 0 {
 		t.Fatalf("tools/call result missing content: %#v", response.Result)
@@ -482,7 +501,7 @@ func decodeToolResponse[T any](t *testing.T, response mcpJSONRPCResponse) mcpfac
 	text, _ := first["text"].(string)
 	var toolResponse mcpfactorysession.ToolResponse[T]
 	if err := json.Unmarshal([]byte(text), &toolResponse); err != nil {
-		t.Fatalf("unmarshal tool response: %v", err)
+		t.Fatalf("unmarshal tool response (isError=%v, structuredContent=%#v, text=%q): %v", isError, response.Result["structuredContent"], text, err)
 	}
 	return toolResponse
 }
