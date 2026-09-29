@@ -2388,3 +2388,10 @@ explicit `max_tokens` currently passes only as metadata, not dedicated
 `PredictOptions.Tokens`; TTS `voice`/`ref_text` reaches protobuf params,
 built-in TTS is VibeVoice, and custom Qwen/Index backend behavior still
 needs validation.
+
+OpenCode MCP edit session 437ad86b-7dfc-4d2f-94e9-31269f1cd011 completed;
+focused Go tests passed. An independent live WSL offline CLI probe with the
+rebuilt binary returned one-word `One` with usage tokens=1 for `max_tokens=1`,
+and `hello` with usage tokens=2 for `max_tokens=3` on prompt `hello`. The
+tests prove the wire mapping; the live probe proves the effective cap in this
+model.

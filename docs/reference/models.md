@@ -588,6 +588,20 @@ you models invoke llm --operation OMNI --input prompt="Write a haiku"
 The command writes the generated UTF-8 text to stdout. Diagnostics remain on
 stderr. Use global `--json` when a structured output object is required.
 
+### Limit OMNI output tokens
+
+Pass an explicit `max_tokens` direct parameter to cap generation length:
+
+```bash
+you models invoke llm --operation OMNI --input prompt="Count to ten" \
+  --parameter '{"name":"max_tokens","value":128}'
+```
+
+`max_tokens` accepts a positive integer from `1` to `2147483647`. When
+supplied, it sets the LocalAI generation token limit (`PredictOptions.Tokens`)
+and is excluded from request metadata. When omitted, generation stays
+unbounded (`Tokens=0`) and context size stays model-derived (`ContextSize=0`).
+
 ### Add Images In Command Order
 
 Repeat the `image` binding to preserve the supplied image order:
