@@ -96,8 +96,9 @@ const (
 var backendReleaseTag = regexp.MustCompile(`^localai-backends-v1-[0-9a-f]{64}$`)
 
 // NewPublishedBackendArtifactResolver checks published Windows and Linux amd64
-// archive manifests on first online use. It keeps the checked-in publication
-// as the fallback when the release index is unavailable or has no compatible
+// archive manifests on first successful online use. A failed discovery is
+// retried on a later online call; the checked-in publication remains the
+// fallback when the release index is unavailable or has no compatible
 // archive. Offline calls never access the network.
 func NewPublishedBackendArtifactResolver(client AssetHTTPDoer) (BackendArtifactResolver, error) {
 	if client == nil {
@@ -129,8 +130,8 @@ func NewPublishedBackendArtifactResolver(client AssetHTTPDoer) (BackendArtifactR
 				mu.Unlock()
 				return BackendArtifactSelection{}, ctx.Err()
 			}
-			checked = true
 			if fetchErr == nil {
+				checked = true
 				published = candidates
 			}
 		}

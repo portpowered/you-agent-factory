@@ -15,6 +15,37 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
 )
 
+func TestPublishedBackendResolverRetriesDiscoveryAfterFailure(t *testing.T) {
+	t.Parallel()
+	manifest := windowsCUDAPublicationFixture(t)
+	tag := publicationTag(t, manifest)
+	index := publicationIndex(t, tag, manifest)
+	requests := 0
+	resolver, err := NewPublishedBackendArtifactResolver(backendPublicationDoer(func(request *http.Request) (*http.Response, error) {
+		requests++
+		if requests == 1 {
+			return publicationResponse(nil), fmt.Errorf("transient publication failure")
+		}
+		if request.URL.String() == backendReleasesURL {
+			return publicationResponse(index), nil
+		}
+		if request.URL.String() == backendReleaseBase+tag+"/manifest.json" {
+			return publicationResponse(manifest), nil
+		}
+		return publicationResponse(nil), fmt.Errorf("unexpected publication request")
+	}))
+	if err != nil {
+		t.Fatalf("construct published resolver: %v", err)
+	}
+	request := publishedWindowsRequest("localai-llamacpp")
+	assertPublishedResolution(t, resolver, request, false, "cpu", "windows-amd64")
+	assertPublicationRequests(t, requests, 1)
+	assertPublishedResolution(t, resolver, request, false, "cuda", "windows-amd64-cuda")
+	assertPublicationRequests(t, requests, 3)
+	assertPublishedResolution(t, resolver, request, false, "cuda", "windows-amd64-cuda")
+	assertPublicationRequests(t, requests, 3)
+}
+
 func TestPublishedBackendResolverUnpinsWindowsCapabilities(t *testing.T) {
 	t.Parallel()
 	older := windowsCUDAPublicationFixture(t)

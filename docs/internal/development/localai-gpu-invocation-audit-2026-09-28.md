@@ -70,6 +70,20 @@ Docker. Gallery CUDA backends and models were installed under
 TTS Qwen3 and IndexTTS results are in
 [localai-tts-reference-audio-audit-2026-09-28.md](localai-tts-reference-audio-audit-2026-09-28.md).
 
+## Native CUDA archive availability — 2026-09-29
+
+The managed published resolver selects a matching CUDA archive before a CPU
+archive on CUDA-capable Windows and Linux amd64 hosts. The checked-in manifest
+has no CUDA entry. The latest public LocalAI backend release
+(`localai-backends-v1-17273d7dbb61dba3f7bfdfd6e05bd90231cf1c1224cf5556668abea1bac91106`)
+lists CPU/Metal archives for llama.cpp, Whisper, and VibeVoice, with no CUDA
+archive. The local release matrix defines Linux and Windows CUDA llama.cpp
+builds, but both require named self-hosted runners; the repository Actions
+runner API reported `total_count: 0` during this audit. Consequently this
+worktree can select a valid published CUDA release but cannot obtain a native
+Windows CUDA backend from the current public release. A verified build and
+publication are still needed.
+
 ## Limitation
 
 The WSL-built `you` binary proves managed CUDA backend first-use and offline

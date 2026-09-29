@@ -2087,3 +2087,23 @@ The installed MCP command for new connections now points to
 `7CC1E5F3094562806353641BFAE116999BC3D53EBFC178A631631109CDE9C658`).
 A fresh headless MCP initialize and tools/list from that exact binary returned
 11 tools including `you.subagent`.
+
+A later bounded OpenCode documentation edit (session
+`867c17d6-c341-47c8-af87-531c3d6d3d9d`, request
+`29fd12f9-fb1a-4b7d-b1b1-9e1be60ff5e9`) timed out after 480 seconds.
+The terminal MCP result correctly reported
+`factory_session.subagent.timed_out`, `partialEffectsPossible=true`, a live
+in-flight dispatch, and recent `REASONING` activity. No edit to the requested
+`docs/reference/models.md` was present afterward. This is another case of
+OpenCode spending the allotted session without delivering a bounded edit;
+the reason for the long reasoning phase remains unproven.
+
+Another narrow OpenCode edit (session
+`fff8d2ba-d646-4e06-ad4a-1ad8400c178f`, request
+`6e2868a7-d5db-4927-97f7-4f4fa2b9cfe7`) timed out after 300 seconds
+while fixing published CUDA discovery retry. Unlike the documentation task,
+it left a complete code edit and focused regression test in the worktree.
+The MCP terminal result reported `partialEffectsPossible=true` and recent
+provider reasoning, but no primary result. An independent focused Go test
+passed after cleanup. This is a second partial-edit timeout; the test result
+does not turn the MCP session into a successful completion.

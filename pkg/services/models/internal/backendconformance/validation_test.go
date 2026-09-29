@@ -159,13 +159,16 @@ func TestValidateRejectsIncompletePinnedArtifactMatrix(t *testing.T) {
 func TestVariantCharacterizationRetainsClosedTargetBaselineAndUniquenessFailures(t *testing.T) {
 	t.Parallel()
 
-	const backendID = "localai-llamacpp"
+	const backendID = "localai-test"
 	cuda := PinnedArtifact{
 		BackendID: backendID, TargetID: TargetWindowsAmd64CUDA,
 		OperatingSystem: "windows", Architecture: "amd64", Accelerators: []string{"cuda"},
 		SizeBytes: MinimumPinnedArtifactSizeBytes + 4,
 	}
 	validBaselines := completePinnedArtifacts(backendID)
+	linuxCUDA := cuda
+	linuxCUDA.TargetID = TargetLinuxAmd64CUDA
+	linuxCUDA.OperatingSystem = "linux"
 
 	tests := []struct {
 		name         string
@@ -179,9 +182,25 @@ func TestVariantCharacterizationRetainsClosedTargetBaselineAndUniquenessFailures
 			wantFailures: 0,
 		},
 		{
+			name:         "Linux CUDA variant with all baselines is accepted",
+			artifacts:    append(append([]PinnedArtifact(nil), validBaselines...), linuxCUDA),
+			wantFailures: 0,
+		},
+		{
+			name:         "both CUDA variants with all baselines are accepted",
+			artifacts:    append(append([]PinnedArtifact(nil), validBaselines...), cuda, linuxCUDA),
+			wantFailures: 0,
+		},
+		{
 			name:         "CUDA variant cannot replace the Windows CPU baseline",
 			artifacts:    append(append([]PinnedArtifact(nil), validBaselines[:2]...), cuda),
 			wantDetails:  []string{`missing the required target "windows-amd64"`},
+			wantFailures: 1,
+		},
+		{
+			name:         "CUDA variant cannot replace the Linux CPU baseline",
+			artifacts:    append([]PinnedArtifact{validBaselines[0], validBaselines[2]}, linuxCUDA),
+			wantDetails:  []string{`missing the required target "linux-amd64"`},
 			wantFailures: 1,
 		},
 		{
@@ -194,6 +213,12 @@ func TestVariantCharacterizationRetainsClosedTargetBaselineAndUniquenessFailures
 			name:         "duplicate Windows CUDA tuple remains invalid",
 			artifacts:    append(append(append([]PinnedArtifact(nil), validBaselines...), cuda), cuda),
 			wantDetails:  []string{`approved target "windows-amd64-cuda"; exactly one is required`},
+			wantFailures: 1,
+		},
+		{
+			name:         "duplicate Linux CUDA tuple remains invalid",
+			artifacts:    append(append([]PinnedArtifact(nil), validBaselines...), linuxCUDA, linuxCUDA),
+			wantDetails:  []string{`approved target "linux-amd64-cuda"; exactly one is required`},
 			wantFailures: 1,
 		},
 	}
@@ -230,7 +255,7 @@ func TestVariantCharacterizationRetainsClosedTargetBaselineAndUniquenessFailures
 	}
 }
 
-func TestValidateRejectsUnauthorizedOrMismatchedCUDAVariants(t *testing.T) {
+func TestValidateRejectsMismatchedCUDAVariants(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -239,26 +264,44 @@ func TestValidateRejectsUnauthorizedOrMismatchedCUDAVariants(t *testing.T) {
 		wantDetail string
 	}{
 		{
-			name: "unauthorized backend",
-			artifact: PinnedArtifact{BackendID: "localai-whisper", TargetID: TargetWindowsAmd64CUDA,
-				OperatingSystem: "windows", Architecture: "amd64", Accelerators: []string{"cuda"}, SizeBytes: MinimumPinnedArtifactSizeBytes + 1},
-			wantDetail: "mismatched approved CUDA compatibility facts",
-		},
-		{
 			name: "mismatched operating system",
-			artifact: PinnedArtifact{BackendID: ApprovedCUDABackend, TargetID: TargetWindowsAmd64CUDA,
+			artifact: PinnedArtifact{BackendID: "localai-test", TargetID: TargetWindowsAmd64CUDA,
 				OperatingSystem: "linux", Architecture: "amd64", Accelerators: []string{"cuda"}, SizeBytes: MinimumPinnedArtifactSizeBytes + 1},
 			wantDetail: "mismatched approved CUDA compatibility facts",
 		},
 		{
+			name: "mismatched Linux operating system",
+			artifact: PinnedArtifact{BackendID: "localai-test", TargetID: TargetLinuxAmd64CUDA,
+				OperatingSystem: "windows", Architecture: "amd64", Accelerators: []string{"cuda"}, SizeBytes: MinimumPinnedArtifactSizeBytes + 1},
+			wantDetail: "mismatched approved CUDA compatibility facts",
+		},
+		{
+			name: "mismatched architecture",
+			artifact: PinnedArtifact{BackendID: "localai-test", TargetID: TargetLinuxAmd64CUDA,
+				OperatingSystem: "linux", Architecture: "arm64", Accelerators: []string{"cuda"}, SizeBytes: MinimumPinnedArtifactSizeBytes + 1},
+			wantDetail: "mismatched approved CUDA compatibility facts",
+		},
+		{
+			name: "mismatched accelerators",
+			artifact: PinnedArtifact{BackendID: "localai-test", TargetID: TargetLinuxAmd64CUDA,
+				OperatingSystem: "linux", Architecture: "amd64", Accelerators: []string{"cuda", "rocm"}, SizeBytes: MinimumPinnedArtifactSizeBytes + 1},
+			wantDetail: "mismatched approved CUDA compatibility facts",
+		},
+		{
 			name: "placeholder size",
-			artifact: PinnedArtifact{BackendID: ApprovedCUDABackend, TargetID: TargetWindowsAmd64CUDA,
+			artifact: PinnedArtifact{BackendID: "localai-test", TargetID: TargetWindowsAmd64CUDA,
 				OperatingSystem: "windows", Architecture: "amd64", Accelerators: []string{"cuda"}, SizeBytes: MinimumPinnedArtifactSizeBytes},
 			wantDetail: "target \"windows-amd64-cuda\" sizeBytes 1048576",
 		},
 		{
+			name: "Linux placeholder size",
+			artifact: PinnedArtifact{BackendID: "localai-test", TargetID: TargetLinuxAmd64CUDA,
+				OperatingSystem: "linux", Architecture: "amd64", Accelerators: []string{"cuda"}, SizeBytes: MinimumPinnedArtifactSizeBytes},
+			wantDetail: "target \"linux-amd64-cuda\" sizeBytes 1048576",
+		},
+		{
 			name: "unknown target",
-			artifact: PinnedArtifact{BackendID: ApprovedCUDABackend, TargetID: "windows-amd64-rocm",
+			artifact: PinnedArtifact{BackendID: "localai-test", TargetID: "windows-amd64-rocm",
 				OperatingSystem: "windows", Architecture: "amd64", Accelerators: []string{"rocm"}, SizeBytes: MinimumPinnedArtifactSizeBytes + 1},
 			wantDetail: "is not an approved optional variant",
 		},

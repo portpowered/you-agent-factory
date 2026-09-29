@@ -686,6 +686,46 @@ func TestHandler_InvokeGenericModelPreservesAudioAndVideoFileBytes(t *testing.T)
 	}
 }
 
+func TestHandler_InvokeGenericModelMultipartVoiceAndRefTextReachModelsTogether(t *testing.T) {
+	t.Parallel()
+
+	voice := []byte{'R', 'I', 'F', 'F', 0, 0xff, 0x80, 'W', 'A', 'V', 'E'}
+	requestJSON := `{"scope":"factory-session:http-test","holder":"operator","model":{"nameOrUri":"tts"},"operation":"TTS","inputs":[{"name":"text","modality":"TEXT","content":"Say hello"},{"name":"voice","modality":"AUDIO","mediaType":"audio/wav","contentType":"audio/wav"}],"parameters":[{"name":"ref_text","value":"reference transcript"}]}`
+	var captured models.InvokeModelRequest
+	root := &rootFake{invokeGeneric: func(_ context.Context, request models.InvokeModelRequest) (models.InvokeModelResult, error) {
+		captured = request
+		return models.InvokeModelResult{}, nil
+	}}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.InvokeGenericModel(recorder, genericMultipartRequest(t, []multipartTestPart{
+		{name: "request", contentType: "application/json", data: []byte(requestJSON)},
+		{name: "files", contentType: "audio/wav", data: voice},
+	}))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s, want 200", recorder.Code, recorder.Body.String())
+	}
+	if captured.Model.NameOrURI != "tts" || captured.Operation != models.OperationTTS || len(captured.Inputs) != 2 {
+		t.Fatalf("Models request = %#v, want TTS with text and voice", captured)
+	}
+	if captured.Inputs[0].Name != "text" || captured.Inputs[0].Content != "Say hello" {
+		t.Fatalf("text input = %#v", captured.Inputs[0])
+	}
+	gotVoice := captured.Inputs[1]
+	wantVoice := models.InferenceInput{
+		Name: "voice", Modality: models.ModalityAudio, ContentType: "audio/wav", MediaType: "audio/wav", Content: string(voice),
+	}
+	if gotVoice != wantVoice {
+		t.Fatalf("voice input = %#v, want exact WAV bytes and media type %#v", gotVoice, wantVoice)
+	}
+	if len(captured.Parameters) != 1 || captured.Parameters[0].Name != "ref_text" {
+		t.Fatalf("Models parameters = %#v, want ref_text", captured.Parameters)
+	}
+	if value, ok := captured.Parameters[0].Value.(string); !ok || value != "reference transcript" {
+		t.Fatalf("ref_text value = %#v, want typed string", captured.Parameters[0].Value)
+	}
+}
+
 func TestHandler_InvokeGenericModelRejectsInvalidRequestBeforeRoot(t *testing.T) {
 	t.Parallel()
 

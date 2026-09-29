@@ -3,6 +3,7 @@ package cli_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"reflect"
 	"testing"
@@ -10,6 +11,70 @@ import (
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 )
+
+func TestRootAdapter_InvokeVoiceFileAndRefTextReachModelsTogether(t *testing.T) {
+	t.Parallel()
+
+	scope := testRuntimeScope(t)
+	voice := []byte{'R', 'I', 'F', 'F', 0, 0xff, 0x80, 'W', 'A', 'V', 'E'}
+	var captured modelinference.InvokeModelRequest
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return genericCLIOperationModel("tts", modelinference.OperationTTS,
+					[]modelinference.OperationSlot{
+						{Name: "text", Modality: modelinference.ModalityText, Required: boolPointer(true)},
+						{Name: "voice", Modality: modelinference.ModalityAudio, MediaTypes: []string{"audio/wav"}},
+						{Name: "parameters", Modality: modelinference.ModalityJSON},
+					},
+					[]modelinference.OperationSlot{{Name: "audio", Modality: modelinference.ModalityAudio}},
+				), nil
+			},
+			invokeModel: func(_ context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				captured = request
+				return modelinference.InvokeModelResult{Outputs: []modelinference.InferenceOutput{{
+					Name: "audio", Modality: modelinference.ModalityAudio, ContentType: "audio/wav", Content: "WAV",
+				}}}, nil
+			},
+		},
+		InputFileReader: func(_ context.Context, path string, _ int64) ([]byte, error) {
+			if path != "reference.wav" {
+				return nil, fmt.Errorf("unexpected input path %q", path)
+			}
+			return voice, nil
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context: context.Background(), ModelName: "tts", Operation: modelinference.OperationTTS,
+		InputMappings:  []string{"text=Say hello", "voice=@reference.wav"},
+		ParameterSpecs: []string{`{"name":"ref_text","value":"reference transcript"}`},
+		JSON:           true, Output: io.Discard,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	if captured.Scope != scope || captured.Model.NameOrURI != "tts" || captured.Operation != modelinference.OperationTTS || len(captured.Inputs) != 2 {
+		t.Fatalf("Models request = %#v, want scoped TTS with text and voice", captured)
+	}
+	if captured.Inputs[0].Name != "text" || captured.Inputs[0].Content != "Say hello" {
+		t.Fatalf("text input = %#v", captured.Inputs[0])
+	}
+	gotVoice := captured.Inputs[1]
+	wantVoice := modelinference.InferenceInput{
+		Name: "voice", Modality: modelinference.ModalityAudio, ContentType: "audio/wav", MediaType: "audio/wav", Content: string(voice),
+	}
+	if gotVoice != wantVoice {
+		t.Fatalf("voice input = %#v, want exact WAV bytes and media type %#v", gotVoice, wantVoice)
+	}
+	if len(captured.Parameters) != 1 || captured.Parameters[0].Name != "ref_text" {
+		t.Fatalf("Models parameters = %#v, want ref_text", captured.Parameters)
+	}
+	if value, ok := captured.Parameters[0].Value.(string); !ok || value != "reference transcript" {
+		t.Fatalf("ref_text value = %#v, want typed string", captured.Parameters[0].Value)
+	}
+}
 
 type zeroInputEffectsModelsRoot struct {
 	stubModelsRoot

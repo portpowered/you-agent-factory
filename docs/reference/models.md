@@ -510,6 +510,25 @@ you --json models invoke tts --operation TTS \
   --output audio=speech.wav
 ```
 
+An operator-configured Qwen3-TTS or IndexTTS model can accept a reference WAV
+through the optional `voice:AUDIO` slot. Pass the reference transcript as the
+`ref_text` parameter when that backend requires it. For example, after
+configuring a model named `qwen3-tts-0.6b`:
+
+```bash
+you models invoke qwen3-tts-0.6b --operation TTS \
+  --input text="Hello, this is a test." \
+  --input voice=@reference.wav \
+  --parameter '{"name":"ref_text","value":"Zero."}' \
+  --output audio=speech.wav
+```
+
+Use the same input and parameter form for an operator-configured IndexTTS
+model. The built-in `tts` model is VibeVoice; Qwen3-TTS and IndexTTS are not
+built-in model bundles. File inputs to direct `models invoke` are limited to
+8 MiB. A successful WAV output confirms synthesis, but voice similarity
+depends on the selected backend and reference audio.
+
 ### Input and output failures
 
 An empty assignment, unknown slot, unreadable file, unsupported media type, or
