@@ -138,23 +138,38 @@ func TestASRCodecRejectsInvalidInputsWithoutLeakingValues(t *testing.T) {
 
 func TestASRCodecRejectsMalformedOversizedAndInvalidTimestampResponsesAtomically(t *testing.T) {
 	codec := codecs.NewASRCodec()
-	for _, payload := range [][]byte{
-		[]byte(`{"text":"hello","segments":[]}`),
-		[]byte(`{"text":"hello","segments":[{"id":0,"start":2,"end":1,"text":"bad"}]}`),
-		[]byte(`{"text":"hello","segments":[{"id":0,"start":0,"end":1,"text":"ok"}]} trailing`),
-		[]byte(strings.Repeat("x", int(codecs.MaxASRResponseBytes)+1)),
-	} {
-		outputs, err := codec.DecodeResponse(payload)
-		if err == nil {
-			t.Fatalf("DecodeResponse(%q) error = nil", payload[:minASRTest(len(payload), 24)])
-		}
-		if len(outputs) != 0 {
-			t.Fatalf("malformed response returned partial outputs: %#v", outputs)
-		}
-		var failure *models.InvocationFailure
-		if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMalformedResponse {
-			t.Fatalf("error = %#v, want malformed InvocationFailure", err)
-		}
+	tests := []struct {
+		name        string
+		payload     []byte
+		slot        string
+		wantMessage string
+	}{
+		{name: "missing segments", payload: []byte(`{"text":"hello","segments":[]}`), slot: "segments", wantMessage: "ASR backend response is missing segments"},
+		{name: "invalid segment bounds", payload: []byte(`{"text":"hello","segments":[{"id":0,"start":2,"end":1,"text":"bad"}]}`), slot: "segments", wantMessage: "ASR backend response contains an invalid segment"},
+		{name: "trailing JSON", payload: []byte(`{"text":"hello","segments":[{"id":0,"start":0,"end":1,"text":"ok"}]} trailing`), slot: "", wantMessage: "ASR backend response is not valid JSON"},
+		{name: "oversized", payload: []byte(strings.Repeat("x", int(codecs.MaxASRResponseBytes)+1)), slot: "", wantMessage: "ASR backend response exceeds the size limit"},
+		{name: "missing transcript", payload: []byte(`{"text":"  ","segments":[{"id":0,"start":0,"end":1,"text":"ok"}]}`), slot: "transcript", wantMessage: "ASR backend response is missing the transcript"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			outputs, err := codec.DecodeResponse(test.payload)
+			if err == nil {
+				t.Fatalf("DecodeResponse() error = nil")
+			}
+			if len(outputs) != 0 {
+				t.Fatalf("malformed response returned partial outputs: %#v", outputs)
+			}
+			var failure *models.InvocationFailure
+			if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMalformedResponse {
+				t.Fatalf("error = %#v, want malformed InvocationFailure", err)
+			}
+			if failure.Operation != models.OperationASR || failure.Slot != test.slot || failure.Message != test.wantMessage {
+				t.Fatalf("failure = %#v, want operation %q slot %q message %q", failure, models.OperationASR, test.slot, test.wantMessage)
+			}
+			if !errors.Is(err, models.ErrInferenceFailed) {
+				t.Fatalf("error = %v, want ErrInferenceFailed cause", err)
+			}
+		})
 	}
 }
 
@@ -163,9 +178,11 @@ func TestASRCodecRejectsNonMonotonicAndOutOfDurationSegments(t *testing.T) {
 
 	codec := codecs.NewASRCodec()
 	tests := []struct {
-		name      string
-		response  codecs.ASRResponse
-		withAudio bool
+		name        string
+		response    codecs.ASRResponse
+		withAudio   bool
+		wantMessage string
+		wantPrefix  bool
 	}{
 		{
 			name: "nonmonotonic timestamps",
@@ -176,6 +193,7 @@ func TestASRCodecRejectsNonMonotonicAndOutOfDurationSegments(t *testing.T) {
 					{ID: 1, Start: 5, End: 9, Text: "again"},
 				},
 			},
+			wantMessage: "ASR backend response segments are out of order",
 		},
 		{
 			name: "segment exceeds PCM duration",
@@ -183,7 +201,17 @@ func TestASRCodecRejectsNonMonotonicAndOutOfDurationSegments(t *testing.T) {
 				Text:     "hello",
 				Segments: []codecs.ASRSegment{{ID: 0, Start: 0, End: 1, Text: "hello"}},
 			},
-			withAudio: true,
+			withAudio:   true,
+			wantMessage: "ASR backend response segment exceeds the audio duration",
+			wantPrefix:  true,
+		},
+		{
+			name: "invalid segment text",
+			response: codecs.ASRResponse{
+				Text:     "hello",
+				Segments: []codecs.ASRSegment{{ID: 0, Start: 0, End: 1, Text: "  "}},
+			},
+			wantMessage: "ASR backend response contains an invalid segment",
 		},
 	}
 	for _, test := range tests {
@@ -204,7 +232,47 @@ func TestASRCodecRejectsNonMonotonicAndOutOfDurationSegments(t *testing.T) {
 			if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMalformedResponse {
 				t.Fatalf("error = %v, failure = %#v, want malformed response", err, failure)
 			}
+			if failure.Operation != models.OperationASR || failure.Slot != "segments" {
+				t.Fatalf("failure = %#v, want ASR segments failure", failure)
+			}
+			if test.wantPrefix {
+				if !strings.HasPrefix(failure.Message, test.wantMessage) {
+					t.Fatalf("failure message = %q, want prefix %q", failure.Message, test.wantMessage)
+				}
+			} else if failure.Message != test.wantMessage {
+				t.Fatalf("failure = %#v, want ASR segments message %q", failure, test.wantMessage)
+			}
 		})
+	}
+}
+
+func TestASRCodecDurationRejectionReportsTimingCoordinates(t *testing.T) {
+	t.Parallel()
+
+	codec := codecs.NewASRCodec()
+	response := codecs.ASRResponse{
+		Text:     "hello",
+		Segments: []codecs.ASRSegment{{ID: 0, Start: 0, End: 1, Text: "hello"}},
+	}
+	_, err := codec.DecodeResponseValueWithinAudio(response, durationTestWAV())
+	if err == nil {
+		t.Fatal("DecodeResponseValueWithinAudio() error = nil, want duration rejection")
+	}
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMalformedResponse {
+		t.Fatalf("error = %v, failure = %#v, want malformed response", err, failure)
+	}
+	const prefix = "ASR backend response segment exceeds the audio duration"
+	if !strings.HasPrefix(failure.Message, prefix) {
+		t.Fatalf("failure message = %q, want prefix %q", failure.Message, prefix)
+	}
+	for _, coordinate := range []string{"segment_index=0", "segment_end_ms=1", "audio_duration_ms=0.042", "overrun_ms=0.958"} {
+		if !strings.Contains(failure.Message, coordinate) {
+			t.Fatalf("failure message = %q, want coordinate %q", failure.Message, coordinate)
+		}
+	}
+	if strings.Contains(failure.Message, "hello") {
+		t.Fatalf("failure message = %q, must not leak transcript text", failure.Message)
 	}
 }
 
@@ -225,11 +293,4 @@ func durationTestWAV() []byte {
 	binary.LittleEndian.PutUint32(audio[40:44], 2)
 	audio[44], audio[45] = 0x01, 0x02
 	return audio
-}
-
-func minASRTest(left, right int) int {
-	if left < right {
-		return left
-	}
-	return right
 }

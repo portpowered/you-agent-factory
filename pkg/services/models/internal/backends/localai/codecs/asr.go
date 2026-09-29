@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"sort"
@@ -185,11 +186,11 @@ func (codec ASRCodec) MarshalRequest(request models.InvokeModelRequest) ([]byte,
 // outputs atomically. On failure it returns no partial output.
 func (codec ASRCodec) DecodeResponse(payload []byte) ([]models.InferenceContent, error) {
 	if int64(len(payload)) > MaxASRResponseBytes {
-		return nil, asrMalformedResponseFailure("")
+		return nil, asrMalformedResponseFailure("", "ASR backend response exceeds the size limit")
 	}
 	var response ASRResponse
 	if err := asrDecodeSingleJSON(payload, &response); err != nil {
-		return nil, asrMalformedResponseFailure("")
+		return nil, asrMalformedResponseFailure("", "ASR backend response is not valid JSON")
 	}
 	return codec.DecodeResponseValue(response)
 }
@@ -219,7 +220,7 @@ func decodeASRResponse(response ASRResponse, durationMilliseconds *float64) ([]m
 	}
 	segments, err := json.Marshal(response.Segments)
 	if err != nil || int64(len(segments)) > MaxASRResponseBytes {
-		return nil, asrMalformedResponseFailure("segments")
+		return nil, asrMalformedResponseFailure("segments", "ASR backend response segments could not be encoded")
 	}
 	return []models.InferenceContent{
 		{
@@ -235,10 +236,13 @@ func decodeASRResponse(response ASRResponse, durationMilliseconds *float64) ([]m
 
 func validateASRResponse(response ASRResponse, durationMilliseconds *float64) error {
 	if strings.TrimSpace(response.Text) == "" {
-		return asrMalformedResponseFailure("transcript")
+		return asrMalformedResponseFailure("transcript", "ASR backend response is missing the transcript")
 	}
-	if len(response.Segments) == 0 || len(response.Segments) > maxASRSegments {
-		return asrMalformedResponseFailure("segments")
+	if len(response.Segments) == 0 {
+		return asrMalformedResponseFailure("segments", "ASR backend response is missing segments")
+	}
+	if len(response.Segments) > maxASRSegments {
+		return asrMalformedResponseFailure("segments", "ASR backend response contains too many segments")
 	}
 	return validateASRSegments(response.Segments, durationMilliseconds)
 }
@@ -246,10 +250,14 @@ func validateASRResponse(response ASRResponse, durationMilliseconds *float64) er
 func validateASRSegments(segments []ASRSegment, durationMilliseconds *float64) error {
 	var previousStart, previousEnd int64
 	for index, segment := range segments {
-		if !validASRSegment(segment) ||
-			(index > 0 && (segment.Start < previousStart || segment.End < previousEnd)) ||
-			(durationMilliseconds != nil && float64(segment.End) > *durationMilliseconds) {
-			return asrMalformedResponseFailure("segments")
+		if !validASRSegment(segment) {
+			return asrMalformedResponseFailure("segments", "ASR backend response contains an invalid segment")
+		}
+		if index > 0 && (segment.Start < previousStart || segment.End < previousEnd) {
+			return asrMalformedResponseFailure("segments", "ASR backend response segments are out of order")
+		}
+		if durationMilliseconds != nil && float64(segment.End) > *durationMilliseconds {
+			return asrMalformedResponseFailure("segments", fmt.Sprintf("ASR backend response segment exceeds the audio duration (segment_index=%d segment_end_ms=%d audio_duration_ms=%.3f overrun_ms=%.3f)", index, segment.End, *durationMilliseconds, float64(segment.End)-*durationMilliseconds))
 		}
 		previousStart, previousEnd = segment.Start, segment.End
 	}
@@ -599,9 +607,12 @@ func asrRepeatedParameterFailure(name string) error {
 	}
 }
 
-func asrMalformedResponseFailure(slot string) error {
+func asrMalformedResponseFailure(slot, message string) error {
+	if strings.TrimSpace(message) == "" {
+		message = "ASR backend response is malformed"
+	}
 	return &models.InvocationFailure{
 		Class: models.InvocationFailureClassMalformedResponse, Operation: models.OperationASR,
-		Slot: slot, Message: "ASR backend response is malformed", Cause: models.ErrInferenceFailed,
+		Slot: slot, Message: message, Cause: models.ErrInferenceFailed,
 	}
 }
