@@ -190,18 +190,18 @@ strict validation was retained (no 50 ms tolerance). Focused
 passed. Speech content, voice similarity, and actual use of
 `ref_text` beyond protocol delivery remain unproven.
 
+Native Windows VibeVoice CUDA synthesis and managed CLI first use were
+verified on 2026-09-29 in [the invocation
+audit](localai-gpu-invocation-audit-2026-09-28.md).
+
 ## Unverified
 
 - Speech content and voice similarity for either backend.
 - Backend consumption of `ref_text` beyond protocol delivery.
 - This repository's pinned artifact publication and Windows first-use
   lifecycle for Qwen/Index (registry still only publishes VibeVoice).
-- Native Windows GPU execution remains unverified. Managed built-in VibeVoice
-  TTS on WSL is verified separately in [the invocation
-  audit](localai-gpu-invocation-audit-2026-09-28.md); managed Qwen3
-  reference-audio synthesis is verified for protocol delivery and GPU
-  execution, but speech content, voice similarity, and actual use of
-  `ref_text` beyond protocol delivery remain unverified.
+- Managed Qwen3 reference-audio synthesis is verified for protocol delivery
+  and GPU execution, but speech content and voice similarity remain unverified.
 
 ## Upstream configuration evidence
 

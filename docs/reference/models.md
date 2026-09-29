@@ -144,8 +144,8 @@ On native Windows, `you` checks for an NVIDIA GPU and, when online, reads the
 latest compatible backend archive manifest from the project's published
 releases. It selects a CUDA archive for each backend that has one, then uses
 the CPU archive for backends without a CUDA build. The current publication
-has no native Windows CUDA archive, so native Windows uses the CPU archive
-today. Offline first use uses the bundled archive manifest. A publication
+includes manual Windows CUDA test archives for llama.cpp, Whisper, and
+VibeVoice. Offline first use uses the bundled archive manifest. A publication
 loaded earlier in the same process remains available to offline requests.
 
 ### Built-in TTS bundle identity
@@ -176,6 +176,7 @@ these target identities. Linux amd64 uses the LocalAI gallery described above.
 | --- | --- | ---: | --- | --- |
 | `darwin-arm64` | `localai-backend-localai-vibevoice-darwin-arm64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz` | `9200265` | `624385483a7c67804ff546ed8649e35c4e7122b833f318ff4d1cf2d44d9f2752` | `metal` |
 | `windows-amd64` | `localai-backend-localai-vibevoice-windows-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.zip` | `10757902` | `8f3c14212948be34c930e9a790af7757460cb2f6bb6a0de80d5b9f95b71e8646` | `cpu` |
+| `windows-amd64-cuda` | `localai-backend-localai-vibevoice-windows-amd64-cuda-000e37282bc5bb09edc20f7047a47924122ba3a0.zip` | `448293919` | `e3f9c42e1d4433044857b1e08422f43efc564c858a73474e993d17f9ffa83342` | `cuda` |
 
 The role manifest is authored at
 `pkg/services/models/internal/artifacts/localai-model-role-artifacts.json`.

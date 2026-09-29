@@ -238,4 +238,17 @@ on the RTX 4090 and generated an 83,244-byte WAV from “Hello from CUDA.”
 `nvidia-smi` listed the VibeVoice backend process while the model was loaded.
 The staged CUDA archive is 448,293,919 bytes, SHA-256
 `e3f9c42e1d4433044857b1e08422f43efc564c858a73474e993d17f9ffa83342`.
-The manual release and public `you models invoke tts` test are pending.
+The manual release was published as
+`localai-backends-v1-1ce403a8d9a4e46eac6472b36bfd97d4a22e663e22956975ff4f6843d8e9bbf0`.
+Its hosted manifest SHA-256 is
+`7112522f4dfbe64ae5dc6f90573d126533955b8664cad9d961567007fb44ae36`.
+The public `you models invoke tts` path downloaded the 448,293,919-byte
+VibeVoice CUDA ZIP with the expected SHA-256 and generated a valid,
+non-silent, mono 24 kHz WAV (70,444 bytes, 1.467 seconds) from
+“Hello from published CUDA.” This validates Windows CUDA archive selection,
+model loading, and audio output through the managed CLI.
+Feeding the WAV to the native Whisper backend directly returned
+`Hello from CUDA!`, matching the synthesis prompt. The public ASR CLI
+rejected that same short WAV because Whisper marked its only segment as
+3.52 seconds against 1.733 seconds of audio; this is the known strict
+segment-duration validation, not a VibeVoice synthesis failure.
