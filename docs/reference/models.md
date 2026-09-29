@@ -425,6 +425,10 @@ Content-Type: application/json
 The HTTP response uses the same `embedding` slot, `JSON` modality,
 `application/json` media type, and canonical JSON vector content.
 
+For direct `POST /models/invocations` responses, `TEXT` and `JSON` outputs use
+`content`. `AUDIO`, `IMAGE`, `VIDEO`, and `BINARY` outputs use `contentBase64`
+instead. Decode that field with standard Base64 to recover the original bytes.
+
 For a direct HTTP invocation with local media files, send a multipart request.
 The `request` part contains the generic invocation JSON. Each `files` part
 fills the next image, audio, video, or binary input that has no inline content
