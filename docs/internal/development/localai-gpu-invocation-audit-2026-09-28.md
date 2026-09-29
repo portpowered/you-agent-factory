@@ -151,3 +151,20 @@ Manual 10-entry bundle tag
 `localai-backends-v1-b2637a4aed57fb1312f436e56a6baec5f23656de8b5ae245b112398f01cbeaa7`
 staged locally; Go manifest decode/resolver test passed; full `make lint`
 24/24. No GitHub release published yet; no managed GPU inference claimed.
+
+## Manual Windows CUDA release — PUBLISHED + native EMBED validation (2026-09-29, final)
+
+Prior "No GitHub release published yet" notes above are preserved and now
+superseded by this entry. Normal (non-draft) release published:
+https://github.com/portpowered/you-agent-factory/releases/tag/localai-backends-v1-b2637a4aed57fb1312f436e56a6baec5f23656de8b5ae245b112398f01cbeaa7
+Tag targets pushed branch commit `48412fc1c6e3f5e23ac906ae2cf0361baabf7e7c`.
+All 11 hosted assets matched staged manifest sizes/digests before publish.
+Windows CUDA ZIP SHA-256
+`c9322c65b36eea345c32f6e29c3b2dcd4187c288fbf145b8f1b400d1541649dc`.
+Fresh isolated native Windows CLI managed EMBED probe PASS: 1024 values;
+EMBED cache selected the new `windows-amd64-cuda` ZIP and the actual cached
+SHA matched the published manifest. `nvidia-smi` compute-app samples include
+`llama-cpp-cpu-all.exe` PID 10592; GPU usage sampled max 53%; WDDM
+per-process memory N/A. Evidence dir
+`C:\Users\andre\AppData\Local\Temp\you-native-cuda-aca54b5bf4f44e75b147760509c2517c`.
+LLM not separately invoked; ASR/TTS still CPU; no Linux CUDA in this release.
