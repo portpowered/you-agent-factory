@@ -2354,3 +2354,19 @@ built-in VibeVoice offline request with voice WAV returned HTTP 200 with
 `artifact.sizeBytes` and digest `0088c84b…d96f`, RIFF/WAVE with 166,400-byte
 data chunk and 154,144 nonzero data bytes. `ref_text` omitted as undocumented
 for built-in VibeVoice; no GPU/voice-similarity claim.
+
+Managed WSL Qwen3-TTS mismatched `ref_text` probe via `you.subagent`
+session `7b3cb811-bd2d-4cbc-8530-4ba9a8d6bb73` produced a valid
+non-silent 165,164-byte 24 kHz mono PCM WAV at
+`/home/andre/you-localai-probe/qwen-mismatched-ref-probe.wav`
+(GPU memory 4006 → 6960 MiB, utilization 24 → 77%). Managed ASR on
+that WAV returned `MODEL_BACKEND_FAILURE` /
+`ASR backend response is malformed` twice, while control ASR on the
+matched 556,844-byte / 11.6 s WAV succeeded. Mismatched speech content,
+voice similarity, and whether `ref_text` was consumed remain unproven.
+Code sources for that exact message: nil segment or non-whole-millisecond
+Whisper timestamp in `asr_protocol.go` (`transcriptResponse`,
+`localAIWhisperTimestampMilliseconds`), or blank transcript / empty or
+invalid / unordered / duration-exceeding segments or oversize payload in
+`codecs/asr.go` (`validateASRResponse`, `validateASRSegments`,
+`DecodeResponse`); the firing branch here is unproven.

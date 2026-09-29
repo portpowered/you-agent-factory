@@ -161,6 +161,36 @@ established request acceptance, not that VibeVoice consumed `ref_text`.
 
 MCP live probe session `93d3ba76-1dfc-483d-acba-395a2cc90a6b`.
 
+## Mismatched `ref_text` probe — 2026-09-29
+
+Managed WSL Qwen3-TTS mismatched `ref_text` probe via `you.subagent`
+session `7b3cb811-bd2d-4cbc-8530-4ba9a8d6bb73` produced a valid
+non-silent 165,164-byte 24 kHz mono PCM WAV at
+`/home/andre/you-localai-probe/qwen-mismatched-ref-probe.wav`.
+GPU samples showed memory 4006 → 6960 MiB and utilization 24 → 77%.
+Managed ASR on that WAV returned `MODEL_BACKEND_FAILURE` /
+`ASR backend response is malformed` twice; a control ASR on the matched
+WAV succeeded. The matched `ref_text` WAV was 556,844 bytes / 11.6 s.
+Mismatched speech content, voice similarity, and whether `ref_text`
+was consumed remain unproven.
+
+From code, the exact `ASR backend response is malformed` text
+(`MalformedResponse` class) comes only from response validation, not
+transport: `pkg/services/models/internal/backends/localai/asr_protocol.go:436-441`
+(`malformedASRProtocolResponse`) is returned by `transcriptResponse`
+for a nil segment entry or by
+`localAIWhisperTimestampMilliseconds` (`asr_protocol.go:357-362`) when
+a segment timestamp is negative or not a whole multiple of 1,000,000
+ns; and by `pkg/services/models/internal/backends/localai/codecs/asr.go:602-607`
+(`asrMalformedResponseFailure`) when the decoded payload exceeds
+16 MiB, is not single JSON, has blank transcript, has zero/too many
+segments, has a segment with negative ID/start, `end <= start`, blank
+text, regressing start/end order, or (`DecodeResponseValueWithinAudio`
+only) `end` beyond the PCM WAV duration. A gRPC protobuf decode
+failure is a distinct `BackendProtocol` message (`asr_protocol.go:413`:
+`ASR backend response was malformed`). Which validation branch fired
+here is unproven from the CLI error alone.
+
 ## Unverified
 
 - Speech content and voice similarity for either backend.
