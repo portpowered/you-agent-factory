@@ -12,6 +12,6 @@ export default defineConfig({
   minify: false,
   noExternal: ['@agentclientprotocol/sdk', 'cross-spawn', 'zod'],
   banner: {
-    js: '#!/usr/bin/env node'
+    js: '#!/usr/bin/env node\nimport { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);'
   }
 })

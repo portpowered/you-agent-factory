@@ -37,7 +37,7 @@
     "format": "prettier . --write",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "node --import tsx --test test/**/*.test.ts",
+    "test": "npm run build && node --import tsx --test test/**/*.test.ts",
     "smoke": "node scripts/smoke-acp.mjs",
     "prepack": "npm run build",
     "prepublishOnly": "npm run test && npm run build"

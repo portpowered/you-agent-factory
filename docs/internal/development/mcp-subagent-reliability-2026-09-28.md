@@ -1963,6 +1963,13 @@ typecheck, focused Go tests, all 24 lint targets, and the packaged docs smoke
 passed. A live Pi model invocation through the newly built binary remains to
 be checked; these tests establish the bridge behavior but not live Pi inference.
 
+The first built-binary ACP initialize probe exposed a bundle defect: the ESM
+bundle's CommonJS `cross-spawn` dependency needed a Node `require` binding.
+The build now supplies `createRequire`, and a new test starts the checked-in
+bundle over ACP stdio. All three Node tests and typecheck pass; the rebuilt
+`you pi-acp` binary returned a valid ACP initialize response headlessly.
+Live Pi inference and end-to-end failure classification remain unverified.
+
 After the run and CUDA edits, a full `make lint` rerun passed all targets
 except `deadcode`: removal of `run.Open` leaves one stale baseline line
 (`pkg/transports/cli/run/run.go: unreachable func: Open`). A focused
