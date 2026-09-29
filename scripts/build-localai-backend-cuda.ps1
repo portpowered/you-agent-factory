@@ -134,6 +134,18 @@ $plugin = Join-Path $grpcInstall 'bin\grpc_cpp_plugin.exe'
 if (-not (Test-Path -LiteralPath $plugin)) { throw 'pinned gRPC build did not install grpc_cpp_plugin.exe' }
 Assert-Tool $protoc @('--version') "libprotoc $($config.toolchain.protobufVersion)"
 
+# The pinned llama grpc-server CMakeLists resolves Protobuf in CONFIG mode but
+# propagates headers via the module-mode ${Protobuf_INCLUDE_DIRS} variable,
+# which is empty there (retry log: "Using protobuf version 24.3.0 |
+# Protobuf_INCLUDE_DIRS:  | ..."), and hw_grpc_proto itself never links
+# protobuf::libprotobuf (only the final exe does), so its backend.pb.cc
+# compile has no protobuf include path even though port_def.inc exists under
+# the pinned install. Export the pinned include dir through the MSVC INCLUDE
+# environment (set by vcvars64 above) so cl resolves
+# google/protobuf/port_def.inc without touching pinned LocalAI sources.
+$grpcInclude = Join-Path $grpcInstall 'include'
+if (-not (Test-Path -LiteralPath (Join-Path $grpcInclude 'google\protobuf\port_def.inc'))) { throw 'pinned gRPC install is missing google/protobuf/port_def.inc' }
+if ($env:INCLUDE) { $env:INCLUDE = "$grpcInclude;$env:INCLUDE" } else { $env:INCLUDE = $grpcInclude }
 $llamaBuild = Join-Path $llamaRoot 'llama-cpp-cuda-build'
 $cmakeArgs = @('-S', $llamaSource, '-B', $llamaBuild, '-G', 'Visual Studio 17 2022', '-A', 'x64', '-T', "cuda=$cudaRoot",
     '-DCMAKE_CXX_STANDARD=17', '-DBUILD_SHARED_LIBS=ON', '-DLLAMA_CURL=OFF', '-DLLAMA_OPENSSL=OFF',
@@ -141,7 +153,7 @@ $cmakeArgs = @('-S', $llamaSource, '-B', $llamaBuild, '-G', 'Visual Studio 17 20
     "-DCMAKE_CUDA_ARCHITECTURES=$($config.hostToolchain.windows.cudaArchitecture)",
     "-DCMAKE_CUDA_COMPILER=$nvcc", "-DCMAKE_PREFIX_PATH=$grpcInstall",
     "-Dabsl_DIR=$(Join-Path $grpcInstall 'lib\cmake\absl')",
-    "-DProtobuf_DIR=$(Join-Path $grpcInstall 'lib\cmake\protobuf')",
+    "-DProtobuf_DIR=$(Join-Path $grpcInstall 'cmake')",
     "-Dutf8_range_DIR=$(Join-Path $grpcInstall 'lib\cmake\utf8_range')",
     "-DgRPC_DIR=$(Join-Path $grpcInstall 'lib\cmake\grpc')",
     "-DProtobuf_PROTOC_EXECUTABLE=$protoc", "-D_PROTOBUF_PROTOC=$protoc", "-D_GRPC_CPP_PLUGIN_EXECUTABLE=$plugin")

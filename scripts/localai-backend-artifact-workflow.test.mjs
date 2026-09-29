@@ -482,6 +482,21 @@ test("the Windows CUDA retry reuses the retained gRPC checkout and patch", async
 	assert.match(cudaScript, /gRPC checkout does not match the pinned commit/);
 });
 
+test("the Windows CUDA build exposes the pinned protobuf headers to the MSVC compiler", async () => {
+	const cudaScript = await readFile("scripts/build-localai-backend-cuda.ps1", "utf8");
+	// Pinned llama grpc-server CMakeLists propagates headers via the empty
+	// module-mode ${Protobuf_INCLUDE_DIRS} and never links hw_grpc_proto to
+	// protobuf::libprotobuf, so the script must export the pinned include dir
+	// through INCLUDE for cl to resolve google/protobuf/port_def.inc.
+	assert.match(cudaScript, /Join-Path \$grpcInstall 'include'/);
+	assert.match(cudaScript, /google\\protobuf\\port_def\.inc/);
+	assert.match(cudaScript, /\$env:INCLUDE = "\$grpcInclude;\$env:INCLUDE"/);
+	// The pinned protobuf CMake config installs at <install>\cmake, not
+	// <install>\lib\cmake\protobuf.
+	assert.match(cudaScript, /-DProtobuf_DIR=\$\(Join-Path \$grpcInstall 'cmake'\)/);
+	assert.doesNotMatch(cudaScript, /lib\\cmake\\protobuf/);
+});
+
 test("the Windows build plan resolves Git from the runner path bridge", async (t) => {
 	const root = await mkdtemp(join(tmpdir(), "localai-backend-windows-tools-"));
 	t.after(() => rm(root, { recursive: true, force: true }));
