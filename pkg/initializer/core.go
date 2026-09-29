@@ -103,7 +103,3 @@ type LifecycleRunnerBuilder func(
 	runtimeartifact.Diagnostics,
 	<-chan RuntimeHostBinding,
 ) (LocalRuntimeRunner, error)
-
-type RunApplication interface {
-	Run(context.Context) error
-}

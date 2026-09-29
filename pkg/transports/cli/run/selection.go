@@ -68,8 +68,8 @@ type DirectJavaScriptRunOperation interface {
 // Sessions-owned one-shot invocation capability directly.
 type SessionInvoker = factorysessions.InvocationService
 
-// SelectionFactory binds one parsed CLI RunConfig to the exact run operations
-// already selected by Wire. It does not construct services or lifecycle state.
+// SelectionFactory binds one parsed CLI RunConfig to the run operations
+// already selected by Wire.
 type SelectionFactory func(RunConfig) processcontract.RunSelection
 
 // SplitFlagTerminator separates tokens parsed as run selectors and flags from
@@ -120,31 +120,35 @@ type selection struct {
 	presentations    factorysessions.OpeningPresentationOwner
 }
 
-func (s *selection) Open(
+func (s *selection) Run(
 	ctx context.Context,
 	intent processcontract.RunIntent,
-) (initializer.RunApplication, error) {
+) error {
 	if s == nil {
-		return nil, fmt.Errorf("run selection is required")
+		return fmt.Errorf("run selection is required")
 	}
 	cfg, err := applyRunIntent(s.cfg, intent)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if s.directJavaScript.Supports(cfg.FactoryConfigPath) {
-		return s.openDirectJavaScript(ctx, cfg, intent)
+		return s.runDirectJavaScript(ctx, cfg, intent)
 	}
-	return s.buildOperation(ctx, cfg, s.buildRunner, s.invocation, s.presentation)
+	operation, err := s.buildOperation(ctx, cfg, s.buildRunner, s.invocation, s.presentation)
+	if err != nil {
+		return err
+	}
+	return operation.Run(ctx)
 }
 
-func (s *selection) openDirectJavaScript(
+func (s *selection) runDirectJavaScript(
 	ctx context.Context,
 	cfg RunConfig,
 	intent processcontract.RunIntent,
-) (initializer.RunApplication, error) {
+) error {
 	startupDisclosure, err := prepareStartupBeforeRuntime(ctx, cfg)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	request := factorysessions.DirectJavaScriptRunRequest{
 		SourcePath: cfg.FactoryConfigPath, MockWorkersEnabled: cfg.MockWorkersEnabled,
@@ -168,49 +172,26 @@ func (s *selection) openDirectJavaScript(
 			Output: cfg.Output, RuntimeHostObserver: observer,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("register direct JavaScript presentation: %w", err)
+			return fmt.Errorf("register direct JavaScript presentation: %w", err)
 		}
 		request.ScopeID = scopeID
+		defer s.presentations.Close(scopeID)
 	}
 	opened, err := s.directJavaScript.Open(ctx, request, cfg.Cancellation)
 	if err != nil {
-		if s.presentations != nil {
-			s.presentations.Close(scopeID)
-		}
-		return nil, err
+		return err
 	}
 	runner, err := s.buildApplication(ctx, opened.Plan, runtimeartifact.Diagnostics{}, nil)
 	if err != nil {
-		if s.presentations != nil {
-			s.presentations.Close(scopeID)
-		}
-		return nil, err
+		return err
 	}
 	if runner == nil {
-		if s.presentations != nil {
-			s.presentations.Close(scopeID)
-		}
-		return nil, fmt.Errorf("direct JavaScript application builder returned nil runner")
+		return fmt.Errorf("direct JavaScript application builder returned nil runner")
 	}
 	if !intent.APIEnabled || s.presentations == nil {
 		startupDisclosure.commit()
 	}
-	if s.presentations == nil {
-		return runner, nil
-	}
-	return closeOnRun{application: runner, close: func() {
-		s.presentations.Close(scopeID)
-	}}, nil
-}
-
-type closeOnRun struct {
-	application initializer.LocalRuntimeRunner
-	close       func()
-}
-
-func (application closeOnRun) Run(ctx context.Context) error {
-	defer application.close()
-	return application.application.Run(ctx)
+	return runner.Run(ctx)
 }
 
 func applyRunIntent(cfg RunConfig, intent processcontract.RunIntent) (RunConfig, error) {

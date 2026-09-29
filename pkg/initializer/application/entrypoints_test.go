@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/initializer"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 )
 
@@ -30,7 +29,7 @@ func TestInitializerProcessContextPreservesParentCancellation(t *testing.T) {
 	}
 }
 
-func TestInitializerRunAppliesPolicyAndRunsSelectedApplication(t *testing.T) {
+func TestInitializerRunForwardsIntentToSelectedExecution(t *testing.T) {
 	selection := &runSelectionStub{}
 	entrypoint := &Initializer{}
 	err := entrypoint.Run(context.Background(), startupcli.RunIntent{
@@ -85,11 +84,8 @@ type runSelectionStub struct {
 	ran    bool
 }
 
-func (s *runSelectionStub) Open(_ context.Context, intent startupcli.RunIntent) (initializer.RunApplication, error) {
+func (s *runSelectionStub) Run(_ context.Context, intent startupcli.RunIntent) error {
 	s.intent = intent
-	return runApplicationFunc(func(context.Context) error { s.ran = true; return nil }), nil
+	s.ran = true
+	return nil
 }
-
-type runApplicationFunc func(context.Context) error
-
-func (run runApplicationFunc) Run(ctx context.Context) error { return run(ctx) }

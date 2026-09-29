@@ -16,7 +16,8 @@ func (i *Initializer) ProcessContext(ctx context.Context) (context.Context, func
 	return signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 }
 
-// Initializer owns lifecycle selection and activation after CLI parsing.
+// Initializer owns process lifecycle after CLI parsing and forwards run intent
+// to the injected command execution operation.
 type Initializer struct {
 	stdio                processcontract.StdioHandler
 	systemInitialization SystemInitializationOperation
@@ -50,11 +51,7 @@ func (i *Initializer) Run(
 	if selection == nil {
 		return fmt.Errorf("initialize run service: run selection is required")
 	}
-	operation, err := selection.Open(ctx, intent)
-	if err != nil {
-		return fmt.Errorf("initialize run service: %w", err)
-	}
-	return operation.Run(ctx)
+	return selection.Run(ctx, intent)
 }
 
 func (i *Initializer) Stdio(ctx context.Context, intent processcontract.MCPIntent) error {

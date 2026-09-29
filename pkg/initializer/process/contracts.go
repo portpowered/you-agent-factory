@@ -79,11 +79,10 @@ type MCPIntent struct {
 	Stdout      io.Writer
 }
 
-// RunSelection is one invocation-local CLI run choice. Initializer forwards
-// the typed customer intent unchanged; the already-injected selection and
-// opening edge returns an inert application with its complete lifecycle plan.
+// RunSelection executes one invocation-local CLI run choice with the typed
+// customer intent and already-injected runtime operations.
 type RunSelection interface {
-	Open(context.Context, RunIntent) (initializer.RunApplication, error)
+	Run(context.Context, RunIntent) error
 }
 
 type RunHandler func(context.Context, RunIntent, RunSelection) error
