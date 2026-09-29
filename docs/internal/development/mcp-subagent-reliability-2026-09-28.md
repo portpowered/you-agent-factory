@@ -1958,3 +1958,24 @@ binary was rebuilt as `C:\Users\andre\bin\you-a6504a902b.exe` (SHA-256
 and the Codex MCP command for new connections points to it. A fresh headless
 stdio initialize and `tools/list` advertised all 11 tools including
 `you.subagent`.
+
+A bounded OpenCode MCP WSL managed GPU embedding probe (session
+`5a44e598-8e89-4fc9-a0c1-de31c4817a88`) inspected the binary at
+`/home/andre/fr035-20260921023755Z-bf8ba28e/you` (version
+`v0.0.8-0.20260911144023-9bec7aae0697+dirty`, built Sep 20). The RTX 4090 was
+visible and idle under `nvidia-smi` (driver 595.71, CUDA 13.2, 1963 MiB / 24564
+MiB used). `you models inspect embed --json` reported `NOT_INSTALLED` /
+`FAILED`: the managed cache at
+`/home/andre/.agent-factory/models/EMBED/370f27d7550e0def9b39c1f16d3fbaa13aa67728/`
+contains `Qwen3-Embedding-0.6B-Q8_0.gguf` (639 MB) while the configured source
+expects `Qwen3-Embedding-0.6B-f16.gguf`
+(`hf://Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-f16.gguf@370f27d7550e0def9b39c1f16d3fbaa13aa67728`).
+The `localai-backends` directory was empty (no backend build metadata). No
+embedding invocation was run. Precise next step: `you models pull embed` from
+the directory whose factory definition specifies the f16 source, then
+re-inspect and re-run the offline EMBED probe if that f16 definition is still
+intended. Because this WSL binary/config is older than the current Windows
+build and a Q8 asset already exists, a cheaper first check is to rebuild the
+current Linux binary and inspect the built-in Q8 definition from a neutral
+directory before downloading another quantization. A published CUDA backend
+archive is still required for managed GPU inference.
