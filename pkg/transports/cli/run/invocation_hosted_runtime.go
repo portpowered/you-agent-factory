@@ -17,7 +17,6 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -423,7 +422,7 @@ func WithCleanInvocationSnapshot(
 	return cleanInvocationSnapshotRunner{runner: runner, provider: provider}
 }
 
-func openHostedRuntime(
+func runHostedRuntime(
 	ctx context.Context,
 	cfg RunConfig,
 	logger *zap.Logger,
@@ -431,7 +430,6 @@ func openHostedRuntime(
 	recordPath resolvedRunRecordPath,
 	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
-	prepareWorkTarget work.SingleWorkTargetPreparation,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	invocationMode bool,
 	requestedPort int,
@@ -439,24 +437,27 @@ func openHostedRuntime(
 	buildRuntimeRequest SessionStartRequestFactory,
 	presentations factorysessions.OpeningPresentationOwner,
 	visualizations factoryvisualization.RuntimeSinkOwner,
-) (*Operation, error) {
-	if buildRunner == nil {
-		return nil, errors.New("construct local runtime: injected runtime runner builder is required")
-	}
-	if buildRuntimeRequest == nil {
-		return nil, errors.New("construct local runtime: runtime opening request factory is required")
+) (resultErr error) {
+	started := false
+	defer func() {
+		if !started && resultErr != nil {
+			resultErr = classifyRunInputFailure(cfg, resultErr)
+			logRunRecoveryOutcome(cfg, runRecoveryOutcomeFailed, resultErr)
+		}
+	}()
+	if err := validateHostedRuntimeBuilders(buildRunner, buildRuntimeRequest); err != nil {
+		return err
 	}
 	startupDisclosure, err := prepareStartupBeforeRuntime(ctx, cfg)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	operation, runtimeCfg, err := prepareHostedInvocation(
-		ctx, cfg, logger, invocationRequest, recordPath, invocation,
-		presentation, mockWorkersConfig, invocationMode,
-	)
-	if err != nil {
-		return nil, err
+	if invocationMode {
+		if err := validateInvocationOperation(invocation, presentation, cfg); err != nil {
+			return err
+		}
 	}
+	runtimeCfg := hostedRuntimeConfig(cfg, invocationMode)
 	openingRequest := buildRuntimeRequest(runtimeCfg, mockWorkersConfig)
 	var factorySvc initializer.LocalRuntimeRunner
 	var recoveryMetadata *recordings.ResumeRecoveryMetadata
@@ -471,16 +472,15 @@ func openHostedRuntime(
 	}
 	visualizationSinkID, err := registerRuntimeVisualizationSink(visualizations, cfg, presentation)
 	if err != nil {
-		return nil, err
+		return err
 	}
+	defer closeRuntimeVisualizationSink(visualizations, visualizationSinkID)
 	factorySvc, err = buildRunner(ctx, openingRequest, cfg.Cancellation, factorysessions.VisualizationSinkID(visualizationSinkID))
 	if err != nil {
-		closeRuntimeVisualizationSink(visualizations, visualizationSinkID)
-		return nil, err
+		return err
 	}
 	if factorySvc == nil {
-		closeRuntimeVisualizationSink(visualizations, visualizationSinkID)
-		return nil, fmt.Errorf("construct local runtime: builder returned nil runner")
+		return fmt.Errorf("construct local runtime: builder returned nil runner")
 	}
 	recoveryMetadata = resumeRecoveryMetadataForRunner(factorySvc)
 	if cfg.Port <= 0 {
@@ -489,33 +489,83 @@ func openHostedRuntime(
 	replayMetadataWarnings := replayMetadataWarningsForRunner(factorySvc)
 	historicalReplay, hostedInvocation := hostedRuntimeCapabilities(factorySvc)
 	batchProvider := batchReportProviderFromRunner(factorySvc)
-	if !cfg.CleanInvocation && (cfg.WithServer || cfg.WithSite || cfg.Port > 0) {
-		factorySvc = runtimeapplication.WithRuntimeHostObserver(factorySvc, onBound)
+	factorySvc = observeHostedRuntimeBinding(cfg, factorySvc, onBound)
+	started = true
+	if historicalReplay != nil {
+		return runHistoricalReplay(ctx, cfg, factorySvc, historicalReplay, replayMetadataWarnings)
 	}
-	if operation != nil {
-		operation.runner = factorySvc
-		operation.resumeRecoveryMetadata = cloneRunResumeRecoveryMetadata(recoveryMetadata)
-		operation.batchReportProvider = batchProvider
-		operation.hostedInvocation = hostedInvocation
-		operation.historicalReplay = historicalReplay
-		operation.replayMetadataWarnings = replayMetadataWarnings
-		operation.openingPresentations = presentations
-		operation.visualizations = visualizations
-		operation.visualizationSinkID = visualizationSinkID
-		operation.startupPrepared = true
-		return operation, nil
+	if invocationMode {
+		return runHostedInvocation(ctx, cfg, logger, invocationRequest, mockWorkersConfig,
+			invocation, presentation, presentations, hostedInvocation, factorySvc)
 	}
+	return runHostedBatch(ctx, cfg, factorySvc, recordPath, batchProvider, recoveryMetadata, replayMetadataWarnings)
+}
 
-	return &Operation{
-		cfg: cfg, logger: logger, runner: factorySvc, recordPath: recordPath,
-		resumeRecoveryMetadata: recoveryMetadata,
-		startupPrepared:        true,
-		batchReportProvider:    batchProvider,
-		hostedInvocation:       hostedInvocation, historicalReplay: historicalReplay,
-		replayMetadataWarnings: replayMetadataWarnings,
-		openingPresentations:   presentations, visualizations: visualizations,
-		visualizationSinkID: visualizationSinkID,
-	}, nil
+func validateHostedRuntimeBuilders(buildRunner RuntimeRunnerBuilder, buildRuntimeRequest SessionStartRequestFactory) error {
+	if buildRunner == nil {
+		return errors.New("construct local runtime: injected runtime runner builder is required")
+	}
+	if buildRuntimeRequest == nil {
+		return errors.New("construct local runtime: runtime opening request factory is required")
+	}
+	return nil
+}
+
+func observeHostedRuntimeBinding(
+	cfg RunConfig,
+	runner initializer.LocalRuntimeRunner,
+	onBound factorysessions.RuntimeHostObserver,
+) initializer.LocalRuntimeRunner {
+	if !cfg.CleanInvocation && (cfg.WithServer || cfg.WithSite || cfg.Port > 0) {
+		return runtimeapplication.WithRuntimeHostObserver(runner, onBound)
+	}
+	return runner
+}
+
+func runHostedInvocation(
+	ctx context.Context,
+	cfg RunConfig,
+	logger *zap.Logger,
+	request *factoryapi.InvocationRequest,
+	mockWorkersConfig *workers.MockWorkersConfig,
+	invocation InvocationOperation,
+	presentation factoryvisualization.ResponsePresentation,
+	presentations factorysessions.OpeningPresentationOwner,
+	hosted HostedInvocationOperation,
+	runner initializer.LocalRuntimeRunner,
+) error {
+	invoke := func(runCtx context.Context) error {
+		return runInvocation(runCtx, cfg, logger, request, invocationTarget(cfg, mockWorkersConfig),
+			invocation, presentation, presentations, hosted)
+	}
+	if completionRunner, ok := runner.(initializer.CompletionRuntimeRunner); ok {
+		return completionRunner.RunWithCompletion(ctx, invoke)
+	}
+	return runner.Run(ctx)
+}
+
+func runHostedBatch(
+	ctx context.Context,
+	cfg RunConfig,
+	runner initializer.LocalRuntimeRunner,
+	recordPath resolvedRunRecordPath,
+	batchProvider batchReportProvider,
+	recoveryMetadata *recordings.ResumeRecoveryMetadata,
+	replayMetadataWarnings []recordings.MetadataMismatchWarning,
+) error {
+	if cfg.Port <= 0 {
+		emitStartupDetails(cfg, runtimeLogDiagnosticsForRunner(runner))
+	}
+	if err := runFactoryServiceAndEmitResult(ctx, cfg, runner, recordPath, batchProvider, recoveryMetadata); err != nil {
+		return err
+	}
+	if cfg.JSONOutput {
+		return nil
+	}
+	if len(replayMetadataWarnings) == 0 {
+		replayMetadataWarnings = replayMetadataWarningsForRunner(runner)
+	}
+	return emitReplayMetadataWarnings(replayMetadataOutput(cfg), replayMetadataWarnings)
 }
 
 func batchReportProviderFromRunner(runner initializer.LocalRuntimeRunner) batchReportProvider {
@@ -569,25 +619,9 @@ func hostedRuntimeCapabilities(
 	return historicalReplay, hostedInvocation
 }
 
-func prepareHostedInvocation(
-	ctx context.Context,
-	cfg RunConfig,
-	logger *zap.Logger,
-	request *factoryapi.InvocationRequest,
-	recordPath resolvedRunRecordPath,
-	invocation InvocationOperation,
-	presentation factoryvisualization.ResponsePresentation,
-	mockWorkersConfig *workers.MockWorkersConfig,
-	invocationMode bool,
-) (*Operation, RunConfig, error) {
+func hostedRuntimeConfig(cfg RunConfig, invocationMode bool) RunConfig {
 	if !invocationMode {
-		return nil, cfg, nil
-	}
-	operation, err := openInvocation(
-		ctx, cfg, logger, request, recordPath, invocation, presentation, mockWorkersConfig, nil,
-	)
-	if err != nil {
-		return nil, RunConfig{}, err
+		return cfg
 	}
 	// The hosted runtime remains alive until the invocation reaches its
 	// terminal result; the customer-visible run is still one-shot.
@@ -599,7 +633,7 @@ func prepareHostedInvocation(
 		// startup Work when a server-attached runtime is used.
 		runtimeCfg.WorkFile = ""
 	}
-	return operation, runtimeCfg, nil
+	return runtimeCfg
 }
 
 func newRuntimeHostObserver(

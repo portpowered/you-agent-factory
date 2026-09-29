@@ -14,7 +14,7 @@ import (
 	runtimeapplication "github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication"
 	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestPrepareCanonicalSessionIDForRunRequiresInjectedGenerator(t *testing.T) {
@@ -53,10 +53,6 @@ func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 	var scope factorysessions.DirectJavaScriptRunScope
 	var scopeRegistered bool
 	factory, err := NewSelectionFactory(
-		func(context.Context, RunConfig, RuntimeRunnerBuilder, InvocationOperation, factoryvisualization.ResponsePresentation) (*Operation, error) {
-			t.Fatal("regular run opener called for direct JavaScript")
-			return nil, nil
-		},
 		func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
@@ -67,7 +63,7 @@ func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 			scope, scopeRegistered = owner.DirectJavaScript(direct.request.ScopeID)
 			return runtimeapplication.NewManagedRunner(plan, diagnostics)
 		},
-		owner,
+		nil, nil, nil, owner, nil,
 	)
 	if err != nil {
 		t.Fatalf("NewSelectionFactory: %v", err)
@@ -94,10 +90,6 @@ func TestRunSelectionCarriesInvocationCancellationToDirectJavaScriptHost(t *test
 	want := &selectionCancellationStub{}
 	direct := &selectionDirectJavaScriptStub{supported: true}
 	factory, err := NewSelectionFactory(
-		func(context.Context, RunConfig, RuntimeRunnerBuilder, InvocationOperation, factoryvisualization.ResponsePresentation) (*Operation, error) {
-			t.Fatal("regular run opener called for direct JavaScript")
-			return nil, nil
-		},
 		func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
@@ -105,6 +97,7 @@ func TestRunSelectionCarriesInvocationCancellationToDirectJavaScriptHost(t *test
 		func(_ context.Context, plan lifecycle.Plan, diagnostics runtimeartifact.Diagnostics, _ <-chan initializer.RuntimeHostBinding) (initializer.LocalRuntimeRunner, error) {
 			return runtimeapplication.NewManagedRunner(plan, diagnostics)
 		},
+		nil, nil, nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("NewSelectionFactory: %v", err)
@@ -125,44 +118,43 @@ func TestRunSelectionCarriesInvocationCancellationToDirectJavaScriptHost(t *test
 	}
 }
 
-func TestRunSelectionExecutesLocalOperationWithIntent(t *testing.T) {
+func TestRunSelectionExecutesLocalRunWithIntent(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	wantCancellation := &selectionCancellationStub{}
 	var gotConfig RunConfig
+	var gotCancellation initializer.InvocationCancellation
 	var ran bool
 	factory, err := NewSelectionFactory(
-		func(_ context.Context, cfg RunConfig, _ RuntimeRunnerBuilder, _ InvocationOperation, _ factoryvisualization.ResponsePresentation) (*Operation, error) {
-			gotConfig = cfg
-			return &Operation{
-				invocationMode: true, startupPrepared: true,
-				runner: runFuncRunner(func(runCtx context.Context) error {
-					if runCtx != ctx {
-						t.Fatal("local runner received a different context")
-					}
-					ran = true
-					return nil
-				}),
-			}, nil
-		},
-		func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
-			return nil, nil
+		func(_ context.Context, _ *factorysessions.SessionStartRequest, cancellation initializer.InvocationCancellation, _ factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
+			gotCancellation = cancellation
+			return runFuncRunner(func(runCtx context.Context) error {
+				if runCtx != ctx {
+					t.Fatal("local runner received a different context")
+				}
+				ran = true
+				return nil
+			}), nil
 		},
 		testInvocationOperation{}, testResponsePresentation(),
 		&selectionDirectJavaScriptStub{},
 		func(context.Context, lifecycle.Plan, runtimeartifact.Diagnostics, <-chan initializer.RuntimeHostBinding) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
+		nil, nil, func(cfg RunConfig, _ *workers.MockWorkersConfig) *factorysessions.SessionStartRequest {
+			gotConfig = cfg
+			return &factorysessions.SessionStartRequest{}
+		}, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("NewSelectionFactory: %v", err)
 	}
-	if err := factory(RunConfig{Port: 7437}).Run(ctx, processcontract.RunIntent{
+	if err := factory(ensureTestRecordingsCLI(RunConfig{Port: 7437, DisableDefaultRecording: true})).Run(ctx, processcontract.RunIntent{
 		WorkerSidecarsEnabled: true, Cancellation: wantCancellation,
 	}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if !ran || gotConfig.Port != 0 || gotConfig.Cancellation != wantCancellation {
+	if !ran || gotConfig.Port != 0 || gotCancellation != wantCancellation {
 		t.Fatalf("local run = ran:%t port:%d cancellation:%p", ran, gotConfig.Port, gotConfig.Cancellation)
 	}
 }
@@ -172,17 +164,13 @@ func TestRunSelectionDirectJavaScriptClosesPresentationAfterRunFailure(t *testin
 	owner := newTestOpeningPresentationOwner()
 	direct := &selectionDirectJavaScriptStub{supported: true}
 	factory, err := NewSelectionFactory(
-		func(context.Context, RunConfig, RuntimeRunnerBuilder, InvocationOperation, factoryvisualization.ResponsePresentation) (*Operation, error) {
-			t.Fatal("regular run opener called for direct JavaScript")
-			return nil, nil
-		},
 		func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
 		testInvocationOperation{}, testResponsePresentation(), direct,
 		func(context.Context, lifecycle.Plan, runtimeartifact.Diagnostics, <-chan initializer.RuntimeHostBinding) (initializer.LocalRuntimeRunner, error) {
 			return runFuncRunner(func(context.Context) error { return want }), nil
-		}, owner,
+		}, nil, nil, nil, owner, nil,
 	)
 	if err != nil {
 		t.Fatalf("NewSelectionFactory: %v", err)
@@ -243,10 +231,6 @@ func TestRunSelectionDirectJavaScriptCleansPresentationOnOpenFailures(t *testing
 			owner := newTestOpeningPresentationOwner()
 			direct := &selectionDirectJavaScriptStub{supported: true, openErr: testCase.openErr}
 			factory, err := NewSelectionFactory(
-				func(context.Context, RunConfig, RuntimeRunnerBuilder, InvocationOperation, factoryvisualization.ResponsePresentation) (*Operation, error) {
-					t.Fatal("regular run opener called for direct JavaScript")
-					return nil, nil
-				},
 				func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 					return nil, nil
 				},
@@ -259,7 +243,7 @@ func TestRunSelectionDirectJavaScriptCleansPresentationOnOpenFailures(t *testing
 						return nil, nil
 					}
 					return runFuncRunner(func(context.Context) error { return nil }), nil
-				}, owner,
+				}, nil, nil, nil, owner, nil,
 			)
 			if err != nil {
 				t.Fatalf("NewSelectionFactory: %v", err)
@@ -279,10 +263,6 @@ func TestRunSelectionDirectJavaScriptCleansPresentationOnOpenFailures(t *testing
 func TestRunSelectionSupportsDirectJavaScriptWithoutPresentationOwner(t *testing.T) {
 	direct := &selectionDirectJavaScriptStub{supported: true}
 	factory, err := NewSelectionFactory(
-		func(context.Context, RunConfig, RuntimeRunnerBuilder, InvocationOperation, factoryvisualization.ResponsePresentation) (*Operation, error) {
-			t.Fatal("regular run opener called for direct JavaScript")
-			return nil, nil
-		},
 		func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
@@ -290,6 +270,7 @@ func TestRunSelectionSupportsDirectJavaScriptWithoutPresentationOwner(t *testing
 		func(_ context.Context, _ lifecycle.Plan, _ runtimeartifact.Diagnostics, _ <-chan initializer.RuntimeHostBinding) (initializer.LocalRuntimeRunner, error) {
 			return runFuncRunner(func(context.Context) error { return nil }), nil
 		},
+		nil, nil, nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("NewSelectionFactory: %v", err)

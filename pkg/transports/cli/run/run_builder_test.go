@@ -489,23 +489,24 @@ func runWithTestRuntimeRunnerAndMockWorkersDiagnosticsLoader(
 	factory.presentations = newTestOpeningPresentationOwner()
 	presentation := testResponsePresentation()
 	factory.visualizationSink = runVisualizationSink(normalizeRunInvocationMode(cfg), presentation)
-	operation, err := OpenWithVisualizationOwnerAndDiagnostics(
+	if loadMockWorkersWithDiagnostics == nil && loadMockWorkers != nil {
+		loadMockWorkersWithDiagnostics = func(path string) (*workers.MockWorkersConfig, workers.MockWorkersConfigDecodeDiagnostics, error) {
+			config, err := loadMockWorkers(path)
+			return config, workers.MockWorkersConfigDecodeDiagnostics{}, err
+		}
+	}
+	return RunSelected(
 		ctx,
 		cfg,
 		factory.BuildRunner,
 		factory.Invocation(),
 		presentation,
 		prepareSingleWorkTargetForTest,
-		loadMockWorkers,
 		loadMockWorkersWithDiagnostics,
 		testSessionStartRequestFactory,
 		factory.presentations,
 		nil,
 	)
-	if err != nil {
-		return err
-	}
-	return operation.Run(ctx)
 }
 
 func testMockWorkersConfigLoader(string) (*workers.MockWorkersConfig, error) {

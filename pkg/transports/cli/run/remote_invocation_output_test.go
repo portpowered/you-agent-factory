@@ -103,17 +103,15 @@ func TestEmitReplayMetadataWarningsUsesConciseDeterministicComponents(t *testing
 	}
 }
 
-func TestOperationRunDisclosesReplayDriftAfterSuccessfulReplay(t *testing.T) {
+func TestReplayDriftAfterSuccessfulRun(t *testing.T) {
 	t.Parallel()
 
 	var output bytes.Buffer
-	operation := &Operation{
-		cfg:                    RunConfig{Output: &output, SuppressDashboardRendering: true},
-		runner:                 stubFactoryService{run: func(context.Context) error { return nil }},
-		replayMetadataWarnings: []recordings.MetadataMismatchWarning{{Key: "workers_hash"}},
+	if err := runFactoryServiceAndEmitResult(context.Background(), RunConfig{Output: &output, SuppressDashboardRendering: true}, stubFactoryService{run: func(context.Context) error { return nil }}, resolvedRunRecordPath{}, nil); err != nil {
+		t.Fatal(err)
 	}
-	if err := operation.Run(context.Background()); err != nil {
-		t.Fatalf("Operation.Run() error = %v, want successful replay", err)
+	if err := emitReplayMetadataWarnings(&output, []recordings.MetadataMismatchWarning{{Key: "workers_hash"}}); err != nil {
+		t.Fatal(err)
 	}
 	want := "Replay warning: current Factory Definition differs from the recording; affected components: workers. Replay continues with recorded inputs.\n"
 	if output.String() != want {
@@ -121,16 +119,12 @@ func TestOperationRunDisclosesReplayDriftAfterSuccessfulReplay(t *testing.T) {
 	}
 }
 
-func TestOperationRunDoesNotDiscloseWhenReplayMetadataMatches(t *testing.T) {
+func TestNoReplayDriftWhenMetadataMatches(t *testing.T) {
 	t.Parallel()
 
 	var output bytes.Buffer
-	operation := &Operation{
-		cfg:    RunConfig{Output: &output, SuppressDashboardRendering: true},
-		runner: stubFactoryService{run: func(context.Context) error { return nil }},
-	}
-	if err := operation.Run(context.Background()); err != nil {
-		t.Fatalf("Operation.Run() error = %v, want successful replay", err)
+	if err := runFactoryServiceAndEmitResult(context.Background(), RunConfig{Output: &output, SuppressDashboardRendering: true}, stubFactoryService{run: func(context.Context) error { return nil }}, resolvedRunRecordPath{}, nil); err != nil {
+		t.Fatal(err)
 	}
 	if output.Len() != 0 {
 		t.Fatalf("replay output = %q, want no drift warning", output.String())

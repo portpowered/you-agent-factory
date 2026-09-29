@@ -12,6 +12,8 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // prepareCanonicalSessionIDForRun allocates the identity used by the
@@ -84,40 +86,44 @@ func SplitFlagTerminator(args []string) (flagArgs []string, positional []string,
 }
 
 func NewSelectionFactory(
-	buildOperation OperationFactory,
 	buildRunner RuntimeRunnerBuilder,
 	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 	directJavaScript DirectJavaScriptRunOperation,
 	buildApplication initializer.LifecycleRunnerBuilder,
-	presentations ...factorysessions.OpeningPresentationOwner,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+	loadMockWorkers workers.MockWorkersConfigDiagnosticsLoader,
+	buildRuntimeRequest SessionStartRequestFactory,
+	presentations factorysessions.OpeningPresentationOwner,
+	visualizations factoryvisualization.RuntimeSinkOwner,
 ) (SelectionFactory, error) {
-	if buildOperation == nil || buildRunner == nil || invocation == nil || presentation == nil ||
+	if buildRunner == nil || invocation == nil || presentation == nil ||
 		directJavaScript == nil || buildApplication == nil {
 		return nil, fmt.Errorf("run transport operations are required")
 	}
-	var presentationOwner factorysessions.OpeningPresentationOwner
-	if len(presentations) > 0 {
-		presentationOwner = presentations[0]
-	}
 	return func(cfg RunConfig) processcontract.RunSelection {
 		return &selection{
-			cfg: cfg, buildOperation: buildOperation, buildRunner: buildRunner, invocation: invocation,
+			cfg: cfg, buildRunner: buildRunner, invocation: invocation,
 			presentation: presentation, directJavaScript: directJavaScript,
-			buildApplication: buildApplication, presentations: presentationOwner,
+			buildApplication: buildApplication, prepareWorkTarget: prepareWorkTarget,
+			loadMockWorkers: loadMockWorkers, buildRuntimeRequest: buildRuntimeRequest,
+			presentations: presentations, visualizations: visualizations,
 		}
 	}, nil
 }
 
 type selection struct {
-	cfg              RunConfig
-	buildOperation   OperationFactory
-	buildRunner      RuntimeRunnerBuilder
-	invocation       InvocationOperation
-	presentation     factoryvisualization.ResponsePresentation
-	directJavaScript DirectJavaScriptRunOperation
-	buildApplication initializer.LifecycleRunnerBuilder
-	presentations    factorysessions.OpeningPresentationOwner
+	cfg                 RunConfig
+	buildRunner         RuntimeRunnerBuilder
+	invocation          InvocationOperation
+	presentation        factoryvisualization.ResponsePresentation
+	directJavaScript    DirectJavaScriptRunOperation
+	buildApplication    initializer.LifecycleRunnerBuilder
+	prepareWorkTarget   work.SingleWorkTargetPreparation
+	loadMockWorkers     workers.MockWorkersConfigDiagnosticsLoader
+	buildRuntimeRequest SessionStartRequestFactory
+	presentations       factorysessions.OpeningPresentationOwner
+	visualizations      factoryvisualization.RuntimeSinkOwner
 }
 
 func (s *selection) Run(
@@ -134,11 +140,9 @@ func (s *selection) Run(
 	if s.directJavaScript.Supports(cfg.FactoryConfigPath) {
 		return s.runDirectJavaScript(ctx, cfg, intent)
 	}
-	operation, err := s.buildOperation(ctx, cfg, s.buildRunner, s.invocation, s.presentation)
-	if err != nil {
-		return err
-	}
-	return operation.Run(ctx)
+	return RunSelected(ctx, cfg, s.buildRunner, s.invocation, s.presentation,
+		s.prepareWorkTarget, s.loadMockWorkers, s.buildRuntimeRequest,
+		s.presentations, s.visualizations)
 }
 
 func (s *selection) runDirectJavaScript(

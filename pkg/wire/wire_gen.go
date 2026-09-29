@@ -533,15 +533,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	resumeWorkerSessionOperation := provideResumeWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
 	cancelWorkerSessionOperation := provideCancelWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
 	terminateWorkerSessionOperation := provideTerminateWorkerSessionOperation(wireStandardCLIHTTPProtocol, wireLocalWorkerSessionsBoundary)
-	mockWorkersConfigFileSystem := provideWorkersMockWorkersConfigFileSystem(edges2)
-	mockWorkersConfigDiagnosticsLoader, err := provideWorkersMockWorkersConfigDiagnosticsLoader(mockWorkersConfigFileSystem)
-	if err != nil {
-		return nil, err
-	}
-	sessionStartRequestFactory := provideSessionStartRequestFactory()
-	v79 := wire3.NewRuntimeSinkOwner()
-	operationFactory := provideRunOperationFactory(singleWorkTargetPreparation, mockWorkersConfigDiagnosticsLoader, sessionStartRequestFactory, openingPresentationOwner, v79)
 	runtimeFactory := provideFactoryVisualizationFactory()
+	v79 := wire3.NewRuntimeSinkOwner()
 	factoryStatusProjector := factory.NewFactoryStatusProjector()
 	httpAdapter := http.NewAdapter(providersessionsService)
 	handler := http.NewHandler(httpAdapter, logger)
@@ -583,7 +576,13 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	selectionFactory, err := provideRunSelectionFactory(operationFactory, runtimeRunnerBuilder, v66, v81, directJavaScriptRunOperation, lifecycleRunnerBuilder, openingPresentationOwner)
+	mockWorkersConfigFileSystem := provideWorkersMockWorkersConfigFileSystem(edges2)
+	mockWorkersConfigDiagnosticsLoader, err := provideWorkersMockWorkersConfigDiagnosticsLoader(mockWorkersConfigFileSystem)
+	if err != nil {
+		return nil, err
+	}
+	sessionStartRequestFactory := provideSessionStartRequestFactory()
+	selectionFactory, err := provideRunSelectionFactory(runtimeRunnerBuilder, v66, v81, directJavaScriptRunOperation, lifecycleRunnerBuilder, singleWorkTargetPreparation, mockWorkersConfigDiagnosticsLoader, sessionStartRequestFactory, openingPresentationOwner, v79)
 	if err != nil {
 		return nil, err
 	}
@@ -1178,8 +1177,7 @@ var BundleSet = wire5.NewSet(
 	provideSystemInitializationService,
 	provideSystemInitializationOperation, wire5.Bind(new(factorydefinitions.Persistence), new(factorydefinitions.PackagedFactoryPersistence)), wire5.Bind(new(process.ACPServer), new(acp.Server)), provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,
-	provideSessionStartRequestFactory,
-	provideRunOperationFactory, application.NewLifecycleRunnerBuilder, provideRunRuntimeRunnerBuilder,
+	provideSessionStartRequestFactory, application.NewLifecycleRunnerBuilder, provideRunRuntimeRunnerBuilder,
 	provideRunSelectionFactory,
 	provideInvocationOperation,
 	provideMCPServerBuilder,

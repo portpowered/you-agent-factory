@@ -166,30 +166,14 @@ func (e *AmbiguousInvocationInputError) Unwrap() error {
 	return e.invocationErr
 }
 
-func openInvocation(
-	ctx context.Context,
-	cfg RunConfig,
-	logger *zap.Logger,
-	request *factoryapi.InvocationRequest,
-	recordPath resolvedRunRecordPath,
-	invocation InvocationOperation,
-	presentation factoryvisualization.ResponsePresentation,
-	mockWorkersConfig *workers.MockWorkersConfig,
-	presentations factorysessions.OpeningPresentationOwner,
-) (*Operation, error) {
+func validateInvocationOperation(invocation InvocationOperation, presentation factoryvisualization.ResponsePresentation, cfg RunConfig) error {
 	if invocation == nil {
-		return nil, fmt.Errorf("construct factory invocation: operation is required")
+		return fmt.Errorf("construct factory invocation: operation is required")
 	}
 	if isResponseStreamOutputMode(cfg.InvocationOutputMode) && presentation == nil {
-		return nil, fmt.Errorf("construct factory invocation: response presentation operation is required")
+		return fmt.Errorf("construct factory invocation: response presentation operation is required")
 	}
-	return &Operation{
-		cfg: cfg, logger: logger, invocationRequest: request,
-		invocationTarget: invocationTarget(cfg, mockWorkersConfig),
-		invocation:       invocation, presentation: presentation,
-		invocationMode: true, recordPath: recordPath,
-		openingPresentations: presentations,
-	}, nil
+	return nil
 }
 
 func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {

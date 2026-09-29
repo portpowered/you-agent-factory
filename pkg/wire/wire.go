@@ -427,7 +427,6 @@ var BundleSet = wire.NewSet(
 	provideLifecycleRunnerFactory,
 	provideWorkStopSummaryProjector,
 	provideSessionStartRequestFactory,
-	provideRunOperationFactory,
 	initializerapplication.NewLifecycleRunnerBuilder,
 	provideRunRuntimeRunnerBuilder,
 	provideRunSelectionFactory,

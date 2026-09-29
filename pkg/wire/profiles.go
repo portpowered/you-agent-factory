@@ -670,17 +670,20 @@ func provideRunInvocationOperation(
 }
 
 func provideRunSelectionFactory(
-	buildOperation runcli.OperationFactory,
 	buildRunner runcli.RuntimeRunnerBuilder,
 	invocation factorysessionwire.InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 	directJavaScript runcli.DirectJavaScriptRunOperation,
 	buildApplication initializer.LifecycleRunnerBuilder,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+	loadMockWorkers workers.MockWorkersConfigDiagnosticsLoader,
+	buildRuntimeRequest runcli.SessionStartRequestFactory,
 	presentations factorysessions.OpeningPresentationOwner,
+	visualizations factoryvisualization.RuntimeSinkOwner,
 ) (runcli.SelectionFactory, error) {
 	return runcli.NewSelectionFactory(
-		buildOperation, buildRunner, invocation, presentation, directJavaScript, buildApplication,
-		presentations,
+		buildRunner, invocation, presentation, directJavaScript, buildApplication,
+		prepareWorkTarget, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
 	)
 }
 
