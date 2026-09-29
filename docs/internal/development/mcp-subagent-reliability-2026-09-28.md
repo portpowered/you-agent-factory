@@ -2364,9 +2364,15 @@ that WAV returned `MODEL_BACKEND_FAILURE` /
 `ASR backend response is malformed` twice, while control ASR on the
 matched 556,844-byte / 11.6 s WAV succeeded. Mismatched speech content,
 voice similarity, and whether `ref_text` was consumed remain unproven.
-Code sources for that exact message: nil segment or non-whole-millisecond
-Whisper timestamp in `asr_protocol.go` (`transcriptResponse`,
-`localAIWhisperTimestampMilliseconds`), or blank transcript / empty or
-invalid / unordered / duration-exceeding segments or oversize payload in
-`codecs/asr.go` (`validateASRResponse`, `validateASRSegments`,
-`DecodeResponse`); the firing branch here is unproven.
+Superseded 2026-09-29: the firing branch is now proven. Committed code
+`30df8d2384` gives predicate-specific ASR errors (diagnostic session
+`dd189072-374b-40ba-9ae7-e308af0b85c5`, edit session
+`acfb38ef-dd14-4f94-a180-d4a285c9af70`, timing probe
+`b1ecb238-f14c-4715-917a-594893e6222f`). A fresh managed WSL offline
+run with the rebuilt CLI on the 3.440 s WAV returned
+`ASR backend response segment exceeds the audio duration
+(segment_index=5 segment_end_ms=4000 audio_duration_ms=3440.000
+overrun_ms=560.000)` — a genuine 560 ms backend overrun, so strict
+validation was retained (no 50 ms tolerance). Focused
+`go test ./pkg/services/models/internal/backends/localai/... ./pkg/services/models/transports/cli -count=1`
+passed.

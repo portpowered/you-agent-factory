@@ -174,22 +174,21 @@ WAV succeeded. The matched `ref_text` WAV was 556,844 bytes / 11.6 s.
 Mismatched speech content, voice similarity, and whether `ref_text`
 was consumed remain unproven.
 
-From code, the exact `ASR backend response is malformed` text
-(`MalformedResponse` class) comes only from response validation, not
-transport: `pkg/services/models/internal/backends/localai/asr_protocol.go:436-441`
-(`malformedASRProtocolResponse`) is returned by `transcriptResponse`
-for a nil segment entry or by
-`localAIWhisperTimestampMilliseconds` (`asr_protocol.go:357-362`) when
-a segment timestamp is negative or not a whole multiple of 1,000,000
-ns; and by `pkg/services/models/internal/backends/localai/codecs/asr.go:602-607`
-(`asrMalformedResponseFailure`) when the decoded payload exceeds
-16 MiB, is not single JSON, has blank transcript, has zero/too many
-segments, has a segment with negative ID/start, `end <= start`, blank
-text, regressing start/end order, or (`DecodeResponseValueWithinAudio`
-only) `end` beyond the PCM WAV duration. A gRPC protobuf decode
-failure is a distinct `BackendProtocol` message (`asr_protocol.go:413`:
-`ASR backend response was malformed`). Which validation branch fired
-here is unproven from the CLI error alone.
+Superseded 2026-09-29: the firing branch is now proven. Committed
+code `30df8d2384` gives predicate-specific ASR errors. OpenCode
+diagnostic MCP session `dd189072-374b-40ba-9ae7-e308af0b85c5` found
+the original CLI error too generic; edit session
+`acfb38ef-dd14-4f94-a180-d4a285c9af70` implemented the specific
+messages; timing probe session `b1ecb238-f14c-4715-917a-594893e6222f`
+measured the overrun. A fresh managed WSL offline run with the
+rebuilt CLI on the 3.440 s WAV returned
+`ASR backend response segment exceeds the audio duration
+(segment_index=5 segment_end_ms=4000 audio_duration_ms=3440.000
+overrun_ms=560.000)`. This is a genuine 560 ms backend overrun, so
+strict validation was retained (no 50 ms tolerance). Focused
+`go test ./pkg/services/models/internal/backends/localai/... ./pkg/services/models/transports/cli -count=1`
+passed. Speech content, voice similarity, and actual use of
+`ref_text` beyond protocol delivery remain unproven.
 
 ## Unverified
 
