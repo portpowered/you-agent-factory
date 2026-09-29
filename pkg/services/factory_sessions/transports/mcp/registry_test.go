@@ -918,11 +918,11 @@ func (fake *subagentTargetFake) InvokeFactorySession(ctx context.Context, _ stri
 			return factorysessions.InvocationResult{}, ctx.Err()
 		}
 	}
+	if fake.invokeResult != nil {
+		return *fake.invokeResult, fake.invokeErr
+	}
 	if fake.invokeErr != nil {
 		return factorysessions.InvocationResult{}, fake.invokeErr
-	}
-	if fake.invokeResult != nil {
-		return *fake.invokeResult, nil
 	}
 	return factorysessions.InvocationResult{
 		Status:        factorysessions.InvocationTerminalStatusCompleted,
@@ -1022,6 +1022,33 @@ func TestSubagentTimeoutReportsPossibleWorkspaceEffects(t *testing.T) {
 		t.Fatalf("timeout details = %#v", response.Error.Details)
 	}
 	if strings.Contains(response.Error.Message, "sensitive") || !target.closed {
+		t.Fatalf("timeout leaked provider text or skipped close: %#v", response.Error)
+	}
+}
+
+func TestSubagentTimeoutResultWithInvocationErrorKeepsTimeoutEnvelope(t *testing.T) {
+	timeout := int64(5000)
+	target := &subagentTargetFake{
+		invokeErr: context.DeadlineExceeded,
+		invokeResult: &factorysessions.InvocationResult{
+			Status:    factorysessions.InvocationTerminalStatusTimedOut,
+			ErrorCode: string(factorysessions.InvocationErrorCodeTimedOut),
+			Message:   "private provider output",
+		},
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-timeout-error" }, mcpfactorysession.SubagentInput{
+		Prompt: "Edit a file", TimeoutMillis: &timeout,
+	})
+	if response.Result != nil || response.Error == nil {
+		t.Fatalf("timeout response = %#v", response)
+	}
+	if response.Error.Code != "factory_session.subagent.timed_out" || response.Error.SessionID != "session-1" || response.Error.Retryable {
+		t.Fatalf("timeout envelope = %#v", response.Error)
+	}
+	if response.Error.Details["partialEffectsPossible"] != true || response.Error.Details["timeoutMillis"] != timeout {
+		t.Fatalf("timeout details = %#v", response.Error.Details)
+	}
+	if strings.Contains(response.Error.Message, "private") || !target.closed {
 		t.Fatalf("timeout leaked provider text or skipped close: %#v", response.Error)
 	}
 }

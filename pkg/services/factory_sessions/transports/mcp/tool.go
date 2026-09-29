@@ -165,11 +165,11 @@ func Subagent(ctx context.Context, target factorysessionexecution.TargetExecutio
 	}
 	result, invokeErr := target.InvokeFactorySession(ctx, started.SessionID, invocationRequest)
 	closeErr := target.CloseFactorySession(context.WithoutCancel(ctx), started.SessionID)
-	if err := errors.Join(invokeErr, closeErr); err != nil {
-		return subagentExecutionFailure(err)
-	}
 	if result.Status != factorysessionexecution.InvocationTerminalStatusCompleted {
 		return subagentTerminalFailure(started.SessionID, result, input.TimeoutMillis)
+	}
+	if err := errors.Join(invokeErr, closeErr); err != nil {
+		return subagentExecutionFailure(err)
 	}
 	response := SubagentResult{SessionID: started.SessionID, Status: string(result.Status)}
 	for _, part := range result.PrimaryResult {

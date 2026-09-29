@@ -17,6 +17,9 @@ import (
 // Package is the portion of go list metadata needed to build the graph.
 type Package struct {
 	ImportPath   string
+	Dir          string
+	GoFiles      []string
+	CgoFiles     []string
 	Imports      []string
 	TestImports  []string
 	XTestImports []string
