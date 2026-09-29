@@ -207,5 +207,12 @@ health check passed, all five expected `gowhisper` exports were present, and
 the package was staged with CUDA and MSVC runtime DLLs. The Windows CUDA ZIP
 is 448,033,531 bytes with SHA-256
 `4d0eb5cc09e94ab820335af5bcfff1634e72c4206f6975848eb12f4b81ba2c9c`.
-The archive is staged for a manual release; native Windows ASR inference from
-the published artifact remains to be checked.
+The first published archive was selected and downloaded by a fresh Windows
+resolver, but `LoadModel` terminated the backend with `GGML_ASSERT(device)`.
+The dynamically loaded CUDA backend was present; `ggml-cpu.dll` was missing.
+The first release was marked prerelease after this finding. Staging the
+pinned build's `ggml-cpu.dll` made a direct gRPC `LoadModel` call succeed, with
+the backend reporting CUDA0 on the RTX 4090. The build script now stages both
+dynamic backends. A repaired archive was rebuilt at 448,333,120 bytes with
+SHA-256 `17541d98c8d00ee0e6dfd9699ad3a886e2a9ed7469d4260cf9ed7452efd6cc58`.
+Full ASR transcription from the repaired published artifact is pending.

@@ -74,7 +74,7 @@ const expectedTargetFacts = {
 	"linux-amd64": { os: "linux", architecture: "amd64", runner: "ubuntu-24.04", buildType: "cpu", accelerators: ["cpu"] },
 	"linux-amd64-cuda": { os: "linux", architecture: "amd64", runner: "localai-linux-amd64-cuda", buildType: "cublas", accelerators: ["cuda"], backends: ["localai-llamacpp"] },
 	"windows-amd64": { os: "windows", architecture: "amd64", runner: "windows-2022", buildType: "cpu", accelerators: ["cpu"] },
-	"windows-amd64-cuda": { os: "windows", architecture: "amd64", runner: "localai-windows-amd64-cuda", buildType: "cublas", accelerators: ["cuda"], backends: ["localai-llamacpp", "localai-whisper"] },
+	"windows-amd64-cuda": { os: "windows", architecture: "amd64", runner: "localai-windows-amd64-cuda", buildType: "cublas", accelerators: ["cuda"], backends: ["localai-llamacpp", "localai-whisper", "localai-vibevoice"] },
 };
 
 export function loadConfig(configPath = defaultConfigPath) {
@@ -321,8 +321,8 @@ export function validateConfig(config) {
 	if (matrix) {
 		const combinations = matrix.include.map((entry) => `${entry.backend}/${entry.target}`);
 		validateUniqueIds(errors, combinations, "matrix");
-		if (matrix.include.length !== 12) {
-			addError(errors, "matrix must contain exactly twelve backend/target combinations");
+		if (matrix.include.length !== 13) {
+			addError(errors, "matrix must contain exactly thirteen backend/target combinations");
 		}
 	}
 	return { errors, matrix };

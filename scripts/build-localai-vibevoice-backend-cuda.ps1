@@ -158,26 +158,16 @@ if (([regex]::Matches($vibevoiceCallbackText, 'purego\.NewCallback\(func\([^)]*\
     throw 'expected exactly one uintptr-returning purego callback in govibevoicecpp.go; reassess the Windows NewCallback ABI shim'
 }
 
-# Build the govibevoicecpp CMake MODULE with the CUDA backend enabled. GGML_NATIVE
-# stays OFF so the DLL runs on any x64 host. UNVERIFIED CMake behavior in this
-# pass (no CUDA build was run): BUILD_SHARED_LIBS=ON with GGML_BACKEND_DL=ON
-# mirrors the Whisper CUDA MSVC build so the vendored ggml produces a separate
-# loadable ggml-cuda.dll. BUILD_SHARED_LIBS stays ON because the pinned ggml
-# configure requires it for GGML_BACKEND_DL
-# ('GGML_BACKEND_DL requires BUILD_SHARED_LIBS'), but the Unix vibevoice
-# BUILD_SHARED_LIBS=OFF and whether vibevoice.cpp@000e372 honors
-# GGML_BACKEND_DL on MSVC is unaudited. Likewise the explicit
-# CMAKE_CUDA_ARCHITECTURES override (the backend CMakeLists defaults to
-# "75-virtual;80-virtual;86-real;89-real" when undefined), the
-# /WHOLEARCHIVE:vibevoice MSVC link branch, and the MSVC compile of
-# cpp/govibevoicecpp.cpp are compile-unverified here. By design this script
-# fails at the ggml-cuda.dll check below if the configure does not emit a
-# separate CUDA backend DLL; reassess the flags then instead of shipping a
-# CPU-only payload under a CUDA target.
+# Build shared ggml backends with CUDA enabled. VibeVoice and its Go wrapper
+# directly link ggml-cuda, so GGML_BACKEND_DL must remain OFF: enabling it
+# changes ggml-cuda to a MODULE_LIBRARY, which CMake cannot link into those
+# targets. GGML_NATIVE stays OFF for portable x64 CPU code, and the pinned
+# architecture set controls CUDA kernels. The separate ggml-cuda.dll is
+# checked and staged below.
 $vibevoiceBuild = Join-Path $vibevoiceRoot 'build-windows-cuda'
 $vibevoiceCmakeArgs = @('-S', $vibevoiceRoot, '-B', $vibevoiceBuild, '-G', 'Visual Studio 17 2022', '-A', 'x64', '-T', "cuda=$cudaRoot",
     '-DCMAKE_CXX_STANDARD=17', '-DBUILD_SHARED_LIBS=ON',
-    '-DGGML_NATIVE=OFF', '-DGGML_BACKEND_DL=ON', '-DGGML_CUDA=ON', '-DVIBEVOICE_GGML_CUDA=ON',
+    '-DGGML_NATIVE=OFF', '-DGGML_BACKEND_DL=OFF', '-DGGML_CUDA=ON', '-DVIBEVOICE_GGML_CUDA=ON',
     '-DVIBEVOICE_BUILD_TESTS=OFF', '-DVIBEVOICE_BUILD_EXAMPLES=OFF',
     "-DCMAKE_CUDA_ARCHITECTURES=$cudaArchitectures",
     "-DCMAKE_CUDA_COMPILER=$nvcc")

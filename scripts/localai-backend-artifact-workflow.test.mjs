@@ -21,10 +21,10 @@ import { patchWindowsGoLoader } from "./localai-backend-windows-patch.mjs";
 
 const config = loadConfig();
 
-test("the pinned workflow config includes Linux and Windows llama CUDA archives and the manual Windows whisper CUDA leg", () => {
+test("the pinned workflow config includes Linux llama and Windows CUDA backend archives", () => {
 	const result = validateConfig(config);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.matrix.include.length, 12);
+	assert.equal(result.matrix.include.length, 13);
 	assert.deepEqual(
 		result.matrix.include.map(({ backend, target }) => `${backend}/${target}`),
 		[
@@ -40,6 +40,7 @@ test("the pinned workflow config includes Linux and Windows llama CUDA archives 
 			"localai-vibevoice/darwin-arm64",
 			"localai-vibevoice/linux-amd64",
 			"localai-vibevoice/windows-amd64",
+			"localai-vibevoice/windows-amd64-cuda",
 		],
 	);
 	assert.deepEqual(matrixForConfig(config), result.matrix);
@@ -190,7 +191,7 @@ test("the validation CLI emits a matrix output suitable for GitHub Actions", asy
 	assert.match(outputText, /windows_msys_packages=make=4\.4\.1-3/);
 	assert.match(outputText, /mingw-w64-x86_64-make=4\.4\.1-5/);
 	assert.match(outputText, /windows_vcpkg_triplet=x64-mingw-static-release/);
-	assert.match(result.stdout, /LOCALAI_BACKEND_ARTIFACT_INPUTS_OK combinations=12/);
+	assert.match(result.stdout, /LOCALAI_BACKEND_ARTIFACT_INPUTS_OK combinations=13/);
 });
 
 function metadataFixture(backend, target) {
@@ -238,7 +239,7 @@ function archiveFixtureBytes(backend, target) {
 	return bytes;
 }
 
-test("the join emits one P1 manifest for the exact twelve archives and re-verifies their bytes", async (t) => {
+test("the join emits one P1 manifest for the exact thirteen archives and re-verifies their bytes", async (t) => {
 	const matrixRoot = await matrixArtifactFixture(t);
 	const outputRoot = await mkdtemp(join(tmpdir(), "localai-backend-release-"));
 	t.after(() => rm(outputRoot, { recursive: true, force: true }));
@@ -250,7 +251,7 @@ test("the join emits one P1 manifest for the exact twelve archives and re-verifi
 	});
 	assert.equal(result.manifest.schemaVersion, 1);
 	assert.equal(result.manifest.kind, "localai-backend-artifacts");
-	assert.equal(result.manifest.artifacts.length, 12);
+	assert.equal(result.manifest.artifacts.length, 13);
 	assert.equal(result.manifest.publication.releaseTag, publicationIdentity(config).releaseTag);
 	assert.equal(result.manifest.publication.packagingRevision, config.packagingRevision);
 	const artifact = result.manifest.artifacts.find((entry) => entry.id === "localai-llamacpp/darwin-arm64");
@@ -274,6 +275,9 @@ test("the join emits one P1 manifest for the exact twelve archives and re-verifi
 	const whisperCUDA = result.manifest.artifacts.find((entry) => entry.id === "localai-whisper/windows-amd64-cuda");
 	assert.deepEqual(whisperCUDA.target.accelerators, ["cuda"]);
 	assert.match(whisperCUDA.artifact.location, /localai-whisper-windows-amd64-cuda.*\.zip$/);
+	const vibevoiceCUDA = result.manifest.artifacts.find((entry) => entry.id === "localai-vibevoice/windows-amd64-cuda");
+	assert.deepEqual(vibevoiceCUDA.target.accelerators, ["cuda"]);
+	assert.match(vibevoiceCUDA.artifact.location, /localai-vibevoice-windows-amd64-cuda.*\.zip$/);
 	assert.deepEqual((await readdir(outputRoot)).sort(), [
 		"localai-backend-localai-llamacpp-darwin-arm64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
 		"localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
@@ -283,6 +287,7 @@ test("the join emits one P1 manifest for the exact twelve archives and re-verifi
 		"localai-backend-localai-vibevoice-darwin-arm64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
 		"localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
 		"localai-backend-localai-vibevoice-windows-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.zip",
+		"localai-backend-localai-vibevoice-windows-amd64-cuda-000e37282bc5bb09edc20f7047a47924122ba3a0.zip",
 		"localai-backend-localai-whisper-darwin-arm64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
 		"localai-backend-localai-whisper-linux-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.tar.gz",
 		"localai-backend-localai-whisper-windows-amd64-080bbbe85230f624f0b52127f1ae1218247989f9.zip",
@@ -297,14 +302,14 @@ test("the join rejects missing and unexpected matrix results", async (t) => {
 	await rm(join(missingRoot, missingArchive));
 	await assert.rejects(
 		(async () => createManifest({ config, artifactDirectory: missingRoot, repository: "portpowered/infinite-you" })),
-		/exactly 12 archives and provenance sidecars/,
+		/exactly 13 archives and provenance sidecars/,
 	);
 
 	const extraRoot = await matrixArtifactFixture(t);
 	await writeFile(join(extraRoot, "unexpected.archive"), "unexpected");
 	assert.throws(
 		() => createManifest({ config, artifactDirectory: extraRoot, repository: "portpowered/infinite-you" }),
-		/exactly 12 archives and provenance sidecars/,
+		/exactly 13 archives and provenance sidecars/,
 	);
 });
 
@@ -374,6 +379,16 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		binary: "whisper",
 		go_dynamic_loader: "xsys-windows",
 		windows_library_name: "libgowhisper.dll",
+		grpc_dependency_mode: "default",
+	});
+	assert.deepEqual(buildPlan({ backend: "localai-vibevoice", target: "windows-amd64-cuda", buildType: "cublas" }), {
+		backend: "localai-vibevoice",
+		target: "windows-amd64-cuda",
+		shell: "pwsh",
+		strategy: "windows-vibevoice-cuda-msvc",
+		binary: "vibevoice-cpp",
+		go_dynamic_loader: "xsys-windows",
+		windows_library_name: "libgovibevoicecpp.dll",
 		grpc_dependency_mode: "default",
 	});
 	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "darwin-arm64", buildType: "metal" }), {
@@ -808,7 +823,7 @@ test("manifest verification rejects bytes tampered after manifest creation", asy
 	);
 });
 
-test("the Windows CUDA legs route each backend to its pinned MSVC build and publish thirteen assets", async () => {
+test("the Windows CUDA legs route each backend to its pinned MSVC build and publish fourteen assets", async () => {
 	const workflow = await readFile(".github/workflows/localai-backend-artifacts.yml", "utf8");
 	assert.match(
 		workflow,
@@ -822,9 +837,13 @@ test("the Windows CUDA legs route each backend to its pinned MSVC build and publ
 		workflow,
 		/Build the Whisper Windows CUDA backend with MSVC\s*\n\s*if: matrix\.backend == 'localai-whisper' && matrix\.target == 'windows-amd64-cuda'[\s\S]*?shell: pwsh[\s\S]*?timeout-minutes: 300[\s\S]*?build-localai-whisper-backend-cuda\.ps1/,
 	);
+	assert.match(
+		workflow,
+		/Build the VibeVoice Windows CUDA backend with MSVC\s*\n\s*if: matrix\.backend == 'localai-vibevoice' && matrix\.target == 'windows-amd64-cuda'[\s\S]*?shell: pwsh[\s\S]*?timeout-minutes: 300[\s\S]*?build-localai-vibevoice-backend-cuda\.ps1/,
+	);
 	assert.match(workflow, /^    timeout-minutes: 360\s*$/m);
-	assert.match(workflow, /twelve-archive backend publication \(12 backend archives plus the manifest, 13 assets\)/);
-	assert.match(workflow, /assets=13/);
+	assert.match(workflow, /thirteen-archive backend publication \(13 backend archives plus the manifest, 14 assets\)/);
+	assert.match(workflow, /assets=14/);
 	assert.doesNotMatch(workflow, /assets=10\b/);
 	assert.doesNotMatch(workflow, /nine-platform backend publication/);
 });

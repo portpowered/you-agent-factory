@@ -239,6 +239,13 @@ jobs:
         timeout-minutes: 300
         run: ./scripts/build-localai-whisper-backend-cuda.ps1
 
+      - name: Build the VibeVoice Windows CUDA backend with MSVC
+        if: matrix.backend == 'localai-vibevoice' && matrix.target == 'windows-amd64-cuda'
+        working-directory: you-agent-factory
+        shell: pwsh
+        timeout-minutes: 300
+        run: ./scripts/build-localai-vibevoice-backend-cuda.ps1
+
       - name: Build the backend package on Unix
         if: runner.os != 'Windows'
         working-directory: you-agent-factory
@@ -418,7 +425,7 @@ jobs:
               -f "tag_name=$RELEASE_TAG" \
               -f "target_commitish=$GITHUB_SHA" \
               -f "name=Pinned LocalAI backends $RELEASE_TAG" \
-              -f "body=Complete twelve-archive backend publication (12 backend archives plus the manifest, 13 assets). The release remains draft until every archive and manifest asset is uploaded." \
+              -f "body=Complete thirteen-archive backend publication (13 backend archives plus the manifest, 14 assets). The release remains draft until every archive and manifest asset is uploaded." \
               -F draft=true \
               --jq '.id')"
             echo "created draft backend release $RELEASE_TAG id=$release_id"
@@ -431,4 +438,4 @@ jobs:
             echo "published backend tag $RELEASE_TAG resolved to $published_tag_target, expected $GITHUB_SHA" >&2
             exit 1
           fi
-          echo "LOCALAI_BACKEND_RELEASE_PUBLISHED tag=$RELEASE_TAG assets=13"
+          echo "LOCALAI_BACKEND_RELEASE_PUBLISHED tag=$RELEASE_TAG assets=14"

@@ -2562,3 +2562,11 @@ Codex MCP config now points to that binary. Existing desktop MCP processes
 may still need a restart before using it; the direct fresh-server probe is
 the live validation evidence. Three model-only requests against the previous
 binary (Muse, MiMo, Ling) had returned the typed provider rejection.
+
+The next bounded OpenCode edit request for the VibeVoice CUDA release config
+used an explicit `provider:opencode` and qualified Muse model. It returned
+`factory_session.subagent.provider_throttled` after 22 seconds with no edits.
+A retry with `opencode/nvidia-nemotron-3-super-free` returned
+`factory_session.subagent.provider_request_rejected` in 1.3 seconds, also
+without edits. The config changes were made locally after checking the tree.
+These outcomes are distinct from the earlier working-root permission failures.

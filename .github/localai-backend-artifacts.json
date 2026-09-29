@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "packagingRevision": 4,
+  "packagingRevision": 5,
   "nodeVersion": "22.14.0",
   "localaiRepository": "https://github.com/mudler/LocalAI.git",
   "localaiCommit": "b224c96db6f4b87306a33a808650bfce63b12588",
@@ -118,7 +118,7 @@
       "runner": "localai-windows-amd64-cuda",
       "buildType": "cublas",
       "accelerators": ["cuda"],
-      "backends": ["localai-llamacpp", "localai-whisper"]
+      "backends": ["localai-llamacpp", "localai-whisper", "localai-vibevoice"]
     }
   ]
 }

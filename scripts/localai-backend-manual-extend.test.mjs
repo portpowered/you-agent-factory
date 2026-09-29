@@ -9,7 +9,7 @@ import { extendManualBackendRelease } from "./localai-backend-manual-extend.mjs"
 import { artifactArchiveName, loadConfig, minimumPublishedArchiveSizeBytes } from "./localai-backend-artifact-workflow.mjs";
 
 const config = loadConfig();
-assert.equal(config.packagingRevision, 4);
+assert.equal(config.packagingRevision, 5);
 
 const baselinePairs = [
 	["localai-llamacpp", "darwin-arm64"],

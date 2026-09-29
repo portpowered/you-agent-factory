@@ -197,6 +197,11 @@ Copy-Item -LiteralPath $gowhisperDll.FullName -Destination (Join-Path $packageRo
 $cudaBackendDll = Get-ChildItem -LiteralPath $whisperBuild -Recurse -File -Filter 'ggml-cuda.dll' | Where-Object Length -gt 0 | Select-Object -First 1
 if (-not $cudaBackendDll) { throw 'MSVC CUDA build did not produce ggml-cuda.dll' }
 Copy-Item -LiteralPath $cudaBackendDll.FullName -Destination $packageRoot -Force
+# With GGML_BACKEND_DL=ON, CPU is also loaded dynamically. Health succeeds
+# without this DLL, but LoadModel aborts when it asks for the CPU device.
+$cpuBackendDll = Get-ChildItem -LiteralPath $whisperBuild -Recurse -File -Filter 'ggml-cpu.dll' | Where-Object Length -gt 0 | Select-Object -First 1
+if (-not $cpuBackendDll) { throw 'MSVC CUDA build did not produce ggml-cpu.dll' }
+Copy-Item -LiteralPath $cpuBackendDll.FullName -Destination $packageRoot -Force
 
 # The pinned whisper Makefile builds the Go entrypoint with CGO_ENABLED=0
 # (purego dynamic loading, no cgo); keep that here so whisper.exe loads the
@@ -251,6 +256,7 @@ try {
 }
 if (-not (Test-Path -LiteralPath (Join-Path $packageRoot 'libgowhisper.dll'))) { throw 'whisper package is missing libgowhisper.dll' }
 if (-not (Test-Path -LiteralPath (Join-Path $packageRoot 'ggml-cuda.dll'))) { throw 'whisper package is missing ggml-cuda.dll' }
+if (-not (Test-Path -LiteralPath (Join-Path $packageRoot 'ggml-cpu.dll'))) { throw 'whisper package is missing ggml-cpu.dll' }
 
 # Stage recursively imported DLLs from the Release build tree first (ggml and
 # whisper shared imports produced by this build), then the CUDA toolkit and

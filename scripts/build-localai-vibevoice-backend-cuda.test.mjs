@@ -18,7 +18,7 @@ test("the Windows CUDA VibeVoice script owns the vibevoice/cuda/cublas identity"
 	assert.match(script, /Visual Studio 17 2022/);
 	assert.match(script, /-DGGML_CUDA=ON/);
 	assert.match(script, /-DVIBEVOICE_GGML_CUDA=ON/);
-	assert.match(script, /-DGGML_BACKEND_DL=ON/);
+	assert.match(script, /-DGGML_BACKEND_DL=OFF/);
 	assert.match(script, /-DBUILD_SHARED_LIBS=ON/);
 	assert.doesNotMatch(script, /-DBUILD_SHARED_LIBS=OFF/);
 	assert.match(script, /--target', 'govibevoicecpp'/);
@@ -40,14 +40,14 @@ test("the Windows CUDA VibeVoice script verifies pins, toolchain, and payload", 
 	assert.match(script, /'metadata'/);
 	assert.match(script, /localai-backend-startup-smoke\.go/);
 	assert.match(script, /vibevoice-cpp\.exe/);
-	assert.match(script, /Build the govibevoicecpp CMake MODULE with the CUDA backend enabled|govibevoicecpp CMake MODULE/);
+	assert.match(script, /Build shared ggml backends with CUDA enabled/);
 });
 
 test("the Windows CUDA VibeVoice script reuses shared CUDA guards without whisper/llama coupling", async () => {
 	const script = await readFile("scripts/build-localai-vibevoice-backend-cuda.ps1", "utf8");
 	assert.match(script, /build-localai-backend-cuda-paths\.ps1/);
 	assert.match(script, /Remove-GeneratedDirectory -Path \$packageRoot -Parent \$vibevoiceRoot -ExpectedName 'package'/);
-	assert.match(script, /GGML_BACKEND_DL requires BUILD_SHARED_LIBS/);
+	assert.match(script, /MODULE_LIBRARY, which CMake cannot link/);
 	assert.match(script, /Get-ChildItem -LiteralPath \$vibevoiceBuild -Recurse -File -Filter \$name/);
 	assert.match(script, /Find-CudaRuntimeFile -CudaRoot \$cudaRoot -Name \$name/);
 	assert.match(script, /Find-CudaRuntimeFile -CudaRoot \$cudaRoot -Name 'cudart64_13\.dll'/);

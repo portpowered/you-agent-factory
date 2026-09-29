@@ -144,10 +144,12 @@ case "$TARGET_ID:$BACKEND_ID" in
 		build_strategy="windows-llamacpp-cuda-msvc"
 		;;
 	windows-amd64-cuda:localai-whisper)
-		# The manual Windows CUDA Whisper archive builds under MSVC via
-		# scripts/build-localai-whisper-backend-cuda.ps1; this shell harness
-		# only reports the plan and never attempts a Unix build for it.
+		# The Windows CUDA Whisper archive builds under MSVC.
 		build_strategy="windows-whisper-cuda-msvc"
+		;;
+	windows-amd64-cuda:localai-vibevoice)
+		# The Windows CUDA VibeVoice archive builds under MSVC.
+		build_strategy="windows-vibevoice-cuda-msvc"
 		;;
 	windows-amd64:localai-whisper)
 		build_strategy="windows-whisper"
@@ -196,11 +198,11 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 			;;
 		esac
 	elif [[ "$TARGET_ID" == "windows-amd64-cuda" && "$BACKEND_ID" == "localai-whisper" ]]; then
-		# The future manual Windows CUDA Whisper archive reuses the CPU Whisper
-		# Windows loader shim. The native build itself runs under MSVC via
-		# scripts/build-localai-whisper-backend-cuda.ps1.
 		go_dynamic_loader="xsys-windows"
 		windows_library_name="libgowhisper.dll"
+	elif [[ "$TARGET_ID" == "windows-amd64-cuda" && "$BACKEND_ID" == "localai-vibevoice" ]]; then
+		go_dynamic_loader="xsys-windows"
+		windows_library_name="libgovibevoicecpp.dll"
 	fi
 
 # The pinned gRPC CMake project otherwise lets the Windows generator select
@@ -245,7 +247,7 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	plan_go_dynamic_loader=" go_dynamic_loader=$go_dynamic_loader"
 	plan_windows_library_name=""
 	plan_grpc_dependency_mode=" grpc_dependency_mode=$grpc_dependency_mode"
-	if [[ "$TARGET_ID" == "windows-amd64-cuda" && "$BACKEND_ID" == "localai-whisper" ]]; then
+	if [[ "$TARGET_ID" == "windows-amd64-cuda" && ( "$BACKEND_ID" == "localai-whisper" || "$BACKEND_ID" == "localai-vibevoice" ) ]]; then
 		plan_windows_library_name=" windows_library_name=$windows_library_name"
 	fi
 	if [[ "$TARGET_ID" == "windows-amd64" ]]; then

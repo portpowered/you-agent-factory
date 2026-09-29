@@ -45,6 +45,7 @@ test("the Windows CUDA Whisper script reuses shared CUDA guards without llama co
 	const script = await readFile("scripts/build-localai-whisper-backend-cuda.ps1", "utf8");
 	assert.match(script, /build-localai-backend-cuda-paths\.ps1/);
 	assert.match(script, /Remove-GeneratedDirectory -Path \$packageRoot -Parent \$whisperRoot -ExpectedName 'package'/);
+	assert.match(script, /whisper package is missing ggml-cpu\.dll/);
 	assert.match(script, /GGML_BACKEND_DL requires BUILD_SHARED_LIBS/);
 	assert.match(script, /Get-ChildItem -LiteralPath \$whisperBuild -Recurse -File -Filter \$name/);
 	assert.match(script, /Find-CudaRuntimeFile -CudaRoot \$cudaRoot -Name \$name/);
