@@ -73,3 +73,22 @@ The known-fixture public ASR invocation passed.
 At this point the requested three Windows modalities work. This handoff ends
 the present validation run; the items above are follow-up work, not claims of
 completed MCP stability.
+
+## Follow-up: native Windows LLM media invocations
+
+Three direct `you --json models invoke llm --offline --operation OMNI` calls
+used the installed Windows binary and the ready Gemma 4 E4B model/projector:
+
+| Inputs | Fixture and question | Observed output |
+| --- | --- | --- |
+| `audio` | Known spoken-word WAV; ask for its single word | `zero`, exit 0. Correct. |
+| `video` | Four-second `groundtruth-fixture.mp4`; ask for its two visual phases | Red background and white `PHASE 1`, followed by blue background and yellow `PHASE 2`, exit 0. Correct. This succeeds on the current Windows binary despite earlier recorded multi-frame failures. |
+| `audio` and `video` together | Same WAV and MP4; ask for the spoken word and ordered visual phases | `Spoken Word: Not available`; it repeated the correct phase labels/colors. Exit 0, but the audio answer is wrong. |
+
+The WAV is `tests/fixtures/localai/asr/localai-asr-known.wav`; the MP4 is
+`tests/integration/models/testdata/omni_media/groundtruth-fixture.mp4`. Model
+inspect reported `READY`, `INSTALLED`, and `verified-projector` before the
+calls. These are semantic results from the direct CLI path, not an MCP
+invocation. The combined result shows that separate audio and video success
+does not establish reliable joint interpretation; the reason the spoken word
+was missed is not yet proven.
