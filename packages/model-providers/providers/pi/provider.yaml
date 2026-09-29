@@ -33,13 +33,13 @@ maximumResponseFidelityCapabilities:
   stableItemIds: false
   providerReconnect: false
 discovery:
-  executableNames: [npx]
+  executableNames: [you, node]
   endpointKinds: [stdio]
   configurationKeys: []
   prerequisites:
     - kind: executable
-      name: npx
-      description: Install the Pi ACP launch executable before execution.
+      name: node
+      description: Install Node.js 20 or newer to run the bundled Pi ACP bridge.
     - kind: authentication
       name: account-authentication
       description: Authenticate the Pi ACP account before execution.

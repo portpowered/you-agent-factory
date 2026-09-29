@@ -196,8 +196,8 @@
     {
       "name": "pi",
       "transport": "stdio",
-      "executable": "npx",
-      "command": "npx pi-acp",
+      "executable": "you",
+      "command": "you pi-acp",
       "arguments": [
         "pi-acp"
       ],

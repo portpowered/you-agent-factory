@@ -4,6 +4,6 @@ implementation:
 launch:
   posture: package_runner
   transport: stdio
-  command: npx
+  command: you
   arguments:
     - pi-acp

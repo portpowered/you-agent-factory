@@ -531,6 +531,36 @@ func (daemon *daemon) promptWithWindow(
 	return response, err
 }
 
+func (daemon *daemon) resolveLaunchName(id providers.ID) (string, error) {
+	name := daemon.command.Name
+	if id == providers.ID("pi") && name == "you" && slices.Equal(daemon.command.Args, []string{"pi-acp"}) {
+		current, ok := daemon.locator.(platformprocess.CurrentExecutableLocator)
+		if !ok {
+			return "", dependencyFailure("ACP current executable locator is unavailable")
+		}
+		resolved, err := current.CurrentExecutable()
+		if err != nil {
+			return "", dependencyFailure(fmt.Sprintf("resolve current executable for ACP pi bridge: %v", err))
+		}
+		if !filepath.IsAbs(resolved) {
+			return "", dependencyFailure("ACP current executable locator returned a relative path")
+		}
+		return resolved, nil
+	}
+	if daemon.locator != nil {
+		if _, err := daemon.locator.LookPath(name); err != nil {
+			return "", providers.ExecuteFailure{
+				Kind:    providers.ExecuteFailureKindDependency,
+				Message: fmt.Sprintf("ACP executable %q is unavailable", name),
+				Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
+					"work-failure-type": "missing_executable",
+				}},
+			}
+		}
+	}
+	return name, nil
+}
+
 func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd string, environment []string, request providers.ExecuteRequest) error {
 	if daemon.connection != nil {
 		// A peer disconnect is authoritative even when cmd.Wait has not yet
@@ -550,18 +580,11 @@ func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd st
 	if daemon.newCommand == nil {
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP command is unavailable"}
 	}
-	if daemon.locator != nil {
-		if _, err := daemon.locator.LookPath(daemon.command.Name); err != nil {
-			return providers.ExecuteFailure{
-				Kind:    providers.ExecuteFailureKindDependency,
-				Message: fmt.Sprintf("ACP executable %q is unavailable", daemon.command.Name),
-				Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
-					"work-failure-type": "missing_executable",
-				}},
-			}
-		}
+	launchName, err := daemon.resolveLaunchName(id)
+	if err != nil {
+		return err
 	}
-	cmd := daemon.newCommand(daemon.command.Name, daemon.command.Args...)
+	cmd := daemon.newCommand(launchName, daemon.command.Args...)
 	if cmd == nil {
 		return dependencyFailure("ACP command factory returned nil")
 	}

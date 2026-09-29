@@ -32,7 +32,7 @@ func TestPackagedACPCatalogIsExactAndDetached(t *testing.T) {
 		{name: "mux-acp", transport: "stdio", command: "mux acp"},
 		{name: "openclaw-acp", transport: "stdio", command: "openclaw acp"},
 		{name: "opencode", transport: "stdio", command: "opencode acp", profile: "opencode-acp"},
-		{name: "pi", transport: "stdio", command: "npx pi-acp", profile: "pi-acp"},
+		{name: "pi", transport: "stdio", command: "you pi-acp", profile: "pi-acp"},
 		{name: "pool-acp", transport: "stdio", command: "pool acp"},
 		{name: "qoder-acp", transport: "stdio", command: "qodercli --acp"},
 		{name: "qwen-acp", transport: "stdio", command: "qwen --acp"},

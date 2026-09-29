@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -22,6 +23,67 @@ func TestACPArgumentRoundTripHelperProcess(t *testing.T) {
 		return
 	}
 	os.Exit(0)
+}
+
+type bridgeExecutableLocator struct {
+	current string
+	looked  []string
+}
+
+func (locator *bridgeExecutableLocator) LookPath(name string) (string, error) {
+	locator.looked = append(locator.looked, name)
+	if name == "you" {
+		return "", errors.New("you is absent from PATH")
+	}
+	return name, nil
+}
+
+func (locator *bridgeExecutableLocator) CurrentExecutable() (string, error) {
+	return locator.current, nil
+}
+
+func TestBundledPiBridgeUsesCurrentExecutableWithoutYouOnPATH(t *testing.T) {
+	current, err := filepath.Abs(os.Args[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	locator := &bridgeExecutableLocator{current: current}
+	var launched string
+	var arguments []string
+	commandFactory := func(name string, args ...string) *exec.Cmd {
+		launched, arguments = name, append([]string(nil), args...)
+		return exec.Command(current, "-test.run=^TestACPArgumentRoundTripHelperProcess$")
+	}
+	daemon := newDaemon(Command{Name: "you", Args: []string{"pi-acp"}}, commandFactory, locator)
+	t.Cleanup(func() { _ = daemon.close(context.Background()) })
+	_ = daemon.ensureStarted(context.Background(), providers.ID("pi"), t.TempDir(),
+		append(os.Environ(), argumentRoundTripHelperEnvironment+"=1"), providers.ExecuteRequest{})
+	if launched != current {
+		t.Fatalf("launch executable = %q, want %q", launched, current)
+	}
+	if len(arguments) != 1 || arguments[0] != "pi-acp" {
+		t.Fatalf("launch arguments = %q, want [pi-acp]", arguments)
+	}
+	if len(locator.looked) != 0 {
+		t.Fatalf("PATH lookups = %q, want none", locator.looked)
+	}
+}
+
+func TestOtherACPCommandStillUsesConfiguredExecutable(t *testing.T) {
+	locator := &bridgeExecutableLocator{current: filepath.Join(t.TempDir(), "you")}
+	var launched string
+	commandFactory := func(name string, args ...string) *exec.Cmd {
+		launched = name
+		return exec.Command(os.Args[0], "-test.run=^TestACPArgumentRoundTripHelperProcess$")
+	}
+	daemon := newDaemon(Command{Name: "other-agent", Args: []string{"acp"}}, commandFactory, locator)
+	t.Cleanup(func() { _ = daemon.close(context.Background()) })
+	_ = daemon.ensureStarted(context.Background(), providers.ID("other"), t.TempDir(),
+		append(os.Environ(), argumentRoundTripHelperEnvironment+"=1"), providers.ExecuteRequest{})
+	if launched != "other-agent" || len(locator.looked) != 1 || locator.looked[0] != "other-agent" {
+		t.Fatalf("other launch = %q, PATH lookups = %q", launched, locator.looked)
+	}
 }
 
 func TestExecuteUsesLosslessQuotedLaunch(t *testing.T) {

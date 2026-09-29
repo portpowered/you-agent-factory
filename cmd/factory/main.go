@@ -24,6 +24,9 @@ const (
 var runProcess = func() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+	if len(os.Args) >= 2 && os.Args[1] == "pi-acp" {
+		return runPiACP(ctx, os.Args[2:])
+	}
 
 	workingDirectory, err := os.Getwd()
 	if err == nil {

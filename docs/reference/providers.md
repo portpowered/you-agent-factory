@@ -197,11 +197,12 @@ a broad, data-backed stdio catalog. Representative entries are:
 | `gemini` | `gemini --acp` |
 | `kiro` | `kiro-cli-chat acp` |
 | `opencode` | `opencode acp` |
-| `pi` | `npx pi-acp` |
+| `pi` | `you pi-acp` |
 
 The canonical built-in IDs `cursor`, `gemini`, `kiro`, `opencode`, and `pi`
 have no aliases. Their runtime implementation profiles retain the `-acp`
 names (`cursor-acp`, `gemini-acp`, `kiro-acp`, `opencode-acp`, `pi-acp`).
+Pi runs the bridge bundled in `you`; install Node.js 20+ and Pi 0.81.0+.
 Catalog output, worker configuration, and dispatch records use these short IDs.
 
 For Cursor, confirm that the command is installed and that the account is

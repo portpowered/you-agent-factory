@@ -4408,13 +4408,14 @@
           "stdio"
         ],
         "executableNames": [
-          "npx"
+          "you",
+          "node"
         ],
         "prerequisites": [
           {
-            "description": "Install the Pi ACP launch executable before execution.",
+            "description": "Install Node.js 20 or newer to run the bundled Pi ACP bridge.",
             "kind": "executable",
-            "name": "npx"
+            "name": "node"
           },
           {
             "description": "Authenticate the Pi ACP account before execution.",

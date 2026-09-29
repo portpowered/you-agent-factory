@@ -1944,6 +1944,25 @@ the embedded manifest and nothing was published. Linux and Windows CUDA
 runners, full archive builds/startup smoke, manifest publication, and live GPU
 model invocations remain necessary.
 
+A read-only OpenCode MCP audit of the broader CLI subtree (session
+`094be105-7729-44ab-af73-2e6b9e0ac5b6`, request
+`5755a776-e362-47a4-97eb-8f94afe13de8`) timed out after 360 seconds
+without a primary result. The MCP error correctly appeared in structured
+content as `factory_session.subagent.timed_out` and reported one in-flight
+dispatch with recent reasoning activity. The audit made no observed edit;
+the CLI subtree failures still need classification.
+
+Codex MCP Pi bridge edits (sessions `97cd0fac-c947-41ad-b4cb-17be558bfab7`
+and `028818f8-f5aa-4c88-8998-e776e06c72fa`) vendored the MIT `pi-acp`
+bridge into the `you pi-acp` executable and made the Pi provider launch the
+current `you` binary by absolute path. The bridge now waits for Pi's
+`agent_settled` event and converts a final typed assistant error into an ACP
+RPC failure; a failed attempt followed by a successful retry completes normally.
+The bundled script rebuild reproduced the staged bundle. Node tests and
+typecheck, focused Go tests, all 24 lint targets, and the packaged docs smoke
+passed. A live Pi model invocation through the newly built binary remains to
+be checked; these tests establish the bridge behavior but not live Pi inference.
+
 After the run and CUDA edits, a full `make lint` rerun passed all targets
 except `deadcode`: removal of `run.Open` leaves one stale baseline line
 (`pkg/transports/cli/run/run.go: unreachable func: Open`). A focused

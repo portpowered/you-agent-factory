@@ -42,7 +42,7 @@ catalog is data-backed at
 
 | Identity | Launch command | Aliases |
 |----------|----------------|---------|
-| `pi` | `npx pi-acp` | |
+| `pi` | `you pi-acp` | |
 | `openclaw-acp` | `openclaw acp` | |
 | `gemini` | `gemini --acp` | |
 | `cursor` | `cursor-agent acp` | |
