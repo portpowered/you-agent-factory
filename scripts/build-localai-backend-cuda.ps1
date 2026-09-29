@@ -156,8 +156,8 @@ while ($queue.Count -gt 0) {
         $destination = Join-Path $packageRoot $name
         if (Test-Path -LiteralPath $destination) { continue }
         if ($name -match '^(api-ms-win-|ext-ms-win-)') { continue }
-        $candidate = Join-Path (Join-Path $cudaRoot 'bin') $name
-        if (-not (Test-Path -LiteralPath $candidate) -and $redist) {
+        $candidate = Find-CudaRuntimeFile -CudaRoot $cudaRoot -Name $name
+        if ((-not $candidate) -and $redist) {
             $redistributable = Get-ChildItem -LiteralPath (Join-Path $redist 'x64') -Recurse -File -Filter $name -ErrorAction SilentlyContinue | Select-Object -First 1
             $candidate = if ($redistributable) { $redistributable.FullName } else { $null }
         }

@@ -1,3 +1,16 @@
+function Find-CudaRuntimeFile {
+    param(
+        [Parameter(Mandatory)][string]$CudaRoot,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    foreach ($relative in @("bin\$Name", "bin\x64\$Name")) {
+        $candidate = Join-Path $CudaRoot $relative
+        if (Test-Path -LiteralPath $candidate) { return $candidate }
+    }
+    return $null
+}
+
 function Remove-GeneratedDirectory {
     param(
         [Parameter(Mandatory)][string]$Path,

@@ -49,3 +49,31 @@ try {
     }
 }
 Write-Output 'LOCALAI_WINDOWS_CUDA_PATH_GUARDS_OK'
+
+$lookupParent = [IO.Path]::GetTempPath()
+$lookupRoot = Join-Path $lookupParent ("localai-cuda-paths-" + [Guid]::NewGuid().ToString('N'))
+$bin = Join-Path $lookupRoot 'bin'
+$binX64 = Join-Path $bin 'x64'
+New-Item -ItemType Directory -Path $lookupRoot | Out-Null
+try {
+    New-Item -ItemType Directory -Path $binX64 -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $binX64 'cudart64_13.dll') -Value 'x64-fallback'
+
+    $found = Find-CudaRuntimeFile -CudaRoot $lookupRoot -Name 'cudart64_13.dll'
+    if ($found -cne (Join-Path $binX64 'cudart64_13.dll')) { throw "bin\\x64 fallback was not used: $found" }
+
+    Set-Content -LiteralPath (Join-Path $bin 'cudart64_13.dll') -Value 'bin-direct'
+    $preferred = Find-CudaRuntimeFile -CudaRoot $lookupRoot -Name 'cudart64_13.dll'
+    if ($preferred -cne (Join-Path $bin 'cudart64_13.dll')) { throw "bin was not preferred: $preferred" }
+
+    $missing = Find-CudaRuntimeFile -CudaRoot $lookupRoot -Name 'missing64_13.dll'
+    if ($null -ne $missing) { throw "missing DLL did not return null: $missing" }
+} finally {
+    foreach ($file in @((Join-Path $binX64 'cudart64_13.dll'), (Join-Path $bin 'cudart64_13.dll'))) {
+        if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force }
+    }
+    foreach ($directory in @($binX64, $bin, $lookupRoot)) {
+        if (Test-Path -LiteralPath $directory) { Remove-Item -LiteralPath $directory }
+    }
+}
+Write-Output 'LOCALAI_WINDOWS_CUDA_PATH_LOOKUP_OK'
