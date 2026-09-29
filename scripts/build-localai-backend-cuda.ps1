@@ -101,6 +101,98 @@ if ($needleCount -eq 1 -and $patchedCount -eq 0) {
     throw 'expected one pinned llama gRPC string conversion in the original or already-patched shape'
 }
 
+# The pinned llama grpc-server.cpp includes POSIX <getopt.h> and parses
+# --addr/-a with getopt_long, which MSVC does not provide
+# (grpc-server.cpp(56): fatal error C1083: 'getopt.h'). Patch the pinned
+# working tree idempotently instead of changing the pinned source commit
+# (verify-source above pins LOCALAI_ROOT/BACKEND_SOURCE_COMMIT): guard the
+# include to POSIX and keep the getopt_long path on Unix while using a small
+# argv loop on Windows with identical CLI semantics (--addr=<address>,
+# --addr value, -a value; anything else prints usage and returns 1).
+# Keyed by the marker LOCALAI_WINDOWS_CUDA_MSVC_GETOPT.
+$getoptMarker = 'LOCALAI_WINDOWS_CUDA_MSVC_GETOPT'
+$serverSourceText = Get-Content -LiteralPath $serverSource -Raw
+if ($serverSourceText.Contains($getoptMarker)) {
+    Write-Output 'llama gRPC getopt parse is already patched for this retry'
+} else {
+    $getoptInclude = '#include <getopt.h>'
+    if (-not $serverSourceText.Contains($getoptInclude)) { throw 'expected pinned llama gRPC getopt include in the original or already-patched shape' }
+    $getoptParse = @'
+  // Define long and short options
+  struct option long_options[] = {
+      {"addr", required_argument, nullptr, 'a'},
+      {nullptr, 0, nullptr, 0}
+  };
+
+  // Parse command-line arguments
+  int option;
+  int option_index = 0;
+  while ((option = getopt_long(argc, argv, "a:", long_options, &option_index)) != -1) {
+    switch (option) {
+      case 'a':
+        server_address = optarg;
+        break;
+      default:
+        std::cerr << "Usage: " << argv[0] << " [--addr=<address>] or [-a <address>]" << std::endl;
+        return 1;
+    }
+  }
+'@
+    if (-not $serverSourceText.Contains($getoptParse)) { throw 'expected pinned llama gRPC addr parse in the original or already-patched shape' }
+    $getoptIncludeReplacement = @'
+#if !defined(_WIN32)
+#include <getopt.h>
+#endif
+'@
+    $getoptParseReplacement = @'
+  // LOCALAI_WINDOWS_CUDA_MSVC_GETOPT: working-tree retry patch applied by
+  // scripts/build-localai-backend-cuda.ps1; the pinned llama source commit is unchanged
+  // (see BACKEND_SOURCE_COMMIT / verify-source). MSVC has no POSIX <getopt.h>, so the
+  // --addr/-a parse keeps the getopt_long path on POSIX and uses a small argv loop on
+  // Windows with identical CLI semantics (--addr=<address>, --addr value, -a value).
+#if defined(_WIN32)
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg.rfind("--addr=", 0) == 0) {
+      server_address = arg.substr(sizeof("--addr=") - 1);
+    } else if (arg == "--addr" || arg == "-a") {
+      if (i + 1 >= argc) {
+        std::cerr << "Usage: " << argv[0] << " [--addr=<address>] or [-a <address>]" << std::endl;
+        return 1;
+      }
+      server_address = argv[++i];
+    } else {
+      std::cerr << "Usage: " << argv[0] << " [--addr=<address>] or [-a <address>]" << std::endl;
+      return 1;
+    }
+  }
+#else
+  // Define long and short options
+  struct option long_options[] = {
+      {"addr", required_argument, nullptr, 'a'},
+      {nullptr, 0, nullptr, 0}
+  };
+
+  // Parse command-line arguments
+  int option;
+  int option_index = 0;
+  while ((option = getopt_long(argc, argv, "a:", long_options, &option_index)) != -1) {
+    switch (option) {
+      case 'a':
+        server_address = optarg;
+        break;
+      default:
+        std::cerr << "Usage: " << argv[0] << " [--addr=<address>] or [-a <address>]" << std::endl;
+        return 1;
+    }
+  }
+#endif
+'@
+    $serverSourceText = $serverSourceText.Replace($getoptInclude, $getoptIncludeReplacement.TrimEnd() + [Environment]::NewLine)
+    $serverSourceText = $serverSourceText.Replace($getoptParse, $getoptParseReplacement.TrimEnd() + [Environment]::NewLine)
+    Set-Content -LiteralPath $serverSource -Value $serverSourceText -NoNewline
+}
+
 New-Item -ItemType Directory -Path $grpcSource -Force | Out-Null
 Invoke-Checked git @('-C', $grpcSource, 'init')
 $grpcOriginUrl = 'https://github.com/grpc/grpc.git'
@@ -140,12 +232,46 @@ Assert-Tool $protoc @('--version') "libprotoc $($config.toolchain.protobufVersio
 # Protobuf_INCLUDE_DIRS:  | ..."), and hw_grpc_proto itself never links
 # protobuf::libprotobuf (only the final exe does), so its backend.pb.cc
 # compile has no protobuf include path even though port_def.inc exists under
-# the pinned install. Export the pinned include dir through the MSVC INCLUDE
-# environment (set by vcvars64 above) so cl resolves
-# google/protobuf/port_def.inc without touching pinned LocalAI sources.
+# the pinned install. Exporting $env:INCLUDE does NOT reach the
+# CMake-generated MSBuild hw_grpc_proto target (observed C1083 for
+# google/protobuf/port_def.inc on hw_grpc_proto.vcxproj despite the export),
+# so patch the pinned grpc-server CMakeLists idempotently instead: link the
+# already-found imported targets into hw_grpc_proto so their
+# INTERFACE_INCLUDE_DIRECTORIES (<install>/include) land in the MSBuild
+# AdditionalIncludeDirectories. The pinned source commits are unchanged
+# (verify-source above pins LOCALAI_ROOT/BACKEND_SOURCE_COMMIT); this is a
+# working-tree retry patch like the grpc-server.cpp string fix below, keyed
+# by the marker LOCALAI_WINDOWS_CUDA_HW_GRPC_PROTO_INCLUDES.
 $grpcInclude = Join-Path $grpcInstall 'include'
 if (-not (Test-Path -LiteralPath (Join-Path $grpcInclude 'google\protobuf\port_def.inc'))) { throw 'pinned gRPC install is missing google/protobuf/port_def.inc' }
 if ($env:INCLUDE) { $env:INCLUDE = "$grpcInclude;$env:INCLUDE" } else { $env:INCLUDE = $grpcInclude }
+$grpcServerCmakeLists = Join-Path $llamaSource 'tools\grpc-server\CMakeLists.txt'
+$protoIncludeMarker = 'LOCALAI_WINDOWS_CUDA_HW_GRPC_PROTO_INCLUDES'
+$grpcServerCmake = Get-Content -LiteralPath $grpcServerCmakeLists -Raw
+if ($grpcServerCmake.Contains($protoIncludeMarker)) {
+    Write-Output 'llama gRPC CMake hw_grpc_proto includes are already patched for this retry'
+} else {
+    if (-not $grpcServerCmake.Contains('add_library(hw_grpc_proto STATIC')) { throw 'expected pinned llama gRPC CMake hw_grpc_proto library in the original or already-patched shape' }
+    $protoIncludeClose = '${hw_proto_hdrs} )'
+    if (-not $grpcServerCmake.Contains($protoIncludeClose)) { throw 'expected pinned llama gRPC CMake hw_grpc_proto sources in the original or already-patched shape' }
+    $protoIncludePatch = @'
+
+# LOCALAI_WINDOWS_CUDA_HW_GRPC_PROTO_INCLUDES: working-tree retry patch applied by
+# scripts/build-localai-backend-cuda.ps1; the pinned llama source commit is unchanged
+# (see BACKEND_SOURCE_COMMIT / verify-source). Links the already-found imported targets
+# into hw_grpc_proto so the pinned <install>/include (google/protobuf/port_def.inc)
+# reaches the MSVC compile via INTERFACE_INCLUDE_DIRECTORIES. Kept PUBLIC so the
+# usage requirements also propagate to the grpc-server executable link.
+if(TARGET protobuf::libprotobuf)
+  target_link_libraries(hw_grpc_proto PUBLIC protobuf::libprotobuf)
+endif()
+if(TARGET gRPC::grpc++)
+  target_link_libraries(hw_grpc_proto PUBLIC gRPC::grpc++)
+endif()
+'@
+    $grpcServerCmake = $grpcServerCmake.Replace($protoIncludeClose, $protoIncludeClose + [Environment]::NewLine + $protoIncludePatch)
+    Set-Content -LiteralPath $grpcServerCmakeLists -Value $grpcServerCmake -NoNewline
+}
 $llamaBuild = Join-Path $llamaRoot 'llama-cpp-cuda-build'
 $cmakeArgs = @('-S', $llamaSource, '-B', $llamaBuild, '-G', 'Visual Studio 17 2022', '-A', 'x64', '-T', "cuda=$cudaRoot",
     '-DCMAKE_CXX_STANDARD=17', '-DBUILD_SHARED_LIBS=ON', '-DLLAMA_CURL=OFF', '-DLLAMA_OPENSSL=OFF',
@@ -198,6 +324,15 @@ while ($queue.Count -gt 0) {
             throw "unresolved Windows runtime dependency $name imported by $file"
         }
     }
+}
+# nvcc links -cudart static, so no staged PE imports cudart64_13.dll and the
+# import scan above never stages it. Copy the pinned runtime explicitly when
+# the scan did not already pull it; the generic cudart check below still
+# validates the payload contract.
+if (-not (Get-ChildItem -LiteralPath $packageRoot -File | Where-Object Name -Match '^cudart64_.*\.dll$')) {
+    $pinnedCudartSource = Find-CudaRuntimeFile -CudaRoot $cudaRoot -Name 'cudart64_13.dll'
+    if (-not $pinnedCudartSource) { throw 'pinned CUDA runtime cudart64_13.dll was not found under the CUDA toolkit' }
+    Copy-Item -LiteralPath $pinnedCudartSource -Destination (Join-Path $packageRoot 'cudart64_13.dll')
 }
 if (-not (Get-ChildItem -LiteralPath $packageRoot -File | Where-Object Name -Match '^cudart64_.*\.dll$')) { throw 'CUDA runtime DLL was not staged' }
 Invoke-Checked go @('run', (Join-Path $repositoryRoot 'scripts\localai-backend-startup-smoke.go'), '--binary', (Join-Path $packageRoot 'llama-cpp-cpu-all.exe'), '--workdir', $packageRoot)

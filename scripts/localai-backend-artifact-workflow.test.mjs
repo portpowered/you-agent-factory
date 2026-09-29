@@ -452,6 +452,10 @@ test("the workflow uses immutable actions, package inputs, and the pinned tag gu
 	assert.match(cudaScript, /Remove-GeneratedDirectory -Path \$packageRoot -Parent \$llamaRoot -ExpectedName 'package'/);
 	assert.match(cudaScript, /--target', 'grpc-server', 'ggml-cuda'/);
 	assert.match(cudaScript, /dumpbin \/dependents/);
+	assert.match(cudaScript, /cudart64_13\.dll/);
+	assert.match(cudaScript, /Find-CudaRuntimeFile -CudaRoot \$cudaRoot -Name 'cudart64_13\.dll'/);
+	assert.match(cudaScript, /pinned CUDA runtime cudart64_13\.dll was not found/);
+	assert.match(cudaScript, /CUDA runtime DLL was not staged/);
 });
 
 test("the Windows CUDA gRPC checkout avoids recursive bloaty submodules", async () => {
@@ -482,19 +486,48 @@ test("the Windows CUDA retry reuses the retained gRPC checkout and patch", async
 	assert.match(cudaScript, /gRPC checkout does not match the pinned commit/);
 });
 
-test("the Windows CUDA build exposes the pinned protobuf headers to the MSVC compiler", async () => {
+test("the Windows CUDA build patches hw_grpc_proto with the pinned protobuf/gRPC imported targets", async () => {
 	const cudaScript = await readFile("scripts/build-localai-backend-cuda.ps1", "utf8");
-	// Pinned llama grpc-server CMakeLists propagates headers via the empty
-	// module-mode ${Protobuf_INCLUDE_DIRS} and never links hw_grpc_proto to
-	// protobuf::libprotobuf, so the script must export the pinned include dir
-	// through INCLUDE for cl to resolve google/protobuf/port_def.inc.
+	// Exporting $env:INCLUDE never reaches the CMake-generated MSBuild
+	// hw_grpc_proto target (C1083 for google/protobuf/port_def.inc on
+	// hw_grpc_proto.vcxproj), so the script must patch the pinned llama
+	// grpc-server CMakeLists idempotently and link the imported targets into
+	// hw_grpc_proto, whose INTERFACE_INCLUDE_DIRECTORIES carry the pinned
+	// <install>/include. The pinned source commits stay unchanged.
+	assert.match(cudaScript, /tools\\grpc-server\\CMakeLists\.txt/);
+	assert.match(cudaScript, /LOCALAI_WINDOWS_CUDA_HW_GRPC_PROTO_INCLUDES/);
+	assert.match(cudaScript, /add_library\(hw_grpc_proto STATIC/);
+	assert.match(cudaScript, /if\(TARGET protobuf::libprotobuf\)/);
+	assert.match(cudaScript, /target_link_libraries\(hw_grpc_proto PUBLIC protobuf::libprotobuf\)/);
+	assert.match(cudaScript, /if\(TARGET gRPC::grpc\+\+\)/);
+	assert.match(cudaScript, /target_link_libraries\(hw_grpc_proto PUBLIC gRPC::grpc\+\+\)/);
+	assert.match(cudaScript, /hw_grpc_proto includes are already patched for this retry/);
+	assert.match(cudaScript, /expected pinned llama gRPC CMake hw_grpc_proto/);
+	// The $env:INCLUDE export remains only as a harmless fallback, and the
+	// pinned protobuf CMake config still installs at <install>\cmake.
 	assert.match(cudaScript, /Join-Path \$grpcInstall 'include'/);
 	assert.match(cudaScript, /google\\protobuf\\port_def\.inc/);
 	assert.match(cudaScript, /\$env:INCLUDE = "\$grpcInclude;\$env:INCLUDE"/);
-	// The pinned protobuf CMake config installs at <install>\cmake, not
-	// <install>\lib\cmake\protobuf.
 	assert.match(cudaScript, /-DProtobuf_DIR=\$\(Join-Path \$grpcInstall 'cmake'\)/);
 	assert.doesNotMatch(cudaScript, /lib\\cmake\\protobuf/);
+});
+
+test("the Windows CUDA build replaces the POSIX getopt parse with a guarded argv loop", async () => {
+	const cudaScript = await readFile("scripts/build-localai-backend-cuda.ps1", "utf8");
+	// MSVC has no <getopt.h> (grpc-server.cpp(56): C1083), so the script must
+	// patch the pinned working tree idempotently: guard the include to POSIX,
+	// keep getopt_long on Unix, and parse --addr=<address>, --addr value, and
+	// -a value with a small argv loop on Windows. The pinned source commits
+	// stay unchanged.
+	assert.match(cudaScript, /LOCALAI_WINDOWS_CUDA_MSVC_GETOPT/);
+	assert.match(cudaScript, /#include <getopt\.h>/);
+	assert.match(cudaScript, /#if !defined\(_WIN32\)/);
+	assert.match(cudaScript, /getopt_long\(argc, argv, "a:", long_options, &option_index\)/);
+	assert.match(cudaScript, /#if defined\(_WIN32\)/);
+	assert.match(cudaScript, /arg\.rfind\("--addr=", 0\)/);
+	assert.match(cudaScript, /arg == "--addr" \|\| arg == "-a"/);
+	assert.match(cudaScript, /getopt parse is already patched for this retry/);
+	assert.match(cudaScript, /expected pinned llama gRPC (getopt include|addr parse) in the original or already-patched shape/);
 });
 
 test("the Windows build plan resolves Git from the runner path bridge", async (t) => {
