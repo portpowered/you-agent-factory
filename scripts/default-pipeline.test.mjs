@@ -50,6 +50,7 @@ async function createHarness(t, failMatch = "") {
 
 	const harnessEnv = {
 		...env,
+		...(platform === "win32" ? { OS: "Windows_NT" } : {}),
 		FAKE_FAIL_MATCH: failMatch,
 		FAKE_LOG: logPath,
 		FAKE_TOOL_SCRIPT: toolScript,
