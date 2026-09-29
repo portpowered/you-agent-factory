@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
 
@@ -248,6 +250,10 @@ func (client grpcProtocolClient) Predict(
 	}
 	options, err := predictOptions(request)
 	if err != nil {
+		var failure *models.InvocationFailure
+		if errors.As(err, &failure) {
+			return PredictResponse{}, err
+		}
 		return PredictResponse{}, protocolFailure("LocalAI Predict request could not be encoded", err)
 	}
 	payload, err := proto.Marshal(options)
@@ -383,7 +389,7 @@ func embeddingOptions(request models.EmbeddingBackendRequest) (*PredictOptions, 
 	for name, value := range request.Parameters {
 		parameters = append(parameters, models.OperationParameter{Name: name, Value: value})
 	}
-	options, err := predictOptions(PredictRequest{Prompt: request.Text, Parameters: parameters})
+	options, err := buildPredictOptions(PredictRequest{Prompt: request.Text, Parameters: parameters}, false)
 	if err != nil {
 		return nil, err
 	}
@@ -395,6 +401,15 @@ func embeddingOptions(request models.EmbeddingBackendRequest) (*PredictOptions, 
 }
 
 func predictOptions(request PredictRequest) (*PredictOptions, error) {
+	return buildPredictOptions(request, true)
+}
+
+// buildPredictOptions maps the private OMNI protocol request to pinned
+// PredictOptions. Tokens stays zero (the pinned backend's unbounded default)
+// unless an explicit canonical max_tokens parameter is present. Embedding
+// keeps the legacy behavior with mapping disabled so its wire shape is
+// unchanged; only the OMNI path promotes max_tokens to Tokens.
+func buildPredictOptions(request PredictRequest, mapMaxTokens bool) (*PredictOptions, error) {
 	options := &PredictOptions{Prompt: request.Prompt}
 	if strings.TrimSpace(request.Prompt) != "" {
 		// The pinned llama backend interprets zero Tokens as n_predict=-1.
@@ -416,19 +431,113 @@ func predictOptions(request PredictRequest) (*PredictOptions, error) {
 	if len(request.Parameters) == 0 {
 		return options, nil
 	}
-	options.Metadata = make(map[string]string, len(request.Parameters))
 	for _, parameter := range request.Parameters {
 		name := strings.TrimSpace(parameter.Name)
 		if name == "" {
+			continue
+		}
+		if mapMaxTokens && name == omniMaxTokensParameter {
+			tokens, err := decodeOmniMaxTokens(parameter.Value)
+			if err != nil {
+				return nil, err
+			}
+			options.Tokens = tokens
 			continue
 		}
 		value, err := json.Marshal(parameter.Value)
 		if err != nil {
 			return nil, fmt.Errorf("parameter %q: %w", name, err)
 		}
+		if options.Metadata == nil {
+			options.Metadata = make(map[string]string, len(request.Parameters))
+		}
 		options.Metadata[name] = string(value)
 	}
 	return options, nil
+}
+
+const omniMaxTokensParameter = "max_tokens"
+
+// decodeOmniMaxTokens validates one canonical OMNI max_tokens value: a
+// positive integer that fits in the pinned int32 Tokens field.
+func decodeOmniMaxTokens(value any) (int32, error) {
+	const maxInt32 = int64(math.MaxInt32)
+	var candidate int64
+	switch raw := value.(type) {
+	case int:
+		candidate = int64(raw)
+	case int8:
+		candidate = int64(raw)
+	case int16:
+		candidate = int64(raw)
+	case int32:
+		candidate = int64(raw)
+	case int64:
+		candidate = raw
+	case uint:
+		candidate = int64(raw)
+		if raw > uint(math.MaxInt32) {
+			return 0, omniInvalidMaxTokensFailure()
+		}
+	case uint8:
+		candidate = int64(raw)
+	case uint16:
+		candidate = int64(raw)
+	case uint32:
+		candidate = int64(raw)
+		if raw > uint32(math.MaxInt32) {
+			return 0, omniInvalidMaxTokensFailure()
+		}
+	case uint64:
+		if raw < 1 || raw > uint64(math.MaxInt32) {
+			return 0, omniInvalidMaxTokensFailure()
+		}
+		candidate = int64(raw)
+	case float32:
+		converted := float64(raw)
+		if math.IsNaN(converted) || math.IsInf(converted, 0) ||
+			converted != math.Trunc(converted) ||
+			converted < 1 || converted > float64(math.MaxInt32) {
+			return 0, omniInvalidMaxTokensFailure()
+		}
+		candidate = int64(converted)
+	case float64:
+		if math.IsNaN(raw) || math.IsInf(raw, 0) ||
+			raw != math.Trunc(raw) ||
+			raw < 1 || raw > float64(math.MaxInt32) {
+			return 0, omniInvalidMaxTokensFailure()
+		}
+		candidate = int64(raw)
+	case json.Number:
+		if parsed, err := raw.Int64(); err == nil {
+			candidate = parsed
+			break
+		}
+		parsed, err := raw.Float64()
+		if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) ||
+			parsed != math.Trunc(parsed) {
+			return 0, omniInvalidMaxTokensFailure()
+		}
+		if parsed < 1 || parsed > float64(math.MaxInt32) {
+			return 0, omniInvalidMaxTokensFailure()
+		}
+		candidate = int64(parsed)
+	default:
+		return 0, omniInvalidMaxTokensFailure()
+	}
+	if candidate < 1 || candidate > maxInt32 {
+		return 0, omniInvalidMaxTokensFailure()
+	}
+	return int32(candidate), nil
+}
+
+func omniInvalidMaxTokensFailure() error {
+	return &models.InvocationFailure{
+		Class:     models.InvocationFailureClassInvalidParameter,
+		Operation: models.OperationOMNI,
+		Parameter: omniMaxTokensParameter,
+		Message:   `OMNI parameter "max_tokens" must be a positive integer up to 2147483647`,
+	}
 }
 
 // predictInputValue maps the public byte-preserving content carrier to the
