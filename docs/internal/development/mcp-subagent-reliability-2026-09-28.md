@@ -1970,6 +1970,24 @@ bundle over ACP stdio. All three Node tests and typecheck pass; the rebuilt
 `you pi-acp` binary returned a valid ACP initialize response headlessly.
 Live Pi inference and end-to-end failure classification remain unverified.
 
+Headless live checks with commit `464a786236` then established the boundary.
+The configured Pi model (`llama-cpp/qwen-3.8-uncensored`) currently returns
+`Connection error` even in direct `pi -p`. Raw Pi RPC emitted final assistant
+`message_end.stopReason=error` and `agent_settled`. The rebuilt `you pi-acp`
+returned ACP JSON-RPC error `-32603` with `{provider:pi,outcome:error}`. A
+fresh `you server mcp` from the same binary returned `you.subagent`
+`isError=true` and `factory_session.subagent.provider_unknown_failure`, with
+`INVOCATION_RUNTIME_FAILURE` and a failed Work state. This fixes false
+success in the new binary, but the final MCP message still loses Pi's
+`Connection error` detail and labels it unknown; that diagnostic propagation
+remains work. An in-app MCP call during this check returned only Pi retry
+progress as `COMPLETED`, consistent with a previously started old connection;
+new connections use the updated binary path. The fresh server advertised all
+11 MCP tools, including `you.subagent`.
+The Codex MCP configuration for new connections points at
+`C:\Users\andre\bin\you-464a786236.exe` (SHA-256
+`F643CE36D7CFC4D19447289751E9F9A6937EF443179C1868C93E2BBBCB06BA53`).
+
 After the run and CUDA edits, a full `make lint` rerun passed all targets
 except `deadcode`: removal of `run.Open` leaves one stale baseline line
 (`pkg/transports/cli/run/run.go: unreachable func: Open`). A focused
