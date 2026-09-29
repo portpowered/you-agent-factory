@@ -674,7 +674,6 @@ func provideRunSelectionFactory(
 	invocation factorysessionwire.InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 	directJavaScript runcli.DirectJavaScriptRunOperation,
-	buildApplication initializer.LifecycleRunnerBuilder,
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigDiagnosticsLoader,
 	buildRuntimeRequest runcli.SessionStartRequestFactory,
@@ -682,7 +681,7 @@ func provideRunSelectionFactory(
 	visualizations factoryvisualization.RuntimeSinkOwner,
 ) (runcli.SelectionFactory, error) {
 	return runcli.NewSelectionFactory(
-		buildRunner, invocation, presentation, directJavaScript, buildApplication,
+		buildRunner, invocation, presentation, directJavaScript,
 		prepareWorkTarget, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
 	)
 }

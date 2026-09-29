@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
@@ -28,6 +29,7 @@ type directJavaScriptRun struct {
 	generateSessionID factorysessions.SessionIDGenerator
 	host              DirectJavaScriptHost
 	presentations     factorysessions.OpeningPresentationOwner
+	buildApplication  initializer.LifecycleRunnerBuilder
 }
 
 func NewDirectJavaScriptRunOperation(
@@ -35,11 +37,12 @@ func NewDirectJavaScriptRunOperation(
 	generateSessionID factorysessions.SessionIDGenerator,
 	host DirectJavaScriptHost,
 	presentations factorysessions.OpeningPresentationOwner,
+	buildApplication initializer.LifecycleRunnerBuilder,
 ) (DirectJavaScriptRunOperation, error) {
-	if sessions == nil || generateSessionID == nil || host == nil || presentations == nil {
-		return nil, fmt.Errorf("direct JavaScript run requires Factory Sessions, identity, HTTP host, and presentation")
+	if sessions == nil || generateSessionID == nil || host == nil || presentations == nil || buildApplication == nil {
+		return nil, fmt.Errorf("direct JavaScript run requires Factory Sessions, identity, HTTP host, presentation, and lifecycle")
 	}
-	return &directJavaScriptRun{sessions: sessions, generateSessionID: generateSessionID, host: host, presentations: presentations}, nil
+	return &directJavaScriptRun{sessions: sessions, generateSessionID: generateSessionID, host: host, presentations: presentations, buildApplication: buildApplication}, nil
 }
 
 func (*directJavaScriptRun) Supports(sourcePath string) bool {
@@ -51,28 +54,32 @@ func (*directJavaScriptRun) Supports(sourcePath string) bool {
 	}
 }
 
-func (operation *directJavaScriptRun) Open(
+func (operation *directJavaScriptRun) Run(
 	ctx context.Context,
 	request factorysessions.DirectJavaScriptRunRequest,
 	cancellation initializer.InvocationCancellation,
-) (factorysessions.DirectJavaScriptApplication, error) {
+	discloseStartup func(),
+) error {
 	if operation == nil || operation.sessions == nil {
-		return factorysessions.DirectJavaScriptApplication{}, fmt.Errorf("Factory Sessions service is required")
+		return fmt.Errorf("Factory Sessions service is required")
+	}
+	if ctx == nil {
+		return fmt.Errorf("direct JavaScript run context is required")
 	}
 	scope, ok := operation.presentations.DirectJavaScript(request.ScopeID)
 	if !ok {
-		return factorysessions.DirectJavaScriptApplication{}, fmt.Errorf("direct JavaScript presentation scope %q is unavailable", request.ScopeID)
+		return fmt.Errorf("direct JavaScript presentation scope %q is unavailable", request.ScopeID)
 	}
 	sourcePath, err := filepath.Abs(strings.TrimSpace(request.SourcePath))
 	if err != nil {
-		return factorysessions.DirectJavaScriptApplication{}, fmt.Errorf("resolve workflow source: %w", err)
+		return fmt.Errorf("resolve workflow source: %w", err)
 	}
 	if !operation.Supports(sourcePath) {
-		return factorysessions.DirectJavaScriptApplication{}, fmt.Errorf("workflow source %q is not a supported JavaScript file", request.SourcePath)
+		return fmt.Errorf("workflow source %q is not a supported JavaScript file", request.SourcePath)
 	}
 	requestID := strings.TrimSpace(operation.generateSessionID())
 	if requestID == "" {
-		return factorysessions.DirectJavaScriptApplication{}, fmt.Errorf("Factory Session ID generator returned an empty identity")
+		return fmt.Errorf("Factory Session ID generator returned an empty identity")
 	}
 	childMode := factorysessions.ChildExecutorModeLive
 	if request.MockWorkersEnabled {
@@ -110,21 +117,35 @@ func (operation *directJavaScriptRun) Open(
 		}
 		transport, err = operation.host(operation.sessions, *request.Host, cancellation, observer)
 		if err != nil {
-			return factorysessions.DirectJavaScriptApplication{}, err
+			return err
 		}
 	}
 	plan, err := sessionexecution.DirectJavaScriptLifecyclePlan(transport, completion)
 	if err != nil {
-		return factorysessions.DirectJavaScriptApplication{}, errors.Join(err, stopDirectJavaScriptTransport(ctx, transport))
+		return errors.Join(err, stopDirectJavaScriptTransport(ctx, transport))
 	}
-	return factorysessions.DirectJavaScriptApplication{Plan: plan}, nil
+	return operation.runLifecycle(ctx, plan, transport, discloseStartup)
+}
+
+func (operation *directJavaScriptRun) runLifecycle(ctx context.Context, plan lifecycle.Plan, transport lifecycle.Component, discloseStartup func()) error {
+	runner, err := operation.buildApplication(ctx, plan, runtimeartifact.Diagnostics{}, nil)
+	if err != nil {
+		return errors.Join(err, stopDirectJavaScriptTransport(ctx, transport))
+	}
+	if runner == nil {
+		return errors.Join(fmt.Errorf("direct JavaScript application builder returned nil runner"), stopDirectJavaScriptTransport(ctx, transport))
+	}
+	if discloseStartup != nil {
+		discloseStartup()
+	}
+	return runner.Run(ctx)
 }
 
 func stopDirectJavaScriptTransport(ctx context.Context, transport lifecycle.Component) error {
 	if transport == nil {
 		return nil
 	}
-	return transport.Stop(ctx)
+	return transport.Stop(context.WithoutCancel(ctx))
 }
 
 var _ DirectJavaScriptRunOperation = (*directJavaScriptRun)(nil)

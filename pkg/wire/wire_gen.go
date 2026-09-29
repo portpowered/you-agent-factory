@@ -567,12 +567,12 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	directJavaScriptRunOperation, err := run.NewDirectJavaScriptRunOperation(factorysessionsService, v7, directJavaScriptHost, openingPresentationOwner)
+	managedRunnerFactory := provideManagedRunnerFactory()
+	lifecycleRunnerBuilder, err := application.NewLifecycleRunnerBuilder(managedRunnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	managedRunnerFactory := provideManagedRunnerFactory()
-	lifecycleRunnerBuilder, err := application.NewLifecycleRunnerBuilder(managedRunnerFactory)
+	directJavaScriptRunOperation, err := run.NewDirectJavaScriptRunOperation(factorysessionsService, v7, directJavaScriptHost, openingPresentationOwner, lifecycleRunnerBuilder)
 	if err != nil {
 		return nil, err
 	}
@@ -582,7 +582,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	sessionStartRequestFactory := provideSessionStartRequestFactory()
-	selectionFactory, err := provideRunSelectionFactory(runtimeRunnerBuilder, v66, v81, directJavaScriptRunOperation, lifecycleRunnerBuilder, singleWorkTargetPreparation, mockWorkersConfigDiagnosticsLoader, sessionStartRequestFactory, openingPresentationOwner, v79)
+	selectionFactory, err := provideRunSelectionFactory(runtimeRunnerBuilder, v66, v81, directJavaScriptRunOperation, singleWorkTargetPreparation, mockWorkersConfigDiagnosticsLoader, sessionStartRequestFactory, openingPresentationOwner, v79)
 	if err != nil {
 		return nil, err
 	}

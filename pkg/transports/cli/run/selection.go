@@ -59,16 +59,13 @@ type InvocationOperation interface {
 // consumed by CLI selection.
 type DirectJavaScriptRunOperation interface {
 	Supports(string) bool
-	Open(
+	Run(
 		context.Context,
 		factorysessions.DirectJavaScriptRunRequest,
 		initializer.InvocationCancellation,
-	) (factorysessions.DirectJavaScriptApplication, error)
+		func(),
+	) error
 }
-
-// SessionInvoker retains the historical CLI name while using the Factory
-// Sessions-owned one-shot invocation capability directly.
-type SessionInvoker = factorysessions.InvocationService
 
 // SelectionFactory binds one parsed CLI RunConfig to the run operations
 // already selected by Wire.
@@ -90,7 +87,6 @@ func NewSelectionFactory(
 	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
 	directJavaScript DirectJavaScriptRunOperation,
-	buildApplication initializer.LifecycleRunnerBuilder,
 	prepareWorkTarget work.SingleWorkTargetPreparation,
 	loadMockWorkers workers.MockWorkersConfigDiagnosticsLoader,
 	buildRuntimeRequest SessionStartRequestFactory,
@@ -98,15 +94,15 @@ func NewSelectionFactory(
 	visualizations factoryvisualization.RuntimeSinkOwner,
 ) (SelectionFactory, error) {
 	if buildRunner == nil || invocation == nil || presentation == nil ||
-		directJavaScript == nil || buildApplication == nil {
+		directJavaScript == nil {
 		return nil, fmt.Errorf("run transport operations are required")
 	}
 	return func(cfg RunConfig) processcontract.RunSelection {
 		return &selection{
 			cfg: cfg, buildRunner: buildRunner, invocation: invocation,
 			presentation: presentation, directJavaScript: directJavaScript,
-			buildApplication: buildApplication, prepareWorkTarget: prepareWorkTarget,
-			loadMockWorkers: loadMockWorkers, buildRuntimeRequest: buildRuntimeRequest,
+			prepareWorkTarget: prepareWorkTarget,
+			loadMockWorkers:   loadMockWorkers, buildRuntimeRequest: buildRuntimeRequest,
 			presentations: presentations, visualizations: visualizations,
 		}
 	}, nil
@@ -118,7 +114,6 @@ type selection struct {
 	invocation          InvocationOperation
 	presentation        factoryvisualization.ResponsePresentation
 	directJavaScript    DirectJavaScriptRunOperation
-	buildApplication    initializer.LifecycleRunnerBuilder
 	prepareWorkTarget   work.SingleWorkTargetPreparation
 	loadMockWorkers     workers.MockWorkersConfigDiagnosticsLoader
 	buildRuntimeRequest SessionStartRequestFactory
@@ -181,21 +176,11 @@ func (s *selection) runDirectJavaScript(
 		request.ScopeID = scopeID
 		defer s.presentations.Close(scopeID)
 	}
-	opened, err := s.directJavaScript.Open(ctx, request, cfg.Cancellation)
-	if err != nil {
-		return err
-	}
-	runner, err := s.buildApplication(ctx, opened.Plan, runtimeartifact.Diagnostics{}, nil)
-	if err != nil {
-		return err
-	}
-	if runner == nil {
-		return fmt.Errorf("direct JavaScript application builder returned nil runner")
-	}
+	var discloseStartup func()
 	if !intent.APIEnabled || s.presentations == nil {
-		startupDisclosure.commit()
+		discloseStartup = startupDisclosure.commit
 	}
-	return runner.Run(ctx)
+	return s.directJavaScript.Run(ctx, request, cfg.Cancellation, discloseStartup)
 }
 
 func applyRunIntent(cfg RunConfig, intent processcontract.RunIntent) (RunConfig, error) {
