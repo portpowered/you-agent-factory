@@ -21,16 +21,18 @@ import { patchWindowsGoLoader } from "./localai-backend-windows-patch.mjs";
 
 const config = loadConfig();
 
-test("the pinned workflow config contains exactly the promised nine combinations", () => {
+test("the pinned workflow config includes Linux and Windows llama CUDA archives", () => {
 	const result = validateConfig(config);
 	assert.deepEqual(result.errors, []);
-	assert.equal(result.matrix.include.length, 9);
+	assert.equal(result.matrix.include.length, 11);
 	assert.deepEqual(
 		result.matrix.include.map(({ backend, target }) => `${backend}/${target}`),
 		[
 			"localai-llamacpp/darwin-arm64",
 			"localai-llamacpp/linux-amd64",
+			"localai-llamacpp/linux-amd64-cuda",
 			"localai-llamacpp/windows-amd64",
+			"localai-llamacpp/windows-amd64-cuda",
 			"localai-whisper/darwin-arm64",
 			"localai-whisper/linux-amd64",
 			"localai-whisper/windows-amd64",
@@ -40,6 +42,17 @@ test("the pinned workflow config contains exactly the promised nine combinations
 		],
 	);
 	assert.deepEqual(matrixForConfig(config), result.matrix);
+	assert.equal(config.hostToolchain.windows.cudaArchitecture, "75-real;80-real;86-real;89-real;90-real;100-real;110-real;120-real;75-virtual");
+	for (const architecture of ["89", "native", "all-major", "75-real;80-real;89-real"]) {
+		const changed = structuredClone(config);
+		changed.hostToolchain.windows.cudaArchitecture = architecture;
+		assert.ok(validateConfig(changed).errors.some((error) => error.includes("hostToolchain.windows.cudaArchitecture")));
+	}
+	const invalid = structuredClone(config);
+	invalid.targets.at(-1).backends = ["localai-whisper"];
+	invalid.hostToolchain.windows.cudaVersion = "12.4";
+	assert.ok(validateConfig(invalid).errors.some((error) => error.includes("windows-amd64-cuda")));
+	assert.ok(validateConfig(invalid).errors.some((error) => error.includes("hostToolchain.windows.cudaVersion")));
 });
 
 test("matrix validation rejects mutable refs, floating runners, and extra targets", () => {
@@ -79,6 +92,18 @@ test("each target payload verifier checks the native executable identity", async
 	await mkdir(windowsRoot);
 	await writeFile(join(windowsRoot, "whisper.exe"), windows);
 	assert.equal(verifyPayload({ packageRoot: windowsRoot, binary: "whisper", targetId: "windows-amd64" }).bytes, 80);
+	await writeFile(join(windowsRoot, "llama-cpp-cpu-all.exe"), windows);
+	assert.throws(
+		() => verifyPayload({ packageRoot: windowsRoot, binary: "llama-cpp-cpu-all", targetId: "windows-amd64-cuda" }),
+		/missing ggml-cuda.dll/,
+	);
+	await writeFile(join(windowsRoot, "ggml-cuda.dll"), "CUDA backend fixture");
+	assert.throws(
+		() => verifyPayload({ packageRoot: windowsRoot, binary: "llama-cpp-cpu-all", targetId: "windows-amd64-cuda" }),
+		/missing the CUDA runtime DLL/,
+	);
+	await writeFile(join(windowsRoot, "cudart64_13.dll"), "CUDA runtime fixture");
+	assert.equal(verifyPayload({ packageRoot: windowsRoot, binary: "llama-cpp-cpu-all", targetId: "windows-amd64-cuda" }).bytes, 80);
 
 	const linux = Buffer.alloc(32);
 	linux[0] = 0x7f;
@@ -90,6 +115,18 @@ test("each target payload verifier checks the native executable identity", async
 	await mkdir(linuxRoot);
 	await writeFile(join(linuxRoot, "llama-cpp-cpu-all"), linux);
 	assert.equal(verifyPayload({ packageRoot: linuxRoot, binary: "llama-cpp-cpu-all", targetId: "linux-amd64" }).bytes, 32);
+	assert.throws(
+		() => verifyPayload({ packageRoot: linuxRoot, binary: "llama-cpp-cpu-all", targetId: "linux-amd64-cuda" }),
+		/missing libggml-cuda.so/,
+	);
+	await mkdir(join(linuxRoot, "lib"));
+	await writeFile(join(linuxRoot, "lib", "libggml-cuda.so"), "");
+	assert.throws(
+		() => verifyPayload({ packageRoot: linuxRoot, binary: "llama-cpp-cpu-all", targetId: "linux-amd64-cuda" }),
+		/missing libggml-cuda.so/,
+	);
+	await writeFile(join(linuxRoot, "lib", "libggml-cuda.so"), "CUDA backend fixture");
+	assert.equal(verifyPayload({ packageRoot: linuxRoot, binary: "llama-cpp-cpu-all", targetId: "linux-amd64-cuda" }).bytes, 32);
 
 	const darwin = Buffer.alloc(32);
 	darwin.writeUInt32LE(0xfeedfacf, 0);
@@ -140,7 +177,7 @@ test("the validation CLI emits a matrix output suitable for GitHub Actions", asy
 	assert.match(outputText, /windows_msys_packages=make=4\.4\.1-3/);
 	assert.match(outputText, /mingw-w64-x86_64-make=4\.4\.1-5/);
 	assert.match(outputText, /windows_vcpkg_triplet=x64-mingw-static-release/);
-	assert.match(result.stdout, /LOCALAI_BACKEND_ARTIFACT_INPUTS_OK combinations=9/);
+	assert.match(result.stdout, /LOCALAI_BACKEND_ARTIFACT_INPUTS_OK combinations=11/);
 });
 
 function metadataFixture(backend, target) {
@@ -173,7 +210,7 @@ async function matrixArtifactFixture(t) {
 	const root = await mkdtemp(join(tmpdir(), "localai-backend-join-"));
 	t.after(() => rm(root, { recursive: true, force: true }));
 	for (const backend of config.backends) {
-		for (const target of config.targets) {
+		for (const target of config.targets.filter((target) => !target.backends || target.backends.includes(backend.id))) {
 			const archiveName = artifactArchiveName({ backend, target });
 			await writeFile(join(root, archiveName), archiveFixtureBytes(backend, target));
 			await writeFile(join(root, `${archiveName}.metadata.json`), `${JSON.stringify(metadataFixture(backend, target))}\n`);
@@ -188,7 +225,7 @@ function archiveFixtureBytes(backend, target) {
 	return bytes;
 }
 
-test("the join emits one P1 manifest for the exact nine archives and re-verifies their bytes", async (t) => {
+test("the join emits one P1 manifest for the exact eleven archives and re-verifies their bytes", async (t) => {
 	const matrixRoot = await matrixArtifactFixture(t);
 	const outputRoot = await mkdtemp(join(tmpdir(), "localai-backend-release-"));
 	t.after(() => rm(outputRoot, { recursive: true, force: true }));
@@ -200,7 +237,7 @@ test("the join emits one P1 manifest for the exact nine archives and re-verifies
 	});
 	assert.equal(result.manifest.schemaVersion, 1);
 	assert.equal(result.manifest.kind, "localai-backend-artifacts");
-	assert.equal(result.manifest.artifacts.length, 9);
+	assert.equal(result.manifest.artifacts.length, 11);
 	assert.equal(result.manifest.publication.releaseTag, publicationIdentity(config).releaseTag);
 	assert.equal(result.manifest.publication.packagingRevision, config.packagingRevision);
 	const artifact = result.manifest.artifacts.find((entry) => entry.id === "localai-llamacpp/darwin-arm64");
@@ -211,10 +248,22 @@ test("the join emits one P1 manifest for the exact nine archives and re-verifies
 	assert.match(artifact.artifact.location, new RegExp(`/${result.manifest.publication.releaseTag}/`));
 	assert.match(artifact.artifact.sha256, /^[0-9a-f]{64}$/);
 	assert.equal(artifact.artifact.sizeBytes, minimumPublishedArchiveSizeBytes + 1);
+	const linuxCUDA = result.manifest.artifacts.find((entry) => entry.id === "localai-llamacpp/linux-amd64-cuda");
+	const linuxCPU = result.manifest.artifacts.find((entry) => entry.id === "localai-llamacpp/linux-amd64");
+	const windowsCPU = result.manifest.artifacts.find((entry) => entry.id === "localai-llamacpp/windows-amd64");
+	const windowsCUDA = result.manifest.artifacts.find((entry) => entry.id === "localai-llamacpp/windows-amd64-cuda");
+	assert.deepEqual(linuxCUDA.target.accelerators, ["cuda"]);
+	assert.deepEqual(linuxCPU.target.accelerators, ["cpu"]);
+	assert.deepEqual(windowsCPU.target.accelerators, ["cpu"]);
+	assert.deepEqual(windowsCUDA.target.accelerators, ["cuda"]);
+	assert.match(windowsCUDA.artifact.location, /windows-amd64-cuda.*\.zip$/);
+	assert.match(linuxCUDA.artifact.location, /linux-amd64-cuda.*\.tar\.gz$/);
 	assert.deepEqual((await readdir(outputRoot)).sort(), [
 		"localai-backend-localai-llamacpp-darwin-arm64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
 		"localai-backend-localai-llamacpp-linux-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
+		"localai-backend-localai-llamacpp-linux-amd64-cuda-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.tar.gz",
 		"localai-backend-localai-llamacpp-windows-amd64-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.zip",
+		"localai-backend-localai-llamacpp-windows-amd64-cuda-6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.zip",
 		"localai-backend-localai-vibevoice-darwin-arm64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
 		"localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz",
 		"localai-backend-localai-vibevoice-windows-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.zip",
@@ -231,14 +280,14 @@ test("the join rejects missing and unexpected matrix results", async (t) => {
 	await rm(join(missingRoot, missingArchive));
 	await assert.rejects(
 		(async () => createManifest({ config, artifactDirectory: missingRoot, repository: "portpowered/infinite-you" })),
-		/exactly the nine archives and nine provenance sidecars/,
+		/exactly 11 archives and provenance sidecars/,
 	);
 
 	const extraRoot = await matrixArtifactFixture(t);
 	await writeFile(join(extraRoot, "unexpected.archive"), "unexpected");
 	assert.throws(
 		() => createManifest({ config, artifactDirectory: extraRoot, repository: "portpowered/infinite-you" }),
-		/exactly the nine archives and nine provenance sidecars/,
+		/exactly 11 archives and provenance sidecars/,
 	);
 });
 
@@ -291,6 +340,15 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		windows_library_name: "none",
 		grpc_dependency_mode: "standalone",
 	});
+	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "windows-amd64-cuda", buildType: "cublas" }), {
+		backend: "localai-llamacpp",
+		target: "windows-amd64-cuda",
+		shell: "pwsh",
+		strategy: "windows-llamacpp-cuda-msvc",
+		binary: "llama-cpp-cpu-all",
+		go_dynamic_loader: "none",
+		grpc_dependency_mode: "default",
+	});
 	assert.deepEqual(buildPlan({ backend: "localai-llamacpp", target: "darwin-arm64", buildType: "metal" }), {
 		backend: "localai-llamacpp",
 		target: "darwin-arm64",
@@ -300,6 +358,7 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 		go_dynamic_loader: "none",
 		grpc_dependency_mode: "default",
 	});
+	assert.equal(buildPlan({ backend: "localai-llamacpp", target: "linux-amd64-cuda", buildType: "cublas" }).strategy, "linux-llamacpp-package");
 	assert.deepEqual(buildPlan({ backend: "localai-whisper", target: "linux-amd64", buildType: "cpu" }), {
 		backend: "localai-whisper",
 		target: "linux-amd64",
@@ -330,7 +389,7 @@ test("the build harness selects the Windows and Unix strategies at runtime", (t)
 test("the join rejects every config-derived placeholder archive before adoption", async (t) => {
 	const matrixRoot = await matrixArtifactFixture(t);
 	for (const backend of config.backends) {
-		for (const target of config.targets) {
+		for (const target of config.targets.filter((target) => !target.backends || target.backends.includes(backend.id))) {
 			const archiveName = artifactArchiveName({ backend, target });
 			for (const size of [minimumPublishedArchiveSizeBytes, minimumPublishedArchiveSizeBytes - 1]) {
 				await writeFile(join(matrixRoot, archiveName), Buffer.alloc(size));
@@ -382,6 +441,17 @@ test("the workflow uses immutable actions, package inputs, and the pinned tag gu
 	assert.match(workflow, /git\/ref\/tags/);
 	assert.match(workflow, /git\/tags/);
 	assert.match(workflow, /exists but its target could not be resolved/);
+	assert.match(workflow, /if: matrix\.target == 'windows-amd64-cuda'[\s\S]*?shell: pwsh[\s\S]*?build-localai-backend-cuda\.ps1/);
+	assert.match(workflow, /if: matrix\.target == 'windows-amd64'[\s\S]*?vcpkg\.exe install/);
+	const cudaScript = await readFile("scripts/build-localai-backend-cuda.ps1", "utf8");
+	assert.match(cudaScript, /Visual Studio 17 2022/);
+	assert.match(cudaScript, /-T', "cuda=\$cudaRoot"/);
+	assert.match(cudaScript, /-DGGML_CUDA=ON/);
+	assert.match(cudaScript, /-DCMAKE_CUDA_ARCHITECTURES=\$cudaArchitectures/);
+	assert.match(cudaScript, /Remove-GeneratedDirectory -Path \$root -Parent \(\[IO\.Path\]::GetTempPath\(\)\)/);
+	assert.match(cudaScript, /Remove-GeneratedDirectory -Path \$packageRoot -Parent \$llamaRoot -ExpectedName 'package'/);
+	assert.match(cudaScript, /--target', 'grpc-server', 'ggml-cuda'/);
+	assert.match(cudaScript, /dumpbin \/dependents/);
 });
 
 test("the Windows build plan resolves Git from the runner path bridge", async (t) => {
@@ -437,7 +507,7 @@ test("the Windows build plan resolves Git from the runner path bridge", async (t
 
 function windowsBuildTimeout(workflow) {
 	const jobTimeout = workflow.match(/^    timeout-minutes:\s+(\d+)\s*$/m);
-	const windowsBuild = workflow.match(/^\s+- name: Build the backend package on Windows\s+([\s\S]*?)(?=^\s+- name: Build the backend package on Unix)/m);
+	const windowsBuild = workflow.match(/^\s+- name: Build the backend package on Windows\s+([\s\S]*?)(?=^\s+- name: Prepare pinned llama sources for Windows CUDA)/m);
 	const unixBuild = workflow.match(/^\s+- name: Build the backend package on Unix\s+([\s\S]*?)(?=^\s+- name: Archive the Unix backend package)/m);
 	if (!jobTimeout || !windowsBuild || !unixBuild) throw new Error("workflow is missing the build job or platform-specific backend build steps");
 	const stepTimeout = windowsBuild[1].match(/^\s+timeout-minutes:\s+(\d+)\s*$/m);

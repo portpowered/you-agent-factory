@@ -85,7 +85,7 @@ verify_host_toolchain() {
 	assert_tool_version "CMake" "$(config_value toolchain cmakeVersion)" cmake --version
 
 	case "$TARGET_ID" in
-		linux-amd64)
+		linux-amd64|linux-amd64-cuda)
 			assert_tool_version "GCC" "$(config_value hostToolchain linux gccVersion)" gcc --version
 			assert_tool_version "GNU Make" "$(config_value hostToolchain linux makeVersion)" "$make_command" --version
 			assert_tool_version "Ninja" "$(config_value hostToolchain linux ninjaVersion)" ninja --version
@@ -131,12 +131,17 @@ esac
 build_shell="bash"
 if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	build_shell="msys2"
+elif [[ "$TARGET_ID" == "windows-amd64-cuda" ]]; then
+	build_shell="pwsh"
 fi
 
 build_strategy=""
 case "$TARGET_ID:$BACKEND_ID" in
 	windows-amd64:localai-llamacpp)
 		build_strategy="windows-llamacpp-grpc"
+		;;
+	windows-amd64-cuda:localai-llamacpp)
+		build_strategy="windows-llamacpp-cuda-msvc"
 		;;
 	windows-amd64:localai-whisper)
 		build_strategy="windows-whisper"
@@ -148,6 +153,9 @@ case "$TARGET_ID:$BACKEND_ID" in
 		build_strategy="darwin-llamacpp-grpc"
 		;;
 	linux-amd64:localai-llamacpp)
+		build_strategy="linux-llamacpp-package"
+		;;
+	linux-amd64-cuda:localai-llamacpp)
 		build_strategy="linux-llamacpp-package"
 		;;
 	darwin-arm64:localai-whisper|darwin-arm64:localai-vibevoice)
@@ -239,7 +247,18 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	exit 0
 fi
 
+if [[ "$TARGET_ID" == "windows-amd64-cuda" ]]; then
+	echo "Windows CUDA uses scripts/build-localai-backend-cuda.ps1 under MSVC" >&2
+	exit 1
+fi
+
 verify_host_toolchain
+
+if [[ "$TARGET_ID" == "linux-amd64-cuda" ]]; then
+	[[ "$BUILD_TYPE" == "cublas" ]] || { echo "CUDA target requires BUILD_TYPE=cublas" >&2; exit 1; }
+	command -v nvcc >/dev/null || { echo "CUDA toolkit nvcc is required for the CUDA target" >&2; exit 1; }
+	assert_tool_version "CUDA toolkit" "release $(config_value hostToolchain linux cudaVersion)," nvcc --version
+fi
 
 node "$workflow_script" verify-source \
 	--config "$config_path" \

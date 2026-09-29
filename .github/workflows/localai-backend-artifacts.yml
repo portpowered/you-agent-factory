@@ -51,6 +51,10 @@ jobs:
   build:
     name: Build ${{ matrix.backend }} (${{ matrix.target }})
     needs: validate-inputs
+    # The Linux CUDA leg uses the localai-linux-amd64-cuda runner label. That
+    # runner must have CUDA 12.4 nvcc installed; the build script verifies it.
+    # The Windows CUDA leg uses localai-windows-amd64-cuda with CUDA 13.3,
+    # Visual Studio 2022 C++ Build Tools, and CUDA Visual Studio integration.
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -89,7 +93,7 @@ jobs:
           submodules: recursive
 
       - name: Check out pinned Windows dependency manager
-        if: runner.os == 'Windows'
+        if: matrix.target == 'windows-amd64'
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: microsoft/vcpkg
@@ -179,7 +183,7 @@ jobs:
           pacman -S --needed --noconfirm --overwrite '*' "${packages[@]}"
 
       - name: Install pinned Windows C++ dependencies
-        if: runner.os == 'Windows'
+        if: matrix.target == 'windows-amd64'
         shell: pwsh
         working-directory: vcpkg
         run: |
@@ -201,7 +205,7 @@ jobs:
             --target "$TARGET_ID"
 
       - name: Build the backend package on Windows
-        if: runner.os == 'Windows'
+        if: matrix.target == 'windows-amd64'
         working-directory: you-agent-factory
         shell: msys2 {0}
         # The pinned static gRPC dependency graph can take more than an hour
@@ -211,6 +215,22 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/build-localai-backend-artifact.sh
+
+      - name: Prepare pinned llama sources for Windows CUDA
+        if: matrix.target == 'windows-amd64-cuda'
+        working-directory: you-agent-factory
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          localai_root="$(cygpath -u "$LOCALAI_ROOT")"
+          make -C "$localai_root/backend/cpp/llama-cpp" llama.cpp/tools/grpc-server
+
+      - name: Build the Windows CUDA backend with MSVC
+        if: matrix.target == 'windows-amd64-cuda'
+        working-directory: you-agent-factory
+        shell: pwsh
+        timeout-minutes: 300
+        run: ./scripts/build-localai-backend-cuda.ps1
 
       - name: Build the backend package on Unix
         if: runner.os != 'Windows'
