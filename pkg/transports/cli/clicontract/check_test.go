@@ -209,14 +209,17 @@ func TestValidateRejectsMigratedInputSetAndMetadataDriftIndependently(t *testing
 			field:    "completion",
 		},
 		{
-			name: "missing relationship",
+			name: "missing offline flag",
 			mutate: func(input *Input) {
-				input.ProductionInputs.Relationships = nil
+				input.ProductionInputs.Flags = removeInputFlag(
+					input.ProductionInputs.Flags,
+					"you.models.invoke.flag.offline",
+				)
 			},
 			kind:     KindMissingInput,
-			stableID: "you.server.mcp.relationship.runtime-source",
-			path:     "you server mcp",
-			field:    "relationship",
+			stableID: "you.models.invoke.flag.offline",
+			path:     "you models invoke",
+			field:    "flag",
 		},
 	}
 
