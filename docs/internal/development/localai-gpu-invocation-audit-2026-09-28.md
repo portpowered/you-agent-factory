@@ -168,3 +168,19 @@ SHA matched the published manifest. `nvidia-smi` compute-app samples include
 per-process memory N/A. Evidence dir
 `C:\Users\andre\AppData\Local\Temp\you-native-cuda-aca54b5bf4f44e75b147760509c2517c`.
 LLM not separately invoked; ASR/TTS still CPU; no Linux CUDA in this release.
+
+## Native Windows managed LLM invocation — 2026-09-29
+
+Native Windows managed LLM pull succeeded: Gemma-4 E4B `Q4_K_M`
+(4,977,171,584 bytes) plus mmproj (990,372,672 bytes). The cached Windows
+CUDA llama backend archive SHA-256
+`c9322c65b36eea345c32f6e29c3b2dcd4187c288fbf145b8f1b400d1541649dc` matched the
+published manifest and the on-disk file. OMNI invocation exited 0 and returned
+`READY.` with usage 3 tokens / 21 prompt tokens. During the invoke,
+`nvidia-smi` observed `llama-cpp-cpu-all.exe` PID 16904 and GPU memory rose
+from ~4,224 to ~9,817 MiB then fell; this supports GPU offload, but WDDM
+per-process memory is N/A and no CUDA init trace was captured, so exact GPU
+compute is unproven. Evidence under
+`C:\Users\andre\AppData\Local\Temp\you-native-cuda-aca54b5bf4f44e75b147760509c2517c`
+in `llm-pull.json`, `llm-invoke4.json`, and `llm-gpu-*samples4.txt`. ASR/TTS
+native Windows remain CPU; no Linux CUDA archive exists in this release.

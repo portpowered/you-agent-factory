@@ -2457,3 +2457,18 @@ SHA matched the published manifest. `nvidia-smi` compute-app samples include
 per-process memory N/A. Evidence dir
 `C:\Users\andre\AppData\Local\Temp\you-native-cuda-aca54b5bf4f44e75b147760509c2517c`.
 LLM not separately invoked; ASR/TTS still CPU; no Linux CUDA in this release.
+
+A native Windows managed LLM pull and OMNI invocation completed through MCP
+session `e9af5dfb-4477-4d6f-b0ef-94ee727369e0` with a primary result in about
+11 minutes, including a 5-minute model pull. Three local retries were needed:
+PowerShell and `Start-Process` argument handling broke the first and third
+invocations, while the second used a Windows Store `python3` launcher that
+could not see the CLI path. The fourth invocation succeeded. A
+concurrent 180-second OpenCode Muse docs call (session
+`2e5e1d9a-4ddd-4fc5-ba8e-a607da0f4c36`) returned typed
+`factory_session.subagent.timed_out` with progress
+`lastObservedProviderActivity` kind `ERROR` phase `FAILED`, but native OpenCode
+DB session `ses_f13f6831bffeoI3k8pK0ZMJhXE` contains an assistant final and
+completed edits, so this is a terminal classification/result bridging
+discrepancy; no new working-tree edits were visible afterwards (possibly
+identical to committed docs).
