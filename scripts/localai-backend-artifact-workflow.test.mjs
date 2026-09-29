@@ -468,6 +468,20 @@ test("the Windows CUDA gRPC checkout avoids recursive bloaty submodules", async 
 	assert.match(cudaScript, /fetch', '--depth', '1', 'origin', \$env:GRPC_COMMIT/);
 });
 
+test("the Windows CUDA retry reuses the retained gRPC checkout and patch", async () => {
+	const cudaScript = await readFile("scripts/build-localai-backend-cuda.ps1", "utf8");
+	assert.match(cudaScript, /reply->set_message\(arr\.dump\(\)\)/);
+	assert.match(cudaScript, /\$patchedNeedle/);
+	assert.match(cudaScript, /already patched for this retry/);
+	assert.match(cudaScript, /original or already-patched shape/);
+	assert.match(cudaScript, /remote get-url origin/);
+	assert.match(cudaScript, /remote', 'add', 'origin', \$grpcOriginUrl/);
+	assert.match(cudaScript, /refusing to reset a conflicting checkout/);
+	assert.match(cudaScript, /https:\/\/github\.com\/grpc\/grpc\.git/);
+	assert.match(cudaScript, /fetch', '--depth', '1', 'origin', \$env:GRPC_COMMIT/);
+	assert.match(cudaScript, /gRPC checkout does not match the pinned commit/);
+});
+
 test("the Windows build plan resolves Git from the runner path bridge", async (t) => {
 	const root = await mkdtemp(join(tmpdir(), "localai-backend-windows-tools-"));
 	t.after(() => rm(root, { recursive: true, force: true }));

@@ -90,12 +90,26 @@ $serverSource = Join-Path $llamaSource 'tools\grpc-server\grpc-server.cpp'
 if (-not (Test-Path -LiteralPath $serverSource)) { throw 'pinned llama gRPC source must be prepared before the MSVC build' }
 $source = Get-Content -LiteralPath $serverSource -Raw
 $needle = 'reply->set_message(arr);'
-if (($source.Split(@($needle), [StringSplitOptions]::None).Length - 1) -ne 1) { throw 'expected one pinned llama gRPC string conversion' }
-Set-Content -LiteralPath $serverSource -Value $source.Replace($needle, 'reply->set_message(arr.dump());') -NoNewline
+$patchedNeedle = 'reply->set_message(arr.dump());'
+$needleCount = ($source.Split(@($needle), [StringSplitOptions]::None).Length - 1)
+$patchedCount = ($source.Split(@($patchedNeedle), [StringSplitOptions]::None).Length - 1)
+if ($needleCount -eq 1 -and $patchedCount -eq 0) {
+    Set-Content -LiteralPath $serverSource -Value $source.Replace($needle, $patchedNeedle) -NoNewline
+} elseif ($needleCount -eq 0 -and $patchedCount -eq 1) {
+    Write-Output 'llama gRPC string conversion is already patched for this retry'
+} else {
+    throw 'expected one pinned llama gRPC string conversion in the original or already-patched shape'
+}
 
 New-Item -ItemType Directory -Path $grpcSource -Force | Out-Null
 Invoke-Checked git @('-C', $grpcSource, 'init')
-Invoke-Checked git @('-C', $grpcSource, 'remote', 'add', 'origin', 'https://github.com/grpc/grpc.git')
+$grpcOriginUrl = 'https://github.com/grpc/grpc.git'
+$existingOriginUrl = (& git -C $grpcSource remote get-url origin 2>$null | Out-String)
+if ($LASTEXITCODE -ne 0) {
+    Invoke-Checked git @('-C', $grpcSource, 'remote', 'add', 'origin', $grpcOriginUrl)
+} elseif ($existingOriginUrl.Trim() -cne $grpcOriginUrl) {
+    throw "gRPC origin remote must be $grpcOriginUrl; refusing to reset a conflicting checkout"
+}
 Invoke-Checked git @('-C', $grpcSource, 'fetch', '--depth', '1', 'origin', $env:GRPC_COMMIT)
 Invoke-Checked git @('-C', $grpcSource, 'checkout', '--detach', 'FETCH_HEAD')
 # gRPC builds every dependency from its pinned third-party submodules
