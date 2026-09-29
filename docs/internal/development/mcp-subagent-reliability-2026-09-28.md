@@ -2376,3 +2376,15 @@ overrun_ms=560.000)` — a genuine 560 ms backend overrun, so strict
 validation was retained (no 50 ms tolerance). Focused
 `go test ./pkg/services/models/internal/backends/localai/... ./pkg/services/models/transports/cli -count=1`
 passed.
+
+Two independent OpenCode Muse `you.subagent` calls were dispatched
+concurrently through one MCP client (`Promise.allSettled`) and both returned
+COMPLETED primary results with no timeout/permission error in either:
+session `a81e10cc-2d05-41cb-a71f-9e8223016c4b` audited direct Models LLM
+explicit token mapping, and session
+`7900cbc9-11a8-4b6d-914a-7fa3ac03d86a` audited TTS `ref_text` routing.
+Findings: default LLM `Tokens`/`ContextSize` remain zero/unbounded;
+explicit `max_tokens` currently passes only as metadata, not dedicated
+`PredictOptions.Tokens`; TTS `voice`/`ref_text` reaches protobuf params,
+built-in TTS is VibeVoice, and custom Qwen/Index backend behavior still
+needs validation.
