@@ -791,24 +791,12 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 	if ctx.Err() != nil {
 		return nativeFailure(ctx.Err())
 	}
-	kind := providers.ExecuteFailureKindUnknown
-	var requestErr *acpsdk.RequestError
-	if errors.As(err, &requestErr) && isACPRateLimitFailure(requestErr.Message) {
-		kind = providers.ExecuteFailureKindThrottled
-	} else if requestErr != nil && isACPServerFailure(requestErr.Code) {
-		// A server-side ACP failure is a provider dependency outcome. Workers
-		// classifies that outcome as retryable and, when a session was opened,
-		// retains the exact Provider Session for the retry continuation.
-		kind = providers.ExecuteFailureKindDependency
-	} else if isACPPeerClosedFailure(err) {
-		// The ACP SDK's structured peer-disconnect error is a provider
-		// dependency outcome. It is classified separately from arbitrary
-		// provider-authored -32603 errors so that only the exact SDK shape
-		// is recognized.
-		kind = providers.ExecuteFailureKindDependency
-	}
+	piModelConnection := isPiModelConnectionFailure(id, err)
+	kind := rpcFailureKind(err, piModelConnection)
 	message := fmt.Sprintf("ACP provider %q %s failed: %s", id, method, safeRPCMessage(err))
-	if kind == providers.ExecuteFailureKindThrottled {
+	if piModelConnection {
+		message = fmt.Sprintf("ACP provider %q could not connect to the selected model endpoint; check the model endpoint and its configuration", id)
+	} else if kind == providers.ExecuteFailureKindThrottled {
 		message = fmt.Sprintf("ACP provider %q is temporarily unavailable due to usage or capacity limits", id)
 	} else if isACPPeerClosedFailure(err) {
 		message = fmt.Sprintf("ACP provider %q disconnected before responding; retry the request", id)
@@ -822,7 +810,9 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 		}
 	}
 	errorCode := "ACP_" + strings.ToUpper(strings.ReplaceAll(method, "session/", "")) + "_FAILED"
-	if isACPPeerClosedFailure(err) {
+	if piModelConnection {
+		errorCode = "ACP_PI_MODEL_CONNECTION"
+	} else if isACPPeerClosedFailure(err) {
 		errorCode = "ACP_PEER_CLOSED"
 	}
 	return providers.ExecuteFailure{Kind: kind, Message: message, Diagnostics: &providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{{
@@ -831,6 +821,44 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 			"error_code": errorCode,
 		},
 	}}}}
+}
+
+func rpcFailureKind(err error, piModelConnection bool) providers.ExecuteFailureKind {
+	var requestErr *acpsdk.RequestError
+	if piModelConnection {
+		return providers.ExecuteFailureKindMisconfigured
+	} else if errors.As(err, &requestErr) && isACPRateLimitFailure(requestErr.Message) {
+		return providers.ExecuteFailureKindThrottled
+	} else if requestErr != nil && isACPServerFailure(requestErr.Code) {
+		// A server-side ACP failure is a provider dependency outcome. Workers
+		// classifies that outcome as retryable and, when a session was opened,
+		// retains the exact Provider Session for the retry continuation.
+		return providers.ExecuteFailureKindDependency
+	} else if isACPPeerClosedFailure(err) {
+		// The ACP SDK's structured peer-disconnect error is a provider
+		// dependency outcome. It is classified separately from arbitrary
+		// provider-authored -32603 errors so that only the exact SDK shape
+		// is recognized.
+		return providers.ExecuteFailureKindDependency
+	}
+	return providers.ExecuteFailureKindUnknown
+}
+
+// isPiModelConnectionFailure recognizes only Pi's typed bridge outcome. The
+// provider-authored message and other data fields are never used as evidence.
+func isPiModelConnectionFailure(id providers.ID, err error) bool {
+	if id != "pi" {
+		return false
+	}
+	var requestErr *acpsdk.RequestError
+	if !errors.As(err, &requestErr) || requestErr.Code != -32603 {
+		return false
+	}
+	data, ok := requestErr.Data.(map[string]any)
+	if !ok {
+		return false
+	}
+	return data["provider"] == "pi" && data["outcome"] == "error" && data["failureKind"] == "model_connection"
 }
 
 func isACPRateLimitFailure(message string) bool {

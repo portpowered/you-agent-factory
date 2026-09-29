@@ -2023,3 +2023,61 @@ build and a Q8 asset already exists, a cheaper first check is to rebuild the
 current Linux binary and inspect the built-in Q8 definition from a neutral
 directory before downloading another quantization. A published CUDA backend
 archive is still required for managed GPU inference.
+
+The next headless, concurrent MCP reliability pass ran three `you.subagent`
+sessions against the same worktree. A broad OpenCode edit to propagate Pi's
+connection diagnostic (session `e9f01676-f6e2-412d-baa1-9af12cf2c777`,
+request `4a68ac06-a32f-41df-9692-e4a226a5a8fa`) timed out after 360
+seconds with recent reasoning activity and no observed edits. Its local log
+shows serial repository searches spread over several minutes; the task was
+too broad for this timeout. A follow-up OpenCode task was narrowed to the Pi
+bridge files and given a longer bound.
+
+A read-only Codex MCP audit (session `309008c8-475a-4b38-84d5-5abf1bd32434`)
+reproduced the CLI subtree failures and identified stale MCP command
+expectations and a fixture smoke decoder that parsed a human-readable error
+message as JSON. Two simultaneous bounded Codex MCP edits completed:
+`dd658878-f3d8-4bcf-8f21-9f55aea78170` fixed the smoke decoder (commit
+`87fcab18d3`), and `39db5b42-558c-4165-abf4-b19b151c5e73` reconciled
+the command/input baselines and tests (commit `b69d5adbf1`). An independent
+`go test ./pkg/transports/cli/... -count=1` passed in full. The agents
+preserved unrelated dirty files and returned primary results; overlapping
+MCP dispatches completed without a session collision.
+
+A further bounded Codex MCP task (session `45a0878b-8a3a-4759-af0b-c9ea9778b8cd`)
+reconciled the session-list default test with the authored CLI default `all`
+(commit `effe740ff7`); the full `contracts` package passed. OpenCode then
+completed a narrow Pi bridge task (session `d069cd71-1a69-4c4f-8115-2ff5ea8ecc37`)
+that marks only Pi's exact `Connection error.` outcome as `model_connection`
+in the ACP error data. A second OpenCode follow-up (session
+`2272a937-83c1-4266-b8ab-b0cfe875f88b`) removed a stale-marker edge case
+across retries. The eight bridge Node tests and typecheck passed. Codex MCP
+session `36268364-ca34-4b3d-b487-1a2ebe0d04cc` mapped the marker at the
+Go ACP boundary to a safe, actionable misconfiguration diagnostic; focused
+provider tests and the full Factory Session MCP package passed. A package
+file-count check found that the new test files should be merged into existing
+test files before final lint and live verification. The selected Pi model
+endpoint itself remains unreachable, so success-path live Pi inference is
+still unverified.
+
+Codex MCP follow-ups `a935ec4e-2a4d-49e0-b553-b37f964de80d` and
+`f68ac872-09be-4994-b688-c9787063450b` merged the new tests into existing
+package files and reduced two complexity findings; file-count and
+maintainability checks passed. A freshly compiled headless MCP binary ran
+`you.subagent` against the currently unreachable Pi model endpoint and
+returned `isError=true` with `factory_session.subagent.provider_misconfigured`
+in both MCP text and structured content. It no longer reports success or an
+unknown failure. The initial message still buried the endpoint check, so a
+bounded Codex MCP copy edit (session `c25e0280-5de7-4c0b-bab6-cf0a840389e3`)
+was attempted. That call timed out after 150 seconds with
+`providerSessionObserved=false` despite leaving reviewable edits. Independent
+focused tests, the full Factory Session MCP package, and maintainability
+checks passed on those edits. This is a partial-edit timeout to retain in
+the reliability record. Independent `make lint` then passed all 24 targets.
+A rebuilt headless MCP binary returned `isError=true`, code
+`factory_session.subagent.provider_misconfigured`, and the message
+"Pi subagent provider is misconfigured; check that Pi's selected model
+endpoint is running and reachable". Its suggested action begins with the
+same concrete endpoint check, followed by Pi setup/version and workspace
+inspection. The live Pi success path is still unavailable because the
+selected local model endpoint reports `Connection error.` even via direct Pi.

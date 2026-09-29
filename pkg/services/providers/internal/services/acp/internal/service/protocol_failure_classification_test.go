@@ -635,3 +635,46 @@ func writeRPCError(writer *bufio.Writer, id json.RawMessage, code int, message s
 	}
 	return writer.Flush()
 }
+
+func TestPiModelConnectionMarkerClassification(t *testing.T) {
+	const secret = "private-model-endpoint-token"
+	marker := map[string]any{"provider": "pi", "outcome": "error", "failureKind": "model_connection", "secret": secret}
+	for _, tc := range []struct {
+		name string
+		id   providers.ID
+		code int
+		data any
+		want providers.ExecuteFailureKind
+	}{
+		{"pi marker", "pi", -32603, marker, providers.ExecuteFailureKindMisconfigured},
+		{"other provider", "other", -32603, marker, providers.ExecuteFailureKindUnknown},
+		{"wrong code", "pi", -32602, marker, providers.ExecuteFailureKindUnknown},
+		{"missing kind", "pi", -32603, map[string]any{"provider": "pi", "outcome": "error"}, providers.ExecuteFailureKindUnknown},
+		{"wrong kind", "pi", -32603, map[string]any{"provider": "pi", "outcome": "error", "failureKind": "other"}, providers.ExecuteFailureKindUnknown},
+		{"wrong outcome", "pi", -32603, map[string]any{"provider": "pi", "outcome": "success", "failureKind": "model_connection"}, providers.ExecuteFailureKindUnknown},
+		{"wrong provider", "pi", -32603, map[string]any{"provider": "other", "outcome": "error", "failureKind": "model_connection"}, providers.ExecuteFailureKindUnknown},
+		{"untyped data", "pi", -32603, secret, providers.ExecuteFailureKindUnknown},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := &acpsdk.RequestError{Code: tc.code, Message: "Pi assistant turn failed", Data: tc.data}
+			failure := rpcFailure(context.Background(), "session/prompt", tc.id, err, "stderr "+secret, providers.ExecuteRequest{})
+			got, ok := failure.(providers.ExecuteFailure)
+			if !ok || got.Kind != tc.want {
+				t.Fatalf("failure = %#v, want kind %q", failure, tc.want)
+			}
+			if tc.want != providers.ExecuteFailureKindMisconfigured {
+				return
+			}
+			if !strings.Contains(got.Message, "selected model endpoint") || strings.Contains(got.Message, secret) {
+				t.Fatalf("unsafe or unactionable message: %q", got.Message)
+			}
+			if got.Diagnostics == nil || len(got.Diagnostics.Progress) != 1 {
+				t.Fatalf("diagnostics = %#v", got.Diagnostics)
+			}
+			progress := got.Diagnostics.Progress[0]
+			if progress.Metadata["error_code"] != "ACP_PI_MODEL_CONNECTION" || progress.Detail != got.Message || strings.Contains(progress.Detail, secret) {
+				t.Fatalf("diagnostic = %#v", progress)
+			}
+		})
+	}
+}

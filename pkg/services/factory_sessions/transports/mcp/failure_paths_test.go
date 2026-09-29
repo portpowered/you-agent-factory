@@ -390,3 +390,58 @@ func TestSubagentTimeoutWithNoProviderEventsReportsObservationFalse(t *testing.T
 		t.Fatalf("empty provider activity = %#v", activity)
 	}
 }
+
+func TestSubagentPiModelConnectionMCPContent(t *testing.T) {
+	const secret = "private-model-endpoint-token"
+	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
+		Status:        factorysessions.InvocationTerminalStatusFailed,
+		Message:       "Connection error. " + secret,
+		FailureReason: string(workers.WorkFailureTypeMisconfigured),
+	}}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-pi-model-connection" }, mcpfactorysession.SubagentInput{Prompt: "Read README", Provider: "pi"})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.provider_misconfigured" || response.Error.Retryable {
+		t.Fatalf("response = %#v", response)
+	}
+	if action, ok := response.Error.Details["suggestedAction"].(string); !ok ||
+		!strings.HasPrefix(action, "Check that Pi's selected model endpoint is running and reachable.") ||
+		!strings.Contains(action, "Pi setup and capabilities") || !strings.Contains(action, "pi --version") {
+		t.Fatalf("suggested action = %#v", response.Error.Details["suggestedAction"])
+	}
+	assertPiModelConnectionMCPContent(t, response, target, secret)
+}
+
+func assertPiModelConnectionMCPContent(t *testing.T, response mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult], target *subagentTargetFake, secret string) {
+	t.Helper()
+	toolResponse, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := mcpfactorysession.MarshalDomainErrorCallToolResultJSON(toolResponse)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+		IsError           bool            `json:"isError"`
+		StructuredContent json.RawMessage `json:"structuredContent"`
+	}
+	if err := json.Unmarshal(encoded, &result); err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsError || len(result.Content) != 1 ||
+		!strings.Contains(result.Content[0].Text, "Pi's selected model endpoint is running and reachable") {
+		t.Fatalf("MCP content = %s", encoded)
+	}
+	var structured mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult]
+	if err := json.Unmarshal(result.StructuredContent, &structured); err != nil {
+		t.Fatal(err)
+	}
+	if structured.Error == nil || structured.Error.Code != response.Error.Code || structured.Error.Details["failureReason"] != string(workers.WorkFailureTypeMisconfigured) || !target.closed {
+		t.Fatalf("MCP structured content = %s", encoded)
+	}
+	if strings.Contains(string(encoded), secret) {
+		t.Fatalf("MCP response leaked provider text: %s", encoded)
+	}
+}

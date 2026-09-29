@@ -894,7 +894,14 @@ export class PiAcpAgent implements ACPAgent {
 
     // ACP has no error StopReason. A typed RPC failure preserves Pi's outcome.
     if (result === 'error') {
-      throw RequestError.internalError({ provider: 'pi', outcome: 'error' }, 'Pi assistant turn failed')
+      const data: Record<string, unknown> = { provider: 'pi', outcome: 'error' }
+      // Narrow, safe marker for pi's known model connection error. Only this
+      // exact, well-known failure is classified; arbitrary pi error messages
+      // are never exposed.
+      if (session.getFailureKind() === 'model_connection') {
+        data.failureKind = 'model_connection'
+      }
+      throw RequestError.internalError(data, 'Pi assistant turn failed')
     }
     return { stopReason: result as StopReason }
   }

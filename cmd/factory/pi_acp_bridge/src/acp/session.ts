@@ -307,6 +307,11 @@ export class PiAcpSession {
   // Retries can follow a failed assistant message. The last typed assistant
   // outcome before agent_settled determines the prompt result.
   private finalAssistantStopReason: string | null = null
+  // Captured only when the final assistant message ends with stopReason 'error'.
+  // Reset on every assistant message_end so a later error without an errorMessage
+  // can't inherit an earlier attempt's message. Used solely to classify pi's known
+  // connection error for ACP; arbitrary error messages are never propagated to clients.
+  private finalAssistantErrorMessage: string | null = null
 
   // For ACP diff support: capture file contents before edit/write mutations,
   // then emit ToolCallContent {type:"diff"}. Compatible structured edit/write
@@ -420,6 +425,17 @@ export class PiAcpSession {
 
   wasCancelRequested(): boolean {
     return this.cancelRequested
+  }
+
+  /**
+   * Narrow, safe classification of the final assistant failure for ACP error
+   * mapping. Returns 'model_connection' only for pi's known model connection
+   * error (stopReason 'error' with errorMessage 'Connection error.'). Arbitrary
+   * pi error messages are never exposed through this method.
+   */
+  getFailureKind(): 'model_connection' | null {
+    if (this.finalAssistantStopReason !== 'error') return null
+    return this.finalAssistantErrorMessage === 'Connection error.' ? 'model_connection' : null
   }
 
   private emit(update: SessionUpdate): void {
@@ -546,6 +562,7 @@ export class PiAcpSession {
     this.cancelRequested = false
     this.inAgentLoop = false
     this.finalAssistantStopReason = null
+    this.finalAssistantErrorMessage = null
 
     this.pendingTurn = { resolve: t.resolve, reject: t.reject }
 
@@ -593,6 +610,12 @@ export class PiAcpSession {
         const message = (ev as any).message
         if (message?.role === 'assistant' && typeof message.stopReason === 'string') {
           this.finalAssistantStopReason = message.stopReason
+          // Reset on every assistant message_end so a later error without an
+          // errorMessage can't inherit an earlier attempt's message.
+          this.finalAssistantErrorMessage = null
+          if (message.stopReason === 'error' && typeof message.errorMessage === 'string') {
+            this.finalAssistantErrorMessage = message.errorMessage
+          }
         }
         break
       }

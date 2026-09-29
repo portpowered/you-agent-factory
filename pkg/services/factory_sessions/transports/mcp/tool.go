@@ -354,7 +354,11 @@ func subagentClosedFailure(response ToolResponse[SubagentResult]) ToolResponse[S
 	envelope.Details["sessionIdPurpose"] = "Use sessionId for log correlation; you.factory_session.get may return session.not_found."
 	const inspectBeforeRetry = "Inspect the workspace for partial edits and check provider logs using sessionId and any requestId, traceId, or workId."
 	if action, ok := envelope.Details["suggestedAction"].(string); ok && action != "" {
-		envelope.Details["suggestedAction"] = inspectBeforeRetry + " " + action
+		if envelope.Code == "factory_session.subagent.provider_misconfigured" && strings.HasPrefix(action, "Check that Pi's selected model endpoint") {
+			envelope.Details["suggestedAction"] = action + " " + inspectBeforeRetry
+		} else {
+			envelope.Details["suggestedAction"] = inspectBeforeRetry + " " + action
+		}
 	} else {
 		envelope.Details["suggestedAction"] = inspectBeforeRetry
 	}
@@ -689,7 +693,8 @@ func subagentClassifyFailure(envelope *ToolErrorEnvelope, reason workers.WorkFai
 		envelope.Retryable = false
 		envelope.Details["failureReason"] = string(workers.WorkFailureTypeMisconfigured)
 		if provider == "pi" {
-			envelope.Details["suggestedAction"] = "Run `pi --version` to verify Pi version; pi-acp requires Pi 0.81.0+. Upgrade via `npm install -g @earendil-works/pi-coding-agent@latest`. Check Pi's selected model endpoint if the version is current."
+			envelope.Message = "Pi subagent provider is misconfigured; check that Pi's selected model endpoint is running and reachable"
+			envelope.Details["suggestedAction"] = "Check that Pi's selected model endpoint is running and reachable. Check Pi setup and capabilities. Run `pi --version`; pi-acp requires Pi 0.81.0+. Upgrade via `npm install -g @earendil-works/pi-coding-agent@latest` if needed."
 		} else {
 			envelope.Details["suggestedAction"] = "Verify the provider configuration and ensure the required executable or model is available"
 		}

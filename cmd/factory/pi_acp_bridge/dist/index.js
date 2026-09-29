@@ -14906,6 +14906,11 @@ var PiAcpSession = class {
   // Retries can follow a failed assistant message. The last typed assistant
   // outcome before agent_settled determines the prompt result.
   finalAssistantStopReason = null;
+  // Captured only when the final assistant message ends with stopReason 'error'.
+  // Reset on every assistant message_end so a later error without an errorMessage
+  // can't inherit an earlier attempt's message. Used solely to classify pi's known
+  // connection error for ACP; arbitrary error messages are never propagated to clients.
+  finalAssistantErrorMessage = null;
   // For ACP diff support: capture file contents before edit/write mutations,
   // then emit ToolCallContent {type:"diff"}. Compatible structured edit/write
   // events may need to be implemented in pi in the future.
@@ -14983,6 +14988,16 @@ var PiAcpSession = class {
   }
   wasCancelRequested() {
     return this.cancelRequested;
+  }
+  /**
+   * Narrow, safe classification of the final assistant failure for ACP error
+   * mapping. Returns 'model_connection' only for pi's known model connection
+   * error (stopReason 'error' with errorMessage 'Connection error.'). Arbitrary
+   * pi error messages are never exposed through this method.
+   */
+  getFailureKind() {
+    if (this.finalAssistantStopReason !== "error") return null;
+    return this.finalAssistantErrorMessage === "Connection error." ? "model_connection" : null;
   }
   emit(update) {
     this.lastEmit = this.lastEmit.then(
@@ -15070,6 +15085,7 @@ var PiAcpSession = class {
     this.cancelRequested = false;
     this.inAgentLoop = false;
     this.finalAssistantStopReason = null;
+    this.finalAssistantErrorMessage = null;
     this.pendingTurn = { resolve: t.resolve, reject: t.reject };
     this.emit({
       sessionUpdate: "session_info_update",
@@ -15101,6 +15117,10 @@ var PiAcpSession = class {
         const message = ev.message;
         if (message?.role === "assistant" && typeof message.stopReason === "string") {
           this.finalAssistantStopReason = message.stopReason;
+          this.finalAssistantErrorMessage = null;
+          if (message.stopReason === "error" && typeof message.errorMessage === "string") {
+            this.finalAssistantErrorMessage = message.errorMessage;
+          }
         }
         break;
       }
@@ -16579,7 +16599,11 @@ ${JSON.stringify(stats, null, 2)}`;
     }
     const result = await session.prompt(message, images);
     if (result === "error") {
-      throw RequestError.internalError({ provider: "pi", outcome: "error" }, "Pi assistant turn failed");
+      const data = { provider: "pi", outcome: "error" };
+      if (session.getFailureKind() === "model_connection") {
+        data.failureKind = "model_connection";
+      }
+      throw RequestError.internalError(data, "Pi assistant turn failed");
     }
     return { stopReason: result };
   }
