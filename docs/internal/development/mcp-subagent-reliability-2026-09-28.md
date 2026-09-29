@@ -2140,8 +2140,9 @@ finished a one-file documentation edit with a primary result, and `git diff
 --check` passed on the result. Codex MCP session
 `fa6ae32c-0fd6-49ae-93a1-d485d66eb4f3` completed a bounded code fix so ACP
 completed tool updates keep the owning tool event with diffs, and MCP timeout
-progress reports `lastCompletedToolObservedAt`. Focused MCP/ACP tests passed;
-the full ACP package is blocked by the existing dirty
+progress initially reported `lastCompletedToolObservedAt` (later removed as
+described below). Focused MCP/ACP tests passed. At that point, the full ACP
+package was blocked by the existing dirty
 `TestPiPreflight_CanceledContext` failure (`Canceled` expected, `misconfigured`
 observed), so the full ACP package is not claimed as passing. `make
 backend-size`, `pkg-maint`, and diff-check passed.
@@ -2163,3 +2164,20 @@ exact Node test file alone passed all 49 tests. The broad `make test` is
 therefore not claimed as passing; this run is presently a
 concurrency/intermittency observation, not evidence against the ACP mapping,
 and it does not prove the cause of the failure.
+
+Correction to the tool-timestamp observation above: a fresh headless MCP
+initialize and tools/list from `you-116fe602cb.exe` advertised 11 tools. A
+deliberately short, read-only OpenCode Mimo request with a 45000 ms limit
+returned typed `factory_session.subagent.timed_out` and recent `REASONING`,
+but no `lastCompletedToolObservedAt`. Sanitized native OpenCode session
+`ses_f14f0b1aeffep0L2MCi85UHa18` showed two completed read tools in
+OpenCode. That native record does not prove ACP transmitted a tool-completion
+update. An architecture audit found that the Factory Sessions response stream
+intentionally filters Worker ACP `TOOL` progress. The new tool timestamp fields
+were based on an unrealistic fake-event test and are being removed. Worker
+Sessions owns tool observations, and its public stream exposes no timestamp.
+
+A separate OpenCode Mimo MCP code task (session
+`aa5c162a-acfd-4019-a955-687cc9182d34`, request
+`88279b3f-c85b-46c4-a1f9-c40349cdcb93`) timed out after 300000 ms and left
+partial edits. No primary completion result or cause is established.

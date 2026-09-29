@@ -747,9 +747,6 @@ func subagentLastProviderActivity(ctx context.Context, target factorysessionexec
 		if event.Provenance.Provider == "" || event.Kind.Validate() != nil || event.Phase.Validate() != nil || event.RecordedAt.IsZero() {
 			continue
 		}
-		if event.Kind == factorysessionexecution.ResponseEventKindTool && event.Phase == factorysessionexecution.ResponseEventPhaseCompleted {
-			activity["lastCompletedToolObservedAt"] = event.RecordedAt
-		}
 		activity["kind"] = string(event.Kind)
 		activity["phase"] = string(event.Phase)
 		activity["observedAt"] = event.RecordedAt
