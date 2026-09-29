@@ -2271,3 +2271,27 @@ the matching `curl.txt` and `gpu.log` files, `models-http-probe.sh`, and
 requests returning HTTP 200 and text `zero` and `BLUE`, respectively. The GPU
 logs recorded compute process PID 4838 during both requests; they did not
 measure utilization, and no independent received-byte checksum was taken.
+
+The next `make test` run, launched from Git Bash, reproduced the previously
+intermittent CI workflow failures. In that environment `bash` resolves to Git
+Bash, while the tests hard-coded WSL `/mnt/c/...` paths; a direct Git Bash
+probe confirmed both the repository and `%TEMP%` `/mnt/c` paths are absent.
+PowerShell resolves `bash` to WSL, explaining why isolated PowerShell runs
+passed. The broad run also failed the functional coverage supervisor test for
+the same shell-path assumption. The captured output is
+`.tmp/make-test-after-models-http-20260929.log`.
+
+A first Codex MCP attempt (session `51dab776-029f-4450-a962-8df40a7f44a8`)
+completed with a primary result but incorrectly moved only two fixture types
+to a repository directory. That did not fix Git Bash's absent `/mnt/c` mount;
+the edit was not committed. A follow-up Codex MCP attempt (session
+`f7bc25e4-bcc4-4cb3-8ffb-abb9fd95c4f9`) received the exact Git Bash
+reproduction, edited the tests, and then timed out at 600000 ms without a
+primary result. Its MCP timeout progress said `providerSessionObserved:false`
+despite the observed edits. After the timeout, independent Git Bash
+`make test-ci-workflows` passed 180/180 and PowerShell focused tests passed
+50/50. Commit `bc90311e72` contains the selected-Bash path bridge and
+supervisor `setsid` selection. The full Git Bash `make test` rerun passed,
+including all 180 CI
+workflow tests; its captured output is
+`.tmp/make-test-cross-shell-fixed-20260929.log`.
