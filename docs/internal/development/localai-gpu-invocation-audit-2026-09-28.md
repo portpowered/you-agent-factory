@@ -128,3 +128,14 @@ build failed in recursive gRPC nested bloaty submodule
 retry is RUNNING (PID 42004, checked live) past CMake gRPC configuration.
 Archive, publish, and native GPU inference are NOT complete; do not treat
 this section as native Windows GPU evidence.
+
+Manual build update (2026-09-29): the retry gRPC step completed. The
+pinned llama CMake step then reported `backend.pb.h` missing
+`port_def.inc` while that header exists, caused by empty
+`Protobuf_INCLUDE_DIRS`. OpenCode MCP session
+`1ce72c0f-86c3-4a93-a63e-987b74b1d82e` fixed the build script by
+exporting the pinned gRPC include via MSVC `INCLUDE` and correcting
+`Protobuf_DIR`; workflow tests report 17 pass, 1 skip. The original
+native build is still compiling CUDA objects; final success is NOT
+claimed. The manual 10-entry assembler was committed as `2fc69146ec`;
+no release published.

@@ -2417,3 +2417,14 @@ nonrecursive checkout and retry idempotency. A retry is currently RUNNING
 publish, and native GPU test are NOT claimed complete. Full `make lint`
 passed 24 targets after moving tool/source staging outside the repo. No
 other edits/tests/network in this entry.
+
+Manual CUDA build update (2026-09-29): the retry gRPC step completed. The
+pinned llama CMake step then failed with `backend.pb.h` missing
+`port_def.inc` while that header exists, caused by empty
+`Protobuf_INCLUDE_DIRS`. OpenCode MCP session
+`1ce72c0f-86c3-4a93-a63e-987b74b1d82e` fixed the build script by
+exporting the pinned gRPC include via MSVC `INCLUDE` and correcting
+`Protobuf_DIR`; its workflow tests report 17 pass, 1 skip. The original
+native build is still compiling CUDA objects; final build success,
+archive, publish, and native GPU inference are NOT claimed. The manual
+10-entry assembler was committed as `2fc69146ec`; no release published.
