@@ -2081,3 +2081,9 @@ endpoint is running and reachable". Its suggested action begins with the
 same concrete endpoint check, followed by Pi setup/version and workspace
 inspection. The live Pi success path is still unavailable because the
 selected local model endpoint reports `Connection error.` even via direct Pi.
+Commit `ffce01616e` records the bridge, classification, tests, and this log.
+The installed MCP command for new connections now points to
+`C:\Users\andre\bin\you-ffce01616e.exe` (SHA-256
+`7CC1E5F3094562806353641BFAE116999BC3D53EBFC178A631631109CDE9C658`).
+A fresh headless MCP initialize and tools/list from that exact binary returned
+11 tools including `you.subagent`.
