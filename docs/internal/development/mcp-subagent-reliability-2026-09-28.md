@@ -2261,4 +2261,13 @@ Focused transport/backend tests passed. This proves byte delivery, not model
 understanding. The pinned llama.cpp message reconstruction labels audio as
 `wav` regardless of submitted media type and carries video as one
 `input_video` blob without Models-side frame extraction or timestamps. A
-live direct-endpoint semantic GPU probe is pending.
+live direct-endpoint semantic GPU probe was subsequently completed.
+
+MCP session `63268445-1f69-4970-abaa-1d7cf850a282` completed that bounded
+probe with a primary result. Workspace evidence under
+`/home/andre/you-localai-probe/models-http-{audio,video}-response.json`,
+the matching `curl.txt` and `gpu.log` files, `models-http-probe.sh`, and
+`models-http-model-detail.json` shows direct Models HTTP multipart WAV and MP4
+requests returning HTTP 200 and text `zero` and `BLUE`, respectively. The GPU
+logs recorded compute process PID 4838 during both requests; they did not
+measure utilization, and no independent received-byte checksum was taken.

@@ -65,6 +65,25 @@ Docker. Gallery CUDA backends and models were installed under
   with 256 default tokens; live repository `OmniCodec` then returned `READY`
   plus usage.
 
+## Direct Models HTTP multipart audio/video — 2026-09-29 UTC
+
+- MCP session `63268445-1f69-4970-abaa-1d7cf850a282` ran the WSL
+  `/home/andre/you-localai-probe/models-http-probe.sh` against
+  `POST /models/invocations` with `offline:true` and multipart WAV/MP4 files.
+  The installed `llm` model detail reports cached Gemma 4 E4B
+  `Q4_K_M` and projector assets as ready; the probe used the
+  `cuda12-llama-cpp` backend.
+- The known WAV saying “Zero” returned text `zero` with HTTP 200. The MP4
+  displaying `BLUE` returned `BLUE` with HTTP 200. These are live
+  direct-endpoint semantic results, beyond the transport byte-path tests.
+- The `nvidia-smi` sampling logs recorded GPU compute process PID 4838 during
+  both requests (process name shown as `[Not Found]` under WSL). They do not
+  measure GPU utilization. No independent checksum of the bytes received by
+  the backend was taken.
+- Evidence: `models-http-{audio,video}-response.json`, matching `curl.txt`
+  and `gpu.log` files, `models-http-probe.sh`, and
+  `models-http-model-detail.json` under `/home/andre/you-localai-probe/`.
+
 ## Related
 
 TTS Qwen3 and IndexTTS results are in
