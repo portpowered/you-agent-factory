@@ -1853,3 +1853,9 @@ diagnostic's computed age with the retained event's `RecordedAt` timestamp,
 removing its production `time.Now` dependency. The full MCP transport suite
 passed. `pkg-boundary` no longer reports that clock call; its three remaining
 findings all come from the untracked local `.artifacts/direct_video_probe.go`.
+
+Commit `b04fb8704d` records both lint repairs and this audit. The rebuilt
+Windows MCP binary is `C:\Users\andre\bin\you-b04fb8704d.exe` (SHA-256
+`4AEDB087F5542C230C6D167D1430CB3AC3B57A24E9638820F003B418A27A76FA`);
+the Codex MCP command for new connections points to it. A fresh headless
+stdio initialize and `tools/list` returned 11 tools including `you.subagent`.
