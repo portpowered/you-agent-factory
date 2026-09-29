@@ -454,6 +454,20 @@ test("the workflow uses immutable actions, package inputs, and the pinned tag gu
 	assert.match(cudaScript, /dumpbin \/dependents/);
 });
 
+test("the Windows CUDA gRPC checkout avoids recursive bloaty submodules", async () => {
+	const cudaScript = await readFile("scripts/build-localai-backend-cuda.ps1", "utf8");
+	const submoduleLines = cudaScript.split("\n").filter((line) => line.includes("'submodule'"));
+	assert.equal(submoduleLines.length, 1);
+	assert.match(submoduleLines[0], /'submodule', 'update', '--init', '--depth', '1'/);
+	assert.doesNotMatch(submoduleLines[0], /--recursive/);
+	// The static gRPC build compiles every dependency from the pinned
+	// top-level third-party submodules, so a non-recursive checkout is sufficient.
+	for (const provider of ["ZLIB", "CARES", "RE2", "SSL", "PROTOBUF", "ABSL"]) {
+		assert.match(cudaScript, new RegExp(`-DgRPC_${provider}_PROVIDER=module`));
+	}
+	assert.match(cudaScript, /fetch', '--depth', '1', 'origin', \$env:GRPC_COMMIT/);
+});
+
 test("the Windows build plan resolves Git from the runner path bridge", async (t) => {
 	const root = await mkdtemp(join(tmpdir(), "localai-backend-windows-tools-"));
 	t.after(() => rm(root, { recursive: true, force: true }));

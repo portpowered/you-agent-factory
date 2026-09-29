@@ -98,7 +98,11 @@ Invoke-Checked git @('-C', $grpcSource, 'init')
 Invoke-Checked git @('-C', $grpcSource, 'remote', 'add', 'origin', 'https://github.com/grpc/grpc.git')
 Invoke-Checked git @('-C', $grpcSource, 'fetch', '--depth', '1', 'origin', $env:GRPC_COMMIT)
 Invoke-Checked git @('-C', $grpcSource, 'checkout', '--detach', 'FETCH_HEAD')
-Invoke-Checked git @('-C', $grpcSource, 'submodule', 'update', '--init', '--recursive', '--depth', '1')
+# gRPC builds every dependency from its pinned third-party submodules
+# (all _PROVIDER=module below), so only top-level submodules are required.
+# Do not re-add --recursive: it enters third_party/bloaty/third_party/abseil-cpp
+# and fails on Windows with `fatal: '$GIT_DIR' too big`.
+Invoke-Checked git @('-C', $grpcSource, 'submodule', 'update', '--init', '--depth', '1')
 if ((& git -C $grpcSource rev-parse HEAD).Trim() -ne $env:GRPC_COMMIT) { throw 'gRPC checkout does not match the pinned commit' }
 $grpcCmake = Get-Content -LiteralPath (Join-Path $grpcSource 'CMakeLists.txt') -Raw
 if ($grpcCmake -notmatch "(?m)set\(PACKAGE_VERSION\s+`"$([regex]::Escape($config.toolchain.grpcVersion))`"\)") { throw 'pinned gRPC version does not match the config' }
