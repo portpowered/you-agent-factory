@@ -1859,3 +1859,20 @@ Windows MCP binary is `C:\Users\andre\bin\you-b04fb8704d.exe` (SHA-256
 `4AEDB087F5542C230C6D167D1430CB3AC3B57A24E9638820F003B418A27A76FA`);
 the Codex MCP command for new connections points to it. A fresh headless
 stdio initialize and `tools/list` returned 11 tools including `you.subagent`.
+
+The ignored `.artifacts/direct_video_probe.go` was identified as this
+session's earlier temporary raw-gRPC diagnostic and preserved at
+`C:\Users\andre\.codex\worktrees\mcp-goal-integration\diagnostics\direct_video_probe.go`,
+outside the package tree. A full lint rerun then passed every target except
+`pkg-file-count`: the new race-test file raised `pkg/services/models/internal/service`
+from its recorded 16 files to 17. A Codex MCP follow-up (session
+`3a287f02-8921-4a91-b097-c6e43281686f`) moved that test into the existing
+`runtime_factory_inference_test.go` and removed the extra file. The destination
+is 942 lines; focused package tests, `pkg-maint`, `pkg-file-count`,
+`backend-size`, and diff checks passed.
+After staging the deletion of the temporary split test file, `fmt-check`
+passed, and the final `make lint` run passed all 24 targets. The first full
+rerun after moving the diagnostic source had failed only `pkg-file-count`;
+the intermediate rerun after the test relocation failed only because the
+removed tracked test file was not yet staged and the formatter tried to read
+it. Neither was a remaining code violation after staging the intended edit.
