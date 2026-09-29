@@ -2506,3 +2506,59 @@ fresh binary, while nine `you-b04fb8704d.exe server mcp` processes launched
 before that config update remained alive; direct stdio validation is therefore
 the evidence for the new binary, and the desktop-hosted MCP instance has not
 yet been observed restarting onto it.
+
+Windows Whisper CUDA follow-up (2026-09-29): OpenCode subagents implemented
+the bounded Windows MSVC/CUDA build script, 12-leg release matrix and workflow
+routing, and a manual extension of the previously published ten-archive
+release. A separate OpenCode review produced an 11-entry fixture manifest,
+decoded it with the Go artifact validator, verified CUDA/CPU selection, and
+passed focused Node and Go tests without changing code. A Muse model dispatch
+for that review was rejected with
+`factory_session.subagent.provider_request_rejected` and
+`permanent_bad_request`; retrying with the default OpenCode provider
+completed the review. The native Whisper build is still compiling CUDA
+sources; no Whisper archive or release is claimed in this entry. `make lint`
+passed all 24 targets after the source edits. A separate read-only OpenCode
+VibeVoice review returned a primary result, but its claim that both projects
+vendor ggml as recursive submodules was not supported by the local Whisper
+checkout (`ggml` is a regular tree there); do not use that claim to justify
+binary reuse or ABI decisions.
+
+The narrower 11-to-12 archive VibeVoice implementation slice completed via
+OpenCode MiMo with a primary result and one new script. A separate MiMo
+test-writing dispatch returned typed `factory_session.subagent.provider_throttled`
+(`INVOCATION_PRIMARY_RESULT_UNRESOLVED`, retryable) before creating its test
+file. A non-OpenCode subagent took the test slice as a fallback. This is a
+provider capacity outcome; no missing working-root permission was observed.
+
+A second OpenCode task to prepare the VibeVoice eleven-to-twelve archive
+manual extension was dispatched with a 600-second limit while Whisper compiled.
+It returned typed `factory_session.subagent.timed_out` with one in-flight
+dispatch and last provider activity `REASONING/DELTA`. No repository edits
+from that dispatch were visible after cleanup. Its broad prompt was not a
+useful bounded unit; retry as smaller implementation and test steps. This
+timeout did not interrupt the independent native Whisper build.
+
+A concurrent read-only OpenCode request to assess a narrower CUDA
+architecture set also reached its 300-second timeout with last activity
+`REASONING/DELTA` and no primary result. It made no intended edits.
+The default OpenCode model for both timed-out tasks was
+`longcat-2.5-preview-free`; the next implementation slice was sent to
+`mimo-v2.6-flash-free` to compare completion behavior on a tighter task.
+
+Explicit OpenCode model rejection root cause and repair (2026-09-29):
+qualified `opencode/...` model IDs were passed without a provider override,
+so `you.subagent` used the operator's default provider and received
+`permanent_bad_request`. Native OpenCode ACP advertised and accepted the
+qualified model IDs; a direct MCP call with both `provider:"opencode"` and
+qualified Muse returned `OK`. The MCP transport now derives `opencode` from
+the qualified model prefix when provider is omitted, and rejects an explicitly
+conflicting provider as `BAD_REQUEST` before session creation (commit
+`adf690272b`). Focused Go tests passed. A fresh binary at
+`C:\Users\andre\bin\you-model-infer-20260929.exe` passed direct MCP stdio
+initialize and a model-only Muse dispatch, returning a completed primary
+result; an explicit conflicting provider returned structured `BAD_REQUEST`.
+Codex MCP config now points to that binary. Existing desktop MCP processes
+may still need a restart before using it; the direct fresh-server probe is
+the live validation evidence. Three model-only requests against the previous
+binary (Muse, MiMo, Ling) had returned the typed provider rejection.

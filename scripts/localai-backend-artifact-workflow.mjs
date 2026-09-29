@@ -74,7 +74,7 @@ const expectedTargetFacts = {
 	"linux-amd64": { os: "linux", architecture: "amd64", runner: "ubuntu-24.04", buildType: "cpu", accelerators: ["cpu"] },
 	"linux-amd64-cuda": { os: "linux", architecture: "amd64", runner: "localai-linux-amd64-cuda", buildType: "cublas", accelerators: ["cuda"], backends: ["localai-llamacpp"] },
 	"windows-amd64": { os: "windows", architecture: "amd64", runner: "windows-2022", buildType: "cpu", accelerators: ["cpu"] },
-	"windows-amd64-cuda": { os: "windows", architecture: "amd64", runner: "localai-windows-amd64-cuda", buildType: "cublas", accelerators: ["cuda"], backends: ["localai-llamacpp"] },
+	"windows-amd64-cuda": { os: "windows", architecture: "amd64", runner: "localai-windows-amd64-cuda", buildType: "cublas", accelerators: ["cuda"], backends: ["localai-llamacpp", "localai-whisper"] },
 };
 
 export function loadConfig(configPath = defaultConfigPath) {
@@ -233,8 +233,8 @@ function validateHostToolchain(errors, hostToolchain) {
 		addError(errors, "hostToolchain.windows must be an object");
 	} else {
 		if (windows.cudaVersion !== "13.3") addError(errors, "hostToolchain.windows.cudaVersion must be 13.3");
-		if (windows.cudaArchitecture !== "75-real;80-real;86-real;89-real;90-real;100-real;110-real;120-real;75-virtual") {
-			addError(errors, "hostToolchain.windows.cudaArchitecture must be the pinned CUDA 13.3 fat-binary architecture set");
+		if (windows.cudaArchitecture !== "89-real;75-virtual") {
+			addError(errors, "hostToolchain.windows.cudaArchitecture must be the pinned Windows CUDA 13.3 test architecture set");
 		}
 		if (windows.vcpkgTriplet !== "x64-mingw-static-release") addError(errors, "hostToolchain.windows.vcpkgTriplet must be x64-mingw-static-release");
 		if (JSON.stringify(windows.msysPackages) !== JSON.stringify(expectedWindowsMsysPackages)) {
@@ -321,8 +321,8 @@ export function validateConfig(config) {
 	if (matrix) {
 		const combinations = matrix.include.map((entry) => `${entry.backend}/${entry.target}`);
 		validateUniqueIds(errors, combinations, "matrix");
-		if (matrix.include.length !== 11) {
-			addError(errors, "matrix must contain exactly eleven backend/target combinations");
+		if (matrix.include.length !== 12) {
+			addError(errors, "matrix must contain exactly twelve backend/target combinations");
 		}
 	}
 	return { errors, matrix };

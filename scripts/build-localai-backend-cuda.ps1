@@ -64,9 +64,9 @@ if (-not $cudaRoot) {
 $nvcc = Join-Path $cudaRoot 'bin\nvcc.exe'
 if (-not (Test-Path -LiteralPath $nvcc)) { throw "missing $nvcc" }
 Assert-Tool $nvcc @('--version') "release $($config.hostToolchain.windows.cudaVersion),"
-# Ship native code for the CUDA 13.3 GPU generations plus compute_75 PTX for
-# forward JIT compatibility. Keep this identical to the pinned artifact config.
-$cudaArchitectures = '75-real;80-real;86-real;89-real;90-real;100-real;110-real;120-real;75-virtual'
+# Ship native code for the Windows test GPU (RTX 4090, sm_89) plus compute_75
+# PTX for JIT compatibility. Keep this identical to the pinned artifact config.
+$cudaArchitectures = '89-real;75-virtual'
 if ($config.hostToolchain.windows.cudaArchitecture -cne $cudaArchitectures) { throw 'unexpected CUDA architecture set' }
 if ($ProbeOnly) { Invoke-CudaProbe; exit 0 }
 

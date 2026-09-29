@@ -217,7 +217,7 @@ jobs:
           bash scripts/build-localai-backend-artifact.sh
 
       - name: Prepare pinned llama sources for Windows CUDA
-        if: matrix.target == 'windows-amd64-cuda'
+        if: matrix.backend == 'localai-llamacpp' && matrix.target == 'windows-amd64-cuda'
         working-directory: you-agent-factory
         shell: msys2 {0}
         run: |
@@ -226,11 +226,18 @@ jobs:
           make -C "$localai_root/backend/cpp/llama-cpp" llama.cpp/tools/grpc-server
 
       - name: Build the Windows CUDA backend with MSVC
-        if: matrix.target == 'windows-amd64-cuda'
+        if: matrix.backend == 'localai-llamacpp' && matrix.target == 'windows-amd64-cuda'
         working-directory: you-agent-factory
         shell: pwsh
         timeout-minutes: 300
         run: ./scripts/build-localai-backend-cuda.ps1
+
+      - name: Build the Whisper Windows CUDA backend with MSVC
+        if: matrix.backend == 'localai-whisper' && matrix.target == 'windows-amd64-cuda'
+        working-directory: you-agent-factory
+        shell: pwsh
+        timeout-minutes: 300
+        run: ./scripts/build-localai-whisper-backend-cuda.ps1
 
       - name: Build the backend package on Unix
         if: runner.os != 'Windows'
@@ -411,7 +418,7 @@ jobs:
               -f "tag_name=$RELEASE_TAG" \
               -f "target_commitish=$GITHUB_SHA" \
               -f "name=Pinned LocalAI backends $RELEASE_TAG" \
-              -f "body=Complete nine-platform backend publication. The release remains draft until every archive and manifest asset is uploaded." \
+              -f "body=Complete twelve-archive backend publication (12 backend archives plus the manifest, 13 assets). The release remains draft until every archive and manifest asset is uploaded." \
               -F draft=true \
               --jq '.id')"
             echo "created draft backend release $RELEASE_TAG id=$release_id"
@@ -424,4 +431,4 @@ jobs:
             echo "published backend tag $RELEASE_TAG resolved to $published_tag_target, expected $GITHUB_SHA" >&2
             exit 1
           fi
-          echo "LOCALAI_BACKEND_RELEASE_PUBLISHED tag=$RELEASE_TAG assets=10"
+          echo "LOCALAI_BACKEND_RELEASE_PUBLISHED tag=$RELEASE_TAG assets=13"

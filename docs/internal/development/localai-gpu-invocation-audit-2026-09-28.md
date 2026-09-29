@@ -184,3 +184,28 @@ compute is unproven. Evidence under
 `C:\Users\andre\AppData\Local\Temp\you-native-cuda-aca54b5bf4f44e75b147760509c2517c`
 in `llm-pull.json`, `llm-invoke4.json`, and `llm-gpu-*samples4.txt`. ASR/TTS
 native Windows remain CPU; no Linux CUDA archive exists in this release.
+
+## Manual Windows Whisper CUDA build (2026-09-29)
+
+The pinned Windows Whisper CUDA build was configured with the broad set of
+eight native GPU architectures plus compute-75 PTX. MSVC compiled 122 of 139
+CUDA sources, but its `argsort.cu` host compiler consumed more than an hour
+without producing an object. The process was stopped after checking its exact
+build-process tree; no archive was published from that attempt. For the
+manual RTX 4090 test release, the pinned Windows architecture set is now
+`89-real;75-virtual`, retaining native Ada code and PTX for supported newer
+GPUs. The packaging revision remains 4; the changed host-toolchain pin is
+included in the new archive metadata and release fingerprint. The narrowed
+build compiled all 139 CUDA sources and linked `ggml-cuda.dll`, `whisper.dll`,
+and `gowhisper.dll`. The pinned LocalAI checkout lacks generated
+`pkg/grpc/proto` sources, so the build script now installs LocalAI's pinned Go
+protobuf plugins in an isolated directory and generates those sources with
+`protoc 31.1`. The original CMake `MODULE` library had no exported symbols on
+Windows; the script changes the pinned declaration to `SHARED` and enables
+CMake's Windows symbol export before building. The native backend startup
+health check passed, all five expected `gowhisper` exports were present, and
+the package was staged with CUDA and MSVC runtime DLLs. The Windows CUDA ZIP
+is 448,033,531 bytes with SHA-256
+`4d0eb5cc09e94ab820335af5bcfff1634e72c4206f6975848eb12f4b81ba2c9c`.
+The archive is staged for a manual release; native Windows ASR inference from
+the published artifact remains to be checked.

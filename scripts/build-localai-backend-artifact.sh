@@ -143,6 +143,12 @@ case "$TARGET_ID:$BACKEND_ID" in
 	windows-amd64-cuda:localai-llamacpp)
 		build_strategy="windows-llamacpp-cuda-msvc"
 		;;
+	windows-amd64-cuda:localai-whisper)
+		# The manual Windows CUDA Whisper archive builds under MSVC via
+		# scripts/build-localai-whisper-backend-cuda.ps1; this shell harness
+		# only reports the plan and never attempts a Unix build for it.
+		build_strategy="windows-whisper-cuda-msvc"
+		;;
 	windows-amd64:localai-whisper)
 		build_strategy="windows-whisper"
 		;;
@@ -189,6 +195,12 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 			windows_library_name="libgovibevoicecpp.dll"
 			;;
 		esac
+	elif [[ "$TARGET_ID" == "windows-amd64-cuda" && "$BACKEND_ID" == "localai-whisper" ]]; then
+		# The future manual Windows CUDA Whisper archive reuses the CPU Whisper
+		# Windows loader shim. The native build itself runs under MSVC via
+		# scripts/build-localai-whisper-backend-cuda.ps1.
+		go_dynamic_loader="xsys-windows"
+		windows_library_name="libgowhisper.dll"
 	fi
 
 # The pinned gRPC CMake project otherwise lets the Windows generator select
@@ -233,6 +245,9 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	plan_go_dynamic_loader=" go_dynamic_loader=$go_dynamic_loader"
 	plan_windows_library_name=""
 	plan_grpc_dependency_mode=" grpc_dependency_mode=$grpc_dependency_mode"
+	if [[ "$TARGET_ID" == "windows-amd64-cuda" && "$BACKEND_ID" == "localai-whisper" ]]; then
+		plan_windows_library_name=" windows_library_name=$windows_library_name"
+	fi
 	if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 		plan_cxx_standard=" cxx_standard=$windows_cxx_standard"
 		plan_cmake_generator=" cmake_generator=mingw-makefiles"
@@ -248,7 +263,17 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 fi
 
 if [[ "$TARGET_ID" == "windows-amd64-cuda" ]]; then
-	echo "Windows CUDA uses scripts/build-localai-backend-cuda.ps1 under MSVC" >&2
+	case "$BACKEND_ID" in
+		localai-llamacpp)
+			echo "Windows CUDA llama uses scripts/build-localai-backend-cuda.ps1 under MSVC" >&2
+			;;
+		localai-whisper)
+			echo "Windows CUDA whisper uses scripts/build-localai-whisper-backend-cuda.ps1 under MSVC" >&2
+			;;
+		*)
+			echo "unsupported backend/target: ${BACKEND_ID}/${TARGET_ID}" >&2
+			;;
+	esac
 	exit 1
 fi
 

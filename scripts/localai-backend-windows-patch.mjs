@@ -48,6 +48,14 @@ export function patchWindowsGoLoader({ mainPath, loaderPath, libraryName, backen
 			"\treturn 0",
 			"}",
 		].join("\n");
+	} else if (backendID === "localai-vibevoice") {
+		// The vibevoice streaming callback (streamCB) lives in govibevoicecpp.go
+		// and already returns uintptr, so no Windows ABI shim is needed here.
+		// Fail loudly if upstream ever registers a callback in main.go so the
+		// ABI need is reassessed instead of silently skipped.
+		if (source.includes("purego.NewCallback")) {
+			throw new Error(`unexpected purego callback registration in ${mainPath}; reassess the Windows NewCallback ABI shim for localai-vibevoice`);
+		}
 	}
 
 	writeFileSync(

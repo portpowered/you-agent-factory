@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "packagingRevision": 3,
+  "packagingRevision": 4,
   "nodeVersion": "22.14.0",
   "localaiRepository": "https://github.com/mudler/LocalAI.git",
   "localaiCommit": "b224c96db6f4b87306a33a808650bfce63b12588",
@@ -37,7 +37,7 @@
     },
     "windows": {
       "cudaVersion": "13.3",
-      "cudaArchitecture": "75-real;80-real;86-real;89-real;90-real;100-real;110-real;120-real;75-virtual",
+      "cudaArchitecture": "89-real;75-virtual",
       "msysPackages": [
         "make=4.4.1-3",
         "mingw-w64-x86_64-make=4.4.1-5",
@@ -118,7 +118,7 @@
       "runner": "localai-windows-amd64-cuda",
       "buildType": "cublas",
       "accelerators": ["cuda"],
-      "backends": ["localai-llamacpp"]
+      "backends": ["localai-llamacpp", "localai-whisper"]
     }
   ]
 }
