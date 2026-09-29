@@ -2326,3 +2326,23 @@ exactly `EDIT_OK\n`. The file was checked and removed after the smoke test.
 The stdio process logged `peer connection closed` on normal input EOF, while
 the tool call itself completed successfully; this line alone is not a task
 failure.
+
+An OpenCode Muse Spark MCP audit (session
+`bd04498b-ecda-4072-b1fe-621f96213121`) completed with a primary result
+and confirmed that direct Models LocalAI OMNI/Predict currently imposes no
+default generation, reasoning, or context-window cap. `PredictOptions.Tokens`
+is omitted/zero, which the pinned llama backend interprets as unlimited
+`n_predict=-1`; `ModelOptions.ContextSize` is omitted/zero so llama.cpp
+derives context from the model. Existing wire tests pin both. The 16 MiB
+normalized output-byte ceiling remains a response memory guard, distinct
+from generation token policy. Explicit user token-count parameters are not
+mapped to `PredictOptions.Tokens`; no default-cap change was needed.
+
+A fresh installed-binary MCP `you.subagent` call with `provider:"pi"`
+returned typed `factory_session.subagent.provider_misconfigured` in the
+primary message and structured error, with an action to check Pi's selected
+model endpoint. `pi --version` returned 0.87.0; `pi models` returned
+`Connection error.`. This is a selected endpoint reachability/configuration
+failure, not a provider-name alias or MCP result-transport failure. The
+underlying runtime logs printed a long stack trace for the expected failed
+dispatch; the customer-facing MCP result remained concise.
