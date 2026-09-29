@@ -2295,3 +2295,25 @@ supervisor `setsid` selection. The full Git Bash `make test` rerun passed,
 including all 180 CI
 workflow tests; its captured output is
 `.tmp/make-test-cross-shell-fixed-20260929.log`.
+
+A scoped OpenCode Muse Spark MCP audit (session
+`c8952f1a-b1b3-4463-95b7-a826bab58f54`) completed with a primary result
+and found one production application composition path:
+`cmd/factory` → `root.BuildProcess` → `wire.InjectBundle` with raw
+`edges.Edges`. The old application opener, runtime bundle, adapter, and
+secondary state graph are absent from production callers; boundary tests
+forbid their reintroduction. Unrelated browser, logging, MCP-transport, and
+model-cache openers remain appropriately scoped.
+
+Codex MCP session `994a542a-7991-484e-9031-19e1161c0912` completed a
+bounded timeout-report correction (`fe24e4b392`). `providerSessionObserved`
+now appears only when a Factory response event positively contains a provider
+session reference; an empty response stream no longer asserts `false` even
+when a Worker may have edited files. The MCP package tests pass. A new Windows
+binary `C:\Users\andre\bin\you-fe24e4b392.exe` (SHA-256
+`B0A8D1B35CA83086CD5F5DE896BD2F0DAE139329F6FBAD88538489D1DE0A4C67`)
+is configured for new MCP connections. A fresh stdio initialize/tools-list
+returned `you.subagent`, and a fresh `you.subagent` Codex call completed with
+primary text `READY`. `make lint` passed all 24 targets with the configured
+Git Bash shell. An earlier lint invocation without that shell setting failed
+at recipe parsing and did not indicate a code defect.
