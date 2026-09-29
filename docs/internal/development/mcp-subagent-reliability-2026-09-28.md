@@ -2192,3 +2192,14 @@ Focused MCP package tests, `make backend-size`, `make pkg-maint`, and
 new connections points to `C:\Users\andre\bin\you-f4eb28e1de.exe` (SHA-256
 `B26557220737BFA4BB1374D313017D1B0ACCFE1F0964432121C567F0BC0D565A`). No
 all-provider live success is claimed from this correction.
+
+An OpenCode Mimo read-only CUDA resolver audit (session
+`704b491c-e400-411c-bbe4-043b82f14f89`, request
+`c85865c2-a38b-43a7-9b32-565c1e70c4c1`) timed out at 180000 ms without a
+primary result. The MCP response correctly carried
+`factory_session.subagent.timed_out`, recent `REASONING` activity, and a closed
+Factory Session. A workspace status check found no new edits. Independent
+inspection and focused tests showed that the resolver already prefers a
+compatible older CUDA archive over a newer CPU-only publication; the two
+currently published backend releases contain no CUDA archive. The subagent
+timeout itself remains unexplained.
