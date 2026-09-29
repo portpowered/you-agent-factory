@@ -1,5 +1,9 @@
 # Backend
 
+Generated [backend structure](visualizations/high-level-backend.md) and
+[test coverage](visualizations/high-level-test-coverage.md) show the current
+service and package inventory.
+
 ## What?
 
 The backend is largely a golang based backend that is responsible for orchestrating AI agents together. The architecture is largely straightforward and is generic to extension in various angles.

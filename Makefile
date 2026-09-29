@@ -285,6 +285,7 @@ endef
 .PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes verify test-ui-coverage
 
 .PHONY: backend-dependency-graph
+.PHONY: architecture
 
 .PHONY: generate-api generate-operator-config-schema operator-config-schema-check generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
 .PHONY: interfaces-api-bundle interfaces-go interfaces-contracts interfaces-ui-openapi interfaces-ui-client interfaces-ui-emulator interfaces-ui interfaces-all
@@ -550,7 +551,7 @@ readme-check:
 test: test-unit test-ci-workflows
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/ci/backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-visualizations-workflow.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/ci/backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -974,6 +975,11 @@ backend-size:
 
 backend-dependency-graph:
 	$(GO) run ./cmd/backenddependencygraph -root . -go $(GO) -output $(BACKEND_DEPENDENCY_GRAPH_DOT) -svg-output $(BACKEND_DEPENDENCY_GRAPH_SVG)
+
+# Generated GitHub-renderable architecture pages; coverage inputs are optional
+# locally and required by the CI publisher after both measured lanes pass.
+architecture:
+	$(GO) run ./cmd/backendvisualizations -root . -go $(GO) -output-dir docs/architecture/visualizations $(if $(BACKEND_VIS_UNIT_SUMMARY),-unit-summary $(BACKEND_VIS_UNIT_SUMMARY),) $(if $(BACKEND_VIS_FUNCTIONAL_SUMMARY),-functional-summary $(BACKEND_VIS_FUNCTIONAL_SUMMARY),) $(if $(BACKEND_VIS_SOURCE_COMMIT),-source-commit $(BACKEND_VIS_SOURCE_COMMIT),) $(if $(BACKEND_VIS_REQUIRE_COVERAGE),-require-coverage,)
 
 pkg-maint:
 	$(call run_lint_checker,./cmd/pkgmaintcheck,-root "$(PACKAGE_MAINT_ROOT)")

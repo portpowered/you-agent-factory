@@ -165,15 +165,11 @@ func Subagent(ctx context.Context, target factorysessionexecution.TargetExecutio
 	}
 	result, invokeErr := target.InvokeFactorySession(ctx, started.SessionID, invocationRequest)
 	closeErr := target.CloseFactorySession(context.WithoutCancel(ctx), started.SessionID)
+	if result.Status != factorysessionexecution.InvocationTerminalStatusCompleted {
+		return subagentTerminalFailure(started.SessionID, result, input.TimeoutMillis)
+	}
 	if err := errors.Join(invokeErr, closeErr); err != nil {
 		return subagentExecutionFailure(err)
-	}
-	if result.Status != factorysessionexecution.InvocationTerminalStatusCompleted {
-		message := result.Message
-		if message == "" {
-			message = fmt.Sprintf("subagent finished with status %s", result.Status)
-		}
-		return subagentExecutionFailure(errors.New(message))
 	}
 	response := SubagentResult{SessionID: started.SessionID, Status: string(result.Status)}
 	for _, part := range result.PrimaryResult {
@@ -222,5 +218,27 @@ func validateSubagentRequest(ctx context.Context, target factorysessionexecution
 
 func subagentExecutionFailure(err error) ToolResponse[SubagentResult] {
 	envelope := executionErrorEnvelope(err)
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentTerminalFailure(sessionID string, result factorysessionexecution.InvocationResult, timeoutMillis *int64) ToolResponse[SubagentResult] {
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.execution_failed",
+		Message:   "subagent execution failed before producing a result",
+		Retryable: false,
+		SessionID: sessionID,
+		Details:   map[string]any{"status": result.Status},
+	}
+	if result.ErrorCode != "" {
+		envelope.Details["invocationCode"] = result.ErrorCode
+	}
+	if result.Status == factorysessionexecution.InvocationTerminalStatusTimedOut {
+		envelope.Code = "factory_session.subagent.timed_out"
+		envelope.Message = "subagent timed out before producing a result; workspace edits may have occurred"
+		envelope.Details["partialEffectsPossible"] = true
+		if timeoutMillis != nil {
+			envelope.Details["timeoutMillis"] = *timeoutMillis
+		}
+	}
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }
