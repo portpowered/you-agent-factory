@@ -443,8 +443,14 @@ func TestGenericInvocationResponseRoundTripsBinaryAndOrderedText(t *testing.T) {
 	t.Parallel()
 
 	wav := []byte{'R', 'I', 'F', 'F', 0x00, 0xff, 0x80}
+	png := []byte{0x89, 'P', 'N', 'G', 0x00, 0xff}
+	mp4 := []byte{0x00, 0x00, 0x00, 0x01, 'f', 't', 'y', 'p'}
+	blob := []byte{0x00, 0x01, 0x02, 0xff, 0x80}
 	projected := GenericInvocationResponseToGenerated(models.GenericInvocationResult{Outputs: []models.InferenceOutput{
 		{Name: "audio", Modality: models.ModalityAudio, MediaType: "audio/wav", Content: string(wav)},
+		{Name: "frame", Modality: models.ModalityImage, MediaType: "image/png", Content: string(png)},
+		{Name: "clip", Modality: models.ModalityVideo, MediaType: "video/mp4", Content: string(mp4)},
+		{Name: "blob", Modality: models.ModalityBinary, MediaType: "application/octet-stream", Content: string(blob)},
 		{Name: "transcript", Modality: models.ModalityText, Content: "héllo"},
 	}})
 	encoded, err := json.Marshal(projected)
@@ -455,16 +461,34 @@ func TestGenericInvocationResponseRoundTripsBinaryAndOrderedText(t *testing.T) {
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(decoded.Outputs) != 2 || decoded.Outputs[0].Name != "audio" || decoded.Outputs[1].Name != "transcript" {
-		t.Fatalf("ordered outputs = %#v", decoded.Outputs)
+	wantNames := []string{"audio", "frame", "clip", "blob", "transcript"}
+	if len(decoded.Outputs) != len(wantNames) {
+		t.Fatalf("ordered outputs = %#v, want %d outputs", decoded.Outputs, len(wantNames))
 	}
-	if decoded.Outputs[0].Content != nil || decoded.Outputs[0].ContentBase64 == nil ||
-		!bytes.Equal(*decoded.Outputs[0].ContentBase64, wav) {
-		t.Fatalf("audio output = %#v, want original WAV bytes", decoded.Outputs[0])
+	for index, want := range wantNames {
+		if decoded.Outputs[index].Name != want {
+			t.Fatalf("output %d name = %q, want %q (outputs = %#v)", index, decoded.Outputs[index].Name, want, decoded.Outputs)
+		}
 	}
-	if decoded.Outputs[1].Content == nil || *decoded.Outputs[1].Content != "héllo" ||
-		decoded.Outputs[1].ContentBase64 != nil {
-		t.Fatalf("text output = %#v, want UTF-8 content", decoded.Outputs[1])
+	wantBytes := map[string][]byte{
+		"audio": wav,
+		"frame": png,
+		"clip":  mp4,
+		"blob":  blob,
+	}
+	for _, output := range decoded.Outputs {
+		want, isBinary := wantBytes[output.Name]
+		if !isBinary {
+			continue
+		}
+		if output.Content != nil || output.ContentBase64 == nil ||
+			!bytes.Equal(*output.ContentBase64, want) {
+			t.Fatalf("%s output = %#v, want original bytes", output.Name, output)
+		}
+	}
+	if decoded.Outputs[4].Content == nil || *decoded.Outputs[4].Content != "héllo" ||
+		decoded.Outputs[4].ContentBase64 != nil {
+		t.Fatalf("text output = %#v, want UTF-8 content", decoded.Outputs[4])
 	}
 }
 
