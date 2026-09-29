@@ -1793,3 +1793,63 @@ against the loaded backend also answered `Red, Red`. Remaining inference, not
 proven by the decoder: which frame(s) the backend sampled and why the model
 reported red twice; the decoder establishes fixture content and the mapping
 path only.
+
+A concurrent Codex MCP implementation attempt for Pi's false-success terminal
+outcome (session `4f45b364-3578-400d-b772-13019ff1fa21`) completed with no
+edits. Inspection confirmed installed `pi-acp` 0.0.34 receives Pi's typed
+assistant outcome but resolves its `agent_settled` handler as ACP `end_turn`
+without forwarding that outcome. Retry events are plain message chunks. The
+Go ACP boundary cannot distinguish a final failure from a successful retry
+reliably without replacing or patching the upstream bridge to carry the final
+settled outcome as typed metadata or a prompt error. Parsing text or session
+JSONL remains unsafe. Focused ACP tests passed; the broader Pi preflight test
+still fails in the preexisting dirty `TestPiPreflight_CanceledContext` case.
+
+A second bounded Codex MCP task (session
+`abc05780-461a-4740-875f-d9e8e8a995c4`) checked distribution feasibility.
+The authored Pi harness launches external `npx pi-acp`; this repository's
+model-provider package publishes catalog data, not an ACP executable. A
+cache-local patch would not reach customers. A truthful OOTB fix needs a
+corrected and distributed `pi-acp` bridge that preserves the final assistant
+`message_end` stop reason at `agent_settled`, then a pinned harness update and
+tests for final error versus failed-attempt-then-successful-retry. The task
+made no edits; this remains an open product dependency rather than a fixed
+Go-side classification.
+
+A concurrent OpenCode MCP read-only audit of pinned LocalAI video sampling
+(session `538a9b7c-5794-4bc5-935f-349be71e5608`) returned a primary result,
+but it asserted that `Red, Red` is expected without identifying the exact C++
+video-frame sampling implementation. That assertion is unsupported. A scoped
+correction request (session `0baa565e-0e64-4b42-b031-378dd885b69a`) timed
+out after 300 seconds with no result and no tracked edits. MCP returned
+`factory_session.subagent.timed_out`, `partialEffectsPossible=true`, and
+`inFlightDispatches=1`. The decoder's frame/timestamp selection remains
+unverified; the opaque MP4 mapping and local fixture frames are established.
+An independent command-line read of pinned LocalAI
+`backend/cpp/llama-cpp/grpc-server.cpp` found that the C++ gRPC server
+base64-decodes each `video_data` entry into `files` (around lines 2537-2545)
+and passes those files to `process_mtmd_prompt` (around line 2556). This
+confirms the raw bytes reach llama.cpp's multimodal path, but still does not
+establish which frames/timestamps that path selected or why the model replied
+`Red, Red`.
+
+The full `make lint` run passed vet, deadcode, formatting, contracts, and most
+other targets, but failed four targets: `backend-size` and `pkg-maint` from the
+lease change's 1006-line `runtime_factory_scoped_pull_test.go` and
+`InvokeModelWithLease` complexity 17 (limit 15); `pkg-boundary` from a
+`time.Now` call in the MCP timeout diagnostic and an existing local
+`pkg/services/models/.artifacts/direct_video_probe.go`; and `pkg-structure`
+from that same `.artifacts` directory. Focused MCP repair work is in progress
+for the tracked regressions. The local diagnostic directory remains outside
+the staged change set.
+
+A Codex MCP lint repair (session `394b9a67-722f-44a2-bb5e-c2b37363dfb0`)
+extracted runtime-outcome handling from `InvokeModelWithLease` and moved the
+complete runtime-scope close race test into its own file. Focused tests,
+`pkg-maint`, `backend-size`, and diff checks passed; the original test file is
+now 879 lines. An OpenCode MCP repair (session
+`c5e46881-b92a-4655-abcf-75bcedd76da9`) replaced the MCP timeout
+diagnostic's computed age with the retained event's `RecordedAt` timestamp,
+removing its production `time.Now` dependency. The full MCP transport suite
+passed. `pkg-boundary` no longer reports that clock call; its three remaining
+findings all come from the untracked local `.artifacts/direct_video_probe.go`.

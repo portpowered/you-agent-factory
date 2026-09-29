@@ -386,7 +386,7 @@ func subagentProgressSnapshot(ctx context.Context, target factorysessionexecutio
 		return map[string]any{"available": false}
 	}
 	details := subagentProgressDetails(projection)
-	if activity := subagentLastProviderActivity(snapshotCtx, target, sessionID, time.Now()); activity != nil {
+	if activity := subagentLastProviderActivity(snapshotCtx, target, sessionID); activity != nil {
 		details["lastObservedProviderActivity"] = activity
 	}
 	return details
@@ -717,8 +717,9 @@ func subagentClassifyFailure(envelope *ToolErrorEnvelope, reason workers.WorkFai
 }
 
 // subagentLastProviderActivity reads the retained response events already owned
-// by the live Factory Session. Only fixed vocabulary and timing leave this edge.
-func subagentLastProviderActivity(ctx context.Context, target factorysessionexecution.Service, sessionID string, now time.Time) map[string]any {
+// by the live Factory Session. Only fixed vocabulary and the runtime-owned
+// event timestamp leave this edge.
+func subagentLastProviderActivity(ctx context.Context, target factorysessionexecution.Service, sessionID string) map[string]any {
 	events, err := boundedSubagentCall(ctx, subagentSnapshotSlots, func() ([]factorysessionexecution.FactoryResponseEvent, error) {
 		cursor, err := target.SubscribeFactoryResponseEvents(ctx, factorysessionexecution.ResponseEventSubscriptionRequest{SessionID: sessionID})
 		if err != nil {
@@ -741,13 +742,9 @@ func subagentLastProviderActivity(ctx context.Context, target factorysessionexec
 		if event.Provenance.Provider == "" || event.Kind.Validate() != nil || event.Phase.Validate() != nil || event.RecordedAt.IsZero() {
 			continue
 		}
-		age := now.Sub(event.RecordedAt)
-		if age < 0 {
-			age = 0
-		}
 		activity["kind"] = string(event.Kind)
 		activity["phase"] = string(event.Phase)
-		activity["ageMillis"] = age.Milliseconds()
+		activity["observedAt"] = event.RecordedAt
 	}
 	return activity
 }

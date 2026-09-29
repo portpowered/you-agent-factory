@@ -141,11 +141,27 @@ func (s *service) InvokeModelWithLease(
 		return s.finishCancelledInvocation(ctx, request, invocation, err)
 	}
 
+	operation := catalogOperation(catalogResult.Model, request.Operation)
 	runtimeResult, err := s.runtime.Invoke(invokeCtx, inference.InvocationRuntimeRequest{
 		Request:   request,
-		Operation: catalogOperation(catalogResult.Model, request.Operation),
+		Operation: operation,
 		HostSlot:  hostSlot,
 	})
+	return s.finishRuntimeInvocation(
+		ctx, invokeCtx, request, invocation, accepted, runtimeResult, err, operation,
+	)
+}
+
+func (s *service) finishRuntimeInvocation(
+	ctx context.Context,
+	invokeCtx context.Context,
+	request models.InvokeModelRequest,
+	invocation models.ModelInvocationRef,
+	accepted models.InvokeModelResult,
+	runtimeResult inference.InvocationRuntimeResult,
+	err error,
+	operation models.Operation,
+) (models.InvokeModelResult, error) {
 	if isInvocationInFlight(err) {
 		s.mu.Lock()
 		delete(s.running, invocation)
@@ -168,7 +184,7 @@ func (s *service) InvokeModelWithLease(
 		request,
 		invocation,
 		runtimeResult,
-		catalogOperation(catalogResult.Model, request.Operation),
+		operation,
 	)
 }
 

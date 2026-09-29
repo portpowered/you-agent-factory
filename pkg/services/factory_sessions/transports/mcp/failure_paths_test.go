@@ -351,9 +351,9 @@ func TestSubagentTimeoutReportsOnlyBoundedProviderActivity(t *testing.T) {
 	if activity["kind"] != "MESSAGE" || activity["phase"] != "DELTA" || activity["providerSessionObserved"] != true {
 		t.Fatalf("last provider activity = %#v", activity)
 	}
-	age, ok := activity["ageMillis"].(int64)
-	if !ok || age < 900 || age > 3000 {
-		t.Fatalf("ageMillis = %#v", activity["ageMillis"])
+	observedAt, ok := activity["observedAt"].(time.Time)
+	if !ok || !observedAt.Equal(now.Add(-time.Second)) {
+		t.Fatalf("observedAt = %#v", activity["observedAt"])
 	}
 	encoded, err := json.Marshal(response.Error)
 	if err != nil || strings.Contains(string(encoded), secret) {
