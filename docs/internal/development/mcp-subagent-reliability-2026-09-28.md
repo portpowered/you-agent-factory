@@ -2243,3 +2243,22 @@ and no ambiguity. It expanded the direct Models HTTP byte round-trip test to
 image, video, and binary outputs (`860182b18e`). The focused HTTP package
 test passed. This demonstrates that OpenCode can complete scoped edits through
 the same MCP harness even though the longer free-model tasks timed out.
+
+Codex MCP session `28c49a03-d3d5-4e2a-a53d-4726d6d38cf8` completed the
+intermittent CI test investigation. The original `partial-snapshot.txt`
+`ENOENT` did not reproduce, including twelve concurrent targeted runs, so its
+exact cause is unproven. The subagent did reproduce a separate Windows fixture
+failure: a POSIX environment assignment was passed to `cmd.exe` before the
+fake CLI writer ran. Commit `09af84efe1` passes that update variable through
+the child environment and prints process output on the stage assertion. The
+focused 49-test file passed independently. A broader CI workflow run had two
+other failures, so no broad green claim is made.
+
+Codex MCP session `ed6a9f92-7669-4ac4-b3f1-194df30c1e92` traced direct
+Models multipart AUDIO/VIDEO uploads through the HTTP parser, Models OMNI
+codec, and gRPC `Audios`/`Videos` fields into pinned LocalAI llama.cpp.
+Focused transport/backend tests passed. This proves byte delivery, not model
+understanding. The pinned llama.cpp message reconstruction labels audio as
+`wav` regardless of submitted media type and carries video as one
+`input_video` blob without Models-side frame extraction or timestamps. A
+live direct-endpoint semantic GPU probe is pending.
