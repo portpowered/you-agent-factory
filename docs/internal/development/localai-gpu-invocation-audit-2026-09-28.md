@@ -139,3 +139,15 @@ exporting the pinned gRPC include via MSVC `INCLUDE` and correcting
 native build is still compiling CUDA objects; final success is NOT
 claimed. The manual 10-entry assembler was committed as `2fc69146ec`;
 no release published.
+
+Native Windows CUDA full build succeeded 2026-09-29 (local): three OpenCode
+MCP sessions completed bounded build-script fixes — `a74faae5-9467-4918-a370-e0151408db28`
+(CMake proto target fix), `5ca45a17-74e3-40a0-b783-df216e30786a` (Windows
+getopt fix), `1a94e9ff-f430-4f24-954b-1aca704cd102` (explicit pinned CUDA
+runtime staging). `grpc-server` and `ggml-cuda` built; health/startup and
+`verify-payload` passed. ZIP 584,983,117 bytes, SHA-256
+`c9322c65b36eea345c32f6e29c3b2dcd4187c288fbf145b8f1b400d1541649dc`.
+Manual 10-entry bundle tag
+`localai-backends-v1-b2637a4aed57fb1312f436e56a6baec5f23656de8b5ae245b112398f01cbeaa7`
+staged locally; Go manifest decode/resolver test passed; full `make lint`
+24/24. No GitHub release published yet; no managed GPU inference claimed.
