@@ -41,6 +41,14 @@ test("the Windows CUDA VibeVoice script verifies pins, toolchain, and payload", 
 	assert.match(script, /localai-backend-startup-smoke\.go/);
 	assert.match(script, /vibevoice-cpp\.exe/);
 	assert.match(script, /Build shared ggml backends with CUDA enabled/);
+	assert.match(script, /add_library\(govibevoicecpp SHARED cpp\/govibevoicecpp\.cpp \$\{CMAKE_CURRENT_BINARY_DIR\}\/vibevoice-exports\.def\)/);
+	assert.match(script, /vv_capi_tts_stream/);
+	assert.match(script, /-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON/);
+	assert.match(script, /WHOLEARCHIVE:\$<TARGET_FILE:vibevoice>/);
+	assert.match(script, /libprotoc 31\.1/);
+	assert.match(script, /protoc-gen-go-grpc@1958fcbe2ca8bd93af633f11e97d44e567e945af/);
+	assert.match(script, /protoc-gen-go@v1\.34\.2/);
+	assert.ok(script.indexOf("'backend_grpc.pb.go'") < script.indexOf("Invoke-Checked go @('build'"));
 });
 
 test("the Windows CUDA VibeVoice script reuses shared CUDA guards without whisper/llama coupling", async () => {
@@ -62,13 +70,12 @@ test("the Windows CUDA VibeVoice script reuses shared CUDA guards without whispe
 	assert.doesNotMatch(script, /getopt/);
 });
 
-test("the Windows CUDA VibeVoice script pins the uintptr callback shape and flags unverified CMake behavior", async () => {
+test("the Windows CUDA VibeVoice script guards the streaming callback ABI", async () => {
 	const script = await readFile("scripts/build-localai-vibevoice-backend-cuda.ps1", "utf8");
 	assert.match(script, /govibevoicecpp\.go/);
 	assert.match(script, /purego\\.NewCallback\\\(func/);
 	assert.match(script, /uintptr-returning purego callback/);
-	assert.match(script, /UNVERIFIED/);
-	assert.match(script, /no CUDA build was run/);
+	assert.match(script, /Unary TTS does not exercise the/);
 	assert.match(script, /VIBEVOICECPP_LIBRARY/);
 	assert.match(script, /CGO_ENABLED/);
 });

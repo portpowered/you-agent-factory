@@ -215,4 +215,27 @@ pinned build's `ggml-cpu.dll` made a direct gRPC `LoadModel` call succeed, with
 the backend reporting CUDA0 on the RTX 4090. The build script now stages both
 dynamic backends. A repaired archive was rebuilt at 448,333,120 bytes with
 SHA-256 `17541d98c8d00ee0e6dfd9699ad3a886e2a9ed7469d4260cf9ed7452efd6cc58`.
-Full ASR transcription from the repaired published artifact is pending.
+The repaired release was published as
+`localai-backends-v1-a8cb28e829e7b41b5ea960bad46fd039658f97bf90fbfb126b83e6cc157c4d1b`.
+Its hosted manifest SHA-256 is
+`f01e4a5f0d5c803167535048a740c1b4c9a49f2eb047594c464af03096130a25`.
+A fresh public `you models invoke asr` selected and downloaded the repaired
+448,333,120-byte archive, then returned transcript `Zero.` and a JSON segment
+for the known audio fixture. A direct native gRPC probe also reported
+`whisper_backend_init_gpu: using CUDA0 backend` and returned the same
+transcript. This validates the Windows CUDA model load and transcription path.
+
+## Manual Windows VibeVoice CUDA build (2026-09-29)
+
+The pinned VibeVoice source compiled with MSVC and CUDA 13.3 after disabling
+`GGML_BACKEND_DL`; the source directly links `ggml-cuda`, which cannot be a
+CMake `MODULE_LIBRARY`. The first built `govibevoicecpp.dll` had no exported
+`vv_capi_*` functions. The build script now makes that target `SHARED` and
+provides an explicit DEF file with the six functions used by the Go wrapper.
+The native health and payload checks passed, and `dumpbin /exports` found all
+six functions. A direct Windows gRPC test loaded the pinned 0.5B TTS bundle
+on the RTX 4090 and generated an 83,244-byte WAV from “Hello from CUDA.”
+`nvidia-smi` listed the VibeVoice backend process while the model was loaded.
+The staged CUDA archive is 448,293,919 bytes, SHA-256
+`e3f9c42e1d4433044857b1e08422f43efc564c858a73474e993d17f9ffa83342`.
+The manual release and public `you models invoke tts` test are pending.

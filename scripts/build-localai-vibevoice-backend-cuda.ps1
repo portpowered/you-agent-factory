@@ -148,14 +148,40 @@ if ($vibevoiceMainText.Contains('loadBackendLibrary(libName)')) {
 
 # The vibevoice streaming callback (streamCB in govibevoicecpp.go) already
 # returns uintptr, so the Windows syscall.NewCallback ABI is satisfied without
-# a whisper-style void-callback wrapper. UNVERIFIED at runtime in this pass
-# (no CUDA build was run); this assertion pins the audited shape so a future
-# upstream callback change fails loudly here instead of corrupting the stack.
+# a whisper-style void-callback wrapper. Unary TTS does not exercise the
+# streaming callback; this guard catches an upstream ABI change before use.
 $vibevoiceCallbackSource = Join-Path $vibevoiceRoot 'govibevoicecpp.go'
 if (-not (Test-Path -LiteralPath $vibevoiceCallbackSource)) { throw "missing $vibevoiceCallbackSource" }
 $vibevoiceCallbackText = Get-Content -LiteralPath $vibevoiceCallbackSource -Raw
 if (([regex]::Matches($vibevoiceCallbackText, 'purego\.NewCallback\(func\([^)]*\) uintptr')).Count -ne 1) {
     throw 'expected exactly one uintptr-returning purego callback in govibevoicecpp.go; reassess the Windows NewCallback ABI shim'
+}
+
+# The pinned MODULE target has no PE exports under MSVC, so purego cannot
+# resolve the vv_capi_* entry points. Build a SHARED target and provide an
+# explicit DEF file for the six entry points consumed by the Go wrapper.
+$vibevoiceBuild = Join-Path $vibevoiceRoot 'build-windows-cuda'
+New-Item -ItemType Directory -Path $vibevoiceBuild -Force | Out-Null
+$exportsFile = Join-Path $vibevoiceBuild 'vibevoice-exports.def'
+$exportsText = "EXPORTS`n    vv_capi_load`n    vv_capi_tts`n    vv_capi_tts_stream`n    vv_capi_asr`n    vv_capi_unload`n    vv_capi_version`n"
+[IO.File]::WriteAllText($exportsFile, $exportsText, [Text.UTF8Encoding]::new($false))
+$vibevoiceCmakeFile = Join-Path $vibevoiceRoot 'CMakeLists.txt'
+$moduleDeclaration = 'add_library(govibevoicecpp MODULE cpp/govibevoicecpp.cpp)'
+$sharedDeclaration = 'add_library(govibevoicecpp SHARED cpp/govibevoicecpp.cpp)'
+$exportDeclaration = 'add_library(govibevoicecpp SHARED cpp/govibevoicecpp.cpp ${CMAKE_CURRENT_BINARY_DIR}/vibevoice-exports.def)'
+$wholeArchiveOld = 'set_property(TARGET govibevoicecpp APPEND PROPERTY LINK_FLAGS "/WHOLEARCHIVE:vibevoice")'
+$wholeArchiveNew = 'target_link_options(govibevoicecpp PRIVATE "/WHOLEARCHIVE:$<TARGET_FILE:vibevoice>")'
+$vibevoiceCmakeText = Get-Content -LiteralPath $vibevoiceCmakeFile -Raw
+if ($vibevoiceCmakeText.Contains($moduleDeclaration) -and $vibevoiceCmakeText.Contains($wholeArchiveOld)) {
+    if (([regex]::Matches($vibevoiceCmakeText, [regex]::Escape($moduleDeclaration))).Count -ne 1 -or
+        ([regex]::Matches($vibevoiceCmakeText, [regex]::Escape($wholeArchiveOld))).Count -ne 1) {
+        throw 'expected one pinned VibeVoice MODULE and whole-archive declaration'
+    }
+    [IO.File]::WriteAllText($vibevoiceCmakeFile, $vibevoiceCmakeText.Replace($moduleDeclaration, $exportDeclaration).Replace($wholeArchiveOld, $wholeArchiveNew), [Text.UTF8Encoding]::new($false))
+} elseif ($vibevoiceCmakeText.Contains($sharedDeclaration) -and $vibevoiceCmakeText.Contains($wholeArchiveNew)) {
+    [IO.File]::WriteAllText($vibevoiceCmakeFile, $vibevoiceCmakeText.Replace($sharedDeclaration, $exportDeclaration), [Text.UTF8Encoding]::new($false))
+} elseif (-not ($vibevoiceCmakeText.Contains($exportDeclaration) -and $vibevoiceCmakeText.Contains($wholeArchiveNew))) {
+    throw 'pinned VibeVoice CMake declarations changed; reassess the Windows export patch'
 }
 
 # Build shared ggml backends with CUDA enabled. VibeVoice and its Go wrapper
@@ -164,9 +190,8 @@ if (([regex]::Matches($vibevoiceCallbackText, 'purego\.NewCallback\(func\([^)]*\
 # targets. GGML_NATIVE stays OFF for portable x64 CPU code, and the pinned
 # architecture set controls CUDA kernels. The separate ggml-cuda.dll is
 # checked and staged below.
-$vibevoiceBuild = Join-Path $vibevoiceRoot 'build-windows-cuda'
 $vibevoiceCmakeArgs = @('-S', $vibevoiceRoot, '-B', $vibevoiceBuild, '-G', 'Visual Studio 17 2022', '-A', 'x64', '-T', "cuda=$cudaRoot",
-    '-DCMAKE_CXX_STANDARD=17', '-DBUILD_SHARED_LIBS=ON',
+    '-DCMAKE_CXX_STANDARD=17', '-DBUILD_SHARED_LIBS=ON', '-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON',
     '-DGGML_NATIVE=OFF', '-DGGML_BACKEND_DL=OFF', '-DGGML_CUDA=ON', '-DVIBEVOICE_GGML_CUDA=ON',
     '-DVIBEVOICE_BUILD_TESTS=OFF', '-DVIBEVOICE_BUILD_EXAMPLES=OFF',
     "-DCMAKE_CUDA_ARCHITECTURES=$cudaArchitectures",
@@ -187,9 +212,8 @@ if ($env:PACKAGE_ROOT) {
 }
 if (Test-Path -LiteralPath $packageRoot) { Remove-GeneratedDirectory -Path $packageRoot -Parent $vibevoiceRoot -ExpectedName 'package' }
 New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
-# UNVERIFIED: which MODULE file name the MSVC generator emits
-# (libgovibevoicecpp.dll under MinGW versus govibevoicecpp.dll under MSVC);
-# accept either build-produced name and stage the canonical package name.
+# MSVC emits govibevoicecpp.dll; accept the MinGW spelling as well and stage
+# the canonical package name used by the Go loader.
 $govibevoiceDll = Get-ChildItem -LiteralPath $vibevoiceBuild -Recurse -File | Where-Object { $_.Length -gt 0 -and ($_.Name -ieq 'libgovibevoicecpp.dll' -or $_.Name -ieq 'govibevoicecpp.dll') } | Select-Object -First 1
 if (-not $govibevoiceDll) { throw 'MSVC CUDA build did not produce the govibevoicecpp DLL' }
 Copy-Item -LiteralPath $govibevoiceDll.FullName -Destination (Join-Path $packageRoot 'libgovibevoicecpp.dll') -Force
@@ -200,6 +224,46 @@ Copy-Item -LiteralPath $cudaBackendDll.FullName -Destination $packageRoot -Force
 # The pinned vibevoice Makefile builds the Go entrypoint with CGO_ENABLED=0
 # (purego dynamic loading, no cgo); keep that here so vibevoice-cpp.exe loads
 # the staged libgovibevoicecpp.dll at runtime through VIBEVOICECPP_LIBRARY.
+# LocalAI generates these Go bindings at build time. Install the pinned
+# plugins into this build tree so a clean Windows checkout can build the
+# wrapper without relying on another backend's generated files.
+$protocCommand = Get-Command protoc.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $protocCommand) { throw 'protoc 31.1 is required to generate LocalAI Go gRPC bindings' }
+$protoc = $protocCommand.Source
+Assert-Tool $protoc @('--version') 'libprotoc 31.1'
+$protoTools = Join-Path $vibevoiceBuild 'proto-tools'
+New-Item -ItemType Directory -Path $protoTools -Force | Out-Null
+$previousGoBin = $env:GOBIN
+try {
+    $env:GOBIN = $protoTools
+    Invoke-Checked go @('install', 'google.golang.org/grpc/cmd/protoc-gen-go-grpc@1958fcbe2ca8bd93af633f11e97d44e567e945af')
+    Invoke-Checked go @('install', 'google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2')
+} finally {
+    $env:GOBIN = $previousGoBin
+}
+$goPlugin = Join-Path $protoTools 'protoc-gen-go.exe'
+$grpcPlugin = Join-Path $protoTools 'protoc-gen-go-grpc.exe'
+foreach ($pluginPath in @($goPlugin, $grpcPlugin)) {
+    if (-not (Test-Path -LiteralPath $pluginPath)) { throw "pinned Go protobuf plugin is missing: $pluginPath" }
+}
+$protoOutput = Join-Path $env:LOCALAI_ROOT 'pkg\grpc\proto'
+New-Item -ItemType Directory -Path $protoOutput -Force | Out-Null
+Push-Location $env:LOCALAI_ROOT
+try {
+    Invoke-Checked $protoc @('--experimental_allow_proto3_optional', '-Ibackend/',
+        "--plugin=protoc-gen-go=$goPlugin", "--plugin=protoc-gen-go-grpc=$grpcPlugin",
+        '--go_out=pkg/grpc/proto/', '--go_opt=paths=source_relative',
+        '--go-grpc_out=pkg/grpc/proto/', '--go-grpc_opt=paths=source_relative',
+        'backend/backend.proto')
+} finally {
+    Pop-Location
+}
+foreach ($generated in @('backend.pb.go', 'backend_grpc.pb.go')) {
+    $generatedPath = Join-Path $protoOutput $generated
+    if (-not (Test-Path -LiteralPath $generatedPath) -or (Get-Item -LiteralPath $generatedPath).Length -eq 0) {
+        throw "LocalAI Go protobuf generation did not produce $generatedPath"
+    }
+}
 $previousCgo = $env:CGO_ENABLED
 try {
     $env:CGO_ENABLED = '0'
