@@ -6357,8 +6357,11 @@ type ModelInvocationOptions struct {
 type ModelInvocationOutput struct {
 	Artifact *ModelInvocationArtifact `json:"artifact,omitempty"`
 
-	// Content Inline output content. JSON values are carried as their canonical JSON text.
+	// Content Inline UTF-8 output content. JSON values are carried as their canonical JSON text. Do not combine with contentBase64.
 	Content *string `json:"content,omitempty"`
+
+	// ContentBase64 Base64-encoded inline binary output content. Do not combine with content.
+	ContentBase64 *[]byte `json:"contentBase64,omitempty"`
 
 	// ContentType Logical content type retained for compatibility with prepared invocation outputs.
 	ContentType *string `json:"contentType,omitempty"`

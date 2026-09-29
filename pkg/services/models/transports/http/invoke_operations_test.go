@@ -439,6 +439,35 @@ func TestGenericInvocationResponseMappingPreservesASROutputsAndFailureIdentity(t
 	assertASRFailureMapping(t, projectedFailure, failure)
 }
 
+func TestGenericInvocationResponseRoundTripsBinaryAndOrderedText(t *testing.T) {
+	t.Parallel()
+
+	wav := []byte{'R', 'I', 'F', 'F', 0x00, 0xff, 0x80}
+	projected := GenericInvocationResponseToGenerated(models.GenericInvocationResult{Outputs: []models.InferenceOutput{
+		{Name: "audio", Modality: models.ModalityAudio, MediaType: "audio/wav", Content: string(wav)},
+		{Name: "transcript", Modality: models.ModalityText, Content: "héllo"},
+	}})
+	encoded, err := json.Marshal(projected)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	var decoded factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(decoded.Outputs) != 2 || decoded.Outputs[0].Name != "audio" || decoded.Outputs[1].Name != "transcript" {
+		t.Fatalf("ordered outputs = %#v", decoded.Outputs)
+	}
+	if decoded.Outputs[0].Content != nil || decoded.Outputs[0].ContentBase64 == nil ||
+		!bytes.Equal(*decoded.Outputs[0].ContentBase64, wav) {
+		t.Fatalf("audio output = %#v, want original WAV bytes", decoded.Outputs[0])
+	}
+	if decoded.Outputs[1].Content == nil || *decoded.Outputs[1].Content != "héllo" ||
+		decoded.Outputs[1].ContentBase64 != nil {
+		t.Fatalf("text output = %#v, want UTF-8 content", decoded.Outputs[1])
+	}
+}
+
 func TestHTTPProjectionPreservesArtifactAndFailureContract(t *testing.T) {
 	t.Parallel()
 

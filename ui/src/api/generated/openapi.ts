@@ -2369,8 +2369,13 @@ export interface components {
       contentType?: string;
       /** @description Concrete MIME type for media or file-backed output, when known. */
       mediaType?: string;
-      /** @description Inline output content. JSON values are carried as their canonical JSON text. */
+      /** @description Inline UTF-8 output content. JSON values are carried as their canonical JSON text. Do not combine with contentBase64. */
       content?: string;
+      /**
+       * Format: byte
+       * @description Base64-encoded inline binary output content. Do not combine with content.
+       */
+      contentBase64?: string;
       /** @description Optional opaque artifact metadata for materialized output. */
       artifact?: components["schemas"]["ModelInvocationArtifact"];
     };

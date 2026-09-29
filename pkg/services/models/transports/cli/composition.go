@@ -875,7 +875,14 @@ func genericInvocationResponseFromInferenceResult(
 		}
 		projected.ContentType = genericCLIStringPointer(output.ContentType)
 		projected.MediaType = genericCLIStringPointer(output.MediaType)
-		projected.Content = genericCLIStringPointer(output.Content)
+		if output.Content != "" {
+			if genericCLIInputUsesBinaryCarrier(output.Modality) {
+				content := []byte(output.Content)
+				projected.ContentBase64 = &content
+			} else {
+				projected.Content = genericCLIStringPointer(output.Content)
+			}
+		}
 		if output.Artifact != nil && !output.Artifact.Artifact.IsZero() {
 			artifact := factoryapi.ModelInvocationArtifact{ArtifactRef: output.Artifact.Artifact.String()}
 			artifact.Name = genericCLIStringPointer(output.Artifact.Name)

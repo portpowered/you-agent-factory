@@ -296,7 +296,15 @@ func genericInferenceOutputToGenerated(
 	}
 	projected.ContentType = nonEmptyStringPointer(output.ContentType)
 	projected.MediaType = nonEmptyStringPointer(output.MediaType)
-	projected.Content = nonEmptyStringPointer(output.Content)
+	if output.Content != "" {
+		switch output.Modality {
+		case models.ModalityAudio, models.ModalityImage, models.ModalityVideo, models.ModalityBinary:
+			content := []byte(output.Content)
+			projected.ContentBase64 = &content
+		default:
+			projected.Content = nonEmptyStringPointer(output.Content)
+		}
+	}
 	if output.Artifact != nil && !output.Artifact.Artifact.IsZero() {
 		projected.Artifact = genericInferenceArtifactToGenerated(*output.Artifact)
 	}
