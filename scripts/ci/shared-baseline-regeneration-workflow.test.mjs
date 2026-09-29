@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { pathForTestBash, testBash } from "./test-bash-paths.mjs";
 
 import {
 	SHARED_BASELINE_BOT_BRANCH,
@@ -61,23 +62,17 @@ function workflowRunScript(stepName) {
 		.trimEnd();
 }
 
-function bashPath(path) {
-	if (process.platform !== "win32") return path;
-	const normalized = path.replaceAll("\\", "/");
-	return "/mnt/" + normalized[0].toLowerCase() + normalized.slice(2);
-}
-
 function bashQuote(value) {
 	return "'" + String(value).replaceAll("'", "'\"'\"'") + "'";
 }
 
 function runBashScript(script, { cwd, env } = {}) {
 	return spawnSync(
-		"bash",
+		testBash(),
 		["--noprofile", "--norc", "-e", "-u", "-o", "pipefail"],
 		{
 			cwd: repositoryRoot,
-			input: "cd " + bashQuote(bashPath(cwd)) + "\n" + script + "\n",
+			input: "cd " + bashQuote(pathForTestBash(cwd)) + "\n" + script + "\n",
 			env: { ...process.env, ...env },
 			encoding: "utf8",
 			windowsHide: true,
@@ -110,6 +105,9 @@ function sourceValidationEnvironment(conclusion) {
 
 function runFakeRegeneration({ failAt = "", failExit = 17 } = {}) {
 	const temporaryDirectory = mkdtempSync(join(tmpdir(), "shared-baseline-writer-"));
+	const makePath = (path) => process.platform === "win32" && !process.env.MSYSTEM
+		? path
+		: pathForTestBash(path);
 	const logPath = join(temporaryDirectory, "writer.log");
 	const outputPath = join(temporaryDirectory, "partial-snapshot.txt");
 	const fakeGoPath = join(temporaryDirectory, "fake-go.mjs");
@@ -132,10 +130,10 @@ function runFakeRegeneration({ failAt = "", failExit = 17 } = {}) {
 		makeCommand,
 		[
 			"regenerate-shared-ci-baselines",
-			"BASELINE_REGEN_ROOT=" + temporaryDirectory,
+			"BASELINE_REGEN_ROOT=" + makePath(temporaryDirectory),
 			"UNIT_LATENCY_BUDGET=budget.json",
 			"UNIT_LATENCY_SAMPLES=sample-1.json,sample-2.json,sample-3.json",
-			"GO=node " + fakeGoPath,
+			"GO=node " + makePath(fakeGoPath),
 			"BASELINE_REGEN_CLI_UPDATE_ENV=",
 		],
 		{
@@ -1997,7 +1995,7 @@ test("F-06/F-07 stop the integrated writer spine and never hand off a partial ca
 	});
 	try {
 		assert.notEqual(firstFailure.result.status, 0, firstFailure.result.stdout + firstFailure.result.stderr);
-		assert.deepEqual(firstFailure.stages, ["unitlanebudget", "ownershipinventoryfreeze"]);
+		assert.deepEqual(firstFailure.stages, ["unitlanebudget", "ownershipinventoryfreeze"], firstFailure.result.stdout + firstFailure.result.stderr);
 		assert.equal(readFileSync(firstFailure.outputPath, "utf8"), "partial snapshot\n");
 		assert.doesNotMatch(firstFailure.result.stdout + firstFailure.result.stderr, /mcptoolinventorygen|publication succeeded/);
 		const plan = planReconciliation({
