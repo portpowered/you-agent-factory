@@ -479,6 +479,33 @@ func subagentAttachProgress(details map[string]any, progress map[string]any) {
 	}
 }
 
+// subagentProviderErrorObserved reports whether the bounded timeout progress
+// captured a terminal provider error event without a provider session
+// reference. The observation is timing evidence only: it does not prove the
+// error caused the timeout, and no provider payload is exposed.
+func subagentProviderErrorObserved(progress map[string]any) bool {
+	activity, ok := progress["lastObservedProviderActivity"].(map[string]any)
+	if !ok {
+		return false
+	}
+	return activity["kind"] == string(workers.KindError) &&
+		activity["phase"] == string(workers.PhaseFailed) &&
+		activity["providerSessionObserved"] != true
+}
+
+// subagentTimeoutProviderErrorEvidence refines the timeout message and action
+// when the progress snapshot captured a terminal provider error without a
+// provider session reference. The default retry guidance assumes a slow model;
+// an observed provider error does not support that remedy, so the action points
+// at provider logs instead without claiming a cause or a provider session.
+func subagentTimeoutProviderErrorEvidence(envelope *ToolErrorEnvelope, progress map[string]any) {
+	if !subagentProviderErrorObserved(progress) {
+		return
+	}
+	envelope.Message = "subagent timed out after a provider error was observed; workspace edits may have occurred"
+	envelope.Details["suggestedAction"] = "The last observed provider activity was an error before the deadline and no provider session reference was observed; a longer timeout may not resolve an observed provider error."
+}
+
 // subagentPrimaryText joins the text parts of a completed invocation with
 // newlines, ignoring non-text content parts.
 func subagentPrimaryText(parts []work.WorkContentPart) string {
@@ -622,6 +649,7 @@ func subagentInvocationTimeout(sessionID, requestID string, timeoutMillis int64,
 		envelope.Details["timeoutMillis"] = timeoutMillis
 	}
 	subagentAttachProgress(envelope.Details, progress)
+	subagentTimeoutProviderErrorEvidence(&envelope, progress)
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }
 
@@ -659,6 +687,7 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 			envelope.Details["workId"] = result.WorkID
 		}
 		subagentAttachProgress(envelope.Details, progress)
+		subagentTimeoutProviderErrorEvidence(&envelope, progress)
 		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
 	subagentClassifyFailure(&envelope, workers.WorkFailureType(result.FailureReason), input.Provider)

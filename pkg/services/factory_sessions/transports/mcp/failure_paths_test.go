@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -474,5 +475,98 @@ func assertPiModelConnectionMCPContent(t *testing.T, response mcpfactorysession.
 	}
 	if strings.Contains(string(encoded), secret) {
 		t.Fatalf("MCP response leaked provider text: %s", encoded)
+	}
+}
+
+func TestSubagentTimeoutWithObservedProviderErrorRefinesMessageAndAction(t *testing.T) {
+	const secret = "private provider error payload"
+	now := time.Now()
+	target := &subagentActivityTarget{
+		subagentTargetFake: &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
+			Status:    factorysessions.InvocationTerminalStatusTimedOut,
+			RequestID: "request-provider-error",
+			TraceID:   "trace-provider-error",
+			WorkID:    "work-provider-error",
+		}},
+		events: []factorysessions.FactoryResponseEvent{
+			{Kind: workers.KindError, Phase: workers.PhaseFailed, RecordedAt: now.Add(-time.Second), Provenance: workers.Provenance{Provider: "opencode"}, Payload: json.RawMessage(`{"error":"` + secret + `"}`)},
+		},
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-provider-error" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" || !target.closed || !target.read {
+		t.Fatalf("timeout and cleanup = %#v, target = %#v", response, target)
+	}
+	progress := response.Error.Details["progress"].(map[string]any)
+	activity := progress["lastObservedProviderActivity"].(map[string]any)
+	if activity["kind"] != "ERROR" || activity["phase"] != "FAILED" || activity["providerSessionObserved"] == true {
+		t.Fatalf("last provider activity = %#v", activity)
+	}
+	if !strings.Contains(response.Error.Message, "provider error") {
+		t.Fatalf("timeout message = %q, want provider error evidence", response.Error.Message)
+	}
+	action, ok := response.Error.Details["suggestedAction"].(string)
+	if !ok {
+		t.Fatalf("suggestedAction = %#v", response.Error.Details["suggestedAction"])
+	}
+	if strings.Contains(action, "use another configured model or a longer timeout") {
+		t.Fatalf("provider-error action keeps the default retry remedy: %#v", action)
+	}
+	if !strings.Contains(action, "no provider session reference was observed") || !strings.Contains(action, "longer timeout may not resolve") {
+		t.Fatalf("provider-error action = %#v", action)
+	}
+	encoded, err := json.Marshal(response.Error)
+	if err != nil || strings.Contains(string(encoded), secret) {
+		t.Fatalf("provider-error timeout leaked provider data: %s, %v", encoded, err)
+	}
+}
+
+func TestSubagentInvokeDeadlineWithObservedProviderErrorRefinesMessageAndAction(t *testing.T) {
+	const secret = "private provider error payload"
+	now := time.Now()
+	timeout := int64(60_000)
+	target := &subagentActivityTarget{
+		subagentTargetFake: &subagentTargetFake{invokeErr: fmt.Errorf("private: %w", context.DeadlineExceeded)},
+		events: []factorysessions.FactoryResponseEvent{
+			{Kind: workers.KindError, Phase: workers.PhaseFailed, RecordedAt: now.Add(-time.Second), Provenance: workers.Provenance{Provider: "opencode"}, Payload: json.RawMessage(`{"error":"` + secret + `"}`)},
+		},
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-deadline-provider-error" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode", TimeoutMillis: &timeout})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" || !target.closed || !target.read {
+		t.Fatalf("deadline timeout and cleanup = %#v, target = %#v", response, target)
+	}
+	if !strings.Contains(response.Error.Message, "provider error") {
+		t.Fatalf("deadline timeout message = %q, want provider error evidence", response.Error.Message)
+	}
+	action, ok := response.Error.Details["suggestedAction"].(string)
+	if !ok {
+		t.Fatalf("suggestedAction = %#v", response.Error.Details["suggestedAction"])
+	}
+	if strings.Contains(action, "use another configured model or a longer timeout") || !strings.Contains(action, "no provider session reference was observed") {
+		t.Fatalf("deadline provider-error action = %#v", action)
+	}
+	encoded, err := json.Marshal(response.Error)
+	if err != nil || strings.Contains(string(encoded), secret) {
+		t.Fatalf("deadline provider-error timeout leaked provider data: %s, %v", encoded, err)
+	}
+}
+
+func TestSubagentTimeoutWithNonTerminalProviderErrorKeepsDefaultAction(t *testing.T) {
+	now := time.Now()
+	target := &subagentActivityTarget{
+		subagentTargetFake: &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusTimedOut}},
+		events: []factorysessions.FactoryResponseEvent{
+			{Kind: workers.KindError, Phase: workers.PhaseUpdated, RecordedAt: now.Add(-time.Second), Provenance: workers.Provenance{Provider: "opencode"}},
+		},
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-nonterminal-error" }, mcpfactorysession.SubagentInput{Prompt: "Do work"})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" {
+		t.Fatalf("timeout response = %#v", response)
+	}
+	if strings.Contains(response.Error.Message, "provider error was observed") {
+		t.Fatalf("non-terminal error refined the message: %q", response.Error.Message)
+	}
+	action, ok := response.Error.Details["suggestedAction"].(string)
+	if !ok || !strings.Contains(action, "use another configured model or a longer timeout") {
+		t.Fatalf("non-terminal error action = %#v", response.Error.Details["suggestedAction"])
 	}
 }

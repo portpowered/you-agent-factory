@@ -2467,8 +2467,27 @@ could not see the CLI path. The fourth invocation succeeded. A
 concurrent 180-second OpenCode Muse docs call (session
 `2e5e1d9a-4ddd-4fc5-ba8e-a607da0f4c36`) returned typed
 `factory_session.subagent.timed_out` with progress
-`lastObservedProviderActivity` kind `ERROR` phase `FAILED`, but native OpenCode
-DB session `ses_f13f6831bffeoI3k8pK0ZMJhXE` contains an assistant final and
-completed edits, so this is a terminal classification/result bridging
-discrepancy; no new working-tree edits were visible afterwards (possibly
-identical to committed docs).
+`lastObservedProviderActivity` kind `ERROR` phase `FAILED` and no provider
+session reference observed. Native OpenCode DB session
+`ses_f13f6831bffeoI3k8pK0ZMJhXE` was checked as a possible match but does not
+correspond to this call: that DB session started 2026-09-29 07:20:40Z, carried
+a different prompt ("Append factual final manual Windows CUDA release
+validation"), and ended 07:21:26Z, about six minutes before this call's last
+provider observation at 07:27:20Z. No matching native DB session was
+established for the timed-out call, and its root cause remains unproven; no
+new working-tree edits were visible afterwards (possibly identical to
+committed docs).
+
+Follow-up OpenCode LongCat MCP session
+`40b4a3c2-00a3-44b0-8234-ee5b7baefc47` ran for its configured 600-second
+limit while investigating that timeout and editing the MCP transport. It
+returned typed `factory_session.subagent.timed_out` with an in-flight dispatch
+and last provider activity `REASONING/DELTA`; a provider session reference was
+observed. The native OpenCode session had begun its focused Go test command
+before the deadline, but no primary result reached MCP. Its partial edits
+corrected the earlier session correlation and refined timeout guidance for a
+last observed `ERROR/FAILED` provider event without a session reference. A
+separate `go test -count=1 ./pkg/services/factory_sessions/transports/mcp/...`
+run passed after cleanup. This call demonstrates the remaining need for
+duration estimates or resumable long-running work; it does not establish a
+provider startup failure.
