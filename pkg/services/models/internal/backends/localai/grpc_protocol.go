@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
@@ -459,76 +459,22 @@ func buildPredictOptions(request PredictRequest, mapMaxTokens bool) (*PredictOpt
 const omniMaxTokensParameter = "max_tokens"
 
 // decodeOmniMaxTokens validates one canonical OMNI max_tokens value: a
-// positive integer that fits in the pinned int32 Tokens field.
+// positive integer that fits in the pinned int32 Tokens field. The value is
+// JSON-encoded first so HTTP integer float64 values marshal as integer
+// lexemes, then parsed as a base-10 signed 32-bit integer.
 func decodeOmniMaxTokens(value any) (int32, error) {
-	const maxInt32 = int64(math.MaxInt32)
-	var candidate int64
-	switch raw := value.(type) {
-	case int:
-		candidate = int64(raw)
-	case int8:
-		candidate = int64(raw)
-	case int16:
-		candidate = int64(raw)
-	case int32:
-		candidate = int64(raw)
-	case int64:
-		candidate = raw
-	case uint:
-		candidate = int64(raw)
-		if raw > uint(math.MaxInt32) {
-			return 0, omniInvalidMaxTokensFailure()
-		}
-	case uint8:
-		candidate = int64(raw)
-	case uint16:
-		candidate = int64(raw)
-	case uint32:
-		candidate = int64(raw)
-		if raw > uint32(math.MaxInt32) {
-			return 0, omniInvalidMaxTokensFailure()
-		}
-	case uint64:
-		if raw < 1 || raw > uint64(math.MaxInt32) {
-			return 0, omniInvalidMaxTokensFailure()
-		}
-		candidate = int64(raw)
-	case float32:
-		converted := float64(raw)
-		if math.IsNaN(converted) || math.IsInf(converted, 0) ||
-			converted != math.Trunc(converted) ||
-			converted < 1 || converted > float64(math.MaxInt32) {
-			return 0, omniInvalidMaxTokensFailure()
-		}
-		candidate = int64(converted)
-	case float64:
-		if math.IsNaN(raw) || math.IsInf(raw, 0) ||
-			raw != math.Trunc(raw) ||
-			raw < 1 || raw > float64(math.MaxInt32) {
-			return 0, omniInvalidMaxTokensFailure()
-		}
-		candidate = int64(raw)
-	case json.Number:
-		if parsed, err := raw.Int64(); err == nil {
-			candidate = parsed
-			break
-		}
-		parsed, err := raw.Float64()
-		if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) ||
-			parsed != math.Trunc(parsed) {
-			return 0, omniInvalidMaxTokensFailure()
-		}
-		if parsed < 1 || parsed > float64(math.MaxInt32) {
-			return 0, omniInvalidMaxTokensFailure()
-		}
-		candidate = int64(parsed)
-	default:
+	encoded, err := json.Marshal(value)
+	if err != nil {
 		return 0, omniInvalidMaxTokensFailure()
 	}
-	if candidate < 1 || candidate > maxInt32 {
+	parsed, err := strconv.ParseInt(string(encoded), 10, 32)
+	if err != nil {
 		return 0, omniInvalidMaxTokensFailure()
 	}
-	return int32(candidate), nil
+	if parsed < 1 {
+		return 0, omniInvalidMaxTokensFailure()
+	}
+	return int32(parsed), nil
 }
 
 func omniInvalidMaxTokensFailure() error {
