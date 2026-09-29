@@ -2566,7 +2566,6 @@ pkg/transports/cli/run/remote_invocation_run.go: unreachable func: RunRemoteInvo
 pkg/transports/cli/run/run.go: unreachable func: APIServerStarterWithListener
 pkg/transports/cli/run/run.go: unreachable func: CountTokenStates
 pkg/transports/cli/run/run.go: unreachable func: FormatDuration
-pkg/transports/cli/run/run.go: unreachable func: Open
 pkg/transports/cli/run/run.go: unreachable func: isFailedState
 pkg/transports/cli/run/run.go: unreachable func: isTerminalState
 pkg/transports/cli/serverstop/serverstop.go: unreachable func: StopObserverFunc.Wait

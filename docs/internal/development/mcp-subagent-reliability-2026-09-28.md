@@ -1876,3 +1876,78 @@ rerun after moving the diagnostic source had failed only `pkg-file-count`;
 the intermediate rerun after the test relocation failed only because the
 removed tracked test file was not yet staged and the formatter tried to read
 it. Neither was a remaining code violation after staging the intended edit.
+
+A Codex MCP architecture audit (session
+`667f57f0-0509-4c26-9209-594c06039407`) found a remaining renamed
+application-opening seam: `RunSelection.Open` returned `RunApplication`, and
+`Initializer.Run` called `Open` then `Run`. A Codex MCP edit (session
+`3b69fa98-8b0a-4b81-a190-e67bbce8e81f`) removed that staged handoff:
+`RunSelection.Run` now executes the selected CLI path directly, and the
+initializer no longer stages a `RunApplication`. Focused initializer, CLI,
+run, and wire tests, targeted vet and architecture checks, and all 24 `make
+lint` targets passed. Commit `2105d425fe` records this slice. The CLI run
+operation's own `Open`/`Run` stage remains and is being flattened next.
+
+A 12-minute OpenCode MCP GPU embedding task timed out with no primary result
+or document edit (session `4e0f89d9-d3b0-4afa-b32a-89a9cf29ee90`). MCP
+reported `factory_session.subagent.timed_out`, `partialEffectsPossible=true`,
+and `inFlightDispatches=1`; `you.factory_session.get` then returned
+`session.not_found`. The OpenCode log showed an invocation and later commands
+that embedded a large vector literal for counting, but no reliable final
+validation from the agent. A separate concise direct offline CLI probe with
+the installed binary completed and returned an `EMBED` JSON output with
+1,024 values. The cached Windows llama.cpp backend archive's own
+`build-metadata.json` declares `buildType: cpu` and `accelerators: [cpu]`, so
+GPU embedding is still unverified. The current default artifact manifest has
+only CPU/Metal targets despite CUDA-variant resolver tests. A scoped CUDA
+artifact/resolver implementation task is in progress. An older diagnostic
+server on port 7557 was found and stopped gracefully; no browser was opened.
+
+A Codex MCP follow-up (session `2d1d8857-ccde-448c-b0de-672983e2d36c`)
+removed the CLI run `OperationFactory`, `Operation`, `Open`, and
+`OpenWithVisualizationOwnerAndDiagnostics` staged runtime path. CLI selection
+now calls `RunSelected` with injected Factory Sessions dependencies. Wire was
+regenerated. Focused CLI/run/wire tests and targeted architecture checks
+passed. The full CLI subtree test attempted by the agent failed in separate
+contract/fixture packages; this needs independent triage before claiming the
+broader subtree is green. An initial `pkg-maint` check found the new
+`runHostedRuntime` at complexity 24 and 101 lines. A bounded Codex MCP repair
+(session `7120361b-b270-4c42-a45e-e68a68db2027`) extracted local helpers;
+focused CLI/run/wire tests, `pkg-maint`, `pkg-file-count`, `backend-size`,
+`fmt-check`, and diff checks then passed. Commit `b24531d9b0` records this
+slice. The DirectJavaScript `Open`/application-plan handoff remains and is
+being flattened separately.
+
+A Codex MCP follow-up (session `da3402bc-b29e-4051-ada8-d0339a080346`)
+removed the remaining DirectJavaScript `Open`/application-plan handoff.
+`DirectJavaScriptRunOperation.Run` now starts the canonical Factory Session
+and owns request-scoped optional HTTP host lifecycle; CLI selection no longer
+receives an application or plan. The unused application type was removed and
+wire regenerated. Focused CLI run/session execution/wire tests, wire smoke,
+maintainability/file-count/size, and architecture checks passed. Commit
+`0b40aafe1f` records it. The implementation still uses an internal lifecycle
+plan builder and request-scoped HTTP host component; those are separate
+remaining flattening candidates, not an application-opening handoff.
+
+A Codex MCP artifact task (session `075853f2-d3a5-48fd-90b7-f7f3aef41ae3`)
+added a Linux llama.cpp CUDA archive leg to the authored build matrix, with
+CUDA toolkit checks and package verification. A concurrent Windows follow-up
+(session `b6cc047b-dfac-4620-aaba-61056fc56c86`) added a Visual Studio/MSVC
+CUDA build leg while retaining MinGW for the CPU archives. A scoped review
+(session `433c3bd6-72c6-4b6e-bc5b-de5d1c03a0c4`) broadened the Windows
+binary's supported CUDA architectures and guarded recursive generated-path
+cleanup against unexpected targets and links. The 11-leg workflow config,
+Node tests (14 pass, 1 local MSYS2-path skip), actionlint, path guard test,
+and independent local MSVC/CUDA 13.3 compile probe passed. No full LocalAI
+CUDA archive or GPU inference has been produced; no release URL was added to
+the embedded manifest and nothing was published. Linux and Windows CUDA
+runners, full archive builds/startup smoke, manifest publication, and live GPU
+model invocations remain necessary.
+
+After the run and CUDA edits, a full `make lint` rerun passed all targets
+except `deadcode`: removal of `run.Open` leaves one stale baseline line
+(`pkg/transports/cli/run/run.go: unreachable func: Open`). A focused
+OpenCode MCP edit (session `a5b073bc-c658-4cb1-8ad2-ba20be331149`)
+removed only that stale line; `make deadcode` and diff checks passed. Commit
+`fba0b94729` records the CUDA artifact build preparation, still without a
+published archive. The final `make lint` rerun passed all 24 targets.
