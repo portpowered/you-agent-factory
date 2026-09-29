@@ -144,15 +144,18 @@ use an output mapping and inspect the file rather than print the full response.
 
 ## Direct Windows Models HTTP probe — 2026-09-29
 
-A headless server from the installed `you-ffce01616e.exe` binary accepted two
-multipart `POST /models/invocations` requests for built-in `tts`. Each request
-included `text`, a 10,340-byte WAV `voice` file, and a string `ref_text`
-parameter. Both returned HTTP 200 with an `audio:AUDIO` output declared as
-`audio/wav`; the reported output sizes were 32,044 and 44,844 bytes. The
-second inline output had `RIFF`, `WAVE`, `fmt `, and `data` markers. This
-establishes that the direct HTTP file input and parameter reach a working
-TTS invocation. The JSON representation did not preserve binary bytes for
-comparison, and this probe did not measure GPU use or voice similarity.
+A headless server from the installed `you-fe24e4b392.exe` binary accepted a
+direct Windows HTTP multipart `POST /models/invocations` request for built-in
+`tts` (VibeVoice, offline) with a voice WAV file. It returned HTTP 200; the
+output carried `contentBase64` with no `content` text field. The decoded WAV
+was 166,444 bytes, equal to `artifact.sizeBytes`, with RIFF/WAVE markers and
+a 166,400-byte `data` chunk containing 154,144 nonzero data bytes. Its SHA-256
+`0088c84b5e4c38bfa79cd35f5efcbe64c8f976d012574632c989ac11ce05d96f` matched
+the artifact digest. `ref_text` was omitted because it is undocumented for
+built-in VibeVoice. This supersedes the earlier probe note that JSON bytes
+were not preserved. GPU use and voice similarity were not measured.
+
+MCP live probe session `93d3ba76-1dfc-483d-acba-395a2cc90a6b`.
 
 ## Unverified
 

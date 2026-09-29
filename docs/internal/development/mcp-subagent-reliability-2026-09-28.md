@@ -2346,3 +2346,11 @@ model endpoint. `pi --version` returned 0.87.0; `pi models` returned
 failure, not a provider-name alias or MCP result-transport failure. The
 underlying runtime logs printed a long stack trace for the expected failed
 dispatch; the customer-facing MCP result remained concise.
+
+MCP live probe session `93d3ba76-1dfc-483d-acba-395a2cc90a6b` completed a
+direct Windows HTTP multipart TTS success: current `you-fe24e4b392.exe`
+built-in VibeVoice offline request with voice WAV returned HTTP 200 with
+`contentBase64` (no `content`); decoded WAV 166,444 bytes matched
+`artifact.sizeBytes` and digest `0088c84b…d96f`, RIFF/WAVE with 166,400-byte
+data chunk and 154,144 nonzero data bytes. `ref_text` omitted as undocumented
+for built-in VibeVoice; no GPU/voice-similarity claim.
