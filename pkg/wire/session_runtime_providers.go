@@ -928,45 +928,6 @@ func provideStatelessWorkersService(
 	)
 }
 
-// provideMockStatelessWorkersService is the explicit mock-feature composition
-// used only by the public root's opt-in detached Workers builder. Normal
-// process composition continues through provideStatelessWorkersService.
-func provideMockStatelessWorkersService(
-	providersService providers.Service,
-	modelsService models.Service,
-	contentMaterializer work.ContentMaterializer,
-	mediaFiles platformfilesystem.ReadOpener,
-	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
-	factoryDocsFileSystem platformfilesystem.ReadFileTree,
-	clock factoryruntime.Clock,
-	logger *zap.Logger,
-	worktreePreparer workers.FactoryWorktreePreparer,
-	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
-	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	providerOverride providerOverrideService,
-	agentToolFileSystem workers.AgentToolFileSystem,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-	mockWorkers *workers.MockWorkersConfig,
-) (workers.Service, error) {
-	return provideStatelessWorkersServiceWithMock(
-		providersService,
-		modelsService,
-		contentMaterializer,
-		mediaFiles,
-		scriptCommandRunner,
-		factoryDocsFileSystem,
-		clock,
-		logger,
-		worktreePreparer,
-		worktreeRelease,
-		temporaryFiles,
-		providerOverride,
-		agentToolFileSystem,
-		decisionEnvelopes,
-		mockWorkers,
-	)
-}
-
 func provideStatelessWorkersServiceWithMock(
 	providersService providers.Service,
 	modelsService models.Service,

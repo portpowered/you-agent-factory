@@ -617,37 +617,6 @@ func TestCanonicalStatelessWorkersExecuteBeforeRuntimeOpening(t *testing.T) {
 	}
 }
 
-func TestBuildStatelessWorkersExecutesBeforeRuntimeOpening(t *testing.T) {
-	service, err := BuildStatelessWorkers(t.Context(), serviceedges.Edges{
-		ScriptCommandRunner: statelessProcessCommandRunner{},
-	})
-	if err != nil {
-		t.Fatalf("BuildStatelessWorkers() error = %v", err)
-	}
-
-	result, err := service.Execute(context.Background(), workers.ExecuteRequest{
-		Correlation: workers.ExecutionCorrelation{
-			FactorySessionID: "session-built-canonical",
-			RuntimeID:        "runtime-built-canonical",
-			GenerationID:     "generation-built-canonical",
-			DispatchID:       "dispatch-built-canonical",
-			AttemptID:        "attempt-built-canonical",
-		},
-		Target: workers.ExecutionTarget{
-			WorkerName: "script-worker",
-			RunnerID:   "script",
-			Command:    "built-canonical-script",
-		},
-	})
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if result.Outcome != workers.ExecutionOutcomeAccepted ||
-		len(result.Output.Primary) != 1 || result.Output.Primary[0].Text != "canonical-output" {
-		t.Fatalf("result = %#v, want accepted canonical output", result)
-	}
-}
-
 func TestProvideWorkersWorktreeReleaseReturnsNilForPreparerWithoutRelease(t *testing.T) {
 	if release := provideWorkersWorktreeRelease(statelessPreparerOnly{}); release != nil {
 		t.Fatal("provideWorkersWorktreeRelease() returned a callback for a preparer without release support")
@@ -853,15 +822,6 @@ func (runner *statelessBlockingCommandRunner) Run(ctx context.Context, _ platfor
 type statelessCompositionCommandRunner struct{}
 
 func (statelessCompositionCommandRunner) Run(
-	context.Context,
-	platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
-	return platformprocess.CommandResult{Stdout: []byte("canonical-output")}, nil
-}
-
-type statelessProcessCommandRunner struct{}
-
-func (statelessProcessCommandRunner) Run(
 	context.Context,
 	platformprocess.CommandRequest,
 ) (platformprocess.CommandResult, error) {

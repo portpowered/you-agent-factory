@@ -20,7 +20,6 @@ import (
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -289,46 +288,6 @@ var workerServiceSet = wire.NewSet(
 	provideWorkerCurrentWorkingDirectory,
 )
 
-var statelessWorkersSet = wire.NewSet(
-	platformSet,
-	provideProvidersService,
-	provideModelsService,
-	provideFactoryRuntimeScriptCommandRunner,
-	provideWorkersFactoryDocsFileSystem,
-	provideFactoryRuntimeClock,
-	provideWorkersProviderTemporaryFileSystem,
-	provideWorkContentHostPlatform,
-	provideContentMaterializer,
-	provideWorkersInferenceMediaFileReader,
-	provideWorkersWorktree,
-	provideWorkersWorktreeRelease,
-	provideFactoryRuntimeProviderOverride,
-	provideWorkersAgentToolFileSystem,
-	provideFactoryInvocationPolicyPorts,
-	provideDecisionEnvelopeService,
-	provideStatelessWorkersService,
-)
-
-var mockStatelessWorkersSet = wire.NewSet(
-	platformSet,
-	provideProvidersService,
-	provideModelsService,
-	provideFactoryRuntimeScriptCommandRunner,
-	provideWorkersFactoryDocsFileSystem,
-	provideFactoryRuntimeClock,
-	provideWorkersProviderTemporaryFileSystem,
-	provideWorkContentHostPlatform,
-	provideContentMaterializer,
-	provideWorkersInferenceMediaFileReader,
-	provideWorkersWorktree,
-	provideWorkersWorktreeRelease,
-	provideFactoryRuntimeProviderOverride,
-	provideWorkersAgentToolFileSystem,
-	provideFactoryInvocationPolicyPorts,
-	provideDecisionEnvelopeService,
-	provideMockStatelessWorkersService,
-)
-
 var cliCommandOperationsSet = wire.NewSet(
 	provideCLIObserver,
 	provideNamedFactoryRootsResolver,
@@ -407,8 +366,8 @@ var cliCommandOperationsSet = wire.NewSet(
 	wire.Struct(new(cli.CommandOperations), "*"),
 )
 
-// BundleSet is the one canonical provider set used by both public bundle
-// injectors. It constructs only inert command and service initializers.
+// BundleSet is the one canonical provider set used by the single public bundle
+// injector. It constructs only inert command and service initializers.
 var BundleSet = wire.NewSet(
 	platformSet,
 	apiSet,
@@ -452,34 +411,6 @@ func InjectBundle(
 ) (*initializerapplication.Process, error) {
 	wire.Build(
 		BundleSet,
-	)
-	return nil, nil
-}
-
-// BuildStatelessWorkers composes the standalone Workers Execute root without
-// opening the application command graph, Factory Runtime, or Factory Session.
-// It is a narrow service-root construction boundary used by direct callers
-// that need one detached attempt.
-func BuildStatelessWorkers(
-	ctx context.Context,
-	edges edges.Edges,
-) (workers.Service, error) {
-	wire.Build(
-		statelessWorkersSet,
-	)
-	return nil, nil
-}
-
-// BuildMockStatelessWorkers composes the explicit mock-feature Workers root.
-// It shares the detached production construction ports while opting into the
-// mock registration only when the caller supplies mock configuration.
-func BuildMockStatelessWorkers(
-	ctx context.Context,
-	edges edges.Edges,
-	mockWorkers *workers.MockWorkersConfig,
-) (workers.Service, error) {
-	wire.Build(
-		mockStatelessWorkersSet,
 	)
 	return nil, nil
 }

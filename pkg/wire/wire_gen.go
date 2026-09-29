@@ -23,7 +23,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -733,103 +732,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	return process, nil
 }
 
-// BuildStatelessWorkers composes the standalone Workers Execute root without
-// opening the application command graph, Factory Runtime, or Factory Session.
-// It is a narrow service-root construction boundary used by direct callers
-// that need one detached attempt.
-func BuildStatelessWorkers(ctx context.Context, edges2 edges.Edges) (workers.Service, error) {
-	service, err := provideProvidersService(edges2)
-	if err != nil {
-		return nil, err
-	}
-	modelsService, err := provideModelsService(edges2)
-	if err != nil {
-		return nil, err
-	}
-	contentHostPlatform := provideWorkContentHostPlatform(edges2)
-	contentMaterializer, err := provideContentMaterializer(contentHostPlatform, edges2)
-	if err != nil {
-		return nil, err
-	}
-	readOpener := provideWorkersInferenceMediaFileReader(edges2)
-	v, err := provideFactoryRuntimeScriptCommandRunner(edges2)
-	if err != nil {
-		return nil, err
-	}
-	readFileTree := provideWorkersFactoryDocsFileSystem(edges2)
-	clock := provideFactoryRuntimeClock(edges2)
-	logger, err := logging.NewDefaultLogger()
-	if err != nil {
-		return nil, err
-	}
-	factoryWorktreePreparer, err := provideWorkersWorktree(edges2)
-	if err != nil {
-		return nil, err
-	}
-	v2 := provideWorkersWorktreeRelease(factoryWorktreePreparer)
-	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
-	v3 := provideFactoryRuntimeProviderOverride(edges2)
-	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
-	invocationPolicyPorts, err := provideFactoryInvocationPolicyPorts()
-	if err != nil {
-		return nil, err
-	}
-	decisionEnvelopeService := provideDecisionEnvelopeService(invocationPolicyPorts)
-	workersService, err := provideStatelessWorkersService(service, modelsService, contentMaterializer, readOpener, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, v3, agentToolFileSystem, decisionEnvelopeService)
-	if err != nil {
-		return nil, err
-	}
-	return workersService, nil
-}
-
-// BuildMockStatelessWorkers composes the explicit mock-feature Workers root.
-// It shares the detached production construction ports while opting into the
-// mock registration only when the caller supplies mock configuration.
-func BuildMockStatelessWorkers(ctx context.Context, edges2 edges.Edges, mockWorkers *workers.MockWorkersConfig) (workers.Service, error) {
-	service, err := provideProvidersService(edges2)
-	if err != nil {
-		return nil, err
-	}
-	modelsService, err := provideModelsService(edges2)
-	if err != nil {
-		return nil, err
-	}
-	contentHostPlatform := provideWorkContentHostPlatform(edges2)
-	contentMaterializer, err := provideContentMaterializer(contentHostPlatform, edges2)
-	if err != nil {
-		return nil, err
-	}
-	readOpener := provideWorkersInferenceMediaFileReader(edges2)
-	v, err := provideFactoryRuntimeScriptCommandRunner(edges2)
-	if err != nil {
-		return nil, err
-	}
-	readFileTree := provideWorkersFactoryDocsFileSystem(edges2)
-	clock := provideFactoryRuntimeClock(edges2)
-	logger, err := logging.NewDefaultLogger()
-	if err != nil {
-		return nil, err
-	}
-	factoryWorktreePreparer, err := provideWorkersWorktree(edges2)
-	if err != nil {
-		return nil, err
-	}
-	v2 := provideWorkersWorktreeRelease(factoryWorktreePreparer)
-	temporaryFileSystem := provideWorkersProviderTemporaryFileSystem(edges2)
-	v3 := provideFactoryRuntimeProviderOverride(edges2)
-	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges2)
-	invocationPolicyPorts, err := provideFactoryInvocationPolicyPorts()
-	if err != nil {
-		return nil, err
-	}
-	decisionEnvelopeService := provideDecisionEnvelopeService(invocationPolicyPorts)
-	workersService, err := provideMockStatelessWorkersService(service, modelsService, contentMaterializer, readOpener, v, readFileTree, clock, logger, factoryWorktreePreparer, v2, temporaryFileSystem, v3, agentToolFileSystem, decisionEnvelopeService, mockWorkers)
-	if err != nil {
-		return nil, err
-	}
-	return workersService, nil
-}
-
 // wire.go:
 
 var platformSet = wire5.NewSet(logging.NewDefaultLogger)
@@ -1047,46 +949,6 @@ var workerServiceSet = wire5.NewSet(
 	provideWorkerCurrentWorkingDirectory,
 )
 
-var statelessWorkersSet = wire5.NewSet(
-	platformSet,
-	provideProvidersService,
-	provideModelsService,
-	provideFactoryRuntimeScriptCommandRunner,
-	provideWorkersFactoryDocsFileSystem,
-	provideFactoryRuntimeClock,
-	provideWorkersProviderTemporaryFileSystem,
-	provideWorkContentHostPlatform,
-	provideContentMaterializer,
-	provideWorkersInferenceMediaFileReader,
-	provideWorkersWorktree,
-	provideWorkersWorktreeRelease,
-	provideFactoryRuntimeProviderOverride,
-	provideWorkersAgentToolFileSystem,
-	provideFactoryInvocationPolicyPorts,
-	provideDecisionEnvelopeService,
-	provideStatelessWorkersService,
-)
-
-var mockStatelessWorkersSet = wire5.NewSet(
-	platformSet,
-	provideProvidersService,
-	provideModelsService,
-	provideFactoryRuntimeScriptCommandRunner,
-	provideWorkersFactoryDocsFileSystem,
-	provideFactoryRuntimeClock,
-	provideWorkersProviderTemporaryFileSystem,
-	provideWorkContentHostPlatform,
-	provideContentMaterializer,
-	provideWorkersInferenceMediaFileReader,
-	provideWorkersWorktree,
-	provideWorkersWorktreeRelease,
-	provideFactoryRuntimeProviderOverride,
-	provideWorkersAgentToolFileSystem,
-	provideFactoryInvocationPolicyPorts,
-	provideDecisionEnvelopeService,
-	provideMockStatelessWorkersService,
-)
-
 var cliCommandOperationsSet = wire5.NewSet(
 	provideCLIObserver,
 	provideNamedFactoryRootsResolver,
@@ -1161,8 +1023,8 @@ var cliCommandOperationsSet = wire5.NewSet(
 	provideVisualizeWorkOperation, wire5.Struct(new(cli.CommandOperations), "*"),
 )
 
-// BundleSet is the one canonical provider set used by both public bundle
-// injectors. It constructs only inert command and service initializers.
+// BundleSet is the one canonical provider set used by the single public bundle
+// injector. It constructs only inert command and service initializers.
 var BundleSet = wire5.NewSet(
 	platformSet,
 	apiSet,
