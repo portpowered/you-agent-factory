@@ -2107,3 +2107,8 @@ The MCP terminal result reported `partialEffectsPossible=true` and recent
 provider reasoning, but no primary result. An independent focused Go test
 passed after cleanup. This is a second partial-edit timeout; the test result
 does not turn the MCP session into a successful completion.
+
+After the CUDA resolver and direct Models tests passed the full 24-target
+lint gate, commit `881c5b5dcd` recorded them. The installed MCP command for
+new connections now points to `C:\Users\andre\bin\you-881c5b5dcd.exe`
+(SHA-256 `9A2041AE5F3F3D20D04D845807B3048FA0DB44A81D0C655A9B09D1BFCE9D6877`).
