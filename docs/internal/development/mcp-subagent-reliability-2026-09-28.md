@@ -2181,3 +2181,14 @@ A separate OpenCode Mimo MCP code task (session
 `aa5c162a-acfd-4019-a955-687cc9182d34`, request
 `88279b3f-c85b-46c4-a1f9-c40349cdcb93`) timed out after 300000 ms and left
 partial edits. No primary completion result or cause is established.
+
+Commit `f4eb28e1de` removed the misleading `TOOL` timestamps from Factory
+Session timeout progress after the architecture audit. The correction
+preserves response-activity reporting and the ACP owning tool completion
+mapping in Worker Sessions. Timeout progress no longer implies a tool
+completion timestamp it cannot source.
+Focused MCP package tests, `make backend-size`, `make pkg-maint`, and
+`git diff --check` passed for the correction. The installed MCP command for
+new connections points to `C:\Users\andre\bin\you-f4eb28e1de.exe` (SHA-256
+`B26557220737BFA4BB1374D313017D1B0ACCFE1F0964432121C567F0BC0D565A`). No
+all-provider live success is claimed from this correction.
