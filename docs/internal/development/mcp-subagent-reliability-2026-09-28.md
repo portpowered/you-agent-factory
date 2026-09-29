@@ -2226,3 +2226,20 @@ contrasts a functioning MCP harness path with a provider-side 504 that the
 current MCP timeout classification obscures.
 
 After the generated contract commit, `make lint` passed all 24 targets.
+
+A follow-up Codex MCP architecture audit (session
+`1d11a5bb-656c-4cb3-8a0c-52d84f2eb96a`) found no truthful current
+ACP-to-MCP path for the native OpenCode intermediate error. The ACP adapter
+maps supported `session/update` progress, but OpenCode's internal assistant
+error/retry is not one of the observed update variants. Calling the retrying
+attempt terminal would be wrong. An actionable timeout would require a typed,
+safe provider error observation entering the existing provider/Worker progress
+path; MCP can then report the observed error while keeping `timed_out` for an
+active retry. No speculative mapping edit was made.
+
+A separate bounded OpenCode Muse Spark MCP edit (session
+`faa9a2a1-e330-435d-963c-6b02a0c96e91`) completed with a primary result
+and no ambiguity. It expanded the direct Models HTTP byte round-trip test to
+image, video, and binary outputs (`860182b18e`). The focused HTTP package
+test passed. This demonstrates that OpenCode can complete scoped edits through
+the same MCP harness even though the longer free-model tasks timed out.
