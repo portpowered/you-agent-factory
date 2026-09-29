@@ -382,7 +382,7 @@ func TestSubagentTimeoutActivityReadFailureStillCloses(t *testing.T) {
 	}
 }
 
-func TestSubagentTimeoutWithNoProviderEventsReportsObservationFalse(t *testing.T) {
+func TestSubagentTimeoutWithNoProviderEventsOmitsActivity(t *testing.T) {
 	target := &subagentActivityTarget{
 		subagentTargetFake: &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusTimedOut}},
 	}
@@ -391,9 +391,34 @@ func TestSubagentTimeoutWithNoProviderEventsReportsObservationFalse(t *testing.T
 		t.Fatalf("timeout and cleanup = %#v, target = %#v", response, target)
 	}
 	progress := response.Error.Details["progress"].(map[string]any)
+	if activity, exists := progress["lastObservedProviderActivity"]; exists {
+		t.Fatalf("unexpected provider activity = %#v", activity)
+	}
+}
+
+func TestSubagentTimeoutWithResponseEventButNoSessionRefOmitsObservation(t *testing.T) {
+	now := time.Now()
+	target := &subagentActivityTarget{
+		subagentTargetFake: &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusTimedOut}},
+		events: []factorysessions.FactoryResponseEvent{
+			{Kind: workers.KindMessage, Phase: workers.PhaseDelta, RecordedAt: now, Provenance: workers.Provenance{Provider: "codex"}},
+		},
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "activity-no-session-ref" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "codex"})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" || !target.closed || !target.read {
+		t.Fatalf("timeout and cleanup = %#v, target = %#v", response, target)
+	}
+	progress := response.Error.Details["progress"].(map[string]any)
 	activity := progress["lastObservedProviderActivity"].(map[string]any)
-	if len(activity) != 1 || activity["providerSessionObserved"] != false {
-		t.Fatalf("empty provider activity = %#v", activity)
+	if _, exists := activity["providerSessionObserved"]; exists {
+		t.Fatalf("unexpected provider session observation = %#v", activity)
+	}
+	if activity["kind"] != "MESSAGE" || activity["phase"] != "DELTA" || len(activity) != 3 {
+		t.Fatalf("retained provider activity = %#v", activity)
+	}
+	observedAt, ok := activity["observedAt"].(time.Time)
+	if !ok || !observedAt.Equal(now) {
+		t.Fatalf("observedAt = %#v", activity["observedAt"])
 	}
 }
 

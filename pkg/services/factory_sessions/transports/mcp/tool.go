@@ -739,7 +739,7 @@ func subagentLastProviderActivity(ctx context.Context, target factorysessionexec
 	if err != nil || ctx.Err() != nil {
 		return nil
 	}
-	activity := map[string]any{"providerSessionObserved": false}
+	activity := make(map[string]any)
 	for _, event := range events {
 		if event.ProviderSessionRef != "" {
 			activity["providerSessionObserved"] = true
@@ -750,6 +750,9 @@ func subagentLastProviderActivity(ctx context.Context, target factorysessionexec
 		activity["kind"] = string(event.Kind)
 		activity["phase"] = string(event.Phase)
 		activity["observedAt"] = event.RecordedAt
+	}
+	if len(activity) == 0 {
+		return nil
 	}
 	return activity
 }
