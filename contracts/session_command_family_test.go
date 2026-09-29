@@ -112,8 +112,8 @@ func TestProductionSessionCreateContractsRelationshipsAndDefaults(t *testing.T) 
 	list := requireObject(t, commands, "you.session.list")
 	listFlags := requireObject(t, list, "flags")
 	scope := requireObject(t, listFlags, "you.session.list.flag.scope")
-	if got := scope["default"]; got != "live" {
-		t.Fatalf("you.session.list --scope default = %v, want live", got)
+	if got := scope["default"]; got != "all" {
+		t.Fatalf("you.session.list --scope default = %v, want all", got)
 	}
 }
 
