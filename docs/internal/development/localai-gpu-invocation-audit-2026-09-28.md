@@ -111,3 +111,20 @@ remains unverified, while managed WSL Qwen3/IndexTTS reference-audio
 synthesis is documented in the linked audit; speech content, voice
 similarity, and actual `ref_text` use are unverified. The host is
 Windows; the CUDA gallery backends in this audit ran under WSL Ubuntu.
+
+## Manual Windows CUDA release — user-requested, IN PROGRESS (2026-09-29)
+
+Host Windows RTX 4090, CUDA 13.3, VS2022;
+`scripts/build-localai-backend-cuda.ps1 -ProbeOnly` passed a real
+CUDA+MSVC compile probe. A 10-entry manual manifest path is accepted by the
+runtime (MCP `463a65d1-91b9-4c48-a47f-7e54481d197c`); DLL lookup fixed to
+toolkit `bin/x64` (commit `7d14f7fe27`); 9 baseline archives
+(116,246,859 bytes) downloaded/verified outside the repo; pinned LocalAI
+source prepared/verified; portable Go 1.25.4/CMake 3.31.10/Node 22.14.0
+installed (Codex `0e98837b-6010-45fc-b819-980b8e051c17`). First native
+build failed in recursive gRPC nested bloaty submodule
+(`fatal: '$GIT_DIR' too big`); fixed nonrecursive checkout (commit
+`050552eef8`) and retry idempotency (commit `8a1e770682`). A native-build
+retry is RUNNING (PID 42004, checked live) past CMake gRPC configuration.
+Archive, publish, and native GPU inference are NOT complete; do not treat
+this section as native Windows GPU evidence.

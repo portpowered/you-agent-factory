@@ -2395,3 +2395,25 @@ rebuilt binary returned one-word `One` with usage tokens=1 for `max_tokens=1`,
 and `hello` with usage tokens=2 for `max_tokens=3` on prompt `hello`. The
 tests prove the wire mapping; the live probe proves the effective cap in this
 model.
+
+User requested a manual Windows CUDA release for native testing. Host:
+Windows RTX 4090, CUDA 13.3, VS2022; `scripts/build-localai-backend-cuda.ps1
+-ProbeOnly` passed a real CUDA+MSVC compile probe. OpenCode MCP session
+`c64df2ba-e7b3-49df-a931-304a9adf4d32` fixed CUDA runtime DLL lookup
+`bin/x64` (commit `7d14f7fe27`); `a203a644-32fa-4999-bcfd-55290a2d8c9b`
+audited the manual build; `463a65d1-91b9-4c48-a47f-7e54481d197c` confirmed
+the runtime accepts the 10-entry manual manifest;
+`9238bf08-fb6e-4166-bac1-f0507220cb8c` downloaded/verified 9 baseline
+archives (116,246,859 bytes) outside the repo; `001aff69-379f-4c5c-9542-3c117c6368e4`
+prepared/verified pinned LocalAI source. Codex MCP session
+`0e98837b-6010-45fc-b819-980b8e051c17` installed portable
+checksum-verified Go 1.25.4 / CMake 3.31.10 / Node 22.14.0. The first native
+build failed in the recursive gRPC nested bloaty submodule
+(`fatal: '$GIT_DIR' too big`); OpenCode MCP sessions
+`e4ca10bf-5870-4231-9b1d-beb8df5a7b97` (commit `050552eef8`) and
+`7f9c0a9b-8c84-4061-a665-18d5791087c0` (commit `8a1e770682`) fixed
+nonrecursive checkout and retry idempotency. A retry is currently RUNNING
+(PID 42004, process checked live) past CMake gRPC configuration; archive,
+publish, and native GPU test are NOT claimed complete. Full `make lint`
+passed 24 targets after moving tool/source staging outside the repo. No
+other edits/tests/network in this entry.
