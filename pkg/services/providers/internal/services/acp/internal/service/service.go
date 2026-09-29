@@ -1305,9 +1305,8 @@ func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress,
 		metadata["status"] = string(update.ToolCall.Status)
 		encodeMetadata(metadata, "raw_input", update.ToolCall.RawInput)
 	case update.ToolCallUpdate != nil:
-		kind = "tool"
+		kind, phase = "tool", "updated"
 		metadata["native_type"] = "tool_call_update"
-		phase = "updated"
 		itemID = string(update.ToolCallUpdate.ToolCallId)
 		if update.ToolCallUpdate.Title != nil {
 			detail = *update.ToolCallUpdate.Title
@@ -1319,7 +1318,8 @@ func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress,
 			}
 		}
 		encodeMetadata(metadata, "raw_output", update.ToolCallUpdate.RawOutput)
-		progress := []providers.ExecuteProgress{}
+		metadata["kind"], metadata["item_id"], metadata["provider_session_id"] = kind, itemID, ""
+		progress := []providers.ExecuteProgress{{Phase: phase, Detail: detail, Metadata: metadata}}
 		for _, content := range update.ToolCallUpdate.Content {
 			if content.Diff == nil {
 				continue

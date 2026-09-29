@@ -2112,3 +2112,54 @@ After the CUDA resolver and direct Models tests passed the full 24-target
 lint gate, commit `881c5b5dcd` recorded them. The installed MCP command for
 new connections now points to `C:\Users\andre\bin\you-881c5b5dcd.exe`
 (SHA-256 `9A2041AE5F3F3D20D04D845807B3048FA0DB44A81D0C655A9B09D1BFCE9D6877`).
+
+A read-only two-file OpenCode MCP audit (session
+`8b849a3d-d5d7-4a8f-a6c6-7ead7a753325`, request
+`76313e28-215b-44f2-bad9-da698602ffdc`) explicitly selected
+`opencode/nemotron-3.5-lightning-free` and timed out at 120000 ms with
+`isError=true`, `partialEffectsPossible`, `providerSessionObserved`, and
+recent `REASONING`. Sanitized native session `ses_f150518d9ffeAVtpCkSBRgIUvS`
+shows five completed tool-call turns (reads and greps), then no completed turn
+for about 80 seconds before the MCP timeout. No edits were observed. A direct
+standalone one-line prompt to the same model returned `READY` in 18 seconds
+(session `ses_f1502b074ffei6yKtTZBXLM0gv`). This distinguishes simple model
+connectivity from completion of the audit; it does not establish the exact
+cause of the stall.
+
+The sanitized native OpenCode session `ses_f151178ebffeT2ZQT1aUO1hdsN` for the
+300-second CUDA retry task shows about ten completed tool-call turns, including
+targeted `go test` commands and a final vet/diff command. Its last assistant
+message finished with error type `aborted` and message `Step interrupted` after
+the MCP deadline. This supports real deadline interruption after partial
+code/test work rather than a lost MCP response; it does not claim that all
+tests completed.
+
+Two bounded MCP tasks then completed after earlier Longcat and Lightning
+timeouts. OpenCode Mimo MCP session `9141b715-f3c7-4543-b8cc-46638533f4e6`
+finished a one-file documentation edit with a primary result, and `git diff
+--check` passed on the result. Codex MCP session
+`fa6ae32c-0fd6-49ae-93a1-d485d66eb4f3` completed a bounded code fix so ACP
+completed tool updates keep the owning tool event with diffs, and MCP timeout
+progress reports `lastCompletedToolObservedAt`. Focused MCP/ACP tests passed;
+the full ACP package is blocked by the existing dirty
+`TestPiPreflight_CanceledContext` failure (`Canceled` expected, `misconfigured`
+observed), so the full ACP package is not claimed as passing. `make
+backend-size`, `pkg-maint`, and diff-check passed.
+
+Follow-up: that temporary ACP test blockage is corrected. Codex MCP session
+`9c63f746-4f8a-4ea1-b57d-c2db13f45477` repaired the dirty Pi preflight
+cancellation classification and the process-tree cleanup without reverting
+unrelated work in the tree. Independent execution of the exact command
+`go test ./pkg/services/providers/internal/services/acp/internal/service -count=1`
+now passes, and `make lint` passes all 24 targets. The repaired Pi
+code remains part of the pre-existing unstaged work, separate from the new
+timeout diagnosis commit.
+
+Verification note: a broad `make test` advanced through the Go short suite but
+failed in `test-ci-workflows` with `ENOENT` while reading a temporary
+`partial-snapshot.txt` referenced by
+`scripts/ci/shared-baseline-regeneration-workflow.test.mjs`. Rerunning that
+exact Node test file alone passed all 49 tests. The broad `make test` is
+therefore not claimed as passing; this run is presently a
+concurrency/intermittency observation, not evidence against the ACP mapping,
+and it does not prove the cause of the failure.

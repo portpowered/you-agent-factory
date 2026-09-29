@@ -338,6 +338,8 @@ func TestSubagentTimeoutReportsOnlyBoundedProviderActivity(t *testing.T) {
 		subagentTargetFake: &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusTimedOut}},
 		events: []factorysessions.FactoryResponseEvent{
 			{Kind: workers.KindTool, Phase: workers.PhaseStarted, RecordedAt: now.Add(-2 * time.Second), Provenance: workers.Provenance{Provider: secret}, ProviderSessionRef: secret, Payload: json.RawMessage(`{"text":"private provider text and metadata"}`)},
+			{Kind: workers.KindTool, Phase: workers.PhaseCompleted, RecordedAt: now.Add(-1500 * time.Millisecond), Provenance: workers.Provenance{Provider: secret}, Payload: json.RawMessage(`{"text":"private provider text and metadata"}`)},
+			{Kind: workers.KindTool, Phase: workers.PhaseCompleted, RecordedAt: now.Add(-1200 * time.Millisecond), Provenance: workers.Provenance{Provider: secret}, Payload: json.RawMessage(`{"text":"private provider text and metadata"}`)},
 			{Kind: workers.KindMessage, Phase: workers.PhaseDelta, RecordedAt: now.Add(-time.Second), Provenance: workers.Provenance{Provider: secret}, Payload: json.RawMessage(`{"text":"private provider text and metadata"}`)},
 			{Kind: workers.Kind(secret), Phase: workers.PhaseUpdated, RecordedAt: now, Provenance: workers.Provenance{Provider: secret}},
 		},
@@ -354,6 +356,10 @@ func TestSubagentTimeoutReportsOnlyBoundedProviderActivity(t *testing.T) {
 	observedAt, ok := activity["observedAt"].(time.Time)
 	if !ok || !observedAt.Equal(now.Add(-time.Second)) {
 		t.Fatalf("observedAt = %#v", activity["observedAt"])
+	}
+	completedAt, ok := activity["lastCompletedToolObservedAt"].(time.Time)
+	if !ok || !completedAt.Equal(now.Add(-1200*time.Millisecond)) || len(activity) != 5 {
+		t.Fatalf("completed tool activity = %#v", activity)
 	}
 	encoded, err := json.Marshal(response.Error)
 	if err != nil || strings.Contains(string(encoded), secret) {
