@@ -52,48 +52,6 @@ func TestBackendArtifactResolverPrefersAvailableWindowsCUDAArchive(t *testing.T)
 	}
 }
 
-// TestManualPublicationManifestProbe can be run against a staged manual release
-// before publication by setting LOCALAI_MANUAL_PUBLICATION_MANIFEST to its manifest.json.
-func TestManualPublicationManifestProbe(t *testing.T) {
-	manifestPath := os.Getenv("LOCALAI_MANUAL_PUBLICATION_MANIFEST")
-	if manifestPath == "" {
-		t.Skip("set LOCALAI_MANUAL_PUBLICATION_MANIFEST to probe a staged publication")
-	}
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	manifest, err := artifacts.Decode(data)
-	if err != nil {
-		t.Fatalf("decode staged manifest: %v", err)
-	}
-	if manifest.ArtifactCount() != 10 {
-		t.Fatalf("artifact count = %d, want 10", manifest.ArtifactCount())
-	}
-	resolve := backendArtifactResolver(manifest)
-	for _, scenario := range []struct {
-		backend, accelerator, target string
-	}{
-		{"localai-llamacpp", "cuda", "windows-amd64-cuda"},
-		{"localai-whisper", "cpu", "windows-amd64"},
-		{"localai-vibevoice", "cpu", "windows-amd64"},
-	} {
-		selection, err := resolve(context.Background(), ResolvedHostConfiguration{
-			Backend: scenario.backend,
-			Platform: models.AssetHostPlatform{
-				OperatingSystem: "windows", Architecture: "amd64", Accelerator: scenario.accelerator,
-			},
-			ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
-		}, false)
-		if err != nil {
-			t.Fatalf("resolve %s/%s: %v", scenario.backend, scenario.accelerator, err)
-		}
-		if selection.Accelerator != scenario.accelerator || !strings.Contains(selection.Name, scenario.target) {
-			t.Fatalf("resolve %s/%s = %#v, want %s", scenario.backend, scenario.accelerator, selection, scenario.target)
-		}
-	}
-}
-
 func TestBackendArtifactResolverPrefersAvailableLinuxCUDAArchive(t *testing.T) {
 	t.Parallel()
 	data, err := os.ReadFile(filepath.Join("..", "internal", "artifacts", "testdata", "windows-cuda-variant-manifest.json"))

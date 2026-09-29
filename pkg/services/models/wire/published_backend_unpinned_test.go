@@ -7,12 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 
+	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
 
 func TestPublishedBackendResolverRetriesDiscoveryAfterFailure(t *testing.T) {
@@ -457,5 +460,47 @@ func assertUnpinnedSelection(t *testing.T, resolver BackendArtifactResolver, req
 	}
 	if tag != "" && !strings.Contains(selection.Location, "/"+tag+"/") {
 		t.Fatalf("location = %q, want publication %s", selection.Location, tag)
+	}
+}
+
+// TestManualPublicationManifestProbe can be run against a staged manual release
+// before publication by setting LOCALAI_MANUAL_PUBLICATION_MANIFEST to its manifest.json.
+func TestManualPublicationManifestProbe(t *testing.T) {
+	manifestPath := os.Getenv("LOCALAI_MANUAL_PUBLICATION_MANIFEST")
+	if manifestPath == "" {
+		t.Skip("set LOCALAI_MANUAL_PUBLICATION_MANIFEST to probe a staged publication")
+	}
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := artifacts.Decode(data)
+	if err != nil {
+		t.Fatalf("decode staged manifest: %v", err)
+	}
+	if manifest.ArtifactCount() != 10 {
+		t.Fatalf("artifact count = %d, want 10", manifest.ArtifactCount())
+	}
+	resolve := backendArtifactResolver(manifest)
+	for _, scenario := range []struct {
+		backend, accelerator, target string
+	}{
+		{"localai-llamacpp", "cuda", "windows-amd64-cuda"},
+		{"localai-whisper", "cpu", "windows-amd64"},
+		{"localai-vibevoice", "cpu", "windows-amd64"},
+	} {
+		selection, err := resolve(context.Background(), ResolvedHostConfiguration{
+			Backend: scenario.backend,
+			Platform: models.AssetHostPlatform{
+				OperatingSystem: "windows", Architecture: "amd64", Accelerator: scenario.accelerator,
+			},
+			ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+		}, false)
+		if err != nil {
+			t.Fatalf("resolve %s/%s: %v", scenario.backend, scenario.accelerator, err)
+		}
+		if selection.Accelerator != scenario.accelerator || !strings.Contains(selection.Name, scenario.target) {
+			t.Fatalf("resolve %s/%s = %#v, want %s", scenario.backend, scenario.accelerator, selection, scenario.target)
+		}
 	}
 }
