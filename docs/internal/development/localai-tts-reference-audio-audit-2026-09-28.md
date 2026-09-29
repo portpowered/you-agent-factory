@@ -155,6 +155,10 @@ the artifact digest. `ref_text` was omitted because it is undocumented for
 built-in VibeVoice. This supersedes the earlier probe note that JSON bytes
 were not preserved. GPU use and voice similarity were not measured.
 
+An earlier `you-ffce01616e.exe` probe also sent `ref_text` with the voice
+WAV and returned HTTP 200 twice (32,044- and 44,844-byte outputs). That
+established request acceptance, not that VibeVoice consumed `ref_text`.
+
 MCP live probe session `93d3ba76-1dfc-483d-acba-395a2cc90a6b`.
 
 ## Unverified
