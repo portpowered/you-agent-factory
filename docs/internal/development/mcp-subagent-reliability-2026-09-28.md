@@ -2317,3 +2317,12 @@ returned `you.subagent`, and a fresh `you.subagent` Codex call completed with
 primary text `READY`. `make lint` passed all 24 targets with the configured
 Git Bash shell. An earlier lint invocation without that shell setting failed
 at recipe parsing and did not indicate a code defect.
+
+A second fresh stdio connection to that installed binary invoked OpenCode
+Muse Spark with no edit-capability flag. MCP session
+`1c543734-2c6f-4f82-9c72-c4379e09fa1e` returned a primary `DONE`
+result in 6.8 seconds and created the requested workspace file containing
+exactly `EDIT_OK\n`. The file was checked and removed after the smoke test.
+The stdio process logged `peer connection closed` on normal input EOF, while
+the tool call itself completed successfully; this line alone is not a task
+failure.
