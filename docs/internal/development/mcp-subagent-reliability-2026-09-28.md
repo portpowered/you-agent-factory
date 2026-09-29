@@ -2203,3 +2203,26 @@ inspection and focused tests showed that the resolver already prefers a
 compatible older CUDA archive over a newer CPU-only publication; the two
 currently published backend releases contain no CUDA archive. The subagent
 timeout itself remains unexplained.
+
+A 600000 ms OpenCode Nemotron 3.5 Lightning code task investigated an
+intermittent CI workflow test failure but returned no primary result or edit.
+MCP session `ca65bb52-d6ad-4ad8-ac5d-f96662ca4dac` returned typed
+`factory_session.subagent.timed_out` with recent `SESSION` activity and a
+closed session. Native sanitized OpenCode session
+`ses_f14dcfdc5ffewhjW7fOz1yHylq` shows twelve completed assistant/tool
+turns, then `provider.internal` with `Streaming response failed: [504]
+Upstream idle timeout exceeded` and an OpenCode retry. The MCP result did not
+surface this provider failure, so its generic longer-timeout suggestion is
+insufficient for this case. The test file was unchanged.
+
+In the same period, three bounded Codex MCP tasks completed with primary
+results: direct Models binary HTTP output transport (`ba94e6770c`), reference
+documentation (`8e97b39f9d`), and publishable API contract regeneration
+(`3101cd2cc5`). Focused HTTP/CLI tests, `make api-smoke`,
+`make docs-reference-smoke`, and `make contracts-check` passed. A broader
+`make lint` passed 23 of 24 targets before contract regeneration; its only
+failure was the expected stale generated contract, since corrected. This
+contrasts a functioning MCP harness path with a provider-side 504 that the
+current MCP timeout classification obscures.
+
+After the generated contract commit, `make lint` passed all 24 targets.
