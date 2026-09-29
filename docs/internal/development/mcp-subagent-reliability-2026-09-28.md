@@ -2491,3 +2491,18 @@ separate `go test -count=1 ./pkg/services/factory_sessions/transports/mcp/...`
 run passed after cleanup. This call demonstrates the remaining need for
 duration estimates or resumable long-running work; it does not establish a
 provider startup failure.
+
+Fresh-server validation after the timeout-guidance change (2026-09-29):
+`go test -count=1 ./pkg/services/factory_sessions/transports/mcp/...` passed,
+`make lint` passed all 24 targets, and the binary built at
+`C:\Users\andre\bin\you-mcp-error-20260929.exe`. A direct MCP stdio
+initialize/tools-list discovered `you.subagent`. One live OpenCode Muse call
+created and verified `.tmp/mcp-fresh-binary-smoke-20260929.txt`. Two more
+`you.subagent` calls were sent to the same fresh server before either result
+returned; both completed in about 16 seconds, each created its requested
+marker file, and both returned primary results. This concurrency probe did
+not reproduce the earlier provider error. The Codex MCP config now names the
+fresh binary, while nine `you-b04fb8704d.exe server mcp` processes launched
+before that config update remained alive; direct stdio validation is therefore
+the evidence for the new binary, and the desktop-hosted MCP instance has not
+yet been observed restarting onto it.
