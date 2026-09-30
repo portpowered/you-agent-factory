@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -851,6 +852,10 @@ func controlledErrorClass(err error) string {
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		return "missing"
+	}
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return "os_error:" + errno.Error()
 	}
 	return "bounded_failure"
 }

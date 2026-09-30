@@ -648,7 +648,7 @@ func testControlledSecret(t *testing.T, runner ControlledRunner, fixture control
 		t.Fatalf("controlled secret output: %v", err)
 	}
 	if report.Status != StatusPass || !report.Commands[0].Redacted {
-		t.Fatalf("secret report = %#v", report)
+		t.Fatalf("secret report = %#v; failure=%+v", report, report.Failure)
 	}
 	body, err := os.ReadFile(fixture.spec.ReportPath)
 	if err != nil {
