@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -305,4 +306,56 @@ func (fixture *omniTextProtocolFixture) Calls() int {
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
 	return fixture.calls
+}
+
+// A bad backend publication must fail truthfully and be retried on the next pull.
+func TestModelsPullRetriesInvalidBackendPublication(t *testing.T) {
+	t.Parallel()
+	home := functionalTempDir(t)
+	network := &invalidBackendPublication{}
+	process := functionalBuildProcess(t, serviceedges.Edges{
+		ModelAssetHTTPClient:           network,
+		ModelAssetResolveHomeDirectory: func() (string, error) { return home, nil },
+		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64", Accelerator: "cuda", CUDAAvailable: true},
+	})
+	defer closeRootProcess(t, process, "close publication Models process")
+	for attempt := 0; attempt < 2; attempt++ {
+		inputs := support.FakeInputs(t.Context(), []string{"you", "models", "pull", models.BuiltInModelNameASR})
+		inputs.Input.Env = functionalHomeEnvironment(home)
+		inputs.Input.WorkingDirectory = home
+		var output, diagnostic bytes.Buffer
+		inputs.Input.Stdout, inputs.Input.Stderr = &output, &diagnostic
+		err := process.Execute(inputs.Input)
+		if err == nil || strings.Contains(output.String(), `"readinessState":"READY"`) {
+			t.Fatalf("invalid publication pull = %v, stdout=%s stderr=%s", err, output.String(), diagnostic.String())
+		}
+	}
+	network.mu.Lock()
+	defer network.mu.Unlock()
+	if network.indexReads != 2 || network.manifestReads != 2 {
+		t.Fatalf("publication reads index=%d manifest=%d, want retry for each pull", network.indexReads, network.manifestReads)
+	}
+}
+
+type invalidBackendPublication struct {
+	mu                        sync.Mutex
+	indexReads, manifestReads int
+}
+
+func (client *invalidBackendPublication) Do(request *http.Request) (*http.Response, error) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	tag := "localai-backends-v1-" + strings.Repeat("a", 64)
+	body := ""
+	switch {
+	case request.URL.Host == "api.github.com" && request.URL.Path == "/repos/portpowered/you-agent-factory/releases":
+		client.indexReads++
+		body = `[{"tag_name":"` + tag + `","assets":[{"name":"manifest.json"}]}]`
+	case request.URL.Host == "github.com" && strings.HasSuffix(request.URL.Path, "/"+tag+"/manifest.json"):
+		client.manifestReads++
+		body = `{"publication":{"releaseTag":"untrusted-release"}}`
+	default:
+		return nil, fmt.Errorf("controlled unavailable backend: %s", request.URL)
+	}
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header), Request: request}, nil
 }

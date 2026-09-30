@@ -111,6 +111,7 @@ func (runner hostObservingRunner) finishAfterRunResult(
 			readinessErr = result.err
 		}
 	}
+	cancelReady()
 	if err == nil && readinessErr != nil && !errors.Is(readinessErr, context.Canceled) {
 		err = readinessErr
 	}
@@ -130,7 +131,8 @@ func (runner hostObservingRunner) observeReadyResult(
 		}
 		return false, result.err
 	default:
-		cancelReady()
+		// The readiness reader may still be delivering a binding published by
+		// a finite run. Its caller decides whether to join or cancel that read.
 		return false, nil
 	}
 }

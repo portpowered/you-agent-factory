@@ -45,9 +45,54 @@ func TestRootBuildProcessIsInertAndReusableAcrossFactorySessions(t *testing.T) {
 	second := runRootProcessCLIInvocation(t, fixture, 1, "run the failing session")
 	assertRootProcessFailure(t, second)
 	assertRootProcessReuse(t, fixture, first.session, second.session)
+	t.Run("cancellation at startup disclosure", func(t *testing.T) {
+		assertRootProcessUnwindsCancellationAtStartupDisclosure(t, fixture)
+	})
 	t.Run("direct JavaScript transport start failure", func(t *testing.T) {
 		assertRootProcessReportsDirectJavaScriptTransportStartFailure(t, fixture)
 	})
+}
+
+func assertRootProcessUnwindsCancellationAtStartupDisclosure(t *testing.T, fixture *rootProcessReuseFixture) {
+	t.Helper()
+	dir := support.ScaffoldFactory(t, processExecuteRuntimeOpeningFactoryConfig())
+	ctx, cancel := context.WithTimeout(t.Context(), rootProcessStreamReadCeiling)
+	defer cancel()
+	stdout := &startupCancellationWriter{cancel: cancel}
+	var stderr bytes.Buffer
+	terminal := true
+	inputs := root.Input{
+		Args:  []string{"you", "run", "--dir", dir, "--continuously", "--no-record"},
+		Env:   append(os.Environ(), "HOME="+t.TempDir(), "USERPROFILE="+t.TempDir()),
+		Stdin: strings.NewReader(""), Stdout: stdout, Stderr: &stderr, StdoutIsTTY: &terminal,
+		Context: ctx, WorkingDirectory: dir,
+	}
+	err := fixture.process.Execute(inputs)
+	if err != nil || !errors.Is(ctx.Err(), context.Canceled) || strings.Count(stdout.String(), "Factory initiated:") != 1 {
+		t.Fatalf("startup cancellation error = %v, context=%v stdout=%q stderr=%q, want orderly cancellation after one startup disclosure", err, ctx.Err(), stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "completed successfully") {
+		t.Fatalf("startup cancellation stdout = %q, want no success result", stdout.String())
+	}
+	inputs.Args = []string{"you", "run", "--dir", dir, "--quiet", "--no-record"}
+	inputs.Context = t.Context()
+	inputs.Stderr = &bytes.Buffer{}
+	if err := fixture.process.Execute(inputs); err != nil {
+		t.Fatalf("reuse process after startup cancellation: %v", err)
+	}
+}
+
+type startupCancellationWriter struct {
+	bytes.Buffer
+	cancel context.CancelFunc
+}
+
+func (writer *startupCancellationWriter) Write(payload []byte) (int, error) {
+	written, err := writer.Buffer.Write(payload)
+	if bytes.Contains(payload, []byte("Factory initiated:")) {
+		writer.cancel()
+	}
+	return written, err
 }
 
 func assertRootProcessReportsDirectJavaScriptTransportStartFailure(t *testing.T, fixture *rootProcessReuseFixture) {

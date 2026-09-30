@@ -75,23 +75,24 @@ func (locator piACPExecutableLocator) LookPath(name string) (string, error) {
 }
 
 func piACPCommandFactory(starts *atomic.Int32, version, mode string) platformprocess.CommandFactory {
+	provider := acpHelperCommandFactory(starts, functionalACPFixture(mode))
+	versionFixture := functionalACPFixture("pi-version")
+	versionFixture.SessionID = version
+	probe := acpHelperCommandFactory(new(atomic.Int32), versionFixture)
 	return func(name string, args ...string) *exec.Cmd {
 		if name == "pi" && sameStringSlice(args, []string{"--version"}) {
 			if version == "nil-command" {
 				return nil
 			}
 			if version == "probe-error" {
-				return exec.Command("you-test-unavailable-pi-version-command")
+				return probe("you-test-unavailable-pi-version-command")
 			}
-			fixture := functionalACPFixture("pi-version")
-			fixture.SessionID = version
-			return exec.Command(os.Args[0], acpFixtureChildArgs("TestACPAgentHelperProcess", fixture)...)
+			return probe("cursor-agent", "acp")
 		}
 		if sameStringSlice(args, []string{"pi-acp"}) {
-			starts.Add(1)
-			return exec.Command(os.Args[0], acpFixtureChildArgs("TestACPAgentHelperProcess", functionalACPFixture(mode))...)
+			return provider("cursor-agent", "acp")
 		}
-		return exec.Command(name, args...)
+		return provider(name, args...)
 	}
 }
 
