@@ -653,9 +653,9 @@ type SessionStartRequest struct {
 	Synchronous    bool
 	// WorkerSettings is an internal snapshot from the selected live Factory
 	// Session for a durable execution started through this process.
-	WorkerSettings          *factoryruntime.JavaScriptWorkerSettings `json:"-"`
-	WorkerAttemptStarter    WorkerAttemptStarter `json:"-"`
-	WorkerProgressPublisher workers.ProgressPublisher `json:"-"`
+	WorkerSettings          *factoryruntime.JavaScriptWorkerSettings      `json:"-"`
+	WorkerAttemptStarter    WorkerAttemptStarter                          `json:"-"`
+	WorkerProgressPublisher workers.ProgressPublisher                     `json:"-"`
 	WorkerResourceAdmission factoryruntime.ResourceCapacityLeaseAdmission `json:"-"`
 	// RuntimeSelection carries value-only runtime selections for process-owned activation.
 	RuntimeSelection *SessionRuntimeSelection
