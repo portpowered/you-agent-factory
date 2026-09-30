@@ -73,6 +73,13 @@ type mcpToolsCallResult struct {
 	StructuredContent json.RawMessage `json:"structuredContent"`
 }
 
+type mcpToolErrorEnvelope struct {
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Retryable bool   `json:"retryable"`
+	SessionID string `json:"sessionId"`
+}
+
 // TestMCPMalformedParametersReturnInvalidParams proves malformed MCP parameters
 // return a JSON-RPC invalid-params error at the public stdio/protocol boundary.
 func TestMCPMalformedParametersReturnInvalidParams(t *testing.T) {
@@ -98,7 +105,7 @@ func TestMCPMalformedParametersReturnInvalidParams(t *testing.T) {
 func TestMCPMissingFactorySessionReturnsCanonicalNotFound(t *testing.T) {
 	withSharedMCPProtocolServer(t, func(server *projectRootBackedMCPServer) {
 		assertInitializeHandshake(t, server)
-		request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + factorySessionGetToolName + `","arguments":{}}}`
+		request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + factorySessionGetToolName + `","arguments":{"sessionId":"` + missingFactorySessionID + `"}}}`
 		response := server.exchange(request)
 		assertMCPResponseID(t, response, float64(1))
 		if response.Error != nil {
@@ -128,6 +135,9 @@ func TestMCPMissingFactorySessionReturnsCanonicalNotFound(t *testing.T) {
 		}
 		if payload.Error.Code != factorySessionNotFoundCode {
 			t.Fatalf("error code = %q, want %q", payload.Error.Code, factorySessionNotFoundCode)
+		}
+		if payload.Error.Message != missingFactorySessionText {
+			t.Fatalf("error message = %q, want %q", payload.Error.Message, missingFactorySessionText)
 		}
 		if payload.Error.SessionID != missingFactorySessionID {
 			t.Fatalf("error sessionId = %q, want %q", payload.Error.SessionID, missingFactorySessionID)

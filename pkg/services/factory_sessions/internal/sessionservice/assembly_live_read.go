@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
@@ -39,6 +41,46 @@ func (a *Assembly) BuildSessionProjectionContext(
 		return factorysessions.ProjectionContext{}, fmt.Errorf("%w: session projection owner is unavailable", factorysessions.ErrRuntimeNotAvailable)
 	}
 	return bound.Owner.BuildSessionProjectionContext(ctx, session)
+}
+
+// GetFactorySessionSyncPreflight uses the gateway attached to the selected
+// live session. The process-owned durable gateway has no live runtime host.
+func (a *Assembly) GetFactorySessionSyncPreflight(
+	ctx context.Context,
+	sessionID string,
+	reconnect *factorydefinitions.FactoryEventReconnectCursor,
+	logicalResolve *factorydefinitions.FactorySessionLogicalResolveHint,
+) (factorysessions.SyncPreflightResult, error) {
+	if a == nil || a.state == nil {
+		return factorysessions.SyncPreflightResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	session := a.Resolve(sessionID)
+	if session == nil {
+		// An active gateway can resolve a stale ~default selector or logical
+		// session key even when the requested ID is no longer in the registry.
+		session = a.state.Current()
+	}
+	if session == nil {
+		return factorysessions.SyncPreflightResult{
+			RequestedSessionID: strings.TrimSpace(sessionID),
+			Reason:             factorysessions.SyncPreflightReasonSessionNotFound,
+		}, nil
+	}
+	bound := runtimebinding.SessionStateFrom(session)
+	if bound == nil || bound.Owner == nil {
+		return factorysessions.SyncPreflightResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	owner, ok := bound.Owner.(interface {
+		Gateway() factorysessions.Service
+	})
+	if !ok {
+		return factorysessions.SyncPreflightResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	gateway := owner.Gateway()
+	if gateway == nil {
+		return factorysessions.SyncPreflightResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	return gateway.GetFactorySessionSyncPreflight(ctx, sessionID, reconnect, logicalResolve)
 }
 
 // Get reads live sessions from the process registry. Durable sessions retain

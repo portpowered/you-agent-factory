@@ -13,11 +13,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestMCPResumePackage_PublicCatalogMatchesGeneratedSubagentCatalog(t *testing.T) {
+func TestMCPResumePackage_PublicCatalogAndSessionReadUseFlattenedRuntime(t *testing.T) {
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("build application process: %v", err)
@@ -86,13 +87,12 @@ func TestMCPResumePackage_PublicCatalogMatchesGeneratedSubagentCatalog(t *testin
 	if !slices.Equal(toolNames, wantNames) {
 		t.Fatalf("tools/list = %#v, want generated catalog %#v", toolNames, wantNames)
 	}
-	if len(toolNames) != 1 || toolNames[0] != mcpfactorysession.ToolSubagent {
-		t.Fatalf("tools/list = %#v, want only %q", toolNames, mcpfactorysession.ToolSubagent)
-	}
-
-	removed := client.callTool(t, "you.factory_session.get", map[string]any{"sessionId": "removed-tool"})
-	if removed.Error == nil {
-		t.Fatalf("tools/call for removed Factory Session tool returned %#v, want protocol error", removed.Result)
+	missing := decodeToolResponse[factoryapi.FactorySessionDurableReadModel](
+		t,
+		client.callTool(t, mcpfactorysession.ToolGetSession, map[string]any{"sessionId": "missing-session"}),
+	)
+	if missing.Result != nil || missing.Error == nil || missing.Error.Code != "factory_session.session.not_found" {
+		t.Fatalf("missing Factory Session read = %#v, want typed not-found response", missing)
 	}
 }
 

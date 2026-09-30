@@ -12,7 +12,73 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 )
+
+type workerSessionsObservationMarker struct{ workersessions.Service }
+
+type syncPreflightGatewayStub struct {
+	factorysessions.Service
+	requestedID string
+	reconnect   *factorydefinitions.FactoryEventReconnectCursor
+	logical     *factorydefinitions.FactorySessionLogicalResolveHint
+}
+
+func (stub *syncPreflightGatewayStub) GetFactorySessionSyncPreflight(
+	_ context.Context,
+	sessionID string,
+	reconnect *factorydefinitions.FactoryEventReconnectCursor,
+	logical *factorydefinitions.FactorySessionLogicalResolveHint,
+) (factorysessions.SyncPreflightResult, error) {
+	stub.requestedID, stub.reconnect, stub.logical = sessionID, reconnect, logical
+	return factorysessions.SyncPreflightResult{RequestedSessionID: sessionID, Reason: factorysessions.SyncPreflightReasonOK}, nil
+}
+
+type syncPreflightOwnerStub struct {
+	projectionOwnerStub
+	gateway factorysessions.Service
+}
+
+func (stub syncPreflightOwnerStub) Gateway() factorysessions.Service { return stub.gateway }
+
+func TestAssemblySyncPreflightUsesSelectedSessionGateway(t *testing.T) {
+	state := newWorkResolverSessionState()
+	assembly := &Assembly{Service: &Service{}, state: state, registry: state.Registry()}
+	first := &syncPreflightGatewayStub{}
+	second := &syncPreflightGatewayStub{}
+	assembly.registry.Upsert(&livesession.LiveSession{ID: "first", Handle: &runtimebinding.SessionState{Owner: syncPreflightOwnerStub{gateway: first}}}, true)
+	assembly.registry.Upsert(&livesession.LiveSession{ID: "second", Handle: &runtimebinding.SessionState{Owner: syncPreflightOwnerStub{gateway: second}}}, false)
+	reconnect := &factorydefinitions.FactoryEventReconnectCursor{AfterEventID: "event-1"}
+	logical := &factorydefinitions.FactorySessionLogicalResolveHint{BackendScopeID: "scope", LogicalSessionKeyID: "key"}
+
+	got, err := assembly.GetFactorySessionSyncPreflight(context.Background(), "second", reconnect, logical)
+	if err != nil || got.Reason != factorysessions.SyncPreflightReasonOK || second.requestedID != "second" || second.reconnect != reconnect || second.logical != logical || first.requestedID != "" {
+		t.Fatalf("second session preflight = %#v, %v; first=%q second=%q", got, err, first.requestedID, second.requestedID)
+	}
+	got, err = assembly.GetFactorySessionSyncPreflight(context.Background(), "~default", nil, logical)
+	if err != nil || got.Reason != factorysessions.SyncPreflightReasonOK || first.requestedID != "~default" {
+		t.Fatalf("stale default preflight = %#v, %v; current gateway request=%q", got, err, first.requestedID)
+	}
+}
+
+func TestAssemblyWorkerSessionsObservationUsesSelectedSession(t *testing.T) {
+	state := newWorkResolverSessionState()
+	assembly := &Assembly{state: state, registry: state.Registry()}
+	first := &workerSessionsObservationMarker{}
+	second := &workerSessionsObservationMarker{}
+	assembly.registry.Upsert(&livesession.LiveSession{ID: "first", Handle: &runtimebinding.SessionState{WorkerSessions: first}}, true)
+	assembly.registry.Upsert(&livesession.LiveSession{ID: "second", Handle: &runtimebinding.SessionState{WorkerSessions: second}}, false)
+
+	if got := assembly.WorkerSessionsObservationForSession("second"); got != second {
+		t.Fatalf("second session observation = %T(%[1]v), want second session", got)
+	}
+	if got := assembly.WorkerSessionsObservationForSession("first"); got != first {
+		t.Fatalf("first session observation = %T(%[1]v), want first session", got)
+	}
+	if got := assembly.WorkerSessionsObservationForSession("missing"); got != nil {
+		t.Fatalf("missing session observation = %T(%[1]v), want nil", got)
+	}
+}
 
 type projectionOwnerStub struct {
 	status string

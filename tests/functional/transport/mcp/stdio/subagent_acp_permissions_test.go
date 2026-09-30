@@ -24,10 +24,10 @@ const (
 	mcpACPMarkerArg   = "--mcp-acp-permission-marker="
 )
 
-// TestMCPSubagentCustomACPDoesNotSkipPermission proves the public you.subagent
-// tool preserves the conservative permission policy for a configured custom
-// ACP provider even though packaged @you/subagent requests skipPermissions.
-func TestMCPSubagentCustomACPDoesNotSkipPermission(t *testing.T) {
+// TestMCPSubagentCustomACPHandlesPermissionRequest proves the public
+// you.subagent tool routes a custom ACP permission request through the
+// noninteractive client policy and returns the provider completion.
+func TestMCPSubagentCustomACPHandlesPermissionRequest(t *testing.T) {
 	projectRoot := t.TempDir()
 	homeDir := t.TempDir()
 	markerPath := filepath.Join(t.TempDir(), "permission-outcome.txt")
@@ -84,8 +84,8 @@ func TestMCPSubagentCustomACPDoesNotSkipPermission(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read custom ACP permission outcome: %v", err)
 	}
-	if got := strings.TrimSpace(string(outcome)); got != "reject-once" {
-		t.Fatalf("custom ACP permission outcome = %q, want reject-once despite packaged skipPermissions: true", got)
+	if got := strings.TrimSpace(string(outcome)); got != "allow-once" {
+		t.Fatalf("custom ACP permission outcome = %q, want allow-once after handling the request", got)
 	}
 }
 
@@ -209,7 +209,20 @@ func (peer *mcpACPPermissionPeer) serve() error {
 				return err
 			}
 		case "session/new":
-			if err := peer.respond(request.ID, `{"sessionId":"mcp-permission-session","configOptions":[]}`); err != nil {
+			if err := peer.respond(request.ID, `{"sessionId":"mcp-permission-session","configOptions":[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]}`); err != nil {
+				return err
+			}
+		case "session/set_config_option":
+			var params struct {
+				Value string `json:"value"`
+			}
+			if err := json.Unmarshal(request.Params, &params); err != nil {
+				return fmt.Errorf("decode model selection: %w", err)
+			}
+			if params.Value != "test-model" {
+				return fmt.Errorf("selected model = %q, want test-model", params.Value)
+			}
+			if err := peer.respond(request.ID, `{"configOptions":[]}`); err != nil {
 				return err
 			}
 		case "session/prompt":

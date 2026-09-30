@@ -2103,7 +2103,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/transports/mcp/server/server_test.go#TestServeStdioUsesSDKProtocolAndRegistersGeneratedSubagentCatalog",
+      "target": "pkg/transports/mcp/server/server_test.go#TestServeStdioUsesSDKProtocolAndRegistersGeneratedCatalog",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },

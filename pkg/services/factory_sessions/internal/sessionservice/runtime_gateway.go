@@ -71,6 +71,17 @@ func (s *Service) WorkerSessionsObservationForSession(factorySessionID string) w
 	return provider.WorkerSessionsObservationForSession(factorySessionID)
 }
 
+// WorkerSessionsObservationForSession reads the observation service retained
+// with the requested live Factory Session. The process assembly has no host:
+// each opened session owns its own runtime bundle and Worker Sessions view.
+func (a *Assembly) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
+	session := a.Resolve(factorySessionID)
+	if state := runtimebinding.SessionStateFrom(session); state != nil {
+		return state.WorkerSessions
+	}
+	return nil
+}
+
 // SubscribeFactoryEventsForSession routes session-scoped observation through
 // the Factory Sessions gateway.
 func (s *Service) SubscribeFactoryEventsForSession(

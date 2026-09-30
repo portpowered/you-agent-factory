@@ -136,7 +136,7 @@ func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *test
 					providers.CapabilityPermissionBypass,
 				)
 			}
-			if test.canonical == "opencode-acp" {
+			if test.canonical == "opencode" {
 				wantCapabilities = append(wantCapabilities, providers.CapabilityPermissionBypass)
 			}
 			if !reflect.DeepEqual(canonical.Provider.Capabilities, wantCapabilities) {
