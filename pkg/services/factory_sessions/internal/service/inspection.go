@@ -8,6 +8,6 @@ func (r *Root) SessionInspectionService() factorysessions.SessionInspectionServi
 	if r == nil || r.Assembly == nil {
 		return nil
 	}
-	inspection, _ := r.Assembly.Service.(factorysessions.SessionInspectionService)
+	inspection, _ := r.Assembly.SessionGateway.(factorysessions.SessionInspectionService)
 	return inspection
 }

@@ -532,8 +532,8 @@ func TestFactorySessionFileReadersUseExactEdgesOrPlatformDefaults(t *testing.T) 
 		read func(string) ([]byte, error)
 	}{
 		{"fixture", provideFactorySessionContractFixtureReader(edges).ReadFile},
-		{"invocation", provideFactorySessionInvocationInputReader(edges).ReadFile},
-		{"replay", provideFactorySessionReplayRecordingReader(edges).ReadFile},
+		{"invocation", provideFactorySessionInvocationInputReader(edges)},
+		{"replay", provideFactorySessionReplayRecordingReader(edges)},
 		{"work", provideFactorySessionInitialWorkReader(edges).ReadFile},
 	}
 	for _, reader := range readers {
@@ -548,8 +548,8 @@ func TestFactorySessionFileReadersUseExactEdgesOrPlatformDefaults(t *testing.T) 
 	}
 	defaults := []func(string) ([]byte, error){
 		provideFactorySessionContractFixtureReader(serviceedges.Edges{}).ReadFile,
-		provideFactorySessionInvocationInputReader(serviceedges.Edges{}).ReadFile,
-		provideFactorySessionReplayRecordingReader(serviceedges.Edges{}).ReadFile,
+		provideFactorySessionInvocationInputReader(serviceedges.Edges{}),
+		provideFactorySessionReplayRecordingReader(serviceedges.Edges{}),
 		provideFactorySessionInitialWorkReader(serviceedges.Edges{}).ReadFile,
 	}
 	for index, read := range defaults {

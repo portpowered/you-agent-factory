@@ -37,7 +37,7 @@ func recoveryRecordingID(recordingID string) string {
 type runtimeProducts struct {
 	process                roles.ProcessRuntime
 	lifecycle              roles.LifecycleRuntime
-	sessions               factorysessions.Service
+	sessions               roles.SessionGateway
 	liveControl            factorysessions.LiveControlService
 	execution              durableexecution.Service
 	workerSettings         *factoryruntime.JavaScriptWorkerSettings
@@ -103,7 +103,7 @@ func historicalReplayRuntimeProducts(
 func assembleRuntimeProducts(
 	ctx context.Context,
 	factoryDefinitions factorydefinitions.Service,
-	factorySessionGateway factorysessions.Service,
+	factorySessionGateway roles.SessionGateway,
 	sessionInvocation roles.SessionInvoker,
 	factoryRuntime factoryruntime.Service,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
@@ -179,7 +179,7 @@ func runtimeBindingForSession(
 
 func resolveOpenedFactorySessionID(
 	ctx context.Context,
-	factorySessionGateway factorysessions.Service,
+	factorySessionGateway roles.SessionGateway,
 	factorySessionID string,
 ) string {
 	effectiveID := factorySessionID

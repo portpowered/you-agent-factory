@@ -91,9 +91,11 @@ const directModelInvocationDispatchID = "direct-model-invocation"
 // execution state; each call constructs a detached request for Workers while
 // Models remains the authority for scoped readiness.
 type RuntimeModelInvokerConfig struct {
-	Models           models.Service
-	Scope            models.RuntimeScopeRef
-	Sessions         factorysessions.Service
+	Models   models.Service
+	Scope    models.RuntimeScopeRef
+	Sessions interface {
+		GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
+	}
 	Workers          workers.Service
 	RuntimeID        string
 	GenerationID     string

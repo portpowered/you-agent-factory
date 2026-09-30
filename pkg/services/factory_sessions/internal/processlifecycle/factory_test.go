@@ -88,29 +88,19 @@ func TestFactoryBindsStateFreeProcessRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFactory: %v", err)
 	}
-	process, err := factory.Bind(runtime, factorysessions.RuntimeHostRequest{Directory: "/factory", Port: 8123}, nil, zap.NewNop())
+	process, err := factory.Bind(runtime, factorysessions.RuntimeHostRequest{Directory: "/factory", Port: 8123}, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Bind: %v", err)
 	}
 	ctx := context.Background()
-	if err := process.Start(ctx, ctx); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	stopWorkers, err := process.StartWorkers(ctx)
-	if err != nil {
-		t.Fatalf("StartWorkers: %v", err)
-	}
 	if err := process.RunTransport(ctx, http.NewServeMux()); err != nil {
 		t.Fatalf("RunTransport: %v", err)
-	}
-	if err := stopWorkers(ctx); err != nil {
-		t.Fatalf("stop workers: %v", err)
 	}
 	if err := process.Stop(ctx); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 
-	want := []string{"runtime:start", "workers:start", "transport:run", "runtime:complete", "workers:stop", "runtime:stop"}
+	want := []string{"transport:run", "runtime:complete", "runtime:stop"}
 	if !reflect.DeepEqual(runtime.events, want) {
 		t.Fatalf("events = %v, want %v", runtime.events, want)
 	}
@@ -129,12 +119,12 @@ func TestFactoryRejectsMissingRuntimeAndHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFactory: %v", err)
 	}
-	if _, err := factory.Bind(nil, factorysessions.RuntimeHostRequest{}, nil, zap.NewNop()); err == nil {
+	if _, err := factory.Bind(nil, factorysessions.RuntimeHostRequest{}, zap.NewNop()); err == nil {
 		t.Fatal("Bind error = nil, want missing runtime")
 	}
 }
 
-func TestFactoryPublishesRuntimeHostBindingAndObserverNotification(t *testing.T) {
+func TestFactoryPublishesRuntimeHostBinding(t *testing.T) {
 	runtime := &lifecycleRuntime{}
 	host := &bindingHostOperation{binding: factorysessions.RuntimeHostBinding{
 		Host: "127.0.0.1", Port: 8123,
@@ -143,13 +133,7 @@ func TestFactoryPublishesRuntimeHostBindingAndObserverNotification(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewFactory: %v", err)
 	}
-	observerCalls := 0
-	process, err := factory.Bind(runtime, factorysessions.RuntimeHostRequest{}, func(binding factorysessions.RuntimeHostBinding) {
-		observerCalls++
-		if binding.Port != 8123 {
-			t.Fatalf("observed binding = %#v, want port 8123", binding)
-		}
-	}, zap.NewNop())
+	process, err := factory.Bind(runtime, factorysessions.RuntimeHostRequest{}, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Bind: %v", err)
 	}
@@ -168,9 +152,6 @@ func TestFactoryPublishesRuntimeHostBindingAndObserverNotification(t *testing.T)
 	}
 	if _, open := <-ready.RuntimeHostReady(); open {
 		t.Fatal("readiness channel remained open after first publication")
-	}
-	if observerCalls != 1 {
-		t.Fatalf("observer calls = %d, want 1", observerCalls)
 	}
 }
 

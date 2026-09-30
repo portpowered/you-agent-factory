@@ -524,7 +524,7 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage(
 	t.Parallel()
 	const sessionID = "dur-sess-0123456789abcdef0123456789abcdef"
 	projectRoot := t.TempDir()
-	store := mustTestRuntimePersistenceStore(t, runtimepersist.DirForProjectRoot(projectRoot))
+	store := mustTestRuntimePersistenceStore(t, projectRoot)
 	state := interruptedSessionForAdmissionTest(sessionID)
 	persistResumeCoverageSnapshot(t, store, sessionID, state)
 

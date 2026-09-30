@@ -31,5 +31,5 @@ func (a *Assembly) SubscribeResponses(ctx context.Context, request factorysessio
 		}
 		return factorysessions.SessionResponseSubscriptionResult{Cursor: cursor}, nil
 	}
-	return a.Service.SubscribeResponses(ctx, request)
+	return a.SessionGateway.SubscribeResponses(ctx, request)
 }

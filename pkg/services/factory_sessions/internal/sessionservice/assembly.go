@@ -31,7 +31,7 @@ import (
 // Assembly retains Factory Sessions-owned mutable registries while peer
 // services are constructed against its root resolver roles.
 type Assembly struct {
-	factorysessions.Service
+	roles.SessionGateway
 	registry                     sessionregistry.Service
 	state                        *sessionruntime.Service
 	streams                      streamManager
@@ -95,7 +95,7 @@ func NewAssembly(
 	}
 	state := sessionruntime.NewWithResponseService(registry, responses, nil, clock, eventIDs, sessionIDs, responseStreamService)
 	return &Assembly{
-		Service:                      &Service{},
+		SessionGateway:               &Service{},
 		registry:                     registry,
 		state:                        state,
 		streams:                      runtimebinding.NewStreamManager(state),
@@ -351,7 +351,7 @@ func (a *Assembly) Complete(
 	invocationMetricsRecorder roles.InvocationMetricsRecorder,
 ) (
 	roles.ApplicationRuntime,
-	factorysessions.Service,
+	roles.SessionGateway,
 	roles.SessionInvoker,
 	factorysessions.DefinitionHost,
 	factorydefinitions.DefinitionActivationGateway,

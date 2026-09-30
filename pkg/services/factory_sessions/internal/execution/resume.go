@@ -1325,6 +1325,14 @@ func (s *JavaScriptRuntimeService) resumeInterruptedSessionViaLifecycleControl(
 		return LifecycleControlResult{}, false, nil
 	}
 
+	available, err := s.HasRestorableState(ctx, id)
+	if err != nil {
+		return LifecycleControlResult{}, true, err
+	}
+	if !available {
+		return LifecycleControlResult{}, true, ErrSessionNotFound
+	}
+
 	requestID := control.RequestID
 	if requestID == "" {
 		requestID = fmt.Sprintf("lifecycle-resume-%s", id)

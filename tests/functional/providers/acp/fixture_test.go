@@ -51,6 +51,7 @@ var acpFunctionalModes = map[string]struct{}{
 	"persistent": {}, "serialize": {}, "crash-once": {}, "spawn": {},
 	"tournament": {}, "cancelled-response": {}, "resume": {}, "resume-not-found": {},
 	"retry-resume": {}, "disconnect-once": {}, "shared-spine": {},
+	"elicitation": {}, "pi-version": {}, "pi-startup": {}, "pi-failure": {},
 }
 
 var acpGoldenModes = map[string]struct{}{

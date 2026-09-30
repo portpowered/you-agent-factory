@@ -26,9 +26,9 @@ import (
 
 func TestPetriRuntime_MutationsPersistAndReloadThroughFactorySessionOwner(t *testing.T) {
 	const sessionID = "~default"
-	store, err := runtimepersist.NewDirectoryStore(t.TempDir(), platformfilesystem.Local{})
+	store, err := runtimepersist.NewLazyProjectStore(t.TempDir(), platformfilesystem.Local{})
 	if err != nil {
-		t.Fatalf("NewDirectoryStore: %v", err)
+		t.Fatalf("NewLazyProjectStore: %v", err)
 	}
 	owner := newConfiguredJavaScriptRuntimeService(runtimeServiceConfig{
 		ProjectRoot: t.TempDir(), Persistence: store,
@@ -125,9 +125,9 @@ func persistAndReloadRuntimeSnapshot(t *testing.T, sessionID string, snapshot fs
 	if err != nil {
 		t.Fatalf("marshal mixed snapshot: %v", err)
 	}
-	store, err := runtimepersist.NewDirectoryStore(t.TempDir(), platformfilesystem.Local{})
+	store, err := runtimepersist.NewLazyProjectStore(t.TempDir(), platformfilesystem.Local{})
 	if err != nil {
-		t.Fatalf("NewDirectoryStore: %v", err)
+		t.Fatalf("NewLazyProjectStore: %v", err)
 	}
 	if err := store.Save(sessionID, encoded); err != nil {
 		t.Fatalf("Save: %v", err)

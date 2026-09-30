@@ -538,7 +538,6 @@ func openRuntime(
 			Host: sessionSelection.Host.Host, Port: sessionSelection.Host.Port,
 			AutoPort: sessionSelection.Host.AutoPort, Pprof: sessionSelection.Host.Pprof,
 		},
-		nil,
 		startupRuntime.RuntimeLogger(),
 	)
 	if err != nil {

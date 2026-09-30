@@ -12,11 +12,8 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	canonicaldurable "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/canonical/durable"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -236,30 +233,15 @@ func (s *Service) ListSessions(ctx context.Context, request factorysessions.List
 	return result, nil
 }
 
-// Start executes one mode-neutral Factory Sessions start operation. The
-// canonical boundary owns the request conversion and returns only Sessions
-// projections; legacy public start methods remain compatibility entrypoints.
-func (s *Service) Start(
-	ctx context.Context,
-	request factorysessions.SessionStartRequest,
-) (factorysessions.SessionStartResult, error) {
+// StartDurable admits persisted execution through the process-owned durable service.
+func (s *Service) StartDurable(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 	if err := validateCanonicalStartRequest(request); err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
-	if s == nil {
-		return factorysessions.SessionStartResult{}, fmt.Errorf("Factory Sessions gateway is required")
+	if request.Mode != factorysessions.SessionOperationModeDurable {
+		return factorysessions.SessionStartResult{}, canonicalRequestError("mode", "mode must be durable")
 	}
-
-	switch request.Mode {
-	case factorysessions.SessionOperationModeLive:
-		return s.startCanonicalLive(ctx, request)
-	case factorysessions.SessionOperationModeDurable:
-		return s.startCanonicalDurable(ctx, request)
-	default:
-		return factorysessions.SessionStartResult{}, canonicalRequestError(
-			"mode", "mode must be live or durable",
-		)
-	}
+	return s.startCanonicalDurable(ctx, request)
 }
 
 // Invoke executes one mode-neutral invocation through the already-bound
@@ -330,11 +312,7 @@ func validateCanonicalStartRequest(request factorysessions.SessionStartRequest) 
 		return canonicalRequestError("mode", "mode must be live or durable")
 	}
 	if request.ValidateOnly && request.InitNewFactory {
-		return sessionvalidation.New(
-			factorysessions.ValidationReasonRequired,
-			"initNewFactory",
-			fmt.Errorf("initNewFactory cannot be combined with validateOnly"),
-		)
+		return canonicalRequestError("initNewFactory", "initNewFactory cannot be combined with validateOnly")
 	}
 	return nil
 }
@@ -351,71 +329,6 @@ func validateCanonicalInvokeRequest(request factorysessions.SessionInvokeRequest
 
 func canonicalRequestError(field, message string) error {
 	return &factorysessions.DetachedRequestError{Field: field, Message: message}
-}
-
-func (s *Service) startCanonicalLive(
-	ctx context.Context,
-	request factorysessions.SessionStartRequest,
-) (factorysessions.SessionStartResult, error) {
-	if s.host == nil {
-		return factorysessions.SessionStartResult{}, fmt.Errorf("Factory Sessions gateway is required")
-	}
-	opened, err := controlplane.OpenFromFolder(
-		ctx,
-		s.host,
-		strings.TrimSpace(request.FolderPath),
-		cloneCanonicalTarget(request.Target),
-		request.ValidateOnly,
-		request.InitNewFactory,
-	)
-	if err != nil {
-		return factorysessions.SessionStartResult{}, err
-	}
-	if opened == nil {
-		return factorysessions.SessionStartResult{}, fmt.Errorf("open Factory Session returned no result")
-	}
-	return s.canonicalLiveStartResult(opened), nil
-}
-
-func (s *Service) canonicalLiveStartResult(
-	opened *factorysessions.OpenResult,
-) factorysessions.SessionStartResult {
-	result := factorysessions.SessionStartResult{
-		SessionID: opened.SessionID,
-		Mode:      factorysessions.SessionOperationModeLive,
-		Status:    "OPENED",
-		Live: &factorysessions.SessionOpenResult{
-			SessionID:             opened.SessionID,
-			Targets:               cloneCanonicalTargets(opened.Targets),
-			InitializedNewFactory: opened.InitsNewFactory,
-			FolderPath:            opened.FolderPath,
-		},
-	}
-	if s.liveRuntime == nil || strings.TrimSpace(opened.SessionID) == "" {
-		return result
-	}
-	session := s.liveRuntime.Resolve(opened.SessionID)
-	if session == nil {
-		return result
-	}
-	view := factorysessions.SessionView{
-		SessionID:        livesession.CanonicalID(session),
-		Mode:             factorysessions.SessionOperationModeLive,
-		Status:           "OPENED",
-		FactoryDir:       session.FactoryDir,
-		FolderPath:       session.FolderPath,
-		Project:          session.Project,
-		IsDefault:        session.IsDefault,
-		Target:           session.Target,
-		RuntimeAvailable: session.Runtime != nil,
-	}
-	if view.SessionID == "" {
-		view.SessionID = opened.SessionID
-	}
-	result.SessionID = view.SessionID
-	result.Live.SessionID = view.SessionID
-	result.Live.Session = &view
-	return result
 }
 
 func (s *Service) startCanonicalDurable(
@@ -545,21 +458,6 @@ func canonicalInvocationRequest(
 // invocation input shared by the live and JavaScript execution paths.
 func CanonicalInvocationRequest(request factorysessions.SessionInvokeRequest) factorysessions.InvocationRequest {
 	return canonicalInvocationRequest(request)
-}
-
-func cloneCanonicalTarget(target *factorysessions.TargetRef) *factorysessions.TargetRef {
-	if target == nil {
-		return nil
-	}
-	cloned := *target
-	return &cloned
-}
-
-func cloneCanonicalTargets(targets []factorysessions.Target) []factorysessions.Target {
-	if len(targets) == 0 {
-		return nil
-	}
-	return append([]factorysessions.Target(nil), targets...)
 }
 
 func cloneCanonicalSource(source factorysessions.Source) factorysessions.Source {

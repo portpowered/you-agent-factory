@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,7 +13,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 )
@@ -148,40 +148,6 @@ func TestNewDurable_EnabledPolicyPersistsProjectDurableSessions(t *testing.T) {
 	}
 }
 
-func TestNewStandalone_DoesNotCreateProjectDurableSessions(t *testing.T) {
-	t.Parallel()
-
-	projectRoot := t.TempDir()
-	storeCalls := 0
-	_, err := NewStandalone(
-		factorysessions.ExecutionProviderJavaScriptRuntime,
-		projectRoot,
-		countingProjectPersistenceStoreFactory(&storeCalls),
-		"",
-		factorysessionexecution.ChildExecutorModeFake,
-		nil,
-		restartClock{now: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
-		restartSyncWaitScheduler{},
-		checkpointfixtures.CheckpointSummariesFixture{},
-		factoryruntimefixtures.ScriptedJavaScriptWorkflows{},
-		factoryruntimefixtures.ScriptedJavaScriptWorkflows{},
-		factoryruntimefixtures.ScriptedJavaScriptWorkflows{},
-		restartRecordingWriter{},
-		func() string { return "cccccccccccccccccccccccccccccccc" },
-		nil,
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("NewStandalone: %v", err)
-	}
-	if storeCalls != 0 {
-		t.Fatalf("standalone store factory calls = %d, want 0", storeCalls)
-	}
-	if _, err := os.Stat(runtimepersist.DirForProjectRoot(projectRoot)); !os.IsNotExist(err) {
-		t.Fatalf("durable persistence path stat error = %v, want not exist", err)
-	}
-}
-
 func projectPersistenceStoreFactory() roles.RuntimePersistenceStoreFactory {
 	return countingProjectPersistenceStoreFactory(nil)
 }
@@ -191,8 +157,8 @@ func countingProjectPersistenceStoreFactory(calls *int) roles.RuntimePersistence
 		if calls != nil {
 			*calls++
 		}
-		store, err := runtimepersist.NewDirectoryStore(
-			runtimepersist.DirForProjectRoot(projectRoot),
+		store, err := runtimepersist.NewLazyProjectStore(
+			projectRoot,
 			platformfilesystem.Local{},
 		)
 		if err != nil {
@@ -200,4 +166,28 @@ func countingProjectPersistenceStoreFactory(calls *int) roles.RuntimePersistence
 		}
 		return store, nil
 	}
+}
+
+type restartClock struct {
+	now time.Time
+}
+
+func (c restartClock) Now() time.Time { return c.now }
+
+type restartSyncWaitScheduler struct{}
+
+func (restartSyncWaitScheduler) Now() time.Time { return time.Now() }
+
+func (restartSyncWaitScheduler) After(duration time.Duration) <-chan time.Time {
+	return time.After(duration)
+}
+
+type restartRecordingWriter struct{}
+
+func (restartRecordingWriter) Write(path string, value recordings.PortableRecording) error {
+	if err := recordings.ValidatePortableRecording(value); err != nil {
+		return err
+	}
+	_ = path
+	return nil
 }

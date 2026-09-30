@@ -94,38 +94,7 @@ func canonicalInspectionReadFixture(t *testing.T) (*Service, *canonicalInspectio
 			}},
 		},
 	}
-	return &Service{liveRuntime: live, durable: durable}, live, durable
-}
-
-func TestService_CanonicalReadsUseModeOwnersAndRuntimeFreeViews(t *testing.T) {
-	t.Parallel()
-
-	service, live, _ := canonicalInspectionReadFixture(t)
-	gotLive, err := service.Get(context.Background(), factorysessions.SessionGetRequest{
-		SessionID: " live-1 ", Mode: factorysessions.SessionOperationModeLive,
-	})
-	if err != nil {
-		t.Fatalf("canonical live Get: %v", err)
-	}
-	if gotLive.Session.SessionID != "live-1" || gotLive.Session.Status != "RUNNING" || !gotLive.Session.RuntimeAvailable || !gotLive.Session.IsDefault {
-		t.Fatalf("live view = %#v, want stable runtime-free projection", gotLive.Session)
-	}
-	if gotLive.Session.FactoryDir != "/factory/live" || gotLive.Session.Target.Name != "live" {
-		t.Fatalf("live identity = %#v, want owner fields", gotLive.Session)
-	}
-	gotLiveList, err := service.List(context.Background(), factorysessions.SessionListRequest{Mode: factorysessions.SessionOperationModeLive})
-	if err != nil {
-		t.Fatalf("canonical live List: %v", err)
-	}
-	if len(gotLiveList.Sessions) != 1 || gotLiveList.Sessions[0].SessionID != "live-2" || gotLiveList.Sessions[0].Status != "PAUSED" {
-		t.Fatalf("live list = %#v, want projected live row", gotLiveList.Sessions)
-	}
-	live.mu.Lock()
-	getCalls, listCalls := live.getCalls, live.listCalls
-	live.mu.Unlock()
-	if getCalls != 1 || listCalls != 1 {
-		t.Fatalf("live owner calls = get:%d list:%d, want direct live reads", getCalls, listCalls)
-	}
+	return &Service{durable: durable}, live, durable
 }
 
 func TestService_CanonicalDurableReadsUseModeOwnersAndRuntimeFreeViews(t *testing.T) {
@@ -134,7 +103,6 @@ func TestService_CanonicalDurableReadsUseModeOwnersAndRuntimeFreeViews(t *testin
 	service, live, durable := canonicalInspectionReadFixture(t)
 	assertCanonicalDurableSessionRead(t, service)
 	durableListRequest := assertCanonicalDurableSessionList(t, service, durable)
-	assertCanonicalAllSessionList(t, service, live)
 	assertCanonicalDurableReadCalls(t, live, durable, durableListRequest)
 }
 
@@ -203,7 +171,7 @@ func assertCanonicalAllSessionList(t *testing.T, service *Service, live *canonic
 		t.Fatalf("canonical all List: %v", err)
 	}
 	if len(got.Sessions) != 2 {
-		t.Fatalf("all list count = %d, want two", len(got.Sessions))
+		t.Fatalf("all list count = %d, want one", len(got.Sessions))
 	}
 	if got.Sessions[0].Mode != factorysessions.SessionOperationModeLive {
 		t.Fatalf("all list first mode = %q, want live", got.Sessions[0].Mode)
@@ -235,8 +203,8 @@ func assertCanonicalDurableReadCalls(t *testing.T, live *canonicalInspectionLive
 	durable.mu.Lock()
 	listCalls, getCalls, legacyCalls := durable.listCalls, durable.getCalls, durable.legacyCalls
 	durable.mu.Unlock()
-	if listCalls != 2 {
-		t.Fatalf("durable list calls = %d, want two", listCalls)
+	if listCalls != 1 {
+		t.Fatalf("durable list calls = %d, want one", listCalls)
 	}
 	if getCalls != 1 {
 		t.Fatalf("durable get calls = %d, want one", getCalls)
@@ -255,7 +223,7 @@ func assertCanonicalDurableReadCalls(t *testing.T, live *canonicalInspectionLive
 	}
 	live.mu.Lock()
 	defer live.mu.Unlock()
-	if live.getCalls != 0 || live.listCalls != 1 {
+	if live.getCalls != 0 || live.listCalls != 0 {
 		t.Fatalf("live owner calls = get:%d list:%d, want all-list live read", live.getCalls, live.listCalls)
 	}
 }
@@ -267,7 +235,7 @@ func TestService_CanonicalInspectionValidationPrecedesOwnerCalls(t *testing.T) {
 
 	live := &canonicalInspectionLiveRuntimeFake{}
 	durable := &canonicalInspectionDurableFake{}
-	service := &Service{liveRuntime: live, durable: durable}
+	service := &Service{durable: durable}
 	cases := []struct {
 		name  string
 		field string
@@ -776,7 +744,7 @@ func TestService_CanonicalStartDurableMapsAndClonesAsyncRequest(t *testing.T) {
 			CancelOnTimeout: true,
 		},
 	}
-	got, err := service.Start(context.Background(), request)
+	got, err := service.StartDurable(context.Background(), request)
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
@@ -864,7 +832,7 @@ func TestService_CanonicalStartDurableSelectsSyncFromRequestValue(t *testing.T) 
 		},
 	}
 	service := &Service{durable: fake}
-	got, err := service.Start(context.Background(), factorysessions.SessionStartRequest{
+	got, err := service.StartDurable(context.Background(), factorysessions.SessionStartRequest{
 		Mode:        factorysessions.SessionOperationModeDurable,
 		FolderPath:  "/test-factory",
 		Correlation: factorysessions.SessionOperationCorrelation{RequestID: "sync-1"},

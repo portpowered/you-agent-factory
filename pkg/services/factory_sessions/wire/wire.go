@@ -189,7 +189,7 @@ func newOwnerServices(
 	if liveChangeCoordinator == nil {
 		return nil, nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
 	}
-	identityService, err := identitywire.NewService(resolveSymlinks, resolveHome, directoryInspection)
+	identityService, err := identitywire.NewService(resolveSymlinks, resolveHome)
 	if err != nil {
 		return nil, nil, err
 	}

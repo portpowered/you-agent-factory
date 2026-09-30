@@ -21,7 +21,7 @@ func TestScanRejectsImplicitPersistenceConstruction(t *testing.T) {
 		"NewJavaScriptRuntimeService",
 		"PersistSessions",
 		"DirForProjectRoot",
-		"NewDirectoryStore",
+		"NewLazyProjectStore",
 		"DirectoryStore literal",
 	} {
 		if !containsFinding(findings, prohibited) {

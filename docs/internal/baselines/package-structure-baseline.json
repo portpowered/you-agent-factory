@@ -2124,11 +2124,6 @@
     },
     {
       "rule": "service-root-interface-count",
-      "filePath": "pkg/services/factory_sessions/internal/services/live_runtime",
-      "target": "pkg/services/factory_sessions/internal/services/live_runtime/service.go:DeletionService,pkg/services/factory_sessions/internal/services/live_runtime/service.go:Service"
-    },
-    {
-      "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle",
       "target": "pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:Clock,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:EventSource,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:Service,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:ViewSink"
     },

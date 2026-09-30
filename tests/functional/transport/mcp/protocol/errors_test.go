@@ -145,7 +145,46 @@ func TestMCPMissingFactorySessionReturnsCanonicalNotFound(t *testing.T) {
 		if payload.Error.Retryable {
 			t.Fatalf("error retryable = true, want false for missing session")
 		}
+		assertMCPMissingFactorySessionControlErrors(t, server)
 	})
+}
+
+// Each durable control must return its typed error as readable MCP text after
+// decoding and normalizing a well-formed request for an unknown session.
+func assertMCPMissingFactorySessionControlErrors(t *testing.T, server *projectRootBackedMCPServer) {
+	t.Helper()
+	// These requests share the existing protocol session and its ordered pipe.
+	for index, operation := range []string{"APPROVE", "RETRY_DISPATCH", "INTERRUPT_DISPATCH"} {
+		t.Run(operation, func(t *testing.T) {
+			request, err := json.Marshal(map[string]any{
+				"jsonrpc": "2.0", "id": index + 1, "method": "tools/call",
+				"params": map[string]any{"name": "you.factory_session.control", "arguments": map[string]any{
+					"sessionId": missingFactorySessionID, "operation": operation,
+					"dispatchId": " dispatch-missing ", "approvalPreviewId": " preview-missing ",
+				}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := server.exchange(string(request))
+			assertMCPResponseID(t, response, float64(index+1))
+			if response.Error != nil || response.Result == nil || !response.Result.IsError {
+				t.Fatalf("%s missing session response = %#v, want typed tool error", operation, response)
+			}
+			var payload struct {
+				Error *mcpToolErrorEnvelope `json:"error"`
+			}
+			if err := json.Unmarshal(response.Result.StructuredContent, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Error == nil || payload.Error.Code != factorySessionNotFoundCode || payload.Error.SessionID != missingFactorySessionID {
+				t.Fatalf("%s error envelope = %s, want identified session-not-found error", operation, response.Result.StructuredContent)
+			}
+			if len(response.Result.Content) != 1 || response.Result.Content[0].Text != payload.Error.Message || payload.Error.Message == "" {
+				t.Fatalf("%s content = %#v, want readable error message %q", operation, response.Result.Content, payload.Error.Message)
+			}
+		})
+	}
 }
 
 // TestMCPServerShutdownClosesStdioCleanly proves MCP server shutdown terminates

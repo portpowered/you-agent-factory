@@ -59,8 +59,9 @@ func assertRootProcessReportsDirectJavaScriptTransportStartFailure(t *testing.T,
 	}
 
 	const failureText = "injected direct JavaScript host failure"
+	failure := errors.New(failureText)
 	startsBefore := fixture.router.starts.Load()
-	fixture.router.setFailure(errors.New(failureText))
+	fixture.router.setFailure(failure)
 
 	var stdout, stderr bytes.Buffer
 	err := fixture.process.Execute(root.Input{
@@ -74,7 +75,7 @@ func assertRootProcessReportsDirectJavaScriptTransportStartFailure(t *testing.T,
 		Context:          t.Context(),
 		WorkingDirectory: workingDirectory,
 	})
-	if err == nil || !strings.Contains(err.Error(), failureText) {
+	if !errors.Is(err, failure) {
 		t.Fatalf("Process.Execute(direct JavaScript host failure) error = %v, want injected failure; stdout=%q stderr=%q", err, stdout.String(), stderr.String())
 	}
 	if got := fixture.router.starts.Load() - startsBefore; got != 1 {
@@ -82,6 +83,12 @@ func assertRootProcessReportsDirectJavaScriptTransportStartFailure(t *testing.T,
 	}
 	if strings.Contains(stdout.String(), "completed (SUCCEEDED)") {
 		t.Fatalf("direct JavaScript failure stdout = %q, want no success result", stdout.String())
+	}
+	fixture.router.mu.Lock()
+	listenerContext := fixture.router.failureContext
+	fixture.router.mu.Unlock()
+	if listenerContext == nil || !errors.Is(listenerContext.Err(), context.Canceled) {
+		t.Fatalf("failed listener context = %v, want cancellation before Execute returns", listenerContext)
 	}
 }
 
@@ -296,10 +303,11 @@ func (runner *gatedRootProviderCommandRunner) CallCount() int {
 var _ platformprocess.CommandRunner = (*gatedRootProviderCommandRunner)(nil)
 
 type reusableRootAPIServerStarter struct {
-	mu      sync.Mutex
-	current *support.ProcessAPIServer
-	failure error
-	starts  atomic.Int32
+	mu             sync.Mutex
+	current        *support.ProcessAPIServer
+	failure        error
+	failureContext context.Context
+	starts         atomic.Int32
 }
 
 func (s *reusableRootAPIServerStarter) setCurrent(server *support.ProcessAPIServer) {
@@ -313,6 +321,7 @@ func (s *reusableRootAPIServerStarter) setFailure(err error) {
 	s.mu.Lock()
 	s.current = nil
 	s.failure = err
+	s.failureContext = nil
 	s.mu.Unlock()
 }
 
@@ -322,6 +331,9 @@ func (s *reusableRootAPIServerStarter) start(
 ) error {
 	s.mu.Lock()
 	server, failure := s.current, s.failure
+	if failure != nil {
+		s.failureContext = ctx
+	}
 	s.mu.Unlock()
 	if failure != nil {
 		s.starts.Add(1)

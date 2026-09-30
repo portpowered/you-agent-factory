@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -72,7 +73,7 @@ func (a *Assembly) GetFactorySessionSyncPreflight(
 		return factorysessions.SyncPreflightResult{}, factorysessions.ErrRuntimeNotAvailable
 	}
 	owner, ok := bound.Owner.(interface {
-		Gateway() factorysessions.Service
+		Gateway() roles.SessionGateway
 	})
 	if !ok {
 		return factorysessions.SyncPreflightResult{}, factorysessions.ErrRuntimeNotAvailable
@@ -88,7 +89,7 @@ func (a *Assembly) GetFactorySessionSyncPreflight(
 // session. The process durable gateway has no live runtime host.
 func (a *Assembly) ApplyLiveChange(ctx context.Context, sessionID string, request factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error) {
 	if a != nil && a.Resolve(sessionID) == nil {
-		owner, ok := a.Service.(*Service)
+		owner, ok := a.SessionGateway.(*Service)
 		if !ok {
 			return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
 		}
@@ -123,7 +124,7 @@ func (a *Assembly) ApplyLiveChange(ctx context.Context, sessionID string, reques
 
 func (a *Assembly) RecoverLiveChange(ctx context.Context, sessionID, requestID string) (factorysessions.LiveChangeResult, error) {
 	if a != nil && a.Resolve(sessionID) == nil {
-		owner, ok := a.Service.(*Service)
+		owner, ok := a.SessionGateway.(*Service)
 		if !ok {
 			return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
 		}
@@ -136,7 +137,7 @@ func (a *Assembly) RecoverLiveChange(ctx context.Context, sessionID, requestID s
 	return gateway.RecoverLiveChange(ctx, sessionID, requestID)
 }
 
-func (a *Assembly) liveChangeGateway(sessionID string) (factorysessions.Service, error) {
+func (a *Assembly) liveChangeGateway(sessionID string) (roles.SessionGateway, error) {
 	if a == nil || a.state == nil {
 		return nil, factorysessions.ErrRuntimeNotAvailable
 	}
@@ -149,7 +150,7 @@ func (a *Assembly) liveChangeGateway(sessionID string) (factorysessions.Service,
 		return nil, factorysessions.ErrRuntimeNotAvailable
 	}
 	owner, ok := bound.Owner.(interface {
-		Gateway() factorysessions.Service
+		Gateway() roles.SessionGateway
 	})
 	if !ok || owner.Gateway() == nil {
 		return nil, factorysessions.ErrRuntimeNotAvailable
@@ -161,7 +162,7 @@ func (a *Assembly) liveChangeGateway(sessionID string) (factorysessions.Service,
 // their current owner until their execution state is folded into this root.
 func (a *Assembly) Get(ctx context.Context, request factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
 	if request.Mode != factorysessions.SessionOperationModeLive {
-		return a.Service.Get(ctx, request)
+		return a.SessionGateway.Get(ctx, request)
 	}
 	if err := validateCanonicalSessionID(request.SessionID); err != nil {
 		return factorysessions.SessionGetResult{}, err
@@ -175,7 +176,7 @@ func (a *Assembly) Get(ctx context.Context, request factorysessions.SessionGetRe
 
 func (a *Assembly) List(ctx context.Context, request factorysessions.SessionListRequest) (factorysessions.SessionListResult, error) {
 	if request.Mode != factorysessions.SessionOperationModeLive {
-		return a.Service.List(ctx, request)
+		return a.SessionGateway.List(ctx, request)
 	}
 	if _, err := canonicalSessionListFilters(request.Mode, request.Filters); err != nil {
 		return factorysessions.SessionListResult{}, err

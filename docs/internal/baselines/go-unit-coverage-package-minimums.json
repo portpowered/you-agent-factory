@@ -1033,10 +1033,6 @@
       "minimum": 78.94
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime/internal/service",
-      "minimum": 66.66
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream",
       "minimum": 60.00
     },
@@ -1055,10 +1051,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice",
       "minimum": 28.30
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation",
-      "minimum": 66.66
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream",

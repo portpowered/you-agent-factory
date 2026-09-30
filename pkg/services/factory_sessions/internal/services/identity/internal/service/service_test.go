@@ -3,10 +3,8 @@ package service
 import (
 	"context"
 	"errors"
-	"io/fs"
 	"path/filepath"
 	"testing"
-	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
@@ -132,20 +130,5 @@ func newTestService(canonicalFolder string) *Service {
 	return New(
 		func(string) (string, error) { return canonicalFolder, nil },
 		func() (string, error) { return "home", nil },
-		testDirectories{},
 	)
 }
-
-type testDirectories struct{}
-
-func (testDirectories) Stat(string) (fs.FileInfo, error)      { return testFileInfo{}, nil }
-func (testDirectories) ReadDir(string) ([]fs.DirEntry, error) { return nil, nil }
-
-type testFileInfo struct{}
-
-func (testFileInfo) Name() string       { return "folder" }
-func (testFileInfo) Size() int64        { return 0 }
-func (testFileInfo) Mode() fs.FileMode  { return fs.ModeDir }
-func (testFileInfo) ModTime() time.Time { return time.Time{} }
-func (testFileInfo) IsDir() bool        { return true }
-func (testFileInfo) Sys() any           { return nil }

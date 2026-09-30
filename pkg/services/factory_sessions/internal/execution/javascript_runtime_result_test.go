@@ -844,7 +844,7 @@ func TestJavaScriptRuntimeService_CloseCancelsJoinsAndPersistsAsyncSession(t *te
 	t.Parallel()
 
 	projectRoot := t.TempDir()
-	store := mustTestRuntimePersistenceStore(t, runtimepersist.DirForProjectRoot(projectRoot))
+	store := mustTestRuntimePersistenceStore(t, projectRoot)
 	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 		Persistence: store,

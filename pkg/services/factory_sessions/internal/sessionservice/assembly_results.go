@@ -25,7 +25,7 @@ func (a *Assembly) ReadResult(ctx context.Context, request factorysessions.Sessi
 		return factorysessions.SessionResultReadResult{}, err
 	}
 	if request.Mode != factorysessions.SessionOperationModeLive {
-		return a.Service.ReadResult(ctx, request)
+		return a.SessionGateway.ReadResult(ctx, request)
 	}
 	normalized, err := factorysessionexecution.NormalizeResultRequest(request.Request)
 	if err != nil {

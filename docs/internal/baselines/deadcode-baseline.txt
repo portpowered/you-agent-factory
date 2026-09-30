@@ -1227,8 +1227,6 @@ pkg/services/factory_sessions/internal/execution/projection_consistency.go: unre
 pkg/services/factory_sessions/internal/execution/projection_consistency.go: unreachable func: ValidateDispatchListMatchesSessionProgress
 pkg/services/factory_sessions/internal/execution/projection_consistency.go: unreachable func: ValidateResultMatchesEventProjection
 pkg/services/factory_sessions/internal/execution/projection_consistency.go: unreachable func: ValidateResultMatchesSessionRead
-pkg/services/factory_sessions/internal/execution/runtimepersist/store.go: unreachable func: NewDirectoryStore
-pkg/services/factory_sessions/internal/execution/runtimepersist/store.go: unreachable func: NewProjectStore
 pkg/services/factory_sessions/internal/execution/service.go: unreachable func: LiveLifecycleControlLinksForSession
 pkg/services/factory_sessions/internal/execution/service.go: unreachable func: SmokeLiveChildProvider
 pkg/services/factory_sessions/internal/execution/service.go: unreachable func: smokeLiveChildProvider.Infer
@@ -1237,9 +1235,6 @@ pkg/services/factory_sessions/internal/livesession/session.go: unreachable func:
 pkg/services/factory_sessions/internal/logicaltarget/derive_key.go: unreachable func: IsLogicalSessionKeyID
 pkg/services/factory_sessions/internal/logicaltarget/errors.go: unreachable func: ValidationReasonFromError
 pkg/services/factory_sessions/internal/logicaltarget/normalize.go: unreachable func: Equivalent
-pkg/services/factory_sessions/internal/logicaltarget/normalize.go: unreachable func: IsDefaultSessionSelector
-pkg/services/factory_sessions/internal/logicaltarget/normalize.go: unreachable func: NormalizeDefaultTargetWithEffects
-pkg/services/factory_sessions/internal/logicaltarget/normalize.go: unreachable func: NormalizeNamedTargetWithEffects
 pkg/services/factory_sessions/internal/logicaltarget/normalize.go: unreachable func: equivalent
 pkg/services/factory_sessions/internal/logicaltarget/normalize.go: unreachable func: isDefaultSessionSelector
 pkg/services/factory_sessions/internal/responseeventstore/store.go: unreachable func: NewSessionResponseEventStoreWithClock
@@ -1253,8 +1248,6 @@ pkg/services/factory_sessions/internal/runtimebinding/binding.go: unreachable fu
 pkg/services/factory_sessions/internal/scopedlisting/listing.go: unreachable func: ProjectLiveSessions
 pkg/services/factory_sessions/internal/service/runtime_activation.go: unreachable func: Root.activationRequest
 pkg/services/factory_sessions/internal/service/runtime_load.go: unreachable func: LoadRuntime
-pkg/services/factory_sessions/internal/services/durable_execution/internal/service/construction.go: unreachable func: NewStandalone
-pkg/services/factory_sessions/internal/services/durable_execution/wire/wire.go: unreachable func: NewStandalone
 pkg/services/factory_sessions/internal/sessionservice/service.go: unreachable func: New
 pkg/services/factory_sessions/internal/sessionservice/service.go: unreachable func: NewWithReconnectValidation
 pkg/services/factory_sessions/internal/sessionservice/service.go: unreachable func: NewWithResponseStreams
@@ -2519,9 +2512,6 @@ pkg/transports/cli/factory/create.go: unreachable func: CreateFromFile
 pkg/transports/cli/factory/query.go: unreachable func: NewQueryCurrent
 pkg/transports/cli/factory/query.go: unreachable func: QueryCurrent
 pkg/transports/cli/factory/update.go: unreachable func: UpdateFromFile
-pkg/transports/cli/generated/load.go: unreachable func: CommandByID
-pkg/transports/cli/generated/load.go: unreachable func: FactoryConfigInitCommandByID
-pkg/transports/cli/generated/load.go: unreachable func: WorkCommandByID
 pkg/transports/cli/observation/observation.go: unreachable func: CaptureAppend
 pkg/transports/cli/observation/observation.go: unreachable func: Flag
 pkg/transports/cli/root_submit_batch.go: unreachable func: prepareRunInvocationInput

@@ -507,7 +507,7 @@ type namedPathsConstructionStub struct {
 	factorydefinitions.NamedPathResolver
 }
 type factorySessionsConstructionStub struct {
-	factorysessions.Service
+	roles.SessionGateway
 	roles.RuntimeAssembly
 }
 type factoryRuntimeAssemblerConstructionStub struct{ FactoryRuntimeAssembler }

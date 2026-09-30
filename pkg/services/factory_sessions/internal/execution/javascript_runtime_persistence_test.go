@@ -652,10 +652,12 @@ func testExecutionServiceInvalidPersistenceChoices(t *testing.T, projectRoot str
 	if err := os.WriteFile(blockedRoot, []byte("blocked"), 0o600); err != nil {
 		t.Fatalf("write blocked persistence root: %v", err)
 	}
-	if _, err := ProjectPersistence(blockedRoot, testRuntimePersistenceStoreFactory); err == nil {
-		t.Fatal("ProjectPersistence(unavailable root) error = nil, want validation error")
-	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "persistence" {
-		t.Fatalf("unavailable persistence error = %#v, want persistence ValidationError", err)
+	persistence, err := ProjectPersistence(blockedRoot, testRuntimePersistenceStoreFactory)
+	if err != nil {
+		t.Fatalf("lazy persistence construction: %v", err)
+	}
+	if err := persistence.store.Save("~default", []byte(`{}`)); err == nil {
+		t.Fatal("Save(unavailable root) error = nil, want persistence error")
 	}
 }
 
@@ -753,7 +755,7 @@ func TestPrepareStartAndPersistenceHelpers(t *testing.T) {
 	projectRoot := writeSimpleFinalWorkflowProject(t)
 	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
-		Persistence: mustTestRuntimePersistenceStore(t, runtimepersist.DirForProjectRoot(projectRoot)),
+		Persistence: mustTestRuntimePersistenceStore(t, projectRoot),
 	})
 
 	prepared, err := service.prepareStart(StartRequest{
@@ -830,7 +832,7 @@ func TestJavaScriptRuntimeService_HasDurableStateReadsFreshOwnerAndRejectsCorrup
 	t.Parallel()
 	const sessionID = "~default"
 	projectRoot := t.TempDir()
-	store := mustTestRuntimePersistenceStore(t, runtimepersist.DirForProjectRoot(projectRoot))
+	store := mustTestRuntimePersistenceStore(t, projectRoot)
 	firstOwner := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 		Persistence: store,
@@ -876,7 +878,7 @@ func TestPersistAndMetadataNoOpBranches(t *testing.T) {
 	projectRoot := t.TempDir()
 	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
-		Persistence: mustTestRuntimePersistenceStore(t, runtimepersist.DirForProjectRoot(projectRoot)),
+		Persistence: mustTestRuntimePersistenceStore(t, projectRoot),
 	})
 
 	if err := service.persistTerminalSessionState(runtimeSessionState{

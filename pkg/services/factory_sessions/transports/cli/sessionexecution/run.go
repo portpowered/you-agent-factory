@@ -17,7 +17,7 @@ import (
 // DirectJavaScriptLifecyclePlan pairs one CLI completion with its optional
 // process HTTP transport. Factory Sessions owns the shutdown order.
 func DirectJavaScriptLifecyclePlan(transport lifecycle.Component, completion func(context.Context) error) (lifecycle.Plan, error) {
-	return processlifecycle.BuildDirectJavaScriptLifecyclePlan(transport, completion, nil)
+	return processlifecycle.BuildDirectJavaScriptLifecyclePlan(transport, completion)
 }
 
 // RunCanonicalSync presents the process-owned synchronous Factory Session

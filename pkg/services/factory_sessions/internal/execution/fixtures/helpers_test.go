@@ -358,8 +358,8 @@ func assertPersistedPetriMutationAndCanonicalProjection(t *testing.T, store runt
 }
 
 func runtimePersistence(projectRoot string) runtimepersist.Store {
-	store, err := runtimepersist.NewDirectoryStore(
-		runtimepersist.DirForProjectRoot(projectRoot),
+	store, err := runtimepersist.NewLazyProjectStore(
+		projectRoot,
 		platformfilesystem.Local{},
 	)
 	if err != nil {

@@ -28,7 +28,7 @@ func (owner *closingDurableOwner) Close() error {
 func TestAssemblyCloseDrainsProcessDurableOwner(t *testing.T) {
 	failure := errors.New("durable shutdown failed")
 	owner := &closingDurableOwner{err: failure}
-	assembly := &Assembly{Service: &Service{durable: owner}}
+	assembly := &Assembly{SessionGateway: &Service{durable: owner}}
 	if err := assembly.Close(context.Background()); !errors.Is(err, failure) {
 		t.Fatalf("Close error = %v, want %v", err, failure)
 	}

@@ -8,7 +8,7 @@ import (
 
 func TestSessionInspectionServiceUsesProcessAssemblyOwner(t *testing.T) {
 	owner := &legacyservice.Service{}
-	root := &Root{Assembly: &legacyservice.Assembly{Service: owner}}
+	root := &Root{Assembly: &legacyservice.Assembly{SessionGateway: owner}}
 	if got := root.SessionInspectionService(); got != owner {
 		t.Fatalf("SessionInspectionService() = %#v, want process assembly owner %#v", got, owner)
 	}

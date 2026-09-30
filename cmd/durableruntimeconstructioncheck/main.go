@@ -15,7 +15,7 @@ import (
 
 const (
 	runtimeConstructorName = "NewJavaScriptRuntimeService"
-	storeConstructorName   = "NewDirectoryStore"
+	storeConstructorName   = "NewLazyProjectStore"
 	storeDirectoryName     = "DirForProjectRoot"
 	persistenceBooleanName = "PersistSessions"
 	providerInferenceName  = "Infer"

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"slices"
 	"testing"
 	"time"
@@ -484,7 +485,7 @@ func TestRuntimeOpeningCleanupPreservesPrimaryErrorAndAggregatesCleanupFailures(
 }
 
 type runtimeProductsSessionsRole struct {
-	factorysessions.Service
+	roles.SessionGateway
 	readSession     func(string) factorysessions.SessionReadResult
 	readLiveSession func(string) factorysessions.LiveControlSnapshot
 }

@@ -12,11 +12,11 @@ func NormalizeFolderPath(folderPath string) (string, error) {
 }
 
 func NormalizeDefaultTarget(backendScopeID, folderPath string) (CanonicalReference, error) {
-	return NormalizeDefaultTargetWithEffects(filepath.EvalSymlinks, os.UserHomeDir, backendScopeID, folderPath)
+	return NormalizeTargetRefWithEffects(filepath.EvalSymlinks, os.UserHomeDir, backendScopeID, folderPath, factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault})
 }
 
 func NormalizeNamedTarget(backendScopeID, folderPath, name string) (CanonicalReference, error) {
-	return NormalizeNamedTargetWithEffects(filepath.EvalSymlinks, os.UserHomeDir, backendScopeID, folderPath, name)
+	return NormalizeTargetRefWithEffects(filepath.EvalSymlinks, os.UserHomeDir, backendScopeID, folderPath, factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: name})
 }
 
 func NormalizeProviderTarget(
@@ -34,3 +34,5 @@ func NormalizeTargetRef(
 ) (CanonicalReference, error) {
 	return NormalizeTargetRefWithEffects(filepath.EvalSymlinks, os.UserHomeDir, backendScopeID, folderPath, ref)
 }
+
+func IsDefaultSessionSelector(selector string) bool { return isDefaultSessionSelector(selector) }

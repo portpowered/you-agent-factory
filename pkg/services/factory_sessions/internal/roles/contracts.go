@@ -79,7 +79,6 @@ type Registry interface {
 	Count() int
 	IDs() []string
 	DefaultSession() *livesession.LiveSession
-	FindByLogicalSessionKeyID(string) *livesession.LiveSession
 }
 
 type RuntimePersistenceStore interface {
@@ -102,14 +101,18 @@ type LifecycleRuntime interface {
 }
 
 type ProcessRuntime interface {
-	Start(context.Context, context.Context) error
-	StartWorkers(context.Context) (factorysessions.RuntimeStop, error)
 	RunTransport(context.Context, http.Handler) error
 	Stop(context.Context) error
 }
 
+type ProcessActivation interface {
+	Start(context.Context, context.Context) error
+	StartWorkers(context.Context) (factorysessions.RuntimeStop, error)
+	Stop(context.Context) error
+}
+
 type ProcessRuntimeFactory interface {
-	Bind(LifecycleRuntime, factorysessions.RuntimeHostRequest, factorysessions.RuntimeHostObserver, *zap.Logger) (ProcessRuntime, error)
+	Bind(LifecycleRuntime, factorysessions.RuntimeHostRequest, *zap.Logger) (ProcessRuntime, error)
 }
 
 type RuntimeHostOperation interface {
@@ -117,7 +120,7 @@ type RuntimeHostOperation interface {
 }
 
 type LifecyclePlanRequest struct {
-	Runtime     ProcessRuntime
+	Runtime     ProcessActivation
 	Components  factorysessions.BoundProcessComponents
 	Close       func() error
 	OrderlyStop lifecycle.OrderlyStopOperation
@@ -194,5 +197,47 @@ type RuntimeAssembly interface {
 		reconnectCursorValidator factorysessions.ReconnectCursorValidator,
 		worldStateProjector factoryruntime.WorldStateProjector,
 		invocationMetricsRecorder InvocationMetricsRecorder,
-	) (ApplicationRuntime, factorysessions.Service, SessionInvoker, factorydefinitions.SessionHost, factorydefinitions.DefinitionActivationGateway, error)
+	) (ApplicationRuntime, SessionGateway, SessionInvoker, factorydefinitions.SessionHost, factorydefinitions.DefinitionActivationGateway, error)
+}
+
+// SessionGateway exposes bound session operations; live startup belongs to Root.
+type SessionGateway interface {
+	StartDurable(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error)
+	Invoke(context.Context, factorysessions.SessionInvokeRequest) (factorysessions.InvocationResult, error)
+	Get(context.Context, factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error)
+	List(context.Context, factorysessions.SessionListRequest) (factorysessions.SessionListResult, error)
+	Control(context.Context, factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error)
+	ReadResult(context.Context, factorysessions.SessionResultReadRequest) (factorysessions.SessionResultReadResult, error)
+	SubscribeResponses(context.Context, factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error)
+	QueryDispatches(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
+	StartAsync(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
+	StartSync(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error)
+	ResumeInterruptedSession(context.Context, string, factorysessions.ResumeSessionRequest) (factorysessions.AsyncStartResult, error)
+	GetSession(context.Context, string) (factorysessions.SessionReadResult, error)
+	Pause(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	Resume(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	Cancel(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	Terminate(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	Approve(context.Context, string, factorysessions.ApproveRequest) (factorysessions.LifecycleControlResult, error)
+	RetryDispatch(context.Context, string, factorysessions.RetryDispatchRequest) (factorysessions.LifecycleControlResult, error)
+	InterruptDispatch(context.Context, string, factorysessions.InterruptDispatchRequest) (factorysessions.LifecycleControlResult, error)
+	GetResult(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error)
+	ListDispatches(context.Context, string) (factorysessions.ListDispatchesResult, error)
+	GetDispatch(context.Context, string, string) (factorysessions.DispatchDetail, error)
+	ListArtifacts(context.Context, string) (factorysessions.ListArtifactsResult, error)
+	GetArtifact(context.Context, string, string) (factorysessions.ArtifactDetail, error)
+	ReadEvents(context.Context, string, factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error)
+	ListSessions(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
+	InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorysessions.InvocationResult, error)
+	ActivateNamedFactory(context.Context, string) error
+	ListFactorySessions(context.Context) ([]factorysessions.ReadProjection, error)
+	GetFactorySession(context.Context, string) (factorysessions.SessionProjection, error)
+	GetFactorySessionSyncPreflight(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor, *factorydefinitions.FactorySessionLogicalResolveHint) (factorysessions.SyncPreflightResult, error)
+	SubscribeFactoryResponseEvents(context.Context, factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error)
+	SubscribeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error)
+	ProbeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) error
+	ReadDurableFactorySessionEventStream(context.Context, string, factorysessions.EventReconnectRequest) (*factorydefinitions.FactoryEventStream, error)
+	ProbeDurableFactorySessionEvents(context.Context, string, factorysessions.EventReconnectRequest) error
+	ApplyLiveChange(context.Context, string, factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error)
+	RecoverLiveChange(context.Context, string, string) (factorysessions.LiveChangeResult, error)
 }

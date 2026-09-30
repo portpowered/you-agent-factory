@@ -68,12 +68,6 @@ func expandHome(path string, resolveHome factorysessions.HomeDirectoryResolver) 
 	return filepath.Join(homeDir, path[2:]), nil
 }
 
-// IsDefaultSessionSelector reports whether selector addresses the default
-// logical target.
-func IsDefaultSessionSelector(selector string) bool {
-	return isDefaultSessionSelector(selector)
-}
-
 func isDefaultSessionSelector(selector string) bool {
 	switch strings.TrimSpace(selector) {
 	case "", factorysessions.DefaultSessionID, string(factorysessions.TargetKindDefault):
@@ -89,25 +83,6 @@ func isDefaultSessionSelector(selector string) bool {
 func IsLiveSessionDefaultSelector(selector string) bool {
 	trimmed := strings.TrimSpace(selector)
 	return trimmed == "" || trimmed == factorysessions.DefaultSessionID
-}
-
-func NormalizeDefaultTargetWithEffects(
-	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
-	resolveHome factorysessions.HomeDirectoryResolver,
-	backendScopeID string,
-	folderPath string,
-) (CanonicalReference, error) {
-	return NormalizeTargetRefWithEffects(resolveSymlinks, resolveHome, backendScopeID, folderPath, factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault})
-}
-
-func NormalizeNamedTargetWithEffects(
-	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
-	resolveHome factorysessions.HomeDirectoryResolver,
-	backendScopeID string,
-	folderPath string,
-	name string,
-) (CanonicalReference, error) {
-	return NormalizeTargetRefWithEffects(resolveSymlinks, resolveHome, backendScopeID, folderPath, factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: name})
 }
 
 func NormalizeProviderTargetWithEffects(

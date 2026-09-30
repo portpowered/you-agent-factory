@@ -157,27 +157,6 @@ func (fs *SessionRuntime) CloseFactorySession(ctx context.Context, sessionID str
 	return fs.requireSessionGateway().CloseFactorySession(ctx, sessionID)
 }
 
-func (fs *SessionRuntime) openFactorySessionForTarget(ctx context.Context, target FactorySessionTarget) (string, error) {
-	if fs == nil {
-		return "", fmt.Errorf("factory service is required")
-	}
-	if fs.sessionIDs == nil {
-		return "", fmt.Errorf("Factory Session ID generator is required")
-	}
-	sessionID := strings.TrimSpace(fs.sessionIDs())
-	if sessionID == "" {
-		return "", fmt.Errorf("Factory Session ID generator returned an empty identity")
-	}
-	replacement, err := fs.buildReplacementFactoryRuntime(ctx, target.FolderPath, target.FactoryDir, sessionID)
-	if err != nil {
-		return "", err
-	}
-	if err := fs.StartBackgroundSessionWithMetadata(ctx, sessionID, replacement, target); err != nil {
-		return "", err
-	}
-	return sessionID, nil
-}
-
 //nolint:contextcheck // The request context bounds startup waiting, while the active service runtime context owns the long-lived session runtime and sidecars.
 func (fs *SessionRuntime) StartBackgroundSessionWithMetadata(
 	ctx context.Context,

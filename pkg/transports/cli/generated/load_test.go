@@ -16,7 +16,7 @@ func TestFactoryConfigInitFamilyManifestMatchesContractedIDs(t *testing.T) {
 		t.Fatalf("command count = %d, want %d", len(manifest.Commands), len(climanifestgen.FactoryConfigInitFamilyCommandIDs))
 	}
 	for _, id := range climanifestgen.FactoryConfigInitFamilyCommandIDs {
-		record, err := generated.FactoryConfigInitCommandByID(id)
+		record, err := manifest.CommandByID(id)
 		if err != nil {
 			t.Fatalf("FactoryConfigInitCommandByID(%q) error = %v", id, err)
 		}
@@ -117,7 +117,11 @@ func TestModelsDocsFamilyCommandIDsGenMatchesGeneratorList(t *testing.T) {
 }
 
 func TestFactoryConfigInitCommandByIDRejectsUnknownID(t *testing.T) {
-	if _, err := generated.FactoryConfigInitCommandByID("you.session.show"); err == nil {
+	manifest, err := generated.FactoryConfigInitFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manifest.CommandByID("you.session.show"); err == nil {
 		t.Fatal("FactoryConfigInitCommandByID(you.session.show) = nil, want error")
 	}
 }
@@ -131,7 +135,7 @@ func TestRepresentativeFamilyManifestMatchesContractedIDs(t *testing.T) {
 		t.Fatalf("command count = %d, want %d", len(manifest.Commands), len(climanifestgen.RepresentativeFamilyCommandIDs))
 	}
 	for _, id := range climanifestgen.RepresentativeFamilyCommandIDs {
-		record, err := generated.CommandByID(id)
+		record, err := manifest.CommandByID(id)
 		if err != nil {
 			t.Fatalf("CommandByID(%q) error = %v", id, err)
 		}
@@ -193,7 +197,7 @@ func TestWorkFamilyManifestMatchesContractedIDs(t *testing.T) {
 		t.Fatalf("command count = %d, want %d", len(manifest.Commands), len(climanifestgen.WorkFamilyCommandIDs))
 	}
 	for _, id := range climanifestgen.WorkFamilyCommandIDs {
-		record, err := generated.WorkCommandByID(id)
+		record, err := manifest.CommandByID(id)
 		if err != nil {
 			t.Fatalf("WorkCommandByID(%q) error = %v", id, err)
 		}
@@ -204,13 +208,21 @@ func TestWorkFamilyManifestMatchesContractedIDs(t *testing.T) {
 }
 
 func TestWorkCommandByIDRejectsUnknownWorkFamilyID(t *testing.T) {
-	if _, err := generated.WorkCommandByID("you.work.submit"); err == nil {
+	manifest, err := generated.WorkFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manifest.CommandByID("you.work.submit"); err == nil {
 		t.Fatal("WorkCommandByID(you.work.submit) = nil, want error")
 	}
 }
 
 func TestCommandByIDRejectsUnknownRepresentativeFamilyID(t *testing.T) {
-	if _, err := generated.CommandByID("you.session.list"); err == nil {
+	manifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manifest.CommandByID("you.session.list"); err == nil {
 		t.Fatal("CommandByID(you.session.list) = nil, want error")
 	}
 }

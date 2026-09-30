@@ -13,6 +13,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -305,8 +306,10 @@ func (r *Root) buildProcessDurableExecution() (durableexecution.Service, error) 
 	if err != nil {
 		return nil, fmt.Errorf("construct Factory Sessions durable owner: %w", err)
 	}
-	if router, ok := processDurable.(interface{ SetPersistenceProjectRootResolver(func() string) }); ok {
-		router.SetPersistenceProjectRootResolver(func() string {
+	if router, ok := processDurable.(interface {
+		SetPersistenceRouting(func(string) (runtimepersist.Store, error), func() string)
+	}); ok {
+		router.SetPersistenceRouting(nil, func() string {
 			if current := r.Resolve(factorysessions.DefaultSessionID); current != nil {
 				return current.FactoryDir
 			}

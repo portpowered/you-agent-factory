@@ -441,16 +441,12 @@ func TestBuildLifecyclePlanFailsClosedWithoutRuntimeOrTransport(t *testing.T) {
 	}
 }
 
-func TestDirectJavaScriptLifecycleRunsCompletionAndClosesExecution(t *testing.T) {
+func TestDirectJavaScriptLifecycleRunsCompletion(t *testing.T) {
 	var events []string
 	plan, err := BuildDirectJavaScriptLifecyclePlan(
 		nil,
 		func(context.Context) error {
 			events = append(events, "completion")
-			return nil
-		},
-		func() error {
-			events = append(events, "close")
 			return nil
 		},
 	)
@@ -460,7 +456,7 @@ func TestDirectJavaScriptLifecycleRunsCompletionAndClosesExecution(t *testing.T)
 	if err := lifecycle.NewManager().Run(t.Context(), plan); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if want := []string{"completion", "close"}; !reflect.DeepEqual(events, want) {
+	if want := []string{"completion"}; !reflect.DeepEqual(events, want) {
 		t.Fatalf("events = %v, want %v", events, want)
 	}
 }
@@ -482,7 +478,6 @@ func TestDirectJavaScriptLifecycleJoinsOwnedTransport(t *testing.T) {
 				return ctx.Err()
 			}
 		},
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("BuildDirectJavaScriptLifecyclePlan: %v", err)
@@ -509,7 +504,6 @@ func TestDirectJavaScriptLifecycleRejectsNonWaitableTransport(t *testing.T) {
 			<-ctx.Done()
 			return ctx.Err()
 		},
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("BuildDirectJavaScriptLifecyclePlan: %v", err)
@@ -521,7 +515,7 @@ func TestDirectJavaScriptLifecycleRejectsNonWaitableTransport(t *testing.T) {
 }
 
 func TestDirectJavaScriptLifecycleRejectsMissingCompletion(t *testing.T) {
-	if _, err := BuildDirectJavaScriptLifecyclePlan(nil, nil, nil); err == nil ||
+	if _, err := BuildDirectJavaScriptLifecyclePlan(nil, nil); err == nil ||
 		!strings.Contains(err.Error(), "completion is required") {
 		t.Fatalf("BuildDirectJavaScriptLifecyclePlan error = %v", err)
 	}
@@ -614,7 +608,7 @@ func requiredPlanWithTransport(
 	return plan
 }
 
-func requiredPlanWithEvents(t *testing.T, runtime roles.ProcessRuntime, events *[]string) lifecycle.Plan {
+func requiredPlanWithEvents(t *testing.T, runtime roles.ProcessActivation, events *[]string) lifecycle.Plan {
 	t.Helper()
 	plan, err := BuildLifecyclePlan(roles.LifecyclePlanRequest{
 		Runtime: runtime,

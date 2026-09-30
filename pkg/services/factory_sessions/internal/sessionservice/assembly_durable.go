@@ -12,9 +12,9 @@ func (a *Assembly) BindProcessDurable(execution durableexecution.Service) error 
 	if a == nil || execution == nil {
 		return fmt.Errorf("bind Factory Sessions durable execution: assembly and execution are required")
 	}
-	if current, ok := a.Service.(*Service); ok && current.durable != nil {
+	if current, ok := a.SessionGateway.(*Service); ok && current.durable != nil {
 		return fmt.Errorf("bind Factory Sessions durable execution: already bound")
 	}
-	a.Service = &Service{durable: execution}
+	a.SessionGateway = &Service{durable: execution}
 	return nil
 }

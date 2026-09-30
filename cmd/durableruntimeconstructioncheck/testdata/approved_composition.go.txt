@@ -1,6 +1,6 @@
 package factorysessionexecution
 
 func build(root string) {
-	store := NewDirectoryStore(DirForProjectRoot(root))
+	store := NewLazyProjectStore(DirForProjectRoot(root))
 	NewJavaScriptRuntimeService(Config{Persistence: store})
 }

@@ -336,16 +336,6 @@ func (rootTestIdentityService) NormalizeProvider(context.Context, identity.Norma
 	return identity.ResolvedIdentity{}, nil
 }
 
-func (rootTestIdentityService) Discover(context.Context, identity.DiscoverRequest) ([]factorysessions.Target, error) {
-	return nil, nil
-}
-
-func (rootTestIdentityService) ResolveFolder(string) (string, error) { return "", nil }
-
-func (rootTestIdentityService) Select([]factorysessions.Target, *factorysessions.TargetRef) (*factorysessions.Target, error) {
-	return nil, nil
-}
-
 func (rootTestIdentityService) Resolve(sessionregistry.Service, string) *livesession.LiveSession {
 	return nil
 }

@@ -266,12 +266,12 @@ func TestCurrentBoardHistoryMayBeUninitializedUsesFreshPersistentOwnerBeforeMiss
 	t.Parallel()
 	const sessionID = "~default"
 	projectRoot := t.TempDir()
-	store, err := runtimepersist.NewDirectoryStore(
-		runtimepersist.DirForProjectRoot(projectRoot),
+	store, err := runtimepersist.NewLazyProjectStore(
+		projectRoot,
 		platformfilesystem.Local{},
 	)
 	if err != nil {
-		t.Fatalf("NewDirectoryStore: %v", err)
+		t.Fatalf("NewLazyProjectStore: %v", err)
 	}
 	firstOwner := newRuntimeOpeningPersistentOwner(projectRoot, store)
 	if err := firstOwner.RecordPetriTokenMutations(sessionID, []factorydefinitions.TokenMutationRecord{{}}); err != nil {

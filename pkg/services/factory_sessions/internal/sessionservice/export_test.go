@@ -23,7 +23,6 @@ import (
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
-	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -651,7 +650,6 @@ func TestRelayInvocationWakeEventsCoalescesBurstsWithoutBlocking(t *testing.T) {
 }
 
 type canonicalInspectionLiveRuntimeFake struct {
-	liveruntime.Service
 	mu            sync.Mutex
 	listResult    []factorysessions.ReadProjection
 	getResult     factorysessions.SessionProjection

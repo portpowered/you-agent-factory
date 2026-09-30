@@ -26,7 +26,7 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 		return factorysessions.SessionStartResult{}, fmt.Errorf("Factory Sessions process root is required")
 	}
 	if request.Mode != factorysessions.SessionOperationModeLive {
-		return r.Assembly.Start(ctx, r.prepareDurableStartRequest(request))
+		return r.Assembly.StartDurable(ctx, r.prepareDurableStartRequest(request))
 	}
 	if request.Wait.TimeoutMillis < 0 {
 		return factorysessions.SessionStartResult{}, &factorysessions.DetachedRequestError{Field: "wait.timeoutMillis", Message: "timeout must not be negative"}
@@ -172,10 +172,6 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
-	previousControl, err := r.closeReplacedSession(ctx, request, selectedID)
-	if err != nil {
-		return factorysessions.SessionStartResult{}, err
-	}
 	selected, err := r.prepareLiveStartRequest(ctx, request, selectedID)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
@@ -183,12 +179,20 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 	if selected.Target == nil {
 		selected.Target = &factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}
 	}
-	products, err := r.openForRequest(ctx, selected)
+	if request.ValidateOnly {
+		resolution, err := r.resolveActivationSnapshot(ctx, definitionRequestForStart(selected), recordingRequestForStart(selected), nil, nil, selectedID)
+		if err != nil {
+			return factorysessions.SessionStartResult{}, err
+		}
+		return validatedSessionResult(resolution.factoryDir, selected), nil
+	}
+	previousControl, err := r.closeReplacedSession(ctx, request, selectedID)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
-	if request.ValidateOnly {
-		return validateOpenedSession(ctx, products, selected)
+	products, err := r.openForRequest(ctx, selected)
+	if err != nil {
+		return factorysessions.SessionStartResult{}, err
 	}
 	r.setStartedSessionTarget(selectedID, selected)
 	activation, err := startSessionLifecycle(ctx, products)
@@ -206,18 +210,21 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 	return result, nil
 }
 
-func validateOpenedSession(ctx context.Context, products runtimeProducts, selected factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
-	var result factorysessions.SessionStartResult
-	var validationErr error
-	if products.sessions == nil {
-		validationErr = fmt.Errorf("start Factory Session: validation service is unavailable")
-	} else {
-		result, validationErr = products.sessions.Start(ctx, selected)
+func validatedSessionResult(factoryDir string, selected factorysessions.SessionStartRequest) factorysessions.SessionStartResult {
+	return factorysessions.SessionStartResult{
+		Mode:   factorysessions.SessionOperationModeLive,
+		Status: "OPENED",
+		Live: &factorysessions.SessionOpenResult{
+			FolderPath: selected.FolderPath,
+			Targets: []factorysessions.Target{{
+				Ref:        *selected.Target,
+				Label:      filepath.Base(factoryDir),
+				FolderPath: selected.FolderPath,
+				FactoryDir: factoryDir,
+				Project:    filepath.Base(selected.FolderPath),
+			}},
+		},
 	}
-	if products.closeArtifacts != nil {
-		validationErr = errors.Join(validationErr, products.closeArtifacts())
-	}
-	return result, validationErr
 }
 
 func (r *Root) setStartedSessionTarget(selectedID string, selected factorysessions.SessionStartRequest) {

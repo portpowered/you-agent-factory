@@ -117,7 +117,7 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions",
-      "fileCount": 30,
+      "fileCount": 29,
       "owner": "factory-session-maintainers",
       "removalReason": "Continue extracting session capabilities into focused child packages."
     },
@@ -135,7 +135,7 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/sessionservice",
-      "fileCount": 55,
+      "fileCount": 50,
       "owner": "factory-session-maintainers",
       "removalReason": "Partition session service behavior by lifecycle responsibility."
     },

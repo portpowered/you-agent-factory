@@ -27,7 +27,7 @@ func (a *Assembly) Close(ctx context.Context) error {
 			}
 		}
 	}
-	if service, ok := a.Service.(*Service); ok && service.durable != nil {
+	if service, ok := a.SessionGateway.(*Service); ok && service.durable != nil {
 		if closer, ok := service.durable.(interface{ Close() error }); ok {
 			result = errors.Join(result, closer.Close())
 		}

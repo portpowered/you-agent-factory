@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -18,7 +19,7 @@ import (
 type workerSessionsObservationMarker struct{ workersessions.Service }
 
 type syncPreflightGatewayStub struct {
-	factorysessions.Service
+	roles.SessionGateway
 	requestedID string
 	reconnect   *factorydefinitions.FactoryEventReconnectCursor
 	logical     *factorydefinitions.FactorySessionLogicalResolveHint
@@ -36,14 +37,14 @@ func (stub *syncPreflightGatewayStub) GetFactorySessionSyncPreflight(
 
 type syncPreflightOwnerStub struct {
 	projectionOwnerStub
-	gateway factorysessions.Service
+	gateway roles.SessionGateway
 }
 
-func (stub syncPreflightOwnerStub) Gateway() factorysessions.Service { return stub.gateway }
+func (stub syncPreflightOwnerStub) Gateway() roles.SessionGateway { return stub.gateway }
 
 func TestAssemblySyncPreflightUsesSelectedSessionGateway(t *testing.T) {
 	state := newWorkResolverSessionState()
-	assembly := &Assembly{Service: &Service{}, state: state, registry: state.Registry()}
+	assembly := &Assembly{SessionGateway: &Service{}, state: state, registry: state.Registry()}
 	first := &syncPreflightGatewayStub{}
 	second := &syncPreflightGatewayStub{}
 	assembly.registry.Upsert(&livesession.LiveSession{ID: "first", Handle: &runtimebinding.SessionState{Owner: syncPreflightOwnerStub{gateway: first}}}, true)
@@ -100,7 +101,7 @@ type projectionOwnerStub struct {
 }
 
 type durableListStub struct {
-	factorysessions.Service
+	roles.SessionGateway
 	requests []factorysessions.ListSessionsRequest
 }
 
@@ -112,7 +113,7 @@ func (stub *durableListStub) ListSessions(_ context.Context, request factorysess
 func TestAssemblyListsCanonicalRegistryAndProcessDurableSessions(t *testing.T) {
 	state := newWorkResolverSessionState()
 	durable := &durableListStub{}
-	assembly := &Assembly{Service: durable, state: state, registry: state.Registry()}
+	assembly := &Assembly{SessionGateway: durable, state: state, registry: state.Registry()}
 	assembly.registry.Upsert(&livesession.LiveSession{ID: "first", SessionState: livesession.SessionState{FolderPath: "first-dir"}}, true)
 	assembly.registry.Upsert(&livesession.LiveSession{ID: "second", SessionState: livesession.SessionState{FolderPath: "second-dir"}}, false)
 

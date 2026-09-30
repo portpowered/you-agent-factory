@@ -301,10 +301,10 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	if _, err := merged.FactorySessionContractFixtureReader.ReadFile("ignored"); err != nil || !contractFixtureRead {
 		t.Fatalf("FactorySessionContractFixtureReader replacement = (%v, %v)", err, contractFixtureRead)
 	}
-	if _, err := merged.FactorySessionInvocationInputReader.ReadFile("ignored"); err != nil || !invocationInputRead {
+	if _, err := merged.FactorySessionInvocationInputReader("ignored"); err != nil || !invocationInputRead {
 		t.Fatalf("FactorySessionInvocationInputReader replacement = (%v, %v)", err, invocationInputRead)
 	}
-	if _, err := merged.FactorySessionReplayRecordingReader.ReadFile("ignored"); err != nil || !replayRecordingRead {
+	if _, err := merged.FactorySessionReplayRecordingReader("ignored"); err != nil || !replayRecordingRead {
 		t.Fatalf("FactorySessionReplayRecordingReader replacement = (%v, %v)", err, replayRecordingRead)
 	}
 	if _, err := merged.FactorySessionInitialWorkReader.ReadFile("ignored"); err != nil || !initialWorkRead {

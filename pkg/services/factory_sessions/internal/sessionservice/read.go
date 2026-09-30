@@ -15,7 +15,6 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
-	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 )
 
@@ -25,7 +24,7 @@ func (s *Service) ResolveFactorySession(sessionID string) *livesession.LiveSessi
 	if s == nil || s.host == nil {
 		return nil
 	}
-	return s.liveRuntime.Resolve(sessionID)
+	return s.host.GetLiveSession(sessionID)
 }
 
 // SubscribeFactoryResponseEvents resolves exactly one live Factory Session and
@@ -37,7 +36,7 @@ func (s *Service) SubscribeFactoryResponseEvents(
 	if s == nil || s.host == nil {
 		return nil, fmt.Errorf("factory session gateway is required")
 	}
-	session := s.liveRuntime.Resolve(request.SessionID)
+	session := s.host.GetLiveSession(request.SessionID)
 	if session == nil {
 		return nil, factorysessions.ErrSessionNotFound
 	}
@@ -85,7 +84,7 @@ func (s *Service) ListFactorySessions(ctx context.Context) ([]factorysessions.Re
 	if s == nil || s.host == nil {
 		return nil, fmt.Errorf("factory session gateway is required")
 	}
-	return s.liveRuntime.List(ctx)
+	return controlplane.ListLiveFactorySessions(ctx, s.host)
 }
 
 // GetFactorySession returns one live session detail through control-plane read routing.
@@ -93,7 +92,7 @@ func (s *Service) GetFactorySession(ctx context.Context, sessionID string) (fact
 	if s == nil || s.host == nil {
 		return factorysessions.SessionProjection{}, fmt.Errorf("factory session gateway is required")
 	}
-	return s.liveRuntime.Get(ctx, sessionID)
+	return controlplane.GetLiveFactorySession(ctx, s.host, sessionID)
 }
 
 // GetFactorySessionSyncPreflight validates reconnect cursors before live event recovery.
@@ -143,11 +142,7 @@ func (s *Service) Get(
 	sessionID := strings.TrimSpace(request.SessionID)
 	switch request.Mode {
 	case factorysessions.SessionOperationModeLive:
-		live, err := s.canonicalLiveRuntime()
-		if err != nil {
-			return factorysessions.SessionGetResult{}, err
-		}
-		projection, err := live.Get(ctx, sessionID)
+		projection, err := s.GetFactorySession(ctx, sessionID)
 		if err != nil {
 			return factorysessions.SessionGetResult{}, err
 		}
@@ -188,11 +183,7 @@ func (s *Service) List(
 	result := factorysessions.SessionListResult{Mode: request.Mode}
 	switch request.Mode {
 	case factorysessions.SessionOperationModeLive:
-		live, err := s.canonicalLiveRuntime()
-		if err != nil {
-			return factorysessions.SessionListResult{}, err
-		}
-		projections, err := live.List(ctx)
+		projections, err := s.ListFactorySessions(ctx)
 		if err != nil {
 			return factorysessions.SessionListResult{}, err
 		}
@@ -214,11 +205,7 @@ func (s *Service) List(
 		result.DurableSessions = projections.DurableSessions
 		return result, nil
 	case factorysessions.SessionOperationModeAll:
-		live, err := s.canonicalLiveRuntime()
-		if err != nil {
-			return factorysessions.SessionListResult{}, err
-		}
-		liveProjections, err := live.List(ctx)
+		liveProjections, err := s.ListFactorySessions(ctx)
 		if err != nil {
 			return factorysessions.SessionListResult{}, err
 		}
@@ -466,13 +453,6 @@ func (s *Service) SubscribeResponses(
 	return factorysessions.SessionResponseSubscriptionResult{Cursor: cursor}, nil
 }
 
-func (s *Service) canonicalLiveRuntime() (liveruntime.Service, error) {
-	if s == nil || s.liveRuntime == nil {
-		return nil, fmt.Errorf("%w: live session service is required", factorysessions.ErrRuntimeNotAvailable)
-	}
-	return s.liveRuntime, nil
-}
-
 func (s *Service) canonicalDurableReads() (canonicaldurable.Service, error) {
 	execution, err := s.durableExecution()
 	if err != nil {
@@ -525,12 +505,8 @@ func (s *Service) controlCanonicalLive(
 	ctx context.Context,
 	request factorysessions.SessionControlRequest,
 ) (factorysessions.SessionControlResult, error) {
-	live, err := s.canonicalLiveRuntime()
-	if err != nil {
-		return factorysessions.SessionControlResult{}, err
-	}
 	if request.Operation == factorysessions.SessionControlClose {
-		if err := live.Close(ctx, request.SessionID); err != nil {
+		if err := s.CloseFactorySession(ctx, request.SessionID); err != nil {
 			return factorysessions.SessionControlResult{}, err
 		}
 		return factorysessions.SessionControlResult{
@@ -541,7 +517,7 @@ func (s *Service) controlCanonicalLive(
 		}, nil
 	}
 	operation := factorysessions.LifecycleControlKind(request.Operation)
-	control, err := live.ApplyControl(ctx, request.SessionID, operation, request.Control)
+	control, err := s.applyLiveLifecycleControl(ctx, request.SessionID, operation, request.Control)
 	if err != nil {
 		return factorysessions.SessionControlResult{}, err
 	}
@@ -648,10 +624,10 @@ func readCanonicalLiveResult(
 }
 
 func (s *Service) resolveCanonicalLiveSession(sessionID string) *livesession.LiveSession {
-	if s == nil || s.liveRuntime == nil {
+	if s == nil || s.host == nil {
 		return nil
 	}
-	return s.liveRuntime.Resolve(sessionID)
+	return s.host.GetLiveSession(sessionID)
 }
 
 func (s *Service) subscribeCanonicalLiveResponses(
@@ -871,5 +847,3 @@ func canonicalDurableSessionViews(
 	}
 	return views
 }
-
-var _ factorysessions.Service = (*Service)(nil)

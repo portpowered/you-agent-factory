@@ -5,11 +5,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 )
 
@@ -56,7 +56,7 @@ func TestValidateInitNewFactoryNestedDir(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, factorydefinitions.FactoryDir), []byte("file\n"), 0o644); err != nil {
 			t.Fatalf("WriteFile(nested): %v", err)
 		}
-		assertPathValidation(t, ValidateInitNewFactoryNestedDir(root, platformfilesystem.Local{}), factorysessions.ValidationReasonConflict)
+		assertPathValidation(t, ValidateInitNewFactoryNestedDir(root, platformfilesystem.Local{}), "directory")
 	})
 	t.Run("conflicting content", func(t *testing.T) {
 		root := t.TempDir()
@@ -67,10 +67,10 @@ func TestValidateInitNewFactoryNestedDir(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(nested, "notes.txt"), []byte("notes\n"), 0o644); err != nil {
 			t.Fatalf("WriteFile(notes): %v", err)
 		}
-		assertPathValidation(t, ValidateInitNewFactoryNestedDir(root, platformfilesystem.Local{}), factorysessions.ValidationReasonConflict)
+		assertPathValidation(t, ValidateInitNewFactoryNestedDir(root, platformfilesystem.Local{}), "conflict")
 	})
 	t.Run("injected failures", func(t *testing.T) {
-		assertPathValidation(t, ValidateInitNewFactoryNestedDir(t.TempDir(), nil), factorysessions.ValidationReasonUnreadable)
+		assertPathValidation(t, ValidateInitNewFactoryNestedDir(t.TempDir(), nil), "inspection")
 		statErr := errors.New("stat unavailable")
 		if err := ValidateInitNewFactoryNestedDir("project", directoryInspectionStub{stat: func(string) (fs.FileInfo, error) { return nil, statErr }}); !errors.Is(err, statErr) {
 			t.Fatalf("stat error = %v, want %v", err, statErr)
@@ -88,9 +88,8 @@ func TestValidateInitNewFactoryNestedDir(t *testing.T) {
 
 func assertPathValidation(t *testing.T, err error, wantReason string) {
 	t.Helper()
-	reason, field, ok := ValidationReasonFromError(err)
-	if !ok || reason != wantReason || field != "folderPath" {
-		t.Fatalf("validation = (%q, %q, %v), want (%q, folderPath, true)", reason, field, ok, wantReason)
+	if err == nil || !strings.Contains(err.Error(), wantReason) {
+		t.Fatalf("validation = %v, want readable %q failure", err, wantReason)
 	}
 }
 

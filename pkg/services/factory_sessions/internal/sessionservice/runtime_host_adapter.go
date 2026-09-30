@@ -9,7 +9,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
@@ -20,9 +19,6 @@ import (
 // process-specific operations needed by the Session gateway.
 func newSessionHost(
 	state *sessionruntime.Service,
-	discoverTargets func(string) ([]factorysessions.Target, error),
-	initializeFactoryScaffold func(string) error,
-	openLiveSessionForTarget func(context.Context, factorysessions.Target) (string, error),
 	buildSessionProjectionContext func(context.Context, *livesession.LiveSession) (factorysessions.ProjectionContext, error),
 	resolveSyncPreflightTarget func(string, *interfaces.FactorySessionLogicalResolveHint) (controlplane.SyncPreflightTarget, error),
 	backendScopeID func() string,
@@ -33,22 +29,15 @@ func newSessionHost(
 	observeLiveLifecycleControl func(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error),
 	durableExecution func() durableexecution.Service,
 	newJavaScriptCheckpointStore factory.JavaScriptCheckpointStoreFactory,
-	directoryInspection roles.DirectoryInspection,
-	resolveSessionFolder func(string) (string, error),
-	selectTarget func([]factorysessions.Target, *factorysessions.TargetRef) (*factorysessions.Target, error),
 ) Host {
 	host := dependencyHost{
-		discoverTargets: discoverTargets, initializeFactoryScaffold: initializeFactoryScaffold,
-		openLiveSessionForTarget:      openLiveSessionForTarget,
 		buildSessionProjectionContext: buildSessionProjectionContext,
 		resolveSyncPreflightTarget:    resolveSyncPreflightTarget,
 		backendScopeID:                backendScopeID, logicalSessionKeyID: logicalSessionKeyID,
 		streamGenerationID:        streamGenerationID,
 		workerSessionsObservation: workerSessionsObservation,
 		stopLiveSession:           stopLiveSession, observeLiveLifecycleControl: observeLiveLifecycleControl,
-		durableExecution: durableExecution, directoryInspection: directoryInspection,
-		resolveSessionFolder: resolveSessionFolder,
-		selectTarget:         selectTarget,
+		durableExecution: durableExecution,
 	}
 	if state != nil {
 		host.requireSession = func(sessionID string) (*livesession.LiveSession, error) {

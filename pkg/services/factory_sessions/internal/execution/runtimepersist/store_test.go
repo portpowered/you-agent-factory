@@ -27,11 +27,11 @@ func (f failingFileSystem) WriteFile(string, []byte, fs.FileMode) error {
 	return f.writeErr
 }
 
-func TestNewProjectStore_ConstructsSnapshotBoundaryAndRoundTrips(t *testing.T) {
+func TestNewLazyProjectStore_ConstructsSnapshotBoundaryAndRoundTrips(t *testing.T) {
 	projectRoot := t.TempDir()
-	store, err := runtimepersist.NewProjectStore(projectRoot, platformfilesystem.Local{})
+	store, err := runtimepersist.NewLazyProjectStore(projectRoot, platformfilesystem.Local{})
 	if err != nil {
-		t.Fatalf("NewProjectStore: %v", err)
+		t.Fatalf("NewLazyProjectStore: %v", err)
 	}
 	if got, want := store.(runtimepersist.DirectoryStore).Dir, runtimepersist.DirForProjectRoot(projectRoot); got != want {
 		t.Fatalf("store directory = %q, want %q", got, want)
@@ -50,16 +50,20 @@ func TestNewProjectStore_ConstructsSnapshotBoundaryAndRoundTrips(t *testing.T) {
 	}
 }
 
-func TestNewProjectStore_RejectsMissingAndUnavailableRoots(t *testing.T) {
-	if _, err := runtimepersist.NewProjectStore("   ", platformfilesystem.Local{}); err == nil {
-		t.Fatal("NewProjectStore(blank) error = nil")
+func TestNewLazyProjectStore_SaveRejectsUnavailableRoot(t *testing.T) {
+	if _, err := runtimepersist.NewLazyProjectStore("   ", platformfilesystem.Local{}); err == nil {
+		t.Fatal("NewLazyProjectStore(blank) error = nil")
 	}
 	blockedRoot := filepath.Join(t.TempDir(), "blocked")
 	if err := os.WriteFile(blockedRoot, []byte("not a directory"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	if _, err := runtimepersist.NewProjectStore(blockedRoot, platformfilesystem.Local{}); err == nil || !strings.Contains(err.Error(), "initialize durable session persistence directory") {
-		t.Fatalf("NewProjectStore(blocked) error = %v, want actionable initialization failure", err)
+	store, err := runtimepersist.NewLazyProjectStore(blockedRoot, platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("lazy construction: %v", err)
+	}
+	if err := store.Save("~default", []byte(`{}`)); err == nil || !strings.Contains(err.Error(), "create durable session persistence directory") {
+		t.Fatalf("Save(blocked root) error = %v, want actionable initialization failure", err)
 	}
 }
 
@@ -105,9 +109,6 @@ func TestNewLazyProjectStore_RejectsMissingDependencies(t *testing.T) {
 
 func TestDirectoryPersistence_RejectsBlankDirectory(t *testing.T) {
 	files := platformfilesystem.Local{}
-	if _, err := runtimepersist.NewDirectoryStore("   ", files); err == nil || !strings.Contains(err.Error(), "directory is required") {
-		t.Fatalf("NewDirectoryStore(blank directory) error = %v", err)
-	}
 	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	if err := runtimepersist.SaveBytes("   ", sessionID, []byte(`{}`), files); err == nil || !strings.Contains(err.Error(), "directory is required") {
 		t.Fatalf("SaveBytes(blank directory) error = %v", err)
@@ -167,8 +168,8 @@ func TestSaveBytes_RejectsUnsafeSessionIdentifiers(t *testing.T) {
 }
 
 func TestStoreFailsClosedWithoutFileSystem(t *testing.T) {
-	if _, err := runtimepersist.NewProjectStore(t.TempDir(), nil); err == nil || !strings.Contains(err.Error(), "filesystem is required") {
-		t.Fatalf("NewProjectStore(nil filesystem) error = %v", err)
+	if _, err := runtimepersist.NewLazyProjectStore(t.TempDir(), nil); err == nil || !strings.Contains(err.Error(), "filesystem is required") {
+		t.Fatalf("NewLazyProjectStore(nil filesystem) error = %v", err)
 	}
 	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	if err := runtimepersist.SaveBytes(t.TempDir(), sessionID, nil, nil); err == nil || !strings.Contains(err.Error(), "filesystem is required") {
@@ -182,8 +183,12 @@ func TestStoreFailsClosedWithoutFileSystem(t *testing.T) {
 func TestStorePropagatesInjectedFileSystemFailures(t *testing.T) {
 	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	mkdirErr := errors.New("mkdir unavailable")
-	if _, err := runtimepersist.NewProjectStore(t.TempDir(), failingFileSystem{mkdirErr: mkdirErr}); !errors.Is(err, mkdirErr) || !strings.Contains(err.Error(), "initialize durable session persistence directory") {
-		t.Fatalf("NewProjectStore injected mkdir error = %v", err)
+	store, err := runtimepersist.NewLazyProjectStore(t.TempDir(), failingFileSystem{mkdirErr: mkdirErr})
+	if err != nil {
+		t.Fatalf("lazy construction: %v", err)
+	}
+	if err := store.Save(sessionID, nil); !errors.Is(err, mkdirErr) || !strings.Contains(err.Error(), "create durable session persistence directory") {
+		t.Fatalf("Save injected mkdir error = %v", err)
 	}
 	if err := runtimepersist.SaveBytes(t.TempDir(), sessionID, nil, failingFileSystem{mkdirErr: mkdirErr}); !errors.Is(err, mkdirErr) || !strings.Contains(err.Error(), "create durable session persistence directory") {
 		t.Fatalf("SaveBytes injected mkdir error = %v", err)
@@ -224,9 +229,9 @@ func (s *interruptingStorage) WriteFile(path string, data []byte, _ fs.FileMode)
 func TestDirectoryStore_InterruptedSavePreservesPriorSnapshotAndSuccessfulSaveReplacesIt(t *testing.T) {
 	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	storage := &interruptingStorage{delegate: platformreplay.NewLocal(runtime.GOOS)}
-	store, err := runtimepersist.NewDirectoryStore(t.TempDir(), storage)
+	store, err := runtimepersist.NewLazyProjectStore(t.TempDir(), storage)
 	if err != nil {
-		t.Fatalf("NewDirectoryStore: %v", err)
+		t.Fatalf("NewLazyProjectStore: %v", err)
 	}
 	previous := []byte(`{"status":"RUNNING","sequence":1}`)
 	next := []byte(`{"status":"COMPLETED","sequence":2}`)

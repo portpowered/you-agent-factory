@@ -70,30 +70,3 @@ func MCPFamilyManifest() (climanifest.Manifest, error) {
 func ServeFamilyManifest() (climanifest.Manifest, error) {
 	return serveFamilyManifestValue(), nil
 }
-
-// CommandByID returns one generated representative-family command record.
-func CommandByID(id string) (climanifest.Command, error) {
-	manifest, err := RepresentativeFamilyManifest()
-	if err != nil {
-		return climanifest.Command{}, err
-	}
-	return manifest.CommandByID(id)
-}
-
-// WorkCommandByID returns one generated work-family command record.
-func WorkCommandByID(id string) (climanifest.Command, error) {
-	manifest, err := WorkFamilyManifest()
-	if err != nil {
-		return climanifest.Command{}, err
-	}
-	return manifest.CommandByID(id)
-}
-
-// FactoryConfigInitCommandByID returns one generated factory/config/init command record.
-func FactoryConfigInitCommandByID(id string) (climanifest.Command, error) {
-	manifest, err := FactoryConfigInitFamilyManifest()
-	if err != nil {
-		return climanifest.Command{}, err
-	}
-	return manifest.CommandByID(id)
-}
