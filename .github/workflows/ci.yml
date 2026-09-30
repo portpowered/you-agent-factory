@@ -1031,3 +1031,127 @@ jobs:
           PROVIDERS_RESULT: ${{ needs.development-package.outputs.model_providers_package_result }}
         shell: bash
         run: node scripts/verification-policy.mjs
+
+  backend-visualizations-preview:
+    name: Backend Architecture Preview
+    needs: [backend-coverage, verification-policy]
+    if: github.event_name == 'pull_request' && needs.backend-coverage.result == 'success' && needs.verification-policy.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: unit-coverage-diagnostics
+          path: .artifacts/unit-coverage
+      - uses: actions/download-artifact@v4
+        with:
+          name: functional-test-diagnostics
+          path: .artifacts/functional-test-viz
+      - name: Generate architecture pages from this CI run
+        run: make architecture
+        env:
+          BACKEND_VIS_UNIT_SUMMARY: .artifacts/unit-coverage/coverage-summary.json
+          BACKEND_VIS_FUNCTIONAL_SUMMARY: .artifacts/functional-test-viz/coverage-summary.json
+          BACKEND_VIS_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          BACKEND_VIS_REQUIRE_COVERAGE: "1"
+      - name: Upload pull request preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-architecture-preview
+          path: docs/architecture/visualizations/
+          if-no-files-found: error
+
+  backend-visualizations-publish:
+    name: Propose Backend Architecture Visualizations
+    needs: [backend-coverage, verification-policy]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.backend-coverage.result == 'success' && needs.verification-policy.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Skip generated-page-only main changes
+        id: source-change
+        shell: bash
+        run: |
+          if git diff --quiet HEAD^ HEAD -- . ':(exclude)docs/architecture/visualizations/**'; then
+            echo "generate=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "generate=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-go@v5
+        if: steps.source-change.outputs.generate == 'true'
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: actions/download-artifact@v4
+        if: steps.source-change.outputs.generate == 'true'
+        with:
+          name: unit-coverage-diagnostics
+          path: .artifacts/unit-coverage
+      - uses: actions/download-artifact@v4
+        if: steps.source-change.outputs.generate == 'true'
+        with:
+          name: functional-test-diagnostics
+          path: .artifacts/functional-test-viz
+      - name: Generate architecture pages from this CI run
+        if: steps.source-change.outputs.generate == 'true'
+        run: make architecture
+        env:
+          BACKEND_VIS_UNIT_SUMMARY: .artifacts/unit-coverage/coverage-summary.json
+          BACKEND_VIS_FUNCTIONAL_SUMMARY: .artifacts/functional-test-viz/coverage-summary.json
+          BACKEND_VIS_SOURCE_COMMIT: ${{ github.sha }}
+          BACKEND_VIS_REQUIRE_COVERAGE: "1"
+      - name: Check for changed architecture pages
+        if: steps.source-change.outputs.generate == 'true'
+        id: candidate
+        shell: bash
+        run: |
+          git add -A docs/architecture/visualizations/
+          if git diff --cached --quiet; then
+            echo "Backend architecture pages are current."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Mint the architecture bot installation token
+        if: steps.candidate.outputs.changed == 'true'
+        id: bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.BASELINE_BOT_APP_ID }}
+          private-key: ${{ secrets.BASELINE_BOT_APP_PRIVATE_KEY }}
+      - name: Propose and auto-merge measured pages
+        if: steps.candidate.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error title=Missing bot credential::Architecture publication requires the installed GitHub App token." >&2
+            exit 1
+          fi
+          gh auth setup-git --hostname github.com
+          bot_branch="automation/backend-architecture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git switch -c "$bot_branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs: refresh backend architecture visualizations"
+          git push origin "HEAD:$bot_branch"
+          body_file="$RUNNER_TEMP/backend-architecture-pr.md"
+          printf 'Generated from measured coverage in [main CI run](%s/%s/actions/runs/%s) at source commit %s.\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_SHA" > "$body_file"
+          pr_url=$(gh pr create --base main --head "$bot_branch" --title "docs: refresh backend architecture visualizations" --body-file "$body_file")
+          gh pr merge "$pr_url" --auto --merge --delete-branch

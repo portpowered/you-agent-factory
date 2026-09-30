@@ -73,13 +73,6 @@ type mcpToolsCallResult struct {
 	StructuredContent json.RawMessage `json:"structuredContent"`
 }
 
-type mcpToolErrorEnvelope struct {
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	Retryable bool   `json:"retryable"`
-	SessionID string `json:"sessionId"`
-}
-
 // TestMCPMalformedParametersReturnInvalidParams proves malformed MCP parameters
 // return a JSON-RPC invalid-params error at the public stdio/protocol boundary.
 func TestMCPMalformedParametersReturnInvalidParams(t *testing.T) {
@@ -105,8 +98,7 @@ func TestMCPMalformedParametersReturnInvalidParams(t *testing.T) {
 func TestMCPMissingFactorySessionReturnsCanonicalNotFound(t *testing.T) {
 	withSharedMCPProtocolServer(t, func(server *projectRootBackedMCPServer) {
 		assertInitializeHandshake(t, server)
-		request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + factorySessionGetToolName +
-			`","arguments":{"sessionId":"` + missingFactorySessionID + `"}}}`
+		request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + factorySessionGetToolName + `","arguments":{}}}`
 		response := server.exchange(request)
 		assertMCPResponseID(t, response, float64(1))
 		if response.Error != nil {

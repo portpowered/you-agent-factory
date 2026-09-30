@@ -38,39 +38,16 @@ func Check(repositoryRoot string) ([]Diagnostic, error) {
 // LoadInputs projects authored, generated, registry, and alias values into
 // explicit checker inputs without making contract data executable.
 func LoadInputs(repositoryRoot string) (Inputs, error) {
-	resolved, err := discoverygen.LoadResolvedCatalog(repositoryRoot)
+	manifest, err := discoverygen.LoadAuthoredManifest(repositoryRoot)
 	if err != nil {
 		return Inputs{}, err
 	}
-	projected, err := discoverygen.ProjectDiscoveryFromCatalogDocument(resolved)
-	if err != nil {
-		return Inputs{}, fmt.Errorf("project authored MCP catalog: %w", err)
+	if err := discoverygen.ValidateManifest(manifest); err != nil {
+		return Inputs{}, fmt.Errorf("project authored MCP manifest: %w", err)
 	}
-
-	root, ok := resolved.(map[string]any)
-	if !ok {
-		return Inputs{}, fmt.Errorf("resolved MCP catalog is not an object")
-	}
-	authoredTools, ok := root["tools"].(map[string]any)
-	if !ok {
-		return Inputs{}, fmt.Errorf("resolved MCP catalog tools is not an object")
-	}
-
-	inputs := Inputs{Catalog: make([]ToolRecord, 0, len(projected.Tools))}
-	for id, record := range projected.Tools {
-		raw, ok := authoredTools[id].(map[string]any)
-		if !ok {
-			return Inputs{}, fmt.Errorf("authored MCP tool %q is not an object", id)
-		}
-		handler, ok := raw["handler"].(map[string]any)
-		if !ok {
-			return Inputs{}, fmt.Errorf("authored MCP tool %q handler is not an object", id)
-		}
-		handlerID, _ := handler["id"].(string)
-		inputs.Catalog = append(inputs.Catalog, ToolRecord{
-			ID: id, Name: record.Name, Description: record.Description,
-			InputSchema: record.InputSchema, HandlerID: handlerID,
-		})
+	inputs := Inputs{Catalog: make([]ToolRecord, 0, len(manifest.Tools))}
+	for _, record := range manifest.Tools {
+		inputs.Catalog = append(inputs.Catalog, ToolRecord{ID: record.ID, Name: record.Name, Description: record.Description, InputSchema: record.InputSchema, HandlerID: record.Handler})
 	}
 
 	for _, record := range mcpgenerated.PrimaryDiscovery() {
@@ -82,8 +59,69 @@ func LoadInputs(repositoryRoot string) (Inputs, error) {
 			ID: record.ID, Name: record.Name, Description: record.Description, InputSchema: inputSchema,
 		})
 	}
-	for _, binding := range mcpfactorysession.ProjectCanonicalToolHandlerBindings() {
-		inputs.Registry = append(inputs.Registry, HandlerBinding(binding))
+
+	bindings := mcpfactorysession.ProjectCanonicalToolHandlerBindings()
+	bindingByID := make(map[string]HandlerBinding, len(bindings))
+	for _, binding := range bindings {
+		bindingByID[binding.ToolID] = HandlerBinding(binding)
+	}
+	for _, record := range manifest.Tools {
+		if binding, ok := bindingByID[record.ID]; ok {
+			inputs.Registry = append(inputs.Registry, binding)
+		}
+	}
+	for _, resource := range manifest.Resources {
+		inputs.Resources = append(inputs.Resources, ResourceRecord{ID: resource.ID, URI: resource.URI, Name: resource.Name, Description: resource.Description, MIMEType: resource.MIMEType, Handler: resource.Handler})
+	}
+	for _, resource := range mcpgenerated.PrimaryResources() {
+		inputs.GeneratedResources = append(inputs.GeneratedResources, ResourceRecord{ID: resource.ID, URI: resource.URI, Name: resource.Name, Description: resource.Description, MIMEType: resource.MIMEType, Handler: resource.Handler})
+	}
+	for _, skill := range manifest.Skills {
+		inputs.Skills = append(inputs.Skills, SkillRecord{ID: skill.ID, URI: skill.URI, Frontmatter: skill.Frontmatter, ResourceURIs: skill.ResourceURIs})
+	}
+	for _, skill := range mcpgenerated.PrimarySkills() {
+		inputs.GeneratedSkills = append(inputs.GeneratedSkills, SkillRecord{ID: skill.ID, URI: skill.URI, Frontmatter: skill.Frontmatter, ResourceURIs: skill.ResourceURIs})
+	}
+
+	// Keep the broader service adapter catalog parity checked independently from
+	// the public MCP surface. These tools remain internal adapter contracts.
+	legacyValue, err := discoverygen.LoadResolvedCatalog(repositoryRoot)
+	if err != nil {
+		return Inputs{}, err
+	}
+	legacyProjection, err := discoverygen.ProjectDiscoveryFromCatalogDocument(legacyValue)
+	if err != nil {
+		return Inputs{}, fmt.Errorf("project legacy MCP adapter catalog: %w", err)
+	}
+	legacyRoot, ok := legacyValue.(map[string]any)
+	if !ok {
+		return Inputs{}, fmt.Errorf("legacy MCP catalog is not an object")
+	}
+	legacyTools, ok := legacyRoot["tools"].(map[string]any)
+	if !ok {
+		return Inputs{}, fmt.Errorf("legacy MCP catalog tools is not an object")
+	}
+	for id, record := range legacyProjection.Tools {
+		raw, ok := legacyTools[id].(map[string]any)
+		if !ok {
+			return Inputs{}, fmt.Errorf("legacy MCP tool %q is not an object", id)
+		}
+		handler, ok := raw["handler"].(map[string]any)
+		if !ok {
+			return Inputs{}, fmt.Errorf("legacy MCP tool %q handler is not an object", id)
+		}
+		handlerID, _ := handler["id"].(string)
+		inputs.LegacyCatalog = append(inputs.LegacyCatalog, ToolRecord{ID: id, Name: record.Name, Description: record.Description, InputSchema: record.InputSchema, HandlerID: handlerID})
+	}
+	for _, record := range mcpgenerated.LegacyDiscovery() {
+		var inputSchema any
+		if err := json.Unmarshal(record.InputSchema, &inputSchema); err != nil {
+			return Inputs{}, fmt.Errorf("decode legacy generated schema for %q: %w", record.ID, err)
+		}
+		inputs.LegacyDiscovery = append(inputs.LegacyDiscovery, ToolRecord{ID: record.ID, Name: record.Name, Description: record.Description, InputSchema: inputSchema})
+	}
+	for _, binding := range bindings {
+		inputs.LegacyRegistry = append(inputs.LegacyRegistry, HandlerBinding(binding))
 	}
 	inputs.Aliases, err = loadRetainedAliases(repositoryRoot)
 	if err != nil {

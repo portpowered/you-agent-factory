@@ -17,7 +17,7 @@ const expectedExports = {
 	"./cli": "./generated/cli/commands.json",
 	"./schemas/cli-command-manifest":
 		"./generated/cli/command-manifest.schema.json",
-	"./mcp": "./generated/mcp/tools.json",
+	"./mcp": "./generated/mcp/manifest.json",
 	"./schemas/you-config": "./generated/schemas/you-config.schema.json",
 	"./schemas/factory": "./generated/schemas/factory.schema.json",
 	"./schemas/factory-event": "./generated/schemas/factory-event.schema.json",

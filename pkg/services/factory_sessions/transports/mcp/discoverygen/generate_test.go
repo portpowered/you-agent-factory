@@ -69,6 +69,108 @@ func TestProductionCatalogProjectsCanonicalDiscoveryMetadata(t *testing.T) {
 	}
 }
 
+func TestProductionManifestProjectsCanonicalToolsAndDeclaredResourcesAndSkills(t *testing.T) {
+	root := testutil.MustRepoPath(t, ".")
+	manifest, err := discoverygen.LoadAuthoredManifest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Tools) != canonicalFactorySessionToolCount {
+		t.Fatalf("manifest tool count = %d, want %d", len(manifest.Tools), canonicalFactorySessionToolCount)
+	}
+	if len(manifest.Resources) != 4 || len(manifest.Skills) != 1 {
+		t.Fatalf("manifest surface sizes = tools:%d resources:%d skills:%d", len(manifest.Tools), len(manifest.Resources), len(manifest.Skills))
+	}
+	metadata, err := discoverygen.ProjectManifestDiscovery(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metadata.Tools) != canonicalFactorySessionToolCount ||
+		metadata.Tools["mcp.tool.you.subagent"].Name != mcpfactorysession.ToolSubagent ||
+		metadata.Tools["mcp.tool.you.factory_session.list"].Name != mcpfactorysession.ToolListSessions {
+		t.Fatalf("projected tools = %#v", metadata.Tools)
+	}
+}
+
+func TestManifestRejectsSkillReferenceWithoutDeclaredResource(t *testing.T) {
+	manifest := discoverygen.MCPManifest{FormatVersion: "1.0.0", ProtocolVersion: "2024-11-05", Skills: []discoverygen.ManifestSkill{{ID: "mcp.skill.test", URI: "skill://missing", Frontmatter: map[string]any{"name": "test", "description": "test"}, ResourceURIs: []string{"skill://missing"}}}}
+	if err := discoverygen.ValidateManifest(manifest); err == nil {
+		t.Fatal("ValidateManifest() accepted undeclared skill resource")
+	}
+}
+
+func TestValidateManifestRejectsMalformedAndDuplicateSurfaces(t *testing.T) {
+	valid := func() discoverygen.MCPManifest {
+		return discoverygen.MCPManifest{
+			FormatVersion: "1.0.0", ProtocolVersion: "2024-11-05",
+			Tools:     []discoverygen.ManifestTool{{ID: "tool-1", Name: "tool", Description: "Tool", Handler: "handleTool", InputSchema: map[string]any{"type": "object"}}},
+			Resources: []discoverygen.ManifestResource{{ID: "resource-1", URI: "you://example", Name: "Example", Description: "Example resource", MIMEType: "text/plain", Handler: "handleResource"}},
+			Skills:    []discoverygen.ManifestSkill{{ID: "skill-1", URI: "skill://example", Frontmatter: map[string]any{"name": "example", "description": "Example skill"}, ResourceURIs: []string{"you://example"}}},
+		}
+	}
+	tests := []struct {
+		name    string
+		mutate  func(*discoverygen.MCPManifest)
+		wantErr string
+	}{
+		{name: "unsupported version", mutate: func(m *discoverygen.MCPManifest) { m.FormatVersion = "2.0.0" }, wantErr: "unsupported format or protocol version"},
+		{name: "incomplete tool", mutate: func(m *discoverygen.MCPManifest) { m.Tools[0].InputSchema = nil }, wantErr: "tool \"tool-1\" is incomplete"},
+		{name: "duplicate tool id", mutate: func(m *discoverygen.MCPManifest) { m.Tools = append(m.Tools, m.Tools[0]) }, wantErr: "tool \"tool-1\" or name \"tool\" is duplicated"},
+		{name: "duplicate tool name", mutate: func(m *discoverygen.MCPManifest) {
+			duplicate := m.Tools[0]
+			duplicate.ID = "tool-2"
+			m.Tools = append(m.Tools, duplicate)
+		}, wantErr: "or name \"tool\" is duplicated"},
+		{name: "incomplete resource", mutate: func(m *discoverygen.MCPManifest) { m.Resources[0].Handler = "" }, wantErr: "resource \"resource-1\" is incomplete"},
+		{name: "duplicate resource id", mutate: func(m *discoverygen.MCPManifest) {
+			duplicate := m.Resources[0]
+			duplicate.URI = "you://other"
+			m.Resources = append(m.Resources, duplicate)
+		}, wantErr: "resource \"resource-1\" or URI \"you://other\" is duplicated"},
+		{name: "duplicate resource uri", mutate: func(m *discoverygen.MCPManifest) {
+			duplicate := m.Resources[0]
+			duplicate.ID = "resource-2"
+			m.Resources = append(m.Resources, duplicate)
+		}, wantErr: "or URI \"you://example\" is duplicated"},
+		{name: "incomplete skill", mutate: func(m *discoverygen.MCPManifest) { m.Skills[0].ResourceURIs = nil }, wantErr: "skill \"skill-1\" is incomplete"},
+		{name: "duplicate skill id", mutate: func(m *discoverygen.MCPManifest) {
+			m.Skills[0].URI = "you://example"
+			duplicate := m.Skills[0]
+			m.Skills = append(m.Skills, duplicate)
+		}, wantErr: "skill \"skill-1\" is duplicated"},
+		{name: "skill uri undeclared", mutate: func(m *discoverygen.MCPManifest) { m.Skills[0].URI = "skill://missing" }, wantErr: "has undeclared skill URI"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifest := valid()
+			tt.mutate(&manifest)
+			if err := discoverygen.ValidateManifest(manifest); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("ValidateManifest() error = %v, want substring %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestGeneratedGoCarriesEveryManifestSurface(t *testing.T) {
+	root := testutil.MustRepoPath(t, ".")
+	payload, err := discoverygen.DiscoveryGoArtifact(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		"func PrimaryDiscovery() []DiscoveryTool",
+		"func LegacyDiscovery() []DiscoveryTool",
+		"func PrimaryResources() []DiscoveryResource",
+		"func PrimarySkills() []DiscoverySkill",
+		"you://providers/catalog",
+		"skill://subagent-configuration/SKILL.md",
+	} {
+		if !bytes.Contains(payload, []byte(expected)) {
+			t.Errorf("generated Go descriptor missing %q", expected)
+		}
+	}
+}
+
 func TestProductionDiscoveryExcludesUnsupportedModalities(t *testing.T) {
 	repositoryRoot := testutil.MustRepoPath(t, ".")
 	payload, err := discoverygen.DiscoveryArtifact(repositoryRoot)
@@ -263,16 +365,18 @@ func validCatalogToolRecord(id string) map[string]any {
 
 func copyCatalog(t *testing.T, sourceRoot, targetRoot string) {
 	t.Helper()
-	payload, err := os.ReadFile(filepath.Join(sourceRoot, filepath.FromSlash(discoverygen.AuthoredCatalogPath)))
-	if err != nil {
-		t.Fatalf("read authored catalog: %v", err)
-	}
-	target := filepath.Join(targetRoot, filepath.FromSlash(discoverygen.AuthoredCatalogPath))
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		t.Fatalf("create authored catalog directory: %v", err)
-	}
-	if err := os.WriteFile(target, payload, 0o644); err != nil {
-		t.Fatalf("write authored catalog: %v", err)
+	for _, path := range []string{discoverygen.AuthoredCatalogPath, discoverygen.AuthoredManifestPath} {
+		payload, err := os.ReadFile(filepath.Join(sourceRoot, filepath.FromSlash(path)))
+		if err != nil {
+			t.Fatalf("read authored %s: %v", path, err)
+		}
+		target := filepath.Join(targetRoot, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatalf("create authored contract directory: %v", err)
+		}
+		if err := os.WriteFile(target, payload, 0o644); err != nil {
+			t.Fatalf("write authored %s: %v", path, err)
+		}
 	}
 }
 

@@ -111,7 +111,7 @@ func TestMCPDiscoveryContainsCanonicalFactorySessionTools(t *testing.T) {
 
 	for _, tool := range mcpgenerated.PrimaryDiscovery() {
 		if !slices.Contains(toolNames, tool.Name) {
-			t.Fatalf("tools/list missing canonical Factory Session tool %q; got %#v", tool.Name, toolNames)
+			t.Fatalf("tools/list missing canonical tool %q; got %#v", tool.Name, toolNames)
 		}
 	}
 }
@@ -181,6 +181,7 @@ type stdioMCPClient struct {
 
 type stdioMCPServer struct {
 	t                   *testing.T
+	home                string
 	client              *stdioMCPClient
 	stdin               *os.File
 	stdinRead           *os.File
@@ -312,6 +313,11 @@ func trackedMCPTempDir(t testing.TB) string {
 
 func startProjectRootBackedMCPServer(t *testing.T, projectRoot string) *stdioMCPServer {
 	t.Helper()
+	return startRuntimeBackedMCPServerWithHome(t, projectRoot, trackedMCPTempDir(t))
+}
+
+func startRuntimeBackedMCPServerWithHome(t *testing.T, projectRoot, homeDir string) *stdioMCPServer {
+	t.Helper()
 
 	process := buildMCPProcess(t)
 
@@ -327,8 +333,7 @@ func startProjectRootBackedMCPServer(t *testing.T, projectRoot string) *stdioMCP
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	homeDir := trackedMCPTempDir(t)
-	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	env := builtcliacceptance.ProcessEnvForIsolatedHome(homeDir)
 
 	serveErr := make(chan error, 1)
 	var stderr bytes.Buffer
@@ -349,6 +354,7 @@ func startProjectRootBackedMCPServer(t *testing.T, projectRoot string) *stdioMCP
 
 	server := &stdioMCPServer{
 		t:            t,
+		home:         homeDir,
 		client:       newStdioMCPClient(t, stdinWrite, stdoutRead),
 		stdin:        stdinWrite,
 		stdinRead:    stdinRead,

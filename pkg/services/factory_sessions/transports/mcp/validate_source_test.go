@@ -50,7 +50,7 @@ var mcpWorkflowDefinitions = testutil.ScriptedJavaScriptWorkflowDefinitions{
 func TestStableIDHandlerRegistryCoversGeneratedCanonicalDiscovery(t *testing.T) {
 	t.Parallel()
 
-	for _, tool := range mcpgenerated.PrimaryDiscovery() {
+	for _, tool := range mcpgenerated.LegacyDiscovery() {
 		binding, ok := mcpfactorysession.ResolveToolHandlerBinding(tool.Name)
 		if !ok {
 			t.Fatalf("generated tool %q (%s) has no handwritten handler binding", tool.Name, tool.ID)

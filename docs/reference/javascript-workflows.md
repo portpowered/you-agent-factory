@@ -43,8 +43,8 @@ Every start needs a stable request id and exactly one source selector. Supply
 invocation data as a JSON object when the factory expects inputs.
 
 Use `run` when the caller should wait for a terminal result or the configured
-timeout. This copy-paste command exercises the published deterministic timeout
-fixture and still returns its Factory Session id for inspection:
+timeout. This example shows a bounded wait and returns a Factory Session id
+for inspection when `long-running-audit` exists in the project:
 
 ```bash
 curl -X POST http://localhost:7437/factory-sessions/sync \
@@ -64,11 +64,10 @@ curl -X POST http://localhost:7437/factory-sessions/async \
 Retain the returned `sessionId`. JavaScript execution uses the same canonical
 Factory Session API and MCP surfaces as other orchestrators.
 
-These examples use the deterministic fake execution provider and published
-fixture catalog selected by default. For live source resolution and JavaScript
-execution, replace the fixture request/source values with your own and add
-`--execution-provider javascript-runtime --project-root .`. Configure MCP with
-runtime backing separately as described in `you docs mcp`.
+Replace the example workflow names and arguments with sources available in
+your project. The server executes against its configured project root. MCP
+uses the same process-owned Factory Sessions service; see `you docs mcp` for
+host setup and `--project-root`.
 
 ### 3. Inspect the Factory Session
 
@@ -243,9 +242,10 @@ sync response or fetched later; running sessions can report a not-ready final
 result while their status, partial result, dispatches, artifacts, and events
 remain inspectable.
 
-`you server mcp` exposes `you.factory_session.*` tools through the process-owned
-Factory Sessions service. Set the MCP host working directory to the project
-root, or pass `--project-root` when launching the child process.
+`you server mcp` exposes `you.subagent` and `you.factory_session.*` tools
+through the process-owned Factory Sessions service. Set the MCP host working
+directory to the project root, or pass `--project-root` when launching the
+child process.
 
 ## Child worker presets
 

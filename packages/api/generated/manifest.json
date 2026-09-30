@@ -180,35 +180,35 @@
       },
       "path": "generated/joined/contracts/manifest.schema.json"
     },
-    "generated.mcp.tools": {
-      "artifactHash": "56b5b2ebc74a228446c773a11f4c6931a4c1859ba35dc6bfabb9feeac6c80dc5",
+    "generated.mcp.manifest": {
+      "artifactHash": "f1bfa518301fe520e299e8ead67046893ac06dfc729edd6bd8c6e3949860a89b",
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Published generated.mcp.tools contract as raw JSON or YAML data.",
-            "id": "generated.mcp.tools.description"
+            "canonicalEnglish": "Published generated.mcp.manifest contract as raw JSON or YAML data.",
+            "id": "generated.mcp.manifest.description"
           },
           "title": {
-            "canonicalEnglish": "Published generated.mcp.tools contract",
-            "id": "generated.mcp.tools.title"
+            "canonicalEnglish": "Published generated.mcp.manifest contract",
+            "id": "generated.mcp.manifest.title"
           }
         },
         "examples": [
-          "generated/mcp/tools.json"
+          "generated/mcp/manifest.json"
         ],
         "formatVersion": "1.0.0",
-        "itemId": "generated.mcp.tools",
-        "sourceHash": "56b5b2ebc74a228446c773a11f4c6931a4c1859ba35dc6bfabb9feeac6c80dc5",
+        "itemId": "generated.mcp.manifest",
+        "sourceHash": "f1bfa518301fe520e299e8ead67046893ac06dfc729edd6bd8c6e3949860a89b",
         "visibility": "public"
       },
       "family": "mcp",
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "generated.mcp.tools",
+        "itemId": "generated.mcp.manifest",
         "since": "0.0.0",
         "state": "active"
       },
-      "path": "generated/mcp/tools.json"
+      "path": "generated/mcp/manifest.json"
     },
     "generated.openapi.openapi": {
       "artifactHash": "50915ca7dba12ab56aab6044c9b11d0a0eb89fcf0233f07ab67f64f02cbe8879",

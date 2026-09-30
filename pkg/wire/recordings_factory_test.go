@@ -67,7 +67,7 @@ func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 		t.Fatal("provideRecordingsRuntimeScopeService(nil) error = nil, want capability validation")
 	}
 
-	buildServer := provideMCPServerBuilder(platformfilesystem.Local{})
+	buildServer := provideMCPServerBuilder(platformfilesystem.Local{}, nil, nil, platformfilesystem.Local{}, func() (string, error) { return t.TempDir(), nil })
 	if buildServer == nil {
 		t.Fatal("provideMCPServerBuilder() returned nil")
 	}

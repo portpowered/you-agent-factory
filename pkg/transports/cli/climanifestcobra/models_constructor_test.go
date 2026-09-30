@@ -845,3 +845,17 @@ func submitChildUses(commands []*cobra.Command) string {
 	}
 	return strings.Join(uses, ", ")
 }
+
+func TestMCPManifestDoesNotRequireRuntimeFlag(t *testing.T) {
+	mcp, err := climanifestcobra.NewMCPCommand(
+		func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcp.SetArgs([]string{"mcp", "--runtime"})
+	err = mcp.Execute()
+	if err == nil || !strings.Contains(err.Error(), "unknown flag: --runtime") {
+		t.Fatalf("execute error = %v, want runtime flag removed", err)
+	}
+}

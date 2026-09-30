@@ -239,9 +239,11 @@ const (
 	CapabilityUsage              Capability = "usage"
 	CapabilityStableItemIDs      Capability = "stable_item_ids"
 	CapabilityProviderReconnect  Capability = "provider_reconnect"
-	// CapabilityPermissionBypass means the provider route has an explicit,
-	// provider-owned way to bypass its normal permission and sandbox prompts.
-	// It is a capability fact, not an instruction to bypass permissions.
+	// CapabilityPermissionBypass means the provider route can honor the
+	// invocation's permission policy. ACP routes do this through
+	// client-mediated permission selection; peers that never request permission
+	// are unaffected by the setting. It is a capability fact, not an instruction
+	// to bypass permissions.
 	CapabilityPermissionBypass Capability = "permission_bypass"
 )
 

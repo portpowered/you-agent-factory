@@ -8,12 +8,70 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
+
+func TestMCPToolCallRemainsOpenForLongSubagentWait(t *testing.T) {
+	t.Parallel()
+	simulatedWork := 1200 * time.Millisecond
+	if os.Getenv("YOU_MCP_LONG_DURATION_TEST") == "1" {
+		simulatedWork = 70 * time.Second
+	}
+	server, err := New(Options{ToolOperation: func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+		if name != mcpfactorysession.ToolSubagent {
+			return nil, errors.New("unexpected tool")
+		}
+		var request struct {
+			TimeoutMillis int64 `json:"timeoutMillis"`
+		}
+		if err := json.Unmarshal(input, &request); err != nil || request.TimeoutMillis != 3_600_000 {
+			return nil, errors.New("one-hour timeout was not forwarded")
+		}
+		select {
+		case <-time.After(simulatedWork):
+			return json.RawMessage(`{"result":{"sessionId":"long-session","status":"COMPLETED","text":"done"}}`), nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	serverCtx, stopServer := context.WithCancel(context.Background())
+	defer stopServer()
+	go func() { _ = server.Serve(serverCtx, serverTransport) }()
+	client := mcp.NewClient(&mcp.Implementation{Name: "duration-test", Version: "1"}, nil)
+	clientBudget := 5 * time.Second
+	if simulatedWork > clientBudget {
+		clientBudget = simulatedWork + 15*time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), clientBudget)
+	defer cancel()
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	start := time.Now()
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: mcpfactorysession.ToolSubagent, Arguments: map[string]any{
+		"prompt": "long task", "timeoutMillis": int64(3_600_000),
+	}})
+	if err != nil || result.IsError {
+		t.Fatalf("long MCP call = %#v, %v", result, err)
+	}
+	if elapsed := time.Since(start); elapsed < simulatedWork {
+		t.Fatalf("MCP call returned after %v, before simulated work ended", elapsed)
+	}
+}
 
 type recordedToolCall struct {
 	name      string
@@ -37,7 +95,7 @@ func TestNewValidatesDirectDependencies(t *testing.T) {
 // docs/models/mcp CLI-manifest baselines.
 //
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
-func TestServeStdioUsesSDKProtocolAndRegistersCatalog(t *testing.T) {
+func TestServeStdioUsesSDKProtocolAndRegistersGeneratedCatalog(t *testing.T) {
 	t.Parallel()
 
 	calls := make(chan recordedToolCall, 1)
@@ -76,18 +134,15 @@ func TestServeStdioUsesSDKProtocolAndRegistersCatalog(t *testing.T) {
 		t.Fatalf("ListTools() error = %v", err)
 	}
 	listed := listResult.Tools
-	wantCount := len(mcpfactorysession.DiscoverTools())
+	wantCount := len(mcpgenerated.PrimaryDiscovery())
 	if len(listed) != wantCount {
 		t.Fatalf("tools/list count = %d, want %d", len(listed), wantCount)
 	}
-	assertToolListed(t, listed, mcpfactorysession.ToolListSessions)
-	for _, tool := range listed {
-		if strings.HasPrefix(tool.Name, "you.workflow.") {
-			t.Fatalf("tools/list exposed removed workflow alias %q", tool.Name)
-		}
+	for _, definition := range mcpgenerated.PrimaryDiscovery() {
+		assertToolListed(t, listed, definition.Name)
 	}
 
-	called, err := session.CallTool(ctx, &mcp.CallToolParams{Name: mcpfactorysession.ToolListSessions, Arguments: map[string]any{}})
+	called, err := session.CallTool(ctx, &mcp.CallToolParams{Name: mcpfactorysession.ToolSubagent, Arguments: map[string]any{"prompt": "hello"}})
 	if err != nil {
 		t.Fatalf("CallTool() error = %v", err)
 	}
@@ -99,10 +154,10 @@ func TestServeStdioUsesSDKProtocolAndRegistersCatalog(t *testing.T) {
 		t.Fatalf("tools/call text = %q, want serialized result", content.Text)
 	}
 	call := <-calls
-	if call.name != mcpfactorysession.ToolListSessions || string(call.arguments) != `{}` {
-		t.Fatalf("tool operation call = (%q, %s), want (%q, {})", call.name, call.arguments, mcpfactorysession.ToolListSessions)
+	if call.name != mcpfactorysession.ToolSubagent || !strings.Contains(string(call.arguments), `"prompt":"hello"`) {
+		t.Fatalf("tool operation call = (%q, %s), want %q with prompt", call.name, call.arguments, mcpfactorysession.ToolSubagent)
 	}
-	invalid, err := session.CallTool(ctx, &mcp.CallToolParams{Name: mcpfactorysession.ToolListSessions, Arguments: "invalid"})
+	invalid, err := session.CallTool(ctx, &mcp.CallToolParams{Name: mcpfactorysession.ToolSubagent, Arguments: "invalid"})
 	if err != nil {
 		t.Fatalf("CallTool(invalid input) protocol error = %v", err)
 	}
@@ -151,7 +206,7 @@ func TestSDKProtocolErrors(t *testing.T) {
 		},
 		{
 			request: `{"jsonrpc":"2.0","id":3,"method":"nope"}`,
-			want:    `{"jsonrpc":"2.0","id":3,"error":{"code":0,"message":"JSON RPC not handled: \"nope\" unsupported"}}`,
+			want:    `{"jsonrpc":"2.0","id":3,"error":{"code":-32601,"message":"method not found: \"nope\""}}`,
 		},
 	} {
 		response := runRawRequest(t, server, test.request)
@@ -372,6 +427,11 @@ func scriptedToolOperation(
 }
 
 func runRawRequest(t *testing.T, server *Server, request string) string {
+	_, response := runRawRequestAtVersion(t, server, "2024-11-05", request)
+	return response
+}
+
+func runRawRequestAtVersion(t *testing.T, server *Server, version, request string) (string, string) {
 	t.Helper()
 	inputReader, inputWriter := io.Pipe()
 	outputReader, outputWriter := io.Pipe()
@@ -380,10 +440,12 @@ func runRawRequest(t *testing.T, server *Server, request string) string {
 	done := make(chan error, 1)
 	go func() { done <- server.ServeStdio(ctx, inputReader, outputWriter) }()
 	scanner := bufio.NewScanner(outputReader)
-	_, _ = io.WriteString(inputWriter, `{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`+"\n")
+	initializeRequest := `{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"` + version + `","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
+	_, _ = io.WriteString(inputWriter, initializeRequest+"\n")
 	if !scanner.Scan() {
 		t.Fatalf("read initialize response: %v", scanner.Err())
 	}
+	initializeResponse := scanner.Text()
 	_, _ = io.WriteString(inputWriter, `{"jsonrpc":"2.0","method":"notifications/initialized"}`+"\n"+request+"\n")
 	if !scanner.Scan() {
 		t.Fatalf("read response: %v", scanner.Err())
@@ -393,7 +455,7 @@ func runRawRequest(t *testing.T, server *Server, request string) string {
 	if err := <-done; err != nil {
 		t.Fatalf("ServeStdio() error = %v", err)
 	}
-	return response
+	return initializeResponse, response
 }
 
 func assertToolListed(t *testing.T, tools []*mcp.Tool, name string) {
@@ -404,4 +466,130 @@ func assertToolListed(t *testing.T, tools []*mcp.Tool, name string) {
 		}
 	}
 	t.Fatalf("tools/list missing %q", name)
+}
+
+func TestSkillsMethodsAndResources(t *testing.T) {
+	t.Parallel()
+	entry := SkillEntry{
+		URI:         "skill://operator-settings/SKILL.md",
+		Frontmatter: map[string]any{"name": "operator-settings", "description": "Configure subagents"},
+		Resources:   []SkillResource{{URI: "skill://operator-settings/SKILL.md", Digest: "sha256:abc", Size: 42}},
+	}
+	server, err := New(Options{
+		ToolOperation: scriptedToolOperation(nil, nil),
+		Skills:        []SkillEntry{entry},
+		Resources: []ResourceRegistration{{
+			Resource: &mcp.Resource{URI: "you://operator/config", Name: "Operator config", MIMEType: "application/json"},
+			Read: func(_ context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+				return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: req.Params.URI, MIMEType: "application/json", Text: `{}`}}}, nil
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	for _, test := range []struct{ request, contains string }{
+		{`{"jsonrpc":"2.0","id":10,"method":"skills/list","params":{}}`, `"cacheScope":"public"`},
+		{`{"jsonrpc":"2.0","id":11,"method":"skills/get","params":{"uri":"skill://operator-settings/SKILL.md"}}`, `"name":"operator-settings"`},
+		{`{"jsonrpc":"2.0","id":12,"method":"resources/list","params":{}}`, `you://operator/config`},
+		{`{"jsonrpc":"2.0","id":14,"method":"resources/read","params":{"uri":"you://operator/config"}}`, `"text":"{}"`},
+	} {
+		response := runRawRequest(t, server, test.request)
+		if !strings.Contains(response, test.contains) {
+			t.Fatalf("response = %s, want substring %q", response, test.contains)
+		}
+	}
+	list := runRawRequest(t, server, `{"jsonrpc":"2.0","id":15,"method":"skills/list","params":{}}`)
+	if !strings.Contains(list, `"ttlMs":300000`) || !strings.Contains(list, `"resultType":"complete"`) {
+		t.Fatalf("skills/list result = %s, want complete result with ttlMs 300000", list)
+	}
+	missing := runRawRequest(t, server, `{"jsonrpc":"2.0","id":13,"method":"skills/get","params":{"uri":"skill://missing/SKILL.md"}}`)
+	if !strings.Contains(missing, `"code":-32602`) {
+		t.Fatalf("unknown skills/get response = %s, want invalid params", missing)
+	}
+}
+
+func TestSkillsCapabilityAdvertisedFor2026Protocol(t *testing.T) {
+	t.Parallel()
+	server, err := New(Options{
+		ToolOperation: scriptedToolOperation(nil, nil),
+		Skills: []SkillEntry{{
+			URI: "skill://test/SKILL.md", Frontmatter: map[string]any{"name": "test", "description": "Test skill"}, Resources: "dynamic",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	initialize, _ := runRawRequestAtVersion(t, server, "2026-07-28", `{"jsonrpc":"2.0","id":21,"method":"ping"}`)
+	if !strings.Contains(initialize, skillsExtension) {
+		t.Fatalf("initialize response = %s, want skills extension declaration", initialize)
+	}
+	discover, _ := runRawRequestAtVersion(t, server, "2026-07-28", `{"jsonrpc":"2.0","id":22,"method":"server/discover","params":{}}`)
+	if !strings.Contains(discover, skillsExtension) {
+		t.Fatalf("server/discover response = %s, want skills extension declaration", discover)
+	}
+}
+
+func TestSkillsValidationAndPagination(t *testing.T) {
+	t.Parallel()
+
+	valid := SkillEntry{
+		URI:         "skill://valid/SKILL.md",
+		Frontmatter: map[string]any{"name": "valid", "description": "Valid skill"},
+		Resources:   []SkillResource{{URI: "skill://valid/SKILL.md", Digest: "sha256:abc", Size: 3}},
+	}
+	tests := []struct {
+		name    string
+		entries []SkillEntry
+	}{
+		{name: "missing fields", entries: []SkillEntry{{}}},
+		{name: "missing name", entries: []SkillEntry{{URI: valid.URI, Frontmatter: map[string]any{"description": "x"}, Resources: "dynamic"}}},
+		{name: "missing description", entries: []SkillEntry{{URI: valid.URI, Frontmatter: map[string]any{"name": "x"}, Resources: "dynamic"}}},
+		{name: "unsupported dynamic marker", entries: []SkillEntry{{URI: valid.URI, Frontmatter: valid.Frontmatter, Resources: "other"}}},
+		{name: "empty manifest", entries: []SkillEntry{{URI: valid.URI, Frontmatter: valid.Frontmatter, Resources: []SkillResource{}}}},
+		{name: "duplicate URI", entries: []SkillEntry{valid, valid}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := New(Options{ToolOperation: scriptedToolOperation(nil, nil), Skills: test.entries}); err == nil {
+				t.Fatal("New() error = nil, want invalid skill registration error")
+			}
+		})
+	}
+
+	entries := make([]SkillEntry, skillPageSize+1)
+	for i := range entries {
+		entries[i] = SkillEntry{
+			URI:         "skill://valid/SKILL.md",
+			Frontmatter: valid.Frontmatter,
+			Resources:   "dynamic",
+		}
+	}
+	first, err := makeListSkillsResult(entries, nil)
+	if err != nil || len(first.Skills) != skillPageSize || first.NextCursor != strconv.Itoa(skillPageSize) {
+		t.Fatalf("first page = (%d skills, cursor %q), %v", len(first.Skills), first.NextCursor, err)
+	}
+	last, err := makeListSkillsResult(entries, &listSkillsParams{Cursor: first.NextCursor})
+	if err != nil || len(last.Skills) != 1 || last.NextCursor != "" {
+		t.Fatalf("last page = (%d skills, cursor %q), %v", len(last.Skills), last.NextCursor, err)
+	}
+	for _, cursor := range []string{"not-a-number", "-1", "102"} {
+		if _, err := makeListSkillsResult(entries, &listSkillsParams{Cursor: cursor}); err == nil {
+			t.Errorf("makeListSkillsResult(cursor %q) error = nil", cursor)
+		}
+	}
+}
+
+func TestServeValidatesServerAndTransport(t *testing.T) {
+	t.Parallel()
+	if err := (*Server)(nil).Serve(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "server is required") {
+		t.Fatalf("Serve(nil server) error = %v", err)
+	}
+	server, err := New(Options{ToolOperation: scriptedToolOperation(nil, nil)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := server.Serve(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "transport is required") {
+		t.Fatalf("Serve(nil transport) error = %v", err)
+	}
 }

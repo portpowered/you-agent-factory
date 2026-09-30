@@ -2,6 +2,7 @@ BINARY_NAME := you
 CMD_PATH    := ./cmd/factory/
 BIN_DIR     := bin
 GO          ?= go
+PYTHON      ?= python
 INSTALL_DIR = $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
 NPM         ?= npm
 NODE        ?= node
@@ -284,8 +285,9 @@ endef
 .PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes verify test-ui-coverage
 
 .PHONY: backend-dependency-graph
+.PHONY: architecture
 
-.PHONY: generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
+.PHONY: generate-api generate-operator-config-schema operator-config-schema-check generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
 .PHONY: interfaces-api-bundle interfaces-go interfaces-contracts interfaces-ui-openapi interfaces-ui-client interfaces-ui-emulator interfaces-ui interfaces-all
 
 .PHONY: wire-smoke api-smoke api-package-pack-smoke api-package-verify packaged-factory-package-smoke packaged-factory-package-verify packaged-factory-package-script-test packaged-factory-package-pack-check packaged-factory-package-candidate-dry-run packaged-factory-package-consumer-smoke model-provider-package-smoke model-provider-package-verify model-provider-reference-input-smoke
@@ -355,7 +357,13 @@ install:
 bundle-api:
 	$(NODE) scripts/run-quiet-api-command.js bundle:rest ./api/openapi-main.yaml ./api/openapi.yaml
 
-generate-api: bundle-api generate-go-api generate-ui-api
+generate-api: bundle-api generate-go-api generate-ui-api generate-operator-config-schema
+
+generate-operator-config-schema: bundle-api
+	$(PYTHON) scripts/generate-operator-config-schema.py
+
+operator-config-schema-check:
+	$(PYTHON) scripts/generate-operator-config-schema.py --check
 
 generate-go-api: generate-go-server-api generate-go-client-api
 
@@ -409,6 +417,7 @@ api-smoke:
 	node scripts/run-quiet-api-command.js validate:main ./api/openapi-main.yaml
 	$(MAKE) generate-api
 	$(MAKE) generate-api
+	$(MAKE) operator-config-schema-check
 	node scripts/check-api-generated-drift.js
 	$(GO) test ./pkg/transports/http/contracttests -run TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/transport/http/server -run TestGeneratedClientAndServerSchemaStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -542,7 +551,7 @@ readme-check:
 test: test-unit test-ci-workflows
 
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/ci/backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-visualizations-workflow.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/ci/backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -966,6 +975,11 @@ backend-size:
 
 backend-dependency-graph:
 	$(GO) run ./cmd/backenddependencygraph -root . -go $(GO) -output $(BACKEND_DEPENDENCY_GRAPH_DOT) -svg-output $(BACKEND_DEPENDENCY_GRAPH_SVG)
+
+# Generated GitHub-renderable architecture pages; coverage inputs are optional
+# locally and required by the CI publisher after both measured lanes pass.
+architecture:
+	$(GO) run ./cmd/backendvisualizations -root . -go $(GO) -output-dir docs/architecture/visualizations $(if $(BACKEND_VIS_UNIT_SUMMARY),-unit-summary $(BACKEND_VIS_UNIT_SUMMARY),) $(if $(BACKEND_VIS_FUNCTIONAL_SUMMARY),-functional-summary $(BACKEND_VIS_FUNCTIONAL_SUMMARY),) $(if $(BACKEND_VIS_SOURCE_COMMIT),-source-commit $(BACKEND_VIS_SOURCE_COMMIT),) $(if $(BACKEND_VIS_REQUIRE_COVERAGE),-require-coverage,)
 
 pkg-maint:
 	$(call run_lint_checker,./cmd/pkgmaintcheck,-root "$(PACKAGE_MAINT_ROOT)")

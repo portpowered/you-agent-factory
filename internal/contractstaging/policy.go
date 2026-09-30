@@ -42,7 +42,7 @@ var (
 		{Source: CanonicalOpenAPIPath, Target: StagedOpenAPIPath},
 		{Source: "contracts/cli/commands.json", Target: "packages/api/generated/cli/commands.json"},
 		{Source: "contracts/cli/command-manifest.schema.json", Target: "packages/api/generated/cli/command-manifest.schema.json"},
-		{Source: "contracts/testdata/baseline/mcp-tools.json", Target: "packages/api/generated/mcp/tools.json"},
+		{Source: "contracts/mcp/manifest.json", Target: "packages/api/generated/mcp/manifest.json"},
 		{Source: "contracts/config/you-config.schema.json", Target: "packages/api/generated/schemas/you-config.schema.json"},
 		{Source: "contracts/config/mock-workers.schema.json", Target: "packages/api/generated/schemas/mock-workers.schema.json"},
 		{Source: "contracts/javascript/runtime-api.json", Target: "packages/api/generated/javascript/runtime-api.json"},

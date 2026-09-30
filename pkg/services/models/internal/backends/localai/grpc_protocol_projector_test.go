@@ -279,8 +279,10 @@ func TestPinnedGRPCHostNegotiatorPropagatesDeadlineToBlockedLoadModel(t *testing
 		t.Fatalf("listen for controlled LocalAI peer: %v", err)
 	}
 	backend := &blockedLoadModelBackend{
-		health: make(chan time.Time, 1), loadModel: make(chan time.Time, 1),
-		cancelled: make(chan time.Time, 1),
+		health:     make(chan time.Time, 1),
+		loadModel:  make(chan time.Time, 1),
+		cancelled:  make(chan time.Time, 1),
+		clientDone: make(chan struct{}),
 	}
 	server := grpcgo.NewServer()
 	server.RegisterService(&localAIBackendServiceDesc, backend)
@@ -299,6 +301,10 @@ func TestPinnedGRPCHostNegotiatorPropagatesDeadlineToBlockedLoadModel(t *testing
 	const readinessBudget = 150 * time.Millisecond
 	ctx, cancel := context.WithTimeout(context.Background(), readinessBudget)
 	defer cancel()
+	go func() {
+		<-ctx.Done()
+		close(backend.clientDone)
+	}()
 	deadlineAt, _ := ctx.Deadline()
 	modelPath := filepath.Join(t.TempDir(), "fixture.gguf")
 	negotiator := NewPinnedGRPCHostProtocolNegotiator(platformgrpc.NetworkDialer{})
@@ -404,9 +410,10 @@ func awaitWitnessSignal[T any](
 }
 
 type blockedLoadModelBackend struct {
-	health    chan time.Time
-	loadModel chan time.Time
-	cancelled chan time.Time
+	health     chan time.Time
+	loadModel  chan time.Time
+	cancelled  chan time.Time
+	clientDone chan struct{}
 }
 
 func (backend *blockedLoadModelBackend) Health(context.Context, *HealthMessage) (*Reply, error) {
@@ -418,6 +425,8 @@ func (backend *blockedLoadModelBackend) LoadModel(ctx context.Context, _ *ModelO
 	backend.loadModel <- time.Now()
 	<-ctx.Done()
 	backend.cancelled <- time.Now()
+	// Keep the peer from winning the race with the client's deadline.
+	<-backend.clientDone
 	return nil, status.Error(codes.Canceled, "controlled LoadModel cancellation")
 }
 

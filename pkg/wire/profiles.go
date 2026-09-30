@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -586,7 +587,13 @@ type mcpServerBuilder func(
 // protocol stdio package receives only the resulting inert server and caller
 // streams; it does not construct Factory Sessions, Recordings, or workflow
 // services while an opening is being selected.
-func provideMCPServerBuilder(workingDirectory platformfilesystem.WorkingDirectory) mcpServerBuilder {
+func provideMCPServerBuilder(
+	workingDirectory platformfilesystem.WorkingDirectory,
+	settings operatorsettings.Service,
+	providerService providers.Service,
+	settingsFiles operatorsettings.FileSystem,
+	homeDirectory factorysessions.HomeDirectoryResolver,
+) mcpServerBuilder {
 	return func(
 		projectRoot string,
 		recordingsService recordings.Service,
@@ -603,10 +610,24 @@ func provideMCPServerBuilder(workingDirectory platformfilesystem.WorkingDirector
 			}
 		}
 		inspection := factorysessionmcp.RecordingsInspection(recordingsService)
+		skills, resources, err := mcpSubagentContent(settings, providerService, settingsFiles, homeDirectory)
+		if err != nil {
+			return nil, err
+		}
+		toolOperation := factorysessionmcp.BindToolOperation(
+			inspection, prepare, workflowPreview, sessions, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString),
+		)
 		return mcpserver.New(mcpserver.Options{
-			ToolOperation: mcpserver.ToolOperation(factorysessionmcp.BindToolOperation(
-				inspection, prepare, workflowPreview, sessions, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString),
-			)),
+			Skills:    skills,
+			Resources: resources,
+			ToolOperation: func(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
+				if name == factorysessionmcp.ToolSubagent {
+					if err := configureMCPProviders(ctx, settings, providerService, homeDirectory); err != nil {
+						return nil, err
+					}
+				}
+				return toolOperation(ctx, name, raw)
+			},
 		})
 	}
 }

@@ -31,6 +31,7 @@ func TestReportReturnsNonZeroForStructuralDiagnostics(t *testing.T) {
 func TestRunCleanRepositoryIsDeterministic(t *testing.T) {
 	root := testutil.MustRepoRoot(t)
 	paths := []string{
+		discoverygen.AuthoredManifestPath,
 		discoverygen.AuthoredCatalogPath,
 		discoverygen.DiscoveryJSONPath,
 		discoverygen.DiscoveryGoPath,

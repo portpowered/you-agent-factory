@@ -686,7 +686,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	commandFactory := provideCLICommandFactory(commandOperations)
 	stdioOpener := stdio.NewOpener()
-	wireMcpServerBuilder := provideMCPServerBuilder(workingDirectory)
+	wireMcpServerBuilder := provideMCPServerBuilder(workingDirectory, operatorsettingsService, service, fileSystem, homeDirectoryResolver)
 	stdioHandler, err := provideStdioHandler(factorysessionsService, recordingsService, lifecycleRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v67, workflowPreviewOperation)
 	if err != nil {
 		return nil, err

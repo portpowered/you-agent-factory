@@ -466,7 +466,7 @@ func projectProtocolErrorFixtures() ([]ProtocolErrorFixture, error) {
 			Description: "SDK JSON-RPC error for an unsupported MCP method.",
 			RequestLine: `{"jsonrpc":"2.0","id":3,"method":"nope"}`,
 			JSONRPCResponse: json.RawMessage(
-				`{"jsonrpc":"2.0","id":3,"error":{"code":0,"message":"JSON RPC not handled: \"nope\" unsupported"}}`,
+				`{"jsonrpc":"2.0","id":3,"error":{"code":-32601,"message":"method not found: \"nope\""}}`,
 			),
 		},
 	}

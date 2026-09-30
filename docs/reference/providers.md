@@ -418,8 +418,9 @@ you run --factory ./test.workflow.js --skip-permissions
 JavaScript receives the structured child result. Use `you session show` for
 Factory Session status and summary. Use `you metrics --session SESSION_ID --group-by provider`
 for provider aggregates. Use the REST
-`GET /factory-sessions/SESSION_ID/dispatches` or MCP
-`you.factory_session.list_dispatches` read for exact dispatch records. Use
+`GET /factory-sessions/SESSION_ID/dispatches` read for exact dispatch records.
+MCP exposes `you.subagent` for one-shot invocation, not Factory Session
+inspection. Use
 `you worker-sessions list --work-id WORK_ID` only for Work-specific drill-down.
 See `you docs javascript-workflows` for the complete host API and lifecycle
 contract.

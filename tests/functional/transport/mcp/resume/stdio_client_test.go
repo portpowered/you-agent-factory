@@ -9,8 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 )
 
 type stdioMCPClient struct {
@@ -181,20 +179,4 @@ func toolNamesFromListResult(t *testing.T, result map[string]any) []string {
 		names = append(names, name)
 	}
 	return names
-}
-
-func assertInstallSmokeInitialize(t *testing.T, client *stdioMCPClient) {
-	t.Helper()
-	initResult := client.call(t, "initialize", map[string]any{
-		"protocolVersion": "2024-11-05",
-		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "install-smoke", "version": "test"},
-	})
-	if initResult.Error != nil {
-		t.Fatalf("initialize error = %#v", initResult.Error)
-	}
-	protocolVersion, _ := initResult.Result["protocolVersion"].(string)
-	if protocolVersion != "2024-11-05" {
-		t.Fatalf("protocolVersion = %q, want 2024-11-05", protocolVersion)
-	}
 }

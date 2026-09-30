@@ -165,15 +165,15 @@ dynamically constructed argument object cannot bypass it.
 The current canonical operator story is intentionally bounded:
 
 - Source validation before execution belongs to the canonical Factory preview
-  contract (`POST /factories/preview`) or MCP
-  `you.factory_session.validate_source`.
+  contract (`POST /factories/preview`). MCP exposes subagent invocation, not
+  source validation for general JavaScript execution.
 - Durable JavaScript execution inspection belongs to `FactorySession`,
   `Dispatch`, `FactoryArtifact`, and `FactoryEvent` reads across CLI, API,
-  dashboard, and MCP-compatible docs.
+  and dashboard surfaces. MCP does not expose those session inspection tools.
 - Portable JavaScript recording resume is not supported. See `you docs
   record-replay` for the supported Factory Event resume path and portable
-  recording limits. Broader live-provider bridge parity and broader MCP host
-  parity remain follow-up scope for the current shipped session model.
+  recording limits. The MCP server exposes one subagent invocation tool and
+  configuration/provider resources.
 
 ## Related Topics
 

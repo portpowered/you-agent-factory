@@ -6,8 +6,9 @@ doc-id: agent-factory/guides/mcp
 
 # MCP Host Setup
 
-Use this guide to install `you` in an MCP host, run a subagent, and inspect
-Factory Sessions. `you docs mcp` is the packaged MCP setup topic.
+Use this guide to install `you` in an MCP host, run a subagent, inspect
+Factory Sessions, and discover operator configuration and providers.
+`you docs mcp` is the packaged MCP setup topic.
 
 ## Start The Stdio Server
 
@@ -104,6 +105,31 @@ longer than `timeoutMillis` plus cleanup time. Short probes can use a shorter
 Workspace edits may have occurred. Inspect the workspace before retrying.
 After inspection, choose another configured model or a longer timeout.
 
+## Discover Configuration And Providers
+
+The server publishes the `subagent-configuration` skill through the MCP Skills
+extension. A supporting host can call `skills/list` and `skills/get`, then
+read `skill://subagent-configuration/SKILL.md` with `resources/read`. The skill
+explains provider names, operator defaults, and custom ACP setup.
+
+Use `resources/list` to discover these resources:
+
+| Resource URI | Content |
+|--------------|---------|
+| `skill://subagent-configuration/SKILL.md` | Subagent configuration instructions |
+| `you://operator/config/schema` | JSON Schema derived from the operator OpenAPI contract |
+| `you://operator/config/current` | Current operator configuration file, or `{}` when absent |
+| `you://providers/catalog` | Current provider names, models, reasoning efforts, and readiness |
+
+The current configuration is read on each request. Its file is
+`~/.you-agent-factory/config.json` on macOS and Linux, or
+`%USERPROFILE%\.you-agent-factory\config.json` on Windows. Keep sensitive
+values from that file out of shared transcripts. The skill describes how to
+modify the file or use the `you` CLI to add a custom provider.
+
+The published MCP manifest in `@you-agent-factory/api/mcp` defines the tools,
+resources, and skill available from the server.
+
 ## Choose A Project Root
 
 Workflow sources resolve from `cwd`. To use a different source root, add
@@ -151,7 +177,8 @@ Work.
 After saving the host configuration:
 
 1. Reload the host and confirm it starts `you server mcp` as a child process.
-2. Discover tools and confirm the canonical `you.factory_session.*` catalog.
+2. Discover tools and confirm the canonical `you.factory_session.*` catalog,
+   the four resources above, and the `subagent-configuration` skill.
 3. Call `you.factory_session.validate_source` for a known source under the
    configured project root.
 4. Call `you.factory_session.start_async` with a unique `requestId` and a
@@ -192,7 +219,8 @@ go test ./tests/functional/smoke -run TestDocsCommandSmoke
 | Symptom or outcome | Action |
 |--------------------|--------|
 | Host cannot start `you` | Use an absolute executable path, confirm it is executable, and keep `server` and `mcp` as separate arguments. |
-| No tools appear | Reload the host, inspect child-process stderr, and confirm stdout is not receiving logs or shell banners. |
+| No tools or resources appear | Reload the host, inspect child-process stderr, and confirm stdout is not receiving logs or shell banners. |
+| Provider is unavailable | Read `you://providers/catalog` for identity and readiness, then check its installation and authentication. |
 | Named workflow or source is not found | Set `cwd` to the project root or pass an explicit `--project-root`; confirm the source exists under a supported source location. |
 | `factory_session.result.not_ready` with `retryable: true` | Keep the same `sessionId` and poll status/result with backoff; do not start duplicate Work. |
 | `factory_session.session.not_found` | Stop polling the bad id and restore the exact `sessionId` returned by start; reconnecting does not create a replacement session. |

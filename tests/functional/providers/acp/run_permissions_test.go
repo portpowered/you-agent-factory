@@ -12,8 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// Isolation: isolated-with-reason - pinned permission wire; each branch must
-// observe its own exact selected permission option on a fresh peer.
+// Isolation: isolated-with-reason - pinned permission wire; both custom ACP
+// branches must select rejection on a fresh peer, even with skipPermissions.
 func TestYouRunMapsSkipPermissionsToSDKGoldenPermissionSelection(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -22,7 +22,7 @@ func TestYouRunMapsSkipPermissionsToSDKGoldenPermissionSelection(t *testing.T) {
 		mode            string
 	}{
 		{name: "default rejects", mode: "permission-reject"},
-		{name: "skipPermissions allows", skipPermissions: true, mode: "permission-allow"},
+		{name: "skipPermissions ignored for custom ACP", skipPermissions: true, mode: "permission-reject"},
 	}
 	for _, test := range tests {
 		test := test

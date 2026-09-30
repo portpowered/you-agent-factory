@@ -7,15 +7,9 @@ import (
 )
 
 func TestMCPResumeSmokeLane_FixtureBackedInstallSmokeRegression(t *testing.T) {
-	service := installSmokeExecutionScript{}
-	projectRoot := writeValidWorkflowFixture(t)
-
-	client, stdinWrite, serveErr := startRunServeSmokeServer(t, service)
+	client, stdinWrite, serveErr := startRunServeSmokeServer(t, installSmokeExecutionScript{})
 	assertInstallSmokeInitialize(t, client)
 	assertInstallSmokeDiscovery(t, client)
-	assertInstallSmokeValidateSuccess(t, client, projectRoot)
-	sessionID := assertInstallSmokeAsyncStart(t, client)
-	assertInstallSmokeRunningPoll(t, client, sessionID)
 	closeRunServeSmokeServer(t, stdinWrite, serveErr)
 }
 

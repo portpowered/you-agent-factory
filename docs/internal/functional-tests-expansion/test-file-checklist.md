@@ -1440,7 +1440,6 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/sessions/root_composition/process_lifecycle_close_test.go`
 - [x] `tests/functional/sessions/root_composition/process_reuse_inert_test.go`
 - [x] `tests/functional/sessions/root_composition/workers_runner_publisher_identity_test.go`
-- [x] `tests/functional/sessions/standalone/fixture_characterization_test.go`
 - [x] `tests/functional/smoke/cli_docs_smoke_test.go`
 - [x] `tests/functional/transport/acp/realclient/pinned_acpx_process_test.go`
 - [x] `tests/functional/transport/acp/realclient/pinned_acpx_test.go`

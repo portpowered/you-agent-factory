@@ -9,7 +9,7 @@
     "catalog": {
       "path": "generated/catalog.json",
       "family": "model-providers",
-      "artifactHash": "bcf6891201c8074a072e28ef3fe7ae94b6955a62823c7cf6bfdc83fad99f3342",
+      "artifactHash": "7f8bcdea6a0b5dd8184bede95e1d3ab8682bac652caacd6d934b59551fc5f7e8",
       "documentation": {
         "formatVersion": "1.0.0",
         "itemId": "catalog",
@@ -27,7 +27,7 @@
           "generated/catalog.json"
         ],
         "visibility": "public",
-        "sourceHash": "bcf6891201c8074a072e28ef3fe7ae94b6955a62823c7cf6bfdc83fad99f3342"
+        "sourceHash": "7f8bcdea6a0b5dd8184bede95e1d3ab8682bac652caacd6d934b59551fc5f7e8"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
