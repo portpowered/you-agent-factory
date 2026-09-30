@@ -17,6 +17,7 @@ import (
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func (s *Service) durableExecution() (durableexecution.Service, error) {
@@ -452,6 +453,7 @@ func canonicalDurableStartRequest(
 		Runtime:           cloneCanonicalRuntimeOptions(request.RuntimeOptions),
 		ProjectRoot:       strings.TrimSpace(request.FolderPath),
 		PersistencePolicy: request.Persistence,
+		MockWorkers:       runtimeSelectionMockWorkers(request.RuntimeSelection),
 	}
 	if legacy.PersistencePolicy == "" {
 		legacy.PersistencePolicy = factorysessions.PersistencePolicyDisabled
@@ -467,6 +469,13 @@ func canonicalDurableStartRequest(
 		}
 	}
 	return legacy
+}
+
+func runtimeSelectionMockWorkers(selection *factorysessions.SessionRuntimeSelection) *workers.MockWorkersConfig {
+	if selection == nil {
+		return nil
+	}
+	return selection.Workers.MockWorkers.Clone()
 }
 
 func canonicalInvocationRequest(

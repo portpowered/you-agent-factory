@@ -6,6 +6,7 @@ import (
 	"errors"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"time"
 )
 
@@ -635,8 +636,9 @@ type StartRequest struct {
 	// ProjectRoot and PersistencePolicy are internal-only selections carried
 	// from the canonical SessionStartRequest. They are never part of the
 	// transport-editable API (json:"-") and preserve legacy behavior when empty.
-	ProjectRoot       string            `json:"-"`
-	PersistencePolicy PersistencePolicy `json:"-"`
+	ProjectRoot       string                     `json:"-"`
+	PersistencePolicy PersistencePolicy          `json:"-"`
+	MockWorkers       *workers.MockWorkersConfig `json:"-"`
 }
 
 // SyncOutcome reports how a sync start wait ended.

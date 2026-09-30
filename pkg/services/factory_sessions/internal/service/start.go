@@ -24,6 +24,9 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 		return factorysessions.SessionStartResult{}, fmt.Errorf("Factory Sessions process root is required")
 	}
 	if request.Mode != factorysessions.SessionOperationModeLive {
+		if request.Mode == factorysessions.SessionOperationModeDurable && request.RuntimeSelection == nil {
+			request = inheritCurrentMockWorkers(request, r.Resolve(factorysessions.DefaultSessionID))
+		}
 		return r.Assembly.Start(ctx, request)
 	}
 	if request.Wait.TimeoutMillis < 0 {
@@ -49,6 +52,24 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 		return value.(factorysessions.SessionStartResult), nil
 	}
 	return r.startLive(ctx, request)
+}
+
+func inheritCurrentMockWorkers(request factorysessions.SessionStartRequest, current *livesession.LiveSession) factorysessions.SessionStartRequest {
+	if current == nil || strings.TrimSpace(request.FolderPath) != strings.TrimSpace(current.FactoryDir) {
+		return request
+	}
+	bound := runtimebinding.SessionStateFrom(current)
+	if bound == nil {
+		return request
+	}
+	mockWorkers := bound.MockWorkersConfig()
+	if mockWorkers == nil {
+		return request
+	}
+	request.RuntimeSelection = &factorysessions.SessionRuntimeSelection{
+		Workers: factorysessions.SessionWorkerSelection{MockWorkers: mockWorkers},
+	}
+	return request
 }
 
 func (r *Root) startLive(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
@@ -91,6 +112,7 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: session runtime state is unavailable")
 	}
 	bindSessionProducts(bound, products, activation, request.Correlation.RequestID, previousControl)
+	bound.SetMockWorkers(selected.RuntimeSelection.Workers.MockWorkers)
 	return liveStartResult(session), nil
 }
 

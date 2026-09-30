@@ -412,6 +412,10 @@ func (e *directChildExecutor) childDispatchIdentity(
 	return e.records.NextChildDispatchIdentity()
 }
 func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) factory.JavaScriptRuntimeHooks {
+	return s.childExecutorHooksForRequest(mode, sessionID, nil)
+}
+
+func (s *JavaScriptRuntimeService) childExecutorHooksForRequest(mode, sessionID string, mockWorkers *workers.MockWorkersConfig) factory.JavaScriptRuntimeHooks {
 	hooks := factory.JavaScriptRuntimeHooks{
 		OnRecord: func(record factory.JavaScriptRuntimeRecord) {
 			s.applyRunningRuntimeRecord(sessionID, record)
@@ -443,6 +447,9 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 			executor.generationID = binding.generationID
 			executor.providerOverride = binding.providerOverride
 			executor.mockWorkers = binding.mockWorkers.Clone()
+			if mockWorkers != nil {
+				executor.mockWorkers = mockWorkers.Clone()
+			}
 			executor.commandRunnerOverride = binding.commandRunnerOverride
 			executor.attemptStarter = binding.attemptStarter
 			executor.publish = binding.publish

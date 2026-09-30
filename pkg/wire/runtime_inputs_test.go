@@ -89,6 +89,18 @@ type workerSessionsObservationGatewayStub struct {
 	observation workersessions.ObservationService
 }
 
+type workerSessionsRuntimeScopeStub struct {
+	factorysessions.Service
+	effectiveID string
+	isDefault   bool
+	requestedID string
+}
+
+func (stub *workerSessionsRuntimeScopeStub) ResolveFactorySessionRuntimeScope(sessionID string) (string, bool, error) {
+	stub.requestedID = sessionID
+	return stub.effectiveID, stub.isDefault, nil
+}
+
 type metricsSessionProjectionReaderStub struct {
 	projection factorysessions.SessionProjection
 	err        error
@@ -200,6 +212,16 @@ func TestWorkerSessionsScopeResolverForwardsObservationCapability(t *testing.T) 
 	}
 	if got := provider.WorkerSessionsObservationForSession("factory-session-1"); got != expected {
 		t.Fatalf("forwarded observation service = %T, want %T", got, expected)
+	}
+}
+
+func TestWorkerSessionsScopeResolverRecognizesExplicitDefaultSessionID(t *testing.T) {
+	const defaultID = "550e8400-e29b-41d4-a716-446655440000"
+	sessions := &workerSessionsRuntimeScopeStub{effectiveID: defaultID, isDefault: true}
+	resolver := newWorkerSessionsFactorySessionScopeResolver(sessions)
+	scope, err := resolver.ResolveWorkerSessionScope(context.Background(), defaultID)
+	if err != nil || scope.EffectiveID != defaultID || !scope.IsDefault || sessions.requestedID != defaultID {
+		t.Fatalf("scope = (%#v, %v), requested = %q; want explicit default UUID", scope, err, sessions.requestedID)
 	}
 }
 

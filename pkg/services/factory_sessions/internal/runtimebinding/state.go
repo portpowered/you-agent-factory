@@ -156,6 +156,8 @@ type SessionState struct {
 	OrderlyStop            func(context.Context) error
 	// Activation retains lifecycle cleanup on the canonical session record.
 	Activation        interface{ Close(context.Context) error }
+	mockWorkersMu     sync.RWMutex
+	mockWorkers       *workers.MockWorkersConfig
 	startRequestMu    sync.RWMutex
 	startRequestID    string
 	controlMu         sync.Mutex
@@ -170,6 +172,7 @@ func (s *SessionState) inheritApplicationValues(previous *SessionState) {
 	s.FactoryRuntime = previous.FactoryRuntime
 	s.ModelsScope = previous.ModelsScope
 	s.WorkerSessions = previous.WorkerSessions
+	s.SetMockWorkers(previous.MockWorkersConfig())
 	s.Logger = previous.Logger
 	s.Reader = previous.Reader
 	s.Projections = previous.Projections
@@ -182,6 +185,25 @@ func (s *SessionState) inheritApplicationValues(previous *SessionState) {
 		s.ResumeRecoveryMetadata = &metadata
 	}
 	s.OrderlyStop = previous.OrderlyStop
+}
+
+func (s *SessionState) SetMockWorkers(config *workers.MockWorkersConfig) {
+	if s == nil {
+		return
+	}
+	s.mockWorkersMu.Lock()
+	s.mockWorkers = config.Clone()
+	s.mockWorkersMu.Unlock()
+}
+
+func (s *SessionState) MockWorkersConfig() *workers.MockWorkersConfig {
+	if s == nil {
+		return nil
+	}
+	s.mockWorkersMu.RLock()
+	config := s.mockWorkers.Clone()
+	s.mockWorkersMu.RUnlock()
+	return config
 }
 
 func (s *SessionState) SetStartRequestID(requestID string) {

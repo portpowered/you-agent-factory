@@ -38,6 +38,7 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 		EventConsumer:     req.EventConsumer,
 		ProjectRoot:       strings.TrimSpace(req.ProjectRoot),
 		PersistencePolicy: req.PersistencePolicy,
+		MockWorkers:       req.MockWorkers.Clone(),
 	}
 	if req.Runtime != nil {
 		runtime := *req.Runtime

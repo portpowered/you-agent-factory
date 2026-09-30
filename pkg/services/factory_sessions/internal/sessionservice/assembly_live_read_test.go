@@ -80,6 +80,20 @@ func TestAssemblyWorkerSessionsObservationUsesSelectedSession(t *testing.T) {
 	}
 }
 
+func TestAssemblyRuntimeScopeRecognizesExplicitDefaultSessionID(t *testing.T) {
+	state := newWorkResolverSessionState()
+	assembly := &Assembly{state: state, registry: state.Registry()}
+	const defaultID = "550e8400-e29b-41d4-a716-446655440000"
+	assembly.registry.Upsert(&livesession.LiveSession{ID: defaultID, IsDefault: true}, true)
+
+	for _, selector := range []string{factorysessions.DefaultSessionID, defaultID} {
+		gotID, isDefault, err := assembly.ResolveFactorySessionRuntimeScope(selector)
+		if err != nil || gotID != defaultID || !isDefault {
+			t.Fatalf("scope for %q = (%q, %t, %v), want (%q, true, nil)", selector, gotID, isDefault, err, defaultID)
+		}
+	}
+}
+
 type projectionOwnerStub struct {
 	status string
 	cfg    *factorydefinitions.FactoryConfig

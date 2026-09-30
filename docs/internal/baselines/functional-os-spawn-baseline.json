@@ -85,8 +85,8 @@
       "packagePath": "tests/functional/transport/mcp/stdio",
       "count": 2,
       "siteIds": [
-        "OSSPAWN-tests-functional-transport-mcp-stdio-subagent-acp-permissions-test-TestMCPSubagentCustomACPDoesNotSkipPermission-01",
-        "OSSPAWN-tests-functional-transport-mcp-stdio-subagent-acp-permissions-test-TestMCPSubagentCustomACPDoesNotSkipPermission-02"
+        "OSSPAWN-tests-functional-transport-mcp-stdio-subagent-acp-permissions-test-TestMCPSubagentCustomACPHandlesPermissionRequest-01",
+        "OSSPAWN-tests-functional-transport-mcp-stdio-subagent-acp-permissions-test-TestMCPSubagentCustomACPHandlesPermissionRequest-02"
       ]
     },
     {

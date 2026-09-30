@@ -859,7 +859,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 		Policy:         policyResolution.Policy,
 		Agents:         resolved.Agents,
 		WorkerSettings: s.workerSettings,
-	}, s.childExecutorHooks(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID))
+	}, s.childExecutorHooksForRequest(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID, normalized.MockWorkers))
 }
 
 func workflowRunContext(parent context.Context, policy factory.JavaScriptPolicy) (context.Context, context.CancelFunc) {

@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -124,7 +123,7 @@ func runFSCP03DurableIdentityScenario(t *testing.T) {
 	}
 	support.CleanupProcess(t, process)
 	fscp03ExecuteHelp(t, process, factoryDir, home)
-	canonical := openFSCP03Execution(t, process)
+	canonical := openFSCP03Execution(t, process.FactorySessions())
 	selections := fscp03RuntimeSelections(factoryDir, home)
 
 	runFSCP03SequentialDurableIdentity(t, canonical, selections)
@@ -147,7 +146,7 @@ func runFSCP03DurableControlScenario(t *testing.T) {
 	}
 	support.CleanupProcess(t, process)
 	fscp03ExecuteHelp(t, process, factoryDir, home)
-	canonical := openFSCP03Execution(t, process)
+	canonical := openFSCP03Execution(t, process.FactorySessions())
 	selections := fscp03RuntimeSelections(factoryDir, home)
 
 	runFSCP03Cancel(t, canonical, selections, controlRunner)
@@ -306,9 +305,8 @@ func fscp03ExecuteHelp(t *testing.T, process fscp03Process, factoryDir, home str
 	}
 }
 
-func openFSCP03Execution(t *testing.T, process *initializerapplication.Process) factorysessions.Service {
+func openFSCP03Execution(t *testing.T, capability interface{ FactorySessions() any }) factorysessions.Service {
 	t.Helper()
-	capability := process.FactorySessions()
 	if capability == nil {
 		t.Fatal("root process returned no FactorySessions capability")
 	}

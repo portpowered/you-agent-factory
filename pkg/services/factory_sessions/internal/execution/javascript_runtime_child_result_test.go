@@ -103,6 +103,23 @@ func TestLiveChildWithoutWorkersExecutionFailsWithChildSessionID(t *testing.T) {
 	}
 }
 
+func TestDurableChildMockWorkersAreSelectedPerRequest(t *testing.T) {
+	service := &JavaScriptRuntimeService{projectRoot: "/project", childValues: childTestValues{}}
+	service.SetWorkerExecution(&recordingWorkerExecution{}, nil, "", "", nil, nil, nil)
+	mocked := workers.NewEmptyMockWorkersConfig()
+	mockedChild := service.childExecutorHooksForRequest(ChildExecutorModeLive, "mocked", mocked).
+		NewChildExecutor("mocked-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*childWorkerExecutor)
+	liveChild := service.childExecutorHooksForRequest(ChildExecutorModeLive, "live", nil).
+		NewChildExecutor("live-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*childWorkerExecutor)
+	if mockedChild.mockWorkers == nil || liveChild.mockWorkers != nil {
+		t.Fatalf("per-request mock selection: mocked = %v, live = %v", mockedChild.mockWorkers, liveChild.mockWorkers)
+	}
+	mockedChild.mockWorkers.MockWorkers = append(mockedChild.mockWorkers.MockWorkers, workers.MockWorkerConfig{ID: "changed"})
+	if len(mocked.MockWorkers) != 0 {
+		t.Fatal("child mutated request mock configuration")
+	}
+}
+
 func newTestChildWorkerExecutor(
 	invoke childExecuteService,
 	sink *childRecordSink,

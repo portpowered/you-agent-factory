@@ -105,7 +105,7 @@ func runFSCP03ConcurrentDurableIdentity(t *testing.T, factoryDir, home string) {
 		t.Fatalf("concurrent root.BuildProcess() error = %v", err)
 	}
 	support.CleanupProcess(t, concurrentProcess)
-	concurrentCanonical := openFSCP03Execution(t, concurrentProcess)
+	concurrentCanonical := openFSCP03Execution(t, concurrentProcess.FactorySessions())
 	selections := fscp03RuntimeSelections(factoryDir, home)
 	runFSCP03ConcurrentStarts(t, concurrentCanonical, selections, barrier)
 	runFSCP03FailedStartRecovery(t, concurrentCanonical, selections, barrier)

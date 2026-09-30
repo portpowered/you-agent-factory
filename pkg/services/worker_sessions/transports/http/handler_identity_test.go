@@ -72,38 +72,35 @@ func assertFailureObservationExecutionFacts(t *testing.T, response factoryapi.Wo
 	}
 }
 
-func TestListWorkerSessionsBySessionIDPreservesRequestedDefaultAlias(t *testing.T) {
+func TestListWorkerSessionsBySessionIDAcceptsDefaultObservationForAliasAndExplicitID(t *testing.T) {
 	resolvedID := "550e8400-e29b-41d4-a716-446655440000"
-	service := &sessionObservationServiceStub{result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
-		WorkerSessionID:  "worker-session-default",
-		FactorySessionID: defaultFactorySessionAlias,
-		WorkIDs:          []string{"work-1"},
-		AttemptID:        "attempt-default",
-		State:            workersessions.StateCompleted,
-		DurationBasis:    workersessions.DurationBasisRecordedTimestamps,
-		Transcript:       workersessions.TranscriptAvailabilityUnavailable,
-	}}}}
-	resolver := &sessionScopeResolverStub{scope: SessionScope{EffectiveID: resolvedID, IsDefault: true}}
-	handler := NewHandler(NewAdapter(service, workServiceStub{}, resolver), zap.NewNop())
-	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest("GET", "/factory-sessions/~default/worker-sessions?workId=work-1", nil)
-
-	handler.ListWorkerSessionsBySessionId(
-		recorder,
-		request,
-		factoryapi.SessionID(defaultFactorySessionAlias),
-		factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work-1"},
-	)
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
-	}
-	var response factoryapi.ListWorkerSessionsResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(response.Sessions) != 1 || response.Sessions[0].FactorySessionId == nil || *response.Sessions[0].FactorySessionId != defaultFactorySessionAlias {
-		t.Fatalf("default alias response = %#v, want one session scoped to %q", response.Sessions, defaultFactorySessionAlias)
+	for _, selector := range []string{defaultFactorySessionAlias, resolvedID} {
+		t.Run(selector, func(t *testing.T) {
+			service := &sessionObservationServiceStub{result: workersessions.ListObservationsResult{Observations: []workersessions.Observation{{
+				WorkerSessionID:  "worker-session-default",
+				FactorySessionID: defaultFactorySessionAlias,
+				WorkIDs:          []string{"work-1"},
+				AttemptID:        "attempt-default",
+				State:            workersessions.StateCompleted,
+				DurationBasis:    workersessions.DurationBasisRecordedTimestamps,
+				Transcript:       workersessions.TranscriptAvailabilityUnavailable,
+			}}}}
+			resolver := &sessionScopeResolverStub{scope: SessionScope{EffectiveID: resolvedID, IsDefault: true}}
+			handler := NewHandler(NewAdapter(service, workServiceStub{}, resolver), zap.NewNop())
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest("GET", "/factory-sessions/"+selector+"/worker-sessions?workId=work-1", nil)
+			handler.ListWorkerSessionsBySessionId(recorder, request, factoryapi.SessionID(selector), factoryapi.ListWorkerSessionsBySessionIdParams{WorkId: "work-1"})
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+			}
+			var response factoryapi.ListWorkerSessionsResponse
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if len(response.Sessions) != 1 || response.Sessions[0].FactorySessionId == nil || *response.Sessions[0].FactorySessionId != selector {
+				t.Fatalf("response = %#v, want one session scoped to %q", response.Sessions, selector)
+			}
+		})
 	}
 }
 

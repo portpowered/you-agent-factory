@@ -1201,6 +1201,7 @@ func cloneStartRequest(req StartRequest) *StartRequest {
 	cloned.Source = cloneStartSource(req.Source)
 	cloned.Args = cloneArgs(req.Args)
 	cloned.RequestedPolicy = cloneArgs(req.RequestedPolicy)
+	cloned.MockWorkers = req.MockWorkers.Clone()
 	if req.Orchestrator != nil {
 		orchestrator := *req.Orchestrator
 		cloned.Orchestrator = &orchestrator
