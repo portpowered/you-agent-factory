@@ -143,7 +143,7 @@ it is not a promise of deterministic content.
 | Planning and implementation | `@you/ralph` | Graph | Plans a request, iterates through every incomplete plan story, and returns only after the durable plan is complete. |
 | Bounded and iterative | `@you/review` | Graph | Produces candidate work and repeats independent review until approval or a bounded failure. |
 | Parallel investigation and selection | `@you/spawn` | JavaScript | Plans an exact number of independent tasks, runs them concurrently, and merges their results into one answer. |
-| Single bounded call | `@you/subagent` | Graph | Runs one bounded subagent and returns its result. |
+| Single bounded call | `@you/subagent` | Graph | Runs one bounded subagent with workspace tools and returns its result. |
 | Parallel investigation and selection | `@you/tournament` | JavaScript | Runs candidates through bounded 1v1 matches, uses a judge to advance each winner, and returns the champion result. |
 | Local media | `@you/tts` | Graph | Converts submitted text to audio with the packaged local text-to-speech model. |
 | Media review | `@you/agy-clip-qa` | Graph | Gates a rendered clip against its shot specification with ANTIGRAVITY and returns a schema-validated pass-or-reroll verdict. |
@@ -752,44 +752,40 @@ you run --named @you/full-flow --no-record --quiet --max-cycles 9 --max-tasks-pe
 
 ### `@you/subagent`
 
-**Purpose and suitable use.** Use `@you/subagent` for one bounded
-worker task that should inspect the submitted request and return a
-self-contained answer in one pass. It is useful for a focused summary,
-explanation, or repository inspection when one worker is enough. It does not
-recursively orchestrate other Factories or represent an ongoing conversational
-agent session; use `goal`, `review`, or a
-planning Factory when the work needs iteration, implementation, or orchestration.
+**Purpose and suitable use.** Use `@you/subagent` for one bounded worker task
+that should inspect the submitted request and return a self-contained answer
+in one pass. It can summarize, inspect, or edit a selected workspace when one
+worker is enough. It does not recursively orchestrate other Factories or
+represent an ongoing conversational agent session; use `goal`, `review`, or a
+planning Factory when the work needs iteration or orchestration.
 
 **Invocation signature.** The live signature is:
 
 ```text
-you run --named @you/subagent <to> [--worker-model <value>] [--worker-provider <value>] [--worker-reasoning-effort <value>]
+you run --named @you/subagent <to> [--worker-model <value>] [--worker-provider <value>] [--worker-reasoning-effort <value>] [--working-root <directory>]
 ```
 
 `<to>` is required and accepts positional, `--to`, or stdin input. The
 optional `--worker-provider` and `--worker-model` flags select the one
 subagent worker's provider and model; `--worker-reasoning-effort` is an
-optional reasoning setting for that worker. Run-level flags such as `--json`,
+optional reasoning setting for that worker. `--working-root` selects the
+worker's directory for repository inspection or edits. Run-level flags such as `--json`,
 `--output`, `--record`, and `--no-record` remain available. `--quiet` cannot be
 combined with `--json` or `--output`.
 
 **Worker roles and provider/model overrides.** The Factory exposes exactly one
-role, `subagent-worker`, an agent worker with a bounded in-process `READ_ONLY`
+role, `subagent-worker`, an agent worker with an in-process `ENABLED`
 tool policy. That policy is not a provider-wide guarantee about shell,
 filesystem, or network behavior. The three `worker-*` flags apply to that role
-and there are no separate planner,
-reviewer, merger, or child-agent overrides. Omit provider or model values to
+and there are no separate planner, reviewer, merger, or child-agent overrides.
+Omit provider or model values to
 use operator defaults. Omit reasoning effort to preserve the selected
-provider's default reasoning setting. These are the only Factory-defined
-provider, model, and reasoning inputs shown by the live help output.
+provider's default reasoning setting.
 
 **Prerequisites and side effects.** A live run needs a configured provider and
-model route for `subagent-worker`. Its Factory-provided workspace tools are
-read-only, while provider-native tools follow the selected provider's own
-permissions. The packaged worker requests `skipPermissions` by default on
-providers that support it. One invocation creates runtime session, Work,
-dispatch, and provider session activity. Normal recording/artifact behavior
-applies unless a
+model route for `subagent-worker`; the worker can inspect and edit its selected
+workspace. One invocation creates runtime session, Work, dispatch, and provider
+session activity, and normal recording/artifact behavior applies unless a
 run-level option such as `--no-record` is supplied. The worker's answer is
 bounded to one pass; a provider or child failure is terminal and does not
 produce a success-shaped primary result. The runtime session and its metadata

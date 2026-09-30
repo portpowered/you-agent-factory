@@ -149,6 +149,7 @@ func runNoSignatureCompatibility(t *testing.T, fixture *namedInvocationFixture) 
 	namedFactoryDir := support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
 	namedFactoryPath := filepath.Join(namedFactoryDir, "factory.json")
 	support.RemoveInvocationSignatureFixture(t, namedFactoryPath)
+	clearGoalWorkerProviderPlaceholders(t, namedFactoryPath)
 	base := []string{"--no-record", "--quiet"}
 	cases := []struct {
 		name  string
@@ -195,6 +196,7 @@ func runEffectiveSignatureParity(t *testing.T, fixture *namedInvocationFixture) 
 	namedFactoryDir := support.CopyFactoryAsNamed(t, factoryDir, scenario.homeDir, customizedNamedGoalFactoryName)
 	namedFactoryPath := filepath.Join(namedFactoryDir, "factory.json")
 	addEffectiveSignatureFixture(t, namedFactoryPath)
+	clearGoalWorkerProviderPlaceholders(t, namedFactoryPath)
 	support.ReplaceGoalWorkstationPrompt(t, namedFactoryPath, "input=${input}|format=${format}|count=${count}|document=${document}|stdin=${body}")
 	documentPath := filepath.Join(scenario.workingDirectory, "story.md")
 	if err := os.WriteFile(documentPath, []byte("factory invocation document"), 0o600); err != nil {
@@ -257,6 +259,7 @@ func runDefaultOnlyInput(t *testing.T, fixture *namedInvocationFixture) {
 			"bindings": []any{map[string]any{"kind": "NAMED"}},
 		}},
 	})
+	clearGoalWorkerProviderPlaceholders(t, factoryPath)
 	support.ReplaceGoalWorkerInstructions(t, factoryPath, "mode=${mode}")
 	support.ReplaceGoalWorkstationPrompt(t, factoryPath, "mode=${mode}")
 

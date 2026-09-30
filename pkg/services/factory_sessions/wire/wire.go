@@ -123,17 +123,16 @@ func NewRuntimeAssembly(
 	return assembly, nil
 }
 
-// NewServiceFromAssembly seals the already-composed owner assembly with the
-// process-scoped opening capability. The wrapper is the only published
-// Factory Sessions root and retains the exact assembly supplied to its peers.
+// NewServiceFromAssembly binds the already-composed owner assembly to the
+// existing process root.
 func NewServiceFromAssembly(
 	assembly RuntimeAssembly,
-	runtimeOpening RuntimeOpeningCapability,
+	root *factorysessionroot.Root,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-) (factorysessions.Service, error) {
+) (*factorysessionroot.Root, error) {
 	service, err := factorysessionroot.NewRootFromAssembly(
 		assembly,
-		runtimeOpening,
+		root,
 		liveChangeCoordinator,
 	)
 	if err != nil {
@@ -190,7 +189,7 @@ func newOwnerServices(
 	if liveChangeCoordinator == nil {
 		return nil, nil, fmt.Errorf("construct Factory Sessions: live-change coordinator is required")
 	}
-	identityService, err := identitywire.NewService(resolveSymlinks, resolveHome, directoryInspection)
+	identityService, err := identitywire.NewService(resolveSymlinks, resolveHome)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -201,26 +200,6 @@ func newOwnerServices(
 	return identityService, responseStreams, nil
 }
 
-// NewDetachedOperations binds the build-first Sessions operation view to the
-// already-composed root. It performs no child construction or lifecycle work.
-
-type detachedOperationsProvider interface {
-	DetachedOperations() factorysessions.DetachedService
-}
-
-func NewDetachedOperations(owner factorysessions.Service) (factorysessions.DetachedService, error) {
-	if provider, ok := owner.(detachedOperationsProvider); ok {
-		if operations := provider.DetachedOperations(); operations != nil {
-			return operations, nil
-		}
-	}
-	return (&factorysessions.DetachedOperations{}).Bind(owner)
-}
-
-// TODO(btrc-p4-sessions-lifecycle-003): remove after application Wire callers
-// use the root-owned detached capability.
-// NewDurableExecution constructs the configured durable execution capability
-// without exposing its implementation package to application Wire.
 func NewDurableExecution(
 	projectRoot string,
 	persistencePolicy factorysessions.PersistencePolicy,
@@ -250,34 +229,5 @@ func NewDurableExecution(
 		workerPresetIDs, workerSettings,
 		recordingWriter, generateSessionID, generateResponseEventID, responseStreams,
 		liveChangeCoordinator,
-	)
-}
-
-// TODO(btrc-p4-sessions-lifecycle-003): remove after application Wire callers
-// use the root-owned detached capability.
-// NewStandaloneExecution constructs the configured standalone execution
-// capability without exposing its implementation package to application Wire.
-func NewStandaloneExecution(
-	provider factorysessions.ExecutionProvider,
-	projectRoot string,
-	stores RuntimePersistenceStoreFactory,
-	fixtureCatalogPath string,
-	childExecutorMode string,
-	execution factorysessionexecution.WorkerExecution,
-	clock factoryruntime.Clock,
-	syncWaits factorysessionexecution.SyncWaitScheduler,
-	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
-	workflows factoryruntime.JavaScriptWorkflows,
-	orchestration factoryruntime.OrchestrationJavaScriptExecution,
-	recordingWriter recordings.PortableRecordingWriter,
-	generateSessionID factorysessions.SessionIDGenerator,
-	fixtureFiles fileeffects.ContractFixtureReader,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-) (durableexecution.Service, error) {
-	return durableexecutionwire.NewStandalone(
-		provider, projectRoot, stores, fixtureCatalogPath, childExecutorMode,
-		execution,
-		clock, syncWaits, checkpointSummaries, workflows, orchestration, workflows,
-		recordingWriter, generateSessionID, fixtureFiles, liveChangeCoordinator,
 	)
 }

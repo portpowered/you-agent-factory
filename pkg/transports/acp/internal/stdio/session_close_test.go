@@ -27,7 +27,7 @@ func TestHandleSessionCloseCommitsBeforeFactoryClose(t *testing.T) {
 	base, session, turn := newActiveBoundControlSession(t, "fs-close-bound")
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	factoryTarget := &fakeFactoryTargetService{closeEntered: make(chan struct{}), closeRelease: make(chan struct{})}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 	env := closeRequestEnvelope(t, 41, session.ID)
 
 	type closeResult struct {
@@ -76,9 +76,16 @@ func TestHandleSessionCloseCommitsBeforeFactoryClose(t *testing.T) {
 	}
 	factoryTarget.mu.Lock()
 	closeCalls := append([]string(nil), factoryTarget.closeCalls...)
+	controlCalls := append([]factorysessions.SessionControlRequest(nil), factoryTarget.controlCalls...)
 	factoryTarget.mu.Unlock()
 	if len(closeCalls) != 1 || closeCalls[0] != "fs-close-bound" {
 		t.Fatalf("CloseFactorySession calls = %#v, want only captured fs-close-bound", closeCalls)
+	}
+	if len(controlCalls) != 2 || controlCalls[0].Operation != factorysessions.SessionControlTerminate || controlCalls[1].Operation != factorysessions.SessionControlClose {
+		t.Fatalf("Factory Sessions controls = %#v, want TERMINATE then CLOSE", controlCalls)
+	}
+	if got := controlCalls[1]; got.SessionID != "fs-close-bound" || got.Control.RequestID != factoryCloseRequestID(request.RequestID) || got.Correlation.RequestID != got.Control.RequestID || got.Control.RequestID == controlCalls[0].Control.RequestID {
+		t.Fatalf("Factory Sessions close control = %#v, want same session and distinct stable close identity", got)
 	}
 
 	closed, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
@@ -103,7 +110,7 @@ func TestHandleSessionCloseCommitsBeforeFactoryClose(t *testing.T) {
 func TestHandleSessionCloseFencesTargetReplacementAfterTurnCompletion(t *testing.T) {
 	base, session, turn := newActiveBoundControlSession(t, "fs-close-target-fence")
 	factoryTarget := &fakeFactoryTargetService{closeEntered: make(chan struct{}), closeRelease: make(chan struct{})}
-	server := New(nil, base, nil, factoryTarget, nil, nil, nil, nil)
+	server := New(nil, base, nil, factoryTarget, nil, nil, nil, nil, nil)
 	type closeResult struct{ err *acpsdk.RequestError }
 	done := make(chan closeResult, 1)
 	go func() {
@@ -166,7 +173,7 @@ func TestHandleSessionCloseUsesCapturedPendingFactorySession(t *testing.T) {
 	}
 	chatSessions := &fakeChatSessionsService{getSessionResult: current}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 
 	result, rpcErr := server.dispatchRequest(context.Background(), closeRequestEnvelope(t, 42, current.Session.ID))
 	if rpcErr != nil {
@@ -190,7 +197,7 @@ func TestHandleSessionCloseUsesCapturedPendingFactorySession(t *testing.T) {
 func TestHandleSessionCloseIsIdempotentAndRejectsPostClosePrompt(t *testing.T) {
 	base, session, _ := newActiveBoundControlSession(t, "fs-close-repeat")
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, base, nil, factoryTarget, nil, nil, nil, nil)
+	server := New(nil, base, nil, factoryTarget, nil, nil, nil, nil, nil)
 
 	for _, requestID := range []int64{43, 44} {
 		result, rpcErr := server.dispatchRequest(context.Background(), closeRequestEnvelope(t, requestID, session.ID))
@@ -232,7 +239,7 @@ func TestHandleSessionCloseRejectsInvalidInputsWithoutFactoryEffects(t *testing.
 		name         string
 		env          envelope.Envelope
 		chatSessions *fakeChatSessionsService
-		factory      factorysessions.TargetExecutionService
+		factory      factorysessions.Service
 		wantCode     int
 		wantGet      bool
 		wantControls int
@@ -287,7 +294,7 @@ func TestHandleSessionCloseRejectsInvalidInputsWithoutFactoryEffects(t *testing.
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := New(nil, test.chatSessions, nil, test.factory, nil, nil, nil, nil)
+			server := New(nil, test.chatSessions, nil, test.factory, nil, nil, nil, nil, nil)
 			_, rpcErr := server.dispatchRequest(context.Background(), test.env)
 			if rpcErr == nil || rpcErr.Code != test.wantCode {
 				t.Fatalf("session/close error = %+v, want code %d", rpcErr, test.wantCode)
@@ -327,7 +334,7 @@ func TestHandleSessionCloseWithoutActiveTurnLeavesLifecycleOpen(t *testing.T) {
 	}
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 
 	_, rpcErr := server.dispatchRequest(context.Background(), closeRequestEnvelope(t, 56, session.ID))
 	if rpcErr == nil || rpcErr.Code != -32602 {
@@ -364,7 +371,7 @@ func TestHandleSessionCloseStaleCaptureCannotReachReplacement(t *testing.T) {
 		requestRelease: release,
 	}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 	env := closeRequestEnvelope(t, 57, session.ID)
 
 	type closeResult struct{ err *acpsdk.RequestError }
@@ -422,7 +429,7 @@ func TestHandleSessionCloseDependencyFailureLeavesLifecycleRetryable(t *testing.
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	failureText := "provider credential at /unsafe/path"
 	factoryTarget := &fakeFactoryTargetService{closeErr: errors.New(failureText)}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 	env := closeRequestEnvelope(t, 59, session.ID)
 
 	_, rpcErr := server.dispatchRequest(context.Background(), env)
@@ -605,7 +612,7 @@ func TestHandleSessionCloseCommittedIntentSafetyCases(t *testing.T) {
 	for index, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			factoryTarget := &fakeFactoryTargetService{}
-			server := New(nil, test.chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+			server := New(nil, test.chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 			result, rpcErr := server.dispatchRequest(context.Background(), closeRequestEnvelope(t, int64(70+index), current.Session.ID))
 			if test.wantCode == 0 {
 				if rpcErr != nil {
@@ -641,7 +648,7 @@ func TestHandleSessionCloseCommittedIntentSafetyCases(t *testing.T) {
 func TestHandleSessionCloseRejectsUncorrelatedRequestIdentityWithoutEffects(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 
 	_, rpcErr := server.handleSessionClose(context.Background(), envelope.Envelope{
 		Params: json.RawMessage(`{"sessionId":"session-close-identity"}`),
@@ -674,7 +681,7 @@ func TestReconcileCanceledCloseAfterBindFailurePreservesCapturedOutcome(t *testi
 		Episode:          chatsessions.TargetEpisode{Number: start.Episode.Number, State: chatsessions.TargetEpisodeStateClosed},
 		MostRecentTurnID: start.Turn.ID,
 	}}
-	server := New(nil, chatSessions, nil, &fakeFactoryTargetService{}, nil, nil, nil, nil)
+	server := New(nil, chatSessions, nil, &fakeFactoryTargetService{}, nil, nil, nil, nil, nil)
 
 	got, ok := server.reconcileCanceledCloseAfterBindFailure(
 		context.Background(), start,
@@ -701,7 +708,7 @@ func TestReconcileCanceledCloseAfterBindFailureRejectsAnythingButCapturedCloseRa
 		Episode:          chatsessions.TargetEpisode{Number: start.Episode.Number, State: chatsessions.TargetEpisodeStateOpen},
 		MostRecentTurnID: start.Turn.ID,
 	}}
-	server := New(nil, chatSessions, nil, &fakeFactoryTargetService{}, nil, nil, nil, nil)
+	server := New(nil, chatSessions, nil, &fakeFactoryTargetService{}, nil, nil, nil, nil, nil)
 
 	for _, test := range []struct {
 		name    string
@@ -720,4 +727,4 @@ func TestReconcileCanceledCloseAfterBindFailureRejectsAnythingButCapturedCloseRa
 	}
 }
 
-var _ factorysessions.TargetExecutionService = (*fakeFactoryTargetService)(nil)
+var _ factorysessions.Service = (*fakeFactoryTargetService)(nil)

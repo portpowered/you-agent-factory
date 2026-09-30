@@ -71,6 +71,13 @@ func testPackagedSubagentReturnsChildResult(t *testing.T, fixture *subagentShare
 		if strings.Contains(invocationResponseJSON(t, response), requestText) {
 			t.Fatalf("invocation JSON echoed submitted request text %q", requestText)
 		}
+		providerInput := string(runner.LastRequest().Stdin)
+		if got := strings.Count(providerInput, requestText); got != 1 {
+			t.Fatalf("provider stdin contains submitted request %d times, want once: %q", got, providerInput)
+		}
+		if strings.Contains(providerInput, "{{ (index .Inputs 0).WorkID }}") {
+			t.Fatalf("provider stdin contains raw WorkID template: %q", providerInput)
+		}
 	})
 
 	t.Run("hermetic named invocation succeeds without listening server", func(t *testing.T) {
@@ -129,7 +136,7 @@ func testPackagedSubagentPropagatesLunaXHighReasoningEffort(t *testing.T, fixtur
 		t.Fatalf("response = %#v, want completed", response)
 	}
 	want := []string{
-		"exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
+		"exec", "--json",
 		"--model", "gpt-5.6-luna",
 		"--config", `model_reasoning_effort="xhigh"`,
 		"-",
@@ -153,7 +160,7 @@ func testPackagedSubagentOmittedReasoningEffortPreservesProviderDefault(t *testi
 		t.Fatalf("response = %#v, want completed", response)
 	}
 	want := []string{
-		"exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
+		"exec", "--json",
 		"--model", "gpt-5.6-luna",
 		"-",
 	}

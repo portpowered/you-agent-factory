@@ -174,7 +174,7 @@ func resolveExecutionFactoryRunner(
 	}
 	if diagnostic := validateExecutionReference(
 		known, normalized, "definition.runner",
-		ExecutionCatalogDiagnosticInvalidRunner, ExecutionCatalogDiagnosticUnknownRunner,
+		ExecutionCatalogDiagnosticInvalidRunner, ExecutionCatalogDiagnosticUnknownRunner, validExecutionIdentity,
 	); diagnostic != nil {
 		return normalized, []ExecutionCatalogDiagnostic{*diagnostic}
 	}
@@ -596,7 +596,7 @@ func validateExecutionWorkstationPolicy(
 	)
 	if diagnostic := validateExecutionReference(
 		references.Runners, result.Runner, "workstations."+result.Name+".runner",
-		ExecutionCatalogDiagnosticInvalidRunner, ExecutionCatalogDiagnosticUnknownRunner,
+		ExecutionCatalogDiagnosticInvalidRunner, ExecutionCatalogDiagnosticUnknownRunner, validExecutionIdentity,
 	); diagnostic != nil {
 		diagnostics = append(diagnostics, *diagnostic)
 	}
@@ -809,7 +809,7 @@ func validateExecutionProvider(value, path string, known map[string]struct{}) *E
 			ExecutionCatalogDiagnosticInvalidProvider, path, value, "provider identity is invalid"))
 	}
 	return validateExecutionReference(known, value, path,
-		ExecutionCatalogDiagnosticInvalidProvider, ExecutionCatalogDiagnosticUnknownProvider)
+		ExecutionCatalogDiagnosticInvalidProvider, ExecutionCatalogDiagnosticUnknownProvider, validExecutionIdentity)
 }
 
 func validateExecutionModel(value, path string, known map[string]struct{}) *ExecutionCatalogDiagnostic {
@@ -821,15 +821,16 @@ func validateExecutionModel(value, path string, known map[string]struct{}) *Exec
 			ExecutionCatalogDiagnosticInvalidModel, path, value, "model identity is invalid"))
 	}
 	return validateExecutionReference(known, value, path,
-		ExecutionCatalogDiagnosticInvalidModel, ExecutionCatalogDiagnosticUnknownModel)
+		ExecutionCatalogDiagnosticInvalidModel, ExecutionCatalogDiagnosticUnknownModel, validExecutionModelIdentity)
 }
 
 func validateExecutionReference(
 	known map[string]struct{}, value, path string,
 	invalidCode, unknownCode ExecutionCatalogDiagnosticCode,
+	validIdentity func(string) bool,
 ) *ExecutionCatalogDiagnostic {
 	trimmed := strings.TrimSpace(value)
-	if trimmed == "" || !validExecutionIdentity(trimmed) {
+	if trimmed == "" || !validIdentity(trimmed) {
 		return pointerExecutionDiagnostic(executionDiagnostic(invalidCode, path, value, "reference identity is invalid"))
 	}
 	if len(known) == 0 {
@@ -854,7 +855,7 @@ func validateExecutionReference(
 
 func knownExecutionRunner(value string) bool {
 	switch normalizeExecutionRunner(value) {
-	case "codex", "claude", "antigravity":
+	case "codex", "claude", "antigravity", "opencode":
 		return true
 	default:
 		return false
@@ -867,6 +868,14 @@ func validExecutionIdentity(value string) bool {
 	trimmed := strings.TrimSpace(value)
 	return trimmed == value && trimmed != "" && executionIdentityPattern.MatchString(trimmed) &&
 		!strings.Contains(trimmed, "..") && !strings.Contains(trimmed, "--")
+}
+
+func validExecutionModelIdentity(value string) bool {
+	provider, model, qualified := strings.Cut(value, "/")
+	if !qualified {
+		return validExecutionIdentity(value)
+	}
+	return validExecutionIdentity(provider) && validExecutionIdentity(model)
 }
 
 func normalizeExecutionRunner(value string) string {

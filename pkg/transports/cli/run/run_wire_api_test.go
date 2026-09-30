@@ -44,10 +44,10 @@ func TestNormalizeWorkerReasoningEffort(t *testing.T) {
 }
 
 func TestOpenRejectsInvalidWorkerReasoningEffortBeforeRuntimeConstruction(t *testing.T) {
-	_, err := Open(
+	err := RunSelected(
 		context.Background(),
 		RunConfig{WorkerReasoningEffort: "turbo"},
-		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), "invalid --worker-reasoning-effort") {
 		t.Fatalf("Open() error = %v, want pre-runtime effort validation", err)

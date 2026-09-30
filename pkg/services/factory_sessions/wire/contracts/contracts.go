@@ -14,7 +14,6 @@ type (
 	CursorPersistenceFileSystem          = roles.CursorPersistenceFileSystem
 	CursorPersistenceTemporaryFile       = roles.CursorPersistenceTemporaryFile
 	CursorPersistenceCreateTemporaryFile = roles.CursorPersistenceCreateTemporaryFile
-	ExecutionOpeningFileSystem           = roles.ExecutionOpeningFileSystem
 	InvocationMetricsRecorder            = roles.InvocationMetricsRecorder
 	RequestPreparation                   = roles.RequestPreparation
 	RuntimePersistenceFileSystem         = roles.RuntimePersistenceFileSystem

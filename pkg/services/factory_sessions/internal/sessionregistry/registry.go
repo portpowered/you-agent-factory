@@ -21,7 +21,6 @@ type Service interface {
 	Count() int
 	IDs() []string
 	DefaultSession() *livesession.LiveSession
-	FindByLogicalSessionKeyID(string) *livesession.LiveSession
 }
 
 // Registry is the synchronized in-memory implementation of the Factory
@@ -156,24 +155,6 @@ func (r *Registry) DefaultSession() *livesession.LiveSession {
 	if len(ids) > 0 {
 		sort.Strings(ids)
 		return r.sessions[ids[0]]
-	}
-	return nil
-}
-
-func (r *Registry) FindByLogicalSessionKeyID(logicalSessionKeyID string) *livesession.LiveSession {
-	if r == nil {
-		return nil
-	}
-	logicalSessionKeyID = strings.TrimSpace(logicalSessionKeyID)
-	if logicalSessionKeyID == "" {
-		return nil
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, session := range r.sessions {
-		if session != nil && logicaltarget.LegacyLiveSessionKeyID(session) == logicalSessionKeyID {
-			return session
-		}
 	}
 	return nil
 }

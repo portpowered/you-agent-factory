@@ -20,6 +20,27 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func TestPinnedGRPCHostProtocolNegotiatorSelectsAudioCPPBackend(t *testing.T) {
+	t.Parallel()
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&Result{Success: true})
+	negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
+	_, err := negotiator.Negotiate(context.Background(), "grpc://127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
+		Configuration: modelseffects.ResolvedHostConfiguration{
+			ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+			Backend:         "localai-audio-cpp", ModelName: "index-tts2.5",
+			ModelPath: "/models/index-tts2_5-orig.gguf",
+			Platform:  models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64", Accelerator: "cuda"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Negotiate audio.cpp: %v", err)
+	}
+	if got := connection.loadRequest.GetOptions(); len(got) != 1 || got[0] != localAIAudioCPPBackendOption {
+		t.Fatalf("audio.cpp LoadModel options = %v, want backend:best", got)
+	}
+}
+
 func TestPinnedGRPCHostProtocolNegotiatorSendsWindowsCPUProjectorPlacementOption(t *testing.T) {
 	t.Parallel()
 
@@ -57,7 +78,7 @@ func assertWindowsCPUProjectorRequest(t *testing.T, request *ModelOptions, model
 	t.Helper()
 	if request.GetModel() != models.BuiltInModelNameLLM || request.GetEmbeddings() ||
 		request.GetModelFile() != modelFile || request.GetMMProj() != mmprojFile ||
-		request.GetModelPath() != filepath.Dir(modelFile) || request.GetNBatch() != localAIModelBatchSize {
+		request.GetModelPath() != filepath.Dir(modelFile) || request.GetNBatch() != localAIModelBatchSize || request.GetThreads() != 4 {
 		t.Fatalf("load request model=%q modelFile=%q mmproj=%q modelPath=%q nBatch=%d options=%v, want unchanged model, paths, directory, and batch size", request.GetModel(), request.GetModelFile(), request.GetMMProj(), request.GetModelPath(), request.GetNBatch(), request.GetOptions())
 	}
 	assertProjectorOption(t, request.GetOptions())
@@ -67,6 +88,7 @@ func assertWindowsCPUProjectorWire(t *testing.T, payload []byte, modelFile, mmpr
 	t.Helper()
 	expected := appendStringField(nil, 1, models.BuiltInModelNameLLM)
 	expected = appendVarintField(expected, 4, localAIModelBatchSize)
+	expected = appendVarintField(expected, 15, 4)
 	expected = appendStringField(expected, 21, modelFile)
 	expected = appendStringField(expected, 41, mmprojFile)
 	expected = appendStringField(expected, 59, filepath.Dir(modelFile))
@@ -91,7 +113,7 @@ func assertWindowsCPUProjectorWire(t *testing.T, payload []byte, modelFile, mmpr
 func assertProjectorOption(t *testing.T, options []string) {
 	t.Helper()
 	if len(options) != 1 {
-		t.Fatalf("projector options = %q, want exactly one option", options)
+		t.Fatalf("projector options = %q, want projector placement only", options)
 	}
 	optionName, optionValue, ok := strings.Cut(options[0], ":")
 	if !ok || optionName != "mmproj_use_gpu" || optionValue != "false" {
@@ -203,11 +225,12 @@ func assertProjectorPlacementRequest(t *testing.T, payload []byte, test projecto
 		decoded.GetModelPath() != filepath.Dir(modelFile) || decoded.GetNBatch() != localAIModelBatchSize {
 		t.Fatalf("%s decoded LoadModel = %#v, want unchanged fields and no projector option", test.name, decoded)
 	}
-	if len(decoded.GetOptions()) != 0 {
-		t.Fatalf("%s decoded LoadModel options = %q, want none", test.name, decoded.GetOptions())
+	wantOptions := []string(nil)
+	if !equalStrings(decoded.GetOptions(), wantOptions) {
+		t.Fatalf("%s decoded LoadModel options = %q, want %q", test.name, decoded.GetOptions(), wantOptions)
 	}
-	if containsWireField(t, payload, 62) {
-		t.Fatalf("%s LoadModel wire unexpectedly contains private field 62: %x", test.name, payload)
+	if containsWireField(t, payload, 62) != (len(wantOptions) > 0) {
+		t.Fatalf("%s LoadModel field 62 presence does not match options: %x", test.name, payload)
 	}
 }
 
@@ -307,10 +330,43 @@ func TestPinnedGRPCHostNegotiatorPropagatesDeadlineToBlockedLoadModel(t *testing
 	if outcome.result.Ready || !errors.Is(outcome.err, context.DeadlineExceeded) {
 		t.Fatalf("Negotiate at the readiness deadline = result %#v, error %v; want not-ready/context.DeadlineExceeded", outcome.result, outcome.err)
 	}
-	if loadModelAt.Before(healthAt) || !loadModelAt.Before(deadlineAt) {
+	if healthAt.After(loadModelAt) || !loadModelAt.Before(deadlineAt) || serverCanceledAt.Before(deadlineAt) {
 		t.Fatalf("witness phase order is invalid: health=%s load_model=%s deadline=%s server_cancel=%s", healthAt, loadModelAt, deadlineAt, serverCanceledAt)
 	}
 	t.Logf("LOCALAI-PROTOCOL-DEADLINE endpoint=%s health=%s load_model=%s peer_deadline=%s server_cancel=%s result=%T ready=false", listener.Addr(), healthAt.UTC().Format(time.RFC3339Nano), loadModelAt.UTC().Format(time.RFC3339Nano), deadlineAt.UTC().Format(time.RFC3339Nano), serverCanceledAt.UTC().Format(time.RFC3339Nano), outcome.err)
+}
+
+func TestPinnedGRPCHostProtocolNegotiatorUsesSelectedArchiveAccelerator(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range []struct {
+		name, accelerator string
+		gpuLayers         int32
+	}{
+		{name: "CPU archive on CUDA host", accelerator: "cpu", gpuLayers: 0},
+		{name: "CUDA archive on CUDA host", accelerator: "cuda", gpuLayers: 99},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			connection := &recordingGRPCConnection{}
+			connection.response, _ = proto.Marshal(&Result{Success: true})
+			negotiator := NewPinnedGRPCHostProtocolNegotiator(recordingGRPCDialer{connection: connection})
+			_, err := negotiator.Negotiate(context.Background(), "grpc://127.0.0.1:50051", modelseffects.HostProtocolNegotiationRequest{
+				Configuration: modelseffects.ResolvedHostConfiguration{
+					ProtocolVersion: modelseffects.PinnedHostProtocolVersion,
+					Backend:         "localai-llamacpp", ModelName: models.BuiltInModelNameEmbed,
+					ModelPath:       "/models/embed.gguf",
+					Platform:        models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64", CUDAAvailable: true},
+					BackendArtifact: modelseffects.BackendArtifactSelection{Accelerator: testCase.accelerator},
+				},
+			})
+			if err != nil {
+				t.Fatalf("negotiate %s: %v", testCase.name, err)
+			}
+			if got := connection.loadRequest.GetNGPULayers(); got != testCase.gpuLayers {
+				t.Fatalf("GPU layers = %d, want %d", got, testCase.gpuLayers)
+			}
+		})
+	}
 }
 
 func awaitProtocolNegotiationOutcome(
@@ -376,4 +432,91 @@ func (backend *blockedLoadModelBackend) LoadModel(ctx context.Context, _ *ModelO
 
 func (*blockedLoadModelBackend) Predict(context.Context, *PredictOptions) (*Reply, error) {
 	return nil, status.Error(codes.Unimplemented, "not used by readiness witness")
+}
+
+func TestPinnedGRPCProtocolClientFailsOnEmptyPredictResponse(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingGRPCConnection{}
+	client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
+	response, err := client.Predict(
+		WithInvocationEndpoint(context.Background(), "127.0.0.1:50051"),
+		PredictRequest{Prompt: "describe"},
+	)
+	if err == nil {
+		t.Fatal("Predict() error = nil, want typed failure for empty response")
+	}
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Predict() error = %v, want typed InvocationFailure", err)
+	}
+	if failure.Class != models.InvocationFailureClassBackendProtocol {
+		t.Fatalf("failure.Class = %v, want BackendProtocol", failure.Class)
+	}
+	if !strings.Contains(failure.Message, "LocalAI Predict response was empty") {
+		t.Fatalf("failure.Message = %q, want it to contain %q", failure.Message, "LocalAI Predict response was empty")
+	}
+	if response.Text != "" {
+		t.Fatalf("Predict() response.Text = %q, want empty", response.Text)
+	}
+}
+
+func TestPinnedGRPCProtocolClientUsesChatDeltaTextWhenLegacyMessageIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&Reply{ChatDeltas: []*ChatDelta{
+		{Content: "generated "}, {Content: "from chat deltas"},
+	}})
+	client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
+	response, err := client.Predict(
+		WithInvocationEndpoint(context.Background(), "127.0.0.1:50051"),
+		PredictRequest{Prompt: "describe"},
+	)
+	if err != nil {
+		t.Fatalf("Predict() error = %v", err)
+	}
+	if response.Text != "generated from chat deltas" {
+		t.Fatalf("Predict() text = %q, want concatenated chat-delta content", response.Text)
+	}
+}
+
+func TestDecodePredictResponseRecordsReplyShape(t *testing.T) {
+	t.Parallel()
+	payload, err := proto.Marshal(&Reply{
+		Message: []byte("text"), Tokens: 7, PromptTokens: 11,
+		Audio: []byte{1, 2, 3}, ChatDeltas: []*ChatDelta{{Content: "private", ReasoningContent: "hidden"}, nil, {ReasoningContent: "think"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := decodePredictResponse(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Text != "text" || response.ReplyBytes != len(payload) || response.MessageBytes != 4 ||
+		response.ChatDeltaCount != 3 || response.ReasoningBytes != 11 || response.GeneratedTokens != 7 || response.PromptTokens != 11 || response.AudioBytes != 3 {
+		t.Fatalf("decoded reply shape = %#v, want wire and field counts", response)
+	}
+}
+
+func TestDecodePredictResponseReasoningOnly(t *testing.T) {
+	t.Parallel()
+	payload, err := proto.Marshal(&Reply{
+		Tokens: 256,
+		ChatDeltas: []*ChatDelta{
+			{ReasoningContent: "private reasoning"},
+			{ReasoningContent: "more reasoning"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := decodePredictResponse(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Text != "" || response.ReasoningBytes != len("private reasoning")+len("more reasoning") || response.GeneratedTokens != 256 {
+		t.Fatalf("decoded reasoning-only reply shape = %#v", response)
+	}
 }

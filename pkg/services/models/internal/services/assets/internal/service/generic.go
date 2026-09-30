@@ -406,18 +406,7 @@ func (s *service) genericModelRequirements(
 	explicit []models.AssetRequirement,
 ) ([]genericArtifact, error) {
 	if isBuiltInGemmaLLMSource(source) {
-		return s.genericArtifactsFromRequirements(source, []models.AssetRequirement{
-			{
-				Name:   builtInGemmaLLMModelName,
-				Bytes:  builtInGemmaLLMModelBytes,
-				SHA256: builtInGemmaLLMModelSHA256,
-			},
-			{
-				Name:   builtInGemmaLLMProjectorName,
-				Bytes:  builtInGemmaLLMProjectorBytes,
-				SHA256: builtInGemmaLLMProjectorSHA256,
-			},
-		}), nil
+		return s.genericArtifactsFromRequirements(source, builtInGemmaLLMRequirements()), nil
 	}
 	if len(explicit) > 0 {
 		return s.genericArtifactsFromRequirements(source, explicit), nil
@@ -436,6 +425,13 @@ func (s *service) genericModelRequirements(
 		return nil, err
 	}
 	return nil, nil
+}
+
+func builtInGemmaLLMRequirements() []models.AssetRequirement {
+	return []models.AssetRequirement{
+		{Name: builtInGemmaLLMModelName, Bytes: builtInGemmaLLMModelBytes, SHA256: builtInGemmaLLMModelSHA256},
+		{Name: builtInGemmaLLMProjectorName, Bytes: builtInGemmaLLMProjectorBytes, SHA256: builtInGemmaLLMProjectorSHA256},
+	}
 }
 
 func isBuiltInGemmaLLMSource(source genericSource) bool {
@@ -914,33 +910,32 @@ func (s *service) resolveGenericSource(
 	raw string,
 ) (genericSource, error) {
 	raw = strings.TrimSpace(raw)
-	if !isGenericSourceReference(raw) {
-		canonical := strings.ToLower(raw)
-		definition, builtIn := (models.BuiltInCatalog{}).ModelDefinitionFor(canonical)
-		overlayName, overlay, hasOverlay := genericOverlay(scope.OperatorModels, canonical)
-		if hasOverlay {
-			if !builtIn {
-				definition = models.ModelDefinition{Name: canonical}
-			}
-			if overlay.Source != nil {
-				definition.Source = strings.TrimSpace(*overlay.Source)
-			}
-			if strings.TrimSpace(definition.Source) == "" {
-				return genericSource{}, models.ModelConfigurationFailure{
-					ModelName: overlayName, Field: "source", Message: "is required",
-				}
-			}
-			raw = definition.Source
-		} else if builtIn {
-			raw = definition.Source
-		} else {
-			return genericSource{}, fmt.Errorf("%w: model name is unknown", models.ErrAssetSourceMissing)
+	canonical := strings.ToLower(raw)
+	definition, builtIn := (models.BuiltInCatalog{}).ModelDefinitionFor(canonical)
+	overlayName, overlay, hasOverlay := genericOverlay(scope.OperatorModels, canonical)
+	if hasOverlay {
+		if !builtIn {
+			definition = models.ModelDefinition{Name: canonical}
 		}
+		if overlay.Source != nil {
+			definition.Source = strings.TrimSpace(*overlay.Source)
+		}
+		if strings.TrimSpace(definition.Source) == "" {
+			return genericSource{}, models.ModelConfigurationFailure{
+				ModelName: overlayName, Field: "source", Message: "is required",
+			}
+		}
+		raw = definition.Source
+	} else if builtIn {
+		raw = definition.Source
+	} else if !isGenericSourceReference(raw) {
+		return genericSource{}, fmt.Errorf("%w: model name is unknown", models.ErrAssetSourceMissing)
 	}
 	source, err := parseGenericSource(raw)
 	if err != nil {
 		return genericSource{}, err
 	}
+	source.modelName = canonical
 	if source.kind != genericSourceHF || isImmutableGenericRevision(source.revision) {
 		return source, nil
 	}

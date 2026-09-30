@@ -299,7 +299,7 @@ func TestResolveJoinedBackendArtifactReceivesOneDetachedConfiguration(t *testing
 	}
 	var observed modelseffects.ResolvedHostConfiguration
 	root := &Root{
-		resolveBackendArtifact: func(_ context.Context, request modelseffects.ResolvedHostConfiguration) (modelseffects.BackendArtifactSelection, error) {
+		resolveBackendArtifact: func(_ context.Context, request modelseffects.ResolvedHostConfiguration, _ bool) (modelseffects.BackendArtifactSelection, error) {
 			observed = request.Clone()
 			request.ModelFiles[0] = "mutated-by-selector"
 			request.Source.NameOrURI = "mutated-by-selector"
@@ -309,7 +309,7 @@ func TestResolveJoinedBackendArtifactReceivesOneDetachedConfiguration(t *testing
 			}, nil
 		},
 	}
-	selection, err := root.resolveJoinedBackendArtifact(context.Background(), configuration)
+	selection, err := root.resolveJoinedBackendArtifact(context.Background(), configuration, false)
 	if err != nil {
 		t.Fatalf("resolveJoinedBackendArtifact: %v", err)
 	}
@@ -344,9 +344,11 @@ func TestRootInvokeUsesConfigurationForArtifactAndOfflineAssetProjection(t *test
 	)
 	platform := models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"}
 	var observed modelseffects.ResolvedHostConfiguration
+	var observedOffline bool
 	root.process = modelseffects.ProcessDependencies{BackendArtifactPlatform: platform}
-	root.resolveBackendArtifact = func(_ context.Context, configuration modelseffects.ResolvedHostConfiguration) (modelseffects.BackendArtifactSelection, error) {
+	root.resolveBackendArtifact = func(_ context.Context, configuration modelseffects.ResolvedHostConfiguration, offline bool) (modelseffects.BackendArtifactSelection, error) {
 		observed = configuration.Clone()
+		observedOffline = offline
 		return modelseffects.BackendArtifactSelection{
 			Name: "backend.tar.gz", Location: "https://example.invalid/backend.tar.gz",
 			Bytes: 1, SHA256: "10a84e67d02d078f711608accf13cb80b6724a4c03dc4acae5ba936831801172",
@@ -362,6 +364,9 @@ func TestRootInvokeUsesConfigurationForArtifactAndOfflineAssetProjection(t *test
 		observed.Backend != "localai-llamacpp" || observed.Platform != platform ||
 		observed.ProtocolVersion != modelseffects.PinnedHostProtocolVersion {
 		t.Fatalf("artifact resolver configuration = %#v, want resolved source/backend/platform/protocol", observed)
+	}
+	if !observedOffline {
+		t.Fatal("artifact resolver did not receive offline policy")
 	}
 	if len(assetRequests) != 1 || !assetRequests[0].Offline ||
 		assetRequests[0].BackendReference.NameOrURI != "https://example.invalid/backend.tar.gz" ||
@@ -390,10 +395,10 @@ func TestResolveJoinedBackendArtifactRejectsInvalidFactsBeforeHostStart(t *testi
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			root := &Root{resolveBackendArtifact: func(context.Context, modelseffects.ResolvedHostConfiguration) (modelseffects.BackendArtifactSelection, error) {
+			root := &Root{resolveBackendArtifact: func(context.Context, modelseffects.ResolvedHostConfiguration, bool) (modelseffects.BackendArtifactSelection, error) {
 				return test.selection, nil
 			}}
-			_, err := root.resolveJoinedBackendArtifact(context.Background(), base)
+			_, err := root.resolveJoinedBackendArtifact(context.Background(), base, false)
 			if !errors.Is(err, models.ErrHostMissingAssets) {
 				t.Fatalf("resolve error = %v, want ErrHostMissingAssets before host start", err)
 			}
@@ -460,3 +465,135 @@ func (assets *resolvedHostLayoutAssets) InspectRuntimeCache(context.Context, mod
 }
 
 var _ scopedassets.Service = (*resolvedHostLayoutAssets)(nil)
+
+func TestResolveJoinedBackendArtifactAcceptsInstalledDirectory(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	root := &Root{resolveBackendArtifact: func(context.Context, modelseffects.ResolvedHostConfiguration, bool) (modelseffects.BackendArtifactSelection, error) {
+		return modelseffects.BackendArtifactSelection{InstalledPath: directory}, nil
+	}}
+	selection, err := root.resolveJoinedBackendArtifact(context.Background(), modelseffects.ResolvedHostConfiguration{Backend: "localai-llamacpp"}, false)
+	if err != nil || selection.InstalledPath != directory {
+		t.Fatalf("installed backend selection = %#v, error = %v", selection, err)
+	}
+}
+
+func TestResolveJoinedBackendArtifactRejectsRelativeInstalledDirectory(t *testing.T) {
+	t.Parallel()
+	root := &Root{resolveBackendArtifact: func(context.Context, modelseffects.ResolvedHostConfiguration, bool) (modelseffects.BackendArtifactSelection, error) {
+		return modelseffects.BackendArtifactSelection{InstalledPath: "relative/backend"}, nil
+	}}
+	_, err := root.resolveJoinedBackendArtifact(context.Background(), modelseffects.ResolvedHostConfiguration{Backend: "localai-whisper"}, false)
+	if !errors.Is(err, models.ErrHostMissingAssets) {
+		t.Fatalf("relative installed directory error = %v, want ErrHostMissingAssets", err)
+	}
+}
+
+func TestResolveJoinedBackendArtifactPreservesOfflineFailure(t *testing.T) {
+	t.Parallel()
+	root := &Root{resolveBackendArtifact: func(_ context.Context, _ modelseffects.ResolvedHostConfiguration, offline bool) (modelseffects.BackendArtifactSelection, error) {
+		if !offline {
+			t.Fatal("backend resolver did not receive offline policy")
+		}
+		return modelseffects.BackendArtifactSelection{}, models.ErrAssetOffline
+	}}
+	_, err := root.resolveJoinedBackendArtifact(context.Background(), modelseffects.ResolvedHostConfiguration{Backend: "localai-whisper"}, true)
+	if !errors.Is(err, models.ErrAssetOffline) {
+		t.Fatalf("offline backend error = %v, want ErrAssetOffline", err)
+	}
+}
+
+func TestCustomAudioCPPFileTTSReachesAssetPreparation(t *testing.T) {
+	t.Parallel()
+	var events []string
+	var assetRequests []models.PrepareModelAssetsRequest
+	inference := &joinedInferenceService{events: &events, result: joinedCompletedResult(t)}
+	root, _, _ := newJoinedInvocationRootWithModel(t, &events, inference, "./unused.gguf", "fixture-backend", &assetRequests)
+	source := "file:///models/custom-voice.gguf"
+	backend := "localai-audio-cpp"
+	loadPolicy := models.LoadPolicyOnDemand
+	ref, err := root.runtimeScopes.Open(models.RuntimeBinding{
+		OperatorModels: map[string]models.ModelOverlay{
+			"custom-voice": {
+				Source: &source, Backend: &backend, LoadPolicy: &loadPolicy,
+				Operations: []string{models.OperationTTS},
+			},
+		},
+		RuntimeConfig: func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
+	})
+	if err != nil {
+		t.Fatalf("open custom TTS scope: %v", err)
+	}
+	scope, err := (models.RuntimeScopeRef{}).Parse(string(ref))
+	if err != nil {
+		t.Fatalf("parse custom TTS scope: %v", err)
+	}
+	root.process = modelseffects.ProcessDependencies{BackendArtifactPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64", CUDAAvailable: true}}
+	installedBackend := t.TempDir()
+	root.resolveBackendArtifact = func(_ context.Context, configuration modelseffects.ResolvedHostConfiguration, _ bool) (modelseffects.BackendArtifactSelection, error) {
+		if configuration.Backend != backend {
+			t.Fatalf("resolved backend = %q, want %q", configuration.Backend, backend)
+		}
+		return modelseffects.BackendArtifactSelection{InstalledPath: installedBackend, Accelerator: "cuda"}, nil
+	}
+	request := models.InvokeModelRequest{
+		Scope: scope, Holder: "custom-tts-holder", Model: models.ModelReference{NameOrURI: "custom-voice"},
+		Operation: models.OperationTTS,
+		Inputs:    []models.InferenceInput{{Name: "text", Modality: models.ModalityText, Content: "hello"}},
+	}
+	_, invokeErr := root.InvokeModel(context.Background(), request)
+	if len(assetRequests) != 1 {
+		t.Fatalf("asset preparation requests = %#v, invoke error = %v, want one custom TTS request", assetRequests, invokeErr)
+	}
+	prepared := assetRequests[0]
+	if prepared.Scope != scope || prepared.Name != "custom-voice" || prepared.Backend != backend ||
+		prepared.Reference.NameOrURI != "custom-voice" || len(prepared.Artifacts) != 0 {
+		t.Fatalf("asset preparation = %#v, want private local source without VibeVoice roles", prepared)
+	}
+	visible, err := joinedAssetPreparationRequest(request, "custom-voice", models.ResolvedModelReference{
+		Definition: models.ModelDefinition{Name: "custom-voice", Source: source, Backend: backend},
+	})
+	if err != nil {
+		t.Fatalf("prepare visible local GGUF source: %v", err)
+	}
+	if visible.Reference.NameOrURI != source || len(visible.Artifacts) != 1 || visible.Artifacts[0].Name != "custom-voice.gguf" {
+		t.Fatalf("visible local source requirements = %#v, want one GGUF without VibeVoice roles", visible)
+	}
+}
+
+func TestRootPullModelForScopeRoutesDottedOperatorNameBeforeLegacyCatalogPull(t *testing.T) {
+	t.Parallel()
+
+	const name = "index-tts2.5"
+	source := "file:///models/audio-cpp/index-tts2_5-orig.gguf"
+	backend := "localai-audio-cpp"
+	loadPolicy := models.LoadPolicyOnDemand
+	root, scope, assets := newPullFallbackRoot(t, name, map[string]models.ModelOverlay{
+		name: {Source: &source, Backend: &backend, LoadPolicy: &loadPolicy, Operations: []string{models.OperationTTS}},
+	})
+	runtime := root.runtimeByScope[scope].(*pullCatalogMissRuntime)
+	runtime.err = models.ErrAssetSourceMissing
+	resolved, err := root.ResolveModelReference(context.Background(), models.ResolveModelReferenceRequest{
+		Scope: scope, Reference: models.ModelReference{NameOrURI: name},
+	})
+	if err != nil || resolved.Resolved.Definition.Name != name || resolved.Resolved.Definition.Backend != backend ||
+		resolved.Resolved.Provenance.SourceKind != models.ModelReferenceSourceFileURI {
+		t.Fatalf("operator resolution = %#v, error = %v, want named file source", resolved, err)
+	}
+
+	result, err := root.PullModelForScope(context.Background(), models.PullModelRequest{Scope: scope, Name: name})
+	if err != nil {
+		t.Fatalf("PullModelForScope(%q): %v", name, err)
+	}
+	if runtime.pullCalls != 0 {
+		t.Fatalf("legacy catalog pull calls = %d, want zero", runtime.pullCalls)
+	}
+	if result.ModelName != name || result.ManagedPullOutcome != "INSTALLED_SUCCESSFULLY" {
+		t.Fatalf("pull result = %#v, want installed operator model", result)
+	}
+	if assets.request.Scope != scope || assets.request.Name != name ||
+		assets.request.Reference.NameOrURI != name || assets.request.Backend != backend ||
+		len(assets.request.Artifacts) != 0 {
+		t.Fatalf("asset preparation request = %#v, want private source resolution and configured backend", assets.request)
+	}
+}

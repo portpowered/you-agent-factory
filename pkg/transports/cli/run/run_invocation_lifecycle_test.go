@@ -47,23 +47,15 @@ func TestOpenInvocationRetainsInjectedOperationWithoutOpeningRuntime(t *testing.
 	}
 
 	factory := testRunnerOpeners{invocation: openTestInvocationRunner}
-	operation, err := Open(context.Background(), ensureTestRecordingsCLI(RunConfig{
+	err := RunSelected(context.Background(), ensureTestRecordingsCLI(RunConfig{
 		Dir:                      t.TempDir(),
 		InvocationPositionalText: &text,
 		StdinIsTTY:               func() bool { return true },
 		Output:                   io.Discard,
 		DisableDefaultRecording:  true,
-	}), factory.BuildRunner, factory.Invocation(), testResponsePresentation(), nil, testMockWorkersConfigLoader, testRuntimeOpeningRequestFactory)
+	}), factory.BuildRunner, factory.Invocation(), testResponsePresentation(), nil, nil, testSessionStartRequestFactory, nil, nil)
 	if err != nil {
-		t.Fatalf("Open() error = %v", err)
-	}
-	if buildCalls != 0 || lifecycleStarted {
-		t.Fatalf("after construction: build calls = %d, lifecycle started = %t; want 0, false", buildCalls, lifecycleStarted)
-	}
-
-	err = operation.Run(context.Background())
-	if err != nil {
-		t.Fatalf("Operation.Run() error = %v", err)
+		t.Fatalf("RunSelected() error = %v", err)
 	}
 	if buildCalls != 1 || !lifecycleStarted {
 		t.Fatalf("after initialization: build calls = %d, lifecycle started = %t; want 1, true", buildCalls, lifecycleStarted)

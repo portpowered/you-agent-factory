@@ -2,8 +2,13 @@
 package http
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"strings"
 
@@ -94,7 +99,7 @@ func (h *Handler) InvokeModel(w http.ResponseWriter, r *http.Request, modelName 
 // contract. The response remains an ordered named-output list; no backend,
 // cache, process, or filesystem detail is exposed at this boundary.
 func (h *Handler) InvokeGenericModel(w http.ResponseWriter, r *http.Request) {
-	request, err := decodeGenericModelInvocationRequestFromHTTP(r.Body)
+	request, err := decodeGenericModelInvocationHTTP(w, r)
 	if err != nil {
 		message := "invalid request payload"
 		var validationErr requestValidationError
@@ -186,5 +191,187 @@ func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 		return factoryapi.ErrorFamilyNotFound
 	default:
 		return factoryapi.ErrorFamilyInternalServerError
+	}
+}
+
+const (
+	maxGenericMultipartBody = 64 << 20
+	maxGenericRequestPart   = 1 << 20
+	maxGenericFilePart      = 8 << 20
+	maxGenericFileCount     = 64
+)
+
+type genericUpload struct {
+	content   []byte
+	mediaType string
+}
+
+func decodeGenericModelInvocationHTTP(w http.ResponseWriter, r *http.Request) (factoryapi.GenericModelInvocationRequest, error) {
+	mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err == nil && mediaType == "multipart/form-data" {
+		boundary := params["boundary"]
+		if boundary == "" {
+			return factoryapi.GenericModelInvocationRequest{}, requestValidationError{message: "multipart boundary is required"}
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxGenericMultipartBody)
+		return decodeGenericModelInvocationMultipart(multipart.NewReader(r.Body, boundary))
+	}
+	return decodeGenericModelInvocationRequestFromHTTP(r.Body)
+}
+
+func decodeGenericModelInvocationMultipart(reader *multipart.Reader) (factoryapi.GenericModelInvocationRequest, error) {
+	var request factoryapi.GenericModelInvocationRequest
+	var uploads []genericUpload
+	requestSeen := false
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return request, err
+		}
+		switch part.FormName() {
+		case "request":
+			if requestSeen {
+				return request, requestValidationError{message: "multipart request part must occur once"}
+			}
+			requestSeen = true
+			request, err = decodeGenericMultipartRequestPart(part)
+		case "files":
+			if len(uploads) >= maxGenericFileCount {
+				return request, requestValidationError{message: "too many multipart files"}
+			}
+			var upload genericUpload
+			upload, err = decodeGenericMultipartFilePart(part)
+			if err == nil {
+				uploads = append(uploads, upload)
+			}
+		default:
+			err = requestValidationError{message: "unexpected multipart field"}
+		}
+		_ = part.Close()
+		if err != nil {
+			return request, err
+		}
+	}
+	if !requestSeen {
+		return request, requestValidationError{message: "multipart request part is required"}
+	}
+	return attachGenericMultipartFiles(request, uploads)
+}
+
+func decodeGenericMultipartRequestPart(part *multipart.Part) (factoryapi.GenericModelInvocationRequest, error) {
+	if contentType := part.Header.Get("Content-Type"); contentType != "" {
+		mediaType, _, err := mime.ParseMediaType(contentType)
+		if err != nil || mediaType != "application/json" {
+			return factoryapi.GenericModelInvocationRequest{}, requestValidationError{message: "multipart request part must be application/json"}
+		}
+	}
+	data, err := io.ReadAll(io.LimitReader(part, maxGenericRequestPart+1))
+	if err != nil {
+		return factoryapi.GenericModelInvocationRequest{}, err
+	}
+	if len(data) > maxGenericRequestPart {
+		return factoryapi.GenericModelInvocationRequest{}, requestValidationError{message: "multipart request part exceeds 1 MiB"}
+	}
+	return decodeGenericModelInvocationRequestFromHTTP(bytes.NewReader(data))
+}
+
+func decodeGenericMultipartFilePart(part *multipart.Part) (genericUpload, error) {
+	data, err := io.ReadAll(io.LimitReader(part, maxGenericFilePart+1))
+	if err != nil {
+		return genericUpload{}, err
+	}
+	if len(data) > maxGenericFilePart {
+		return genericUpload{}, requestValidationError{message: "multipart file exceeds 8 MiB"}
+	}
+	if len(data) == 0 {
+		return genericUpload{}, requestValidationError{message: "multipart file must not be empty"}
+	}
+	mediaType := ""
+	if contentType := part.Header.Get("Content-Type"); contentType != "" {
+		mediaType, _, err = mime.ParseMediaType(contentType)
+		if err != nil {
+			return genericUpload{}, requestValidationError{message: "multipart file has invalid Content-Type"}
+		}
+	}
+	return genericUpload{content: data, mediaType: mediaType}, nil
+}
+
+func attachGenericMultipartFiles(request factoryapi.GenericModelInvocationRequest, uploads []genericUpload) (factoryapi.GenericModelInvocationRequest, error) {
+	if request.Inputs == nil {
+		if len(uploads) != 0 {
+			return request, requestValidationError{message: "multipart file has no matching media input"}
+		}
+		return request, nil
+	}
+	fileIndex := 0
+	for index := range *request.Inputs {
+		input := &(*request.Inputs)[index]
+		carriers := 0
+		for _, present := range []bool{input.Content != nil, input.ContentBase64 != nil, input.ArtifactRef != nil} {
+			if present {
+				carriers++
+			}
+		}
+		if carriers > 1 {
+			return request, requestValidationError{message: "input must set only one content carrier"}
+		}
+		if !genericMultipartMediaModality(input.Modality) || carriers != 0 {
+			continue
+		}
+		if fileIndex >= len(uploads) {
+			return request, requestValidationError{message: fmt.Sprintf("multipart file is required for input %q", input.Name)}
+		}
+		upload := uploads[fileIndex]
+		fileIndex++
+		if err := attachGenericMultipartFile(input, upload); err != nil {
+			return request, err
+		}
+	}
+	if fileIndex != len(uploads) {
+		return request, requestValidationError{message: "multipart file has no matching media input"}
+	}
+	return request, nil
+}
+
+func attachGenericMultipartFile(input *factoryapi.ModelInvocationInput, upload genericUpload) error {
+	if input.MediaType != nil && strings.TrimSpace(*input.MediaType) != "" {
+		declared, _, err := mime.ParseMediaType(*input.MediaType)
+		if err != nil {
+			return requestValidationError{message: "input mediaType is invalid"}
+		}
+		if upload.mediaType != "" && !strings.EqualFold(declared, upload.mediaType) {
+			return requestValidationError{message: "multipart file Content-Type does not match input mediaType"}
+		}
+		input.MediaType = &declared
+	} else if upload.mediaType != "" {
+		input.MediaType = &upload.mediaType
+	} else {
+		return requestValidationError{message: "multipart file or input must declare a media type"}
+	}
+	if input.ContentType != nil && strings.Contains(*input.ContentType, "/") {
+		contentType, _, err := mime.ParseMediaType(*input.ContentType)
+		if err != nil {
+			return requestValidationError{message: "input contentType is invalid"}
+		}
+		if !strings.EqualFold(contentType, *input.MediaType) {
+			return requestValidationError{message: "multipart file Content-Type does not match input contentType"}
+		}
+	}
+	input.ContentBase64 = &upload.content
+	return nil
+}
+
+func genericMultipartMediaModality(modality factoryapi.ModelInvocationContentType) bool {
+	switch modality {
+	case factoryapi.ModelInvocationContentTypeImage,
+		factoryapi.ModelInvocationContentTypeAudio,
+		factoryapi.ModelInvocationContentTypeVideo,
+		factoryapi.ModelInvocationContentTypeBinary:
+		return true
+	default:
+		return false
 	}
 }

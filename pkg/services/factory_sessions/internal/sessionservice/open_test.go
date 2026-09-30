@@ -2,10 +2,6 @@ package service_test
 
 import (
 	"context"
-	"errors"
-	"strings"
-	"sync"
-	"testing"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -14,7 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"go.uber.org/zap"
@@ -32,57 +27,11 @@ func newServiceTestGateway(host factorysessionservice.LegacyHost) *factorysessio
 }
 
 type openTestHost struct {
-	targets         []factorysessions.Target
-	discoverErr     error
-	scaffoldErr     error
-	openSessionID   string
-	openErr         error
 	requireSession  *livesession.LiveSession
 	requireSessionE error
 	sessionIDs      []string
 	sessions        map[string]*livesession.LiveSession
 	projectionErr   error
-
-	// selectCallsMu guards selectCalls: this host is shared by the concurrent
-	// open tests, which drive SelectTarget from several goroutines at once.
-	selectCallsMu sync.Mutex
-	selectCalls   int
-}
-
-// selectCallCount returns a consistent snapshot of the recorded selections.
-func (h *openTestHost) selectCallCount() int {
-	h.selectCallsMu.Lock()
-	defer h.selectCallsMu.Unlock()
-	return h.selectCalls
-}
-
-func (h *openTestHost) DiscoverTargets(_ string) ([]factorysessions.Target, error) {
-	if h.discoverErr != nil {
-		return nil, h.discoverErr
-	}
-	return h.targets, nil
-}
-
-func (h *openTestHost) SelectTarget(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*factorysessions.Target, error) {
-	h.selectCallsMu.Lock()
-	h.selectCalls++
-	h.selectCallsMu.Unlock()
-	return logicaltarget.Select(targets, ref)
-}
-
-func (h *openTestHost) InitializeFactoryScaffold(_ string) error {
-	return h.scaffoldErr
-}
-
-func (h *openTestHost) ValidateInitNewFactoryNestedDir(string) error { return nil }
-
-func (h *openTestHost) ResolveSessionFolder(folder string) (string, error) { return folder, nil }
-
-func (h *openTestHost) OpenLiveSessionForTarget(_ context.Context, _ factorysessions.Target) (string, error) {
-	if h.openErr != nil {
-		return "", h.openErr
-	}
-	return h.openSessionID, nil
 }
 
 func (h *openTestHost) RequireSession(_ string) (*livesession.LiveSession, error) {
@@ -199,161 +148,4 @@ func (h *openTestHost) ObserveResponseStreamDegraded(
 	*zap.Logger,
 	error,
 ) {
-}
-
-func TestService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T) {
-	t.Parallel()
-
-	host := &openTestHost{
-		targets: []factorysessions.Target{{
-			Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-			FactoryDir: "/tmp/factory",
-			FolderPath: "/tmp",
-		}},
-		openSessionID: "sess-1",
-		requireSession: &livesession.LiveSession{
-			ID: "sess-1",
-			SessionState: livesession.SessionState{
-				FactoryDir: "/tmp/factory",
-				FolderPath: "/tmp",
-			},
-			Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-		},
-	}
-	gateway := newServiceTestGateway(host)
-
-	result, err := gateway.OpenFactorySessionFromFolder(context.Background(), "/tmp", nil, false, false)
-	if err != nil {
-		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
-	}
-	if result.SessionID != "sess-1" {
-		t.Fatalf("session id = %q, want sess-1", result.SessionID)
-	}
-	if got := host.selectCallCount(); got != 1 {
-		t.Fatalf("identity target selections = %d, want 1", got)
-	}
-}
-
-func TestService_OpenFactorySessionFromFolder_ReturnsTargetPickerMetadata(t *testing.T) {
-	t.Parallel()
-
-	host := &openTestHost{
-		targets: []factorysessions.Target{
-			{Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, Label: "default"},
-			{Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"}, Label: "beta"},
-		},
-	}
-	gateway := newServiceTestGateway(host)
-
-	result, err := gateway.OpenFactorySessionFromFolder(context.Background(), "/tmp", nil, false, false)
-	if err != nil {
-		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
-	}
-	if result.SessionID != "" {
-		t.Fatalf("session id = %q, want empty", result.SessionID)
-	}
-	if len(result.Targets) != 2 {
-		t.Fatalf("targets = %d, want 2", len(result.Targets))
-	}
-}
-
-func TestService_OpenFactorySessionFromFolder_ValidateOnlyReturnsTargetsWithoutOpening(t *testing.T) {
-	t.Parallel()
-
-	host := &openTestHost{
-		targets: []factorysessions.Target{
-			{Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, Label: "default"},
-			{Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"}, Label: "beta"},
-		},
-		openErr: errors.New("open should not run"),
-	}
-	gateway := newServiceTestGateway(host)
-
-	result, err := gateway.OpenFactorySessionFromFolder(context.Background(), "/tmp", nil, true, false)
-	if err != nil {
-		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
-	}
-	if len(result.Targets) != 2 {
-		t.Fatalf("targets = %d, want 2", len(result.Targets))
-	}
-}
-
-func TestService_OpenFactorySession_RejectsValidateOnlyWithInitNewFactory(t *testing.T) {
-	t.Parallel()
-
-	gateway := newServiceTestGateway(&openTestHost{})
-	validateOnly := true
-	initNewFactory := true
-	_, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{
-		FolderPath:     "/tmp",
-		ValidateOnly:   validateOnly,
-		InitNewFactory: initNewFactory,
-	})
-	if err == nil || !strings.Contains(err.Error(), "initNewFactory cannot be combined with validateOnly") {
-		t.Fatalf("OpenFactorySession error = %v, want initNewFactory/validateOnly conflict", err)
-	}
-}
-
-func TestService_OpenFactorySession_ReturnsOpenedSessionIdentity(t *testing.T) {
-	t.Parallel()
-
-	host := &openTestHost{
-		targets: []factorysessions.Target{{
-			Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-			FactoryDir: "/tmp/factory",
-			FolderPath: "/tmp",
-			Project:    "demo",
-		}},
-		openSessionID: "sess-1",
-		requireSession: &livesession.LiveSession{
-			ID: "sess-1",
-			SessionState: livesession.SessionState{
-				FactoryDir: "/tmp/factory",
-				FolderPath: "/tmp",
-			},
-			Project: "demo",
-			Target:  factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-		},
-	}
-	gateway := newServiceTestGateway(host)
-
-	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{
-		FolderPath: "/tmp",
-	})
-	if err != nil {
-		t.Fatalf("OpenFactorySession: %v", err)
-	}
-	if result == nil || result.SessionID != "sess-1" {
-		t.Fatalf("open result = %#v, want sess-1", result)
-	}
-	if result.Session == nil || result.Session.ID != "sess-1" || result.Session.Project != "demo" {
-		t.Fatalf("open session = %#v, want owner-projected sess-1 summary", result.Session)
-	}
-}
-
-func TestService_OpenFactorySession_LeavesSummaryAbsentWhenSessionCannotResolve(t *testing.T) {
-	t.Parallel()
-
-	host := &openTestHost{
-		targets: []factorysessions.Target{{
-			Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-			FactoryDir: "/tmp/factory",
-		}},
-		openSessionID:   "sess-1",
-		requireSessionE: errors.New("session missing"),
-	}
-	gateway := newServiceTestGateway(host)
-
-	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{
-		FolderPath: "/tmp",
-	})
-	if err != nil {
-		t.Fatalf("OpenFactorySession: %v", err)
-	}
-	if result == nil || result.SessionID != "sess-1" {
-		t.Fatalf("open result = %#v, want sess-1", result)
-	}
-	if result.Session != nil {
-		t.Fatalf("open session = %#v, want nil for unresolved session", result.Session)
-	}
 }

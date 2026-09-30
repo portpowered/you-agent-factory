@@ -35,61 +35,6 @@ type ListDispatchesInput struct {
 	Status    string `json:"status,omitempty"`
 }
 
-// ListDispatchesWithFallback preserves live-session inspection while the
-// canonical Recordings artifact is still unavailable. Finalized history stays
-// on Recordings; only the explicit no-artifact compatibility case reaches the
-// already-bound Factory Sessions reader.
-func ListDispatchesWithFallback(
-	ctx context.Context,
-	execution DurableExecution,
-	service RecordingsInspection,
-	input ListDispatchesInput,
-) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
-	var live LiveDispatchReader
-	if reader, ok := any(execution).(LiveDispatchReader); ok {
-		live = reader
-	}
-	return listDispatchesWithFallback(ctx, live, service, input)
-}
-
-func listDispatchesWithFallback(
-	ctx context.Context,
-	live LiveDispatchReader,
-	service RecordingsInspection,
-	input ListDispatchesInput,
-) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
-	if ctx == nil {
-		envelope := executionErrorEnvelope(errMissingRequestContext)
-		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
-	}
-	if response, done := requestContextErrorResponse[factoryapi.ListFactorySessionDispatchesResponse](ctx); done {
-		return response
-	}
-	if err := validateDispatchStatus(input.Status); err != nil {
-		envelope := readErrorEnvelope(input.SessionID, err)
-		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
-	}
-	if err := validateDispatchInspectionRequest(ctx, service, live, input.SessionID); err != nil {
-		envelope := readErrorEnvelope(input.SessionID, err)
-		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
-	}
-	result, err := listFactorySessionDispatches(ctx, service, input)
-	if err != nil && live != nil && canUseLiveDispatchFallback(err) {
-		liveResult, liveErr := live.ListDispatches(ctx, input.SessionID)
-		if liveErr == nil {
-			result = liveDispatchesResponse(input, liveResult)
-			err = nil
-		} else {
-			err = liveErr
-		}
-	}
-	if err != nil {
-		envelope := readErrorEnvelope(input.SessionID, err)
-		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
-	}
-	return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Result: &result}
-}
-
 // ListArtifactsInput is the MCP request shape for you.factory_session.list_artifacts.
 type ListArtifactsInput struct {
 	SessionID string `json:"sessionId"`
@@ -161,101 +106,6 @@ type ControlInput struct {
 	ApprovedPolicy    *map[string]any                               `json:"approvedPolicy,omitempty"`
 }
 
-// Control applies one durable Factory Session lifecycle control through the
-// you.factory_session.control MCP tool.
-func Control(
-	ctx context.Context,
-	service DurableExecution,
-	prepare RequestPreparation,
-	input ControlInput,
-) ToolResponse[factoryapi.FactorySessionLifecycleControlResponse] {
-	if ctx == nil {
-		envelope := executionErrorEnvelope(errMissingRequestContext)
-		return ToolResponse[factoryapi.FactorySessionLifecycleControlResponse]{Error: &envelope}
-	}
-	if response, done := requestContextErrorResponse[factoryapi.FactorySessionLifecycleControlResponse](ctx); done {
-		return response
-	}
-	if service == nil {
-		envelope := unavailableServiceErrorEnvelope()
-		return ToolResponse[factoryapi.FactorySessionLifecycleControlResponse]{Error: &envelope}
-	}
-
-	sessionID := input.SessionID
-	result, err := invokeLifecycleControl(ctx, service, prepare, input)
-	if err != nil {
-		var controlErr *factorysessionexecution.ControlError
-		if errors.As(err, &controlErr) {
-			mapped := apifactorysession.ControlErrorToAPI(sessionID, controlErr)
-			return ToolResponse[factoryapi.FactorySessionLifecycleControlResponse]{Result: &mapped}
-		}
-		envelope := controlErrorEnvelope(sessionID, err)
-		return ToolResponse[factoryapi.FactorySessionLifecycleControlResponse]{Error: &envelope}
-	}
-
-	mapped := apifactorysession.LifecycleControlResponseToAPI(result)
-	return ToolResponse[factoryapi.FactorySessionLifecycleControlResponse]{Result: &mapped}
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity this MCP control router keeps lifecycle kind dispatch on one seam.
-func invokeLifecycleControl(
-	ctx context.Context,
-	service DurableExecution,
-	prepare RequestPreparation,
-	input ControlInput,
-) (factorysessionexecution.LifecycleControlResult, error) {
-	sessionID := input.SessionID
-
-	switch input.Operation {
-	case factoryapi.FactorySessionLifecycleControlKindPause:
-		control, err := prepareControlInput(prepare, input)
-		if err != nil {
-			return factorysessionexecution.LifecycleControlResult{}, err
-		}
-		return service.Pause(ctx, sessionID, control)
-	case factoryapi.FactorySessionLifecycleControlKindResume:
-		control, err := prepareControlInput(prepare, input)
-		if err != nil {
-			return factorysessionexecution.LifecycleControlResult{}, err
-		}
-		return service.Resume(ctx, sessionID, control)
-	case factoryapi.FactorySessionLifecycleControlKindCancel:
-		control, err := prepareControlInput(prepare, input)
-		if err != nil {
-			return factorysessionexecution.LifecycleControlResult{}, err
-		}
-		return service.Cancel(ctx, sessionID, control)
-	case factoryapi.FactorySessionLifecycleControlKindTerminate:
-		control, err := prepareControlInput(prepare, input)
-		if err != nil {
-			return factorysessionexecution.LifecycleControlResult{}, err
-		}
-		return service.Terminate(ctx, sessionID, control)
-	case factoryapi.FactorySessionLifecycleControlKindApprove:
-		approve, err := prepareApproveInput(prepare, input)
-		if err != nil {
-			return factorysessionexecution.LifecycleControlResult{}, err
-		}
-		return service.Approve(ctx, sessionID, approve)
-	case factoryapi.FactorySessionLifecycleControlKindRetryDispatch:
-		retry, err := prepareRetryDispatchInput(prepare, input)
-		if err != nil {
-			return factorysessionexecution.LifecycleControlResult{}, err
-		}
-		return service.RetryDispatch(ctx, sessionID, retry)
-	case factoryapi.FactorySessionLifecycleControlKindInterruptDispatch:
-		interrupt, err := prepareInterruptDispatchInput(prepare, input)
-		if err != nil {
-			return factorysessionexecution.LifecycleControlResult{}, err
-		}
-		return service.InterruptDispatch(ctx, sessionID, interrupt)
-	default:
-		return factorysessionexecution.LifecycleControlResult{}, &factorysessionexecution.ExecutionValidationError{
-			Field: "operation", Message: "unsupported lifecycle control operation",
-		}
-	}
-}
-
 func prepareControlInput(prepare RequestPreparation, input ControlInput) (factorysessionexecution.ControlRequest, error) {
 	if prepare == nil {
 		return factorysessionexecution.ControlRequest{}, errors.New("Factory Session request preparation is required")
@@ -318,10 +168,7 @@ func derefString(value *string) string {
 	return *value
 }
 
-// The compatibility inspection tools retain their established Factory Session
-// names and API shapes, but their canonical facts come from the Recordings
-// root. Keeping the conversion here avoids making a peer service's transport
-// package part of the Factory Sessions transport dependency graph.
+// Factory Session inspection reads canonical facts from the Recordings root.
 func listFactorySessionDispatches(
 	ctx context.Context,
 	service RecordingsInspection,
@@ -473,27 +320,6 @@ func validateInspectionRequest(
 		return err
 	}
 	if service == nil {
-		return recordings.ErrServiceUnavailable
-	}
-	if strings.TrimSpace(sessionID) == "" {
-		return fmt.Errorf("sessionId is required")
-	}
-	return nil
-}
-
-func validateDispatchInspectionRequest(
-	ctx context.Context,
-	service RecordingsInspection,
-	live LiveDispatchReader,
-	sessionID string,
-) error {
-	if ctx == nil {
-		return errors.New("MCP request context is required")
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if service == nil && live == nil {
 		return recordings.ErrServiceUnavailable
 	}
 	if strings.TrimSpace(sessionID) == "" {

@@ -152,8 +152,9 @@ func TestDurableExecutionConstructionUsesRootWorkflowContracts(t *testing.T) {
 
 	workflows := boundaryRootWorkflows{}
 	orchestration := boundaryOrchestrationAdapter{workflows}
+	projectRoot := t.TempDir()
 	service, err := factorysessionexecution.NewJavaScriptExecutionService(
-		t.TempDir(),
+		projectRoot,
 		factorysessionexecution.ChildExecutorModeFake,
 		nil,
 		factorysessionexecution.DisabledPersistence(),
@@ -177,7 +178,8 @@ func TestDurableExecutionConstructionUsesRootWorkflowContracts(t *testing.T) {
 	}
 
 	started, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: "req-boundary-root-workflow",
+		RequestID:   "req-boundary-root-workflow",
+		ProjectRoot: projectRoot,
 		Source: factorysessionexecution.Source{
 			Kind: factory.WorkflowSourceKindInlineWorkflow,
 			InlineWorkflow: &factorysessionexecution.InlineWorkflowSource{
@@ -615,7 +617,8 @@ func TestNewJavaScript_ForwardsClockProjectRootAndPersistence(t *testing.T) {
 	}
 
 	started, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: "request-project-root",
+		RequestID:   "request-project-root",
+		ProjectRoot: projectRoot,
 		Source: factorysessionexecution.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "from-project",
@@ -846,7 +849,8 @@ func withConfig(config harnessConfig, change func(*harnessConfig)) harnessConfig
 
 func startRequest(requestID, source string) factorysessionexecution.StartRequest {
 	return factorysessionexecution.StartRequest{
-		RequestID: requestID,
+		RequestID:   requestID,
+		ProjectRoot: ".",
 		Source: factorysessionexecution.Source{
 			Kind: factory.WorkflowSourceKindInlineWorkflow,
 			InlineWorkflow: &factorysessionexecution.InlineWorkflowSource{

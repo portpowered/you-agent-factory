@@ -63,8 +63,8 @@ func TestHandlerFromRoot_StartDurableFactorySessionAsyncValidationErrorReturnsTy
 	t.Parallel()
 
 	root := &httpSessionsRootFake{
-		onStartAsync: func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
-			return factorysessions.AsyncStartResult{}, &factorysessions.ExecutionValidationError{
+		onStart: func(_ context.Context, _ factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+			return factorysessions.SessionStartResult{}, &factorysessions.ExecutionValidationError{
 				Field:   "requestId",
 				Message: "requestId is required",
 			}
@@ -144,8 +144,8 @@ func TestHandlerFromRoot_StartDurableFactorySessionAsyncRequestIDConflictReturns
 	t.Parallel()
 
 	root := &httpSessionsRootFake{
-		onStartAsync: func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
-			return factorysessions.AsyncStartResult{}, factorysessions.ErrExecutionRequestIDConflict
+		onStart: func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+			return factorysessions.SessionStartResult{}, factorysessions.ErrExecutionRequestIDConflict
 		},
 	}
 	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())

@@ -35,6 +35,10 @@ func TestLiveAPI_MapsCompleteLifecycleThroughNarrowControl(t *testing.T) {
 	if control.openRequest.Target == nil || control.openRequest.Target.Name != name {
 		t.Fatalf("open request = %#v, want named target %q", control.openRequest, name)
 	}
+	if control.openRequest.Mode != factorysessions.SessionOperationModeLive || !control.openRequest.ActivationOnly ||
+		control.openRequest.RuntimeSelection == nil || control.openRequest.RuntimeSelection.Mode != factorysessions.SessionRuntimeModeService {
+		t.Fatalf("open start selection = %#v, want service-mode activation", control.openRequest)
+	}
 
 	listed, err := api.ListFactorySessions(ctx)
 	if err != nil {
@@ -119,8 +123,9 @@ func TestLiveAPI_MapsCancelAndTerminateThroughLifecycleCapability(t *testing.T) 
 const liveControlSessionID = "live-session-1"
 
 type liveControlSpy struct {
+	factorysessions.Service
 	calls            []string
-	openRequest      factorysessions.LiveControlOpenRequest
+	openRequest      factorysessions.SessionStartRequest
 	pauseRequest     factorysessions.LiveControlRequest
 	resumeRequest    factorysessions.LiveControlRequest
 	cancelRequest    factorysessions.LiveControlRequest
@@ -131,13 +136,16 @@ type liveControlSpy struct {
 var _ factorysessions.LiveControlService = (*liveControlSpy)(nil)
 var _ factorysessions.LiveLifecycleControlService = (*liveControlSpy)(nil)
 
-func (s *liveControlSpy) OpenFactorySession(
+func (s *liveControlSpy) Start(
 	_ context.Context,
-	request factorysessions.LiveControlOpenRequest,
-) (*factorysessions.LiveControlOpenResult, error) {
+	request factorysessions.SessionStartRequest,
+) (factorysessions.SessionStartResult, error) {
 	s.calls = append(s.calls, "open")
 	s.openRequest = request
-	return &factorysessions.OpenResult{SessionID: liveControlSessionID, Session: liveControlSummary()}, nil
+	return factorysessions.SessionStartResult{SessionID: liveControlSessionID, Live: &factorysessions.SessionOpenResult{
+		SessionID: liveControlSessionID,
+		Session:   &factorysessions.SessionView{SessionID: liveControlSessionID},
+	}}, nil
 }
 
 func (s *liveControlSpy) ListFactorySessions(context.Context) ([]factorysessions.LiveControlListItem, error) {

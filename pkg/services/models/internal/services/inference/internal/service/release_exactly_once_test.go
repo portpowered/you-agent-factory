@@ -9,6 +9,7 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
@@ -26,6 +27,53 @@ func TestInvocationLeaseReleaseIsExactlyOnce(t *testing.T) {
 	t.Run("cancellation release failure stays retained", runCancellationReleaseFailure)
 	t.Run("missing runtime releases acquired lease", runReleaseMissingRuntime)
 	t.Run("release failure cannot publish success", runReleaseFailureCannotPublishSuccess)
+	t.Run("cancellation during generation retains capacity until exit", runRunningCancellation)
+}
+
+type cancellationBlockingRuntime struct {
+	started   chan struct{}
+	allowExit chan struct{}
+}
+
+func (runtime cancellationBlockingRuntime) Invoke(ctx context.Context, _ inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error) {
+	close(runtime.started)
+	<-ctx.Done()
+	<-runtime.allowExit
+	return inference.InvocationRuntimeResult{}, ctx.Err()
+}
+
+func runRunningCancellation(t *testing.T) {
+	t.Parallel()
+	scopes, scope, lease, host := releaseFixture(t, "release-running-cancel", models.OperationOMNI)
+	runtime := cancellationBlockingRuntime{started: make(chan struct{}), allowExit: make(chan struct{})}
+	service := newInferenceServiceWithHost(t, scopes, mustCatalog(t, scopes), host, runtime, fixedClock(), nil)
+	type outcome struct {
+		result models.InvokeModelResult
+		err    error
+	}
+	finished := make(chan outcome, 1)
+	go func() {
+		result, err := service.InvokeModelWithLease(context.Background(), releaseRequest(scope, lease, models.OperationOMNI))
+		finished <- outcome{result, err}
+	}()
+	<-runtime.started
+	invocation, err := (models.ModelInvocationRef{}).Parse("models-inference:1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelled, err := service.CancelInvocation(context.Background(), models.CancelInvocationRequest{Scope: scope, Invocation: invocation})
+	if err != nil || cancelled.LeaseDisposition != models.InvocationLeaseRetained {
+		t.Fatalf("cancel while running = (%#v, %v), want retained until backend exits", cancelled, err)
+	}
+	if host.releaseCalls != 0 {
+		t.Fatalf("lease released before backend exit: %d calls", host.releaseCalls)
+	}
+	close(runtime.allowExit)
+	ended := <-finished
+	if !errors.Is(ended.err, models.ErrInferenceCancelled) || ended.result.LeaseDisposition != models.InvocationLeaseReleased {
+		t.Fatalf("generation exit = (%#v, %v)", ended.result, ended.err)
+	}
+	assertOneLeaseRelease(t, host)
 }
 
 func runReleaseSuccess(t *testing.T) {

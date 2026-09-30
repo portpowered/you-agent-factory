@@ -1,0 +1,9 @@
+implementation:
+  kind: acp_agent
+  profile: opencode-acp
+launch:
+  posture: installed_executable
+  transport: stdio
+  command: opencode
+  arguments:
+    - acp

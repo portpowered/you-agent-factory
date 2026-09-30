@@ -1,8 +1,9 @@
 type: string
 description: Uppercase content-part categories supported by worker model-operation capability slots.
 enum:
-    - TEXT
-    - IMAGE
-    - AUDIO
-    - JSON
-    - BINARY
+  - TEXT
+  - IMAGE
+  - AUDIO
+  - VIDEO
+  - JSON
+  - BINARY

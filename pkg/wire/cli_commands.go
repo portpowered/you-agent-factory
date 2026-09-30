@@ -15,17 +15,18 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
 	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -564,11 +565,7 @@ func (composition modelsCLIComposition) CompositionModelsRoot() modelservice.Ser
 func (composition modelsCLIComposition) CompositionOpenCatalogScope(
 	ctx context.Context,
 ) (modelscli.InvokeRuntimeScope, error) {
-	opened, err := composition.source.OpenModelsCatalogScope(ctx)
-	if err != nil {
-		return modelscli.InvokeRuntimeScope{}, err
-	}
-	return modelscli.InvokeRuntimeScope{Scope: opened.Scope, Close: opened.Close}, nil
+	return composition.openCatalogModelsScope(ctx, "")
 }
 
 func (composition modelsCLIComposition) CompositionOpenCatalogScopeWithModelCache(
@@ -916,31 +913,34 @@ func provideVisualizeWorkOperation(
 	return workcli.NewVisualize(visualize)
 }
 
-func provideCLIExecutionServiceBuilder(
-	build factorysessionwire.ExecutionServiceBuilder,
-) cli.ExecutionServiceBuilder {
-	return func(ctx context.Context, provider, projectRoot, fixtureCatalogPath, childExecutorMode string) (cli.OwnedExecutionService, error) {
-		return build(ctx, provider, projectRoot, fixtureCatalogPath, childExecutorMode)
+func provideInstallPackagedFactoryOperation(
+	catalog factorydefinitions.PackagedFactoryCatalogOperations,
+	installer factorydefinitions.PackagedFactoryInstallationOperations,
+) factorydefinitions.InstallPackagedFactoryOperation {
+	return factorydefinitions.NewInstallPackagedFactoryOperation(catalog, installer)
+}
+
+func providePackagedFactoryNameCompletionOperation(
+	catalog factorydefinitions.PackagedFactoryCatalogOperations,
+) cobracompletion.PackagedFactoryNamesOperation {
+	return cobracompletion.NewPackagedFactoryNames(catalog)
+}
+
+func provideInstallPackagedFactoryCLI(
+	install factorydefinitions.InstallPackagedFactoryOperation,
+) cli.InstallPackagedFactoryOperation {
+	if install == nil {
+		return nil
+	}
+	return func(cfg factorydefinitionscli.InstallPackagedFactoryConfig) error {
+		return factorydefinitionscli.InstallPackagedFactory(cfg, install)
 	}
 }
 
-func provideRunOpener(
-	prepareWorkTarget work.SingleWorkTargetPreparation,
-	loadMockWorkers workers.MockWorkersConfigDiagnosticsLoader,
-	buildRuntimeRequest runcli.RuntimeOpeningRequestFactory,
-	presentations factorysessions.OpeningPresentationOwner,
-	visualizations factoryvisualization.RuntimeSinkOwner,
-) runcli.Opener {
-	return func(
-		ctx context.Context,
-		cfg runcli.RunConfig,
-		buildRunner runcli.RuntimeRunnerBuilder,
-		invocation runcli.InvocationOperation,
-		presentation factoryvisualization.ResponsePresentation,
-	) (*runcli.Operation, error) {
-		return runcli.OpenWithVisualizationOwnerAndDiagnostics(
-			ctx, cfg, buildRunner, invocation, presentation,
-			prepareWorkTarget, nil, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
-		)
-	}
+func provideCLIObserver(edges serviceedges.Edges) platformprocess.CLIObserver {
+	return edges.CLIObserver
+}
+
+func provideCLICommandFactory(operations cli.CommandOperations) cli.CommandFactory {
+	return cli.NewCommandFactory(operations)
 }

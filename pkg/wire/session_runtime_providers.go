@@ -45,6 +45,7 @@ import (
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"go.uber.org/zap"
@@ -87,11 +88,9 @@ func (c *compositeProcessLifecycle) Close(ctx context.Context) error {
 // provideApplicationProcessLifecycle composes the process-wide shutdown path
 // Process.Close reaches: the singular Factory Sessions root, the Models host
 // supervisor, Providers lifecycle (executable/session teardown), the singular
-// Events root (pkg/wire/events_providers.go), and the on-demand Factory
-// Sessions activation the production ACP prompt-delegation consumer lazily
-// opens runtimes through (see provideACPServerFactoryTarget) -- so every
-// runtime retained by the application has a deterministic close on process
-// shutdown.
+// Events root (pkg/wire/events_providers.go). Factory Sessions owns every
+// activated ACP runtime through its canonical process root, so its Close
+// drains those sessions on process shutdown.
 // The process-scoped direct Worker Sessions pool closes first so an admitted
 // local invocation can publish its terminal observation before shared roots
 // are closed.
@@ -100,7 +99,6 @@ func provideApplicationProcessLifecycle(
 	modelsService models.Service,
 	eventsService events.Service,
 	factorySessions factorysessions.Service,
-	factoryTarget *factorysessionwire.OnDemandFactoryTargetService,
 	localWorkerSessions *localWorkerSessionsBoundary,
 	metricsOwner factoryruntime.RuntimeMetricsOwner,
 ) (initializerapplication.ProcessLifecycle, error) {
@@ -146,12 +144,6 @@ func provideApplicationProcessLifecycle(
 			// assembled when that boundary cannot be built.
 			return localWorkerSessions.Close(ctx)
 		},
-		func(context.Context) error {
-			if factoryTarget == nil {
-				return nil
-			}
-			return factoryTarget.Close()
-		},
 		factorySessionsLifecycle.Close,
 		modelsLifecycle.Close,
 		lifecycle.Close,
@@ -177,7 +169,7 @@ func provideConfiguredProvidersService(
 		providerswire.WithAgyPTY(agyPTYPlatform),
 		providerswire.WithAgyCommandClock(effectiveProviderCommandClock(edges)),
 		providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
-		providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator),
+		providerswire.WithExecutableLocator(provideProvidersExecutableLocator(edges)),
 		providerswire.WithACPIntegrations(projectACPIntegrations(integrations)...),
 		providerswire.WithCatalogCapabilityOverrides(edges.ProviderCatalogCapabilityOverrides...),
 		providerswire.WithRegistrations(edges.ProviderRegistrations...),
@@ -219,6 +211,13 @@ func provideConfiguredProvidersService(
 		workerswire.NewProviderCommandRunner(loggedRunner),
 	))
 	return newConfiguredProvidersService(options, loggedRunner)
+}
+
+func provideProvidersExecutableLocator(edges serviceedges.Edges) platformprocess.ExecutableLocator {
+	if edges.ProvidersExecutableLocator != nil {
+		return edges.ProvidersExecutableLocator
+	}
+	return platformprocess.HostExecutableLocator{}
 }
 
 func providerCommandRunnerWithLogging(
@@ -627,41 +626,31 @@ func provideFactorySessionsAssembly(
 
 func provideFactorySessionsService(
 	assembly factorysessionwire.RuntimeAssembly,
-	opening *factorysessionwire.RuntimeOpening,
+	root *factorysessionwire.Root,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 ) (factorysessions.Service, error) {
-	return factorysessionwire.NewServiceFromAssembly(assembly, opening, liveChangeCoordinator)
+	return factorysessionwire.NewServiceFromAssembly(assembly, root, liveChangeCoordinator)
 }
 
-// provideFactorySessionRuntimeOpeningAdapter binds the temporary opening
-// seams to the already-published Factory Sessions root. The adapter is a
-// value-only compatibility view and does not own another graph or lifecycle.
-func provideFactorySessionRuntimeOpeningAdapter(
+// provideFactorySessionsCapability publishes the already-composed Sessions root
+// through the neutral process capability. The initializer retains the opaque
+// value without importing the Sessions service; pkg/root reifies it at the
+// caller-facing boundary.
+func provideFactorySessionsCapability(
 	service factorysessions.Service,
-) (*factorysessionwire.RuntimeOpeningAdapter, error) {
-	return factorysessionwire.NewRuntimeOpeningAdapter(service)
-}
-
-// provideFactorySessionDetachedOperations publishes the one detached value
-// capability from the already-composed Sessions root. The neutral process
-// wrapper keeps initializer/application independent of product services while
-// preserving the concrete Sessions view for pkg/root callers.
-func provideFactorySessionDetachedOperations(
-	service factorysessions.Service,
-) (processcontract.DetachedOperationsCapability, error) {
-	operations, err := factorysessionwire.NewDetachedOperations(service)
-	if err != nil {
-		return nil, err
+) (processcontract.FactorySessionsCapability, error) {
+	if service == nil {
+		return nil, fmt.Errorf("construct factory sessions capability: service is required")
 	}
-	return detachedOperationsCapability{operations: operations}, nil
+	return factorySessionsCapability{service: service}, nil
 }
 
-type detachedOperationsCapability struct {
-	operations factorysessions.DetachedService
+type factorySessionsCapability struct {
+	service factorysessions.Service
 }
 
-func (capability detachedOperationsCapability) DetachedOperations() any {
-	return capability.operations
+func (capability factorySessionsCapability) FactorySessions() any {
+	return capability.service
 }
 
 // provideFactoryVisualizationMetricsQuery composes the one process-scoped,
@@ -731,55 +720,6 @@ type runtimeMetricsQueryCapability struct {
 
 func (capability runtimeMetricsQueryCapability) RuntimeMetricsQuery() any {
 	return capability.query
-}
-
-func provideFactorySessionExecutionRuntimeOpening(
-	opening *factorysessionwire.RuntimeOpeningAdapter,
-) (processcontract.ExecutionRuntimeOpeningCapability, error) {
-	if opening == nil {
-		return nil, errors.New("construct execution runtime opening capability: opening is required")
-	}
-	return executionRuntimeOpeningCapability{
-		opening: func(
-			ctx context.Context,
-			request factorysessions.ExecutionRuntimeOpeningRequest,
-		) (factorysessions.OpenedExecutionRuntime, error) {
-			projectRoot := request.ProjectRoot
-			opened, err := opening.OpenExecutionRuntime(ctx, &factorysessions.RuntimeOpeningRequest{
-				FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
-					Directory:        projectRoot,
-					ExecutionBaseDir: projectRoot,
-				},
-				FactoryRuntime: factoryruntime.RuntimeOpeningRequest{
-					LogDirectory:      filepath.Join(projectRoot, ".you-agent-factory", "runtime-logs"),
-					FileLoggingPolicy: factoryruntime.RuntimeFileLoggingPolicyDisabled,
-					MetricsDirectory:  filepath.Join(projectRoot, ".you-agent-factory", "runtime-metrics"),
-					MetricsPolicy:     factoryruntime.RuntimeMetricsPolicyDisabled,
-				},
-				FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-					FactorySessionID:  request.FactorySessionID,
-					PersistencePolicy: request.PersistencePolicy,
-					SystemConfigHome:  request.SystemConfigHome,
-				},
-				Recordings: recordings.RuntimeOpeningRequest{ReplayPath: request.ReplayPath},
-			})
-			if err != nil {
-				return factorysessions.OpenedExecutionRuntime{}, err
-			}
-			return factorysessions.OpenedExecutionRuntime{
-				Execution: opened.Execution,
-				Close:     opened.Resources.Close,
-			}, nil
-		},
-	}, nil
-}
-
-type executionRuntimeOpeningCapability struct {
-	opening factorysessions.ExecutionRuntimeOpeningFunc
-}
-
-func (capability executionRuntimeOpeningCapability) ExecutionRuntimeOpening() any {
-	return capability.opening
 }
 
 func provideOrchestrationJavaScriptExecution(
@@ -855,45 +795,6 @@ func provideFactorySessionExecutionFactory(
 			responseEventIDs,
 			responseEventRetentionLimits,
 			eventsService,
-			liveChangeCoordinator,
-		)
-	}
-}
-
-func provideStandaloneSessionExecutionFactory(
-	workflows factoryruntime.JavaScriptWorkflows,
-	orchestration factoryruntime.OrchestrationJavaScriptExecution,
-	recordingWriter recordings.PortableRecordingWriter,
-	stores factorysessionwire.RuntimePersistenceStoreFactory,
-	syncWaits factorysessionwire.SyncWaitScheduler,
-	sessionIDs factorysessions.SessionIDGenerator,
-	fixtureFiles factorysessionwire.ContractFixtureReader,
-	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
-	execution factorysessionwire.WorkerExecution,
-) factorysessionwire.StandaloneSessionExecutionFactory {
-	return func(
-		provider factorysessions.ExecutionProvider,
-		projectRoot string,
-		fixtureCatalogPath string,
-		childExecutorMode string,
-		workerExecution factorysessionwire.WorkerExecution,
-		clock factoryruntime.Clock,
-	) (factorysessionwire.DurableExecutionService, error) {
-		return factorysessionwire.NewStandaloneExecution(
-			provider,
-			projectRoot,
-			stores,
-			fixtureCatalogPath,
-			childExecutorMode,
-			workerExecution,
-			clock,
-			syncWaits,
-			factoryruntimewire.NewJavaScriptCheckpointSummaries(),
-			workflows,
-			orchestration,
-			recordingWriter,
-			sessionIDs,
-			fixtureFiles,
 			liveChangeCoordinator,
 		)
 	}
@@ -995,6 +896,8 @@ func provideWorkersWorktreeRelease(
 func provideStatelessWorkersService(
 	providersService providers.Service,
 	modelsService models.Service,
+	contentMaterializer work.ContentMaterializer,
+	mediaFiles platformfilesystem.ReadOpener,
 	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
 	factoryDocsFileSystem platformfilesystem.ReadFileTree,
 	clock factoryruntime.Clock,
@@ -1009,6 +912,8 @@ func provideStatelessWorkersService(
 	return provideStatelessWorkersServiceWithMock(
 		providersService,
 		modelsService,
+		contentMaterializer,
+		mediaFiles,
 		scriptCommandRunner,
 		factoryDocsFileSystem,
 		clock,
@@ -1023,44 +928,11 @@ func provideStatelessWorkersService(
 	)
 }
 
-// provideMockStatelessWorkersService is the explicit mock-feature composition
-// used only by the public root's opt-in detached Workers builder. Normal
-// process composition continues through provideStatelessWorkersService.
-func provideMockStatelessWorkersService(
-	providersService providers.Service,
-	modelsService models.Service,
-	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
-	factoryDocsFileSystem platformfilesystem.ReadFileTree,
-	clock factoryruntime.Clock,
-	logger *zap.Logger,
-	worktreePreparer workers.FactoryWorktreePreparer,
-	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error,
-	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	providerOverride providerOverrideService,
-	agentToolFileSystem workers.AgentToolFileSystem,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-	mockWorkers *workers.MockWorkersConfig,
-) (workers.Service, error) {
-	return provideStatelessWorkersServiceWithMock(
-		providersService,
-		modelsService,
-		scriptCommandRunner,
-		factoryDocsFileSystem,
-		clock,
-		logger,
-		worktreePreparer,
-		worktreeRelease,
-		temporaryFiles,
-		providerOverride,
-		agentToolFileSystem,
-		decisionEnvelopes,
-		mockWorkers,
-	)
-}
-
 func provideStatelessWorkersServiceWithMock(
 	providersService providers.Service,
 	modelsService models.Service,
+	contentMaterializer work.ContentMaterializer,
+	mediaFiles platformfilesystem.ReadOpener,
 	scriptCommandRunner factorysessionwire.ScriptCommandRunner,
 	factoryDocsFileSystem platformfilesystem.ReadFileTree,
 	clock factoryruntime.Clock,
@@ -1103,7 +975,9 @@ func provideStatelessWorkersServiceWithMock(
 			Type: factorydefinitions.WorkerTypeInference,
 		},
 	}
-	inferenceDependencies := workerswire.InferenceDependencies{Models: modelsService}
+	inferenceDependencies := workerswire.InferenceDependencies{
+		Models: modelsService, ContentMaterializer: contentMaterializer, MediaFiles: mediaFiles,
+	}
 	loggerValue := logging.NewZapLogger(logger, false)
 	if mockWorkers != nil {
 		return workerswire.NewMockService(
@@ -1151,6 +1025,13 @@ func provideWorkersRetryRandomSource(edges serviceedges.Edges) platformrandom.So
 func provideWorkersWorkstationFileSystem(edges serviceedges.Edges) platformfilesystem.ReadFileInspector {
 	if edges.WorkersWorkstationFileSystem != nil {
 		return edges.WorkersWorkstationFileSystem
+	}
+	return platformfilesystem.Local{}
+}
+
+func provideWorkersInferenceMediaFileReader(edges serviceedges.Edges) platformfilesystem.ReadOpener {
+	if edges.WorkersInferenceMediaFileReader != nil {
+		return edges.WorkersInferenceMediaFileReader
 	}
 	return platformfilesystem.Local{}
 }

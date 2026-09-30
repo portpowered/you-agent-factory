@@ -11,6 +11,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -384,10 +385,12 @@ func TestSessionOwner_PreservesCallerCancellationAtSubmission(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	waitCalls := 0
+	submitCalls := 0
 	owner := newTestSessionOwner(sessionOwnerFixture{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return sessionOwnerFactoryConfig(), nil },
 		SubmitWork: func(ctx context.Context, _ string, _ workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
-			return workdomain.WorkRequestSubmitResult{}, ctx.Err()
+			submitCalls++
+			return workdomain.WorkRequestSubmitResult{}, nil // An uncooperative submitter would otherwise accept late Work.
 		},
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			waitCalls++
@@ -402,6 +405,9 @@ func TestSessionOwner_PreservesCallerCancellationAtSubmission(t *testing.T) {
 	}
 	if waitCalls != 0 {
 		t.Fatalf("wait calls = %d, want 0", waitCalls)
+	}
+	if submitCalls != 0 {
+		t.Fatalf("submit calls = %d, want 0", submitCalls)
 	}
 }
 
@@ -559,6 +565,13 @@ func TestSessionOwnerWait_MapsTimeoutAndCancellation(t *testing.T) {
 					if ctx.Err() != nil {
 						t.Fatalf("cancel-on-timeout context error = %v, want detached context", ctx.Err())
 					}
+					deadline, ok := ctx.Deadline()
+					if !ok {
+						t.Fatal("cancel-on-timeout context has no deadline")
+					}
+					if remaining := time.Until(deadline); remaining < 14*time.Second || remaining > 16*time.Second {
+						t.Fatalf("cancel-on-timeout deadline = %v from now, want between 14s and 16s", remaining)
+					}
 					if sessionID != "session-1" {
 						t.Fatalf("cancel-on-timeout session ID = %q, want session-1", sessionID)
 					}
@@ -584,6 +597,34 @@ func TestSessionOwnerWait_MapsTimeoutAndCancellation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSessionOwner_InvokeTimeoutPreservesSubmittedWorkID(t *testing.T) {
+	content := sessionOwnerTextContent(t, "hello")
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	owner := newTestSessionOwner(sessionOwnerFixture{
+		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) {
+			return sessionOwnerFactoryConfig(), nil
+		},
+		SubmitWork: func(context.Context, string, workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
+			return workdomain.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1", WorkID: "work-1"}, nil
+		},
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			return activeSessionInvocationObservation(), nil
+		},
+		WaitNext: func(context.Context) error { return context.DeadlineExceeded },
+	})
+
+	result, err := owner.Invoke(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
+		SourceKind: &sourceKind, Content: &content,
+	}))
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusTimedOut)
+	assertSessionOwnerEqual(t, "request ID", result.RequestID, "request-1")
+	assertSessionOwnerEqual(t, "trace ID", result.TraceID, "trace-1")
+	assertSessionOwnerEqual(t, "work ID", result.WorkID, "work-1")
 }
 
 func TestSessionOwnerWait_CancellationAfterPrimaryResultResolutionWinsOverFailureClassification(t *testing.T) {
@@ -717,6 +758,62 @@ func TestSessionOwnerWait_ReturnsFailedWhileActiveWorkHasScopedFailure(t *testin
 	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusFailed)
 	assertSessionOwnerEqual(t, "error code", result.ErrorCode, string(work.PrimaryResultErrorCodeFailed))
 	assertSessionOwnerEqual(t, "work state", result.WorkState, "quorum-branch-b:failed")
+}
+
+func TestSessionOwnerWait_CarriesNormalizedFailureReason(t *testing.T) {
+	observation := failedSessionInvocationObservation()
+	observation.WorldState.FailureDetailsByWorkID = map[string]interfaces.FactoryWorldFailureDetail{
+		"work-root": {FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeThrottled, Message: "sensitive provider text"}},
+	}
+	result := waitForSessionOwnerObservation(t, observation, nil)
+	if result.FailureReason != string(workers.WorkFailureTypeThrottled) {
+		t.Fatalf("failure reason = %q, want throttled", result.FailureReason)
+	}
+	if strings.Contains(result.Message, "sensitive") {
+		t.Fatalf("invocation message leaked provider detail: %q", result.Message)
+	}
+}
+
+func TestSessionOwnerWait_CarriesSoleDispatchFailureWhenPrimaryWorkIsUnresolved(t *testing.T) {
+	observation := stoppedSessionInvocationObservation()
+	observation.WorldState.FailureDetailsByWorkID = map[string]interfaces.FactoryWorldFailureDetail{
+		"dispatch-work": {FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeThrottled, Message: "private ACP response"}},
+	}
+	result := waitForSessionOwnerObservation(t, observation, nil)
+	if result.Status != interfaces.InvocationTerminalStatusFailed || result.FailureReason != string(workers.WorkFailureTypeThrottled) {
+		t.Fatalf("unresolved dispatch failure = %#v, want typed throttle", result)
+	}
+}
+
+func TestSessionOwnerWait_MatchesDispatchFailureOnlyWhenUnique(t *testing.T) {
+	tests := []struct {
+		name, reason string
+		details      map[string]interfaces.FactoryWorldFailureDetail
+	}{
+		{"unique", string(workers.WorkFailureTypeThrottled), map[string]interfaces.FactoryWorldFailureDetail{
+			"other-work":  {DispatchID: "dispatch-other", FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeTimeout, Message: "private other response"}},
+			"target-work": {DispatchID: "dispatch-target", FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeThrottled, Message: "sensitive provider text"}},
+		}},
+		{"ambiguous", "", map[string]interfaces.FactoryWorldFailureDetail{
+			"first-work":  {DispatchID: "dispatch-target", FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeThrottled, Message: "sensitive first response"}},
+			"second-work": {DispatchID: "dispatch-target", FailureDetail: &workers.FailureDetail{Reason: workers.WorkFailureTypeTimeout, Message: "private second response"}},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			observation := stoppedSessionInvocationObservation()
+			observation.MissingPrimaryResult = &work.PrimaryResultError{
+				Code: work.PrimaryResultErrorCodeUnresolved, Message: "invocation primary result unresolved",
+				Context: work.InvocationFailureContext{WorkID: "work-root", DispatchID: "dispatch-target"},
+			}
+			observation.WorldState.FailureDetailsByWorkID = tt.details
+			result := waitForSessionOwnerObservation(t, observation, nil)
+			assertSessionOwnerEqual(t, "failure reason", result.FailureReason, tt.reason)
+			if strings.Contains(result.Message, "sensitive") || strings.Contains(result.Message, "private") {
+				t.Fatalf("invocation message leaked provider detail: %q", result.Message)
+			}
+		})
+	}
 }
 
 func TestSessionOwnerWait_DefaultWaitNextPollsUntilCompletion(t *testing.T) {

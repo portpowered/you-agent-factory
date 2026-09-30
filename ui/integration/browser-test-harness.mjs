@@ -1076,6 +1076,7 @@ const repoProcessSpawnedKey = Symbol("repoProcessSpawned");
 const repoProcessErrorKey = Symbol("repoProcessError");
 let browserArtifactSequence = 0;
 let sharedBrowserPorts = null;
+const claimedBrowserPorts = new Set();
 export const exportCoverImagePath = path.resolve(
   packageRoot,
   "..",
@@ -1192,6 +1193,16 @@ async function browserDistReady() {
 }
 
 export async function findAvailablePort() {
+  for (;;) {
+    const port = await probeAvailablePort();
+    if (!claimedBrowserPorts.has(port)) {
+      claimedBrowserPorts.add(port);
+      return port;
+    }
+  }
+}
+
+async function probeAvailablePort() {
   const probe = http.createServer();
   await new Promise((resolve, reject) => {
     probe.once("error", reject);

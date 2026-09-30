@@ -357,6 +357,7 @@ type WorkContentPartType string
 const (
 	WorkContentPartTypeText   WorkContentPartType = "text"
 	WorkContentPartTypeImage  WorkContentPartType = "image"
+	WorkContentPartTypeVideo  WorkContentPartType = "VIDEO"
 	WorkContentPartTypeAudio  WorkContentPartType = "AUDIO"
 	WorkContentPartTypeJSON   WorkContentPartType = "JSON"
 	WorkContentPartTypeBinary WorkContentPartType = "BINARY"
@@ -369,6 +370,8 @@ func (t WorkContentPartType) Normalized() WorkContentPartType {
 		return WorkContentPartTypeText
 	case "IMAGE":
 		return WorkContentPartTypeImage
+	case "VIDEO":
+		return WorkContentPartTypeVideo
 	default:
 		return t
 	}
@@ -618,6 +621,7 @@ func SupportedContentParts(parts []WorkContentPart) []WorkContentPart {
 		switch part.Type {
 		case WorkContentPartTypeText,
 			WorkContentPartTypeImage,
+			WorkContentPartTypeVideo,
 			WorkContentPartTypeAudio,
 			WorkContentPartTypeJSON,
 			WorkContentPartTypeBinary:

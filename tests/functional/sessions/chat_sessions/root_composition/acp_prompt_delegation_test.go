@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
@@ -31,13 +32,8 @@ import (
 // ACP session through the real, singular Chat Sessions and Factory Sessions
 // authorities root.BuildProcess composes, not fakes.
 //
-// Before this story's on-demand Factory Sessions activation
-// (factorysessionwire.OnDemandFactoryTargetService), every session/prompt
-// call that reached Factory dispatch through this exact composition path
-// failed with factorysessions.ErrExecutionServiceNotConfigured, because the
-// process-scoped factorysessions.Service root.BuildProcess constructs stays
-// permanently inert outside the CLI daemon's OpenApplication bootstrap. This
-// test is a regression guard for that gap.
+// This guards canonical Factory Sessions activation and invocation from the
+// process root through the customer-facing ACP transport.
 func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test driving root.BuildProcess Factory Session dispatch")
@@ -61,6 +57,55 @@ func TestACPPromptDelegationStartsOneFactorySessionAndReusesItForLaterTurns(t *t
 		t.Fatalf("second session/prompt response error = %+v, want a successful final result", secondResp.Error)
 	}
 	assertPromptResponseStopReason(t, secondResp, acpsdk.StopReasonEndTurn)
+}
+
+func TestACPPromptDelegationCancelRestartsCapturedFactorySession(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test driving root.BuildProcess Factory Session cancellation")
+	}
+	cohort := controlledACPCohortForTest(t)
+	server := controlledACPServerForCohort(t, cohort)
+	started, releaseBusy := cohort.runner.armBusy()
+	t.Cleanup(releaseBusy)
+	cwd := controlledACPWorkingDirectoryForCohort(t, cohort, "delegation-cancel-restart")
+	sessionID := assertSessionNewReturnsDefaultTarget(t, server, cwd, "factory:@you/goal")
+
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := doSessionPrompt(server, sessionID, "please help with this goal [cohort-busy]")
+		firstDone <- err
+	}()
+	select {
+	case <-started:
+	case err := <-firstDone:
+		t.Fatalf("first prompt stopped before provider started: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for provider work")
+	}
+
+	line := fmt.Sprintf(`{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":%q}}`, sessionID) + "\n"
+	var out bytes.Buffer
+	if err := serveChatRequest(server, context.Background(), strings.NewReader(line), &out); err != nil {
+		t.Fatalf("Serve(session/cancel): %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("session/cancel output = %q, want notification without response", out.String())
+	}
+	releaseBusy()
+	select {
+	case err := <-firstDone:
+		if err != nil {
+			t.Fatalf("canceled prompt transport: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for canceled prompt")
+	}
+
+	later := sendSessionPrompt(t, server, sessionID, "a follow-up after cancellation [cohort-busy-later]")
+	if later.Error != nil {
+		t.Fatalf("prompt after cancellation error = %+v, want replacement runtime", later.Error)
+	}
+	assertPromptResponseStopReason(t, later, acpsdk.StopReasonEndTurn)
 }
 
 // TestACPPromptDelegationFailedFactoryInvocationReportsAnACPError proves the
@@ -146,7 +191,7 @@ const internalErrorCode = -32603
 // already succeeded, exactly the window where a concurrent uninstall could
 // leave a session pointed at a target its own catalog snapshot no longer
 // backs -- the real root.BuildProcess composition, through
-// provideACPServerFactoryTargetRuntimeResolver's
+// provideACPServerFactorySessionStartResolver's
 // factorydefinitions.ErrNamedFactoryNotFound path, returns a bounded
 // internal ACP error instead of a crash or a fabricated success, and leaves
 // no turn stranded: a second prompt on the same session is admitted and

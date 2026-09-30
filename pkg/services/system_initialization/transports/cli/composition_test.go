@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/initializer"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
@@ -155,7 +154,7 @@ func TestBindInitializeSystemRoutesThroughInitializerCompositionPath(t *testing.
 		},
 	}
 	initializer, err := initializerapplication.NewInitializer(
-		&compositionStdioOpener{},
+		func(context.Context, startupcli.MCPIntent) error { panic("composition test does not run stdio") },
 		systeminitializationcli.BindInitializeSystem(root),
 	)
 	if err != nil {
@@ -172,12 +171,3 @@ func TestBindInitializeSystemRoutesThroughInitializerCompositionPath(t *testing.
 }
 
 type contextKey string
-
-type compositionStdioOpener struct{}
-
-func (compositionStdioOpener) OpenStdio(
-	context.Context,
-	startupcli.MCPIntent,
-) (initializer.RunApplication, error) {
-	panic("composition test does not open stdio")
-}

@@ -376,6 +376,28 @@ func TestRuntimeRootDeactivationRetainsStateUntilCleanupSucceeds(t *testing.T) {
 	}
 }
 
+func TestRuntimeRootActivationRequiresPerCallOperation(t *testing.T) {
+	t.Parallel()
+
+	root, err := factoryruntimewire.NewService(
+		func() string { return "runtime-activation-test-id" },
+		nil,
+		nil,
+		clockwork.NewFakeClock(),
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+			return workers.WorkstationDispatchCancelResult{}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	_, err = root.Activate(context.Background(), foldRuntimeActivationRequest(), nil)
+	if !errors.Is(err, factoryruntime.ErrRuntimeActivationUnavailable) {
+		t.Fatalf("Activate(nil operation) error = %v, want unavailable", err)
+	}
+}
+
 func newRuntimeRoot(
 	t *testing.T,
 	activation factoryruntime.RuntimeActivationOperation,
@@ -394,7 +416,6 @@ func newRuntimeRoot(
 		func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
 			return workers.WorkstationDispatchCancelResult{}, nil
 		},
-		activation,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -402,5 +423,14 @@ func newRuntimeRoot(
 	if root == nil {
 		t.Fatal("NewService() returned nil root")
 	}
-	return root
+	return &perCallActivationRoot{Root: root, operation: activation}
+}
+
+type perCallActivationRoot struct {
+	factoryruntime.Root
+	operation factoryruntime.RuntimeActivationOperation
+}
+
+func (r *perCallActivationRoot) Activate(ctx context.Context, request factoryruntime.RuntimeActivationRequest) (factoryruntime.RuntimeActivationResult, error) {
+	return r.Root.Activate(ctx, request, r.operation)
 }

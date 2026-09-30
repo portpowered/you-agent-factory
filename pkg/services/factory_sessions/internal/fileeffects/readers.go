@@ -13,13 +13,9 @@ func (read ContractFixtureReader) ReadFile(path string) ([]byte, error) { return
 // arguments during interpolation validation.
 type InvocationInputReader func(string) ([]byte, error)
 
-func (read InvocationInputReader) ReadFile(path string) ([]byte, error) { return read(path) }
-
 // ReplayRecordingReader inspects a customer-selected portable Factory Session
 // recording before runtime construction.
 type ReplayRecordingReader func(string) ([]byte, error)
-
-func (read ReplayRecordingReader) ReadFile(path string) ([]byte, error) { return read(path) }
 
 // InitialWorkReader loads the customer-selected initial Work request for a
 // Factory Session runtime.

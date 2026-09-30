@@ -212,6 +212,48 @@ func TestContentStagingOwnsPersistenceSignedResolutionAndCleanup(t *testing.T) {
 	}
 }
 
+func TestContentStagingPrepareContentMapsVideoItems(t *testing.T) {
+	service, _, _ := newNestedContentStagingForTest(t)
+	ctx := context.Background()
+
+	staged, err := service.StageContent(ctx, work.StageContentRequest{
+		ItemType:  "video",
+		FileName:  "clip.mp4",
+		MediaType: "video/mp4",
+		Content:   []byte("mp4-bytes"),
+	})
+	if err != nil {
+		t.Fatalf("StageContent video: %v", err)
+	}
+
+	parts, err := service.PrepareContent(ctx, []work.StagedSubmissionItem{
+		{ItemType: "text", Text: "Review this clip."},
+		{
+			ItemType: "video", StagedFileRef: staged.StagedFileRef,
+			FileName: "customer-clip.mp4", MediaType: "video/mp4",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PrepareContent: %v", err)
+	}
+	if len(parts) != 2 {
+		t.Fatalf("prepared parts len = %d, want 2", len(parts))
+	}
+	if parts[0].Type != work.WorkContentPartTypeText || parts[0].Text != "Review this clip." {
+		t.Fatalf("prepared text = %#v", parts[0])
+	}
+	if parts[1].Type != work.WorkContentPartTypeVideo {
+		t.Fatalf("prepared video type = %#v, want VIDEO", parts[1].Type)
+	}
+	if parts[1].URL != staged.URL || parts[1].ContentType != "video/mp4" {
+		t.Fatalf("prepared video = %#v", parts[1])
+	}
+	if parts[1].Metadata["submissionItemType"] != "video" ||
+		parts[1].Metadata["fileName"] != "customer-clip.mp4" {
+		t.Fatalf("prepared video metadata = %#v", parts[1].Metadata)
+	}
+}
+
 func TestContentStagingRejectsTamperedExpiredAndMissingReferences(t *testing.T) {
 	ctx := context.Background()
 

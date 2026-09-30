@@ -81,13 +81,11 @@ func BuildLifecyclePlan(request roles.LifecyclePlanRequest) (lifecycle.Plan, err
 }
 
 // BuildDirectJavaScriptLifecyclePlan owns the smaller lifecycle transaction
-// used by a raw workflow-file run. The durable execution service is shared by
-// the terminal CLI operation and optional HTTP transport, then closed exactly
-// once after both have joined.
+// used by a raw workflow-file run. The terminal CLI operation and optional
+// HTTP transport share the process-owned execution service.
 func BuildDirectJavaScriptLifecyclePlan(
 	transport lifecycle.Component,
 	completion func(context.Context) error,
-	closeExecution func() error,
 ) (lifecycle.Plan, error) {
 	if completion == nil {
 		return lifecycle.Plan{}, errors.New("plan direct JavaScript lifecycle: completion is required")
@@ -99,11 +97,6 @@ func BuildDirectJavaScriptLifecyclePlan(
 	plan := lifecycle.Plan{Components: []lifecycle.NamedComponent{{
 		Name: transportComponentName, Component: primary, Primary: true,
 	}}}
-	if closeExecution != nil {
-		plan.Resources = []lifecycle.NamedResource{{
-			Name: "direct JavaScript execution", Resource: lifecycle.CloserFunc(closeExecution),
-		}}
-	}
 	if err := lifecycle.Validate(plan); err != nil {
 		return lifecycle.Plan{}, errors.Join(
 			errors.New("plan direct JavaScript lifecycle"),
@@ -215,7 +208,7 @@ func joinCompletionTransportResults(first, second completionTransportResult) err
 // applicationRuntimeLifecycle owns the state needed to pair process runtime
 // and worker-sidecar acquisition with exactly one cleanup operation.
 type applicationRuntimeLifecycle struct {
-	runtime roles.ProcessRuntime
+	runtime roles.ProcessActivation
 
 	mu            sync.Mutex
 	runtimeCancel context.CancelFunc

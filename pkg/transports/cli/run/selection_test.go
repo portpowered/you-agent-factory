@@ -9,11 +9,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
-	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
-	runtimeapplication "github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestPrepareCanonicalSessionIDForRunRequiresInjectedGenerator(t *testing.T) {
@@ -49,45 +47,33 @@ func TestRunSelectionOwnsDirectJavaScriptTransportChoice(t *testing.T) {
 	output := &bytes.Buffer{}
 	direct := &selectionDirectJavaScriptStub{supported: true}
 	owner := newTestOpeningPresentationOwner()
+	var scope factorysessions.DirectJavaScriptRunScope
+	var scopeRegistered bool
+	direct.onRun = func() { scope, scopeRegistered = owner.DirectJavaScript(direct.request.ScopeID) }
 	factory, err := NewSelectionFactory(
-		func(context.Context, RunConfig, RuntimeRunnerBuilder, InvocationOperation, factoryvisualization.ResponsePresentation) (*Operation, error) {
-			t.Fatal("regular run opener called for direct JavaScript")
-			return nil, nil
-		},
-		func(context.Context, *factorysessions.RuntimeOpeningRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
+		func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
 		testInvocationOperation{},
 		testResponsePresentation(),
 		direct,
-		func(ctx context.Context, open initializer.ApplicationOpeningOperation) (initializer.LocalRuntimeRunner, error) {
-			opened, err := open(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return runtimeapplication.NewManagedRunner(opened.Plan, opened.Diagnostics)
-		},
-		owner,
+		nil, nil, nil, owner, nil,
 	)
 	if err != nil {
 		t.Fatalf("NewSelectionFactory: %v", err)
 	}
-	application, err := factory(RunConfig{
+	err = factory(RunConfig{
 		FactoryConfigPath: "workflow.cjs", MockWorkersEnabled: true,
 		JSONOutput: true, Output: output,
-	}).Open(t.Context(), processcontract.RunIntent{WorkerSidecarsEnabled: true})
+	}).Run(t.Context(), processcontract.RunIntent{WorkerSidecarsEnabled: true})
 	if err != nil {
-		t.Fatalf("Open: %v", err)
+		t.Fatalf("Run: %v", err)
 	}
-	scope, ok := owner.DirectJavaScript(direct.request.ScopeID)
 	if direct.request.SourcePath != "workflow.cjs" || !direct.request.MockWorkersEnabled || !direct.request.JSONOutput {
 		t.Fatalf("direct opening request = %#v", direct.request)
 	}
-	if !ok || scope.Output != output {
+	if !scopeRegistered || scope.Output != output {
 		t.Fatalf("direct opening scope = %#v, want output writer", scope)
-	}
-	if err := application.Run(t.Context()); err != nil {
-		t.Fatalf("Run: %v", err)
 	}
 	if _, ok := owner.DirectJavaScript(direct.request.ScopeID); ok {
 		t.Fatal("direct JavaScript presentation scope remained after application run")
@@ -98,32 +84,22 @@ func TestRunSelectionCarriesInvocationCancellationToDirectJavaScriptHost(t *test
 	want := &selectionCancellationStub{}
 	direct := &selectionDirectJavaScriptStub{supported: true}
 	factory, err := NewSelectionFactory(
-		func(context.Context, RunConfig, RuntimeRunnerBuilder, InvocationOperation, factoryvisualization.ResponsePresentation) (*Operation, error) {
-			t.Fatal("regular run opener called for direct JavaScript")
-			return nil, nil
-		},
-		func(context.Context, *factorysessions.RuntimeOpeningRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
+		func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
 		testInvocationOperation{}, testResponsePresentation(), direct,
-		func(ctx context.Context, open initializer.ApplicationOpeningOperation) (initializer.LocalRuntimeRunner, error) {
-			opened, err := open(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return runtimeapplication.NewManagedRunner(opened.Plan, opened.Diagnostics)
-		},
+		nil, nil, nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("NewSelectionFactory: %v", err)
 	}
-	application, err := factory(RunConfig{
+	err = factory(RunConfig{
 		FactoryConfigPath: "workflow.cjs", Port: 7437,
-	}).Open(t.Context(), processcontract.RunIntent{
+	}).Run(t.Context(), processcontract.RunIntent{
 		APIEnabled: true, WorkerSidecarsEnabled: true, Cancellation: want,
 	})
 	if err != nil {
-		t.Fatalf("Open: %v", err)
+		t.Fatalf("Run: %v", err)
 	}
 	if direct.request.Host == nil {
 		t.Fatal("direct JavaScript host request = nil")
@@ -131,8 +107,68 @@ func TestRunSelectionCarriesInvocationCancellationToDirectJavaScriptHost(t *test
 	if direct.cancellation != want {
 		t.Fatalf("direct JavaScript cancellation = %p, want %p", direct.cancellation, want)
 	}
-	if err := application.Run(t.Context()); err != nil {
+}
+
+func TestRunSelectionExecutesLocalRunWithIntent(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	wantCancellation := &selectionCancellationStub{}
+	var gotConfig RunConfig
+	var gotCancellation initializer.InvocationCancellation
+	var ran bool
+	factory, err := NewSelectionFactory(
+		func(_ context.Context, _ *factorysessions.SessionStartRequest, cancellation initializer.InvocationCancellation, _ factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
+			gotCancellation = cancellation
+			return runFuncRunner(func(runCtx context.Context) error {
+				if runCtx != ctx {
+					t.Fatal("local runner received a different context")
+				}
+				ran = true
+				return nil
+			}), nil
+		},
+		testInvocationOperation{}, testResponsePresentation(),
+		&selectionDirectJavaScriptStub{},
+		nil, nil, func(cfg RunConfig, _ *workers.MockWorkersConfig) *factorysessions.SessionStartRequest {
+			gotConfig = cfg
+			return &factorysessions.SessionStartRequest{}
+		}, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("NewSelectionFactory: %v", err)
+	}
+	if err := factory(ensureTestRecordingsCLI(RunConfig{Port: 7437, DisableDefaultRecording: true})).Run(ctx, processcontract.RunIntent{
+		WorkerSidecarsEnabled: true, Cancellation: wantCancellation,
+	}); err != nil {
 		t.Fatalf("Run: %v", err)
+	}
+	if !ran || gotConfig.Port != 0 || gotCancellation != wantCancellation {
+		t.Fatalf("local run = ran:%t port:%d cancellation:%p", ran, gotConfig.Port, gotConfig.Cancellation)
+	}
+}
+
+func TestRunSelectionDirectJavaScriptClosesPresentationAfterRunFailure(t *testing.T) {
+	want := errors.New("run failed")
+	owner := newTestOpeningPresentationOwner()
+	direct := &selectionDirectJavaScriptStub{supported: true, runErr: want}
+	factory, err := NewSelectionFactory(
+		func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
+			return nil, nil
+		},
+		testInvocationOperation{}, testResponsePresentation(), direct,
+		nil, nil, nil, owner, nil,
+	)
+	if err != nil {
+		t.Fatalf("NewSelectionFactory: %v", err)
+	}
+	err = factory(RunConfig{FactoryConfigPath: "workflow.cjs"}).Run(
+		t.Context(), processcontract.RunIntent{WorkerSidecarsEnabled: true},
+	)
+	if !errors.Is(err, want) {
+		t.Fatalf("Run error = %v, want %v", err, want)
+	}
+	if _, ok := owner.DirectJavaScript(direct.request.ScopeID); ok {
+		t.Fatal("direct JavaScript presentation scope remained after run failure")
 	}
 }
 
@@ -166,53 +202,34 @@ func TestApplyRunIntentCarriesInvocationCancellation(t *testing.T) {
 	}
 }
 
-func TestRunSelectionDirectJavaScriptCleansPresentationOnOpenFailures(t *testing.T) {
+func TestRunSelectionDirectJavaScriptCleansPresentationOnRunFailure(t *testing.T) {
 	for _, testCase := range []struct {
-		name       string
-		openErr    error
-		builderErr error
-		nilRunner  bool
+		name   string
+		runErr error
 	}{
-		{name: "direct opener", openErr: errors.New("direct open failed")},
-		{name: "application builder", builderErr: errors.New("application build failed")},
-		{name: "nil application runner", nilRunner: true},
+		{name: "validation failure", runErr: errors.New("direct run failed")},
+		{name: "lifecycle failure", runErr: errors.New("application build failed")},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			owner := newTestOpeningPresentationOwner()
-			direct := &selectionDirectJavaScriptStub{supported: true, openErr: testCase.openErr}
+			direct := &selectionDirectJavaScriptStub{supported: true, runErr: testCase.runErr}
 			factory, err := NewSelectionFactory(
-				func(context.Context, RunConfig, RuntimeRunnerBuilder, InvocationOperation, factoryvisualization.ResponsePresentation) (*Operation, error) {
-					t.Fatal("regular run opener called for direct JavaScript")
-					return nil, nil
-				},
-				func(context.Context, *factorysessions.RuntimeOpeningRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
+				func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 					return nil, nil
 				},
 				testInvocationOperation{}, testResponsePresentation(), direct,
-				func(ctx context.Context, open initializer.ApplicationOpeningOperation) (initializer.LocalRuntimeRunner, error) {
-					_, err := open(ctx)
-					if err != nil {
-						return nil, err
-					}
-					if testCase.builderErr != nil {
-						return nil, testCase.builderErr
-					}
-					if testCase.nilRunner {
-						return nil, nil
-					}
-					return runFuncRunner(func(context.Context) error { return nil }), nil
-				}, owner,
+				nil, nil, nil, owner, nil,
 			)
 			if err != nil {
 				t.Fatalf("NewSelectionFactory: %v", err)
 			}
 			selection := factory(RunConfig{FactoryConfigPath: "workflow.cjs", Output: &bytes.Buffer{}})
-			_, err = selection.Open(t.Context(), processcontract.RunIntent{WorkerSidecarsEnabled: true})
+			err = selection.Run(t.Context(), processcontract.RunIntent{WorkerSidecarsEnabled: true})
 			if err == nil {
-				t.Fatal("direct selection Open error = nil")
+				t.Fatal("direct selection Run error = nil")
 			}
 			if _, ok := owner.DirectJavaScript(direct.request.ScopeID); ok {
-				t.Fatal("direct JavaScript presentation scope remained after failed open")
+				t.Fatal("direct JavaScript presentation scope remained after failed run")
 			}
 		})
 	}
@@ -221,31 +238,19 @@ func TestRunSelectionDirectJavaScriptCleansPresentationOnOpenFailures(t *testing
 func TestRunSelectionSupportsDirectJavaScriptWithoutPresentationOwner(t *testing.T) {
 	direct := &selectionDirectJavaScriptStub{supported: true}
 	factory, err := NewSelectionFactory(
-		func(context.Context, RunConfig, RuntimeRunnerBuilder, InvocationOperation, factoryvisualization.ResponsePresentation) (*Operation, error) {
-			t.Fatal("regular run opener called for direct JavaScript")
-			return nil, nil
-		},
-		func(context.Context, *factorysessions.RuntimeOpeningRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
+		func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
 			return nil, nil
 		},
 		testInvocationOperation{}, testResponsePresentation(), direct,
-		func(ctx context.Context, open initializer.ApplicationOpeningOperation) (initializer.LocalRuntimeRunner, error) {
-			if _, err := open(ctx); err != nil {
-				return nil, err
-			}
-			return runFuncRunner(func(context.Context) error { return nil }), nil
-		},
+		nil, nil, nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("NewSelectionFactory: %v", err)
 	}
-	application, err := factory(RunConfig{FactoryConfigPath: "workflow.cjs"}).Open(
+	err = factory(RunConfig{FactoryConfigPath: "workflow.cjs"}).Run(
 		t.Context(), processcontract.RunIntent{WorkerSidecarsEnabled: true},
 	)
 	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	if err := application.Run(t.Context()); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 }
@@ -271,7 +276,8 @@ type selectionDirectJavaScriptStub struct {
 	supported    bool
 	request      factorysessions.DirectJavaScriptRunRequest
 	cancellation initializer.InvocationCancellation
-	openErr      error
+	runErr       error
+	onRun        func()
 }
 
 type selectionCancellationStub struct{}
@@ -280,23 +286,22 @@ func (*selectionCancellationStub) Cancel() {}
 
 func (s *selectionDirectJavaScriptStub) Supports(string) bool { return s.supported }
 
-func (s *selectionDirectJavaScriptStub) Open(
+func (s *selectionDirectJavaScriptStub) Run(
 	_ context.Context,
 	request factorysessions.DirectJavaScriptRunRequest,
 	cancellation initializer.InvocationCancellation,
-) (factorysessions.DirectJavaScriptApplication, error) {
+	discloseStartup func(),
+) error {
 	s.request = request
 	s.cancellation = cancellation
-	if s.openErr != nil {
-		return factorysessions.DirectJavaScriptApplication{}, s.openErr
+	if s.onRun != nil {
+		s.onRun()
 	}
-	return factorysessions.DirectJavaScriptApplication{
-		Plan: lifecycle.Plan{Components: []lifecycle.NamedComponent{{
-			Name: "direct JavaScript",
-			Component: lifecycle.NewRunner(func(context.Context) error {
-				return nil
-			}),
-			Primary: true,
-		}}},
-	}, nil
+	if s.runErr != nil {
+		return s.runErr
+	}
+	if discloseStartup != nil {
+		discloseStartup()
+	}
+	return nil
 }

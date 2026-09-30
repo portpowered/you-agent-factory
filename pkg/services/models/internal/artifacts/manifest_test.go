@@ -201,6 +201,31 @@ func TestDecodePreservesPackagingRevision(t *testing.T) {
 	}
 }
 
+func TestDecodeSelectsLinuxCUDAArtifact(t *testing.T) {
+	t.Parallel()
+	data := mutatedFixture(t, func(document map[string]any) {
+		entry := document["artifacts"].([]any)[0].(map[string]any)
+		entry["id"] = "localai-vibevoice/linux-amd64-cuda"
+		target := entry["target"].(map[string]any)
+		target["id"] = "linux-amd64-cuda"
+		target["accelerators"] = []string{"cuda"}
+	})
+	manifest, err := artifacts.Decode(data)
+	if err != nil {
+		t.Fatalf("Decode Linux CUDA fixture: %v", err)
+	}
+	descriptor, err := manifest.Select(artifacts.SelectionRequest{
+		Backend: "localai-vibevoice", OperatingSystem: "linux", Architecture: "amd64",
+		ProtocolRevision: fixtureProtocolRevision, Accelerator: "cuda",
+	})
+	if err != nil {
+		t.Fatalf("Select Linux CUDA fixture: %v", err)
+	}
+	if descriptor.Target.ID != "linux-amd64-cuda" {
+		t.Fatalf("target = %q, want linux-amd64-cuda", descriptor.Target.ID)
+	}
+}
+
 func TestDecodeRejectsNonPositivePackagingRevision(t *testing.T) {
 	t.Parallel()
 

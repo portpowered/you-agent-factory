@@ -1,4 +1,13 @@
 actions:
+    - target: $.components.schemas.ModelOperationContentType
+      update:
+        x-enum-varnames:
+            - ModelOperationContentTypeText
+            - ModelOperationContentTypeImage
+            - ModelOperationContentTypeAudio
+            - ModelOperationContentTypeVideo
+            - ModelOperationContentTypeJSON
+            - ModelOperationContentTypeBinary
     - target: $.components.schemas.ListWorkResponse.properties.results
       update:
         x-go-type: '[]Work'

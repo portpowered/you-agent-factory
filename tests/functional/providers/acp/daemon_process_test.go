@@ -32,7 +32,7 @@ const singleACPAgentWorkflow = `return (async function () {
     label: "daemon-agent",
     prompt: "complete one ACP daemon turn",
     executorProvider: "ACP",
-    modelProvider: "cursor-acp"
+    modelProvider: "cursor"
   });
   if (result.status !== "COMPLETED") { throw "ACP child failed"; }
   return result.output;
@@ -40,8 +40,8 @@ const singleACPAgentWorkflow = `return (async function () {
 
 const parallelACPAgentWorkflow = `return (async function () {
   const results = await parallel([
-    {label: "daemon-agent-1", prompt: "first", executorProvider: "ACP", modelProvider: "cursor-acp"},
-    {label: "daemon-agent-2", prompt: "second", executorProvider: "ACP", modelProvider: "cursor-acp"}
+    {label: "daemon-agent-1", prompt: "first", executorProvider: "ACP", modelProvider: "cursor"},
+    {label: "daemon-agent-2", prompt: "second", executorProvider: "ACP", modelProvider: "cursor"}
   ]);
   if (results[0].status !== "COMPLETED" || results[1].status !== "COMPLETED") {
     throw "parallel ACP child failed";

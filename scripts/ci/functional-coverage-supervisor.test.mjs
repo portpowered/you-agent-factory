@@ -5,6 +5,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { pathForTestBash, testBash } from "./test-bash-paths.mjs";
 
 const repositoryRoot = process.cwd();
 const supervisorPath = join(
@@ -13,21 +14,15 @@ const supervisorPath = join(
 	"ci",
 	"run-functional-coverage-with-quarantine.sh",
 );
-const bashCommand = process.env.BASH_BIN || "bash";
+const bashCommand = testBash({ requireSetsid: true });
+const pathForBash = (path) => pathForTestBash(path, bashCommand);
 
-function pathForBash(path) {
-	if (process.platform !== "win32") return path;
-	const windowsPath = path.match(/^([A-Za-z]):[\\/](.*)$/);
-	if (!windowsPath) return path.replaceAll("\\", "/");
-	return `/mnt/${windowsPath[1].toLowerCase()}/${windowsPath[2].replaceAll("\\", "/")}`;
-}
-
-const bashSupervisorPath = pathForBash(supervisorPath);
-const bashProbe = spawnSync(bashCommand, ["-c", "exit 0"], {
+const bashProbe = spawnSync(bashCommand, ["-c", "command -v setsid >/dev/null"], {
 	encoding: "utf8",
 	windowsHide: true,
 });
 const bashAvailable = !bashProbe.error && bashProbe.status === 0;
+const bashSupervisorPath = bashAvailable ? pathForBash(supervisorPath) : supervisorPath;
 
 function shellQuote(value) {
 	return `'${value.replaceAll("'", "'\\\"'\\\"'")}'`;
@@ -144,7 +139,7 @@ async function createCommands(directory, options = {}) {
 
 test(
 	"functional coverage supervisor joins independent outcomes and cleans up cancellation",
-	{ skip: !bashAvailable, skipReason: "bash is required for the CI supervisor test" },
+	{ skip: !bashAvailable, skipReason: "bash with setsid is required for the CI supervisor test" },
 	async (t) => {
 		const root = await mkdtemp(join(tmpdir(), "functional-coverage-supervisor-"));
 		t.after(() => rm(root, { recursive: true, force: true }));
@@ -160,7 +155,7 @@ test(
 		}
 
 		const success = await scenario("success", {});
-		assert.equal(success.result.status, 0);
+		assert.equal(success.result.status, 0, outputOf(success.result));
 		assert.equal(readStatus(success.directory, "quarantine"), 0);
 		assert.equal(readStatus(success.directory, "coverage"), 0);
 

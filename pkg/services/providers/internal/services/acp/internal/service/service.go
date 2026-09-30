@@ -317,12 +317,17 @@ func (daemon *daemon) execute(
 	if err != nil {
 		return providers.ExecuteResult{}, invalidFailure(err)
 	}
-	prompt := promptBlocks(request)
-
-	if err := daemon.ensureStarted(ctx, id, cwd, requestEnvironment(request), request); err != nil {
+	environment := requestEnvironment(request)
+	environment = openCodeEnvironment(id, environment)
+	if err := daemon.preflight(ctx, id, cwd, environment); err != nil {
 		return providers.ExecuteResult{}, err
 	}
-	daemon.client.reset(request.SkipPermissions, request.ProgressObserver)
+	prompt := promptBlocks(request)
+
+	if err := daemon.ensureStarted(ctx, id, cwd, environment, request); err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	daemon.client.reset(request.ProgressObserver)
 	client := daemon.client
 	connection := daemon.connection
 	initialized := daemon.initialized
@@ -331,6 +336,7 @@ func (daemon *daemon) execute(
 	if err != nil {
 		return providers.ExecuteResult{}, err
 	}
+	client.suppressStartupChunk(providerStartupInfo(id, session.Meta))
 	daemon.client.setSessionID(string(session.SessionId))
 	request.ObserveSession(providers.SessionRef{
 		Provider: id,
@@ -339,6 +345,10 @@ func (daemon *daemon) execute(
 	})
 	modelConfig, err := applyAdvertisedModel(ctx, connection, session, request.Model)
 	if err != nil {
+		var failure providers.ExecuteFailure
+		if errors.As(err, &failure) {
+			return providers.ExecuteResult{}, withSessionRef(failure, id, string(session.SessionId))
+		}
 		daemon.invalidateDisconnected(ctx)
 		return providers.ExecuteResult{}, withSessionRef(
 			rpcFailure(ctx, "session/set_config_option", id, err, daemon.stderr.String(), request),
@@ -364,6 +374,12 @@ func (daemon *daemon) execute(
 	}
 	if response.StopReason == acpsdk.StopReasonCancelled {
 		return providers.ExecuteResult{}, withPartial(acpControlCanceledFailure(id), client, id)
+	}
+	if client.permissionDenied() && strings.TrimSpace(client.content()) == "" {
+		return providers.ExecuteResult{}, withPartial(providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindUnknown,
+			Message: fmt.Sprintf("ACP provider %q ended the turn without output after a permission request was denied", id),
+		}, client, id)
 	}
 	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: client.completeProgress(), ProgressAlreadyObserved: request.ProgressObserver != nil, Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig, "completion_evidence": "provider_response"}}}, nil
 }
@@ -397,6 +413,47 @@ func (daemon *daemon) openSession(
 		return acpsdk.NewSessionResponse{}, daemon.sessionOpenFailure(ctx, id, "session/new", err, initialized, request)
 	}
 	return session, nil
+}
+
+const (
+	// piAcpMetaKey and piAcpStartupInfoField address the `_meta.piAcp.startupInfo`
+	// value pi-acp attaches to its session/new (and session/load) response. ACP
+	// reserves `_meta` for agent-defined metadata, so this is a pi-acp
+	// extension rather than a protocol guarantee.
+	piAcpMetaKey          = "piAcp"
+	piAcpStartupInfoField = "startupInfo"
+)
+
+func (daemon *daemon) preflight(ctx context.Context, id providers.ID, cwd string, environment []string) error {
+	if id != providers.IDPi {
+		return nil
+	}
+	return piPreflight(ctx, daemon.newCommand, daemon.locator, cwd, environment)
+}
+
+// pi-acp replays this session metadata as an agent message outside the prompt
+// turn. It must not become the primary result when no model answer follows.
+func providerStartupInfo(id providers.ID, meta map[string]any) string {
+	if id != providers.IDPi {
+		return ""
+	}
+	return piStartupInfo(meta)
+}
+
+// piStartupInfo returns the exact startup banner text an agent published under
+// `_meta.piAcp.startupInfo`, or "" when the agent published none. The value is
+// read from a freshly decoded JSON object, so the nested object arrives as
+// map[string]any; the map[string]string case is accepted so a caller that
+// built the response in process is not silently ignored.
+func piStartupInfo(meta map[string]any) string {
+	switch fields := meta[piAcpMetaKey].(type) {
+	case map[string]any:
+		startup, _ := fields[piAcpStartupInfoField].(string)
+		return startup
+	case map[string]string:
+		return fields[piAcpStartupInfoField]
+	}
+	return ""
 }
 
 const (
@@ -473,6 +530,36 @@ func (daemon *daemon) promptWithWindow(
 	return response, err
 }
 
+func (daemon *daemon) resolveLaunchName(id providers.ID) (string, error) {
+	name := daemon.command.Name
+	if id == providers.ID("pi") && name == "you" && slices.Equal(daemon.command.Args, []string{"pi-acp"}) {
+		current, ok := daemon.locator.(platformprocess.CurrentExecutableLocator)
+		if !ok {
+			return "", dependencyFailure("ACP current executable locator is unavailable")
+		}
+		resolved, err := current.CurrentExecutable()
+		if err != nil {
+			return "", dependencyFailure(fmt.Sprintf("resolve current executable for ACP pi bridge: %v", err))
+		}
+		if !filepath.IsAbs(resolved) {
+			return "", dependencyFailure("ACP current executable locator returned a relative path")
+		}
+		return resolved, nil
+	}
+	if daemon.locator != nil {
+		if _, err := daemon.locator.LookPath(name); err != nil {
+			return "", providers.ExecuteFailure{
+				Kind:    providers.ExecuteFailureKindDependency,
+				Message: fmt.Sprintf("ACP executable %q is unavailable", name),
+				Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
+					"work-failure-type": "missing_executable",
+				}},
+			}
+		}
+	}
+	return name, nil
+}
+
 func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd string, environment []string, request providers.ExecuteRequest) error {
 	if daemon.connection != nil {
 		// A peer disconnect is authoritative even when cmd.Wait has not yet
@@ -492,18 +579,11 @@ func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd st
 	if daemon.newCommand == nil {
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP command is unavailable"}
 	}
-	if daemon.locator != nil {
-		if _, err := daemon.locator.LookPath(daemon.command.Name); err != nil {
-			return providers.ExecuteFailure{
-				Kind:    providers.ExecuteFailureKindDependency,
-				Message: fmt.Sprintf("ACP executable %q is unavailable", daemon.command.Name),
-				Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
-					"work-failure-type": "missing_executable",
-				}},
-			}
-		}
+	launchName, err := daemon.resolveLaunchName(id)
+	if err != nil {
+		return err
 	}
-	cmd := daemon.newCommand(daemon.command.Name, daemon.command.Args...)
+	cmd := daemon.newCommand(launchName, daemon.command.Args...)
 	if cmd == nil {
 		return dependencyFailure("ACP command factory returned nil")
 	}
@@ -527,7 +607,10 @@ func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd st
 	go func() { finished <- cmd.Wait() }()
 	client := &client{}
 	connection := acpsdk.NewClientSideConnection(client, stdin, stdout)
-	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{ProtocolVersion: acpsdk.ProtocolVersionNumber, ClientCapabilities: acpsdk.ClientCapabilities{}})
+	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{
+		ProtocolVersion:    acpsdk.ProtocolVersionNumber,
+		ClientCapabilities: acpClientCapabilities(),
+	})
 	if err != nil {
 		daemon.cmd, daemon.stdin, daemon.finished, daemon.tree = cmd, stdin, finished, tree
 		_ = daemon.stopLocked(context.Background())
@@ -624,6 +707,19 @@ func requestEnvironment(request providers.ExecuteRequest) []string {
 	return values
 }
 
+func openCodeEnvironment(id providers.ID, environment []string) []string {
+	if id != providers.IDOpenCode {
+		return environment
+	}
+	for _, entry := range environment {
+		name, _, assigned := strings.Cut(entry, "=")
+		if assigned && strings.EqualFold(name, "OPENCODE_CONFIG_CONTENT") {
+			return environment
+		}
+	}
+	return append(environment, `OPENCODE_CONFIG_CONTENT={"snapshots":false}`)
+}
+
 func absoluteWorkingDirectory(value string) (string, error) {
 	if strings.TrimSpace(value) == "" {
 		return "", errors.New("ACP working directory is required")
@@ -646,7 +742,10 @@ func applyAdvertisedModel(ctx context.Context, connection *acpsdk.ClientSideConn
 		}
 		return "applied", nil
 	}
-	return "not_advertised", nil
+	return "not_advertised", providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindInvalidRequest,
+		Message: fmt.Sprintf("ACP session does not advertise requested model %q", model),
+	}
 }
 
 func selectOptionContains(options acpsdk.SessionConfigSelectOptions, model acpsdk.SessionConfigValueId) bool {
@@ -691,18 +790,17 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 	if ctx.Err() != nil {
 		return nativeFailure(ctx.Err())
 	}
-	detail := safeACPStderr(stderr, request.EnvVars)
+	piModelConnection := isPiModelConnectionFailure(id, err)
+	kind := rpcFailureKind(err, piModelConnection)
 	message := fmt.Sprintf("ACP provider %q %s failed: %s", id, method, safeRPCMessage(err))
-	if detail != "" {
+	if piModelConnection {
+		message = fmt.Sprintf("ACP provider %q could not connect to the selected model endpoint; check the model endpoint and its configuration", id)
+	} else if kind == providers.ExecuteFailureKindThrottled {
+		message = fmt.Sprintf("ACP provider %q is temporarily unavailable due to usage or capacity limits", id)
+	} else if isACPPeerClosedFailure(err) {
+		message = fmt.Sprintf("ACP provider %q disconnected before responding; retry the request", id)
+	} else if detail := safeACPStderr(stderr, request.EnvVars); detail != "" {
 		message += " (stderr: " + detail + ")"
-	}
-	kind := providers.ExecuteFailureKindUnknown
-	var requestErr *acpsdk.RequestError
-	if errors.As(err, &requestErr) && isACPServerFailure(requestErr.Code) {
-		// A server-side ACP failure is a provider dependency outcome. Workers
-		// classifies that outcome as retryable and, when a session was opened,
-		// retains the exact Provider Session for the retry continuation.
-		kind = providers.ExecuteFailureKindDependency
 	}
 	if method == "initialize" {
 		native := strings.ToLower(err.Error())
@@ -710,17 +808,92 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 			kind = providers.ExecuteFailureKindMisconfigured
 		}
 	}
+	errorCode := "ACP_" + strings.ToUpper(strings.ReplaceAll(method, "session/", "")) + "_FAILED"
+	if piModelConnection {
+		errorCode = "ACP_PI_MODEL_CONNECTION"
+	} else if isACPPeerClosedFailure(err) {
+		errorCode = "ACP_PEER_CLOSED"
+	}
 	return providers.ExecuteFailure{Kind: kind, Message: message, Diagnostics: &providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{{
 		Phase: "failed", Detail: message, Metadata: map[string]string{
 			"kind": "error", "native_type": method,
-			"error_code": "ACP_" + strings.ToUpper(strings.ReplaceAll(method, "session/", "")) + "_FAILED",
+			"error_code": errorCode,
 		},
 	}}}}
+}
+
+func rpcFailureKind(err error, piModelConnection bool) providers.ExecuteFailureKind {
+	var requestErr *acpsdk.RequestError
+	if piModelConnection {
+		return providers.ExecuteFailureKindMisconfigured
+	} else if errors.As(err, &requestErr) && isACPRateLimitFailure(requestErr.Message) {
+		return providers.ExecuteFailureKindThrottled
+	} else if requestErr != nil && isACPServerFailure(requestErr.Code) {
+		// A server-side ACP failure is a provider dependency outcome. Workers
+		// classifies that outcome as retryable and, when a session was opened,
+		// retains the exact Provider Session for the retry continuation.
+		return providers.ExecuteFailureKindDependency
+	} else if isACPPeerClosedFailure(err) {
+		// The ACP SDK's structured peer-disconnect error is a provider
+		// dependency outcome. It is classified separately from arbitrary
+		// provider-authored -32603 errors so that only the exact SDK shape
+		// is recognized.
+		return providers.ExecuteFailureKindDependency
+	}
+	return providers.ExecuteFailureKindUnknown
+}
+
+// isPiModelConnectionFailure recognizes only Pi's typed bridge outcome. The
+// provider-authored message and other data fields are never used as evidence.
+func isPiModelConnectionFailure(id providers.ID, err error) bool {
+	if id != "pi" {
+		return false
+	}
+	var requestErr *acpsdk.RequestError
+	if !errors.As(err, &requestErr) || requestErr.Code != -32603 {
+		return false
+	}
+	data, ok := requestErr.Data.(map[string]any)
+	if !ok {
+		return false
+	}
+	return data["provider"] == "pi" && data["outcome"] == "error" && data["failureKind"] == "model_connection"
+}
+
+func isACPRateLimitFailure(message string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	return strings.Contains(normalized, "rate limit") || strings.Contains(normalized, "too many requests") ||
+		strings.Contains(normalized, "resource exhausted") || strings.Contains(normalized, "at capacity") ||
+		strings.Contains(normalized, "http 429")
 }
 
 func isACPServerFailure(code int) bool {
 	return code >= acpServerErrorMinimum && code <= acpServerErrorMaximum &&
 		code != -32000 && code != acpErrorCodeResourceNotFound
+}
+
+// isACPPeerClosedFailure reports whether err is the ACP SDK's structured
+// peer-disconnect RequestError: code -32603 with Data carrying the exact
+// "peer disconnected before response" or "peer disconnected while waiting
+// for pre-response notifications" marker.
+func isACPPeerClosedFailure(err error) bool {
+	var requestErr *acpsdk.RequestError
+	if !errors.As(err, &requestErr) {
+		return false
+	}
+	if requestErr.Code != -32603 || requestErr.Message != "Internal error" {
+		return false
+	}
+	data, ok := requestErr.Data.(map[string]any)
+	if !ok {
+		return false
+	}
+	errorValue, _ := data["error"].(string)
+	switch errorValue {
+	case "peer disconnected before response", "peer disconnected while waiting for pre-response notifications":
+		return true
+	}
+	return false
 }
 
 func safeRPCMessage(err error) string {
@@ -957,29 +1130,73 @@ func sensitiveEnvironmentName(name string) bool {
 }
 
 type client struct {
-	mu              sync.Mutex
-	skipPermissions bool
-	text            strings.Builder
-	sessionID       string
-	stream          *promptProgressStream
+	mu                  sync.Mutex
+	permissionWasDenied bool
+	text                strings.Builder
+	sessionID           string
+	// startupChunk is the exact startup banner text this turn's session
+	// metadata identified, empty when the provider published none. Chunks
+	// matching it are never accumulated as result content.
+	startupChunk string
+	stream       *promptProgressStream
 }
 
 // reset begins one turn's progress stream. observe may be nil, in which case
 // the turn still normalizes its facts but delivers them only in the returned
 // diagnostics.
-func (c *client) reset(skipPermissions bool, observe providers.ProgressObserver) {
+func (c *client) reset(observe providers.ProgressObserver) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.skipPermissions = skipPermissions
+	c.permissionWasDenied = false
 	c.text.Reset()
 	c.sessionID = ""
+	c.startupChunk = ""
 	c.stream = newPromptProgressStream(observe)
+}
+
+// suppressStartupChunk records the exact startup banner text the session
+// metadata identified and removes it from the text this turn has accumulated
+// so far.
+//
+// Order matters and both orders are handled. The banner reaches the client as
+// an ordinary agent_message_chunk, and an agent that emits it outside the
+// prompt turn can deliver that notification before session/new has returned -
+// that chunk is already inside c.text and can only be withdrawn here. A
+// notification that arrives later is dropped by SessionUpdate instead, because
+// this call has already recorded the text. Both paths mutate only c.text, so
+// real prompt output and the source-native progress facts the observer
+// receives are untouched either way.
+func (c *client) suppressStartupChunk(value string) {
+	if strings.TrimSpace(value) == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.startupChunk = strings.TrimSpace(value)
+	accumulated := c.text.String()
+	remainder := strings.Replace(accumulated, value, "", 1)
+	if remainder == accumulated {
+		return
+	}
+	c.text.Reset()
+	// A turn whose only accumulated text was the banner must read as empty, not
+	// as the banner's trailing whitespace, so a caller judging whether the
+	// provider produced any output at all is not misled.
+	if strings.TrimSpace(remainder) != "" {
+		c.text.WriteString(remainder)
+	}
+}
+
+// isStartupChunkLocked reports whether text is the exact startup banner this
+// turn's session metadata identified. Callers must hold c.mu.
+func (c *client) isStartupChunkLocked(text string) bool {
+	return c.startupChunk != "" && strings.TrimSpace(text) == c.startupChunk
 }
 
 func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) error {
 	p, text := mapSessionUpdate(n.Update)
 	c.mu.Lock()
-	if text != "" {
+	if text != "" && !c.isStartupChunkLocked(text) {
 		c.text.WriteString(text)
 	}
 	stream := c.stream
@@ -1000,6 +1217,11 @@ func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) 
 }
 func (c *client) setSessionID(v string) { c.mu.Lock(); c.sessionID = v; c.mu.Unlock() }
 func (c *client) content() string       { c.mu.Lock(); defer c.mu.Unlock(); return c.text.String() }
+func (c *client) permissionDenied() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.permissionWasDenied
+}
 func (c *client) sessionRef(provider providers.ID) *providers.SessionRef {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1082,9 +1304,8 @@ func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress,
 		metadata["status"] = string(update.ToolCall.Status)
 		encodeMetadata(metadata, "raw_input", update.ToolCall.RawInput)
 	case update.ToolCallUpdate != nil:
-		kind = "tool"
+		kind, phase = "tool", "updated"
 		metadata["native_type"] = "tool_call_update"
-		phase = "updated"
 		itemID = string(update.ToolCallUpdate.ToolCallId)
 		if update.ToolCallUpdate.Title != nil {
 			detail = *update.ToolCallUpdate.Title
@@ -1096,7 +1317,8 @@ func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress,
 			}
 		}
 		encodeMetadata(metadata, "raw_output", update.ToolCallUpdate.RawOutput)
-		progress := []providers.ExecuteProgress{}
+		metadata["kind"], metadata["item_id"], metadata["provider_session_id"] = kind, itemID, ""
+		progress := []providers.ExecuteProgress{{Phase: phase, Detail: detail, Metadata: metadata}}
 		for _, content := range update.ToolCallUpdate.Content {
 			if content.Diff == nil {
 				continue
@@ -1176,20 +1398,29 @@ func (c *client) RequestPermission(ctx context.Context, request acpsdk.RequestPe
 	if ctx.Err() != nil {
 		return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeCancelled()}, nil
 	}
-	// The SDK invokes this callback from its connection reader while the
-	// per-turn policy is reset by the execution goroutine. Snapshot the policy
-	// under the same lock as reset so a permission request cannot observe an
-	// unsynchronized or stale turn value.
-	c.mu.Lock()
-	want := c.skipPermissions
-	c.mu.Unlock()
+	// ACP invocations are noninteractive. Grant the broadest advertised allow
+	// choice so the peer can continue without a permission prompt.
+	for _, kind := range []acpsdk.PermissionOptionKind{
+		acpsdk.PermissionOptionKindAllowAlways,
+		acpsdk.PermissionOptionKindAllowOnce,
+	} {
+		for _, option := range request.Options {
+			if option.Kind == kind {
+				return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeSelected(option.OptionId)}, nil
+			}
+		}
+	}
 	for _, option := range request.Options {
-		allow := option.Kind == acpsdk.PermissionOptionKindAllowOnce || option.Kind == acpsdk.PermissionOptionKindAllowAlways
-		reject := option.Kind == acpsdk.PermissionOptionKindRejectOnce || option.Kind == acpsdk.PermissionOptionKindRejectAlways
-		if (want && allow) || (!want && reject) {
+		if option.Kind == acpsdk.PermissionOptionKindRejectOnce || option.Kind == acpsdk.PermissionOptionKindRejectAlways {
+			c.mu.Lock()
+			c.permissionWasDenied = true
+			c.mu.Unlock()
 			return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeSelected(option.OptionId)}, nil
 		}
 	}
+	c.mu.Lock()
+	c.permissionWasDenied = true
+	c.mu.Unlock()
 	return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeCancelled()}, nil
 }
 func (*client) ReadTextFile(context.Context, acpsdk.ReadTextFileRequest) (acpsdk.ReadTextFileResponse, error) {

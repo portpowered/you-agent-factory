@@ -17,7 +17,7 @@ func writeACPJavaScriptFactory(t *testing.T) string {
     prompt: "complete the JavaScript ACP child",
     label: "javascript-acp",
     executorProvider: "ACP",
-    modelProvider: "cursor-acp",
+    modelProvider: "cursor",
     model: "test-model",
   });
   return child;

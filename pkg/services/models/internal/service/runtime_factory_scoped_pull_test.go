@@ -134,15 +134,19 @@ func TestRootPullModelForScopeKeepsExistingFactoryPullResult(t *testing.T) {
 	}
 }
 
-func newPullFallbackRoot(t *testing.T, modelName string) (*Root, models.RuntimeScopeRef, *preparationAssetService) {
+func newPullFallbackRoot(t *testing.T, modelName string, overlays ...map[string]models.ModelOverlay) (*Root, models.RuntimeScopeRef, *preparationAssetService) {
 	t.Helper()
 	scopes, err := runtimescopeswire.NewService(func() string { return "pull-fallback-test" })
 	if err != nil {
 		t.Fatalf("construct runtime scopes: %v", err)
 	}
-	ref, err := scopes.Open(models.RuntimeBinding{
+	binding := models.RuntimeBinding{
 		RuntimeConfig: func() *models.RuntimeConfig { return &models.RuntimeConfig{} },
-	})
+	}
+	if len(overlays) != 0 {
+		binding.OperatorModels = overlays[0]
+	}
+	ref, err := scopes.Open(binding)
 	if err != nil {
 		t.Fatalf("open runtime scope: %v", err)
 	}
@@ -178,138 +182,14 @@ func firstPullFallbackScope(t *testing.T, root *Root) models.RuntimeScopeRef {
 
 type pullCatalogMissRuntime struct {
 	models.Service
-	result models.PullResult
-	err    error
+	result    models.PullResult
+	err       error
+	pullCalls int
 }
 
 func (runtime *pullCatalogMissRuntime) PullModel(context.Context, string) (models.PullResult, error) {
+	runtime.pullCalls++
 	return runtime.result, runtime.err
-}
-
-func TestRootCloseRuntimeScopePreventsConcurrentLazyRuntimeReinsertion(t *testing.T) {
-	t.Parallel()
-
-	scope, err := (models.RuntimeScopeRef{}).Parse("factory-session:test:close-race")
-	if err != nil {
-		t.Fatalf("parse runtime scope: %v", err)
-	}
-	scopes := newCloseRaceRuntimeScopes()
-	runtime := &closeRaceRuntime{}
-	root := &Root{
-		runtimeScopes:  scopes,
-		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
-	}
-	invokeResult := make(chan error, 1)
-	go func() {
-		resolved, invokeErr := root.scopedRuntimeWithBuilder(
-			scope,
-			func(models.RuntimeBinding) (models.Service, error) { return runtime, nil },
-		)
-		if invokeErr == nil {
-			_, invokeErr = resolved.InvokeLocal(
-				context.Background(),
-				models.LocalInvocationRequest{Scope: scope},
-			)
-		}
-		invokeResult <- invokeErr
-	}()
-
-	awaitCloseRaceSignal(t, scopes.resolveStarted, "initial scope resolution")
-	if _, err := root.CloseRuntimeScope(
-		context.Background(),
-		models.CloseRuntimeScopeRequest{Scope: scope},
-	); err != nil {
-		t.Fatalf("CloseRuntimeScope() error = %v, want nil", err)
-	}
-
-	select {
-	case err := <-invokeResult:
-		if !errors.Is(err, models.ErrRuntimeScopeClosed) {
-			t.Fatalf("concurrent InvokeLocal() error = %v, want ErrRuntimeScopeClosed", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("concurrent InvokeLocal() did not return")
-	}
-	if runtime.invokeCalls != 0 {
-		t.Fatalf("closed-scope runtime invocation calls = %d, want 0", runtime.invokeCalls)
-	}
-	root.runtimeMu.RLock()
-	retained := root.runtimeByScope[scope]
-	root.runtimeMu.RUnlock()
-	if retained != nil {
-		t.Fatal("runtime capability was reinserted after its scope closed")
-	}
-}
-
-type closeRaceRuntimeScopes struct {
-	mu             sync.Mutex
-	resolveCalls   int
-	closed         bool
-	resolveStarted chan struct{}
-	closeCompleted chan struct{}
-	closeOnce      sync.Once
-}
-
-func newCloseRaceRuntimeScopes() *closeRaceRuntimeScopes {
-	return &closeRaceRuntimeScopes{
-		resolveStarted: make(chan struct{}),
-		closeCompleted: make(chan struct{}),
-	}
-}
-
-func (scopes *closeRaceRuntimeScopes) Open(models.RuntimeBinding) (runtimescopes.Reference, error) {
-	return "", errors.New("unexpected runtime scope open")
-}
-
-func (scopes *closeRaceRuntimeScopes) Resolve(
-	runtimescopes.Reference,
-) (models.RuntimeBinding, error) {
-	scopes.mu.Lock()
-	scopes.resolveCalls++
-	call := scopes.resolveCalls
-	closed := scopes.closed
-	scopes.mu.Unlock()
-	if call == 1 {
-		close(scopes.resolveStarted)
-		<-scopes.closeCompleted
-		return models.RuntimeBinding{}, nil
-	}
-	if closed {
-		return models.RuntimeBinding{}, runtimescopes.ErrScopeClosed
-	}
-	return models.RuntimeBinding{}, nil
-}
-
-func (scopes *closeRaceRuntimeScopes) Close(runtimescopes.Reference) error {
-	scopes.mu.Lock()
-	scopes.closed = true
-	scopes.mu.Unlock()
-	scopes.closeOnce.Do(func() {
-		close(scopes.closeCompleted)
-	})
-	return nil
-}
-
-type closeRaceRuntime struct {
-	models.Service
-	invokeCalls int
-}
-
-func (runtime *closeRaceRuntime) InvokeLocal(
-	context.Context,
-	models.LocalInvocationRequest,
-) (models.LocalInvocationResult, error) {
-	runtime.invokeCalls++
-	return models.LocalInvocationResult{}, nil
-}
-
-func awaitCloseRaceSignal(t *testing.T, signal <-chan struct{}, description string) {
-	t.Helper()
-	select {
-	case <-signal:
-	case <-time.After(5 * time.Second):
-		t.Fatalf("timed out waiting for %s", description)
-	}
 }
 
 func TestRootRemoveModelAssetsRefusesAnInUseCacheBeforeMutation(t *testing.T) {
@@ -570,6 +450,14 @@ func (host *removeGuardHost) ReleaseModelLease(context.Context, models.ReleaseMo
 	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
 }
 
+func (host *removeGuardHost) ClaimInvocationLease(context.Context, models.InvokeModelRequest) (models.ModelLease, error) {
+	return models.ModelLease{}, models.ErrUnsupportedOperation
+}
+
+func (host *removeGuardHost) ReleaseInvocationLease(context.Context, models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error) {
+	return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
+}
+
 func TestRootInvokeModelRecordsOneTerminalForInvocationFailure(t *testing.T) {
 	t.Parallel()
 
@@ -711,6 +599,24 @@ func TestJoinedAssetPreparationRequestKeepsNamedBackendAndRepositorySource(t *te
 		if !isJoinedSourceReference(value) {
 			t.Fatalf("source %q was not recognized", value)
 		}
+	}
+}
+
+func TestJoinedAssetPreparationRequestSkipsArchiveForInstalledBackend(t *testing.T) {
+	t.Parallel()
+	request := models.InvokeModelRequest{Model: models.ModelReference{NameOrURI: "llm"}}
+	resolved := models.ResolvedModelReference{Definition: models.ModelDefinition{
+		Name: "llm", Source: "hf://owner/repository/weights.gguf@revision-1", Backend: "localai-llamacpp",
+	}}
+	configuration := modelseffects.ResolvedHostConfiguration{
+		Backend: "localai-llamacpp", BackendArtifact: modelseffects.BackendArtifactSelection{InstalledPath: "/cache/backends/cuda12-llama-cpp"},
+	}
+	prepared, err := joinedAssetPreparationRequestWithConfiguration(request, configuration, resolved)
+	if err != nil {
+		t.Fatalf("prepare installed backend request: %v", err)
+	}
+	if len(prepared.BackendArtifacts) != 0 || !prepared.BackendReference.IsZero() {
+		t.Fatalf("installed backend requested an archive: %#v", prepared)
 	}
 }
 
@@ -924,6 +830,14 @@ func (host *joinedHostService) ReleaseModelLease(context.Context, models.Release
 	*host.events = append(*host.events, "release")
 	host.lease.Status = models.ModelLeaseStatusReleased
 	return models.ReleaseModelLeaseResult{Lease: host.lease, Outcome: models.ModelLeaseReleased}, nil
+}
+
+func (host *joinedHostService) ClaimInvocationLease(context.Context, models.InvokeModelRequest) (models.ModelLease, error) {
+	return host.lease, nil
+}
+
+func (host *joinedHostService) ReleaseInvocationLease(ctx context.Context, request models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error) {
+	return host.ReleaseModelLease(ctx, request)
 }
 
 type joinedInferenceService struct {

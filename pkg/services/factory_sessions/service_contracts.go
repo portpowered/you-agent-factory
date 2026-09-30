@@ -7,7 +7,9 @@ import (
 	"fmt"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"strings"
 	"time"
@@ -55,8 +57,8 @@ type ResolvedInvocationInput struct {
 // identity slice uses plain IdentityNormalizeRequest,
 // IdentityNormalizeProviderRequest, ResolvedIdentity, and the logical-target
 // typed errors; peers must not import the private identity subservice.
-// The published live-control slice uses OpenRequest/OpenResult,
-// ReadProjection, SessionProjection, ControlRequest, LifecycleControlResult,
+// The published live-control slice uses ReadProjection, SessionProjection,
+// ControlRequest, LifecycleControlResult,
 // ErrSessionNotFound, and *ControlError through LiveControlService; peers
 // that only manage live sessions depend on that narrow capability rather than
 // this broader aggregate and never import private live-runtime registry or
@@ -84,9 +86,8 @@ type ResolvedInvocationInput struct {
 // depend on a nested stream interface for peer import.
 // Peers must depend on the smallest owner-published capability it uses: LiveControlService for
 // live control, DurableExecutionService for durable execution,
-// InvocationService for one-shot invocation, or TargetExecutionService for the
-// established combined target behavior. Service remains the singular aggregate
-// authority for callers that genuinely need a combined surface.
+// InvocationService for one-shot invocation. Service is the singular aggregate
+// authority for callers that need live start, invoke, and control together.
 type Service interface {
 	// Canonical Factory Sessions operation vocabulary.
 	Start(context.Context, SessionStartRequest) (SessionStartResult, error)
@@ -119,8 +120,6 @@ type Service interface {
 	ListSessions(context.Context, ListSessionsRequest) (ListSessionsResult, error)
 	InvokeFactorySession(context.Context, string, InvocationRequest) (InvocationResult, error)
 	ActivateNamedFactory(context.Context, string) error
-	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
-	OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error)
 	ListFactorySessions(context.Context) ([]ReadProjection, error)
 	GetFactorySession(context.Context, string) (SessionProjection, error)
 	GetFactorySessionSyncPreflight(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor, *factorydefinitions.FactorySessionLogicalResolveHint) (SyncPreflightResult, error)
@@ -133,13 +132,24 @@ type Service interface {
 	RecoverLiveChange(context.Context, string, string) (LiveChangeResult, error)
 }
 
+// SessionInspectionService reads active durable Factory Session history and
+// inspection facts through session-keyed, value-only requests. It is a narrow
+// capability for transports that also read finalized history from Recordings.
+type SessionInspectionService interface {
+	QueryEvents(context.Context, SessionEventQueryRequest) (EventReadResult, error)
+	QueryEventStream(context.Context, SessionEventQueryRequest) (*factorydefinitions.FactoryEventStream, error)
+	ProbeEvents(context.Context, SessionEventQueryRequest) error
+	InspectDispatch(context.Context, SessionDispatchInspectRequest) (DispatchDetail, error)
+	QueryArtifacts(context.Context, SessionArtifactQueryRequest) (ListArtifactsResult, error)
+	InspectArtifact(context.Context, SessionArtifactInspectRequest) (ArtifactDetail, error)
+}
+
 // --- merged from live_control_contract.go ---
 
-// Live-control root slice freezes open, list, get/snapshot, pause, resume, and
+// Live-control root slice freezes list, get/snapshot, pause, resume, and
 // close vocabulary on the singular Service. Peers consume these plain root
 // contracts without importing private live-runtime registry or host types:
 //
-//   - Open: OpenRequest → *OpenResult
 //   - List: []ReadProjection
 //   - Get/snapshot: SessionProjection
 //   - Pause/Resume: ControlRequest → LifecycleControlResult
@@ -155,9 +165,8 @@ type Service interface {
 // depend on the aggregate Service.
 
 // LiveControlService is the owner-published Factory Sessions capability for
-// opening, listing, reading, pausing, resuming, and closing live Factory
-// Sessions. It is retained as the P5A transport compatibility capability
-// while canonical callers use Service's mode-neutral operations. It uses the
+// listing, reading, pausing, resuming, and closing live Factory Sessions.
+// It uses the
 // existing public request, projection, result, and typed-error vocabulary, so
 // the authoritative root implementation satisfies it structurally without an
 // adapter, duplicate registry, or second construction path.
@@ -166,7 +175,6 @@ type Service interface {
 // invocation, response-event streaming, inspection, or runtime-opening
 // operations through its dependency.
 type LiveControlService interface {
-	OpenFactorySession(context.Context, LiveControlOpenRequest) (*LiveControlOpenResult, error)
 	ListFactorySessions(context.Context) ([]LiveControlListItem, error)
 	GetFactorySession(context.Context, string) (LiveControlSnapshot, error)
 	PauseLiveFactorySession(context.Context, string, LiveControlRequest) (LiveControlResult, error)
@@ -181,7 +189,7 @@ type LiveControlService interface {
 // session inspectable so a later delete can apply its own safety policy.
 //
 // It is separate from LiveControlService to preserve the existing narrow
-// capability for callers that only open, inspect, pause, resume, or close live
+// capability for callers that only inspect, pause, resume, or close live
 // sessions. The canonical Factory Sessions root implements both capabilities.
 type LiveLifecycleControlService interface {
 	CancelLiveFactorySession(context.Context, string, LiveControlRequest) (LiveControlResult, error)
@@ -212,14 +220,6 @@ type PartialSessionResult = factoryruntime.PartialSessionResult
 // Factory Sessions surface and callers that only need live changes share one
 // implementation and one admission path.
 var _ LiveChangeService = (Service)(nil)
-
-// LiveControlOpenRequest is the plain root open request for live session control.
-// It is the published name for OpenRequest on the live-control slice.
-type LiveControlOpenRequest = OpenRequest
-
-// LiveControlOpenResult is the plain root open result carrying stable session
-// identity and discovered targets for the live-control slice.
-type LiveControlOpenResult = OpenResult
 
 // LiveControlListItem is one live session row returned by list through the
 // live-control root vocabulary.
@@ -559,10 +559,80 @@ type SessionOperationWait struct {
 	CancelOnTimeout bool
 }
 
+// SessionRuntimeMode selects batch or service execution.
+type SessionRuntimeMode string
+
+const (
+	SessionRuntimeModeBatch   SessionRuntimeMode = "BATCH"
+	SessionRuntimeModeService SessionRuntimeMode = "SERVICE"
+)
+
+// SessionArtifactPolicy controls artifact sink creation.
+type SessionArtifactPolicy string
+
+const (
+	SessionArtifactPolicyEnabled  SessionArtifactPolicy = "enabled"
+	SessionArtifactPolicyDisabled SessionArtifactPolicy = "disabled"
+)
+
+// SessionArtifactStorageConfig is the bounded rolling-file request.
+type SessionArtifactStorageConfig struct {
+	MaxSize    int
+	MaxBackups int
+	MaxAge     int
+	Compress   bool
+}
+
+// SessionRuntimeSelection carries value-only runtime selections for
+// process-owned activation.
+type SessionRuntimeSelection struct {
+	SystemConfigHome              string
+	LogDirectory                  string
+	MetricsDirectory              string
+	OperatorDefaults              operatorsettings.ResolvedDefaults
+	DefinitionSourcePath          string
+	DefinitionInvocationArguments *work.InvocationArguments
+	ExecutionBaseDir              string
+	CanonicalSessionID            string
+	BackendScopeID                string
+	SystemConfigPath              string
+	WorkFile                      string
+	ModelCacheDirectory           string
+	Mode                          SessionRuntimeMode
+	Verbose                       bool
+	RuntimeInstanceID             string
+	LogPolicy                     SessionArtifactPolicy
+	LogConfig                     SessionArtifactStorageConfig
+	MetricsPolicy                 SessionArtifactPolicy
+	MetricsConfig                 SessionArtifactStorageConfig
+	Host                          RuntimeHostRequest
+	Workers                       SessionWorkerSelection
+	Recording                     SessionRecordingSelection
+}
+
+// SessionWorkerSelection carries worker-side selections for one session.
+type SessionWorkerSelection struct {
+	RunnerID                          string
+	Worktree                          string
+	WorkerReasoningEffort             string
+	MockWorkers                       *workers.MockWorkersConfig
+	InvocationSkipPermissionsOverride *bool
+	SkipBuiltInPrerequisiteValidation bool
+}
+
+// SessionRecordingSelection carries recording selections for one session.
+type SessionRecordingSelection struct {
+	RecordPath    string
+	ReplayPath    string
+	ResumePath    string
+	WorkflowID    string
+	FlushInterval time.Duration
+}
+
 // SessionStartRequest is the detached start/open vocabulary for both live and
-// durable Factory Sessions. Its fields are immutable selections and normalized
-// values only: its RuntimeOptions field is configuration data and it carries no
-// Runtime object, service bundle, stream, logger, or filesystem handle.
+// durable Factory Sessions. Transport-visible fields are immutable selections
+// and normalized values; the internal Worker capabilities are attached by the
+// process root after transport mapping.
 type SessionStartRequest struct {
 	SessionID      string
 	Mode           SessionOperationMode
@@ -581,16 +651,30 @@ type SessionStartRequest struct {
 	ValidateOnly   bool
 	InitNewFactory bool
 	Synchronous    bool
+	// WorkerSettings is an internal snapshot from the selected live Factory
+	// Session for a durable execution started through this process.
+	WorkerSettings          *factoryruntime.JavaScriptWorkerSettings      `json:"-"`
+	WorkerAttemptStarter    WorkerAttemptStarter                          `json:"-"`
+	WorkerProgressPublisher workers.ProgressPublisher                     `json:"-"`
+	WorkerResourceAdmission factoryruntime.ResourceCapacityLeaseAdmission `json:"-"`
+	// RuntimeSelection carries value-only runtime selections for process-owned activation.
+	RuntimeSelection *SessionRuntimeSelection
+	// ActivationOnly starts lifecycle without dispatching Work (ACP target).
+	ActivationOnly bool
 }
 
-// SessionInvokeRequest carries normalized Work input into an existing
-// Factory Session. The owner converts it to the private invocation request only
-// at the owner boundary.
+// SessionInvokeRequest carries invocation values into an existing Factory
+// Session. Raw Content is normalized by the owner against the active Factory
+// signature; Input carries already prepared Work input.
 type SessionInvokeRequest struct {
-	SessionID   string
-	Correlation SessionOperationCorrelation
-	Input       *work.PreparedInvocationInput
-	Wait        SessionOperationWait
+	SessionID       string
+	Correlation     SessionOperationCorrelation
+	Input           *work.PreparedInvocationInput
+	Content         []work.WorkContentPart
+	ContentProvided bool
+	// Args carries normalized named invocation values as request data; transport owns no runtime handle.
+	Args map[string]any
+	Wait SessionOperationWait
 }
 
 // SessionActivateRequest selects a named Factory definition for an existing
@@ -657,6 +741,27 @@ type SessionResultReadRequest struct {
 	Request   ResultRequest
 }
 
+// SessionEventQueryRequest selects durable Factory Events after a reconnect
+// cursor. Its response is a finite value-only event batch.
+type SessionEventQueryRequest struct {
+	SessionID string
+	Reconnect EventReconnectRequest
+}
+
+type SessionDispatchInspectRequest struct {
+	SessionID  string
+	DispatchID string
+}
+
+type SessionArtifactQueryRequest struct {
+	SessionID string
+}
+
+type SessionArtifactInspectRequest struct {
+	SessionID  string
+	ArtifactID string
+}
+
 // SessionSyncPreparationRequest asks the Sessions owner to normalize a sync
 // start without opening a runtime or starting execution.
 type SessionSyncPreparationRequest struct {
@@ -695,9 +800,7 @@ type SessionOpenResult struct {
 	FolderPath            string
 }
 
-// SessionView is the common detached session inventory shape. Durable-only
-// details remain available through the durable owner projection in later
-// migration slices; this first slice keeps identity and readiness stable.
+// SessionView is the common Factory Session inventory shape.
 type SessionView struct {
 	SessionID        string
 	Mode             SessionOperationMode
@@ -716,11 +819,14 @@ type SessionView struct {
 
 type SessionGetResult struct {
 	Session SessionView
+	// Durable carries the complete value-only durable inspection projection.
+	Durable *SessionReadResult
 }
 
 type SessionListResult struct {
-	Mode     SessionOperationMode
-	Sessions []SessionView
+	Mode            SessionOperationMode
+	Sessions        []SessionView
+	DurableSessions []DurableSessionListSummary
 }
 
 type SessionControlResult struct {
@@ -777,28 +883,6 @@ type SessionResponseSubscriptionResult struct {
 	Cursor *ResponseEventCursor
 }
 
-// DetachedService is the canonical detached operation view used by callers
-// that need the mode-neutral operation family. The process root remains the
-// Service authority; P5A/P5B transport capabilities stay separate until their
-// owning packets complete the corresponding cutovers.
-type DetachedService = *DetachedOperations
-
-// DetachedStartRequest and related aliases make the new vocabulary easy to
-// discover without renaming the pre-existing durable StartRequest in P4-A.
-type (
-	DetachedStartRequest                = SessionStartRequest
-	DetachedInvokeRequest               = SessionInvokeRequest
-	DetachedActivateRequest             = SessionActivateRequest
-	DetachedGetRequest                  = SessionGetRequest
-	DetachedListRequest                 = SessionListRequest
-	DetachedControlRequest              = SessionControlRequest
-	DetachedResultReadRequest           = SessionResultReadRequest
-	DetachedSyncPreparationRequest      = SessionSyncPreparationRequest
-	DetachedResponseSubscriptionRequest = SessionResponseSubscriptionRequest
-)
-
-var ErrDetachedServiceUnavailable = errors.New("factory session detached operations are unavailable")
-
 // DetachedRequestError is returned before any legacy implementation is called
 // when a detached operation is missing a required value.
 type DetachedRequestError struct {
@@ -827,8 +911,6 @@ func (wait SessionOperationWait) SessionOperationTimeout() time.Duration {
 	}
 	return time.Duration(wait.TimeoutMillis) * time.Millisecond
 }
-
-var _ DetachedService = (*DetachedOperations)(nil)
 
 // ErrSessionDeletionConflict identifies a deletion request that is unsafe for
 // the selected Factory Session's current identity or runtime lifecycle.

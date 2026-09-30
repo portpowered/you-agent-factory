@@ -6,10 +6,14 @@ import (
 	"errors"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -156,6 +160,29 @@ func TestProjectResultRead_TerminalFinalAndUnavailable(t *testing.T) {
 	}
 	if unavailable.Availability == nil || unavailable.Availability.Reason != "SESSION_CANCELED" {
 		t.Fatalf("availability = %#v", unavailable.Availability)
+	}
+}
+
+func TestProjectResultRead_UnavailableRetainsTerminalFailure(t *testing.T) {
+	t.Parallel()
+	failure := &FailureSummary{Reason: "SCRIPT_ERROR", Message: "controlled workflow failure"}
+	session := SessionReadResult{
+		SessionID:     "dur-sess-failure",
+		Status:        LifecycleStatusFailed,
+		ResultSummary: &ResultSummary{ResultStatus: string(ResultStatusUnavailable)},
+	}
+	canonical := ResultReadResult{
+		SessionID: session.SessionID, SessionStatus: LifecycleStatusFailed,
+		ResultStatus: ResultStatusUnavailable, Failure: failure,
+	}
+	for _, mode := range []ResultMode{ResultModeFinal, ResultModePartial} {
+		result, err := ProjectResultRead(canonical, session, nil, ResultRequest{Mode: mode})
+		if err != nil {
+			t.Fatalf("ProjectResultRead(%s): %v", mode, err)
+		}
+		if result.Failure == nil || result.Failure.Message != failure.Message || result.Failure == failure {
+			t.Fatalf("ProjectResultRead(%s) Failure = %#v, want cloned original failure", mode, result.Failure)
+		}
 	}
 }
 
@@ -813,176 +840,124 @@ func TestChildWorkerExecutor_CarriesTheAuthoredWorkerNameAndPermissionPolicy(t *
 	}
 }
 
-// TestDirectChildExecutor_CarriesCanonicalPermissionsToWorkersExecuteRequest
-// is the standalone composition regression. Its child has no Factory Runtime
-// or Worker Session behind it, so the direct executor must translate the
-// canonical child permission into the detached Workers request itself.
-func TestDirectChildExecutor_CarriesCanonicalPermissionsToWorkersExecuteRequest(t *testing.T) {
-	for _, test := range []struct {
-		name       string
-		permission factory.JavaScriptChildPermission
-		want       bool
-	}{
-		{name: "DEFAULT", permission: factory.JavaScriptChildPermissionDefault, want: false},
-		{name: "SKIP_PERMISSIONS", permission: factory.JavaScriptChildPermissionSkipPermissions, want: true},
-		{name: "omitted", want: false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			invocation := &recordingWorkerExecution{result: workers.ExecuteResult{
-				Outcome: workers.ExecutionOutcomeAccepted,
-				Output: workers.ProposedOutput{
-					Primary: []work.WorkContentPart{{
-						Type: work.WorkContentPartTypeText,
-						Text: "child output",
-					}},
-				},
-			}}
-			executor := newDirectChildExecutor(
-				"direct-sess-1",
-				invocation,
-				newChildRecordSink(),
-				childTestValues{},
-				"/project",
-				0,
-			)
-			request := factory.JavaScriptChildExecutionRequest{Prompt: "run", Permissions: test.permission}
+func TestJavaScriptRuntimeService_CloseCancelsJoinsAndPersistsAsyncSession(t *testing.T) {
+	t.Parallel()
 
-			if _, err := executor.Execute(context.Background(), request); err != nil {
-				t.Fatalf("Execute: %v", err)
-			}
-			if invocation.request.Target.Permissions.SkipPermissions != test.want {
-				t.Fatalf("Workers skip-permissions = %v, want %v", invocation.request.Target.Permissions.SkipPermissions, test.want)
-			}
-		})
+	projectRoot := t.TempDir()
+	store := mustTestRuntimePersistenceStore(t, projectRoot)
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: store,
+		Workflows:   scriptedBlockingRuntimeWorkflows(),
+	})
+	started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-close-joins-001",
+		busyLoopWorkflowSource,
+		map[string]any{"subject": "shutdown"},
+		nil,
+	))
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	if err := service.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	session, err := service.GetSession(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession after Close: %v", err)
+	}
+	if session.Status != LifecycleStatusCanceled {
+		t.Fatalf("session status after Close = %q, want CANCELED", session.Status)
+	}
+	if session.Failure == nil || session.Failure.Reason != "WORKFLOW_RUNTIME_CANCELED" {
+		t.Fatalf("session failure after Close = %#v, want WORKFLOW_RUNTIME_CANCELED", session.Failure)
+	}
+	snapshotPath := filepath.Join(runtimepersist.DirForProjectRoot(projectRoot), started.SessionID+".json")
+	if _, err := os.Stat(snapshotPath); err != nil {
+		t.Fatalf("terminal snapshot after Close: %v", err)
+	}
+	if err := service.Close(); err != nil {
+		t.Fatalf("repeated Close: %v", err)
+	}
+	if _, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-close-rejected-001",
+		busyLoopWorkflowSource,
+		nil,
+		nil,
+	)); !errors.Is(err, ErrDurableExecutionClosed) {
+		t.Fatalf("StartAsync after Close error = %v, want ErrDurableExecutionClosed", err)
 	}
 }
 
-func TestJavaScriptRuntimeService_StandaloneChildUsesInjectedWorkersExecute(t *testing.T) {
-	invoker := &recordingWorkerExecution{result: workers.ExecuteResult{
-		Outcome: workers.ExecutionOutcomeAccepted,
-	}}
-	service := &JavaScriptRuntimeService{
-		projectRoot: "/project",
-		childValues: childTestValues{},
-	}
-	service.SetDirectWorkerExecution(invoker)
-
-	hooks := service.childExecutorHooks(ChildExecutorModeLive, "standalone-session")
-	if hooks.NewChildExecutor == nil {
-		t.Fatal("standalone child executor hook = nil")
-	}
-	sink := newChildRecordSink()
-	if _, err := hooks.NewChildExecutor("standalone-session", sink, factory.DefaultJavaScriptPolicy()).Execute(
-		context.Background(),
-		factory.JavaScriptChildExecutionRequest{Prompt: "run", Preset: "worker-a"},
-	); err != nil {
-		t.Fatalf("Execute standalone child: %v", err)
-	}
-	if invoker.request.Correlation.FactorySessionID != "standalone-session" {
-		t.Fatalf("standalone child session ID = %q, want standalone-session", invoker.request.Correlation.FactorySessionID)
-	}
-	if invoker.request.Target.WorkerName != "worker-a" {
-		t.Fatalf("standalone child worker name = %q, want worker-a", invoker.request.Target.WorkerName)
-	}
-}
-
-func TestLiveChildWithoutWorkersExecutionFailsWithChildSessionID(t *testing.T) {
-	service := &JavaScriptRuntimeService{
-		projectRoot: "/project",
-		childValues: childTestValues{},
-	}
-	hooks := service.childExecutorHooks(ChildExecutorModeLive, "parent-session")
-	if hooks.NewChildExecutor == nil {
-		t.Fatal("live child executor hook = nil")
-	}
-
-	_, err := hooks.NewChildExecutor(
-		"child-session-42",
-		newChildRecordSink(),
-		factory.DefaultJavaScriptPolicy(),
-	).Execute(context.Background(), factory.JavaScriptChildExecutionRequest{Prompt: "run"})
-	if err == nil || !strings.Contains(err.Error(), "child-session-42") || !strings.Contains(err.Error(), "Workers Execute capability is required") {
-		t.Fatalf("missing Workers Execute error = %v, want child session and capability", err)
-	}
-}
-
-func newTestChildWorkerExecutor(
-	invoke childExecuteService,
-	sink *childRecordSink,
-	observe workerDispatchObserver,
-) *childWorkerExecutor {
-	return newChildWorkerExecutor("dur-sess-1", invoke, sink, childTestValues{}, observe, "/project", 0)
-}
-
-// recordingWorkerExecution is the narrow Workers Execute seam a child reaches
-// through. It intentionally does not embed Factory Runtime or an executor.
-type recordingWorkerExecution struct {
-	request   workers.ExecuteRequest
-	result    workers.ExecuteResult
-	err       error
-	onInvoke  func()
-	onExecute func(workers.ExecuteRequest)
-}
-
-func (i *recordingWorkerExecution) Execute(
-	_ context.Context,
-	req workers.ExecuteRequest,
-) (workers.ExecuteResult, error) {
-	i.request = req
-	if i.onExecute != nil {
-		i.onExecute(req)
-	}
-	if i.onInvoke != nil {
-		i.onInvoke()
-	}
-	return i.result, i.err
-}
-
-type childRecordSink struct {
-	records  []factory.JavaScriptRuntimeRecord
-	statuses []string
-	next     int
-}
-
-func newChildRecordSink() *childRecordSink { return &childRecordSink{} }
-
-func (s *childRecordSink) Append(record factory.JavaScriptRuntimeRecord) {
-	s.records = append(s.records, record)
-}
-
-func (s *childRecordSink) AppendChildDispatch(_ factory.JavaScriptChildDispatchRecord, status string) {
-	s.statuses = append(s.statuses, status)
-}
-
-func (s *childRecordSink) NextChildDispatchIdentity() (string, int) {
-	s.next++
-	return "dispatch-1", s.next - 1
-}
-
-func (s *childRecordSink) NextChildArtifactID() string { return "artifact-1" }
-
-func (s *childRecordSink) terminalChildDispatch(t *testing.T) factory.JavaScriptChildDispatchRecord {
+func newTerminalWorkersService(t *testing.T, provider providers.Service) WorkerExecution {
 	t.Helper()
-	for index := len(s.records) - 1; index >= 0; index-- {
-		if record := s.records[index]; record.ChildDispatch != nil {
-			return *record.ChildDispatch
-		}
-	}
-	t.Fatal("no terminal child dispatch record was appended")
-	return factory.JavaScriptChildDispatchRecord{}
+	return terminalWorkerService{provider: provider}
 }
 
-type childTestValues struct{}
+// terminalWorkerService is a service-root fake: the bridge test owns durable
+// response publication, while Workers-owned wire tests cover construction and
+// normalization of the real Execute implementation.
+type terminalWorkerService struct {
+	provider providers.Service
+}
 
-func (childTestValues) TextDigest(string) string           { return "digest" }
-func (childTestValues) SchemaDigest(map[string]any) string { return "schema-digest" }
-func (childTestValues) CloneOutputMap(m map[string]any) map[string]any {
-	if m == nil {
-		return nil
+func (service terminalWorkerService) Execute(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	providerResult, err := service.provider.Execute(ctx, providers.ExecuteRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: request.Correlation.AttemptID,
+		Correlation: providers.ExecuteCorrelation{
+			FactorySessionID: request.Correlation.FactorySessionID,
+			RuntimeID:        request.Correlation.RuntimeID,
+			GenerationID:     request.Correlation.GenerationID,
+			DispatchID:       request.Correlation.DispatchID,
+			AttemptID:        request.Correlation.AttemptID,
+			RequestID:        request.Correlation.RequestID,
+			TraceID:          request.Correlation.TraceID,
+		},
+		UserMessage: request.Target.Prompt.UserMessage,
+	})
+	result := workers.ExecuteResult{Correlation: request.Correlation}
+	if err != nil {
+		outcome := workers.ExecutionOutcomeFailed
+		failureType := workers.WorkFailureTypeUnknown
+		if errors.Is(err, context.Canceled) {
+			outcome = workers.ExecutionOutcomeCanceled
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			failureType = workers.WorkFailureTypeTimeout
+		}
+		result.Outcome = outcome
+		result.Failure = &workers.ExecutionFailure{
+			Type:    failureType,
+			Family:  workers.WorkFailureFamilyTerminal,
+			Message: err.Error(),
+		}
+		return result, err
 	}
-	clone := make(map[string]any, len(m))
-	for key, value := range m {
-		clone[key] = value
+	result.Outcome = workers.ExecutionOutcomeAccepted
+	result.Output.Primary = []work.WorkContentPart{{Text: providerResult.Content}}
+	return result, nil
+}
+
+func exactEncodedSizeWarningState(t *testing.T, targetSize int) runtimeSessionState {
+	t.Helper()
+	state := runtimeSessionState{
+		session:        SessionReadResult{SessionID: "dur-sess-warning-threshold", Status: LifecycleStatusSucceeded},
+		petriMutations: []interfaces.TokenMutationRecord{{Type: interfaces.MutationCreate, TokenID: "live-token", ToPlace: "task:running", TransitionReachable: true, Token: &workers.Token{ID: "live-token", Color: workers.Color{WorkID: "live-work"}}}},
+		petriSummaries: []PetriTokenSummary{{TokenID: "terminal-token", WorkID: "terminal-work", PlaceID: "task:done"}},
 	}
-	return clone
+	base := encodedWarningStateBytes(t, state)
+	if targetSize < base {
+		t.Fatalf("target snapshot size %d is below base size %d", targetSize, base)
+	}
+	state.sourceContent = strings.Repeat("x", targetSize-base)
+	if got := encodedWarningStateBytes(t, state); got != targetSize {
+		t.Fatalf("constructed snapshot bytes = %d, want %d", got, targetSize)
+	}
+	return state
 }

@@ -261,16 +261,6 @@ func resumeRecoveryMetadataForRunner(
 	return &clone
 }
 
-func cloneRunResumeRecoveryMetadata(
-	metadata *recordings.ResumeRecoveryMetadata,
-) *recordings.ResumeRecoveryMetadata {
-	if metadata == nil {
-		return nil
-	}
-	clone := *metadata
-	return &clone
-}
-
 func runServiceFailureFields(err error, resumeInput bool) (string, string) {
 	if err == nil {
 		return runServiceFailureNone, ""

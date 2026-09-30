@@ -35,7 +35,7 @@ func assertACPResponseEventSequence(t *testing.T, events []factoryapi.FactoryRes
 	got := make([]factoryapi.FactoryResponseEvent, 0, len(events))
 	var previous int64
 	for _, event := range events {
-		if event.Provenance.Provider != "cursor-acp" {
+		if event.Provenance.Provider != "cursor" {
 			continue
 		}
 		if event.Sequence <= previous {
@@ -100,8 +100,8 @@ func assertACPWorkerSessionHistory(t *testing.T, events []factoryapi.WorkerSessi
 	if opening.WorkerSessionId == "" || len(opening.WorkIds) == 0 {
 		t.Fatalf("ACP Worker Session opening correlation = %#v, want Worker Session and Work identities", opening)
 	}
-	if opening.ProviderSession.Provider != "cursor-acp" || opening.ProviderSession.Kind != "session_id" || opening.ProviderSession.Id == "" {
-		t.Fatalf("ACP Worker Session opening provider reference = %#v, want cursor-acp session_id identity", opening.ProviderSession)
+	if opening.ProviderSession.Provider != "cursor" || opening.ProviderSession.Kind != "session_id" || opening.ProviderSession.Id == "" {
+		t.Fatalf("ACP Worker Session opening provider reference = %#v, want cursor session_id identity", opening.ProviderSession)
 	}
 
 	providerBindingIndex := -1
@@ -126,28 +126,28 @@ func assertACPWorkerSessionHistory(t *testing.T, events []factoryapi.WorkerSessi
 			t.Fatalf("ACP Worker Session source sequence regressed for %s: %d after %d", sourceKey, event.Event.SourceSequence, previous)
 		}
 		lastSourceSequences[sourceKey] = event.Event.SourceSequence
-		if event.ProviderSession.Provider != "cursor-acp" || event.ProviderSession.Kind != "session_id" || event.ProviderSession.Id == "" {
-			t.Fatalf("ACP Worker Session frame[%d] provider reference = %#v, want cursor-acp session_id identity", index, event.ProviderSession)
+		if event.ProviderSession.Provider != "cursor" || event.ProviderSession.Kind != "session_id" || event.ProviderSession.Id == "" {
+			t.Fatalf("ACP Worker Session frame[%d] provider reference = %#v, want cursor session_id identity", index, event.ProviderSession)
 		}
 
 		kind, phase := acpWorkerString(event, "kind"), acpWorkerString(event, "phase")
 		if !legalACPWorkerEvent(kind, phase) {
 			t.Fatalf("ACP Worker Session frame[%d] has illegal normalized pair %s/%s: %#v", index, kind, phase, event.Event.Payload)
 		}
-		if event.Event.SourceType == "worker_session_lifecycle" && phase == "UPDATED" && acpWorkerProvider(event) == "cursor-acp" {
+		if event.Event.SourceType == "worker_session_lifecycle" && phase == "UPDATED" && acpWorkerProvider(event) == "cursor" {
 			if providerBindingIndex != -1 {
 				t.Fatalf("ACP Worker Session history has multiple provider bindings: %#v", records)
 			}
 			providerBindingIndex = index
-			assertACPLifecycleProvenance(t, event, "cursor-acp", "STARTING")
+			assertACPLifecycleProvenance(t, event, "cursor", "STARTING")
 		}
 		if event.Event.SourceType == "worker_observation" {
 			if firstProviderOutputIndex == -1 {
 				firstProviderOutputIndex = index
 			}
-			if acpWorkerProvider(event) != "cursor-acp" || acpWorkerProvenance(event, "delivery") != "NATIVE_STREAM" ||
+			if acpWorkerProvider(event) != "cursor" || acpWorkerProvenance(event, "delivery") != "NATIVE_STREAM" ||
 				acpWorkerProvenance(event, "representation") != "NOTIFICATION" || acpWorkerProvenance(event, "fidelity") != "NORMALIZED" {
-				t.Fatalf("ACP Worker Session provider output provenance = %#v, want cursor-acp/NATIVE_STREAM/NOTIFICATION/NORMALIZED", event.Event.Payload)
+				t.Fatalf("ACP Worker Session provider output provenance = %#v, want cursor/NATIVE_STREAM/NOTIFICATION/NORMALIZED", event.Event.Payload)
 			}
 		}
 		if event.Event.SourceType == "worker_session_lifecycle" && phase == "COMPLETED" {
@@ -155,7 +155,7 @@ func assertACPWorkerSessionHistory(t *testing.T, events []factoryapi.WorkerSessi
 				t.Fatalf("ACP Worker Session terminal = %#v, want exactly one SESSION/COMPLETED TERMINAL_REPLAY", event)
 			}
 			terminalIndex = index
-			assertACPLifecycleProvenance(t, event, "cursor-acp", "COMPLETED")
+			assertACPLifecycleProvenance(t, event, "cursor", "COMPLETED")
 		}
 	}
 	if providerBindingIndex == -1 || firstProviderOutputIndex == -1 || providerBindingIndex >= firstProviderOutputIndex {
@@ -186,8 +186,8 @@ func assertCanonicalACPWorkerSessionHistory(t *testing.T, records []factoryapi.W
 		if index > 0 && event.Event.Position <= records[index-1].Event.Position {
 			t.Fatalf("canonical ACP positions are not increasing: frame[%d]=%d previous=%d", index, event.Event.Position, records[index-1].Event.Position)
 		}
-		if event.ProviderSession.Provider != "cursor-acp" || event.ProviderSession.Kind != "session_id" || event.ProviderSession.Id == "" {
-			t.Fatalf("canonical ACP frame[%d] provider reference = %#v, want cursor-acp session identity", index, event.ProviderSession)
+		if event.ProviderSession.Provider != "cursor" || event.ProviderSession.Kind != "session_id" || event.ProviderSession.Id == "" {
+			t.Fatalf("canonical ACP frame[%d] provider reference = %#v, want cursor session identity", index, event.ProviderSession)
 		}
 		providerResponse = providerResponse || event.Event.SchemaId == "MODEL_RESPONSE"
 	}

@@ -439,6 +439,59 @@ func TestGenericInvocationResponseMappingPreservesASROutputsAndFailureIdentity(t
 	assertASRFailureMapping(t, projectedFailure, failure)
 }
 
+func TestGenericInvocationResponseRoundTripsBinaryAndOrderedText(t *testing.T) {
+	t.Parallel()
+
+	wav := []byte{'R', 'I', 'F', 'F', 0x00, 0xff, 0x80}
+	png := []byte{0x89, 'P', 'N', 'G', 0x00, 0xff}
+	mp4 := []byte{0x00, 0x00, 0x00, 0x01, 'f', 't', 'y', 'p'}
+	blob := []byte{0x00, 0x01, 0x02, 0xff, 0x80}
+	projected := GenericInvocationResponseToGenerated(models.GenericInvocationResult{Outputs: []models.InferenceOutput{
+		{Name: "audio", Modality: models.ModalityAudio, MediaType: "audio/wav", Content: string(wav)},
+		{Name: "frame", Modality: models.ModalityImage, MediaType: "image/png", Content: string(png)},
+		{Name: "clip", Modality: models.ModalityVideo, MediaType: "video/mp4", Content: string(mp4)},
+		{Name: "blob", Modality: models.ModalityBinary, MediaType: "application/octet-stream", Content: string(blob)},
+		{Name: "transcript", Modality: models.ModalityText, Content: "héllo"},
+	}})
+	encoded, err := json.Marshal(projected)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	var decoded factoryapi.GenericModelInvocationResponse
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	wantNames := []string{"audio", "frame", "clip", "blob", "transcript"}
+	if len(decoded.Outputs) != len(wantNames) {
+		t.Fatalf("ordered outputs = %#v, want %d outputs", decoded.Outputs, len(wantNames))
+	}
+	for index, want := range wantNames {
+		if decoded.Outputs[index].Name != want {
+			t.Fatalf("output %d name = %q, want %q (outputs = %#v)", index, decoded.Outputs[index].Name, want, decoded.Outputs)
+		}
+	}
+	wantBytes := map[string][]byte{
+		"audio": wav,
+		"frame": png,
+		"clip":  mp4,
+		"blob":  blob,
+	}
+	for _, output := range decoded.Outputs {
+		want, isBinary := wantBytes[output.Name]
+		if !isBinary {
+			continue
+		}
+		if output.Content != nil || output.ContentBase64 == nil ||
+			!bytes.Equal(*output.ContentBase64, want) {
+			t.Fatalf("%s output = %#v, want original bytes", output.Name, output)
+		}
+	}
+	if decoded.Outputs[4].Content == nil || *decoded.Outputs[4].Content != "héllo" ||
+		decoded.Outputs[4].ContentBase64 != nil {
+		t.Fatalf("text output = %#v, want UTF-8 content", decoded.Outputs[4])
+	}
+}
+
 func TestHTTPProjectionPreservesArtifactAndFailureContract(t *testing.T) {
 	t.Parallel()
 
@@ -643,6 +696,86 @@ func TestHandler_InvokeGenericModelUsesModelsRootAndPreservesNamedOutputs(t *tes
 	}
 	if len(response.Outputs) != 2 || response.Outputs[0].Name != "transcript" || response.Outputs[1].Name != "segments" {
 		t.Fatalf("outputs = %#v, want ordered named outputs", response.Outputs)
+	}
+}
+
+func TestHandler_InvokeGenericModelPreservesAudioAndVideoFileBytes(t *testing.T) {
+	t.Parallel()
+	audio := []byte{0, 255, 1, 128}
+	video := []byte{0, 0, 0, 1, 255}
+	prompt := "Describe the recording and video."
+	audioType, videoType := "audio/wav", "video/mp4"
+	operation := factoryapi.ModelOperationName(models.OperationOMNI)
+	inputs := []factoryapi.ModelInvocationInput{
+		{Name: "prompt", Modality: factoryapi.ModelInvocationContentTypeText, Content: &prompt},
+		{Name: "audio", Modality: factoryapi.ModelInvocationContentTypeAudio, MediaType: &audioType, ContentBase64: &audio},
+		{Name: "video", Modality: factoryapi.ModelInvocationContentTypeVideo, MediaType: &videoType, ContentBase64: &video},
+	}
+	encoded, err := json.Marshal(factoryapi.GenericModelInvocationRequest{
+		Scope: "factory-session:http-test", Holder: "operator",
+		Model: factoryapi.ModelReference{NameOrUri: "llm"}, Operation: &operation, Inputs: &inputs,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var captured models.InvokeModelRequest
+	root := &rootFake{invokeGeneric: func(_ context.Context, request models.InvokeModelRequest) (models.InvokeModelResult, error) {
+		captured = request
+		return models.InvokeModelResult{}, nil
+	}}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	httpRequest := httptest.NewRequest(http.MethodPost, "/models/invocations", bytes.NewReader(encoded))
+	httpRequest.Header.Set("Content-Type", "application/json")
+	handler.InvokeGenericModel(recorder, httpRequest)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("response = %d %s", recorder.Code, recorder.Body.String())
+	}
+	if len(captured.Inputs) != 3 || captured.Inputs[0].Content != prompt ||
+		!bytes.Equal([]byte(captured.Inputs[1].Content), audio) ||
+		!bytes.Equal([]byte(captured.Inputs[2].Content), video) ||
+		captured.Inputs[1].MediaType != audioType || captured.Inputs[2].MediaType != videoType {
+		t.Fatalf("ordered media inputs = %#v", captured.Inputs)
+	}
+}
+
+func TestHandler_InvokeGenericModelMultipartVoiceAndRefTextReachModelsTogether(t *testing.T) {
+	t.Parallel()
+
+	voice := []byte{'R', 'I', 'F', 'F', 0, 0xff, 0x80, 'W', 'A', 'V', 'E'}
+	requestJSON := `{"scope":"factory-session:http-test","holder":"operator","model":{"nameOrUri":"tts"},"operation":"TTS","inputs":[{"name":"text","modality":"TEXT","content":"Say hello"},{"name":"voice","modality":"AUDIO","mediaType":"audio/wav","contentType":"audio/wav"}],"parameters":[{"name":"ref_text","value":"reference transcript"}]}`
+	var captured models.InvokeModelRequest
+	root := &rootFake{invokeGeneric: func(_ context.Context, request models.InvokeModelRequest) (models.InvokeModelResult, error) {
+		captured = request
+		return models.InvokeModelResult{}, nil
+	}}
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
+	recorder := httptest.NewRecorder()
+	handler.InvokeGenericModel(recorder, genericMultipartRequest(t, []multipartTestPart{
+		{name: "request", contentType: "application/json", data: []byte(requestJSON)},
+		{name: "files", contentType: "audio/wav", data: voice},
+	}))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s, want 200", recorder.Code, recorder.Body.String())
+	}
+	if captured.Model.NameOrURI != "tts" || captured.Operation != models.OperationTTS || len(captured.Inputs) != 2 {
+		t.Fatalf("Models request = %#v, want TTS with text and voice", captured)
+	}
+	if captured.Inputs[0].Name != "text" || captured.Inputs[0].Content != "Say hello" {
+		t.Fatalf("text input = %#v", captured.Inputs[0])
+	}
+	gotVoice := captured.Inputs[1]
+	wantVoice := models.InferenceInput{
+		Name: "voice", Modality: models.ModalityAudio, ContentType: "audio/wav", MediaType: "audio/wav", Content: string(voice),
+	}
+	if gotVoice != wantVoice {
+		t.Fatalf("voice input = %#v, want exact WAV bytes and media type %#v", gotVoice, wantVoice)
+	}
+	if len(captured.Parameters) != 1 || captured.Parameters[0].Name != "ref_text" {
+		t.Fatalf("Models parameters = %#v, want ref_text", captured.Parameters)
+	}
+	if value, ok := captured.Parameters[0].Value.(string); !ok || value != "reference transcript" {
+		t.Fatalf("ref_text value = %#v, want typed string", captured.Parameters[0].Value)
 	}
 }
 

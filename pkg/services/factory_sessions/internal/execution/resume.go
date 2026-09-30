@@ -9,6 +9,7 @@ import (
 	"fmt"
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/workersettings"
 	"go.uber.org/zap"
 	"os"
 	"strings"
@@ -38,6 +39,7 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		startRequest:              cloneStartRequestPtr(state.startRequest),
 		resolvedSource:            state.resolvedSource,
 		sourceContent:             state.sourceContent,
+		projectRoot:               state.projectRoot,
 		runCancel:                 state.runCancel,
 		runDone:                   state.runDone,
 		eventConsumer:             state.eventConsumer,
@@ -200,6 +202,22 @@ func (s *JavaScriptRuntimeService) prepareResumeSession(
 	if err := s.validateResumeSessionState(id, state); err != nil {
 		return "", runtimeSessionState{}, err
 	}
+	if s.resumeRuntimeScope != nil {
+		scope, scopeErr := s.resumeRuntimeScope(state.projectRoot)
+		if scopeErr != nil {
+			return "", runtimeSessionState{}, scopeErr
+		}
+		state.startRequest = cloneStartRequestPtr(state.startRequest)
+		if state.startRequest.WorkerSettings == nil {
+			state.startRequest.WorkerSettings = workersettings.Clone(scope.WorkerSettings)
+		}
+		if state.startRequest.MockWorkers == nil {
+			state.startRequest.MockWorkers = scope.MockWorkers.Clone()
+		}
+		state.startRequest.WorkerAttemptStarter = scope.WorkerAttemptStarter
+		state.startRequest.WorkerResourceAdmission = scope.WorkerResourceAdmission
+		state.startRequest.WorkerProgressPublisher = scope.WorkerProgressPublisher
+	}
 	return id, state, nil
 }
 
@@ -238,8 +256,11 @@ func (s *JavaScriptRuntimeService) loadResumeSessionState(sessionID string) (run
 		s.mu.RUnlock()
 		return cloned, nil
 	}
-	persistence := s.persistence
+	persistence, routeErr := s.persistenceForRead()
 	s.mu.RUnlock()
+	if routeErr != nil {
+		return runtimeSessionState{}, routeErr
+	}
 
 	if persistence == nil {
 		return runtimeSessionState{}, ErrSessionNotFound
@@ -534,17 +555,22 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntimeWithResume(
 	if err != nil {
 		return workflowresult.JavaScriptRuntimeOutcome{}, err
 	}
+	workerSettings := s.workerSettings
+	if normalized.WorkerSettings != nil {
+		workerSettings = *normalized.WorkerSettings
+	}
 	return s.orchestration.RunJavaScript(ctx, workflowresult.JavaScriptRuntimeRequest{
-		Source:      sourceContent,
-		SourceRef:   resolved.SourceRef,
-		SessionID:   sessionID,
-		Args:        argsJSON,
-		ArgsSchema:  resolved.ArgsSchema,
-		Metadata:    workflowMetadataFromResolved(resolved, normalized),
-		FactoryName: factoryNameFromStart(normalized, resolved),
-		Policy:      policyResolution.Policy,
-		Resume:      resume,
-	}, s.childExecutorHooks(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID))
+		Source:         sourceContent,
+		SourceRef:      resolved.SourceRef,
+		SessionID:      sessionID,
+		Args:           argsJSON,
+		ArgsSchema:     resolved.ArgsSchema,
+		Metadata:       workflowMetadataFromResolved(resolved, normalized),
+		FactoryName:    factoryNameFromStart(normalized, resolved),
+		Policy:         policyResolution.Policy,
+		Resume:         resume,
+		WorkerSettings: workerSettings,
+	}, s.childExecutorHooksForStart(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID, normalized.MockWorkers, normalized.WorkerAttemptStarter, normalized.WorkerResourceAdmission, normalized.WorkerProgressPublisher))
 }
 
 func mergeRuntimeRecords(existing, resumed []workflowresult.JavaScriptRuntimeRecord) []workflowresult.JavaScriptRuntimeRecord {
@@ -624,6 +650,9 @@ func applyRuntimeSessionFields(target *runtimeSessionState, source runtimeSessio
 	target.dispatchStatusTransitions = cloneDispatchStatusTransitions(source.dispatchStatusTransitions)
 	target.artifacts = cloneArtifactSummaries(source.artifacts)
 	target.events = source.events
+	if strings.TrimSpace(source.projectRoot) != "" {
+		target.projectRoot = source.projectRoot
+	}
 	restoreRuntimeResumeState(target, preservedResume)
 }
 
@@ -987,8 +1016,10 @@ type PersistedRuntimeSessionState struct {
 	Records           []DurableSessionRecord
 	CheckpointSummary *workflowresult.JavaScriptCheckpointSummary
 	StartRequest      *StartRequest
+	WorkerSettings    *workflowresult.JavaScriptWorkerSettings `json:"workerSettings,omitempty"`
 	ResolvedSource    ResolvedSource
 	SourceContent     string
+	ProjectRoot       string
 }
 
 // persistedSnapshotFromRuntimeStateWithFailureLogCapacity builds a detached
@@ -1010,6 +1041,10 @@ func persistedSnapshotFromRuntimeStateWithFailureLogCapacity(
 		StartRequest:      cloneStartRequestPtr(state.startRequest),
 		ResolvedSource:    state.resolvedSource,
 		SourceContent:     state.sourceContent,
+		ProjectRoot:       state.projectRoot,
+	}
+	if state.startRequest != nil {
+		snapshot.WorkerSettings = workersettings.Clone(state.startRequest.WorkerSettings)
 	}
 	if len(state.dispatchJavaScript) > 0 {
 		snapshot.DispatchJavaScript = cloneDispatchJavaScriptProjections(state.dispatchJavaScript)
@@ -1041,6 +1076,10 @@ func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) ru
 		startRequest:      cloneStartRequestPtr(snapshot.StartRequest),
 		resolvedSource:    snapshot.ResolvedSource,
 		sourceContent:     snapshot.SourceContent,
+		projectRoot:       snapshot.ProjectRoot,
+	}
+	if state.startRequest != nil {
+		state.startRequest.WorkerSettings = workersettings.Clone(snapshot.WorkerSettings)
 	}
 	if len(snapshot.DispatchJavaScript) > 0 {
 		state.dispatchJavaScript = cloneDispatchJavaScriptProjections(snapshot.DispatchJavaScript)
@@ -1063,7 +1102,18 @@ func (s *JavaScriptRuntimeService) persistTerminalSessionState(state runtimeSess
 }
 
 func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionState) error {
-	if s.persistence == nil {
+	projectRoot := strings.TrimSpace(state.projectRoot)
+	if projectRoot == "" {
+		projectRoot = s.projectRoot
+	}
+	persistence, err := s.persistenceForRoot(projectRoot)
+	if err != nil {
+		return err
+	}
+	if persistence == nil {
+		return nil
+	}
+	if state.startRequest != nil && state.startRequest.PersistencePolicy == PersistencePolicyDisabled {
 		return nil
 	}
 	sessionID := strings.TrimSpace(state.session.SessionID)
@@ -1094,12 +1144,12 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 	)
 	if len(encoded) > maxBytes {
 		return &SnapshotSizeLimitError{
-			Path:        persistedSnapshotPath(s.persistence, s.projectRoot, sessionID),
+			Path:        persistedSnapshotPath(persistence, projectRoot, sessionID),
 			ActualBytes: len(encoded),
 			MaxBytes:    maxBytes,
 		}
 	}
-	if err := s.persistence.Save(sessionID, encoded); err != nil {
+	if err := persistence.Save(sessionID, encoded); err != nil {
 		return fmt.Errorf("persist durable session snapshot: %w", err)
 	}
 	return nil
@@ -1193,6 +1243,11 @@ func cloneStartRequest(req StartRequest) *StartRequest {
 	cloned.Source = cloneStartSource(req.Source)
 	cloned.Args = cloneArgs(req.Args)
 	cloned.RequestedPolicy = cloneArgs(req.RequestedPolicy)
+	cloned.MockWorkers = req.MockWorkers.Clone()
+	cloned.WorkerSettings = workersettings.Clone(req.WorkerSettings)
+	cloned.WorkerAttemptStarter = req.WorkerAttemptStarter
+	cloned.WorkerProgressPublisher = req.WorkerProgressPublisher
+	cloned.WorkerResourceAdmission = req.WorkerResourceAdmission
 	if req.Orchestrator != nil {
 		orchestrator := *req.Orchestrator
 		cloned.Orchestrator = &orchestrator
@@ -1270,6 +1325,14 @@ func (s *JavaScriptRuntimeService) resumeInterruptedSessionViaLifecycleControl(
 		return LifecycleControlResult{}, false, nil
 	}
 
+	available, err := s.HasRestorableState(ctx, id)
+	if err != nil {
+		return LifecycleControlResult{}, true, err
+	}
+	if !available {
+		return LifecycleControlResult{}, true, ErrSessionNotFound
+	}
+
 	requestID := control.RequestID
 	if requestID == "" {
 		requestID = fmt.Sprintf("lifecycle-resume-%s", id)
@@ -1290,8 +1353,11 @@ func (s *JavaScriptRuntimeService) peekSessionStatusForResume(sessionID string) 
 		s.mu.RUnlock()
 		return status, nil
 	}
-	persistence := s.persistence
+	persistence, routeErr := s.persistenceForRead()
 	s.mu.RUnlock()
+	if routeErr != nil {
+		return "", routeErr
+	}
 
 	if persistence == nil {
 		return "", ErrSessionNotFound

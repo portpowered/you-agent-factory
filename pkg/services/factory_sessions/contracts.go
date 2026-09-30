@@ -39,7 +39,6 @@ type RuntimeMetricsScopeResolver = internalcontracts.RuntimeMetricsScopeResolver
 // peers and Wire bind through factorysessions names without adding service
 // authorities to the root.
 type (
-	ExecutionOpeningFileSystem           = internalcontracts.ExecutionOpeningFileSystem
 	DirectoryInspection                  = internalcontracts.DirectoryInspection
 	CursorPersistenceFileSystem          = internalcontracts.CursorPersistenceFileSystem
 	CursorPersistenceTemporaryFile       = internalcontracts.CursorPersistenceTemporaryFile

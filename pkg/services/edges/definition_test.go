@@ -112,6 +112,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 		ModelAssetHostPlatform: models.AssetHostPlatform{
 			OperatingSystem: "default-os",
 			Architecture:    "default-arch",
+			Accelerator:     "cpu",
 		},
 		WorkContentHostPlatform: "default-os",
 	}, Edges{
@@ -129,6 +130,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 		ModelAssetHostPlatform: models.AssetHostPlatform{
 			OperatingSystem: "replacement-os",
 			Architecture:    "replacement-arch",
+			Accelerator:     "cuda",
 		},
 		WorkContentHostPlatform:      "replacement-os",
 		ModelInvocationBackend:       invocationBackend,
@@ -156,7 +158,6 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 		},
 		FactorySessionCursorPersistenceFileSystem:  platformfilesystem.Local{},
 		FactorySessionRuntimePersistenceFileSystem: platformfilesystem.Local{},
-		FactorySessionExecutionOpeningFileSystem:   platformfilesystem.Local{},
 		FactorySessionDirectoryInspection:          platformfilesystem.Local{},
 		FactorySessionContractFixtureReader: func(string) ([]byte, error) {
 			contractFixtureRead = true
@@ -237,7 +238,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	if merged.HostedLinearEndpoint != "https://linear.example.test" {
 		t.Fatal("Merge discarded an unreplaced default")
 	}
-	if merged.ModelAssetHostPlatform != (models.AssetHostPlatform{OperatingSystem: "replacement-os", Architecture: "replacement-arch"}) {
+	if merged.ModelAssetHostPlatform != (models.AssetHostPlatform{OperatingSystem: "replacement-os", Architecture: "replacement-arch", Accelerator: "cuda"}) {
 		t.Fatalf("ModelAssetHostPlatform = %#v, want explicit replacement", merged.ModelAssetHostPlatform)
 	}
 	if merged.WorkContentHostPlatform != "replacement-os" {
@@ -300,10 +301,10 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	if _, err := merged.FactorySessionContractFixtureReader.ReadFile("ignored"); err != nil || !contractFixtureRead {
 		t.Fatalf("FactorySessionContractFixtureReader replacement = (%v, %v)", err, contractFixtureRead)
 	}
-	if _, err := merged.FactorySessionInvocationInputReader.ReadFile("ignored"); err != nil || !invocationInputRead {
+	if _, err := merged.FactorySessionInvocationInputReader("ignored"); err != nil || !invocationInputRead {
 		t.Fatalf("FactorySessionInvocationInputReader replacement = (%v, %v)", err, invocationInputRead)
 	}
-	if _, err := merged.FactorySessionReplayRecordingReader.ReadFile("ignored"); err != nil || !replayRecordingRead {
+	if _, err := merged.FactorySessionReplayRecordingReader("ignored"); err != nil || !replayRecordingRead {
 		t.Fatalf("FactorySessionReplayRecordingReader replacement = (%v, %v)", err, replayRecordingRead)
 	}
 	if _, err := merged.FactorySessionInitialWorkReader.ReadFile("ignored"); err != nil || !initialWorkRead {
@@ -314,9 +315,6 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	}
 	if got := merged.FactorySessionIDGenerator(); got != "session-edge-id" || !sessionIDGenerated {
 		t.Fatalf("FactorySessionIDGenerator replacement = (%q, %v)", got, sessionIDGenerated)
-	}
-	if _, ok := merged.FactorySessionExecutionOpeningFileSystem.(platformfilesystem.Local); !ok {
-		t.Fatalf("FactorySessionExecutionOpeningFileSystem = %T, want explicit replacement", merged.FactorySessionExecutionOpeningFileSystem)
 	}
 	if _, err := merged.FactorySessionCursorCreateTemporaryFile("ignored", "ignored"); !errors.Is(err, cursorTemporaryFileError) || !cursorTemporaryFileRequested {
 		t.Fatalf("FactorySessionCursorCreateTemporaryFile replacement = (%v, %v), want injected call", err, cursorTemporaryFileRequested)
@@ -515,7 +513,7 @@ func TestMergeAppliesAssetAndHostedEndpointReplacements(t *testing.T) {
 	t.Parallel()
 
 	merged := Merge(
-		Edges{HostedLinearEndpoint: "https://default.example"},
+		Edges{HostedLinearEndpoint: "https://default.example", ModelAssetHostPlatform: models.AssetHostPlatform{Accelerator: "cpu"}},
 		Edges{
 			HostedLinearEndpoint: "https://replacement.example",
 			ModelAssetEndpoints: models.RuntimeAssetEndpoints{
@@ -538,6 +536,9 @@ func TestMergeAppliesAssetAndHostedEndpointReplacements(t *testing.T) {
 	}
 	if merged.ModelAssetHostPlatform.OperatingSystem != "replacement-os" {
 		t.Fatalf("ModelAssetHostPlatform.OperatingSystem = %q, want replacement", merged.ModelAssetHostPlatform.OperatingSystem)
+	}
+	if merged.ModelAssetHostPlatform.Accelerator != "cpu" {
+		t.Fatalf("ModelAssetHostPlatform.Accelerator = %q, want preserved default", merged.ModelAssetHostPlatform.Accelerator)
 	}
 }
 

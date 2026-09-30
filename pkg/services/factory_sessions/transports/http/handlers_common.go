@@ -120,14 +120,6 @@ func stringValue(value *string) string {
 	return optional.StringValue(value)
 }
 
-func (s *Server) requireDurableSessionLifecycleAPI(w http.ResponseWriter) (apisurface.DurableSessionLifecycleAPI, bool) {
-	if s.durableLifecycle == nil {
-		s.writeError(w, http.StatusInternalServerError, "durable factory session lifecycle control is unavailable", "INTERNAL_ERROR")
-		return nil, false
-	}
-	return s.durableLifecycle, true
-}
-
 func (s *Server) writeDurableLifecycleControlError(w http.ResponseWriter, sessionID string, err error) bool {
 	if status, response, ok := factorysession.LifecycleControlErrorResponse(sessionID, err); ok {
 		s.writeJSON(w, status, response)
@@ -154,7 +146,6 @@ func (s *Server) handleDurableLifecycleControl(
 	r *http.Request,
 	sessionID factoryapi.SessionID,
 	operation string,
-	invoke func(apisurface.DurableSessionLifecycleAPI, factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
 ) {
 	if !isDurableExecutionSessionID(string(sessionID)) {
 		s.writeError(w, http.StatusNotImplemented, "durable factory session "+operation+" is not implemented", "INTERNAL_ERROR")
@@ -170,27 +161,16 @@ func (s *Server) handleDurableLifecycleControl(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-
-	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
-	if !ok {
+	if s.sessionsRoot == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "factory session service is unavailable", "SERVICE_UNAVAILABLE")
 		return
 	}
-
-	response, err := invoke(lifecycle, control)
-	if err != nil {
-		if s.writeDurableLifecycleControlError(w, string(sessionID), err) {
-			return
-		}
-		s.logger.Error("durable factory session lifecycle control failed",
-			zap.Error(err),
-			zap.String("session_id", string(sessionID)),
-			zap.String("operation", operation),
-		)
-		s.writeError(w, http.StatusInternalServerError, "durable factory session lifecycle control failed", "INTERNAL_ERROR")
-		return
-	}
-
-	s.writeLifecycleControlSuccessWithDiagnostics(w, response, diagnostics.Paths())
+	result, err := s.sessionsRoot.Control(r.Context(), factorysessionexecution.SessionControlRequest{
+		SessionID: string(sessionID), Mode: factorysessionexecution.SessionOperationModeDurable,
+		Operation:   factorysessionexecution.SessionControlOperation(strings.ToUpper(operation)),
+		Correlation: factorysessionexecution.SessionOperationCorrelation{RequestID: control.RequestID}, Control: control,
+	})
+	s.finishRootLifecycleControl(w, string(sessionID), operation, canonicalLifecycleResult(result), diagnostics.Paths(), err)
 }
 
 // usesDurableLifecycleControl selects the durable control owner for a durable
@@ -291,7 +271,6 @@ func (s *Server) handleDurableApproveControl(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
-	invoke func(apisurface.DurableSessionLifecycleAPI, factorysessionexecution.ApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
 ) {
 	if !isDurableExecutionSessionID(string(sessionID)) {
 		s.writeError(w, http.StatusNotImplemented, "durable factory session approve is not implemented", "INTERNAL_ERROR")
@@ -308,32 +287,22 @@ func (s *Server) handleDurableApproveControl(
 		return
 	}
 
-	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
-	if !ok {
+	if s.sessionsRoot == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "factory session service is unavailable", "SERVICE_UNAVAILABLE")
 		return
 	}
-
-	response, err := invoke(lifecycle, approve)
-	if err != nil {
-		if s.writeDurableLifecycleControlError(w, string(sessionID), err) {
-			return
-		}
-		s.logger.Error("durable factory session approve failed",
-			zap.Error(err),
-			zap.String("session_id", string(sessionID)),
-		)
-		s.writeError(w, http.StatusInternalServerError, "durable factory session approve failed", "INTERNAL_ERROR")
-		return
-	}
-
-	s.writeLifecycleControlSuccessWithDiagnostics(w, response, diagnostics.Paths())
+	result, err := s.sessionsRoot.Control(r.Context(), factorysessionexecution.SessionControlRequest{
+		SessionID: string(sessionID), Mode: factorysessionexecution.SessionOperationModeDurable,
+		Operation:   factorysessionexecution.SessionControlApprove,
+		Correlation: factorysessionexecution.SessionOperationCorrelation{RequestID: approve.RequestID}, Approve: &approve,
+	})
+	s.finishRootLifecycleControl(w, string(sessionID), "approve", canonicalLifecycleResult(result), diagnostics.Paths(), err)
 }
 
 func (s *Server) handleDurableRetryDispatchControl(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
-	invoke func(apisurface.DurableSessionLifecycleAPI, factorysessionexecution.RetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
 ) {
 	if !isDurableExecutionSessionID(string(sessionID)) {
 		s.writeError(w, http.StatusNotImplemented, "durable factory session retry-dispatch is not implemented", "INTERNAL_ERROR")
@@ -350,44 +319,25 @@ func (s *Server) handleDurableRetryDispatchControl(
 		return
 	}
 
-	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
-	if !ok {
+	if s.sessionsRoot == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "factory session service is unavailable", "SERVICE_UNAVAILABLE")
 		return
 	}
-
-	response, err := invoke(lifecycle, retry)
-	if err != nil {
-		if s.writeDurableLifecycleControlError(w, string(sessionID), err) {
-			return
-		}
-		s.logger.Error("durable factory session retry-dispatch failed",
-			zap.Error(err),
-			zap.String("session_id", string(sessionID)),
-		)
-		s.writeError(w, http.StatusInternalServerError, "durable factory session retry-dispatch failed", "INTERNAL_ERROR")
-		return
-	}
-
-	s.writeLifecycleControlSuccessWithDiagnostics(w, response, diagnostics.Paths())
+	result, err := s.sessionsRoot.Control(r.Context(), factorysessionexecution.SessionControlRequest{
+		SessionID: string(sessionID), Mode: factorysessionexecution.SessionOperationModeDurable,
+		Operation:   factorysessionexecution.SessionControlRetryDispatch,
+		Correlation: factorysessionexecution.SessionOperationCorrelation{RequestID: retry.RequestID}, Retry: &retry,
+	})
+	s.finishRootLifecycleControl(w, string(sessionID), "retry-dispatch", canonicalLifecycleResult(result), diagnostics.Paths(), err)
 }
 
 func (s *Server) ApproveFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	s.handleDurableApproveControl(w, r, sessionID, func(
-		lifecycle apisurface.DurableSessionLifecycleAPI,
-		req factorysessionexecution.ApproveRequest,
-	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-		return lifecycle.ApproveDurableFactorySession(r.Context(), string(sessionID), req)
-	})
+	s.handleDurableApproveControl(w, r, sessionID)
 }
 
 func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	if s.usesDurableLifecycleControl(r.Context(), string(sessionID)) {
-		s.handleDurableLifecycleControl(w, r, sessionID, "pause", func(
-			lifecycle apisurface.DurableSessionLifecycleAPI,
-			req factorysessionexecution.ControlRequest,
-		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-			return lifecycle.PauseDurableFactorySession(r.Context(), string(sessionID), req)
-		})
+		s.handleDurableLifecycleControl(w, r, sessionID, "pause")
 		return
 	}
 	s.handleLiveLifecycleControl(w, r, sessionID, "pause", func(
@@ -400,12 +350,7 @@ func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, ses
 
 func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	if s.usesDurableLifecycleControl(r.Context(), string(sessionID)) {
-		s.handleDurableLifecycleControl(w, r, sessionID, "resume", func(
-			lifecycle apisurface.DurableSessionLifecycleAPI,
-			req factorysessionexecution.ControlRequest,
-		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-			return lifecycle.ResumeDurableFactorySession(r.Context(), string(sessionID), req)
-		})
+		s.handleDurableLifecycleControl(w, r, sessionID, "resume")
 		return
 	}
 	s.handleLiveLifecycleControl(w, r, sessionID, "resume", func(
@@ -418,12 +363,7 @@ func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, se
 
 func (s *Server) CancelFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	if s.usesDurableLifecycleControl(r.Context(), string(sessionID)) {
-		s.handleDurableLifecycleControl(w, r, sessionID, "cancel", func(
-			lifecycle apisurface.DurableSessionLifecycleAPI,
-			req factorysessionexecution.ControlRequest,
-		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-			return lifecycle.CancelDurableFactorySession(r.Context(), string(sessionID), req)
-		})
+		s.handleDurableLifecycleControl(w, r, sessionID, "cancel")
 		return
 	}
 	s.handleLiveLifecycleControl(w, r, sessionID, "cancel", func(
@@ -436,12 +376,7 @@ func (s *Server) CancelFactorySession(w http.ResponseWriter, r *http.Request, se
 
 func (s *Server) TerminateFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	if s.usesDurableLifecycleControl(r.Context(), string(sessionID)) {
-		s.handleDurableLifecycleControl(w, r, sessionID, "terminate", func(
-			lifecycle apisurface.DurableSessionLifecycleAPI,
-			req factorysessionexecution.ControlRequest,
-		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-			return lifecycle.TerminateDurableFactorySession(r.Context(), string(sessionID), req)
-		})
+		s.handleDurableLifecycleControl(w, r, sessionID, "terminate")
 		return
 	}
 	s.handleLiveLifecycleControl(w, r, sessionID, "terminate", func(
@@ -453,19 +388,13 @@ func (s *Server) TerminateFactorySession(w http.ResponseWriter, r *http.Request,
 }
 
 func (s *Server) RetryFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	s.handleDurableRetryDispatchControl(w, r, sessionID, func(
-		lifecycle apisurface.DurableSessionLifecycleAPI,
-		req factorysessionexecution.RetryDispatchRequest,
-	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-		return lifecycle.RetryDurableFactorySessionDispatch(r.Context(), string(sessionID), req)
-	})
+	s.handleDurableRetryDispatchControl(w, r, sessionID)
 }
 
 func (s *Server) handleDurableInterruptDispatchControl(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
-	invoke func(apisurface.DurableSessionLifecycleAPI, factorysessionexecution.InterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
 ) {
 	if !isDurableExecutionSessionID(string(sessionID)) {
 		s.writeError(w, http.StatusNotImplemented, "durable factory session interrupt-dispatch is not implemented", "INTERNAL_ERROR")
@@ -482,23 +411,14 @@ func (s *Server) handleDurableInterruptDispatchControl(
 		return
 	}
 
-	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
-	if !ok {
+	if s.sessionsRoot == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "factory session service is unavailable", "SERVICE_UNAVAILABLE")
 		return
 	}
-
-	response, err := invoke(lifecycle, interrupt)
-	if err != nil {
-		if s.writeDurableLifecycleControlError(w, string(sessionID), err) {
-			return
-		}
-		s.logger.Error("durable factory session interrupt-dispatch failed",
-			zap.Error(err),
-			zap.String("session_id", string(sessionID)),
-		)
-		s.writeError(w, http.StatusInternalServerError, "durable factory session interrupt-dispatch failed", "INTERNAL_ERROR")
-		return
-	}
-
-	s.writeLifecycleControlSuccessWithDiagnostics(w, response, diagnostics.Paths())
+	result, err := s.sessionsRoot.Control(r.Context(), factorysessionexecution.SessionControlRequest{
+		SessionID: string(sessionID), Mode: factorysessionexecution.SessionOperationModeDurable,
+		Operation:   factorysessionexecution.SessionControlInterruptDispatch,
+		Correlation: factorysessionexecution.SessionOperationCorrelation{RequestID: interrupt.RequestID}, Interrupt: &interrupt,
+	})
+	s.finishRootLifecycleControl(w, string(sessionID), "interrupt-dispatch", canonicalLifecycleResult(result), diagnostics.Paths(), err)
 }

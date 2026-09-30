@@ -10,7 +10,7 @@ const shaPattern = /^[0-9a-f]{40}$/;
 const digestPattern = /^[0-9a-f]{64}$/;
 const versionPattern = /^\d+\.\d+(?:\.\d+)?$/;
 const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
-const supportedAccelerators = new Set(["cpu", "metal"]);
+const supportedAccelerators = new Set(["cpu", "metal", "cuda"]);
 
 // A published backend archive must contain a credible runnable payload. The
 // strict boundary is intentionally shared by manifest creation and final
@@ -19,7 +19,7 @@ const supportedAccelerators = new Set(["cpu", "metal"]);
 export const minimumPublishedArchiveSizeBytes = 1 << 20;
 
 const expectedBackendIds = ["localai-llamacpp", "localai-whisper", "localai-vibevoice"];
-const expectedTargetIds = ["darwin-arm64", "linux-amd64", "windows-amd64"];
+const expectedTargetIds = ["darwin-arm64", "linux-amd64", "linux-amd64-cuda", "windows-amd64", "windows-amd64-cuda"];
 const expectedWorkflowPins = {
 	checkout: "11bd71901bbe5b1630ceea73d27597364c9af683",
 	setupNode: "49933ea5288caeca8642d1e84afbd3f7d6820020",
@@ -64,13 +64,17 @@ const expectedBackendFacts = {
 const targetHostFacts = {
 	"darwin-arm64": { platform: "darwin", architectures: ["arm64"] },
 	"linux-amd64": { platform: "linux", architectures: ["x64", "amd64"] },
+	"linux-amd64-cuda": { platform: "linux", architectures: ["x64", "amd64"] },
 	"windows-amd64": { platform: "win32", architectures: ["x64", "amd64"] },
+	"windows-amd64-cuda": { platform: "win32", architectures: ["x64", "amd64"] },
 };
 
 const expectedTargetFacts = {
 	"darwin-arm64": { os: "darwin", architecture: "arm64", runner: "macos-14", buildType: "metal", accelerators: ["metal"] },
 	"linux-amd64": { os: "linux", architecture: "amd64", runner: "ubuntu-24.04", buildType: "cpu", accelerators: ["cpu"] },
+	"linux-amd64-cuda": { os: "linux", architecture: "amd64", runner: "localai-linux-amd64-cuda", buildType: "cublas", accelerators: ["cuda"], backends: ["localai-llamacpp"] },
 	"windows-amd64": { os: "windows", architecture: "amd64", runner: "windows-2022", buildType: "cpu", accelerators: ["cpu"] },
+	"windows-amd64-cuda": { os: "windows", architecture: "amd64", runner: "localai-windows-amd64-cuda", buildType: "cublas", accelerators: ["cuda"], backends: ["localai-llamacpp", "localai-whisper", "localai-vibevoice"] },
 };
 
 export function loadConfig(configPath = defaultConfigPath) {
@@ -187,7 +191,7 @@ function validateTarget(errors, target) {
 		addError(errors, `target ${target.id ?? "<unknown>"} has unsupported architecture ${target.architecture}`);
 	}
 	const expected = expectedTargetFacts[target.id];
-	if (expected && (target.os !== expected.os || target.architecture !== expected.architecture || target.runner !== expected.runner || target.buildType !== expected.buildType || JSON.stringify(target.accelerators) !== JSON.stringify(expected.accelerators))) {
+	if (expected && (target.os !== expected.os || target.architecture !== expected.architecture || target.runner !== expected.runner || target.buildType !== expected.buildType || JSON.stringify(target.accelerators) !== JSON.stringify(expected.accelerators) || JSON.stringify(target.backends) !== JSON.stringify(expected.backends))) {
 		addError(errors, `target ${target.id} does not match its pinned OS, architecture, and build type`);
 	}
 }
@@ -215,6 +219,7 @@ function validateHostToolchain(errors, hostToolchain) {
 		for (const key of ["gccVersion", "makeVersion", "ninjaVersion", "pkgConfigVersion"]) {
 			validateVersion(errors, linux[key], `hostToolchain.linux.${key}`);
 		}
+		validateVersion(errors, linux.cudaVersion, "hostToolchain.linux.cudaVersion");
 	}
 	const macos = hostToolchain.macos;
 	if (!isPlainObject(macos)) {
@@ -227,6 +232,10 @@ function validateHostToolchain(errors, hostToolchain) {
 	if (!isPlainObject(windows)) {
 		addError(errors, "hostToolchain.windows must be an object");
 	} else {
+		if (windows.cudaVersion !== "13.3") addError(errors, "hostToolchain.windows.cudaVersion must be 13.3");
+		if (windows.cudaArchitecture !== "89-real;75-virtual") {
+			addError(errors, "hostToolchain.windows.cudaArchitecture must be the pinned Windows CUDA 13.3 test architecture set");
+		}
 		if (windows.vcpkgTriplet !== "x64-mingw-static-release") addError(errors, "hostToolchain.windows.vcpkgTriplet must be x64-mingw-static-release");
 		if (JSON.stringify(windows.msysPackages) !== JSON.stringify(expectedWindowsMsysPackages)) {
 			addError(errors, "hostToolchain.windows.msysPackages must be the pinned native build package set");
@@ -240,7 +249,7 @@ function validateHostToolchain(errors, hostToolchain) {
 export function matrixForConfig(config) {
 	return {
 		include: config.backends.flatMap((backend) =>
-			config.targets.map((target) => ({
+			config.targets.filter((target) => !target.backends || target.backends.includes(backend.id)).map((target) => ({
 				backend: backend?.id,
 				target: target?.id,
 				runner: target?.runner,
@@ -312,8 +321,8 @@ export function validateConfig(config) {
 	if (matrix) {
 		const combinations = matrix.include.map((entry) => `${entry.backend}/${entry.target}`);
 		validateUniqueIds(errors, combinations, "matrix");
-		if (matrix.include.length !== expectedBackendIds.length * expectedTargetIds.length) {
-			addError(errors, "matrix must contain exactly nine backend/target combinations");
+		if (matrix.include.length !== 13) {
+			addError(errors, "matrix must contain exactly thirteen backend/target combinations");
 		}
 	}
 	return { errors, matrix };
@@ -438,18 +447,29 @@ export function verifyPayload({ packageRoot, binary, targetId }) {
 	});
 	if (!binaryPath) throw new Error(`backend package is missing non-empty executable ${binary}`);
 	const bytes = readFileSync(binaryPath);
-	if (targetId === "windows-amd64") {
+	if (targetId === "windows-amd64" || targetId === "windows-amd64-cuda") {
 		if (bytes.length < 64 || bytes[0] !== 0x4d || bytes[1] !== 0x5a) throw new Error(`${binary} is not a Windows PE executable`);
 		const peOffset = bytes.readUInt32LE(0x3c);
 		if (bytes.length < peOffset + 6 || bytes.toString("ascii", peOffset, peOffset + 4) !== "PE\u0000\u0000" || bytes.readUInt16LE(peOffset + 4) !== 0x8664) {
 			throw new Error(`${binary} is not an amd64 Windows PE executable`);
 		}
-	} else if (targetId === "linux-amd64") {
+	} else if (targetId === "linux-amd64" || targetId === "linux-amd64-cuda") {
 		if (bytes.length < 20 || bytes[0] !== 0x7f || bytes.toString("ascii", 1, 4) !== "ELF" || bytes[4] !== 2 || bytes[5] !== 1 || bytes[18] !== 0x3e) {
 			throw new Error(`${binary} is not an amd64 Linux ELF executable`);
 		}
 	} else if (targetId === "darwin-arm64") {
 		if (!isArm64MachO(bytes)) throw new Error(`${binary} is not an arm64 Darwin Mach-O executable`);
+	}
+	if (targetId === "linux-amd64-cuda" && !files.some((entry) => entry.size > 0 && /^libggml-cuda\.so(?:\.|$)/.test(entry.path.split(/[\\/]/).at(-1)))) {
+		throw new Error("CUDA backend package is missing libggml-cuda.so");
+	}
+	if (targetId === "windows-amd64-cuda") {
+		if (!files.some((entry) => entry.size > 0 && /^ggml-cuda\.dll$/i.test(entry.path.split(/[\\/]/).at(-1)))) {
+			throw new Error("CUDA backend package is missing ggml-cuda.dll");
+		}
+		if (!files.some((entry) => entry.size > 0 && /^cudart64_.*\.dll$/i.test(entry.path.split(/[\\/]/).at(-1)))) {
+			throw new Error("CUDA backend package is missing the CUDA runtime DLL");
+		}
 	}
 	return { binaryPath, files, bytes: bytes.length };
 }
@@ -514,7 +534,7 @@ function canonicalPinDocument(config) {
 		hostToolchain: config.hostToolchain,
 		nodeVersion: config.nodeVersion,
 		backends: config.backends.map(({ id, sourceRepository, sourceCommit, sourcePinVariable }) => ({ id, sourceRepository, sourceCommit, sourcePinVariable })),
-		targets: config.targets.map(({ id, os, architecture, buildType, accelerators }) => ({ id, os, architecture, buildType, accelerators })),
+		targets: config.targets.map(({ id, os, architecture, buildType, accelerators, backends }) => ({ id, os, architecture, buildType, accelerators, backends })),
 	};
 }
 
@@ -531,7 +551,7 @@ export function publicationIdentity(config) {
 }
 
 export function artifactArchiveName({ backend, target }) {
-	const extension = target.id === "windows-amd64" ? "zip" : "tar.gz";
+	const extension = target.os === "windows" ? "zip" : "tar.gz";
 	return `localai-backend-${backend.id}-${target.id}-${backend.sourceCommit}.${extension}`;
 }
 
@@ -541,7 +561,7 @@ function artifactMetadataName(archiveName) {
 
 function expectedArtifactEntries(config) {
 	return config.backends.flatMap((backend) =>
-		config.targets.map((target) => ({
+		config.targets.filter((target) => !target.backends || target.backends.includes(backend.id)).map((target) => ({
 			backend,
 			target,
 			key: `${backend.id}/${target.id}`,
@@ -669,7 +689,7 @@ export function createManifest({ config, artifactDirectory, repository }) {
 	const expectedFiles = expected.flatMap(({ archiveName }) => [archiveName, artifactMetadataName(archiveName)]).sort();
 	const actualFiles = listArtifactDirectoryFiles(artifactDirectory);
 	if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) {
-		throw new Error(`matrix artifact set must contain exactly the nine archives and nine provenance sidecars; expected ${expectedFiles.join(", ")}, received ${actualFiles.join(", ")}`);
+		throw new Error(`matrix artifact set must contain exactly ${expected.length} archives and provenance sidecars; expected ${expectedFiles.join(", ")}, received ${actualFiles.join(", ")}`);
 	}
 	const artifacts = expected.map(({ backend, target, key, archiveName }) => {
 		const metadata = readJsonFile(join(artifactDirectory, artifactMetadataName(archiveName)), `${key} metadata`);

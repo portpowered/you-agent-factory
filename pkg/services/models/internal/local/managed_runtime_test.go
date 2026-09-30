@@ -269,7 +269,7 @@ func managedRuntimeProjectionExpectedArtifacts() []models.AssetRequirement {
 	}
 }
 
-func TestProjectorEffectiveVideoOmitsOnlyVideoWhenProjectorMissing(t *testing.T) {
+func TestProjectorEffectiveMediaOmitsAllMediaWhenProjectorMissing(t *testing.T) {
 	t.Parallel()
 
 	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameLLM)
@@ -280,12 +280,14 @@ func TestProjectorEffectiveVideoOmitsOnlyVideoWhenProjectorMissing(t *testing.T)
 		definition,
 		RuntimeCacheInspection{Supported: true},
 	)
-	if !unavailable || diagnostics[VideoReadinessDiagnostic] != VideoReadinessMissing {
+	if !unavailable || diagnostics[MediaReadinessDiagnostic] != MediaReadinessMissing {
 		t.Fatalf("missing-projector projection = %#v, %#v, unavailable=%t", effective, diagnostics, unavailable)
 	}
 	operation := findOperation(t, effective.Operations, models.OperationOMNI)
-	if hasVideoSlot(operation) {
-		t.Fatalf("effective OMNI inputs = %#v, want VIDEO omitted", operation.Inputs)
+	for _, slot := range []string{"image", "audio", "video"} {
+		if hasNamedSlot(operation, slot) {
+			t.Fatalf("effective OMNI inputs = %#v, want %s omitted", operation.Inputs, slot)
+		}
 	}
 	if !hasNamedSlot(operation, "prompt") {
 		t.Fatalf("effective OMNI inputs = %#v, want prompt retained", operation.Inputs)
@@ -301,11 +303,13 @@ func TestProjectorEffectiveVideoRejectsCorruptProjector(t *testing.T) {
 	effective, diagnostics := ProjectEffectiveVideoOperations(
 		models.BuiltInModelNameLLM, definition.Operations, inspection,
 	)
-	if diagnostics[VideoReadinessDiagnostic] != VideoReadinessMissing {
+	if diagnostics[MediaReadinessDiagnostic] != MediaReadinessMissing {
 		t.Fatalf("corrupt projector diagnostics = %#v, want stable missing reason", diagnostics)
 	}
-	if hasVideoSlot(findOperation(t, effective, models.OperationOMNI)) {
-		t.Fatal("corrupt projector retained VIDEO capability")
+	for _, slot := range []string{"image", "audio", "video"} {
+		if hasNamedSlot(findOperation(t, effective, models.OperationOMNI), slot) {
+			t.Fatalf("corrupt projector retained %s capability", slot)
+		}
 	}
 }
 
@@ -316,12 +320,14 @@ func TestProjectorEffectiveVideoRestoresVideoForVerifiedProjector(t *testing.T) 
 	effective, diagnostics := ProjectEffectiveVideoOperations(
 		models.BuiltInModelNameLLM, definition.Operations, verifiedProjectorInspection(),
 	)
-	if diagnostics[VideoReadinessDiagnostic] != VideoReadinessVerified ||
+	if diagnostics[MediaReadinessDiagnostic] != MediaReadinessVerified ||
 		diagnostics[EffectiveOperationsDiagnostic] != "verified-runtime-assets" {
 		t.Fatalf("verified projector diagnostics = %#v", diagnostics)
 	}
-	if !hasVideoSlot(findOperation(t, effective, models.OperationOMNI)) {
-		t.Fatal("verified projector omitted VIDEO capability")
+	for _, slot := range []string{"image", "audio", "video"} {
+		if !hasNamedSlot(findOperation(t, effective, models.OperationOMNI), slot) {
+			t.Fatalf("verified projector omitted %s capability", slot)
+		}
 	}
 }
 

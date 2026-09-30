@@ -337,7 +337,7 @@ func transcriptResponse(response *TranscriptResult) (models.ASRBackendResponse, 
 	result.Segments = make([]models.ASRBackendSegment, 0, len(response.GetSegments()))
 	for _, segment := range response.GetSegments() {
 		if segment == nil {
-			return models.ASRBackendResponse{}, malformedASRProtocolResponse("segments")
+			return models.ASRBackendResponse{}, malformedASRProtocolResponse("segments", "ASR backend response contains an empty segment")
 		}
 		start, err := localAIWhisperTimestampMilliseconds(segment.GetStart())
 		if err != nil {
@@ -355,8 +355,11 @@ func transcriptResponse(response *TranscriptResult) (models.ASRBackendResponse, 
 }
 
 func localAIWhisperTimestampMilliseconds(raw int64) (int64, error) {
-	if raw < 0 || raw%localAIWhisperTimestampNanosecondsPerMillisecond != 0 {
-		return 0, malformedASRProtocolResponse("segments")
+	if raw < 0 {
+		return 0, malformedASRProtocolResponse("segments", "ASR backend response contains a negative segment timestamp")
+	}
+	if raw%localAIWhisperTimestampNanosecondsPerMillisecond != 0 {
+		return 0, malformedASRProtocolResponse("segments", "ASR backend response contains a misaligned segment timestamp")
 	}
 	return raw / localAIWhisperTimestampNanosecondsPerMillisecond, nil
 }
@@ -433,10 +436,13 @@ func asrProtocolFailure(message string, cause error) error {
 	}
 }
 
-func malformedASRProtocolResponse(slot string) error {
+func malformedASRProtocolResponse(slot, message string) error {
+	if strings.TrimSpace(message) == "" {
+		message = "ASR backend response is malformed"
+	}
 	return &models.InvocationFailure{
 		Class: models.InvocationFailureClassMalformedResponse, Operation: models.OperationASR,
-		Slot: slot, Message: "ASR backend response is malformed", Cause: models.ErrInferenceFailed,
+		Slot: slot, Message: message, Cause: models.ErrInferenceFailed,
 	}
 }
 

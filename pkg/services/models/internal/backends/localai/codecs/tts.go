@@ -24,7 +24,7 @@ const (
 	MaxTTSResponseBytes = MaxTTSAudioBytes
 )
 
-var supportedTTSParameters = []string{"instructions", "language"}
+var supportedTTSParameters = []string{"instructions", "language", "ref_text"}
 
 // TTSRequest is the provider-neutral request passed to the private LocalAI
 // protocol adapter. It deliberately contains no destination path, endpoint,
@@ -198,9 +198,9 @@ func ttsValidateVoiceInput(input models.InferenceInput) error {
 	mediaType := strings.ToLower(strings.TrimSpace(input.MediaType))
 	contentType := strings.ToLower(strings.TrimSpace(input.ContentType))
 	if input.Modality != models.ModalityAudio || input.Artifact != nil ||
-		(mediaType != "" && !strings.HasPrefix(mediaType, "audio/")) ||
-		(contentType != "" && !strings.HasPrefix(contentType, "audio/")) ||
-		strings.TrimSpace(input.Content) == "" {
+		(mediaType != "" && canonicalWAVMediaType(mediaType) == "") ||
+		(contentType != "" && canonicalWAVMediaType(contentType) == "") ||
+		!validPCMWAV([]byte(input.Content)) {
 		return ttsInvalidVoiceFailure()
 	}
 	return nil
@@ -255,7 +255,7 @@ func addTTSParameter(parameters map[string]any, name string, value any) error {
 }
 
 func ttsParameterValueSupported(name string, value any) bool {
-	if name != "language" && name != "instructions" {
+	if name != "language" && name != "instructions" && name != "ref_text" {
 		return false
 	}
 	text, ok := value.(string)

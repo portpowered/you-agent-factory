@@ -140,16 +140,17 @@ func TestWirePackageExposesOnlyCanonicalApplicationInjector(t *testing.T) {
 	parseProductionGoFiles(t, ".", func(_ string, file *ast.File) {
 		for _, declaration := range file.Decls {
 			function, ok := declaration.(*ast.FuncDecl)
-			if ok && strings.HasPrefix(function.Name.Name, "Inject") {
+			if ok && (strings.HasPrefix(function.Name.Name, "Inject") ||
+				strings.HasPrefix(function.Name.Name, "Build")) {
 				names[function.Name.Name] = struct{}{}
 			}
 		}
 	})
 	if len(names) != 1 {
-		t.Fatalf("Wire injector names = %v, want only InjectBundle", names)
+		t.Fatalf("Wire injector/builder names = %v, want only InjectBundle", names)
 	}
 	if _, ok := names["InjectBundle"]; !ok {
-		t.Fatalf("Wire injector names = %v, want InjectBundle", names)
+		t.Fatalf("Wire injector/builder names = %v, want InjectBundle", names)
 	}
 }
 

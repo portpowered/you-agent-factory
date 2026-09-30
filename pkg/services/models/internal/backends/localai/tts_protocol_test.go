@@ -5,12 +5,15 @@ import (
 	"encoding/binary"
 	"errors"
 	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelartifacts "github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -34,6 +37,8 @@ func TestPinnedTTSProtocolUsesConfirmedWireFields(t *testing.T) {
 	}
 }
 
+func ttsTestWriteFile(string, []byte) error { return nil }
+
 func TestPinnedTTSBackendMapsPrivateRequestAndCleansOutput(t *testing.T) {
 	t.Parallel()
 
@@ -41,14 +46,23 @@ func TestPinnedTTSBackendMapsPrivateRequestAndCleansOutput(t *testing.T) {
 	connection.response, _ = proto.Marshal(&Result{Success: true, Message: "private backend detail"})
 	dialer := &ttsProtocolDialer{connection: connection}
 	temporary := &ttsProtocolTempFile{path: `C:\private\.you-model-tts-123.wav`}
+	voiceTemporary := &ttsProtocolTempFile{path: `C:\private\.you-model-tts-voice-123.wav`}
 	audio := ttsProtocolWAV()
-	var createdDirectory, createdPattern, inspectedPath, readPath, removedPath string
+	var createdDirectory, createdPattern, inspectedPath, readPath, removedPath, voiceWritePath, voiceWriteContent string
+	removed := []string{}
 	backend := NewPinnedTTSBackend(
 		dialer,
 		func() string { return `C:\private` },
 		func(directory, pattern string) (TempFile, error) {
+			if pattern == ttsVoiceFilePattern {
+				return voiceTemporary, nil
+			}
 			createdDirectory, createdPattern = directory, pattern
 			return temporary, nil
+		},
+		func(path string, content []byte) error {
+			voiceWritePath, voiceWriteContent = path, string(content)
+			return nil
 		},
 		func(path string) (os.FileInfo, error) {
 			inspectedPath = path
@@ -60,6 +74,7 @@ func TestPinnedTTSBackendMapsPrivateRequestAndCleansOutput(t *testing.T) {
 		},
 		func(path string) error {
 			removedPath = path
+			removed = append(removed, path)
 			return nil
 		},
 	)
@@ -77,7 +92,10 @@ func TestPinnedTTSBackendMapsPrivateRequestAndCleansOutput(t *testing.T) {
 	assertTTSProtocolResponse(t, err, response, audio)
 	assertTTSProtocolOutputLifecycle(t, temporary, createdDirectory, createdPattern, inspectedPath, readPath, removedPath)
 	assertTTSProtocolTransport(t, connection, dialer)
-	assertTTSProtocolRequest(t, &connection.request, temporary.path)
+	assertTTSProtocolRequest(t, &connection.request, temporary.path, voiceTemporary.path)
+	if voiceWritePath != voiceTemporary.path || voiceWriteContent != "voice-bytes" || voiceTemporary.closeCalls != 1 || len(removed) != 2 || removed[0] != voiceTemporary.path || removed[1] != temporary.path {
+		t.Fatalf("voice staging = path:%q content:%q close:%d removed:%v", voiceWritePath, voiceWriteContent, voiceTemporary.closeCalls, removed)
+	}
 }
 
 func assertTTSProtocolResponse(t *testing.T, err error, response codecs.TTSResponse, audio []byte) {
@@ -111,10 +129,75 @@ func assertTTSProtocolTransport(t *testing.T, connection *ttsProtocolConnection,
 	}
 }
 
-func assertTTSProtocolRequest(t *testing.T, request *TTSRequest, destination string) {
+func assertTTSProtocolRequest(t *testing.T, request *TTSRequest, destination, voicePath string) {
 	t.Helper()
-	if request.GetText() != "hello" || request.GetModel() != "tts" || request.GetVoice() != "voice-bytes" || request.GetDst() != destination || request.GetLanguage() != "en" || request.GetInstructions() != "speak clearly" || len(request.GetParams()) != 0 {
+	if request.GetText() != "hello" || request.GetModel() != "tts" || request.GetVoice() != voicePath || request.GetDst() != destination || request.GetLanguage() != "en" || request.GetInstructions() != "speak clearly" || len(request.GetParams()) != 0 {
 		t.Fatalf("private TTS request = %s, want exact text/model/voice/destination/confirmed fields", request.String())
+	}
+}
+
+func TestPinnedTTSBackendMapsRefTextToProtobufParams(t *testing.T) {
+	t.Parallel()
+
+	connection := &ttsProtocolConnection{}
+	connection.response, _ = proto.Marshal(&Result{Success: true})
+	dialer := &ttsProtocolDialer{connection: connection}
+	temporary := &ttsProtocolTempFile{path: `C:\private\.you-model-tts-ref.wav`}
+	audio := ttsProtocolWAV()
+	backend := NewPinnedTTSBackend(
+		dialer,
+		func() string { return `C:\private` },
+		func(string, string) (TempFile, error) { return temporary, nil },
+		ttsTestWriteFile,
+		func(string) (os.FileInfo, error) { return ttsProtocolFileInfo{size: int64(len(audio))}, nil },
+		func(string) ([]byte, error) { return append([]byte(nil), audio...), nil },
+		func(string) error { return nil },
+	)
+	_, err := backend(
+		WithInvocationEndpoint(context.Background(), "127.0.0.1:45912"),
+		codecs.TTSRequest{
+			Text:       "hello",
+			Model:      "tts",
+			Parameters: map[string]any{"ref_text": "reference transcript"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("backend error = %v", err)
+	}
+	params := connection.request.GetParams()
+	if len(params) != 1 || params["ref_text"] != "reference transcript" {
+		t.Fatalf("protobuf params = %v, want exactly ref_text=%q", params, "reference transcript")
+	}
+}
+
+func TestPinnedTTSBackendCleansStagedVoiceWhenWriteFails(t *testing.T) {
+	t.Parallel()
+
+	output := &ttsProtocolTempFile{path: "temp/output.wav"}
+	voice := &ttsProtocolTempFile{path: "temp/voice.wav"}
+	removed := []string{}
+	connection := &ttsProtocolConnection{}
+	backend := NewPinnedTTSBackend(
+		&ttsProtocolDialer{connection: connection},
+		func() string { return "temp" },
+		func(_ string, pattern string) (TempFile, error) {
+			if pattern == ttsVoiceFilePattern {
+				return voice, nil
+			}
+			return output, nil
+		},
+		func(string, []byte) error { return errors.New("private voice write failure") },
+		func(string) (os.FileInfo, error) { t.Fatal("output should not be inspected"); return nil, nil },
+		func(string) ([]byte, error) { t.Fatal("output should not be read"); return nil, nil },
+		func(path string) error { removed = append(removed, path); return nil },
+	)
+	response, err := backend(WithInvocationEndpoint(context.Background(), "127.0.0.1:45913"), codecs.TTSRequest{Text: "hello", Voice: "reference bytes"})
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassBackendProtocol || response.Audio != nil || strings.Contains(err.Error(), "private voice") {
+		t.Fatalf("voice staging failure = response:%#v error:%v", response, err)
+	}
+	if output.closeCalls != 1 || voice.closeCalls != 1 || len(removed) != 2 || removed[0] != voice.path || removed[1] != output.path || connection.invokes != 0 {
+		t.Fatalf("voice failure cleanup = outputClose:%d voiceClose:%d removed:%v invokes:%d", output.closeCalls, voice.closeCalls, removed, connection.invokes)
 	}
 }
 
@@ -135,6 +218,7 @@ func TestPinnedTTSBackendFailureIsAtomicAndRecovers(t *testing.T) {
 			files = append(files, file)
 			return file, nil
 		},
+		ttsTestWriteFile,
 		func(string) (os.FileInfo, error) { return ttsProtocolFileInfo{size: int64(len(audio))}, nil },
 		func(string) ([]byte, error) {
 			readCalls++
@@ -197,6 +281,7 @@ func TestPinnedTTSBackendRejectsMalformedResultAndAudioBounds(t *testing.T) {
 				&ttsProtocolDialer{connection: connection},
 				func() string { return `C:\private` },
 				func(string, string) (TempFile, error) { return temporary, nil },
+				ttsTestWriteFile,
 				func(string) (os.FileInfo, error) {
 					inspectCalls++
 					return ttsProtocolFileInfo{size: test.fileSize}, nil
@@ -237,6 +322,7 @@ func TestPinnedTTSBackendPreservesCancellationAndReadinessClassification(t *test
 				calls++
 				return &ttsProtocolTempFile{path: "temp/out.wav"}, nil
 			},
+			ttsTestWriteFile,
 			func(string) (os.FileInfo, error) { return ttsProtocolFileInfo{size: 1}, nil },
 			func(string) ([]byte, error) { return nil, nil },
 			func(string) error { return nil },
@@ -253,6 +339,7 @@ func TestPinnedTTSBackendPreservesCancellationAndReadinessClassification(t *test
 			ttsUnavailableDialer{},
 			func() string { return "temp" },
 			func(string, string) (TempFile, error) { return &ttsProtocolTempFile{path: "temp/unavailable.wav"}, nil },
+			ttsTestWriteFile,
 			func(string) (os.FileInfo, error) { return ttsProtocolFileInfo{size: 1}, nil },
 			func(string) ([]byte, error) { return nil, nil },
 			func(string) error { return nil },
@@ -272,6 +359,7 @@ func TestPinnedTTSBackendPreservesCancellationAndReadinessClassification(t *test
 			func(string, string) (TempFile, error) {
 				return &ttsProtocolTempFile{path: "temp/incompatible.wav"}, nil
 			},
+			ttsTestWriteFile,
 			func(string) (os.FileInfo, error) { return ttsProtocolFileInfo{size: 1}, nil },
 			func(string) ([]byte, error) { return nil, nil },
 			func(string) error { return nil },
@@ -291,6 +379,7 @@ func TestPinnedTTSBackendPreservesCancellationAndReadinessClassification(t *test
 			&ttsProtocolDialer{connection: connection},
 			func() string { return "temp" },
 			func(string, string) (TempFile, error) { return temporary, nil },
+			ttsTestWriteFile,
 			func(string) (os.FileInfo, error) { return ttsProtocolFileInfo{size: 1}, nil },
 			func(string) ([]byte, error) { return nil, nil },
 			func(string) error { return nil },
@@ -418,4 +507,160 @@ func ttsProtocolWAV() []byte {
 	audio[44] = 0x01
 	audio[45] = 0x02
 	return audio
+}
+
+func TestConfinedVibeVoiceRolePathsAcceptsExactManifestLayout(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		t.Fatalf("DefaultModelRoleManifest: %v", err)
+	}
+	definition, ok := manifest.Model("tts")
+	if !ok {
+		t.Fatal("TTS role definition is missing")
+	}
+	root := t.TempDir()
+	modelFile := filepath.Join(root, definition.Artifacts[0].Path)
+	absoluteFiles := make([]string, 0, len(definition.Artifacts))
+	relativeFiles := make([]string, 0, len(definition.Artifacts))
+	for _, artifact := range definition.Artifacts {
+		path := filepath.Join(root, artifact.Path)
+		if err := os.WriteFile(path, []byte(artifact.Role), 0o600); err != nil {
+			t.Fatalf("write %s fixture: %v", artifact.Role, err)
+		}
+		absoluteFiles = append(absoluteFiles, path)
+		relativeFiles = append(relativeFiles, artifact.Path)
+	}
+
+	for _, testCase := range []struct {
+		name  string
+		files []string
+	}{
+		{name: "absolute entries", files: absoluteFiles},
+		{name: "relative entries", files: relativeFiles},
+	} {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			paths, err := confinedVibeVoiceRolePaths(modelFile, testCase.files, definition, filepath.EvalSymlinks)
+			if err != nil {
+				t.Fatalf("confinedVibeVoiceRolePaths: %v", err)
+			}
+			want := map[string]string{}
+			for _, artifact := range definition.Artifacts {
+				want[artifact.Role] = filepath.Join(root, artifact.Path)
+			}
+			if !reflect.DeepEqual(paths, want) {
+				t.Fatalf("role paths = %#v, want %#v", paths, want)
+			}
+		})
+	}
+}
+
+func TestConfinedVibeVoiceRolePathsRejectsMissingDuplicateMismatchAndTraversal(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		t.Fatalf("DefaultModelRoleManifest: %v", err)
+	}
+	definition, ok := manifest.Model("tts")
+	if !ok {
+		t.Fatal("TTS role definition is missing")
+	}
+	root := t.TempDir()
+	modelFile := filepath.Join(root, definition.Artifacts[0].Path)
+	validFiles := []string{
+		modelFile,
+		filepath.Join(root, definition.Artifacts[1].Path),
+		filepath.Join(root, definition.Artifacts[2].Path),
+	}
+	tests := []struct {
+		name  string
+		files []string
+	}{
+		{name: "missing", files: validFiles[:2]},
+		{name: "duplicate", files: []string{validFiles[0], validFiles[1], validFiles[1]}},
+		{name: "mismatched role", files: []string{validFiles[0], validFiles[1], filepath.Join(root, "voice.bin")}},
+		{name: "traversal", files: []string{validFiles[0], validFiles[1], filepath.Join(root, "..", definition.Artifacts[2].Path)}},
+	}
+	for _, testCase := range tests {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := confinedVibeVoiceRolePaths(modelFile, testCase.files, definition, nil)
+			if !errors.Is(err, errVibeVoiceLayout) {
+				t.Fatalf("confinedVibeVoiceRolePaths error = %v, want typed layout error", err)
+			}
+		})
+	}
+}
+
+func TestConfinedVibeVoiceRolePathsRejectsSymlinkEscape(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		t.Fatalf("DefaultModelRoleManifest: %v", err)
+	}
+	definition, ok := manifest.Model("tts")
+	if !ok {
+		t.Fatal("TTS role definition is missing")
+	}
+	root := t.TempDir()
+	outside := t.TempDir()
+	modelFile := filepath.Join(root, definition.Artifacts[0].Path)
+	tokenizerFile := filepath.Join(root, definition.Artifacts[1].Path)
+	voiceFile := filepath.Join(root, definition.Artifacts[2].Path)
+	if err := os.WriteFile(modelFile, []byte("model"), 0o600); err != nil {
+		t.Fatalf("write model fixture: %v", err)
+	}
+	if err := os.WriteFile(tokenizerFile, []byte("tokenizer"), 0o600); err != nil {
+		t.Fatalf("write tokenizer fixture: %v", err)
+	}
+	outsideVoice := filepath.Join(outside, definition.Artifacts[2].Path)
+	if err := os.WriteFile(outsideVoice, []byte("outside"), 0o600); err != nil {
+		t.Fatalf("write outside voice fixture: %v", err)
+	}
+	if err := os.Symlink(outsideVoice, voiceFile); err != nil {
+		t.Skipf("symlink creation unavailable: %v", err)
+	}
+
+	_, err = confinedVibeVoiceRolePaths(modelFile, []string{modelFile, tokenizerFile, voiceFile}, definition, filepath.EvalSymlinks)
+	if !errors.Is(err, errVibeVoiceLayout) {
+		t.Fatalf("confinedVibeVoiceRolePaths error = %v, want symlink escape rejection", err)
+	}
+}
+
+func TestConfinedVibeVoiceRolePathsRejectsInjectedResolvedEscape(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := modelartifacts.DefaultModelRoleManifest()
+	if err != nil {
+		t.Fatalf("DefaultModelRoleManifest: %v", err)
+	}
+	definition, ok := manifest.Model("tts")
+	if !ok {
+		t.Fatal("TTS role definition is missing")
+	}
+	root := t.TempDir()
+	modelFile := filepath.Join(root, definition.Artifacts[0].Path)
+	tokenizerFile := filepath.Join(root, definition.Artifacts[1].Path)
+	voiceFile := filepath.Join(root, definition.Artifacts[2].Path)
+	for _, path := range []string{modelFile, tokenizerFile, voiceFile} {
+		if err := os.WriteFile(path, []byte("fixture"), 0o600); err != nil {
+			t.Fatalf("write fixture %s: %v", path, err)
+		}
+	}
+	outside := filepath.Join(filepath.Dir(root), "outside", definition.Artifacts[1].Path)
+	resolve := func(path string) (string, error) {
+		if filepath.Clean(path) == filepath.Clean(tokenizerFile) {
+			return outside, nil
+		}
+		return path, nil
+	}
+
+	_, err = confinedVibeVoiceRolePaths(modelFile, []string{modelFile, tokenizerFile, voiceFile}, definition, resolve)
+	if !errors.Is(err, errVibeVoiceLayout) {
+		t.Fatalf("confinedVibeVoiceRolePaths error = %v, want injected resolved escape rejection", err)
+	}
 }

@@ -23,7 +23,6 @@ import (
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
-	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -68,36 +67,6 @@ func TestResolveWorkRuntimeUsesSessionOwnedMetricsRecorder(t *testing.T) {
 	adapterB, ok := resolvedB.(workRuntimeAdapter)
 	if !ok || adapterB.readMetrics != recorderB {
 		t.Fatalf("session-b metrics recorder = %T %p, want %p", adapterB.readMetrics, adapterB.readMetrics, recorderB)
-	}
-}
-
-func TestAssemblyCloseDrainsEveryOwnedSessionAndJoinsFailures(t *testing.T) {
-	t.Parallel()
-
-	firstErr := errors.New("close first session")
-	first := &detachedRouterOwnerFake{closeErr: firstErr}
-	second := &detachedRouterOwnerFake{}
-	state := newWorkResolverSessionState()
-	for _, sessionID := range []string{"session-first", "session-second", "session-third"} {
-		state.Register(sessionruntime.Registration{
-			SessionID: sessionID,
-			Handle:    struct{}{},
-			Runtime:   &factorysessions.LiveRuntime{},
-		})
-	}
-	assembly := &Assembly{state: state}
-	assembly.registerDetachedGateway("session-first", first)
-	assembly.registerDetachedGateway("session-second", second)
-
-	err := assembly.Close(context.Background())
-	if !errors.Is(err, firstErr) {
-		t.Fatalf("Close() error = %v, want it to retain %v", err, firstErr)
-	}
-	if !reflect.DeepEqual(first.closedSessionIDs, []string{"session-first"}) {
-		t.Fatalf("first owner close calls = %v, want [session-first]", first.closedSessionIDs)
-	}
-	if !reflect.DeepEqual(second.closedSessionIDs, []string{"session-third", "session-second"}) {
-		t.Fatalf("second owner close calls = %v, want [session-third session-second]", second.closedSessionIDs)
 	}
 }
 
@@ -681,7 +650,6 @@ func TestRelayInvocationWakeEventsCoalescesBurstsWithoutBlocking(t *testing.T) {
 }
 
 type canonicalInspectionLiveRuntimeFake struct {
-	liveruntime.Service
 	mu            sync.Mutex
 	listResult    []factorysessions.ReadProjection
 	getResult     factorysessions.SessionProjection

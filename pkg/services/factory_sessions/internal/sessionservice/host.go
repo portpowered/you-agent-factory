@@ -9,8 +9,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -18,21 +16,16 @@ import (
 
 // Host exposes composition-root seams required by the session gateway.
 type Host interface {
-	controlplane.OpenControlHost
 	controlplane.LiveReadHost
 	controlplane.SyncPreflightHost
 	controlplane.ResultReadHost
 	controlplane.DurableLifecycleHost
-	OpenLiveSessionForTarget(context.Context, factorysessions.Target) (string, error)
 	SessionFactory(string) (factory.Service, error)
 	StopLiveSession(string) error
 	ObserveLiveLifecycleControl(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error)
 }
 
 type dependencyHost struct {
-	discoverTargets               func(string) ([]factorysessions.Target, error)
-	initializeFactoryScaffold     func(string) error
-	openLiveSessionForTarget      func(context.Context, factorysessions.Target) (string, error)
 	requireSession                func(string) (*livesession.LiveSession, error)
 	listLiveSessionIDs            func() []string
 	getLiveSession                func(string) *livesession.LiveSession
@@ -48,48 +41,6 @@ type dependencyHost struct {
 	observeLiveLifecycleControl   func(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error)
 	durableExecution              func() durableexecution.Service
 	javaScriptCheckpointStore     func(*livesession.LiveSession) factory.JavaScriptCheckpointStore
-	directoryInspection           roles.DirectoryInspection
-	resolveSessionFolder          func(string) (string, error)
-	selectTarget                  func([]factorysessions.Target, *factorysessions.TargetRef) (*factorysessions.Target, error)
-}
-
-func (h dependencyHost) ResolveSessionFolder(folderPath string) (string, error) {
-	if h.resolveSessionFolder == nil {
-		return "", fmt.Errorf("Factory Session folder resolver is required")
-	}
-	return h.resolveSessionFolder(folderPath)
-}
-
-func (h dependencyHost) SelectTarget(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*factorysessions.Target, error) {
-	if h.selectTarget == nil {
-		return nil, fmt.Errorf("Factory Session target selector is required")
-	}
-	return h.selectTarget(targets, ref)
-}
-
-func (h dependencyHost) DiscoverTargets(folderPath string) ([]factorysessions.Target, error) {
-	if h.discoverTargets == nil {
-		return nil, fmt.Errorf("factory service is required")
-	}
-	return h.discoverTargets(folderPath)
-}
-
-func (h dependencyHost) InitializeFactoryScaffold(factoryDir string) error {
-	if h.initializeFactoryScaffold == nil {
-		return fmt.Errorf("factory service is required")
-	}
-	return h.initializeFactoryScaffold(factoryDir)
-}
-
-func (h dependencyHost) ValidateInitNewFactoryNestedDir(resolvedFolder string) error {
-	return logicaltarget.ValidateInitNewFactoryNestedDir(resolvedFolder, h.directoryInspection)
-}
-
-func (h dependencyHost) OpenLiveSessionForTarget(ctx context.Context, target factorysessions.Target) (string, error) {
-	if h.openLiveSessionForTarget == nil {
-		return "", fmt.Errorf("factory service is required")
-	}
-	return h.openLiveSessionForTarget(ctx, target)
 }
 
 func (h dependencyHost) RequireSession(sessionID string) (*livesession.LiveSession, error) {
@@ -212,5 +163,3 @@ type LegacyHost interface {
 	Host
 	stream.Host
 }
-
-var _ factorysessions.Service = (*Service)(nil)

@@ -15,16 +15,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
-	jsonRPCInvalidParamsCode  = -32602
-	factorySessionGetToolName = "you.factory_session.get"
-	mcpProtocolStopTimeout    = 5 * time.Second
+	jsonRPCInvalidParamsCode   = -32602
+	factorySessionNotFoundCode = "factory_session.session.not_found"
+	missingFactorySessionID    = "dur-sess-missing-999"
+	missingFactorySessionText  = "factory session not found"
+	factorySessionGetToolName  = "you.factory_session.get"
+	mcpProtocolStopTimeout     = 5 * time.Second
 )
 
 type mcpProtocolPackageFixture struct {
@@ -67,13 +69,21 @@ type mcpToolsCallResult struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	} `json:"content"`
-	IsError bool `json:"isError"`
+	IsError           bool            `json:"isError"`
+	StructuredContent json.RawMessage `json:"structuredContent"`
+}
+
+type mcpToolErrorEnvelope struct {
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Retryable bool   `json:"retryable"`
+	SessionID string `json:"sessionId"`
 }
 
 // TestMCPMalformedParametersReturnInvalidParams proves malformed MCP parameters
 // return a JSON-RPC invalid-params error at the public stdio/protocol boundary.
 func TestMCPMalformedParametersReturnInvalidParams(t *testing.T) {
-	withSharedMCPProtocolServer(t, func(server *fixtureBackedMCPServer) {
+	withSharedMCPProtocolServer(t, func(server *projectRootBackedMCPServer) {
 		assertInitializeHandshake(t, server)
 		response := server.exchange(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}`)
 		assertMCPResponseID(t, response, float64(1))
@@ -86,18 +96,95 @@ func TestMCPMalformedParametersReturnInvalidParams(t *testing.T) {
 	})
 }
 
-// TestMCPFactorySessionToolIsOutsidePublicCatalog proves removed Factory
-// Session tools cannot be invoked through the public MCP stdio boundary.
-func TestMCPFactorySessionToolIsOutsidePublicCatalog(t *testing.T) {
-	withSharedMCPProtocolServer(t, func(server *fixtureBackedMCPServer) {
+// TestMCPMissingFactorySessionReturnsCanonicalNotFound proves a well-formed Factory
+// Session tools/call for a missing session id returns the canonical typed
+// ToolResponse not-found error at the public MCP stdio/protocol boundary: no
+// JSON-RPC protocol error, MCP IsError=true, one readable text content equal to
+// the typed error.message, and structuredContent retaining the canonical error
+// envelope.
+func TestMCPMissingFactorySessionReturnsCanonicalNotFound(t *testing.T) {
+	withSharedMCPProtocolServer(t, func(server *projectRootBackedMCPServer) {
 		assertInitializeHandshake(t, server)
-		request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + factorySessionGetToolName + `","arguments":{}}}`
+		request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + factorySessionGetToolName + `","arguments":{"sessionId":"` + missingFactorySessionID + `"}}}`
 		response := server.exchange(request)
 		assertMCPResponseID(t, response, float64(1))
-		if response.Error == nil {
-			t.Fatalf("tools/call for removed tool returned result %#v, want unknown-tool protocol error", response.Result)
+		if response.Error != nil {
+			t.Fatalf("tools/call for missing session returned JSON-RPC protocol error %#v, want typed ToolResponse result", response.Error)
 		}
+		if response.Result == nil {
+			t.Fatal("tools/call for missing session returned nil result")
+		}
+		if !response.Result.IsError {
+			t.Fatalf("tools/call isError = false, want true for typed ToolResponse error %#v", response.Result)
+		}
+		if len(response.Result.Content) != 1 || response.Result.Content[0].Type != "text" {
+			t.Fatalf("tools/call content = %#v, want one text item", response.Result.Content)
+		}
+		if response.Result.Content[0].Text != missingFactorySessionText {
+			t.Fatalf("tools/call text = %q, want %q", response.Result.Content[0].Text, missingFactorySessionText)
+		}
+
+		var payload struct {
+			Error *mcpToolErrorEnvelope `json:"error"`
+		}
+		if err := json.Unmarshal(response.Result.StructuredContent, &payload); err != nil {
+			t.Fatalf("unmarshal tools/call structured content: %v", err)
+		}
+		if payload.Error == nil {
+			t.Fatalf("tools/call structured content = %s, want typed error envelope", response.Result.StructuredContent)
+		}
+		if payload.Error.Code != factorySessionNotFoundCode {
+			t.Fatalf("error code = %q, want %q", payload.Error.Code, factorySessionNotFoundCode)
+		}
+		if payload.Error.Message != missingFactorySessionText {
+			t.Fatalf("error message = %q, want %q", payload.Error.Message, missingFactorySessionText)
+		}
+		if payload.Error.SessionID != missingFactorySessionID {
+			t.Fatalf("error sessionId = %q, want %q", payload.Error.SessionID, missingFactorySessionID)
+		}
+		if payload.Error.Retryable {
+			t.Fatalf("error retryable = true, want false for missing session")
+		}
+		assertMCPMissingFactorySessionControlErrors(t, server)
 	})
+}
+
+// Each durable control must return its typed error as readable MCP text after
+// decoding and normalizing a well-formed request for an unknown session.
+func assertMCPMissingFactorySessionControlErrors(t *testing.T, server *projectRootBackedMCPServer) {
+	t.Helper()
+	// These requests share the existing protocol session and its ordered pipe.
+	for index, operation := range []string{"APPROVE", "RETRY_DISPATCH", "INTERRUPT_DISPATCH"} {
+		t.Run(operation, func(t *testing.T) {
+			request, err := json.Marshal(map[string]any{
+				"jsonrpc": "2.0", "id": index + 1, "method": "tools/call",
+				"params": map[string]any{"name": "you.factory_session.control", "arguments": map[string]any{
+					"sessionId": missingFactorySessionID, "operation": operation,
+					"dispatchId": " dispatch-missing ", "approvalPreviewId": " preview-missing ",
+				}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := server.exchange(string(request))
+			assertMCPResponseID(t, response, float64(index+1))
+			if response.Error != nil || response.Result == nil || !response.Result.IsError {
+				t.Fatalf("%s missing session response = %#v, want typed tool error", operation, response)
+			}
+			var payload struct {
+				Error *mcpToolErrorEnvelope `json:"error"`
+			}
+			if err := json.Unmarshal(response.Result.StructuredContent, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Error == nil || payload.Error.Code != factorySessionNotFoundCode || payload.Error.SessionID != missingFactorySessionID {
+				t.Fatalf("%s error envelope = %s, want identified session-not-found error", operation, response.Result.StructuredContent)
+			}
+			if len(response.Result.Content) != 1 || response.Result.Content[0].Text != payload.Error.Message || payload.Error.Message == "" {
+				t.Fatalf("%s content = %#v, want readable error message %q", operation, response.Result.Content, payload.Error.Message)
+			}
+		})
+	}
 }
 
 // TestMCPServerShutdownClosesStdioCleanly proves MCP server shutdown terminates
@@ -106,14 +193,14 @@ func TestMCPServerShutdownClosesStdioCleanly(t *testing.T) {
 	t.Parallel()
 	// Keep this root isolated: whole-protocol cancellation and stdout EOF are
 	// the lifecycle witness, so sharing the package root would blur ownership.
-	server := startFixtureBackedMCPServer(t)
+	server := startProjectRootBackedMCPServer(t)
 	defer server.cleanup()
 
 	assertInitializeHandshake(t, server)
-	assertFixtureBackedMCPServerShutdownClean(t, server)
+	assertProjectRootBackedMCPServerShutdownClean(t, server)
 }
 
-type fixtureBackedMCPServer struct {
+type projectRootBackedMCPServer struct {
 	t                *testing.T
 	process          support.ApplicationProcess
 	ownsProcess      bool
@@ -133,17 +220,17 @@ type fixtureBackedMCPServer struct {
 	cleanupErr       error
 }
 
-func startFixtureBackedMCPServer(t *testing.T) *fixtureBackedMCPServer {
+func startProjectRootBackedMCPServer(t *testing.T) *projectRootBackedMCPServer {
 	t.Helper()
 
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess: %v", err)
 	}
-	return startFixtureBackedMCPServerWithProcess(t, process, true)
+	return startProjectRootBackedMCPServerWithProcess(t, process, true)
 }
 
-func withSharedMCPProtocolServer(t *testing.T, run func(*fixtureBackedMCPServer)) {
+func withSharedMCPProtocolServer(t *testing.T, run func(*projectRootBackedMCPServer)) {
 	t.Helper()
 
 	sharedMCPProtocolFixture.Lock()
@@ -157,7 +244,7 @@ func withSharedMCPProtocolServer(t *testing.T, run func(*fixtureBackedMCPServer)
 		t.Fatalf("BuildProcess() for shared MCP protocol rows: %v", sharedMCPProtocolFixture.buildErr)
 	}
 
-	server := startFixtureBackedMCPServerWithProcess(t, sharedMCPProtocolFixture.process, false)
+	server := startProjectRootBackedMCPServerWithProcess(t, sharedMCPProtocolFixture.process, false)
 	defer server.cleanup()
 	run(server)
 }
@@ -178,14 +265,14 @@ func closeSharedMCPProtocolFixture() error {
 	return sharedMCPProtocolFixture.closeErr
 }
 
-func startFixtureBackedMCPServerWithProcess(
+func startProjectRootBackedMCPServerWithProcess(
 	t *testing.T,
 	process support.ApplicationProcess,
 	ownsProcess bool,
-) *fixtureBackedMCPServer {
+) *projectRootBackedMCPServer {
 	t.Helper()
 	if process == nil {
-		t.Fatal("start fixture-backed MCP server requires an application process")
+		t.Fatal("start project-root backed MCP server requires an application process")
 	}
 
 	stdinRead, stdinWrite, err := os.Pipe()
@@ -202,24 +289,23 @@ func startFixtureBackedMCPServerWithProcess(
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	fixturePath := testutil.MustRepoPath(t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json")
-	workingDirectory := t.TempDir()
+	projectRoot := support.ScaffoldSingleStepFactory(t, "mcp-protocol-errors")
 	homeDirectory := t.TempDir()
 
 	serveErr := make(chan error, 1)
 	var stderr bytes.Buffer
 	go func() {
 		serveErr <- process.Execute(root.Input{
-			Args:             []string{"you", "server", "mcp", "--fixture-catalog", fixturePath},
+			Args:             []string{"you", "server", "mcp", "--project-root", projectRoot},
 			Env:              append(os.Environ(), "HOME="+homeDirectory, "USERPROFILE="+homeDirectory),
 			Stdin:            stdinRead,
 			Stdout:           stdoutWrite,
 			Stderr:           &stderr,
 			Context:          ctx,
-			WorkingDirectory: workingDirectory,
+			WorkingDirectory: projectRoot,
 		})
 	}()
-	server := &fixtureBackedMCPServer{
+	server := &projectRootBackedMCPServer{
 		t:                t,
 		process:          process,
 		ownsProcess:      ownsProcess,
@@ -230,14 +316,14 @@ func startFixtureBackedMCPServerWithProcess(
 		stdoutWrite:      stdoutWrite,
 		serveErr:         serveErr,
 		cancel:           cancel,
-		workingDirectory: workingDirectory,
+		workingDirectory: projectRoot,
 		shutdownDone:     make(chan struct{}),
 	}
 	t.Cleanup(server.cleanup)
 	return server
 }
 
-func assertInitializeHandshake(t *testing.T, server *fixtureBackedMCPServer) {
+func assertInitializeHandshake(t *testing.T, server *projectRootBackedMCPServer) {
 	t.Helper()
 
 	initResponse := server.exchange(`{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"protocol-errors-test","version":"test"}}}`)
@@ -257,7 +343,7 @@ func assertMCPResponseID(t *testing.T, response mcpJSONRPCResponse, want any) {
 	}
 }
 
-func (s *fixtureBackedMCPServer) exchange(request string) mcpJSONRPCResponse {
+func (s *projectRootBackedMCPServer) exchange(request string) mcpJSONRPCResponse {
 	s.t.Helper()
 
 	if _, err := s.stdin.Write([]byte(request + "\n")); err != nil {
@@ -294,7 +380,7 @@ func (s *fixtureBackedMCPServer) exchange(request string) mcpJSONRPCResponse {
 // working root, and (for isolated scenarios) application root. It is
 // idempotent because both a scenario defer and testing.T cleanup protect the
 // same real resources.
-func (s *fixtureBackedMCPServer) cleanup() {
+func (s *projectRootBackedMCPServer) cleanup() {
 	s.cleanupOnce.Do(func() {
 		var cleanupErrors []error
 		if err := s.shutdown(); err != nil {
@@ -319,20 +405,20 @@ func (s *fixtureBackedMCPServer) cleanup() {
 	}
 }
 
-func (s *fixtureBackedMCPServer) shutdown() error {
+func (s *projectRootBackedMCPServer) shutdown() error {
 	s.shutdownOnce.Do(func() {
 		s.cancel()
 		_ = s.stdin.Close()
 		select {
 		case err := <-s.serveErr:
 			if err != nil && err != io.EOF && !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "file already closed") {
-				s.shutdownErr = fmt.Errorf("fixture-backed MCP server: %w", err)
+				s.shutdownErr = fmt.Errorf("project-root backed MCP server: %w", err)
 			}
 		// This bounded wait is only a hang guard. A returned serveErr is the
 		// deterministic completion signal; the timeout protects test cleanup
 		// from a genuinely stuck stream without acting as synchronization.
 		case <-time.After(mcpProtocolStopTimeout):
-			s.shutdownErr = fmt.Errorf("fixture-backed MCP server did not shut down after stdin closed")
+			s.shutdownErr = fmt.Errorf("project-root backed MCP server did not shut down after stdin closed")
 		}
 		close(s.shutdownDone)
 	})
@@ -340,7 +426,7 @@ func (s *fixtureBackedMCPServer) shutdown() error {
 	return s.shutdownErr
 }
 
-func (s *fixtureBackedMCPServer) closeStreams() {
+func (s *projectRootBackedMCPServer) closeStreams() {
 	s.streamsOnce.Do(func() {
 		_ = s.stdinRead.Close()
 		_ = s.stdin.Close()
@@ -358,11 +444,11 @@ func closeMCPProcessAfterStartFailure(process support.ApplicationProcess, ownsPr
 	cancel()
 }
 
-func assertFixtureBackedMCPServerShutdownClean(t *testing.T, server *fixtureBackedMCPServer) {
+func assertProjectRootBackedMCPServerShutdownClean(t *testing.T, server *projectRootBackedMCPServer) {
 	t.Helper()
 
 	if err := server.shutdown(); err != nil {
-		t.Fatalf("fixture-backed MCP server shutdown: %v", err)
+		t.Fatalf("project-root backed MCP server shutdown: %v", err)
 	}
 
 	_ = server.stdoutWrite.Close()

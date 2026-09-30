@@ -131,8 +131,8 @@ func TestSelectionContract_ValidatePrerequisitesUsesCatalogAuthority(t *testing.
 			Readiness:    providers.ReadinessReady,
 		},
 		providers.Descriptor{
-			ID:           providers.IDCursor,
-			DisplayName:  "Cursor",
+			ID:           "unavailable-test",
+			DisplayName:  "Unavailable test provider",
 			Availability: providers.AvailabilitySupportedButUnavailable,
 			Readiness:    providers.ReadinessUnavailable,
 			Prerequisites: []providers.Prerequisite{{
@@ -151,10 +151,10 @@ func TestSelectionContract_ValidatePrerequisitesUsesCatalogAuthority(t *testing.
 	}
 	err := service.ValidatePrerequisites(
 		context.Background(),
-		providers.ValidatePrerequisitesRequest{ID: providers.IDCursor},
+		providers.ValidatePrerequisitesRequest{ID: "unavailable-test"},
 	)
 	if !errors.Is(err, providers.ErrProviderUnavailable) {
-		t.Fatalf("ValidatePrerequisites(cursor) = %v, want ErrProviderUnavailable", err)
+		t.Fatalf("ValidatePrerequisites(unavailable-test) = %v, want ErrProviderUnavailable", err)
 	}
 }
 

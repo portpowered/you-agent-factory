@@ -4,9 +4,11 @@ import (
 	"context"
 	"strings"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelcodecs "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/videoaudio"
 	modelsruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/runtime"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
@@ -27,6 +29,23 @@ func (runtime backendInvocationRuntime) Invoke(
 		Content:   content,
 		Artifacts: invocationArtifactSources(artifacts),
 	}, nil
+}
+
+func invocationArtifactSources(artifacts []models.InferenceArtifact) []inference.InvocationArtifactSource {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	sources := make([]inference.InvocationArtifactSource, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		sources = append(sources, inference.InvocationArtifactSource{
+			RefValue:   artifact.Artifact.String(),
+			Name:       artifact.Name,
+			MediaType:  artifact.MediaType,
+			SizeBytes:  artifact.SizeBytes,
+			Properties: artifact.Properties,
+		})
+	}
+	return sources
 }
 
 type operationInvocationRuntime struct {
@@ -68,7 +87,7 @@ func (runtime operationInvocationRuntime) Invoke(
 func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, error) {
 	runtime := operationInvocationRuntime{
 		generic: genericInvocationRuntime(options.Backend),
-		omni:    newInvocationRuntime(options.Client, options.Dialer),
+		omni:    newInvocationRuntime(options.Client, options.Dialer, options.VideoAudioRunner),
 	}
 	if err := configureASRRuntime(&runtime, options); err != nil {
 		return nil, err
@@ -125,6 +144,7 @@ func configureTTSRuntime(runtime *operationInvocationRuntime, options invocation
 		options.Dialer,
 		options.TTSTempDirectory,
 		options.TTSCreateTemp,
+		options.TTSWriteFile,
 		options.TTSInspectFile,
 		options.TTSReadFile,
 		options.TTSRemoveFile,
@@ -145,6 +165,33 @@ func genericInvocationRuntime(backend InvocationBackend) invocationRuntime {
 		return failClosedInvocationRuntime{}
 	}
 	return backendInvocationRuntime{backend: backend}
+}
+
+// failClosedInvocationRuntime is the production default when no operation
+// adapter was composed. It intentionally emits no content, preserving the
+// distinction between an unavailable backend and generated model output.
+type failClosedInvocationRuntime struct{}
+
+func (failClosedInvocationRuntime) Invoke(
+	ctx context.Context,
+	request inference.InvocationRuntimeRequest,
+) (inference.InvocationRuntimeResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return inference.InvocationRuntimeResult{}, err
+	}
+	operation := strings.TrimSpace(request.Operation.Name)
+	if operation == "" {
+		operation = strings.TrimSpace(request.Request.Operation)
+	}
+	return inference.InvocationRuntimeResult{}, &models.InvocationFailure{
+		Class:     models.InvocationFailureClassConfiguration,
+		Operation: operation,
+		Message:   "model operation backend is unavailable",
+		Cause:     models.ErrUnavailable,
+	}
 }
 
 func newASRInvocationRuntime(backend ASRBackend) (invocationRuntime, error) {
@@ -204,6 +251,7 @@ type omniInvocationRuntime struct {
 func newInvocationRuntime(
 	client InvocationProtocolClient,
 	dialer InvocationProtocolDialer,
+	runners ...platformprocess.CommandRunner,
 ) invocationRuntime {
 	fallback := failClosedInvocationRuntime{}
 	if isNilDependency(client) {
@@ -215,8 +263,15 @@ func newInvocationRuntime(
 	} else if dialer != nil {
 		protocolClient = localai.NewPinnedGRPCProtocolClient(dialer)
 	}
+	var extract localai.VideoAudioExtractor
+	if len(runners) > 0 && runners[0] != nil {
+		runner := runners[0]
+		extract = func(ctx context.Context, video []byte) ([]byte, error) {
+			return videoaudio.ExtractVideoAudio(ctx, runner, video)
+		}
+	}
 	return omniInvocationRuntime{
-		codec:    localai.NewPinnedOmniCodec(protocolClient),
+		codec:    localai.NewPinnedOmniCodec(protocolClient, extract),
 		fallback: fallback,
 	}
 }

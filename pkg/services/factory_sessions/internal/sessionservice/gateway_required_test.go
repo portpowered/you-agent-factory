@@ -94,38 +94,7 @@ func canonicalInspectionReadFixture(t *testing.T) (*Service, *canonicalInspectio
 			}},
 		},
 	}
-	return &Service{liveRuntime: live, durable: durable}, live, durable
-}
-
-func TestService_CanonicalReadsUseModeOwnersAndRuntimeFreeViews(t *testing.T) {
-	t.Parallel()
-
-	service, live, _ := canonicalInspectionReadFixture(t)
-	gotLive, err := service.Get(context.Background(), factorysessions.SessionGetRequest{
-		SessionID: " live-1 ", Mode: factorysessions.SessionOperationModeLive,
-	})
-	if err != nil {
-		t.Fatalf("canonical live Get: %v", err)
-	}
-	if gotLive.Session.SessionID != "live-1" || gotLive.Session.Status != "RUNNING" || !gotLive.Session.RuntimeAvailable || !gotLive.Session.IsDefault {
-		t.Fatalf("live view = %#v, want stable runtime-free projection", gotLive.Session)
-	}
-	if gotLive.Session.FactoryDir != "/factory/live" || gotLive.Session.Target.Name != "live" {
-		t.Fatalf("live identity = %#v, want owner fields", gotLive.Session)
-	}
-	gotLiveList, err := service.List(context.Background(), factorysessions.SessionListRequest{Mode: factorysessions.SessionOperationModeLive})
-	if err != nil {
-		t.Fatalf("canonical live List: %v", err)
-	}
-	if len(gotLiveList.Sessions) != 1 || gotLiveList.Sessions[0].SessionID != "live-2" || gotLiveList.Sessions[0].Status != "PAUSED" {
-		t.Fatalf("live list = %#v, want projected live row", gotLiveList.Sessions)
-	}
-	live.mu.Lock()
-	getCalls, listCalls := live.getCalls, live.listCalls
-	live.mu.Unlock()
-	if getCalls != 1 || listCalls != 1 {
-		t.Fatalf("live owner calls = get:%d list:%d, want direct live reads", getCalls, listCalls)
-	}
+	return &Service{durable: durable}, live, durable
 }
 
 func TestService_CanonicalDurableReadsUseModeOwnersAndRuntimeFreeViews(t *testing.T) {
@@ -134,7 +103,6 @@ func TestService_CanonicalDurableReadsUseModeOwnersAndRuntimeFreeViews(t *testin
 	service, live, durable := canonicalInspectionReadFixture(t)
 	assertCanonicalDurableSessionRead(t, service)
 	durableListRequest := assertCanonicalDurableSessionList(t, service, durable)
-	assertCanonicalAllSessionList(t, service, live)
 	assertCanonicalDurableReadCalls(t, live, durable, durableListRequest)
 }
 
@@ -157,6 +125,9 @@ func assertCanonicalDurableSessionRead(t *testing.T, service *Service) {
 	}
 	if got.Session.SourceRef != "factory.js" {
 		t.Fatalf("durable source ref = %q, want factory.js", got.Session.SourceRef)
+	}
+	if got.Durable == nil || got.Durable.SessionID != "durable-1" || got.Durable.ResolvedSource.SourceRef != "factory.js" {
+		t.Fatalf("complete durable read projection = %#v", got.Durable)
 	}
 }
 
@@ -185,6 +156,9 @@ func assertCanonicalDurableSessionList(t *testing.T, service *Service, durable *
 	if row.ResultStatus != "PARTIAL" {
 		t.Fatalf("durable list result status = %q, want PARTIAL", row.ResultStatus)
 	}
+	if len(got.DurableSessions) != 1 || got.DurableSessions[0].SessionID != "durable-2" {
+		t.Fatalf("durable summaries = %#v, want canonical owner projection", got.DurableSessions)
+	}
 	durable.mu.Lock()
 	defer durable.mu.Unlock()
 	return durable.lastList
@@ -197,7 +171,7 @@ func assertCanonicalAllSessionList(t *testing.T, service *Service, live *canonic
 		t.Fatalf("canonical all List: %v", err)
 	}
 	if len(got.Sessions) != 2 {
-		t.Fatalf("all list count = %d, want two", len(got.Sessions))
+		t.Fatalf("all list count = %d, want one", len(got.Sessions))
 	}
 	if got.Sessions[0].Mode != factorysessions.SessionOperationModeLive {
 		t.Fatalf("all list first mode = %q, want live", got.Sessions[0].Mode)
@@ -210,6 +184,9 @@ func assertCanonicalAllSessionList(t *testing.T, service *Service, live *canonic
 	}
 	if got.Sessions[1].SessionID != "durable-2" {
 		t.Fatalf("all list second session ID = %q, want durable-2", got.Sessions[1].SessionID)
+	}
+	if len(got.DurableSessions) != 1 || got.DurableSessions[0].SessionID != "durable-2" {
+		t.Fatalf("all list durable summaries = %#v, want canonical owner projection", got.DurableSessions)
 	}
 	live.mu.Lock()
 	defer live.mu.Unlock()
@@ -226,8 +203,8 @@ func assertCanonicalDurableReadCalls(t *testing.T, live *canonicalInspectionLive
 	durable.mu.Lock()
 	listCalls, getCalls, legacyCalls := durable.listCalls, durable.getCalls, durable.legacyCalls
 	durable.mu.Unlock()
-	if listCalls != 2 {
-		t.Fatalf("durable list calls = %d, want two", listCalls)
+	if listCalls != 1 {
+		t.Fatalf("durable list calls = %d, want one", listCalls)
 	}
 	if getCalls != 1 {
 		t.Fatalf("durable get calls = %d, want one", getCalls)
@@ -246,7 +223,7 @@ func assertCanonicalDurableReadCalls(t *testing.T, live *canonicalInspectionLive
 	}
 	live.mu.Lock()
 	defer live.mu.Unlock()
-	if live.getCalls != 0 || live.listCalls != 1 {
+	if live.getCalls != 0 || live.listCalls != 0 {
 		t.Fatalf("live owner calls = get:%d list:%d, want all-list live read", live.getCalls, live.listCalls)
 	}
 }
@@ -258,7 +235,7 @@ func TestService_CanonicalInspectionValidationPrecedesOwnerCalls(t *testing.T) {
 
 	live := &canonicalInspectionLiveRuntimeFake{}
 	durable := &canonicalInspectionDurableFake{}
-	service := &Service{liveRuntime: live, durable: durable}
+	service := &Service{durable: durable}
 	cases := []struct {
 		name  string
 		field string
@@ -689,6 +666,7 @@ type canonicalSessionInvokerFake struct {
 	legacyCalls     int
 	calls           int
 	mutateInput     bool
+	contentProvided bool
 }
 
 func (fake *canonicalSessionInvokerFake) Invoke(
@@ -722,6 +700,7 @@ func (fake *canonicalSessionInvokerFake) recordInvocation(
 		fake.timeout = *request.TimeoutMillis
 	}
 	fake.cancelOnTimeout = request.CancelOnTimeout
+	fake.contentProvided = request.ContentProvided
 	fake.input = request.PreparedInvocationInput.Clone()
 	if fake.mutateInput && request.PreparedInvocationInput != nil && request.PreparedInvocationInput.ResolvedInput != nil {
 		request.PreparedInvocationInput.ResolvedInput.Text = "owner mutation"
@@ -743,7 +722,8 @@ func TestService_CanonicalStartDurableMapsAndClonesAsyncRequest(t *testing.T) {
 	}
 	service := &Service{durable: fake}
 	request := factorysessions.SessionStartRequest{
-		Mode: factorysessions.SessionOperationModeDurable,
+		Mode:       factorysessions.SessionOperationModeDurable,
+		FolderPath: "/test-factory",
 		Correlation: factorysessions.SessionOperationCorrelation{
 			RequestID: "  start-async-1  ",
 		},
@@ -764,7 +744,7 @@ func TestService_CanonicalStartDurableMapsAndClonesAsyncRequest(t *testing.T) {
 			CancelOnTimeout: true,
 		},
 	}
-	got, err := service.Start(context.Background(), request)
+	got, err := service.StartDurable(context.Background(), request)
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
@@ -852,8 +832,9 @@ func TestService_CanonicalStartDurableSelectsSyncFromRequestValue(t *testing.T) 
 		},
 	}
 	service := &Service{durable: fake}
-	got, err := service.Start(context.Background(), factorysessions.SessionStartRequest{
+	got, err := service.StartDurable(context.Background(), factorysessions.SessionStartRequest{
 		Mode:        factorysessions.SessionOperationModeDurable,
+		FolderPath:  "/test-factory",
 		Correlation: factorysessions.SessionOperationCorrelation{RequestID: "sync-1"},
 		Synchronous: true,
 	})
@@ -909,6 +890,34 @@ func TestService_CanonicalInvokeMapsIdentityAndClonesPreparedWork(t *testing.T) 
 	assertCanonicalInvokeResult(t, fake, got)
 }
 
+func TestCanonicalInvocationRequestClonesNamedArguments(t *testing.T) {
+	t.Parallel()
+
+	args := map[string]any{"nested": map[string]any{"items": []any{"original"}}}
+	converted := canonicalInvocationRequest(factorysessions.SessionInvokeRequest{Args: args})
+	if converted.Args == nil {
+		t.Fatal("canonical invocation lost named arguments")
+	}
+	(*converted.Args)["nested"].(map[string]any)["items"].([]any)[0] = "changed"
+	if got := args["nested"].(map[string]any)["items"].([]any)[0]; got != "original" {
+		t.Fatalf("caller arguments mutated through invocation request: %v", got)
+	}
+}
+
+func TestCanonicalInvocationRequestKeepsRawContentForSignatureNormalization(t *testing.T) {
+	t.Parallel()
+
+	content := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello", Metadata: map[string]any{"source": "acp"}}}
+	converted := canonicalInvocationRequest(factorysessions.SessionInvokeRequest{Content: content, ContentProvided: true})
+	if !converted.ContentProvided || converted.SourceKind == nil || *converted.SourceKind != factorysessions.InvocationInputSourceKindText || len(converted.Content) != 1 || converted.Content[0].Text != "hello" {
+		t.Fatalf("raw invocation mapping = %#v, want text content for owner normalization", converted)
+	}
+	converted.Content[0].Metadata["source"] = "owner"
+	if content[0].Metadata["source"] != "acp" {
+		t.Fatal("owner mutation crossed caller-owned raw content")
+	}
+}
+
 func assertCanonicalInvokeRequest(t *testing.T, fake *canonicalSessionInvokerFake, input *work.PreparedInvocationInput) {
 	t.Helper()
 	if fake.canonicalCalls != 1 || fake.legacyCalls != 0 || fake.calls != 1 || fake.sessionID != "session-1" || fake.requestID != "invoke-1" || fake.timeout != 500 || !fake.cancelOnTimeout {
@@ -919,6 +928,9 @@ func assertCanonicalInvokeRequest(t *testing.T, fake *canonicalSessionInvokerFak
 	}
 	if fake.input == nil || fake.input.ResolvedInput == nil || fake.input.ResolvedInput.Text != "caller input" {
 		t.Fatalf("invoker input = %#v, want cloned prepared input", fake.input)
+	}
+	if fake.contentProvided {
+		t.Fatal("prepared input was marked as additional content")
 	}
 }
 

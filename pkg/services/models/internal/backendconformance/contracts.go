@@ -13,9 +13,9 @@ import (
 const (
 	TargetDarwinArm64      = "darwin-arm64"
 	TargetLinuxAmd64       = "linux-amd64"
+	TargetLinuxAmd64CUDA   = "linux-amd64-cuda"
 	TargetWindowsAmd64     = "windows-amd64"
 	TargetWindowsAmd64CUDA = "windows-amd64-cuda"
-	ApprovedCUDABackend    = "localai-llamacpp"
 )
 
 // Reference identifies one backend name exposed to a customer.

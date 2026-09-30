@@ -16,9 +16,10 @@ func (i *Initializer) ProcessContext(ctx context.Context) (context.Context, func
 	return signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 }
 
-// Initializer owns lifecycle selection and activation after CLI parsing.
+// Initializer owns process lifecycle after CLI parsing and forwards run intent
+// to the injected command execution operation.
 type Initializer struct {
-	stdio                processcontract.StdioApplicationOpener
+	stdio                processcontract.StdioHandler
 	systemInitialization SystemInitializationOperation
 }
 
@@ -27,11 +28,11 @@ type Initializer struct {
 type SystemInitializationOperation func(context.Context, string) error
 
 func NewInitializer(
-	stdio processcontract.StdioApplicationOpener,
+	stdio processcontract.StdioHandler,
 	systemInitialization SystemInitializationOperation,
 ) (*Initializer, error) {
 	if stdio == nil {
-		return nil, fmt.Errorf("stdio application opener is required")
+		return nil, fmt.Errorf("stdio handler is required")
 	}
 	if systemInitialization == nil {
 		return nil, fmt.Errorf("system initialization service is required")
@@ -50,25 +51,14 @@ func (i *Initializer) Run(
 	if selection == nil {
 		return fmt.Errorf("initialize run service: run selection is required")
 	}
-	operation, err := selection.Open(ctx, intent)
-	if err != nil {
-		return fmt.Errorf("initialize run service: %w", err)
-	}
-	return operation.Run(ctx)
+	return selection.Run(ctx, intent)
 }
 
 func (i *Initializer) Stdio(ctx context.Context, intent processcontract.MCPIntent) error {
 	if i == nil || i.stdio == nil {
-		return fmt.Errorf("initialize stdio service: stdio application opener is required")
+		return fmt.Errorf("initialize stdio service: stdio handler is required")
 	}
-	application, err := i.stdio.OpenStdio(ctx, intent)
-	if err != nil {
-		return fmt.Errorf("initialize stdio service: %w", err)
-	}
-	if application == nil {
-		return fmt.Errorf("initialize stdio service: stdio application is required")
-	}
-	return application.Run(ctx)
+	return i.stdio(ctx, intent)
 }
 
 func (i *Initializer) InitializeSystem(ctx context.Context, homeDir string) error {

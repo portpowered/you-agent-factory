@@ -85,6 +85,11 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (work.WorkContentPart, b
 		}
 	}
 
+	videoPart, videoErr := part.AsWorkVideoContentPart()
+	if videoErr == nil && videoPart.Type == factoryapi.VIDEO {
+		return videoPartFromGenerated(videoPart), true
+	}
+
 	audioPart, audioErr := part.AsWorkAudioContentPart()
 	if audioErr == nil && audioPart.Type == factoryapi.WorkContentPartTypeAudio {
 		return work.WorkContentPart{
@@ -168,6 +173,8 @@ func GeneratedPartFromPart(part work.WorkContentPart) (factoryapi.WorkContentPar
 		}); err != nil {
 			return factoryapi.WorkContentPart{}, false
 		}
+	case work.WorkContentPartTypeVideo:
+		return generatedVideoPartFromPart(part)
 	case work.WorkContentPartTypeAudio:
 		if err := generated.FromWorkAudioContentPart(factoryapi.WorkAudioContentPart{
 			Type:        factoryapi.WorkContentPartTypeAudio,
@@ -219,6 +226,38 @@ func GeneratedPartFromPart(part work.WorkContentPart) (factoryapi.WorkContentPar
 		return factoryapi.WorkContentPart{}, false
 	}
 
+	return generated, true
+}
+
+func videoPartFromGenerated(part factoryapi.WorkVideoContentPart) work.WorkContentPart {
+	return work.WorkContentPart{
+		Type:        work.WorkContentPartTypeVideo,
+		URL:         string(part.Url),
+		File:        deprecatedFileValue(part.File),
+		Slot:        stringValue(part.Slot),
+		Label:       stringValue(part.Label),
+		Role:        stringValue(part.Role),
+		ContentType: stringValue(part.ContentType),
+		ArtifactID:  stringValue(part.ArtifactId),
+		Metadata:    cloneMetadata(part.Metadata),
+	}
+}
+
+func generatedVideoPartFromPart(part work.WorkContentPart) (factoryapi.WorkContentPart, bool) {
+	var generated factoryapi.WorkContentPart
+	if err := generated.FromWorkVideoContentPart(factoryapi.WorkVideoContentPart{
+		Type:        factoryapi.VIDEO,
+		Url:         factoryapi.WorkContentURLProperty(part.URL),
+		File:        deprecatedFilePtr(part.File),
+		Slot:        stringPtr(part.Slot),
+		Label:       stringPtr(part.Label),
+		Role:        stringPtr(part.Role),
+		ContentType: stringPtr(part.ContentType),
+		ArtifactId:  stringPtr(part.ArtifactID),
+		Metadata:    metadataPtr(part.Metadata),
+	}); err != nil {
+		return factoryapi.WorkContentPart{}, false
+	}
 	return generated, true
 }
 

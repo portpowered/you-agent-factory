@@ -33,6 +33,10 @@ type functionalRPCPeer struct {
 
 func runFunctionalRPCPeer(fixture acpFixtureConfig, stdin io.Reader, stdout, stderr io.Writer) error {
 	mode := fixture.Mode
+	if mode == "pi-version" {
+		_, err := fmt.Fprintln(stdout, fixture.SessionID)
+		return err
+	}
 	if mode == "malformed" {
 		_, err := fmt.Fprintln(stdout, "{not-json")
 		return err
@@ -237,10 +241,7 @@ func (p *functionalRPCPeer) createSession(request rpcEnvelope) error {
 	if err := p.rejectUnexpectedNewSession(); err != nil {
 		return err
 	}
-	config := `[]`
-	if p.mode == "model" || p.mode == "package-conformance" {
-		config = `[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]`
-	}
+	config := `[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]`
 	p.sessions++
 	sessionID := p.sessionID
 	if p.mode == "persistent" || p.mode == "serialize" {
@@ -248,6 +249,9 @@ func (p *functionalRPCPeer) createSession(request rpcEnvelope) error {
 	}
 	p.sessionID = sessionID
 	result := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"configOptions":%s}`, sessionID, config))
+	if p.mode == "pi-startup" || p.mode == "pi-failure" {
+		result = json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"configOptions":%s,"_meta":{"piAcp":{"startupInfo":"Pi startup banner"}}}`, sessionID, config))
+	}
 	return p.respond(request.ID, result)
 }
 
@@ -268,7 +272,7 @@ func (p *functionalRPCPeer) loadSession(request rpcEnvelope) error {
 	}
 	p.sessionID = params.SessionID
 	p.sessions++
-	return p.respond(request.ID, json.RawMessage(`{"configOptions":[]}`))
+	return p.respond(request.ID, json.RawMessage(`{"configOptions":[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]}`))
 }
 
 func (p *functionalRPCPeer) supportsSessionLoad() bool {
@@ -438,6 +442,14 @@ func holdFailedRetryPeer(holdMarker string, scanner *bufio.Scanner) error {
 // notification ever having been sent -- a real ACP agent may self-report
 // cancellation this way.
 func (p *functionalRPCPeer) respondToPackagedPrompt(request rpcEnvelope) (bool, error) {
+	if p.mode == "elicitation" {
+		if err := p.assertElicitationChoices(); err != nil {
+			return true, p.respondError(request.ID, -32603, "elicitation selection mismatch", map[string]any{"error": err.Error()})
+		}
+	}
+	if p.mode == "pi-failure" {
+		return true, p.respondError(request.ID, -32603, "model connection failed", map[string]any{"provider": "pi", "outcome": "error", "failureKind": "model_connection"})
+	}
 	if p.mode == "cancelled-response" {
 		if err := p.update(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"partial ACP answer before self-cancellation"}}`); err != nil {
 			return true, err

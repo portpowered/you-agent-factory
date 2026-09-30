@@ -41,12 +41,12 @@ func TestServiceInternalDelegationCoverage(t *testing.T) {
 
 func TestEffectiveACPIntegrationsPreservesUnchangedPackageRuntimeBinding(t *testing.T) {
 	packaged := []providers.ACPIntegration{{
-		ID: "entry-1", Name: "cursor-acp", Aliases: []string{"factory-cursor"},
+		ID: "entry-1", Name: "cursor", Aliases: []string{"factory-cursor"},
 		Transport: "stdio", Command: "cursor-agent acp", Arguments: []string{"acp"},
 		RuntimePosture: "installed_executable", ImplementationProfile: "cursor-acp",
 	}}
 	configured := []providers.ACPIntegration{{
-		ID: "saved-entry", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+		ID: "saved-entry", Name: "cursor", Transport: "stdio", Command: "cursor-agent acp",
 	}}
 
 	got := effectiveACPIntegrations(packaged, configured)

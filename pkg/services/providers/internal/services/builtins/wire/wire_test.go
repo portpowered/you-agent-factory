@@ -17,21 +17,22 @@ func TestPackagedACPCatalogIsExactAndDetached(t *testing.T) {
 		aliases   []string
 		transport string
 		command   string
+		profile   string
 	}{
 		{name: "copilot-acp", transport: "stdio", command: "copilot --acp --stdio"},
-		{name: "cursor-acp", transport: "stdio", command: "cursor-agent acp"},
+		{name: "cursor", transport: "stdio", command: "cursor-agent acp", profile: "cursor-acp"},
 		{name: "droid-acp", aliases: []string{"factory-droid", "factorydroid"}, transport: "stdio", command: "droid exec --output-format acp"},
 		{name: "fast-agent-acp", transport: "stdio", command: "uvx fast-agent-mcp acp"},
-		{name: "gemini-acp", transport: "stdio", command: "gemini --acp"},
+		{name: "gemini", transport: "stdio", command: "gemini --acp", profile: "gemini-acp"},
 		{name: "grok-build-acp", transport: "stdio", command: "grok agent stdio"},
 		{name: "iflow-acp", transport: "stdio", command: "iflow --experimental-acp"},
 		{name: "kilocode-acp", transport: "stdio", command: "npx -y @kilocode/cli acp"},
 		{name: "kimi-acp", transport: "stdio", command: "kimi acp"},
-		{name: "kiro-acp", transport: "stdio", command: "kiro-cli-chat acp"},
+		{name: "kiro", transport: "stdio", command: "kiro-cli-chat acp", profile: "kiro-acp"},
 		{name: "mux-acp", transport: "stdio", command: "mux acp"},
 		{name: "openclaw-acp", transport: "stdio", command: "openclaw acp"},
-		{name: "opencode-acp", transport: "stdio", command: "npx -y opencode-ai acp"},
-		{name: "pi-acp", transport: "stdio", command: "npx pi-acp"},
+		{name: "opencode", transport: "stdio", command: "opencode acp", profile: "opencode-acp"},
+		{name: "pi", transport: "stdio", command: "you pi-acp", profile: "pi-acp"},
 		{name: "pool-acp", transport: "stdio", command: "pool acp"},
 		{name: "qoder-acp", transport: "stdio", command: "qodercli --acp"},
 		{name: "qwen-acp", transport: "stdio", command: "qwen --acp"},
@@ -49,8 +50,12 @@ func TestPackagedACPCatalogIsExactAndDetached(t *testing.T) {
 		if got := integration.Arguments; !reflect.DeepEqual(got, strings.Fields(want[index].command)[1:]) {
 			t.Fatalf("packaged ACP integration[%d] arguments = %#v, want command arguments %#v", index, got, strings.Fields(want[index].command)[1:])
 		}
-		if integration.ImplementationProfile != integration.Name.String() {
-			t.Fatalf("packaged ACP integration[%d] profile = %q, want %q", index, integration.ImplementationProfile, integration.Name)
+		wantProfile := want[index].name
+		if want[index].profile != "" {
+			wantProfile = want[index].profile
+		}
+		if integration.ImplementationProfile != wantProfile {
+			t.Fatalf("packaged ACP integration[%d] profile = %q, want %q", index, integration.ImplementationProfile, wantProfile)
 		}
 		if integration.RuntimePosture != wantPosture(integration.Name.String()) {
 			t.Fatalf("packaged ACP integration[%d] posture = %q, want %q", index, integration.RuntimePosture, wantPosture(integration.Name.String()))
@@ -66,7 +71,7 @@ func TestPackagedACPCatalogIsExactAndDetached(t *testing.T) {
 
 func wantPosture(name string) string {
 	switch name {
-	case "fast-agent-acp", "kilocode-acp", "opencode-acp", "pi-acp":
+	case "fast-agent-acp", "kilocode-acp", "pi":
 		return "package_runner"
 	default:
 		return "installed_executable"

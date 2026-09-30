@@ -2337,7 +2337,7 @@ export interface components {
       resources: components["schemas"]["ModelResourceSummary"][];
       /** @description Worker-scoped capability declarations that contribute to this discovered model. */
       capabilities: components["schemas"]["ModelCapability"][];
-      /** @description Effective-readiness diagnostics. When VIDEO is omitted because its required projector is missing or invalid, `videoReadiness` contains a stable safe reason. */
+      /** @description Effective-readiness diagnostics. When IMAGE, AUDIO, or VIDEO inputs are omitted because their required projector is missing or invalid, `mediaReadiness` contains a stable safe reason. */
       diagnostics: components["schemas"]["StringMap"];
     };
     /** @description Opaque model name or source URI accepted by the provider-neutral invocation contract. */
@@ -7294,6 +7294,7 @@ export interface components {
     WorkContentPart:
       | components["schemas"]["WorkTextContentPart"]
       | components["schemas"]["WorkImageContentPart"]
+      | components["schemas"]["WorkVideoContentPart"]
       | components["schemas"]["WorkAudioContentPart"]
       | components["schemas"]["WorkJsonContentPart"]
       | components["schemas"]["WorkBinaryContentPart"];
@@ -7370,6 +7371,13 @@ export interface components {
     WorkContentURLProperty: string;
     /** @description Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration. */
     WorkContentDeprecatedFileProperty: string;
+    /** @description Ordered video content for one work item. */
+    WorkVideoContentPart: components["schemas"]["WorkContentCommonFields"] & {
+      /** @enum {unknown} */
+      type: WorkVideoContentPartType;
+      url: components["schemas"]["WorkContentURLProperty"];
+      file?: components["schemas"]["WorkContentDeprecatedFileProperty"];
+    };
     /** @description Canonical content URL for the submitted file-backed item. Supported schemes are file://, http://, https://, and data:. */
     SubmitWorkContentURLProperty: string;
     /** @description Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`. */
@@ -9262,6 +9270,11 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["GenericModelInvocationRequest"];
+        "multipart/form-data": {
+          request: components["schemas"]["GenericModelInvocationRequest"];
+          /** @description Binary uploads in the order of media inputs without content, contentBase64, or artifactRef. Each file is limited to 8 MiB. */
+          files?: string[];
+        };
       };
     };
     responses: {
@@ -11997,6 +12010,7 @@ export const ModelOperationContentType = {
   TEXT: "TEXT",
   IMAGE: "IMAGE",
   AUDIO: "AUDIO",
+  VIDEO: "VIDEO",
   JSON: "JSON",
   BINARY: "BINARY",
 } as const;
@@ -12158,6 +12172,7 @@ export const WorkContentPartType = {
   AUDIO: "AUDIO",
   JSON: "JSON",
   BINARY: "BINARY",
+  VIDEO: "VIDEO",
 } as const;
 export type WorkContentPartType =
   (typeof WorkContentPartType)[keyof typeof WorkContentPartType];
@@ -12197,6 +12212,11 @@ export const RelationType = {
   RelationTypeSpawnedBy: "SPAWNED_BY",
 } as const;
 export type RelationType = (typeof RelationType)[keyof typeof RelationType];
+export const WorkVideoContentPartType = {
+  VIDEO: "VIDEO",
+} as const;
+export type WorkVideoContentPartType =
+  (typeof WorkVideoContentPartType)[keyof typeof WorkVideoContentPartType];
 export const FactoryGuardType = {
   INFERENCE_THROTTLE_GUARD: "INFERENCE_THROTTLE_GUARD",
 } as const;

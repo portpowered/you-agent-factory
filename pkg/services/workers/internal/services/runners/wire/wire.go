@@ -174,8 +174,10 @@ func inferenceImplementation(
 			Scope: config.Scope,
 		},
 		inference.Dependencies{
-			Models:   dependencies.Models,
-			Delegate: dependencies.Delegate,
+			Models:              dependencies.Models,
+			Delegate:            dependencies.Delegate,
+			ContentMaterializer: dependencies.ContentMaterializer,
+			MediaFiles:          dependencies.MediaFiles,
 		},
 	)
 }

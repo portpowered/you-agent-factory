@@ -161,12 +161,6 @@ func wireFoldServiceWithHostedRuntime(
 		) (workers.WorkstationDispatchCancelResult, error) {
 			return workers.WorkstationDispatchCancelResult{}, nil
 		},
-		func(
-			context.Context,
-			factoryruntime.RuntimeActivationRequest,
-		) (*factoryruntime.RuntimeActivation, error) {
-			return &factoryruntime.RuntimeActivation{Service: active}, nil
-		},
 	)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
@@ -174,7 +168,13 @@ func wireFoldServiceWithHostedRuntime(
 	if service == nil {
 		t.Fatal("NewService() returned nil service")
 	}
-	if _, err := service.Activate(context.Background(), foldRuntimeActivationRequest()); err != nil {
+	operation := factoryruntime.RuntimeActivationOperation(func(
+		context.Context,
+		factoryruntime.RuntimeActivationRequest,
+	) (*factoryruntime.RuntimeActivation, error) {
+		return &factoryruntime.RuntimeActivation{Service: active}, nil
+	})
+	if _, err := service.Activate(context.Background(), foldRuntimeActivationRequest(), operation); err != nil {
 		t.Fatalf("Activate() = %v", err)
 	}
 	return service

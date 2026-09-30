@@ -148,9 +148,9 @@ func (p *assetPuller) InspectRuntimeCache(ctx context.Context, runtimeCfg *model
 		return RuntimeCacheInspection{}, fmt.Errorf("runtime config is not available")
 	}
 	if modelScopedResource(runtimeCfg, modelName) == nil {
-		// Local Factory workers without an explicit model resource still need
-		// durable generic cache facts for effective capability projection. Keep
-		// the legacy catalog-only behavior for cloud/custom workers.
+		// Names without a Factory worker may have durable generic caches from
+		// operator definitions. Keep Factory workers without a model resource
+		// scoped to built-in local models.
 		if worker := factoryModelWorker(runtimeCfg, modelName); worker != nil {
 			if strings.TrimSpace(worker.ModelLocality) != models.RuntimeModelLocalityLocal {
 				return RuntimeCacheInspection{}, nil
@@ -158,9 +158,6 @@ func (p *assetPuller) InspectRuntimeCache(ctx context.Context, runtimeCfg *model
 			if _, builtIn := (models.BuiltInCatalog{}).ModelDefinitionFor(strings.ToLower(strings.TrimSpace(modelName))); !builtIn {
 				return RuntimeCacheInspection{}, nil
 			}
-		}
-		if _, builtIn := (models.BuiltInCatalog{}).ModelDefinitionFor(strings.ToLower(strings.TrimSpace(modelName))); !builtIn {
-			return RuntimeCacheInspection{}, nil
 		}
 	}
 	scope, err := p.currentScope()

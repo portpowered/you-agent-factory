@@ -103,7 +103,7 @@ func logFSCP03RetrospectiveEvidence(t *testing.T) {
 	t.Log("FSCP-03 F7 PASS: CLOSE returned its own live-session closed outcome")
 	t.Log("FSCP-03 F8 PASS: CancelOnTimeout=false returned TIMED_OUT while leaving the selected session active")
 	t.Log("FSCP-03 F9 PASS: CancelOnTimeout=true returned TIMED_OUT and canceled only the selected session")
-	t.Log("FSCP-03 F10 PASS: canonical and legacy durable starts produced equivalent public success semantics")
+	t.Log("FSCP-03 F10 PASS: repeated canonical durable starts produced equivalent public success semantics")
 	t.Log("FSCP-03 F11 PASS: repeated Process.Close calls were safe and construction performed no runtime activation")
 	t.Log("FSCP-03 F12 PASS: public Factory Event and Response Event observations preserved session-scoped Work and runtime lineage")
 	t.Log("FSCP-03 F14 PASS: canonical field validation remained explicit at the retained public boundary")
@@ -123,15 +123,12 @@ func runFSCP03DurableIdentityScenario(t *testing.T) {
 	}
 	support.CleanupProcess(t, process)
 	fscp03ExecuteHelp(t, process, factoryDir, home)
-	opened, canonical := openFSCP03Execution(t, process, process.ExecutionRuntimeOpening(), factoryDir, home, "fscp03-durable-identity-owner")
-	legacy, ok := opened.Execution.(factorysessions.DurableExecutionService)
-	if !ok {
-		t.Fatalf("execution type = %T, want public DurableExecutionService", opened.Execution)
-	}
+	canonical := openFSCP03Execution(t, process.FactorySessions())
+	selections := fscp03RuntimeSelections(factoryDir, home)
 
-	runFSCP03SequentialDurableIdentity(t, canonical)
-	runFSCP03DurableDirection(t, canonical, legacy)
-	runFSCP03ConcurrentDurableIdentity(t, factoryDir)
+	runFSCP03SequentialDurableIdentity(t, canonical, selections)
+	runFSCP03DurableDirection(t, canonical, selections)
+	runFSCP03ConcurrentDurableIdentity(t, factoryDir, home)
 }
 
 func runFSCP03DurableControlScenario(t *testing.T) {
@@ -149,12 +146,13 @@ func runFSCP03DurableControlScenario(t *testing.T) {
 	}
 	support.CleanupProcess(t, process)
 	fscp03ExecuteHelp(t, process, factoryDir, home)
-	_, canonical := openFSCP03Execution(t, process, process.ExecutionRuntimeOpening(), factoryDir, home, "fscp03-control-owner")
+	canonical := openFSCP03Execution(t, process.FactorySessions())
+	selections := fscp03RuntimeSelections(factoryDir, home)
 
-	runFSCP03Cancel(t, canonical, controlRunner)
-	runFSCP03Terminate(t, canonical, controlRunner)
-	runFSCP03Close(t, canonical, factoryDir)
-	runFSCP03TimeoutBranches(t, canonical, controlRunner)
+	runFSCP03Cancel(t, canonical, selections, controlRunner)
+	runFSCP03Terminate(t, canonical, selections, controlRunner)
+	runFSCP03Close(t, canonical, selections, factoryDir)
+	runFSCP03TimeoutBranches(t, canonical, selections, controlRunner)
 }
 
 func runFSCP03LiveIsolationScenario(t *testing.T) {
@@ -285,16 +283,6 @@ func runFSCP03ProcessLifecycleScenario(t *testing.T) {
 	}
 }
 
-type fscp03CanonicalOperations interface {
-	Start(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error)
-	List(context.Context, factorysessions.SessionListRequest) (factorysessions.SessionListResult, error)
-	Get(context.Context, factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error)
-	Control(context.Context, factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error)
-	ReadResult(context.Context, factorysessions.SessionResultReadRequest) (factorysessions.SessionResultReadResult, error)
-	QueryDispatches(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
-	SubscribeResponses(context.Context, factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error)
-}
-
 type fscp03StartOutcome struct {
 	result factorysessions.SessionStartResult
 	err    error
@@ -317,59 +305,48 @@ func fscp03ExecuteHelp(t *testing.T, process fscp03Process, factoryDir, home str
 	}
 }
 
-func openFSCP03Execution(
-	t *testing.T,
-	process fscp03Process,
-	capability executionRuntimeOpeningCapability,
-	factoryDir, home, sessionID string,
-) (factorysessions.OpenedExecutionRuntime, fscp03CanonicalOperations) {
+func openFSCP03Execution(t *testing.T, capability interface{ FactorySessions() any }) factorysessions.Service {
 	t.Helper()
 	if capability == nil {
-		t.Fatal("root process returned no execution opening")
+		t.Fatal("root process returned no FactorySessions capability")
 	}
-	opening, ok := capability.ExecutionRuntimeOpening().(factorysessions.ExecutionRuntimeOpeningFunc)
-	if !ok || opening == nil {
-		t.Fatalf("execution opening type = %T, want factorysessions.ExecutionRuntimeOpeningFunc", capability.ExecutionRuntimeOpening())
+	canonical, ok := capability.FactorySessions().(factorysessions.Service)
+	if !ok || canonical == nil {
+		t.Fatalf("FactorySessions type = %T, want factorysessions.Service", capability.FactorySessions())
 	}
-	opened, err := opening(t.Context(), factorysessions.ExecutionRuntimeOpeningRequest{
-		ProjectRoot:       factoryDir,
-		SystemConfigHome:  home,
-		FactorySessionID:  sessionID,
-		PersistencePolicy: factorysessions.PersistencePolicyDisabled,
-	})
-	if err != nil {
-		t.Fatalf("execution runtime opening error = %v", err)
+	return canonical
+}
+
+func fscp03RuntimeSelections(factoryDir, home string) *factorysessions.SessionRuntimeSelection {
+	return &factorysessions.SessionRuntimeSelection{
+		SystemConfigHome: home,
+		ExecutionBaseDir: factoryDir,
+		LogPolicy:        factorysessions.SessionArtifactPolicyDisabled,
+		MetricsPolicy:    factorysessions.SessionArtifactPolicyDisabled,
 	}
-	if opened.Execution == nil {
-		t.Fatal("execution opening returned no public Factory Sessions execution")
+}
+
+func fscp03DurableStartRequest(selections *factorysessions.SessionRuntimeSelection, requestID string, source factorysessions.Source) factorysessions.SessionStartRequest {
+	return factorysessions.SessionStartRequest{
+		Mode:             factorysessions.SessionOperationModeDurable,
+		FolderPath:       selections.ExecutionBaseDir,
+		Persistence:      factorysessions.PersistencePolicyDisabled,
+		Correlation:      factorysessions.SessionOperationCorrelation{RequestID: requestID},
+		Source:           source,
+		Synchronous:      true,
+		RuntimeSelection: selections,
 	}
-	if opened.Close != nil {
-		t.Cleanup(func() {
-			if err := opened.Close(); err != nil {
-				t.Errorf("close execution runtime: %v", err)
-			}
-		})
-	}
-	canonical, ok := opened.Execution.(fscp03CanonicalOperations)
-	if !ok {
-		t.Fatalf("execution type = %T, want public canonical Factory Sessions operations", opened.Execution)
-	}
-	return opened, canonical
 }
 
 func fscp03StartSynchronous(
 	t *testing.T,
-	canonical fscp03CanonicalOperations,
+	canonical factorysessions.Service,
+	selections *factorysessions.SessionRuntimeSelection,
 	requestID string,
 	source factorysessions.Source,
 ) factorysessions.SessionStartResult {
 	t.Helper()
-	started, err := canonical.Start(t.Context(), factorysessions.SessionStartRequest{
-		Mode:        factorysessions.SessionOperationModeDurable,
-		Correlation: factorysessions.SessionOperationCorrelation{RequestID: requestID},
-		Source:      source,
-		Synchronous: true,
-	})
+	started, err := canonical.Start(t.Context(), fscp03DurableStartRequest(selections, requestID, source))
 	if err != nil {
 		t.Fatalf("canonical durable Start(%s) error = %v", requestID, err)
 	}
@@ -378,16 +355,15 @@ func fscp03StartSynchronous(
 
 func fscp03StartBlockedAsync(
 	t *testing.T,
-	canonical fscp03CanonicalOperations,
+	canonical factorysessions.Service,
+	selections *factorysessions.SessionRuntimeSelection,
 	startedEvents <-chan struct{},
 	requestID string,
 ) factorysessions.SessionStartResult {
 	t.Helper()
-	started, err := canonical.Start(t.Context(), factorysessions.SessionStartRequest{
-		Mode:        factorysessions.SessionOperationModeDurable,
-		Correlation: factorysessions.SessionOperationCorrelation{RequestID: requestID},
-		Source:      fscp03ChildSource(requestID),
-	})
+	request := fscp03DurableStartRequest(selections, requestID, fscp03ChildSource(requestID))
+	request.Synchronous = false
+	started, err := canonical.Start(t.Context(), request)
 	if err != nil {
 		t.Fatalf("blocked canonical Start(%s) error = %v", requestID, err)
 	}
@@ -411,7 +387,7 @@ func assertFSCP03SuccessfulStart(t *testing.T, started factorysessions.SessionSt
 	}
 }
 
-func assertFSCP03DurableLineage(t *testing.T, canonical fscp03CanonicalOperations, sessionID string) {
+func assertFSCP03DurableLineage(t *testing.T, canonical factorysessions.Service, sessionID string) {
 	t.Helper()
 	view, err := canonical.Get(t.Context(), factorysessions.SessionGetRequest{
 		SessionID: sessionID,
@@ -468,7 +444,7 @@ func assertFSCP03DurableLineage(t *testing.T, canonical fscp03CanonicalOperation
 	assertFSCP03ResponseEvents(t, sessionID, events)
 }
 
-func assertFSCP03DisjointDurableObservations(t *testing.T, canonical fscp03CanonicalOperations, firstID, secondID string) {
+func assertFSCP03DisjointDurableObservations(t *testing.T, canonical factorysessions.Service, firstID, secondID string) {
 	t.Helper()
 	first, err := canonical.SubscribeResponses(t.Context(), factorysessions.SessionResponseSubscriptionRequest{SessionID: firstID})
 	if err != nil {
@@ -530,7 +506,7 @@ func assertFSCP03ResponseEventsUseSessionDispatches(
 	}
 }
 
-func assertFSCP03DurableStatus(t *testing.T, canonical fscp03CanonicalOperations, sessionID string, want factorysessions.LifecycleStatus) {
+func assertFSCP03DurableStatus(t *testing.T, canonical factorysessions.Service, sessionID string, want factorysessions.LifecycleStatus) {
 	t.Helper()
 	view, err := canonical.Get(t.Context(), factorysessions.SessionGetRequest{SessionID: sessionID, Mode: factorysessions.SessionOperationModeDurable})
 	if err != nil {
@@ -541,7 +517,7 @@ func assertFSCP03DurableStatus(t *testing.T, canonical fscp03CanonicalOperations
 	}
 }
 
-func assertFSCP03DurableTerminalStatus(t *testing.T, canonical fscp03CanonicalOperations, sessionID string) {
+func assertFSCP03DurableTerminalStatus(t *testing.T, canonical factorysessions.Service, sessionID string) {
 	t.Helper()
 	view, err := canonical.Get(t.Context(), factorysessions.SessionGetRequest{SessionID: sessionID, Mode: factorysessions.SessionOperationModeDurable})
 	if err != nil {

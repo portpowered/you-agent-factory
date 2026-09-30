@@ -5,16 +5,16 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
-	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -49,10 +49,8 @@ func newServerFromRoles(
 		Runtime: runtime, FactoryStatus: factoryStatus,
 		Sessions: sessions, Invocation: invocation,
 		FactoryDefinitions: factoryDefinitions, FactoryValidation: factoryValidation,
-		WorkflowPreview:  workflowPreview,
-		DurableExecution: durableExecution, DurableLifecycle: durableLifecycle,
-		DurableListing: durableListing, DurableResponseEvents: durableResponseEvents,
-		DurableLister: durableLister, LiveSessionLister: liveSessionLister,
+		WorkflowPreview: workflowPreview,
+		DurableLister:   durableLister, LiveSessionLister: liveSessionLister,
 		WorkerPrompts:   workerPrompts,
 		SessionRequests: sessionRequests,
 	}, logger)
@@ -74,11 +72,20 @@ func newServerFromRoles(
 		)
 	}
 	return NewServerWithRecordings(
-		recordingshttp.NewLegacyAdapterWithLive(
-			factorysessionmapping.NewDurableHistoryBridge(durableResponseEvents),
-			factorysessionshttp.NewDurableRequestPreparation(sessionRequests),
-			workAPI,
-		),
+		recordingshttp.NewAdapterWithSessions(nil, roleTestSessionsRoot{source: workAPI}, nil),
 		handler, workAdapter, modelsHTTP, providerSessionsHTTP, nil, logger,
 	)
+}
+
+type roleTestSessionsRoot struct {
+	factorysessions.Service
+	source apisurface.WorkAPI
+}
+
+func (root roleTestSessionsRoot) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error) {
+	return root.source.SubscribeFactoryEventsForSession(ctx, sessionID, reconnect)
+}
+
+func (root roleTestSessionsRoot) ProbeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *factorydefinitions.FactoryEventReconnectCursor) error {
+	return root.source.ProbeFactoryEventsForSession(ctx, sessionID, reconnect)
 }

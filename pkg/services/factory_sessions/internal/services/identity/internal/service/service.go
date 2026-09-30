@@ -7,7 +7,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 )
@@ -15,7 +14,6 @@ import (
 type Service struct {
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks
 	resolveHome     factorysessions.HomeDirectoryResolver
-	directories     roles.DirectoryInspection
 }
 
 var _ identity.Service = (*Service)(nil)
@@ -23,12 +21,11 @@ var _ identity.Service = (*Service)(nil)
 func New(
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 	resolveHome factorysessions.HomeDirectoryResolver,
-	directories roles.DirectoryInspection,
 ) *Service {
-	if resolveSymlinks == nil || resolveHome == nil || directories == nil {
+	if resolveSymlinks == nil || resolveHome == nil {
 		return nil
 	}
-	return &Service{resolveSymlinks: resolveSymlinks, resolveHome: resolveHome, directories: directories}
+	return &Service{resolveSymlinks: resolveSymlinks, resolveHome: resolveHome}
 }
 
 func (s *Service) Normalize(_ context.Context, request identity.NormalizeRequest) (identity.ResolvedIdentity, error) {
@@ -57,21 +54,6 @@ func resolvedIdentity(ref factorysessions.CanonicalLogicalTargetReference) ident
 		LogicalSessionKeyID: logicaltarget.DeriveLogicalSessionKeyID(ref),
 		RuntimeTarget:       logicaltarget.RuntimeLogicalTarget(ref),
 	}
-}
-
-func (s *Service) Discover(_ context.Context, request identity.DiscoverRequest) ([]factorysessions.Target, error) {
-	return logicaltarget.DiscoverConfigured(
-		request.FolderPath, request.WorkstationLoader, request.LoadFactory, request.Logger,
-		s.directories, s.resolveHome,
-	)
-}
-
-func (s *Service) ResolveFolder(folderPath string) (string, error) {
-	return logicaltarget.ResolveSessionFolder(folderPath, s.resolveHome, s.directories)
-}
-
-func (s *Service) Select(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*factorysessions.Target, error) {
-	return logicaltarget.Select(targets, ref)
 }
 
 func (s *Service) Resolve(registry sessionregistry.Service, selector string) *livesession.LiveSession {

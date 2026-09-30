@@ -112,6 +112,13 @@ async function fetchJSON(url) {
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: this focused suite owns all startup lifecycle paths and the one real setup proof.
 describe("real backend durable session setup", () => {
+  it("claims distinct ports for concurrent dedicated previews", async () => {
+    const ports = await Promise.all(
+      Array.from({ length: 12 }, () => findAvailablePort()),
+    );
+    expect(new Set(ports).size).toBe(ports.length);
+  });
+
   it("builds one prebuilt artifact and removes it through idempotent cleanup", async () => {
     const diagnostics = [];
     const artifact = await buildRealBackendBrowserHarness({

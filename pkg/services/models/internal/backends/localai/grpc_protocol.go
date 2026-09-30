@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
@@ -17,13 +19,13 @@ import (
 )
 
 const (
-	localAIHealthMethod                    = "/backend.Backend/Health"
-	localAILoadModelMethod                 = "/backend.Backend/LoadModel"
-	localAIPredictMethod                   = "/backend.Backend/Predict"
-	localAIEmbeddingMethod                 = "/backend.Backend/Embedding"
-	localAIModelBatchSize                  = 512
-	localAIEmbedContextSize          int32 = 512
-	localAIDisableProjectorGPUOption       = "mmproj_use_gpu:false"
+	localAIHealthMethod              = "/backend.Backend/Health"
+	localAILoadModelMethod           = "/backend.Backend/LoadModel"
+	localAIPredictMethod             = "/backend.Backend/Predict"
+	localAIEmbeddingMethod           = "/backend.Backend/Embedding"
+	localAIModelBatchSize            = 512
+	localAIDisableProjectorGPUOption = "mmproj_use_gpu:false"
+	localAIAudioCPPBackendOption     = "backend:best"
 )
 
 type invocationEndpointContextKey struct{}
@@ -153,20 +155,33 @@ func loadModel(
 		)
 	}
 	options = append(options, projectorLoadOptions(configuration)...)
-	isBuiltInEmbed := strings.EqualFold(configuration.ModelName, models.BuiltInModelNameEmbed)
-	contextSize := int32(0)
-	if isBuiltInEmbed {
-		contextSize = localAIEmbedContextSize
+	if configuration.Backend == "localai-audio-cpp" {
+		options = append(options, localAIAudioCPPBackendOption)
 	}
+	isBuiltInEmbed := strings.EqualFold(configuration.ModelName, models.BuiltInModelNameEmbed)
+	threads := int32(0)
+	gpuLayers := int32(0)
+	if configuration.Backend == "localai-llamacpp" {
+		threads = 4
+		accelerator := configuration.BackendArtifact.Accelerator
+		if accelerator == "" {
+			accelerator = configuration.Platform.Accelerator
+		}
+		if accelerator == "cuda" {
+			gpuLayers = 99
+		}
+	}
+	// ContextSize stays zero so llama.cpp derives the context from the model.
 	payload, err := proto.Marshal(&ModelOptions{
-		Model:       configuration.ModelName,
-		ContextSize: contextSize,
-		NBatch:      localAIModelBatchSize,
-		Embeddings:  isBuiltInEmbed,
-		ModelFile:   modelFile,
-		MMProj:      strings.TrimSpace(configuration.MMProjPath),
-		ModelPath:   filepath.Dir(modelFile),
-		Options:     options,
+		Model:      configuration.ModelName,
+		NBatch:     localAIModelBatchSize,
+		Embeddings: isBuiltInEmbed,
+		Threads:    threads,
+		NGPULayers: gpuLayers,
+		ModelFile:  modelFile,
+		MMProj:     strings.TrimSpace(configuration.MMProjPath),
+		ModelPath:  filepath.Dir(modelFile),
+		Options:    options,
 	})
 	if err != nil {
 		return fmt.Errorf(
@@ -235,6 +250,10 @@ func (client grpcProtocolClient) Predict(
 	}
 	options, err := predictOptions(request)
 	if err != nil {
+		var failure *models.InvocationFailure
+		if errors.As(err, &failure) {
+			return PredictResponse{}, err
+		}
 		return PredictResponse{}, protocolFailure("LocalAI Predict request could not be encoded", err)
 	}
 	payload, err := proto.Marshal(options)
@@ -256,11 +275,27 @@ func (client grpcProtocolClient) Predict(
 		}
 		return PredictResponse{}, protocolFailure("LocalAI Predict request failed", err)
 	}
+	return decodePredictResponse(responsePayload)
+}
+
+// decodePredictResponse converts the pinned LocalAI Predict wire payload into
+// the public response, preferring the legacy message bytes and falling back to
+// concatenated chat deltas. An empty payload is a typed protocol failure.
+func decodePredictResponse(responsePayload []byte) (PredictResponse, error) {
+	if len(responsePayload) == 0 {
+		return PredictResponse{}, protocolFailure("LocalAI Predict response was empty", nil)
+	}
 	response := &Reply{}
 	if err := proto.Unmarshal(responsePayload, response); err != nil {
 		return PredictResponse{}, protocolFailure("LocalAI Predict response was malformed", err)
 	}
 	text := string(response.Message)
+	reasoningBytes := 0
+	for _, delta := range response.GetChatDeltas() {
+		if delta != nil {
+			reasoningBytes += len(delta.GetReasoningContent())
+		}
+	}
 	if text == "" {
 		var builder strings.Builder
 		for _, delta := range response.GetChatDeltas() {
@@ -271,8 +306,15 @@ func (client grpcProtocolClient) Predict(
 		text = builder.String()
 	}
 	return PredictResponse{
-		Text:  text,
-		Usage: usageJSON(response),
+		Text:            text,
+		Usage:           usageJSON(response),
+		ReplyBytes:      len(responsePayload),
+		MessageBytes:    len(response.Message),
+		ChatDeltaCount:  len(response.GetChatDeltas()),
+		ReasoningBytes:  reasoningBytes,
+		GeneratedTokens: response.GetTokens(),
+		PromptTokens:    response.GetPromptTokens(),
+		AudioBytes:      len(response.GetAudio()),
 	}, nil
 }
 
@@ -347,7 +389,7 @@ func embeddingOptions(request models.EmbeddingBackendRequest) (*PredictOptions, 
 	for name, value := range request.Parameters {
 		parameters = append(parameters, models.OperationParameter{Name: name, Value: value})
 	}
-	options, err := predictOptions(PredictRequest{Prompt: request.Text, Parameters: parameters})
+	options, err := buildPredictOptions(PredictRequest{Prompt: request.Text, Parameters: parameters}, false)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +401,22 @@ func embeddingOptions(request models.EmbeddingBackendRequest) (*PredictOptions, 
 }
 
 func predictOptions(request PredictRequest) (*PredictOptions, error) {
+	return buildPredictOptions(request, true)
+}
+
+// buildPredictOptions maps the private OMNI protocol request to pinned
+// PredictOptions. Tokens stays zero (the pinned backend's unbounded default)
+// unless an explicit canonical max_tokens parameter is present. Embedding
+// keeps the legacy behavior with mapping disabled so its wire shape is
+// unchanged; only the OMNI path promotes max_tokens to Tokens.
+func buildPredictOptions(request PredictRequest, mapMaxTokens bool) (*PredictOptions, error) {
 	options := &PredictOptions{Prompt: request.Prompt}
+	if strings.TrimSpace(request.Prompt) != "" {
+		// The pinned llama backend interprets zero Tokens as n_predict=-1.
+		// Leave generation length uncapped by this adapter, including reasoning.
+		options.UseTokenizerTemplate = true
+		options.Messages = []*Message{{Role: "user", Content: request.Prompt}}
+	}
 	for _, input := range request.Inputs {
 		value := predictInputValue(input)
 		switch input.Modality {
@@ -374,19 +431,59 @@ func predictOptions(request PredictRequest) (*PredictOptions, error) {
 	if len(request.Parameters) == 0 {
 		return options, nil
 	}
-	options.Metadata = make(map[string]string, len(request.Parameters))
 	for _, parameter := range request.Parameters {
 		name := strings.TrimSpace(parameter.Name)
 		if name == "" {
+			continue
+		}
+		if mapMaxTokens && name == omniMaxTokensParameter {
+			tokens, err := decodeOmniMaxTokens(parameter.Value)
+			if err != nil {
+				return nil, err
+			}
+			options.Tokens = tokens
 			continue
 		}
 		value, err := json.Marshal(parameter.Value)
 		if err != nil {
 			return nil, fmt.Errorf("parameter %q: %w", name, err)
 		}
+		if options.Metadata == nil {
+			options.Metadata = make(map[string]string, len(request.Parameters))
+		}
 		options.Metadata[name] = string(value)
 	}
 	return options, nil
+}
+
+const omniMaxTokensParameter = "max_tokens"
+
+// decodeOmniMaxTokens validates one canonical OMNI max_tokens value: a
+// positive integer that fits in the pinned int32 Tokens field. The value is
+// JSON-encoded first so HTTP integer float64 values marshal as integer
+// lexemes, then parsed as a base-10 signed 32-bit integer.
+func decodeOmniMaxTokens(value any) (int32, error) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return 0, omniInvalidMaxTokensFailure()
+	}
+	parsed, err := strconv.ParseInt(string(encoded), 10, 32)
+	if err != nil {
+		return 0, omniInvalidMaxTokensFailure()
+	}
+	if parsed < 1 {
+		return 0, omniInvalidMaxTokensFailure()
+	}
+	return int32(parsed), nil
+}
+
+func omniInvalidMaxTokensFailure() error {
+	return &models.InvocationFailure{
+		Class:     models.InvocationFailureClassInvalidParameter,
+		Operation: models.OperationOMNI,
+		Parameter: omniMaxTokensParameter,
+		Message:   `OMNI parameter "max_tokens" must be a positive integer up to 2147483647`,
+	}
 }
 
 // predictInputValue maps the public byte-preserving content carrier to the

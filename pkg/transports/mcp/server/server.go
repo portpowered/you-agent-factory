@@ -124,8 +124,52 @@ func addTool(server *mcp.Server, name, description string, inputSchema json.RawM
 		if err != nil {
 			return textResult(err.Error(), true), nil
 		}
+		if result, ok := typedToolResponseErrorResult(raw); ok {
+			return result, nil
+		}
 		return textResult(string(raw), false), nil
 	})
+}
+
+// fallbackToolErrorMessage is the safe nonempty text used when a typed
+// ToolResponse error envelope carries a blank or whitespace error.message.
+// pkg/services/factory_sessions/transports/mcp keeps an identical constant;
+// the two must stay in sync so server and inventory encoders agree.
+const fallbackToolErrorMessage = "tool execution failed"
+
+// typedToolResponseErrorResult detects a typed top-level ToolResponse.error
+// payload produced by a successful ToolOperation call and maps it to an MCP
+// CallToolResult: the first text content carries the safe human-readable
+// error.message, IsError is true, and StructuredContent retains the complete
+// typed ToolResponse so error code, sessionId, retryable, and details stay
+// machine-readable. Detection is tightened to the typed envelope only: the
+// error object must carry a nonempty error.code and the payload must not
+// carry a result, so arbitrary {"error":{"message":...}} tool output keeps
+// the plain success encoding. A blank or whitespace error.message falls back
+// to fallbackToolErrorMessage so text content stays nonempty and readable.
+func typedToolResponseErrorResult(raw json.RawMessage) (*mcp.CallToolResult, bool) {
+	var probe struct {
+		Result *json.RawMessage `json:"result"`
+		Error  *struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil || probe.Error == nil {
+		return nil, false
+	}
+	if strings.TrimSpace(probe.Error.Code) == "" || probe.Result != nil {
+		return nil, false
+	}
+	message := probe.Error.Message
+	if strings.TrimSpace(message) == "" {
+		message = fallbackToolErrorMessage
+	}
+	return &mcp.CallToolResult{
+		Content:           []mcp.Content{&mcp.TextContent{Text: message}},
+		IsError:           true,
+		StructuredContent: json.RawMessage(raw),
+	}, true
 }
 
 func textResult(text string, isError bool) *mcp.CallToolResult {

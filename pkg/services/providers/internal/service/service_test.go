@@ -81,9 +81,12 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 		t.Fatalf("GetProvider(codex).Provider.ID = %q, want codex", got.Provider.ID)
 	}
 
-	_, err = root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.ID("cursor")})
-	if !errors.Is(err, providers.ErrUnknownProvider) {
-		t.Fatalf("GetProvider(cursor) error = %v, want ErrUnknownProvider", err)
+	cursor, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.ID("cursor")})
+	if err != nil {
+		t.Fatalf("GetProvider(cursor) = %v", err)
+	}
+	if cursor.Provider.ID != providers.ID("cursor") {
+		t.Fatalf("GetProvider(cursor).Provider.ID = %q, want cursor", cursor.Provider.ID)
 	}
 }
 

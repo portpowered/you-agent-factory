@@ -12,6 +12,15 @@ import (
 	"go.uber.org/zap"
 )
 
+func canonicalLifecycleResult(result factorysessions.SessionControlResult) factorysessions.LifecycleControlResult {
+	return factorysessions.LifecycleControlResult{
+		SessionID: result.SessionID, Operation: factorysessions.LifecycleControlKind(result.Operation),
+		Outcome: result.Outcome, Status: result.Status, Detail: result.Detail,
+		ApprovalPreviewID: result.ApprovalPreviewID, DispatchID: result.DispatchID,
+		RetryDispatchID: result.RetryDispatchID, Links: result.Links,
+	}
+}
+
 func decodeStartFactorySessionRequestWithDiagnostics(
 	body io.Reader,
 	prepare RequestPreparation,

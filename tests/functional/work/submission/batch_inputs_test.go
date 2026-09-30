@@ -98,6 +98,9 @@ func TestWorkBatchHTTPSubmission(t *testing.T) {
 	t.Run("TestAPIStageAndSubmitFileCreatesExpectedWork", func(t *testing.T) {
 		assertAPIStageAndSubmitFileCreatesExpectedWork(t, server)
 	})
+	t.Run("TestAPIStageAndSubmitMediaPreservesTypes", func(t *testing.T) {
+		assertAPIStageAndSubmitMediaPreservesTypes(t, server)
+	})
 }
 
 // assertWorkBatchAcceptsInlineFileAndStdinShapes proves the public Work Request

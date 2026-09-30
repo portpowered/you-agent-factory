@@ -822,6 +822,11 @@ func executeServerCommand(
 		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), mapped, globals.json)
 		return mapped
 	}
+	if err := validateServerCurrentFactory(cmd, cfg, rootOptions); err != nil {
+		mapped := runcli.MapCurrentFactoryFailure(err)
+		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), mapped, globals.json)
+		return mapped
+	}
 	policy := diagnostics.resolvePolicy(false)
 	err = runFactoryWithOptions(
 		cmd, cfg, nil, globals, operatorDefaults, policy, rootOptions, true,
@@ -833,6 +838,26 @@ func executeServerCommand(
 	mapped = runcli.MapCurrentFactoryFailure(factoryload.MaybeFormatOperatorError(mapped, cfg.Dir))
 	_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), mapped, globals.json)
 	return mapped
+}
+
+func validateServerCurrentFactory(cmd *cobra.Command, cfg runcli.RunConfig, options CommandFactory) error {
+	if options.runInputPathInspector == nil {
+		return nil
+	}
+	path := cfg.FactoryConfigPath
+	info, err := options.runInputPathInspector.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info == nil || !info.Mode().IsRegular() {
+		return factorydefinitions.ErrFactoryLayoutNotFound
+	}
+	if options.ValidateFactory != nil {
+		return options.ValidateFactory(factorycli.ValidateConfig{
+			Context: cmd.Context(), Path: path, JSON: true, Output: io.Discard,
+		})
+	}
+	return nil
 }
 
 func executeServerStopCommand(

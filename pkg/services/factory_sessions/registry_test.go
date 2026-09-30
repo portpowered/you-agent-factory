@@ -154,65 +154,6 @@ func TestRegistry_CompatibilityOnlyDefaultSessionAliasLookupAndRemoval(t *testin
 	}
 }
 
-func TestLogicalSessionKeyID_DefaultTargetUsesStableKey(t *testing.T) {
-	session := &livesession.LiveSession{
-		SessionState: livesession.SessionState{
-			FolderPath: "/workspace/root",
-		},
-		Target: TargetRef{
-			Kind: TargetKindDefault,
-		},
-	}
-	if got := logicaltarget.LegacyLiveSessionKeyID(session); got != "/workspace/root::default::" {
-		t.Fatalf("LogicalSessionKeyID(default) = %q, want /workspace/root::default::", got)
-	}
-}
-
-func TestLogicalSessionKeyID_NamedTargetIncludesFactoryName(t *testing.T) {
-	session := &livesession.LiveSession{
-		SessionState: livesession.SessionState{
-			FolderPath: "/workspace/root",
-		},
-		Target: TargetRef{
-			Kind: TargetKindNamed,
-			Name: "beta",
-		},
-	}
-	if got := logicaltarget.LegacyLiveSessionKeyID(session); got != "/workspace/root::named::beta" {
-		t.Fatalf("LogicalSessionKeyID(named) = %q, want /workspace/root::named::beta", got)
-	}
-}
-
-func TestRegistry_FindByLogicalSessionKeyID_ReturnsMatchingSession(t *testing.T) {
-	registry := sessionregistry.New()
-	defaultSession := &livesession.LiveSession{
-		ID: "session-default",
-		SessionState: livesession.SessionState{
-			FolderPath: "/workspace/root",
-		},
-		Target: TargetRef{Kind: TargetKindDefault},
-	}
-	namedSession := &livesession.LiveSession{
-		ID: "session-beta",
-		SessionState: livesession.SessionState{
-			FolderPath: "/workspace/root",
-		},
-		Target: TargetRef{Kind: TargetKindNamed, Name: "beta"},
-	}
-	registry.Upsert(defaultSession, true)
-	registry.Upsert(namedSession, false)
-
-	if got := registry.FindByLogicalSessionKeyID("/workspace/root::default::"); got != defaultSession {
-		t.Fatalf("FindByLogicalSessionKeyID(default) = %#v, want default session", got)
-	}
-	if got := registry.FindByLogicalSessionKeyID("/workspace/root::named::beta"); got != namedSession {
-		t.Fatalf("FindByLogicalSessionKeyID(named) = %#v, want named session", got)
-	}
-	if got := registry.FindByLogicalSessionKeyID("/workspace/other::default::"); got != nil {
-		t.Fatalf("FindByLogicalSessionKeyID(missing) = %#v, want nil", got)
-	}
-}
-
 // --- merged from durable_execution_contract_characterization_test.go ---
 
 // peerDurableExecutionFake exercises the published durable-execution capability
@@ -672,12 +613,8 @@ func newPeerRootServiceFake() *peerRootServiceFake {
 
 var _ Service = (*peerRootServiceFake)(nil)
 
-func (fake *peerRootServiceFake) OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error) {
-	return &OpenResult{SessionID: DefaultSessionID}, nil
-}
-
-func (fake *peerRootServiceFake) OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error) {
-	return &OpenResult{SessionID: DefaultSessionID}, nil
+func (fake *peerRootServiceFake) Start(context.Context, SessionStartRequest) (SessionStartResult, error) {
+	return SessionStartResult{Live: &SessionOpenResult{SessionID: DefaultSessionID}}, nil
 }
 
 func (fake *peerRootServiceFake) ListFactorySessions(context.Context) ([]ReadProjection, error) {
@@ -857,11 +794,11 @@ func TestSingularRootServiceAuthority_PeerFakeReadNotFound(t *testing.T) {
 		t.Fatalf("ListFactorySessions len = %d, want empty list", len(listed))
 	}
 
-	opened, err := service.OpenFactorySession(ctx, OpenRequest{FolderPath: "/factories/demo"})
+	opened, err := service.Start(ctx, SessionStartRequest{Mode: SessionOperationModeLive, FolderPath: "/factories/demo"})
 	if err != nil {
-		t.Fatalf("OpenFactorySession error = %v, want nil", err)
+		t.Fatalf("Start error = %v, want nil", err)
 	}
-	if opened == nil || opened.SessionID == "" {
-		t.Fatalf("OpenFactorySession result = %#v, want reachable open path through singular root", opened)
+	if opened.Live == nil || opened.Live.SessionID == "" {
+		t.Fatalf("Start result = %#v, want reachable live start path through singular root", opened)
 	}
 }

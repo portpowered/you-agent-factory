@@ -492,7 +492,7 @@ func TestMCPCommandIsDetachedAndManifestPresented(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"fixture-catalog", "project-root"} {
+	for _, name := range []string{"project-root"} {
 		if serve.Flags().Lookup(name) == nil {
 			t.Fatalf("manifest flag %q was not registered", name)
 		}
@@ -503,7 +503,7 @@ func TestMCPCommandIsDetachedAndManifestPresented(t *testing.T) {
 		t.Fatalf("help: %v", err)
 	}
 	if got := output.String(); !strings.Contains(got, "you docs mcp") ||
-		!strings.Contains(got, "durable-session-contract-fixtures.json") {
+		!strings.Contains(got, "--project-root") {
 		t.Fatalf("manifest help missing canonical details:\n%s", got)
 	}
 }
@@ -516,13 +516,12 @@ func TestMCPCommandResolvesNormalizedInputsAndProvenance(t *testing.T) {
 			return nil
 		},
 	)
-	root.SetArgs([]string{"server", "mcp", "--fixture-catalog", "  fixtures.json  ", "--project-root", "  project  "})
+	root.SetArgs([]string{"server", "mcp", "--project-root", "  project  "})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 	for inputID, want := range map[string]string{
-		"you.server.mcp.flag.fixture-catalog": "fixtures.json",
-		"you.server.mcp.flag.project-root":    "project",
+		"you.server.mcp.flag.project-root": "project",
 	} {
 		got, valueErr := local.String(inputID)
 		if valueErr != nil || got != want {
@@ -575,20 +574,6 @@ func newMCPRoot(
 		t.Fatal(err)
 	}
 	return root
-}
-
-func TestMCPManifestDoesNotRequireRuntimeFlag(t *testing.T) {
-	mcp, err := climanifestcobra.NewMCPCommand(
-		func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	mcp.SetArgs([]string{"mcp", "--runtime"})
-	err = mcp.Execute()
-	if err == nil || !strings.Contains(err.Error(), "unknown flag: --runtime") {
-		t.Fatalf("execute error = %v, want runtime flag removed", err)
-	}
 }
 
 func assertMCPResolvedState(
@@ -859,4 +844,18 @@ func submitChildUses(commands []*cobra.Command) string {
 		uses[index] = command.Use
 	}
 	return strings.Join(uses, ", ")
+}
+
+func TestMCPManifestDoesNotRequireRuntimeFlag(t *testing.T) {
+	mcp, err := climanifestcobra.NewMCPCommand(
+		func(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error { return nil },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mcp.SetArgs([]string{"mcp", "--runtime"})
+	err = mcp.Execute()
+	if err == nil || !strings.Contains(err.Error(), "unknown flag: --runtime") {
+		t.Fatalf("execute error = %v, want runtime flag removed", err)
+	}
 }

@@ -74,20 +74,6 @@
       "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/applicationopening",
-      "justification": "Intentional test-suite cleanup changed current-head functional coverage; retain the prior floor until focused matching-lane coverage is restored.",
-      "owner": "coverage-remediation",
-      "deadline": "2027-07-15",
-      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening",
-      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
-      "owner": "coverage-remediation",
-      "deadline": "2027-07-15",
-      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp",
       "justification": "The legacy Factory Session MCP tools were removed from the public server catalog; customer-process functional tests can no longer execute their retained adapter handlers. Keep the prior 15.31% floor while retiring those handlers or restoring matching public-path coverage.",
       "owner": "backend-quality",
@@ -895,10 +881,6 @@
       "minimum": 25.42
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/applicationopening",
-      "minimum": 65.85
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/artifactprojection",
       "minimum": 31.57
     },
@@ -923,10 +905,6 @@
       "minimum": 65.30
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/executionopening",
-      "minimum": 53.84
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects",
       "minimum": 50.00
     },
@@ -949,10 +927,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession",
       "minimum": 53.12
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/ondemandtarget",
-      "minimum": 5.26
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle",
@@ -991,18 +965,6 @@
       "minimum": 79.03
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening",
-      "minimum": 71.41
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/invocation",
-      "minimum": 72.45
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/operatordefaults",
-      "minimum": 76.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/scopedlisting",
       "minimum": 0.00
     },
@@ -1035,14 +997,6 @@
       "minimum": 80.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime/internal/service",
-      "minimum": 53.76
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime/wire",
-      "minimum": 100.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream",
       "minimum": 0.00
     },
@@ -1065,10 +1019,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice",
       "minimum": 46.13
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation",
-      "minimum": 36.11
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream",

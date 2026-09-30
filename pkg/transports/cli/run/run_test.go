@@ -55,22 +55,21 @@ func TestEmitHistoricalReplayInspectionIncludesLegacyWorkerHistoryOutcome(t *tes
 	}
 }
 
-func TestOperationRunDisclosesReplayHomeBeforeInspection(t *testing.T) {
+func TestHistoricalReplayDisclosesHomeBeforeInspection(t *testing.T) {
 	var output bytes.Buffer
-	operation := &Operation{
-		cfg: RunConfig{
-			HomeDir:       "operator-home",
-			Output:        &output,
-			StartupOutput: &output,
-		},
-		runner: stubFactoryService{run: func(context.Context) error { return nil }},
-		historicalReplay: &factorysessions.HistoricalReplayInspection{
-			Session: factorysessions.SessionReadResult{SessionID: "replay-session"},
-		},
+	cfg := RunConfig{
+		HomeDir:       "operator-home",
+		Output:        &output,
+		StartupOutput: &output,
 	}
-
-	if err := operation.Run(context.Background()); err != nil {
-		t.Fatalf("Operation.Run() error = %v, want successful replay", err)
+	replay := &factorysessions.HistoricalReplayInspection{
+		Session: factorysessions.SessionReadResult{SessionID: "replay-session"},
+	}
+	if err := prepareRunStartup(context.Background(), cfg, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := runHistoricalReplay(context.Background(), cfg, stubFactoryService{run: func(context.Context) error { return nil }}, replay, nil); err != nil {
+		t.Fatalf("runHistoricalReplay() error = %v", err)
 	}
 	homeIndex := strings.Index(output.String(), "Home directory: operator-home\n")
 	inspectionIndex := strings.Index(output.String(), "Replayed Factory Session: replay-session\n")
@@ -652,25 +651,22 @@ func TestOpenSequentialHomesControlDefaultRecordingPath(t *testing.T) {
 			gotMetricsDir = cfg.RuntimeMetricsDir
 			return stubFactoryService{run: func(context.Context) error { return nil }}, nil
 		}}
-		operation, err := Open(context.Background(), ensureTestRecordingsCLI(RunConfig{
+		err := RunSelected(context.Background(), ensureTestRecordingsCLI(RunConfig{
 			Dir: t.TempDir(), HomeDir: homeDir, Port: 0, SuppressDashboardRendering: true,
 			StdinIsTTY: func() bool { return true },
 			RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(func(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
 				plannedRequest = request
 				return recordings.LiveRecordingTarget{ServicePath: plannedPath, ReportedPath: plannedPath}, nil
 			}),
-		}), factory.BuildRunner, factory.Invocation(), testResponsePresentation(), nil, testMockWorkersConfigLoader, testRuntimeOpeningRequestFactory)
+		}), factory.BuildRunner, factory.Invocation(), testResponsePresentation(), nil, nil, testSessionStartRequestFactory, nil, nil)
 		if err != nil {
-			t.Fatalf("Open(home %q) error = %v", homeDir, err)
+			t.Fatalf("RunSelected(home %q) error = %v", homeDir, err)
 		}
 		if plannedRequest.HomeDir != homeDir || gotRecordPath != plannedPath {
 			t.Fatalf("planner request/path = %#v / %q, want home %q / %q", plannedRequest, gotRecordPath, homeDir, plannedPath)
 		}
 		if gotSystemHome != homeDir || gotLogDir != logging.RuntimeLogsRoot(homeDir) || gotMetricsDir != metrics.RuntimeMetricsRoot(homeDir) {
 			t.Fatalf("service home paths = home %q logs %q metrics %q; want roots below %q", gotSystemHome, gotLogDir, gotMetricsDir, homeDir)
-		}
-		if err := operation.Run(context.Background()); err != nil {
-			t.Fatalf("Operation.Run(home %q) error = %v", homeDir, err)
 		}
 	}
 }

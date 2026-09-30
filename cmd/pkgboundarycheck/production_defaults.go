@@ -208,6 +208,7 @@ var productionDefaultAllowances = []productionDefaultAllowance{
 	{filePath: "pkg/platform/process/command.go", operation: "ExecCommandRunner.Run", symbol: "os/exec.Command", wireSymbol: repositoryImportPrefix + "pkg/platform/process.ExecCommandRunner"},
 	{filePath: "pkg/platform/process/managedchild/managed.go", operation: "Start", symbol: "os/exec.Command", wireSymbol: repositoryImportPrefix + "pkg/platform/process/managedchild.Start"},
 	{filePath: "pkg/platform/process/executable.go", operation: "HostExecutableLocator.LookPath", symbol: "os/exec.LookPath", wireSymbol: repositoryImportPrefix + "pkg/platform/process.HostExecutableLocator"},
+	{filePath: "pkg/platform/process/executable.go", operation: "HostExecutableLocator.CurrentExecutable", symbol: "os.Executable", wireSymbol: repositoryImportPrefix + "pkg/platform/process.HostExecutableLocator"},
 	{filePath: "pkg/platform/pty/platform_unix.go", operation: "package", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/pty.NewHost"},
 	{filePath: "pkg/platform/pty/platform_unix.go", operation: "posixPTYAllocation.Master", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/pty.NewHost"},
 	{filePath: "pkg/platform/pty/platform_unix.go", operation: "posixPTYAllocation.Slave", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/pty.NewHost"},

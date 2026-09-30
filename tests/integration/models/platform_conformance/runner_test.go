@@ -245,6 +245,17 @@ func TestPortableControlledReservationContention(t *testing.T) {
 		}
 		fixture.admission = admitted
 		reservationID := fmt.Sprintf("contention-reservation-%d", index)
+		if index == 0 {
+			// Settle the injected start failure before contention. Otherwise a
+			// competing reservation can be rejected before this slot is released.
+			report, runErr := runner.Run(context.Background(), admitted, ControlledRunOptions{
+				ReservationID:  reservationID,
+				FinalizeLedger: &noFinalize,
+				OnStarted:      func() { started.Add(1) },
+			})
+			results <- controlledRunResult{report: report, err: runErr, reservationID: reservationID}
+			continue
+		}
 		go func() {
 			<-gate
 			report, runErr := runner.Run(context.Background(), admitted, ControlledRunOptions{
@@ -637,7 +648,7 @@ func testControlledSecret(t *testing.T, runner ControlledRunner, fixture control
 		t.Fatalf("controlled secret output: %v", err)
 	}
 	if report.Status != StatusPass || !report.Commands[0].Redacted {
-		t.Fatalf("secret report = %#v", report)
+		t.Fatalf("secret report = %#v; failure=%+v", report, report.Failure)
 	}
 	body, err := os.ReadFile(fixture.spec.ReportPath)
 	if err != nil {

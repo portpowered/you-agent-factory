@@ -3,6 +3,7 @@ package factorysession
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 )
@@ -13,6 +14,14 @@ const (
 	ResultPolicyInventoryBaselineRelativePath = "contracts/testdata/baseline/mcp-result-policy.json"
 	// SuccessTextEncodingSerializedJSON documents serialized JSON tool payloads in text content.
 	SuccessTextEncodingSerializedJSON = "serialized-json"
+	// DomainErrorTextEncodingMessage documents the safe human-readable
+	// error.message carried in text content for typed ToolErrorEnvelope results.
+	DomainErrorTextEncodingMessage = "error-message"
+	// fallbackToolErrorMessage is the safe nonempty text used when a typed
+	// ToolResponse error envelope carries a blank or whitespace error.message.
+	// pkg/transports/mcp/server keeps an identical constant; the two must stay
+	// in sync so server and inventory encoders agree.
+	fallbackToolErrorMessage = "tool execution failed"
 	// FailureClassDomain labels typed ToolErrorEnvelope failures carried in tools/call results.
 	FailureClassDomain = "domain"
 	// FailureClassProtocol labels JSON-RPC protocol errors outside CallToolResult payloads.
@@ -51,6 +60,7 @@ type DomainErrorTransportPolicy struct {
 	ContentTypes         []string `json:"contentTypes"`
 	TextEncoding         string   `json:"textEncoding"`
 	IsError              bool     `json:"isError"`
+	HasStructuredContent bool     `json:"hasStructuredContent"`
 	StableEnvelopeFields []string `json:"stableEnvelopeFields"`
 }
 
@@ -133,8 +143,9 @@ func ProjectResultPolicyInventory() (ResultPolicyInventory, error) {
 			FailureClass:         FailureClassDomain,
 			ContentItemCount:     1,
 			ContentTypes:         []string{"text"},
-			TextEncoding:         SuccessTextEncodingSerializedJSON,
-			IsError:              false,
+			TextEncoding:         DomainErrorTextEncodingMessage,
+			IsError:              true,
+			HasStructuredContent: true,
 			StableEnvelopeFields: append([]string(nil), sharedErrorStableFields...),
 		},
 		ProtocolErrorTransport: ProtocolErrorTransportPolicy{
@@ -169,6 +180,49 @@ func EncodeSuccessCallToolResult(toolResponse json.RawMessage) map[string]any {
 // MarshalSuccessCallToolResultJSON encodes one success CallToolResult with stable key order.
 func MarshalSuccessCallToolResultJSON(toolResponse json.RawMessage) ([]byte, error) {
 	return json.Marshal(EncodeSuccessCallToolResult(toolResponse))
+}
+
+// EncodeDomainErrorCallToolResult builds the live MCP tools/call domain-error
+// envelope for one typed tool-response payload carrying a top-level error.
+// The text content carries the safe human-readable error.message, IsError is
+// true, and structuredContent retains the complete typed ToolResponse so
+// error code, sessionId, retryable, and details stay machine-readable.
+func EncodeDomainErrorCallToolResult(toolResponse json.RawMessage) map[string]any {
+	return map[string]any{
+		"content": []map[string]any{
+			{
+				"type": "text",
+				"text": typedToolResponseErrorMessage(toolResponse),
+			},
+		},
+		"isError":           true,
+		"structuredContent": toolResponse,
+	}
+}
+
+// MarshalDomainErrorCallToolResultJSON encodes one domain-error CallToolResult
+// with stable key order.
+func MarshalDomainErrorCallToolResultJSON(toolResponse json.RawMessage) ([]byte, error) {
+	return json.Marshal(EncodeDomainErrorCallToolResult(toolResponse))
+}
+
+// typedToolResponseErrorMessage extracts the safe human-readable message from
+// a typed top-level ToolResponse.error payload. A blank or whitespace
+// error.message falls back to fallbackToolErrorMessage so text content stays
+// nonempty and readable.
+func typedToolResponseErrorMessage(toolResponse json.RawMessage) string {
+	var probe struct {
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(toolResponse, &probe); err != nil || probe.Error == nil {
+		return fallbackToolErrorMessage
+	}
+	if strings.TrimSpace(probe.Error.Message) == "" {
+		return fallbackToolErrorMessage
+	}
+	return probe.Error.Message
 }
 
 // VerifyProjectedResultPolicyInventory projects the result-policy inventory and fails
@@ -298,11 +352,14 @@ func verifyDomainErrorTransportPolicy(policy DomainErrorTransportPolicy) error {
 	if len(policy.ContentTypes) != 1 || policy.ContentTypes[0] != "text" {
 		return fmt.Errorf("domain error transport contentTypes = %#v, want [text]", policy.ContentTypes)
 	}
-	if policy.TextEncoding != SuccessTextEncodingSerializedJSON {
-		return fmt.Errorf("domain error transport textEncoding = %q, want %q", policy.TextEncoding, SuccessTextEncodingSerializedJSON)
+	if policy.TextEncoding != DomainErrorTextEncodingMessage {
+		return fmt.Errorf("domain error transport textEncoding = %q, want %q", policy.TextEncoding, DomainErrorTextEncodingMessage)
 	}
-	if policy.IsError {
-		return fmt.Errorf("domain error transport isError = true, want false for typed ToolErrorEnvelope payloads")
+	if !policy.IsError {
+		return fmt.Errorf("domain error transport isError = false, want true for typed ToolErrorEnvelope payloads")
+	}
+	if !policy.HasStructuredContent {
+		return fmt.Errorf("domain error transport hasStructuredContent = false, want true")
 	}
 	if !slices.Equal(policy.StableEnvelopeFields, sharedErrorStableFields) {
 		return fmt.Errorf("domain error transport stableEnvelopeFields = %#v, want %#v", policy.StableEnvelopeFields, sharedErrorStableFields)
@@ -376,7 +433,7 @@ func projectDomainErrorFixtures() ([]DomainErrorFixture, error) {
 	if err != nil {
 		return nil, err
 	}
-	callToolResult, err := MarshalSuccessCallToolResultJSON(toolResponse)
+	callToolResult, err := MarshalDomainErrorCallToolResultJSON(toolResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -426,6 +483,22 @@ func representativeSessionNotFoundDomainErrorToolResponse() (json.RawMessage, er
 }
 
 func verifyDomainErrorFixture(fixture DomainErrorFixture) error {
+	if err := verifyDomainErrorFixtureRequiredFields(fixture); err != nil {
+		return err
+	}
+	if err := verifyDomainErrorFixtureToolResponse(fixture); err != nil {
+		return err
+	}
+	if err := verifyDomainErrorFixtureCallToolResultEncoding(fixture); err != nil {
+		return err
+	}
+	if err := verifyDomainErrorFixtureDecodedEnvelope(fixture); err != nil {
+		return err
+	}
+	return verifyDomainErrorFixtureDecodedContent(fixture)
+}
+
+func verifyDomainErrorFixtureRequiredFields(fixture DomainErrorFixture) error {
 	if strings.TrimSpace(fixture.Name) == "" {
 		return fmt.Errorf("domain-error fixture name is required")
 	}
@@ -441,7 +514,10 @@ func verifyDomainErrorFixture(fixture DomainErrorFixture) error {
 	if len(fixture.CallToolResult) == 0 {
 		return fmt.Errorf("domain-error fixture %q callToolResult is required", fixture.Name)
 	}
+	return nil
+}
 
+func verifyDomainErrorFixtureToolResponse(fixture DomainErrorFixture) error {
 	var toolResponse struct {
 		Error *ToolErrorEnvelope `json:"error"`
 	}
@@ -457,21 +533,64 @@ func verifyDomainErrorFixture(fixture DomainErrorFixture) error {
 	if strings.TrimSpace(toolResponse.Error.Message) == "" {
 		return fmt.Errorf("domain-error fixture %q error.message is required", fixture.Name)
 	}
+	return nil
+}
 
-	expected, err := MarshalSuccessCallToolResultJSON(fixture.ToolResponse)
+func verifyDomainErrorFixtureCallToolResultEncoding(fixture DomainErrorFixture) error {
+	expected, err := MarshalDomainErrorCallToolResultJSON(fixture.ToolResponse)
 	if err != nil {
 		return fmt.Errorf("domain-error fixture %q marshal expected callToolResult: %w", fixture.Name, err)
 	}
 	if string(fixture.CallToolResult) != string(expected) {
 		return fmt.Errorf("domain-error fixture %q callToolResult does not match encoded toolResponse", fixture.Name)
 	}
+	return nil
+}
 
+func verifyDomainErrorFixtureDecodedEnvelope(fixture DomainErrorFixture) error {
 	var decoded map[string]any
 	if err := json.Unmarshal(fixture.CallToolResult, &decoded); err != nil {
 		return fmt.Errorf("domain-error fixture %q callToolResult: %w", fixture.Name, err)
 	}
-	if isError, present := decoded["isError"]; present && isError != false {
-		return fmt.Errorf("domain-error fixture %q isError = %#v, want false or omitted", fixture.Name, isError)
+	if isError, present := decoded["isError"]; !present || isError != true {
+		return fmt.Errorf("domain-error fixture %q isError = %#v, want true", fixture.Name, isError)
+	}
+	structured, present := decoded["structuredContent"]
+	if !present {
+		return fmt.Errorf("domain-error fixture %q structuredContent is required", fixture.Name)
+	}
+	var wantStructured any
+	if err := json.Unmarshal(fixture.ToolResponse, &wantStructured); err != nil {
+		return fmt.Errorf("domain-error fixture %q toolResponse: %w", fixture.Name, err)
+	}
+	if !reflect.DeepEqual(wantStructured, structured) {
+		return fmt.Errorf("domain-error fixture %q structuredContent does not match toolResponse", fixture.Name)
+	}
+	return nil
+}
+
+func verifyDomainErrorFixtureDecodedContent(fixture DomainErrorFixture) error {
+	var decoded map[string]any
+	if err := json.Unmarshal(fixture.CallToolResult, &decoded); err != nil {
+		return fmt.Errorf("domain-error fixture %q callToolResult: %w", fixture.Name, err)
+	}
+	content, ok := decoded["content"].([]any)
+	if !ok || len(content) != 1 {
+		return fmt.Errorf("domain-error fixture %q content = %#v, want one item", fixture.Name, decoded["content"])
+	}
+	item, ok := content[0].(map[string]any)
+	if !ok {
+		return fmt.Errorf("domain-error fixture %q content[0] type = %T, want object", fixture.Name, content[0])
+	}
+	if item["type"] != "text" {
+		return fmt.Errorf("domain-error fixture %q content type = %#v, want text", fixture.Name, item["type"])
+	}
+	text, ok := item["text"].(string)
+	if !ok || strings.TrimSpace(text) == "" {
+		return fmt.Errorf("domain-error fixture %q content text is required", fixture.Name)
+	}
+	if text != typedToolResponseErrorMessage(fixture.ToolResponse) {
+		return fmt.Errorf("domain-error fixture %q content text does not match safe error message", fixture.Name)
 	}
 	return nil
 }

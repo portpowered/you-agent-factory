@@ -236,6 +236,9 @@ func genericCLIResultFromGenerated(
 		Outputs:   make([]models.InferenceOutput, len(response.Outputs)),
 	}
 	for index, output := range response.Outputs {
+		if output.Content != nil && output.ContentBase64 != nil {
+			return models.InvokeModelResult{}, fmt.Errorf("malformed models invocation response: output has both content and contentBase64")
+		}
 		mapped := models.InferenceOutput{
 			Name:     output.Name,
 			Modality: models.Modality(output.Modality),
@@ -248,6 +251,9 @@ func genericCLIResultFromGenerated(
 		}
 		if output.Content != nil {
 			mapped.Content = *output.Content
+		}
+		if output.ContentBase64 != nil {
+			mapped.Content = string(*output.ContentBase64)
 		}
 		if output.Artifact != nil {
 			artifactRef, err := (models.InferenceArtifactRef{}).Parse(output.Artifact.ArtifactRef)

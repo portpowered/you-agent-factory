@@ -36,6 +36,7 @@ type SessionInvoker = roles.SessionInvoker
 type SessionInvocationWaitInput struct {
 	RequestID        string
 	TraceID          string
+	WorkID           string
 	InputSource      work.InputSourceLabel
 	InvocationReturn *factorydefinitions.InvocationReturnConfig
 	FactoryConfig    *factorydefinitions.FactoryConfig
@@ -157,6 +158,7 @@ func (o *SessionOwner) Invoke(
 	return o.waitForResult(ctx, sessionID, SessionInvocationWaitInput{
 		RequestID:        submitResult.RequestID,
 		TraceID:          submitResult.TraceID,
+		WorkID:           submitResult.WorkID,
 		InputSource:      prepared.resolved.Source,
 		InvocationReturn: prepared.factoryConfig.InvocationReturn,
 		FactoryConfig:    prepared.factoryConfig,
@@ -217,6 +219,9 @@ func (o *SessionOwner) submitInvocation(
 	prepared invocationPreparation,
 ) (work.WorkRequestSubmitResult, *FactoryInvocationResult, error) {
 	submissionContextErr := contextError(ctx)
+	if submissionContextErr != nil {
+		return work.WorkRequestSubmitResult{}, nil, submissionContextErr
+	}
 	submitResult, err := o.submitWork(ctx, sessionID, work.SubmitRequest{
 		RequestID:           trimmedStringValue(request.RequestID),
 		WorkTypeID:          prepared.workTypeName,

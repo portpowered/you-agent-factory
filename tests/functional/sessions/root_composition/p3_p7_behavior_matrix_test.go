@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -139,9 +140,13 @@ func runP3P7CanonicalCorpus(
 	running := startP3P7CanonicalProcess(t, label, runner)
 	status := support.WaitForSessionTerminalStatus(t, running.baseURL, running.sessionID, p3p7CorpusTerminalLimit)
 
-	listed := support.ListDefaultSessionWork(t, running.baseURL)
+	listed := waitForP3P7SessionWork(t, running)
 	if len(listed.Results) != 1 {
-		t.Fatalf("%s: listed work = %d, want exactly one submitted work item", label, len(listed.Results))
+		names := make([]string, 0, len(listed.Results))
+		for _, item := range listed.Results {
+			names = append(names, fmt.Sprintf("%s:%s", item.Name, support.StringPointerValue(item.WorkId)))
+		}
+		t.Fatalf("%s: listed work = %d (%v), want exactly one submitted work item", label, len(listed.Results), names)
 	}
 	admitted := listed.Results[0]
 	workID := support.StringPointerValue(admitted.WorkId)
@@ -162,6 +167,19 @@ func runP3P7CanonicalCorpus(
 		status:    status,
 		work:      admitted,
 		events:    events,
+	}
+}
+
+func waitForP3P7SessionWork(t *testing.T, running *p3p7CanonicalProcess) factoryapi.ListWorkResponse {
+	t.Helper()
+	endpoint := strings.TrimSuffix(running.baseURL, "/") + "/factory-sessions/" + url.PathEscape(running.sessionID) + "/work"
+	deadline := time.Now().Add(p3p7CorpusTerminalLimit)
+	for {
+		listed := support.GetJSON[factoryapi.ListWorkResponse](t, endpoint)
+		if len(listed.Results) > 0 || !time.Now().Before(deadline) {
+			return listed
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
 }
 

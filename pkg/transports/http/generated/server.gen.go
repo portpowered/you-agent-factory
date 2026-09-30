@@ -994,6 +994,7 @@ const (
 	ModelOperationContentTypeImage  ModelOperationContentType = "IMAGE"
 	ModelOperationContentTypeJSON   ModelOperationContentType = "JSON"
 	ModelOperationContentTypeText   ModelOperationContentType = "TEXT"
+	ModelOperationContentTypeVideo  ModelOperationContentType = "VIDEO"
 )
 
 // Defines values for ModelPullOutcome.
@@ -1324,6 +1325,7 @@ const (
 
 // Defines values for WorkContentPartType.
 const (
+	VIDEO                         WorkContentPartType = "VIDEO"
 	WorkContentPartTypeAudio      WorkContentPartType = "AUDIO"
 	WorkContentPartTypeBinary     WorkContentPartType = "BINARY"
 	WorkContentPartTypeImage      WorkContentPartType = "image"
@@ -6355,8 +6357,11 @@ type ModelInvocationOptions struct {
 type ModelInvocationOutput struct {
 	Artifact *ModelInvocationArtifact `json:"artifact,omitempty"`
 
-	// Content Inline output content. JSON values are carried as their canonical JSON text.
+	// Content Inline UTF-8 output content. JSON values are carried as their canonical JSON text. Do not combine with contentBase64.
 	Content *string `json:"content,omitempty"`
+
+	// ContentBase64 Base64-encoded inline binary output content. Do not combine with content.
+	ContentBase64 *[]byte `json:"contentBase64,omitempty"`
 
 	// ContentType Logical content type retained for compatibility with prepared invocation outputs.
 	ContentType *string `json:"contentType,omitempty"`
@@ -8721,6 +8726,34 @@ type WorkType struct {
 // WorkTypeHandlingBehavior Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
 type WorkTypeHandlingBehavior string
 
+// WorkVideoContentPart defines model for WorkVideoContentPart.
+type WorkVideoContentPart struct {
+	// ArtifactId Optional artifact identifier for externally materialized content.
+	ArtifactId *string `json:"artifactId,omitempty"`
+
+	// ContentType Optional MIME content type for file-backed or structured parts.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// File Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
+	File *WorkContentDeprecatedFileProperty `json:"file,omitempty"`
+
+	// Label Optional caller-defined label for slot binding or diagnostics.
+	Label *string `json:"label,omitempty"`
+
+	// Metadata Optional metadata attached to one work content part.
+	Metadata *WorkContentMetadata `json:"metadata,omitempty"`
+
+	// Role Optional semantic role for model-operation authoring.
+	Role *string `json:"role,omitempty"`
+
+	// Slot Optional slot name used by model-operation binding selectors and diagnostics.
+	Slot *string             `json:"slot,omitempty"`
+	Type WorkContentPartType `json:"type"`
+
+	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.
+	Url WorkContentURLProperty `json:"url"`
+}
+
 // Worker A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.
 type Worker struct {
 	// AgentTools Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set policy DISABLED to run agent loops without advertising or executing tools.
@@ -10014,6 +10047,15 @@ type GetMetricsCostsParams struct {
 	SessionId *string `form:"session_id,omitempty" json:"session_id,omitempty"`
 }
 
+// InvokeGenericModelMultipartBody defines parameters for InvokeGenericModel.
+type InvokeGenericModelMultipartBody struct {
+	// Files Binary uploads in the order of media inputs without content, contentBase64, or artifactRef. Each file is limited to 8 MiB.
+	Files *[]openapi_types.File `json:"files,omitempty"`
+
+	// Request Provider-neutral generic model invocation request. Inputs and parameters retain authored order. When operation is omitted, Models infers the sole operation exposed by the resolved model.
+	Request GenericModelInvocationRequest `json:"request"`
+}
+
 // RemoveModelParams defines parameters for RemoveModel.
 type RemoveModelParams struct {
 	// ReclaimUnusedCache Also reclaim proven unreferenced model and backend cache assets. The default preserves them.
@@ -10124,6 +10166,9 @@ type ValidateFactoryJSONRequestBody = Factory
 
 // InvokeGenericModelJSONRequestBody defines body for InvokeGenericModel for application/json ContentType.
 type InvokeGenericModelJSONRequestBody = GenericModelInvocationRequest
+
+// InvokeGenericModelMultipartRequestBody defines body for InvokeGenericModel for multipart/form-data ContentType.
+type InvokeGenericModelMultipartRequestBody InvokeGenericModelMultipartBody
 
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
@@ -18307,6 +18352,32 @@ func (t *WorkContentPart) FromWorkImageContentPart(v WorkImageContentPart) error
 
 // MergeWorkImageContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkImageContentPart
 func (t *WorkContentPart) MergeWorkImageContentPart(v WorkImageContentPart) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkVideoContentPart returns the union data inside the WorkContentPart as a WorkVideoContentPart
+func (t WorkContentPart) AsWorkVideoContentPart() (WorkVideoContentPart, error) {
+	var body WorkVideoContentPart
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkVideoContentPart overwrites any union data inside the WorkContentPart as the provided WorkVideoContentPart
+func (t *WorkContentPart) FromWorkVideoContentPart(v WorkVideoContentPart) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkVideoContentPart performs a merge with any union data inside the WorkContentPart, using the provided WorkVideoContentPart
+func (t *WorkContentPart) MergeWorkVideoContentPart(v WorkVideoContentPart) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

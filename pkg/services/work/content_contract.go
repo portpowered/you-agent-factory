@@ -91,7 +91,7 @@ func ResolveDispatchContentURL(workingDirectory, rawURL string) (string, error) 
 // canonical URL representation.
 func NormalizeFileBackedContentPart(part WorkContentPart) (WorkContentPart, error) {
 	switch part.Type.Normalized() {
-	case WorkContentPartTypeImage, WorkContentPartTypeAudio, WorkContentPartTypeBinary:
+	case WorkContentPartTypeImage, WorkContentPartTypeVideo, WorkContentPartTypeAudio, WorkContentPartTypeBinary:
 	default:
 		return part, nil
 	}

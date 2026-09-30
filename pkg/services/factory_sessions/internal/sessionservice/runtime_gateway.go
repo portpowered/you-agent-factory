@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"sort"
 	"strings"
 
@@ -11,33 +13,31 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
-	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"go.uber.org/zap"
 )
 
 type sessionGateway interface {
-	factorysessions.Service
+	roles.SessionGateway
 	factorysessions.LiveControlService
 	factorysessions.LiveLifecycleControlService
 	JavaScriptCheckpointStore(*livesession.LiveSession) factoryruntime.JavaScriptCheckpointStore
 	InferenceProgressPublisherFactory(*zap.Logger) func(string) factorysessions.ProgressPublisher
 }
 
-// ResolveFactorySessionRuntimeID resolves a public Factory Session selector
-// to the canonical runtime identity without building the full read projection.
-// Transport adapters use this narrow capability for identity-only routing.
-func (a *Assembly) ResolveFactorySessionRuntimeID(sessionID string) (string, error) {
+// ResolveFactorySessionRuntimeScope resolves a public Factory Session selector
+// to its canonical identity and default-session status without building a full
+// read projection. Both facts are needed to scope Worker Session observations.
+func (a *Assembly) ResolveFactorySessionRuntimeScope(sessionID string) (string, bool, error) {
 	session := a.Resolve(sessionID)
 	if session == nil {
-		return "", fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
+		return "", false, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, strings.TrimSpace(sessionID))
 	}
-	return livesession.CanonicalID(session), nil
+	return livesession.CanonicalID(session), session.IsDefault, nil
 }
 
 // ObserveForSession routes a status read through the live-runtime capability
@@ -47,10 +47,14 @@ func (s *Service) ObserveForSession(
 	sessionID string,
 	request factoryruntime.ObserveRequest,
 ) (factoryruntime.ObserveResult, error) {
-	if s == nil || s.liveRuntime == nil {
+	if s == nil || s.host == nil {
 		return factoryruntime.ObserveResult{}, fmt.Errorf("Factory Sessions live runtime gateway is required")
 	}
-	return s.liveRuntime.Observe(ctx, sessionID, request)
+	runtime, err := s.host.SessionFactory(sessionID)
+	if err != nil {
+		return factoryruntime.ObserveResult{}, err
+	}
+	return runtime.Observe(ctx, request)
 }
 
 // WorkerSessionsObservationForSession resolves the opened runtime behind the
@@ -68,6 +72,17 @@ func (s *Service) WorkerSessionsObservationForSession(factorySessionID string) w
 		return nil
 	}
 	return provider.WorkerSessionsObservationForSession(factorySessionID)
+}
+
+// WorkerSessionsObservationForSession reads the observation service retained
+// with the requested live Factory Session. The process assembly has no host:
+// each opened session owns its own runtime bundle and Worker Sessions view.
+func (a *Assembly) WorkerSessionsObservationForSession(factorySessionID string) workersessions.ObservationService {
+	session := a.Resolve(factorySessionID)
+	if state := runtimebinding.SessionStateFrom(session); state != nil {
+		return state.WorkerSessions
+	}
+	return nil
 }
 
 // SubscribeFactoryEventsForSession routes session-scoped observation through
@@ -143,7 +158,49 @@ func (a *Assembly) ListSessions(ctx context.Context, request factorysessions.Lis
 	if scope == factorysessions.SessionListScopeHistory {
 		return result, nil
 	}
-	return a.mergeDetachedSessionList(ctx, request, result)
+	if a == nil {
+		return factorysessions.ListSessionsResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	if scope == factorysessions.SessionListScopeLive || scope == factorysessions.SessionListScopeAll {
+		result.LiveSessions = a.listLiveSessions()
+	}
+	if scope == factorysessions.SessionListScopePersisted || scope == factorysessions.SessionListScopeAll {
+		durable, err := a.listPersistedSessions(ctx, request)
+		if err != nil {
+			return factorysessions.ListSessionsResult{}, err
+		}
+		result.DurableSessions = durable
+	}
+	return result, nil
+}
+
+func (a *Assembly) listLiveSessions() []factorysessions.LiveSessionSummary {
+	var sessions []factorysessions.LiveSessionSummary
+	for _, id := range a.ListLiveSessionIDs() {
+		session := a.Resolve(id)
+		if session == nil {
+			continue
+		}
+		sessions = append(sessions, factorysessions.LiveSessionSummary{
+			ID: livesession.CanonicalID(session), FactoryDir: session.FactoryDir,
+			FolderPath: session.FolderPath, Project: session.Project, IsDefault: session.IsDefault,
+		})
+	}
+	return sessions
+}
+
+func (a *Assembly) listPersistedSessions(ctx context.Context, request factorysessions.ListSessionsRequest) ([]factorysessions.DurableSessionListSummary, error) {
+	if a.SessionGateway == nil {
+		return nil, factorysessions.ErrExecutionServiceNotConfigured
+	}
+	durable, err := a.SessionGateway.ListSessions(ctx, factorysessions.ListSessionsRequest{
+		Scope: factorysessions.SessionListScopePersisted, Filters: request.Filters,
+		ExcludeRecordedHistory: true,
+	})
+	if err != nil && !(request.Scope == factorysessions.SessionListScopeAll && errors.Is(err, factorysessions.ErrExecutionServiceNotConfigured)) {
+		return nil, err
+	}
+	return durable.DurableSessions, nil
 }
 
 func shouldIncludeRecordedHistory(scope factorysessions.SessionListScope, excluded bool) bool {
@@ -181,62 +238,6 @@ func (a *Assembly) listRecordedSessions() ([]factorysessions.RecordedSessionList
 		return result[left].ArtifactReference < result[right].ArtifactReference
 	})
 	return result, nil
-}
-
-func (a *Assembly) mergeDetachedSessionList(
-	ctx context.Context,
-	request factorysessions.ListSessionsRequest,
-	result factorysessions.ListSessionsResult,
-) (factorysessions.ListSessionsResult, error) {
-	owners := a.detachedOwners()
-	if len(owners) == 0 {
-		if a != nil && a.recordedSessionInventory != nil && request.Scope == factorysessions.SessionListScopeAll {
-			return result, nil
-		}
-		return factorysessions.ListSessionsResult{}, factorysessions.ErrDetachedServiceUnavailable
-	}
-	seenLive := make(map[string]struct{})
-	seenDurable := make(map[string]struct{})
-	for _, owner := range owners {
-		listed, err := owner.ListSessions(ctx, request)
-		if err != nil {
-			return factorysessions.ListSessionsResult{}, err
-		}
-		if result.Scope == "" {
-			result.Scope = listed.Scope
-		}
-		appendUniqueLiveSessions(&result, seenLive, listed.LiveSessions)
-		appendUniqueDurableSessions(&result, seenDurable, listed.DurableSessions)
-	}
-	return result, nil
-}
-
-func appendUniqueLiveSessions(
-	result *factorysessions.ListSessionsResult,
-	seen map[string]struct{},
-	sessions []factorysessions.LiveSessionSummary,
-) {
-	for _, session := range sessions {
-		if _, exists := seen[session.ID]; exists {
-			continue
-		}
-		seen[session.ID] = struct{}{}
-		result.LiveSessions = append(result.LiveSessions, session)
-	}
-}
-
-func appendUniqueDurableSessions(
-	result *factorysessions.ListSessionsResult,
-	seen map[string]struct{},
-	sessions []factorysessions.DurableSessionListSummary,
-) {
-	for _, session := range sessions {
-		if _, exists := seen[session.SessionID]; exists {
-			continue
-		}
-		seen[session.SessionID] = struct{}{}
-		result.DurableSessions = append(result.DurableSessions, session)
-	}
 }
 
 // ReadDurableFactorySessionEventStream reads and materializes one finite
@@ -291,24 +292,7 @@ func (fs *SessionRuntime) observeLiveLifecycleControl(
 	runtimebinding.ObserveLifecycleControl(fs.logger, fs.sessionState, sessionID, operation, control, outcome, status, err)
 }
 
-var _ factorysessions.Service = (*Service)(nil)
-
-func newSessionGatewayService(fs *SessionRuntime) *Service {
-	if fs == nil || fs.sessionState == nil {
-		return nil
-	}
-	state := fs.sessionState
-	streams := state.ResponseStreams()
-	return NewWithResponseService(
-		SessionServiceHost(fs),
-		state,
-		sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle),
-		streams,
-		fs.ReconnectCursorValidator(),
-		fs.sessionResultProjection,
-		state.ResponseEventService(),
-	)
-}
+var _ roles.SessionGateway = (*Service)(nil)
 
 // AttachSessionGateway installs the Wire-constructed gateway used by all
 // SessionRuntime operations. It returns the same gateway for provider chaining.
@@ -320,7 +304,7 @@ func (fs *SessionRuntime) AttachSessionGateway(gateway *Service) *Service {
 }
 
 // Gateway returns the single gateway attached to this Factory Session runtime.
-func (fs *SessionRuntime) Gateway() factorysessions.Service {
+func (fs *SessionRuntime) Gateway() roles.SessionGateway {
 	return fs.requireSessionGateway()
 }
 
@@ -336,45 +320,8 @@ func (fs *SessionRuntime) ReconnectCursorValidator() factorysessions.ReconnectCu
 // SessionServiceHost exposes the runtime's lifecycle callbacks to the bounded
 // Session gateway.
 func SessionServiceHost(runtime *SessionRuntime) Host {
-	initializeFactoryScaffold := func(factoryDir string) error {
-		if runtime == nil {
-			return sessionvalidation.New(
-				factorysessions.ValidationReasonUnreadable,
-				"folderPath",
-				fmt.Errorf("initialize factory scaffold: initializer is required"),
-			)
-		}
-		initialize := runtime.factoryScaffoldInitializer
-		if initialize == nil {
-			return sessionvalidation.New(
-				factorysessions.ValidationReasonUnreadable,
-				"folderPath",
-				fmt.Errorf("initialize factory scaffold: initializer is required"),
-			)
-		}
-		if err := initialize(factoryDir); err != nil {
-			return sessionvalidation.New(
-				factorysessions.ValidationReasonUnreadable,
-				"folderPath",
-				fmt.Errorf("initialize factory scaffold: %w", err),
-			)
-		}
-		return nil
-	}
 	if runtime == nil {
-		return newSessionHost(
-			nil, nil, initializeFactoryScaffold, nil, nil, nil,
-			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-		)
-	}
-	discoverTargets := func(folderPath string) ([]factorysessions.Target, error) {
-		return runtime.identity.Discover(context.Background(), identity.DiscoverRequest{
-			FolderPath: folderPath, WorkstationLoader: runtime.workstationLoader,
-			LoadFactory: runtime.loadFactory, Logger: runtime.logger,
-		})
-	}
-	resolveSessionFolder := func(folderPath string) (string, error) {
-		return runtime.identity.ResolveFolder(folderPath)
+		return dependencyHost{}
 	}
 	resolveSyncPreflightTarget := func(
 		sessionID string,
@@ -405,9 +352,6 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 	}
 	return newSessionHost(
 		runtime.sessionState,
-		discoverTargets,
-		initializeFactoryScaffold,
-		runtime.openFactorySessionForTarget,
 		runtime.buildSessionProjectionContext,
 		resolveSyncPreflightTarget,
 		backendScopeID,
@@ -418,18 +362,12 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 		runtime.observeLiveLifecycleControl,
 		runtime.durableExecutionService,
 		runtime.newJavaScriptCheckpointStore,
-		runtime.directoryInspection,
-		resolveSessionFolder,
-		runtime.identity.Select,
 	)
 }
 
 func (fs *SessionRuntime) requireSessionGateway() sessionGateway {
 	if fs == nil {
-		return newSessionGatewayService(nil)
-	}
-	if fs.sessionGateway == nil {
-		fs.sessionGateway = newSessionGatewayService(fs)
+		return nil
 	}
 	return fs.sessionGateway
 }

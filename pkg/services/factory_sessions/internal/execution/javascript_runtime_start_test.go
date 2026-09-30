@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -442,7 +441,8 @@ func TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSession
 	waitMillis := int64(50)
 
 	started, err := service.StartSync(context.Background(), StartRequest{
-		RequestID: "req-runtime-sync-wait-timeout-001",
+		RequestID:   "req-runtime-sync-wait-timeout-001",
+		ProjectRoot: service.projectRoot,
 		Source: Source{
 			Kind: factory.WorkflowSourceKindInlineWorkflow,
 			InlineWorkflow: &InlineWorkflowSource{
@@ -495,15 +495,38 @@ type javaScriptRuntimeServiceConfig struct {
 	LiveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator
 }
 
-func testRuntimePersistenceStoreFactory(projectRoot string) (runtimepersist.Store, error) {
-	return runtimepersist.NewProjectStore(projectRoot, platformfilesystem.Local{})
+func TestReservedSyncSessionsExposeTheirOwnProjectRootsBeforeExecution(t *testing.T) {
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{ProjectRoot: t.TempDir()})
+	service.SetDirectWorkerExecution(&recordingWorkerExecution{})
+	for _, root := range []string{t.TempDir(), t.TempDir()} {
+		requestID := filepath.Base(root)
+		reserved, err := service.reserveStartSession(context.Background(), StartRequest{
+			RequestID: requestID, ProjectRoot: root,
+		}, requestID, false)
+		if err != nil {
+			t.Fatalf("reserveStartSession(%q): %v", root, err)
+		}
+		defer reserved.release()
+		if got := service.projectRootForSession(reserved.state.session.SessionID); got != root {
+			t.Fatalf("reserved session project root = %q, want %q", got, root)
+		}
+		child := service.childExecutorHooks(ChildExecutorModeLive, reserved.state.session.SessionID).
+			NewChildExecutor("child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*directChildExecutor)
+		if child.workingDir != root {
+			t.Fatalf("child working directory = %q, want %q", child.workingDir, root)
+		}
+	}
 }
 
-func mustTestRuntimePersistenceStore(t *testing.T, dir string) runtimepersist.Store {
+func testRuntimePersistenceStoreFactory(projectRoot string) (runtimepersist.Store, error) {
+	return runtimepersist.NewLazyProjectStore(projectRoot, platformfilesystem.Local{})
+}
+
+func mustTestRuntimePersistenceStore(t *testing.T, projectRoot string) runtimepersist.Store {
 	t.Helper()
-	store, err := runtimepersist.NewDirectoryStore(dir, platformfilesystem.Local{})
+	store, err := runtimepersist.NewLazyProjectStore(projectRoot, platformfilesystem.Local{})
 	if err != nil {
-		t.Fatalf("NewDirectoryStore: %v", err)
+		t.Fatalf("NewLazyProjectStore: %v", err)
 	}
 	return store
 }
@@ -822,7 +845,8 @@ func inlineWorkflowStartRequest(
 	requestedPolicy map[string]any,
 ) StartRequest {
 	return StartRequest{
-		RequestID: requestID,
+		RequestID:   requestID,
+		ProjectRoot: ".",
 		Source: Source{
 			Kind: factory.WorkflowSourceKindInlineWorkflow,
 			InlineWorkflow: &InlineWorkflowSource{
@@ -924,74 +948,4 @@ func (a orchestrationJavaScriptAdapter) ResumeJavaScript(
 	records []factory.JavaScriptRuntimeRecord,
 ) factory.JavaScriptResumeContext {
 	return a.ResumeContext(summary, records)
-}
-func newTerminalWorkersService(t *testing.T, provider providers.Service) WorkerExecution {
-	t.Helper()
-	return terminalWorkerService{provider: provider}
-}
-
-// terminalWorkerService is a service-root fake: the bridge test owns durable
-// response publication, while Workers-owned wire tests cover construction and
-// normalization of the real Execute implementation.
-type terminalWorkerService struct {
-	provider providers.Service
-}
-
-func (service terminalWorkerService) Execute(
-	ctx context.Context,
-	request workers.ExecuteRequest,
-) (workers.ExecuteResult, error) {
-	providerResult, err := service.provider.Execute(ctx, providers.ExecuteRequest{
-		Provider:  providers.IDCodex,
-		AttemptID: request.Correlation.AttemptID,
-		Correlation: providers.ExecuteCorrelation{
-			FactorySessionID: request.Correlation.FactorySessionID,
-			RuntimeID:        request.Correlation.RuntimeID,
-			GenerationID:     request.Correlation.GenerationID,
-			DispatchID:       request.Correlation.DispatchID,
-			AttemptID:        request.Correlation.AttemptID,
-			RequestID:        request.Correlation.RequestID,
-			TraceID:          request.Correlation.TraceID,
-		},
-		UserMessage: request.Target.Prompt.UserMessage,
-	})
-	result := workers.ExecuteResult{Correlation: request.Correlation}
-	if err != nil {
-		outcome := workers.ExecutionOutcomeFailed
-		failureType := workers.WorkFailureTypeUnknown
-		if errors.Is(err, context.Canceled) {
-			outcome = workers.ExecutionOutcomeCanceled
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			failureType = workers.WorkFailureTypeTimeout
-		}
-		result.Outcome = outcome
-		result.Failure = &workers.ExecutionFailure{
-			Type:    failureType,
-			Family:  workers.WorkFailureFamilyTerminal,
-			Message: err.Error(),
-		}
-		return result, err
-	}
-	result.Outcome = workers.ExecutionOutcomeAccepted
-	result.Output.Primary = []work.WorkContentPart{{Text: providerResult.Content}}
-	return result, nil
-}
-
-func exactEncodedSizeWarningState(t *testing.T, targetSize int) runtimeSessionState {
-	t.Helper()
-	state := runtimeSessionState{
-		session:        SessionReadResult{SessionID: "dur-sess-warning-threshold", Status: LifecycleStatusSucceeded},
-		petriMutations: []interfaces.TokenMutationRecord{{Type: interfaces.MutationCreate, TokenID: "live-token", ToPlace: "task:running", TransitionReachable: true, Token: &workers.Token{ID: "live-token", Color: workers.Color{WorkID: "live-work"}}}},
-		petriSummaries: []PetriTokenSummary{{TokenID: "terminal-token", WorkID: "terminal-work", PlaceID: "task:done"}},
-	}
-	base := encodedWarningStateBytes(t, state)
-	if targetSize < base {
-		t.Fatalf("target snapshot size %d is below base size %d", targetSize, base)
-	}
-	state.sourceContent = strings.Repeat("x", targetSize-base)
-	if got := encodedWarningStateBytes(t, state); got != targetSize {
-		t.Fatalf("constructed snapshot bytes = %d, want %d", got, targetSize)
-	}
-	return state
 }

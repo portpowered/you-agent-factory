@@ -42,30 +42,6 @@
       "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
     },
     {
-      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening",
-      "destination": "factory_sessions/internal/services/runtime_opening",
-      "successor": "pkg/services/factory_sessions/internal/services/runtime_opening",
-      "class": "test-only",
-      "stage": "pss-package-target-test-only",
-      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
-    },
-    {
-      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening/invocation",
-      "destination": "factory_sessions/internal/services/runtime_opening",
-      "successor": "pkg/services/factory_sessions/internal/services/runtime_opening",
-      "class": "test-only",
-      "stage": "pss-package-target-test-only",
-      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
-    },
-    {
-      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening/operatordefaults",
-      "destination": "factory_sessions/internal/services/runtime_opening",
-      "successor": "pkg/services/factory_sessions/internal/services/runtime_opening",
-      "class": "test-only",
-      "stage": "pss-package-target-test-only",
-      "deletionGate": "delete the exact test-only package-target edge after its owning migration lands, then remove this baseline entry"
-    },
-    {
       "packagePath": "pkg/services/operator_settings/internal",
       "destination": "operator_settings/internal",
       "successor": "pkg/services/operator_settings/internal",

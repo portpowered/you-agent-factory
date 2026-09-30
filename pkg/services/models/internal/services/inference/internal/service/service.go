@@ -36,6 +36,7 @@ type service struct {
 	mu             sync.Mutex
 	nextInvocation int
 	invocations    map[models.ModelInvocationRef]models.InvokeModelResult
+	running        map[models.ModelInvocationRef]context.CancelFunc
 }
 
 var _ inference.Service = (*service)(nil)
@@ -66,6 +67,7 @@ func New(
 		clock:             clock,
 		executionDeadline: executionDeadline,
 		invocations:       make(map[models.ModelInvocationRef]models.InvokeModelResult),
+		running:           make(map[models.ModelInvocationRef]context.CancelFunc),
 	}
 }
 
@@ -113,6 +115,9 @@ func (s *service) InvokeModelWithLease(
 	if err != nil {
 		return models.InvokeModelResult{}, err
 	}
+	if _, err := s.runtimeHost.ClaimInvocationLease(validationCtx, request); err != nil {
+		return models.InvokeModelResult{}, err
+	}
 
 	if s.runtime == nil {
 		disposition, releaseErr := s.releaseInvocationLease(ctx, request)
@@ -125,23 +130,50 @@ func (s *service) InvokeModelWithLease(
 		return failedLeaseCleanupResult(request, disposition), joinInvocationCleanupError(err, releaseErr)
 	}
 
+	invokeCtx, cancelDeadline := s.invokeWithDeadline(ctx)
+	defer cancelDeadline()
 	accepted := acceptedInvocationResult(request, invocation)
-	s.putInvocation(invocation, accepted)
-
+	s.mu.Lock()
+	s.invocations[invocation] = accepted.Clone()
+	s.running[invocation] = cancelDeadline
+	s.mu.Unlock()
 	if err := invokeContextError(ctx); err != nil {
 		return s.finishCancelledInvocation(ctx, request, invocation, err)
 	}
 
-	invokeCtx, cancelDeadline := s.invokeWithDeadline(ctx)
-	defer cancelDeadline()
-
+	operation := catalogOperation(catalogResult.Model, request.Operation)
 	runtimeResult, err := s.runtime.Invoke(invokeCtx, inference.InvocationRuntimeRequest{
 		Request:   request,
-		Operation: catalogOperation(catalogResult.Model, request.Operation),
+		Operation: operation,
 		HostSlot:  hostSlot,
 	})
+	return s.finishRuntimeInvocation(
+		ctx, invokeCtx, request, invocation, accepted, runtimeResult, err, operation,
+	)
+}
+
+func (s *service) finishRuntimeInvocation(
+	ctx context.Context,
+	invokeCtx context.Context,
+	request models.InvokeModelRequest,
+	invocation models.ModelInvocationRef,
+	accepted models.InvokeModelResult,
+	runtimeResult inference.InvocationRuntimeResult,
+	err error,
+	operation models.Operation,
+) (models.InvokeModelResult, error) {
 	if isInvocationInFlight(err) {
+		s.mu.Lock()
+		delete(s.running, invocation)
+		cancelled := s.invocations[invocation].Status == models.ModelInvocationStatusCancelled
+		s.mu.Unlock()
+		if cancelled {
+			return s.finishCancelledInvocation(ctx, request, invocation, models.ErrInferenceCancelled)
+		}
 		return accepted.Clone(), nil
+	}
+	if invokeCtx.Err() != nil {
+		return s.finishFailedInvocation(invokeCtx, request, invocation, invokeCtx.Err())
 	}
 	if err != nil {
 		return s.finishFailedInvocation(invokeCtx, request, invocation, err)
@@ -152,7 +184,7 @@ func (s *service) InvokeModelWithLease(
 		request,
 		invocation,
 		runtimeResult,
-		catalogOperation(catalogResult.Model, request.Operation),
+		operation,
 	)
 }
 
@@ -188,7 +220,7 @@ func (s *service) releaseInvocationLease(
 	}
 	releaseContext := context.WithoutCancel(ctx)
 	modelseffects.MarkRuntimeLeaseReleaseAttempted(releaseContext)
-	released, err := s.runtimeHost.ReleaseModelLease(releaseContext, models.ReleaseModelLeaseRequest{
+	released, err := s.runtimeHost.ReleaseInvocationLease(releaseContext, models.ReleaseModelLeaseRequest{
 		Scope: request.Scope,
 		Lease: request.Lease,
 	})

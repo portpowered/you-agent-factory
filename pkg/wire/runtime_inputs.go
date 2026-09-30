@@ -3,7 +3,6 @@ package wire
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -12,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
-	"github.com/portpowered/infinite-you/pkg/initializer/runtimeapplication"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
@@ -31,7 +29,6 @@ import (
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingshttp "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
@@ -39,7 +36,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	recordingshttp "github.com/portpowered/infinite-you/pkg/transports/http/recordings"
 	"go.uber.org/zap"
 )
 
@@ -60,81 +57,6 @@ func provideWorkersMockWorkersConfigDiagnosticsLoader(
 
 func provideRunInputPathInspector() platformfilesystem.PathInspector {
 	return platformfilesystem.Local{}
-}
-
-func provideRunRuntimeRunnerBuilder(
-	build initializer.RuntimeRunnerBuilder,
-	open *factorysessionwire.ApplicationService,
-) (runcli.RuntimeRunnerBuilder, error) {
-	if build == nil || open == nil {
-		return nil, errors.New("run application lifecycle builder and Factory Session opener are required")
-	}
-	return func(
-		ctx context.Context,
-		request *factorysessions.RuntimeOpeningRequest,
-		cancellation initializer.InvocationCancellation,
-		sinkID factorysessions.VisualizationSinkID,
-	) (initializer.LocalRuntimeRunner, error) {
-		if ctx == nil {
-			return nil, errors.New("build run application: context is required")
-		}
-		if err := ctx.Err(); err != nil {
-			return nil, fmt.Errorf("build run application: %w", err)
-		}
-		if request == nil {
-			return nil, errors.New("build run application: opening request is required")
-		}
-
-		// Open once at the Factory Sessions boundary so historical inspection
-		// can be selected before the generic initializer constructs an
-		// application runner. Its plan is already the inert historical lifecycle;
-		// hosted/ordinary replay continues through the injected builder below.
-		opened, err := open.OpenApplicationWithCancellation(ctx, request, cancellation, sinkID)
-		if err != nil {
-			return nil, err
-		}
-		replay := opened.HistoricalReplay
-		replayMetadataWarnings := append(
-			[]recordings.MetadataMismatchWarning(nil),
-			opened.ReplayMetadataWarnings...,
-		)
-		hostedInvocation := opened.HostedInvocation
-		cleanInvocation := opened.CleanInvocation
-
-		var runner initializer.LocalRuntimeRunner
-		if replay != nil {
-			runner, err = runtimeapplication.NewManagedRunner(
-				opened.Plan,
-				platformruntimeartifact.Diagnostics(opened.Diagnostics),
-			)
-			if err != nil {
-				return nil, lifecycle.CloseResources(opened.Plan.Resources, err)
-			}
-			if managed, ok := runner.(interface {
-				SetRuntimeHostReady(<-chan initializer.RuntimeHostBinding)
-			}); ok {
-				managed.SetRuntimeHostReady(opened.Ready)
-			}
-		} else {
-			if build == nil {
-				return nil, errors.New("build run application: lifecycle builder is required")
-			}
-			runner, err = build(ctx, func(context.Context) (initializer.OpenedApplication, error) {
-				return initializer.OpenedApplication{
-					Plan:        opened.Plan,
-					Diagnostics: platformruntimeartifact.Diagnostics(opened.Diagnostics),
-					Ready:       opened.Ready,
-				}, nil
-			})
-			if err != nil {
-				return nil, err
-			}
-		}
-		runner = runcli.WithHostedInvocation(runner, hostedInvocation, opened.ResumeRecoveryMetadata)
-		runner = runcli.WithCleanInvocationSnapshot(runner, cleanInvocation)
-		runner = runcli.WithReplayMetadataWarnings(runner, replayMetadataWarnings)
-		return runcli.WithHistoricalReplay(runner, replay), nil
-	}, nil
 }
 
 type runtimeArtifactClock func() time.Time
@@ -355,116 +277,15 @@ func (a runtimeMetricRecordWriterAdapter) Close() error {
 	return a.writer.Close()
 }
 
-// provideRuntimeOpeningRequestFactory is the sole mapping from transport
+// provideSessionStartRequestFactory is the sole mapping from transport
 // selections into the bounded owner requests consumed by Factory Sessions.
-func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
+func provideSessionStartRequestFactory() runcli.SessionStartRequestFactory {
 	return func(
 		cfg runcli.RunConfig,
 		mockWorkers *workers.MockWorkersConfig,
-	) *factorysessions.RuntimeOpeningRequest {
-		logDirectory := cfg.RuntimeLogDir
-		if strings.TrimSpace(logDirectory) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
-			logDirectory = logging.RuntimeLogsRoot(cfg.HomeDir)
-		}
-		metricsDirectory := cfg.RuntimeMetricsDir
-		if strings.TrimSpace(metricsDirectory) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
-			metricsDirectory = platformmetrics.RuntimeMetricsRoot(cfg.HomeDir)
-		}
-		mode := factorydefinitions.RuntimeModeBatch
-		if cfg.Continuously {
-			mode = factorydefinitions.RuntimeModeService
-		}
-		request := &factorysessions.RuntimeOpeningRequest{
-			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
-				Directory:        cfg.Dir,
-				SourcePath:       cfg.FactoryConfigPath,
-				ExecutionBaseDir: cfg.ExecutionBaseDir,
-			},
-			FactoryRuntime: factoryruntime.RuntimeOpeningRequest{
-				Mode:         mode,
-				Verbose:      cfg.Verbose,
-				LogDirectory: logDirectory,
-				LogConfig: factoryruntime.RuntimeLogStorageConfig{
-					MaxSize: cfg.RuntimeLogConfig.MaxSize, MaxBackups: cfg.RuntimeLogConfig.MaxBackups,
-					MaxAge: cfg.RuntimeLogConfig.MaxAge, Compress: cfg.RuntimeLogConfig.Compress,
-				},
-				MetricsDirectory: metricsDirectory,
-				MetricsConfig: factoryruntime.RuntimeMetricsStorageConfig{
-					MaxSize: cfg.RuntimeMetricsConfig.MaxSize, MaxBackups: cfg.RuntimeMetricsConfig.MaxBackups,
-					MaxAge: cfg.RuntimeMetricsConfig.MaxAge, Compress: cfg.RuntimeMetricsConfig.Compress,
-				},
-			},
-			FactorySession: factorysessions.SessionRuntimeOpeningRequest{
-				FactorySessionID:   cfg.FactorySessionID,
-				CanonicalSessionID: cfg.CanonicalSessionID,
-				// Public run and service openings use the existing durable
-				// snapshot path explicitly. Empty and disabled remain
-				// memory-only choices for callers that opt into them.
-				PersistencePolicy: factorysessions.PersistencePolicyEnabled,
-				SystemConfigHome:  cfg.HomeDir,
-				WorkFile:          cfg.WorkFile,
-				Host: factorysessions.RuntimeHostRequest{
-					Directory:   cfg.Dir,
-					RuntimeMode: mode,
-					WorkFile:    cfg.WorkFile,
-					MockWorkers: mockWorkers != nil,
-					Host:        cfg.BindHost,
-					Port:        cfg.Port,
-					AutoPort:    cfg.AutoPort,
-					Pprof:       cfg.Pprof,
-				},
-			},
-			Workers: workers.RuntimeOpeningRequest{
-				RunnerID:                          cfg.RunnerID,
-				Worktree:                          cfg.Worktree,
-				WorkerReasoningEffort:             cfg.WorkerReasoningEffort,
-				MockWorkers:                       mockWorkers,
-				InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
-			},
-			Recordings: recordings.RuntimeOpeningRequest{
-				RecordPath: cfg.RecordPath,
-				ReplayPath: cfg.ReplayPath,
-				ResumePath: cfg.ResumePath,
-				WorkflowID: cfg.Workflow,
-			},
-			ModelCacheDirectory: cfg.ModelCacheDir,
-			OperatorDefaults:    cfg.OperatorDefaults,
-		}
-		return request
-	}
-}
-
-// provideRuntimeInputResolver copies transport-owned request values into the
-// stable application-opening input. External effects are selected by the
-// process graph and are not projected from this operation callback.
-func provideRuntimeInputResolver() factorysessionwire.ApplicationRuntimeInputResolver {
-	return func(
-		ctx context.Context,
-		request *factorysessions.RuntimeOpeningRequest,
-	) (factorysessionwire.ApplicationRuntimeInputs, error) {
-		if err := validateRuntimeOpeningInputs(ctx, request); err != nil {
-			return factorysessionwire.ApplicationRuntimeInputs{}, err
-		}
-		configured := *request
-		return factorysessionwire.ApplicationRuntimeInputs{
-			Request: &configured,
-		}, nil
-	}
-}
-
-func validateRuntimeOpeningInputs(
-	ctx context.Context,
-	request *factorysessions.RuntimeOpeningRequest,
-) error {
-	switch {
-	case ctx == nil:
-		return errors.New("context is required")
-	case ctx.Err() != nil:
-		return ctx.Err()
-	case request == nil:
-		return errors.New("runtime opening request is required")
-	default:
-		return nil
+	) *factorysessions.SessionStartRequest {
+		request := runSessionStartRequest(cfg, mockWorkers)
+		return &request
 	}
 }
 
@@ -521,22 +342,8 @@ func provideFactoryRuntimeScriptCommandRunner(
 	return runner, nil
 }
 
-func provideSessionExecutionOpeningFactory(
-	runtimes factorysessionwire.ExecutionRuntimeOpening,
-	workerExecution workers.Service,
-	build factorysessionwire.StandaloneSessionExecutionFactory,
-	resolveClock factoryruntime.ClockResolver,
-	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
-	paths factorysessionwire.ExecutionOpeningFileSystem,
-	logger *zap.Logger,
-) (*factorysessionwire.ExecutionOpeningFactory, error) {
-	return factorysessionwire.NewExecutionOpeningFactory(
-		runtimes, workerExecution, build, resolveClock, artifactRoots, paths, logger,
-	)
-}
-
 func provideInvocationOperation(
-	openRuntime factorysessionwire.InvocationRuntimeOpening,
+	sessions factorysessions.Service,
 	modelsRoot models.Service,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
@@ -548,7 +355,7 @@ func provideInvocationOperation(
 	presentations factorysessions.OpeningPresentationOwner,
 ) (factorysessionwire.InvocationOperation, error) {
 	return factorysessionwire.NewInvocationOperation(
-		openRuntime,
+		sessions,
 		modelsRoot,
 		workingDirectory,
 		resolveCurrentDir,
@@ -666,18 +473,18 @@ func provideDirectJavaScriptHostAdapter(
 	start platformhttpserver.Starter,
 	newRunner lifecycle.RunnerFactory,
 	logger *zap.Logger,
-) (factorysessionwire.DirectJavaScriptHostAdapter, error) {
+) (runcli.DirectJavaScriptHost, error) {
 	if validation == nil || invocationWorkType == nil || sessionRequests == nil || start == nil || newRunner == nil || logger == nil {
 		return nil, errors.New("direct JavaScript HTTP handler, starter, and lifecycle runner are required")
 	}
 	return func(
-		execution factorysessionwire.OwnedExecutionService,
+		sessions factorysessions.Service,
 		host factorysessions.RuntimeHostRequest,
 		cancellation initializer.InvocationCancellation,
 		observer factorysessions.RuntimeHostObserver,
 	) (lifecycle.Component, error) {
 		handler, err := newDurableExecutionHTTPHandler(
-			execution, validation, invocationWorkType, sessionRequests, logger, cancellation,
+			sessions, validation, invocationWorkType, sessionRequests, logger, cancellation,
 		)
 		if err != nil {
 			return nil, err
@@ -699,21 +506,23 @@ func provideDirectJavaScriptHostAdapter(
 }
 
 func newDurableExecutionHTTPHandler(
-	execution factorysessionwire.OwnedExecutionService,
+	sessions factorysessions.Service,
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
 	invocationWorkType factorydefinitions.InvocationWorkTypeService,
 	sessionRequests factorysessionshttp.RequestPreparation,
 	logger *zap.Logger,
 	cancellation initializer.InvocationCancellation,
 ) (http.Handler, error) {
-	if execution == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || logger == nil {
+	if sessions == nil || validation == nil || invocationWorkType == nil || sessionRequests == nil || logger == nil {
 		return nil, errors.New("construct durable execution HTTP handler: execution, policies, request preparation, and logger are required")
 	}
-	durable := factorysessionmapping.NewDurableAPI(execution)
+	inspection, err := sessionInspectionForHTTP(sessions)
+	if err != nil {
+		return nil, err
+	}
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		DurableExecution: durable, DurableLifecycle: durable,
-		DurableListing: durable, DurableResponseEvents: durable,
-		DurableLister: execution, FactoryValidation: validation,
+		SessionsRoot:  sessions,
+		DurableLister: sessions, FactoryValidation: validation,
 		InvocationWorkType: invocationWorkType, SessionRequests: sessionRequests,
 	}, logger)
 	var shutdown transporthttp.ShutdownOperation
@@ -721,12 +530,23 @@ func newDurableExecutionHTTPHandler(
 		shutdown = cancellation.Cancel
 	}
 	return transporthttp.NewServerWithRecordingsAndShutdown(
-		recordingshttp.NewLegacyAdapter(
-			factorysessionmapping.NewDurableHistoryBridge(durable),
-			factorysessionshttp.NewDurableRequestPreparation(sessionRequests),
-		),
+		recordingshttp.NewAdapterWithSessions(nil, sessions, inspection),
 		sessionsHandler, nil, nil, nil, nil, logger, shutdown,
 	).Handler(), nil
+}
+
+func sessionInspectionForHTTP(sessions factorysessions.Service) (factorysessions.SessionInspectionService, error) {
+	owner, ok := sessions.(interface {
+		SessionInspectionService() factorysessions.SessionInspectionService
+	})
+	if !ok {
+		return nil, errors.New("construct durable execution HTTP handler: Factory Sessions root must expose session inspection")
+	}
+	inspection := owner.SessionInspectionService()
+	if inspection == nil {
+		return nil, errors.New("construct durable execution HTTP handler: session inspection is unavailable")
+	}
+	return inspection, nil
 }
 
 type workerSessionsFactorySessionScopeResolver struct {
@@ -747,9 +567,9 @@ func (resolver workerSessionsFactorySessionScopeResolver) ResolveWorkerSessionSc
 	sessionID string,
 ) (workersessionshttp.SessionScope, error) {
 	if fast, ok := resolver.sessions.(interface {
-		ResolveFactorySessionRuntimeID(string) (string, error)
+		ResolveFactorySessionRuntimeScope(string) (string, bool, error)
 	}); ok {
-		effectiveID, err := fast.ResolveFactorySessionRuntimeID(sessionID)
+		effectiveID, isDefault, err := fast.ResolveFactorySessionRuntimeScope(sessionID)
 		if err != nil {
 			if errors.Is(err, factorysessions.ErrSessionNotFound) || errors.Is(err, factorysessions.ErrNotFound) {
 				return workersessionshttp.SessionScope{}, workersessions.ErrObservationSessionNotFound
@@ -758,7 +578,7 @@ func (resolver workerSessionsFactorySessionScopeResolver) ResolveWorkerSessionSc
 		}
 		return workersessionshttp.SessionScope{
 			EffectiveID: effectiveID,
-			IsDefault:   strings.TrimSpace(sessionID) == factorysessions.DefaultSessionID,
+			IsDefault:   isDefault,
 		}, nil
 	}
 	projection, err := resolver.sessions.GetFactorySession(ctx, sessionID)

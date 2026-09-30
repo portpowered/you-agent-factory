@@ -165,6 +165,7 @@ const (
 	publicFactoryModelOperationContentTypeText   = "TEXT"
 	publicFactoryModelOperationContentTypeImage  = "IMAGE"
 	publicFactoryModelOperationContentTypeAudio  = "AUDIO"
+	publicFactoryModelOperationContentTypeVideo  = "VIDEO"
 	publicFactoryModelOperationContentTypeJSON   = "JSON"
 	publicFactoryModelOperationContentTypeBinary = "BINARY"
 	publicFactoryWorkerProviderScriptWrap        = "SCRIPT_WRAP"
@@ -206,6 +207,7 @@ var publicFactoryModelOperationContentTypeAliases = map[string]string{
 	publicFactoryModelOperationContentTypeText:   publicFactoryModelOperationContentTypeText,
 	publicFactoryModelOperationContentTypeImage:  publicFactoryModelOperationContentTypeImage,
 	publicFactoryModelOperationContentTypeAudio:  publicFactoryModelOperationContentTypeAudio,
+	publicFactoryModelOperationContentTypeVideo:  publicFactoryModelOperationContentTypeVideo,
 	publicFactoryModelOperationContentTypeJSON:   publicFactoryModelOperationContentTypeJSON,
 	publicFactoryModelOperationContentTypeBinary: publicFactoryModelOperationContentTypeBinary,
 }

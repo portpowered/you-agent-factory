@@ -279,7 +279,7 @@ func TestHostedFiniteRunsKeepEmptyAndTerminalSuccess(t *testing.T) {
 					t, factoryDir, workFile, mode.flag,
 				)
 				if err != nil {
-					t.Fatalf("finite hosted run error = %v; stdout=%q stderr=%q", err, stdout, stderr)
+					t.Fatalf("finite hosted run error = %v; causes=%q; stdout=%q stderr=%q", err, errorLeaves(err), stdout, stderr)
 				}
 				wantStdout := ""
 				if workFile != "" {
@@ -297,6 +297,26 @@ func TestHostedFiniteRunsKeepEmptyAndTerminalSuccess(t *testing.T) {
 			})
 		}
 	}
+}
+
+// errorLeaves retains the internal cause when the CLI safely presents a
+// generic startup diagnostic. It is printed only when this functional test
+// fails, so CI can distinguish readiness and lifecycle failures.
+func errorLeaves(err error) []string {
+	if err == nil {
+		return nil
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		var leaves []string
+		for _, cause := range joined.Unwrap() {
+			leaves = append(leaves, errorLeaves(cause)...)
+		}
+		return leaves
+	}
+	if cause := errors.Unwrap(err); cause != nil {
+		return errorLeaves(cause)
+	}
+	return []string{fmt.Sprintf("%T: %v", err, err)}
 }
 
 func TestHostedContinuousRunsStayLiveWhileIdle(t *testing.T) {

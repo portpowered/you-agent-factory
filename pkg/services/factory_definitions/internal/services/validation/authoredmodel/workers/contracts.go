@@ -77,6 +77,7 @@ const (
 	ModelOperationContentTypeText   = "TEXT"
 	ModelOperationContentTypeImage  = "IMAGE"
 	ModelOperationContentTypeAudio  = "AUDIO"
+	ModelOperationContentTypeVideo  = "VIDEO"
 	ModelOperationContentTypeJSON   = "JSON"
 	ModelOperationContentTypeBinary = "BINARY"
 )

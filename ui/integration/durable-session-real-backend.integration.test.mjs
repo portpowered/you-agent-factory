@@ -265,7 +265,7 @@ async function assertDispatchDetailScenario({
       .first()
       .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
     await browserPage.page
-      .getByText("fake", { exact: true })
+      .getByText("live-provider", { exact: true })
       .first()
       .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
     await browserPage.page

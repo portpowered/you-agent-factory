@@ -2,8 +2,26 @@ package runtimebinding
 
 import (
 	"context"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/workersettings"
 	"sync"
+
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"github.com/portpowered/infinite-you/pkg/services/models"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
+
+// SessionProjectionOwner is the existing per-session runtime state needed to
+// project a live session. It is retained on the canonical session record.
+type SessionProjectionOwner interface {
+	BuildSessionProjectionContext(context.Context, *livesession.LiveSession) (factorysessions.ProjectionContext, error)
+}
 
 // ActiveRuntime is Factory Session's selection of one running runtime handle.
 type ActiveRuntime struct {
@@ -114,7 +132,189 @@ func runtimeContext(fallback context.Context, active *ActiveRuntime) context.Con
 // SessionState is the opaque Factory Runtime payload retained by a live
 // Factory Session.
 type SessionState struct {
-	Instance RuntimeInstance
-	Handle   RuntimeHandle
-	Spec     any
+	Instance      RuntimeInstance
+	Handle        RuntimeHandle
+	Spec          any
+	Owner         SessionProjectionOwner
+	Invoker       roles.CanonicalSessionInvoker
+	ModelInvoker  workers.ModelInvoker
+	InputResolver roles.InvocationInputResolver
+	// Process and Diagnostics are application lifecycle values owned by this
+	// canonical session record. The process root routes transport commands by
+	// session ID instead of retaining another runtime-opening graph.
+	Process                roles.ProcessRuntime
+	Diagnostics            factoryruntime.RuntimeLogDiagnostics
+	FactoryRuntime         factoryruntime.Service
+	ModelsScope            models.RuntimeScopeRef
+	WorkerSessions         workersessions.ObservationService
+	Logger                 *zap.Logger
+	Reader                 roles.RuntimeReader
+	Projections            recordings.ProjectionService
+	Clock                  factoryruntime.Clock
+	OperatorSettingsPath   string
+	Recordings             recordings.Service
+	ReplayMetadataWarnings []recordings.MetadataMismatchWarning
+	ResumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
+	OrderlyStop            func(context.Context) error
+	// Activation retains lifecycle cleanup on the canonical session record.
+	Activation         interface{ Close(context.Context) error }
+	mockWorkersMu      sync.RWMutex
+	mockWorkers        *workers.MockWorkersConfig
+	operatorDefaultsMu sync.RWMutex
+	operatorDefaults   operatorsettings.ResolvedDefaults
+	workerSettingsMu   sync.RWMutex
+	workerSettings     *factoryruntime.JavaScriptWorkerSettings
+	startRequestMu     sync.RWMutex
+	startRequestID     string
+	controlMu          sync.Mutex
+	lastControlKey     string
+	lastControlResult  factorysessions.SessionControlResult
+}
+
+func (s *SessionState) inheritApplicationValues(previous *SessionState) {
+	if s == nil || previous == nil {
+		return
+	}
+	s.FactoryRuntime = previous.FactoryRuntime
+	s.ModelsScope = previous.ModelsScope
+	s.WorkerSessions = previous.WorkerSessions
+	s.SetMockWorkers(previous.MockWorkersConfig())
+	s.SetOperatorDefaults(previous.OperatorDefaults())
+	s.SetWorkerSettings(previous.WorkerSettingsSnapshot())
+	s.Logger = previous.Logger
+	s.Reader = previous.Reader
+	s.Projections = previous.Projections
+	s.Clock = previous.Clock
+	s.OperatorSettingsPath = previous.OperatorSettingsPath
+	s.Recordings = previous.Recordings
+	s.ReplayMetadataWarnings = append([]recordings.MetadataMismatchWarning(nil), previous.ReplayMetadataWarnings...)
+	if previous.ResumeRecoveryMetadata != nil {
+		metadata := *previous.ResumeRecoveryMetadata
+		s.ResumeRecoveryMetadata = &metadata
+	}
+	s.OrderlyStop = previous.OrderlyStop
+}
+
+func (s *SessionState) SetMockWorkers(config *workers.MockWorkersConfig) {
+	if s == nil {
+		return
+	}
+	s.mockWorkersMu.Lock()
+	s.mockWorkers = config.Clone()
+	s.mockWorkersMu.Unlock()
+}
+
+func (s *SessionState) MockWorkersConfig() *workers.MockWorkersConfig {
+	if s == nil {
+		return nil
+	}
+	s.mockWorkersMu.RLock()
+	config := s.mockWorkers.Clone()
+	s.mockWorkersMu.RUnlock()
+	return config
+}
+
+func (s *SessionState) SetOperatorDefaults(defaults operatorsettings.ResolvedDefaults) {
+	if s == nil {
+		return
+	}
+	s.operatorDefaultsMu.Lock()
+	s.operatorDefaults = defaults
+	s.operatorDefaultsMu.Unlock()
+}
+
+func (s *SessionState) OperatorDefaults() operatorsettings.ResolvedDefaults {
+	if s == nil {
+		return operatorsettings.ResolvedDefaults{}
+	}
+	s.operatorDefaultsMu.RLock()
+	defaults := s.operatorDefaults
+	s.operatorDefaultsMu.RUnlock()
+	return defaults
+}
+
+func (s *SessionState) SetWorkerSettings(settings *factoryruntime.JavaScriptWorkerSettings) {
+	if s == nil {
+		return
+	}
+	s.workerSettingsMu.Lock()
+	s.workerSettings = workersettings.Clone(settings)
+	s.workerSettingsMu.Unlock()
+}
+
+func (s *SessionState) WorkerSettingsSnapshot() *factoryruntime.JavaScriptWorkerSettings {
+	if s == nil {
+		return nil
+	}
+	s.workerSettingsMu.RLock()
+	settings := workersettings.Clone(s.workerSettings)
+	s.workerSettingsMu.RUnlock()
+	return settings
+}
+
+func (s *SessionState) SetStartRequestID(requestID string) {
+	if s == nil {
+		return
+	}
+	s.startRequestMu.Lock()
+	s.startRequestID = requestID
+	s.startRequestMu.Unlock()
+}
+
+func (s *SessionState) StartRequestID() string {
+	if s == nil {
+		return ""
+	}
+	s.startRequestMu.RLock()
+	defer s.startRequestMu.RUnlock()
+	return s.startRequestID
+}
+
+// ApplyControlOnce serializes controls on one canonical session generation.
+// A repeated committed control ID returns its original result.
+func (s *SessionState) ApplyControlOnce(key string, apply func() (factorysessions.SessionControlResult, error)) (factorysessions.SessionControlResult, error) {
+	if s == nil {
+		return factorysessions.SessionControlResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	s.controlMu.Lock()
+	defer s.controlMu.Unlock()
+	if key != "" && key == s.lastControlKey {
+		return s.lastControlResult, nil
+	}
+	result, err := apply()
+	if err == nil && key != "" {
+		s.lastControlKey = key
+		s.lastControlResult = result
+	}
+	return result, err
+}
+
+func (s *SessionState) CanReplaceTerminatedSession() bool {
+	if s == nil {
+		return false
+	}
+	s.controlMu.Lock()
+	defer s.controlMu.Unlock()
+	return (s.lastControlResult.Operation == factorysessions.SessionControlCancel || s.lastControlResult.Operation == factorysessions.SessionControlTerminate) &&
+		s.lastControlResult.Status == factorysessions.LifecycleStatusSucceeded
+}
+
+// InheritTerminalControl carries the committed cancellation fence across a
+// same-ID replacement. Retried Chat controls then replay the old outcome
+// instead of terminating the newly started runtime.
+func (s *SessionState) InheritTerminalControl(previous *SessionState) {
+	if s == nil || previous == nil || s == previous {
+		return
+	}
+	previous.controlMu.Lock()
+	key := previous.lastControlKey
+	result := previous.lastControlResult
+	previous.controlMu.Unlock()
+	if key == "" || (result.Operation != factorysessions.SessionControlCancel && result.Operation != factorysessions.SessionControlTerminate) {
+		return
+	}
+	s.controlMu.Lock()
+	s.lastControlKey = key
+	s.lastControlResult = result
+	s.controlMu.Unlock()
 }

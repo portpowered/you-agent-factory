@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 )
 
 type stdioMCPClient struct {
@@ -109,6 +112,57 @@ func (c *stdioMCPClient) callTool(t *testing.T, name string, arguments any) mcpJ
 		"name":      name,
 		"arguments": json.RawMessage(encoded),
 	})
+}
+
+func decodeToolResponse[T any](t *testing.T, response mcpJSONRPCResponse) mcpfactorysession.ToolResponse[T] {
+	t.Helper()
+	if response.Error != nil {
+		t.Fatalf("tools/call protocol error = %#v", response.Error)
+	}
+	content, ok := response.Result["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatalf("tools/call result missing content: %#v", response.Result)
+	}
+	first, ok := content[0].(map[string]any)
+	if !ok {
+		t.Fatalf("tools/call content[0] = %#v, want object", content[0])
+	}
+	isError, _ := response.Result["isError"].(bool)
+	if isError {
+		text, _ := first["text"].(string)
+		if text == "" {
+			t.Fatalf("tools/call domain error missing readable text: %#v", response.Result)
+		}
+		structured, ok := response.Result["structuredContent"].(map[string]any)
+		if !ok {
+			t.Fatalf("tools/call domain error missing structuredContent: %#v", response.Result)
+		}
+		raw, err := json.Marshal(structured)
+		if err != nil {
+			t.Fatalf("marshal structuredContent: %v", err)
+		}
+		var toolResponse mcpfactorysession.ToolResponse[T]
+		if err := json.Unmarshal(raw, &toolResponse); err != nil {
+			t.Fatalf("unmarshal tool response from structuredContent: %v", err)
+		}
+		if toolResponse.Error == nil {
+			t.Fatalf("tools/call domain error missing typed Error: %#v", response.Result)
+		}
+		wantText := toolResponse.Error.Message
+		if strings.TrimSpace(wantText) == "" {
+			wantText = "tool execution failed"
+		}
+		if text != wantText {
+			t.Fatalf("tools/call domain error text = %q, want %q", text, wantText)
+		}
+		return toolResponse
+	}
+	text, _ := first["text"].(string)
+	var toolResponse mcpfactorysession.ToolResponse[T]
+	if err := json.Unmarshal([]byte(text), &toolResponse); err != nil {
+		t.Fatalf("unmarshal tool response: %v", err)
+	}
+	return toolResponse
 }
 
 func toolNamesFromListResult(t *testing.T, result map[string]any) []string {

@@ -59,6 +59,12 @@ func (launcher modelsProcessLauncher) Start(ctx context.Context, spec serviceedg
 		return nil, err
 	}
 	environment := appendManagedBackendEnvironment(spec.Env, launch.Env)
+	if spec.Backend == "localai-llamacpp" {
+		// The gallery run.sh treats this as a launcher switch, while the direct
+		// gRPC binary parses even an empty value as an RPC endpoint. It must be
+		// absent from the child's environment.
+		environment = removeManagedBackendEnvironmentKey(environment, "LLAMACPP_GRPC_SERVERS")
+	}
 	managedSpec := managedchild.Spec{
 		Command: launch.Command, Args: append([]string(nil), launch.Args...),
 		Env: environment, WorkDir: launch.WorkDir,
@@ -144,6 +150,17 @@ func appendManagedBackendEnvironment(base, additions []string) []string {
 		environment = replaceManagedBackendEnvironmentKey(environment, key, addition)
 	}
 	return environment
+}
+
+func removeManagedBackendEnvironmentKey(environment []string, key string) []string {
+	filtered := environment[:0]
+	for _, entry := range environment {
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok || !strings.EqualFold(name, key) {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
 }
 
 func replaceManagedBackendEnvironmentKey(environment []string, key, replacement string) []string {

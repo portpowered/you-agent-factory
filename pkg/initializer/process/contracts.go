@@ -74,30 +74,19 @@ type RunIntent struct {
 }
 
 type MCPIntent struct {
-	FixtureCatalogPath string
-	RuntimeBacked      bool
-	ProjectRoot        string
-	HomeDir            string
-	Stdin              io.Reader
-	Stdout             io.Writer
+	ProjectRoot string
+	Stdin       io.Reader
+	Stdout      io.Writer
 }
 
-// RunSelection is one invocation-local CLI run choice. Initializer forwards
-// the typed customer intent unchanged; the already-injected selection and
-// opening edge returns an inert application with its complete lifecycle plan.
+// RunSelection executes one invocation-local CLI run choice with the typed
+// customer intent and already-injected runtime operations.
 type RunSelection interface {
-	Open(context.Context, RunIntent) (initializer.RunApplication, error)
+	Run(context.Context, RunIntent) error
 }
 
 type RunHandler func(context.Context, RunIntent, RunSelection) error
 type StdioHandler func(context.Context, MCPIntent) error
-
-// StdioApplicationOpener opens one lifecycle-ready stdio application. Product
-// selection and service opening stay behind the injected operation; the
-// Initializer only activates the returned lifecycle.
-type StdioApplicationOpener interface {
-	OpenStdio(context.Context, MCPIntent) (initializer.RunApplication, error)
-}
 
 type Initializer interface {
 	ProcessContext(context.Context) (context.Context, func())
@@ -131,12 +120,12 @@ type WorkerRecordingReader interface {
 	LoadWorkerRecording(context.Context, string) (json.RawMessage, error)
 }
 
-// DetachedOperationsCapability is the neutral process handoff for the
-// Factory Sessions detached operation view. The initializer retains the
+// FactorySessionsCapability is the neutral process handoff for the
+// Factory Sessions root. The initializer retains the
 // selected capability without importing the Sessions service; pkg/root
 // reifies the opaque value at the caller-facing boundary.
-type DetachedOperationsCapability interface {
-	DetachedOperations() any
+type FactorySessionsCapability interface {
+	FactorySessions() any
 }
 
 // RuntimeMetricsQueryCapability is the neutral process handoff for the
@@ -145,13 +134,6 @@ type DetachedOperationsCapability interface {
 // pkg/root reifies the opaque value at the caller-facing boundary.
 type RuntimeMetricsQueryCapability interface {
 	RuntimeMetricsQuery() any
-}
-
-// ExecutionRuntimeOpeningCapability is the neutral process handoff for the
-// canonical Factory Sessions durable-execution opening. The initializer keeps
-// the capability opaque; pkg/root reifies its public service-owned contract.
-type ExecutionRuntimeOpeningCapability interface {
-	ExecutionRuntimeOpening() any
 }
 
 // RuntimeCostsQueryCapability is the neutral process handoff for the

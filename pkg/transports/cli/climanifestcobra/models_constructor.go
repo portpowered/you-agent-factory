@@ -566,5 +566,9 @@ func NewMCPCommandFromManifest(
 		return nil, fmt.Errorf("build server MCP command: find projected command: %w", err)
 	}
 	root.RemoveCommand(parent)
+	_, _, err = parent.Find([]string{serveRecord.Name})
+	if err != nil {
+		return nil, fmt.Errorf("build server MCP command: find projected MCP command: %w", err)
+	}
 	return parent, nil
 }

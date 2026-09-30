@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -170,22 +170,143 @@ func (script apiLiveSessionScript) ResumeLiveFactorySession(ctx context.Context,
 	return script.resume(ctx, sessionID, request)
 }
 
-func newDurableAPITestServer(execution factorysessionmapping.DurableExecution) *api.Server {
+func newDurableAPITestServer(execution scriptedDurableExecution) *api.Server {
 	return newDurableAndLiveAPITestServer(execution, nil)
 }
 
-func newDurableAndLiveAPITestServer(execution factorysessionmapping.DurableExecution, live apisurface.LiveSessionAPI) *api.Server {
+func newDurableAndLiveAPITestServer(execution scriptedDurableExecution, live apisurface.LiveSessionAPI) *api.Server {
 	preparation := canonicalAPIRequestPreparation()
-	var durable *factorysessionmapping.DurableAPI
-	if execution != nil {
-		durable = factorysessionmapping.NewDurableAPI(execution)
-	}
 	liveLister, _ := live.(factorysessionshttp.LiveSessionListReader)
+	var sessionsRoot factorysessions.Service
+	if execution != nil {
+		sessionsRoot = canonicalDurableStartTestRoot{execution: execution}
+	}
 	return newAPIServerFromRoles(
 		nil, nil, live, nil, nil, nil, nil, nil, nil, nil,
-		durable, durable, durable, durable, execution, liveLister, nil, nil,
-		nil, nil, preparation, zap.NewNop(),
+		nil, nil, nil, nil, execution, liveLister, nil, nil,
+		nil, nil, preparation, zap.NewNop(), sessionsRoot,
 	)
+}
+
+type scriptedDurableExecution interface {
+	factorysessions.DurableExecutionService
+	factorysessions.SessionInventoryService
+}
+
+// canonicalDurableStartTestRoot exercises the HTTP Start boundary with the
+// existing scripted execution fixture; it has no production construction path.
+type canonicalDurableStartTestRoot struct {
+	factorysessions.Service
+	execution scriptedDurableExecution
+}
+
+func (root canonicalDurableStartTestRoot) ListFactorySessions(context.Context) ([]factorysessions.ReadProjection, error) {
+	return nil, nil
+}
+
+func (root canonicalDurableStartTestRoot) CloseFactorySession(context.Context, string) error {
+	return nil
+}
+
+func (root canonicalDurableStartTestRoot) ListSessions(ctx context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+	return root.execution.ListSessions(ctx, request)
+}
+
+func (root canonicalDurableStartTestRoot) Get(ctx context.Context, request factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
+	if request.Mode == factorysessions.SessionOperationModeDurable {
+		read, err := root.execution.GetSession(ctx, request.SessionID)
+		return factorysessions.SessionGetResult{Durable: &read}, err
+	}
+	return factorysessions.SessionGetResult{Session: factorysessions.SessionView{SessionID: request.SessionID, FactoryDir: "."}}, nil
+}
+
+func (root canonicalDurableStartTestRoot) ReadResult(ctx context.Context, request factorysessions.SessionResultReadRequest) (factorysessions.SessionResultReadResult, error) {
+	result, err := root.execution.GetResult(ctx, request.SessionID, request.Request)
+	return factorysessions.SessionResultReadResult{SessionID: request.SessionID, Mode: request.Mode, Durable: &factorysessions.SessionDurableResult{
+		SessionID: result.SessionID, Status: result.ResultStatus, SessionStatus: result.SessionStatus,
+		Mode: result.Mode, IncludeArtifacts: result.IncludeArtifacts, PrimaryResult: result.PrimaryResult,
+		ArtifactIDs: result.ArtifactIDs, ArtifactRefs: result.ArtifactRefs, Failure: result.Failure, Availability: result.Availability,
+	}}, err
+}
+
+func (root canonicalDurableStartTestRoot) QueryDispatches(ctx context.Context, request factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error) {
+	return root.execution.QueryDispatches(ctx, request)
+}
+
+func (root canonicalDurableStartTestRoot) QueryEvents(ctx context.Context, request factorysessions.SessionEventQueryRequest) (factorysessions.EventReadResult, error) {
+	return root.execution.ReadEvents(ctx, request.SessionID, request.Reconnect)
+}
+
+func (root canonicalDurableStartTestRoot) QueryEventStream(ctx context.Context, request factorysessions.SessionEventQueryRequest) (*factorydefinitions.FactoryEventStream, error) {
+	result, err := root.QueryEvents(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return factorysessions.MaterializeEventReadStream(result), nil
+}
+
+func (root canonicalDurableStartTestRoot) ProbeEvents(ctx context.Context, request factorysessions.SessionEventQueryRequest) error {
+	_, err := root.execution.ReadEvents(ctx, request.SessionID, request.Reconnect)
+	return err
+}
+
+func (root canonicalDurableStartTestRoot) InspectDispatch(ctx context.Context, request factorysessions.SessionDispatchInspectRequest) (factorysessions.DispatchDetail, error) {
+	return root.execution.GetDispatch(ctx, request.SessionID, request.DispatchID)
+}
+
+func (root canonicalDurableStartTestRoot) QueryArtifacts(ctx context.Context, request factorysessions.SessionArtifactQueryRequest) (factorysessions.ListArtifactsResult, error) {
+	return root.execution.ListArtifacts(ctx, request.SessionID)
+}
+
+func (root canonicalDurableStartTestRoot) InspectArtifact(ctx context.Context, request factorysessions.SessionArtifactInspectRequest) (factorysessions.ArtifactDetail, error) {
+	return root.execution.GetArtifact(ctx, request.SessionID, request.ArtifactID)
+}
+
+func (root canonicalDurableStartTestRoot) Start(ctx context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	legacy := factorysessions.StartRequest{
+		RequestID: request.Correlation.RequestID, Source: request.Source, Args: request.Args,
+		Orchestrator: request.Orchestrator, RequestedPolicy: request.Policy,
+		Runtime: request.RuntimeOptions, ProjectRoot: request.FolderPath, PersistencePolicy: request.Persistence,
+	}
+	if request.Wait.TimeoutMillis != 0 || request.Wait.CancelOnTimeout {
+		timeout := request.Wait.TimeoutMillis
+		legacy.Wait = &factorysessions.WaitOptions{TimeoutMillis: &timeout, CancelOnTimeout: request.Wait.CancelOnTimeout}
+	}
+	if request.Synchronous {
+		result, err := root.execution.StartSync(ctx, legacy)
+		return factorysessions.SessionStartResult{SessionID: result.SessionID, Mode: factorysessions.SessionOperationModeDurable, Sync: &result}, err
+	}
+	result, err := root.execution.StartAsync(ctx, legacy)
+	return factorysessions.SessionStartResult{SessionID: result.SessionID, Mode: factorysessions.SessionOperationModeDurable, Async: &result}, err
+}
+
+func (root canonicalDurableStartTestRoot) Control(ctx context.Context, request factorysessions.SessionControlRequest) (factorysessions.SessionControlResult, error) {
+	var result factorysessions.LifecycleControlResult
+	var err error
+	switch request.Operation {
+	case factorysessions.SessionControlPause:
+		result, err = root.execution.Pause(ctx, request.SessionID, request.Control)
+	case factorysessions.SessionControlResume:
+		result, err = root.execution.Resume(ctx, request.SessionID, request.Control)
+	case factorysessions.SessionControlCancel:
+		result, err = root.execution.Cancel(ctx, request.SessionID, request.Control)
+	case factorysessions.SessionControlTerminate:
+		result, err = root.execution.Terminate(ctx, request.SessionID, request.Control)
+	case factorysessions.SessionControlApprove:
+		result, err = root.execution.Approve(ctx, request.SessionID, *request.Approve)
+	case factorysessions.SessionControlRetryDispatch:
+		result, err = root.execution.RetryDispatch(ctx, request.SessionID, *request.Retry)
+	case factorysessions.SessionControlInterruptDispatch:
+		result, err = root.execution.InterruptDispatch(ctx, request.SessionID, *request.Interrupt)
+	default:
+		panic("unexpected canonical control operation in HTTP script")
+	}
+	return factorysessions.SessionControlResult{
+		SessionID: result.SessionID, Mode: factorysessions.SessionOperationModeDurable,
+		Operation: request.Operation, Outcome: result.Outcome, Status: result.Status,
+		Detail: result.Detail, ApprovalPreviewID: result.ApprovalPreviewID,
+		DispatchID: result.DispatchID, RetryDispatchID: result.RetryDispatchID, Links: result.Links,
+	}, err
 }
 
 func newWorkAPITestServer(work apisurface.WorkAPI) *api.Server {
@@ -195,7 +316,7 @@ func newWorkAPITestServer(work apisurface.WorkAPI) *api.Server {
 	)
 }
 
-func durableRoleHTTPServer(t *testing.T, execution factorysessionmapping.DurableExecution) string {
+func durableRoleHTTPServer(t *testing.T, execution scriptedDurableExecution) string {
 	t.Helper()
 	server := httptest.NewServer(newDurableAPITestServer(execution).Handler())
 	t.Cleanup(server.Close)
@@ -206,7 +327,7 @@ func durableRoleHTTPServer(t *testing.T, execution factorysessionmapping.Durable
 // execution contract. Tests must install every callback they exercise; it has
 // no storage, reduction, lifecycle, replay, or execution behavior of its own.
 type apiExecutionScript struct {
-	factorysessionmapping.DurableExecution
+	scriptedDurableExecution
 	startAsync               func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
 	startSync                func(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error)
 	resumeInterruptedSession func(context.Context, string, factorysessions.ResumeSessionRequest) (factorysessions.AsyncStartResult, error)

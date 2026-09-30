@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -72,6 +73,12 @@ func normalizeIdempotencyDocument(req StartRequest) (map[string]any, error) {
 	}
 	document := map[string]any{
 		"source": source,
+	}
+	if root := strings.TrimSpace(req.ProjectRoot); root != "" {
+		document["projectRoot"] = root
+	}
+	if req.PersistencePolicy != "" {
+		document["persistencePolicy"] = string(req.PersistencePolicy)
 	}
 	if len(req.Args) > 0 {
 		args, err := canonicalizeMap(req.Args)
@@ -389,7 +396,8 @@ func (s *JavaScriptRuntimeService) reserveStartSession(
 			return nil, err
 		}
 		placeholder := &runtimeSessionState{
-			session: SessionReadResult{SessionID: sessionID},
+			session:     SessionReadResult{SessionID: sessionID},
+			projectRoot: s.resolveRequestProjectRoot(normalized),
 		}
 		s.sessions[sessionID] = placeholder
 		s.startReplay[normalized.RequestID] = startReplayRecord{
@@ -445,6 +453,7 @@ func (s *JavaScriptRuntimeService) startWaitingSyncSession(
 	reserved.state.startRequest = cloneStartRequest(normalized)
 	reserved.state.resolvedSource = resolved
 	reserved.state.sourceContent = sourceContent
+	reserved.state.projectRoot = s.resolveRequestProjectRoot(normalized)
 	s.mu.Unlock()
 
 	if err := admission.launch(func() {
@@ -623,7 +632,18 @@ func (s *JavaScriptRuntimeService) ApplyLiveChange(
 	sessionID string,
 	request factorysessions.LiveChangeRequest,
 ) (factorysessions.LiveChangeResult, error) {
-	return s.runDurableLiveChange(ctx, sessionID, request, "")
+	return s.runDurableLiveChange(ctx, sessionID, request, "", nil)
+}
+
+func (s *JavaScriptRuntimeService) ApplyLiveChangeWithRuntime(ctx context.Context, sessionID string, request factorysessions.LiveChangeRequest, runtime workflowsource.Service, projectRoot string) (factorysessions.LiveChangeResult, error) {
+	state, err := s.snapshotSessionState(sessionID)
+	if err != nil {
+		return factorysessions.LiveChangeResult{}, err
+	}
+	if strings.TrimSpace(state.projectRoot) != "" && !strings.EqualFold(filepath.Clean(state.projectRoot), filepath.Clean(projectRoot)) {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrSessionNotFound
+	}
+	return s.runDurableLiveChange(ctx, sessionID, request, "", runtime)
 }
 
 // RecoverLiveChange closes an admitted durable live change after a restart or
@@ -634,7 +654,7 @@ func (s *JavaScriptRuntimeService) RecoverLiveChange(
 	sessionID string,
 	requestID string,
 ) (factorysessions.LiveChangeResult, error) {
-	return s.runDurableLiveChange(ctx, sessionID, factorysessions.LiveChangeRequest{}, requestID)
+	return s.runDurableLiveChange(ctx, sessionID, factorysessions.LiveChangeRequest{}, requestID, nil)
 }
 
 func (s *JavaScriptRuntimeService) runDurableLiveChange(
@@ -642,6 +662,7 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 	sessionID string,
 	request factorysessions.LiveChangeRequest,
 	recoverRequestID string,
+	runtimeOverride workflowsource.Service,
 ) (factorysessions.LiveChangeResult, error) {
 	if s == nil {
 		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
@@ -654,6 +675,9 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 		return factorysessions.LiveChangeResult{}, err
 	}
 	runtime := s.workerInvoker()
+	if runtimeOverride != nil {
+		runtime = runtimeOverride
+	}
 	if runtime == nil {
 		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
 			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
@@ -673,24 +697,11 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 		}
 	}
 	admission := runtimebinding.NewLiveChangeAdmission(runtime)
-	if admission == nil {
-		if _, requiresAdmission := runtime.(workflowsource.AdmittedResourceCapacityService); requiresAdmission {
-			return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
-				Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
-				Message: "live change coordination is unavailable",
-			}
-		}
-	} else {
-		release, admissionErr := admission.AcquireLiveChange(ctx, id)
-		if admissionErr != nil {
-			return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
-				Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
-				Message: "live change coordination is unavailable",
-				Cause:   admissionErr,
-			}
-		}
-		defer release()
+	release, admissionErr := acquireDurableLiveChangeAdmission(ctx, id, runtime, admission)
+	if admissionErr != nil {
+		return factorysessions.LiveChangeResult{}, admissionErr
 	}
+	defer release()
 	stateProvider := s.durableLiveChangeStateProvider(id, events)
 	if s.liveChangeCoordinator == nil {
 		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
@@ -717,6 +728,32 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 		}
 	}
 	return result, applyErr
+}
+
+func acquireDurableLiveChangeAdmission(
+	ctx context.Context,
+	sessionID string,
+	runtime workflowsource.Service,
+	admission factorysessions.LiveChangeAdmission,
+) (func(), error) {
+	if admission == nil {
+		if _, required := runtime.(workflowsource.AdmittedResourceCapacityService); required {
+			return nil, &factorysessions.LiveChangeError{
+				Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+				Message: "live change coordination is unavailable",
+			}
+		}
+		return func() {}, nil
+	}
+	release, err := admission.AcquireLiveChange(ctx, sessionID)
+	if err != nil {
+		return nil, &factorysessions.LiveChangeError{
+			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+			Message: "live change coordination is unavailable",
+			Cause:   err,
+		}
+	}
+	return release, nil
 }
 
 func (s *JavaScriptRuntimeService) durableLiveChangeStateProvider(

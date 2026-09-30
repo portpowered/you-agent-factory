@@ -152,10 +152,10 @@ func (c *attachmentCache) commitWorkerChildProjection(sessionID, parentItemID st
 }
 
 // dispatchFactoryInvocation calls invoke -- one of the two
-// factorysessions.Service.InvokeFactorySession-forwarding calls
+// factorysessions.Service.Invoke calls
 // startFactorySessionForEpisode/invokeFactorySessionForEpisode make -- and
 // returns its result, error, and liveDelivered=false unchanged. When
-// s.responseBridge, s.chatSessions, and s.factoryTarget are all configured, it
+// s.responseBridge, s.chatSessions, and s.factorySessions are all configured, it
 // instead calls s.responseBridge with invoke and a liveDrain closure over
 // s.liveDrainTurnUpdates: the injected collaborator (see acp.ResponseBridge's
 // own doc comment) starts the Chat Sessions-owned Factory response-event
@@ -192,7 +192,7 @@ func (s *Server) dispatchFactoryInvocation(
 	factorySessionID string,
 	invoke func(context.Context) (factorysessions.InvocationResult, error),
 ) (result factorysessions.InvocationResult, liveDelivered bool, err error) {
-	if s.responseBridge == nil || s.chatSessions == nil || s.factoryTarget == nil {
+	if s.responseBridge == nil || s.chatSessions == nil || s.factorySessions == nil {
 		result, err = invoke(ctx)
 		return result, false, err
 	}

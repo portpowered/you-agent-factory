@@ -121,7 +121,7 @@ func TestLogicalTargetToAPI_DefaultNamedAndProvider(t *testing.T) {
 	}
 }
 
-func TestOpenRequestFromAPI_DetachesAndNormalizesPublicInput(t *testing.T) {
+func TestSessionStartRequestFromAPI_DetachesAndNormalizesPublicInput(t *testing.T) {
 	t.Parallel()
 
 	name := " beta "
@@ -132,7 +132,7 @@ func TestOpenRequestFromAPI_DetachesAndNormalizesPublicInput(t *testing.T) {
 		ValidateOnly: &validateOnly,
 	}
 
-	mapped := factorysession.OpenRequestFromAPI(request)
+	mapped := factorysession.SessionStartRequestFromAPI(request)
 	name = "changed"
 	validateOnly = false
 
@@ -142,26 +142,30 @@ func TestOpenRequestFromAPI_DetachesAndNormalizesPublicInput(t *testing.T) {
 	if mapped.Target == nil || mapped.Target.Kind != factorysessions.TargetKindNamed || mapped.Target.Name != "beta" {
 		t.Fatalf("open target = %#v, want trimmed named target", mapped.Target)
 	}
+	if mapped.Mode != factorysessions.SessionOperationModeLive || !mapped.ActivationOnly ||
+		mapped.RuntimeSelection == nil || mapped.RuntimeSelection.Mode != factorysessions.SessionRuntimeModeService {
+		t.Fatalf("start request = %#v, want live service-mode activation", mapped)
+	}
 }
 
-func TestOpenResultToAPI_PreservesHintsTargetsAndSession(t *testing.T) {
+func TestSessionOpenResultToAPI_PreservesHintsTargetsAndSession(t *testing.T) {
 	t.Parallel()
 
-	result := &factorysessions.OpenResult{
-		FolderPath:      " /workspace ",
-		InitsNewFactory: true,
-		SessionID:       "session-beta",
+	result := &factorysessions.SessionOpenResult{
+		FolderPath:            " /workspace ",
+		InitializedNewFactory: true,
+		SessionID:             "session-beta",
 		Targets: []factorysessions.Target{{
 			Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
 		}},
-		Session: &factorysessions.ScopedLiveSessionSummary{
-			ID: "session-beta", FactoryDir: "/workspace/factory/beta",
+		Session: &factorysessions.SessionView{
+			SessionID: "session-beta", FactoryDir: "/workspace/factory/beta",
 			FolderPath: "/workspace", Project: "demo",
 			Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
 		},
 	}
 
-	response := factorysession.OpenResultToAPI(result)
+	response := factorysession.SessionOpenResultToAPI(result)
 	if response.InitsNewFactory == nil || !*response.InitsNewFactory ||
 		response.FolderPath == nil || *response.FolderPath != "/workspace" {
 		t.Fatalf("open hints = %#v, want init hint and trimmed folder", response)

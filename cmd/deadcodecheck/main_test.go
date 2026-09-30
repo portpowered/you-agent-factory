@@ -126,6 +126,16 @@ func TestRunBaselineMatchWritesCurrentReport(t *testing.T) {
 	}
 }
 
+func TestNormalizeReportOmitsPlatformSpecificFindings(t *testing.T) {
+	report := "pkg\\runner_windows.go:1:2: unreachable func: windowsOnly\n" +
+		"pkg/runner_unix.go: unreachable func: unixOnly\n" +
+		"pkg/runner_arm64.go: unreachable func: armOnly\n" +
+		"pkg/runner.go:3:4: unreachable func: portable\n"
+	if got, want := normalizeReport(report), "pkg/runner.go: unreachable func: portable\n"; got != want {
+		t.Fatalf("normalizeReport() = %q, want %q", got, want)
+	}
+}
+
 func TestRunBaselineDriftReportsCurrentAndBaselinePaths(t *testing.T) {
 	restore := stubDeadcodecheckCommand(t, "pkg/foo.go: Current\n", nil)
 	defer restore()

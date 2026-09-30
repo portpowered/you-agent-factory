@@ -69,14 +69,14 @@ func TestProductionCatalogProjectsCanonicalDiscoveryMetadata(t *testing.T) {
 	}
 }
 
-func TestProductionManifestProjectsOnlySubagentAndDeclaredResourcesAndSkills(t *testing.T) {
+func TestProductionManifestProjectsCanonicalToolsAndDeclaredResourcesAndSkills(t *testing.T) {
 	root := testutil.MustRepoPath(t, ".")
 	manifest, err := discoverygen.LoadAuthoredManifest(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Tools) != 1 || manifest.Tools[0].Name != mcpfactorysession.ToolSubagent {
-		t.Fatalf("manifest tools = %#v, want only %s", manifest.Tools, mcpfactorysession.ToolSubagent)
+	if len(manifest.Tools) != canonicalFactorySessionToolCount {
+		t.Fatalf("manifest tool count = %d, want %d", len(manifest.Tools), canonicalFactorySessionToolCount)
 	}
 	if len(manifest.Resources) != 4 || len(manifest.Skills) != 1 {
 		t.Fatalf("manifest surface sizes = tools:%d resources:%d skills:%d", len(manifest.Tools), len(manifest.Resources), len(manifest.Skills))
@@ -85,7 +85,9 @@ func TestProductionManifestProjectsOnlySubagentAndDeclaredResourcesAndSkills(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(metadata.Tools) != 1 || metadata.Tools[manifest.Tools[0].ID].Name != mcpfactorysession.ToolSubagent {
+	if len(metadata.Tools) != canonicalFactorySessionToolCount ||
+		metadata.Tools["mcp.tool.you.subagent"].Name != mcpfactorysession.ToolSubagent ||
+		metadata.Tools["mcp.tool.you.factory_session.list"].Name != mcpfactorysession.ToolListSessions {
 		t.Fatalf("projected tools = %#v", metadata.Tools)
 	}
 }

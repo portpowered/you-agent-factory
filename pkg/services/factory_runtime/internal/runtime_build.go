@@ -203,19 +203,19 @@ func (service runtimeWorkersServiceWithProgress) ResolveTemplateFields(
 	)
 }
 
-type runtimeOpeningWithFlush struct {
-	recordings.RuntimeOpening
+type runtimeScopeWithFlush struct {
+	recordings.RuntimeScopeService
 	flushInterval         time.Duration
 	resumeCanonicalEvents []factorydefinitions.FactoryEvent
 }
 
-func (opening runtimeOpeningWithFlush) OpenRuntime(
+func (opening runtimeScopeWithFlush) OpenRuntime(
 	ctx context.Context,
 	request recordings.RuntimeScopeRequest,
 ) (recordings.RuntimeScopeResult, error) {
 	request.FlushInterval = opening.flushInterval
 	request.ReplayEvents = cloneFactoryEvents(opening.resumeCanonicalEvents)
-	return opening.RuntimeOpening.OpenRuntime(ctx, request)
+	return opening.RuntimeScopeService.OpenRuntime(ctx, request)
 }
 
 // newRuntimeBuild constructs the canonical runtime-build service from decomposed process
@@ -261,7 +261,7 @@ func NewRuntimeBuild(
 	completionFactory DispatchCompletionFactory,
 	petriMutationRecorder factory.PetriMutationRecorder,
 	worldStateProjector factory.WorldStateProjector,
-	recordingsRuntime recordings.RuntimeOpening,
+	recordingsRuntime recordings.RuntimeScopeService,
 	loadFactory factory.LoadedFactoryLoader,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (*runtimebuild.Service, error) {
@@ -372,7 +372,7 @@ func buildBundle(
 	runtimeFactory *RuntimeFactory,
 	dispatchCompleted func(string),
 	worldStateProjector factory.WorldStateProjector,
-	recordingsRuntime recordings.RuntimeOpening,
+	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (*factoryhost.Bundle, error) {
 	loadedFactoryCfg, sessionID, initialFactory, err := resolveBundleInputs(
@@ -426,8 +426,8 @@ func buildBundle(
 		spec.CompletionPlanner,
 		spec.PetriMutationRecorder,
 		worldStateProjector,
-		runtimeOpeningWithFlush{
-			RuntimeOpening:        recordingsRuntime,
+		runtimeScopeWithFlush{
+			RuntimeScopeService:   recordingsRuntime,
 			flushInterval:         recordFlushInterval,
 			resumeCanonicalEvents: cloneFactoryEvents(spec.ResumeCanonicalEvents),
 		},
@@ -502,7 +502,7 @@ func newRuntimeWorkersService(
 		invocationSkipPermissionsOverride: invocationOverride,
 		factorySessionID:                  canonicalSessionID,
 		runtimeID:                         spec.RuntimeInstanceID,
-		recordingID:                       workerRecordingIdentity(spec.RuntimeInstanceID, spec.RecordPath),
+		recordingID:                       workerRecordingIdentity(spec.RuntimeInstanceID),
 	}
 	if runtimeFactory != nil && spec.LoadedFactoryCfg != nil {
 		resolver := runtime.NewWorkstationRequestExecutor(runtime.WorkstationRequestExecutorConfig{
@@ -514,7 +514,7 @@ func newRuntimeWorkersService(
 			WorkflowContext:            RuntimeWorkflowContext(spec.LoadedFactoryCfg.FactoryConfig(), canonicalSessionID),
 			FactorySessionID:           canonicalSessionID,
 			RuntimeID:                  spec.RuntimeInstanceID,
-			RecordingID:                workerRecordingIdentity(spec.RuntimeInstanceID, spec.RecordPath),
+			RecordingID:                workerRecordingIdentity(spec.RuntimeInstanceID),
 			NewID:                      runtimeFactory.newID,
 			PromptRenderer:             service,
 			TemplateFieldResolver:      service,
@@ -563,7 +563,7 @@ func setBundleProgressPublisher(bundle *factoryhost.Bundle, publisher workers.Pr
 func resolveBundleInputs(
 	spec runtimebuild.SessionBuildSpec,
 	defaultSessionID string,
-	recordingsRuntime recordings.RuntimeOpening,
+	recordingsRuntime recordings.RuntimeScopeService,
 	initialFactorySnapshot InitialFactorySnapshotFactory,
 ) (factorydefinitions.LoadedFactorySource, string, *factorydefinitions.FactorySnapshot, error) {
 	loadedFactoryCfg, ok := spec.LoadedFactoryCfg.(factorydefinitions.LoadedFactorySource)

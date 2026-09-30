@@ -50,4 +50,6 @@ type Service interface {
 		context.Context,
 		models.ReleaseModelLeaseRequest,
 	) (models.ReleaseModelLeaseResult, error)
+	ClaimInvocationLease(context.Context, models.InvokeModelRequest) (models.ModelLease, error)
+	ReleaseInvocationLease(context.Context, models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error)
 }

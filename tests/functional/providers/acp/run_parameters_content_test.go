@@ -21,7 +21,7 @@ func TestYouRunUsesPinnedACPWireGoldensAndProjectsTerminalOutput(t *testing.T) {
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"golden ACP request"}`))
-	writeACPWorker(t, dir, "cursor-acp")
+	writeACPWorker(t, dir, "cursor")
 	writeGoldenSentinelWorkstation(t, dir)
 	fixture := goldenACPFixture("success")
 
@@ -68,7 +68,7 @@ func assertGoldenProviderSession(t *testing.T, events []factoryapi.FactoryEvent)
 			t.Fatalf("decode inference response: %v", err)
 		}
 		if payload.ProviderSession != nil && payload.ProviderSession.Provider != nil && payload.ProviderSession.Id != nil &&
-			*payload.ProviderSession.Provider == "cursor-acp" && *payload.ProviderSession.Id == "sess_abc123def456" {
+			*payload.ProviderSession.Provider == "cursor" && *payload.ProviderSession.Id == "sess_abc123def456" {
 			return
 		}
 	}
@@ -90,7 +90,7 @@ func assertGoldenResponseStream(t *testing.T, events []factoryapi.FactoryRespons
 	t.Helper()
 	var lines []string
 	for _, event := range events {
-		if event.Provenance.Provider != "cursor-acp" {
+		if event.Provenance.Provider != "cursor" {
 			continue
 		}
 		itemID := ""

@@ -1106,6 +1106,24 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/GenericModelInvocationRequest'
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - request
+              properties:
+                request:
+                  $ref: '#/components/schemas/GenericModelInvocationRequest'
+                files:
+                  type: array
+                  description: Binary uploads in the order of media inputs without content, contentBase64, or artifactRef. Each file is limited to 8 MiB.
+                  items:
+                    type: string
+                    format: binary
+            encoding:
+              request:
+                contentType: application/json
       responses:
         '200':
           description: Successful generic model invocation result.
@@ -5077,7 +5095,7 @@ components:
         diagnostics:
           $ref: '#/components/schemas/StringMap'
           description: |
-            Effective-readiness diagnostics. When VIDEO is omitted because its required projector is missing or invalid, `videoReadiness` contains a stable safe reason.
+            Effective-readiness diagnostics. When IMAGE, AUDIO, or VIDEO inputs are omitted because their required projector is missing or invalid, `mediaReadiness` contains a stable safe reason.
     ModelReference:
       type: object
       additionalProperties: false
@@ -5144,7 +5162,11 @@ components:
           description: Concrete MIME type for media or file-backed output, when known.
         content:
           type: string
-          description: Inline output content. JSON values are carried as their canonical JSON text.
+          description: Inline UTF-8 output content. JSON values are carried as their canonical JSON text. Do not combine with contentBase64.
+        contentBase64:
+          type: string
+          format: byte
+          description: Base64-encoded inline binary output content. Do not combine with content.
         artifact:
           $ref: '#/components/schemas/ModelInvocationArtifact'
           description: Optional opaque artifact metadata for materialized output.
@@ -13660,6 +13682,7 @@ components:
         - TEXT
         - IMAGE
         - AUDIO
+        - VIDEO
         - JSON
         - BINARY
     RunnerID:
@@ -14842,6 +14865,7 @@ components:
       oneOf:
         - $ref: '#/components/schemas/WorkTextContentPart'
         - $ref: '#/components/schemas/WorkImageContentPart'
+        - $ref: '#/components/schemas/WorkVideoContentPart'
         - $ref: '#/components/schemas/WorkAudioContentPart'
         - $ref: '#/components/schemas/WorkJsonContentPart'
         - $ref: '#/components/schemas/WorkBinaryContentPart'
@@ -14856,6 +14880,7 @@ components:
         - AUDIO
         - JSON
         - BINARY
+        - VIDEO
     WorkContentMetadata:
       type: object
       additionalProperties: true
@@ -15009,6 +15034,24 @@ components:
     WorkContentDeprecatedFileProperty:
       type: string
       description: Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
+    WorkVideoContentPart:
+      description: Ordered video content for one work item.
+      allOf:
+        - $ref: '#/components/schemas/WorkContentCommonFields'
+        - type: object
+          required:
+            - type
+            - url
+          properties:
+            type:
+              allOf:
+                - $ref: '#/components/schemas/WorkContentPartType'
+              enum:
+                - VIDEO
+            url:
+              $ref: '#/components/schemas/WorkContentURLProperty'
+            file:
+              $ref: '#/components/schemas/WorkContentDeprecatedFileProperty'
     SubmitWorkContentURLProperty:
       type: string
       minLength: 1

@@ -9,20 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionswire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
-	workersessionswire "github.com/portpowered/infinite-you/pkg/services/worker_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -45,18 +38,14 @@ func TestRecordedWorkerSessionLiveIdentityOnlyRebindsRestoredLineage(t *testing.
 			SessionID: stringPointerForRecordedTest(historicalSession),
 		}}},
 	}
-	fresh := &recordedWorkerSessionObservation{Service: live, factorySessionID: foreignSession}
-	fleet := workersessionswire.NewFleetObservationService(func(context.Context) ([]workersessions.Service, error) {
-		return []workersessions.Service{restored, fresh}, nil
-	})
-	observation, err := fleet.GetObservationByWorkerSessionID(context.Background(), request)
+	observation, err := restored.GetObservationByWorkerSessionID(context.Background(), request)
 	if err != nil || observation.FactorySessionID != foreignSession {
-		t.Fatalf("foreign fleet observation = %#v, %v; want preserved Factory Session", observation, err)
+		t.Fatalf("foreign observation = %#v, %v; want preserved Factory Session", observation, err)
 	}
 	live.getByWorkerResult.FactorySessionID = historicalSession
-	observation, err = fleet.GetObservationByWorkerSessionID(context.Background(), request)
+	observation, err = restored.GetObservationByWorkerSessionID(context.Background(), request)
 	if err != nil || observation.FactorySessionID != successorSession {
-		t.Fatalf("restored fleet observation = %#v, %v; want successor Factory Session", observation, err)
+		t.Fatalf("restored observation = %#v, %v; want successor Factory Session", observation, err)
 	}
 }
 
@@ -145,44 +134,36 @@ func TestRecordedWorkerSessionObservationReprojectsWhenRestoredHistoryGrows(t *t
 	})
 }
 
-// TestTerminateFactorySession_FansOutCapturedChildrenBeforeTargetCleanup
-// exercises the committed Factory Sessions close boundary against the real
-// Runtime selector, Worker Sessions service, and Workers cancellation
-// boundary. The controlled dispatches can only finish through the exact
+// TestTerminateCapturedTurn_FansOutChildrenBeforeCleanup
+// exercises Factory Runtime control against the Runtime selector, a
+// Worker Sessions contract double, and Workers cancellation boundary.
+// The controlled dispatches can only finish through the exact
 // boundary Cancel call, so caller-context cancellation and target cleanup
 // cannot hide a missed child control.
-func TestTerminateFactorySession_FansOutCapturedChildrenBeforeTargetCleanup(t *testing.T) {
+func TestTerminateCapturedTurn_FansOutChildrenBeforeCleanup(t *testing.T) {
 	execution := newSynchronousFanOutExecution("dispatch-a", "dispatch-b", "dispatch-replacement")
-	events, err := eventswire.NewService(logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New events service: %v", err)
-	}
-	workerSessions, err := workersessionswire.NewService(execution, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
-	if err != nil {
-		t.Fatalf("New Worker Sessions service: %v", err)
-	}
+	workerSessions := newCapturedTurnWorkerSessions(execution)
 	starts, startErrs := startCapturedTurnWorkerSessions(t, workerSessions, execution)
-	target, lifecycle := newCapturedTurnTarget(t, workerSessions, execution)
-
-	started, err := target.StartAsync(context.Background(), factorysessions.StartRequest{})
-	if err != nil {
-		t.Fatalf("StartAsync: %v", err)
-	}
+	runtimeService, cleanup := newCapturedTurnRuntime(t, workerSessions, execution)
 
 	canceledControlContext, cancelControlContext := context.WithCancel(context.Background())
 	cancelControlContext()
-	err = target.TerminateFactorySession(canceledControlContext, started.SessionID, factorysessions.ControlRequest{
-		RequestID: "control-close-captured",
-		Reason:    "committed ACP close",
-		TurnID:    "turn-captured",
+	_, err := runtimeService.ControlTerminate(context.WithoutCancel(canceledControlContext), factoryruntime.TerminateRequest{
+		ControlID:           "control-close-captured",
+		Reason:              "committed ACP close",
+		TurnID:              "turn-captured",
+		WorkerSessionAction: factoryruntime.WorkerSessionControlActionTerminate,
 	})
 	if err != nil {
-		t.Fatalf("TerminateFactorySession: %v", err)
+		t.Fatalf("ControlTerminate: %v", err)
 	}
-	if lifecycle.stopCallsSnapshot() != 1 {
-		t.Fatalf("target cleanup calls = %d, want exactly one after captured child controls", lifecycle.stopCallsSnapshot())
+	if err := cleanup.verifyAfterControl(); err != nil {
+		t.Fatalf("verify cleanup after control: %v", err)
 	}
-	if got := lifecycle.cleanupCallsSnapshot(); len(got) != 2 {
+	if cleanup.stopCallsSnapshot() != 1 {
+		t.Fatalf("target cleanup calls = %d, want exactly one after captured child controls", cleanup.stopCallsSnapshot())
+	}
+	if got := cleanup.cleanupCallsSnapshot(); len(got) != 2 {
 		t.Fatalf("boundary cancellations before target cleanup = %#v, want both captured children", got)
 	}
 	if execution.observedCanceledControlContext() {
@@ -209,7 +190,7 @@ func TestTerminateFactorySession_FansOutCapturedChildrenBeforeTargetCleanup(t *t
 }
 
 // TestFactoryResume_IsolatesCapturedChildProviderSessionContinuations enters
-// through the real Factory Runtime fan-out and real Worker Sessions service.
+// through the Factory Runtime fan-out and a Worker Sessions contract double.
 // The controlled Workers edge returns one child failure before the other
 // succeeds, proving each captured child retains its own exact reference and
 // terminal result without reaching the unrelated direct Worker Session.
@@ -218,14 +199,7 @@ func TestTerminateFactorySession_FansOutCapturedChildrenBeforeTargetCleanup(t *t
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func TestFactoryResume_IsolatesCapturedChildProviderSessionContinuations(t *testing.T) {
 	execution := newContinuationFanOutExecution("dispatch-a", "dispatch-b", "dispatch-direct")
-	events, err := eventswire.NewService(logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("New Events service: %v", err)
-	}
-	workerSessions, err := workersessionswire.NewService(execution, events, logging.NoopLogger{}, platformclock.Real{}, unavailableProviderSessions{}, nil)
-	if err != nil {
-		t.Fatalf("New Worker Sessions service: %v", err)
-	}
+	workerSessions := newCapturedTurnWorkerSessions(execution)
 	starts, startErrs := startContinuationFanOutWorkerSessions(t, workerSessions, execution)
 	t.Cleanup(func() { execution.cancelInitial("dispatch-direct") })
 
@@ -434,11 +408,11 @@ func startCapturedTurnWorkerSessions(
 	return starts, startErrs
 }
 
-func newCapturedTurnTarget(
+func newCapturedTurnRuntime(
 	t *testing.T,
 	workerSessions workersessions.Service,
 	execution *synchronousFanOutExecution,
-) (*factorysessionswire.OnDemandFactoryTargetService, *capturedTurnTargetLifecycle) {
+) (factoryruntime.Service, *capturedTurnCleanupProbe) {
 	t.Helper()
 	runtimeInstance, ledger, err := newTestFactoryWithScriptedLedger(
 		withNet(buildMoveControlNet()), withInlineDispatch(), withWorkerSessions(workerSessions),
@@ -455,21 +429,11 @@ func newCapturedTurnTarget(
 		workerSessionAssociationEvent(t, 10, "association-a", "turn-captured", "worker-a"),
 		workerSessionAssociationEvent(t, 30, "association-replacement", "turn-replacement", "worker-replacement"),
 	)
-	lifecycle := &capturedTurnTargetLifecycle{
-		runtime: runtimeService, cancellationCalls: execution.cancelCalls,
+	cleanup := &capturedTurnCleanupProbe{
+		cancellationCalls:  execution.cancelCalls,
 		expectedDispatches: []string{"dispatch-a", "dispatch-b"},
 	}
-	target, err := factorysessionswire.NewOnDemandFactoryTargetService(
-		capturedTurnTargetOpening{opened: factorysessionswire.OpenedInvocationRuntime{Lifecycle: lifecycle}},
-		func(context.Context, string, string) (factorysessions.RuntimeOpeningRequest, error) {
-			return factorysessions.RuntimeOpeningRequest{}, nil
-		},
-		func() string { return "target-captured-control" }, zap.NewNop(),
-	)
-	if err != nil {
-		t.Fatalf("New on-demand Factory target: %v", err)
-	}
-	return target, lifecycle
+	return runtimeService, cleanup
 }
 
 func assertCapturedWorkerSessionsTerminated(
@@ -496,19 +460,7 @@ func assertCapturedWorkerSessionsTerminated(
 	}
 }
 
-type capturedTurnTargetOpening struct {
-	opened factorysessionswire.OpenedInvocationRuntime
-}
-
-func (o capturedTurnTargetOpening) OpenInvocationRuntime(
-	context.Context,
-	*factorysessions.RuntimeOpeningRequest,
-) (factorysessionswire.OpenedInvocationRuntime, error) {
-	return o.opened, nil
-}
-
-type capturedTurnTargetLifecycle struct {
-	runtime            factoryruntime.Service
+type capturedTurnCleanupProbe struct {
 	cancellationCalls  <-chan workers.WorkstationDispatchCancelRequest
 	expectedDispatches []string
 
@@ -517,19 +469,7 @@ type capturedTurnTargetLifecycle struct {
 	cleanupCalls []workers.WorkstationDispatchCancelRequest
 }
 
-func (*capturedTurnTargetLifecycle) StartLifecycle(context.Context, context.Context) error {
-	return nil
-}
-
-func (*capturedTurnTargetLifecycle) StartWorkerLifecycle(context.Context) (factorysessions.RuntimeStop, error) {
-	return nil, nil
-}
-
-func (*capturedTurnTargetLifecycle) CompleteStartup(context.Context) error { return nil }
-
-func (*capturedTurnTargetLifecycle) WaitForRuntime(context.Context) error { return nil }
-
-func (l *capturedTurnTargetLifecycle) StopLifecycle(context.Context) error {
+func (l *capturedTurnCleanupProbe) verifyAfterControl() error {
 	observed := make(map[string]struct{}, len(l.expectedDispatches))
 	for range l.expectedDispatches {
 		select {
@@ -554,30 +494,17 @@ func (l *capturedTurnTargetLifecycle) StopLifecycle(context.Context) error {
 	return nil
 }
 
-func (*capturedTurnTargetLifecycle) FailStartup(err error) error { return err }
-
-func (l *capturedTurnTargetLifecycle) CurrentRuntimeBundle() factoryruntime.RuntimeRecord {
-	return capturedTurnTargetHostedInstance{runtime: l.runtime}
-}
-
-func (l *capturedTurnTargetLifecycle) stopCallsSnapshot() int {
+func (l *capturedTurnCleanupProbe) stopCallsSnapshot() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.stopCalls
 }
 
-func (l *capturedTurnTargetLifecycle) cleanupCallsSnapshot() []workers.WorkstationDispatchCancelRequest {
+func (l *capturedTurnCleanupProbe) cleanupCallsSnapshot() []workers.WorkstationDispatchCancelRequest {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return append([]workers.WorkstationDispatchCancelRequest(nil), l.cleanupCalls...)
 }
-
-type capturedTurnTargetHostedInstance struct {
-	factoryruntime.RuntimeRecord
-	runtime factoryruntime.Service
-}
-
-func (i capturedTurnTargetHostedInstance) RuntimeService() factoryruntime.Service { return i.runtime }
 
 // continuationFanOutExecution is a deterministic Workers boundary for the
 // multi-child resume integration. Initial attempts can finish only through
@@ -708,7 +635,12 @@ func (e *continuationFanOutExecution) continuationRequests(
 	t.Helper()
 	requests := make(map[string]workers.WorkstationDispatchRequest, count)
 	for range count {
-		request := <-e.started
+		var request workers.WorkstationDispatchRequest
+		select {
+		case request = <-e.started:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for continuation requests: got %d of %d", len(requests), count)
+		}
 		dispatchID := request.Execution.Dispatch.DispatchID
 		if _, duplicate := requests[dispatchID]; duplicate {
 			t.Fatalf("duplicate continuation request for dispatch %q", dispatchID)
@@ -776,3 +708,147 @@ func failedForeignContinuation(dispatchID string) continuationDispatchResult {
 		},
 	}}
 }
+
+// capturedTurnWorkerSessions supplies the Worker Sessions contract consumed by
+// Runtime while keeping execution and each session's exact reference observable.
+type capturedTurnWorkerSessions struct {
+	*fakeWorkerSessionsService
+	mu       sync.Mutex
+	sessions map[string]*capturedTurnSession
+}
+
+type capturedTurnSession struct {
+	request workersessions.InvokeSessionRequest
+	session workersessions.Session
+	resume  chan workers.WorkstationDispatchRequest
+}
+
+func newCapturedTurnWorkerSessions(execution workers.Service) *capturedTurnWorkerSessions {
+	return &capturedTurnWorkerSessions{
+		fakeWorkerSessionsService: &fakeWorkerSessionsService{execution: execution},
+		sessions:                  make(map[string]*capturedTurnSession),
+	}
+}
+
+func (s *capturedTurnWorkerSessions) InvokeSession(ctx context.Context, request workersessions.InvokeSessionRequest) (workersessions.InvokeSessionResult, error) {
+	entry := &capturedTurnSession{
+		request: request,
+		session: workersessions.Session{ID: request.ID, State: workersessions.StateRunning},
+		resume:  make(chan workers.WorkstationDispatchRequest, 1),
+	}
+	s.mu.Lock()
+	s.sessions[request.ID] = entry
+	s.mu.Unlock()
+	dispatch := request.Execution
+	for {
+		result, err := s.execution.Execute(ctx, testExecuteRequestFromDispatch(dispatch))
+		converted := testDispatchResultFromExecute(dispatch, result, err)
+		if result.Failure != nil {
+			converted.Result.ProviderContinuationFailureKind = result.Failure.ProviderContinuationFailureKind
+		}
+		s.mu.Lock()
+		state := entry.session.State
+		if state == workersessions.StatePaused {
+			s.mu.Unlock()
+			dispatch = <-entry.resume
+			continue
+		}
+		// Resume may have queued the successor before the canceled initial
+		// execution returned. Consume it before classifying that result.
+		if state == workersessions.StateRunning {
+			select {
+			case dispatch = <-entry.resume:
+				s.mu.Unlock()
+				continue
+			default:
+			}
+		}
+		if state != workersessions.StateTerminated {
+			if converted.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCompleted {
+				entry.session.State = workersessions.StateCompleted
+				entry.session.Result = &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted}
+			} else {
+				entry.session.State = workersessions.StateFailed
+				entry.session.Result = &workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeFailed,
+					Cause: &workersessions.FailureCause{Kind: workersessions.FailureCauseWorkersExecutionFailure,
+						Detail:                          "controlled Workers execution failed",
+						ProviderContinuationFailureKind: converted.Result.ProviderContinuationFailureKind}}
+			}
+		}
+		session := entry.session.Clone()
+		s.mu.Unlock()
+		return workersessions.InvokeSessionResult{Session: session, Dispatch: converted, DispatchErr: err}, nil
+	}
+}
+
+func (s *capturedTurnWorkerSessions) Get(_ context.Context, request workersessions.GetRequest) (workersessions.Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry := s.sessions[request.ID]
+	if entry == nil {
+		return workersessions.Session{}, workersessions.ErrSessionNotFound
+	}
+	return entry.session.Clone(), nil
+}
+
+func (s *capturedTurnWorkerSessions) AssociateProviderSession(_ context.Context, request workersessions.ProviderSessionAssociationRequest) (workersessions.ProviderSessionAssociationResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry := s.sessions[request.WorkerSessionID]
+	association := workersessions.ProviderSessionAssociation{
+		WorkerSessionID: request.WorkerSessionID, DispatchID: request.DispatchID,
+		AttemptID: request.DispatchID, TurnID: entry.request.Execution.Execution.Dispatch.Execution.RequestID,
+		Reference: request.Reference,
+	}
+	entry.session.ProviderSessionAssociation = &association
+	return workersessions.ProviderSessionAssociationResult{Association: association, Outcome: workersessions.ProviderSessionAssociationOutcomeAccepted}, nil
+}
+
+func (s *capturedTurnWorkerSessions) Pause(ctx context.Context, request workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	s.mu.Lock()
+	entry := s.sessions[request.ID]
+	entry.session.State = workersessions.StatePaused
+	dispatchID := entry.request.Execution.Execution.Dispatch.DispatchID
+	session := entry.session.Clone()
+	s.mu.Unlock()
+	err := s.cancel(ctx, dispatchID)
+	return workersessions.ControlResult{Session: session, Action: workersessions.ControlActionPause, Outcome: workersessions.ControlOutcomeApplied, DispatchID: dispatchID}, err
+}
+
+func (s *capturedTurnWorkerSessions) Resume(_ context.Context, request workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	s.mu.Lock()
+	entry := s.sessions[request.ID]
+	dispatch := entry.request.Execution
+	dispatch.Execution.Dispatch.DispatchID += "/resume/1"
+	reference := entry.session.ProviderSessionAssociation.Reference.ContinuationRef()
+	dispatch.Execution.Continuation = &reference
+	entry.session.State = workersessions.StateRunning
+	session := entry.session.Clone()
+	entry.resume <- dispatch
+	s.mu.Unlock()
+	return workersessions.ControlResult{Session: session, Action: workersessions.ControlActionResume, Outcome: workersessions.ControlOutcomeApplied, DispatchID: dispatch.Execution.Dispatch.DispatchID}, nil
+}
+
+func (s *capturedTurnWorkerSessions) Terminate(ctx context.Context, request workersessions.ControlRequest) (workersessions.ControlResult, error) {
+	s.mu.Lock()
+	entry := s.sessions[request.ID]
+	entry.session.State = workersessions.StateTerminated
+	dispatchID := entry.request.Execution.Execution.Dispatch.DispatchID
+	session := entry.session.Clone()
+	s.mu.Unlock()
+	err := s.cancel(ctx, dispatchID)
+	return workersessions.ControlResult{Session: session, Action: workersessions.ControlActionTerminate, Outcome: workersessions.ControlOutcomeApplied, DispatchID: dispatchID}, err
+}
+
+func (s *capturedTurnWorkerSessions) cancel(ctx context.Context, dispatchID string) error {
+	switch execution := s.execution.(type) {
+	case *synchronousFanOutExecution:
+		return execution.cancel(ctx, dispatchID)
+	case *continuationFanOutExecution:
+		execution.cancelInitial(dispatchID)
+		<-execution.cancelCalls
+	}
+	return nil
+}
+
+var _ workersessions.Service = (*capturedTurnWorkerSessions)(nil)

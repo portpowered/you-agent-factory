@@ -22,21 +22,23 @@ import (
 // binding, session creation, or persistence.
 //
 // chatSessions and catalog are the canonical Chat Sessions collaborators
-// "session/new" dispatches to. factoryTarget is Factory Sessions' own
-// target-execution capability and eventsService is the canonical aggregate
+// "session/new" dispatches to. factorySessions is the canonical Factory
+// Sessions service and eventsService is the canonical aggregate
 // stream ordinary prompt delivery drains. This package only injects them.
 func NewServer(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
-	factoryTarget factorysessions.TargetExecutionService,
+	factorySessions factorysessions.Service,
 	eventsService events.Service,
 	resolveHomeDir func() (string, error),
 	responseBridge acp.ResponseBridge,
 	wireRecorder acp.WireRecorder,
+	startResolver acp.FactorySessionStartResolver,
+	invocationScope ...acp.InvocationScopeFactory,
 ) acp.Server {
 	return stdio.New(
-		logger, chatSessions, catalog, factoryTarget, eventsService,
-		resolveHomeDir, responseBridge, wireRecorder,
+		logger, chatSessions, catalog, factorySessions, eventsService,
+		resolveHomeDir, responseBridge, wireRecorder, startResolver, invocationScope...,
 	)
 }

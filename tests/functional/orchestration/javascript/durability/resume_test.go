@@ -17,11 +17,94 @@ import (
 	"github.com/fsnotify/fsnotify"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const javascriptDurabilityResumeRequestID = "req-js-durability-resume-interrupt-001"
+
+func TestJavaScriptResourceChildResumesAfterProcessRestartInSameProject(t *testing.T) {
+	const workflowName = "resumable-two-step-fake-children"
+	projectRoot := setupJavaScriptDurabilityResumeWorkflowFixture(t, workflowName)
+	configPath := filepath.Join(projectRoot, factorydefinitions.FactoryConfigFile)
+	encoded, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(encoded, &config); err != nil {
+		t.Fatal(err)
+	}
+	config["resources"] = []map[string]any{{"id": "reviewers", "name": "Reviewers", "capacity": 1}}
+	encoded, err = json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	workflowPath := filepath.Join(projectRoot, ".claude", "workflows", workflowName+".js")
+	workflow, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withResource := strings.Replace(string(workflow), "label: \"step-two\",", "label: \"step-two\",\n    resourceId: \"reviewers\",", 1)
+	if withResource == string(workflow) {
+		t.Fatal("workflow has no second child to resource-bind")
+	}
+	if err := os.WriteFile(workflowPath, []byte(withResource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	provider := newJavaScriptDurabilityResumeBlockingCommandRunner(workflowName)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: projectRoot, Edges: serviceedges.Edges{ProviderCommandRunner: provider},
+	})
+	sessionID := startInterruptedJavaScriptDurabilitySession(t, strings.TrimSuffix(server.URL(), "/"), provider, workflowName)
+	server.Close(t)
+
+	// A copied snapshot must not grant another project's current runtime the
+	// right to resume this session or acquire its resource capacity.
+	otherRoot := support.ScaffoldSingleStepFactory(t, "unrelated-resume-project")
+	otherSnapshot := javaScriptDurableSessionPersistencePath(otherRoot, sessionID)
+	if err := os.MkdirAll(filepath.Dir(otherSnapshot), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err = os.ReadFile(javaScriptDurableSessionPersistencePath(projectRoot, sessionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(otherSnapshot, encoded, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	otherServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: otherRoot})
+	mismatchRequest, err := http.NewRequestWithContext(t.Context(), http.MethodPost, strings.TrimSuffix(otherServer.URL(), "/")+"/factory-sessions/"+sessionID+"/resume", bytes.NewReader([]byte(`{}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mismatchRequest.Header.Set("Content-Type", "application/json")
+	mismatchResponse, err := http.DefaultClient.Do(mismatchRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mismatchResponse.Body.Close()
+	if mismatchResponse.StatusCode != http.StatusNotFound {
+		t.Fatalf("cross-project resume status = %d, want 404", mismatchResponse.StatusCode)
+	}
+	otherServer.Close(t)
+
+	restarted := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: projectRoot, Edges: serviceedges.Edges{ProviderCommandRunner: provider},
+	})
+	after := resumeAndWaitForJavaScriptSession(t, strings.TrimSuffix(restarted.URL(), "/"), sessionID, provider, projectRoot)
+	if after.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("resumed status = %q, want SUCCEEDED", after.Status)
+	}
+	if provider.callCount() != 3 {
+		t.Fatalf("provider calls = %d, want 3", provider.callCount())
+	}
+}
 
 // TestJavaScriptInterruptedSessionResumesWithoutRepeatingCompletedChildren proves
 // that a durable JavaScript Factory Session interrupted after the first child
@@ -331,12 +414,16 @@ func waitForJavaScriptPersistedResume(
 			if !ok {
 				t.Fatal("durable snapshot watcher closed before resumed persistence")
 			}
-			if !strings.EqualFold(filepath.Clean(event.Name), filepath.Clean(snapshotPath)) ||
+			if !strings.EqualFold(filepath.Clean(filepath.Dir(event.Name)), filepath.Clean(filepath.Dir(snapshotPath))) ||
 				event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename) == 0 {
 				continue
 			}
-			session := readDurableJavaScriptSession(t, baseURL, sessionID)
-			if session.Status == factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+			encoded, readErr := os.ReadFile(snapshotPath)
+			if readErr != nil {
+				continue
+			}
+			var persisted struct{ Session struct{ Status string } }
+			if json.Unmarshal(encoded, &persisted) == nil && persisted.Session.Status == string(factoryapi.FactorySessionDurableLifecycleStatusSucceeded) {
 				return
 			}
 		case err, ok := <-watcher.Errors:
@@ -345,7 +432,11 @@ func waitForJavaScriptPersistedResume(
 			}
 			t.Fatalf("durable snapshot watcher: %v", err)
 		case <-timer.C:
-			t.Fatalf("durable snapshot did not publish resumed terminal state at %s", snapshotPath)
+			session := readDurableJavaScriptSession(t, baseURL, sessionID)
+			raw, readErr := os.ReadFile(snapshotPath)
+			var persisted struct{ Session struct{ Status string } }
+			_ = json.Unmarshal(raw, &persisted)
+			t.Fatalf("durable snapshot did not publish resumed terminal state at %s; status=%s snapshotRead=%v persistedStatus=%s", snapshotPath, session.Status, readErr, persisted.Session.Status)
 		}
 	}
 }

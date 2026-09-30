@@ -8,11 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -31,6 +33,25 @@ const (
 	ToolReadEvents     = "you.factory_session.read_events"
 	ToolSubagent       = "you.subagent"
 )
+
+// Cleanup shares one small budget after invocation termination.
+const subagentCleanupBudget = 17 * time.Second
+const subagentCloseTimeout = 15 * time.Second
+
+// subagentSnapshotTimeout bounds the best-effort timeout progress snapshot so
+// capturing it never materially delays cleanup.
+const subagentSnapshotTimeout = 2 * time.Second
+
+// Non-cooperative service calls cannot be stopped by Go contexts. Keep at most
+// this many abandoned calls of each kind in flight process-wide.
+var subagentAdmissionSlots = make(chan struct{}, 16)
+var subagentInvokeSlots = make(chan struct{}, 16)
+var subagentSnapshotSlots = make(chan struct{}, 16)
+var errSubagentCapacity = errors.New("subagent operation capacity exhausted")
+
+// subagentDefaultTimeoutMillis bounds a subagent wait when the caller omits timeoutMillis.
+const subagentDefaultTimeoutMillis = int64((20 * time.Minute) / time.Millisecond)
+const subagentMaxTimeoutMillis = int64((1<<63 - 1) / time.Millisecond)
 
 // Stable error envelope fields shared by every dynamic workflow MCP tool.
 var sharedErrorStableFields = []string{
@@ -119,6 +140,7 @@ type SubagentInput struct {
 	Provider        string `json:"provider,omitempty"`
 	Model           string `json:"model,omitempty"`
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	WorkingRoot     string `json:"workingRoot,omitempty"`
 	TimeoutMillis   *int64 `json:"timeoutMillis,omitempty"`
 }
 
@@ -131,62 +153,380 @@ type SubagentResult struct {
 }
 
 // Subagent invokes the packaged @you/subagent Factory through the canonical
-// on-demand target execution service.
-func Subagent(ctx context.Context, target factorysessionexecution.TargetExecutionService, workingRoot string, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) ToolResponse[SubagentResult] {
+// Factory Sessions Service.
+func Subagent(ctx context.Context, target factorysessionexecution.Service, workingRoot string, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) ToolResponse[SubagentResult] {
 	if err := validateSubagentRequest(ctx, target, generateID, input); err != nil {
-		var envelope ToolErrorEnvelope
-		if errors.Is(err, errMissingRequestContext) || ctx == nil || ctx.Err() != nil || target == nil || generateID == nil {
-			envelope = executionErrorEnvelope(err)
-		} else {
-			envelope = ToolErrorEnvelope{Code: errorCodeBadRequest, Message: err.Error(), Retryable: false}
-		}
+		envelope := subagentRequestErrorEnvelope(err, ctx, target, generateID)
 		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
 	requestID := generateID()
-	startArgs := map[string]any{"workingRoot": workingRoot}
-	started, err := target.StartAsync(ctx, factorysessionexecution.StartRequest{
-		RequestID: requestID,
-		Source: factorysessionexecution.Source{
-			Kind:      factoryruntime.WorkflowSourceKindFactoryID,
-			FactoryID: factorydefinitions.PackagedSubagentFactoryName,
-		},
-		Args: startArgs,
-	})
+	select {
+	case subagentAdmissionSlots <- struct{}{}:
+	default:
+		return subagentCapacityFailure("", requestID)
+	}
+	releaseAdmission := true
+	defer func() {
+		if releaseAdmission {
+			<-subagentAdmissionSlots
+		}
+	}()
+	if input.WorkingRoot != "" {
+		workingRoot = input.WorkingRoot
+	}
+	timeoutMillis := subagentDefaultTimeoutMillis
+	if input.TimeoutMillis != nil {
+		timeoutMillis = *input.TimeoutMillis
+	}
+	callCtx, stopCall := context.WithTimeout(ctx, time.Duration(timeoutMillis)*time.Millisecond)
+	defer stopCall()
+	started, err, startAbandoned := startSubagentSession(callCtx, target, workingRoot, requestID)
+	if startAbandoned {
+		releaseAdmission = false // The Start goroutine owns the slot and any late cleanup.
+	}
 	if err != nil {
-		return subagentExecutionFailure(err)
+		return subagentStartFailure(err, requestID, timeoutMillis, input)
 	}
 	if started.SessionID == "" {
 		return subagentExecutionFailure(fmt.Errorf("subagent Factory Session identity is missing"))
 	}
-	args := subagentInvocationArgs(input)
-	invocationRequest := factorysessionexecution.InvocationRequest{
-		Args: &args, RequestID: &requestID,
-		TimeoutMillis: input.TimeoutMillis,
+	result, invokeErr := invokeSubagent(callCtx, target, started.SessionID, workingRoot, requestID, timeoutMillis, input)
+	progress, closeErr := cleanupSubagent(ctx, target, started.SessionID, result, invokeErr, &releaseAdmission)
+	if closeErr != nil {
+		return subagentCleanupError(closeErr, started.SessionID, requestID)
 	}
-	result, invokeErr := target.InvokeFactorySession(ctx, started.SessionID, invocationRequest)
-	closeErr := target.CloseFactorySession(context.WithoutCancel(ctx), started.SessionID)
+	if invokeErr != nil {
+		return subagentClosedFailure(subagentInvokeError(invokeErr, started.SessionID, requestID, timeoutMillis, input, progress))
+	}
 	if result.Status != factorysessionexecution.InvocationTerminalStatusCompleted {
-		return subagentTerminalFailure(started.SessionID, result, input.TimeoutMillis)
+		return subagentClosedFailure(subagentTerminalFailure(started.SessionID, result, timeoutMillis, input, progress))
 	}
-	if err := errors.Join(invokeErr, closeErr); err != nil {
-		return subagentExecutionFailure(err)
+	response := SubagentResult{
+		SessionID: started.SessionID,
+		Status:    string(result.Status),
+		Text:      subagentPrimaryText(result.PrimaryResult),
 	}
-	response := SubagentResult{SessionID: started.SessionID, Status: string(result.Status)}
-	for _, part := range result.PrimaryResult {
-		if part.Type == work.WorkContentPartTypeText {
-			if response.Text != "" {
-				response.Text += "\n"
-			}
-			response.Text += part.Text
+	if strings.TrimSpace(response.Text) == "" {
+		envelope := ToolErrorEnvelope{
+			Code:      "factory_session.subagent.empty_result",
+			Message:   "subagent completed without returning any text result; the ACP peer may have closed without producing output",
+			SessionID: started.SessionID,
+			Details:   map[string]any{"status": string(result.Status)},
 		}
+		return subagentClosedFailure(ToolResponse[SubagentResult]{Error: &envelope})
 	}
 	return ToolResponse[SubagentResult]{Result: &response}
+}
+
+func subagentStartFailure(err error, requestID string, timeoutMillis int64, input SubagentInput) ToolResponse[SubagentResult] {
+	if errors.Is(err, context.DeadlineExceeded) {
+		response := subagentInvocationTimeout("", requestID, timeoutMillis, input, nil)
+		response.Error.Details["phase"] = "start"
+		return response
+	}
+	if errors.Is(err, errSubagentCapacity) {
+		return subagentCapacityFailure("", requestID)
+	}
+	return subagentExecutionFailure(err)
+}
+
+func startSubagentSession(ctx context.Context, target factorysessionexecution.Service, workingRoot, requestID string) (factorysessionexecution.SessionStartResult, error, bool) {
+	return boundedSubagentStart(ctx, target, factorysessionexecution.SessionStartRequest{
+		Mode:           factorysessionexecution.SessionOperationModeLive,
+		ActivationOnly: true,
+		Correlation:    factorysessionexecution.SessionOperationCorrelation{RequestID: requestID},
+		Definition: factorysessionexecution.SessionDefinitionSelection{
+			FactoryID: factorydefinitions.PackagedSubagentFactoryName,
+		},
+		Source: factorysessionexecution.Source{
+			Kind:      factoryruntime.WorkflowSourceKindFactoryID,
+			FactoryID: factorydefinitions.PackagedSubagentFactoryName,
+		},
+		Args:       map[string]any{"workingRoot": workingRoot},
+		FolderPath: workingRoot,
+		RuntimeSelection: &factorysessionexecution.SessionRuntimeSelection{
+			ExecutionBaseDir: workingRoot,
+			Mode:             factorysessionexecution.SessionRuntimeModeService,
+		},
+	})
+}
+
+func invokeSubagent(callCtx context.Context, target factorysessionexecution.Service, sessionID, workingRoot, requestID string, timeoutMillis int64, input SubagentInput) (factorysessionexecution.InvocationResult, error) {
+	args := subagentInvocationArgs(input)
+	args["workingRoot"] = workingRoot
+	if callCtx.Err() != nil {
+		return factorysessionexecution.InvocationResult{}, callCtx.Err()
+	}
+	return boundedSubagentCall(callCtx, subagentInvokeSlots, func() (factorysessionexecution.InvocationResult, error) {
+		return target.Invoke(callCtx, factorysessionexecution.SessionInvokeRequest{
+			SessionID:   sessionID,
+			Correlation: factorysessionexecution.SessionOperationCorrelation{RequestID: requestID},
+			Args:        args,
+			Wait:        factorysessionexecution.SessionOperationWait{TimeoutMillis: timeoutMillis, CancelOnTimeout: true},
+		})
+	})
+}
+
+func cleanupSubagent(ctx context.Context, target factorysessionexecution.Service, sessionID string, result factorysessionexecution.InvocationResult, invokeErr error, releaseAdmission *bool) (map[string]any, error) {
+	cleanupCtx, stopCleanup := context.WithTimeout(context.WithoutCancel(ctx), subagentCleanupBudget)
+	defer stopCleanup()
+	// A timeout snapshot is taken before cleanup closes the live Factory
+	// Session, because the closed session can no longer report live progress.
+	var progress map[string]any
+	if subagentInvocationTimedOut(invokeErr, result) {
+		progress = subagentProgressSnapshot(cleanupCtx, target, sessionID)
+	}
+	// Close runs on a detached context so caller cancellation cannot skip
+	// cleanup. The deadline keeps cooperative close paths from waiting forever.
+	closeCtx, cancelClose := context.WithTimeout(cleanupCtx, subagentCloseTimeout)
+	closeResult := make(chan error, 1)
+	*releaseAdmission = false // The close goroutine now owns the admission slot.
+	go func() {
+		defer func() { <-subagentAdmissionSlots }()
+		_, err := target.Control(closeCtx, factorysessionexecution.SessionControlRequest{
+			SessionID: sessionID,
+			Mode:      factorysessionexecution.SessionOperationModeLive,
+			Operation: factorysessionexecution.SessionControlClose,
+		})
+		closeResult <- err
+	}()
+	var closeErr error
+	select {
+	case closeErr = <-closeResult:
+	case <-closeCtx.Done():
+		closeErr = closeCtx.Err()
+	}
+	cancelClose()
+	return progress, closeErr
+}
+
+// boundedSubagentStart hands a timed-out start's admission slot to its worker.
+// A late successful start is closed there, even after the MCP response returns.
+func boundedSubagentStart(
+	ctx context.Context,
+	target factorysessionexecution.Service,
+	request factorysessionexecution.SessionStartRequest,
+) (factorysessionexecution.SessionStartResult, error, bool) {
+	type outcome struct {
+		value factorysessionexecution.SessionStartResult
+		err   error
+	}
+	completed := make(chan outcome)
+	go func() {
+		started, err := target.Start(ctx, request)
+		select {
+		case completed <- outcome{value: started, err: err}:
+		case <-ctx.Done():
+			defer func() { <-subagentAdmissionSlots }()
+			if started.SessionID == "" {
+				return
+			}
+			closeCtx, stopClose := context.WithTimeout(context.WithoutCancel(ctx), subagentCloseTimeout)
+			defer stopClose()
+			_, _ = target.Control(closeCtx, factorysessionexecution.SessionControlRequest{
+				SessionID: started.SessionID, Mode: factorysessionexecution.SessionOperationModeLive,
+				Operation: factorysessionexecution.SessionControlClose,
+			})
+		}
+	}()
+	select {
+	case got := <-completed:
+		return got.value, got.err, false
+	case <-ctx.Done():
+		return factorysessionexecution.SessionStartResult{}, ctx.Err(), true
+	}
+}
+
+func subagentRequestErrorEnvelope(err error, ctx context.Context, target factorysessionexecution.Service, generateID factorysessionexecution.SessionIDGenerator) ToolErrorEnvelope {
+	if errors.Is(err, errMissingRequestContext) || ctx == nil || ctx.Err() != nil || target == nil || generateID == nil {
+		return executionErrorEnvelope(err)
+	}
+	return ToolErrorEnvelope{Code: errorCodeBadRequest, Message: err.Error(), Retryable: false}
+}
+
+func subagentClosedFailure(response ToolResponse[SubagentResult]) ToolResponse[SubagentResult] {
+	envelope := response.Error
+	envelope.Message += "; you.subagent cleanup closed the live Factory Session"
+	if envelope.Details == nil {
+		envelope.Details = make(map[string]any)
+	}
+	envelope.Details["sessionClosed"] = true
+	envelope.Details["sessionIdPurpose"] = "Use sessionId for log correlation; you.factory_session.get may return session.not_found."
+	const inspectBeforeRetry = "Inspect the workspace for partial edits and check provider logs using sessionId and any requestId, traceId, or workId."
+	if action, ok := envelope.Details["suggestedAction"].(string); ok && action != "" {
+		if envelope.Code == "factory_session.subagent.provider_misconfigured" && strings.HasPrefix(action, "Check that Pi's selected model endpoint") {
+			envelope.Details["suggestedAction"] = action + " " + inspectBeforeRetry
+		} else {
+			envelope.Details["suggestedAction"] = inspectBeforeRetry + " " + action
+		}
+	} else {
+		envelope.Details["suggestedAction"] = inspectBeforeRetry
+	}
+	return response
+}
+
+// subagentInvocationTimedOut reports whether one invocation outcome is a
+// timeout, covering both a returned context deadline and a terminal TIMED_OUT
+// invocation result.
+func subagentInvocationTimedOut(invokeErr error, result factorysessionexecution.InvocationResult) bool {
+	if invokeErr != nil {
+		return errors.Is(invokeErr, context.DeadlineExceeded)
+	}
+	return result.Status == factorysessionexecution.InvocationTerminalStatusTimedOut
+}
+
+// subagentProgressSnapshot reads a best-effort live Factory Session progress
+// projection through the owner contract so a timeout keeps bounded runtime
+// context after cleanup closes the session. The read runs on a short detached
+// context, and any failure degrades to an unavailable marker instead of
+// changing the reported outcome or delaying cleanup.
+func subagentProgressSnapshot(ctx context.Context, target factorysessionexecution.Service, sessionID string) map[string]any {
+	snapshotCtx, cancelSnapshot := context.WithTimeout(ctx, subagentSnapshotTimeout)
+	defer cancelSnapshot()
+	projection, err := boundedSubagentCall(snapshotCtx, subagentSnapshotSlots, func() (factorysessionexecution.SessionProjection, error) {
+		return target.GetFactorySession(snapshotCtx, sessionID)
+	})
+	if err != nil || snapshotCtx.Err() != nil {
+		return map[string]any{"available": false}
+	}
+	details := subagentProgressDetails(projection)
+	if activity := subagentLastProviderActivity(snapshotCtx, target, sessionID); activity != nil {
+		details["lastObservedProviderActivity"] = activity
+	}
+	return details
+}
+
+func boundedSubagentCall[T any](ctx context.Context, slots chan struct{}, call func() (T, error)) (T, error) {
+	var zero T
+	if err := ctx.Err(); err != nil {
+		return zero, err
+	}
+	select {
+	case slots <- struct{}{}:
+	case <-ctx.Done():
+		return zero, ctx.Err()
+	default:
+		return zero, errSubagentCapacity
+	}
+	if err := ctx.Err(); err != nil {
+		<-slots
+		return zero, err
+	}
+	type outcome struct {
+		value T
+		err   error
+	}
+	result := make(chan outcome, 1)
+	go func() {
+		defer func() { <-slots }()
+		value, err := call()
+		result <- outcome{value: value, err: err}
+	}()
+	select {
+	case got := <-result:
+		return got.value, got.err
+	case <-ctx.Done():
+		return zero, ctx.Err()
+	}
+}
+
+// subagentProgressDetails copies numeric counts and an allowlisted script
+// status. Projection strings can contain authored or provider-controlled text.
+func subagentProgressDetails(projection factorysessionexecution.SessionProjection) map[string]any {
+	details := map[string]any{"available": true}
+	runtime := projection.Runtime
+	if runtime.Progress.InFlightCount > 0 {
+		details["inFlightDispatches"] = runtime.Progress.InFlightCount
+	}
+	if counts := subagentProgressWorkCounts(runtime.Progress.Categories); counts != nil {
+		details["workCounts"] = counts
+	}
+	if runtime.JavaScript != nil {
+		switch runtime.JavaScript.ScriptStatus {
+		case "IDLE", "RUNNING", "PAUSED", "FINISHED", "FAILED":
+			details["scriptStatus"] = string(runtime.JavaScript.ScriptStatus)
+		}
+		children := runtime.JavaScript.ChildDispatchCounts
+		if children.Completed > 0 || children.Queued > 0 || children.Running > 0 {
+			details["childDispatchCounts"] = map[string]any{
+				"completed": children.Completed,
+				"queued":    children.Queued,
+				"running":   children.Running,
+			}
+		}
+	}
+	return details
+}
+
+// subagentProgressWorkCounts returns work counts only when the live
+// projection reports at least one item in any category.
+func subagentProgressWorkCounts(categories factorysessionexecution.RuntimeStatusCategories) map[string]any {
+	if categories.Initial == 0 && categories.Processing == 0 && categories.Terminal == 0 && categories.Failed == 0 {
+		return nil
+	}
+	return map[string]any{
+		"initial":    categories.Initial,
+		"processing": categories.Processing,
+		"terminal":   categories.Terminal,
+		"failed":     categories.Failed,
+	}
+}
+
+// subagentAttachProgress records one captured snapshot on a timeout envelope.
+func subagentAttachProgress(details map[string]any, progress map[string]any) {
+	if len(progress) > 0 {
+		details["progress"] = progress
+	}
+}
+
+// subagentProviderErrorObserved reports whether the bounded timeout progress
+// captured a terminal provider error event without a provider session
+// reference. The observation is timing evidence only: it does not prove the
+// error caused the timeout, and no provider payload is exposed.
+func subagentProviderErrorObserved(progress map[string]any) bool {
+	activity, ok := progress["lastObservedProviderActivity"].(map[string]any)
+	if !ok {
+		return false
+	}
+	return activity["kind"] == string(workers.KindError) &&
+		activity["phase"] == string(workers.PhaseFailed) &&
+		activity["providerSessionObserved"] != true
+}
+
+// subagentTimeoutProviderErrorEvidence refines the timeout message and action
+// when the progress snapshot captured a terminal provider error without a
+// provider session reference. The default retry guidance assumes a slow model;
+// an observed provider error does not support that remedy, so the action points
+// at provider logs instead without claiming a cause or a provider session.
+func subagentTimeoutProviderErrorEvidence(envelope *ToolErrorEnvelope, progress map[string]any) {
+	if !subagentProviderErrorObserved(progress) {
+		return
+	}
+	envelope.Message = "subagent timed out after a provider error was observed; workspace edits may have occurred"
+	envelope.Details["suggestedAction"] = "The last observed provider activity was an error before the deadline and no provider session reference was observed; a longer timeout may not resolve an observed provider error."
+}
+
+// subagentPrimaryText joins the text parts of a completed invocation with
+// newlines, ignoring non-text content parts.
+func subagentPrimaryText(parts []work.WorkContentPart) string {
+	text := ""
+	for _, part := range parts {
+		if part.Type == work.WorkContentPartTypeText {
+			if text != "" {
+				text += "\n"
+			}
+			text += part.Text
+		}
+	}
+	return text
 }
 
 func subagentInvocationArgs(input SubagentInput) map[string]any {
 	args := map[string]any{"input": input.Prompt}
 	if input.Provider != "" {
 		args["workerProvider"] = input.Provider
+	} else if strings.HasPrefix(input.Model, "opencode/") {
+		args["workerProvider"] = "opencode"
 	}
 	if input.Model != "" {
 		args["workerModel"] = input.Model
@@ -197,7 +537,7 @@ func subagentInvocationArgs(input SubagentInput) map[string]any {
 	return args
 }
 
-func validateSubagentRequest(ctx context.Context, target factorysessionexecution.TargetExecutionService, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) error {
+func validateSubagentRequest(ctx context.Context, target factorysessionexecution.Service, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) error {
 	switch {
 	case ctx == nil:
 		return errMissingRequestContext
@@ -209,8 +549,12 @@ func validateSubagentRequest(ctx context.Context, target factorysessionexecution
 		return errors.New("subagent request ID generator is unavailable")
 	case strings.TrimSpace(input.Prompt) == "":
 		return fmt.Errorf("prompt is required")
+	case strings.HasPrefix(input.Model, "opencode/") && input.Provider != "" && !strings.EqualFold(strings.TrimSpace(input.Provider), "opencode"):
+		return fmt.Errorf("model %q requires provider opencode, but provider %q was requested", input.Model, input.Provider)
 	case input.TimeoutMillis != nil && *input.TimeoutMillis <= 0:
 		return fmt.Errorf("timeoutMillis must be greater than zero")
+	case input.TimeoutMillis != nil && *input.TimeoutMillis > subagentMaxTimeoutMillis:
+		return fmt.Errorf("timeoutMillis exceeds the supported range")
 	default:
 		return nil
 	}
@@ -221,13 +565,104 @@ func subagentExecutionFailure(err error) ToolResponse[SubagentResult] {
 	return ToolResponse[SubagentResult]{Error: &envelope}
 }
 
-func subagentTerminalFailure(sessionID string, result factorysessionexecution.InvocationResult, timeoutMillis *int64) ToolResponse[SubagentResult] {
+func subagentCapacityFailure(sessionID, requestID string) ToolResponse[SubagentResult] {
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.capacity_exhausted",
+		Message:   "subagent execution capacity is temporarily exhausted",
+		Retryable: true,
+		SessionID: sessionID,
+		Details: map[string]any{
+			"requestId":       requestID,
+			"suggestedAction": "Wait for active calls to finish and retry. If capacity remains exhausted, inspect or restart the MCP server.",
+		},
+	}
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentCleanupError(err error, sessionID, requestID string) ToolResponse[SubagentResult] {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return subagentCleanupTimeout(sessionID, requestID)
+	}
+	return subagentCleanupFailure(sessionID, requestID)
+}
+
+func subagentCleanupTimeout(sessionID, requestID string) ToolResponse[SubagentResult] {
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.cleanup_timed_out",
+		Message:   "subagent session cleanup exceeded its deadline after execution; workspace edits may have occurred",
+		Retryable: false,
+		SessionID: sessionID,
+		Details: map[string]any{
+			"partialEffectsPossible": true,
+			"requestId":              requestID,
+			"suggestedAction":        "Inspect the workspace and Factory Session before retrying.",
+		},
+	}
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentCleanupFailure(sessionID, requestID string) ToolResponse[SubagentResult] {
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.cleanup_failed",
+		Message:   "subagent session cleanup failed after execution; workspace edits may have occurred",
+		SessionID: sessionID,
+		Details:   map[string]any{"partialEffectsPossible": true, "requestId": requestID},
+	}
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentInvocationFailure(sessionID, requestID string) ToolResponse[SubagentResult] {
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.invocation_failed",
+		Message:   "subagent invocation failed before producing a result",
+		SessionID: sessionID,
+		Details:   map[string]any{"partialEffectsPossible": true, "requestId": requestID},
+	}
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentInvokeError(err error, sessionID, requestID string, timeoutMillis int64, input SubagentInput, progress map[string]any) ToolResponse[SubagentResult] {
+	if errors.Is(err, errSubagentCapacity) {
+		return subagentCapacityFailure(sessionID, requestID)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return subagentInvocationTimeout(sessionID, requestID, timeoutMillis, input, progress)
+	}
+	return subagentInvocationFailure(sessionID, requestID)
+}
+
+func subagentInvocationTimeout(sessionID, requestID string, timeoutMillis int64, input SubagentInput, progress map[string]any) ToolResponse[SubagentResult] {
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.timed_out",
+		Message:   "subagent timed out before producing a result; workspace edits may have occurred",
+		Retryable: false,
+		SessionID: sessionID,
+		Details: map[string]any{
+			"partialEffectsPossible": true,
+			"requestId":              requestID,
+			"suggestedAction":        "If you retry, use another configured model or a longer timeout.",
+		},
+	}
+	if input.Provider != "" {
+		envelope.Details["provider"] = input.Provider
+	}
+	if input.Model != "" {
+		envelope.Details["model"] = input.Model
+	}
+	if timeoutMillis > 0 {
+		envelope.Details["timeoutMillis"] = timeoutMillis
+	}
+	subagentAttachProgress(envelope.Details, progress)
+	subagentTimeoutProviderErrorEvidence(&envelope, progress)
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentTerminalFailure(sessionID string, result factorysessionexecution.InvocationResult, timeoutMillis int64, input SubagentInput, progress map[string]any) ToolResponse[SubagentResult] {
 	envelope := ToolErrorEnvelope{
 		Code:      "factory_session.subagent.execution_failed",
 		Message:   "subagent execution failed before producing a result",
-		Retryable: false,
 		SessionID: sessionID,
-		Details:   map[string]any{"status": result.Status},
+		Details:   map[string]any{"status": string(result.Status)},
 	}
 	if result.ErrorCode != "" {
 		envelope.Details["invocationCode"] = result.ErrorCode
@@ -236,9 +671,121 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		envelope.Code = "factory_session.subagent.timed_out"
 		envelope.Message = "subagent timed out before producing a result; workspace edits may have occurred"
 		envelope.Details["partialEffectsPossible"] = true
-		if timeoutMillis != nil {
-			envelope.Details["timeoutMillis"] = *timeoutMillis
+		envelope.Details["suggestedAction"] = "If you retry, use another configured model or a longer timeout."
+		if input.Provider != "" {
+			envelope.Details["provider"] = input.Provider
 		}
+		if input.Model != "" {
+			envelope.Details["model"] = input.Model
+		}
+		if timeoutMillis > 0 {
+			envelope.Details["timeoutMillis"] = timeoutMillis
+		}
+		if result.RequestID != "" {
+			envelope.Details["requestId"] = result.RequestID
+		}
+		if result.TraceID != "" {
+			envelope.Details["traceId"] = result.TraceID
+		}
+		if result.WorkID != "" {
+			envelope.Details["workId"] = result.WorkID
+		}
+		subagentAttachProgress(envelope.Details, progress)
+		subagentTimeoutProviderErrorEvidence(&envelope, progress)
+		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
+	subagentClassifyFailure(&envelope, workers.WorkFailureType(result.FailureReason), input.Provider)
 	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+func subagentClassifyFailure(envelope *ToolErrorEnvelope, reason workers.WorkFailureType, provider string) {
+	switch reason {
+	case workers.WorkFailureTypeThrottled:
+		envelope.Code = "factory_session.subagent.provider_throttled"
+		envelope.Message = "provider is temporarily unavailable due to usage or capacity limits"
+		envelope.Retryable = true
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeThrottled)
+	case workers.WorkFailureTypeAuthFailure:
+		envelope.Code = "factory_session.subagent.provider_auth_failure"
+		envelope.Message = "provider authentication failed"
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeAuthFailure)
+	case workers.WorkFailureTypePermanentBadRequest:
+		envelope.Code = "factory_session.subagent.provider_request_rejected"
+		envelope.Message = "provider rejected the subagent request"
+		envelope.Retryable = false
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypePermanentBadRequest)
+		envelope.Details["suggestedAction"] = "Verify the selected model against the provider's advertised models and request settings before retrying."
+	case workers.WorkFailureTypeTimeout:
+		envelope.Code = "factory_session.subagent.provider_timeout"
+		envelope.Message = "provider request timed out"
+		envelope.Retryable = true
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeTimeout)
+	case workers.WorkFailureTypeMisconfigured:
+		envelope.Code = "factory_session.subagent.provider_misconfigured"
+		envelope.Message = "subagent provider is misconfigured; check provider setup and capabilities"
+		envelope.Retryable = false
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeMisconfigured)
+		if provider == "pi" {
+			envelope.Message = "Pi subagent provider is misconfigured; check that Pi's selected model endpoint is running and reachable"
+			envelope.Details["suggestedAction"] = "Check that Pi's selected model endpoint is running and reachable. Check Pi setup and capabilities. Run `pi --version`; pi-acp requires Pi 0.81.0+. Upgrade via `npm install -g @earendil-works/pi-coding-agent@latest` if needed."
+		} else {
+			envelope.Details["suggestedAction"] = "Verify the provider configuration and ensure the required executable or model is available"
+		}
+	case workers.WorkFailureTypeMissingExecutable:
+		envelope.Code = "factory_session.subagent.provider_executable_missing"
+		envelope.Message = "required provider executable is unavailable"
+		envelope.Retryable = false
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeMissingExecutable)
+		envelope.Details["suggestedAction"] = "Install the provider command on PATH or update its configured executable path, then retry."
+	case workers.WorkFailureTypeInternalServerError:
+		envelope.Code = "factory_session.subagent.provider_internal_error"
+		envelope.Message = "provider encountered an internal error"
+		envelope.Retryable = true
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeInternalServerError)
+		envelope.Details["suggestedAction"] = "Check provider status and logs, then retry when the provider is available."
+	case workers.WorkFailureTypeUnknown:
+		envelope.Code = "factory_session.subagent.provider_unknown_failure"
+		envelope.Message = "provider failed for an unknown reason"
+		envelope.Retryable = false
+		envelope.Details["failureReason"] = string(workers.WorkFailureTypeUnknown)
+		envelope.Details["suggestedAction"] = "Check provider logs and configuration before retrying."
+	case "":
+		envelope.Details["suggestedAction"] = "Check provider logs and configuration before retrying."
+	}
+}
+
+// subagentLastProviderActivity reads the retained response events already owned
+// by the live Factory Session. Only fixed vocabulary and the runtime-owned
+// event timestamp leave this edge.
+func subagentLastProviderActivity(ctx context.Context, target factorysessionexecution.Service, sessionID string) map[string]any {
+	events, err := boundedSubagentCall(ctx, subagentSnapshotSlots, func() ([]factorysessionexecution.FactoryResponseEvent, error) {
+		cursor, err := target.SubscribeFactoryResponseEvents(ctx, factorysessionexecution.ResponseEventSubscriptionRequest{SessionID: sessionID})
+		if err != nil {
+			return nil, err
+		}
+		if cursor == nil {
+			return nil, errors.New("response event cursor unavailable")
+		}
+		defer cursor.Detach()
+		return cursor.Drain()
+	})
+	if err != nil || ctx.Err() != nil {
+		return nil
+	}
+	activity := make(map[string]any)
+	for _, event := range events {
+		if event.ProviderSessionRef != "" {
+			activity["providerSessionObserved"] = true
+		}
+		if event.Provenance.Provider == "" || event.Kind.Validate() != nil || event.Phase.Validate() != nil || event.RecordedAt.IsZero() {
+			continue
+		}
+		activity["kind"] = string(event.Kind)
+		activity["phase"] = string(event.Phase)
+		activity["observedAt"] = event.RecordedAt
+	}
+	if len(activity) == 0 {
+		return nil
+	}
+	return activity
 }

@@ -7,19 +7,25 @@ import (
 	"io"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
-// RunNormalizedSync executes and renders an already-normalized synchronous
-// Factory Session request. Wire supplies it as the presentation edge for the
-// Factory Sessions-owned direct JavaScript operation.
-func RunNormalizedSync(
+// DirectJavaScriptLifecyclePlan pairs one CLI completion with its optional
+// process HTTP transport. Factory Sessions owns the shutdown order.
+func DirectJavaScriptLifecyclePlan(transport lifecycle.Component, completion func(context.Context) error) (lifecycle.Plan, error) {
+	return processlifecycle.BuildDirectJavaScriptLifecyclePlan(transport, completion)
+}
+
+// RunCanonicalSync presents the process-owned synchronous Factory Session
+// result without opening a second durable execution service.
+func RunCanonicalSync(
 	ctx context.Context,
-	service factorysessionwire.DurableExecutionService,
-	normalized factorysessionexecution.StartRequest,
+	service factorysessionexecution.Service,
+	request factorysessionexecution.SessionStartRequest,
 	jsonOutput bool,
 	output io.Writer,
 ) error {
@@ -27,24 +33,32 @@ func RunNormalizedSync(
 		return fmt.Errorf("workflow run output is required")
 	}
 	if service == nil {
-		return writeRunError(output, jsonOutput, fmt.Errorf("durable execution service is required"))
+		return writeRunError(output, jsonOutput, fmt.Errorf("Factory Sessions service is required"))
 	}
-	result, err := service.StartSync(ctx, normalized)
+	result, err := service.Start(ctx, request)
 	if err != nil {
 		return writeRunError(output, jsonOutput, err)
 	}
-
-	mapped := factorysession.SyncStartResponseToAPI(result)
+	if result.Sync == nil {
+		return writeRunError(output, jsonOutput, fmt.Errorf("synchronous Factory Session result is required"))
+	}
+	mapped := factorysession.SyncStartResponseToAPI(*result.Sync)
 	if jsonOutput {
 		var encoded []byte
 		var marshalErr error
 		if isSyncTimeoutOutcome(mapped) {
-			availability, availabilityErr := syncResultAvailability(ctx, service, mapped.SessionId)
+			availability, availabilityErr := service.ReadResult(ctx, factorysessionexecution.SessionResultReadRequest{
+				SessionID: mapped.SessionId,
+				Mode:      factorysessionexecution.SessionOperationModeDurable,
+				Request:   factorysessionexecution.ResultRequest{Mode: factorysessionexecution.ResultModeFinal},
+			})
 			if availabilityErr != nil {
 				return writeRunError(output, jsonOutput, availabilityErr)
 			}
-			cancelOnTimeout := normalized.Wait != nil && normalized.Wait.CancelOnTimeout
-			encoded, marshalErr = marshalSyncTimeoutJSON(mapped, normalized.RequestID, cancelOnTimeout, availability)
+			if availability.Durable == nil {
+				return writeRunError(output, jsonOutput, fmt.Errorf("durable Factory Session result is required"))
+			}
+			encoded, marshalErr = marshalSyncTimeoutJSON(mapped, request.Correlation.RequestID, request.Wait.CancelOnTimeout, factoryapi.FactorySessionResultStatus(availability.Durable.Status))
 		} else {
 			encoded, marshalErr = json.Marshal(mapped)
 		}
@@ -54,8 +68,7 @@ func RunNormalizedSync(
 		_, err = fmt.Fprintln(output, string(encoded))
 		return err
 	}
-	cancelOnTimeout := normalized.Wait != nil && normalized.Wait.CancelOnTimeout
-	return renderSyncRunHuman(output, mapped, cancelOnTimeout)
+	return renderSyncRunHuman(output, mapped, request.Wait.CancelOnTimeout)
 }
 
 func writeRunError(output io.Writer, jsonOutput bool, err error) error {
@@ -76,20 +89,6 @@ type syncTimeoutCLIResponse struct {
 func isSyncTimeoutOutcome(result factoryapi.FactorySessionSyncExecutionResponse) bool {
 	return result.SyncOutcome == factoryapi.FactorySessionSyncExecutionOutcomeTimedOut ||
 		(result.TimedOut != nil && *result.TimedOut)
-}
-
-func syncResultAvailability(
-	ctx context.Context,
-	service factorysessionwire.DurableExecutionService,
-	sessionID string,
-) (factoryapi.FactorySessionResultStatus, error) {
-	result, err := service.GetResult(ctx, sessionID, factorysessionexecution.ResultRequest{
-		Mode: factorysessionexecution.ResultModeFinal,
-	})
-	if err != nil {
-		return "", err
-	}
-	return factoryapi.FactorySessionResultStatus(result.ResultStatus), nil
 }
 
 func marshalSyncTimeoutJSON(

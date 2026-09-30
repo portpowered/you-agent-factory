@@ -36,16 +36,16 @@ you run --named @you/goal --provider codex --model gpt-5 \
 ## Packaged ACP stdio integrations
 
 ACP harnesses use `executorProvider: ACP` on an agent worker and name the
-integration in `modelProvider` (for example `cursor-acp`). The packaged stdio
+integration in `modelProvider` (for example `cursor`). The packaged stdio
 catalog is data-backed at
 `pkg/services/providers/internal/services/builtins/wire/catalog.json`.
 
 | Identity | Launch command | Aliases |
 |----------|----------------|---------|
-| `pi-acp` | `npx pi-acp` | |
+| `pi` | `you pi-acp` | |
 | `openclaw-acp` | `openclaw acp` | |
-| `gemini-acp` | `gemini --acp` | |
-| `cursor-acp` | `cursor-agent acp` | |
+| `gemini` | `gemini --acp` | |
+| `cursor` | `cursor-agent acp` | |
 | `copilot-acp` | `copilot --acp --stdio` | |
 | `droid-acp` | `droid exec --output-format acp` | `factory-droid`, `factorydroid` |
 | `fast-agent-acp` | `uvx fast-agent-mcp acp` | |
@@ -53,9 +53,9 @@ catalog is data-backed at
 | `iflow-acp` | `iflow --experimental-acp` | |
 | `kilocode-acp` | `npx -y @kilocode/cli acp` | |
 | `kimi-acp` | `kimi acp` | |
-| `kiro-acp` | `kiro-cli-chat acp` | |
+| `kiro` | `kiro-cli-chat acp` | |
 | `mux-acp` | `mux acp` | |
-| `opencode-acp` | `npx -y opencode-ai acp` | |
+| `opencode` | `opencode acp` | |
 | `pool-acp` | `pool acp` | |
 | `qoder-acp` | `qodercli --acp` | |
 | `qwen-acp` | `qwen --acp` | |
@@ -63,13 +63,15 @@ catalog is data-backed at
 | `trae-acp` | `traecli acp serve` | |
 | `zeroclaw-acp` | `zeroclaw acp` | |
 
+The `opencode` identity works without `opencode-acp`. It uses the `opencode` CLI directly. For concurrent ACP runs, You defaults OpenCode v2 filesystem snapshots off to avoid shared snapshot Git lock contention. An operator who needs OpenCode's own undo/revert can set `OPENCODE_CONFIG_CONTENT` to `{"snapshots":true}` while accepting possible contention for simultaneous runs in one worktree.
+
 That is twenty packaged ACP identities, plus the three bundled provider CLIs
 above. Operators can add more with `you workers acp add`.
 
 Representative ACP run after the agent is installed and authenticated:
 
 ```bash
-you run --named @you/goal --provider cursor-acp --model auto --skip-permissions \
+you run --named @you/goal --provider cursor --model auto --skip-permissions \
   --to "Add a simple unit test, run it, and finish the goal"
 ```
 

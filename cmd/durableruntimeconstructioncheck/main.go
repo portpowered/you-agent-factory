@@ -15,7 +15,7 @@ import (
 
 const (
 	runtimeConstructorName = "NewJavaScriptRuntimeService"
-	storeConstructorName   = "NewDirectoryStore"
+	storeConstructorName   = "NewLazyProjectStore"
 	storeDirectoryName     = "DirForProjectRoot"
 	persistenceBooleanName = "PersistSessions"
 	providerInferenceName  = "Infer"
@@ -37,7 +37,6 @@ var applicationCompositionCalls = map[string]struct{}{
 
 var approvedApplicationCompositionFiles = map[string]struct{}{
 	"pkg/initializer/application/entrypoints.go":                                                         {},
-	"pkg/services/factory_sessions/internal/executionopening/factory.go":                                 {},
 	"pkg/services/factory_sessions/internal/execution/service.go":                                        {},
 	"pkg/services/factory_sessions/internal/services/durable_execution/internal/service/construction.go": {},
 }

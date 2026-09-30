@@ -76,7 +76,7 @@ func TestFactoryRunRetriesACPProviderByResumingExactSession(t *testing.T) {
 }
 
 func assertACPProviderSession(t *testing.T, events []factoryapi.FactoryEvent) {
-	assertProviderSession(t, events, "cursor-acp")
+	assertProviderSession(t, events, "cursor")
 }
 
 func assertProviderSession(t *testing.T, events []factoryapi.FactoryEvent, provider string) {

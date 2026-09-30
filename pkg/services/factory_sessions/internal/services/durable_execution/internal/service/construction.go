@@ -5,8 +5,8 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -32,7 +32,7 @@ func NewDurable(
 	generateResponseEventID factorysessions.ResponseEventIDGenerator,
 	responseStreams responsestreamservice.Service,
 	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-) (*Service, error) {
+) (durableexecution.Service, error) {
 	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
 		persistencePolicy,
 		projectRoot,
@@ -67,84 +67,10 @@ func NewDurable(
 	if err != nil {
 		return nil, err
 	}
-	return New(execution)
-}
-
-// NewStandalone constructs the explicitly selected durable backend used by
-// standalone CLI and MCP execution opening.
-func NewStandalone(
-	provider factorysessions.ExecutionProvider,
-	projectRoot string,
-	stores roles.RuntimePersistenceStoreFactory,
-	fixtureCatalogPath string,
-	childExecutorMode string,
-	workerExecution factorysessionexecution.WorkerExecution,
-	clock factoryruntime.Clock,
-	syncWaits factorysessionexecution.SyncWaitScheduler,
-	checkpointSummaries factoryruntime.JavaScriptCheckpointSummaries,
-	workflows factoryruntime.JavaScriptWorkflows,
-	orchestration factoryruntime.OrchestrationJavaScriptExecution,
-	childValues factoryruntime.JavaScriptChildValues,
-	recordingWriter recordings.PortableRecordingWriter,
-	generateSessionID factorysessions.SessionIDGenerator,
-	fixtureFiles fileeffects.ContractFixtureReader,
-	liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
-) (*Service, error) {
-	switch provider {
-	case factorysessions.ExecutionProviderFake:
-		execution, err := factorysessionexecution.NewFakeServiceFromContractFixtures(
-			fixtureCatalogPath,
-			clock,
-			fixtureFiles,
-		)
-		if err != nil {
-			return nil, err
-		}
-		return New(execution)
-	case factorysessions.ExecutionProviderJavaScriptRuntime:
-		// Standalone CLI/MCP opening follows the interim application policy:
-		// in-memory only. Callers that need restart/resume snapshots compose
-		// through NewDurable with PersistencePolicyEnabled instead.
-		persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
-			factorysessions.PersistencePolicyDisabled,
-			projectRoot,
-			adaptRuntimePersistenceStoreFactory(stores),
-		)
-		if err != nil {
-			return nil, err
-		}
-		execution, err := factorysessionexecution.NewJavaScriptExecutionService(
-			projectRoot,
-			childExecutorMode,
-			nil,
-			persistence,
-			clock,
-			syncWaits,
-			checkpointSummaries,
-			workflows,
-			orchestration,
-			childValues,
-			nil,
-			factoryruntime.JavaScriptWorkerSettings{},
-			recordingWriter,
-			generateSessionID,
-			nil,
-			nil,
-			liveChangeCoordinator,
-		)
-		if err != nil {
-			return nil, err
-		}
-		if runtime, ok := execution.(*factorysessionexecution.JavaScriptRuntimeService); ok {
-			runtime.SetDirectWorkerExecution(workerExecution)
-		}
-		return New(execution)
-	default:
-		return nil, factorysessionexecution.NewValidationError(
-			"provider",
-			"unsupported execution provider",
-		)
+	if runtime, ok := execution.(*factorysessionexecution.JavaScriptRuntimeService); ok {
+		runtime.SetPersistenceRouting(adaptRuntimePersistenceStoreFactory(stores), nil)
 	}
+	return execution, nil
 }
 
 func adaptRuntimePersistenceStoreFactory(

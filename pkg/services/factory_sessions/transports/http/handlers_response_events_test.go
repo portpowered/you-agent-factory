@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,47 +10,41 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
-type durableResponseEventsProjectionFake struct {
-	subscribe func(context.Context, factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error)
+type responseEventsRootFake struct {
+	factorysessions.Service
+	subscribe func(context.Context, factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error)
 }
 
-func (fake durableResponseEventsProjectionFake) SubscribeDurableFactoryResponseEvents(
+func (fake responseEventsRootFake) SubscribeResponses(
 	ctx context.Context,
-	request factorysessions.ResponseEventSubscriptionRequest,
-) (apisurface.FactoryResponseEventSubscription, error) {
+	request factorysessions.SessionResponseSubscriptionRequest,
+) (factorysessions.SessionResponseSubscriptionResult, error) {
 	if fake.subscribe == nil {
-		panic("unexpected SubscribeDurableFactoryResponseEvents call")
+		panic("unexpected SubscribeResponses call")
 	}
 	return fake.subscribe(ctx, request)
 }
 
-type staticResponseEventSubscription struct {
-	records []apisurface.FactoryResponseEventRecord
-	index   int
-}
-
-func (s *staticResponseEventSubscription) Next(context.Context) ([]apisurface.FactoryResponseEventRecord, error) {
-	if s.index >= len(s.records) {
-		return nil, context.Canceled
+func blockingResponseEventCursor() *factorysessions.ResponseEventCursor {
+	return &factorysessions.ResponseEventCursor{
+		NextEvents: func(ctx context.Context) ([]factorysessions.FactoryResponseEvent, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+		DetachCursor: func() {},
 	}
-	batch := s.records[s.index:]
-	s.index = len(s.records)
-	return batch, nil
 }
-
-func (s *staticResponseEventSubscription) Detach() {}
 
 func TestGetFactoryResponseEventsBySessionId_CanceledStreamCompletesWithoutHang(t *testing.T) {
 	t.Parallel()
 
 	handler := NewHandler(Dependencies{
-		DurableResponseEvents: durableResponseEventsProjectionFake{
-			subscribe: func(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error) {
-				return &blockingResponseEventSubscription{}, nil
+		SessionsRoot: responseEventsRootFake{
+			subscribe: func(ctx context.Context, request factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
+				return factorysessions.SessionResponseSubscriptionResult{Cursor: blockingResponseEventCursor()}, nil
 			},
 		},
 	}, zap.NewNop())
@@ -83,9 +76,9 @@ func TestGetFactoryResponseEventsBySessionId_DeadlineExceededStreamCompletesWith
 	t.Parallel()
 
 	handler := NewHandler(Dependencies{
-		DurableResponseEvents: durableResponseEventsProjectionFake{
-			subscribe: func(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error) {
-				return &blockingResponseEventSubscription{}, nil
+		SessionsRoot: responseEventsRootFake{
+			subscribe: func(ctx context.Context, request factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
+				return factorysessions.SessionResponseSubscriptionResult{Cursor: blockingResponseEventCursor()}, nil
 			},
 		},
 	}, zap.NewNop())
@@ -115,38 +108,26 @@ func TestGetFactoryResponseEventsBySessionId_DeadlineExceededStreamCompletesWith
 	}
 }
 
-type blockingResponseEventSubscription struct{}
-
-func (blockingResponseEventSubscription) Next(ctx context.Context) ([]apisurface.FactoryResponseEventRecord, error) {
-	<-ctx.Done()
-	return nil, ctx.Err()
-}
-
-func (blockingResponseEventSubscription) Detach() {}
-
 func TestGetFactoryResponseEventsBySessionId_DurableSessionStreamsSSE(t *testing.T) {
 	t.Parallel()
 
-	payload, err := json.Marshal(factorysessions.FactoryResponseEvent{
-		Sequence:   1,
-		Kind:       factorysessions.ResponseEventKindMessage,
-		DispatchID: "dispatch-1",
-	})
-	if err != nil {
-		t.Fatalf("marshal event: %v", err)
-	}
-
 	handler := NewHandler(Dependencies{
-		DurableResponseEvents: durableResponseEventsProjectionFake{
-			subscribe: func(_ context.Context, request factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error) {
+		SessionsRoot: responseEventsRootFake{
+			subscribe: func(_ context.Context, request factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
 				if request.SessionID != "dur-sess-1" || request.AfterSequence != 2 {
 					t.Fatalf("subscribe request = %#v", request)
 				}
-				return &staticResponseEventSubscription{records: []apisurface.FactoryResponseEventRecord{{
-					Sequence: 1,
-					Kind:     string(factorysessions.ResponseEventKindMessage),
-					Data:     payload,
-				}}}, nil
+				called := false
+				return factorysessions.SessionResponseSubscriptionResult{Cursor: &factorysessions.ResponseEventCursor{
+					NextEvents: func(context.Context) ([]factorysessions.FactoryResponseEvent, error) {
+						if called {
+							return nil, context.Canceled
+						}
+						called = true
+						return []factorysessions.FactoryResponseEvent{{Sequence: 1, Kind: factorysessions.ResponseEventKindMessage, DispatchID: "dispatch-1"}}, nil
+					},
+					DetachCursor: func() {},
+				}}, nil
 			},
 		},
 	}, zap.NewNop())
@@ -169,7 +150,7 @@ func TestGetFactoryResponseEventsBySessionId_DurableSessionStreamsSSE(t *testing
 func TestGetFactoryResponseEventsBySessionId_RejectsInvalidAfterSequence(t *testing.T) {
 	t.Parallel()
 
-	handler := NewHandler(Dependencies{DurableResponseEvents: durableResponseEventsProjectionFake{}}, zap.NewNop())
+	handler := NewHandler(Dependencies{SessionsRoot: responseEventsRootFake{}}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	afterSequence := factoryapi.ResponseEventAfterSequence(-1)
 	handler.GetFactoryResponseEventsBySessionId(
@@ -186,7 +167,7 @@ func TestGetFactoryResponseEventsBySessionId_RejectsInvalidAfterSequence(t *test
 func TestGetFactoryResponseEventsBySessionId_RejectsInvalidKindFilter(t *testing.T) {
 	t.Parallel()
 
-	handler := NewHandler(Dependencies{DurableResponseEvents: durableResponseEventsProjectionFake{}}, zap.NewNop())
+	handler := NewHandler(Dependencies{SessionsRoot: responseEventsRootFake{}}, zap.NewNop())
 	recorder := httptest.NewRecorder()
 	kinds := factoryapi.ResponseEventKind{"NOT_A_KIND"}
 	handler.GetFactoryResponseEventsBySessionId(
@@ -204,9 +185,9 @@ func TestGetFactoryResponseEventsBySessionId_MapsDurableSessionNotFound(t *testi
 	t.Parallel()
 
 	handler := NewHandler(Dependencies{
-		DurableResponseEvents: durableResponseEventsProjectionFake{
-			subscribe: func(context.Context, factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error) {
-				return nil, apisurface.ErrFactorySessionNotFound
+		SessionsRoot: responseEventsRootFake{
+			subscribe: func(context.Context, factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
+				return factorysessions.SessionResponseSubscriptionResult{}, factorysessions.ErrSessionNotFound
 			},
 		},
 	}, zap.NewNop())
@@ -222,7 +203,7 @@ func TestGetFactoryResponseEventsBySessionId_MapsDurableSessionNotFound(t *testi
 	}
 }
 
-func TestGetFactoryResponseEventsBySessionId_RequiresDurableProjection(t *testing.T) {
+func TestGetFactoryResponseEventsBySessionId_RequiresSessionsRoot(t *testing.T) {
 	t.Parallel()
 
 	handler := NewHandler(Dependencies{}, zap.NewNop())
@@ -233,7 +214,7 @@ func TestGetFactoryResponseEventsBySessionId_RequiresDurableProjection(t *testin
 		"dur-sess-1",
 		factoryapi.GetFactoryResponseEventsBySessionIdParams{},
 	)
-	if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), "response-event replay is unavailable") {
+	if recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), "factory sessions service is unavailable") {
 		t.Fatalf("response = %d %s, want unavailable dependency error", recorder.Code, recorder.Body.String())
 	}
 }

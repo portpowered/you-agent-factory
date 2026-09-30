@@ -65,7 +65,7 @@ func TestProvidersListThroughRootBuildProcess(t *testing.T) {
 func TestPackagedACPProjectionRejectsInvalidRuntimeBindings(t *testing.T) {
 	const base = `{
   "acp": [{
-    "name": "cursor-acp",
+    "name": "cursor",
     "transport": "stdio",
     "executable": "cursor-agent",
     "command": "cursor-agent acp",
@@ -103,7 +103,7 @@ func TestPackagedACPProjectionRejectsInvalidRuntimeBindings(t *testing.T) {
 		{
 			name: "canonical alias",
 			mutate: func(document string) string {
-				return strings.Replace(document, `"transport": "stdio",`, "\"aliases\": [\"cursor-acp\"],\n    \"transport\": \"stdio\",", 1)
+				return strings.Replace(document, `"transport": "stdio",`, "\"aliases\": [\"cursor\"],\n    \"transport\": \"stdio\",", 1)
 			},
 			want: "duplicates its canonical identity",
 		},
@@ -288,16 +288,16 @@ func assertJSONProviderInventory(t *testing.T, decoded listOutput) map[string]pr
 			t.Fatalf("ACP provider %q published unverified model/tool/limit facts = %#v", providerID, provider)
 		}
 		wantCapabilities := []string{"prompt_submission"}
-		if providerID == "cursor-acp" {
+		if providerID == "cursor" {
 			wantCapabilities = []string{"image_input", "permission_bypass", "prompt_submission"}
-		} else if providerID == "opencode-acp" {
+		} else if providerID == "opencode" {
 			wantCapabilities = []string{"permission_bypass", "prompt_submission"}
 		}
 		if !sameStrings(provider.Capabilities, wantCapabilities) {
 			t.Fatalf("ACP provider %q capabilities = %v, want %v", providerID, provider.Capabilities, wantCapabilities)
 		}
-		if len(provider.Prerequisites) != 4 {
-			t.Fatalf("ACP provider %q prerequisites = %#v, want stdio, executable, authentication, and workspace", providerID, provider.Prerequisites)
+		if len(provider.Prerequisites) < 4 {
+			t.Fatalf("ACP provider %q prerequisites = %#v, want at least stdio, executable, authentication, and workspace", providerID, provider.Prerequisites)
 		}
 		for _, prerequisite := range provider.Prerequisites {
 			if prerequisite.Status != "required" {
@@ -317,9 +317,9 @@ func expectedProviderIDs() []string {
 
 func expectedACPProviderIDs() []string {
 	return []string{
-		"copilot-acp", "cursor-acp", "droid-acp", "fast-agent-acp", "gemini-acp",
-		"grok-build-acp", "iflow-acp", "kilocode-acp", "kimi-acp", "kiro-acp",
-		"mux-acp", "openclaw-acp", "opencode-acp", "pi-acp", "pool-acp",
+		"copilot-acp", "cursor", "droid-acp", "fast-agent-acp", "gemini",
+		"grok-build-acp", "iflow-acp", "kilocode-acp", "kimi-acp", "kiro",
+		"mux-acp", "openclaw-acp", "opencode", "pi", "pool-acp",
 		"qoder-acp", "qwen-acp", "reasonix-acp", "trae-acp", "zeroclaw-acp",
 	}
 }

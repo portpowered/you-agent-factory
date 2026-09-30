@@ -55,7 +55,7 @@ func (s *bridgeSequencer) AdvanceStreamHead(_ context.Context, req chatsessions.
 }
 
 type bridgeTarget struct {
-	factorysessions.TargetExecutionService
+	factorysessions.Service
 	cursor              *factorysessions.ResponseEventCursor
 	err                 error
 	factoryEvents       *factorydefinitions.FactoryEventStream
@@ -64,8 +64,8 @@ type bridgeTarget struct {
 	factoryEventIndex   *int
 }
 
-func (t bridgeTarget) SubscribeFactoryResponseEvents(_ context.Context, _ factorysessions.ResponseEventSubscriptionRequest) (*factorysessions.ResponseEventCursor, error) {
-	return t.cursor, t.err
+func (t bridgeTarget) SubscribeResponses(_ context.Context, _ factorysessions.SessionResponseSubscriptionRequest) (factorysessions.SessionResponseSubscriptionResult, error) {
+	return factorysessions.SessionResponseSubscriptionResult{Cursor: t.cursor}, t.err
 }
 
 func (t bridgeTarget) SubscribeFactoryEventsForSession(_ context.Context, _ string, _ *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error) {

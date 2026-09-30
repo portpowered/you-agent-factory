@@ -132,8 +132,8 @@ func TestStopActiveHostedInstanceStopsSidecarsRunLoopAndFinalizesArtifacts(t *te
 	}
 
 	stopErr := host.Stop(handle)
-	if !errors.Is(stopErr, context.Canceled) {
-		t.Fatalf("Stop() error = %v, want context canceled", stopErr)
+	if stopErr != nil {
+		t.Fatalf("Stop() error = %v, want ordinary shutdown cancellation normalized", stopErr)
 	}
 	select {
 	case <-sidecarExited:
@@ -405,8 +405,8 @@ func TestStop_CancelsAndJoinsSidecarsBeforeStoppingRunLoop(t *testing.T) {
 	}()
 
 	stopErr := host.Stop(handle)
-	if !errors.Is(stopErr, context.Canceled) {
-		t.Fatalf("Stop() error = %v, want context canceled", stopErr)
+	if stopErr != nil {
+		t.Fatalf("Stop() error = %v, want ordinary shutdown cancellation normalized", stopErr)
 	}
 	select {
 	case <-sidecarExited:

@@ -953,3 +953,20 @@ func requestArtifacts(request models.PrepareModelAssetsRequest) []genericArtifac
 	}
 	return artifacts
 }
+
+func TestGenericSourcePrefersDottedOperatorNameToRelativePath(t *testing.T) {
+	t.Parallel()
+	const name = "index-tts2.5"
+	const path = "/models/index-tts2_5-orig.gguf"
+	source := "file://" + path
+	scope := models.RuntimeScopeConfig{OperatorModels: map[string]models.ModelOverlay{
+		name: {Source: &source},
+	}}
+	resolved, err := (&service{}).resolveGenericSource(context.Background(), scope, name)
+	if err != nil {
+		t.Fatalf("resolve operator source: %v", err)
+	}
+	if resolved.kind != genericSourceFile || resolved.localPath != filepath.FromSlash(path) {
+		t.Fatalf("resolved source = %#v, want configured file path", resolved)
+	}
+}

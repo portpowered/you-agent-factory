@@ -73,7 +73,7 @@ func TestNewAddsAndReplacesContributedDescriptors(t *testing.T) {
 
 	service, err := internalservice.New(internalservice.WithDescriptors(
 		providers.Descriptor{ID: providers.IDCodex, DisplayName: "Configured Codex", Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady},
-		providers.Descriptor{ID: "cursor-acp", DisplayName: "cursor-acp", Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady},
+		providers.Descriptor{ID: "cursor", DisplayName: "cursor", Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady},
 	))
 	if err != nil {
 		t.Fatalf("New(WithDescriptors) = %v", err)
@@ -86,7 +86,7 @@ func TestNewAddsAndReplacesContributedDescriptors(t *testing.T) {
 	if indexed[providers.IDCodex].DisplayName != "Configured Codex" {
 		t.Fatalf("replacement = %#v", indexed[providers.IDCodex])
 	}
-	if indexed["cursor-acp"].ID != "cursor-acp" {
+	if indexed["cursor"].ID != "cursor" {
 		t.Fatalf("contributed descriptor missing: %#v", indexed)
 	}
 }
@@ -202,8 +202,8 @@ func TestListProvidersProjectsIdentityMetadataAndCapabilities(t *testing.T) {
 	assertAntigravityCatalogFacts(t, indexed[providers.IDAntigravity])
 	assertClaudeCatalogFacts(t, indexed[providers.IDClaude])
 
-	if _, ok := indexed[providers.IDCursor]; ok {
-		t.Fatal("native cursor must not be present in the selectable provider catalog")
+	if _, ok := indexed[providers.IDCursor]; !ok {
+		t.Fatal("canonical cursor ACP must be present in the selectable provider catalog")
 	}
 }
 
@@ -499,7 +499,7 @@ func TestResolveProviderIDUsesStaticCanonicalAuthority(t *testing.T) {
 		err  error
 	}{
 		{name: "canonical", id: providers.IDCodex, want: providers.IDCodex},
-		{name: "retired native cursor", id: "cursor", err: providers.ErrUnknownProvider},
+		{name: "canonical ACP cursor", id: "cursor", want: "cursor"},
 		{name: "invalid", err: providers.ErrInvalidID},
 		{name: "unknown", id: "missing", err: providers.ErrUnknownProvider},
 	}

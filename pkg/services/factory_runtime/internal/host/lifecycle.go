@@ -220,7 +220,28 @@ func Stop(handle *Handle, clock factory.Clock) error {
 	handle.CancelRun()
 	runErr := handle.Wait()
 	finalizeRuntimeLifecycleMetrics(handle, runtimeMetricsObservation{})
-	return errors.Join(runErr, FinalizeArtifacts(handle.Bundle, clock))
+	// Ordinary run cancellation is expected during shutdown. Remove it before
+	// joining cleanup failures so callers cannot mistake a failed final flush
+	// for benign cancellation. Preserve other causes in a joined run error.
+	return errors.Join(withoutRunCancellation(runErr), FinalizeArtifacts(handle.Bundle, clock))
+}
+
+func withoutRunCancellation(err error) error {
+	if !errors.Is(err, context.Canceled) {
+		return err
+	}
+	switch wrapped := err.(type) {
+	case interface{ Unwrap() []error }:
+		var remaining []error
+		for _, cause := range wrapped.Unwrap() {
+			remaining = append(remaining, withoutRunCancellation(cause))
+		}
+		return errors.Join(remaining...)
+	case interface{ Unwrap() error }:
+		return withoutRunCancellation(wrapped.Unwrap())
+	default:
+		return nil
+	}
 }
 
 // FinalizeArtifacts finishes replay recording and closes runtime log and metrics sinks.

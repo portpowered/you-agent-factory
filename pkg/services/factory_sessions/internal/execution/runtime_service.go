@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/workersettings"
 	"strings"
 	"sync"
 	"time"
@@ -48,6 +49,7 @@ type runtimeSessionState struct {
 	startRequest              *StartRequest
 	resolvedSource            ResolvedSource
 	sourceContent             string
+	projectRoot               string
 	events                    []json.RawMessage
 	runCancel                 context.CancelFunc
 	runDone                   chan struct{} // closed under mu after the async run and terminal persistence return
@@ -103,8 +105,9 @@ func projectRuntimeSessionState(
 	}
 
 	state := runtimeSessionState{
-		session: session,
-		result:  result,
+		session:     session,
+		result:      result,
+		projectRoot: strings.TrimSpace(normalized.ProjectRoot),
 	}
 	if outcome.OK {
 		applyRuntimeSuccessProjection(&state, sessionID, outcome, finishedAt)
@@ -162,8 +165,9 @@ func projectRuntimeRunningSessionState(
 		},
 	}
 	state := runtimeSessionState{
-		session: session,
-		result:  result,
+		session:     session,
+		result:      result,
+		projectRoot: strings.TrimSpace(normalized.ProjectRoot),
 	}
 	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result, RuntimeDispatchEventInput{
 		Dispatches:                state.dispatches,
@@ -191,7 +195,10 @@ func projectRuntimeFailure(session *SessionReadResult, result *ResultReadResult,
 		}
 		result.ResultStatus = ResultStatusUnavailable
 	}
-	if code := strings.TrimSpace(failure.Code); code != "" {
+	if code := strings.TrimSpace(failure.Code); code != "" || strings.TrimSpace(failure.Message) != "" {
+		if code == "" {
+			code = factory.JavaScriptRuntimeCodeScriptError
+		}
 		session.Failure = &FailureSummary{
 			Reason:  code,
 			Message: failure.Message,
@@ -230,9 +237,12 @@ type JavaScriptRuntimeService struct {
 	// helpers and tests. Production standalone opening supplies the narrow
 	// Workers Execute capability through directChildExecution; P6-C can remove
 	// this compatibility input after those callers are retired.
-	directChildInvocation workers.InvocationExecutor
-	directChildExecution  childExecuteService
-	persistence           runtimepersist.Store
+	directChildInvocation   workers.InvocationExecutor
+	directChildExecution    childExecuteService
+	persistence             runtimepersist.Store
+	persistenceStoreForRoot func(string) (runtimepersist.Store, error)
+	persistenceProjectRoot  func() string
+	resumeRuntimeScope      func(string) (ResumeRuntimeScope, error)
 	durableSnapshotBounds
 	clock                   factory.Clock
 	syncWaits               SyncWaitScheduler
@@ -327,7 +337,7 @@ func NewJavaScriptRuntimeService(
 		orchestration:           orchestration,
 		childValues:             childValues,
 		workerPresetIDs:         workerPresetIDs,
-		workerSettings:          workerSettings,
+		workerSettings:          *workersettings.Clone(&workerSettings),
 		recordingWriter:         recordingWriter,
 		generateSessionID:       generateSessionID,
 		generateResponseEventID: generateResponseEventID,
@@ -349,6 +359,51 @@ func (s *JavaScriptRuntimeService) PersistenceStore() runtimepersist.Store {
 		return nil
 	}
 	return s.persistence
+}
+
+// SetPersistenceRouting selects the opened project's store for process-owned
+// durable requests. The resolver reads the canonical live Factory Session.
+func (s *JavaScriptRuntimeService) SetPersistenceRouting(storeForRoot func(string) (runtimepersist.Store, error), projectRoot func() string) {
+	if s == nil {
+		return
+	}
+	if storeForRoot != nil {
+		s.persistenceStoreForRoot = storeForRoot
+	}
+	if projectRoot != nil {
+		s.persistenceProjectRoot = projectRoot
+	}
+}
+
+// ResumeRuntimeScope carries transient Worker capabilities from the selected
+// live Factory Session. No function in this value is persisted in a snapshot.
+type ResumeRuntimeScope struct {
+	WorkerSettings          *factory.JavaScriptWorkerSettings
+	MockWorkers             *workers.MockWorkersConfig
+	WorkerAttemptStarter    factorysessions.WorkerAttemptStarter
+	WorkerResourceAdmission factory.ResourceCapacityLeaseAdmission
+	WorkerProgressPublisher workers.ProgressPublisher
+}
+
+func (s *JavaScriptRuntimeService) SetResumeRuntimeScopeResolver(resolve func(string) (ResumeRuntimeScope, error)) {
+	if s == nil {
+		return
+	}
+	s.resumeRuntimeScope = resolve
+}
+
+func (s *JavaScriptRuntimeService) persistenceForRoot(root string) (runtimepersist.Store, error) {
+	if s.persistenceStoreForRoot == nil || strings.TrimSpace(root) == "" || strings.TrimSpace(root) == strings.TrimSpace(s.projectRoot) {
+		return s.persistence, nil
+	}
+	return s.persistenceStoreForRoot(root)
+}
+
+func (s *JavaScriptRuntimeService) persistenceForRead() (runtimepersist.Store, error) {
+	if s.persistenceProjectRoot == nil {
+		return s.persistence, nil
+	}
+	return s.persistenceForRoot(s.persistenceProjectRoot())
 }
 
 func (s *JavaScriptRuntimeService) now() time.Time { return s.clock.Now().UTC() }
@@ -423,6 +478,7 @@ func (s *JavaScriptRuntimeService) startAsync(ctx context.Context, req StartRequ
 	reserved.state.startRequest = cloneStartRequest(normalized)
 	reserved.state.resolvedSource = resolved
 	reserved.state.sourceContent = sourceContent
+	reserved.state.projectRoot = s.resolveRequestProjectRoot(normalized)
 	s.mu.Unlock()
 	if err := s.ensureSessionResponseEventsIfNeeded(reserved.state); err != nil {
 		s.mu.Lock()
@@ -745,10 +801,35 @@ func (s *JavaScriptRuntimeService) executeImmediateSyncSession(
 }
 
 func (s *JavaScriptRuntimeService) prepareStart(normalized StartRequest) (PreparedStart, error) {
+	presetIDs := s.workerPresetIDs
+	if normalized.WorkerSettings != nil {
+		presetIDs = make(map[string]struct{}, len(normalized.WorkerSettings.Presets))
+		for id := range normalized.WorkerSettings.Presets {
+			presetIDs[id] = struct{}{}
+		}
+	}
 	return PrepareStart(normalized, StartPrepareContext{
-		StartSourceContext: StartSourceContext{ProjectRoot: s.projectRoot},
-		WorkerPresetIDs:    s.workerPresetIDs,
+		StartSourceContext: StartSourceContext{ProjectRoot: s.resolveRequestProjectRoot(normalized)},
+		WorkerPresetIDs:    presetIDs,
 	}, s.workflowDefinitions)
+}
+
+func (s *JavaScriptRuntimeService) resolveRequestProjectRoot(req StartRequest) string {
+	return strings.TrimSpace(req.ProjectRoot)
+}
+
+func (s *JavaScriptRuntimeService) projectRootForSession(sessionID string) string {
+	if s == nil {
+		return ""
+	}
+	s.mu.RLock()
+	state := s.sessions[sessionID]
+	root := ""
+	if state != nil {
+		root = strings.TrimSpace(state.projectRoot)
+	}
+	s.mu.RUnlock()
+	return root
 }
 
 func policyResolutionFromPrepared(prepared PreparedStart) factory.JavaScriptPolicyResolution {
@@ -823,6 +904,10 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 	if err != nil {
 		return factory.JavaScriptRuntimeOutcome{}, err
 	}
+	workerSettings := s.workerSettings
+	if normalized.WorkerSettings != nil {
+		workerSettings = *normalized.WorkerSettings
+	}
 	return s.orchestration.RunJavaScript(ctx, factory.JavaScriptRuntimeRequest{
 		Source:         sourceContent,
 		SourceRef:      resolved.SourceRef,
@@ -833,8 +918,8 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 		FactoryName:    factoryNameFromStart(normalized, resolved),
 		Policy:         policyResolution.Policy,
 		Agents:         resolved.Agents,
-		WorkerSettings: s.workerSettings,
-	}, s.childExecutorHooks(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID))
+		WorkerSettings: workerSettings,
+	}, s.childExecutorHooksForStart(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID, normalized.MockWorkers, normalized.WorkerAttemptStarter, normalized.WorkerResourceAdmission, normalized.WorkerProgressPublisher))
 }
 
 func workflowRunContext(parent context.Context, policy factory.JavaScriptPolicy) (context.Context, context.CancelFunc) {
@@ -857,8 +942,11 @@ func (s *JavaScriptRuntimeService) snapshotSessionState(sessionID string) (runti
 		s.mu.RUnlock()
 		return cloned, nil
 	}
-	persistence := s.persistence
+	persistence, routeErr := s.persistenceForRead()
 	s.mu.RUnlock()
+	if routeErr != nil {
+		return runtimeSessionState{}, routeErr
+	}
 
 	if persistence == nil {
 		return runtimeSessionState{}, ErrSessionNotFound
@@ -882,118 +970,4 @@ func (s *JavaScriptRuntimeService) snapshotSessionState(sessionID string) (runti
 	cached := loaded
 	s.sessions[sessionID] = &cached
 	return cloneRuntimeSessionState(&cached), nil
-}
-
-// RecordPetriTokenMutations appends applied Petri transition records through
-// the canonical Factory Session persistence owner. Persistence succeeds before
-// the updated history becomes visible to live readers.
-func (s *JavaScriptRuntimeService) RecordPetriTokenMutations(
-	sessionID string,
-	mutations []interfaces.TokenMutationRecord,
-) error {
-	id, err := NormalizeSessionID(sessionID)
-	if err != nil {
-		return err
-	}
-	if len(mutations) == 0 {
-		return nil
-	}
-	if _, err := s.snapshotSessionState(id); err != nil && !errors.Is(err, ErrSessionNotFound) {
-		return err
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	state, ok := s.sessions[id]
-	if !ok {
-		initial := projectPetriRunningSessionState(id, s.now())
-		state = &initial
-	}
-	candidate := cloneRuntimeSessionState(state)
-	candidate.petriMutations = append(candidate.petriMutations, clonePetriMutations(mutations)...)
-	compactRuntimePetriHistory(&candidate)
-	if err := s.persistSessionSnapshot(candidate); err != nil {
-		return err
-	}
-	if ok {
-		*state = candidate
-	} else {
-		s.sessions[id] = &candidate
-	}
-	return nil
-}
-
-func (s *JavaScriptRuntimeService) syncStartFromState(state runtimeSessionState) SyncStartResult {
-	async := s.asyncStartFromState(state)
-	result := SyncStartResult{AsyncStartResult: async}
-	if state.result.Availability != nil && state.result.Availability.Reason == "SYNC_WAIT_TIMED_OUT" {
-		result.SyncOutcome = SyncOutcomeTimedOut
-		result.TimedOut = true
-		return result
-	}
-	if IsTerminalLifecycleStatus(state.session.Status) {
-		result.SyncOutcome = SyncOutcomeCompleted
-		projected, err := ProjectResultRead(state.result, state.session, state.artifacts, ResultRequest{
-			Mode: ResultModeFinal,
-		})
-		if err == nil {
-			if encoded, err := json.Marshal(projected); err == nil {
-				result.Result = encoded
-			}
-		}
-	}
-	return result
-}
-
-func (s *JavaScriptRuntimeService) asyncStartFromState(state runtimeSessionState) AsyncStartResult {
-	return AsyncStartResult{
-		SessionID:        state.session.SessionID,
-		Status:           string(state.session.Status),
-		OrchestratorKind: state.session.OrchestratorKind,
-		Dialect:          state.session.Dialect,
-		ResolvedSource:   state.session.ResolvedSource,
-		SourceHash:       state.session.SourceHash,
-		Policy:           state.session.Policy,
-		Links:            state.session.Links,
-	}
-}
-
-func defaultUnavailableAvailability() *ResultAvailabilityDetail {
-	return &ResultAvailabilityDetail{
-		Reason:    "UNAVAILABLE",
-		Message:   "session result is unavailable",
-		Retryable: false,
-	}
-}
-
-func marshalStartArgs(args map[string]any) (json.RawMessage, error) {
-	if len(args) == 0 {
-		return nil, nil
-	}
-	encoded, err := json.Marshal(args)
-	if err != nil {
-		return nil, NewValidationError("args", "args must be JSON-compatible")
-	}
-	return encoded, nil
-}
-
-func workflowMetadataFromResolved(resolved ResolvedSource, req StartRequest) map[string]string {
-	metadata := map[string]string{}
-	if req.Source.InlineWorkflow != nil {
-		for key, value := range req.Source.InlineWorkflow.Metadata {
-			metadata[key] = value
-		}
-	}
-	for key, value := range resolved.Metadata {
-		metadata[key] = value
-	}
-	if name := strings.TrimSpace(req.Source.WorkflowName); name != "" {
-		metadata["name"] = name
-	} else if _, ok := metadata["name"]; !ok {
-		base := strings.TrimSpace(resolved.SourceRef)
-		if base != "" {
-			metadata["name"] = base
-		}
-	}
-	return metadata
 }

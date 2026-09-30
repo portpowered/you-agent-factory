@@ -538,6 +538,37 @@ func TestFactoryImpl_TerminationStopsOutboxCancelsWorkersAndAcceptsLateDuplicate
 	assertStoppedRuntimeLateResult(t, impl, request)
 }
 
+func TestFactoryImpl_TerminateBeforeRunDoesNotReopenRuntime(t *testing.T) {
+	runtime, err := newTestFactory(
+		withNet(buildSimpleNet()), withServiceMode(), withLogger(logging.NoopLogger{}),
+	)
+	requireNoRootErr(t, err, "New")
+	impl := runtime.(*factoryImpl)
+	terminated, err := impl.ControlTerminate(t.Context(), factory.TerminateRequest{Reason: "session closed before run started"})
+	requireNoRootErr(t, err, "ControlTerminate(idle)")
+	if terminated.Outcome != factory.ControlOutcomeAccepted {
+		t.Fatalf("termination outcome = %q, want ACCEPTED", terminated.Outcome)
+	}
+	runCtx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	runDone := make(chan error, 1)
+	go func() { runDone <- runtime.Run(runCtx) }()
+	select {
+	case err := <-runDone:
+		if err != nil {
+			t.Fatalf("Run after termination: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run reopened a runtime terminated before its goroutine started")
+	}
+	impl.mu.RLock()
+	state := impl.state
+	impl.mu.RUnlock()
+	if state != interfaces.FactoryStateCompleted {
+		t.Fatalf("runtime state = %q, want completed", state)
+	}
+}
+
 func TestFactoryImpl_RunCancellationPropagatesThroughWorkersBoundary(t *testing.T) {
 	boundary := newControlledWorkstationBoundary()
 	runtime, err := newTestFactory(

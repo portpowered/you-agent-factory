@@ -4,7 +4,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -13,11 +12,6 @@ import (
 
 type RuntimeStop = factorysessions.RuntimeStop
 
-type ownedSession struct {
-	id    string
-	owner factorysessions.Service
-}
-
 // Close drains every live Factory Session owned by this process root. A
 // command stops only its admitted session; process shutdown owns the rest.
 func (a *Assembly) Close(ctx context.Context) error {
@@ -25,65 +19,20 @@ func (a *Assembly) Close(ctx context.Context) error {
 		return nil
 	}
 	var result error
-	for _, session := range a.ownedSessionsForClose() {
-		result = errors.Join(result, closeOwnedSession(ctx, session))
+	if a.registry != nil {
+		ids := a.registry.IDs()
+		for index := len(ids) - 1; index >= 0; index-- {
+			if err := a.CloseSession(ctx, ids[index]); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, factorysessions.ErrSessionNotFound) {
+				result = errors.Join(result, err)
+			}
+		}
+	}
+	if service, ok := a.SessionGateway.(*Service); ok && service.durable != nil {
+		if closer, ok := service.durable.(interface{ Close() error }); ok {
+			result = errors.Join(result, closer.Close())
+		}
 	}
 	return result
-}
-
-func (a *Assembly) ownedSessionsForClose() []ownedSession {
-	a.detachedMu.RLock()
-	defer a.detachedMu.RUnlock()
-	if a.state == nil || a.state.Registry() == nil {
-		return a.detachedSessionsInReverseOrder()
-	}
-	ids := a.state.Registry().IDs()
-	owned := make([]ownedSession, 0, len(ids))
-	for index := len(ids) - 1; index >= 0; index-- {
-		id := ids[index]
-		if owner := a.ownerForClose(id); owner != nil {
-			owned = append(owned, ownedSession{id: id, owner: owner})
-		}
-	}
-	return owned
-}
-
-func (a *Assembly) detachedSessionsInReverseOrder() []ownedSession {
-	owned := make([]ownedSession, 0, len(a.detachedGatewayOrder))
-	for index := len(a.detachedGatewayOrder) - 1; index >= 0; index-- {
-		id := a.detachedGatewayOrder[index]
-		if owner := a.detachedGateways[id]; owner != nil {
-			owned = append(owned, ownedSession{id: id, owner: owner})
-		}
-	}
-	return owned
-}
-
-func (a *Assembly) ownerForClose(sessionID string) factorysessions.Service {
-	if owner := a.detachedGateways[sessionID]; owner != nil {
-		return owner
-	}
-	for index := len(a.detachedGatewayOrder) - 1; index >= 0; index-- {
-		if owner := a.detachedGateways[a.detachedGatewayOrder[index]]; owner != nil {
-			return owner
-		}
-	}
-	return nil
-}
-
-func closeOwnedSession(ctx context.Context, session ownedSession) error {
-	control, ok := session.owner.(factorysessions.LiveControlService)
-	if !ok {
-		return fmt.Errorf("close Factory Session %s: %w: live control capability unavailable", session.id, factorysessions.ErrDetachedServiceUnavailable)
-	}
-	err := control.CloseFactorySession(ctx, session.id)
-	if errors.Is(err, context.Canceled) || errors.Is(err, factorysessions.ErrSessionNotFound) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("close Factory Session %s: %w", session.id, err)
-	}
-	return nil
 }
 
 // StartLifecycle starts the runtime phase selected by the Factory
@@ -107,8 +56,17 @@ func (runtime *SessionRuntime) StartLifecycle(ctx, runCtx context.Context) error
 		}
 	}
 	// Initializer owns sidecar activation as the next lifecycle phase.
-	_, err := runtime.StartDefaultRuntime(ctx, runCtx)
-	return err
+	handle, err := runtime.StartDefaultRuntime(ctx, runCtx)
+	if err != nil {
+		return err
+	}
+	if handle == nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return errors.New("start runtime: Factory Session runtime was not activated")
+	}
+	return nil
 }
 
 // StartWorkerLifecycle activates the runtime's worker-side automation.
@@ -116,8 +74,14 @@ func (runtime *SessionRuntime) StartWorkerLifecycle(ctx context.Context) (Runtim
 	if runtime == nil {
 		return nil, errors.New("start runtime automation: Factory Session runtime is required")
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	current := runtime.runtimeState.ActiveHandle()
 	if current == nil || current.RuntimeInstance() == nil {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		return nil, errors.New("start runtime automation: runtime is not started")
 	}
 	serviceMode := runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService
@@ -141,20 +105,23 @@ func (runtime *SessionRuntime) CompleteStartup(ctx context.Context) error {
 	if runtime == nil {
 		return errors.New("complete runtime startup: Factory Session runtime is required")
 	}
-	current := runtime.runtimeState.ActiveHandle()
 	serviceMode := runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService
 	if serviceMode && runtime.workFile != "" {
-		if err := runtime.submitWorkFile(ctx); err != nil {
-			sessionID := runtime.runSessionID()
-			failure := runtimebinding.FailStartup(
-				runtime.sessionState, &runtime.runtimeState, sessionID,
-				current, runtime.StopLiveRuntime, err,
-			)
-			if runtime.releaseWorkAdmissionProjection != nil {
-				runtime.releaseWorkAdmissionProjection(sessionID)
+		// A process-backed run starts through Root.Start and then hosts its
+		// transport. Both phases complete startup on this same runtime.
+		runtime.startupWorkOnce.Do(func() {
+			if err := runtime.submitWorkFile(ctx); err != nil {
+				sessionID := runtime.runSessionID()
+				runtime.startupWorkErr = runtimebinding.FailStartup(
+					runtime.sessionState, &runtime.runtimeState, sessionID,
+					runtime.runtimeState.ActiveHandle(), runtime.StopLiveRuntime, err,
+				)
+				if runtime.releaseWorkAdmissionProjection != nil {
+					runtime.releaseWorkAdmissionProjection(sessionID)
+				}
 			}
-			return failure
-		}
+		})
+		return runtime.startupWorkErr
 	}
 	return nil
 }

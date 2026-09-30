@@ -76,6 +76,9 @@ func TestWSRFT010WorkerSessionIDHTTPHistory(t *testing.T) {
 		WaitForServiceModeRuntime: true,
 		Args:                      []string{"--session", sessionID, "--replay", artifactPath, "--no-record"},
 	})
+	// Host readiness precedes replay execution; complete-history assertions
+	// require the replayed Factory Session to finish its terminal callbacks.
+	support.WaitForSessionTerminalStatus(t, replayServer.URL(), sessionID, 30*time.Second)
 	historical := getWSRFT010Observation(t, replayServer.URL(), sessionID, workerID)
 	assertWSRFT010Observation(t, historical, sessionID, workerID, workID)
 	if historical.ProviderSessionAvailable || historical.ProviderSession != nil {

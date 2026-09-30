@@ -201,7 +201,7 @@ func TestStreamTurnUpdatesNotifierFailureLeavesRecordRetryable(t *testing.T) {
 	}
 }
 func TestDispatchFactoryInvocation_NilResponseBridgeCallsInvokeDirectly(t *testing.T) {
-	server := &Server{chatSessions: &fakeChatSessionsService{}, factoryTarget: &fakeFactoryTargetService{}}
+	server := &Server{chatSessions: &fakeChatSessionsService{}, factorySessions: &fakeFactoryTargetService{}}
 
 	wantResult := factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCompleted}
 	invokeCalls := 0
@@ -233,7 +233,7 @@ func TestDispatchFactoryInvocation_NilChatSessionsOrFactoryTargetSkipsBridge(t *
 		return factorysessions.InvocationResult{}, nil
 	}
 
-	server := &Server{responseBridge: bridge, factoryTarget: &fakeFactoryTargetService{}}
+	server := &Server{responseBridge: bridge, factorySessions: &fakeFactoryTargetService{}}
 	invoke := func(context.Context) (factorysessions.InvocationResult, error) {
 		return factorysessions.InvocationResult{}, nil
 	}
@@ -267,9 +267,9 @@ func TestDispatchFactoryInvocation_CallsInjectedResponseBridge(t *testing.T) {
 	}
 
 	server := &Server{
-		chatSessions:   &fakeChatSessionsService{},
-		factoryTarget:  &fakeFactoryTargetService{},
-		responseBridge: bridge,
+		chatSessions:    &fakeChatSessionsService{},
+		factorySessions: &fakeFactoryTargetService{},
+		responseBridge:  bridge,
 	}
 
 	invokeCalls := 0

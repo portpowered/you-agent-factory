@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingprojections "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections"
 	recordingdashboard "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/dashboard"
-	"github.com/portpowered/infinite-you/pkg/services/recordings/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	clidashboard "github.com/portpowered/infinite-you/pkg/transports/cli/dashboard"
@@ -32,7 +31,7 @@ func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupporte
 	projector := &selectedTickWorkstationProjector{
 		result: selectedTickWorkstationProjectionFixture(t0),
 	}
-	requestSlice := http.Generated(projector.ProjectWorkstationRequests(worldState))
+	requestSlice := recordingshttp.Generated(projector.ProjectWorkstationRequests(worldState))
 	if projector.received.Tick != worldState.Tick || len(projector.received.CompletedDispatches) != 2 {
 		t.Fatalf("workstation projector received state = %#v, want selected tick 11 with two completions", projector.received)
 	}

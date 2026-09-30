@@ -809,9 +809,9 @@ func TestBeginRecordingScopeCancellationWithoutClockCleansUp(t *testing.T) {
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		staticRecordingClock{at: time.Unix(1_700_000_500, 0).UTC()},
 	)
-	opening, ok := runtimeRoot.(recordings.RuntimeOpening)
+	opening, ok := runtimeRoot.(recordings.RuntimeScopeService)
 	if !ok || opening == nil {
-		t.Fatal("NewRuntimeRootWithHistoricalQueryAndAppender did not expose RuntimeOpening")
+		t.Fatal("NewRuntimeRootWithHistoricalQueryAndAppender did not expose RuntimeScopeService")
 	}
 	now := func() time.Time { return time.Unix(1_700_000_500, 0).UTC() }
 	opened, err := opening.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{

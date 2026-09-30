@@ -37,6 +37,45 @@ func TestOpenAPIContract_GenericModelInvocationSupportsSoleOperationInference(t 
 	}
 }
 
+func TestOpenAPIContract_GenericModelInvocationAcceptsMultipartMedia(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("paths object is missing")
+	}
+	operation := pathOperation(t, paths, "/models/invocations", "post")
+	body, ok := operation["requestBody"].(map[string]any)
+	if !ok {
+		t.Fatal("generic invocation request body is missing")
+	}
+	content, ok := body["content"].(map[string]any)
+	if !ok || content["application/json"] == nil {
+		t.Fatalf("generic invocation JSON content is missing: %#v", content)
+	}
+	multipart, ok := content["multipart/form-data"].(map[string]any)
+	if !ok {
+		t.Fatalf("generic invocation multipart content is missing: %#v", content)
+	}
+	schema, ok := multipart["schema"].(map[string]any)
+	if !ok {
+		t.Fatal("multipart schema is missing")
+	}
+	assertRequiredFields(t, schema, "request")
+	properties := schemaProperties(t, schema, "multipart invocation")
+	request, ok := properties["request"].(map[string]any)
+	if !ok || request["$ref"] != "#/components/schemas/GenericModelInvocationRequest" {
+		t.Fatalf("multipart request part = %#v", properties["request"])
+	}
+	files, ok := properties["files"].(map[string]any)
+	if !ok || files["type"] != "array" {
+		t.Fatalf("multipart files part = %#v", properties["files"])
+	}
+	items, ok := files["items"].(map[string]any)
+	if !ok || items["type"] != "string" || items["format"] != "binary" {
+		t.Fatalf("multipart file item = %#v", files["items"])
+	}
+}
+
 func TestOpenAPIContract_ErrorResponseTargetsUseCanonicalValidationTargetShape(t *testing.T) {
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 

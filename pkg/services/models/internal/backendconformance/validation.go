@@ -92,7 +92,7 @@ func validatePinned(reference Reference, artifacts []PinnedArtifact) []Failure {
 
 	byTarget, failures := classifyPinnedTargets(reference, matching)
 	failures = append(failures, validateRequiredTargets(reference, byTarget)...)
-	failures = append(failures, validateApprovedCUDATarget(reference, byTarget)...)
+	failures = append(failures, validateOptionalCUDATargets(reference, byTarget)...)
 	return failures
 }
 
@@ -104,24 +104,32 @@ func classifyPinnedTargets(reference Reference, matching []PinnedArtifact) (map[
 			byTarget[artifact.TargetID] = append(byTarget[artifact.TargetID], artifact)
 			continue
 		}
-		if artifact.TargetID != TargetWindowsAmd64CUDA {
+		if !isOptionalCUDATarget(artifact.TargetID) {
 			failures = append(failures, pinnedFailure(reference,
 				fmt.Sprintf("manifest target %q is not an approved optional variant", artifact.TargetID)))
 			continue
 		}
-		if !approvedCUDAFacts(artifact) {
+		byTarget[artifact.TargetID] = append(byTarget[artifact.TargetID], artifact)
+		if !matchesCUDAFacts(artifact) {
 			failures = append(failures, pinnedFailure(reference,
 				fmt.Sprintf("manifest target %q has mismatched approved CUDA compatibility facts", artifact.TargetID)))
 			continue
 		}
-		byTarget[artifact.TargetID] = append(byTarget[artifact.TargetID], artifact)
 	}
 	return byTarget, failures
 }
 
-func approvedCUDAFacts(artifact PinnedArtifact) bool {
-	return artifact.BackendID == ApprovedCUDABackend && artifact.OperatingSystem == "windows" &&
-		artifact.Architecture == "amd64" && sameStrings(artifact.Accelerators, []string{"cuda"})
+func isOptionalCUDATarget(target string) bool {
+	return target == TargetLinuxAmd64CUDA || target == TargetWindowsAmd64CUDA
+}
+
+func matchesCUDAFacts(artifact PinnedArtifact) bool {
+	operatingSystem := "linux"
+	if artifact.TargetID == TargetWindowsAmd64CUDA {
+		operatingSystem = "windows"
+	}
+	return artifact.OperatingSystem == operatingSystem && artifact.Architecture == "amd64" &&
+		sameStrings(artifact.Accelerators, []string{"cuda"})
 }
 
 func validateRequiredTargets(reference Reference, byTarget map[string][]PinnedArtifact) []Failure {
@@ -144,19 +152,21 @@ func validateRequiredTargets(reference Reference, byTarget map[string][]PinnedAr
 	return failures
 }
 
-func validateApprovedCUDATarget(reference Reference, byTarget map[string][]PinnedArtifact) []Failure {
-	entries := byTarget[TargetWindowsAmd64CUDA]
-	if len(entries) == 0 {
-		return nil
+func validateOptionalCUDATargets(reference Reference, byTarget map[string][]PinnedArtifact) []Failure {
+	failures := make([]Failure, 0)
+	for _, target := range []string{TargetLinuxAmd64CUDA, TargetWindowsAmd64CUDA} {
+		entries := byTarget[target]
+		if len(entries) > 1 {
+			failures = append(failures, pinnedFailure(reference,
+				fmt.Sprintf("manifest has %d entries for approved target %q; exactly one is required", len(entries), target)))
+		}
+		for _, entry := range entries {
+			if entry.SizeBytes <= MinimumPinnedArtifactSizeBytes {
+				failures = append(failures, sizeFailure(reference, target, entry.SizeBytes))
+			}
+		}
 	}
-	if len(entries) > 1 {
-		return []Failure{pinnedFailure(reference,
-			fmt.Sprintf("manifest has %d entries for approved target %q; exactly one is required", len(entries), TargetWindowsAmd64CUDA))}
-	}
-	if entries[0].SizeBytes <= MinimumPinnedArtifactSizeBytes {
-		return []Failure{sizeFailure(reference, TargetWindowsAmd64CUDA, entries[0].SizeBytes)}
-	}
-	return nil
+	return failures
 }
 
 func sizeFailure(reference Reference, target string, size int64) Failure {

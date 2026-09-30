@@ -17,6 +17,18 @@ import (
 // without turning an idle synchronous invocation into a busy wait.
 const sessionInvocationPollInterval = 250 * time.Millisecond
 
+// A timed-out invocation still owes its Factory Session a cancel-on-timeout
+// control request, and the expired wait context cannot bound that call. The
+// control context stays detached from cancellation so the request is still
+// issued, but it carries a deadline so a stalled lifecycle gateway cannot hold
+// an already-resolved invocation open indefinitely. Tests shorten this bound;
+// production code never reassigns it.
+var sessionTimeoutCancelControlTimeout = 15 * time.Second
+
+// Context cancellation cannot interrupt a non-cooperative lifecycle gateway.
+// Limit outstanding detached cancel calls so repeated timeouts stay bounded.
+var sessionTimeoutCancelSlots = make(chan struct{}, 16)
+
 // SessionInvocationObservation is one event-derived view of invocation state.
 // Runtime adapters populate it without exposing engine or Petri-net types.
 type SessionInvocationObservation struct {
@@ -119,13 +131,13 @@ func (o *SessionOwner) resolveObservation(
 		return FactoryInvocationResult{}, true, err
 	}
 	if observation.MissingPrimaryResult != nil {
-		return o.failedResult(sessionID, input, observation.MissingPrimaryResult), true, nil
+		return o.failedResult(sessionID, input, observation.MissingPrimaryResult, observation.WorldState), true, nil
 	}
 	if classified, ok := work.ClassifyInvocationControlState(sessionID, observation.FactoryState, selectionInput); ok {
-		return o.failedResult(sessionID, input, classified), true, nil
+		return o.failedResult(sessionID, input, classified, observation.WorldState), true, nil
 	}
 	if classified, ok := work.ClassifyMissingPrimaryResult(selectionInput); ok {
-		return o.failedResult(sessionID, input, classified), true, nil
+		return o.failedResult(sessionID, input, classified, observation.WorldState), true, nil
 	}
 	if packaged {
 		worldState, _ := selectionInput.WorldState.(interfaces.FactoryWorldState)
@@ -134,7 +146,7 @@ func (o *SessionOwner) resolveObservation(
 		}
 	}
 	if classified, ok := work.ClassifyFailedInvocation(sessionID, selectionInput); ok {
-		return o.failedResult(sessionID, input, classified), true, nil
+		return o.failedResult(sessionID, input, classified, observation.WorldState), true, nil
 	}
 	if _, exists := observation.WorldState.WorkRequestsByID[input.RequestID]; !exists || observation.ActiveWork {
 		return FactoryInvocationResult{}, false, nil
@@ -169,22 +181,22 @@ func (o *SessionOwner) resolveStoppedInvocation(
 	primaryErr *work.PrimaryResultError,
 	packaged bool,
 ) FactoryInvocationResult {
+	worldState, _ := selectionInput.WorldState.(interfaces.FactoryWorldState)
 	if packaged {
-		worldState, _ := selectionInput.WorldState.(interfaces.FactoryWorldState)
 		if result, ok := o.packagedTerminalFailureResult(sessionID, input, worldState); ok {
 			return result
 		}
 	}
 	if classified, ok := work.ClassifyInvocationControlState(sessionID, "", selectionInput); ok {
-		return o.failedResult(sessionID, input, classified)
+		return o.failedResult(sessionID, input, classified, worldState)
 	}
 	if classified, ok := work.ClassifyFailedInvocation(sessionID, selectionInput); ok {
-		return o.failedResult(sessionID, input, classified)
+		return o.failedResult(sessionID, input, classified, worldState)
 	}
 	if classified, ok := work.ClassifyMissingPrimaryResult(selectionInput); ok {
-		return o.failedResult(sessionID, input, classified)
+		return o.failedResult(sessionID, input, classified, worldState)
 	}
-	return o.failedResult(sessionID, input, primaryErr)
+	return o.failedResult(sessionID, input, primaryErr, worldState)
 }
 
 func (o *SessionOwner) packagedTerminalFailureResult(
@@ -235,6 +247,7 @@ func (o *SessionOwner) failedResult(
 	sessionID string,
 	input SessionInvocationWaitInput,
 	primaryErr *work.PrimaryResultError,
+	worldState interfaces.FactoryWorldState,
 ) FactoryInvocationResult {
 	result := FactoryInvocationResult{
 		RequestID: input.RequestID, TraceID: input.TraceID,
@@ -245,6 +258,31 @@ func (o *SessionOwner) failedResult(
 		ApprovalID: primaryErr.Context.ApprovalID, DispatchID: primaryErr.Context.DispatchID,
 		WorkstationID: primaryErr.Context.WorkstationID, WorkstationName: primaryErr.Context.WorkstationName,
 		Decisions: append([]string(nil), primaryErr.Context.Decisions...),
+	}
+	if detail, ok := worldState.FailureDetailsByWorkID[result.WorkID]; ok && detail.FailureDetail != nil {
+		result.FailureReason = string(detail.FailureDetail.Reason)
+	} else if result.DispatchID != "" {
+		matches := 0
+		for _, detail := range worldState.FailureDetailsByWorkID {
+			if detail.DispatchID != result.DispatchID || detail.FailureDetail == nil {
+				continue
+			}
+			matches++
+			result.FailureReason = string(detail.FailureDetail.Reason)
+		}
+		if matches != 1 {
+			result.FailureReason = ""
+		}
+	}
+	if result.FailureReason == "" && len(worldState.FailureDetailsByWorkID) == 1 {
+		// A dispatch can fail before Work reaches a failed place. The primary
+		// result then remains unresolved, but its sole recorded failure still
+		// identifies the provider outcome for this one-shot invocation.
+		for _, detail := range worldState.FailureDetailsByWorkID {
+			if detail.FailureDetail != nil {
+				result.FailureReason = string(detail.FailureDetail.Reason)
+			}
+		}
 	}
 	o.recordFailure(sessionID, input, result, failureClassForPrimaryResultError(primaryErr.Code))
 	return result
@@ -258,7 +296,7 @@ func (o *SessionOwner) waitErrorResult(
 	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		return FactoryInvocationResult{}, err
 	}
-	result := FactoryInvocationResult{RequestID: input.RequestID, TraceID: input.TraceID}
+	result := FactoryInvocationResult{RequestID: input.RequestID, TraceID: input.TraceID, WorkID: input.WorkID}
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		result.Status = interfaces.InvocationTerminalStatusTimedOut
@@ -275,10 +313,31 @@ func (o *SessionOwner) waitErrorResult(
 	}
 	o.recordFailure(sessionID, input, result, failureClass)
 	if result.Status == interfaces.InvocationTerminalStatusTimedOut && input.CancelOnTimeout && o.cancelOnTimeout != nil {
-		_, cancelErr := o.cancelOnTimeout(context.WithoutCancel(context.Background()), sessionID, factorysessions.ControlRequest{
-			RequestID: input.RequestID,
-			Reason:    "invocation wait timed out",
-		})
+		// The cancel-on-timeout control must run even though the invocation wait
+		// already expired, so it detaches from the canceled wait context. Give
+		// cooperative control paths a deadline rather than waiting indefinitely.
+		cancelCtx, stopCancel := context.WithTimeout(context.WithoutCancel(context.Background()), sessionTimeoutCancelControlTimeout)
+		defer stopCancel()
+		var cancelErr error
+		select {
+		case sessionTimeoutCancelSlots <- struct{}{}:
+			completed := make(chan error, 1)
+			go func() {
+				defer func() { <-sessionTimeoutCancelSlots }()
+				_, err := o.cancelOnTimeout(cancelCtx, sessionID, factorysessions.ControlRequest{
+					RequestID: input.RequestID,
+					Reason:    "invocation wait timed out",
+				})
+				completed <- err
+			}()
+			select {
+			case cancelErr = <-completed:
+			case <-cancelCtx.Done():
+				cancelErr = cancelCtx.Err()
+			}
+		case <-cancelCtx.Done():
+			cancelErr = cancelCtx.Err()
+		}
 		if cancelErr != nil {
 			result.Message = "invocation timed out while waiting for primary result; cancel-on-timeout control failed"
 		}

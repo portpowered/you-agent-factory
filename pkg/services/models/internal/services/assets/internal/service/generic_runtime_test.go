@@ -370,6 +370,57 @@ func TestInspectRuntimeCacheRejectsIncompleteGenericManifest(t *testing.T) {
 	}
 }
 
+func TestInspectRuntimeCacheRejectsLegacyBuiltinLLMManifestWithoutProjector(t *testing.T) {
+	t.Parallel()
+
+	cacheDirectory := t.TempDir()
+	modelDirectory := filepath.Join(cacheDirectory, canonicalModelName(models.BuiltInModelNameLLM))
+	if err := os.MkdirAll(modelDirectory, 0o755); err != nil {
+		t.Fatalf("create built-in LLM cache directory: %v", err)
+	}
+	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameLLM)
+	if !ok {
+		t.Fatal("built-in LLM definition is missing")
+	}
+	source, err := parseGenericSource(definition.Source)
+	if err != nil {
+		t.Fatalf("parse built-in LLM source: %v", err)
+	}
+	metadata, err := json.Marshal(cacheMetadata{
+		ModelName: models.BuiltInModelNameLLM,
+		Revision:  source.revision,
+		Files: []metadataFile{{
+			Path: builtInGemmaLLMModelName, Bytes: builtInGemmaLLMModelBytes,
+			SHA256: builtInGemmaLLMModelSHA256,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal legacy LLM metadata: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(modelDirectory, metadataFileName), metadata, 0o644); err != nil {
+		t.Fatalf("write legacy LLM metadata: %v", err)
+	}
+
+	scopes := newScopes(t, "legacy-llm-projector")
+	scope := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("legacy LLM inspection used the network")
+		return nil, nil
+	}), func(string) string { return "" })
+	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+		Scope: scope, Name: models.BuiltInModelNameLLM,
+	})
+	if err != nil {
+		t.Fatalf("InspectRuntimeCache: %v", err)
+	}
+	if !inspection.ManifestPresent || !inspection.ManifestValid || inspection.Installed ||
+		inspection.FailureReason != "managed cache does not satisfy configured model requirements" ||
+		len(inspection.ExpectedArtifacts) != 2 || len(inspection.MissingAssets) != 1 ||
+		inspection.MissingAssets[0] != builtInGemmaLLMProjectorName {
+		t.Fatalf("legacy LLM inspection = %#v, want projector missing and cache unavailable", inspection)
+	}
+}
+
 func TestInspectRuntimeCacheRejectsPinnedGenericCacheForDifferentSource(t *testing.T) {
 	t.Parallel()
 

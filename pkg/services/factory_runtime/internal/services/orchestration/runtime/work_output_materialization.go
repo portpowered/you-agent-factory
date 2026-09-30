@@ -911,6 +911,8 @@ func runtimeModelOperationContentType(part work.WorkContentPart) string {
 		return interfaces.ModelOperationContentTypeImage
 	case work.WorkContentPartTypeAudio:
 		return interfaces.ModelOperationContentTypeAudio
+	case work.WorkContentPartTypeVideo:
+		return interfaces.ModelOperationContentTypeVideo
 	case work.WorkContentPartTypeJSON:
 		return interfaces.ModelOperationContentTypeJSON
 	case work.WorkContentPartTypeBinary:

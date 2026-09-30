@@ -524,3 +524,43 @@ func (*hostObservingTestComponent) Wait(ctx context.Context) error {
 	<-ctx.Done()
 	return ctx.Err()
 }
+
+// A successful finite run can finish before its readiness reader delivers the
+// already-published binding. Presentation must join that read before canceling.
+func TestHostObservingRunnerJoinsPendingReadinessAfterSuccessfulRun(t *testing.T) {
+	expected := initializer.RuntimeHostBinding{Host: "127.0.0.1", Port: 7437}
+	readyResult := make(chan runtimeHostResult, 1)
+	readyCtx, cancelReady := context.WithCancel(t.Context())
+	defer cancelReady()
+	observed := make(chan initializer.RuntimeHostBinding, 1)
+	runner := hostObservingRunner{
+		runner:  &pendingHostReadinessRunner{publish: func() { readyResult <- runtimeHostResult{binding: expected, err: readyCtx.Err()} }},
+		onReady: func(binding initializer.RuntimeHostBinding) { observed <- binding },
+	}
+	err := runner.finishAfterRunResult(t.Context(), nil, readyResult, cancelReady)
+	if err != nil {
+		t.Fatalf("finishAfterRunResult = %v, want nil", err)
+	}
+	select {
+	case binding := <-observed:
+		if binding != expected {
+			t.Fatalf("observed binding = %#v, want %#v", binding, expected)
+		}
+	default:
+		t.Fatal("successful finite run canceled pending readiness before presentation")
+	}
+}
+
+type pendingHostReadinessRunner struct {
+	hostReadinessRunner
+	publish func()
+}
+
+func (runner *pendingHostReadinessRunner) RuntimeHostReadinessConfigured() bool {
+	if runner.publish != nil {
+		publish := runner.publish
+		runner.publish = nil
+		publish()
+	}
+	return true
+}

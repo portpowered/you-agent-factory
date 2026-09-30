@@ -903,3 +903,44 @@ func closeAssetStagingLock(lock io.Closer, primary error) error {
 	}
 	return primary
 }
+
+func (s *service) inspectConfiguredRuntimeCache(
+	ctx context.Context,
+	scope models.RuntimeScopeConfig,
+	modelName string,
+	active activePullState,
+	isActive bool,
+	pullFailure string,
+) (assets.RuntimeCacheInspection, bool, error) {
+	spec, source, supported, err := s.resolveRuntimeCacheSource(scope.Runtime, modelName)
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, true, err
+	}
+	if !supported {
+		return assets.RuntimeCacheInspection{}, false, nil
+	}
+	expected := assetRequirementsForSpec(spec)
+	cacheRoot, err := s.modelCacheRoot(scope.CacheDirectory, spec.modelName)
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, true, err
+	}
+	metadata, manifestPresent, err := s.readMetadata(
+		ctx, filepath.Join(cacheRoot, metadataFileName),
+	)
+	if err != nil {
+		inspection, inspectionErr := s.invalidRuntimeCacheInspection(
+			ctx, expected, active, isActive, pullFailure,
+		)
+		return inspection, true, inspectionErr
+	}
+	if manifestPresent {
+		expected = requirementsFromMetadata(spec, metadata)
+	}
+	result, err := s.inspectRuntimeCacheFiles(
+		ctx, scope.CacheDirectory, spec, source, expected, cacheRoot, metadata, manifestPresent,
+	)
+	if err != nil {
+		return assets.RuntimeCacheInspection{}, true, err
+	}
+	return s.applyActivePullFacts(result, active, isActive, pullFailure), true, nil
+}

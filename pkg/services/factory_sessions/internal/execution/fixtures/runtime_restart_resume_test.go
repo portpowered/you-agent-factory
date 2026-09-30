@@ -26,9 +26,9 @@ import (
 
 func TestPetriRuntime_MutationsPersistAndReloadThroughFactorySessionOwner(t *testing.T) {
 	const sessionID = "~default"
-	store, err := runtimepersist.NewDirectoryStore(t.TempDir(), platformfilesystem.Local{})
+	store, err := runtimepersist.NewLazyProjectStore(t.TempDir(), platformfilesystem.Local{})
 	if err != nil {
-		t.Fatalf("NewDirectoryStore: %v", err)
+		t.Fatalf("NewLazyProjectStore: %v", err)
 	}
 	owner := newConfiguredJavaScriptRuntimeService(runtimeServiceConfig{
 		ProjectRoot: t.TempDir(), Persistence: store,
@@ -125,9 +125,9 @@ func persistAndReloadRuntimeSnapshot(t *testing.T, sessionID string, snapshot fs
 	if err != nil {
 		t.Fatalf("marshal mixed snapshot: %v", err)
 	}
-	store, err := runtimepersist.NewDirectoryStore(t.TempDir(), platformfilesystem.Local{})
+	store, err := runtimepersist.NewLazyProjectStore(t.TempDir(), platformfilesystem.Local{})
 	if err != nil {
-		t.Fatalf("NewDirectoryStore: %v", err)
+		t.Fatalf("NewLazyProjectStore: %v", err)
 	}
 	if err := store.Save(sessionID, encoded); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -639,7 +639,8 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_NonInterruptedSession
 		Workflows:   successfulFixtureWorkflows(map[string]any{"status": "done"}),
 	})
 	started, err := service.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-resume-non-interrupted-001",
+		RequestID:   "req-runtime-resume-non-interrupted-001",
+		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "simple-final",
@@ -777,7 +778,8 @@ func TestJavaScriptRuntimeService_NonResumedFakeChild_PreservesShippedTransportS
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-non-resumed-fake-child-001",
+		RequestID:   "req-runtime-non-resumed-fake-child-001",
+		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "agent-run-fake-child",
@@ -836,7 +838,8 @@ func TestJavaScriptRuntimeService_NonResumedSimpleFinal_PreservesReplayReconnect
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-non-resumed-simple-final-001",
+		RequestID:   "req-runtime-non-resumed-simple-final-001",
+		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "simple-final",
@@ -903,7 +906,8 @@ func TestJavaScriptRuntimeService_NonResumedTerminalSnapshot_OmitsCheckpointSumm
 	})
 
 	completed, err := initial.StartSync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-non-resumed-persisted-001",
+		RequestID:   "req-runtime-non-resumed-persisted-001",
+		ProjectRoot: projectRoot,
 		Source: fse.Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "agent-run-fake-child",

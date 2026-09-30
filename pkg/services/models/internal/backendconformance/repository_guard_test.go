@@ -62,6 +62,7 @@ func TestRepositoryBackendReferenceCollectorPreservesCustomerSources(t *testing.
 
 func TestWindowsCUDAVariantFixtureTraversesRepositoryConformanceSpine(t *testing.T) {
 	t.Parallel()
+	const fixtureBackend = "localai-llamacpp"
 
 	fixture, err := os.ReadFile("../artifacts/testdata/windows-cuda-variant-manifest.json")
 	if err != nil {
@@ -81,7 +82,7 @@ func TestWindowsCUDAVariantFixtureTraversesRepositoryConformanceSpine(t *testing
 	}
 	observedTargets := make(map[string]int, len(pinnedArtifacts))
 	for _, artifact := range pinnedArtifacts {
-		if artifact.BackendID != ApprovedCUDABackend {
+		if artifact.BackendID != fixtureBackend {
 			continue
 		}
 		observedTargets[artifact.TargetID]++
@@ -96,12 +97,36 @@ func TestWindowsCUDAVariantFixtureTraversesRepositoryConformanceSpine(t *testing
 	}
 
 	inputs := Inputs{
-		References:         []Reference{{Identifier: ApprovedCUDABackend, Source: "exact Windows CUDA fixture"}},
-		RegisteredBackends: []string{ApprovedCUDABackend},
+		References:         []Reference{{Identifier: fixtureBackend, Source: "exact Windows CUDA fixture"}},
+		RegisteredBackends: []string{fixtureBackend},
 		PinnedArtifacts:    pinnedArtifacts,
 	}
 	if err := Validate(inputs); err != nil {
 		t.Fatalf("Validate(projected exact Windows CUDA fixture): %v", err)
+	}
+
+	// Reuse the decoded repository fixture to exercise both optional targets on
+	// another registered backend while retaining its three real CPU baselines.
+	const otherBackend = "localai-whisper"
+	var cuda PinnedArtifact
+	for _, artifact := range pinnedArtifacts {
+		if artifact.BackendID == fixtureBackend && artifact.TargetID == TargetWindowsAmd64CUDA {
+			cuda = artifact
+			break
+		}
+	}
+	windowsCUDA := cuda
+	windowsCUDA.BackendID = otherBackend
+	linuxCUDA := windowsCUDA
+	linuxCUDA.TargetID = TargetLinuxAmd64CUDA
+	linuxCUDA.OperatingSystem = "linux"
+	inputs = Inputs{
+		References:         []Reference{{Identifier: otherBackend, Source: "projected CUDA variants"}},
+		RegisteredBackends: []string{otherBackend},
+		PinnedArtifacts:    append(pinnedArtifacts, windowsCUDA, linuxCUDA),
+	}
+	if err := Validate(inputs); err != nil {
+		t.Fatalf("Validate(projected CUDA variants on another registered backend): %v", err)
 	}
 }
 

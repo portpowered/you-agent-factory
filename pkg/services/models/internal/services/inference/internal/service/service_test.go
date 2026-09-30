@@ -838,7 +838,25 @@ func (host *recordingInferenceHost) GetModelLease(
 	if lease.Status == models.ModelLeaseStatusExpired {
 		return models.GetModelLeaseResult{Lease: lease}, models.ErrHostLeaseExpired
 	}
+	if host.warmHosts == nil {
+		host.warmHosts = make(map[string]bool)
+	}
+	// A valid lease is issued only after its model host became ready.
+	host.warmHosts[host.hostKey(lease.Scope, lease.ModelName)] = true
 	return models.GetModelLeaseResult{Lease: lease}, nil
+}
+
+func (host *recordingInferenceHost) ClaimInvocationLease(
+	ctx context.Context, request models.InvokeModelRequest,
+) (models.ModelLease, error) {
+	result, err := host.GetModelLease(ctx, models.GetModelLeaseRequest{Scope: request.Scope, Lease: request.Lease})
+	return result.Lease, err
+}
+
+func (host *recordingInferenceHost) ReleaseInvocationLease(
+	ctx context.Context, request models.ReleaseModelLeaseRequest,
+) (models.ReleaseModelLeaseResult, error) {
+	return host.ReleaseModelLease(ctx, request)
 }
 
 func (host *recordingInferenceHost) ReleaseModelLease(

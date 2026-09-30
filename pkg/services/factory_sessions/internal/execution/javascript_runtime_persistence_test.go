@@ -21,6 +21,25 @@ import (
 	"time"
 )
 
+func TestPersistedRuntimeStateRestoresRequestWorkerSettings(t *testing.T) {
+	state := runtimeSessionState{startRequest: &StartRequest{WorkerSettings: &factory.JavaScriptWorkerSettings{
+		Presets: map[string]factory.JavaScriptWorkerPreset{"review": {ModelProvider: "codex", Model: "test-model"}},
+	}}}
+	snapshot := persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, 0)
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded PersistedRuntimeSessionState
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	restored := runtimeStateFromPersistedSnapshot(decoded)
+	if restored.startRequest == nil || restored.startRequest.WorkerSettings == nil || restored.startRequest.WorkerSettings.Presets["review"].Model != "test-model" {
+		t.Fatalf("restored worker settings = %#v", restored.startRequest)
+	}
+}
+
 func TestChildWorkerExecutor_PreservesTypedProviderReasonWithoutSessionReference(t *testing.T) {
 	const rejection = "Agy does not support a separate reasoning effort."
 	invoker := &recordingWorkerExecution{result: workers.ExecuteResult{
@@ -633,10 +652,12 @@ func testExecutionServiceInvalidPersistenceChoices(t *testing.T, projectRoot str
 	if err := os.WriteFile(blockedRoot, []byte("blocked"), 0o600); err != nil {
 		t.Fatalf("write blocked persistence root: %v", err)
 	}
-	if _, err := ProjectPersistence(blockedRoot, testRuntimePersistenceStoreFactory); err == nil {
-		t.Fatal("ProjectPersistence(unavailable root) error = nil, want validation error")
-	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "persistence" {
-		t.Fatalf("unavailable persistence error = %#v, want persistence ValidationError", err)
+	persistence, err := ProjectPersistence(blockedRoot, testRuntimePersistenceStoreFactory)
+	if err != nil {
+		t.Fatalf("lazy persistence construction: %v", err)
+	}
+	if err := persistence.store.Save("~default", []byte(`{}`)); err == nil {
+		t.Fatal("Save(unavailable root) error = nil, want persistence error")
 	}
 }
 
@@ -734,11 +755,12 @@ func TestPrepareStartAndPersistenceHelpers(t *testing.T) {
 	projectRoot := writeSimpleFinalWorkflowProject(t)
 	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
-		Persistence: mustTestRuntimePersistenceStore(t, runtimepersist.DirForProjectRoot(projectRoot)),
+		Persistence: mustTestRuntimePersistenceStore(t, projectRoot),
 	})
 
 	prepared, err := service.prepareStart(StartRequest{
-		RequestID: "req-prepare-start-001",
+		RequestID:   "req-prepare-start-001",
+		ProjectRoot: projectRoot,
 		Source: Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "simple-final",
@@ -791,7 +813,8 @@ func TestJavaScriptRuntimeService_ProjectRootAloneDoesNotEnablePersistence(t *te
 	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{ProjectRoot: projectRoot})
 
 	if _, err := service.StartSync(context.Background(), StartRequest{
-		RequestID: "req-runtime-no-implicit-persistence-001",
+		RequestID:   "req-runtime-no-implicit-persistence-001",
+		ProjectRoot: projectRoot,
 		Source: Source{
 			Kind:         factory.WorkflowSourceKindWorkflowName,
 			WorkflowName: "simple-final",
@@ -809,7 +832,7 @@ func TestJavaScriptRuntimeService_HasDurableStateReadsFreshOwnerAndRejectsCorrup
 	t.Parallel()
 	const sessionID = "~default"
 	projectRoot := t.TempDir()
-	store := mustTestRuntimePersistenceStore(t, runtimepersist.DirForProjectRoot(projectRoot))
+	store := mustTestRuntimePersistenceStore(t, projectRoot)
 	firstOwner := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 		Persistence: store,
@@ -855,7 +878,7 @@ func TestPersistAndMetadataNoOpBranches(t *testing.T) {
 	projectRoot := t.TempDir()
 	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
-		Persistence: mustTestRuntimePersistenceStore(t, runtimepersist.DirForProjectRoot(projectRoot)),
+		Persistence: mustTestRuntimePersistenceStore(t, projectRoot),
 	})
 
 	if err := service.persistTerminalSessionState(runtimeSessionState{
@@ -940,56 +963,5 @@ func TestSmokeLiveChildProviderUsesWorkersRootInferenceContracts(t *testing.T) {
 	providerSession := (resp.Continuation).SessionMetadata()
 	if providerSession == nil || providerSession.ID != "live-provider-session-1" {
 		t.Fatalf("provider session = %#v, want live-provider-session-1", providerSession)
-	}
-}
-
-func TestJavaScriptRuntimeService_CloseCancelsJoinsAndPersistsAsyncSession(t *testing.T) {
-	t.Parallel()
-
-	projectRoot := t.TempDir()
-	store := mustTestRuntimePersistenceStore(t, runtimepersist.DirForProjectRoot(projectRoot))
-	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-		Persistence: store,
-		Workflows:   scriptedBlockingRuntimeWorkflows(),
-	})
-	started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
-		"req-runtime-close-joins-001",
-		busyLoopWorkflowSource,
-		map[string]any{"subject": "shutdown"},
-		nil,
-	))
-	if err != nil {
-		t.Fatalf("StartAsync: %v", err)
-	}
-
-	if err := service.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-
-	session, err := service.GetSession(context.Background(), started.SessionID)
-	if err != nil {
-		t.Fatalf("GetSession after Close: %v", err)
-	}
-	if session.Status != LifecycleStatusCanceled {
-		t.Fatalf("session status after Close = %q, want CANCELED", session.Status)
-	}
-	if session.Failure == nil || session.Failure.Reason != "WORKFLOW_RUNTIME_CANCELED" {
-		t.Fatalf("session failure after Close = %#v, want WORKFLOW_RUNTIME_CANCELED", session.Failure)
-	}
-	snapshotPath := filepath.Join(runtimepersist.DirForProjectRoot(projectRoot), started.SessionID+".json")
-	if _, err := os.Stat(snapshotPath); err != nil {
-		t.Fatalf("terminal snapshot after Close: %v", err)
-	}
-	if err := service.Close(); err != nil {
-		t.Fatalf("repeated Close: %v", err)
-	}
-	if _, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
-		"req-runtime-close-rejected-001",
-		busyLoopWorkflowSource,
-		nil,
-		nil,
-	)); !errors.Is(err, ErrDurableExecutionClosed) {
-		t.Fatalf("StartAsync after Close error = %v, want ErrDurableExecutionClosed", err)
 	}
 }

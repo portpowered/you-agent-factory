@@ -12,9 +12,9 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-// OpenRequestFromAPI detaches a generated open request before Factory Session
-// policy executes.
-func OpenRequestFromAPI(request factoryapi.OpenFactorySessionRequest) factorysessions.OpenRequest {
+// SessionStartRequestFromAPI maps the public open command to canonical live
+// activation. Both HTTP entry points use the same value-only selection.
+func SessionStartRequestFromAPI(request factoryapi.OpenFactorySessionRequest) factorysessions.SessionStartRequest {
 	var target *factorysessions.TargetRef
 	if request.Target != nil {
 		targetName := ""
@@ -26,24 +26,27 @@ func OpenRequestFromAPI(request factoryapi.OpenFactorySessionRequest) factoryses
 			Name: targetName,
 		}
 	}
-	return factorysessions.OpenRequest{
-		FolderPath:     request.FolderPath,
-		Target:         target,
-		ValidateOnly:   request.ValidateOnly != nil && *request.ValidateOnly,
-		InitNewFactory: request.InitNewFactory != nil && *request.InitNewFactory,
+	return factorysessions.SessionStartRequest{
+		Mode:             factorysessions.SessionOperationModeLive,
+		FolderPath:       request.FolderPath,
+		Target:           target,
+		ValidateOnly:     request.ValidateOnly != nil && *request.ValidateOnly,
+		InitNewFactory:   request.InitNewFactory != nil && *request.InitNewFactory,
+		ActivationOnly:   true,
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{Mode: factorysessions.SessionRuntimeModeService},
 	}
 }
 
-// OpenResultToAPI maps an owner-defined open result to the generated public
-// response without re-deriving Factory Session identity policy.
-func OpenResultToAPI(result *factorysessions.OpenResult) factoryapi.OpenFactorySessionResponse {
+// SessionOpenResultToAPI maps the canonical live Start outcome to the public
+// open response without exposing legacy runtime projections.
+func SessionOpenResultToAPI(result *factorysessions.SessionOpenResult) factoryapi.OpenFactorySessionResponse {
 	response := factoryapi.OpenFactorySessionResponse{}
 	if result == nil {
 		return response
 	}
-	if result.InitsNewFactory {
-		initsNewFactory := true
-		response.InitsNewFactory = &initsNewFactory
+	if result.InitializedNewFactory {
+		initialized := true
+		response.InitsNewFactory = &initialized
 		if folderPath := strings.TrimSpace(result.FolderPath); folderPath != "" {
 			response.FolderPath = &folderPath
 		}
@@ -53,8 +56,15 @@ func OpenResultToAPI(result *factorysessions.OpenResult) factoryapi.OpenFactoryS
 		response.Targets = &targets
 	}
 	if result.Session != nil {
-		summary := ScopedLiveSessionSummaryToAPI(*result.Session)
-		response.Session = &summary
+		view := result.Session
+		response.Session = &factoryapi.FactorySessionSummary{
+			Id: view.SessionID, FactoryDir: view.FactoryDir, FolderPath: view.FolderPath,
+			Project: view.Project, IsDefault: view.IsDefault,
+			Target: factoryapi.FactorySessionTargetRef{
+				Kind: factoryapi.FactorySessionTargetRefKind(view.Target.Kind),
+				Name: optionalTrimmedString(view.Target.Name),
+			},
+		}
 	}
 	return response
 }

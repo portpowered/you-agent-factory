@@ -531,6 +531,30 @@ func TestCLIProjectionPreservesArtifactAndFailureContract(t *testing.T) {
 	}
 }
 
+func TestGenericCLIResultDecodesBinaryOutputAndPreservesOrder(t *testing.T) {
+	t.Parallel()
+
+	wav := []byte{'R', 'I', 'F', 'F', 0x00, 0xff, 0x80}
+	text := "héllo"
+	response := factoryapi.GenericModelInvocationResponse{Outputs: []factoryapi.ModelInvocationOutput{
+		{Name: "audio", Modality: factoryapi.ModelInvocationContentTypeAudio, ContentBase64: &wav},
+		{Name: "transcript", Modality: factoryapi.ModelInvocationContentTypeText, Content: &text},
+	}}
+	result, err := genericCLIResultFromGenerated(response, "tts", "TTS")
+	if err != nil {
+		t.Fatalf("map response: %v", err)
+	}
+	if len(result.Outputs) != 2 || result.Outputs[0].Name != "audio" ||
+		!bytes.Equal([]byte(result.Outputs[0].Content), wav) || result.Outputs[1].Name != "transcript" ||
+		result.Outputs[1].Content != text {
+		t.Fatalf("mapped outputs = %#v", result.Outputs)
+	}
+	response.Outputs[0].Content = &text
+	if _, err := genericCLIResultFromGenerated(response, "tts", "TTS"); err == nil {
+		t.Fatal("accepted output with both inline carriers")
+	}
+}
+
 func assertCLIContentParts(t *testing.T) {
 	t.Helper()
 	parts := inferenceContentToWorkParts([]modelinference.InferenceContent{

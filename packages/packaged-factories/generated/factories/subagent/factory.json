@@ -1,7 +1,7 @@
 {
   "description": {
     "type": "LOCALIZABLE_ASSET",
-    "value": "Runs one bounded subagent and returns its result."
+    "value": "Runs one bounded subagent with workspace tools and returns its result."
   },
   "examples": [
     {
@@ -84,6 +84,19 @@
         "description": "Optional reasoning effort for the subagent; omitted values use the provider default.",
         "externalName": "worker-reasoning-effort",
         "name": "workerReasoningEffort"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Workspace directory for the subagent.",
+        "externalName": "working-root",
+        "name": "workingRoot"
       }
     ]
   },
@@ -113,19 +126,19 @@
   "workers": [
     {
       "agentTools": {
-        "policy": "READ_ONLY"
+        "policy": "ENABLED"
       },
+      "body": "You are the one-pass subagent worker for @you/subagent. You inherit no hidden\nconversation or project knowledge. Read applicable contributor instructions.\nFor exact-file bounded requests, inspect the named files and their direct\ndependencies and tests first. Expand only when the request requires it.\nReserve time to edit, verify, and respond.\n\nRespond directly to the submitted request in a single bounded pass. Preserve\nunrelated changes, validate important assumptions, perform proportional\nverification, and make the response self-contained for a caller that will not\nsee your intermediate reasoning. Do not plan multi-stage work or defer\nfollow-up actions. Return one concise final result without plan narration.",
       "model": "${workerModel}",
       "modelProvider": "${workerProvider}",
       "name": "subagent-worker",
       "reasoningEffort": "${workerReasoningEffort}",
-      "skipPermissions": true,
       "type": "AGENT_WORKER"
     }
   ],
   "workstations": [
     {
-      "body": "Begin from zero context and complete the submitted request in one pass for Work\n{{ (index .Inputs 0).WorkID }}. Read the entire request before acting. If it\nconcerns a repository, inspect contributor instructions, relevant architecture,\nsource, tests, and working-tree state. Preserve unrelated work, run proportional\nverification, and return a self-contained outcome with evidence and limitations.\n\nRequest:\n${input}\n",
+      "body": "${input}",
       "inputs": [
         {
           "state": "init",
@@ -145,9 +158,9 @@
           "workType": "task"
         }
       ],
-      "promptFile": "prompts/run-subagent.md",
       "type": "AGENT_RUN",
-      "worker": "subagent-worker"
+      "worker": "subagent-worker",
+      "workingDirectory": "${workingRoot}"
     }
   ]
 }

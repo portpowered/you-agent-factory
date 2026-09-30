@@ -17,8 +17,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	sessionstream "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -102,10 +104,14 @@ func StartInitial(
 	runtimeState.ClearStartup()
 	runtimeState.SetActive(runContext, registeredSessionID, handle)
 	if err := lifecycle.WaitForStart(readinessContext, handle); err != nil {
-		return nil, HandleStartFailure(
+		startupErr := HandleStartFailure(
 			readinessContext, state, runtimeState,
 			sessionID, handle, stop, err, runtimeMode, onSessionRemoved,
 		)
+		if startupErr == nil && readinessContext.Err() != nil {
+			return nil, readinessContext.Err()
+		}
+		return nil, startupErr
 	}
 	return handle, nil
 }
@@ -211,16 +217,36 @@ func registerReplacementSession(
 		}
 	}
 	state.RotateResponseStreams(session)
+	var projectionOwner SessionProjectionOwner
+	var invoker roles.CanonicalSessionInvoker
+	var modelInvoker workers.ModelInvoker
+	var inputResolver roles.InvocationInputResolver
+	var activation interface{ Close(context.Context) error }
+	var process roles.ProcessRuntime
+	var diagnostics factory.RuntimeLogDiagnostics
+	previous := SessionStateFrom(session)
+	if previous != nil {
+		projectionOwner = previous.Owner
+		invoker = previous.Invoker
+		modelInvoker = previous.ModelInvoker
+		inputResolver = previous.InputResolver
+		activation = previous.Activation
+		process = previous.Process
+		diagnostics = previous.Diagnostics
+	}
+	handle := &SessionState{
+		Handle: replacementHandle, Instance: replacement,
+		Spec: preparedSpec, Owner: projectionOwner, Invoker: invoker, ModelInvoker: modelInvoker, InputResolver: inputResolver, Activation: activation,
+		Process: process, Diagnostics: diagnostics,
+	}
+	handle.inheritApplicationValues(previous)
 	state.Register(sessionruntime.Registration{
 		SessionID: session.ID, FactoryDir: replacement.Directory(),
 		FolderPath: session.FolderPath, ExecutionBaseDir: executionBaseDir,
 		RuntimeFactorySessionID: session.RuntimeFactorySessionID,
 		RuntimeEventSessionID:   session.RuntimeEventSessionID,
 		Target:                  session.Target,
-		Handle: &SessionState{
-			Handle: replacementHandle, Instance: replacement,
-			Spec: preparedSpec,
-		},
+		Handle:                  handle,
 		Runtime: &factorysessions.LiveRuntime{
 			Factory: replacement.RuntimeService(), BackendScopeID: replacement.BackendScope(),
 			WorkAndEventIngress:   DeclaredWorkAndEventIngress(replacement.RuntimeService()),
@@ -332,10 +358,29 @@ func Register(state *sessionruntime.Service, input Registration) string {
 		RuntimeBaseDir: runtimeBaseDir, Target: input.Target,
 		PreparedSpec: PreparedSpecFromSession(state.Resolve(input.SessionID)),
 	})
+	var projectionOwner SessionProjectionOwner
+	var invoker roles.CanonicalSessionInvoker
+	var modelInvoker workers.ModelInvoker
+	var inputResolver roles.InvocationInputResolver
+	var activation interface{ Close(context.Context) error }
+	var process roles.ProcessRuntime
+	var diagnostics factory.RuntimeLogDiagnostics
+	previous := SessionStateFrom(state.Resolve(input.SessionID))
+	if previous != nil {
+		projectionOwner = previous.Owner
+		invoker = previous.Invoker
+		modelInvoker = previous.ModelInvoker
+		inputResolver = previous.InputResolver
+		activation = previous.Activation
+		process = previous.Process
+		diagnostics = previous.Diagnostics
+	}
+	handle := &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec, Owner: projectionOwner, Invoker: invoker, ModelInvoker: modelInvoker, InputResolver: inputResolver, Activation: activation, Process: process, Diagnostics: diagnostics}
+	handle.inheritApplicationValues(previous)
 	return state.Register(sessionruntime.Registration{
 		SessionID: input.SessionID, FactoryDir: metadata.FactoryDir, FolderPath: metadata.FolderPath,
 		ExecutionBaseDir: metadata.ExecutionBaseDir, Target: metadata.Target,
-		Handle: &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec},
+		Handle: handle,
 		Runtime: &factorysessions.LiveRuntime{
 			Factory: runtimeService, Binding: input.Binding, BackendScopeID: bundle.BackendScope(),
 			WorkAndEventIngress:   DeclaredWorkAndEventIngress(runtimeService),
@@ -399,16 +444,12 @@ func DeclaredWorkAndEventIngress(runtime factory.Service) factory.APIFactory {
 }
 
 // WorkAndEventIngressForLiveRuntime returns the ingress declared when Factory
-// Sessions bound the runtime, falling back to the bound Runtime capability
-// while older openings that predate the declared field are still in flight.
+// Sessions bound the runtime.
 func WorkAndEventIngressForLiveRuntime(runtime *factorysessions.LiveRuntime) (factory.APIFactory, bool) {
-	if runtime == nil {
+	if runtime == nil || runtime.WorkAndEventIngress == nil {
 		return nil, false
 	}
-	if runtime.WorkAndEventIngress != nil {
-		return runtime.WorkAndEventIngress, true
-	}
-	return WorkAndEventIngressForService(ServiceForLiveRuntime(runtime))
+	return runtime.WorkAndEventIngress, true
 }
 
 // BindingForSession returns the opaque binding published for a live session.

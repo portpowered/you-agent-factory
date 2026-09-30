@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -35,12 +36,19 @@ func sessionListPrepare(options CommandFactory) func(context.Context, *sessioncl
 		if scope != fse.SessionListScopePersisted && scope != fse.SessionListScopeAll {
 			return nil
 		}
-		service, err := buildWorkflowExecutionService(ctx, options, string(fse.ExecutionProviderFake), "", "", "")
-		if err != nil {
-			return err
+		if options.FactorySessions == nil {
+			return fmt.Errorf("list durable Factory Sessions: Factory Sessions service is required")
 		}
-		cfg.DurableLister = service.ListSessions
-		cfg.DurableCloser = service
+		cfg.DurableLister = func(ctx context.Context, request fse.ListSessionsRequest) (fse.ListSessionsResult, error) {
+			result, err := options.FactorySessions.List(ctx, fse.SessionListRequest{
+				Mode:    fse.SessionOperationModeDurable,
+				Filters: request.Filters,
+			})
+			if err != nil {
+				return fse.ListSessionsResult{}, err
+			}
+			return fse.ListSessionsResult{Scope: request.Scope, DurableSessions: result.DurableSessions}, nil
+		}
 		return nil
 	}
 }

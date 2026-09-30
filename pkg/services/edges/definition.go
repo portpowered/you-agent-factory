@@ -152,7 +152,6 @@ type Edges struct {
 	// messages stay behind the Models wire boundary.
 	ModelInvocationGRPCDialer                  platformgrpc.Dialer
 	FactorySessionsWorkingDirectory            platformfilesystem.WorkingDirectory
-	FactorySessionExecutionOpeningFileSystem   factorysessions.ExecutionOpeningFileSystem
 	FactorySessionDirectoryInspection          factorysessions.DirectoryInspection
 	FactorySessionResolveHomeDirectory         factorysessions.HomeDirectoryResolver
 	FactorySessionResolveLogicalTargetSymlinks factorysessions.LogicalTargetResolveSymlinks
@@ -253,6 +252,7 @@ type Edges struct {
 	WorkersExecutableLocator           platformprocess.ExecutableLocator
 	WorkersExecutablePathInspector     platformfilesystem.PathInspector
 	WorkersExecutableFileReader        platformfilesystem.ReadOpener
+	WorkersInferenceMediaFileReader    platformfilesystem.ReadOpener
 	WorkersOperatingSystem             workers.OperatingSystem
 	WorkersWorktreeFileSystem          workers.WorktreeFileSystem
 	WorkersWorktreeGit                 workers.WorktreeGitCommander
@@ -357,6 +357,12 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.ModelAssetHostPlatform.Architecture != "" {
 		defaults.ModelAssetHostPlatform.Architecture = replacements.ModelAssetHostPlatform.Architecture
+	}
+	if replacements.ModelAssetHostPlatform.Accelerator != "" {
+		defaults.ModelAssetHostPlatform.Accelerator = replacements.ModelAssetHostPlatform.Accelerator
+	}
+	if replacements.ModelAssetHostPlatform.CUDAAvailable {
+		defaults.ModelAssetHostPlatform.CUDAAvailable = true
 	}
 	if replacements.ModelResolveHuggingFaceRevision != nil {
 		defaults.ModelResolveHuggingFaceRevision = replacements.ModelResolveHuggingFaceRevision
@@ -468,9 +474,6 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.FactorySessionsWorkingDirectory != nil {
 		defaults.FactorySessionsWorkingDirectory = replacements.FactorySessionsWorkingDirectory
-	}
-	if replacements.FactorySessionExecutionOpeningFileSystem != nil {
-		defaults.FactorySessionExecutionOpeningFileSystem = replacements.FactorySessionExecutionOpeningFileSystem
 	}
 	if replacements.FactorySessionDirectoryInspection != nil {
 		defaults.FactorySessionDirectoryInspection = replacements.FactorySessionDirectoryInspection
@@ -711,6 +714,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.WorkersExecutableFileReader != nil {
 		defaults.WorkersExecutableFileReader = replacements.WorkersExecutableFileReader
+	}
+	if replacements.WorkersInferenceMediaFileReader != nil {
+		defaults.WorkersInferenceMediaFileReader = replacements.WorkersInferenceMediaFileReader
 	}
 	if replacements.WorkersOperatingSystem != "" {
 		defaults.WorkersOperatingSystem = replacements.WorkersOperatingSystem

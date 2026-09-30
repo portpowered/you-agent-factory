@@ -321,7 +321,7 @@ func joinedModelAssetRequirements(
 	return requirements, nil
 }
 
-func isJoinedPinnedBackend(value string) bool {
+func isJoinedManagedBackend(value string) bool {
 	canonical := strings.ToLower(strings.TrimSpace(value))
 	return strings.HasPrefix(canonical, "localai-") || canonical == "localai" ||
 		canonical == "localai_grpc" || canonical == "localai-grpc"
@@ -422,7 +422,8 @@ func (o *Root) effectiveInvocationDefinition(
 	resolved models.ResolvedModelReference,
 ) (models.ModelDefinition, error) {
 	definition := resolved.Definition.Clone()
-	if !genericRequestUsesVideo(request) ||
+	mediaSlot := genericRequestProjectorMediaSlot(request)
+	if mediaSlot == "" ||
 		!localmodels.VideoProjectorRequired(definition.Name, definition.Operations) ||
 		o == nil || o.assets == nil {
 		return definition, nil
@@ -449,22 +450,27 @@ func (o *Root) effectiveInvocationDefinition(
 	if unavailable {
 		return models.ModelDefinition{}, &models.InvocationFailure{
 			Class:     models.InvocationFailureClassMediaCapability,
-			Message:   "video input requires a verified projector artifact",
+			Message:   mediaSlot + " input requires a verified projector artifact",
 			Model:     request.Model,
 			Operation: models.OperationOMNI,
-			Slot:      "video",
+			Slot:      mediaSlot,
 			Cause:     models.ErrUnsupportedOperation,
 		}
 	}
 	return effective, nil
 }
 
-func genericRequestUsesVideo(request models.InvokeModelRequest) bool {
-	for _, input := range request.Inputs {
-		if strings.EqualFold(strings.TrimSpace(input.Name), "video") ||
-			input.Modality == models.ModalityVideo {
-			return true
+func genericRequestProjectorMediaSlot(request models.InvokeModelRequest) string {
+	inputs := request.Inputs
+	if len(inputs) == 0 && !inferenceInputIsZero(request.Input) {
+		inputs = []models.InferenceInput{request.Input}
+	}
+	for _, input := range inputs {
+		for _, modality := range []models.Modality{models.ModalityImage, models.ModalityAudio, models.ModalityVideo} {
+			if input.Modality == modality || strings.EqualFold(strings.TrimSpace(input.Name), string(modality)) {
+				return strings.ToLower(string(modality))
+			}
 		}
 	}
-	return false
+	return ""
 }

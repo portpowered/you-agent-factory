@@ -15,7 +15,7 @@ import (
 
 type runtimeRoot interface {
 	recordings.Service
-	recordings.RuntimeOpening
+	recordings.RuntimeScopeService
 }
 
 // TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent proves the
@@ -130,9 +130,9 @@ func TestRuntimeOpeningRedactsDeclaredFactoryPathsInFinalArtifact(t *testing.T) 
 		nil, nil, nil, nil,
 		runtimeRecorderTestClock{now: startedAt},
 	)
-	opening, ok := root.(recordings.RuntimeOpening)
+	opening, ok := root.(recordings.RuntimeScopeService)
 	if !ok {
-		t.Fatal("Recordings root does not expose RuntimeOpening")
+		t.Fatal("Recordings root does not expose RuntimeScopeService")
 	}
 	opened, err := opening.OpenRuntime(context.Background(), recordings.RuntimeScopeRequest{
 		Topology:         runtimeOpeningTopology{},
@@ -258,9 +258,9 @@ func TestRuntimeOpeningReconstructsCanonicalFactoryWorldStateFromFixture(t *test
 		NewRuntimeLedger(nil, func() time.Time { return base }, "roundtrip", nil),
 		NewProjectionService(),
 	)
-	opening, ok := root.(recordings.RuntimeOpening)
+	opening, ok := root.(recordings.RuntimeScopeService)
 	if !ok {
-		t.Fatal("Recordings root does not expose RuntimeOpening")
+		t.Fatal("Recordings root does not expose RuntimeScopeService")
 	}
 
 	factorySnapshot, err := factorydefinitions.NewFactorySnapshot(map[string]any{

@@ -4,7 +4,6 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,7 +31,6 @@ type ListConfig struct {
 	Output        io.Writer
 	Diagnostics   io.Writer
 	DurableLister durableSessionLister
-	DurableCloser io.Closer
 	HTTP          clihttp.Protocol
 	Preparation   RequestPreparation
 }
@@ -52,7 +50,7 @@ func NewList(transport clihttp.Protocol, prepare RequestPreparation) func(ListCo
 // List requests factory sessions from a running host and, when scoped listing
 // includes durable rows, from the deterministic fixture-backed provider.
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
-func List(cfg ListConfig) (err error) {
+func List(cfg ListConfig) error {
 	if cfg.Context == nil {
 		return fmt.Errorf("context is required")
 	}
@@ -62,13 +60,6 @@ func List(cfg ListConfig) (err error) {
 			Message: "--live-only and --history-only are mutually exclusive",
 			Cause:   fmt.Errorf("--live-only and --history-only are mutually exclusive"),
 		}
-	}
-	if cfg.DurableCloser != nil {
-		defer func() {
-			if closeErr := cfg.DurableCloser.Close(); closeErr != nil {
-				err = errors.Join(err, fmt.Errorf("close durable session listing: %w", closeErr))
-			}
-		}()
 	}
 	if cfg.Output == nil {
 		return fmt.Errorf("output writer is required")

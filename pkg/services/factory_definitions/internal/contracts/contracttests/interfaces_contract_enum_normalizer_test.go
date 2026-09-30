@@ -99,6 +99,14 @@ func publicFactoryEnumNormalizerProviderCases() []publicFactoryEnumNormalizerCas
 			strict:     interfaces.StrictPublicFactoryWorkerModelOperationContentType,
 		},
 		{
+			name:       "worker operation video content type",
+			alias:      "VIDEO",
+			unknown:    "movie",
+			want:       workerconfig.ModelOperationContentTypeVideo,
+			permissive: interfaces.PermissivePublicFactoryWorkerModelOperationContentType,
+			strict:     interfaces.StrictPublicFactoryWorkerModelOperationContentType,
+		},
+		{
 			name:       "resource type",
 			alias:      "MODEL",
 			unknown:    "custom-resource",
@@ -112,6 +120,11 @@ func publicFactoryEnumNormalizerProviderCases() []publicFactoryEnumNormalizerCas
 func TestStrictPublicFactoryWorkerModelProviderAcceptsCanonicalExtensionIdentity(t *testing.T) {
 	t.Parallel()
 
+	for _, identity := range []string{"GEMINI", "KIRO", "OPENCODE", "PI"} {
+		if got := interfaces.StrictPublicFactoryWorkerModelProvider(identity); got != identity {
+			t.Fatalf("StrictPublicFactoryWorkerModelProvider(%q) = %q, want canonical identity", identity, got)
+		}
+	}
 	const identity = "customer.provider-v2"
 	if got := interfaces.StrictPublicFactoryWorkerModelProvider(identity); got != identity {
 		t.Fatalf("StrictPublicFactoryWorkerModelProvider(%q) = %q, want preserved identity", identity, got)

@@ -11,11 +11,6 @@ import (
 // (pkg-structure requires exactly one named service interface aside from
 // recorded deletion-only debt for the Sessions service root).
 
-type ExecutionOpeningFileSystem interface {
-	Getwd() (string, error)
-	Stat(string) (fs.FileInfo, error)
-}
-
 type DirectoryInspection interface {
 	Stat(string) (fs.FileInfo, error)
 	ReadDir(string) ([]fs.DirEntry, error)

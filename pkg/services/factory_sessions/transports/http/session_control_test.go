@@ -23,15 +23,21 @@ func TestHandlerFromRoot_OpenFactorySessionEncodesRootResult(t *testing.T) {
 	t.Parallel()
 
 	root := &httpSessionsRootFake{
-		onOpen: func(_ context.Context, request factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
+		onStart: func(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 			if request.FolderPath != "/workspace/alpha" {
 				t.Fatalf("folderPath = %q, want /workspace/alpha", request.FolderPath)
 			}
-			return &factorysessions.OpenResult{
+			if request.Mode != factorysessions.SessionOperationModeLive {
+				t.Fatalf("mode = %q, want live", request.Mode)
+			}
+			return factorysessions.SessionStartResult{
 				SessionID: "session-open-alpha",
-				Session: &factorysessions.ScopedLiveSessionSummary{
-					ID:         "session-open-alpha",
-					FolderPath: "/workspace/alpha",
+				Mode:      factorysessions.SessionOperationModeLive,
+				Live: &factorysessions.SessionOpenResult{
+					SessionID: "session-open-alpha",
+					Session: &factorysessions.SessionView{
+						SessionID: "session-open-alpha", FolderPath: "/workspace/alpha",
+					},
 				},
 			}, nil
 		},
@@ -59,11 +65,15 @@ func TestHandlerFromRoot_OpenFactorySessionAcceptsUnknownFieldsWithWarning(t *te
 
 	core, logs := observer.New(zap.WarnLevel)
 	root := &httpSessionsRootFake{
-		onOpen: func(_ context.Context, request factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
+		onStart: func(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 			if request.FolderPath != "/workspace/alpha" {
 				t.Fatalf("folderPath = %q, want /workspace/alpha", request.FolderPath)
 			}
-			return &factorysessions.OpenResult{SessionID: "session-open-alpha"}, nil
+			return factorysessions.SessionStartResult{
+				SessionID: "session-open-alpha",
+				Mode:      factorysessions.SessionOperationModeLive,
+				Live:      &factorysessions.SessionOpenResult{SessionID: "session-open-alpha"},
+			}, nil
 		},
 	}
 	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.New(core))
@@ -101,9 +111,9 @@ func TestHandlerFromRoot_OpenFactorySessionMissingFolderPathReturnsBadRequestWit
 	t.Parallel()
 
 	root := &httpSessionsRootFake{
-		onOpen: func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
-			t.Fatal("fake root must not be invoked when folderPath is missing")
-			return nil, nil
+		onStart: func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+			t.Fatal("canonical Start must not be invoked when folderPath is missing")
+			return factorysessions.SessionStartResult{}, nil
 		},
 	}
 	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
@@ -128,14 +138,14 @@ func TestHandlerFromRoot_StartDurableFactorySessionAsyncInvokesRootWithDecodedRe
 	t.Parallel()
 
 	root := &httpSessionsRootFake{
-		onStartAsync: func(_ context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
-			if request.RequestID != "req-async-alpha" {
-				t.Fatalf("requestId = %q, want req-async-alpha", request.RequestID)
+		onStart: func(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+			if request.Correlation.RequestID != "req-async-alpha" {
+				t.Fatalf("requestId = %q, want req-async-alpha", request.Correlation.RequestID)
 			}
-			return factorysessions.AsyncStartResult{
+			return factorysessions.SessionStartResult{Async: &factorysessions.AsyncStartResult{
 				SessionID: "dur-sess-async-alpha",
 				Status:    string(factorysessions.LifecycleStatusRunning),
-			}, nil
+			}}, nil
 		},
 	}
 	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())
@@ -163,9 +173,9 @@ func TestHandlerFromRoot_StartDurableFactorySessionAsyncInvalidSourceReturnsBadR
 	t.Parallel()
 
 	root := &httpSessionsRootFake{
-		onStartAsync: func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+		onStart: func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 			t.Fatal("fake root must not be invoked for invalid execution source")
-			return factorysessions.AsyncStartResult{}, nil
+			return factorysessions.SessionStartResult{}, nil
 		},
 	}
 	handler := factorysessionshttp.NewHandlerFromRoot(factorysessionshttp.RootBinding{Sessions: root}, zap.NewNop())

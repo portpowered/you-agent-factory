@@ -205,6 +205,46 @@ func TestInferenceInputFromWorkPartSupportsMetadataAndArtifactErrors(t *testing.
 	}
 }
 
+func TestInferenceInputFromWorkPartMapsVideoToModalityVideo(t *testing.T) {
+	input, err := inferenceInputFromWorkPart("video", work.WorkContentPart{
+		Type:        work.WorkContentPartTypeVideo,
+		URL:         "file://clip.mp4",
+		ContentType: "video/mp4",
+	})
+	if err != nil {
+		t.Fatalf("inferenceInputFromWorkPart() error = %v", err)
+	}
+	if input.Name != "video" || input.Modality != models.ModalityVideo {
+		t.Fatalf("inference input = %#v, want modality video", input)
+	}
+	if input.ContentType != "video/mp4" || input.MediaType != "video/mp4" {
+		t.Fatalf("video metadata = %#v, want video/mp4 for both fields", input)
+	}
+	if input.Content != "file://clip.mp4" {
+		t.Fatalf("video content = %q, want file://clip.mp4", input.Content)
+	}
+}
+
+func TestWorkContentPartFromModelOutputMapsVideoModality(t *testing.T) {
+	part, err := workContentPartFromModelOutput(models.InferenceOutput{
+		Modality:    models.ModalityVideo,
+		ContentType: "video/mp4",
+		Content:     "clip-content",
+	}, 0)
+	if err != nil {
+		t.Fatalf("workContentPartFromModelOutput() error = %v", err)
+	}
+	if part.Type != work.WorkContentPartTypeVideo {
+		t.Fatalf("part type = %#v, want VIDEO", part.Type)
+	}
+	if part.URL == "" || !strings.HasPrefix(part.URL, "data:video/mp4;base64,") {
+		t.Fatalf("part URL = %q, want data:video/mp4;base64,...", part.URL)
+	}
+	if part.ContentType != "video/mp4" {
+		t.Fatalf("part ContentType = %q, want video/mp4", part.ContentType)
+	}
+}
+
 func TestOperationParametersDecodeValidation(t *testing.T) {
 	cases := []struct {
 		name string
@@ -344,7 +384,7 @@ func TestWorkContentPartFromModelOutputRejectsMalformedOutputs(t *testing.T) {
 		{Name: "audio", Modality: models.ModalityAudio},
 		{Name: "image", Modality: models.ModalityImage},
 		{Name: "binary", Modality: models.ModalityBinary},
-		{Name: "unknown", Modality: models.Modality("video"), Content: "value"},
+		{Name: "unknown", Modality: models.Modality("unknown"), Content: "value"},
 	}
 	for _, output := range cases {
 		if _, err := workContentPartFromModelOutput(output, 0); err == nil {

@@ -54,15 +54,15 @@ func TestFactorySessionsConstructsWorkersRequestsThroughRoot(t *testing.T) {
 func runWorkersOpeningAndInvocationTargetProof(t *testing.T, fixture workersRootBoundaryFixture) {
 	t.Helper()
 
-	openingRequest := factorysessions.RuntimeOpeningRequest{
-		Workers: workers.RuntimeOpeningRequest{
-			RunnerID: fixture.runnerID,
+	startRequest := factorysessions.SessionStartRequest{
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+			Workers: factorysessions.SessionWorkerSelection{RunnerID: fixture.runnerID},
 		},
 	}
-	if openingRequest.Workers.RunnerID != fixture.runnerID {
+	if startRequest.RuntimeSelection.Workers.RunnerID != fixture.runnerID {
 		t.Fatalf(
-			"Workers.RuntimeOpeningRequest.RunnerID = %q, want %q",
-			openingRequest.Workers.RunnerID,
+			"SessionRuntimeSelection.Workers.RunnerID = %q, want %q",
+			startRequest.RuntimeSelection.Workers.RunnerID,
 			fixture.runnerID,
 		)
 	}
@@ -216,9 +216,9 @@ func TestFactorySessionsWorkersRootContractsCompileAtSessionsRoot(t *testing.T) 
 	t.Parallel()
 
 	var (
-		_ factorysessions.RuntimeOpeningRequest
+		_ factorysessions.SessionStartRequest
 		_ factorysessions.InvocationTarget
-		_ workers.RuntimeOpeningRequest
+		_ workers.RuntimeSelection
 		_ workers.ProviderInferenceRequest
 		_ workers.InvocationInput
 		_ platformprocess.CommandRequest

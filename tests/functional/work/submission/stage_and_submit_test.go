@@ -200,3 +200,54 @@ func assertStageAndSubmitImageWorkContent(
 		)
 	}
 }
+
+// The staged-file API and Work API must preserve the same media identity for
+// audio and documents as for images in the stage-then-submit flow.
+func assertAPIStageAndSubmitMediaPreservesTypes(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
+	for _, scenario := range []struct {
+		itemType, fileName, mediaType, contentType string
+	}{
+		{"audio", "speech.wav", "audio/wav", "AUDIO"},
+		{"document", "notes.pdf", "application/pdf", "BINARY"},
+	} {
+		t.Run(scenario.itemType, func(t *testing.T) {
+			staged := stageSubmitWorkFile(t, server.URL(), scenario.itemType, scenario.fileName, scenario.mediaType, []byte("staged media fixture"))
+			payload, err := json.Marshal(map[string]string{
+				"type": scenario.itemType, "stagedFileRef": staged.StagedFileRef,
+				"url": string(staged.Url), "fileName": scenario.fileName, "mediaType": scenario.mediaType,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var item factoryapi.SubmitWorkItem
+			if err := json.Unmarshal(payload, &item); err != nil {
+				t.Fatal(err)
+			}
+			submitted := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+				Name: stringPtr("stage-and-submit-" + scenario.itemType), WorkTypeName: batchInputsWorkType,
+				Items: &[]factoryapi.SubmitWorkItem{item},
+			})
+			workID := support.StringPointerValue(submitted.WorkId)
+			got := support.GetJSON[factoryapi.Work](t, support.DefaultSessionWorkURL(server.URL(), "/work/"+workID))
+			if got.Content == nil || len(*got.Content) != 1 {
+				t.Fatalf("Work content = %#v, want one %s part", got.Content, scenario.contentType)
+			}
+			partJSON, err := json.Marshal((*got.Content)[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			var part struct {
+				Type, URL, ContentType string
+				Metadata               map[string]any
+			}
+			if err := json.Unmarshal(partJSON, &part); err != nil {
+				t.Fatal(err)
+			}
+			if part.Type != scenario.contentType || part.URL != string(staged.Url) || part.ContentType != scenario.mediaType ||
+				part.Metadata["fileName"] != scenario.fileName || part.Metadata["submissionItemType"] != scenario.itemType {
+				t.Fatalf("staged %s Work content = %s, want type, URL, media type and file identity preserved", scenario.itemType, partJSON)
+			}
+		})
+	}
+}

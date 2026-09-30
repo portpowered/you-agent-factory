@@ -17,6 +17,7 @@ import (
 const (
 	localAITTSMethod        = "/backend.Backend/TTS"
 	ttsOutputFilePattern    = ".you-model-tts-*.wav"
+	ttsVoiceFilePattern     = ".you-model-tts-voice-*.wav"
 	ttsAudioMediaType       = "audio/wav"
 	ttsProtocolErrorMessage = "TTS backend protocol request failed"
 )
@@ -35,16 +36,17 @@ func NewPinnedTTSBackend(
 	dialer platformgrpc.Dialer,
 	tempDirectory func() string,
 	createTempFile TempFileFactory,
+	writeFile InputFileWriter,
 	inspectFile TTSOutputInspector,
 	readFile TTSOutputReader,
 	removeFile InputFileRemover,
 ) func(context.Context, codecs.TTSRequest) (codecs.TTSResponse, error) {
-	if dialer == nil || tempDirectory == nil || createTempFile == nil || inspectFile == nil || readFile == nil || removeFile == nil {
+	if dialer == nil || tempDirectory == nil || createTempFile == nil || writeFile == nil || inspectFile == nil || readFile == nil || removeFile == nil {
 		return nil
 	}
 	client := grpcProtocolClient{dialer: dialer}
 	return func(ctx context.Context, request codecs.TTSRequest) (codecs.TTSResponse, error) {
-		return client.synthesize(ctx, request, tempDirectory, createTempFile, inspectFile, readFile, removeFile)
+		return client.synthesize(ctx, request, tempDirectory, createTempFile, writeFile, inspectFile, readFile, removeFile)
 	}
 }
 
@@ -53,6 +55,7 @@ func (client grpcProtocolClient) synthesize(
 	request codecs.TTSRequest,
 	tempDirectory func() string,
 	createTempFile TempFileFactory,
+	writeFile InputFileWriter,
 	inspectFile TTSOutputInspector,
 	readFile TTSOutputReader,
 	removeFile InputFileRemover,
@@ -68,6 +71,12 @@ func (client grpcProtocolClient) synthesize(
 		return codecs.TTSResponse{}, err
 	}
 	defer func() { _ = removeFile(path) }()
+	voicePath, cleanupVoice, err := stageTTSVoice(ctx, request.Voice, tempDirectory, createTempFile, writeFile, removeFile)
+	if err != nil {
+		return codecs.TTSResponse{}, err
+	}
+	defer cleanupVoice()
+	request.Voice = voicePath
 
 	protocolRequest, err := ttsProtocolRequest(path, request)
 	if err != nil {
@@ -90,6 +99,51 @@ func (client grpcProtocolClient) synthesize(
 		return codecs.TTSResponse{}, err
 	}
 	return response, nil
+}
+
+func stageTTSVoice(
+	ctx context.Context,
+	voice string,
+	tempDirectory func() string,
+	createTempFile TempFileFactory,
+	writeFile InputFileWriter,
+	removeFile InputFileRemover,
+) (string, func(), error) {
+	noop := func() {}
+	if voice == "" {
+		return "", noop, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return "", noop, err
+	}
+	temporary, err := createTempFile(tempDirectory(), ttsVoiceFilePattern)
+	path := ""
+	if temporary != nil {
+		path = strings.TrimSpace(temporary.Name())
+	}
+	if err != nil || path == "" {
+		if temporary != nil {
+			_ = temporary.Close()
+		}
+		if path != "" {
+			_ = removeFile(path)
+		}
+		return "", noop, ttsProtocolFailure("TTS voice staging is unavailable", err)
+	}
+	cleanup := func() { _ = removeFile(path) }
+	if err := temporary.Close(); err != nil {
+		cleanup()
+		return "", noop, ttsProtocolFailure("TTS voice staging could not be closed", err)
+	}
+	if err := writeFile(path, []byte(voice)); err != nil {
+		cleanup()
+		return "", noop, ttsProtocolFailure("TTS voice staging could not be written", err)
+	}
+	if err := ctx.Err(); err != nil {
+		cleanup()
+		return "", noop, err
+	}
+	return path, cleanup, nil
 }
 
 func validateTTSProtocolRequest(ctx context.Context, request codecs.TTSRequest) error {
@@ -213,6 +267,11 @@ func ttsProtocolRequest(path string, request codecs.TTSRequest) (*TTSRequest, er
 			result.Language = stringPointer(text)
 		case "instructions":
 			result.Instructions = stringPointer(text)
+		case "ref_text":
+			if result.Params == nil {
+				result.Params = make(map[string]string)
+			}
+			result.Params["ref_text"] = text
 		default:
 			return nil, ttsInvalidParameterFailure(name)
 		}

@@ -1,0 +1,961 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"path/filepath"
+	"strings"
+	"sync"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+)
+
+func (r *Root) activateRuntime(
+	ctx context.Context,
+	request factoryruntime.RuntimeActivationRequest,
+) (runtimeProducts, error) {
+	if err := ctx.Err(); err != nil {
+		return runtimeProducts{}, err
+	}
+	definition, err := definitionRequestFromActivation(request)
+	if err != nil {
+		return runtimeProducts{}, err
+	}
+	session := sessionRequestFromActivation(request)
+	worker := workerRequestFromActivation(request.Inputs.Workers)
+	recording := recordingRuntimeSelection(request)
+	defaults := operatorsettings.ResolvedDefaults{
+		WorkerModelProvider: request.Inputs.OperatorDefaults.WorkerModelProvider,
+		WorkerModel:         request.Inputs.OperatorDefaults.WorkerModel,
+		ConfigPath:          request.Inputs.OperatorDefaults.ConfigPath,
+	}
+	canonicalSessionIDProvided := strings.TrimSpace(session.RuntimeSelection.CanonicalSessionID) != ""
+	if err := ensureDefaultCanonicalSessionID(&session, recording.ReplayPath, r.canonicalSessionIDGenerator()); err != nil {
+		return runtimeProducts{}, err
+	}
+	canonicalSessionIDGenerated := !canonicalSessionIDProvided &&
+		strings.TrimSpace(session.RuntimeSelection.CanonicalSessionID) != ""
+	// Runtime Root validates the caller context before it invokes this
+	// activation operation. A generated canonical identity is allocated at the
+	// session-product boundary for compatibility with the historical session-ID
+	// edge, which may itself cancel the caller context. Once the activation has
+	// been admitted, finish constructing it atomically even if that allocation
+	// cancels the caller. Cancellation already present on entry still returns
+	// above.
+	openingContext := ctx
+	if canonicalSessionIDGenerated && ctx.Err() != nil {
+		openingContext = context.WithoutCancel(ctx)
+	}
+	products, err := r.openRuntimeWithOptions(openingContext, definition, request.Runtime, &session, canonicalSessionIDGenerated, worker, recording, request.Inputs.ModelCacheDirectory, defaults, r.baseLogger, &request.Snapshot, nil)
+	if err != nil {
+		return runtimeProducts{}, err
+	}
+	return products, nil
+}
+
+// newRuntimeActivation publishes the opened engine as the Runtime activation.
+// It resolves the migration-only Work and event ingress once here, at
+// construction, and hands it to the Runtime root as a declared activation
+// value so no later Work submission or event subscription has to recover a
+// legacy owner from the published service.
+func newRuntimeActivation(products runtimeProducts) (*factoryruntime.RuntimeActivation, error) {
+	service := runtimeEngineService(products)
+	if service == nil {
+		return nil, fmt.Errorf("activate Factory Runtime: opened Runtime engine service is required")
+	}
+	ingress, ok := service.(factoryruntime.APIFactory)
+	if !ok {
+		return nil, fmt.Errorf(
+			"activate Factory Runtime: opened runtime Work submission and event subscription are required until Recordings migration",
+		)
+	}
+	return &factoryruntime.RuntimeActivation{
+		Service:             service,
+		WorkAndEventIngress: ingress,
+		Close: func(closeCtx context.Context) error {
+			if products.closeArtifacts == nil {
+				return nil
+			}
+			return products.closeArtifacts()
+		},
+	}, nil
+}
+
+// runtimeEngineService returns the live engine the opening resolved from the
+// Runtime instance. The application HTTP view is intentionally not used here:
+// during the migration it is allowed to be a Factory Sessions resolver proxy,
+// and publishing that proxy as the binding would re-enter the same session
+// lookup for every Work or Worker operation.
+func runtimeEngineService(products runtimeProducts) factoryruntime.Service {
+	return products.engine
+}
+
+func definitionRequestFromActivation(request factoryruntime.RuntimeActivationRequest) (factorydefinitions.RuntimeSelection, error) {
+	definitionDirectory := strings.TrimSpace(request.Inputs.Definition.Directory)
+	if definitionDirectory == "" {
+		definitionDirectory = request.Snapshot.FactoryDir
+	}
+	executionBaseDir := strings.TrimSpace(request.Inputs.Definition.ExecutionBaseDir)
+	if executionBaseDir == "" {
+		executionBaseDir = request.Snapshot.RuntimeBaseDir
+	}
+	if definitionDirectory == "" {
+		return factorydefinitions.RuntimeSelection{}, fmt.Errorf("runtime activation inputs: Factory Definition directory is required")
+	}
+	return definitionRuntimeSelection(definitionDirectory, request.Inputs.Definition.SourcePath, executionBaseDir, request.Snapshot.Invocation.Arguments), nil
+}
+
+func sessionRequestFromActivation(request factoryruntime.RuntimeActivationRequest) factorysessions.SessionStartRequest {
+	return factorysessions.SessionStartRequest{
+		SessionID:   request.FactorySessionID,
+		Mode:        factorysessions.SessionOperationModeLive,
+		Persistence: factorysessions.PersistencePolicy(request.Inputs.Session.PersistencePolicy),
+		RuntimeSelection: &factorysessions.SessionRuntimeSelection{
+			CanonicalSessionID: request.Inputs.Session.CanonicalSessionID,
+			BackendScopeID:     request.Inputs.Session.BackendScopeID,
+			SystemConfigHome:   request.Inputs.Session.SystemConfigHome,
+			SystemConfigPath:   request.Inputs.Session.SystemConfigPath,
+			WorkFile:           request.Inputs.Session.WorkFile,
+			Host: factorysessions.RuntimeHostRequest{
+				Directory:   request.Inputs.Session.Host.Directory,
+				RuntimeMode: request.Inputs.Session.Host.RuntimeMode,
+				WorkFile:    request.Inputs.Session.Host.WorkFile,
+				MockWorkers: request.Inputs.Session.Host.MockWorkers,
+				Host:        request.Inputs.Session.Host.Host,
+				Port:        request.Inputs.Session.Host.Port,
+				AutoPort:    request.Inputs.Session.Host.AutoPort,
+				Pprof:       request.Inputs.Session.Host.Pprof,
+			},
+		},
+	}
+}
+
+func workerRequestFromActivation(input factoryruntime.RuntimeActivationWorkerInputs) workers.RuntimeSelection {
+	return workers.RuntimeSelection{
+		RunnerID:                          input.RunnerID,
+		Worktree:                          input.Worktree,
+		WorkerReasoningEffort:             input.WorkerReasoningEffort,
+		MockWorkers:                       activationMockWorkers(input.MockWorkers),
+		InvocationSkipPermissionsOverride: input.InvocationSkipPermissionsOverride,
+		SkipBuiltInPrerequisiteValidation: input.SkipBuiltInPrerequisiteValidation,
+	}
+}
+
+func definitionRuntimeSelection(
+	directory, sourcePath, executionBaseDir string,
+	invocationArguments *work.InvocationArguments,
+) factorydefinitions.RuntimeSelection {
+	return factorydefinitions.RuntimeSelection{
+		Directory:           directory,
+		SourcePath:          sourcePath,
+		ExecutionBaseDir:    executionBaseDir,
+		InvocationArguments: work.CloneInvocationArguments(invocationArguments),
+	}
+}
+
+func recordingRuntimeSelection(request factoryruntime.RuntimeActivationRequest) recordings.RuntimeSelection {
+	return recordings.RuntimeSelection{
+		RecordPath:    request.Inputs.Recordings.RecordPath,
+		ReplayPath:    request.Inputs.Recordings.ReplayPath,
+		ResumePath:    request.Inputs.Recordings.ResumePath,
+		ResumeInput:   request.Inputs.ResumeInput,
+		WorkflowID:    request.Inputs.Recordings.WorkflowID,
+		FlushInterval: request.Inputs.Recordings.FlushInterval,
+	}
+}
+
+func activationMockWorkers(input *factoryruntime.RuntimeActivationMockWorkersConfig) *workers.MockWorkersConfig {
+	if input == nil {
+		return nil
+	}
+	config := &workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicy(input.UnmatchedDispatchPolicy),
+		MockWorkers:             make([]workers.MockWorkerConfig, len(input.MockWorkers)),
+	}
+	for index, worker := range input.MockWorkers {
+		converted := workers.MockWorkerConfig{
+			ID:              worker.ID,
+			WorkerName:      worker.WorkerName,
+			WorkstationName: worker.WorkstationName,
+			RunType:         workers.MockWorkerRunType(worker.RunType),
+			WorkInputs:      make([]workers.MockWorkInputSelector, len(worker.WorkInputs)),
+		}
+		for inputIndex, workInput := range worker.WorkInputs {
+			converted.WorkInputs[inputIndex] = workers.MockWorkInputSelector{
+				WorkID:      workInput.WorkID,
+				WorkType:    workInput.WorkType,
+				State:       workInput.State,
+				InputName:   workInput.InputName,
+				TraceID:     workInput.TraceID,
+				Channel:     workInput.Channel,
+				PayloadHash: workInput.PayloadHash,
+			}
+		}
+		if worker.ScriptConfig != nil {
+			script := &workers.MockWorkerScriptConfig{
+				Command:          worker.ScriptConfig.Command,
+				Args:             append([]string(nil), worker.ScriptConfig.Args...),
+				Env:              make(map[string]string, len(worker.ScriptConfig.Env)),
+				WorkingDirectory: worker.ScriptConfig.WorkingDirectory,
+				Stdin:            worker.ScriptConfig.Stdin,
+				Timeout:          worker.ScriptConfig.Timeout,
+			}
+			for key, value := range worker.ScriptConfig.Env {
+				script.Env[key] = value
+			}
+			converted.ScriptConfig = script
+		}
+		if worker.RejectConfig != nil {
+			reject := &workers.MockWorkerRejectConfig{
+				Stdout: worker.RejectConfig.Stdout,
+				Stderr: worker.RejectConfig.Stderr,
+			}
+			if worker.RejectConfig.ExitCode != nil {
+				value := *worker.RejectConfig.ExitCode
+				reject.ExitCode = &value
+			}
+			converted.RejectConfig = reject
+		}
+		if worker.GateConfig != nil {
+			converted.GateConfig = &workers.MockWorkerGateConfig{
+				ArrivedFile: worker.GateConfig.ArrivedFile,
+				ReleaseFile: worker.GateConfig.ReleaseFile,
+				Timeout:     worker.GateConfig.Timeout,
+			}
+		}
+		if worker.Usage != nil {
+			converted.Usage = &workers.MockWorkerUsageConfig{
+				Provider:              worker.Usage.Provider,
+				Model:                 worker.Usage.Model,
+				InputTokens:           cloneInt64Pointer(worker.Usage.InputTokens),
+				OutputTokens:          cloneInt64Pointer(worker.Usage.OutputTokens),
+				CachedInputTokens:     cloneInt64Pointer(worker.Usage.CachedInputTokens),
+				ReasoningOutputTokens: cloneInt64Pointer(worker.Usage.ReasoningOutputTokens),
+			}
+		}
+		config.MockWorkers[index] = converted
+	}
+	return config
+}
+
+func (r *Root) openActivatedRuntime(
+	ctx context.Context,
+	request factorysessions.SessionStartRequest,
+) (runtimeProducts, error) {
+	return r.openActivatedRuntimeWithInputs(ctx, request, nil, nil)
+}
+
+func (r *Root) openActivatedRuntimeWithReplayInput(
+	ctx context.Context,
+	request factorysessions.SessionStartRequest,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+) (runtimeProducts, error) {
+	return r.openActivatedRuntimeWithInputs(ctx, request, preloadedReplayInput, nil)
+}
+
+func (r *Root) openActivatedRuntimeWithResumeInput(
+	ctx context.Context,
+	request factorysessions.SessionStartRequest,
+	resumeInput *recordings.LoadResumeInputResult,
+) (runtimeProducts, error) {
+	return r.openActivatedRuntimeWithInputs(ctx, request, nil, resumeInput)
+}
+
+func (r *Root) openActivatedRuntimeWithInputs(
+	ctx context.Context,
+	request factorysessions.SessionStartRequest,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+	resumeInput *recordings.LoadResumeInputResult,
+) (runtimeProducts, error) {
+	if r == nil || r.runtimeRoot == nil {
+		return runtimeProducts{}, fmt.Errorf("open Factory Runtime: Runtime root is required")
+	}
+	activationRequest, err := r.activationRequestWithInputs(ctx, request, preloadedReplayInput, resumeInput)
+	if err != nil {
+		return runtimeProducts{}, err
+	}
+	var products runtimeProducts
+	result, err := r.runtimeRoot.Activate(ctx, activationRequest, func(activationCtx context.Context, activation factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
+		opened, openErr := r.activateRuntime(activationCtx, activation)
+		if openErr != nil {
+			return nil, openErr
+		}
+		products = opened
+		published, activationErr := newRuntimeActivation(opened)
+		if activationErr != nil && opened.closeArtifacts != nil {
+			activationErr = errors.Join(activationErr, opened.closeArtifacts())
+		}
+		return published, activationErr
+	})
+	if err != nil {
+		return runtimeProducts{}, err
+	}
+	binding := result.Binding
+	if binding.IsZero() {
+		binding = result.Runtime.Binding
+	}
+	if resumeInput != nil {
+		metadata := resumeInput.RecoveryMetadata
+		metadata.SuccessorRecordingID = recoveryRecordingID(activationRequest.RuntimeID)
+		products.resumeRecoveryMetadata = &metadata
+	}
+	closeRuntime := r.activationCloser(binding, result.RuntimeID)
+	if !binding.IsZero() && products.bindRuntime != nil {
+		if err := products.bindRuntime(binding); err != nil {
+			return runtimeProducts{}, runtimeBindingPublicationError(err, closeRuntime())
+		}
+	}
+	if binding.Service() != nil {
+		products.factoryRuntime = binding.Service()
+	} else {
+		products.factoryRuntime = r.runtimeRoot
+	}
+	products.closeArtifacts = closeRuntime
+	return products, nil
+}
+
+func (r *Root) activationCloser(binding factoryruntime.RuntimeBinding, runtimeID string) func() error {
+	var mu sync.Mutex
+	closed := false
+	return func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		if closed {
+			return nil
+		}
+		var err error
+		if !binding.IsZero() {
+			_, err = binding.Deactivate(context.Background())
+		} else {
+			_, err = r.runtimeRoot.Deactivate(
+				context.Background(),
+				factoryruntime.RuntimeDeactivationRequest{RuntimeID: runtimeID},
+			)
+		}
+		if errors.Is(err, factoryruntime.ErrRuntimeNotActive) {
+			err = nil
+		}
+		if err == nil {
+			closed = true
+		}
+		return err
+	}
+}
+
+func runtimeBindingPublicationError(bindErr, cleanupErr error) error {
+	if cleanupErr == nil {
+		return fmt.Errorf("open Factory Runtime: publish Runtime binding to Factory Session: %w", bindErr)
+	}
+	return fmt.Errorf(
+		"open Factory Runtime: publish Runtime binding to Factory Session: %w",
+		errors.Join(bindErr, fmt.Errorf("cleanup activated Runtime: %w", cleanupErr)),
+	)
+}
+
+func (r *Root) activationRequest(
+	ctx context.Context,
+	request factorysessions.SessionStartRequest,
+) (factoryruntime.RuntimeActivationRequest, error) {
+	return r.activationRequestWithInputs(ctx, request, nil, nil)
+}
+
+func (r *Root) activationRequestWithInputs(
+	ctx context.Context,
+	request factorysessions.SessionStartRequest,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+	resumeInput *recordings.LoadResumeInputResult,
+) (factoryruntime.RuntimeActivationRequest, error) {
+	definition := definitionRequestForStart(request)
+	runtimeRequest := runtimeOwnerRequestForStart(request)
+	session := request
+	worker := workerRequestForStart(request)
+	recording := recordingRequestForStart(request)
+	selection := runtimeSelectionForStart(request)
+	runtimeID, err := r.ensureActivationRuntimeID(&runtimeRequest)
+	if err != nil {
+		return factoryruntime.RuntimeActivationRequest{}, err
+	}
+	sessionID := sessionIDForSelection(session)
+	resolution, err := r.resolveActivationSnapshot(
+		ctx,
+		definition,
+		recording,
+		preloadedReplayInput,
+		resumeInput,
+		sessionID,
+	)
+	if err != nil {
+		return factoryruntime.RuntimeActivationRequest{}, err
+	}
+	normalizeActivationSnapshot(
+		&resolution.snapshot,
+		resolution.factoryDir,
+		resolution.sourcePath,
+		resolution.runtimeBaseDir,
+		sessionID,
+		recording.WorkflowID,
+	)
+	inputs := runtimeActivationInputs(
+		definition,
+		session,
+		false,
+		worker,
+		recording,
+		selection.ModelCacheDirectory,
+		selection.OperatorDefaults,
+		resumeInput,
+	)
+	// Runtime root activation must receive the same resolved source identity
+	// that Definitions used. In particular, named paths and directory-backed
+	// authored files cannot be rediscovered from the caller's shorthand after
+	// the snapshot has crossed the boundary. Keep the caller's Directory as
+	// the session/factory-root scope; SourcePath carries the concrete source
+	// identity used to resolve the snapshot.
+	if resolution.sourcePath != "" {
+		inputs.Definition.SourcePath = resolution.sourcePath
+	}
+	return factoryruntime.RuntimeActivationRequest{
+		RuntimeID:        runtimeID,
+		FactorySessionID: sessionID,
+		Snapshot:         resolution.snapshot,
+		Runtime:          runtimeRequest,
+		Inputs:           inputs,
+	}, nil
+}
+
+type activationSnapshotResolution struct {
+	snapshot       factorydefinitions.RuntimeSnapshot
+	factoryDir     string
+	sourcePath     string
+	runtimeBaseDir string
+}
+
+func (r *Root) ensureActivationRuntimeID(runtime *factoryruntime.RuntimeSelection) (string, error) {
+	if runtime == nil {
+		return "", fmt.Errorf("activate Factory Runtime: runtime selection is required")
+	}
+	runtimeID := strings.TrimSpace(runtime.RuntimeInstanceID)
+	if runtimeID != "" {
+		return runtimeID, nil
+	}
+	if r.generateRuntimeInstanceID == nil {
+		return "", fmt.Errorf("open Factory Runtime: runtime instance ID generator is required")
+	}
+	runtimeID = strings.TrimSpace(r.generateRuntimeInstanceID())
+	if runtimeID == "" {
+		return "", fmt.Errorf("open Factory Runtime: runtime instance ID generator returned an empty identity")
+	}
+	runtime.RuntimeInstanceID = runtimeID
+	return runtimeID, nil
+}
+
+func (r *Root) canonicalSessionIDGenerator() func() string {
+	if r == nil {
+		return nil
+	}
+	if r.generateSessionID != nil {
+		return r.generateSessionID
+	}
+	// Keep direct internal callers compatible while the process graph adopts
+	// the dedicated Factory Session identity edge.
+	return r.generateRuntimeInstanceID
+}
+
+func ensureDefaultCanonicalSessionID(
+	session *factorysessions.SessionStartRequest,
+	replayPath string,
+	generateID func() string,
+) error {
+	if session == nil || strings.TrimSpace(replayPath) != "" {
+		return nil
+	}
+	sessionID := strings.TrimSpace(session.SessionID)
+	if sessionID == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
+	selection := sessionRuntimeSelection(session)
+	if sessionID != factorysessions.DefaultSessionID || strings.TrimSpace(selection.CanonicalSessionID) != "" {
+		return nil
+	}
+	if generateID == nil {
+		return fmt.Errorf("open Factory Session: canonical session ID generator is required")
+	}
+	canonicalID := strings.TrimSpace(generateID())
+	if canonicalID == "" {
+		return fmt.Errorf("open Factory Session: canonical session ID generator returned an empty identity")
+	}
+	selection.CanonicalSessionID = canonicalID
+	return nil
+}
+
+func (r *Root) resolveActivationSnapshot(
+	ctx context.Context,
+	definition factorydefinitions.RuntimeSelection,
+	recording recordings.RuntimeSelection,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+	resumeInput *recordings.LoadResumeInputResult,
+	sessionID string,
+) (activationSnapshotResolution, error) {
+	if replaySnapshot, ok, err := r.resolveLegacyReplaySnapshot(ctx, definition, recording, sessionID, preloadedReplayInput); err != nil {
+		return activationSnapshotResolution{}, err
+	} else if ok {
+		return activationSnapshotResolution{
+			snapshot:       replaySnapshot,
+			factoryDir:     strings.TrimSpace(replaySnapshot.FactoryDir),
+			runtimeBaseDir: firstNonEmptyString(definition.ExecutionBaseDir, replaySnapshot.RuntimeBaseDir),
+		}, nil
+	}
+	if resumeSnapshot, ok, err := r.resolveLegacyResumeSnapshot(ctx, definition, recording, sessionID, resumeInput); err != nil {
+		return activationSnapshotResolution{}, err
+	} else if ok {
+		return activationSnapshotResolution{
+			snapshot:       resumeSnapshot,
+			factoryDir:     strings.TrimSpace(resumeSnapshot.FactoryDir),
+			runtimeBaseDir: firstNonEmptyString(definition.ExecutionBaseDir, resumeSnapshot.RuntimeBaseDir),
+		}, nil
+	}
+	factoryDir, sourcePath, err := r.resolveActivationDefinitionSource(definition)
+	if err != nil {
+		return activationSnapshotResolution{}, err
+	}
+	if factoryDir == "" && sourcePath == "" {
+		return activationSnapshotResolution{}, fmt.Errorf("open Factory Runtime: Factory Definition directory is required")
+	}
+	runtimeBaseDir := firstNonEmptyString(definition.ExecutionBaseDir, factoryDir, sourcePath)
+	snapshot, err := r.resolveActivationDefinitionSnapshot(ctx, sourcePath, runtimeBaseDir, definition, recording.WorkflowID, sessionID)
+	if err != nil {
+		return activationSnapshotResolution{}, err
+	}
+	return activationSnapshotResolution{
+		snapshot:       snapshot,
+		factoryDir:     factoryDir,
+		sourcePath:     sourcePath,
+		runtimeBaseDir: runtimeBaseDir,
+	}, nil
+}
+
+func (r *Root) resolveActivationDefinitionSnapshot(
+	ctx context.Context,
+	sourcePath, runtimeBaseDir string,
+	definition factorydefinitions.RuntimeSelection,
+	workflowID string,
+	sessionID string,
+) (factorydefinitions.RuntimeSnapshot, error) {
+	if r.factoryDefinitions == nil {
+		return factorydefinitions.RuntimeSnapshot{}, runtimeSnapshotResolverUnavailable()
+	}
+	resolved, err := r.factoryDefinitions.ResolveRuntimeSnapshot(ctx, factorydefinitions.ResolveRuntimeSnapshotRequest{
+		// SourcePath is the concrete authored file for direct layouts. Do not
+		// send the retained directory as FactoryDir as the Definitions root
+		// rejects two distinct source identities.
+		SourcePath:       sourcePath,
+		ExecutionBaseDir: runtimeBaseDir,
+		Invocation: factorydefinitions.RuntimeSnapshotInvocationContext{
+			FactorySessionID: sessionID,
+			WorkflowID:       workflowID,
+			Arguments:        work.CloneInvocationArguments(definition.InvocationArguments),
+		},
+	})
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, err
+	}
+	snapshot, err := resolved.Snapshot.Clone()
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, fmt.Errorf("open Factory Runtime: detach resolved Factory Definition snapshot: %w", err)
+	}
+	return snapshot, nil
+}
+
+func normalizeActivationSnapshot(
+	snapshot *factorydefinitions.RuntimeSnapshot,
+	factoryDir, sourcePath, runtimeBaseDir, sessionID, workflowID string,
+) {
+	if strings.TrimSpace(snapshot.FactoryDir) == "" {
+		snapshot.FactoryDir = factoryDir
+		if strings.TrimSpace(snapshot.FactoryDir) == "" && strings.TrimSpace(sourcePath) != "" {
+			snapshot.FactoryDir = filepath.Dir(sourcePath)
+		}
+	}
+	if strings.TrimSpace(snapshot.RuntimeBaseDir) == "" {
+		snapshot.RuntimeBaseDir = runtimeBaseDir
+	}
+	if snapshot.EffectiveFactory.Name == "" {
+		snapshot.EffectiveFactory.Name = runtimeFactoryName(factoryDir)
+	}
+	snapshot.Invocation.FactorySessionID = sessionID
+	if workflowID = strings.TrimSpace(workflowID); workflowID != "" {
+		snapshot.Invocation.WorkflowID = workflowID
+	}
+	if snapshot.DefinitionVersion == nil {
+		snapshot.DefinitionVersion = &factorydefinitions.FactoryVersion{Logical: 1}
+	}
+}
+
+func runtimeFactoryName(factoryDir string) string {
+	name := filepath.Base(filepath.Clean(factoryDir))
+	if name == "." || name == string(filepath.Separator) || name == "" {
+		return "runtime"
+	}
+	return name
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func sessionIDForSelection(session factorysessions.SessionStartRequest) string {
+	if sessionID := strings.TrimSpace(session.SessionID); sessionID != "" {
+		return sessionID
+	}
+	return factorysessions.DefaultSessionID
+}
+
+func (r *Root) resolveLegacyReplaySnapshot(
+	ctx context.Context,
+	definition factorydefinitions.RuntimeSelection,
+	recording recordings.RuntimeSelection,
+	sessionID string,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+) (factorydefinitions.RuntimeSnapshot, bool, error) {
+	if !legacyReplayRequested(recording.ReplayPath, preloadedReplayInput, r.replayInputs != nil) {
+		return factorydefinitions.RuntimeSnapshot{}, false, nil
+	}
+	input, err := r.loadReplayInputForActivation(recording.ReplayPath, preloadedReplayInput)
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, false, err
+	}
+	if input.Portable != nil || input.Legacy == nil || input.Legacy.Factory == nil {
+		return factorydefinitions.RuntimeSnapshot{}, false, nil
+	}
+	snapshot, err := r.resolveLegacyFactorySnapshot(ctx, definition, recording.WorkflowID, sessionID, input.Legacy.Factory, "replay")
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, false, err
+	}
+	return snapshot, true, nil
+}
+
+func (r *Root) resolveLegacyResumeSnapshot(
+	ctx context.Context,
+	definition factorydefinitions.RuntimeSelection,
+	recording recordings.RuntimeSelection,
+	sessionID string,
+	resumeInput *recordings.LoadResumeInputResult,
+) (factorydefinitions.RuntimeSnapshot, bool, error) {
+	if resumeInput == nil {
+		return factorydefinitions.RuntimeSnapshot{}, false, nil
+	}
+	input := resumeInput.Input
+	if input.Portable != nil || input.Legacy == nil || input.Legacy.Factory == nil {
+		return factorydefinitions.RuntimeSnapshot{}, false, fmt.Errorf(
+			"open Factory Runtime: resume recording Factory Definition is required",
+		)
+	}
+	snapshot, err := r.resolveLegacyFactorySnapshot(ctx, definition, recording.WorkflowID, sessionID, input.Legacy.Factory, "resume")
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, false, err
+	}
+	return snapshot, true, nil
+}
+
+func (r *Root) resolveLegacyFactorySnapshot(
+	ctx context.Context,
+	definition factorydefinitions.RuntimeSelection,
+	workflowID string,
+	sessionID string,
+	factoryJSON *factorydefinitions.FactorySnapshot,
+	intent string,
+) (factorydefinitions.RuntimeSnapshot, error) {
+	if r.factoryDefinitions == nil {
+		return factorydefinitions.RuntimeSnapshot{}, runtimeSnapshotResolverUnavailable()
+	}
+	replayConfig, err := r.decodeLegacyReplayConfig(factoryJSON)
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, err
+	}
+	factoryDir, runtimeBaseDir := legacyReplayPaths(definition.ExecutionBaseDir, replayConfig)
+	resolved, err := r.factoryDefinitions.ResolveRuntimeSnapshot(ctx, factorydefinitions.ResolveRuntimeSnapshotRequest{
+		Canonical:        append([]byte(nil), []byte(*factoryJSON)...),
+		ExecutionBaseDir: runtimeBaseDir,
+		Invocation: factorydefinitions.RuntimeSnapshotInvocationContext{
+			FactorySessionID: sessionID,
+			WorkflowID:       workflowID,
+		},
+	})
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, err
+	}
+	snapshot, err := resolved.Snapshot.Clone()
+	if err != nil {
+		return factorydefinitions.RuntimeSnapshot{}, fmt.Errorf(
+			"open Factory Runtime: detach %s Factory Definition snapshot: %w",
+			intent,
+			err,
+		)
+	}
+	if strings.TrimSpace(snapshot.FactoryDir) == "" {
+		snapshot.FactoryDir = factoryDir
+	}
+	if strings.TrimSpace(snapshot.RuntimeBaseDir) == "" {
+		snapshot.RuntimeBaseDir = runtimeBaseDir
+	}
+	return snapshot, nil
+}
+
+func legacyReplayRequested(
+	replayPath string,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+	replayInputsAvailable bool,
+) bool {
+	return strings.TrimSpace(replayPath) != "" && (preloadedReplayInput != nil || replayInputsAvailable)
+}
+
+func (r *Root) loadReplayInputForActivation(
+	replayPath string,
+	preloadedReplayInput *recordings.LoadReplayInputResult,
+) (recordings.LoadReplayInputResult, error) {
+	if preloadedReplayInput != nil {
+		return *preloadedReplayInput, nil
+	}
+	loaded, err := r.replayInputs.LoadReplayInput(
+		recordings.LoadReplayInputRequest{Path: replayPath},
+	)
+	if err != nil {
+		return recordings.LoadReplayInputResult{}, fmt.Errorf("open Factory Runtime: load replay input for activation: %w", err)
+	}
+	return loaded, nil
+}
+
+func (r *Root) decodeLegacyReplayConfig(
+	factoryJSON *factorydefinitions.FactorySnapshot,
+) (factorydefinitions.ReplayRuntimeConfig, error) {
+	if r.factoryDefinitions == nil {
+		return nil, runtimeSnapshotResolverUnavailable()
+	}
+	if r.decodeReplayConfig == nil {
+		return nil, fmt.Errorf("open Factory Runtime: replay Factory Definition decoder is required")
+	}
+	replayConfig, err := r.decodeReplayConfig(factoryJSON)
+	if err != nil {
+		return nil, fmt.Errorf("open Factory Runtime: decode replay Factory Definition: %w", err)
+	}
+	if replayConfig == nil {
+		return nil, fmt.Errorf("open Factory Runtime: replay Factory Definition is empty")
+	}
+	return replayConfig, nil
+}
+
+func legacyReplayPaths(
+	executionBaseDir string,
+	replayConfig factorydefinitions.ReplayRuntimeConfig,
+) (string, string) {
+	factoryDir := strings.TrimSpace(replayConfig.FactoryDir())
+	runtimeBaseDir := firstNonEmptyString(executionBaseDir, replayConfig.RuntimeBaseDir())
+	factoryDir = firstNonEmptyString(factoryDir, runtimeBaseDir, ".")
+	runtimeBaseDir = firstNonEmptyString(runtimeBaseDir, factoryDir)
+	return factoryDir, runtimeBaseDir
+}
+
+func (r *Root) resolveActivationDefinitionSource(
+	definition factorydefinitions.RuntimeSelection,
+) (string, string, error) {
+	if strings.TrimSpace(definition.SourcePath) != "" {
+		sourcePath := strings.TrimSpace(definition.SourcePath)
+		if !strings.HasPrefix(sourcePath, "~") && r.resolveHome == nil {
+			return "", sourcePath, nil
+		}
+		resolved, err := absolutizeActivationPath(sourcePath, r.resolveHome)
+		if err != nil {
+			return "", "", fmt.Errorf("open Factory Runtime: resolve Factory source: %w", err)
+		}
+		return "", resolved, nil
+	}
+	factoryDir := strings.TrimSpace(definition.Directory)
+	if factoryDir == "" {
+		return "", "", nil
+	}
+	if r.namedPaths != nil {
+		resolved, err := r.namedPaths.ResolveCurrentDir(factoryDir)
+		if err != nil {
+			return "", "", fmt.Errorf("open Factory Runtime: resolve Factory directory: %w", err)
+		}
+		factoryDir = resolved
+	}
+	resolved, err := absolutizeActivationPath(factoryDir, r.resolveHome)
+	if err != nil {
+		return "", "", fmt.Errorf("open Factory Runtime: resolve Factory directory: %w", err)
+	}
+	// The authored loader treats a directory as a split layout and therefore
+	// requires body-only worker definitions. Opening has historically accepted
+	// a direct factory.json with topology-only workers (including mock-worker
+	// runs), so resolve the concrete source file while retaining the directory
+	// as the snapshot's Factory identity.
+	return resolved, filepath.Join(resolved, factorydefinitions.FactoryConfigFile), nil
+}
+
+func absolutizeActivationPath(
+	path string,
+	resolveHome factorysessions.HomeDirectoryResolver,
+) (string, error) {
+	if resolveHome == nil && path != "~" && !strings.HasPrefix(path, "~/") && !strings.HasPrefix(path, `~\`) {
+		resolved, err := filepath.Abs(path)
+		if err != nil {
+			return "", fmt.Errorf("resolve Factory directory %q: %w", path, err)
+		}
+		return filepath.Clean(resolved), nil
+	}
+	return logicaltarget.AbsolutizeFactoryDirectory(path, resolveHome)
+}
+
+func runtimeSnapshotResolverUnavailable() error {
+	return &factorydefinitions.RuntimeSnapshotResolutionError{
+		Diagnostic: factorydefinitions.RuntimeSnapshotDiagnostic{
+			Code:    factorydefinitions.RuntimeSnapshotDiagnosticUnavailable,
+			Field:   "resolver",
+			Message: "Factory Definitions runtime snapshot resolver is unavailable",
+		},
+		Cause: factorydefinitions.ErrRuntimeSnapshotResolverUnavailable,
+	}
+}
+
+func runtimeActivationInputs(
+	definition factorydefinitions.RuntimeSelection,
+	session factorysessions.SessionStartRequest,
+	canonicalSessionIDGenerated bool,
+	worker workers.RuntimeSelection,
+	recording recordings.RuntimeSelection,
+	modelCacheDirectory string,
+	operatorDefaults operatorsettings.ResolvedDefaults,
+	resumeInput *recordings.LoadResumeInputResult,
+) factoryruntime.RuntimeActivationInputs {
+	selection := runtimeSelectionForStart(session)
+	inputs := factoryruntime.RuntimeActivationInputs{
+		Definition: factoryruntime.RuntimeActivationDefinitionInputs{
+			Directory:        definition.Directory,
+			SourcePath:       definition.SourcePath,
+			ExecutionBaseDir: definition.ExecutionBaseDir,
+		},
+		Session: factoryruntime.RuntimeActivationSessionInputs{
+			CanonicalSessionID:          selection.CanonicalSessionID,
+			CanonicalSessionIDGenerated: canonicalSessionIDGenerated,
+			PersistencePolicy:           string(session.Persistence),
+			BackendScopeID:              selection.BackendScopeID,
+			SystemConfigHome:            selection.SystemConfigHome,
+			SystemConfigPath:            selection.SystemConfigPath,
+			WorkFile:                    selection.WorkFile,
+			Host: factoryruntime.RuntimeActivationHostInputs{
+				Directory:   selection.Host.Directory,
+				RuntimeMode: selection.Host.RuntimeMode,
+				WorkFile:    selection.Host.WorkFile,
+				MockWorkers: selection.Host.MockWorkers,
+				Host:        selection.Host.Host,
+				Port:        selection.Host.Port,
+				AutoPort:    selection.Host.AutoPort,
+				Pprof:       selection.Host.Pprof,
+			},
+		},
+		Workers: factoryruntime.RuntimeActivationWorkerInputs{
+			RunnerID:                          worker.RunnerID,
+			Worktree:                          worker.Worktree,
+			WorkerReasoningEffort:             worker.WorkerReasoningEffort,
+			MockWorkers:                       runtimeActivationMockWorkers(worker.MockWorkers),
+			InvocationSkipPermissionsOverride: worker.InvocationSkipPermissionsOverride,
+			SkipBuiltInPrerequisiteValidation: worker.SkipBuiltInPrerequisiteValidation,
+		},
+		Recordings: factoryruntime.RuntimeActivationRecordingInputs{
+			RecordPath:    recording.RecordPath,
+			ReplayPath:    recording.ReplayPath,
+			ResumePath:    recording.ResumePath,
+			WorkflowID:    recording.WorkflowID,
+			FlushInterval: recording.FlushInterval,
+		},
+		ModelCacheDirectory: modelCacheDirectory,
+		OperatorDefaults: factoryruntime.RuntimeActivationOperatorDefaults{
+			WorkerModelProvider: operatorDefaults.WorkerModelProvider,
+			WorkerModel:         operatorDefaults.WorkerModel,
+			ConfigPath:          operatorDefaults.ConfigPath,
+		},
+	}
+	if resumeInput != nil {
+		inputs.ResumeInput = *resumeInput
+	}
+	return inputs
+}
+
+func runtimeActivationMockWorkers(input *workers.MockWorkersConfig) *factoryruntime.RuntimeActivationMockWorkersConfig {
+	if input == nil {
+		return nil
+	}
+	output := &factoryruntime.RuntimeActivationMockWorkersConfig{
+		UnmatchedDispatchPolicy: string(input.UnmatchedDispatchPolicy),
+		MockWorkers:             make([]factoryruntime.RuntimeActivationMockWorker, len(input.MockWorkers)),
+	}
+	for index, worker := range input.MockWorkers {
+		converted := factoryruntime.RuntimeActivationMockWorker{
+			ID:              worker.ID,
+			WorkerName:      worker.WorkerName,
+			WorkstationName: worker.WorkstationName,
+			RunType:         string(worker.RunType),
+			WorkInputs:      make([]factoryruntime.RuntimeActivationMockWorkInput, len(worker.WorkInputs)),
+		}
+		for inputIndex, workInput := range worker.WorkInputs {
+			converted.WorkInputs[inputIndex] = factoryruntime.RuntimeActivationMockWorkInput{
+				WorkID:      workInput.WorkID,
+				WorkType:    workInput.WorkType,
+				State:       workInput.State,
+				InputName:   workInput.InputName,
+				TraceID:     workInput.TraceID,
+				Channel:     workInput.Channel,
+				PayloadHash: workInput.PayloadHash,
+			}
+		}
+		if worker.ScriptConfig != nil {
+			converted.ScriptConfig = &factoryruntime.RuntimeActivationMockScript{
+				Command:          worker.ScriptConfig.Command,
+				Args:             append([]string(nil), worker.ScriptConfig.Args...),
+				Env:              cloneStringMap(worker.ScriptConfig.Env),
+				WorkingDirectory: worker.ScriptConfig.WorkingDirectory,
+				Stdin:            worker.ScriptConfig.Stdin,
+				Timeout:          worker.ScriptConfig.Timeout,
+			}
+		}
+		if worker.RejectConfig != nil {
+			converted.RejectConfig = &factoryruntime.RuntimeActivationMockReject{Stdout: worker.RejectConfig.Stdout, Stderr: worker.RejectConfig.Stderr}
+			if worker.RejectConfig.ExitCode != nil {
+				value := *worker.RejectConfig.ExitCode
+				converted.RejectConfig.ExitCode = &value
+			}
+		}
+		if worker.GateConfig != nil {
+			converted.GateConfig = &factoryruntime.RuntimeActivationMockGate{
+				ArrivedFile: worker.GateConfig.ArrivedFile,
+				ReleaseFile: worker.GateConfig.ReleaseFile,
+				Timeout:     worker.GateConfig.Timeout,
+			}
+		}
+		if worker.Usage != nil {
+			converted.Usage = &factoryruntime.RuntimeActivationMockUsage{
+				Provider:              worker.Usage.Provider,
+				Model:                 worker.Usage.Model,
+				InputTokens:           cloneInt64Pointer(worker.Usage.InputTokens),
+				OutputTokens:          cloneInt64Pointer(worker.Usage.OutputTokens),
+				CachedInputTokens:     cloneInt64Pointer(worker.Usage.CachedInputTokens),
+				ReasoningOutputTokens: cloneInt64Pointer(worker.Usage.ReasoningOutputTokens),
+			}
+		}
+		output.MockWorkers[index] = converted
+	}
+	return output
+}

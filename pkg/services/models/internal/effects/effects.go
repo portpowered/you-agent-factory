@@ -192,22 +192,24 @@ func (configuration ResolvedHostConfiguration) Clone() ResolvedHostConfiguration
 	return configuration
 }
 
-// BackendArtifactSelection is the provider-neutral archive identity consumed
-// by the private asset preparation seam. Location is retained only inside the
-// Models implementation and is never copied to a public result or error.
+// BackendArtifactSelection identifies either an immutable archive or an
+// installed backend directory. Location stays inside the Models implementation.
 type BackendArtifactSelection struct {
-	Name     string
-	Location string
-	Bytes    int64
-	SHA256   string
+	Name          string
+	Location      string
+	Bytes         int64
+	SHA256        string
+	InstalledPath string
+	Accelerator   string
 }
 
-// BackendArtifactResolver selects one immutable backend archive for a managed
-// host. It is an injected effect so tests can use deterministic manifests and
-// production can obtain the published P3 artifact set without live probing.
+// BackendArtifactResolver selects a backend archive or an installed LocalAI
+// directory for a managed host. It is an injected effect so tests can use
+// deterministic selections and production can delegate OCI installation.
 type BackendArtifactResolver func(
 	context.Context,
 	ResolvedHostConfiguration,
+	bool,
 ) (BackendArtifactSelection, error)
 
 type AssetHTTPDoer interface {

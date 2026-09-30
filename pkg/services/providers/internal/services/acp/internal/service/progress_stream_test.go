@@ -6,8 +6,35 @@ import (
 	"testing"
 	"time"
 
+	acpsdk "github.com/coder/acp-go-sdk"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
+
+func TestMapSessionUpdateCompletedToolWithDiffKeepsOwningTool(t *testing.T) {
+	status := acpsdk.ToolCallStatusCompleted
+	title := "Edit file"
+	oldText := "before"
+	progress, text := mapSessionUpdate(acpsdk.SessionUpdate{ToolCallUpdate: &acpsdk.SessionToolCallUpdate{
+		ToolCallId: "call-1", Status: &status, Title: &title,
+		Content: []acpsdk.ToolCallContent{
+			{Diff: &acpsdk.ToolCallContentDiff{Path: "changed.go", OldText: &oldText}},
+			{Diff: &acpsdk.ToolCallContentDiff{Path: "new.go"}},
+		},
+	}})
+	if text != "" || len(progress) != 3 {
+		t.Fatalf("mapped progress = %#v, text = %q", progress, text)
+	}
+	tool := progress[0]
+	if tool.Phase != "completed" || tool.Detail != title || tool.Metadata["kind"] != "tool" || tool.Metadata["item_id"] != "call-1" || tool.Metadata["status"] != string(status) {
+		t.Fatalf("owning tool completion = %#v", tool)
+	}
+	for i, want := range []struct{ path, operation string }{{"changed.go", "modified"}, {"new.go", "created"}} {
+		change := progress[i+1]
+		if change.Metadata["kind"] != "file_change" || change.Metadata["path"] != want.path || change.Metadata["operation"] != want.operation || change.Metadata["tool_call_id"] != "call-1" {
+			t.Fatalf("file change %d = %#v", i, change)
+		}
+	}
+}
 
 // streamHarness drives a promptProgressStream the way the ACP client does:
 // emission happens under the caller's lock, pending facts are taken there, and

@@ -428,7 +428,7 @@ func NewRuntimeRootWithHistoricalQuery(
 }
 
 var _ recordings.Service = (*combinedService)(nil)
-var _ recordings.RuntimeOpening = (*combinedService)(nil)
+var _ recordings.RuntimeScopeService = (*combinedService)(nil)
 
 func (service *combinedService) Projection() recordings.ProjectionService {
 	if service == nil {
@@ -466,7 +466,7 @@ func (service *combinedService) ReplayExecution(
 	error,
 ) {
 	if service == nil {
-		return nil, nil, nil, nil, fmt.Errorf("Recordings runtime opening is unavailable")
+		return nil, nil, nil, nil, fmt.Errorf("Recordings runtime scope is unavailable")
 	}
 	return NewReplayExecution(
 		artifact,
@@ -532,7 +532,7 @@ func validateRuntimeOpening(
 	request recordings.RuntimeScopeRequest,
 ) error {
 	if service == nil || service.runtimeRouter == nil {
-		return fmt.Errorf("Recordings runtime opening is unavailable")
+		return fmt.Errorf("Recordings runtime scope is unavailable")
 	}
 	if ctx == nil {
 		ctx = context.Background()

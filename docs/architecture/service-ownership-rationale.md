@@ -355,12 +355,17 @@ Top-level owner · `pkg/services/factory_sessions`
 
 | Aspect | Rationale |
 | --- | --- |
-| Authority | Session identity, desired lifecycle, placement, recovery, discovery, invocation coordination, and session response streams. |
+| Authority | Session identity, lifecycle, runtime activation, recovery, invocation coordination, and session response streams. |
 | State store | Live session registry, session control store, and session-owned persistence coordination (canonical history delegated to Recordings). |
 | Lifecycle | Owns desired lifecycle reconcile, live selection/activation, and durable start/resume/control. |
 | Consumers | Transports, Factory Runtime, Work, Workers, Provider Sessions, Models, Visualization, Recordings. |
 | Transaction boundary | Session aggregate mutations are Sessions-local; peer services are commanded through roots. |
 | Failure recovery | Placement/activation conflicts, durable control failures, and timeout/cancellation are Sessions recovery facts. |
+
+The Factory Sessions assembly directly coordinates the already-constructed
+Runtime, Work, Workers, and Recordings services. The application graph in
+`pkg/wire` constructs these services once; the initializer activates their
+lifecycle roles. Live runtime activation and cleanup belong to this assembly.
 
 #### `factory_sessions/durable_execution`
 
@@ -371,7 +376,7 @@ Nested subservice of `factory_sessions` · `pkg/services/factory_sessions/intern
 | Authority | Durable start/resume/control/inspection and session-owned persistence coordination. |
 | State store | Session durable execution identity/persistence handles; delegates canonical history/artifacts to Recordings. |
 | Lifecycle | Durable control lifecycle for a session. |
-| Consumers | Factory Sessions root, Live Runtime, Recordings root. |
+| Consumers | Factory Sessions root and Recordings root. |
 | Transaction boundary | Session persistence coordination is Sessions-local; ledger append is Recordings command. |
 | Failure recovery | Durable control and resume conflicts recover in Durable Execution. |
 
@@ -381,10 +386,10 @@ Nested subservice of `factory_sessions` · `pkg/services/factory_sessions/intern
 
 | Aspect | Rationale |
 | --- | --- |
-| Authority | Normalize/discover targets, derive logical keys, resolve folders, registry-aware identity lookup. |
-| State store | Logical session keys and folder/identity resolution metadata. |
+| Authority | Normalize target references, derive canonical logical keys, and resolve registry identity. |
+| State store | Reads the Factory Sessions registry; no independent identity store. |
 | Lifecycle | Identity resolution is request-driven under Sessions. |
-| Consumers | Factory Sessions root and nested Live Runtime/Durable Execution. |
+| Consumers | Factory Sessions assembly and durable execution. |
 | Transaction boundary | Identity derivation shares Sessions aggregate authority. |
 | Failure recovery | Ambiguous/missing identity targets are Sessions identity failures. |
 
@@ -401,19 +406,6 @@ Nested subservice of `factory_sessions` · `pkg/services/factory_sessions/intern
 | Transaction boundary | Invocation coordination is Sessions-local; Work admission/state are Work commands. |
 | Failure recovery | Timeouts and cancellations are Sessions invocation recovery facts. |
 
-#### `factory_sessions/live_runtime`
-
-Nested subservice of `factory_sessions` · `pkg/services/factory_sessions/internal/services/live_runtime`
-
-| Aspect | Rationale |
-| --- | --- |
-| Authority | Open/list/get/snapshot/pause/resume/close; sole owner of live registry, selection, activation lock, cleanup. |
-| State store | Live session registry and mutable live-runtime aggregate. |
-| Lifecycle | Live activation lock and cleanup lifecycle. |
-| Consumers | Factory Sessions root, Runtime Opening, Durable Execution, Response Stream. |
-| Transaction boundary | Live registry mutations are exclusive to Live Runtime inside Sessions. |
-| Failure recovery | Activation races and cleanup failures recover under Live Runtime. |
-
 #### `factory_sessions/response_stream`
 
 Nested subservice of `factory_sessions` · `pkg/services/factory_sessions/internal/services/response_stream`
@@ -426,19 +418,6 @@ Nested subservice of `factory_sessions` · `pkg/services/factory_sessions/intern
 | Consumers | Factory Sessions root, transports/Visualization presentation consumers. |
 | Transaction boundary | Response-store mutations are Sessions-local; canonical Factory events belong to Recordings. |
 | Failure recovery | Backpressure/drop and retention faults are Response Stream recovery policy. |
-
-#### `factory_sessions/runtime_opening`
-
-Nested subservice of `factory_sessions` · `pkg/services/factory_sessions/internal/services/runtime_opening`
-
-| Aspect | Rationale |
-| --- | --- |
-| Authority | Coordinate peer root services and return a lifecycle plan without importing peer implementations. |
-| State store | No independent datastore; produces lifecycle plan over already-constructed roles. |
-| Lifecycle | Opening/binding lifecycle after root binding contract stabilizes. |
-| Consumers | Factory Sessions root and peer service roots (Definitions, Runtime, Workers, Models, Recordings). |
-| Transaction boundary | Does not own peer transactions; only plans Sessions-owned activation steps. |
-| Failure recovery | Binding/plan failures surface as Sessions opening faults without peer downcasts. |
 
 ### `factory_visualization`
 

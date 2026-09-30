@@ -114,8 +114,8 @@ func main() {
 	startRequest := factoryapi.FactorySessionExecutionRequest{
 		RequestId: cfg.requestID,
 		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
-			WorkflowName: strPtr(cfg.workflowName),
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
+			WorkflowFile: strPtr(filepath.Join(projectRoot, projectWorkflowDirectory, cfg.workflowName+".js")),
 		},
 	}
 	sessionID, err := startSession(ctx, cfg.apiPort, cfg.startMode, startRequest)

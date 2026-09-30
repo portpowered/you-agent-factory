@@ -347,16 +347,17 @@ func TestTranscriptResponseRejectsMalformedTimestampsAtomically(t *testing.T) {
 		}
 	}
 	tests := []struct {
-		name     string
-		response *TranscriptResult
+		name        string
+		response    *TranscriptResult
+		wantMessage string
 	}{
-		{name: "nil segment", response: &TranscriptResult{Text: "transcript", Segments: []*TranscriptSegment{nil}}},
-		{name: "negative start", response: valid(-1, 1_000_000)},
-		{name: "negative end", response: valid(0, -1)},
-		{name: "minimum int64", response: valid(math.MinInt64, 1_000_000)},
-		{name: "maximum int64", response: valid(0, math.MaxInt64)},
-		{name: "non-integral start", response: valid(1, 1_000_000)},
-		{name: "non-integral end", response: valid(0, 1_000_001)},
+		{name: "nil segment", response: &TranscriptResult{Text: "transcript", Segments: []*TranscriptSegment{nil}}, wantMessage: "ASR backend response contains an empty segment"},
+		{name: "negative start", response: valid(-1, 1_000_000), wantMessage: "ASR backend response contains a negative segment timestamp"},
+		{name: "negative end", response: valid(0, -1), wantMessage: "ASR backend response contains a negative segment timestamp"},
+		{name: "minimum int64", response: valid(math.MinInt64, 1_000_000), wantMessage: "ASR backend response contains a negative segment timestamp"},
+		{name: "maximum int64", response: valid(0, math.MaxInt64), wantMessage: "ASR backend response contains a misaligned segment timestamp"},
+		{name: "non-integral start", response: valid(1, 1_000_000), wantMessage: "ASR backend response contains a misaligned segment timestamp"},
+		{name: "non-integral end", response: valid(0, 1_000_001), wantMessage: "ASR backend response contains a misaligned segment timestamp"},
 		{
 			name: "invalid later segment does not publish an earlier segment",
 			response: &TranscriptResult{
@@ -366,6 +367,7 @@ func TestTranscriptResponseRejectsMalformedTimestampsAtomically(t *testing.T) {
 					{Id: 1, Start: 1_000_001, End: 2_000_000, Text: "second"},
 				},
 			},
+			wantMessage: "ASR backend response contains a misaligned segment timestamp",
 		},
 	}
 	for _, test := range tests {
@@ -382,6 +384,9 @@ func TestTranscriptResponseRejectsMalformedTimestampsAtomically(t *testing.T) {
 				failure.Operation != models.OperationASR || failure.Slot != "segments" ||
 				!errors.Is(err, models.ErrInferenceFailed) {
 				t.Fatalf("transcriptResponse() error = %v, failure = %#v, want typed malformed ASR failure", err, failure)
+			}
+			if failure.Message != test.wantMessage {
+				t.Fatalf("transcriptResponse() message = %q, want %q", failure.Message, test.wantMessage)
 			}
 		})
 	}

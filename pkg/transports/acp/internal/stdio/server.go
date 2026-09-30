@@ -69,9 +69,9 @@ var errNullInitializeParams = errors.New("acp: initialize params must not be nul
 //
 // chatSessions and catalog are the canonical Chat Sessions collaborators
 // "session/new", "session/set_config_option", the "/factory" fallback
-// command, and ordinary prompt turn admission dispatch to; factoryTarget is
-// the Factory Sessions-owned target-execution capability an admitted prompt
-// starts or invokes against; events is the canonical aggregate stream an
+// command, and ordinary prompt turn admission dispatch to; factorySessions is
+// the process-owned Factory Sessions service an admitted prompt starts or
+// invokes against; events is the canonical aggregate stream an
 // admitted turn drains before falling back to V1 final text. A narrowly
 // constructed Server may omit events, in which case streaming is a no-op.
 //
@@ -84,14 +84,25 @@ var errNullInitializeParams = errors.New("acp: initialize params must not be nul
 // being reconstructed, not just this one instance staying alive -- see
 // startFactorySessionForEpisode.
 type Server struct {
-	logger         logging.Logger
-	chatSessions   chatsessions.Service
-	catalog        chatsessions.FactoryTargetCatalogService
-	factoryTarget  factorysessions.TargetExecutionService
-	events         events.Service
-	resolveHomeDir func() (string, error)
-	responseBridge acp.ResponseBridge
-	wireRecorder   acp.WireRecorder
+	logger          logging.Logger
+	chatSessions    chatsessions.Service
+	catalog         chatsessions.FactoryTargetCatalogService
+	factorySessions factorysessions.Service
+	events          events.Service
+	resolveHomeDir  func() (string, error)
+	responseBridge  acp.ResponseBridge
+	wireRecorder    acp.WireRecorder
+	startResolver   acp.FactorySessionStartResolver
+	invocationScope acp.InvocationScopeFactory
+	controlFlights  *promptFlightRegistry
+}
+
+func (s *Server) scopedInvocation(ctx context.Context) (context.Context, func()) {
+	if s.invocationScope == nil {
+		return ctx, func() {}
+	}
+	scope := s.invocationScope(ctx)
+	return scope.Context(), scope.Stop
 }
 
 func (s *Server) resolveInvocationHomeDir(ctx context.Context) (string, error) {
@@ -104,8 +115,9 @@ func (s *Server) resolveInvocationHomeDir(ctx context.Context) (string, error) {
 }
 
 // promptFlightRegistry coalesces duplicate session/prompt requests for the
-// lifetime of one connection. Prompt processing is asynchronous so a later
-// line can carry a session/cancel notification while the Factory call is in
+// lifetime of one connection. A Server keeps a separate instance for captured
+// cancellation across Serve calls. Prompt processing is asynchronous so a
+// later line can carry a session/cancel notification while the Factory call is in
 // flight. That also means an immediate redelivery of the same JSON-RPC
 // request can otherwise observe the turn before its first handler has moved
 // it out of ADMITTED. A flight lets that redelivery await the original
@@ -117,12 +129,16 @@ func (s *Server) resolveInvocationHomeDir(ctx context.Context) (string, error) {
 type promptFlightRegistry struct {
 	mu        sync.Mutex
 	byRequest map[string]*promptFlight
+	byTurn    map[string]*promptFlight
+	invoking  map[string]*promptFlight
 }
 
 type promptFlight struct {
-	done   chan struct{}
-	result json.RawMessage
-	rpcErr *acpsdk.RequestError
+	done             chan struct{}
+	result           json.RawMessage
+	rpcErr           *acpsdk.RequestError
+	accepted         bool
+	cancelInvocation context.CancelFunc
 }
 
 func (r *promptFlightRegistry) start(req identity.RequestIdentity) (*promptFlight, bool) {
@@ -148,9 +164,123 @@ func (r *promptFlightRegistry) start(req identity.RequestIdentity) (*promptFligh
 	return flight, true
 }
 
+type cancelFlightRegistryContextKey struct{}
+
+func contextWithCancelFlights(ctx context.Context, registry *promptFlightRegistry) context.Context {
+	return context.WithValue(ctx, cancelFlightRegistryContextKey{}, registry)
+}
+
+func cancelFlightsFromContext(ctx context.Context) *promptFlightRegistry {
+	registry, _ := ctx.Value(cancelFlightRegistryContextKey{}).(*promptFlightRegistry)
+	return registry
+}
+
+func cancelFlightKey(sessionID, turnID string) string { return sessionID + "\x00" + turnID }
+
+// trackInvocation lets an accepted cancel wait for the old invocation to
+// observe its terminal Factory state before a replacement uses the same ID.
+func (r *promptFlightRegistry) trackInvocation(sessionID, turnID string, cancel context.CancelFunc) *promptFlight {
+	key := cancelFlightKey(sessionID, turnID)
+	identity, _ := identity.NewMinted("invocation-flight:" + key)
+	flight, _ := r.start(identity)
+	flight.cancelInvocation = cancel
+	r.mu.Lock()
+	if r.invoking == nil {
+		r.invoking = make(map[string]*promptFlight)
+	}
+	r.invoking[key] = flight
+	r.mu.Unlock()
+	return flight
+}
+
+func (r *promptFlightRegistry) invocationForTurn(sessionID, turnID string) *promptFlight {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.invoking[cancelFlightKey(sessionID, turnID)]
+}
+
+func stopCapturedInvocation(flights *promptFlightRegistry, sessionID, turnID string) {
+	if flights == nil {
+		return
+	}
+	invoking := flights.invocationForTurn(sessionID, turnID)
+	if invoking == nil {
+		return
+	}
+	invoking.cancelInvocation()
+	<-invoking.done
+}
+
+func (r *promptFlightRegistry) finishInvocation(sessionID, turnID string, flight *promptFlight) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := cancelFlightKey(sessionID, turnID)
+	if r.invoking[key] != flight {
+		return
+	}
+	flight.finish(nil, nil)
+	delete(r.invoking, key)
+	identity, _ := identity.NewMinted("invocation-flight:" + key)
+	identityJSON, _ := json.Marshal(identity)
+	delete(r.byRequest, string(identityJSON))
+}
+
+func (r *promptFlightRegistry) startCancel(sessionID, turnID string) (*promptFlight, bool) {
+	key := cancelFlightKey(sessionID, turnID)
+	identity, _ := identity.NewMinted("cancel-flight:" + key)
+	identityJSON, _ := json.Marshal(identity)
+	r.mu.Lock()
+	if r.byTurn == nil {
+		r.byTurn = make(map[string]*promptFlight)
+	}
+	if existing := r.byTurn[key]; existing != nil {
+		select {
+		case <-existing.done:
+			if existing.accepted {
+				r.mu.Unlock()
+				return existing, false
+			}
+			delete(r.byTurn, key)
+			delete(r.byRequest, string(identityJSON))
+		default:
+			r.mu.Unlock()
+			return existing, false
+		}
+	}
+	r.mu.Unlock()
+	flight, owner := r.start(identity)
+	r.mu.Lock()
+	r.byTurn[key] = flight
+	r.mu.Unlock()
+	return flight, owner
+}
+
+func (r *promptFlightRegistry) cancelForTurn(sessionID, turnID string) *promptFlight {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.byTurn[cancelFlightKey(sessionID, turnID)]
+}
+
+func (r *promptFlightRegistry) clearCancel(sessionID, turnID string, flight *promptFlight) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := cancelFlightKey(sessionID, turnID)
+	if r.byTurn[key] == flight {
+		delete(r.byTurn, key)
+		identity, _ := identity.NewMinted("cancel-flight:" + key)
+		identityJSON, _ := json.Marshal(identity)
+		delete(r.byRequest, string(identityJSON))
+	}
+}
+
 func (f *promptFlight) finish(result json.RawMessage, rpcErr *acpsdk.RequestError) {
 	f.result = result
 	f.rpcErr = rpcErr
+	close(f.done)
+}
+
+func (f *promptFlight) finishCancel(accepted bool) {
+	f.accepted = accepted
 	close(f.done)
 }
 
@@ -164,22 +294,30 @@ func New(
 	logger logging.Logger,
 	chatSessions chatsessions.Service,
 	catalog chatsessions.FactoryTargetCatalogService,
-	factoryTarget factorysessions.TargetExecutionService,
+	factorySessions factorysessions.Service,
 	eventsService events.Service,
 	resolveHomeDir func() (string, error),
 	responseBridge acp.ResponseBridge,
 	wireRecorder acp.WireRecorder,
+	startResolver acp.FactorySessionStartResolver,
+	invocationScope ...acp.InvocationScopeFactory,
 ) *Server {
-	return &Server{
-		logger:         logging.EnsureLogger(logger),
-		chatSessions:   chatSessions,
-		catalog:        catalog,
-		factoryTarget:  factoryTarget,
-		events:         eventsService,
-		resolveHomeDir: resolveHomeDir,
-		responseBridge: responseBridge,
-		wireRecorder:   wireRecorder,
+	server := &Server{
+		logger:          logging.EnsureLogger(logger),
+		chatSessions:    chatSessions,
+		catalog:         catalog,
+		factorySessions: factorySessions,
+		events:          eventsService,
+		resolveHomeDir:  resolveHomeDir,
+		responseBridge:  responseBridge,
+		wireRecorder:    wireRecorder,
+		startResolver:   startResolver,
+		controlFlights:  &promptFlightRegistry{},
 	}
+	if len(invocationScope) != 0 {
+		server.invocationScope = invocationScope[0]
+	}
+	return server
 }
 
 // Serve begins one connection-scoped serving invocation over caller-owned
@@ -453,7 +591,11 @@ func (s *Server) dispatchConnectionLine(
 	promptFlights *promptFlightRegistry,
 	promptGroup *taskgroup.Group,
 ) (stop bool, err error) {
-	reqCtx := contextWithAttachmentCache(contextWithPromptNotifier(ctx, notify), attachments)
+	controlFlights := s.controlFlights
+	if controlFlights == nil {
+		controlFlights = promptFlights
+	}
+	reqCtx := contextWithCancelFlights(contextWithAttachmentCache(contextWithPromptNotifier(ctx, notify), attachments), controlFlights)
 	env, decodeErr := envelope.Decode(connectionID, *notificationSeq, raw)
 	if decodeErr != nil {
 		rpcErr, wireID, hasID := protocol.RejectEnvelope(decodeErr)

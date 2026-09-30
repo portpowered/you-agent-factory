@@ -96,6 +96,7 @@ func TestServeCancelReachesFactorySessionWhileItsOwnSessionPromptInvocationIsSti
 		Target:           chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
 		FactorySessionID: "fs-already-bound",
 	}
+	getSessionResult.Session.ActiveTurnID = "turn-2"
 	chatSessions := &fakeChatSessionsService{
 		getSessionResult: getSessionResult,
 		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
@@ -105,7 +106,8 @@ func TestServeCancelReachesFactorySessionWhileItsOwnSessionPromptInvocationIsSti
 		invokeEnter:   make(chan struct{}),
 		invokeRelease: make(chan struct{}),
 		cancelEntered: make(chan struct{}),
-		invokeResult:  factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCanceled},
+		cancelOutcome: factorysessions.LifecycleControlOutcomeAccepted,
+		invokeErr:     fmt.Errorf("%w: stopped factory session", factorysessions.ErrSessionNotFound),
 	}
 	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
 
@@ -215,7 +217,7 @@ func TestHandleSessionCancelCommitsCapturedIntentBeforeFactoryCancel(t *testing.
 	base, session, turn := newActiveBoundControlSession(t, "fs-control-1")
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	factoryTarget := &fakeFactoryTargetService{cancelEntered: make(chan struct{}), cancelRelease: make(chan struct{})}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 	env := cancelNotificationEnvelope(t, "cancel-control-1", session.ID)
 
 	done := make(chan struct{})
@@ -272,7 +274,7 @@ func TestHandleSessionCancelCompletionRaceResolvesNoopWithoutFactoryEffect(t *te
 	release := make(chan struct{})
 	chatSessions := &controlRecordingChatSessions{Service: base, commitEntered: make(chan struct{}), commitRelease: release}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 	env := cancelNotificationEnvelope(t, "cancel-noop-1", session.ID)
 
 	done := make(chan struct{})
@@ -309,7 +311,7 @@ func TestHandleSessionCancelSupersededRaceCannotReachReplacementTurn(t *testing.
 	release := make(chan struct{})
 	chatSessions := &controlRecordingChatSessions{Service: base, commitEntered: make(chan struct{}), commitRelease: release}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 	env := cancelNotificationEnvelope(t, "cancel-superseded-1", session.ID)
 
 	done := make(chan struct{})
@@ -355,8 +357,8 @@ func TestHandleSessionCancelSupersededRaceCannotReachReplacementTurn(t *testing.
 func TestHandleSessionCancelRepeatedIdentityDoesNotDuplicateFactoryCancel(t *testing.T) {
 	base, session, _ := newActiveBoundControlSession(t, "fs-control-repeat")
 	chatSessions := &controlRecordingChatSessions{Service: base}
-	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+	factoryTarget := &fakeFactoryTargetService{cancelOutcome: factorysessions.LifecycleControlOutcomeAccepted}
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, testStartResolver)
 	env := cancelNotificationEnvelope(t, "cancel-repeat-1", session.ID)
 
 	server.handleSessionCancel(context.Background(), env)
@@ -368,7 +370,16 @@ func TestHandleSessionCancelRepeatedIdentityDoesNotDuplicateFactoryCancel(t *tes
 	if len(cancelCalls) != 1 || cancelCalls[0].sessionID != "fs-control-repeat" {
 		t.Fatalf("Factory Sessions Cancel calls = %#v, want exactly one captured cancellation", cancelCalls)
 	}
+	factoryTarget.mu.Lock()
+	restarts := append([]factorysessions.SessionStartRequest(nil), factoryTarget.sessionStartCalls...)
+	factoryTarget.mu.Unlock()
+	if len(restarts) != 1 || restarts[0].SessionID != "fs-control-repeat" || !restarts[0].ActivationOnly {
+		t.Fatalf("Factory Sessions restarts = %#v, want one activation under the captured identity", restarts)
+	}
 	requests, advances := chatSessions.snapshotControls()
+	if got := restarts[0].Correlation.RequestID; got != factoryCancelRestartRequestID(requests[0].RequestID) || got == cancelCalls[0].request.RequestID {
+		t.Fatalf("restart request ID = %q, want stable ID distinct from CANCEL", got)
+	}
 	if len(requests) != 2 || requests[0].RequestID != requests[1].RequestID {
 		t.Fatalf("RequestControl calls = %#v, want the same identity on retry", requests)
 	}
@@ -467,7 +478,7 @@ func TestHandleSessionCancelCommittedSafetyCases(t *testing.T) {
 	for index, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			factoryTarget := &fakeFactoryTargetService{}
-			server := New(nil, test.chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+			server := New(nil, test.chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 			server.handleSessionCancel(context.Background(), cancelNotificationEnvelope(t, fmt.Sprintf("cancel-safety-%d", index), current.Session.ID))
 
 			factoryTarget.mu.Lock()
@@ -492,7 +503,7 @@ func TestHandleSessionCancelCommittedSafetyCases(t *testing.T) {
 func TestHandleSessionCancelRejectsUncorrelatedIdentityWithoutEffects(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{}
 	factoryTarget := &fakeFactoryTargetService{}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 
 	server.handleSessionCancel(context.Background(), envelope.Envelope{
 		Params: json.RawMessage(`{"sessionId":"session-cancel-identity"}`),
@@ -761,10 +772,11 @@ func TestHandleSessionCancelDependencyFailureLeavesTurnRunningAndRetryable(t *te
 	base, session, turn := newActiveBoundControlSession(t, "fs-cancel-failure")
 	chatSessions := &controlRecordingChatSessions{Service: base}
 	factoryTarget := &fakeFactoryTargetService{cancelErr: errors.New("provider secret at /unsafe/path")}
-	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil)
+	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 	env := cancelNotificationEnvelope(t, "cancel-failure-1", session.ID)
+	cancelCtx := contextWithCancelFlights(context.Background(), &promptFlightRegistry{})
 
-	server.handleSessionCancel(context.Background(), env)
+	server.handleSessionCancel(cancelCtx, env)
 	current, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
 	if err != nil {
 		t.Fatalf("GetSession after failed cancel: %v", err)
@@ -789,7 +801,7 @@ func TestHandleSessionCancelDependencyFailureLeavesTurnRunningAndRetryable(t *te
 	factoryTarget.mu.Lock()
 	factoryTarget.cancelErr = nil
 	factoryTarget.mu.Unlock()
-	server.handleSessionCancel(context.Background(), env)
+	server.handleSessionCancel(cancelCtx, env)
 	factoryTarget.mu.Lock()
 	cancelCalls := append([]cancelFactoryTargetCall(nil), factoryTarget.cancelCalls...)
 	factoryTarget.mu.Unlock()

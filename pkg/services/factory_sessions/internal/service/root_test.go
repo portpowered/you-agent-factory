@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"net/http"
 	"path/filepath"
 	"testing"
 	"time"
@@ -37,11 +38,71 @@ func TestNewRootFromAssemblyRetainsLiveChangeCoordinator(t *testing.T) {
 	if root == nil {
 		t.Fatal("NewRootFromAssembly() returned nil root")
 	}
-	if root.DetachedOperations() == nil {
-		t.Fatal("NewRootFromAssembly() did not publish detached operations")
-	}
 	if root.liveChangeCoordinator != coordinator {
 		t.Fatalf("live-change coordinator = %T, want the injected coordinator %T", root.liveChangeCoordinator, coordinator)
+	}
+}
+
+func TestApplicationOperationsRejectMissingSelectedSession(t *testing.T) {
+	root, err := newRootForTest(livechange.NewCoordinator())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := root.ApplicationDiagnostics(""); err == nil {
+		t.Fatal("application diagnostics accepted an empty session ID")
+	}
+	if _, err := root.ApplicationReady("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("application readiness error = %v", err)
+	}
+	if _, err := root.ApplicationCleanSnapshot(ctx, "missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("clean snapshot error = %v", err)
+	}
+	if _, err := root.SessionPresentation("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("session presentation error = %v", err)
+	}
+	if _, err := root.ApplicationReplayMetadataWarnings("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("replay warnings error = %v", err)
+	}
+	if _, err := root.ApplicationResumeRecoveryMetadata("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("resume metadata error = %v", err)
+	}
+	if err := root.RunApplicationTransport(ctx, "missing", nil); err == nil {
+		t.Fatal("application transport accepted nil HTTP handler")
+	}
+	if err := root.RunApplicationTransport(ctx, "missing", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("application transport error = %v", err)
+	}
+	if err := root.StopApplicationRuntime(ctx, "missing"); err != nil {
+		t.Fatalf("stopping an absent application should be idempotent: %v", err)
+	}
+	if err := root.StopApplicationOrderly(ctx, "missing"); err != nil {
+		t.Fatalf("orderly stop of absent application should be idempotent: %v", err)
+	}
+	if result := root.ApplicationControlWaitToComplete("missing", factoryruntime.WaitToCompleteRequest{}); result != (factoryruntime.WaitToCompleteResult{}) {
+		t.Fatalf("absent wait control = %+v", result)
+	}
+	var nilRoot *Root
+	if _, err := nilRoot.ApplicationDiagnostics("missing"); err == nil {
+		t.Fatal("nil root accepted application diagnostics")
+	}
+}
+
+func TestLiveControlRequiresSelectedSession(t *testing.T) {
+	root, err := newRootForTest(livechange.NewCoordinator())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	var nilRoot *Root
+	if _, err := nilRoot.Control(ctx, factorysessions.SessionControlRequest{}); err == nil {
+		t.Fatal("nil root accepted control")
+	}
+	if _, err := root.Control(ctx, factorysessions.SessionControlRequest{Mode: factorysessions.SessionOperationModeLive}); err == nil {
+		t.Fatal("live control accepted an empty session ID")
+	}
+	if _, err := root.Control(ctx, factorysessions.SessionControlRequest{Mode: factorysessions.SessionOperationModeLive, SessionID: "missing"}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("missing live session control error = %v", err)
 	}
 }
 
@@ -57,7 +118,7 @@ func TestNewRootFromAssemblyRequiresRetainedRuntimeOpening(t *testing.T) {
 	if root != nil || err == nil {
 		t.Fatalf("NewRootFromAssembly(nil opening) = (%#v, %v), want nil root and stable error", root, err)
 	}
-	if got, want := err.Error(), "construct Factory Sessions: runtime opening is required"; got != want {
+	if got, want := err.Error(), "construct Factory Sessions: process root is required"; got != want {
 		t.Fatalf("NewRootFromAssembly(nil opening) error = %q, want %q", got, want)
 	}
 }
@@ -70,7 +131,7 @@ func TestNewRootFromAssemblyRetainsOneAssemblyAndOpening(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAssembly() error = %v", err)
 	}
-	opening := &rootRuntimeOpeningStub{}
+	opening := &Root{}
 	root, err := NewRootFromAssembly(assembly, opening, inputs.liveChangeCoordinator)
 	if err != nil {
 		t.Fatalf("NewRootFromAssembly() error = %v", err)
@@ -78,17 +139,11 @@ func TestNewRootFromAssemblyRetainsOneAssemblyAndOpening(t *testing.T) {
 	if root == nil {
 		t.Fatal("NewRootFromAssembly() returned nil root")
 	}
+	if root != opening {
+		t.Fatal("NewRootFromAssembly() allocated a second root")
+	}
 	if any(root.Assembly) != any(assembly) {
 		t.Fatalf("root assembly = %T(%[1]v), want injected assembly %T(%[2]v)", root.Assembly, assembly)
-	}
-	if got := root.RuntimeOpening(); got != opening {
-		t.Fatalf("root runtime opening = %T(%[1]v), want injected opening %T(%[2]v)", got, opening)
-	}
-	if _, err := root.OpenExecutionRuntime(context.Background(), &factorysessions.RuntimeOpeningRequest{}); err != nil {
-		t.Fatalf("OpenExecutionRuntime() error = %v", err)
-	}
-	if opening.executionCalls != 1 {
-		t.Fatalf("OpenExecutionRuntime() calls = %d, want 1", opening.executionCalls)
 	}
 }
 
@@ -212,7 +267,7 @@ func (in rootTestInputs) call() (*Root, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewRootFromAssembly(assembly, &rootRuntimeOpeningStub{}, in.liveChangeCoordinator)
+	return NewRootFromAssembly(assembly, &Root{}, in.liveChangeCoordinator)
 }
 
 func (in rootTestInputs) callAssembly() (roles.RuntimeAssembly, error) {
@@ -281,16 +336,6 @@ func (rootTestIdentityService) NormalizeProvider(context.Context, identity.Norma
 	return identity.ResolvedIdentity{}, nil
 }
 
-func (rootTestIdentityService) Discover(context.Context, identity.DiscoverRequest) ([]factorysessions.Target, error) {
-	return nil, nil
-}
-
-func (rootTestIdentityService) ResolveFolder(string) (string, error) { return "", nil }
-
-func (rootTestIdentityService) Select([]factorysessions.Target, *factorysessions.TargetRef) (*factorysessions.Target, error) {
-	return nil, nil
-}
-
 func (rootTestIdentityService) Resolve(sessionregistry.Service, string) *livesession.LiveSession {
 	return nil
 }
@@ -300,25 +345,6 @@ func (rootTestIdentityService) ResolveLogical(sessionregistry.Service, string, s
 }
 
 type rootTestResponseStreams struct{}
-
-type rootRuntimeOpeningStub struct {
-	executionCalls int
-}
-
-func (s *rootRuntimeOpeningStub) OpenApplicationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedApplicationRuntime, error) {
-	return roles.OpenedApplicationRuntime{}, nil
-}
-
-func (s *rootRuntimeOpeningStub) OpenInvocationRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedInvocationRuntime, error) {
-	return roles.OpenedInvocationRuntime{}, nil
-}
-
-func (s *rootRuntimeOpeningStub) OpenExecutionRuntime(context.Context, *factorysessions.RuntimeOpeningRequest) (roles.OpenedExecutionRuntime, error) {
-	s.executionCalls++
-	return roles.OpenedExecutionRuntime{}, nil
-}
-
-var _ roles.RuntimeOpening = (*rootRuntimeOpeningStub)(nil)
 
 func (rootTestResponseStreams) NewEventStore(string, factoryruntime.Clock) (*responseeventstore.SessionResponseEventStore, error) {
 	return nil, nil

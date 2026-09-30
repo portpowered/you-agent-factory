@@ -100,7 +100,7 @@ func resolveManagedBackendLaunch(
 			"supervised process command is required when no packaged backend is supplied",
 		)
 	}
-	root, executable, cleanup, err := materializeManagedBackend(ctx, backend, spec.BackendFiles, operations)
+	root, executable, installed, cleanup, err := materializeManagedBackend(ctx, backend, spec.BackendFiles, operations)
 	if err != nil {
 		return ManagedBackendLaunch{}, err
 	}
@@ -110,9 +110,22 @@ func resolveManagedBackendLaunch(
 	}
 	args := append([]string(nil), spec.Args...)
 	args = append(args, "--addr="+address)
+	environment := managedBackendEnvironment(backend, root)
+	if installed && backend == "localai-llamacpp" {
+		grpcExecutable := filepath.Join(root, "llama-cpp-grpc")
+		if executable != grpcExecutable {
+			args = append([]string{grpcExecutable}, args...)
+		}
+		libraryPath := filepath.Join(root, "lib")
+		previous := managedBackendEnvironmentValue(spec.Env, "LD_LIBRARY_PATH")
+		if previous != "" {
+			libraryPath += ":" + previous
+		}
+		environment = append(environment, "LD_LIBRARY_PATH="+libraryPath)
+	}
 	return ManagedBackendLaunch{
 		Command: executable, Args: args,
-		Env:     managedBackendEnvironment(backend, root),
+		Env:     environment,
 		WorkDir: root, Endpoint: endpoint, Cleanup: cleanup,
 	}, nil
 }
@@ -134,44 +147,117 @@ func materializeManagedBackend(
 	backend string,
 	files []string,
 	operations managedBackendOperations,
-) (string, string, func() error, error) {
+) (string, string, bool, func() error, error) {
 	if err := operations.failAt(runtimeSubcauseArchiveSelection); err != nil {
-		return "", "", func() error { return nil }, err
+		return "", "", false, func() error { return nil }, err
 	}
-	archivePath, directPath, err := selectManagedBackendFile(backend, files)
+	archivePath, directPath, installedDirectory, err := selectManagedBackendFile(backend, files)
 	if err != nil {
-		return "", "", func() error { return nil }, WrapBackendExtractFailure(runtimeSubcauseArchiveSelection, err)
+		return "", "", false, func() error { return nil }, WrapBackendExtractFailure(runtimeSubcauseArchiveSelection, err)
+	}
+	if installedDirectory != "" {
+		var script string
+		var scriptErr error
+		if backend == "localai-llamacpp" {
+			script, scriptErr = installedLlamaCPPEntrypoint(installedDirectory)
+		} else {
+			script, scriptErr = installedBackendEntrypoint(installedDirectory)
+		}
+		if scriptErr != nil {
+			return "", "", false, func() error { return nil }, WrapBackendExtractFailure(runtimeSubcauseExecutableDiscovery, scriptErr)
+		}
+		return installedDirectory, script, true, func() error { return nil }, nil
 	}
 	if directPath != "" {
-		return filepath.Dir(directPath), directPath, func() error { return nil }, nil
+		return filepath.Dir(directPath), directPath, false, func() error { return nil }, nil
 	}
 
 	root, err := operations.mkdirTemp("", "you-model-backend-")
 	if err != nil {
-		return "", "", func() error { return nil }, WrapBackendExtractFailure(
+		return "", "", false, func() error { return nil }, WrapBackendExtractFailure(
 			runtimeSubcauseArchiveSelection,
 			fmt.Errorf("prepare managed backend workspace: %w", err),
 		)
 	}
 	cleanup := newManagedBackendCleanup(root, operations.removeAll)
 	if err := extractManagedBackendArchive(ctx, archivePath, root, operations); err != nil {
-		return "", "", cleanup, cleanupManagedBackendFailure(err, cleanup)
+		return "", "", false, cleanup, cleanupManagedBackendFailure(err, cleanup)
 	}
 	executable, err := findManagedBackendExecutable(root, backend, operations)
 	if err != nil {
-		return "", "", cleanup, cleanupManagedBackendFailure(
+		return "", "", false, cleanup, cleanupManagedBackendFailure(
 			WrapBackendExtractFailure(runtimeSubcauseExecutableDiscovery, err), cleanup,
 		)
 	}
 	if runtime.GOOS != "windows" {
 		if err := os.Chmod(executable, 0o755); err != nil {
-			return "", "", cleanup, cleanupManagedBackendFailure(
+			return "", "", false, cleanup, cleanupManagedBackendFailure(
 				WrapBackendExtractFailure(runtimeSubcauseEntryCopy, fmt.Errorf("make managed backend executable: %w", err)),
 				cleanup,
 			)
 		}
 	}
-	return filepath.Dir(executable), executable, cleanup, nil
+	return filepath.Dir(executable), executable, false, cleanup, nil
+}
+
+func installedBackendEntrypoint(directory string) (string, error) {
+	return installedExecutable(directory, "run.sh")
+}
+
+func installedLlamaCPPEntrypoint(directory string) (string, error) {
+	executable, err := installedExecutable(directory, "llama-cpp-grpc")
+	if err != nil {
+		return "", err
+	}
+	libraryDirectory := filepath.Join(directory, "lib")
+	if info, err := os.Lstat(libraryDirectory); err == nil {
+		if !info.IsDir() {
+			return "", fmt.Errorf("installed backend library directory must be a directory")
+		}
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("inspect installed backend library directory: %w", err)
+	}
+	loader := filepath.Join(directory, "lib", "ld.so")
+	if _, err := os.Lstat(loader); os.IsNotExist(err) {
+		return executable, nil
+	} else if err != nil {
+		return "", fmt.Errorf("inspect installed backend loader: %w", err)
+	}
+	if _, err := installedExecutable(directory, filepath.Join("lib", "ld.so")); err != nil {
+		return "", fmt.Errorf("invalid installed backend loader: %w", err)
+	}
+	return loader, nil
+}
+
+func installedExecutable(directory, name string) (string, error) {
+	if runtime.GOOS == "windows" {
+		return "", fmt.Errorf("installed shell backend cannot run on Windows")
+	}
+	if !filepath.IsAbs(directory) {
+		return "", fmt.Errorf("installed backend directory must be absolute")
+	}
+	script := filepath.Join(directory, name)
+	info, err := os.Lstat(script)
+	if err != nil {
+		return "", fmt.Errorf("inspect installed backend entrypoint: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
+		return "", fmt.Errorf("installed backend entrypoint must be a regular executable file")
+	}
+	return script, nil
+}
+
+func managedBackendEnvironmentValue(environment []string, key string) string {
+	for _, entry := range environment {
+		name, value, ok := strings.Cut(entry, "=")
+		if ok && name == key {
+			return value
+		}
+	}
+	if len(environment) == 0 {
+		return os.Getenv(key)
+	}
+	return ""
 }
 
 func newManagedBackendCleanup(root string, removeAll func(string) error) func() error {
@@ -215,35 +301,46 @@ func cleanupManagedBackendFailure(primary error, cleanup func() error) error {
 	return newBackendExtractFailure(runtimeSubcauseCleanup, errors.Join(primary, cleanupErr))
 }
 
-func selectManagedBackendFile(backend string, files []string) (string, string, error) {
+func selectManagedBackendFile(backend string, files []string) (string, string, string, error) {
 	archivePath := ""
+	installedDirectory := ""
 	for _, rawPath := range files {
 		candidate := strings.TrimSpace(rawPath)
 		if candidate == "" {
 			continue
 		}
-		info, err := os.Stat(candidate)
+		info, err := os.Lstat(candidate)
 		if err != nil {
-			return "", "", fmt.Errorf("inspect managed backend artifact: %w", err)
+			return "", "", "", fmt.Errorf("inspect managed backend artifact: %w", err)
 		}
 		if info.IsDir() {
-			return "", "", fmt.Errorf("managed backend artifact %q is a directory", candidate)
+			if len(files) != 1 {
+				return "", "", "", fmt.Errorf("installed backend directory must be the only backend file")
+			}
+			installedDirectory = candidate
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			return "", "", "", fmt.Errorf("managed backend artifact must be a regular file or directory")
 		}
 		if isManagedBackendArchive(candidate) {
 			if archivePath != "" {
-				return "", "", fmt.Errorf("multiple packaged backend archives supplied for %q", backend)
+				return "", "", "", fmt.Errorf("multiple packaged backend archives supplied for %q", backend)
 			}
 			archivePath = candidate
 			continue
 		}
 		if directPath := managedBackendExecutableIfNamed(candidate, backend); directPath != "" {
-			return "", directPath, nil
+			return "", directPath, "", nil
 		}
 	}
-	if archivePath == "" {
-		return "", "", fmt.Errorf("managed backend executable or archive is unavailable for %q", backend)
+	if installedDirectory != "" {
+		return "", "", installedDirectory, nil
 	}
-	return archivePath, "", nil
+	if archivePath == "" {
+		return "", "", "", fmt.Errorf("managed backend executable or archive is unavailable for %q", backend)
+	}
+	return archivePath, "", "", nil
 }
 
 func isManagedBackendArchive(name string) bool {

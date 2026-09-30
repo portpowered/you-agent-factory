@@ -20,8 +20,9 @@ const SessionEventStreamRetainedCountHeader = factorysessions.SessionEventStream
 // LiveAPI maps generated live-session contracts onto the canonical Factory
 // Session application gateway and registry.
 type LiveAPI struct {
-	control factorysessions.LiveControlService
-	gateway LiveGateway
+	sessions factorysessions.Service
+	control  factorysessions.LiveControlService
+	gateway  LiveGateway
 }
 
 var _ apisurface.LiveSessionAPI = (*LiveAPI)(nil)
@@ -39,8 +40,9 @@ type LiveGateway interface {
 }
 
 // NewLiveAPI constructs the transport-facing live Factory Session service.
-func NewLiveAPI(control factorysessions.LiveControlService, gateway LiveGateway) *LiveAPI {
-	return &LiveAPI{control: control, gateway: gateway}
+func NewLiveAPI(sessions factorysessions.Service, gateway LiveGateway) *LiveAPI {
+	control, _ := sessions.(factorysessions.LiveControlService)
+	return &LiveAPI{sessions: sessions, control: control, gateway: gateway}
 }
 
 func (a *LiveAPI) requireControl() (factorysessions.LiveControlService, error) {
@@ -144,18 +146,17 @@ func (a *LiveAPI) GetFactorySessionPartialResult(ctx context.Context, sessionID 
 }
 
 func (a *LiveAPI) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
-	control, err := a.requireControl()
+	if a == nil || a.sessions == nil {
+		return factoryapi.OpenFactorySessionResponse{}, fmt.Errorf("Factory Session service is required")
+	}
+	result, err := a.sessions.Start(ctx, SessionStartRequestFromAPI(request))
 	if err != nil {
 		return factoryapi.OpenFactorySessionResponse{}, err
 	}
-	result, err := control.OpenFactorySession(ctx, OpenRequestFromAPI(request))
-	if err != nil {
-		return factoryapi.OpenFactorySessionResponse{}, err
+	if result.Live == nil {
+		return factoryapi.OpenFactorySessionResponse{}, fmt.Errorf("Factory Session start returned no live result")
 	}
-	if result == nil || strings.TrimSpace(result.SessionID) == "" {
-		return OpenResultToAPI(result), nil
-	}
-	return OpenResultToAPI(result), nil
+	return SessionOpenResultToAPI(result.Live), nil
 }
 
 func (a *LiveAPI) CloseFactorySession(ctx context.Context, sessionID string) error {

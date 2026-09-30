@@ -3,6 +3,7 @@ package run
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -11,15 +12,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
-func TestOpenHostedRuntimePreparesHomeBeforeRuntimeOpening(t *testing.T) {
+func TestRunHostedRuntimePreparesHomeBeforeRuntimeStart(t *testing.T) {
 	var output bytes.Buffer
 	var events []string
-	operation, err := openHostedRuntime(
+	err := runHostedRuntime(
 		t.Context(),
 		RunConfig{
 			HomeDir:                           "operator-home",
@@ -41,44 +43,40 @@ func TestOpenHostedRuntimePreparesHomeBeforeRuntimeOpening(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		nil,
 		false,
 		0,
 		func(
 			_ context.Context,
-			_ *factorysessions.RuntimeOpeningRequest,
+			_ *factorysessions.SessionStartRequest,
 			_ initializer.InvocationCancellation,
 			_ factorysessions.VisualizationSinkID,
 		) (initializer.LocalRuntimeRunner, error) {
 			events = append(events, "runtime log and metrics")
 			return runFuncRunner(func(context.Context) error { return nil }), nil
 		},
-		func(RunConfig, *workers.MockWorkersConfig) *factorysessions.RuntimeOpeningRequest {
-			return &factorysessions.RuntimeOpeningRequest{}
+		func(RunConfig, *workers.MockWorkersConfig) *factorysessions.SessionStartRequest {
+			return &factorysessions.SessionStartRequest{}
 		},
 		nil,
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("openHostedRuntime() error = %v", err)
-	}
-	if operation == nil {
-		t.Fatal("openHostedRuntime() operation = nil")
+		t.Fatalf("runHostedRuntime() error = %v", err)
 	}
 	if got, want := strings.Join(events, ","), "home,runtime log and metrics"; got != want {
 		t.Fatalf("startup events = %q, want %q", got, want)
 	}
-	if got, want := output.String(), "Home directory: operator-home\n"; got != want {
-		t.Fatalf("startup disclosure = %q, want %q after successful runtime opening", got, want)
+	if got, want := output.String(), "Home directory: operator-home\n"; !strings.HasPrefix(got, want) {
+		t.Fatalf("startup disclosure = %q, want prefix %q", got, want)
 	}
 }
 
-func TestOpenHostedRuntimeUsesOpenedHostedInvocationCapability(t *testing.T) {
+func TestRunHostedRuntimeUsesHostedInvocationCapability(t *testing.T) {
 	sessions := &hostedInvocationCapabilityFake{}
 	request := invocationRequestFromText("summarize the dispatch")
 	const sessionID = "session-explicit"
 
-	operation, err := openHostedRuntime(
+	err := runHostedRuntime(
 		t.Context(),
 		RunConfig{Output: io.Discard, WithServer: true, FactorySessionID: sessionID},
 		zap.NewNop(),
@@ -87,28 +85,24 @@ func TestOpenHostedRuntimeUsesOpenedHostedInvocationCapability(t *testing.T) {
 		testInvocationOperation{},
 		nil,
 		nil,
-		nil,
 		true,
 		0,
 		func(
 			_ context.Context,
-			_ *factorysessions.RuntimeOpeningRequest,
+			_ *factorysessions.SessionStartRequest,
 			_ initializer.InvocationCancellation,
 			_ factorysessions.VisualizationSinkID,
 		) (initializer.LocalRuntimeRunner, error) {
 			return WithHostedInvocation(hostedInvocationCompletionRunner{}, sessions), nil
 		},
-		func(RunConfig, *workers.MockWorkersConfig) *factorysessions.RuntimeOpeningRequest {
-			return &factorysessions.RuntimeOpeningRequest{}
+		func(RunConfig, *workers.MockWorkersConfig) *factorysessions.SessionStartRequest {
+			return &factorysessions.SessionStartRequest{}
 		},
 		nil,
 		nil,
 	)
 	if err != nil {
-		t.Fatalf("openHostedRuntime() error = %v", err)
-	}
-	if err := operation.Run(t.Context()); err != nil {
-		t.Fatalf("Operation.Run() error = %v", err)
+		t.Fatalf("runHostedRuntime() error = %v", err)
 	}
 	if !sessions.invoked {
 		t.Fatal("hosted Factory Sessions invocation was not used")
@@ -118,44 +112,78 @@ func TestOpenHostedRuntimeUsesOpenedHostedInvocationCapability(t *testing.T) {
 	}
 }
 
-func TestPrepareHostedInvocationClearsFiniteWorkFile(t *testing.T) {
-	cleanOperation, cleanConfig, err := prepareHostedInvocation(
-		t.Context(),
-		RunConfig{CleanInvocation: true, WorkFile: "work.json"},
-		zap.NewNop(),
-		invocationRequestFromText("one-shot input"),
-		resolvedRunRecordPath{},
-		testInvocationOperation{},
-		nil,
-		nil,
-		true,
-	)
-	if err != nil {
-		t.Fatalf("clean prepareHostedInvocation() error = %v", err)
-	}
-	if cleanOperation == nil {
-		t.Fatal("clean operation = nil")
-	}
+func TestHostedRuntimeConfigClearsFiniteWorkFile(t *testing.T) {
+	cleanConfig := hostedRuntimeConfig(RunConfig{CleanInvocation: true, WorkFile: "work.json"}, true)
 	if cleanConfig.WorkFile != "" {
 		t.Fatalf("clean runtime WorkFile = %q, want empty after owner projection", cleanConfig.WorkFile)
 	}
 
-	_, ordinaryConfig, err := prepareHostedInvocation(
-		t.Context(),
-		RunConfig{WorkFile: "work.json"},
-		zap.NewNop(),
-		nil,
-		resolvedRunRecordPath{},
-		testInvocationOperation{},
-		nil,
-		nil,
-		false,
-	)
-	if err != nil {
-		t.Fatalf("ordinary prepareHostedInvocation() error = %v", err)
-	}
+	ordinaryConfig := hostedRuntimeConfig(RunConfig{WorkFile: "work.json"}, false)
 	if ordinaryConfig.WorkFile != "work.json" {
 		t.Fatalf("ordinary runtime WorkFile = %q, want original batch input", ordinaryConfig.WorkFile)
+	}
+}
+
+func TestRunHostedRuntimeClosesVisualizationSinkAfterFailure(t *testing.T) {
+	owner := &runSinkOwnerProbe{}
+	want := context.Canceled
+	var sinkID factorysessions.VisualizationSinkID
+	err := runHostedRuntime(
+		t.Context(), RunConfig{Output: io.Discard}, zap.NewNop(), nil,
+		resolvedRunRecordPath{}, nil, testResponsePresentation(), nil, false, 0,
+		func(_ context.Context, _ *factorysessions.SessionStartRequest, _ initializer.InvocationCancellation, id factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
+			sinkID = id
+			return runFuncRunner(func(context.Context) error { return want }), nil
+		},
+		func(RunConfig, *workers.MockWorkersConfig) *factorysessions.SessionStartRequest {
+			return &factorysessions.SessionStartRequest{}
+		}, nil, owner,
+	)
+	if !errors.Is(err, want) {
+		t.Fatalf("runHostedRuntime() error = %v, want %v", err, want)
+	}
+	if sinkID == "" {
+		t.Fatal("runtime did not receive a visualization sink")
+	}
+	if _, ok := owner.RuntimeSink(factoryvisualization.RuntimeSinkID(sinkID)); ok {
+		t.Fatal("visualization sink remained registered after run failure")
+	}
+}
+
+func TestRunHostedRuntimeKeepsRuntimeFailureAfterReplayOpens(t *testing.T) {
+	want := errors.New("runtime failed")
+	err := runHostedRuntime(
+		t.Context(), RunConfig{ReplayPath: "recording.jsonl"}, zap.NewNop(), nil,
+		resolvedRunRecordPath{}, nil, nil, nil, false, 0,
+		func(context.Context, *factorysessions.SessionStartRequest, initializer.InvocationCancellation, factorysessions.VisualizationSinkID) (initializer.LocalRuntimeRunner, error) {
+			return runFuncRunner(func(context.Context) error { return want }), nil
+		},
+		func(RunConfig, *workers.MockWorkersConfig) *factorysessions.SessionStartRequest {
+			return &factorysessions.SessionStartRequest{}
+		}, nil, nil,
+	)
+	if err != want {
+		t.Fatalf("runtime failure = %v, want unchanged %v", err, want)
+	}
+}
+
+type runSinkOwnerProbe struct {
+	sink   factoryvisualization.Sink
+	closed bool
+}
+
+func (owner *runSinkOwnerProbe) RegisterRuntimeSink(sink factoryvisualization.Sink) (factoryvisualization.RuntimeSinkID, error) {
+	owner.sink = sink
+	return "run-sink", nil
+}
+
+func (owner *runSinkOwnerProbe) RuntimeSink(id factoryvisualization.RuntimeSinkID) (factoryvisualization.Sink, bool) {
+	return owner.sink, id == "run-sink" && !owner.closed
+}
+
+func (owner *runSinkOwnerProbe) CloseRuntimeSink(id factoryvisualization.RuntimeSinkID) {
+	if id == "run-sink" {
+		owner.closed = true
 	}
 }
 

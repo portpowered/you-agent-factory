@@ -122,11 +122,13 @@ func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, par
 
 func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	if isDurableExecutionSessionID(string(sessionID)) {
-		getter, ok := s.requireDurableSessionGetter(w)
-		if !ok {
+		if s.sessionsRoot == nil {
+			s.writeError(w, http.StatusServiceUnavailable, "factory session service is unavailable", "SERVICE_UNAVAILABLE")
 			return
 		}
-		response, err := getter.GetDurableFactorySession(r.Context(), string(sessionID))
+		result, err := s.sessionsRoot.Get(r.Context(), factorysessionexecution.SessionGetRequest{
+			SessionID: string(sessionID), Mode: factorysessionexecution.SessionOperationModeDurable,
+		})
 		if err != nil {
 			if s.writeDurableSessionReadError(w, err) {
 				return
@@ -135,7 +137,11 @@ func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessi
 			s.writeError(w, http.StatusInternalServerError, "failed to get factory session", "INTERNAL_ERROR")
 			return
 		}
-		s.writeJSON(w, http.StatusOK, response)
+		if result.Durable == nil {
+			s.writeError(w, http.StatusInternalServerError, "durable factory session read is unavailable", "INTERNAL_ERROR")
+			return
+		}
+		s.writeJSON(w, http.StatusOK, factorysession.SessionReadResponseToAPI(*result.Durable))
 		return
 	}
 
@@ -210,12 +216,7 @@ func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.R
 }
 
 func (s *Server) InterruptFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	s.handleDurableInterruptDispatchControl(w, r, sessionID, func(
-		lifecycle apisurface.DurableSessionLifecycleAPI,
-		req factorysessionexecution.InterruptDispatchRequest,
-	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-		return lifecycle.InterruptDurableFactorySessionDispatch(r.Context(), string(sessionID), req)
-	})
+	s.handleDurableInterruptDispatchControl(w, r, sessionID)
 }
 
 func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
@@ -240,31 +241,25 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.liveControl != nil {
-		if s.guardSessionsRequestContext(w, r) {
-			return
-		}
-		result, err := s.liveControl.OpenFactorySession(r.Context(), factorysession.OpenRequestFromAPI(req))
-		if err != nil {
-			s.writeOpenFactorySessionRejected(w, err)
-			return
-		}
-		s.writeCompatibilityWarning(w, "open_factory_session", decoded.Diagnostics.Paths())
-		s.writeJSON(w, http.StatusOK, factorysession.OpenResultToAPI(result))
+	if s.sessionsRoot == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "factory session service is unavailable", "SERVICE_UNAVAILABLE")
 		return
 	}
-
-	sessionRuntime, ok := s.requireSessionRuntime(w)
-	if !ok {
+	if s.guardSessionsRequestContext(w, r) {
 		return
 	}
-	response, err := sessionRuntime.OpenFactorySession(r.Context(), req)
+	start, err := s.sessionsRoot.Start(r.Context(), factorysession.SessionStartRequestFromAPI(req))
 	if err != nil {
 		s.writeOpenFactorySessionRejected(w, err)
 		return
 	}
+	if start.Live == nil {
+		s.logger.Error("canonical factory session start returned no live result")
+		s.writeError(w, http.StatusInternalServerError, "failed to open factory session", "INTERNAL_ERROR")
+		return
+	}
 	s.writeCompatibilityWarning(w, "open_factory_session", decoded.Diagnostics.Paths())
-	s.writeJSON(w, http.StatusOK, response)
+	s.writeJSON(w, http.StatusOK, factorysession.SessionOpenResultToAPI(start.Live))
 }
 
 func (s *Server) writeOpenFactorySessionRejected(w http.ResponseWriter, err error) {
@@ -345,20 +340,78 @@ func (s *Server) CloseFactorySession(w http.ResponseWriter, r *http.Request, ses
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) requireDurableExecutionAPI(w http.ResponseWriter) (apisurface.DurableSessionExecutionAPI, bool) {
-	if s.durableExecution == nil {
-		s.writeError(w, http.StatusInternalServerError, "durable factory session execution is unavailable", "INTERNAL_ERROR")
-		return nil, false
-	}
-	return s.durableExecution, true
-}
-
 func (s *Server) writeDurableExecutionError(w http.ResponseWriter, err error) bool {
 	if status, response, ok := factorysession.ExecutionErrorResponse(err); ok {
 		s.writeJSON(w, status, response)
 		return true
 	}
 	return false
+}
+
+func durableSessionStartRequest(raw factorysessionexecution.StartRequest, synchronous bool, projectRoot string) (factorysessionexecution.SessionStartRequest, error) {
+	if raw.EventConsumer != nil {
+		return factorysessionexecution.SessionStartRequest{}, &factorysessionexecution.ValidationError{
+			Field:   "eventConsumer",
+			Message: "eventConsumer is not supported over HTTP",
+		}
+	}
+	wait := factorysessionexecution.SessionOperationWait{}
+	if raw.Wait != nil {
+		if raw.Wait.TimeoutMillis != nil {
+			wait.TimeoutMillis = *raw.Wait.TimeoutMillis
+		}
+		wait.CancelOnTimeout = raw.Wait.CancelOnTimeout
+	}
+	return factorysessionexecution.SessionStartRequest{
+		Mode:           factorysessionexecution.SessionOperationModeDurable,
+		Synchronous:    synchronous,
+		Correlation:    factorysessionexecution.SessionOperationCorrelation{RequestID: raw.RequestID},
+		Source:         raw.Source,
+		Args:           raw.Args,
+		Policy:         raw.RequestedPolicy,
+		Orchestrator:   raw.Orchestrator,
+		RuntimeOptions: raw.Runtime,
+		Wait:           wait,
+		FolderPath:     projectRoot,
+	}, nil
+}
+
+func (s *Server) durableProjectRoot(ctx context.Context) (string, error) {
+	defaultSession, err := s.sessionsRoot.Get(ctx, factorysessionexecution.SessionGetRequest{
+		SessionID: factorysessionexecution.DefaultSessionID,
+		Mode:      factorysessionexecution.SessionOperationModeLive,
+	})
+	if err != nil {
+		if !errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+			return "", err
+		}
+		// A hosted process may select an explicit Factory Session ID. The
+		// single live session is then the unambiguous Current Factory for
+		// durable execution requests that have no session selector.
+		listed, listErr := s.sessionsRoot.List(ctx, factorysessionexecution.SessionListRequest{
+			Mode: factorysessionexecution.SessionOperationModeLive,
+		})
+		if listErr != nil {
+			return "", listErr
+		}
+		if len(listed.Sessions) != 1 {
+			if len(listed.Sessions) == 0 {
+				return "", err
+			}
+			return "", &factorysessionexecution.ValidationError{
+				Field: "projectRoot", Message: "current Factory Session is ambiguous",
+			}
+		}
+		defaultSession.Session = listed.Sessions[0]
+	}
+	root := strings.TrimSpace(defaultSession.Session.FactoryDir)
+	if root == "" {
+		root = strings.TrimSpace(defaultSession.Session.FolderPath)
+	}
+	if root == "" {
+		return "", &factorysessionexecution.ValidationError{Field: "projectRoot", Message: "current Factory project root is required"}
+	}
+	return root, nil
 }
 
 func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
@@ -375,38 +428,41 @@ func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if s.sessionsRoot != nil {
-		if s.guardSessionsRequestContext(w, r) {
-			return
-		}
-		result, err := s.sessionsRoot.StartAsync(r.Context(), raw)
-		if err != nil {
-			if s.writeSessionsRootError(w, "", err) {
-				return
-			}
-			s.logger.Error("durable factory session async start failed", zap.Error(err))
-			s.writeSessionsRootErrorOrInternal(w, "", err, "durable factory session execution failed")
-			return
-		}
-		s.writeCompatibilityWarning(w, "start_durable_factory_session_async", diagnostics.Paths())
-		s.writeJSON(w, http.StatusOK, factorysession.AsyncStartResponseToAPI(result))
+	if s.sessionsRoot == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "factory session service is unavailable", "SERVICE_UNAVAILABLE")
 		return
 	}
-
-	execution, ok := s.requireDurableExecutionAPI(w)
-	if !ok {
+	if s.guardSessionsRequestContext(w, r) {
 		return
 	}
-	response, err := execution.StartDurableFactorySessionAsync(r.Context(), raw)
+	projectRoot, err := s.durableProjectRoot(r.Context())
 	if err != nil {
-		if s.writeDurableExecutionError(w, err) {
+		s.writeSessionsRootErrorOrInternal(w, "", err, "current Factory is unavailable")
+		return
+	}
+	mapped, err := durableSessionStartRequest(raw, false, projectRoot)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		return
+	}
+	started, err := s.sessionsRoot.Start(r.Context(), mapped)
+	if err != nil {
+		if s.writeSessionsRootError(w, "", err) {
 			return
 		}
+		s.logger.Error("durable factory session async start failed", zap.Error(err))
+		s.writeSessionsRootErrorOrInternal(w, "", err, "durable factory session execution failed")
+		return
+	}
+	if started.Async == nil {
+		s.logger.Error("canonical factory session start returned no async result")
 		s.writeError(w, http.StatusInternalServerError, "durable factory session execution failed", "INTERNAL_ERROR")
 		return
 	}
 	s.writeCompatibilityWarning(w, "start_durable_factory_session_async", diagnostics.Paths())
-	s.writeJSON(w, http.StatusOK, response)
+	s.writeJSON(w, http.StatusOK, factorysession.AsyncStartResponseToAPI(*started.Async))
+	return
+
 }
 
 func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request) {
@@ -423,49 +479,41 @@ func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if s.sessionsRoot != nil {
-		if s.guardSessionsRequestContext(w, r) {
-			return
-		}
-		result, err := s.sessionsRoot.StartSync(r.Context(), raw)
-		if err != nil {
-			if s.writeSessionsRootError(w, "", err) {
-				return
-			}
-			s.logger.Error("durable factory session sync start failed", zap.Error(err))
-			s.writeSessionsRootErrorOrInternal(w, "", err, "durable factory session execution failed")
-			return
-		}
-		s.writeCompatibilityWarning(w, "start_durable_factory_session_sync", diagnostics.Paths())
-		s.writeJSON(w, http.StatusOK, factorysession.SyncStartResponseToAPI(result))
+	if s.sessionsRoot == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "factory session service is unavailable", "SERVICE_UNAVAILABLE")
 		return
 	}
-
-	execution, ok := s.requireDurableExecutionAPI(w)
-	if !ok {
+	if s.guardSessionsRequestContext(w, r) {
 		return
 	}
-	response, err := execution.StartDurableFactorySessionSync(r.Context(), raw)
+	projectRoot, err := s.durableProjectRoot(r.Context())
 	if err != nil {
-		if s.writeDurableExecutionError(w, err) {
+		s.writeSessionsRootErrorOrInternal(w, "", err, "current Factory is unavailable")
+		return
+	}
+	mapped, err := durableSessionStartRequest(raw, true, projectRoot)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		return
+	}
+	started, err := s.sessionsRoot.Start(r.Context(), mapped)
+	if err != nil {
+		if s.writeSessionsRootError(w, "", err) {
 			return
 		}
+		s.logger.Error("durable factory session sync start failed", zap.Error(err))
+		s.writeSessionsRootErrorOrInternal(w, "", err, "durable factory session execution failed")
+		return
+	}
+	if started.Sync == nil {
+		s.logger.Error("canonical factory session start returned no sync result")
 		s.writeError(w, http.StatusInternalServerError, "durable factory session execution failed", "INTERNAL_ERROR")
 		return
 	}
 	s.writeCompatibilityWarning(w, "start_durable_factory_session_sync", diagnostics.Paths())
-	s.writeJSON(w, http.StatusOK, response)
-}
+	s.writeJSON(w, http.StatusOK, factorysession.SyncStartResponseToAPI(*started.Sync))
+	return
 
-type durableSessionGetter interface {
-	GetDurableFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySessionDurableReadModel, error)
-}
-
-type durableSessionResponseEventsReader interface {
-	SubscribeDurableFactoryResponseEvents(
-		ctx context.Context,
-		request factorysessionexecution.ResponseEventSubscriptionRequest,
-	) (apisurface.FactoryResponseEventSubscription, error)
 }
 
 type DurableExecutionSessionLister interface {
@@ -473,22 +521,6 @@ type DurableExecutionSessionLister interface {
 		context.Context,
 		factorysessionexecution.ListSessionsRequest,
 	) (factorysessionexecution.ListSessionsResult, error)
-}
-
-func (s *Server) requireDurableSessionGetter(w http.ResponseWriter) (durableSessionGetter, bool) {
-	if s.durableLifecycle == nil {
-		s.writeError(w, http.StatusInternalServerError, "durable factory session read is unavailable", "INTERNAL_ERROR")
-		return nil, false
-	}
-	return s.durableLifecycle, true
-}
-
-func (s *Server) requireDurableSessionResponseEventsReader(w http.ResponseWriter) (durableSessionResponseEventsReader, bool) {
-	if s.durableResponseEvents == nil {
-		s.writeError(w, http.StatusInternalServerError, "durable factory session response-event replay is unavailable", "INTERNAL_ERROR")
-		return nil, false
-	}
-	return s.durableResponseEvents, true
 }
 
 func isDurableExecutionSessionID(sessionID string) bool {
@@ -503,7 +535,11 @@ func (s *Server) mergeScopedFactorySessionList(
 	var durable scopedDurableReader
 
 	if s.sessionsRoot != nil {
-		live = ReadProjectionSessionListReader{Reader: s.liveControl}
+		if s.liveControl != nil {
+			live = ReadProjectionSessionListReader{Reader: s.liveControl}
+		} else {
+			live = s.liveSessionLister
+		}
 		durable = s.sessionsRoot
 	} else {
 		live = s.liveSessionLister

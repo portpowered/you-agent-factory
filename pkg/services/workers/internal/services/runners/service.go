@@ -6,9 +6,11 @@ import (
 	"context"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
@@ -98,8 +100,10 @@ type InferenceConfig struct {
 
 // InferenceDependencies are the exact effects projected into one Inference Runner.
 type InferenceDependencies struct {
-	Models   inference.ModelInvoker
-	Delegate workers.Runner
+	Models              inference.ModelInvoker
+	Delegate            workers.Runner
+	ContentMaterializer work.ContentMaterializer
+	MediaFiles          platformfilesystem.ReadOpener
 }
 
 // AgentDependencies are the exact peer-service and observation capabilities

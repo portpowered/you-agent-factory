@@ -459,7 +459,7 @@ examples.
 | `@you/ralph` | Graph | Plans a request, iterates through every incomplete plan story, and returns only after the durable plan is complete. |
 | `@you/review` | Graph | Repeat writing and independent review until approval or exhaustion. |
 | `@you/spawn` | JavaScript | Plan an exact number of tasks, execute them concurrently, and merge ordered results. |
-| `@you/subagent` | Graph | Run one bounded subagent and return its result. |
+| `@you/subagent` | Graph | Run one bounded subagent with workspace tools and return its result. |
 | `@you/tournament` | JavaScript | Compare candidates in judged 1v1 matches and return the champion. |
 | `@you/tts` | Graph | Convert text to audio with the packaged local text-to-speech model. |
 

@@ -16,7 +16,7 @@ func TestYouRunReturnsUnsupportedFilesystemAndTerminalRPCsAtTheACPBoundary(t *te
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"unsupported ACP client capabilities"}`))
-	writeACPWorker(t, dir, "cursor-acp")
+	writeACPWorker(t, dir, "cursor")
 	fixture := functionalACPFixture("unsupported")
 
 	var starts atomic.Int32

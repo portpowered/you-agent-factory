@@ -117,25 +117,25 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions",
-      "fileCount": 31,
+      "fileCount": 29,
       "owner": "factory-session-maintainers",
       "removalReason": "Continue extracting session capabilities into focused child packages."
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/execution",
-      "fileCount": 28,
+      "fileCount": 30,
       "owner": "factory-session-maintainers",
       "removalReason": "Separate execution coordination from invocation policy."
     },
     {
-      "packagePath": "pkg/services/factory_sessions/internal/runtimeopening",
-      "fileCount": 25,
-      "owner": "factory-session-maintainers",
-      "removalReason": "Partition runtime opening composition, model binding, and runtime construction by responsibility."
+      "packagePath": "pkg/services/factory_sessions/internal/service",
+      "fileCount": 36,
+      "owner": "backend-maintainers",
+      "removalReason": "The single process-owned Factory Sessions root consolidated runtime activation and replay here; extract cohesive stateless helpers while keeping one canonical session registry."
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/sessionservice",
-      "fileCount": 38,
+      "fileCount": 50,
       "owner": "factory-session-maintainers",
       "removalReason": "Partition session service behavior by lifecycle responsibility."
     },
@@ -147,13 +147,13 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/transports/http",
-      "fileCount": 25,
+      "fileCount": 27,
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
     },
     {
       "packagePath": "pkg/services/factory_sessions/transports/mcp",
-      "fileCount": 19,
+      "fileCount": 21,
       "owner": "factory-session-maintainers",
       "removalReason": "Separate Factory Session MCP tools by lifecycle responsibility."
     },
@@ -248,12 +248,6 @@
       "removalReason": "Split replay ingestion, validation, and execution responsibilities."
     },
     {
-      "packagePath": "pkg/services/recordings/transports/http",
-      "fileCount": 24,
-      "owner": "backend-maintainers",
-      "removalReason": "P5B-2 moved the canonical history HTTP adapter family under the Recordings owner; split this package into focused sub-packages and remove this entry after the transport cutover."
-    },
-    {
       "packagePath": "pkg/services/recordings/transports/mcp",
       "fileCount": 19,
       "owner": "backend-maintainers",
@@ -303,7 +297,7 @@
     },
     {
       "packagePath": "pkg/transports/acp/internal/stdio",
-      "fileCount": 22,
+      "fileCount": 23,
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this package into focused sub-packages and remove this entry."
     },
@@ -345,9 +339,15 @@
     },
     {
       "packagePath": "pkg/transports/cli/run",
-      "fileCount": 30,
+      "fileCount": 33,
       "owner": "cli-maintainers",
       "removalReason": "Split run invocation, presentation, and input behavior."
+    },
+    {
+      "packagePath": "pkg/transports/http/recordings",
+      "fileCount": 24,
+      "owner": "backend-maintainers",
+      "removalReason": "Moved Recordings HTTP presentation out of the domain service; split handlers and mapping tests into focused transport packages."
     },
     {
       "packagePath": "pkg/transports/http/servertests",
@@ -357,13 +357,13 @@
     },
     {
       "packagePath": "pkg/transports/mapping/factorysession",
-      "fileCount": 22,
+      "fileCount": 20,
       "owner": "transport-mapping-maintainers",
       "removalReason": "Partition Factory Session mapping by contract direction."
     },
     {
       "packagePath": "pkg/wire",
-      "fileCount": 46,
+      "fileCount": 50,
       "owner": "composition-maintainers",
       "removalReason": "Split composition tests and providers by durable process graph boundary."
     }

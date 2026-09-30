@@ -12,7 +12,7 @@ import (
 )
 
 func TestMCPSkillsRejectsInvalidRequests(t *testing.T) {
-	server := startFixtureBackedMCPServer(t)
+	server := startRuntimeBackedMCPServerWithHome(t, t.TempDir(), t.TempDir())
 	defer server.cleanup()
 
 	initialized := server.client.call("initialize", map[string]any{
@@ -43,7 +43,7 @@ func TestMCPSkillsRejectsInvalidRequests(t *testing.T) {
 // 2024-11-05 clients can still call the Skills methods and read published
 // resources. The Skills-specific 2026 discovery handshake is covered below.
 func TestMCPSkillsExtensionListsGetsAndReadsPublishedSkills(t *testing.T) {
-	server := startFixtureBackedMCPServer(t)
+	server := startRuntimeBackedMCPServerWithHome(t, t.TempDir(), t.TempDir())
 	defer server.cleanup()
 
 	initResult := server.client.call("initialize", map[string]any{
@@ -106,7 +106,7 @@ func TestMCPSkillsExtensionListsGetsAndReadsPublishedSkills(t *testing.T) {
 	if resources.Error != nil {
 		t.Fatalf("resources/list error = %#v", resources.Error)
 	}
-	// The legacy handshake used by this stdio fixture predates cacheable
+	// The legacy handshake used by this stdio server predates cacheable
 	// resources/list results; the 2026 handshake is covered by server tests.
 	assertOperatorConfigResourcesPublished(t, server, resources.Result)
 }
@@ -155,7 +155,7 @@ func assertSkillResourcesReadable(t *testing.T, server *stdioMCPServer, files []
 // work through the public stdio server. The 2026 protocol uses per-request
 // metadata and does not begin with the legacy initialize handshake.
 func TestMCP2026SkillsDiscovery(t *testing.T) {
-	server := startFixtureBackedMCPServer(t)
+	server := startRuntimeBackedMCPServerWithHome(t, t.TempDir(), t.TempDir())
 	defer server.cleanup()
 
 	requestMeta := map[string]any{

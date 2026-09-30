@@ -6,12 +6,15 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -22,6 +25,7 @@ import (
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	globalconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	"go.uber.org/zap"
 )
 
@@ -167,16 +171,26 @@ func TestModelInvocationEdgesPreserveOverridesAndSelectPlatformDefaults(t *testi
 func TestModelAssetHostPlatformPreservesOverrideAndSelectsProcessDefault(t *testing.T) {
 	t.Parallel()
 
-	if got := provideModelAssetHostPlatform(serviceedges.Edges{}); got != (models.AssetHostPlatform{
-		OperatingSystem: runtime.GOOS,
-		Architecture:    runtime.GOARCH,
-	}) {
-		t.Fatalf("default model asset host platform = %#v, want current process platform", got)
+	// Managed backend selection now accepts published CUDA archives on both
+	// desktop platforms, so a detected GPU selects the CUDA accelerator
+	// everywhere a CUDA-capable archive can be published.
+	selectsCUDA := runtime.GOARCH == "amd64" &&
+		(runtime.GOOS == "linux" || runtime.GOOS == "windows")
+	if got := provideModelAssetHostPlatform(serviceedges.Edges{}); got.OperatingSystem != runtime.GOOS ||
+		got.Architecture != runtime.GOARCH ||
+		(got.Accelerator != "" && !(selectsCUDA && got.Accelerator == "cuda")) ||
+		(got.Accelerator == "cuda" && !got.CUDAAvailable) {
+		t.Fatalf("default model asset host platform = %#v, want current process platform and optional detected CUDA", got)
 	}
 
-	override := models.AssetHostPlatform{OperatingSystem: "customer-os", Architecture: "customer-arch"}
+	override := models.AssetHostPlatform{OperatingSystem: "customer-os", Architecture: "customer-arch", Accelerator: "cuda", CUDAAvailable: true}
 	if got := provideModelAssetHostPlatform(serviceedges.Edges{ModelAssetHostPlatform: override}); got != override {
 		t.Fatalf("model asset host platform override = %#v, want %#v", got, override)
+	}
+	if got := provideModelAssetHostPlatform(serviceedges.Edges{ModelAssetHostPlatform: models.AssetHostPlatform{Accelerator: "cuda"}}); got != (models.AssetHostPlatform{
+		OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH, Accelerator: "cuda", CUDAAvailable: true,
+	}) {
+		t.Fatalf("model asset host platform with accelerator override = %#v, want process OS and architecture with CUDA", got)
 	}
 }
 
@@ -819,5 +833,79 @@ func TestModelsInvokeStandaloneScopeProjectsOperatorModelOverlay(t *testing.T) {
 	}
 	if err := opened.Close(context.Background()); err != nil {
 		t.Fatalf("close standalone overlay scope: %v", err)
+	}
+}
+
+func TestModelsCatalogWithoutCacheIncludesCustomOperatorModel(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	configPath := operatorsettings.DefaultConfigPath(home)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	const source = "file:///models/index-tts2_5-orig.gguf"
+	configJSON := `{"models":{"index-tts2.5":{"source":"` + source + `","backend":"localai-audio-cpp","loadPolicy":"ON_DEMAND","operations":["TTS"]}}}`
+	if err := os.WriteFile(configPath, []byte(configJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	scope, err := (modelservice.RuntimeScopeRef{}).Parse("wire:models:custom-catalog")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var openRequest modelservice.OpenRuntimeScopeRequest
+	root := modelsCLICompositionRootStub{
+		openRuntime: func(_ context.Context, request modelservice.OpenRuntimeScopeRequest) (modelservice.OpenRuntimeScopeResult, error) {
+			openRequest = request
+			return modelservice.OpenRuntimeScopeResult{Scope: scope}, nil
+		},
+		closeRuntime: func(_ context.Context, request modelservice.CloseRuntimeScopeRequest) (modelservice.CloseRuntimeScopeResult, error) {
+			return modelservice.CloseRuntimeScopeResult{Scope: request.Scope, Closed: true}, nil
+		},
+	}
+	sourceScope := &modelsCLICompositionScopeSourceStub{err: factorydefinitions.ErrFactoryLayoutNotFound}
+	loader := func(path string) (operatorsettings.Config, error) {
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return operatorsettings.Config{}, readErr
+		}
+		return globalconfig.Decode(data)
+	}
+	composition, err := provideModelsCLIComposition(root, sourceScope, loader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := startupcli.WithHomeDirectory(context.Background(), home)
+	ctx = startupcli.WithWorkingDirectory(ctx, t.TempDir())
+	opened, err := composition.CompositionOpenCatalogScope(ctx)
+	if err != nil {
+		t.Fatalf("open catalog scope: %v", err)
+	}
+	if sourceScope.calls != 1 {
+		t.Fatalf("presentation scope probes = %d, want one", sourceScope.calls)
+	}
+	assertCustomCatalogOverlay(t, openRequest.Config.OperatorModels, source)
+	if err := opened.Close(context.Background()); err != nil {
+		t.Fatalf("close catalog scope: %v", err)
+	}
+}
+
+func assertCustomCatalogOverlay(t *testing.T, overlays map[string]modelservice.ModelOverlay, source string) {
+	t.Helper()
+	overlay, ok := overlays["index-tts2.5"]
+	if !ok {
+		t.Fatal("custom catalog overlay is missing")
+	}
+	if overlay.Source == nil || *overlay.Source != source {
+		t.Fatalf("custom catalog source = %v, want %q", overlay.Source, source)
+	}
+	if overlay.Backend == nil || *overlay.Backend != "localai-audio-cpp" {
+		t.Fatalf("custom catalog backend = %v, want localai-audio-cpp", overlay.Backend)
+	}
+	if overlay.LoadPolicy == nil || *overlay.LoadPolicy != modelservice.LoadPolicyOnDemand {
+		t.Fatalf("custom catalog load policy = %v, want ON_DEMAND", overlay.LoadPolicy)
+	}
+	if !reflect.DeepEqual(overlay.Operations, []string{"TTS"}) {
+		t.Fatalf("custom catalog operations = %v, want [TTS]", overlay.Operations)
 	}
 }

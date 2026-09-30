@@ -85,7 +85,7 @@ verify_host_toolchain() {
 	assert_tool_version "CMake" "$(config_value toolchain cmakeVersion)" cmake --version
 
 	case "$TARGET_ID" in
-		linux-amd64)
+		linux-amd64|linux-amd64-cuda)
 			assert_tool_version "GCC" "$(config_value hostToolchain linux gccVersion)" gcc --version
 			assert_tool_version "GNU Make" "$(config_value hostToolchain linux makeVersion)" "$make_command" --version
 			assert_tool_version "Ninja" "$(config_value hostToolchain linux ninjaVersion)" ninja --version
@@ -131,12 +131,25 @@ esac
 build_shell="bash"
 if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 	build_shell="msys2"
+elif [[ "$TARGET_ID" == "windows-amd64-cuda" ]]; then
+	build_shell="pwsh"
 fi
 
 build_strategy=""
 case "$TARGET_ID:$BACKEND_ID" in
 	windows-amd64:localai-llamacpp)
 		build_strategy="windows-llamacpp-grpc"
+		;;
+	windows-amd64-cuda:localai-llamacpp)
+		build_strategy="windows-llamacpp-cuda-msvc"
+		;;
+	windows-amd64-cuda:localai-whisper)
+		# The Windows CUDA Whisper archive builds under MSVC.
+		build_strategy="windows-whisper-cuda-msvc"
+		;;
+	windows-amd64-cuda:localai-vibevoice)
+		# The Windows CUDA VibeVoice archive builds under MSVC.
+		build_strategy="windows-vibevoice-cuda-msvc"
 		;;
 	windows-amd64:localai-whisper)
 		build_strategy="windows-whisper"
@@ -148,6 +161,9 @@ case "$TARGET_ID:$BACKEND_ID" in
 		build_strategy="darwin-llamacpp-grpc"
 		;;
 	linux-amd64:localai-llamacpp)
+		build_strategy="linux-llamacpp-package"
+		;;
+	linux-amd64-cuda:localai-llamacpp)
 		build_strategy="linux-llamacpp-package"
 		;;
 	darwin-arm64:localai-whisper|darwin-arm64:localai-vibevoice)
@@ -181,6 +197,12 @@ if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 			windows_library_name="libgovibevoicecpp.dll"
 			;;
 		esac
+	elif [[ "$TARGET_ID" == "windows-amd64-cuda" && "$BACKEND_ID" == "localai-whisper" ]]; then
+		go_dynamic_loader="xsys-windows"
+		windows_library_name="libgowhisper.dll"
+	elif [[ "$TARGET_ID" == "windows-amd64-cuda" && "$BACKEND_ID" == "localai-vibevoice" ]]; then
+		go_dynamic_loader="xsys-windows"
+		windows_library_name="libgovibevoicecpp.dll"
 	fi
 
 # The pinned gRPC CMake project otherwise lets the Windows generator select
@@ -225,6 +247,9 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	plan_go_dynamic_loader=" go_dynamic_loader=$go_dynamic_loader"
 	plan_windows_library_name=""
 	plan_grpc_dependency_mode=" grpc_dependency_mode=$grpc_dependency_mode"
+	if [[ "$TARGET_ID" == "windows-amd64-cuda" && ( "$BACKEND_ID" == "localai-whisper" || "$BACKEND_ID" == "localai-vibevoice" ) ]]; then
+		plan_windows_library_name=" windows_library_name=$windows_library_name"
+	fi
 	if [[ "$TARGET_ID" == "windows-amd64" ]]; then
 		plan_cxx_standard=" cxx_standard=$windows_cxx_standard"
 		plan_cmake_generator=" cmake_generator=mingw-makefiles"
@@ -239,7 +264,28 @@ if [[ "${LOCALAI_BUILD_PLAN_ONLY:-0}" == "1" ]]; then
 	exit 0
 fi
 
+if [[ "$TARGET_ID" == "windows-amd64-cuda" ]]; then
+	case "$BACKEND_ID" in
+		localai-llamacpp)
+			echo "Windows CUDA llama uses scripts/build-localai-backend-cuda.ps1 under MSVC" >&2
+			;;
+		localai-whisper)
+			echo "Windows CUDA whisper uses scripts/build-localai-whisper-backend-cuda.ps1 under MSVC" >&2
+			;;
+		*)
+			echo "unsupported backend/target: ${BACKEND_ID}/${TARGET_ID}" >&2
+			;;
+	esac
+	exit 1
+fi
+
 verify_host_toolchain
+
+if [[ "$TARGET_ID" == "linux-amd64-cuda" ]]; then
+	[[ "$BUILD_TYPE" == "cublas" ]] || { echo "CUDA target requires BUILD_TYPE=cublas" >&2; exit 1; }
+	command -v nvcc >/dev/null || { echo "CUDA toolkit nvcc is required for the CUDA target" >&2; exit 1; }
+	assert_tool_version "CUDA toolkit" "release $(config_value hostToolchain linux cudaVersion)," nvcc --version
+fi
 
 node "$workflow_script" verify-source \
 	--config "$config_path" \

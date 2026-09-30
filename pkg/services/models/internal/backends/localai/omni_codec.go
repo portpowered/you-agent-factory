@@ -28,11 +28,18 @@ type PredictRequest struct {
 	Parameters []models.OperationParameter
 }
 
-// PredictResponse is the detached text response returned by LocalAI's
-// protocol adapter.
+// PredictResponse is the detached text response and safe reply-shape counts
+// returned by LocalAI's protocol adapter.
 type PredictResponse struct {
-	Text  string
-	Usage string
+	Text            string
+	Usage           string
+	ReplyBytes      int
+	MessageBytes    int
+	ChatDeltaCount  int
+	ReasoningBytes  int
+	GeneratedTokens int32
+	PromptTokens    int32
+	AudioBytes      int
 }
 
 // OmniInvocationResult is private LocalAI/Models output. Artifact identity is
@@ -50,27 +57,36 @@ type ProtocolClient interface {
 	Predict(context.Context, PredictRequest) (PredictResponse, error)
 }
 
+// VideoAudioExtractor returns WAV bytes for a video's embedded audio track.
+// An empty result means the video has no audio track.
+type VideoAudioExtractor func(context.Context, []byte) ([]byte, error)
+
 // OmniCodec owns OMNI validation, provider mapping, and response shaping.
 type OmniCodec struct {
-	client     ProtocolClient
-	capability OmniCapability
+	client       ProtocolClient
+	capability   OmniCapability
+	extractAudio VideoAudioExtractor
 }
 
 // NewOmniCodec constructs an inert codec around one recorded capability. It
 // performs no network, process, filesystem, or backend-artifact work.
-func NewOmniCodec(client ProtocolClient, capability OmniCapability) (*OmniCodec, error) {
+func NewOmniCodec(client ProtocolClient, capability OmniCapability, extractors ...VideoAudioExtractor) (*OmniCodec, error) {
 	if err := capability.Validate(); err != nil {
 		return nil, err
 	}
-	return &OmniCodec{client: client, capability: capability.Clone()}, nil
+	codec := &OmniCodec{client: client, capability: capability.Clone()}
+	if len(extractors) > 0 {
+		codec.extractAudio = extractors[0]
+	}
+	return codec, nil
 }
 
 // NewPinnedOmniCodec constructs the codec with the pinned protocol capability.
 // A nil client is allowed so callers can use Operation and Encode for pure
 // validation/mapping tests; Invoke reports ErrUnavailable until a client is
 // supplied.
-func NewPinnedOmniCodec(client ProtocolClient) *OmniCodec {
-	codec, err := NewOmniCodec(client, PinnedOmniCapability())
+func NewPinnedOmniCodec(client ProtocolClient, extractors ...VideoAudioExtractor) *OmniCodec {
+	codec, err := NewOmniCodec(client, PinnedOmniCapability(), extractors...)
 	if err != nil {
 		return nil
 	}
@@ -145,18 +161,12 @@ func (codec *OmniCodec) Invoke(
 			Cause:     models.ErrUnavailable,
 		}
 	}
-	response, err := codec.client.Predict(ctx, predict)
+	response, err := codec.invokePredict(ctx, request, predict)
 	if err != nil {
 		return OmniInvocationResult{}, err
 	}
-	if strings.TrimSpace(response.Text) == "" {
-		return OmniInvocationResult{}, &models.InvocationFailure{
-			Class:     models.InvocationFailureClassMalformedResponse,
-			Model:     request.Model,
-			Operation: models.OperationOMNI,
-			Slot:      "text",
-			Message:   "OMNI response did not contain text output",
-		}
+	if err := validateTextResponse(request, response); err != nil {
+		return OmniInvocationResult{}, err
 	}
 	content := []models.InferenceContent{{
 		Name:        "text",
@@ -180,6 +190,126 @@ func (codec *OmniCodec) Invoke(
 			SizeBytes: int64(len([]byte(response.Text))),
 		}},
 	}, nil
+}
+
+type omniAudioSource struct {
+	label string
+	input ProtocolInput
+}
+
+func (codec *OmniCodec) invokePredict(
+	ctx context.Context, request models.InvokeModelRequest, predict PredictRequest,
+) (PredictResponse, error) {
+	var audios []omniAudioSource
+	var visuals []ProtocolInput
+	videoCount := 0
+	for _, input := range predict.Inputs {
+		switch input.Modality {
+		case models.ModalityAudio:
+			audios = append(audios, omniAudioSource{
+				label: fmt.Sprintf("Audio input %d", len(audios)+1), input: input,
+			})
+		case models.ModalityVideo:
+			videoCount++
+			visuals = append(visuals, input)
+			if codec.extractAudio == nil || input.Content == "" {
+				continue
+			}
+			if err := ctx.Err(); err != nil {
+				return PredictResponse{}, err
+			}
+			wav, err := codec.extractAudio(ctx, []byte(input.Content))
+			if err != nil {
+				return PredictResponse{}, fmt.Errorf("extract audio from video input %d: %w", videoCount, err)
+			}
+			if len(wav) > 0 {
+				audios = append(audios, omniAudioSource{
+					label: fmt.Sprintf("Embedded audio from video input %d", videoCount),
+					input: ProtocolInput{Slot: "audio", Modality: models.ModalityAudio,
+						MediaType: "audio/wav", Content: string(wav)},
+				})
+			}
+		case models.ModalityImage:
+			visuals = append(visuals, input)
+		}
+	}
+	if videoCount == 0 || len(audios) == 0 {
+		return codec.predict(ctx, predict)
+	}
+	for _, parameter := range request.Parameters {
+		if strings.TrimSpace(parameter.Name) == omniMaxTokensParameter {
+			return PredictResponse{}, &models.InvocationFailure{
+				Class: models.InvocationFailureClassInvalidParameter, Model: request.Model,
+				Operation: models.OperationOMNI, Parameter: omniMaxTokensParameter,
+				Message: "OMNI max_tokens is unsupported for combined audio and video because the response joins separate observations",
+			}
+		}
+	}
+	return codec.predictAudioVideo(ctx, request, predict, audios, visuals)
+}
+
+func (codec *OmniCodec) predictAudioVideo(
+	ctx context.Context, request models.InvokeModelRequest, original PredictRequest,
+	audios []omniAudioSource, visuals []ProtocolInput,
+) (PredictResponse, error) {
+	var observations strings.Builder
+	for _, source := range audios {
+		prompt := "Transcribe spoken words verbatim using words rather than digits where possible. " +
+			"Describe other salient sounds. Only report audible facts."
+		response, err := codec.predict(ctx, PredictRequest{
+			Prompt: prompt, Parameters: original.Parameters,
+			Inputs: []ProtocolInput{{Slot: "prompt", Modality: models.ModalityText,
+				MediaType: "text/plain", Content: prompt}, source.input},
+		})
+		if err != nil {
+			return PredictResponse{}, err
+		}
+		if err := validateTextResponse(request, response); err != nil {
+			return PredictResponse{}, err
+		}
+		fmt.Fprintf(&observations, "%s: %s\n", source.label, strings.TrimSpace(response.Text))
+	}
+	videoPrompt := "Report visible events, on-screen words, colors, and their temporal order. " +
+		"Only report visual facts."
+	videoInputs := append([]ProtocolInput{{
+		Slot: "prompt", Modality: models.ModalityText,
+		MediaType: "text/plain", Content: videoPrompt,
+	}}, visuals...)
+	video, err := codec.predict(ctx, PredictRequest{
+		Prompt: videoPrompt, Parameters: original.Parameters, Inputs: videoInputs,
+	})
+	if err != nil {
+		return PredictResponse{}, err
+	}
+	if err := validateTextResponse(request, video); err != nil {
+		return PredictResponse{}, err
+	}
+	// Preserve both observed modalities without another model pass that might
+	// incorrectly deny an already observed audio source. Per-pass usage cannot
+	// be represented as one reliable total in the single-response contract.
+	return PredictResponse{Text: observations.String() + "Video: " + strings.TrimSpace(video.Text)}, nil
+}
+
+func (codec *OmniCodec) predict(ctx context.Context, request PredictRequest) (PredictResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return PredictResponse{}, err
+	}
+	return codec.client.Predict(ctx, request)
+}
+
+func validateTextResponse(request models.InvokeModelRequest, response PredictResponse) error {
+	if strings.TrimSpace(response.Text) != "" {
+		return nil
+	}
+	return &models.InvocationFailure{
+		Class: models.InvocationFailureClassMalformedResponse, Model: request.Model,
+		Operation: models.OperationOMNI, Slot: "text",
+		Message: fmt.Sprintf(
+			"OMNI response did not contain text output (reply_bytes=%d message_bytes=%d chat_delta_count=%d generated_tokens=%d prompt_tokens=%d audio_bytes=%d reasoning_bytes=%d)",
+			response.ReplyBytes, response.MessageBytes, response.ChatDeltaCount,
+			response.GeneratedTokens, response.PromptTokens, response.AudioBytes, response.ReasoningBytes,
+		),
+	}
 }
 
 func declaresOutputSlot(operations []models.Operation, name string) bool {

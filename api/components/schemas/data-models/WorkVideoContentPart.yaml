@@ -1,0 +1,17 @@
+description: Ordered video content for one work item.
+allOf:
+  - $ref: './WorkContentCommonFields.yaml'
+  - type: object
+    required:
+      - type
+      - url
+    properties:
+      type:
+        allOf:
+          - $ref: './WorkContentPartType.yaml'
+        enum:
+          - VIDEO
+      url:
+        $ref: './WorkContentURLProperty.yaml'
+      file:
+        $ref: './WorkContentDeprecatedFileProperty.yaml'

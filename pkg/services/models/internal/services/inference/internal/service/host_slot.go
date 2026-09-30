@@ -14,7 +14,7 @@ func (s *service) acquireHostSlot(
 	if s == nil || s.runtimeHost == nil {
 		return inference.HostHandleSlot{}, models.ErrUnavailable
 	}
-	result, err := s.runtimeHost.EnsureModelHost(ctx, models.EnsureModelHostRequest{
+	result, err := s.runtimeHost.InspectModelHost(ctx, models.InspectModelHostRequest{
 		Scope: request.Scope,
 		Name:  request.ModelName,
 	})
@@ -26,7 +26,7 @@ func (s *service) acquireHostSlot(
 	}
 
 	return inference.HostHandleSlot{
-		Reused:   result.Outcome == models.HostEnsureAlreadyReady,
+		Reused:   true,
 		Endpoint: s.invocationEndpoint(ctx, request.Scope, request.ModelName),
 	}, nil
 }

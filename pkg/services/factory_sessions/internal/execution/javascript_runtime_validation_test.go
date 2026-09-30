@@ -515,7 +515,8 @@ return { ok: true };`
 	})
 
 	started, err := service.StartSync(context.Background(), StartRequest{
-		RequestID: "req-policy-denied-model",
+		RequestID:   "req-policy-denied-model",
+		ProjectRoot: projectRoot,
 		Source: Source{
 			Kind:         factory.WorkflowSourceKindWorkflowFile,
 			WorkflowFile: workflowPath,

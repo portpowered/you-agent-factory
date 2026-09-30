@@ -62,8 +62,8 @@ func TestChildWorkerExecutor_PassesDetachedCorrelationAndOneProgressPublisher(t 
 	}
 	assertSchemaLessChildResult(t, result)
 	assertDetachedChildRequest(t, invoker.request)
-	if len(progress) != 1 || progress[0].Kind != workers.CompletedFragmentKind {
-		t.Fatalf("progress observations = %#v, want one terminal fragment", progress)
+	if len(progress) != 2 || progress[0].Kind != workers.ResponseFragmentKind || progress[0].Payload != `{"text":"done"}` || progress[1].Kind != workers.CompletedFragmentKind {
+		t.Fatalf("progress observations = %#v, want final content before one terminal fragment", progress)
 	}
 }
 
@@ -524,7 +524,7 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage(
 	t.Parallel()
 	const sessionID = "dur-sess-0123456789abcdef0123456789abcdef"
 	projectRoot := t.TempDir()
-	store := mustTestRuntimePersistenceStore(t, runtimepersist.DirForProjectRoot(projectRoot))
+	store := mustTestRuntimePersistenceStore(t, projectRoot)
 	state := interruptedSessionForAdmissionTest(sessionID)
 	persistResumeCoverageSnapshot(t, store, sessionID, state)
 

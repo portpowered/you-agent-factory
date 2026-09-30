@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/initializer"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -243,13 +242,9 @@ func (root rootInvocationInputScript) PrepareInvocationInput(
 
 type testRunSelection struct{ cfg runcli.RunConfig }
 
-func (selection testRunSelection) Open(context.Context, startupcli.RunIntent) (initializer.RunApplication, error) {
-	return runApplicationFuncForCLITest(func(context.Context) error { return nil }), nil
+func (selection testRunSelection) Run(context.Context, startupcli.RunIntent) error {
+	return nil
 }
-
-type runApplicationFuncForCLITest func(context.Context) error
-
-func (run runApplicationFuncForCLITest) Run(ctx context.Context) error { return run(ctx) }
 
 func testRunConfig(selection startupcli.RunSelection) runcli.RunConfig {
 	return selection.(testRunSelection).cfg
@@ -673,7 +668,7 @@ func newBatchColdStartApplicationProcess(
 	lifecycle := &batchColdStartProcessLifecycle{}
 	process, err := initializerapplication.NewProcess(
 		withTestInjectedPlatformRoles(CommandFactory{}), initializer,
-		batchColdStartProcessProviderRegistry{}, lifecycle, nil, nil, nil, nil, nil,
+		batchColdStartProcessProviderRegistry{}, lifecycle, nil, nil, nil, nil,
 	)
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)

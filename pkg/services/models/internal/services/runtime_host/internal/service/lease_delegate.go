@@ -35,3 +35,17 @@ func (s *service) ReleaseModelLease(
 	}
 	return s.leases.ReleaseModelLease(ctx, request)
 }
+
+func (s *service) ClaimInvocationLease(ctx context.Context, request models.InvokeModelRequest) (models.ModelLease, error) {
+	if s == nil || s.leases == nil {
+		return models.ModelLease{}, models.ErrUnsupportedOperation
+	}
+	return s.leases.ClaimInvocationLease(ctx, request)
+}
+
+func (s *service) ReleaseInvocationLease(ctx context.Context, request models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error) {
+	if s == nil || s.leases == nil {
+		return models.ReleaseModelLeaseResult{}, models.ErrUnsupportedOperation
+	}
+	return s.leases.ReleaseInvocationLease(ctx, request)
+}

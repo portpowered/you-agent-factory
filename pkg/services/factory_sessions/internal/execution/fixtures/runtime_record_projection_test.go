@@ -251,7 +251,23 @@ func newJavaScriptRuntimeServiceWithFixture(t *testing.T, fixtureName, workflowN
 	if len(workflows) > 0 {
 		config.Workflows = workflows[0]
 	}
-	return newConfiguredJavaScriptRuntimeService(config)
+	return fixtureProjectRootService{Service: newConfiguredJavaScriptRuntimeService(config), projectRoot: projectRoot}
+}
+
+// Fixture starts carry the root of the authored workflow in every request.
+type fixtureProjectRootService struct {
+	fse.Service
+	projectRoot string
+}
+
+func (s fixtureProjectRootService) StartAsync(ctx context.Context, request fse.StartRequest) (fse.AsyncStartResult, error) {
+	request.ProjectRoot = s.projectRoot
+	return s.Service.StartAsync(ctx, request)
+}
+
+func (s fixtureProjectRootService) StartSync(ctx context.Context, request fse.StartRequest) (fse.SyncStartResult, error) {
+	request.ProjectRoot = s.projectRoot
+	return s.Service.StartSync(ctx, request)
 }
 
 func scriptedRecordOutcome(records []factory.JavaScriptRuntimeRecord) factory.JavaScriptWorkflows {

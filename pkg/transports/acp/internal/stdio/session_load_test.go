@@ -169,7 +169,7 @@ func TestHandleSessionLoadAndResumeUnknownSessionReturnsBoundedRejection(t *test
 // proves a Server constructed without the Chat Sessions collaborator reports
 // a bounded failure rather than panicking.
 func TestHandleSessionLoadAndResumeWithoutCollaboratorsReportsBoundedFailure(t *testing.T) {
-	server := New(nil, nil, nil, nil, nil, nil, nil, nil)
+	server := New(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	env := numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionLoad, validSessionLoadParams)
 	if _, rpcErr := server.handleSessionLoad(context.Background(), env); rpcErr == nil {
@@ -698,16 +698,13 @@ func TestHandleSessionPromptRecordPendingFailureAfterStartMakesNoBindCall(t *tes
 // TestHandleSessionPromptRetryAfterRecordPendingFailureReusesStableRequestID
 // proves that a later, uniquely identified prompt for the same still-unbound
 // episode (observed after a RecordPendingFactorySession failure left the
-// episode with no pending or bound identity at all) calls StartAsync
+// episode with no pending or bound identity at all) calls Start
 // again with the exact same RequestID as the original attempt -- a stable key
 // derived only from the session and episode, never the admitted Turn's own
 // ID, which differs on every retry. This is what lets
-// ondemandtarget.Service.StartAsync's own request-scoped deduplication (see
-// that package's TestStartAsyncSameRequestIDConvergesOnASingleActivation)
-// converge the retry onto the exact same runtime instead of opening a second
-// one for the same episode; this test proves the transport's half of that
-// contract (the stable key), not the activation service's own dedup logic,
-// which is a different package's responsibility.
+// canonical Factory Sessions Start deduplication converge the retry onto the
+// same runtime instead of opening another for the episode. This test proves
+// the transport's stable key; Factory Sessions owns activation deduplication.
 func TestHandleSessionPromptRetryAfterRecordPendingFailureReusesStableRequestID(t *testing.T) {
 	chatSessions := &fakeChatSessionsService{
 		getSessionResult: sessionAt("session-1", "factory:@you/review", 3, "/work/project"),

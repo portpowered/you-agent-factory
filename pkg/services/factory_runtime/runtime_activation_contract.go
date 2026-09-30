@@ -26,7 +26,7 @@ type RuntimeActivationRequest struct {
 	RuntimeID        string
 	FactorySessionID string
 	Snapshot         factorydefinitions.RuntimeSnapshot
-	Runtime          RuntimeOpeningRequest
+	Runtime          RuntimeSelection
 	Inputs           RuntimeActivationInputs
 }
 
@@ -260,8 +260,17 @@ type RuntimeActivation struct {
 	Close func(context.Context) error
 }
 
-// RuntimeActivationOperation is injected when the process root is composed.
-// It receives only explicit Runtime values and returns an initialized Runtime
+// Root is the Factory Runtime activation authority. Service carries control,
+// observation, and dispatch-plan operations; Activate publishes one Runtime
+// from a per-call activation operation without retaining opener state.
+type Root interface {
+	Service
+	Activate(context.Context, RuntimeActivationRequest, RuntimeActivationOperation) (RuntimeActivationResult, error)
+	Deactivate(context.Context, RuntimeDeactivationRequest) (RuntimeDeactivationResult, error)
+}
+
+// RuntimeActivationOperation is supplied per Activate call. It receives only
+// explicit Runtime values and returns an initialized Runtime
 // plus its owned cleanup operation.
 type RuntimeActivationOperation func(
 	context.Context,
@@ -269,7 +278,7 @@ type RuntimeActivationOperation func(
 ) (*RuntimeActivation, error)
 
 // Normalize validates and detaches an activation request before it is handed
-// to the root's injected start operation.
+// to the per-call start operation.
 func (request RuntimeActivationRequest) Normalize() (RuntimeActivationRequest, error) {
 	runtimeID := strings.TrimSpace(request.RuntimeID)
 	sessionID := strings.TrimSpace(request.FactorySessionID)

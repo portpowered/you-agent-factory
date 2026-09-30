@@ -16,7 +16,7 @@
       }
     },
     {
-      "name": "cursor-acp",
+      "name": "cursor",
       "transport": "stdio",
       "executable": "cursor-agent",
       "command": "cursor-agent acp",
@@ -65,7 +65,7 @@
       }
     },
     {
-      "name": "gemini-acp",
+      "name": "gemini",
       "transport": "stdio",
       "executable": "gemini",
       "command": "gemini --acp",
@@ -138,7 +138,7 @@
       }
     },
     {
-      "name": "kiro-acp",
+      "name": "kiro",
       "transport": "stdio",
       "executable": "kiro-cli-chat",
       "command": "kiro-cli-chat acp",
@@ -180,26 +180,24 @@
       }
     },
     {
-      "name": "opencode-acp",
+      "name": "opencode",
       "transport": "stdio",
-      "executable": "npx",
-      "command": "npx -y opencode-ai acp",
+      "executable": "opencode",
+      "command": "opencode acp",
       "arguments": [
-        "-y",
-        "opencode-ai",
         "acp"
       ],
-      "posture": "package_runner",
+      "posture": "installed_executable",
       "implementation": {
         "kind": "acp_agent",
         "profile": "opencode-acp"
       }
     },
     {
-      "name": "pi-acp",
+      "name": "pi",
       "transport": "stdio",
-      "executable": "npx",
-      "command": "npx pi-acp",
+      "executable": "you",
+      "command": "you pi-acp",
       "arguments": [
         "pi-acp"
       ],

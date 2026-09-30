@@ -39,7 +39,7 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 	ledger := &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "runtime-recordings-root"}
 	var capturedSource recordings.InitialStructureSource
 	recorder := &runtimeRecordingsRecorderStub{}
-	runtimeOpening := &testRuntimeOpeningStub{
+	runtimeScopes := &testRuntimeScopeServiceStub{
 		ledger:         ledger,
 		recorder:       recorder,
 		capturedSource: &capturedSource,
@@ -53,7 +53,7 @@ func TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities(t *testing.T
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-recordings-root", "", clockwork.NewFakeClock(),
 		"/recordings/session.json", nil, nil, false, nil, nil, nil, nil,
-		runtimeOpening,
+		runtimeScopes,
 		testRuntimeWorkers{},
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
@@ -90,7 +90,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-test", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
-		testRuntimeOpening(newTestRuntimeLedger),
+		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
@@ -126,7 +126,7 @@ func TestBuild_SeparatesCompatibilitySelectorFromCanonicalRuntimeIdentity(t *tes
 		canonicalSessionID     = "550e8400-e29b-41d4-a716-446655440000"
 	)
 	var capturedRequest recordings.RuntimeScopeRequest
-	runtimeOpening := &testRuntimeOpeningStub{
+	runtimeScopes := &testRuntimeScopeServiceStub{
 		ledger:          &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "identity-handoff"},
 		capturedRequest: &capturedRequest,
 	}
@@ -138,7 +138,7 @@ func TestBuild_SeparatesCompatibilitySelectorFromCanonicalRuntimeIdentity(t *tes
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-identity-handoff", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
-		runtimeOpening,
+		runtimeScopes,
 		testRuntimeWorkers{},
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
@@ -184,7 +184,7 @@ func TestBuild_UsesCompatibilityIdentityWhenCanonicalIdentityIsEmpty(t *testing.
 		factoryinternal.RuntimeFileLoggingPolicyDisabled,
 		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-identity-fallback", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
-		testRuntimeOpening(newTestRuntimeLedger),
+		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
@@ -215,7 +215,7 @@ func TestBuild_FinalizesRecordingBeforeClosingRuntimeSinksOnPartialFailure(t *te
 	recorder := &runtimeRecordingsRecorderStub{onFinalize: func() {
 		events = append(events, "recording.finalize")
 	}}
-	runtimeOpening := &testRuntimeOpeningStub{
+	runtimeScopes := &testRuntimeScopeServiceStub{
 		ledger:   &recordingfixtures.ScriptedRuntimeLedger{GenerationID: "partial-runtime"},
 		recorder: recorder,
 	}
@@ -228,7 +228,7 @@ func TestBuild_FinalizesRecordingBeforeClosingRuntimeSinksOnPartialFailure(t *te
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
 		loaded, "partial-runtime", "", clockwork.NewFakeClock(), "recording.json", nil, nil, false, nil, nil, nil, nil,
-		runtimeOpening,
+		runtimeScopes,
 		testRuntimeWorkers{}, failingRuntimeWorkerSessionsFactory(), nil,
 	)
 	if err == nil {
@@ -255,7 +255,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		logDir, factory.RuntimeLogStorageConfig{},
 		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
-		testRuntimeOpening(newTestRuntimeLedger),
+		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
@@ -293,7 +293,7 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		factoryinternal.RuntimeMetricsPolicyDisabled,
 		metricsDir, factory.RuntimeMetricsStorageConfig{},
 		loaded, "runtime-disabled", "", clockwork.NewFakeClock(), "", nil, nil, false, nil, nil, nil, nil,
-		testRuntimeOpening(newTestRuntimeLedger),
+		testRuntimeScopeService(newTestRuntimeLedger),
 		testRuntimeWorkers{},
 		testRuntimeWorkerSessionsFactory(t),
 		nil,
@@ -499,17 +499,17 @@ func newTestRuntimeLedger(
 	return &recordingfixtures.ScriptedRuntimeLedger{}
 }
 
-func testRuntimeOpening(
+func testRuntimeScopeService(
 	ledgerFactory func(
 		recordings.InitialStructureSource,
 		func() time.Time,
 		interfaces.RuntimeDefinitionLookup,
 	) recordings.RuntimeEventLedger,
-) recordings.RuntimeOpening {
-	return &testRuntimeOpeningStub{ledgerFactory: ledgerFactory}
+) recordings.RuntimeScopeService {
+	return &testRuntimeScopeServiceStub{ledgerFactory: ledgerFactory}
 }
 
-type testRuntimeOpeningStub struct {
+type testRuntimeScopeServiceStub struct {
 	ledger          recordings.RuntimeEventLedger
 	ledgerFactory   func(recordings.InitialStructureSource, func() time.Time, interfaces.RuntimeDefinitionLookup) recordings.RuntimeEventLedger
 	recorder        recordings.RuntimeRecorder
@@ -517,49 +517,51 @@ type testRuntimeOpeningStub struct {
 	capturedRequest *recordings.RuntimeScopeRequest
 }
 
-func (opening *testRuntimeOpeningStub) OpenRuntime(
+func (runtimeScopes *testRuntimeScopeServiceStub) OpenRuntime(
 	_ context.Context,
 	request recordings.RuntimeScopeRequest,
 ) (recordings.RuntimeScopeResult, error) {
-	if opening.capturedSource != nil {
-		*opening.capturedSource = request.Topology
+	if runtimeScopes.capturedSource != nil {
+		*runtimeScopes.capturedSource = request.Topology
 	}
-	if opening.capturedRequest != nil {
-		*opening.capturedRequest = request
+	if runtimeScopes.capturedRequest != nil {
+		*runtimeScopes.capturedRequest = request
 	}
-	ledger := opening.ledger
-	if opening.ledgerFactory != nil {
-		ledger = opening.ledgerFactory(request.Topology, request.Now, request.Definitions)
+	ledger := runtimeScopes.ledger
+	if runtimeScopes.ledgerFactory != nil {
+		ledger = runtimeScopes.ledgerFactory(request.Topology, request.Now, request.Definitions)
 	}
-	return recordings.RuntimeScopeResult{Ledger: ledger, Recorder: opening.recorder}, nil
+	return recordings.RuntimeScopeResult{Ledger: ledger, Recorder: runtimeScopes.recorder}, nil
 }
 
-func (*testRuntimeOpeningStub) Projection() recordings.ProjectionService { return nil }
+func (*testRuntimeScopeServiceStub) Projection() recordings.ProjectionService { return nil }
 
-func (*testRuntimeOpeningStub) ReconstructCanonicalFactoryWorldState(
+func (*testRuntimeScopeServiceStub) ReconstructCanonicalFactoryWorldState(
 	[]interfaces.FactoryEvent,
 	int,
 ) (recordings.FactoryWorldState, error) {
 	return recordings.FactoryWorldState{}, nil
 }
 
-func (*testRuntimeOpeningStub) ReplayClock(*recordings.ReplayArtifact) recordings.Clock { return nil }
+func (*testRuntimeScopeServiceStub) ReplayClock(*recordings.ReplayArtifact) recordings.Clock {
+	return nil
+}
 
-func (*testRuntimeOpeningStub) ReplayExecution(
+func (*testRuntimeScopeServiceStub) ReplayExecution(
 	*recordings.ReplayArtifact,
 ) (providers.Service, platformprocess.CommandRunner, []recordings.ReplayHook, recordings.CompletionDeliveryPlanner, error) {
 	return nil, nil, nil, nil, nil
 }
 
-func (*testRuntimeOpeningStub) LoadReplayInput(recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
+func (*testRuntimeScopeServiceStub) LoadReplayInput(recordings.LoadReplayInputRequest) (recordings.LoadReplayInputResult, error) {
 	return recordings.LoadReplayInputResult{}, nil
 }
 
-func (*testRuntimeOpeningStub) LoadResumeInput(recordings.LoadResumeInputRequest) (recordings.LoadResumeInputResult, error) {
+func (*testRuntimeScopeServiceStub) LoadResumeInput(recordings.LoadResumeInputRequest) (recordings.LoadResumeInputResult, error) {
 	return recordings.LoadResumeInputResult{}, nil
 }
 
-var _ recordings.RuntimeOpening = (*testRuntimeOpeningStub)(nil)
+var _ recordings.RuntimeScopeService = (*testRuntimeScopeServiceStub)(nil)
 
 func testRuntimeLoggerFactory(*zap.Logger, bool) factory.Logger { return factory.NoopLogger{} }
 

@@ -67,12 +67,12 @@ func provideRecordingsRoot(
 	return service, nil
 }
 
-func provideRecordingsRuntimeOpening(
+func provideRecordingsRuntimeScopeService(
 	service recordings.Service,
-) (recordings.RuntimeOpening, error) {
-	runtime, ok := service.(recordings.RuntimeOpening)
+) (recordings.RuntimeScopeService, error) {
+	runtime, ok := service.(recordings.RuntimeScopeService)
 	if !ok || runtime == nil {
-		return nil, fmt.Errorf("compose Recordings runtime opening: service does not implement RuntimeOpening")
+		return nil, fmt.Errorf("compose Recordings runtime scope: service does not implement RuntimeScopeService")
 	}
 	return runtime, nil
 }

@@ -2,14 +2,15 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
@@ -33,8 +34,8 @@ import (
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
+	factorysessionmcp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
@@ -53,6 +54,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
+	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 	"go.uber.org/zap"
 )
@@ -130,15 +132,6 @@ func provideFactorySessionsWorkingDirectory(
 ) platformfilesystem.WorkingDirectory {
 	if edges.FactorySessionsWorkingDirectory != nil {
 		return edges.FactorySessionsWorkingDirectory
-	}
-	return platformfilesystem.Local{}
-}
-
-func provideFactorySessionExecutionOpeningFileSystem(
-	edges serviceedges.Edges,
-) factorysessionwire.ExecutionOpeningFileSystem {
-	if edges.FactorySessionExecutionOpeningFileSystem != nil {
-		return edges.FactorySessionExecutionOpeningFileSystem
 	}
 	return platformfilesystem.Local{}
 }
@@ -447,8 +440,10 @@ func providePackagedFactoryInstallation(
 
 func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLoader) factorysessionwire.DurableExecutionFactory {
 	return func(
-		definition factorydefinitions.RuntimeOpeningRequest,
-		session factorysessions.SessionRuntimeOpeningRequest,
+		definition factorydefinitions.RuntimeSelection,
+		persistence factorysessions.PersistencePolicy,
+		systemConfigHome string,
+		systemConfigPath string,
 		defaults operatorsettings.ResolvedDefaults,
 		root factorysessionwire.RuntimeRoot,
 		clock factoryruntime.Clock,
@@ -460,7 +455,9 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 		return factorysessionwire.NewDurableExecutionRuntime(
 			loadOperatorConfig,
 			definition,
-			session,
+			persistence,
+			systemConfigHome,
+			systemConfigPath,
 			defaults,
 			root,
 			clock,
@@ -556,71 +553,6 @@ func provideWorkContentStagingService(
 	return workwire.NewContentStagingService(filesystem, random, clock, 0)
 }
 
-func provideApplicationRuntimeAdapter(
-	edges serviceedges.Edges,
-	visualizationFactory factoryvisualization.RuntimeFactory,
-	visualizationSinks factoryvisualization.RuntimeSinkOwner,
-	httpBinding httpRuntimeBinding,
-	newRunner lifecycle.RunnerFactory,
-) (factorysessionwire.RuntimeAdapter, error) {
-	if visualizationFactory == nil || visualizationSinks == nil || httpBinding == nil || newRunner == nil {
-		return nil, errors.New("Factory visualization, HTTP binding, and lifecycle component operations are required")
-	}
-	fixedSink := edges.FactoryVisualizationSink
-	fixedRootObserver := edges.FactoryVisualizationRootObserver
-	return func(
-		opened factorysessionwire.OpenedApplicationRuntime,
-		sinkID factorysessions.VisualizationSinkID,
-	) (factorysessions.BoundProcessComponents, error) {
-		sink, err := selectVisualizationSink(visualizationSinks, sinkID)
-		if err != nil {
-			return factorysessions.BoundProcessComponents{}, err
-		}
-		if fixedSink != nil {
-			sink = fixedSink
-		}
-		var visualization lifecycle.Component
-		if sink != nil {
-			logger := opened.Resources.Logger
-			if logger == nil {
-				logger = zap.NewNop()
-			}
-			visualized, err := visualizationFactory(
-				opened.Visualization.Reader, opened.Visualization.Projections, opened.Resources.Clock, sink,
-				func(err error) {
-					logger.Error("Factory visualization failed", zap.Error(err))
-				},
-			)
-			if err != nil {
-				return factorysessions.BoundProcessComponents{}, err
-			}
-			if fixedRootObserver != nil {
-				fixedRootObserver(visualized)
-			}
-			// Factory Session lifecycle must not auto-activate Visualization.
-			// Peers leave the composed root inert until explicit Activate.
-			visualization = lifecycle.Functions{
-				StartFunc: func(context.Context) error { return nil },
-				StopFunc: func(ctx context.Context) error {
-					_, err := visualized.StopDrain(ctx, factoryvisualization.StopDrainRequest{})
-					return err
-				},
-			}
-		}
-		handler, err := httpBinding(opened)
-		if err != nil {
-			return factorysessions.BoundProcessComponents{}, err
-		}
-		transport := newRunner(func(ctx context.Context) error {
-			return opened.Process.RunTransport(ctx, handler)
-		})
-		return factorysessions.BoundProcessComponents{
-			Transport:     transport,
-			Visualization: visualization,
-		}, nil
-	}, nil
-}
-
 // selectVisualizationSink resolves the transport-selected visualization sink
 // the opening request carries. Factory Sessions carries only the opaque
 // selection, so the composition root that owns the sink registry is the only
@@ -643,184 +575,109 @@ func provideManagedRunnerFactory() runtimeapplication.ManagedRunnerFactory {
 	return runtimeapplication.NewManagedRunner
 }
 
-func provideFixtureStdioApplicationBuilder(
-	build initializerapplication.StdioRunnerBuilder,
+type mcpServerBuilder func(
+	string,
+	recordings.Service,
+	factorysessionwire.RequestPreparation,
+	factoryruntime.WorkflowPreviewOperation,
+	factorysessions.Service,
+) (*mcpserver.Server, error)
+
+// provideMCPServerBuilder composes owner adapters at the Wire boundary. The
+// protocol stdio package receives only the resulting inert server and caller
+// streams; it does not construct Factory Sessions, Recordings, or workflow
+// services while an opening is being selected.
+func provideMCPServerBuilder(
+	workingDirectory platformfilesystem.WorkingDirectory,
+	settings operatorsettings.Service,
+	providerService providers.Service,
+	settingsFiles operatorsettings.FileSystem,
+	homeDirectory factorysessions.HomeDirectoryResolver,
+) mcpServerBuilder {
+	return func(
+		projectRoot string,
+		recordingsService recordings.Service,
+		prepare factorysessionwire.RequestPreparation,
+		workflowPreview factoryruntime.WorkflowPreviewOperation,
+		sessions factorysessions.Service,
+	) (*mcpserver.Server, error) {
+		workingRoot := strings.TrimSpace(projectRoot)
+		if workingRoot == "" {
+			var err error
+			workingRoot, err = workingDirectory.Getwd()
+			if err != nil {
+				return nil, fmt.Errorf("resolve MCP working directory: %w", err)
+			}
+		}
+		inspection := factorysessionmcp.RecordingsInspection(recordingsService)
+		skills, resources, err := mcpSubagentContent(settings, providerService, settingsFiles, homeDirectory)
+		if err != nil {
+			return nil, err
+		}
+		toolOperation := factorysessionmcp.BindToolOperation(
+			inspection, prepare, workflowPreview, sessions, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString),
+		)
+		return mcpserver.New(mcpserver.Options{
+			Skills:    skills,
+			Resources: resources,
+			ToolOperation: func(ctx context.Context, name string, raw json.RawMessage) (json.RawMessage, error) {
+				if name == factorysessionmcp.ToolSubagent {
+					if err := configureMCPProviders(ctx, settings, providerService, homeDirectory); err != nil {
+						return nil, err
+					}
+				}
+				return toolOperation(ctx, name, raw)
+			},
+		})
+	}
+}
+
+func stdioLifecyclePlan(transport lifecycle.Component) lifecycle.Plan {
+	return lifecycle.Plan{Components: []lifecycle.NamedComponent{{
+		Name: "stdio transport", Component: transport, Primary: true,
+	}}}
+}
+
+func provideStdioHandler(
+	sessions factorysessions.Service,
+	recordingsRoot recordings.Service,
+	build initializer.LifecycleRunnerBuilder,
 	newRunner lifecycle.RunnerFactory,
 	open mcpstdio.Opener,
 	buildServer mcpServerBuilder,
 	prepare factorysessionwire.RequestPreparation,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	target factorysessions.TargetExecutionService,
-) factorysessionwire.FixtureStdioApplicationBuilder {
-	return func(
-		ctx context.Context,
-		execution factorysessionwire.DurableExecutionService,
-		input io.Reader,
-		output io.Writer,
-	) (factorysessionwire.StdioApplication, error) {
-		openSession := initializer.StdioSessionOpener(func(
-			sessionCtx context.Context,
-			sessionInput io.Reader,
-			sessionOutput io.Writer,
-		) (initializer.OpenedApplication, error) {
-			if sessionCtx == nil {
-				return initializer.OpenedApplication{}, errors.New("MCP stdio context is required")
-			}
-			if err := sessionCtx.Err(); err != nil {
-				return initializer.OpenedApplication{}, err
-			}
-			server, err := buildServer(execution, nil, prepare, workflowPreview, target)
-			if err != nil {
-				return initializer.OpenedApplication{}, err
-			}
-			session, err := open(server, sessionInput, sessionOutput)
-			if err != nil {
-				return initializer.OpenedApplication{}, err
-			}
-			return stdioLifecycleOpening(newRunner(session.Run), runtimeartifact.Diagnostics{}, nil), nil
-		})
-		return build(ctx, openSession, input, output)
+) (processcontract.StdioHandler, error) {
+	if sessions == nil || build == nil || newRunner == nil || open == nil || buildServer == nil {
+		return nil, errors.New("MCP stdio requires Factory Sessions root, lifecycle, transport, and server")
 	}
-}
-
-func provideRuntimeStdioApplicationBuilder(
-	build initializerapplication.OpenedStdioRunnerBuilder,
-	newRunner lifecycle.RunnerFactory,
-	open mcpstdio.Opener,
-	buildServer mcpServerBuilder,
-	prepare factorysessionwire.RequestPreparation,
-	target factorysessions.TargetExecutionService,
-) factorysessionwire.RuntimeStdioApplicationBuilder {
-	return func(
-		ctx context.Context,
-		opened factorysessionwire.OpenedExecutionRuntime,
-		input io.Reader,
-		output io.Writer,
-	) (factorysessionwire.StdioApplication, error) {
-		neutral := initializer.OpenedStdioApplication{
-			OpenSession: func(
-				sessionCtx context.Context,
-				sessionInput io.Reader,
-				sessionOutput io.Writer,
-			) (initializer.OpenedApplication, error) {
-				if sessionCtx == nil {
-					return initializer.OpenedApplication{}, errors.New("MCP stdio context is required")
-				}
-				if err := sessionCtx.Err(); err != nil {
-					return initializer.OpenedApplication{}, err
-				}
-				server, err := buildServer(opened.Execution, opened.Recordings, prepare, opened.WorkflowPreview, target)
-				if err != nil {
-					return initializer.OpenedApplication{}, err
-				}
-				session, err := open(server, sessionInput, sessionOutput)
-				if err != nil {
-					return initializer.OpenedApplication{}, err
-				}
-				return stdioLifecycleOpening(
-					newRunner(session.Run), opened.Resources.Diagnostics, opened.Resources.Close,
-				), nil
-			},
+	return func(ctx context.Context, intent processcontract.MCPIntent) error {
+		if ctx == nil {
+			return errors.New("MCP stdio context is required")
 		}
-		return build(ctx, neutral, input, output)
-	}
-}
-
-func stdioLifecycleOpening(
-	transport lifecycle.Component,
-	diagnostics runtimeartifact.Diagnostics,
-	close func() error,
-) initializer.OpenedApplication {
-	plan := lifecycle.Plan{Components: []lifecycle.NamedComponent{{
-		Name: "stdio transport", Component: transport, Primary: true,
-	}}}
-	if close != nil {
-		plan.Resources = []lifecycle.NamedResource{{
-			Name: "runtime application", Resource: lifecycle.CloserFunc(close),
-		}}
-	}
-	return initializer.OpenedApplication{Plan: plan, Diagnostics: diagnostics}
-}
-
-type stdioApplicationOpener struct {
-	open               factorysessionwire.StdioOpeningOperation
-	presentations      factorysessions.OpeningPresentationOwner
-	configureProviders mcpProviderConfigurer
-}
-
-func (adapter stdioApplicationOpener) OpenStdio(
-	ctx context.Context,
-	intent processcontract.MCPIntent,
-) (initializer.RunApplication, error) {
-	if intent.RuntimeBacked {
-		if err := adapter.configureProviders(ctx, intent.HomeDir); err != nil {
-			return nil, fmt.Errorf("configure MCP providers: %w", err)
+		if err := ctx.Err(); err != nil {
+			return err
 		}
-	}
-	request := factorysessions.StdioOpeningRequest{
-		FixtureCatalogPath: intent.FixtureCatalogPath,
-		RuntimeBacked:      intent.RuntimeBacked,
-		ProjectRoot:        intent.ProjectRoot,
-		SystemConfigHome:   intent.HomeDir,
-	}
-	var scopeID factorysessions.OpeningScopeID
-	var err error
-	if adapter.presentations != nil {
-		scopeID, err = adapter.presentations.RegisterStdio(factorysessions.StdioOpeningScope{
-			Input: intent.Stdin, Output: intent.Stdout,
-		})
+		if intent.Stdin == nil || intent.Stdout == nil {
+			return errors.New("MCP stdio input and output are required")
+		}
+		server, err := buildServer(intent.ProjectRoot, recordingsRoot, prepare, workflowPreview, sessions)
 		if err != nil {
-			return nil, fmt.Errorf("register stdio opening presentation: %w", err)
+			return err
 		}
-		request.ScopeID = scopeID
-	}
-	application, err := adapter.open.OpenStdio(
-		ctx,
-		request,
-	)
-	if err != nil {
-		if adapter.presentations != nil {
-			adapter.presentations.Close(scopeID)
+		transport, err := open(server, intent.Stdin, intent.Stdout)
+		if err != nil {
+			return err
 		}
-		return nil, err
-	}
-	if application == nil {
-		if adapter.presentations != nil {
-			adapter.presentations.Close(scopeID)
+		runner, err := build(ctx, stdioLifecyclePlan(newRunner(transport.Run)), runtimeartifact.Diagnostics{}, nil)
+		if err != nil {
+			return err
 		}
-		return nil, errors.New("stdio opening returned nil application")
-	}
-	if adapter.presentations == nil {
-		return application, nil
-	}
-	return scopedRunApplication{
-		application: application,
-		close:       func() { adapter.presentations.Close(scopeID) },
+		if runner == nil {
+			return errors.New("MCP stdio application is required")
+		}
+		return runner.Run(ctx)
 	}, nil
-}
-
-type scopedRunApplication struct {
-	application initializer.RunApplication
-	close       func()
-}
-
-func (application scopedRunApplication) Run(ctx context.Context) error {
-	defer application.close()
-	return application.application.Run(ctx)
-}
-
-func provideStdioApplicationOpener(
-	open factorysessionwire.StdioOpeningOperation,
-	presentations factorysessions.OpeningPresentationOwner,
-	configureProviders mcpProviderConfigurer,
-) (processcontract.StdioApplicationOpener, error) {
-	if open == nil {
-		return nil, errors.New("Factory Session stdio opening operation is required")
-	}
-	if configureProviders == nil {
-		return nil, errors.New("MCP provider configuration is required")
-	}
-	return stdioApplicationOpener{open: open, presentations: presentations, configureProviders: configureProviders}, nil
 }
 
 func provideLifecycleRunnerFactory() lifecycle.RunnerFactory {
@@ -834,17 +691,19 @@ func provideRunInvocationOperation(
 }
 
 func provideRunSelectionFactory(
-	open runcli.Opener,
 	buildRunner runcli.RuntimeRunnerBuilder,
 	invocation factorysessionwire.InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
-	directJavaScript factorysessionwire.DirectJavaScriptRunOperation,
-	buildApplication initializer.RuntimeRunnerBuilder,
+	directJavaScript runcli.DirectJavaScriptRunOperation,
+	prepareWorkTarget work.SingleWorkTargetPreparation,
+	loadMockWorkers workers.MockWorkersConfigDiagnosticsLoader,
+	buildRuntimeRequest runcli.SessionStartRequestFactory,
 	presentations factorysessions.OpeningPresentationOwner,
+	visualizations factoryvisualization.RuntimeSinkOwner,
 ) (runcli.SelectionFactory, error) {
 	return runcli.NewSelectionFactory(
-		open, buildRunner, invocation, presentation, directJavaScript, buildApplication,
-		presentations,
+		buildRunner, invocation, presentation, directJavaScript,
+		prepareWorkTarget, loadMockWorkers, buildRuntimeRequest, presentations, visualizations,
 	)
 }
 
@@ -860,8 +719,4 @@ func provideWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector 
 
 func provideResponsePresentation() factoryvisualization.ResponsePresentation {
 	return factoryvisualizationwire.NewResponsePresentation()
-}
-
-func provideDirectJavaScriptSyncRunner() factorysessionwire.DirectJavaScriptSyncRunner {
-	return sessionexecutioncli.RunNormalizedSync
 }

@@ -123,6 +123,31 @@ builds, backend startup, transcription, offline reuse, or cleanup. For another
 build, inspect that build's selected manifest entry and verify its artifact
 identity before reusing this host policy.
 
+### Linux LocalAI backend installation
+
+On Linux amd64, `you` installs managed LocalAI backends from LocalAI's current
+backend gallery on first use. It selects a CUDA 12 backend when an NVIDIA GPU
+device and `nvidia-smi` are available. Otherwise it selects the CPU backend.
+The `localai-llamacpp`, `localai-whisper`, and `localai-vibevoice` identities
+map to the corresponding gallery backends. VibeVoice uses the `vibevoice-cpp`
+gallery variant for its GGUF model bundle. The installed backend stays in the
+user cache for later use.
+
+`you` uses `LOCALAI_BINARY` when it is set, then `local-ai` on `PATH`. If
+neither is available, it downloads the latest official Linux amd64 LocalAI
+binary and verifies its size and SHA-256 against that release's checksums.
+The first install needs access to GitHub, LocalAI's backend gallery, and its
+backend image registry. Run `you` inside WSL Ubuntu to use the current CUDA
+gallery builds on a Windows host.
+
+On native Windows, `you` checks for an NVIDIA GPU and, when online, reads the
+latest compatible backend archive manifest from the project's published
+releases. It selects a CUDA archive for each backend that has one, then uses
+the CPU archive for backends without a CUDA build. The current publication
+includes manual Windows CUDA test archives for llama.cpp, Whisper, and
+VibeVoice. Offline first use uses the bundled archive manifest. A publication
+loaded earlier in the same process remains available to offline requests.
+
 ### Built-in TTS bundle identity
 
 The built-in `tts` model uses one immutable three-file bundle. The bundle contains one model, one tokenizer, and one voice.
@@ -144,13 +169,14 @@ The LocalAI source commit is `b224c96db6f4b87306a33a808650bfce63b12588`.
 The protocol source is `backend/backend.proto` at revision
 `ad62c6df07ae1169eb14411a565a689cd996b19c`.
 
-The published backend artifacts use these target identities:
+The packaged backend publication used by native Windows and macOS includes
+these target identities. Linux amd64 uses the LocalAI gallery described above.
 
 | Target | Artifact | Size in bytes | SHA-256 | Accelerator |
 | --- | --- | ---: | --- | --- |
 | `darwin-arm64` | `localai-backend-localai-vibevoice-darwin-arm64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz` | `9200265` | `624385483a7c67804ff546ed8649e35c4e7122b833f318ff4d1cf2d44d9f2752` | `metal` |
-| `linux-amd64` | `localai-backend-localai-vibevoice-linux-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.tar.gz` | `14976678` | `8a8ae6b816e4eb4b7088a7e5c7ef291dbd657f6f38f930b5471b9a73fb056bcb` | `cpu` |
 | `windows-amd64` | `localai-backend-localai-vibevoice-windows-amd64-000e37282bc5bb09edc20f7047a47924122ba3a0.zip` | `10757902` | `8f3c14212948be34c930e9a790af7757460cb2f6bb6a0de80d5b9f95b71e8646` | `cpu` |
+| `windows-amd64-cuda` | `localai-backend-localai-vibevoice-windows-amd64-cuda-000e37282bc5bb09edc20f7047a47924122ba3a0.zip` | `448293919` | `e3f9c42e1d4433044857b1e08422f43efc564c858a73474e993d17f9ffa83342` | `cuda` |
 
 The role manifest is authored at
 `pkg/services/models/internal/artifacts/localai-model-role-artifacts.json`.
@@ -400,6 +426,26 @@ Content-Type: application/json
 The HTTP response uses the same `embedding` slot, `JSON` modality,
 `application/json` media type, and canonical JSON vector content.
 
+For direct `POST /models/invocations` responses, `TEXT` and `JSON` outputs use
+`content`. `AUDIO`, `IMAGE`, `VIDEO`, and `BINARY` outputs use `contentBase64`
+instead. Decode that field with standard Base64 to recover the original bytes.
+
+For a direct HTTP invocation with local media files, send a multipart request.
+The `request` part contains the generic invocation JSON. Each `files` part
+fills the next image, audio, video, or binary input that has no inline content
+or artifact reference, in input order:
+
+```bash
+curl -X POST http://localhost:7437/models/invocations \
+  -F 'request={"scope":"factory-session:example","holder":"example","model":{"nameOrUri":"llm"},"operation":"OMNI","inputs":[{"name":"prompt","modality":"TEXT","content":"Describe the audio and video."},{"name":"audio","modality":"AUDIO","mediaType":"audio/wav"},{"name":"video","modality":"VIDEO","mediaType":"video/mp4"}]};type=application/json' \
+  -F 'files=@speech.wav;type=audio/wav' \
+  -F 'files=@clip.mp4;type=video/mp4'
+```
+
+Each uploaded file must be nonempty and no larger than 8 MiB. The complete
+multipart body is limited to 64 MiB. JSON callers can continue to use
+`contentBase64` with the file bytes and `mediaType` for each media input.
+
 `ASR` preserves backend segment timestamps in the `segments` JSON output. Each
 segment contains `id`, `start`, `end`, and `text` fields.
 
@@ -469,6 +515,25 @@ you --json models invoke tts --operation TTS \
   --output audio=speech.wav
 ```
 
+An operator-configured Qwen3-TTS or IndexTTS model can accept a reference WAV
+through the optional `voice:AUDIO` slot. Pass the reference transcript as the
+`ref_text` parameter when that backend requires it. For example, after
+configuring a model named `qwen3-tts-0.6b`:
+
+```bash
+you models invoke qwen3-tts-0.6b --operation TTS \
+  --input text="Hello, this is a test." \
+  --input voice=@reference.wav \
+  --parameter '{"name":"ref_text","value":"Zero."}' \
+  --output audio=speech.wav
+```
+
+Use the same input and parameter form for an operator-configured IndexTTS
+model. The built-in `tts` model is VibeVoice; Qwen3-TTS and IndexTTS are not
+built-in model bundles. File inputs to direct `models invoke` are limited to
+8 MiB. A successful WAV output confirms synthesis, but voice similarity
+depends on the selected backend and reference audio.
+
 ### Input and output failures
 
 An empty assignment, unknown slot, unreadable file, unsupported media type, or
@@ -504,9 +569,15 @@ following named input slots:
 | `video` | `@` file detected as video | No | No |
 | `parameters` | JSON text prefixed with `json:` | No | No |
 
-The pinned-protocol conformance fixture records the `Audios` and `Videos`
-request fields as accepted at the pinned llama.cpp protocol revision. This
-slice therefore supports text, images, audio, and video. The output is text.
+The `OMNI` request can carry text, image, audio, and video inputs to the pinned
+LocalAI protocol. The protocol conformance fixture checks the request fields;
+it does not confirm that a loaded model understands the media. The output is
+text. The built-in `llm` requires a verified multimodal projector for media
+inference. Check `you models inspect llm` before sending media. If
+`mediaReadiness` reports that the projector is missing or invalid, video is
+unavailable. The effective operation also omits `image` and `audio`. Requests
+for any of these media inputs fail before backend execution. Pull the model to
+repair an incomplete cache, then inspect it again.
 
 Use a repeatable `--input` flag for each named binding. Set
 `--operation OMNI` to select the built-in operation.
@@ -517,6 +588,20 @@ you models invoke llm --operation OMNI --input prompt="Write a haiku"
 
 The command writes the generated UTF-8 text to stdout. Diagnostics remain on
 stderr. Use global `--json` when a structured output object is required.
+
+### Limit OMNI output tokens
+
+Pass an explicit `max_tokens` direct parameter to cap generation length:
+
+```bash
+you models invoke llm --operation OMNI --input prompt="Count to ten" \
+  --parameter '{"name":"max_tokens","value":128}'
+```
+
+`max_tokens` accepts a positive integer from `1` to `2147483647`. When
+supplied, it sets the LocalAI generation token limit (`PredictOptions.Tokens`)
+and is excluded from request metadata. When omitted, generation stays
+unbounded (`Tokens=0`) and context size stays model-derived (`ContextSize=0`).
 
 ### Add Images In Command Order
 
@@ -536,7 +621,8 @@ non-repeatable slot fails before generation.
 
 Prefix a file path with `@` to read its bytes and detect its media type. Common
 extensions map to their concrete types, including `.txt`, `.png`, `.wav`, and
-`.mp4`. Unknown extensions use content detection.
+`.mp4`. Unknown extensions use content detection. Each file must be nonempty
+and no larger than 8 MiB.
 
 ```bash
 you models invoke llm \
@@ -548,11 +634,25 @@ you models invoke llm \
   --input audio=@speech.wav
 ```
 
+When a video contains an audio stream, `OMNI` reads the first audio stream
+and the video frames. It returns separate `Embedded audio from video input 1`
+and `Video` observations. A request with a separate `audio` input and a
+`video` input returns labeled observations for both sources. The host needs
+`ffmpeg` and `ffprobe` on `PATH` for video input. A video without an audio
+stream still returns a visual answer.
+
+Combined audio and video analysis does not include the optional `usage`
+output. It rejects an explicit `max_tokens` parameter because the composed
+response cannot apply that token limit exactly. Single-modality `OMNI`
+invocations continue to support `max_tokens` and `usage`.
+
 The detected type must match the named slot. For example,
 `--input audio=@clip.mp4` is rejected before generation. The Models service
 classifies this as `MEDIA_CAPABILITY`. The CLI reports the safe
 `CLI_COMMAND_FAILED` diagnostic.
 Unsupported modalities are never silently omitted or converted.
+The built-in `OMNI` operation has no general document or binary input slot.
+Convert a document to text or a supported media type before invocation.
 
 Cancel a running invocation with `Ctrl-C`. Cancellation releases model capacity
 and leaves no partial stdout or output file.
@@ -578,6 +678,12 @@ Session owns dispatch and the primary result. This is inference behavior, not
 an agent loop. Legacy `MODEL_WORKER` and `MODEL_INVOKE` values remain migration
 inputs, but new Factory configuration should use `INFERENCE_WORKER` and
 `INFERENCE_RUN`.
+
+For media understanding, stage an image, audio, or video file as Work and bind
+its content to the matching model input slot. The inference worker reads the
+staged file bytes before invoking Models, preserving the file's media type and
+the order of repeated inputs. Each media input is limited to 32 MiB in this
+path. Direct `you models invoke` file inputs use the 8 MiB limit above.
 
 Use `you docs providers` for agent provider/model selection and limits. Use
 `you docs workers` for worker capabilities, `you docs workstations` for routing

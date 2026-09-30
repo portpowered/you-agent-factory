@@ -208,6 +208,19 @@ func TestValidateRejectsMigratedInputSetAndMetadataDriftIndependently(t *testing
 			path:     "you docs",
 			field:    "completion",
 		},
+		{
+			name: "missing offline flag",
+			mutate: func(input *Input) {
+				input.ProductionInputs.Flags = removeInputFlag(
+					input.ProductionInputs.Flags,
+					"you.models.invoke.flag.offline",
+				)
+			},
+			kind:     KindMissingInput,
+			stableID: "you.models.invoke.flag.offline",
+			path:     "you models invoke",
+			field:    "flag",
+		},
 	}
 
 	for _, test := range tests {

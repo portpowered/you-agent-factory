@@ -6,124 +6,13 @@ import (
 	"reflect"
 	"testing"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-func TestService_CanonicalLiveControlAndResponseRouting(t *testing.T) {
-	t.Parallel()
-
-	service, live, response := canonicalLiveControlFixture()
-	assertCanonicalLivePause(t, service, live)
-	assertCanonicalLiveCancel(t, service, live)
-	assertCanonicalLiveTerminate(t, service, live)
-	assertCanonicalLiveResponseSubscription(t, service, live, response)
-}
-
-func canonicalLiveControlFixture() (*Service, *canonicalInspectionLiveRuntimeFake, *canonicalInspectionResponseStreamFake) {
-	const sessionID = "live-control"
-	liveSession := &livesession.LiveSession{
-		ID:             sessionID,
-		ResponseEvents: responseeventstore.NewSessionResponseEventStore(sessionID, platformclock.Real{}, func() string { return "event-1" }),
-	}
-	live := &canonicalInspectionLiveRuntimeFake{
-		resolved: map[string]*livesession.LiveSession{sessionID: liveSession},
-		controlResult: factorysessions.LifecycleControlResult{
-			Outcome: factorysessions.LifecycleControlOutcomeAccepted,
-			Status:  factorysessions.LifecycleStatusPaused,
-		},
-	}
-	response := &canonicalInspectionResponseStreamFake{cursor: &factorysessions.ResponseEventCursor{}}
-	return &Service{liveRuntime: live, responseEvents: response}, live, response
-}
-
-func assertCanonicalLivePause(t *testing.T, service *Service, live *canonicalInspectionLiveRuntimeFake) {
-	t.Helper()
-	paused, err := service.Control(context.Background(), factorysessions.SessionControlRequest{
-		SessionID: " live-control ", Mode: factorysessions.SessionOperationModeLive,
-		Operation:   factorysessions.SessionControlPause,
-		Correlation: factorysessions.SessionOperationCorrelation{RequestID: "control-1", TurnID: "turn-1"},
-	})
-	if err != nil {
-		t.Fatalf("canonical live pause: %v", err)
-	}
-	if paused.Outcome != factorysessions.LifecycleControlOutcomeAccepted || paused.Status != factorysessions.LifecycleStatusPaused || paused.Closed {
-		t.Fatalf("live pause = %#v, want typed lifecycle result", paused)
-	}
-	live.mu.Lock()
-	controlCalls, closeCalls, operation, control := live.controlCalls, live.closeCalls, live.lastOperation, live.lastControl
-	live.mu.Unlock()
-	if controlCalls != 1 || closeCalls != 0 || operation != factorysessions.LifecycleControlKind(factorysessions.SessionControlPause) || control.RequestID != "control-1" || control.TurnID != "turn-1" {
-		t.Fatalf("live pause owner call = control:%d close:%d operation:%q request:%#v, want direct pause owner", controlCalls, closeCalls, operation, control)
-	}
-}
-
-func assertCanonicalLiveCancel(t *testing.T, service *Service, live *canonicalInspectionLiveRuntimeFake) {
-	t.Helper()
-	cancelled, err := service.Control(context.Background(), factorysessions.SessionControlRequest{
-		SessionID: "live-control", Mode: factorysessions.SessionOperationModeLive,
-		Operation: factorysessions.SessionControlCancel,
-	})
-	if err != nil {
-		t.Fatalf("canonical live cancel: %v", err)
-	}
-	if cancelled.Closed || cancelled.Operation != factorysessions.SessionControlCancel || cancelled.Status != factorysessions.LifecycleStatusCanceled {
-		t.Fatalf("live cancel = %#v, want typed lifecycle control result", cancelled)
-	}
-	live.mu.Lock()
-	controlCalls, closeCalls, operation := live.controlCalls, live.closeCalls, live.lastOperation
-	live.mu.Unlock()
-	if controlCalls != 2 || closeCalls != 0 || operation != factorysessions.LifecycleControlKind(factorysessions.SessionControlCancel) {
-		t.Fatalf("live cancel owner calls = control:%d close:%d operation:%q, want direct cancel control", controlCalls, closeCalls, operation)
-	}
-}
-
-func assertCanonicalLiveTerminate(t *testing.T, service *Service, live *canonicalInspectionLiveRuntimeFake) {
-	t.Helper()
-	terminated, err := service.Control(context.Background(), factorysessions.SessionControlRequest{
-		SessionID: "live-control", Mode: factorysessions.SessionOperationModeLive,
-		Operation: factorysessions.SessionControlTerminate,
-	})
-	if err != nil {
-		t.Fatalf("canonical live terminate: %v", err)
-	}
-	if terminated.Closed || terminated.Operation != factorysessions.SessionControlTerminate || terminated.Status != factorysessions.LifecycleStatusTerminated {
-		t.Fatalf("live terminate = %#v, want typed lifecycle control result", terminated)
-	}
-	live.mu.Lock()
-	controlCalls, closeCalls, operation := live.controlCalls, live.closeCalls, live.lastOperation
-	live.mu.Unlock()
-	if controlCalls != 3 || closeCalls != 0 || operation != factorysessions.LifecycleControlKind(factorysessions.SessionControlTerminate) {
-		t.Fatalf("live terminate owner calls = control:%d close:%d operation:%q, want direct terminate control", controlCalls, closeCalls, operation)
-	}
-}
-
-func assertCanonicalLiveResponseSubscription(t *testing.T, service *Service, live *canonicalInspectionLiveRuntimeFake, response *canonicalInspectionResponseStreamFake) {
-	t.Helper()
-	subscription, err := service.SubscribeResponses(context.Background(), factorysessions.SessionResponseSubscriptionRequest{
-		SessionID: "live-control", AfterSequence: 0, Kinds: []factorysessions.ResponseEventKind{factorysessions.ResponseEventKindMessage},
-	})
-	if err != nil {
-		t.Fatalf("canonical live SubscribeResponses: %v", err)
-	}
-	if subscription.Cursor != response.cursor {
-		t.Fatal("canonical live SubscribeResponses did not return live owner cursor")
-	}
-	live.mu.Lock()
-	closeCalls := live.closeCalls
-	live.mu.Unlock()
-	response.mu.Lock()
-	responseCalls := response.calls
-	response.mu.Unlock()
-	if closeCalls != 0 || responseCalls != 1 {
-		t.Fatalf("live response owner calls = close:%d response:%d, want response owner without close", closeCalls, responseCalls)
-	}
-}
 func TestService_CanonicalOperationsRejectInvalidValuesBeforeDependencies(t *testing.T) {
 	t.Parallel()
 
@@ -136,7 +25,7 @@ func TestService_CanonicalOperationsRejectInvalidValuesBeforeDependencies(t *tes
 		{Mode: factorysessions.SessionOperationModeLive, ValidateOnly: true, InitNewFactory: true},
 	}
 	for index, request := range invalidStarts {
-		if _, err := service.Start(context.Background(), request); err == nil {
+		if _, err := service.StartDurable(context.Background(), request); err == nil {
 			t.Fatalf("invalid Start case %d returned nil error", index)
 		}
 	}
@@ -164,8 +53,9 @@ func TestService_CanonicalOperationsReportTypedAvailabilityFailures(t *testing.T
 	t.Parallel()
 
 	service := &Service{}
-	if _, err := service.Start(context.Background(), factorysessions.SessionStartRequest{
+	if _, err := service.StartDurable(context.Background(), factorysessions.SessionStartRequest{
 		Mode:        factorysessions.SessionOperationModeDurable,
+		FolderPath:  "/test-factory",
 		Correlation: factorysessions.SessionOperationCorrelation{RequestID: "request"},
 	}); !errors.Is(err, factorysessions.ErrExecutionServiceNotConfigured) {
 		t.Fatalf("Start() error = %v, want durable availability error", err)
@@ -181,8 +71,9 @@ func TestService_CanonicalOperationsPropagateOwnerFailuresWithoutLegacyCalls(t *
 	startFailure := errors.New("durable request identity conflict")
 	durable := &canonicalDurableExecutionFake{asyncErr: startFailure}
 	service := &Service{durable: durable}
-	if _, err := service.Start(context.Background(), factorysessions.SessionStartRequest{
+	if _, err := service.StartDurable(context.Background(), factorysessions.SessionStartRequest{
 		Mode:        factorysessions.SessionOperationModeDurable,
+		FolderPath:  "/test-factory",
 		Correlation: factorysessions.SessionOperationCorrelation{RequestID: "request"},
 	}); !errors.Is(err, startFailure) {
 		t.Fatalf("Start() error = %v, want owner failure %v", err, startFailure)

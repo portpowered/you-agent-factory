@@ -1539,6 +1539,7 @@
         "TEXT",
         "IMAGE",
         "AUDIO",
+        "VIDEO",
         "JSON",
         "BINARY"
       ],
@@ -1891,6 +1892,9 @@
           "$ref": "#/$defs/WorkImageContentPart"
         },
         {
+          "$ref": "#/$defs/WorkVideoContentPart"
+        },
+        {
           "$ref": "#/$defs/WorkAudioContentPart"
         },
         {
@@ -1910,7 +1914,8 @@
         "IMAGE",
         "AUDIO",
         "JSON",
-        "BINARY"
+        "BINARY",
+        "VIDEO"
       ],
       "type": "string"
     },
@@ -2132,6 +2137,39 @@
         "DEFAULT"
       ],
       "type": "string"
+    },
+    "WorkVideoContentPart": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/WorkContentCommonFields"
+        },
+        {
+          "properties": {
+            "file": {
+              "$ref": "#/$defs/WorkContentDeprecatedFileProperty"
+            },
+            "type": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/WorkContentPartType"
+                }
+              ],
+              "enum": [
+                "VIDEO"
+              ]
+            },
+            "url": {
+              "$ref": "#/$defs/WorkContentURLProperty"
+            }
+          },
+          "required": [
+            "type",
+            "url"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Ordered video content for one work item."
     },
     "Worker": {
       "additionalProperties": true,

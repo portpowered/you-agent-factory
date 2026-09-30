@@ -1096,6 +1096,7 @@ $defs:
             - TEXT
             - IMAGE
             - AUDIO
+            - VIDEO
             - JSON
             - BINARY
         type: string
@@ -1339,6 +1340,7 @@ $defs:
         oneOf:
             - $ref: '#/$defs/WorkTextContentPart'
             - $ref: '#/$defs/WorkImageContentPart'
+            - $ref: '#/$defs/WorkVideoContentPart'
             - $ref: '#/$defs/WorkAudioContentPart'
             - $ref: '#/$defs/WorkJsonContentPart'
             - $ref: '#/$defs/WorkBinaryContentPart'
@@ -1352,6 +1354,7 @@ $defs:
             - AUDIO
             - JSON
             - BINARY
+            - VIDEO
         type: string
     WorkContentURLProperty:
         description: Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.
@@ -1491,6 +1494,24 @@ $defs:
         enum:
             - DEFAULT
         type: string
+    WorkVideoContentPart:
+        allOf:
+            - $ref: '#/$defs/WorkContentCommonFields'
+            - properties:
+                file:
+                    $ref: '#/$defs/WorkContentDeprecatedFileProperty'
+                type:
+                    allOf:
+                        - $ref: '#/$defs/WorkContentPartType'
+                    enum:
+                        - VIDEO
+                url:
+                    $ref: '#/$defs/WorkContentURLProperty'
+              required:
+                - type
+                - url
+              type: object
+        description: Ordered video content for one work item.
     Worker:
         additionalProperties: true
         description: A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.
