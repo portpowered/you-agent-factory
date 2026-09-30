@@ -74,6 +74,8 @@ type SessionRuntime struct {
 	runtimeMode                    interfaces.RuntimeMode
 	backendScopeID                 string
 	workFile                       string
+	startupWorkOnce                sync.Once
+	startupWorkErr                 error
 	workflowID                     string
 	workstationLoader              interfaces.WorkstationLoader
 	loadFactory                    interfaces.LoadedFactoryLoader

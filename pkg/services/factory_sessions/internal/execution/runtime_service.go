@@ -236,9 +236,12 @@ type JavaScriptRuntimeService struct {
 	// helpers and tests. Production standalone opening supplies the narrow
 	// Workers Execute capability through directChildExecution; P6-C can remove
 	// this compatibility input after those callers are retired.
-	directChildInvocation workers.InvocationExecutor
-	directChildExecution  childExecuteService
-	persistence           runtimepersist.Store
+	directChildInvocation   workers.InvocationExecutor
+	directChildExecution    childExecuteService
+	persistence             runtimepersist.Store
+	persistenceStoreForRoot func(string) (runtimepersist.Store, error)
+	persistenceProjectRoot  func() string
+	resumeRuntimeScope      func(string) (ResumeRuntimeScope, error)
 	durableSnapshotBounds
 	clock                   factory.Clock
 	syncWaits               SyncWaitScheduler
@@ -333,7 +336,7 @@ func NewJavaScriptRuntimeService(
 		orchestration:           orchestration,
 		childValues:             childValues,
 		workerPresetIDs:         workerPresetIDs,
-		workerSettings:          workerSettings,
+		workerSettings:          *factorysessions.CloneWorkerSettings(&workerSettings),
 		recordingWriter:         recordingWriter,
 		generateSessionID:       generateSessionID,
 		generateResponseEventID: generateResponseEventID,
@@ -355,6 +358,51 @@ func (s *JavaScriptRuntimeService) PersistenceStore() runtimepersist.Store {
 		return nil
 	}
 	return s.persistence
+}
+
+// SetPersistenceRouting selects the opened project's store for process-owned
+// durable requests. The resolver reads the canonical live Factory Session.
+func (s *JavaScriptRuntimeService) SetPersistenceRouting(storeForRoot func(string) (runtimepersist.Store, error), projectRoot func() string) {
+	if s == nil {
+		return
+	}
+	if storeForRoot != nil {
+		s.persistenceStoreForRoot = storeForRoot
+	}
+	if projectRoot != nil {
+		s.persistenceProjectRoot = projectRoot
+	}
+}
+
+// ResumeRuntimeScope carries transient Worker capabilities from the selected
+// live Factory Session. No function in this value is persisted in a snapshot.
+type ResumeRuntimeScope struct {
+	WorkerSettings          *factory.JavaScriptWorkerSettings
+	MockWorkers             *workers.MockWorkersConfig
+	WorkerAttemptStarter    factorysessions.WorkerAttemptStarter
+	WorkerResourceAdmission factory.ResourceCapacityLeaseAdmission
+	WorkerProgressPublisher workers.ProgressPublisher
+}
+
+func (s *JavaScriptRuntimeService) SetResumeRuntimeScopeResolver(resolve func(string) (ResumeRuntimeScope, error)) {
+	if s == nil {
+		return
+	}
+	s.resumeRuntimeScope = resolve
+}
+
+func (s *JavaScriptRuntimeService) persistenceForRoot(root string) (runtimepersist.Store, error) {
+	if s.persistenceStoreForRoot == nil || strings.TrimSpace(root) == "" || strings.TrimSpace(root) == strings.TrimSpace(s.projectRoot) {
+		return s.persistence, nil
+	}
+	return s.persistenceStoreForRoot(root)
+}
+
+func (s *JavaScriptRuntimeService) persistenceForRead() (runtimepersist.Store, error) {
+	if s.persistenceProjectRoot == nil {
+		return s.persistence, nil
+	}
+	return s.persistenceForRoot(s.persistenceProjectRoot())
 }
 
 func (s *JavaScriptRuntimeService) now() time.Time { return s.clock.Now().UTC() }
@@ -752,9 +800,16 @@ func (s *JavaScriptRuntimeService) executeImmediateSyncSession(
 }
 
 func (s *JavaScriptRuntimeService) prepareStart(normalized StartRequest) (PreparedStart, error) {
+	presetIDs := s.workerPresetIDs
+	if normalized.WorkerSettings != nil {
+		presetIDs = make(map[string]struct{}, len(normalized.WorkerSettings.Presets))
+		for id := range normalized.WorkerSettings.Presets {
+			presetIDs[id] = struct{}{}
+		}
+	}
 	return PrepareStart(normalized, StartPrepareContext{
 		StartSourceContext: StartSourceContext{ProjectRoot: s.resolveRequestProjectRoot(normalized)},
-		WorkerPresetIDs:    s.workerPresetIDs,
+		WorkerPresetIDs:    presetIDs,
 	}, s.workflowDefinitions)
 }
 
@@ -848,6 +903,10 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 	if err != nil {
 		return factory.JavaScriptRuntimeOutcome{}, err
 	}
+	workerSettings := s.workerSettings
+	if normalized.WorkerSettings != nil {
+		workerSettings = *normalized.WorkerSettings
+	}
 	return s.orchestration.RunJavaScript(ctx, factory.JavaScriptRuntimeRequest{
 		Source:         sourceContent,
 		SourceRef:      resolved.SourceRef,
@@ -858,8 +917,8 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 		FactoryName:    factoryNameFromStart(normalized, resolved),
 		Policy:         policyResolution.Policy,
 		Agents:         resolved.Agents,
-		WorkerSettings: s.workerSettings,
-	}, s.childExecutorHooksForRequest(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID, normalized.MockWorkers))
+		WorkerSettings: workerSettings,
+	}, s.childExecutorHooksForStart(resolveChildExecutorMode(s.childExecutorMode, normalized), sessionID, normalized.MockWorkers, normalized.WorkerAttemptStarter, normalized.WorkerResourceAdmission, normalized.WorkerProgressPublisher))
 }
 
 func workflowRunContext(parent context.Context, policy factory.JavaScriptPolicy) (context.Context, context.CancelFunc) {
@@ -882,8 +941,11 @@ func (s *JavaScriptRuntimeService) snapshotSessionState(sessionID string) (runti
 		s.mu.RUnlock()
 		return cloned, nil
 	}
-	persistence := s.persistence
+	persistence, routeErr := s.persistenceForRead()
 	s.mu.RUnlock()
+	if routeErr != nil {
+		return runtimeSessionState{}, routeErr
+	}
 
 	if persistence == nil {
 		return runtimeSessionState{}, ErrSessionNotFound

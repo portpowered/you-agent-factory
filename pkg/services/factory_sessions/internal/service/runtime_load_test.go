@@ -842,7 +842,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 		got = settings
 		return nil, nil
 	}
-	_, err := NewDurableExecution(
+	opened, err := NewDurableExecution(
 		func(string) (operatorconfig.Config, error) {
 			return operatorconfig.Config{
 				Defaults: operatorconfig.Defaults{WorkerModelProvider: "customer"},
@@ -882,6 +882,13 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 	}
 	if preset := got.Presets["review"]; preset.ModelProvider != "cursor" {
 		t.Fatalf("review preset = %#v, want canonical cursor identity", preset)
+	}
+	if opened.WorkerSettings == nil || opened.WorkerSettings.Presets["review"].ModelProvider != "cursor" {
+		t.Fatalf("opened WorkerSettings = %#v, want canonical review preset for the process start", opened.WorkerSettings)
+	}
+	got.Presets["review"] = factoryruntime.JavaScriptWorkerPreset{Model: "changed"}
+	if opened.WorkerSettings.Presets["review"].Model != "" {
+		t.Fatal("opened WorkerSettings aliases the runtime execution settings")
 	}
 }
 

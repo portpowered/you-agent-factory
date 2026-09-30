@@ -41,6 +41,7 @@ func ACPWorkerUpdateScript(toolCallID, completionText string) []string {
 type ACPWorkerPeerConfig struct {
 	SessionIDPrefix string
 	CompletionText  string
+	Model           string
 }
 
 // RunACPWorkerPeer serves a minimal, hand-rolled JSON-RPC 2.0 ACP agent over
@@ -101,8 +102,16 @@ func (p *acpWorkerPeer) serve() error {
 		case "session/new":
 			p.sessions++
 			p.sessionID = fmt.Sprintf("%s-%d", p.config.SessionIDPrefix, p.sessions)
+			options := `[]`
+			if p.config.Model != "" {
+				options = fmt.Sprintf(`[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":%q}]}]`, p.config.Model)
+			}
 			if err := p.respond(request.ID, json.RawMessage(
-				fmt.Sprintf(`{"sessionId":%q,"configOptions":[]}`, p.sessionID))); err != nil {
+				fmt.Sprintf(`{"sessionId":%q,"configOptions":%s}`, p.sessionID, options))); err != nil {
+				return err
+			}
+		case "session/set_config_option":
+			if err := p.respond(request.ID, json.RawMessage(`{"configOptions":[]}`)); err != nil {
 				return err
 			}
 		case "session/prompt":

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -23,6 +25,8 @@ const (
   const child = await agent.run({
     prompt: "` + associationChildPrompt + `",
     label: "` + associationChildLabel + `",
+    modelProvider: "codex",
+    model: "test-model",
   });
   return { child };
 })();`
@@ -33,6 +37,8 @@ const (
   const child = await agent.run({
     prompt: "` + absentProviderSessionChildPrompt + `",
     label: "` + absentProviderSessionChildLabel + `",
+    modelProvider: "codex",
+    model: "test-model",
   });
   return { child };
 })();`
@@ -45,14 +51,32 @@ const (
   const first = await agent.run({
     prompt: "` + multiDispatchFirstChildPrompt + `",
     label: "` + multiDispatchFirstChildLabel + `",
+    modelProvider: "codex",
+    model: "test-model",
   });
   const second = await agent.run({
     prompt: "` + multiDispatchSecondChildPrompt + `",
     label: "` + multiDispatchSecondChildLabel + `",
+    modelProvider: "codex",
+    model: "test-model",
   });
   return { first, second };
 })();`
 )
+
+func associationSuccessResult(sessionID string) platformprocess.CommandResult {
+	return platformprocess.CommandResult{Stdout: []byte(
+		`{"type":"thread.started","thread_id":"` + sessionID + `"}` + "\n" +
+			`{"type":"item.completed","item":{"id":"message-final","type":"agent_message","text":"associated"}}` + "\n" +
+			`{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}` + "\n",
+	)}
+}
+
+func associationFailureResult() platformprocess.CommandResult {
+	return platformprocess.CommandResult{Stdout: []byte(
+		`{"type":"turn.failed","error":{"message":"provider failed before session establishment"}}` + "\n",
+	), ExitCode: 1}
+}
 
 // TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession proves
 // Provider Session association activates through public surfaces after runtime
@@ -64,11 +88,10 @@ func TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession(t *test
 	t.Parallel()
 
 	dir := scaffoldAssociationWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	runner := testutil.NewProviderCommandRunner(associationSuccessResult("association-provider-1"))
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
 		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
 	})
 	t.Cleanup(func() { server.Stop(t) })
@@ -80,8 +103,8 @@ func TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession(t *test
 	if strings.TrimSpace(executed.SessionId) == "" {
 		t.Fatal("sessionId unexpectedly empty")
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for fake child execution", runner.CallCount())
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner call count = %d, want 1", runner.CallCount())
 	}
 
 	listed := listAssociationDispatches(t, server.URL(), executed.SessionId)
@@ -114,9 +137,9 @@ func TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession(t *test
 		summary.Id,
 		providerRef,
 	)
-	if providerRef.Id != "fake-provider-session-1" {
+	if providerRef.Id != "association-provider-1" {
 		t.Fatalf(
-			"providerSessionRef id = %q, want runtime-produced fake-provider-session-1",
+			"providerSessionRef id = %q, want runtime-produced association-provider-1",
 			providerRef.Id,
 		)
 	}
@@ -163,11 +186,10 @@ func TestAbsentProviderSessionIsNotFabricated(t *testing.T) {
 	t.Parallel()
 
 	dir := scaffoldAbsentProviderSessionWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	runner := testutil.NewProviderCommandRunner(associationFailureResult())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
 		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
 	})
 	t.Cleanup(func() { server.Stop(t) })
@@ -179,8 +201,8 @@ func TestAbsentProviderSessionIsNotFabricated(t *testing.T) {
 	if strings.TrimSpace(executed.SessionId) == "" {
 		t.Fatal("sessionId unexpectedly empty")
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for fake child failure edge", runner.CallCount())
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner call count = %d, want 1", runner.CallCount())
 	}
 
 	listed := listAssociationDispatches(t, server.URL(), executed.SessionId)
@@ -234,11 +256,13 @@ func TestMultipleDispatchesKeepDistinctProviderSessionRefs(t *testing.T) {
 	t.Parallel()
 
 	dir := scaffoldMultiDispatchWorkflow(t)
-	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	runner := testutil.NewProviderCommandRunner(
+		associationSuccessResult("association-provider-1"),
+		associationSuccessResult("association-provider-2"),
+	)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
-		UseMockWorkers:            true,
 		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
 	})
 	t.Cleanup(func() { server.Stop(t) })
@@ -250,8 +274,8 @@ func TestMultipleDispatchesKeepDistinctProviderSessionRefs(t *testing.T) {
 	if strings.TrimSpace(executed.SessionId) == "" {
 		t.Fatal("sessionId unexpectedly empty")
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 for fake child execution", runner.CallCount())
+	if runner.CallCount() != 2 {
+		t.Fatalf("provider command runner call count = %d, want 2", runner.CallCount())
 	}
 
 	listed := listAssociationDispatches(t, server.URL(), executed.SessionId)
@@ -277,15 +301,15 @@ func TestMultipleDispatchesKeepDistinctProviderSessionRefs(t *testing.T) {
 			secondSummary.Id,
 		)
 	}
-	if firstRef.Id != "fake-provider-session-1" {
+	if firstRef.Id != "association-provider-1" {
 		t.Fatalf(
-			"first dispatch providerSessionRef id = %q, want runtime-produced fake-provider-session-1",
+			"first dispatch providerSessionRef id = %q, want runtime-produced association-provider-1",
 			firstRef.Id,
 		)
 	}
-	if secondRef.Id != "fake-provider-session-2" {
+	if secondRef.Id != "association-provider-2" {
 		t.Fatalf(
-			"second dispatch providerSessionRef id = %q, want runtime-produced fake-provider-session-2",
+			"second dispatch providerSessionRef id = %q, want runtime-produced association-provider-2",
 			secondRef.Id,
 		)
 	}

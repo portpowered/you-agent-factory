@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -81,6 +82,79 @@ func (a *Assembly) GetFactorySessionSyncPreflight(
 		return factorysessions.SyncPreflightResult{}, factorysessions.ErrRuntimeNotAvailable
 	}
 	return gateway.GetFactorySessionSyncPreflight(ctx, sessionID, reconnect, logicalResolve)
+}
+
+// ApplyLiveChange routes a live mutation to the gateway that owns the selected
+// session. The process durable gateway has no live runtime host.
+func (a *Assembly) ApplyLiveChange(ctx context.Context, sessionID string, request factorysessions.LiveChangeRequest) (factorysessions.LiveChangeResult, error) {
+	if a != nil && a.Resolve(sessionID) == nil {
+		owner, ok := a.Service.(*Service)
+		if !ok {
+			return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+		}
+		if _, err := owner.GetSession(ctx, sessionID); err != nil {
+			if errors.Is(err, factorysessions.ErrDurableSessionNotFound) {
+				return factorysessions.LiveChangeResult{}, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
+			}
+			return factorysessions.LiveChangeResult{}, err
+		}
+		current := a.Resolve(factorysessions.DefaultSessionID)
+		if current == nil {
+			ids := a.ListLiveSessionIDs()
+			if len(ids) == 1 {
+				current = a.Resolve(ids[0])
+			}
+		}
+		if current == nil {
+			return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+		}
+		instance := runtimebinding.BundleFromSession(current)
+		if instance == nil {
+			return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+		}
+		return owner.ApplyDurableLiveChange(ctx, sessionID, request, instance.RuntimeService(), current.FactoryDir)
+	}
+	gateway, err := a.liveChangeGateway(sessionID)
+	if err != nil {
+		return factorysessions.LiveChangeResult{}, err
+	}
+	return gateway.ApplyLiveChange(ctx, sessionID, request)
+}
+
+func (a *Assembly) RecoverLiveChange(ctx context.Context, sessionID, requestID string) (factorysessions.LiveChangeResult, error) {
+	if a != nil && a.Resolve(sessionID) == nil {
+		owner, ok := a.Service.(*Service)
+		if !ok {
+			return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+		}
+		return owner.RecoverDurableLiveChange(ctx, sessionID, requestID)
+	}
+	gateway, err := a.liveChangeGateway(sessionID)
+	if err != nil {
+		return factorysessions.LiveChangeResult{}, err
+	}
+	return gateway.RecoverLiveChange(ctx, sessionID, requestID)
+}
+
+func (a *Assembly) liveChangeGateway(sessionID string) (factorysessions.Service, error) {
+	if a == nil || a.state == nil {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	session := a.Resolve(sessionID)
+	if session == nil {
+		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, sessionID)
+	}
+	bound := runtimebinding.SessionStateFrom(session)
+	if bound == nil || bound.Owner == nil {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	owner, ok := bound.Owner.(interface {
+		Gateway() factorysessions.Service
+	})
+	if !ok || owner.Gateway() == nil {
+		return nil, factorysessions.ErrRuntimeNotAvailable
+	}
+	return owner.Gateway(), nil
 }
 
 // Get reads live sessions from the process registry. Durable sessions retain

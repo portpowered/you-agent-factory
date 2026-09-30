@@ -28,7 +28,7 @@ func TestYouRunMapsGoldenSessionAndConfigRPCFailuresToTerminalWork(t *testing.T)
 			t.Parallel()
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"golden ACP failure"}`))
-			writeACPWorker(t, dir, "cursor-acp")
+			writeACPWorker(t, dir, "cursor")
 			writeGoldenSentinelWorkstation(t, dir)
 			fixture := goldenACPFixture(test.mode)
 

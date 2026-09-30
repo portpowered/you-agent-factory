@@ -535,6 +535,9 @@ func finishChildWorkerAttempt(
 	result workers.ExecuteResult,
 	err error,
 ) {
+	if progress != nil {
+		progress.publishResultContent(result)
+	}
 	if complete != nil {
 		_ = complete(context.Background(), result, err)
 	}

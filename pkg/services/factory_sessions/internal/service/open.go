@@ -15,6 +15,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/modelinvocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeports"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -505,6 +506,9 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	if bound := runtimebinding.SessionStateFrom(runtimeService.Resolve(sessionID)); bound != nil {
+		bound.SetMockWorkers(configured.Workers.MockWorkers)
+	}
 	if binder, ok := startupRuntime.(interface {
 		BindModelsRuntimeScope(models.RuntimeScopeRef) error
 	}); ok {
@@ -601,6 +605,7 @@ func openRuntime(
 		configured.Recordings.RecordPath,
 	)
 	opened.operatorSettingsPath = operatorSettingsPath
+	opened.workerSettings = durableExecution.WorkerSettings
 	opened.replayMetadataWarnings = append(
 		[]recordings.MetadataMismatchWarning(nil),
 		load.ReplayMetadataWarnings...,

@@ -636,9 +636,32 @@ type StartRequest struct {
 	// ProjectRoot and PersistencePolicy are internal-only selections carried
 	// from the canonical SessionStartRequest. They are never part of the
 	// transport-editable API (json:"-") and preserve legacy behavior when empty.
-	ProjectRoot       string                     `json:"-"`
-	PersistencePolicy PersistencePolicy          `json:"-"`
-	MockWorkers       *workers.MockWorkersConfig `json:"-"`
+	ProjectRoot             string                                        `json:"-"`
+	PersistencePolicy       PersistencePolicy                             `json:"-"`
+	MockWorkers             *workers.MockWorkersConfig                    `json:"-"`
+	WorkerSettings          *workflowsource.JavaScriptWorkerSettings      `json:"-"`
+	WorkerAttemptStarter    WorkerAttemptStarter                          `json:"-"`
+	WorkerProgressPublisher workers.ProgressPublisher                     `json:"-"`
+	WorkerResourceAdmission workflowsource.ResourceCapacityLeaseAdmission `json:"-"`
+}
+
+// WorkerAttemptStarter opens a Worker Session in the live runtime selected for
+// one durable invocation. It is an internal capability, never transport input.
+type WorkerAttemptStarter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error)
+
+// CloneWorkerSettings detaches the operator settings used by one durable start.
+func CloneWorkerSettings(settings *workflowsource.JavaScriptWorkerSettings) *workflowsource.JavaScriptWorkerSettings {
+	if settings == nil {
+		return nil
+	}
+	cloned := *settings
+	if settings.Presets != nil {
+		cloned.Presets = make(map[string]workflowsource.JavaScriptWorkerPreset, len(settings.Presets))
+		for id, preset := range settings.Presets {
+			cloned.Presets[id] = preset
+		}
+	}
+	return &cloned
 }
 
 // SyncOutcome reports how a sync start wait ended.

@@ -56,8 +56,11 @@ func (s *JavaScriptRuntimeService) HasDurableState(ctx context.Context, sessionI
 	}
 
 	s.mu.RLock()
-	persistence := s.persistence
+	persistence, routeErr := s.persistenceForRead()
 	s.mu.RUnlock()
+	if routeErr != nil {
+		return false, routeErr
+	}
 	if persistence == nil {
 		return false, nil
 	}

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -117,6 +118,41 @@ func TestDurableChildMockWorkersAreSelectedPerRequest(t *testing.T) {
 	mockedChild.mockWorkers.MockWorkers = append(mockedChild.mockWorkers.MockWorkers, workers.MockWorkerConfig{ID: "changed"})
 	if len(mocked.MockWorkers) != 0 {
 		t.Fatal("child mutated request mock configuration")
+	}
+}
+
+func TestDurableChildAttemptStarterIsSelectedPerRequest(t *testing.T) {
+	service := &JavaScriptRuntimeService{projectRoot: "/project", childValues: childTestValues{}}
+	service.SetWorkerExecution(&recordingWorkerExecution{}, nil, "", "", nil, nil, nil)
+	starter := factorysessions.WorkerAttemptStarter(func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error) {
+		return nil, nil
+	})
+	selected := service.childExecutorHooksForStart(ChildExecutorModeLive, "selected", nil, starter, nil, nil).
+		NewChildExecutor("selected-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*childWorkerExecutor)
+	other := service.childExecutorHooksForStart(ChildExecutorModeLive, "other", nil, nil, nil, nil).
+		NewChildExecutor("other-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*childWorkerExecutor)
+	if selected.attemptStarter == nil || other.attemptStarter != nil {
+		t.Fatalf("per-request attempt starters: selected = %v, other = %v", selected.attemptStarter != nil, other.attemptStarter != nil)
+	}
+}
+
+func TestDurableChildProgressPublisherIsSelectedPerRequest(t *testing.T) {
+	service := &JavaScriptRuntimeService{projectRoot: "/project", childValues: childTestValues{}}
+	service.SetWorkerExecution(&recordingWorkerExecution{}, nil, "", "", nil, nil, nil)
+	var selectedFragments []workers.ProgressFragment
+	selected := service.childExecutorHooksForStart(ChildExecutorModeLive, "selected", nil, nil, nil, func(fragment workers.ProgressFragment) {
+		selectedFragments = append(selectedFragments, fragment)
+	}).NewChildExecutor("selected-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*childWorkerExecutor)
+	other := service.childExecutorHooksForStart(ChildExecutorModeLive, "other", nil, nil, nil, nil).
+		NewChildExecutor("other-child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*childWorkerExecutor)
+
+	selected.publish("selected-dispatch", workers.ProgressFragment{Kind: workers.ResponseFragmentKind, Payload: "selected text"})
+	if len(selectedFragments) != 1 || selectedFragments[0].DispatchID != "selected-dispatch" || selectedFragments[0].Correlation.DispatchID != "selected-dispatch" {
+		t.Fatalf("selected progress = %#v", selectedFragments)
+	}
+	other.publish("other-dispatch", workers.ProgressFragment{Kind: workers.ResponseFragmentKind, Payload: "other text"})
+	if len(selectedFragments) != 1 {
+		t.Fatalf("other start leaked into selected publisher: %#v", selectedFragments)
 	}
 }
 

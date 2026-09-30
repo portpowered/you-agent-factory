@@ -458,7 +458,7 @@ func acpWorkerChildFactoryJSON(name string, stages int) string {
 
 const acpWorkerChildWorkerAgents = "---\n" +
 	"executorProvider: ACP\n" +
-	"modelProvider: cursor-acp\n" +
+	"modelProvider: cursor\n" +
 	"model: test-model\n" +
 	"stopToken: COMPLETE\n" +
 	"type: MODEL_WORKER\n" +
@@ -495,6 +495,7 @@ func TestACPWorkerChildPeerProcess(t *testing.T) {
 	err := support.RunACPWorkerPeer(support.ACPWorkerPeerConfig{
 		SessionIDPrefix: "acp-child",
 		CompletionText:  acpWorkerChildCompletionText,
+		Model:           "test-model",
 	}, os.Stdin, os.Stdout)
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)

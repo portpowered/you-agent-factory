@@ -40,6 +40,7 @@ type runtimeProducts struct {
 	sessions               factorysessions.Service
 	liveControl            factorysessions.LiveControlService
 	execution              durableexecution.Service
+	workerSettings         *factoryruntime.JavaScriptWorkerSettings
 	inputResolver          roles.InvocationInputResolver
 	modelInvoker           workers.ModelInvoker
 	factoryRuntime         factoryruntime.Service

@@ -28,6 +28,16 @@ func (fs *SessionRuntime) PrepareOwnedSessionClose(ctx context.Context, sessionI
 			return fmt.Errorf("terminate live Factory Session: %w", err)
 		}
 	}
+	// Termination can publish RUN_RESPONSE before the hosted run appends its
+	// final session events. Join the run before activation cleanup closes
+	// recording; retirement owns the runtime stop and artifact finalization.
+	if handle := runtimebinding.HandleFromSession(session); handle != nil {
+		select {
+		case <-handle.RunDoneCh():
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 	return nil
 }
 

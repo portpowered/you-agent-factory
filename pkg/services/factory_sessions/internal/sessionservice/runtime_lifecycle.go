@@ -96,20 +96,23 @@ func (runtime *SessionRuntime) CompleteStartup(ctx context.Context) error {
 	if runtime == nil {
 		return errors.New("complete runtime startup: Factory Session runtime is required")
 	}
-	current := runtime.runtimeState.ActiveHandle()
 	serviceMode := runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService
 	if serviceMode && runtime.workFile != "" {
-		if err := runtime.submitWorkFile(ctx); err != nil {
-			sessionID := runtime.runSessionID()
-			failure := runtimebinding.FailStartup(
-				runtime.sessionState, &runtime.runtimeState, sessionID,
-				current, runtime.StopLiveRuntime, err,
-			)
-			if runtime.releaseWorkAdmissionProjection != nil {
-				runtime.releaseWorkAdmissionProjection(sessionID)
+		// A process-backed run starts through Root.Start and then hosts its
+		// transport. Both phases complete startup on this same runtime.
+		runtime.startupWorkOnce.Do(func() {
+			if err := runtime.submitWorkFile(ctx); err != nil {
+				sessionID := runtime.runSessionID()
+				runtime.startupWorkErr = runtimebinding.FailStartup(
+					runtime.sessionState, &runtime.runtimeState, sessionID,
+					runtime.runtimeState.ActiveHandle(), runtime.StopLiveRuntime, err,
+				)
+				if runtime.releaseWorkAdmissionProjection != nil {
+					runtime.releaseWorkAdmissionProjection(sessionID)
+				}
 			}
-			return failure
-		}
+		})
+		return runtime.startupWorkErr
 	}
 	return nil
 }

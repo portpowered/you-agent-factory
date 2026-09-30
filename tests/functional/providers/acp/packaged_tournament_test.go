@@ -27,7 +27,7 @@ func TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio(t *t
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("create operator config directory: %v", err)
 	}
-	config := []byte(`{"workers":{"acp":{"integrations":[{"id":"cursor-functional","name":"cursor-acp","transport":"stdio","command":"cursor-agent acp"}]}}}`)
+	config := []byte(`{"workers":{"acp":{"integrations":[{"id":"cursor-functional","name":"cursor","transport":"stdio","command":"cursor-agent acp"}]}}}`)
 	if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
 		t.Fatalf("write operator config: %v", err)
 	}
@@ -43,8 +43,8 @@ func TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio(t *t
 	javascript := factory.Orchestrator.Javascript
 	args := map[string]any{
 		"request": "propose a launch strategy", "rounds": 1,
-		"executorProvider": "ACP", "modelProvider": "cursor-acp",
-		"judgeExecutorProvider": "ACP", "judgeModelProvider": "cursor-acp",
+		"executorProvider": "ACP", "modelProvider": "cursor",
+		"judgeExecutorProvider": "ACP", "judgeModelProvider": "cursor",
 	}
 	request := factoryapi.FactorySessionExecutionRequest{
 		RequestId: "packaged-tournament-acp-stdio",

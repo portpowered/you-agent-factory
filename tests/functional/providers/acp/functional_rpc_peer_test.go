@@ -237,10 +237,7 @@ func (p *functionalRPCPeer) createSession(request rpcEnvelope) error {
 	if err := p.rejectUnexpectedNewSession(); err != nil {
 		return err
 	}
-	config := `[]`
-	if p.mode == "model" || p.mode == "package-conformance" {
-		config = `[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]`
-	}
+	config := `[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]`
 	p.sessions++
 	sessionID := p.sessionID
 	if p.mode == "persistent" || p.mode == "serialize" {
@@ -268,7 +265,7 @@ func (p *functionalRPCPeer) loadSession(request rpcEnvelope) error {
 	}
 	p.sessionID = params.SessionID
 	p.sessions++
-	return p.respond(request.ID, json.RawMessage(`{"configOptions":[]}`))
+	return p.respond(request.ID, json.RawMessage(`{"configOptions":[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]}`))
 }
 
 func (p *functionalRPCPeer) supportsSessionLoad() bool {

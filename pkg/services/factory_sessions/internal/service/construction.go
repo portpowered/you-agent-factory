@@ -252,7 +252,11 @@ func NewDurableExecution(
 		return DurableExecution{}, fmt.Errorf("compose durable session persistence: %w", err)
 	}
 	return DurableExecution{
-		Service:         execution,
+		Service: execution,
+		WorkerSettings: factorysessions.CloneWorkerSettings(&factoryruntime.JavaScriptWorkerSettings{
+			Presets: workerPresets, DefaultModelProvider: defaultProvider,
+			DefaultModel: firstNonEmpty(resolvedDefaults.WorkerModel, operatorConfig.Defaults.WorkerModel),
+		}),
 		ACPIntegrations: append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),
 		OperatorModels:  projectOperatorModelOverlays(operatorConfig.Models),
 	}, nil

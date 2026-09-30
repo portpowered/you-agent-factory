@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -155,14 +156,18 @@ type SessionState struct {
 	ResumeRecoveryMetadata *recordings.ResumeRecoveryMetadata
 	OrderlyStop            func(context.Context) error
 	// Activation retains lifecycle cleanup on the canonical session record.
-	Activation        interface{ Close(context.Context) error }
-	mockWorkersMu     sync.RWMutex
-	mockWorkers       *workers.MockWorkersConfig
-	startRequestMu    sync.RWMutex
-	startRequestID    string
-	controlMu         sync.Mutex
-	lastControlKey    string
-	lastControlResult factorysessions.SessionControlResult
+	Activation         interface{ Close(context.Context) error }
+	mockWorkersMu      sync.RWMutex
+	mockWorkers        *workers.MockWorkersConfig
+	operatorDefaultsMu sync.RWMutex
+	operatorDefaults   operatorsettings.ResolvedDefaults
+	workerSettingsMu   sync.RWMutex
+	workerSettings     *factoryruntime.JavaScriptWorkerSettings
+	startRequestMu     sync.RWMutex
+	startRequestID     string
+	controlMu          sync.Mutex
+	lastControlKey     string
+	lastControlResult  factorysessions.SessionControlResult
 }
 
 func (s *SessionState) inheritApplicationValues(previous *SessionState) {
@@ -173,6 +178,8 @@ func (s *SessionState) inheritApplicationValues(previous *SessionState) {
 	s.ModelsScope = previous.ModelsScope
 	s.WorkerSessions = previous.WorkerSessions
 	s.SetMockWorkers(previous.MockWorkersConfig())
+	s.SetOperatorDefaults(previous.OperatorDefaults())
+	s.SetWorkerSettings(previous.WorkerSettingsSnapshot())
 	s.Logger = previous.Logger
 	s.Reader = previous.Reader
 	s.Projections = previous.Projections
@@ -204,6 +211,44 @@ func (s *SessionState) MockWorkersConfig() *workers.MockWorkersConfig {
 	config := s.mockWorkers.Clone()
 	s.mockWorkersMu.RUnlock()
 	return config
+}
+
+func (s *SessionState) SetOperatorDefaults(defaults operatorsettings.ResolvedDefaults) {
+	if s == nil {
+		return
+	}
+	s.operatorDefaultsMu.Lock()
+	s.operatorDefaults = defaults
+	s.operatorDefaultsMu.Unlock()
+}
+
+func (s *SessionState) OperatorDefaults() operatorsettings.ResolvedDefaults {
+	if s == nil {
+		return operatorsettings.ResolvedDefaults{}
+	}
+	s.operatorDefaultsMu.RLock()
+	defaults := s.operatorDefaults
+	s.operatorDefaultsMu.RUnlock()
+	return defaults
+}
+
+func (s *SessionState) SetWorkerSettings(settings *factoryruntime.JavaScriptWorkerSettings) {
+	if s == nil {
+		return
+	}
+	s.workerSettingsMu.Lock()
+	s.workerSettings = factorysessions.CloneWorkerSettings(settings)
+	s.workerSettingsMu.Unlock()
+}
+
+func (s *SessionState) WorkerSettingsSnapshot() *factoryruntime.JavaScriptWorkerSettings {
+	if s == nil {
+		return nil
+	}
+	s.workerSettingsMu.RLock()
+	settings := factorysessions.CloneWorkerSettings(s.workerSettings)
+	s.workerSettingsMu.RUnlock()
+	return settings
 }
 
 func (s *SessionState) SetStartRequestID(requestID string) {

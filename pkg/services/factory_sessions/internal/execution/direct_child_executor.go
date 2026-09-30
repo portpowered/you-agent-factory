@@ -9,6 +9,7 @@ import (
 	"time"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -416,6 +417,10 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 }
 
 func (s *JavaScriptRuntimeService) childExecutorHooksForRequest(mode, sessionID string, mockWorkers *workers.MockWorkersConfig) factory.JavaScriptRuntimeHooks {
+	return s.childExecutorHooksForStart(mode, sessionID, mockWorkers, nil, nil, nil)
+}
+
+func (s *JavaScriptRuntimeService) childExecutorHooksForStart(mode, sessionID string, mockWorkers *workers.MockWorkersConfig, attemptStarter factorysessions.WorkerAttemptStarter, resourceAdmission factory.ResourceCapacityLeaseAdmission, progressPublisher workers.ProgressPublisher) factory.JavaScriptRuntimeHooks {
 	hooks := factory.JavaScriptRuntimeHooks{
 		OnRecord: func(record factory.JavaScriptRuntimeRecord) {
 			s.applyRunningRuntimeRecord(sessionID, record)
@@ -443,6 +448,15 @@ func (s *JavaScriptRuntimeService) childExecutorHooksForRequest(mode, sessionID 
 			)
 			executor.maxWorkerDuration = childWorkerDurationFromPolicy(policy)
 			executor.resourceLeaseAcquirer = binding.resourceLeaseAcquirer
+			if resourceAdmission != nil {
+				executor.resourceLeaseAcquirer = func(ctx context.Context, request factory.ResourceCapacityLeaseRequest) (*childResourceLease, error) {
+					lease, err := resourceAdmission.AcquireResourceCapacityLease(ctx, request)
+					if err != nil || lease == nil {
+						return nil, err
+					}
+					return &childResourceLease{factoryRevision: lease.FactoryRevision, release: lease.Release}, nil
+				}
+			}
 			executor.runtimeID = binding.runtimeID
 			executor.generationID = binding.generationID
 			executor.providerOverride = binding.providerOverride
@@ -452,7 +466,21 @@ func (s *JavaScriptRuntimeService) childExecutorHooksForRequest(mode, sessionID 
 			}
 			executor.commandRunnerOverride = binding.commandRunnerOverride
 			executor.attemptStarter = binding.attemptStarter
+			if attemptStarter != nil {
+				executor.attemptStarter = childWorkerAttemptStarter(attemptStarter)
+			}
 			executor.publish = binding.publish
+			if progressPublisher != nil {
+				executor.publish = func(workerDispatchID string, fragment workers.ProgressFragment) {
+					if strings.TrimSpace(fragment.DispatchID) == "" {
+						fragment.DispatchID = workerDispatchID
+					}
+					if strings.TrimSpace(fragment.Correlation.DispatchID) == "" {
+						fragment.Correlation.DispatchID = workerDispatchID
+					}
+					progressPublisher(fragment)
+				}
+			}
 			return executor
 		}
 		if execution := s.directWorkerExecution(); execution != nil {
@@ -498,6 +526,7 @@ type childWorkerProgressBridge struct {
 	publish    childWorkerProgressPublisher
 	dispatchID string
 	pending    *workers.ProgressFragment
+	authored   bool
 	terminal   bool
 }
 
@@ -526,10 +555,37 @@ func (b *childWorkerProgressBridge) publishProgress(fragment workers.ProgressFra
 		b.mu.Unlock()
 		return
 	}
+	if fragment.Kind == workers.ResponseFragmentKind || fragment.CanonicalDraft != nil {
+		b.authored = true
+	}
 	publish := b.publish
 	dispatchID := b.dispatchID
 	b.mu.Unlock()
 	publish(dispatchID, fragment)
+}
+
+// publishResultContent preserves final-only Worker output when a provider
+// supplied no streaming response fragments during this attempt.
+func (b *childWorkerProgressBridge) publishResultContent(result workers.ExecuteResult) {
+	if b == nil || b.publish == nil || !childExecutionSucceeded(result.Outcome) {
+		return
+	}
+	b.mu.Lock()
+	if b.terminal || b.authored {
+		b.mu.Unlock()
+		return
+	}
+	b.authored = true
+	b.mu.Unlock()
+	for _, part := range result.Output.Primary {
+		if part.Type != work.WorkContentPartTypeText || strings.TrimSpace(part.Text) == "" {
+			continue
+		}
+		b.publish(b.dispatchID, workers.ProgressFragment{
+			DispatchID: b.dispatchID, Correlation: result.Correlation,
+			Kind: workers.ResponseFragmentKind, Type: "message.delta", Payload: part.Text,
+		})
+	}
 }
 
 func (b *childWorkerProgressBridge) resetAttempt() {

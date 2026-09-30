@@ -504,13 +504,16 @@ func assertRepeatedWorkerSessionReads(
 		"--server", baseURL, "worker-sessions", "show", "--session", sessionID,
 		"--provider", "codex", "--kind", "session_id", "--id", providerID, "--output", "json",
 	}
-	// Confirmation is a separate public durability condition for replay. Wait
-	// for it before the repeated diagnosis reads so no downstream replay gate
-	// can be the first observation of an unsettled recording.
-	waitForWorkerSessionConfirmation(t, ctx, process, env, factoryDir, showArgs)
 	before := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
 	firstShow := executeCLI(t, ctx, process, env, factoryDir, showArgs...)
 	secondShow := executeCLI(t, ctx, process, env, factoryDir, showArgs...)
+	var shown workerSessionJSON
+	decodeCLIJSON(t, firstShow, &shown)
+	// Worker Session observations come from the source-native Events stream.
+	// No completed recording cursor covers their current terminal state.
+	if shown.State != "COMPLETED" || shown.ConfirmationState != "UNCONFIRMED" {
+		t.Fatalf("Worker Session terminal confirmation = %s/%s, want COMPLETED/UNCONFIRMED", shown.State, shown.ConfirmationState)
+	}
 	if strings.TrimSpace(firstShow.Stdout()) != strings.TrimSpace(secondShow.Stdout()) {
 		t.Fatalf("repeated show output changed:\nfirst:\n%s\nsecond:\n%s", firstShow.Stdout(), secondShow.Stdout())
 	}
@@ -543,36 +546,6 @@ func assertRepeatedWorkerSessionReads(
 	}
 	after := captureWorkerSessionsCLIPublicState(t, fixture, sessionID)
 	assertWorkerSessionsCLIPublicStateUnchanged(t, before, after)
-}
-
-func waitForWorkerSessionConfirmation(
-	t *testing.T,
-	ctx context.Context,
-	process support.Process,
-	env []string,
-	factoryDir string,
-	showArgs []string,
-) {
-	t.Helper()
-	deadline := time.NewTimer(15 * time.Second)
-	defer deadline.Stop()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		inputs := executeCLI(t, ctx, process, env, factoryDir, showArgs...)
-		var shown workerSessionJSON
-		decodeCLIJSON(t, inputs, &shown)
-		if shown.ConfirmationState == "CONFIRMED" {
-			return
-		}
-		select {
-		case <-ticker.C:
-		case <-deadline.C:
-			t.Fatalf("Worker Session confirmation did not settle: %#v", shown)
-		case <-ctx.Done():
-			t.Fatalf("waiting for Worker Session confirmation canceled: %v", ctx.Err())
-		}
-	}
 }
 
 func assertFailedWorkerSession(t *testing.T, ctx context.Context, process support.Process, env []string, factoryDir, baseURL, sessionID, workID string) {

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -59,6 +60,9 @@ func (r *Root) RunApplicationTransport(ctx context.Context, sessionID string, ha
 func (r *Root) StopApplicationRuntime(ctx context.Context, sessionID string) error {
 	bound, err := r.applicationSessionState(sessionID)
 	if err != nil {
+		if errors.Is(err, factorysessions.ErrSessionNotFound) {
+			return nil
+		}
 		return err
 	}
 	return bound.Process.Stop(ctx)
@@ -70,6 +74,9 @@ func (r *Root) CloseApplicationSession(ctx context.Context, sessionID string) er
 		SessionID: sessionID, Mode: factorysessions.SessionOperationModeLive,
 		Operation: factorysessions.SessionControlClose,
 	})
+	if errors.Is(err, factorysessions.ErrSessionNotFound) {
+		return nil
+	}
 	return err
 }
 
@@ -175,6 +182,9 @@ func (r *Root) ApplicationResumeRecoveryMetadata(sessionID string) (*recordings.
 func (r *Root) StopApplicationOrderly(ctx context.Context, sessionID string) error {
 	bound, err := r.applicationSessionState(sessionID)
 	if err != nil {
+		if errors.Is(err, factorysessions.ErrSessionNotFound) {
+			return nil
+		}
 		return err
 	}
 	if bound.OrderlyStop == nil {

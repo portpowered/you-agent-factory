@@ -329,10 +329,10 @@ func TestModelsGenericHTTPInvocationReachesJoinedRootThroughProcess(t *testing.T
 		},
 		"POST /models/invocations",
 	)
-	if len(response.Outputs) != 1 || response.Outputs[0].Name != "audio" || response.Outputs[0].Modality != factoryapi.ModelInvocationContentTypeAudio || response.Outputs[0].Content == nil {
+	if len(response.Outputs) != 1 || response.Outputs[0].Name != "audio" || response.Outputs[0].Modality != factoryapi.ModelInvocationContentTypeAudio || response.Outputs[0].ContentBase64 == nil {
 		t.Fatalf("generic HTTP response = %#v, want one named audio output", response)
 	}
-	assertSemanticTTSAudio(t, []byte(*response.Outputs[0].Content), "generic HTTP audio")
+	assertSemanticTTSAudio(t, *response.Outputs[0].ContentBase64, "generic HTTP audio")
 	if genericTTS.Calls() != 0 || len(privateTTS.Calls()) != 1 {
 		t.Fatalf("generic HTTP TTS routing = generic calls:%d private calls:%d, want 0/1", genericTTS.Calls(), len(privateTTS.Calls()))
 	}
@@ -392,17 +392,17 @@ func testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution(t *testing.T)
 	)
 	if len(genericResponse.Outputs) != 1 || genericResponse.Outputs[0].Name != "audio" ||
 		genericResponse.Outputs[0].Modality != factoryapi.ModelInvocationContentTypeAudio ||
-		genericResponse.Outputs[0].Content == nil {
+		genericResponse.Outputs[0].ContentBase64 == nil {
 		t.Fatalf("generic built-in parity response = %#v, want one named audio output", genericResponse)
 	}
-	assertSemanticTTSAudio(t, []byte(*genericResponse.Outputs[0].Content), "generic built-in parity audio")
+	assertSemanticTTSAudio(t, *genericResponse.Outputs[0].ContentBase64, "generic built-in parity audio")
 	if genericTTS.Calls() != 0 || len(privateTTS.Calls()) != 1 {
 		t.Fatalf("generic built-in parity TTS routing = generic calls:%d private calls:%d, want 0/1", genericTTS.Calls(), len(privateTTS.Calls()))
 	}
 	genericEffects := [4]int{
 		rejectingNetwork.Calls(), hostLauncher.Calls(), protocol.Calls(), compatibility.Calls(),
 	}
-	if genericEffects != [4]int{0, 1, 1, 2} {
+	if genericEffects != [4]int{0, 1, 1, 1} {
 		t.Fatalf("generic built-in parity effects = %#v; want cache hit with one controlled host lifecycle", genericEffects)
 	}
 

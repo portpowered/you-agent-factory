@@ -67,6 +67,9 @@ func NewDurable(
 	if err != nil {
 		return nil, err
 	}
+	if runtime, ok := execution.(*factorysessionexecution.JavaScriptRuntimeService); ok {
+		runtime.SetPersistenceRouting(adaptRuntimePersistenceStoreFactory(stores), nil)
+	}
 	return New(execution)
 }
 

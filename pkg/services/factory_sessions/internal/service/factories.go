@@ -50,6 +50,7 @@ type FactoryRuntimeRoot interface {
 
 type DurableExecution struct {
 	Service         durableexecution.Service
+	WorkerSettings  *factoryruntime.JavaScriptWorkerSettings
 	ACPIntegrations []operatorsettings.ACPIntegration
 	OperatorModels  map[string]models.ModelOverlay
 }

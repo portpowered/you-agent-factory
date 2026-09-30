@@ -93,6 +93,8 @@ type Server struct {
 	responseBridge  acp.ResponseBridge
 	wireRecorder    acp.WireRecorder
 	startResolver   acp.FactorySessionStartResolver
+	cancelMu        sync.Mutex
+	cancelFlights   map[string]*cancelFlight
 }
 
 func (s *Server) resolveInvocationHomeDir(ctx context.Context) (string, error) {

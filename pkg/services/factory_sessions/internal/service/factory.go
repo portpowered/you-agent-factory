@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 
@@ -11,7 +12,9 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
@@ -301,6 +304,49 @@ func (r *Root) buildProcessDurableExecution() (durableexecution.Service, error) 
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct Factory Sessions durable owner: %w", err)
+	}
+	if router, ok := processDurable.(interface{ SetPersistenceProjectRootResolver(func() string) }); ok {
+		router.SetPersistenceProjectRootResolver(func() string {
+			if current := r.Resolve(factorysessions.DefaultSessionID); current != nil {
+				return current.FactoryDir
+			}
+			if ids := r.ListLiveSessionIDs(); len(ids) == 1 {
+				if current := r.Resolve(ids[0]); current != nil {
+					return current.FactoryDir
+				}
+			}
+			return ""
+		})
+	}
+	if router, ok := processDurable.(interface {
+		SetResumeRuntimeScopeResolver(func(string) (factorysessionexecution.ResumeRuntimeScope, error))
+	}); ok {
+		router.SetResumeRuntimeScopeResolver(func(projectRoot string) (factorysessionexecution.ResumeRuntimeScope, error) {
+			current := r.Resolve(factorysessions.DefaultSessionID)
+			if current == nil {
+				ids := r.ListLiveSessionIDs()
+				if len(ids) == 1 {
+					current = r.Resolve(ids[0])
+				}
+			}
+			if current == nil {
+				return factorysessionexecution.ResumeRuntimeScope{}, factorysessions.ErrRuntimeNotAvailable
+			}
+			if filepath.Clean(current.FactoryDir) != filepath.Clean(projectRoot) {
+				return factorysessionexecution.ResumeRuntimeScope{}, factorysessions.ErrSessionNotFound
+			}
+			instance := runtimebinding.BundleFromSession(current)
+			bound := runtimebinding.SessionStateFrom(current)
+			if instance == nil || bound == nil {
+				return factorysessionexecution.ResumeRuntimeScope{}, factorysessions.ErrRuntimeNotAvailable
+			}
+			admission, _ := instance.RuntimeService().(factoryruntime.ResourceCapacityLeaseAdmission)
+			return factorysessionexecution.ResumeRuntimeScope{
+				WorkerSettings: bound.WorkerSettingsSnapshot(), MockWorkers: bound.MockWorkersConfig(),
+				WorkerAttemptStarter:    factorysessions.WorkerAttemptStarter(runtimeWorkerAttemptStarter(instance)),
+				WorkerResourceAdmission: admission, WorkerProgressPublisher: runtimeProgressPublisher(instance),
+			}, nil
+		})
 	}
 	if binder, ok := processDurable.(interface {
 		SetWorkerExecution(interface {

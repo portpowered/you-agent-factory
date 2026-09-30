@@ -27,6 +27,34 @@ func (s *Service) durableExecution() (durableexecution.Service, error) {
 	return s.durable, nil
 }
 
+func (s *Service) ApplyDurableLiveChange(ctx context.Context, sessionID string, request factorysessions.LiveChangeRequest, runtime factoryruntime.Service, projectRoot string) (factorysessions.LiveChangeResult, error) {
+	execution, err := s.durableExecution()
+	if err != nil {
+		return factorysessions.LiveChangeResult{}, err
+	}
+	capability, ok := execution.(interface {
+		ApplyLiveChangeWithRuntime(context.Context, string, factorysessions.LiveChangeRequest, factoryruntime.Service, string) (factorysessions.LiveChangeResult, error)
+	})
+	if !ok {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	return capability.ApplyLiveChangeWithRuntime(ctx, sessionID, request, runtime, projectRoot)
+}
+
+func (s *Service) RecoverDurableLiveChange(ctx context.Context, sessionID, requestID string) (factorysessions.LiveChangeResult, error) {
+	execution, err := s.durableExecution()
+	if err != nil {
+		return factorysessions.LiveChangeResult{}, err
+	}
+	capability, ok := execution.(interface {
+		RecoverLiveChange(context.Context, string, string) (factorysessions.LiveChangeResult, error)
+	})
+	if !ok {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	return capability.RecoverLiveChange(ctx, sessionID, requestID)
+}
+
 func (s *Service) StartAsync(ctx context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
 	execution, err := s.durableExecution()
 	if err != nil {
@@ -445,18 +473,22 @@ func canonicalDurableStartRequest(
 		source.FactoryID = strings.TrimSpace(request.Definition.FactoryID)
 	}
 	legacy := factorysessions.StartRequest{
-		RequestID:         strings.TrimSpace(request.Correlation.RequestID),
-		Source:            source,
-		Args:              cloneCanonicalAnyMap(request.Args),
-		RequestedPolicy:   cloneCanonicalAnyMap(request.Policy),
-		Orchestrator:      cloneCanonicalOrchestrator(request.Orchestrator),
-		Runtime:           cloneCanonicalRuntimeOptions(request.RuntimeOptions),
-		ProjectRoot:       strings.TrimSpace(request.FolderPath),
-		PersistencePolicy: request.Persistence,
-		MockWorkers:       runtimeSelectionMockWorkers(request.RuntimeSelection),
+		RequestID:               strings.TrimSpace(request.Correlation.RequestID),
+		Source:                  source,
+		Args:                    cloneCanonicalAnyMap(request.Args),
+		RequestedPolicy:         cloneCanonicalAnyMap(request.Policy),
+		Orchestrator:            cloneCanonicalOrchestrator(request.Orchestrator),
+		Runtime:                 cloneCanonicalRuntimeOptions(request.RuntimeOptions),
+		ProjectRoot:             strings.TrimSpace(request.FolderPath),
+		PersistencePolicy:       request.Persistence,
+		MockWorkers:             runtimeSelectionMockWorkers(request.RuntimeSelection),
+		WorkerSettings:          factorysessions.CloneWorkerSettings(request.WorkerSettings),
+		WorkerAttemptStarter:    request.WorkerAttemptStarter,
+		WorkerProgressPublisher: request.WorkerProgressPublisher,
+		WorkerResourceAdmission: request.WorkerResourceAdmission,
 	}
 	if legacy.PersistencePolicy == "" {
-		legacy.PersistencePolicy = factorysessions.PersistencePolicyDisabled
+		legacy.PersistencePolicy = factorysessions.PersistencePolicyEnabled
 	}
 	if len(legacy.Args) == 0 && request.Input != nil && request.Input.NormalizedArguments != nil {
 		legacy.Args = canonicalNormalizedArgumentsToValues(request.Input.NormalizedArguments)
@@ -506,6 +538,12 @@ func canonicalInvocationRequest(
 	}
 	legacy.CancelOnTimeout = request.Wait.CancelOnTimeout
 	return legacy
+}
+
+// CanonicalInvocationRequest maps an existing-session invoke command to the
+// invocation input shared by the live and JavaScript execution paths.
+func CanonicalInvocationRequest(request factorysessions.SessionInvokeRequest) factorysessions.InvocationRequest {
+	return canonicalInvocationRequest(request)
 }
 
 func cloneCanonicalTarget(target *factorysessions.TargetRef) *factorysessions.TargetRef {

@@ -65,6 +65,15 @@ type historicalReplayRunner struct {
 	replay *factorysessions.HistoricalReplayInspection
 }
 
+type startupReadyCallbackInstaller interface {
+	SetStartupReadyCallback(func()) bool
+}
+
+func setStartupReadyCallback(runner initializer.LocalRuntimeRunner, callback func()) bool {
+	installer, ok := runner.(startupReadyCallbackInstaller)
+	return ok && installer.SetStartupReadyCallback(callback)
+}
+
 func (runner historicalReplayRunner) Run(ctx context.Context) error {
 	return runner.runner.Run(ctx)
 }
@@ -168,6 +177,10 @@ func (runner replayMetadataWarningRunner) Run(ctx context.Context) error {
 	return runner.runner.Run(ctx)
 }
 
+func (runner replayMetadataWarningRunner) SetStartupReadyCallback(callback func()) bool {
+	return setStartupReadyCallback(runner.runner, callback)
+}
+
 func (runner replayMetadataWarningRunner) RunWithCompletion(
 	ctx context.Context,
 	completion initializer.CompletionOperation,
@@ -253,6 +266,10 @@ func (runner hostedInvocationRunner) Run(ctx context.Context) error {
 	return runner.runner.Run(ctx)
 }
 
+func (runner hostedInvocationRunner) SetStartupReadyCallback(callback func()) bool {
+	return setStartupReadyCallback(runner.runner, callback)
+}
+
 func (runner hostedInvocationRunner) RunWithCompletion(
 	ctx context.Context,
 	completion initializer.CompletionOperation,
@@ -329,6 +346,10 @@ type cleanInvocationSnapshotRunner struct {
 
 func (runner cleanInvocationSnapshotRunner) Run(ctx context.Context) error {
 	return runner.runner.Run(ctx)
+}
+
+func (runner cleanInvocationSnapshotRunner) SetStartupReadyCallback(callback func()) bool {
+	return setStartupReadyCallback(runner.runner, callback)
 }
 
 func (runner cleanInvocationSnapshotRunner) RunWithCompletion(
@@ -554,7 +575,11 @@ func runHostedBatch(
 	replayMetadataWarnings []recordings.MetadataMismatchWarning,
 ) error {
 	if cfg.Port <= 0 {
-		emitStartupDetails(cfg, runtimeLogDiagnosticsForRunner(runner))
+		if !setStartupReadyCallback(runner, func() {
+			emitStartupDetails(cfg, runtimeLogDiagnosticsForRunner(runner))
+		}) {
+			emitStartupDetails(cfg, runtimeLogDiagnosticsForRunner(runner))
+		}
 	}
 	if err := runFactoryServiceAndEmitResult(ctx, cfg, runner, recordPath, batchProvider, recoveryMetadata); err != nil {
 		return err

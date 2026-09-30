@@ -423,7 +423,7 @@ func assembleRuntimeBundle(
 		clock,
 		inlineDispatch,
 		eventHistory,
-		workerRecordingIdentity(runtimeInstanceID, recordPath),
+		workerRecordingIdentity(runtimeInstanceID),
 		runtimeInstanceID,
 		worldStateProjector,
 		restoredWorldState,
@@ -476,17 +476,13 @@ func invocationFileReader(inputFiles inputFileSystem) interfaces.FileReader {
 	return inputFiles.ReadFile
 }
 
-// workerRecordingIdentity keeps the Worker source-native recording identity
-// distinct from the user-facing artifact path. Artifact paths are allowed to
-// be absolute and may contain platform-specific separators or spaces, while
-// Events source identities must remain portable opaque tokens. The identity is
-// derived from the concrete runtime/Recording lifecycle identity, so all
-// Worker Sessions captured by one Factory recording share one durable snapshot
-// identity without allowing later recordings at the same path to collide.
-func workerRecordingIdentity(recordingID, recordPath string) string {
-	recordPath = strings.TrimSpace(recordPath)
+// workerRecordingIdentity derives the Worker source-native recording identity
+// from the concrete runtime lifecycle, independently of whether a Factory
+// recording artifact was requested. All Worker Sessions in one runtime share
+// one durable snapshot without collisions across later runs at the same path.
+func workerRecordingIdentity(recordingID string) string {
 	recordingID = strings.TrimSpace(recordingID)
-	if recordPath == "" || recordingID == "" {
+	if recordingID == "" {
 		return ""
 	}
 	digest := sha256.Sum256([]byte(recordingID))

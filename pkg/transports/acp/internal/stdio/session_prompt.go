@@ -284,6 +284,13 @@ func (s *Server) applySessionCancel(ctx context.Context, sessionID string, reque
 		// intent committed preserves the existing retry contract.
 		return
 	}
+	flight, owner := s.startCancelFlight(intent.SessionID, intent.TurnID)
+	if !owner {
+		<-flight.done
+		return
+	}
+	accepted := false
+	defer func() { flight.finish(accepted) }()
 
 	controlRequestID := factoryCancelRequestID(intent.RequestID)
 	controlled, err := s.factorySessions.Control(ctx, factorysessions.SessionControlRequest{
@@ -301,6 +308,7 @@ func (s *Server) applySessionCancel(ctx context.Context, sessionID string, reque
 		return
 	}
 	if controlled.Outcome == factorysessions.LifecycleControlOutcomeAccepted {
+		accepted = true
 		if s.startResolver == nil {
 			return
 		}
@@ -311,7 +319,7 @@ func (s *Server) applySessionCancel(ctx context.Context, sessionID string, reque
 		restart.SessionID = factorySessionID
 		restart.Mode = factorysessions.SessionOperationModeLive
 		restart.ActivationOnly = true
-		activated, err := s.factorySessions.Start(ctx, restart)
+		activated, err := s.factorySessions.Start(context.WithoutCancel(ctx), restart)
 		if err != nil || activated.SessionID != factorySessionID {
 			return
 		}
@@ -600,6 +608,14 @@ func (s *Server) dispatchFactoryTurn(
 		dispatched, dispatchErr = s.startFactorySessionForEpisode(ctx, startResult, turn, reqIdentity.ConnectionID)
 	} else {
 		dispatched, dispatchErr = s.invokeFactorySessionForEpisode(ctx, startResult, turn, reqIdentity.ConnectionID)
+	}
+	if flight := s.cancelFlightForTurn(startResult.Session.ID, startResult.Turn.ID); flight != nil {
+		<-flight.done
+		if flight.accepted {
+			dispatched = dispatchOutcome{terminal: chatsessions.TurnStateCanceled, outcome: protocol.PromptOutcome{StopReason: acpsdk.StopReasonCancelled}}
+			dispatchErr = nil
+		}
+		s.clearCancelFlight(startResult.Session.ID, startResult.Turn.ID, flight)
 	}
 
 	terminal := dispatched.terminal

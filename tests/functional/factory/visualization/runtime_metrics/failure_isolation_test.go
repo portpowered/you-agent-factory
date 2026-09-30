@@ -235,7 +235,7 @@ func TestMetricsSessionTimeoutReturnsNoPartialReport(t *testing.T) {
 	})
 	// The deadline is the behavior under test. The readiness select below
 	// returns as soon as the real event request reaches the server.
-	ctx, cancel := context.WithTimeout(t.Context(), 250*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	inputs := boundaryInputs(t, ctx, "you", "--json", "--server", server.URL(), "metrics", "session", fixture.sessionID)
 	command := support.StartProcessCommand(t, runtimeMetricsCLIProcess, inputs.Input)

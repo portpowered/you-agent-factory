@@ -29,7 +29,7 @@ func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *t
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("create operator config directory: %v", err)
 	}
-	config := []byte(`{"workers":{"acp":{"integrations":[{"id":"cursor-functional","name":"cursor-acp","transport":"stdio","command":"cursor-agent acp"}]}}}`)
+	config := []byte(`{"workers":{"acp":{"integrations":[{"id":"cursor-functional","name":"cursor","transport":"stdio","command":"cursor-agent acp"}]}}}`)
 	if err := os.WriteFile(filepath.Join(configDir, "config.json"), config, 0o600); err != nil {
 		t.Fatalf("write operator config: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *t
 			PlatformProcessCommandFactory: acpHelperCommandFactory(&starts, fixture),
 			ProvidersExecutableLocator:    availableExecutableLocator{},
 			ProviderCatalogCapabilityOverrides: []providerswire.CatalogCapabilityOverride{{
-				Provider: "cursor-acp",
+				Provider: "cursor",
 				Capabilities: []providers.Capability{
 					providers.CapabilityPromptSubmission,
 					providers.CapabilityImageInput,
@@ -56,7 +56,7 @@ func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *t
 	javascript := factory.Orchestrator.Javascript
 	args := map[string]any{
 		"request": "research the best places to travel", "count": 2,
-		"executorProvider": "ACP", "modelProvider": "cursor-acp",
+		"executorProvider": "ACP", "modelProvider": "cursor",
 	}
 	request := factoryapi.FactorySessionExecutionRequest{
 		RequestId: "packaged-spawn-acp-stdio",

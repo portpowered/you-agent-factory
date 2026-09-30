@@ -21,6 +21,25 @@ import (
 	"time"
 )
 
+func TestPersistedRuntimeStateRestoresRequestWorkerSettings(t *testing.T) {
+	state := runtimeSessionState{startRequest: &StartRequest{WorkerSettings: &factory.JavaScriptWorkerSettings{
+		Presets: map[string]factory.JavaScriptWorkerPreset{"review": {ModelProvider: "codex", Model: "test-model"}},
+	}}}
+	snapshot := persistedSnapshotFromRuntimeStateWithFailureLogCapacity(state, 0)
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded PersistedRuntimeSessionState
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	restored := runtimeStateFromPersistedSnapshot(decoded)
+	if restored.startRequest == nil || restored.startRequest.WorkerSettings == nil || restored.startRequest.WorkerSettings.Presets["review"].Model != "test-model" {
+		t.Fatalf("restored worker settings = %#v", restored.startRequest)
+	}
+}
+
 func TestChildWorkerExecutor_PreservesTypedProviderReasonWithoutSessionReference(t *testing.T) {
 	const rejection = "Agy does not support a separate reasoning effort."
 	invoker := &recordingWorkerExecution{result: workers.ExecuteResult{

@@ -496,6 +496,29 @@ type javaScriptRuntimeServiceConfig struct {
 	LiveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator
 }
 
+func TestReservedSyncSessionsExposeTheirOwnProjectRootsBeforeExecution(t *testing.T) {
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{ProjectRoot: t.TempDir()})
+	service.SetDirectWorkerExecution(&recordingWorkerExecution{})
+	for _, root := range []string{t.TempDir(), t.TempDir()} {
+		requestID := filepath.Base(root)
+		reserved, err := service.reserveStartSession(context.Background(), StartRequest{
+			RequestID: requestID, ProjectRoot: root,
+		}, requestID, false)
+		if err != nil {
+			t.Fatalf("reserveStartSession(%q): %v", root, err)
+		}
+		defer reserved.release()
+		if got := service.projectRootForSession(reserved.state.session.SessionID); got != root {
+			t.Fatalf("reserved session project root = %q, want %q", got, root)
+		}
+		child := service.childExecutorHooks(ChildExecutorModeLive, reserved.state.session.SessionID).
+			NewChildExecutor("child", newChildRecordSink(), factory.DefaultJavaScriptPolicy()).(*directChildExecutor)
+		if child.workingDir != root {
+			t.Fatalf("child working directory = %q, want %q", child.workingDir, root)
+		}
+	}
+}
+
 func testRuntimePersistenceStoreFactory(projectRoot string) (runtimepersist.Store, error) {
 	return runtimepersist.NewProjectStore(projectRoot, platformfilesystem.Local{})
 }

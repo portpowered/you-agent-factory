@@ -68,10 +68,10 @@ func TestFSCP03OneDurableOwnerAcrossProjectRootsAndRestart(t *testing.T) {
 		if outcome.err != nil || outcome.result.SessionID == "" || outcome.result.Status != string(factorysessions.LifecycleStatusSucceeded) {
 			t.Fatalf("durable Start(%q) = %#v, error = %v", outcome.root, outcome.result, outcome.err)
 		}
-		snapshotPath := filepath.Join(home, ".you-agent-factory", "durable-sessions", outcome.result.SessionID+".json")
+		snapshotPath := filepath.Join(outcome.root, ".you-agent-factory", "durable-sessions", outcome.result.SessionID+".json")
 		encoded, err := os.ReadFile(snapshotPath)
 		if err != nil {
-			t.Fatalf("read home-scoped snapshot %q: %v", snapshotPath, err)
+			t.Fatalf("read project-scoped snapshot %q: %v", snapshotPath, err)
 		}
 		var snapshot struct{ ProjectRoot string }
 		if err := json.Unmarshal(encoded, &snapshot); err != nil {
@@ -79,10 +79,6 @@ func TestFSCP03OneDurableOwnerAcrossProjectRootsAndRestart(t *testing.T) {
 		}
 		if snapshot.ProjectRoot != outcome.root {
 			t.Fatalf("snapshot %q project root = %q, want %q", snapshotPath, snapshot.ProjectRoot, outcome.root)
-		}
-		projectSnapshot := filepath.Join(outcome.root, ".you-agent-factory", "durable-sessions", outcome.result.SessionID+".json")
-		if _, err := os.Stat(projectSnapshot); !os.IsNotExist(err) {
-			t.Fatalf("project-scoped snapshot %q stat error = %v, want absence", projectSnapshot, err)
 		}
 	}
 	if outcomes[0].result.SessionID == outcomes[1].result.SessionID {
@@ -101,11 +97,24 @@ func TestFSCP03OneDurableOwnerAcrossProjectRootsAndRestart(t *testing.T) {
 		t.Fatal("restarted process Factory Sessions capability is unavailable")
 	}
 	for _, outcome := range outcomes {
+		selected, err := restartedSessions.Start(t.Context(), factorysessions.SessionStartRequest{
+			Mode: factorysessions.SessionOperationModeLive, FolderPath: outcome.root,
+			ActivationOnly: true, RuntimeSelection: fscp03RuntimeSelections(outcome.root, home),
+		})
+		if err != nil {
+			t.Fatalf("select current Factory %q after restart: %v", outcome.root, err)
+		}
 		got, err := restartedSessions.Get(t.Context(), factorysessions.SessionGetRequest{
 			SessionID: outcome.result.SessionID, Mode: factorysessions.SessionOperationModeDurable,
 		})
 		if err != nil || got.Session.SessionID != outcome.result.SessionID || got.Session.Status != string(factorysessions.LifecycleStatusSucceeded) {
 			t.Fatalf("Get after restart (%q) = %#v, error = %v", outcome.root, got, err)
+		}
+		if _, err := restartedSessions.Control(t.Context(), factorysessions.SessionControlRequest{
+			SessionID: selected.SessionID, Mode: factorysessions.SessionOperationModeLive,
+			Operation: factorysessions.SessionControlClose,
+		}); err != nil {
+			t.Fatalf("close current Factory %q: %v", outcome.root, err)
 		}
 	}
 }

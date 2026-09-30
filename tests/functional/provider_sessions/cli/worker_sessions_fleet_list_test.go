@@ -77,12 +77,6 @@ func TestWorkerSessionsFleetListBoundedRootPages(t *testing.T) {
 			t.Fatalf("bounded fleet Work %s resolved to %#v", observation.WorkID, listed)
 		}
 	}
-	for _, observation := range expectedByName {
-		waitForWorkerSessionConfirmation(t, ctx, process, env, factoryDir, []string{
-			"--server", baseURL, "worker-sessions", "show", "--session", observation.FactorySessionID,
-			"--provider", "codex", "--kind", "session_id", "--id", observation.ProviderSessionID, "--output", "json",
-		})
-	}
 	if err := fixture.runner.WaitForCalls(ctx, routeStart+len(workNames)); err != nil {
 		t.Fatalf("wait for bounded fleet provider dispatches: %v", err)
 	}
@@ -295,7 +289,7 @@ func assertBoundedFleetObservation(t *testing.T, label string, session workerSes
 	if session.AttemptID == "" || session.StartedAt == nil || session.EndedAt == nil || session.DurationMillis == nil || *session.DurationMillis < 0 || session.DurationBasis != "RECORDED_TIMESTAMPS" {
 		t.Fatalf("%s row %q omitted recorded timing facts: %#v", label, session.WorkerSessionID, session)
 	}
-	if session.Transcript != "AVAILABLE" || (session.ConfirmationState != "CONFIRMED" && session.ConfirmationState != "UNCONFIRMED") || session.Parse.EventCount == 0 {
+	if session.Transcript != "AVAILABLE" || session.ConfirmationState != "UNCONFIRMED" || session.Parse.EventCount == 0 {
 		t.Fatalf("%s row %q omitted transcript/recording/parse facts: transcript=%q confirmation=%q parse=%#v", label, session.WorkerSessionID, session.Transcript, session.ConfirmationState, session.Parse)
 	}
 	if !containsString(session.WorkIDs, want.WorkID) {

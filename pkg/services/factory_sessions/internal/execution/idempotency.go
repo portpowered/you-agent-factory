@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -395,7 +396,8 @@ func (s *JavaScriptRuntimeService) reserveStartSession(
 			return nil, err
 		}
 		placeholder := &runtimeSessionState{
-			session: SessionReadResult{SessionID: sessionID},
+			session:     SessionReadResult{SessionID: sessionID},
+			projectRoot: s.resolveRequestProjectRoot(normalized),
 		}
 		s.sessions[sessionID] = placeholder
 		s.startReplay[normalized.RequestID] = startReplayRecord{
@@ -630,7 +632,18 @@ func (s *JavaScriptRuntimeService) ApplyLiveChange(
 	sessionID string,
 	request factorysessions.LiveChangeRequest,
 ) (factorysessions.LiveChangeResult, error) {
-	return s.runDurableLiveChange(ctx, sessionID, request, "")
+	return s.runDurableLiveChange(ctx, sessionID, request, "", nil)
+}
+
+func (s *JavaScriptRuntimeService) ApplyLiveChangeWithRuntime(ctx context.Context, sessionID string, request factorysessions.LiveChangeRequest, runtime workflowsource.Service, projectRoot string) (factorysessions.LiveChangeResult, error) {
+	state, err := s.snapshotSessionState(sessionID)
+	if err != nil {
+		return factorysessions.LiveChangeResult{}, err
+	}
+	if strings.TrimSpace(state.projectRoot) != "" && !strings.EqualFold(filepath.Clean(state.projectRoot), filepath.Clean(projectRoot)) {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrSessionNotFound
+	}
+	return s.runDurableLiveChange(ctx, sessionID, request, "", runtime)
 }
 
 // RecoverLiveChange closes an admitted durable live change after a restart or
@@ -641,7 +654,7 @@ func (s *JavaScriptRuntimeService) RecoverLiveChange(
 	sessionID string,
 	requestID string,
 ) (factorysessions.LiveChangeResult, error) {
-	return s.runDurableLiveChange(ctx, sessionID, factorysessions.LiveChangeRequest{}, requestID)
+	return s.runDurableLiveChange(ctx, sessionID, factorysessions.LiveChangeRequest{}, requestID, nil)
 }
 
 func (s *JavaScriptRuntimeService) runDurableLiveChange(
@@ -649,6 +662,7 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 	sessionID string,
 	request factorysessions.LiveChangeRequest,
 	recoverRequestID string,
+	runtimeOverride workflowsource.Service,
 ) (factorysessions.LiveChangeResult, error) {
 	if s == nil {
 		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
@@ -661,6 +675,9 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 		return factorysessions.LiveChangeResult{}, err
 	}
 	runtime := s.workerInvoker()
+	if runtimeOverride != nil {
+		runtime = runtimeOverride
+	}
 	if runtime == nil {
 		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
 			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,

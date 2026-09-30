@@ -126,6 +126,38 @@ func replaceInvocationSignatureFixture(t *testing.T, factoryPath string, signatu
 	}
 }
 
+// The packaged Goal worker refers to parameters in its original signature.
+// These scenarios replace or remove that signature to test invocation syntax,
+// so detach those unrelated provider selectors from the copied fixture.
+func clearGoalWorkerProviderPlaceholders(t *testing.T, factoryPath string) {
+	t.Helper()
+	payload, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatalf("read installed Factory: %v", err)
+	}
+	var factory map[string]any
+	if err := json.Unmarshal(payload, &factory); err != nil {
+		t.Fatalf("decode installed Factory: %v", err)
+	}
+	workers, ok := factory["workers"].([]any)
+	if !ok || len(workers) == 0 {
+		t.Fatalf("installed Factory workers = %#v", factory["workers"])
+	}
+	worker, ok := workers[0].(map[string]any)
+	if !ok {
+		t.Fatalf("installed Factory worker = %#v", workers[0])
+	}
+	delete(worker, "modelProvider")
+	delete(worker, "model")
+	updated, err := json.MarshalIndent(factory, "", "  ")
+	if err != nil {
+		t.Fatalf("encode installed Factory: %v", err)
+	}
+	if err := os.WriteFile(factoryPath, updated, 0o600); err != nil {
+		t.Fatalf("write installed Factory: %v", err)
+	}
+}
+
 type customerProcess interface {
 	Execute(root.Input) error
 }

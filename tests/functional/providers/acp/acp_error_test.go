@@ -28,7 +28,7 @@ func TestACPCommandStartFailureMapsToDependencyFailure(t *testing.T) {
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP command start failure"}`))
-	writeACPWorker(t, dir, "cursor-acp")
+	writeACPWorker(t, dir, "cursor")
 
 	_, listed, _, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
 		PlatformProcessCommandFactory: func(string, ...string) *exec.Cmd {
@@ -40,7 +40,7 @@ func TestACPCommandStartFailureMapsToDependencyFailure(t *testing.T) {
 		t.Fatalf("failed work = %d, want 1", got)
 	}
 	for _, event := range responseEvents {
-		if event.Kind != "ERROR" || event.Phase != "FAILED" || event.Provenance.Provider != "cursor-acp" {
+		if event.Kind != "ERROR" || event.Phase != "FAILED" || event.Provenance.Provider != "cursor" {
 			continue
 		}
 		payload, err := event.Payload.AsFactoryResponseEventErrorPayload()
@@ -61,7 +61,7 @@ func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP stderr redaction"}`))
-	writeACPWorker(t, dir, "cursor-acp")
+	writeACPWorker(t, dir, "cursor")
 	workstation := []byte("---\ntype: MODEL_WORKSTATION\nenv:\n  ACP_TEST_API_TOKEN: super-secret-token\n---\n\nTest workstation.\n")
 	if err := os.WriteFile(filepath.Join(dir, "workstations", "process", "AGENTS.md"), workstation, 0o600); err != nil {
 		t.Fatalf("write ACP workstation environment: %v", err)
@@ -77,7 +77,7 @@ func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 		t.Fatalf("failed work = %d, want 1", got)
 	}
 	for _, event := range responseEvents {
-		if event.Kind != "ERROR" || event.Phase != "FAILED" || event.Provenance.Provider != "cursor-acp" {
+		if event.Kind != "ERROR" || event.Phase != "FAILED" || event.Provenance.Provider != "cursor" {
 			continue
 		}
 		payload, err := event.Payload.AsFactoryResponseEventErrorPayload()
@@ -109,7 +109,7 @@ func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 			t.Parallel()
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP failure"}`))
-			writeACPWorker(t, dir, "cursor-acp")
+			writeACPWorker(t, dir, "cursor")
 			fixture := functionalACPFixture(test.mode)
 
 			var starts atomic.Int32
@@ -134,7 +134,7 @@ func TestUnavailableACPExecutableFailsBeforeStartWithMissingExecutableClass(t *t
 	t.Parallel()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"missing ACP executable"}`))
-	writeACPWorker(t, dir, "cursor-acp")
+	writeACPWorker(t, dir, "cursor")
 
 	var starts atomic.Int32
 	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{

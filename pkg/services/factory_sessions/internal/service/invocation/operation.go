@@ -263,21 +263,42 @@ func (o *operation) invokeJavaScriptFactoryViaSessions(
 	target roles.InvocationTarget,
 	request factorysessions.InvocationRequest,
 ) (factorydefinitions.FactoryInvocationResult, error) {
-	resolved, err := o.sessionInput.ResolveInvocationInputForSession(ctx, sessionID, request)
+	return InvokeJavaScriptFactoryViaSessions(ctx, o.sessions, o.sessionInput, o.generateSessionID, sessionID, projection, target, request, nil)
+}
+
+// InvokeJavaScriptFactoryViaSessions executes the same JavaScript Factory
+// invocation for CLI and session-scoped callers such as ACP.
+func InvokeJavaScriptFactoryViaSessions(
+	ctx context.Context,
+	sessions factorysessions.Service,
+	inputs interface {
+		ResolveInvocationInputForSession(context.Context, string, factorysessions.InvocationRequest) (factorysessions.ResolvedInvocationInput, error)
+	},
+	generateSessionID factorysessions.SessionIDGenerator,
+	sessionID string,
+	projection factorysessions.ProjectionContext,
+	target roles.InvocationTarget,
+	request factorysessions.InvocationRequest,
+	configure func(*factorysessions.StartRequest),
+) (factorydefinitions.FactoryInvocationResult, error) {
+	resolved, err := inputs.ResolveInvocationInputForSession(ctx, sessionID, request)
 	if err != nil {
 		return factorydefinitions.FactoryInvocationResult{}, err
 	}
 	startRequest, err := javaScriptStartRequest(
-		projection, target, request, resolved, o.generateSessionID,
+		projection, target, request, resolved, generateSessionID,
 	)
 	if err != nil {
 		return factorydefinitions.FactoryInvocationResult{}, err
 	}
-	started, err := o.sessions.StartSync(ctx, startRequest)
+	if configure != nil {
+		configure(&startRequest)
+	}
+	started, err := sessions.StartSync(ctx, startRequest)
 	if err != nil {
 		return factorydefinitions.FactoryInvocationResult{}, err
 	}
-	result, err := o.sessions.GetResult(ctx, started.SessionID, factorysessions.ResultRequest{
+	result, err := sessions.GetResult(ctx, started.SessionID, factorysessions.ResultRequest{
 		Mode: factorysessions.ResultModeFinal,
 	})
 	if err != nil {
@@ -285,7 +306,7 @@ func (o *operation) invokeJavaScriptFactoryViaSessions(
 	}
 	var sessionFailure *factorysessions.FailureSummary
 	if result.Failure == nil && !javaScriptInvocationSucceeded(result) {
-		if session, sessionErr := o.sessions.GetSession(ctx, started.SessionID); sessionErr == nil {
+		if session, sessionErr := sessions.GetSession(ctx, started.SessionID); sessionErr == nil {
 			sessionFailure = session.Failure
 		}
 	}
@@ -388,6 +409,7 @@ func javaScriptStartRequest(
 	}
 	return factorysessions.StartRequest{
 		RequestID:       requestID,
+		ProjectRoot:     javaScriptInvocationProjectRoot(projection, target),
 		Source:          source,
 		Args:            args,
 		RequestedPolicy: factoryDefaultPolicyMap(js.DefaultPolicy),
@@ -418,11 +440,7 @@ func javaScriptWorkflowSource(
 		return factorysessions.Source{}, errors.New("JavaScript Factory workflow sourceRef is required")
 	}
 	if !filepath.IsAbs(source.WorkflowFile) {
-		factoryDir := target.FactoryDir
-		if projection.Session != nil && strings.TrimSpace(projection.Session.FactoryDir) != "" {
-			factoryDir = projection.Session.FactoryDir
-		}
-		source.WorkflowFile = filepath.Join(factoryDir, source.WorkflowFile)
+		source.WorkflowFile = filepath.Join(javaScriptInvocationProjectRoot(projection, target), source.WorkflowFile)
 	}
 	metadata := javaScriptFactoryMetadata(js, projection)
 	if len(js.DefaultPolicy) > 0 || len(js.ArgsSchema) > 0 || len(js.Agents) > 0 || len(metadata) > 0 {
@@ -434,6 +452,13 @@ func javaScriptWorkflowSource(
 		}
 	}
 	return source, nil
+}
+
+func javaScriptInvocationProjectRoot(projection factorysessions.ProjectionContext, target roles.InvocationTarget) string {
+	if projection.Session != nil && strings.TrimSpace(projection.Session.FactoryDir) != "" {
+		return strings.TrimSpace(projection.Session.FactoryDir)
+	}
+	return strings.TrimSpace(target.FactoryDir)
 }
 
 func javaScriptFactoryMetadata(

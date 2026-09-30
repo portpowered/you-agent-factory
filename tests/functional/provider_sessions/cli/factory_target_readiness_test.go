@@ -167,7 +167,10 @@ func assertFactoryTargetReadinessSemanticFailure(t *testing.T, err error, checks
 	if checks != 1 {
 		t.Fatalf("malformed Factory readiness checks = %d, want immediate single check", checks)
 	}
-	assertReadinessErrorMarkers(t, err, "default", "<none>", "FACTORY_SESSION_CONFIG_LOAD_FAILED")
+	assertReadinessErrorMarkers(t, err, "default", "<none>", "HTTP 400 code=BAD_REQUEST")
+	if !strings.Contains(err.Error(), "Factory source could not be loaded or validated") {
+		t.Fatalf("malformed Factory readiness omitted load failure: %v", err)
+	}
 	if providerCalls != 0 {
 		t.Fatalf("malformed Factory readiness invoked provider route: calls=%d", providerCalls)
 	}
@@ -423,6 +426,7 @@ func assertExplicitFactorySessionTarget(t *testing.T, baseURL, sessionID, factor
 		t.Fatalf("decode explicit Factory Session %q: %v", sessionID, err)
 	}
 	if session.Id != sessionID || session.Target.Kind != factoryapi.FactorySessionTargetRefKindDefault ||
+		session.Target.Name != nil ||
 		!sameFactoryPath(session.FolderPath, factoryDir) || !sameFactoryPath(session.FactoryDir, factoryDir) {
 		t.Fatalf("explicit Factory Session target = %#v, want default target at %q", session, factoryDir)
 	}

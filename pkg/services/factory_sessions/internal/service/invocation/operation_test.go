@@ -38,6 +38,9 @@ func TestJavaScriptStartRequestPreservesWorkflowFileDefaultPolicy(t *testing.T) 
 	if started.Source.Kind != factoryruntime.WorkflowSourceKindWorkflowFile {
 		t.Fatalf("source kind = %q, want WORKFLOW_FILE", started.Source.Kind)
 	}
+	if started.ProjectRoot != factoryDir {
+		t.Fatalf("project root = %q, want %q", started.ProjectRoot, factoryDir)
+	}
 	if started.Source.InlineWorkflow == nil || string(started.Source.InlineWorkflow.DefaultPolicy) != string(defaultPolicy) {
 		t.Fatalf("inline workflow overlay = %#v, want factory defaultPolicy preserved", started.Source.InlineWorkflow)
 	}
@@ -84,6 +87,9 @@ func TestJavaScriptStartRequestUsesDefinitionAndNormalizedArguments(t *testing.T
 	if started.Source.Kind != factoryruntime.WorkflowSourceKindWorkflowFile || started.Source.WorkflowFile != wantSource {
 		t.Fatalf("source = %#v, want workflow file %q", started.Source, wantSource)
 	}
+	if started.ProjectRoot != factoryDir {
+		t.Fatalf("project root = %q, want %q", started.ProjectRoot, factoryDir)
+	}
 	if got, ok := started.Args["researchDepth"].(int64); !ok || got != 3 {
 		t.Fatalf("researchDepth = %#v, want int64(3)", started.Args["researchDepth"])
 	}
@@ -95,6 +101,37 @@ func TestJavaScriptStartRequestUsesDefinitionAndNormalizedArguments(t *testing.T
 	}
 	if started.Runtime == nil || started.Runtime.ChildExecutorMode != factorysessions.ChildExecutorModeFake {
 		t.Fatalf("runtime = %#v, want fake child executor", started.Runtime)
+	}
+}
+
+func TestJavaScriptStartRequestProjectRootUsesScopedSessionThenTarget(t *testing.T) {
+	sessionDir := t.TempDir()
+	targetDir := t.TempDir()
+	projection := factorysessions.ProjectionContext{FactoryCfg: &factorydefinitions.FactoryConfig{
+		Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{JavaScript: &factorydefinitions.FactoryOrchestratorJavaScriptConfig{
+			SourceRef: "workflow.js",
+		}},
+	}, Session: &factorysessions.ScopedLiveSessionSummary{FactoryDir: sessionDir}}
+	target := roles.InvocationTarget{FactoryDir: targetDir}
+	for _, tc := range []struct {
+		name string
+		want string
+	}{
+		{name: "session", want: sessionDir},
+		{name: "target fallback", want: targetDir},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.name == "target fallback" {
+				projection.Session = nil
+			}
+			started, err := javaScriptStartRequest(projection, target, factorysessions.InvocationRequest{}, factorysessions.ResolvedInvocationInput{}, func() string { return "session-id" })
+			if err != nil {
+				t.Fatalf("javaScriptStartRequest: %v", err)
+			}
+			if started.ProjectRoot != tc.want || started.Source.WorkflowFile != filepath.Join(tc.want, "workflow.js") {
+				t.Fatalf("project root = %q, workflow file = %q, want root %q", started.ProjectRoot, started.Source.WorkflowFile, tc.want)
+			}
+		})
 	}
 }
 

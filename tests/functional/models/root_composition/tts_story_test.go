@@ -130,8 +130,8 @@ func TestModelsDirectTTSCharacterizesDefaultScopeNonReentrancy(t *testing.T) {
 	secondInputs.Input.Env = story.environment
 	secondInputs.Input.WorkingDirectory = story.dir
 	secondErr := story.process.Execute(secondInputs.Input)
-	if secondErr == nil || !strings.Contains(secondErr.Error(), "runtime is already bound") {
-		t.Fatalf("overlapping default-scope invocation error = %v, want bounded already-bound lifecycle failure", secondErr)
+	if secondErr == nil || !strings.Contains(secondErr.Error(), "session \"~default\" is already active") {
+		t.Fatalf("overlapping default-scope invocation error = %v, want bounded active-session lifecycle failure", secondErr)
 	}
 	cancelFirst()
 	if err := <-firstDone; !errors.Is(err, context.Canceled) && !errors.Is(err, models.ErrInferenceCancelled) {
@@ -147,7 +147,7 @@ func TestModelsDirectTTSCharacterizesDefaultScopeNonReentrancy(t *testing.T) {
 	if starts != stops || stops != waits || active != 0 {
 		t.Fatalf("non-reentrant host release = starts:%d stops:%d waits:%d active:%d, want no leaked host lifecycle", starts, stops, waits, active)
 	}
-	t.Logf("lifecycle exception evidence: one root.BuildProcess owns customer scope ~default; overlapping Process.Execute returned bounded runtime-already-bound failure, first invocation canceled, temp/host ledgers released exactly once")
+	t.Logf("lifecycle exception evidence: one root.BuildProcess owns customer scope ~default; overlapping Process.Execute returned bounded active-session failure, first invocation canceled, temp/host ledgers released exactly once")
 }
 
 type ttsStory struct {

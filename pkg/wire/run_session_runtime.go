@@ -74,6 +74,7 @@ type runSessionProcess struct {
 	mu        sync.RWMutex
 	sessionID string
 	ready     chan initializer.RuntimeHostBinding
+	onStarted func()
 }
 
 func newRunSessionProcess(root *factorysessionwire.Root, request factorysessions.SessionStartRequest) *runSessionProcess {
@@ -98,6 +99,9 @@ func (process *runSessionProcess) Start(ctx, runCtx context.Context) error {
 	process.mu.Lock()
 	process.sessionID = result.SessionID
 	process.mu.Unlock()
+	if process.onStarted != nil {
+		process.onStarted()
+	}
 	if process.ready != nil {
 		ready, readyErr := process.root.ApplicationReady(result.SessionID)
 		if readyErr != nil {
@@ -151,6 +155,11 @@ type runSessionRunner struct {
 	*runtimeapplication.ManagedRunner
 	root    *factorysessionwire.Root
 	process *runSessionProcess
+}
+
+func (runner runSessionRunner) SetStartupReadyCallback(callback func()) bool {
+	runner.process.onStarted = callback
+	return true
 }
 
 func (runner runSessionRunner) RuntimeLogDiagnostics() runtimeartifact.Diagnostics {

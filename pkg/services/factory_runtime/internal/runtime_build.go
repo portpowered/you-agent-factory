@@ -502,7 +502,7 @@ func newRuntimeWorkersService(
 		invocationSkipPermissionsOverride: invocationOverride,
 		factorySessionID:                  canonicalSessionID,
 		runtimeID:                         spec.RuntimeInstanceID,
-		recordingID:                       workerRecordingIdentity(spec.RuntimeInstanceID, spec.RecordPath),
+		recordingID:                       workerRecordingIdentity(spec.RuntimeInstanceID),
 	}
 	if runtimeFactory != nil && spec.LoadedFactoryCfg != nil {
 		resolver := runtime.NewWorkstationRequestExecutor(runtime.WorkstationRequestExecutorConfig{
@@ -514,7 +514,7 @@ func newRuntimeWorkersService(
 			WorkflowContext:            RuntimeWorkflowContext(spec.LoadedFactoryCfg.FactoryConfig(), canonicalSessionID),
 			FactorySessionID:           canonicalSessionID,
 			RuntimeID:                  spec.RuntimeInstanceID,
-			RecordingID:                workerRecordingIdentity(spec.RuntimeInstanceID, spec.RecordPath),
+			RecordingID:                workerRecordingIdentity(spec.RuntimeInstanceID),
 			NewID:                      runtimeFactory.newID,
 			PromptRenderer:             service,
 			TemplateFieldResolver:      service,

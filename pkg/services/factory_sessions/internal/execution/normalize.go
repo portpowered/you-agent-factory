@@ -31,14 +31,18 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 	}
 
 	normalized := StartRequest{
-		RequestID:         requestID,
-		Source:            source,
-		Args:              cloneArgs(req.Args),
-		RequestedPolicy:   cloneArgs(req.RequestedPolicy),
-		EventConsumer:     req.EventConsumer,
-		ProjectRoot:       strings.TrimSpace(req.ProjectRoot),
-		PersistencePolicy: req.PersistencePolicy,
-		MockWorkers:       req.MockWorkers.Clone(),
+		RequestID:               requestID,
+		Source:                  source,
+		Args:                    cloneArgs(req.Args),
+		RequestedPolicy:         cloneArgs(req.RequestedPolicy),
+		EventConsumer:           req.EventConsumer,
+		ProjectRoot:             strings.TrimSpace(req.ProjectRoot),
+		PersistencePolicy:       req.PersistencePolicy,
+		MockWorkers:             req.MockWorkers.Clone(),
+		WorkerSettings:          factorysessions.CloneWorkerSettings(req.WorkerSettings),
+		WorkerAttemptStarter:    req.WorkerAttemptStarter,
+		WorkerProgressPublisher: req.WorkerProgressPublisher,
+		WorkerResourceAdmission: req.WorkerResourceAdmission,
 	}
 	if req.Runtime != nil {
 		runtime := *req.Runtime

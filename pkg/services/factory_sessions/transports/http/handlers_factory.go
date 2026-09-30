@@ -382,7 +382,27 @@ func (s *Server) durableProjectRoot(ctx context.Context) (string, error) {
 		Mode:      factorysessionexecution.SessionOperationModeLive,
 	})
 	if err != nil {
-		return "", err
+		if !errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+			return "", err
+		}
+		// A hosted process may select an explicit Factory Session ID. The
+		// single live session is then the unambiguous Current Factory for
+		// durable execution requests that have no session selector.
+		listed, listErr := s.sessionsRoot.List(ctx, factorysessionexecution.SessionListRequest{
+			Mode: factorysessionexecution.SessionOperationModeLive,
+		})
+		if listErr != nil {
+			return "", listErr
+		}
+		if len(listed.Sessions) != 1 {
+			if len(listed.Sessions) == 0 {
+				return "", err
+			}
+			return "", &factorysessionexecution.ValidationError{
+				Field: "projectRoot", Message: "current Factory Session is ambiguous",
+			}
+		}
+		defaultSession.Session = listed.Sessions[0]
 	}
 	root := strings.TrimSpace(defaultSession.Session.FactoryDir)
 	if root == "" {

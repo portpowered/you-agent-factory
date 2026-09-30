@@ -635,7 +635,12 @@ func (e *continuationFanOutExecution) continuationRequests(
 	t.Helper()
 	requests := make(map[string]workers.WorkstationDispatchRequest, count)
 	for range count {
-		request := <-e.started
+		var request workers.WorkstationDispatchRequest
+		select {
+		case request = <-e.started:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for continuation requests: got %d of %d", len(requests), count)
+		}
 		dispatchID := request.Execution.Dispatch.DispatchID
 		if _, duplicate := requests[dispatchID]; duplicate {
 			t.Fatalf("duplicate continuation request for dispatch %q", dispatchID)
@@ -747,6 +752,16 @@ func (s *capturedTurnWorkerSessions) InvokeSession(ctx context.Context, request 
 			s.mu.Unlock()
 			dispatch = <-entry.resume
 			continue
+		}
+		// Resume may have queued the successor before the canceled initial
+		// execution returned. Consume it before classifying that result.
+		if state == workersessions.StateRunning {
+			select {
+			case dispatch = <-entry.resume:
+				s.mu.Unlock()
+				continue
+			default:
+			}
 		}
 		if state != workersessions.StateTerminated {
 			if converted.TerminalOutcome == workers.WorkstationDispatchTerminalOutcomeCompleted {

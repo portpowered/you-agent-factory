@@ -10,6 +10,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	canonicaldurable "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/canonical/durable"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -21,6 +22,26 @@ import (
 // the established execution contract during the package migration.
 type Service struct {
 	durableexecution.Service
+}
+
+// SetPersistenceProjectRootResolver uses the canonical live session selection
+// when a process-owned durable session is loaded after restart.
+func (s *Service) SetPersistenceProjectRootResolver(resolve func() string) {
+	if s == nil || s.Service == nil {
+		return
+	}
+	if runtime, ok := s.Service.(*factorysessionexecution.JavaScriptRuntimeService); ok {
+		runtime.SetPersistenceRouting(nil, resolve)
+	}
+}
+
+func (s *Service) SetResumeRuntimeScopeResolver(resolve func(string) (factorysessionexecution.ResumeRuntimeScope, error)) {
+	if s == nil || s.Service == nil {
+		return
+	}
+	if runtime, ok := s.Service.(*factorysessionexecution.JavaScriptRuntimeService); ok {
+		runtime.SetResumeRuntimeScopeResolver(resolve)
+	}
 }
 
 var _ canonicaldurable.Service = (*Service)(nil)
@@ -310,6 +331,19 @@ func (s *Service) ApplyLiveChange(
 	request factorysessions.LiveChangeRequest,
 ) (factorysessions.LiveChangeResult, error) {
 	return s.forwardLiveChange(ctx, sessionID, request, "")
+}
+
+func (s *Service) ApplyLiveChangeWithRuntime(ctx context.Context, sessionID string, request factorysessions.LiveChangeRequest, runtime factoryruntime.Service, projectRoot string) (factorysessions.LiveChangeResult, error) {
+	if s == nil || s.Service == nil {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	capability, ok := s.Service.(interface {
+		ApplyLiveChangeWithRuntime(context.Context, string, factorysessions.LiveChangeRequest, factoryruntime.Service, string) (factorysessions.LiveChangeResult, error)
+	})
+	if !ok {
+		return factorysessions.LiveChangeResult{}, factorysessions.ErrRuntimeNotAvailable
+	}
+	return capability.ApplyLiveChangeWithRuntime(ctx, sessionID, request, runtime, projectRoot)
 }
 
 // RecoverLiveChange forwards durable live-change recovery when the underlying

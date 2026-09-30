@@ -4,13 +4,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"path/filepath"
-	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -18,10 +14,10 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestAPIPetriDispatchUsageReachesDispatchList proves a completed Petri
-// dispatch crosses a real provider command edge and the public dispatch-list
-// endpoint without losing measured usage or inventing absent token facts.
-func TestAPIPetriDispatchUsageReachesDispatchList(t *testing.T) {
+// TestAPIPetriDispatchUsageReachesCanonicalStream proves a completed Petri
+// dispatch crosses a real provider command edge and its live canonical event
+// stream without losing measured usage or inventing absent token facts.
+func TestAPIPetriDispatchUsageReachesCanonicalStream(t *testing.T) {
 	t.Parallel()
 	acquireExecutionFixtureSlot(t)
 
@@ -50,8 +46,8 @@ func TestAPIPetriDispatchUsageReachesDispatchList(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			endpoint := runPetriDispatchUsage(t, test)
-			assertPetriDispatchUsage(t, endpoint, test)
+			response, endpoint := runPetriDispatchUsage(t, test)
+			assertPetriDispatchUsage(t, response, endpoint, test)
 		})
 	}
 }
@@ -66,34 +62,22 @@ type petriDispatchUsageCase struct {
 	wantTokenKeys  bool
 }
 
-func runPetriDispatchUsage(t *testing.T, test petriDispatchUsageCase) string {
+func runPetriDispatchUsage(t *testing.T, test petriDispatchUsageCase) (factoryapi.FactoryEvent, string) {
 	t.Helper()
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.WriteAgentConfig(t, dir, "processor", test.workerConfig)
-	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	var openingCustomSession bool
-	var customRuntimeIDIssued atomic.Bool
-	recordPath := filepath.Join(t.TempDir(), "petri-dispatch-usage.json")
+	const sessionID = "sess-petri-dispatch-usage"
 	providerRunner := testutil.NewProviderCommandRunner(test.providerResult)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
-		Args:                      []string{"--record", recordPath},
 		Edges: serviceedges.Edges{
-			FactoryRuntimeIDGenerator: func() string {
-				if openingCustomSession && customRuntimeIDIssued.CompareAndSwap(false, true) {
-					return sessionID
-				}
-				return uuid.NewString()
-			},
-			FactorySessionIDGenerator:                func() string { return sessionID },
-			FactorySessionRuntimeInstanceIDGenerator: uuid.NewString,
-			ProviderCommandRunner:                    providerRunner,
+			FactorySessionIDGenerator: func() string { return sessionID },
+			ProviderCommandRunner:     providerRunner,
 		},
 	})
 	t.Cleanup(func() { server.Stop(t) })
 
-	openingCustomSession = true
 	opened := support.OpenFactorySessionAt(t, server.URL(), dir)
 	if opened.Session == nil || opened.Session.Id != sessionID {
 		t.Fatalf("opened session = %#v, want id %q", opened.Session, sessionID)
@@ -105,55 +89,24 @@ func runPetriDispatchUsage(t *testing.T, test petriDispatchUsageCase) string {
 		Payload:      map[string]string{"title": "REST Petri dispatch usage"},
 	})
 	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, 10*time.Second)
-	support.CloseFactorySessionAt(t, server.URL(), sessionID)
-	return strings.TrimSuffix(server.URL(), "/") + "/factory-sessions/" + sessionID + "/dispatches"
+	events := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeDispatchResponse {
+			return event, server.URL() + "/factory-sessions/" + sessionID + "/dispatches"
+		}
+	}
+	t.Fatalf("live Factory Session %q emitted no DISPATCH_RESPONSE", sessionID)
+	return factoryapi.FactoryEvent{}, ""
 }
 
-func assertPetriDispatchUsage(t *testing.T, endpoint string, test petriDispatchUsageCase) {
+func assertPetriDispatchUsage(t *testing.T, event factoryapi.FactoryEvent, endpoint string, test petriDispatchUsageCase) {
 	t.Helper()
-	deadline := time.NewTimer(10 * time.Second)
-	defer deadline.Stop()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	var (
-		body   []byte
-		listed factoryapi.ListFactorySessionDispatchesResponse
-	)
-	for {
-		response, err := http.Get(endpoint)
-		if err != nil {
-			t.Fatalf("GET %s: %v", endpoint, err)
-		}
-		body, err = io.ReadAll(response.Body)
-		response.Body.Close()
-		if err != nil {
-			t.Fatalf("read GET %s response: %v", endpoint, err)
-		}
-		if response.StatusCode != http.StatusOK {
-			t.Fatalf("GET %s status = %d, want 200: %s", endpoint, response.StatusCode, body)
-		}
-		listed = factoryapi.ListFactorySessionDispatchesResponse{}
-		if err := json.Unmarshal(body, &listed); err != nil {
-			t.Fatalf("decode GET %s response: %v", endpoint, err)
-		}
-		if len(listed.Dispatches) > 0 {
-			break
-		}
-		select {
-		case <-deadline.C:
-			t.Fatalf("GET %s dispatches remained empty after waiting for recording projection", endpoint)
-		case <-ticker.C:
-		}
+	dispatch, err := event.Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode DISPATCH_RESPONSE: %v", err)
 	}
-	if len(listed.Dispatches) != 1 {
-		t.Fatalf("GET %s dispatches = %#v, want one completed Petri dispatch", endpoint, listed.Dispatches)
-	}
-	dispatch := listed.Dispatches[0]
-	if dispatch.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
-		t.Fatalf("dispatch status = %q, want COMPLETED", dispatch.Status)
-	}
-	if dispatch.DispatchKind != factoryapi.FactoryDispatchKindPETRITRANSITION {
-		t.Fatalf("dispatch kind = %q, want PETRI_TRANSITION", dispatch.DispatchKind)
+	if dispatch.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("dispatch outcome = %q, want ACCEPTED", dispatch.Outcome)
 	}
 	if dispatch.Usage == nil || dispatch.Usage.DurationMillis == nil {
 		t.Fatalf("dispatch usage = %#v, want measured duration", dispatch.Usage)
@@ -167,19 +120,30 @@ func assertPetriDispatchUsage(t *testing.T, endpoint string, test petriDispatchU
 	if dispatch.Usage.CostUsd != nil {
 		t.Fatalf("dispatch costUsd = %#v, want absent", dispatch.Usage.CostUsd)
 	}
-	assertUsageTokenFieldPresence(t, endpoint, body, test.wantTokenKeys)
+	assertUsageTokenFieldPresence(t, event.Payload, test.wantTokenKeys)
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatalf("GET %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("live Petri dispatch history status = %d, want 404: %s", response.StatusCode, body)
+	}
 }
 
-func assertUsageTokenFieldPresence(t *testing.T, endpoint string, body []byte, wantPresent bool) {
+func assertUsageTokenFieldPresence(t *testing.T, payload factoryapi.FactoryEvent_Payload, wantPresent bool) {
 	t.Helper()
-	var envelope struct {
-		Dispatches []map[string]json.RawMessage `json:"dispatches"`
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal dispatch response payload: %v", err)
 	}
+	var envelope map[string]json.RawMessage
 	if err := json.Unmarshal(body, &envelope); err != nil {
-		t.Fatalf("decode raw GET %s response: %v", endpoint, err)
+		t.Fatalf("decode dispatch response payload: %v", err)
 	}
 	var usage map[string]json.RawMessage
-	if err := json.Unmarshal(envelope.Dispatches[0]["usage"], &usage); err != nil {
+	if err := json.Unmarshal(envelope["usage"], &usage); err != nil {
 		t.Fatalf("decode raw dispatch usage: %v", err)
 	}
 	for _, key := range []string{"inputTokens", "outputTokens", "totalTokens"} {

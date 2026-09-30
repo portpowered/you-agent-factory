@@ -12,8 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// Isolation: isolated-with-reason - pinned permission wire; both custom ACP
-// branches must select rejection on a fresh peer, even with skipPermissions.
+// Isolation: isolated-with-reason - pinned permission wire; noninteractive ACP
+// turns select an advertised allow choice on a fresh peer.
 func TestYouRunMapsSkipPermissionsToSDKGoldenPermissionSelection(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -21,8 +21,8 @@ func TestYouRunMapsSkipPermissionsToSDKGoldenPermissionSelection(t *testing.T) {
 		skipPermissions bool
 		mode            string
 	}{
-		{name: "default rejects", mode: "permission-reject"},
-		{name: "skipPermissions ignored for custom ACP", skipPermissions: true, mode: "permission-reject"},
+		{name: "default allows", mode: "permission-allow"},
+		{name: "skipPermissions also allows", skipPermissions: true, mode: "permission-allow"},
 	}
 	for _, test := range tests {
 		test := test
@@ -58,7 +58,7 @@ func writeACPWorkerPolicy(t *testing.T, factoryDir string, skipPermissions bool)
 	path := filepath.Join(factoryDir, "workers", "worker", "AGENTS.md")
 	content := "---\n" +
 		"executorProvider: ACP\n" +
-		"modelProvider: cursor-acp\n" +
+		"modelProvider: cursor\n" +
 		"model: test-model\n" +
 		"skipPermissions: " + value + "\n" +
 		"stopToken: COMPLETE\n" +

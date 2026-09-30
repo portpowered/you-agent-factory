@@ -630,9 +630,9 @@ type SessionRecordingSelection struct {
 }
 
 // SessionStartRequest is the detached start/open vocabulary for both live and
-// durable Factory Sessions. Its fields are immutable selections and normalized
-// values only: its RuntimeOptions field is configuration data and it carries no
-// Runtime object, service bundle, stream, logger, or filesystem handle.
+// durable Factory Sessions. Transport-visible fields are immutable selections
+// and normalized values; the internal Worker capabilities are attached by the
+// process root after transport mapping.
 type SessionStartRequest struct {
 	SessionID      string
 	Mode           SessionOperationMode
@@ -651,6 +651,12 @@ type SessionStartRequest struct {
 	ValidateOnly   bool
 	InitNewFactory bool
 	Synchronous    bool
+	// WorkerSettings is an internal snapshot from the selected live Factory
+	// Session for a durable execution started through this process.
+	WorkerSettings          *factoryruntime.JavaScriptWorkerSettings `json:"-"`
+	WorkerAttemptStarter    WorkerAttemptStarter `json:"-"`
+	WorkerProgressPublisher workers.ProgressPublisher `json:"-"`
+	WorkerResourceAdmission factoryruntime.ResourceCapacityLeaseAdmission `json:"-"`
 	// RuntimeSelection carries value-only runtime selections for process-owned activation.
 	RuntimeSelection *SessionRuntimeSelection
 	// ActivationOnly starts lifecycle without dispatching Work (ACP target).
