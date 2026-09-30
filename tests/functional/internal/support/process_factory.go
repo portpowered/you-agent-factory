@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -182,6 +184,7 @@ func RunFactoryToCompletionWithEdgesAndObservationsStableBeforeClose(
 		terminalObservationStableWindow,
 		nil,
 		beforeClose,
+		"",
 	)
 	return session, work, events
 }
@@ -195,7 +198,19 @@ func RunFactoryToCompletionWithConfiguredHome(
 	overrides serviceedges.Edges,
 	timeout time.Duration,
 	configure func(string),
+	factorySessionIDs ...string,
 ) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+	t.Helper()
+	if len(factorySessionIDs) > 1 {
+		t.Fatalf("Factory Session IDs = %d, want at most one", len(factorySessionIDs))
+	}
+	factorySessionID := ""
+	if len(factorySessionIDs) == 1 {
+		factorySessionID = strings.TrimSpace(factorySessionIDs[0])
+		if factorySessionID == "" {
+			t.Fatal("Factory Session ID is empty")
+		}
+	}
 	session, work, events, _ := runFactoryToCompletionWithHome(
 		t,
 		dir,
@@ -206,6 +221,7 @@ func RunFactoryToCompletionWithConfiguredHome(
 		terminalObservationCorrelated,
 		nil,
 		nil,
+		factorySessionID,
 	)
 	return session, work, events
 }
@@ -272,6 +288,7 @@ func RunFactoryToCompletionWithEdgesAndResponseEventsAndWorkerSessionEvents(
 			}
 		},
 		nil,
+		"",
 	)
 	return session, work, events, responseEvents, workerEvents
 }
@@ -321,6 +338,7 @@ func runFactoryToCompletionWithMode(
 		observationMode,
 		nil,
 		nil,
+		"",
 	)
 }
 
@@ -335,6 +353,7 @@ func runFactoryToCompletionWithHome(
 	observationMode terminalObservationMode,
 	captureWorkerSessionEvents func(string, factoryapi.ListWorkResponse),
 	beforeClose func(),
+	factorySessionID string,
 ) (
 	factoryapi.FactorySession,
 	factoryapi.ListWorkResponse,
@@ -346,7 +365,7 @@ func runFactoryToCompletionWithHome(
 	server := NewProcessAPIServer()
 	overrides.APIServerStarter = server.Start
 	process := BuildProcess(t, overrides)
-	inputs := FakeInputs(t.Context(), []string{
+	args := []string{
 		"you", "run",
 		"--dir", dir,
 		"--continuously",
@@ -354,7 +373,11 @@ func runFactoryToCompletionWithHome(
 		"--server", "http://127.0.0.1:1",
 		"--quiet",
 		"--no-record",
-	})
+	}
+	if factorySessionID != "" {
+		args = append(args, "--session", factorySessionID)
+	}
+	inputs := FakeInputs(t.Context(), args)
 	homeDir := t.TempDir()
 	if configure != nil {
 		configure(homeDir)
@@ -374,7 +397,22 @@ func runFactoryToCompletionWithHome(
 	})
 	daemon := StartProcessCommand(t, process, inputs.Input)
 	baseURL := server.WaitForURL(t)
-	liveSession := GetDefaultSession(t, baseURL)
+	selectedSessionID := strings.TrimSpace(factorySessionID)
+	if selectedSessionID == "" {
+		selectedSessionID = factorysessions.DefaultSessionID
+	}
+	readSession := func(sessionID string) factoryapi.FactorySession {
+		response := GetJSON[factoryapi.FactorySessionGetResponse](
+			t,
+			strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+url.PathEscape(sessionID),
+		)
+		session, err := response.AsFactorySession()
+		if err != nil {
+			t.Fatalf("decode live Factory Session %q: %v", sessionID, err)
+		}
+		return session
+	}
+	liveSession := readSession(selectedSessionID)
 	var (
 		responseCaptureCancel context.CancelFunc
 		responseCaptureDone   <-chan responseEventCaptureResult
@@ -411,9 +449,9 @@ func runFactoryToCompletionWithHome(
 		WaitForSessionTerminalStatus(t, baseURL, liveSession.Id, timeout)
 	}
 
-	session := GetDefaultSession(t, baseURL)
-	work := ListDefaultSessionWork(t, baseURL)
-	events := GetFactoryEventsAt(t, baseURL)
+	session := readSession(liveSession.Id)
+	work := GetJSON[factoryapi.ListWorkResponse](t, SessionWorkURL(baseURL, liveSession.Id, "/work"))
+	events := GetFactoryEventsForSessionAt(t, baseURL, liveSession.Id)
 	if captureWorkerSessionEvents != nil {
 		// Worker Session replay is the provider-owned lifecycle boundary. Its
 		// terminal replay summary is authoritative for source observations that

@@ -31,6 +31,7 @@ type acpFixtureConfig struct {
 
 	RetryAttemptDirectory         string `json:"retryAttemptDirectory,omitempty"`
 	RetryHoldPath                 string `json:"retryHoldPath,omitempty"`
+	ObservationPath               string `json:"observationPath,omitempty"`
 	DisconnectMarkerPath          string `json:"disconnectMarkerPath,omitempty"`
 	DisconnectReadyPath           string `json:"disconnectReadyPath,omitempty"`
 	DisconnectReleasePath         string `json:"disconnectReleasePath,omitempty"`
@@ -66,6 +67,7 @@ type acpFixturePathField struct {
 var acpAbsolutePathFields = []acpFixturePathField{
 	{name: "retryAttemptDirectory", value: func(config acpFixtureConfig) string { return config.RetryAttemptDirectory }},
 	{name: "retryHoldPath", value: func(config acpFixtureConfig) string { return config.RetryHoldPath }},
+	{name: "observationPath", value: func(config acpFixtureConfig) string { return config.ObservationPath }},
 	{name: "disconnectMarkerPath", value: func(config acpFixtureConfig) string { return config.DisconnectMarkerPath }},
 	{name: "disconnectReadyPath", value: func(config acpFixtureConfig) string { return config.DisconnectReadyPath }},
 	{name: "disconnectReleasePath", value: func(config acpFixtureConfig) string { return config.DisconnectReleasePath }},

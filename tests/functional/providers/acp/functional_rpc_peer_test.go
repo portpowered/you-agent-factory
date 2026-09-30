@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -18,21 +19,63 @@ import (
 // tests. Keeping the peer as raw JSON-RPC also prevents shared SDK types from
 // hiding wire-compatibility failures.
 type functionalRPCPeer struct {
-	fixture      acpFixtureConfig
-	mode         string
-	scanner      *bufio.Scanner
-	writer       *bufio.Writer
-	stderr       io.Writer
-	closeOutput  io.Closer
-	modelSet     bool
-	sessionID    string
-	sessions     int
-	nextCallID   int
-	retryAttempt int
+	fixture       acpFixtureConfig
+	mode          string
+	scanner       *bufio.Scanner
+	writer        *bufio.Writer
+	stderr        io.Writer
+	closeOutput   io.Closer
+	observation   *acpObservationWriter
+	currentMethod string
+	modelSet      bool
+	sessionID     string
+	sessions      int
+	nextCallID    int
+	retryAttempt  int
 }
 
-func runFunctionalRPCPeer(fixture acpFixtureConfig, stdin io.Reader, stdout, stderr io.Writer) error {
+func runFunctionalRPCPeer(fixture acpFixtureConfig, stdin io.Reader, stdout, stderr io.Writer) (runErr error) {
 	mode := fixture.Mode
+	retryAttempt := 0
+	var attemptErr error
+	if mode == "retry-resume" {
+		retryAttempt, attemptErr = currentRetryAttempt(fixture.RetryAttemptDirectory)
+	}
+	observation, err := newACPObservationWriter(fixture.ObservationPath, retryAttempt)
+	if err != nil {
+		return err
+	}
+	if observation != nil {
+		if err := observation.lifecycle("start", "started", nil); err != nil {
+			_ = observation.close()
+			return err
+		}
+		defer func() {
+			exitCode := 0
+			result := "success"
+			if runErr != nil {
+				exitCode = 2
+				result = "error"
+			}
+			if err := observation.lifecycle("exit", result, &exitCode); err != nil {
+				if runErr == nil {
+					runErr = err
+				} else {
+					runErr = fmt.Errorf("%v; %w", runErr, err)
+				}
+			}
+			if err := observation.close(); err != nil {
+				if runErr == nil {
+					runErr = err
+				} else {
+					runErr = fmt.Errorf("%v; %w", runErr, err)
+				}
+			}
+		}()
+	}
+	if attemptErr != nil {
+		return attemptErr
+	}
 	if mode == "malformed" {
 		_, err := fmt.Fprintln(stdout, "{not-json")
 		return err
@@ -40,17 +83,9 @@ func runFunctionalRPCPeer(fixture acpFixtureConfig, stdin io.Reader, stdout, std
 	if mode == "eof" {
 		return nil
 	}
-	retryAttempt := 0
-	if mode == "retry-resume" {
-		var err error
-		retryAttempt, err = currentRetryAttempt(fixture.RetryAttemptDirectory)
-		if err != nil {
-			return err
-		}
-	}
 	peer := &functionalRPCPeer{
 		fixture: fixture, mode: mode, scanner: bufio.NewScanner(stdin), writer: bufio.NewWriter(stdout), stderr: stderr,
-		sessionID: fixture.SessionID, retryAttempt: retryAttempt,
+		sessionID: fixture.SessionID, retryAttempt: retryAttempt, observation: observation,
 	}
 	if closeOutput, ok := stdout.(io.Closer); ok {
 		peer.closeOutput = closeOutput
@@ -68,6 +103,9 @@ func currentRetryAttempt(directory string) (int, error) {
 	if directory == "" {
 		return 0, fmt.Errorf("retry-resume mode requires retryAttemptDirectory")
 	}
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return 0, fmt.Errorf("create retry attempt directory: %w", err)
+	}
 	entries, err := os.ReadDir(directory)
 	if err != nil {
 		return 0, fmt.Errorf("read retry attempt directory: %w", err)
@@ -83,10 +121,24 @@ func currentRetryAttempt(directory string) (int, error) {
 		}
 		latest = attempt
 	}
-	if latest == 0 {
-		return 0, fmt.Errorf("retry attempt directory %q has no process phase", directory)
+	for attempt := latest + 1; ; attempt++ {
+		path := filepath.Join(directory, strconv.Itoa(attempt))
+		marker, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if os.IsExist(err) {
+			continue
+		}
+		if err != nil {
+			return 0, fmt.Errorf("claim retry attempt %d: %w", attempt, err)
+		}
+		if _, err := marker.WriteString("started"); err != nil {
+			_ = marker.Close()
+			return 0, fmt.Errorf("write retry attempt marker: %w", err)
+		}
+		if err := marker.Close(); err != nil {
+			return 0, fmt.Errorf("close retry attempt marker: %w", err)
+		}
+		return attempt, nil
 	}
-	return latest, nil
 }
 
 func (p *functionalRPCPeer) serve() error {
@@ -95,94 +147,111 @@ func (p *functionalRPCPeer) serve() error {
 		if err := json.Unmarshal(p.scanner.Bytes(), &request); err != nil {
 			return fmt.Errorf("decode client RPC: %w", err)
 		}
-		switch request.Method {
-		case "initialize":
-			if err := p.initialize(request); err != nil {
-				return err
-			}
-		case "session/new":
-			if err := p.createSession(request); err != nil {
-				return err
-			}
-		case "session/load":
-			if err := p.loadSession(request); err != nil {
-				return err
-			}
-		case "session/set_config_option":
-			var params struct {
-				Value string `json:"value"`
-			}
-			if err := json.Unmarshal(request.Params, &params); err != nil {
-				return fmt.Errorf("decode model selection: %w", err)
-			}
-			p.modelSet = params.Value == "test-model"
-			if err := p.respond(request.ID, json.RawMessage(`{"configOptions":[]}`)); err != nil {
-				return err
-			}
-		case "session/prompt":
-			if err := p.prompt(request); err != nil {
-				return err
-			}
-			if err := holdACPHelperUntilReleased(p.fixture); err != nil {
-				return err
-			}
-			if p.mode == "package-conformance" {
-				return p.waitForPackageConformanceRelease()
-			}
-			if p.mode == "disconnect-once" && p.sessions == 1 {
-				marker := p.fixture.DisconnectMarkerPath
-				ready := p.fixture.DisconnectReadyPath
-				release := p.fixture.DisconnectReleasePath
-				if marker == "" {
-					return fmt.Errorf("disconnect-once mode requires disconnectMarkerPath")
-				}
-				if ready == "" || release == "" {
-					return fmt.Errorf("disconnect-once mode requires disconnectReadyPath and disconnectReleasePath")
-				}
-				if _, err := os.Stat(marker); os.IsNotExist(err) {
-					if err := os.WriteFile(ready, []byte("response-ready"), 0o600); err != nil {
-						return fmt.Errorf("write ACP response-ready marker: %w", err)
-					}
-					for {
-						if _, err := os.Stat(release); err == nil {
-							break
-						} else if !os.IsNotExist(err) {
-							return fmt.Errorf("inspect ACP disconnect release: %w", err)
-						}
-						time.Sleep(10 * time.Millisecond)
-					}
-					if p.closeOutput == nil {
-						return fmt.Errorf("disconnect-once mode cannot close its output")
-					}
-					if err := p.closeOutput.Close(); err != nil {
-						return fmt.Errorf("close disconnected ACP output: %w", err)
-					}
-					if err := os.WriteFile(marker, []byte("disconnected"), 0o600); err != nil {
-						return fmt.Errorf("write ACP disconnect marker: %w", err)
-					}
-					for p.scanner.Scan() {
-					}
-					return p.scanner.Err()
-				} else if err != nil {
-					return fmt.Errorf("inspect ACP disconnect marker: %w", err)
-				}
-			}
-			if (p.mode == "spawn" && p.sessions >= 4) ||
-				(p.mode == "tournament" && p.sessions >= 3) ||
-				((p.mode == "persistent" || p.mode == "serialize") && p.sessions >= 2) {
-				return nil
-			}
-			if p.mode != "persistent" && p.mode != "serialize" && p.mode != "spawn" && p.mode != "tournament" {
-				return nil
-			}
-		case "$/cancel_request", "session/cancel":
+		p.currentMethod = request.Method
+		if err := p.observation.rpc("client_to_peer", request.Method, request.ID, "request", nil); err != nil {
+			return fmt.Errorf("record ACP observation: %w", err)
+		}
+		done, err := p.handleRequest(request)
+		if err != nil {
+			return err
+		}
+		if done {
 			return nil
-		default:
-			return fmt.Errorf("unexpected client RPC method %q", request.Method)
 		}
 	}
 	if err := p.scanner.Err(); err != nil {
 		return fmt.Errorf("read client RPC: %w", err)
+	}
+	return nil
+}
+
+func (p *functionalRPCPeer) handleRequest(request rpcEnvelope) (bool, error) {
+	switch request.Method {
+	case "initialize":
+		return false, p.initialize(request)
+	case "session/new":
+		return false, p.createSession(request)
+	case "session/load":
+		return false, p.loadSession(request)
+	case "session/set_config_option":
+		var params struct {
+			Value string `json:"value"`
+		}
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			return false, fmt.Errorf("decode model selection: %w", err)
+		}
+		p.modelSet = params.Value == "test-model"
+		return false, p.respond(request.ID, json.RawMessage(`{"configOptions":[]}`))
+	case "session/prompt":
+		return p.handlePrompt(request)
+	case "$/cancel_request", "session/cancel":
+		return true, nil
+	default:
+		return false, fmt.Errorf("unexpected client RPC method %q", request.Method)
+	}
+}
+
+func (p *functionalRPCPeer) handlePrompt(request rpcEnvelope) (bool, error) {
+	if err := p.prompt(request); err != nil {
+		return false, err
+	}
+	if err := holdACPHelperUntilReleased(p.fixture); err != nil {
+		return false, err
+	}
+	if p.mode == "package-conformance" {
+		return true, p.waitForPackageConformanceRelease()
+	}
+	if p.mode == "disconnect-once" && p.sessions == 1 {
+		if err := p.disconnectOnceAfterPrompt(); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	if (p.mode == "spawn" && p.sessions >= 4) ||
+		(p.mode == "tournament" && p.sessions >= 3) ||
+		((p.mode == "persistent" || p.mode == "serialize") && p.sessions >= 2) {
+		return true, nil
+	}
+	done := p.mode != "persistent" && p.mode != "serialize" && p.mode != "spawn" && p.mode != "tournament"
+	return done, nil
+}
+
+func (p *functionalRPCPeer) disconnectOnceAfterPrompt() error {
+	marker := p.fixture.DisconnectMarkerPath
+	ready := p.fixture.DisconnectReadyPath
+	release := p.fixture.DisconnectReleasePath
+	if marker == "" {
+		return fmt.Errorf("disconnect-once mode requires disconnectMarkerPath")
+	}
+	if ready == "" || release == "" {
+		return fmt.Errorf("disconnect-once mode requires disconnectReadyPath and disconnectReleasePath")
+	}
+	if _, err := os.Stat(marker); os.IsNotExist(err) {
+		if err := os.WriteFile(ready, []byte("response-ready"), 0o600); err != nil {
+			return fmt.Errorf("write ACP response-ready marker: %w", err)
+		}
+		for {
+			if _, err := os.Stat(release); err == nil {
+				break
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("inspect ACP disconnect release: %w", err)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		if p.closeOutput == nil {
+			return fmt.Errorf("disconnect-once mode cannot close its output")
+		}
+		if err := p.closeOutput.Close(); err != nil {
+			return fmt.Errorf("close disconnected ACP output: %w", err)
+		}
+		if err := os.WriteFile(marker, []byte("disconnected"), 0o600); err != nil {
+			return fmt.Errorf("write ACP disconnect marker: %w", err)
+		}
+		for p.scanner.Scan() {
+		}
+		return p.scanner.Err()
+	} else if err != nil {
+		return fmt.Errorf("inspect ACP disconnect marker: %w", err)
 	}
 	return nil
 }
@@ -528,6 +597,13 @@ func (p *functionalRPCPeer) assertUnsupportedClientMethods() error {
 		if err := json.Unmarshal(p.scanner.Bytes(), &response); err != nil {
 			return fmt.Errorf("decode %s response: %w", call.method, err)
 		}
+		result := "success"
+		if response.Error != nil {
+			result = "error"
+		}
+		if err := p.observation.rpc("client_to_peer", call.method, response.ID, result, response.Error); err != nil {
+			return fmt.Errorf("record ACP observation: %w", err)
+		}
 		if response.Error == nil {
 			return fmt.Errorf("%s response = %s, want not supported error", call.method, p.scanner.Bytes())
 		}
@@ -549,6 +625,20 @@ func (p *functionalRPCPeer) respondError(id json.RawMessage, code int, message s
 }
 
 func (p *functionalRPCPeer) write(message rpcEnvelope) error {
+	method := message.Method
+	result := "request"
+	if method == "" {
+		method = p.currentMethod
+		result = "success"
+		if message.Error != nil {
+			result = "error"
+		}
+	} else if len(message.ID) == 0 {
+		result = "notification"
+	}
+	if err := p.observation.rpc("peer_to_client", method, message.ID, result, message.Error); err != nil {
+		return fmt.Errorf("record ACP observation: %w", err)
+	}
 	if err := json.NewEncoder(p.writer).Encode(message); err != nil {
 		return err
 	}
