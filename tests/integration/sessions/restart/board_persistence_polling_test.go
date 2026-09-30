@@ -144,6 +144,11 @@ func boardPersistenceReportsCancellation(logs string) bool {
 		if fields["operation"] == "run.service" && fields["outcome"] == "cancelled" {
 			return true
 		}
+		// The runtime can stop after its first log write but before the
+		// automation phase reports startup cancellation to the CLI.
+		if fields["msg"] == "engine stopped" && fields["reason"] == "context canceled" {
+			return true
+		}
 		if fields["level"] == "error" && fields["error"] == "context canceled" {
 			message, _ := fields["msg"].(string)
 			if message == "engine initial tick error" || message == "failed to compile factory orchestration" {
@@ -152,6 +157,16 @@ func boardPersistenceReportsCancellation(logs string) bool {
 		}
 	}
 	return false
+}
+
+func TestBoardPersistenceReportsStructuredEngineCancellation(t *testing.T) {
+	t.Parallel()
+	if !boardPersistenceReportsCancellation(`{"level":"info","msg":"engine stopped","reason":"context canceled"}`) {
+		t.Fatal("engine stop cancellation was not observed")
+	}
+	if boardPersistenceReportsCancellation(`{"level":"info","msg":"engine stopped","reason":"completed"}`) {
+		t.Fatal("normal engine stop was classified as cancellation")
+	}
 }
 
 func boardPersistenceDaemonReady(t *testing.T, daemon *boardPersistenceDaemon) bool {

@@ -65,8 +65,14 @@ func (runtime *SessionRuntime) StartWorkerLifecycle(ctx context.Context) (Runtim
 	if runtime == nil {
 		return nil, errors.New("start runtime automation: Factory Session runtime is required")
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	current := runtime.runtimeState.ActiveHandle()
 	if current == nil || current.RuntimeInstance() == nil {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		return nil, errors.New("start runtime automation: runtime is not started")
 	}
 	serviceMode := runtimeModeOrDefault(runtime.runtimeMode) == interfaces.RuntimeModeService

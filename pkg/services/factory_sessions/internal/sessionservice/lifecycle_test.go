@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -11,6 +12,17 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 )
+
+func TestStartWorkerLifecyclePreservesCancellationBeforeRuntimeState(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	runtime := &factorysessionservice.SessionRuntime{}
+	_, err := runtime.StartWorkerLifecycle(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("StartWorkerLifecycle() = %v, want context cancellation", err)
+	}
+}
 
 type unifiedLifecycleGatewayHost struct {
 	lifecycleGatewayHost
