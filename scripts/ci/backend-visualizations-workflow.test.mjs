@@ -28,16 +28,24 @@ test("PR architecture previews reuse complete coverage artifacts with read-only 
 	assert.doesNotMatch(preview, /git push|git commit/);
 });
 
-test("only successful main CI publishes generated pages", () => {
+test("successful main CI proposes measured pages through a bot pull request", () => {
 	const publish = job("backend-visualizations-publish");
 	assert.match(publish, /github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
 	assert.match(publish, /needs\.backend-coverage\.result == 'success'/);
 	assert.match(publish, /needs\.verification-policy\.result == 'success'/);
-	assert.match(publish, /permissions:\n      contents: write/);
+	assert.match(publish, /permissions:\n      contents: read/);
+	assert.match(publish, /fetch-depth: 2/);
+	assert.match(publish, /persist-credentials: false/);
+	assert.match(publish, /git diff --quiet HEAD\^ HEAD -- \. ':\(exclude\)docs\/architecture\/visualizations\/\*\*'/);
 	assert.match(publish, /BACKEND_VIS_SOURCE_COMMIT: \$\{\{ github\.sha \}\}/);
 	assert.match(publish, /BACKEND_VIS_REQUIRE_COVERAGE: "1"/);
 	assert.match(publish, /run: make architecture/);
 	assert.match(publish, /git add -A docs\/architecture\/visualizations\//);
 	assert.match(publish, /git diff --cached --quiet/);
-	assert.match(publish, /git push origin HEAD:main/);
+	assert.match(publish, /uses: actions\/create-github-app-token@v2/);
+	assert.match(publish, /gh auth setup-git --hostname github\.com/);
+	assert.match(publish, /git push origin "HEAD:\$bot_branch"/);
+	assert.match(publish, /gh pr create --base main --head "\$bot_branch"/);
+	assert.match(publish, /gh pr merge "\$pr_url" --auto --merge --delete-branch/);
+	assert.doesNotMatch(publish, /git push origin HEAD:main/);
 });
