@@ -94,6 +94,7 @@ type Server struct {
 	wireRecorder    acp.WireRecorder
 	startResolver   acp.FactorySessionStartResolver
 	invocationScope acp.InvocationScopeFactory
+	controlFlights  *promptFlightRegistry
 }
 
 func (s *Server) scopedInvocation(ctx context.Context) (context.Context, func()) {
@@ -114,8 +115,9 @@ func (s *Server) resolveInvocationHomeDir(ctx context.Context) (string, error) {
 }
 
 // promptFlightRegistry coalesces duplicate session/prompt requests for the
-// lifetime of one connection. Prompt processing is asynchronous so a later
-// line can carry a session/cancel notification while the Factory call is in
+// lifetime of one connection. A Server keeps a separate instance for captured
+// cancellation across Serve calls. Prompt processing is asynchronous so a
+// later line can carry a session/cancel notification while the Factory call is in
 // flight. That also means an immediate redelivery of the same JSON-RPC
 // request can otherwise observe the turn before its first handler has moved
 // it out of ADMITTED. A flight lets that redelivery await the original
@@ -310,6 +312,7 @@ func New(
 		responseBridge:  responseBridge,
 		wireRecorder:    wireRecorder,
 		startResolver:   startResolver,
+		controlFlights:  &promptFlightRegistry{},
 	}
 	if len(invocationScope) != 0 {
 		server.invocationScope = invocationScope[0]
@@ -588,7 +591,11 @@ func (s *Server) dispatchConnectionLine(
 	promptFlights *promptFlightRegistry,
 	promptGroup *taskgroup.Group,
 ) (stop bool, err error) {
-	reqCtx := contextWithCancelFlights(contextWithAttachmentCache(contextWithPromptNotifier(ctx, notify), attachments), promptFlights)
+	controlFlights := s.controlFlights
+	if controlFlights == nil {
+		controlFlights = promptFlights
+	}
+	reqCtx := contextWithCancelFlights(contextWithAttachmentCache(contextWithPromptNotifier(ctx, notify), attachments), controlFlights)
 	env, decodeErr := envelope.Decode(connectionID, *notificationSeq, raw)
 	if decodeErr != nil {
 		rpcErr, wireID, hasID := protocol.RejectEnvelope(decodeErr)
