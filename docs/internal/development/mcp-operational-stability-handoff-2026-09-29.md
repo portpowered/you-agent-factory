@@ -92,3 +92,30 @@ calls. These are semantic results from the direct CLI path, not an MCP
 invocation. The combined result shows that separate audio and video success
 does not establish reliable joint interpretation; the reason the spoken word
 was missed is not yet proven.
+
+### Follow-up repair and native Windows validation
+
+The direct Models OMNI path now extracts the first audio stream from a video
+with the injected process runner and sends audio and video through separate
+model observation calls. It returns both labeled observations without a third
+fusion call, which had contradicted correct audio evidence in a live test.
+`ffprobe` confirms the video and audio streams; `ffmpeg` converts the audio
+stream to mono 16 kHz WAV. Videos without audio keep the single video call.
+Explicit audio and video inputs use the same separate-observation path.
+
+A fresh Windows binary, `C:\Users\andre\bin\you-omni-av-20260929c.exe`,
+passed both direct CLI semantic probes:
+
+| Request | Result |
+| --- | --- |
+| Known `Zero.` WAV plus a four-second red `PHASE 1` / blue `PHASE 2` video with no audio track | `Audio input 1: zero`, followed by the correct visual colors, labels, and order. Exit 0. |
+| The same video with the known WAV muxed into its audio stream; only `video` bound | `Embedded audio from video input 1: zero` plus the correct visual phases. Exit 0. The audio observation added an unverified “drawn-out vowel sound,” so only the word and visual facts are counted as correct. |
+
+Focused LocalAI and Models wire tests passed. The output `usage` slot is
+omitted for combined media because it represents multiple model calls.
+An explicit `max_tokens` parameter is rejected for combined media, rather
+than silently ignored. The probes validate these fixtures on this Windows
+host; they do not establish accuracy for every audio/video format or prompt.
+The final `you.exe` was installed with SHA-256
+`757e4c0e585b7e9068ee7bccdaea3668b9a2ea63aadc52546bf1ca083df9c118`.
+`make docs-reference-smoke` and all 24 `make lint` targets passed.

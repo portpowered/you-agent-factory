@@ -634,6 +634,18 @@ you models invoke llm \
   --input audio=@speech.wav
 ```
 
+When a video contains an audio stream, `OMNI` reads the first audio stream
+and the video frames. It returns separate `Embedded audio from video input 1`
+and `Video` observations. A request with a separate `audio` input and a
+`video` input returns labeled observations for both sources. The host needs
+`ffmpeg` and `ffprobe` on `PATH` for video input. A video without an audio
+stream still returns a visual answer.
+
+Combined audio and video analysis does not include the optional `usage`
+output. It rejects an explicit `max_tokens` parameter because the composed
+response cannot apply that token limit exactly. Single-modality `OMNI`
+invocations continue to support `max_tokens` and `usage`.
+
 The detected type must match the named slot. For example,
 `--input audio=@clip.mp4` is rejected before generation. The Models service
 classifies this as `MEDIA_CAPABILITY`. The CLI reports the safe

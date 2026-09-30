@@ -101,6 +101,7 @@ type invocationRuntimeOptions struct {
 	Embedding        EmbeddingBackend
 	Client           InvocationProtocolClient
 	Dialer           InvocationProtocolDialer
+	VideoAudioRunner platformprocess.CommandRunner
 	ASRTempDirectory func() string
 	ASRCreateTemp    localai.TempFileFactory
 	ASRWriteFile     localai.InputFileWriter
@@ -426,6 +427,9 @@ func composeModelsService(
 	runtimeOptions = bindTTSStaging(
 		runtimeOptions, runtimeTempDir, runtimeTempFile, assetWriteFile, runtimeInspect, assetReadFile, assetRemove,
 	)
+	if runtimeOptions.Client == nil && runtimeOptions.Dialer != nil {
+		runtimeOptions.VideoAudioRunner = runtimeRunner
+	}
 	launcher, clock, createTempFile := adaptConstructionPorts(
 		processLauncher, hostClock, runtimeTempFile,
 	)

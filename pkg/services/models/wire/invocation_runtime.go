@@ -4,9 +4,11 @@ import (
 	"context"
 	"strings"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelcodecs "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/videoaudio"
 	modelsruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/runtime"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
@@ -85,7 +87,7 @@ func (runtime operationInvocationRuntime) Invoke(
 func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, error) {
 	runtime := operationInvocationRuntime{
 		generic: genericInvocationRuntime(options.Backend),
-		omni:    newInvocationRuntime(options.Client, options.Dialer),
+		omni:    newInvocationRuntime(options.Client, options.Dialer, options.VideoAudioRunner),
 	}
 	if err := configureASRRuntime(&runtime, options); err != nil {
 		return nil, err
@@ -249,6 +251,7 @@ type omniInvocationRuntime struct {
 func newInvocationRuntime(
 	client InvocationProtocolClient,
 	dialer InvocationProtocolDialer,
+	runners ...platformprocess.CommandRunner,
 ) invocationRuntime {
 	fallback := failClosedInvocationRuntime{}
 	if isNilDependency(client) {
@@ -260,8 +263,15 @@ func newInvocationRuntime(
 	} else if dialer != nil {
 		protocolClient = localai.NewPinnedGRPCProtocolClient(dialer)
 	}
+	var extract localai.VideoAudioExtractor
+	if len(runners) > 0 && runners[0] != nil {
+		runner := runners[0]
+		extract = func(ctx context.Context, video []byte) ([]byte, error) {
+			return videoaudio.ExtractVideoAudio(ctx, runner, video)
+		}
+	}
 	return omniInvocationRuntime{
-		codec:    localai.NewPinnedOmniCodec(protocolClient),
+		codec:    localai.NewPinnedOmniCodec(protocolClient, extract),
 		fallback: fallback,
 	}
 }

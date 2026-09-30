@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -137,8 +138,9 @@ func TestOmniCodecForwardsOrderedMediaAndDetectedTypes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if len(result.Content) != 1 || result.Content[0].Content != "LOCALAI_FIXTURE_OMNI" {
-		t.Fatalf("content = %#v, want fixture text", result.Content)
+	if len(result.Content) != 1 || result.Content[0].Content !=
+		"Audio input 1: LOCALAI_FIXTURE_OMNI\nVideo: LOCALAI_FIXTURE_OMNI" {
+		t.Fatalf("content = %#v, want composed fixture observations", result.Content)
 	}
 	want := PredictRequest{
 		Prompt: "compare",
@@ -150,8 +152,12 @@ func TestOmniCodecForwardsOrderedMediaAndDetectedTypes(t *testing.T) {
 			{Slot: "video", Modality: models.ModalityVideo, MediaType: "video/mp4", Content: "clip.mp4"},
 		},
 	}
-	if !reflect.DeepEqual(fixture.request, want) {
-		t.Fatalf("protocol request = %#v, want %#v", fixture.request, want)
+	encoded, err := codec.Encode(request)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	if !reflect.DeepEqual(encoded, want) {
+		t.Fatalf("encoded request = %#v, want %#v", encoded, want)
 	}
 }
 
@@ -444,6 +450,210 @@ type protocolFixture struct {
 	response PredictResponse
 	err      error
 	calls    int
+}
+
+type scriptedOmniProtocol struct {
+	requests  []PredictRequest
+	responses []PredictResponse
+	errors    map[int]error
+	afterCall func(int)
+}
+
+func (fixture *scriptedOmniProtocol) Predict(_ context.Context, request PredictRequest) (PredictResponse, error) {
+	index := len(fixture.requests)
+	fixture.requests = append(fixture.requests, request)
+	if fixture.afterCall != nil {
+		fixture.afterCall(index)
+	}
+	if err := fixture.errors[index]; err != nil {
+		return PredictResponse{}, err
+	}
+	return fixture.responses[index], nil
+}
+
+func omniMediaRequest(t *testing.T, inputs ...models.InferenceInput) models.InvokeModelRequest {
+	t.Helper()
+	scope, err := (models.RuntimeScopeRef{}).Parse("scope:media-composition")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return models.InvokeModelRequest{
+		Scope: scope, Holder: "media-composition", Model: models.ModelReference{NameOrURI: "llm"},
+		Operation: models.OperationOMNI,
+		Inputs: append([]models.InferenceInput{{Name: "prompt", Modality: models.ModalityText,
+			Content: "Name the spoken word and visual phases"}}, inputs...),
+	}
+}
+
+func TestOmniCodecComposesAudioAndVideoObservations(t *testing.T) {
+	t.Parallel()
+	fixture := &scriptedOmniProtocol{responses: []PredictResponse{
+		{Text: "zero", Usage: `{"tokens":2}`},
+		{Text: "red PHASE 1, blue PHASE 2", Usage: `{"tokens":4}`},
+	}}
+	codec := NewPinnedOmniCodec(fixture)
+	result, err := codec.Invoke(context.Background(), omniMediaRequest(t,
+		models.InferenceInput{Name: "audio", Modality: models.ModalityAudio, MediaType: "audio/wav", Content: "WAV"},
+		models.InferenceInput{Name: "video", Modality: models.ModalityVideo, MediaType: "video/mp4", Content: "MP4"},
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fixture.requests) != 2 || len(result.Content) != 1 ||
+		result.Content[0].Content != "Audio input 1: zero\nVideo: red PHASE 1, blue PHASE 2" {
+		t.Fatalf("calls = %#v, result = %#v", fixture.requests, result)
+	}
+	if len(fixture.requests[0].Inputs) != 2 || fixture.requests[0].Inputs[1].Modality != models.ModalityAudio ||
+		len(fixture.requests[1].Inputs) != 2 || fixture.requests[1].Inputs[1].Modality != models.ModalityVideo {
+		t.Fatalf("media passes = %#v, want audio and video only", fixture.requests)
+	}
+	if !strings.Contains(fixture.requests[0].Prompt, "using words rather than digits") ||
+		!strings.Contains(fixture.requests[1].Prompt, "on-screen words, colors, and their temporal order") ||
+		strings.Contains(fixture.requests[0].Prompt, "Name the spoken word and visual phases") ||
+		strings.Contains(fixture.requests[1].Prompt, "Name the spoken word and visual phases") ||
+		strings.Contains(fixture.requests[1].Prompt, "audio") ||
+		strings.Contains(fixture.requests[1].Prompt, "speech") {
+		t.Fatalf("modality prompts = %#v", fixture.requests)
+	}
+}
+
+func TestOmniCodecCombinedMediaRejectsMaxTokensBeforePredict(t *testing.T) {
+	t.Parallel()
+	request := omniMediaRequest(t,
+		models.InferenceInput{Name: "audio", Modality: models.ModalityAudio, Content: "WAV"},
+		models.InferenceInput{Name: "video", Modality: models.ModalityVideo, Content: "MP4"},
+	)
+	request.Parameters = []models.OperationParameter{
+		{Name: "max_tokens", Value: 1}, {Name: "temperature", Value: 0.2},
+	}
+	for _, test := range []struct {
+		name      string
+		request   models.InvokeModelRequest
+		extractor VideoAudioExtractor
+	}{
+		{name: "explicit audio", request: request},
+		{name: "embedded audio", request: func() models.InvokeModelRequest {
+			videoOnly := request
+			videoOnly.Inputs = append([]models.InferenceInput(nil), request.Inputs[0], request.Inputs[2])
+			return videoOnly
+		}(), extractor: func(context.Context, []byte) ([]byte, error) { return []byte("WAV"), nil }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := &scriptedOmniProtocol{}
+			result, err := NewPinnedOmniCodec(fixture, test.extractor).Invoke(context.Background(), test.request)
+			var failure *models.InvocationFailure
+			if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassInvalidParameter ||
+				failure.Parameter != "max_tokens" || len(fixture.requests) != 0 ||
+				!reflect.DeepEqual(result, OmniInvocationResult{}) {
+				t.Fatalf("result = %#v, error = %v, calls = %d", result, err, len(fixture.requests))
+			}
+		})
+	}
+}
+
+func TestOmniCodecSingleModalityPreservesMaxTokens(t *testing.T) {
+	t.Parallel()
+	for _, modality := range []models.Modality{models.ModalityAudio, models.ModalityVideo} {
+		fixture := &scriptedOmniProtocol{responses: []PredictResponse{{Text: "answer"}}}
+		request := omniMediaRequest(t, models.InferenceInput{Name: strings.ToLower(string(modality)),
+			Modality: modality, Content: "media"})
+		request.Parameters = []models.OperationParameter{{Name: "max_tokens", Value: 1}}
+		_, err := NewPinnedOmniCodec(fixture).Invoke(context.Background(), request)
+		if err != nil || len(fixture.requests) != 1 ||
+			!reflect.DeepEqual(fixture.requests[0].Parameters, request.Parameters) {
+			t.Fatalf("modality %s: error = %v, calls = %#v", modality, err, fixture.requests)
+		}
+	}
+}
+
+func TestOmniCodecExtractsAndLabelsEmbeddedAudioSeparately(t *testing.T) {
+	t.Parallel()
+	var extracted int
+	extractor := func(_ context.Context, video []byte) ([]byte, error) {
+		extracted++
+		if string(video) != "MP4" {
+			t.Fatalf("extractor video = %q", video)
+		}
+		return []byte("EMBEDDED-WAV"), nil
+	}
+	fixture := &scriptedOmniProtocol{responses: []PredictResponse{
+		{Text: "separate audio says zero"}, {Text: "embedded audio says one"},
+		{Text: "red then blue"},
+	}}
+	codec := NewPinnedOmniCodec(fixture, extractor)
+	request := omniMediaRequest(t,
+		models.InferenceInput{Name: "audio", Modality: models.ModalityAudio, Content: "EXPLICIT-WAV"},
+		models.InferenceInput{Name: "video", Modality: models.ModalityVideo, Content: "MP4"},
+	)
+	if _, err := codec.Encode(request); err != nil || extracted != 0 {
+		t.Fatalf("Encode error = %v, extraction calls = %d, want pure Encode", err, extracted)
+	}
+	result, err := codec.Invoke(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if extracted != 1 || len(fixture.requests) != 3 ||
+		fixture.requests[0].Inputs[1].Content != "EXPLICIT-WAV" ||
+		fixture.requests[1].Inputs[1].Content != "EMBEDDED-WAV" {
+		t.Fatalf("extraction = %d, requests = %#v", extracted, fixture.requests)
+	}
+	if len(result.Content) != 1 ||
+		result.Content[0].Content != "Audio input 1: separate audio says zero\n"+
+			"Embedded audio from video input 1: embedded audio says one\nVideo: red then blue" {
+		t.Fatalf("composed output lost source labels: %#v", result.Content)
+	}
+}
+
+func TestOmniCodecVideoWithoutAudioStaysSinglePass(t *testing.T) {
+	t.Parallel()
+	fixture := &scriptedOmniProtocol{responses: []PredictResponse{{Text: "visual answer"}}}
+	codec := NewPinnedOmniCodec(fixture, func(context.Context, []byte) ([]byte, error) {
+		return nil, nil
+	})
+	result, err := codec.Invoke(context.Background(), omniMediaRequest(t,
+		models.InferenceInput{Name: "video", Modality: models.ModalityVideo, Content: "MP4"},
+	))
+	if err != nil || len(fixture.requests) != 1 || result.Content[0].Content != "visual answer" {
+		t.Fatalf("result = %#v, error = %v, requests = %#v", result, err, fixture.requests)
+	}
+}
+
+func TestOmniCodecMultiPassFailsAtomically(t *testing.T) {
+	t.Parallel()
+	request := omniMediaRequest(t,
+		models.InferenceInput{Name: "audio", Modality: models.ModalityAudio, Content: "WAV"},
+		models.InferenceInput{Name: "video", Modality: models.ModalityVideo, Content: "MP4"},
+	)
+	backendErr := errors.New("backend failed")
+	for _, step := range []int{0, 1} {
+		fixture := &scriptedOmniProtocol{responses: []PredictResponse{{Text: "audio"}, {Text: "video"}},
+			errors: map[int]error{step: backendErr}}
+		codec := NewPinnedOmniCodec(fixture)
+		result, err := codec.Invoke(context.Background(), request)
+		if !errors.Is(err, backendErr) || !reflect.DeepEqual(result, OmniInvocationResult{}) ||
+			len(fixture.requests) != step+1 {
+			t.Fatalf("step %d: result = %#v, error = %v, calls = %d", step, result, err, len(fixture.requests))
+		}
+	}
+	fixture := &scriptedOmniProtocol{responses: []PredictResponse{{Text: "audio"}, {Text: "video"}}}
+	ctx, cancel := context.WithCancel(context.Background())
+	fixture.afterCall = func(index int) {
+		if index == 0 {
+			cancel()
+		}
+	}
+	result, err := NewPinnedOmniCodec(fixture).Invoke(ctx, request)
+	if !errors.Is(err, context.Canceled) || !reflect.DeepEqual(result, OmniInvocationResult{}) ||
+		len(fixture.requests) != 1 {
+		t.Fatalf("canceled result = %#v, error = %v, calls = %d", result, err, len(fixture.requests))
+	}
+	fixture = &scriptedOmniProtocol{responses: []PredictResponse{{Text: "unused"}}}
+	result, err = NewPinnedOmniCodec(fixture, func(context.Context, []byte) ([]byte, error) {
+		return nil, backendErr
+	}).Invoke(context.Background(), request)
+	if !errors.Is(err, backendErr) || !reflect.DeepEqual(result, OmniInvocationResult{}) || len(fixture.requests) != 0 {
+		t.Fatalf("extraction result = %#v, error = %v, calls = %d", result, err, len(fixture.requests))
+	}
 }
 
 type recordingConformanceProbe struct {
