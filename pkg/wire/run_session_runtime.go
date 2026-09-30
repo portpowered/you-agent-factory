@@ -107,21 +107,43 @@ func (process *runSessionProcess) Start(ctx, runCtx context.Context) error {
 		if readyErr != nil {
 			return readyErr
 		}
-		go func() {
-			defer close(process.ready)
-			if ready == nil {
-				return
-			}
-			select {
-			case binding, ok := <-ready:
-				if ok {
-					process.ready <- initializer.RuntimeHostBinding{Host: binding.Host, Port: binding.Port}
-				}
-			case <-runCtx.Done():
-			}
-		}()
+		go relayRuntimeHostReady(runCtx, ready, process.ready)
 	}
 	return nil
+}
+
+func relayRuntimeHostReady(
+	ctx context.Context,
+	source <-chan factorysessions.RuntimeHostBinding,
+	target chan<- initializer.RuntimeHostBinding,
+) {
+	defer close(target)
+	if source == nil {
+		return
+	}
+	forward := func(binding factorysessions.RuntimeHostBinding, ok bool) {
+		if ok {
+			target <- initializer.RuntimeHostBinding{Host: binding.Host, Port: binding.Port}
+		}
+	}
+	// A finite runtime can publish readiness and finish before this relay runs.
+	// Consume the buffered binding before honoring cancellation in that case.
+	select {
+	case binding, ok := <-source:
+		forward(binding, ok)
+		return
+	default:
+	}
+	select {
+	case binding, ok := <-source:
+		forward(binding, ok)
+	case <-ctx.Done():
+		select {
+		case binding, ok := <-source:
+			forward(binding, ok)
+		default:
+		}
+	}
 }
 
 func (*runSessionProcess) StartWorkers(context.Context) (factorysessions.RuntimeStop, error) {

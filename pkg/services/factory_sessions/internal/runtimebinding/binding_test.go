@@ -105,6 +105,12 @@ func (handle *hostedHandleFake) RunDoneCh() <-chan struct{} { return handle.done
 
 type lifecycleFake struct{}
 
+type canceledReadinessLifecycle struct{ lifecycleFake }
+
+func (canceledReadinessLifecycle) WaitForStart(ctx context.Context, _ factory.RuntimeRun) error {
+	return ctx.Err()
+}
+
 func (lifecycleFake) Start(_ context.Context, instance factory.RuntimeRecord) (factory.RuntimeRun, error) {
 	return newHostedHandleFake(instance), nil
 }
@@ -479,6 +485,28 @@ func TestStartInitialRegistersAndSelectsCanonicalDefaultSession(t *testing.T) {
 	}
 	handle.CancelRun()
 	<-handle.RunDoneCh()
+}
+
+func TestStartInitialPreservesCancellationAfterStartupCleanup(t *testing.T) {
+	sessions := newRuntimeBindingState()
+	var runtimeState runtimebinding.State
+	bundle := &hostedInstanceFake{dir: "/factory", service: replacementFactory{}}
+	readinessCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	handle, err := runtimebinding.StartInitial(
+		readinessCtx, context.Background(), sessions, &runtimeState,
+		factorysessions.DefaultSessionID, "/factory", bundle,
+		factorysessions.Target{Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}},
+		interfaces.RuntimeModeBatch, canceledReadinessLifecycle{},
+		func(handle factory.RuntimeRun) error { handle.CancelRun(); return nil }, nil,
+	)
+	if handle != nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("StartInitial after canceled readiness = (%#v, %v), want nil handle and cancellation", handle, err)
+	}
+	if sessions.Resolve(factorysessions.DefaultSessionID) != nil || runtimeState.ActiveHandle() != nil {
+		t.Fatal("canceled startup retained an active Factory Session")
+	}
 }
 
 func TestStartInitialRegistersExplicitSessionWithoutDefaultAlias(t *testing.T) {

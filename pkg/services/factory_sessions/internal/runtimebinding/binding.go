@@ -104,10 +104,14 @@ func StartInitial(
 	runtimeState.ClearStartup()
 	runtimeState.SetActive(runContext, registeredSessionID, handle)
 	if err := lifecycle.WaitForStart(readinessContext, handle); err != nil {
-		return nil, HandleStartFailure(
+		startupErr := HandleStartFailure(
 			readinessContext, state, runtimeState,
 			sessionID, handle, stop, err, runtimeMode, onSessionRemoved,
 		)
+		if startupErr == nil && readinessContext.Err() != nil {
+			return nil, readinessContext.Err()
+		}
+		return nil, startupErr
 	}
 	return handle, nil
 }

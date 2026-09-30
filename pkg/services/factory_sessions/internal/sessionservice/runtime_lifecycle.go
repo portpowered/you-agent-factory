@@ -56,8 +56,17 @@ func (runtime *SessionRuntime) StartLifecycle(ctx, runCtx context.Context) error
 		}
 	}
 	// Initializer owns sidecar activation as the next lifecycle phase.
-	_, err := runtime.StartDefaultRuntime(ctx, runCtx)
-	return err
+	handle, err := runtime.StartDefaultRuntime(ctx, runCtx)
+	if err != nil {
+		return err
+	}
+	if handle == nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return errors.New("start runtime: Factory Session runtime was not activated")
+	}
+	return nil
 }
 
 // StartWorkerLifecycle activates the runtime's worker-side automation.

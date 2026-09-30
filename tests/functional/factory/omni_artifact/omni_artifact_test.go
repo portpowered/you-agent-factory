@@ -85,7 +85,10 @@ func TestFactorySessionOmniArtifactReplayPreservesOrderAndLineage(t *testing.T) 
 	const wantText = "Replay exact: café, 東京, and 🌍"
 	fixture := newFactoryFixture(t, wantText)
 	live := fixture.invoke(t, "Replay this exact fixture")
-	liveWork := fixture.listWork(t)
+	// A terminal runtime status can precede the recording flush that confirms
+	// the final Work state. Replay reads the flushed recording, so compare the
+	// live snapshot only after that same durability watermark is visible.
+	liveWork := fixture.waitForConfirmedWork(t)
 	liveEvents := fixture.recording(t)
 	liveJourney := assertSuccessfulJourney(t, liveEvents, "Replay this exact fixture", wantText)
 	replayed := fixture.replay(t)
@@ -98,6 +101,10 @@ func TestFactorySessionOmniArtifactReplayPreservesOrderAndLineage(t *testing.T) 
 		t.Fatalf("replayed canonical events differ from live recording")
 	}
 	replayedJourney := assertReplayJourney(t, replayed.events, "Replay this exact fixture", wantText)
+	if len(replayed.work.Results) != 1 || replayed.work.Results[0].ConfirmationState == nil ||
+		*replayed.work.Results[0].ConfirmationState != factoryapi.UNCONFIRMED {
+		t.Fatalf("no-record replay Work confirmation = %#v, want UNCONFIRMED", replayed.work.Results)
+	}
 	assertPublicWorkEquivalent(t, liveWork, replayed.work, "live and replay public Work")
 	if replayedJourney.artifactID != liveJourney.artifactID || requiredString(replayedJourney.outputWork.WorkId) != requiredString(liveJourney.outputWork.WorkId) {
 		t.Fatalf("replayed Work/artifact identity = (%q,%q), want live (%q,%q)", requiredString(replayedJourney.outputWork.WorkId), replayedJourney.artifactID, requiredString(liveJourney.outputWork.WorkId), liveJourney.artifactID)
@@ -587,6 +594,26 @@ func (fixture *factoryFixture) listWork(t *testing.T) factoryapi.ListWorkRespons
 	)
 }
 
+func (fixture *factoryFixture) waitForConfirmedWork(t *testing.T) factoryapi.ListWorkResponse {
+	t.Helper()
+	deadline := time.Now().Add(omniFactoryFunctionalTimeout)
+	for {
+		listed := fixture.listWork(t)
+		if len(listed.Results) == 1 {
+			item := listed.Results[0]
+			if item.ConfirmationState != nil && *item.ConfirmationState == factoryapi.CONFIRMED &&
+				item.State != nil && item.State.Type == factoryapi.WorkStateTypeTERMINAL {
+				return listed
+			}
+		}
+		if time.Now().After(deadline) {
+			payload, _ := json.Marshal(listed)
+			t.Fatalf("timed out waiting for confirmed terminal live Work: %s", payload)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func (fixture *factoryFixture) startLive(t *testing.T, prompt string) {
 	t.Helper()
 	if fixture.command != nil {
@@ -833,8 +860,15 @@ func assertPublicWorkEquivalent(t *testing.T, live, replay factoryapi.ListWorkRe
 	if len(live.Results) != 1 || len(replay.Results) != 1 {
 		t.Fatalf("%s list sizes = live:%d replay:%d, want exactly one each", label, len(live.Results), len(replay.Results))
 	}
-	if !jsonEqual(t, live.Results[0], replay.Results[0]) {
-		t.Fatalf("%s differs: live=%#v replay=%#v", label, live.Results[0], replay.Results[0])
+	// Confirmation is a durability watermark, not part of canonical Work:
+	// the live recording is flushed, while replay runs with --no-record.
+	liveWork, replayWork := live.Results[0], replay.Results[0]
+	liveWork.ConfirmationState = nil
+	replayWork.ConfirmationState = nil
+	if !jsonEqual(t, liveWork, replayWork) {
+		liveJSON, _ := json.Marshal(liveWork)
+		replayJSON, _ := json.Marshal(replayWork)
+		t.Fatalf("%s differs:\nlive=%s\nreplay=%s", label, liveJSON, replayJSON)
 	}
 }
 

@@ -1,13 +1,45 @@
 package wire
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
+
+func TestRelayRuntimeHostReadyPreservesBindingWhenRuntimeAlreadyFinished(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	source := make(chan factorysessions.RuntimeHostBinding, 1)
+	target := make(chan initializer.RuntimeHostBinding, 1)
+	want := factorysessions.RuntimeHostBinding{Host: "127.0.0.1", Port: 7437}
+	source <- want
+	close(source)
+	cancel()
+
+	done := make(chan struct{})
+	go func() {
+		relayRuntimeHostReady(ctx, source, target)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("readiness relay did not finish after runtime cancellation")
+	}
+	got, ok := <-target
+	if !ok || got.Host != want.Host || got.Port != want.Port {
+		t.Fatalf("relayed binding = %#v, open=%t; want %#v", got, ok, want)
+	}
+	if _, ok := <-target; ok {
+		t.Fatal("readiness relay published more than one binding")
+	}
+}
 
 func TestRunSessionStartRequestPreservesCLISelections(t *testing.T) {
 	t.Parallel()
