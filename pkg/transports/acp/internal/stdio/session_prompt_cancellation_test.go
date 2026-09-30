@@ -96,6 +96,7 @@ func TestServeCancelReachesFactorySessionWhileItsOwnSessionPromptInvocationIsSti
 		Target:           chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
 		FactorySessionID: "fs-already-bound",
 	}
+	getSessionResult.Session.ActiveTurnID = "turn-2"
 	chatSessions := &fakeChatSessionsService{
 		getSessionResult: getSessionResult,
 		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-2", "fs-already-bound"),
@@ -105,7 +106,8 @@ func TestServeCancelReachesFactorySessionWhileItsOwnSessionPromptInvocationIsSti
 		invokeEnter:   make(chan struct{}),
 		invokeRelease: make(chan struct{}),
 		cancelEntered: make(chan struct{}),
-		invokeResult:  factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCanceled},
+		cancelOutcome: factorysessions.LifecycleControlOutcomeAccepted,
+		invokeErr:     fmt.Errorf("%w: stopped factory session", factorysessions.ErrSessionNotFound),
 	}
 	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
 
@@ -772,8 +774,9 @@ func TestHandleSessionCancelDependencyFailureLeavesTurnRunningAndRetryable(t *te
 	factoryTarget := &fakeFactoryTargetService{cancelErr: errors.New("provider secret at /unsafe/path")}
 	server := New(nil, chatSessions, nil, factoryTarget, nil, nil, nil, nil, nil)
 	env := cancelNotificationEnvelope(t, "cancel-failure-1", session.ID)
+	cancelCtx := contextWithCancelFlights(context.Background(), &promptFlightRegistry{})
 
-	server.handleSessionCancel(context.Background(), env)
+	server.handleSessionCancel(cancelCtx, env)
 	current, err := base.GetSession(context.Background(), chatsessions.GetSessionRequest{SessionID: session.ID})
 	if err != nil {
 		t.Fatalf("GetSession after failed cancel: %v", err)
@@ -798,7 +801,7 @@ func TestHandleSessionCancelDependencyFailureLeavesTurnRunningAndRetryable(t *te
 	factoryTarget.mu.Lock()
 	factoryTarget.cancelErr = nil
 	factoryTarget.mu.Unlock()
-	server.handleSessionCancel(context.Background(), env)
+	server.handleSessionCancel(cancelCtx, env)
 	factoryTarget.mu.Lock()
 	cancelCalls := append([]cancelFactoryTargetCall(nil), factoryTarget.cancelCalls...)
 	factoryTarget.mu.Unlock()

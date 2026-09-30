@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"net/http"
 	"path/filepath"
 	"testing"
 	"time"
@@ -39,6 +40,69 @@ func TestNewRootFromAssemblyRetainsLiveChangeCoordinator(t *testing.T) {
 	}
 	if root.liveChangeCoordinator != coordinator {
 		t.Fatalf("live-change coordinator = %T, want the injected coordinator %T", root.liveChangeCoordinator, coordinator)
+	}
+}
+
+func TestApplicationOperationsRejectMissingSelectedSession(t *testing.T) {
+	root, err := newRootForTest(livechange.NewCoordinator())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := root.ApplicationDiagnostics(""); err == nil {
+		t.Fatal("application diagnostics accepted an empty session ID")
+	}
+	if _, err := root.ApplicationReady("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("application readiness error = %v", err)
+	}
+	if _, err := root.ApplicationCleanSnapshot(ctx, "missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("clean snapshot error = %v", err)
+	}
+	if _, err := root.SessionPresentation("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("session presentation error = %v", err)
+	}
+	if _, err := root.ApplicationReplayMetadataWarnings("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("replay warnings error = %v", err)
+	}
+	if _, err := root.ApplicationResumeRecoveryMetadata("missing"); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("resume metadata error = %v", err)
+	}
+	if err := root.RunApplicationTransport(ctx, "missing", nil); err == nil {
+		t.Fatal("application transport accepted nil HTTP handler")
+	}
+	if err := root.RunApplicationTransport(ctx, "missing", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("application transport error = %v", err)
+	}
+	if err := root.StopApplicationRuntime(ctx, "missing"); err != nil {
+		t.Fatalf("stopping an absent application should be idempotent: %v", err)
+	}
+	if err := root.StopApplicationOrderly(ctx, "missing"); err != nil {
+		t.Fatalf("orderly stop of absent application should be idempotent: %v", err)
+	}
+	if result := root.ApplicationControlWaitToComplete("missing", factoryruntime.WaitToCompleteRequest{}); result != (factoryruntime.WaitToCompleteResult{}) {
+		t.Fatalf("absent wait control = %+v", result)
+	}
+	var nilRoot *Root
+	if _, err := nilRoot.ApplicationDiagnostics("missing"); err == nil {
+		t.Fatal("nil root accepted application diagnostics")
+	}
+}
+
+func TestLiveControlRequiresSelectedSession(t *testing.T) {
+	root, err := newRootForTest(livechange.NewCoordinator())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	var nilRoot *Root
+	if _, err := nilRoot.Control(ctx, factorysessions.SessionControlRequest{}); err == nil {
+		t.Fatal("nil root accepted control")
+	}
+	if _, err := root.Control(ctx, factorysessions.SessionControlRequest{Mode: factorysessions.SessionOperationModeLive}); err == nil {
+		t.Fatal("live control accepted an empty session ID")
+	}
+	if _, err := root.Control(ctx, factorysessions.SessionControlRequest{Mode: factorysessions.SessionOperationModeLive, SessionID: "missing"}); !errors.Is(err, factorysessions.ErrSessionNotFound) {
+		t.Fatalf("missing live session control error = %v", err)
 	}
 }
 

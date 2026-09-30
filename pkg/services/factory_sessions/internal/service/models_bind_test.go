@@ -11,9 +11,33 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"go.uber.org/zap"
 )
+
+func TestProjectOperatorModelOverlaysDetachesSourceSettings(t *testing.T) {
+	if got := projectOperatorModelOverlays(nil); got != nil {
+		t.Fatalf("empty model overlays = %+v", got)
+	}
+	source, backend := "model.gguf", "llama"
+	policy := operatorconfig.LoadPolicy("on-demand")
+	configured := map[string]operatorconfig.ModelConfig{
+		"review": {Source: &source, Backend: &backend, Operations: []string{"chat"}, LoadPolicy: &policy},
+	}
+	projected := projectOperatorModelOverlays(configured)
+	model := projected["review"]
+	if model.Source == nil || *model.Source != source || model.Backend == nil || *model.Backend != backend || len(model.Operations) != 1 || model.LoadPolicy == nil {
+		t.Fatalf("projected model = %+v", model)
+	}
+	source = "changed"
+	backend = "changed"
+	configured["review"].Operations[0] = "embedding"
+	policy = "changed"
+	if *model.Source != "model.gguf" || *model.Backend != "llama" || model.Operations[0] != "chat" || string(*model.LoadPolicy) != "on-demand" {
+		t.Fatalf("model overlay retained source aliases: %+v", model)
+	}
+}
 
 type recordingModelsService struct {
 	openRequests  []models.OpenRuntimeScopeRequest

@@ -77,6 +77,71 @@ func TestResolveRuntimeRootPreservesExplicitIdentityWithoutGenerator(t *testing.
 	}
 }
 
+func TestEnsureBackendScopePreservesExplicitSelectionAndPropagatesFailures(t *testing.T) {
+	if err := ensureBackendScope(nil, nil, nil); err == nil {
+		t.Fatal("nil request accepted")
+	}
+	request := &factorysessions.SessionStartRequest{RuntimeSelection: &factorysessions.SessionRuntimeSelection{BackendScopeID: "existing"}}
+	if err := ensureBackendScope(nil, request, nil); err != nil || request.RuntimeSelection.BackendScopeID != "existing" {
+		t.Fatalf("explicit backend scope = %+v, error = %v", request.RuntimeSelection, err)
+	}
+	request.RuntimeSelection.BackendScopeID = ""
+	if err := ensureBackendScope(nil, request, nil); err == nil {
+		t.Fatal("missing Operator Settings ensurer accepted")
+	}
+	called := ""
+	request.RuntimeSelection.SystemConfigPath = "/config/operator.json"
+	err := ensureBackendScope(func(path string) (operatorconfig.ResolvedBackendScope, error) {
+		called = path
+		return operatorconfig.ResolvedBackendScope{BackendScopeID: "local-1"}, nil
+	}, request, nil)
+	if err != nil || called != "/config/operator.json" || request.RuntimeSelection.BackendScopeID != "local-1" {
+		t.Fatalf("resolved backend scope = %+v, path = %q, error = %v", request.RuntimeSelection, called, err)
+	}
+	request.RuntimeSelection.BackendScopeID = ""
+	request.RuntimeSelection.SystemConfigPath = ""
+	request.RuntimeSelection.SystemConfigHome = ""
+	if err := ensureBackendScope(func(string) (operatorconfig.ResolvedBackendScope, error) {
+		return operatorconfig.ResolvedBackendScope{}, nil
+	}, request, nil); err == nil {
+		t.Fatal("missing operator config home accepted")
+	}
+	request.RuntimeSelection.SystemConfigHome = t.TempDir()
+	want := errors.New("backend scope unavailable")
+	if err := ensureBackendScope(func(string) (operatorconfig.ResolvedBackendScope, error) {
+		return operatorconfig.ResolvedBackendScope{}, want
+	}, request, nil); !errors.Is(err, want) {
+		t.Fatalf("backend scope error = %v", err)
+	}
+}
+
+func TestEnsureDefaultCanonicalSessionIDOnlyAllocatesForNewDefault(t *testing.T) {
+	if err := ensureDefaultCanonicalSessionID(nil, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	request := &factorysessions.SessionStartRequest{}
+	if err := ensureDefaultCanonicalSessionID(request, "recording.json", nil); err != nil {
+		t.Fatalf("replay allocated a new identity: %v", err)
+	}
+	request.SessionID = "named-session"
+	if err := ensureDefaultCanonicalSessionID(request, "", nil); err != nil {
+		t.Fatalf("named session required a default identity: %v", err)
+	}
+	request.SessionID = factorysessions.DefaultSessionID
+	if err := ensureDefaultCanonicalSessionID(request, "", nil); err == nil {
+		t.Fatal("default session accepted missing identity generator")
+	}
+	if err := ensureDefaultCanonicalSessionID(request, "", func() string { return "  " }); err == nil {
+		t.Fatal("default session accepted empty generated identity")
+	}
+	if err := ensureDefaultCanonicalSessionID(request, "", func() string { return "canonical-1" }); err != nil || request.RuntimeSelection.CanonicalSessionID != "canonical-1" {
+		t.Fatalf("default canonical ID = %+v, error = %v", request.RuntimeSelection, err)
+	}
+	if err := ensureDefaultCanonicalSessionID(request, "", nil); err != nil {
+		t.Fatalf("existing canonical ID was not retained: %v", err)
+	}
+}
+
 func TestActivationRequestDefersCanonicalIdentityUntilRuntimeActivation(t *testing.T) {
 	t.Parallel()
 

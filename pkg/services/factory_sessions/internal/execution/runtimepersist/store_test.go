@@ -63,6 +63,60 @@ func TestNewProjectStore_RejectsMissingAndUnavailableRoots(t *testing.T) {
 	}
 }
 
+func TestNewLazyProjectStore_DefersInitializationAndReportsSnapshotPath(t *testing.T) {
+	projectRoot := t.TempDir()
+	store, err := runtimepersist.NewLazyProjectStore(projectRoot, platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("NewLazyProjectStore: %v", err)
+	}
+	dir := runtimepersist.DirForProjectRoot(projectRoot)
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("persistence directory before Save: %v, want not exist", err)
+	}
+	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	pathResolver, ok := store.(runtimepersist.SnapshotPathResolver)
+	if !ok {
+		t.Fatal("lazy store does not report its snapshot path")
+	}
+	if got, want := pathResolver.SnapshotPath(sessionID), filepath.Join(dir, sessionID+".json"); got != want {
+		t.Fatalf("snapshot path = %q, want %q", got, want)
+	}
+	payload := []byte(`{"status":"COMPLETED"}`)
+	if err := store.Save(sessionID, payload); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := store.Load(sessionID)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if string(loaded) != string(payload) {
+		t.Fatalf("loaded payload = %s, want %s", loaded, payload)
+	}
+}
+
+func TestNewLazyProjectStore_RejectsMissingDependencies(t *testing.T) {
+	if _, err := runtimepersist.NewLazyProjectStore("   ", platformfilesystem.Local{}); err == nil || !strings.Contains(err.Error(), "project root is required") {
+		t.Fatalf("NewLazyProjectStore(blank root) error = %v", err)
+	}
+	if _, err := runtimepersist.NewLazyProjectStore(t.TempDir(), nil); err == nil || !strings.Contains(err.Error(), "filesystem is required") {
+		t.Fatalf("NewLazyProjectStore(nil filesystem) error = %v", err)
+	}
+}
+
+func TestDirectoryPersistence_RejectsBlankDirectory(t *testing.T) {
+	files := platformfilesystem.Local{}
+	if _, err := runtimepersist.NewDirectoryStore("   ", files); err == nil || !strings.Contains(err.Error(), "directory is required") {
+		t.Fatalf("NewDirectoryStore(blank directory) error = %v", err)
+	}
+	const sessionID = "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if err := runtimepersist.SaveBytes("   ", sessionID, []byte(`{}`), files); err == nil || !strings.Contains(err.Error(), "directory is required") {
+		t.Fatalf("SaveBytes(blank directory) error = %v", err)
+	}
+	if _, err := runtimepersist.LoadBytes("   ", sessionID, files); err == nil || !strings.Contains(err.Error(), "directory is required") {
+		t.Fatalf("LoadBytes(blank directory) error = %v", err)
+	}
+}
+
 func TestSaveLoadBytes_RoundTripsSnapshotPayload(t *testing.T) {
 	dir := t.TempDir()
 	sessionID := "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

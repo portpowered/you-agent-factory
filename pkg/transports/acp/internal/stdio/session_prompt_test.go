@@ -598,3 +598,115 @@ func wantPromptFailureForStatus(t *testing.T, status factorysessions.InvocationT
 		t.Fatalf("prompt failure = %s, want the bounded invocation error code", encoded)
 	}
 }
+
+func TestCancelFlightRegistryKeepsCapturedTurnsSeparate(t *testing.T) {
+	registry := &promptFlightRegistry{}
+	ctx := contextWithCancelFlights(context.Background(), registry)
+	if got := cancelFlightsFromContext(ctx); got != registry {
+		t.Fatal("cancel flight context lost its connection registry")
+	}
+	if got := cancelFlightsFromContext(context.Background()); got != nil {
+		t.Fatal("unrelated context received a cancel flight registry")
+	}
+	first, owner := registry.startCancel("session", "turn-1")
+	if !owner || first == nil || registry.cancelForTurn("session", "turn-1") != first {
+		t.Fatal("first cancel did not own its captured turn")
+	}
+	duplicate, owner := registry.startCancel("session", "turn-1")
+	if owner || duplicate != first {
+		t.Fatal("concurrent redelivery started another cancel effect")
+	}
+	other, owner := registry.startCancel("session", "turn-2")
+	if !owner || other == first {
+		t.Fatal("a later captured turn reused the prior cancellation")
+	}
+	first.finishCancel(true)
+	duplicate, owner = registry.startCancel("session", "turn-1")
+	if owner || duplicate != first || !duplicate.accepted {
+		t.Fatal("completed cancellation did not coalesce redelivery")
+	}
+	registry.clearCancel("session", "turn-1", other)
+	if registry.cancelForTurn("session", "turn-1") != first {
+		t.Fatal("a different turn cleared the captured cancellation")
+	}
+	registry.clearCancel("session", "turn-1", first)
+	if registry.cancelForTurn("session", "turn-1") != nil {
+		t.Fatal("captured cancellation remained after prompt terminalization")
+	}
+	other.finishCancel(false)
+	registry.clearCancel("session", "turn-2", other)
+}
+
+func TestCancelFlightRegistryRetriesFailedControlWithoutReusingTerminalSignal(t *testing.T) {
+	registry := &promptFlightRegistry{}
+	failed, owner := registry.startCancel("session", "turn")
+	if !owner {
+		t.Fatal("first cancel did not own the control")
+	}
+	failed.finishCancel(false)
+	retry, owner := registry.startCancel("session", "turn")
+	if !owner || retry == failed || registry.cancelForTurn("session", "turn") != retry {
+		t.Fatal("failed control was not replaced by a fresh retry")
+	}
+	registry.clearCancel("session", "turn", failed)
+	if registry.cancelForTurn("session", "turn") != retry {
+		t.Fatal("late cleanup of failed control erased the retry")
+	}
+	retry.finishCancel(true)
+	registry.clearCancel("session", "turn", retry)
+	if registry.cancelForTurn("session", "turn") != nil {
+		t.Fatal("successful retry was not cleared")
+	}
+}
+
+func TestAcceptedCancelFlightClosesWhenReplacementCannotStart(t *testing.T) {
+	resolverFailure := func(context.Context, string, string, string) (factorysessions.SessionStartRequest, error) {
+		return factorysessions.SessionStartRequest{}, errors.New("replacement unavailable")
+	}
+	for _, tt := range []struct {
+		name      string
+		resolver  func(context.Context, string, string, string) (factorysessions.SessionStartRequest, error)
+		startErr  error
+		wantStart int
+	}{
+		{name: "no resolver"},
+		{name: "resolver fails", resolver: resolverFailure},
+		{name: "activation fails", resolver: testStartResolver, startErr: errors.New("activation unavailable"), wantStart: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			base, session, turn := newActiveBoundControlSession(t, "fs-replacement")
+			factoryTarget := &fakeFactoryTargetService{cancelOutcome: factorysessions.LifecycleControlOutcomeAccepted, startErr: tt.startErr}
+			server := New(nil, base, nil, factoryTarget, nil, nil, nil, nil, tt.resolver)
+			registry := &promptFlightRegistry{}
+			server.handleSessionCancel(contextWithCancelFlights(context.Background(), registry), cancelNotificationEnvelope(t, "cancel-replacement", session.ID))
+			flight := registry.cancelForTurn(session.ID, turn.ID)
+			if flight == nil {
+				t.Fatal("accepted control did not retain its captured cancel flight")
+			}
+			select {
+			case <-flight.done:
+			default:
+				t.Fatal("cancel flight remained open after replacement failed")
+			}
+			if !flight.accepted || len(factoryTarget.sessionStartCalls) != tt.wantStart {
+				t.Fatalf("cancel accepted = %v, replacement starts = %d, want %d", flight.accepted, len(factoryTarget.sessionStartCalls), tt.wantStart)
+			}
+		})
+	}
+}
+
+func TestCompletedCancelFlightSuppressesDuplicateDownstreamControl(t *testing.T) {
+	base, session, turn := newActiveBoundControlSession(t, "fs-duplicate-cancel")
+	registry := &promptFlightRegistry{}
+	first, owner := registry.startCancel(session.ID, turn.ID)
+	if !owner {
+		t.Fatal("first captured cancellation did not own its flight")
+	}
+	first.finishCancel(true)
+	factoryTarget := &fakeFactoryTargetService{}
+	server := New(nil, base, nil, factoryTarget, nil, nil, nil, nil, nil)
+	server.handleSessionCancel(contextWithCancelFlights(context.Background(), registry), cancelNotificationEnvelope(t, "duplicate-cancel", session.ID))
+	if len(factoryTarget.cancelCalls) != 0 {
+		t.Fatalf("duplicate cancellation reached Factory Sessions %d times", len(factoryTarget.cancelCalls))
+	}
+}
