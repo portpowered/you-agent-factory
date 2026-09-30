@@ -109,13 +109,6 @@
       "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening",
-      "justification": "Intentional test-suite cleanup changed current-head unit coverage; retain the prior floor until focused matching-lane coverage is restored.",
-      "owner": "coverage-remediation",
-      "deadline": "2027-07-15",
-      "removalGate": "Matching unit coverage reaches the existing floor and this hold is removed."
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/service",
       "justification": "Complete current-main unit coverage measured below the existing floor; hold until matching-lane tests restore it.",
       "owner": "coverage-remediation",
@@ -952,10 +945,6 @@
       "minimum": 89.79
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/executionopening",
-      "minimum": 47.05
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects",
       "minimum": 100.00
     },
@@ -982,10 +971,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget",
       "minimum": 77.31
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/ondemandtarget",
-      "minimum": 83.15
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/processlifecycle",
@@ -1026,18 +1011,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimehosting",
       "minimum": 91.93
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening",
-      "minimum": 70.19
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/invocation",
-      "minimum": 43.54
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/operatordefaults",
-      "minimum": 85.33
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/scopedlisting",
