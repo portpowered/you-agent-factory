@@ -71,6 +71,38 @@ func TestManagedRunnerReadinessCachesBindingAndReportsScopeState(t *testing.T) {
 	}
 }
 
+func TestManagedRunnerReadinessSharesOneBindingAcrossConcurrentReaders(t *testing.T) {
+	runner, err := NewManagedRunner(lifecycle.Plan{Components: []lifecycle.NamedComponent{{
+		Name: "transport", Component: &lifecyclePlanComponentStub{}, Primary: true,
+	}}}, runtimeartifact.Diagnostics{})
+	if err != nil {
+		t.Fatalf("NewManagedRunner: %v", err)
+	}
+	ready := make(chan initializer.RuntimeHostBinding)
+	runner.SetRuntimeHostReady(ready)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	type result struct {
+		binding initializer.RuntimeHostBinding
+		err     error
+	}
+	results := make(chan result, 2)
+	for range 2 {
+		go func() {
+			binding, err := runner.RuntimeHostBinding(ctx)
+			results <- result{binding: binding, err: err}
+		}()
+	}
+	want := initializer.RuntimeHostBinding{Host: "127.0.0.1", Port: 7437}
+	ready <- want
+	for range 2 {
+		got := <-results
+		if got.err != nil || got.binding != want {
+			t.Fatalf("concurrent RuntimeHostBinding() = %#v, %v; want %#v, nil", got.binding, got.err, want)
+		}
+	}
+}
+
 func TestManagedRunnerReadinessReportsClosedAndCanceledStreams(t *testing.T) {
 	closed := make(chan initializer.RuntimeHostBinding)
 	close(closed)

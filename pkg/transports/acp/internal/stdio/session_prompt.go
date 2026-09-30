@@ -316,6 +316,9 @@ func (s *Server) applySessionCancel(ctx context.Context, sessionID string, reque
 	}
 	if controlled.Outcome == factorysessions.LifecycleControlOutcomeAccepted {
 		accepted = true
+		// Invocation observation resolves the current Factory by Session ID.
+		// Stop the captured invocation before replacement reuses that ID.
+		stopCapturedInvocation(flights, intent.SessionID, intent.TurnID)
 		if s.startResolver == nil {
 			return
 		}
@@ -609,14 +612,24 @@ func (s *Server) dispatchFactoryTurn(
 	turn session.PromptTurn,
 	reqIdentity chatsessions.RequestIdentity,
 ) (json.RawMessage, *acpsdk.RequestError) {
+	invokeCtx, stopInvocation := s.scopedInvocation(ctx)
+	defer stopInvocation()
+	flights := cancelFlightsFromContext(ctx)
+	var invoking *promptFlight
+	if flights != nil {
+		invoking = flights.trackInvocation(startResult.Session.ID, startResult.Turn.ID, stopInvocation)
+	}
 	var dispatched dispatchOutcome
 	var dispatchErr error
 	if startResult.Episode.FactorySessionID == "" {
-		dispatched, dispatchErr = s.startFactorySessionForEpisode(ctx, startResult, turn, reqIdentity.ConnectionID)
+		dispatched, dispatchErr = s.startFactorySessionForEpisode(invokeCtx, startResult, turn, reqIdentity.ConnectionID)
 	} else {
-		dispatched, dispatchErr = s.invokeFactorySessionForEpisode(ctx, startResult, turn, reqIdentity.ConnectionID)
+		dispatched, dispatchErr = s.invokeFactorySessionForEpisode(invokeCtx, startResult, turn, reqIdentity.ConnectionID)
 	}
-	if flights := cancelFlightsFromContext(ctx); flights != nil {
+	if invoking != nil {
+		flights.finishInvocation(startResult.Session.ID, startResult.Turn.ID, invoking)
+	}
+	if flights != nil {
 		if flight := flights.cancelForTurn(startResult.Session.ID, startResult.Turn.ID); flight != nil {
 			<-flight.done
 			if flight.accepted {

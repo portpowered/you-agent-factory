@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 
@@ -708,5 +709,40 @@ func TestCompletedCancelFlightSuppressesDuplicateDownstreamControl(t *testing.T)
 	server.handleSessionCancel(contextWithCancelFlights(context.Background(), registry), cancelNotificationEnvelope(t, "duplicate-cancel", session.ID))
 	if len(factoryTarget.cancelCalls) != 0 {
 		t.Fatalf("duplicate cancellation reached Factory Sessions %d times", len(factoryTarget.cancelCalls))
+	}
+}
+
+func TestAcceptedCancelWaitsForCapturedInvocationBeforeReplacement(t *testing.T) {
+	base, session, turn := newActiveBoundControlSession(t, "fs-cancel-order")
+	factoryTarget := &fakeFactoryTargetService{cancelOutcome: factorysessions.LifecycleControlOutcomeAccepted}
+	server := New(nil, base, nil, factoryTarget, nil, nil, nil, nil, testStartResolver)
+	registry := &promptFlightRegistry{}
+	invocationCtx, cancelInvocation := context.WithCancel(context.Background())
+	defer cancelInvocation()
+	invoking := registry.trackInvocation(session.ID, turn.ID, cancelInvocation)
+	notification := cancelNotificationEnvelope(t, "cancel-order", session.ID)
+	done := make(chan struct{})
+	go func() {
+		server.handleSessionCancel(contextWithCancelFlights(context.Background(), registry), notification)
+		close(done)
+	}()
+	select {
+	case <-invocationCtx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("accepted cancel did not stop the captured invocation")
+	}
+	select {
+	case <-done:
+		t.Fatal("replacement started before the captured invocation exited")
+	default:
+	}
+	registry.finishInvocation(session.ID, turn.ID, invoking)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("replacement did not start after the captured invocation exited")
+	}
+	if len(factoryTarget.sessionStartCalls) != 1 {
+		t.Fatalf("replacement starts = %d, want one", len(factoryTarget.sessionStartCalls))
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/contextscope"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
@@ -191,6 +192,7 @@ func provideACPServer(
 	return acpwire.NewServer(
 		logger, chatSessions, catalog, factorySessions, eventsService,
 		resolveHomeDir, responseBridge, wireRecorder, startResolver,
+		func(ctx context.Context) acp.InvocationScope { return contextscope.New(ctx) },
 	)
 }
 

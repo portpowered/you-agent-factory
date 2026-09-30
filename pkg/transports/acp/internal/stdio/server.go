@@ -93,6 +93,15 @@ type Server struct {
 	responseBridge  acp.ResponseBridge
 	wireRecorder    acp.WireRecorder
 	startResolver   acp.FactorySessionStartResolver
+	invocationScope acp.InvocationScopeFactory
+}
+
+func (s *Server) scopedInvocation(ctx context.Context) (context.Context, func()) {
+	if s.invocationScope == nil {
+		return ctx, func() {}
+	}
+	scope := s.invocationScope(ctx)
+	return scope.Context(), scope.Stop
 }
 
 func (s *Server) resolveInvocationHomeDir(ctx context.Context) (string, error) {
@@ -119,13 +128,15 @@ type promptFlightRegistry struct {
 	mu        sync.Mutex
 	byRequest map[string]*promptFlight
 	byTurn    map[string]*promptFlight
+	invoking  map[string]*promptFlight
 }
 
 type promptFlight struct {
-	done     chan struct{}
-	result   json.RawMessage
-	rpcErr   *acpsdk.RequestError
-	accepted bool
+	done             chan struct{}
+	result           json.RawMessage
+	rpcErr           *acpsdk.RequestError
+	accepted         bool
+	cancelInvocation context.CancelFunc
 }
 
 func (r *promptFlightRegistry) start(req identity.RequestIdentity) (*promptFlight, bool) {
@@ -163,6 +174,54 @@ func cancelFlightsFromContext(ctx context.Context) *promptFlightRegistry {
 }
 
 func cancelFlightKey(sessionID, turnID string) string { return sessionID + "\x00" + turnID }
+
+// trackInvocation lets an accepted cancel wait for the old invocation to
+// observe its terminal Factory state before a replacement uses the same ID.
+func (r *promptFlightRegistry) trackInvocation(sessionID, turnID string, cancel context.CancelFunc) *promptFlight {
+	key := cancelFlightKey(sessionID, turnID)
+	identity, _ := identity.NewMinted("invocation-flight:" + key)
+	flight, _ := r.start(identity)
+	flight.cancelInvocation = cancel
+	r.mu.Lock()
+	if r.invoking == nil {
+		r.invoking = make(map[string]*promptFlight)
+	}
+	r.invoking[key] = flight
+	r.mu.Unlock()
+	return flight
+}
+
+func (r *promptFlightRegistry) invocationForTurn(sessionID, turnID string) *promptFlight {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.invoking[cancelFlightKey(sessionID, turnID)]
+}
+
+func stopCapturedInvocation(flights *promptFlightRegistry, sessionID, turnID string) {
+	if flights == nil {
+		return
+	}
+	invoking := flights.invocationForTurn(sessionID, turnID)
+	if invoking == nil {
+		return
+	}
+	invoking.cancelInvocation()
+	<-invoking.done
+}
+
+func (r *promptFlightRegistry) finishInvocation(sessionID, turnID string, flight *promptFlight) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := cancelFlightKey(sessionID, turnID)
+	if r.invoking[key] != flight {
+		return
+	}
+	flight.finish(nil, nil)
+	delete(r.invoking, key)
+	identity, _ := identity.NewMinted("invocation-flight:" + key)
+	identityJSON, _ := json.Marshal(identity)
+	delete(r.byRequest, string(identityJSON))
+}
 
 func (r *promptFlightRegistry) startCancel(sessionID, turnID string) (*promptFlight, bool) {
 	key := cancelFlightKey(sessionID, turnID)
@@ -239,8 +298,9 @@ func New(
 	responseBridge acp.ResponseBridge,
 	wireRecorder acp.WireRecorder,
 	startResolver acp.FactorySessionStartResolver,
+	invocationScope ...acp.InvocationScopeFactory,
 ) *Server {
-	return &Server{
+	server := &Server{
 		logger:          logging.EnsureLogger(logger),
 		chatSessions:    chatSessions,
 		catalog:         catalog,
@@ -251,6 +311,10 @@ func New(
 		wireRecorder:    wireRecorder,
 		startResolver:   startResolver,
 	}
+	if len(invocationScope) != 0 {
+		server.invocationScope = invocationScope[0]
+	}
+	return server
 }
 
 // Serve begins one connection-scoped serving invocation over caller-owned

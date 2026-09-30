@@ -14,12 +14,13 @@ import (
 // ManagedRunner executes one caller-supplied lifecycle plan through the
 // singular manager.
 type ManagedRunner struct {
-	manager     *lifecycle.Manager
-	plan        lifecycle.Plan
-	diagnostics runtimeartifact.Diagnostics
-	ready       <-chan initializer.RuntimeHostBinding
-	readyMu     sync.Mutex
-	readyValue  *initializer.RuntimeHostBinding
+	manager      *lifecycle.Manager
+	plan         lifecycle.Plan
+	diagnostics  runtimeartifact.Diagnostics
+	ready        <-chan initializer.RuntimeHostBinding
+	readyMu      sync.Mutex
+	readyValue   *initializer.RuntimeHostBinding
+	readyReading chan struct{}
 }
 
 // ManagedRunnerFactory is the injected lifecycle activation constructor used
@@ -70,47 +71,55 @@ func (r *ManagedRunner) RuntimeHostBinding(ctx context.Context) (initializer.Run
 	if r == nil {
 		return initializer.RuntimeHostBinding{}, errors.New("managed application is required")
 	}
-	r.readyMu.Lock()
-	if r.readyValue != nil {
-		binding := *r.readyValue
+	for {
+		r.readyMu.Lock()
+		if r.readyValue != nil {
+			binding := *r.readyValue
+			r.readyMu.Unlock()
+			return binding, nil
+		}
+		ready := r.ready
+		if ready == nil {
+			r.readyMu.Unlock()
+			return initializer.RuntimeHostBinding{}, initializer.ErrRuntimeHostReadinessUnavailable
+		}
+		if reading := r.readyReading; reading != nil {
+			r.readyMu.Unlock()
+			select {
+			case <-reading:
+				continue
+			case <-ctx.Done():
+				return initializer.RuntimeHostBinding{}, ctx.Err()
+			}
+		}
+		reading := make(chan struct{})
+		r.readyReading = reading
 		r.readyMu.Unlock()
-		return binding, nil
-	}
-	ready := r.ready
-	r.readyMu.Unlock()
-	if ready == nil {
-		return initializer.RuntimeHostBinding{}, initializer.ErrRuntimeHostReadinessUnavailable
-	}
-	select {
-	case binding, ok := <-ready:
-		if !ok {
-			return initializer.RuntimeHostBinding{}, errors.New("managed application host readiness ended without a binding")
+
+		var binding initializer.RuntimeHostBinding
+		var ok bool
+		var err error
+		select {
+		case binding, ok = <-ready:
+		default:
+			select {
+			case binding, ok = <-ready:
+			case <-ctx.Done():
+				err = ctx.Err()
+			}
+		}
+		if !ok && err == nil {
+			err = errors.New("managed application host readiness ended without a binding")
 		}
 		r.readyMu.Lock()
-		if r.readyValue == nil {
+		if err == nil {
 			copy := binding
 			r.readyValue = &copy
 		}
-		binding = *r.readyValue
+		r.readyReading = nil
+		close(reading)
 		r.readyMu.Unlock()
-		return binding, nil
-	default:
-	}
-	select {
-	case binding, ok := <-ready:
-		if !ok {
-			return initializer.RuntimeHostBinding{}, errors.New("managed application host readiness ended without a binding")
-		}
-		r.readyMu.Lock()
-		if r.readyValue == nil {
-			copy := binding
-			r.readyValue = &copy
-		}
-		binding = *r.readyValue
-		r.readyMu.Unlock()
-		return binding, nil
-	case <-ctx.Done():
-		return initializer.RuntimeHostBinding{}, ctx.Err()
+		return binding, err
 	}
 }
 

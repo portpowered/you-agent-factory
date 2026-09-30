@@ -516,10 +516,21 @@ func newFactoryImpl(
 // terminates (all tokens terminal/failed, or deadlock detected).
 // Closes completeCh when Run returns so WaitToComplete() unblocks.
 func (f *factoryImpl) Run(ctx context.Context) error {
+	// Termination can win the race with the goroutine launched by the host.
+	// Publish the run cancellation capability in the same state transition so
+	// ControlTerminate cannot complete an idle run that starts afterward.
+	engCtx, cancelEng := context.WithCancel(ctx)
+	defer cancelEng()
 	f.mu.Lock()
+	if f.state == interfaces.FactoryStateCompleted || f.state == interfaces.FactoryStateFailed {
+		f.mu.Unlock()
+		f.completeOnce.Do(func() { close(f.completeCh) })
+		return nil
+	}
 	previousState := f.state
 	f.state = interfaces.FactoryStateRunning
 	f.startedAt = f.clock.Now()
+	f.runCancel = cancelEng
 	f.mu.Unlock()
 	f.recordStateChange(previousState, interfaces.FactoryStateRunning, "run started")
 
@@ -527,11 +538,6 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 
 	// Use a derived context for the engine so we can stop the engine before
 	// stopping the pool (prevents send-on-closed-channel panics).
-	engCtx, cancelEng := context.WithCancel(ctx)
-	defer cancelEng()
-	f.mu.Lock()
-	f.runCancel = cancelEng
-	f.mu.Unlock()
 	defer func() {
 		f.mu.Lock()
 		f.runCancel = nil
