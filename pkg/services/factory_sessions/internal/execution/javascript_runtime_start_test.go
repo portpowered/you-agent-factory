@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -949,74 +948,4 @@ func (a orchestrationJavaScriptAdapter) ResumeJavaScript(
 	records []factory.JavaScriptRuntimeRecord,
 ) factory.JavaScriptResumeContext {
 	return a.ResumeContext(summary, records)
-}
-func newTerminalWorkersService(t *testing.T, provider providers.Service) WorkerExecution {
-	t.Helper()
-	return terminalWorkerService{provider: provider}
-}
-
-// terminalWorkerService is a service-root fake: the bridge test owns durable
-// response publication, while Workers-owned wire tests cover construction and
-// normalization of the real Execute implementation.
-type terminalWorkerService struct {
-	provider providers.Service
-}
-
-func (service terminalWorkerService) Execute(
-	ctx context.Context,
-	request workers.ExecuteRequest,
-) (workers.ExecuteResult, error) {
-	providerResult, err := service.provider.Execute(ctx, providers.ExecuteRequest{
-		Provider:  providers.IDCodex,
-		AttemptID: request.Correlation.AttemptID,
-		Correlation: providers.ExecuteCorrelation{
-			FactorySessionID: request.Correlation.FactorySessionID,
-			RuntimeID:        request.Correlation.RuntimeID,
-			GenerationID:     request.Correlation.GenerationID,
-			DispatchID:       request.Correlation.DispatchID,
-			AttemptID:        request.Correlation.AttemptID,
-			RequestID:        request.Correlation.RequestID,
-			TraceID:          request.Correlation.TraceID,
-		},
-		UserMessage: request.Target.Prompt.UserMessage,
-	})
-	result := workers.ExecuteResult{Correlation: request.Correlation}
-	if err != nil {
-		outcome := workers.ExecutionOutcomeFailed
-		failureType := workers.WorkFailureTypeUnknown
-		if errors.Is(err, context.Canceled) {
-			outcome = workers.ExecutionOutcomeCanceled
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			failureType = workers.WorkFailureTypeTimeout
-		}
-		result.Outcome = outcome
-		result.Failure = &workers.ExecutionFailure{
-			Type:    failureType,
-			Family:  workers.WorkFailureFamilyTerminal,
-			Message: err.Error(),
-		}
-		return result, err
-	}
-	result.Outcome = workers.ExecutionOutcomeAccepted
-	result.Output.Primary = []work.WorkContentPart{{Text: providerResult.Content}}
-	return result, nil
-}
-
-func exactEncodedSizeWarningState(t *testing.T, targetSize int) runtimeSessionState {
-	t.Helper()
-	state := runtimeSessionState{
-		session:        SessionReadResult{SessionID: "dur-sess-warning-threshold", Status: LifecycleStatusSucceeded},
-		petriMutations: []interfaces.TokenMutationRecord{{Type: interfaces.MutationCreate, TokenID: "live-token", ToPlace: "task:running", TransitionReachable: true, Token: &workers.Token{ID: "live-token", Color: workers.Color{WorkID: "live-work"}}}},
-		petriSummaries: []PetriTokenSummary{{TokenID: "terminal-token", WorkID: "terminal-work", PlaceID: "task:done"}},
-	}
-	base := encodedWarningStateBytes(t, state)
-	if targetSize < base {
-		t.Fatalf("target snapshot size %d is below base size %d", targetSize, base)
-	}
-	state.sourceContent = strings.Repeat("x", targetSize-base)
-	if got := encodedWarningStateBytes(t, state); got != targetSize {
-		t.Fatalf("constructed snapshot bytes = %d, want %d", got, targetSize)
-	}
-	return state
 }

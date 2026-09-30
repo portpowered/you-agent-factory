@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/workersettings"
 	"strings"
 	"sync"
 	"time"
@@ -336,7 +337,7 @@ func NewJavaScriptRuntimeService(
 		orchestration:           orchestration,
 		childValues:             childValues,
 		workerPresetIDs:         workerPresetIDs,
-		workerSettings:          *factorysessions.CloneWorkerSettings(&workerSettings),
+		workerSettings:          *workersettings.Clone(&workerSettings),
 		recordingWriter:         recordingWriter,
 		generateSessionID:       generateSessionID,
 		generateResponseEventID: generateResponseEventID,

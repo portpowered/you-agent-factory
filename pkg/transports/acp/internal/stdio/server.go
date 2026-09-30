@@ -93,8 +93,6 @@ type Server struct {
 	responseBridge  acp.ResponseBridge
 	wireRecorder    acp.WireRecorder
 	startResolver   acp.FactorySessionStartResolver
-	cancelMu        sync.Mutex
-	cancelFlights   map[string]*cancelFlight
 }
 
 func (s *Server) resolveInvocationHomeDir(ctx context.Context) (string, error) {
@@ -120,12 +118,14 @@ func (s *Server) resolveInvocationHomeDir(ctx context.Context) (string, error) {
 type promptFlightRegistry struct {
 	mu        sync.Mutex
 	byRequest map[string]*promptFlight
+	byTurn    map[string]*promptFlight
 }
 
 type promptFlight struct {
-	done   chan struct{}
-	result json.RawMessage
-	rpcErr *acpsdk.RequestError
+	done     chan struct{}
+	result   json.RawMessage
+	rpcErr   *acpsdk.RequestError
+	accepted bool
 }
 
 func (r *promptFlightRegistry) start(req identity.RequestIdentity) (*promptFlight, bool) {
@@ -151,9 +151,75 @@ func (r *promptFlightRegistry) start(req identity.RequestIdentity) (*promptFligh
 	return flight, true
 }
 
+type cancelFlightRegistryContextKey struct{}
+
+func contextWithCancelFlights(ctx context.Context, registry *promptFlightRegistry) context.Context {
+	return context.WithValue(ctx, cancelFlightRegistryContextKey{}, registry)
+}
+
+func cancelFlightsFromContext(ctx context.Context) *promptFlightRegistry {
+	registry, _ := ctx.Value(cancelFlightRegistryContextKey{}).(*promptFlightRegistry)
+	return registry
+}
+
+func cancelFlightKey(sessionID, turnID string) string { return sessionID + "\x00" + turnID }
+
+func (r *promptFlightRegistry) startCancel(sessionID, turnID string) (*promptFlight, bool) {
+	key := cancelFlightKey(sessionID, turnID)
+	identity, _ := identity.NewMinted("cancel-flight:" + key)
+	identityJSON, _ := json.Marshal(identity)
+	r.mu.Lock()
+	if r.byTurn == nil {
+		r.byTurn = make(map[string]*promptFlight)
+	}
+	if existing := r.byTurn[key]; existing != nil {
+		select {
+		case <-existing.done:
+			if existing.accepted {
+				r.mu.Unlock()
+				return existing, false
+			}
+			delete(r.byTurn, key)
+			delete(r.byRequest, string(identityJSON))
+		default:
+			r.mu.Unlock()
+			return existing, false
+		}
+	}
+	r.mu.Unlock()
+	flight, owner := r.start(identity)
+	r.mu.Lock()
+	r.byTurn[key] = flight
+	r.mu.Unlock()
+	return flight, owner
+}
+
+func (r *promptFlightRegistry) cancelForTurn(sessionID, turnID string) *promptFlight {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.byTurn[cancelFlightKey(sessionID, turnID)]
+}
+
+func (r *promptFlightRegistry) clearCancel(sessionID, turnID string, flight *promptFlight) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := cancelFlightKey(sessionID, turnID)
+	if r.byTurn[key] == flight {
+		delete(r.byTurn, key)
+		identity, _ := identity.NewMinted("cancel-flight:" + key)
+		identityJSON, _ := json.Marshal(identity)
+		delete(r.byRequest, string(identityJSON))
+	}
+}
+
 func (f *promptFlight) finish(result json.RawMessage, rpcErr *acpsdk.RequestError) {
 	f.result = result
 	f.rpcErr = rpcErr
+	close(f.done)
+}
+
+func (f *promptFlight) finishCancel(accepted bool) {
+	f.accepted = accepted
 	close(f.done)
 }
 
@@ -458,7 +524,7 @@ func (s *Server) dispatchConnectionLine(
 	promptFlights *promptFlightRegistry,
 	promptGroup *taskgroup.Group,
 ) (stop bool, err error) {
-	reqCtx := contextWithAttachmentCache(contextWithPromptNotifier(ctx, notify), attachments)
+	reqCtx := contextWithCancelFlights(contextWithAttachmentCache(contextWithPromptNotifier(ctx, notify), attachments), promptFlights)
 	env, decodeErr := envelope.Decode(connectionID, *notificationSeq, raw)
 	if decodeErr != nil {
 		rpcErr, wireID, hasID := protocol.RejectEnvelope(decodeErr)

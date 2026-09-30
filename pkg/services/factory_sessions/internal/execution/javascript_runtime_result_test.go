@@ -6,10 +6,14 @@ import (
 	"errors"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -834,4 +838,126 @@ func TestChildWorkerExecutor_CarriesTheAuthoredWorkerNameAndPermissionPolicy(t *
 	if invoker.request.Target.RunnerID != "codex" {
 		t.Fatalf("runner = %q, want the runner resolved from the child's model provider", invoker.request.Target.RunnerID)
 	}
+}
+
+func TestJavaScriptRuntimeService_CloseCancelsJoinsAndPersistsAsyncSession(t *testing.T) {
+	t.Parallel()
+
+	projectRoot := t.TempDir()
+	store := mustTestRuntimePersistenceStore(t, runtimepersist.DirForProjectRoot(projectRoot))
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: store,
+		Workflows:   scriptedBlockingRuntimeWorkflows(),
+	})
+	started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-close-joins-001",
+		busyLoopWorkflowSource,
+		map[string]any{"subject": "shutdown"},
+		nil,
+	))
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	if err := service.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	session, err := service.GetSession(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession after Close: %v", err)
+	}
+	if session.Status != LifecycleStatusCanceled {
+		t.Fatalf("session status after Close = %q, want CANCELED", session.Status)
+	}
+	if session.Failure == nil || session.Failure.Reason != "WORKFLOW_RUNTIME_CANCELED" {
+		t.Fatalf("session failure after Close = %#v, want WORKFLOW_RUNTIME_CANCELED", session.Failure)
+	}
+	snapshotPath := filepath.Join(runtimepersist.DirForProjectRoot(projectRoot), started.SessionID+".json")
+	if _, err := os.Stat(snapshotPath); err != nil {
+		t.Fatalf("terminal snapshot after Close: %v", err)
+	}
+	if err := service.Close(); err != nil {
+		t.Fatalf("repeated Close: %v", err)
+	}
+	if _, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-close-rejected-001",
+		busyLoopWorkflowSource,
+		nil,
+		nil,
+	)); !errors.Is(err, ErrDurableExecutionClosed) {
+		t.Fatalf("StartAsync after Close error = %v, want ErrDurableExecutionClosed", err)
+	}
+}
+
+func newTerminalWorkersService(t *testing.T, provider providers.Service) WorkerExecution {
+	t.Helper()
+	return terminalWorkerService{provider: provider}
+}
+
+// terminalWorkerService is a service-root fake: the bridge test owns durable
+// response publication, while Workers-owned wire tests cover construction and
+// normalization of the real Execute implementation.
+type terminalWorkerService struct {
+	provider providers.Service
+}
+
+func (service terminalWorkerService) Execute(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	providerResult, err := service.provider.Execute(ctx, providers.ExecuteRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: request.Correlation.AttemptID,
+		Correlation: providers.ExecuteCorrelation{
+			FactorySessionID: request.Correlation.FactorySessionID,
+			RuntimeID:        request.Correlation.RuntimeID,
+			GenerationID:     request.Correlation.GenerationID,
+			DispatchID:       request.Correlation.DispatchID,
+			AttemptID:        request.Correlation.AttemptID,
+			RequestID:        request.Correlation.RequestID,
+			TraceID:          request.Correlation.TraceID,
+		},
+		UserMessage: request.Target.Prompt.UserMessage,
+	})
+	result := workers.ExecuteResult{Correlation: request.Correlation}
+	if err != nil {
+		outcome := workers.ExecutionOutcomeFailed
+		failureType := workers.WorkFailureTypeUnknown
+		if errors.Is(err, context.Canceled) {
+			outcome = workers.ExecutionOutcomeCanceled
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			failureType = workers.WorkFailureTypeTimeout
+		}
+		result.Outcome = outcome
+		result.Failure = &workers.ExecutionFailure{
+			Type:    failureType,
+			Family:  workers.WorkFailureFamilyTerminal,
+			Message: err.Error(),
+		}
+		return result, err
+	}
+	result.Outcome = workers.ExecutionOutcomeAccepted
+	result.Output.Primary = []work.WorkContentPart{{Text: providerResult.Content}}
+	return result, nil
+}
+
+func exactEncodedSizeWarningState(t *testing.T, targetSize int) runtimeSessionState {
+	t.Helper()
+	state := runtimeSessionState{
+		session:        SessionReadResult{SessionID: "dur-sess-warning-threshold", Status: LifecycleStatusSucceeded},
+		petriMutations: []interfaces.TokenMutationRecord{{Type: interfaces.MutationCreate, TokenID: "live-token", ToPlace: "task:running", TransitionReachable: true, Token: &workers.Token{ID: "live-token", Color: workers.Color{WorkID: "live-work"}}}},
+		petriSummaries: []PetriTokenSummary{{TokenID: "terminal-token", WorkID: "terminal-work", PlaceID: "task:done"}},
+	}
+	base := encodedWarningStateBytes(t, state)
+	if targetSize < base {
+		t.Fatalf("target snapshot size %d is below base size %d", targetSize, base)
+	}
+	state.sourceContent = strings.Repeat("x", targetSize-base)
+	if got := encodedWarningStateBytes(t, state); got != targetSize {
+		t.Fatalf("constructed snapshot bytes = %d, want %d", got, targetSize)
+	}
+	return state
 }

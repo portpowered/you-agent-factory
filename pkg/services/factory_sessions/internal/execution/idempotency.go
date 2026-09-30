@@ -697,24 +697,11 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 		}
 	}
 	admission := runtimebinding.NewLiveChangeAdmission(runtime)
-	if admission == nil {
-		if _, requiresAdmission := runtime.(workflowsource.AdmittedResourceCapacityService); requiresAdmission {
-			return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
-				Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
-				Message: "live change coordination is unavailable",
-			}
-		}
-	} else {
-		release, admissionErr := admission.AcquireLiveChange(ctx, id)
-		if admissionErr != nil {
-			return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
-				Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
-				Message: "live change coordination is unavailable",
-				Cause:   admissionErr,
-			}
-		}
-		defer release()
+	release, admissionErr := acquireDurableLiveChangeAdmission(ctx, id, runtime, admission)
+	if admissionErr != nil {
+		return factorysessions.LiveChangeResult{}, admissionErr
 	}
+	defer release()
 	stateProvider := s.durableLiveChangeStateProvider(id, events)
 	if s.liveChangeCoordinator == nil {
 		return factorysessions.LiveChangeResult{}, &factorysessions.LiveChangeError{
@@ -741,6 +728,32 @@ func (s *JavaScriptRuntimeService) runDurableLiveChange(
 		}
 	}
 	return result, applyErr
+}
+
+func acquireDurableLiveChangeAdmission(
+	ctx context.Context,
+	sessionID string,
+	runtime workflowsource.Service,
+	admission factorysessions.LiveChangeAdmission,
+) (func(), error) {
+	if admission == nil {
+		if _, required := runtime.(workflowsource.AdmittedResourceCapacityService); required {
+			return nil, &factorysessions.LiveChangeError{
+				Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+				Message: "live change coordination is unavailable",
+			}
+		}
+		return func() {}, nil
+	}
+	release, err := admission.AcquireLiveChange(ctx, sessionID)
+	if err != nil {
+		return nil, &factorysessions.LiveChangeError{
+			Code:    factorysessions.LiveChangeErrorApplicationUnavailable,
+			Message: "live change coordination is unavailable",
+			Cause:   err,
+		}
+	}
+	return release, nil
 }
 
 func (s *JavaScriptRuntimeService) durableLiveChangeStateProvider(

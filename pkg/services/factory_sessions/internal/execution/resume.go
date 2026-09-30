@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/workersettings"
 	"go.uber.org/zap"
 	"os"
 	"strings"
@@ -209,7 +209,7 @@ func (s *JavaScriptRuntimeService) prepareResumeSession(
 		}
 		state.startRequest = cloneStartRequestPtr(state.startRequest)
 		if state.startRequest.WorkerSettings == nil {
-			state.startRequest.WorkerSettings = factorysessions.CloneWorkerSettings(scope.WorkerSettings)
+			state.startRequest.WorkerSettings = workersettings.Clone(scope.WorkerSettings)
 		}
 		if state.startRequest.MockWorkers == nil {
 			state.startRequest.MockWorkers = scope.MockWorkers.Clone()
@@ -1044,7 +1044,7 @@ func persistedSnapshotFromRuntimeStateWithFailureLogCapacity(
 		ProjectRoot:       state.projectRoot,
 	}
 	if state.startRequest != nil {
-		snapshot.WorkerSettings = factorysessions.CloneWorkerSettings(state.startRequest.WorkerSettings)
+		snapshot.WorkerSettings = workersettings.Clone(state.startRequest.WorkerSettings)
 	}
 	if len(state.dispatchJavaScript) > 0 {
 		snapshot.DispatchJavaScript = cloneDispatchJavaScriptProjections(state.dispatchJavaScript)
@@ -1079,7 +1079,7 @@ func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) ru
 		projectRoot:       snapshot.ProjectRoot,
 	}
 	if state.startRequest != nil {
-		state.startRequest.WorkerSettings = factorysessions.CloneWorkerSettings(snapshot.WorkerSettings)
+		state.startRequest.WorkerSettings = workersettings.Clone(snapshot.WorkerSettings)
 	}
 	if len(snapshot.DispatchJavaScript) > 0 {
 		state.dispatchJavaScript = cloneDispatchJavaScriptProjections(snapshot.DispatchJavaScript)
@@ -1244,7 +1244,7 @@ func cloneStartRequest(req StartRequest) *StartRequest {
 	cloned.Args = cloneArgs(req.Args)
 	cloned.RequestedPolicy = cloneArgs(req.RequestedPolicy)
 	cloned.MockWorkers = req.MockWorkers.Clone()
-	cloned.WorkerSettings = factorysessions.CloneWorkerSettings(req.WorkerSettings)
+	cloned.WorkerSettings = workersettings.Clone(req.WorkerSettings)
 	cloned.WorkerAttemptStarter = req.WorkerAttemptStarter
 	cloned.WorkerProgressPublisher = req.WorkerProgressPublisher
 	cloned.WorkerResourceAdmission = req.WorkerResourceAdmission

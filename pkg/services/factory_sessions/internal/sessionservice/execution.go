@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/workersettings"
 	"sort"
 	"strings"
 
@@ -482,7 +483,7 @@ func canonicalDurableStartRequest(
 		ProjectRoot:             strings.TrimSpace(request.FolderPath),
 		PersistencePolicy:       request.Persistence,
 		MockWorkers:             runtimeSelectionMockWorkers(request.RuntimeSelection),
-		WorkerSettings:          factorysessions.CloneWorkerSettings(request.WorkerSettings),
+		WorkerSettings:          workersettings.Clone(request.WorkerSettings),
 		WorkerAttemptStarter:    request.WorkerAttemptStarter,
 		WorkerProgressPublisher: request.WorkerProgressPublisher,
 		WorkerResourceAdmission: request.WorkerResourceAdmission,

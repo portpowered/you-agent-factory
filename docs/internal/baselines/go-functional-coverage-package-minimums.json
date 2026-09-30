@@ -74,13 +74,6 @@
       "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/applicationopening",
-      "justification": "Intentional test-suite cleanup changed current-head functional coverage; retain the prior floor until focused matching-lane coverage is restored.",
-      "owner": "coverage-remediation",
-      "deadline": "2027-07-15",
-      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening",
       "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
       "owner": "coverage-remediation",
@@ -893,10 +886,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions",
       "minimum": 25.42
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/applicationopening",
-      "minimum": 65.85
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/artifactprojection",

@@ -649,21 +649,6 @@ type StartRequest struct {
 // one durable invocation. It is an internal capability, never transport input.
 type WorkerAttemptStarter func(context.Context, workers.ExecuteRequest) (func(context.Context, workers.ExecuteResult, error) error, error)
 
-// CloneWorkerSettings detaches the operator settings used by one durable start.
-func CloneWorkerSettings(settings *workflowsource.JavaScriptWorkerSettings) *workflowsource.JavaScriptWorkerSettings {
-	if settings == nil {
-		return nil
-	}
-	cloned := *settings
-	if settings.Presets != nil {
-		cloned.Presets = make(map[string]workflowsource.JavaScriptWorkerPreset, len(settings.Presets))
-		for id, preset := range settings.Presets {
-			cloned.Presets[id] = preset
-		}
-	}
-	return &cloned
-}
-
 // SyncOutcome reports how a sync start wait ended.
 type SyncOutcome string
 

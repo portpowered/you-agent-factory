@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/workersettings"
 	"strings"
 	"time"
 
@@ -39,7 +40,7 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 		ProjectRoot:             strings.TrimSpace(req.ProjectRoot),
 		PersistencePolicy:       req.PersistencePolicy,
 		MockWorkers:             req.MockWorkers.Clone(),
-		WorkerSettings:          factorysessions.CloneWorkerSettings(req.WorkerSettings),
+		WorkerSettings:          workersettings.Clone(req.WorkerSettings),
 		WorkerAttemptStarter:    req.WorkerAttemptStarter,
 		WorkerProgressPublisher: req.WorkerProgressPublisher,
 		WorkerResourceAdmission: req.WorkerResourceAdmission,

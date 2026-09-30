@@ -2,6 +2,7 @@ package runtimebinding
 
 import (
 	"context"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/workersettings"
 	"sync"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -237,7 +238,7 @@ func (s *SessionState) SetWorkerSettings(settings *factoryruntime.JavaScriptWork
 		return
 	}
 	s.workerSettingsMu.Lock()
-	s.workerSettings = factorysessions.CloneWorkerSettings(settings)
+	s.workerSettings = workersettings.Clone(settings)
 	s.workerSettingsMu.Unlock()
 }
 
@@ -246,7 +247,7 @@ func (s *SessionState) WorkerSettingsSnapshot() *factoryruntime.JavaScriptWorker
 		return nil
 	}
 	s.workerSettingsMu.RLock()
-	settings := factorysessions.CloneWorkerSettings(s.workerSettings)
+	settings := workersettings.Clone(s.workerSettings)
 	s.workerSettingsMu.RUnlock()
 	return settings
 }

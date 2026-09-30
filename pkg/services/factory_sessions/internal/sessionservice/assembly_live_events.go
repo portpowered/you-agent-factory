@@ -40,3 +40,13 @@ func (a *Assembly) ProbeFactoryEventsForSession(ctx context.Context, sessionID s
 	_, err := a.SubscribeFactoryEventsForSession(probeCtx, sessionID, reconnect)
 	return err
 }
+
+// QueryEventStream materializes a finite durable event read at the Sessions
+// owner, so transports receive a ready stream without managing channels.
+func (s *Service) QueryEventStream(ctx context.Context, request factorysessions.SessionEventQueryRequest) (*factorydefinitions.FactoryEventStream, error) {
+	result, err := s.QueryEvents(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return factorysessions.MaterializeEventReadStream(result), nil
+}

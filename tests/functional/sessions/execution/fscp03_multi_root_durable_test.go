@@ -14,6 +14,12 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+type fscp03StartedSession struct {
+	root   string
+	result factorysessions.SessionStartResult
+	err    error
+}
+
 func TestFSCP03OneDurableOwnerAcrossProjectRootsAndRestart(t *testing.T) {
 	t.Parallel()
 	acquireExecutionFixtureSlot(t)
@@ -37,12 +43,7 @@ func TestFSCP03OneDurableOwnerAcrossProjectRootsAndRestart(t *testing.T) {
 	if !ok {
 		t.Fatal("process Factory Sessions capability is unavailable")
 	}
-	type startedSession struct {
-		root   string
-		result factorysessions.SessionStartResult
-		err    error
-	}
-	outcomes := make([]startedSession, 2)
+	outcomes := make([]fscp03StartedSession, 2)
 	roots := []string{firstDir, secondDir}
 	var started sync.WaitGroup
 	for index, projectRoot := range roots {
@@ -64,23 +65,7 @@ func TestFSCP03OneDurableOwnerAcrossProjectRootsAndRestart(t *testing.T) {
 		}()
 	}
 	started.Wait()
-	for _, outcome := range outcomes {
-		if outcome.err != nil || outcome.result.SessionID == "" || outcome.result.Status != string(factorysessions.LifecycleStatusSucceeded) {
-			t.Fatalf("durable Start(%q) = %#v, error = %v", outcome.root, outcome.result, outcome.err)
-		}
-		snapshotPath := filepath.Join(outcome.root, ".you-agent-factory", "durable-sessions", outcome.result.SessionID+".json")
-		encoded, err := os.ReadFile(snapshotPath)
-		if err != nil {
-			t.Fatalf("read project-scoped snapshot %q: %v", snapshotPath, err)
-		}
-		var snapshot struct{ ProjectRoot string }
-		if err := json.Unmarshal(encoded, &snapshot); err != nil {
-			t.Fatalf("decode snapshot %q: %v", snapshotPath, err)
-		}
-		if snapshot.ProjectRoot != outcome.root {
-			t.Fatalf("snapshot %q project root = %q, want %q", snapshotPath, snapshot.ProjectRoot, outcome.root)
-		}
-	}
+	assertFSCP03ProjectScopedSnapshots(t, outcomes)
 	if outcomes[0].result.SessionID == outcomes[1].result.SessionID {
 		t.Fatal("distinct project roots shared durable SessionID")
 	}
@@ -115,6 +100,27 @@ func TestFSCP03OneDurableOwnerAcrossProjectRootsAndRestart(t *testing.T) {
 			Operation: factorysessions.SessionControlClose,
 		}); err != nil {
 			t.Fatalf("close current Factory %q: %v", outcome.root, err)
+		}
+	}
+}
+
+func assertFSCP03ProjectScopedSnapshots(t *testing.T, outcomes []fscp03StartedSession) {
+	t.Helper()
+	for _, outcome := range outcomes {
+		if outcome.err != nil || outcome.result.SessionID == "" || outcome.result.Status != string(factorysessions.LifecycleStatusSucceeded) {
+			t.Fatalf("durable Start(%q) = %#v, error = %v", outcome.root, outcome.result, outcome.err)
+		}
+		snapshotPath := filepath.Join(outcome.root, ".you-agent-factory", "durable-sessions", outcome.result.SessionID+".json")
+		encoded, err := os.ReadFile(snapshotPath)
+		if err != nil {
+			t.Fatalf("read project-scoped snapshot %q: %v", snapshotPath, err)
+		}
+		var snapshot struct{ ProjectRoot string }
+		if err := json.Unmarshal(encoded, &snapshot); err != nil {
+			t.Fatalf("decode snapshot %q: %v", snapshotPath, err)
+		}
+		if snapshot.ProjectRoot != outcome.root {
+			t.Fatalf("snapshot %q project root = %q, want %q", snapshotPath, snapshot.ProjectRoot, outcome.root)
 		}
 	}
 }

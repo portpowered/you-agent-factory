@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/workersettings"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -253,7 +254,7 @@ func NewDurableExecution(
 	}
 	return DurableExecution{
 		Service: execution,
-		WorkerSettings: factorysessions.CloneWorkerSettings(&factoryruntime.JavaScriptWorkerSettings{
+		WorkerSettings: workersettings.Clone(&factoryruntime.JavaScriptWorkerSettings{
 			Presets: workerPresets, DefaultModelProvider: defaultProvider,
 			DefaultModel: firstNonEmpty(resolvedDefaults.WorkerModel, operatorConfig.Defaults.WorkerModel),
 		}),

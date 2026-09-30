@@ -26,21 +26,7 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 		return factorysessions.SessionStartResult{}, fmt.Errorf("Factory Sessions process root is required")
 	}
 	if request.Mode != factorysessions.SessionOperationModeLive {
-		if request.Mode == factorysessions.SessionOperationModeDurable && request.WorkerResourceAdmission == nil {
-			request.WorkerResourceAdmission = r.currentWorkerResourceAdmission()
-		}
-		if request.Mode == factorysessions.SessionOperationModeDurable && request.WorkerAttemptStarter == nil {
-			request.WorkerAttemptStarter = r.currentWorkerAttemptStarter()
-		}
-		if request.Mode == factorysessions.SessionOperationModeDurable && request.WorkerSettings == nil {
-			if current := runtimebinding.SessionStateFrom(r.Resolve(factorysessions.DefaultSessionID)); current != nil {
-				request.WorkerSettings = current.WorkerSettingsSnapshot()
-			}
-		}
-		if request.Mode == factorysessions.SessionOperationModeDurable && request.RuntimeSelection == nil {
-			request = inheritCurrentMockWorkers(request, r.Resolve(factorysessions.DefaultSessionID))
-		}
-		return r.Assembly.Start(ctx, request)
+		return r.Assembly.Start(ctx, r.prepareDurableStartRequest(request))
 	}
 	if request.Wait.TimeoutMillis < 0 {
 		return factorysessions.SessionStartResult{}, &factorysessions.DetachedRequestError{Field: "wait.timeoutMillis", Message: "timeout must not be negative"}
@@ -65,6 +51,25 @@ func (r *Root) Start(ctx context.Context, request factorysessions.SessionStartRe
 		return value.(factorysessions.SessionStartResult), nil
 	}
 	return r.startLive(ctx, request)
+}
+
+func (r *Root) prepareDurableStartRequest(request factorysessions.SessionStartRequest) factorysessions.SessionStartRequest {
+	if request.Mode != factorysessions.SessionOperationModeDurable {
+		return request
+	}
+	if request.WorkerResourceAdmission == nil {
+		request.WorkerResourceAdmission = r.currentWorkerResourceAdmission()
+	}
+	if request.WorkerAttemptStarter == nil {
+		request.WorkerAttemptStarter = r.currentWorkerAttemptStarter()
+	}
+	if request.WorkerSettings == nil {
+		request.WorkerSettings = r.currentWorkerSettings()
+	}
+	if request.RuntimeSelection == nil {
+		request = inheritCurrentMockWorkers(request, r.Resolve(factorysessions.DefaultSessionID))
+	}
+	return request
 }
 
 func (r *Root) currentWorkerSettings() *factoryruntime.JavaScriptWorkerSettings {
@@ -183,52 +188,71 @@ func (r *Root) startLive(ctx context.Context, request factorysessions.SessionSta
 		return factorysessions.SessionStartResult{}, err
 	}
 	if request.ValidateOnly {
-		var result factorysessions.SessionStartResult
-		var validationErr error
-		if products.sessions == nil {
-			validationErr = fmt.Errorf("start Factory Session: validation service is unavailable")
-		} else {
-			result, validationErr = products.sessions.Start(ctx, selected)
-		}
-		if products.closeArtifacts != nil {
-			validationErr = errors.Join(validationErr, products.closeArtifacts())
-		}
-		return result, validationErr
+		return validateOpenedSession(ctx, products, selected)
 	}
-	if selected.Target != nil {
-		if session := r.Resolve(selectedID); session != nil {
-			session.Target = *selected.Target
-			if selected.Target.Kind == factorysessions.TargetKindNamed {
-				session.FolderPath = selected.FolderPath
-				session.Project = filepath.Base(selected.FolderPath)
-			}
-		}
-	}
+	r.setStartedSessionTarget(selectedID, selected)
 	activation, err := startSessionLifecycle(ctx, products)
 	if err != nil {
 		return factorysessions.SessionStartResult{}, err
 	}
-	session := r.Resolve(selectedID)
-	if session == nil {
-		_ = activation.Close(ctx)
-		_ = activation.lifecycle.StopLifecycle(ctx)
-		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: activated session %q is unavailable", selectedID)
+	session, err := r.bindStartedSession(ctx, selectedID, selected, products, activation, request.Correlation.RequestID, previousControl)
+	if err != nil {
+		return factorysessions.SessionStartResult{}, err
 	}
-	bound := runtimebinding.SessionStateFrom(session)
-	if bound == nil {
-		_ = activation.Close(ctx)
-		_ = activation.lifecycle.StopLifecycle(ctx)
-		return factorysessions.SessionStartResult{}, fmt.Errorf("start Factory Session: session runtime state is unavailable")
-	}
-	bindSessionProducts(bound, products, activation, request.Correlation.RequestID, previousControl)
-	bound.SetMockWorkers(selected.RuntimeSelection.Workers.MockWorkers)
-	bound.SetOperatorDefaults(selected.RuntimeSelection.OperatorDefaults)
-	bound.SetWorkerSettings(products.workerSettings)
 	result := liveStartResult(session)
 	if request.InitNewFactory {
 		result.Live.InitializedNewFactory = true
 	}
 	return result, nil
+}
+
+func validateOpenedSession(ctx context.Context, products runtimeProducts, selected factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
+	var result factorysessions.SessionStartResult
+	var validationErr error
+	if products.sessions == nil {
+		validationErr = fmt.Errorf("start Factory Session: validation service is unavailable")
+	} else {
+		result, validationErr = products.sessions.Start(ctx, selected)
+	}
+	if products.closeArtifacts != nil {
+		validationErr = errors.Join(validationErr, products.closeArtifacts())
+	}
+	return result, validationErr
+}
+
+func (r *Root) setStartedSessionTarget(selectedID string, selected factorysessions.SessionStartRequest) {
+	if selected.Target == nil {
+		return
+	}
+	session := r.Resolve(selectedID)
+	if session == nil {
+		return
+	}
+	session.Target = *selected.Target
+	if selected.Target.Kind == factorysessions.TargetKindNamed {
+		session.FolderPath = selected.FolderPath
+		session.Project = filepath.Base(selected.FolderPath)
+	}
+}
+
+func (r *Root) bindStartedSession(ctx context.Context, selectedID string, selected factorysessions.SessionStartRequest, products runtimeProducts, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) (*livesession.LiveSession, error) {
+	session := r.Resolve(selectedID)
+	if session == nil {
+		_ = activation.Close(ctx)
+		_ = activation.lifecycle.StopLifecycle(ctx)
+		return nil, fmt.Errorf("start Factory Session: activated session %q is unavailable", selectedID)
+	}
+	bound := runtimebinding.SessionStateFrom(session)
+	if bound == nil {
+		_ = activation.Close(ctx)
+		_ = activation.lifecycle.StopLifecycle(ctx)
+		return nil, fmt.Errorf("start Factory Session: session runtime state is unavailable")
+	}
+	bindSessionProducts(bound, products, activation, requestID, previousControl)
+	bound.SetMockWorkers(selected.RuntimeSelection.Workers.MockWorkers)
+	bound.SetOperatorDefaults(selected.RuntimeSelection.OperatorDefaults)
+	bound.SetWorkerSettings(products.workerSettings)
+	return session, nil
 }
 
 func (r *Root) closeReplacedSession(ctx context.Context, request factorysessions.SessionStartRequest, selectedID string) (*runtimebinding.SessionState, error) {
@@ -266,50 +290,9 @@ func (r *Root) prepareLiveStartRequest(ctx context.Context, request factorysessi
 		}
 		runtimeSelection.SystemConfigHome = home
 	}
-	if selectedID != factorysessions.DefaultSessionID && runtimeSelection.OperatorDefaults == (operatorsettings.ResolvedDefaults{}) {
-		if current := runtimebinding.SessionStateFrom(r.Resolve(factorysessions.DefaultSessionID)); current != nil {
-			runtimeSelection.OperatorDefaults = current.OperatorDefaults()
-		}
-	}
-	if selectedID != factorysessions.DefaultSessionID && runtimeSelection.Workers.MockWorkers == nil {
-		if current := runtimebinding.SessionStateFrom(r.Resolve(factorysessions.DefaultSessionID)); current != nil {
-			runtimeSelection.Workers.MockWorkers = current.MockWorkersConfig()
-		}
-	}
-	if selectedID != factorysessions.DefaultSessionID {
-		if current := runtimebinding.SessionStateFrom(r.Resolve(factorysessions.DefaultSessionID)); current != nil {
-			if runtimeSelection.LogPolicy == "" && current.Diagnostics.RootDir != "" {
-				runtimeSelection.LogPolicy = factorysessions.SessionArtifactPolicyEnabled
-				runtimeSelection.LogDirectory = current.Diagnostics.RootDir
-				runtimeSelection.LogConfig = factorysessions.SessionArtifactStorageConfig{
-					MaxSize: current.Diagnostics.MaxSizeMB, MaxBackups: current.Diagnostics.MaxBackups,
-					MaxAge: current.Diagnostics.MaxAgeDays, Compress: current.Diagnostics.Compress,
-				}
-			}
-			if runtimeSelection.MetricsPolicy == "" && current.Diagnostics.MetricsRootDir != "" {
-				runtimeSelection.MetricsPolicy = factorysessions.SessionArtifactPolicyEnabled
-				runtimeSelection.MetricsDirectory = current.Diagnostics.MetricsRootDir
-			}
-		}
-	}
-	if request.Target != nil {
-		switch request.Target.Kind {
-		case factorysessions.TargetKindDefault:
-			if strings.TrimSpace(request.Target.Name) != "" {
-				return factorysessions.SessionStartRequest{}, fmt.Errorf("default Factory Session target must not have a name")
-			}
-		case factorysessions.TargetKindNamed:
-			name := strings.TrimSpace(request.Target.Name)
-			segments, err := factorydefinitions.PathSegments(name)
-			if err != nil || len(segments) != 1 {
-				return factorysessions.SessionStartRequest{}, fmt.Errorf("invalid named Factory Session target %q", name)
-			}
-			selected.Target = &factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: name}
-			namedDir := filepath.Join(request.FolderPath, name)
-			runtimeSelection.DefinitionSourcePath = filepath.Join(namedDir, factorydefinitions.FactoryConfigFile)
-		default:
-			return factorysessions.SessionStartRequest{}, fmt.Errorf("unsupported Factory Session target kind %q", request.Target.Kind)
-		}
+	r.inheritCurrentSelection(selectedID, &runtimeSelection)
+	if err := selectStartTarget(request, &selected, &runtimeSelection); err != nil {
+		return factorysessions.SessionStartRequest{}, err
 	}
 	selectedFolder, resolveErr := r.resolveStartFolder(ctx, request, runtimeSelection)
 	if resolveErr != nil {
@@ -327,6 +310,58 @@ func (r *Root) prepareLiveStartRequest(ctx context.Context, request factorysessi
 	}
 	selected.RuntimeSelection = &runtimeSelection
 	return selected, nil
+}
+
+func (r *Root) inheritCurrentSelection(selectedID string, selection *factorysessions.SessionRuntimeSelection) {
+	if selectedID == factorysessions.DefaultSessionID {
+		return
+	}
+	current := runtimebinding.SessionStateFrom(r.Resolve(factorysessions.DefaultSessionID))
+	if current == nil {
+		return
+	}
+	if selection.OperatorDefaults == (operatorsettings.ResolvedDefaults{}) {
+		selection.OperatorDefaults = current.OperatorDefaults()
+	}
+	if selection.Workers.MockWorkers == nil {
+		selection.Workers.MockWorkers = current.MockWorkersConfig()
+	}
+	if selection.LogPolicy == "" && current.Diagnostics.RootDir != "" {
+		selection.LogPolicy = factorysessions.SessionArtifactPolicyEnabled
+		selection.LogDirectory = current.Diagnostics.RootDir
+		selection.LogConfig = factorysessions.SessionArtifactStorageConfig{
+			MaxSize: current.Diagnostics.MaxSizeMB, MaxBackups: current.Diagnostics.MaxBackups,
+			MaxAge: current.Diagnostics.MaxAgeDays, Compress: current.Diagnostics.Compress,
+		}
+	}
+	if selection.MetricsPolicy == "" && current.Diagnostics.MetricsRootDir != "" {
+		selection.MetricsPolicy = factorysessions.SessionArtifactPolicyEnabled
+		selection.MetricsDirectory = current.Diagnostics.MetricsRootDir
+	}
+}
+
+func selectStartTarget(request factorysessions.SessionStartRequest, selected *factorysessions.SessionStartRequest, selection *factorysessions.SessionRuntimeSelection) error {
+	if request.Target == nil {
+		return nil
+	}
+	switch request.Target.Kind {
+	case factorysessions.TargetKindDefault:
+		if strings.TrimSpace(request.Target.Name) != "" {
+			return fmt.Errorf("default Factory Session target must not have a name")
+		}
+	case factorysessions.TargetKindNamed:
+		name := strings.TrimSpace(request.Target.Name)
+		segments, err := factorydefinitions.PathSegments(name)
+		if err != nil || len(segments) != 1 {
+			return fmt.Errorf("invalid named Factory Session target %q", name)
+		}
+		selected.Target = &factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: name}
+		namedDir := filepath.Join(request.FolderPath, name)
+		selection.DefinitionSourcePath = filepath.Join(namedDir, factorydefinitions.FactoryConfigFile)
+	default:
+		return fmt.Errorf("unsupported Factory Session target kind %q", request.Target.Kind)
+	}
+	return nil
 }
 
 func startSessionLifecycle(ctx context.Context, products runtimeProducts) (*sessionActivation, error) {
