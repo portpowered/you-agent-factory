@@ -74,6 +74,9 @@ func TestWSRFT011WorkerSessionCursorResumeAcrossRestart(t *testing.T) {
 		Env:                       env,
 		Args:                      []string{"--session", sessionID, "--replay", artifactPath, "--no-record"},
 	})
+	// Host readiness precedes replay execution; complete-history assertions
+	// require the replayed Factory Session to finish its terminal callbacks.
+	support.WaitForSessionTerminalStatus(t, replayServer.URL(), sessionID, 30*time.Second)
 	resumedHistory := readWSRFT011Events(t, workerEventsWSRFT011URL(replayServer.URL(), sessionID, firstWorkerID, url.Values{
 		"replayOnly":     []string{"true"},
 		"after_position": []string{strconv.FormatInt(acknowledged, 10)},
@@ -156,7 +159,9 @@ func TestWSRFT012WorkerSessionFollowAndProviderReferenceParity(t *testing.T) {
 	server.Stop(t)
 
 	providerServer, providerFactorySession, providerWorkerID, providerSession := startWSRFT012ProviderServer(t)
-	directObservation := getWSRFT010Observation(t, providerServer.URL(), providerFactorySession, providerWorkerID)
+	// Recording confirmation advances after execution ends. Observe its final
+	// watermark before comparing two sequential reads of every public field.
+	directObservation := waitForWSRFT012ConfirmedObservation(t, providerServer.URL(), providerFactorySession, providerWorkerID)
 	providerObservation := getWSRFT012ProviderObservation(t, providerServer.URL(), providerFactorySession, providerSession)
 	if !reflect.DeepEqual(directObservation, providerObservation) {
 		t.Fatalf("Worker-ID/provider observations differ:\ndirect=%#v\nprovider=%#v", directObservation, providerObservation)
@@ -589,6 +594,26 @@ func startWSRFT012ProviderServer(t *testing.T) (*support.FunctionalAPIServer, st
 		t.Fatalf("Codex Worker Session provider association = %#v, want provider/codex session_id identity", observation.ProviderSession)
 	}
 	return server, factorySession, workerID, providerSession
+}
+
+func waitForWSRFT012ConfirmedObservation(t *testing.T, baseURL, sessionID, workerID string) factoryapi.WorkerSessionObservation {
+	t.Helper()
+	deadline := time.NewTimer(30 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		observation := getWSRFT010Observation(t, baseURL, sessionID, workerID)
+		if observation.ConfirmationState == factoryapi.CONFIRMED {
+			return observation
+		}
+		select {
+		case <-deadline.C:
+			payload, _ := json.Marshal(observation)
+			t.Fatalf("timed out waiting for confirmed Worker Session observation: %s", payload)
+		case <-ticker.C:
+		}
+	}
 }
 
 func readWSRFT012ProviderFixture(t *testing.T, fileName string) []byte {

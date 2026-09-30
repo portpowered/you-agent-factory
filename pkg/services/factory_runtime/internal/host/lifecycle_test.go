@@ -43,6 +43,7 @@ func TestFinalizeArtifacts_RequiresClock(t *testing.T) {
 type terminalRecording struct {
 	finalizeCalls int
 	finishedAt    time.Time
+	finalizeErr   error
 }
 
 func (*terminalRecording) BindRecordingLifecycle(
@@ -61,7 +62,7 @@ func (*terminalRecording) Err() error                          { return nil }
 func (r *terminalRecording) Finalize(finishedAt time.Time) error {
 	r.finalizeCalls++
 	r.finishedAt = finishedAt
-	return nil
+	return r.finalizeErr
 }
 
 var _ recordings.RuntimeRecorder = (*terminalRecording)(nil)
@@ -155,10 +156,10 @@ func TestStopDelegatesEveryRuntimeOutcomeToRecordingFinalization(t *testing.T) {
 			handle.SetRunResult(runErr)
 
 			err := factoryhost.Stop(handle, clockwork.NewFakeClockAt(finishedAt))
-			if runErr != nil && !errors.Is(err, runErr) {
+			if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(err, runErr) {
 				t.Fatalf("Stop error = %v, want run error %v", err, runErr)
 			}
-			if runErr == nil && err != nil {
+			if (runErr == nil || errors.Is(runErr, context.Canceled)) && err != nil {
 				t.Fatalf("Stop error = %v, want nil", err)
 			}
 			if recording.finalizeCalls != 1 || !recording.finishedAt.Equal(finishedAt) {
@@ -168,6 +169,31 @@ func TestStopDelegatesEveryRuntimeOutcomeToRecordingFinalization(t *testing.T) {
 					recording.finishedAt,
 					finishedAt,
 				)
+			}
+		})
+	}
+}
+
+func TestStopPreservesFailuresAfterCanceledRun(t *testing.T) {
+	t.Parallel()
+	flushErr := errors.New("final recording flush failed")
+	runFailure := errors.New("worker drain failed")
+	for name, runErr := range map[string]error{
+		"cancellation":   context.Canceled,
+		"joined failure": fmt.Errorf("runtime stopped: %w", errors.Join(context.Canceled, runFailure)),
+	} {
+		t.Run(name, func(t *testing.T) {
+			recording := &terminalRecording{finalizeErr: flushErr}
+			handle := &factoryhost.Handle{
+				Bundle: &factoryhost.Bundle{Recording: recording}, RunDone: make(chan struct{}),
+			}
+			handle.SetRunResult(runErr)
+			err := factoryhost.Stop(handle, clockwork.NewFakeClock())
+			if !errors.Is(err, flushErr) || errors.Is(err, context.Canceled) {
+				t.Fatalf("Stop = %v, want final flush failure without benign cancellation", err)
+			}
+			if errors.Is(runErr, runFailure) && !errors.Is(err, runFailure) {
+				t.Fatalf("Stop = %v, lost worker drain failure", err)
 			}
 		})
 	}
@@ -412,8 +438,8 @@ func TestStop_CancelsAndJoinsSidecarsBeforeStoppingRunLoop(t *testing.T) {
 	}()
 
 	err := factoryhost.Stop(handle, clockwork.NewFakeClock())
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("Stop error = %v, want context canceled", err)
+	if err != nil {
+		t.Fatalf("Stop error = %v, want ordinary shutdown cancellation normalized", err)
 	}
 	select {
 	case <-sidecarExited:

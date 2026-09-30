@@ -73,6 +73,8 @@ type activeAttempt struct {
 // and returns a detached ExecuteResult.
 type attemptLifecycle struct {
 	mu       sync.Mutex
+	pending  sync.WaitGroup
+	stopped  bool
 	service  executeCapability
 	newID    factory.IDGenerator
 	capacity int
@@ -169,11 +171,13 @@ func (l *attemptLifecycle) startWithPreparation(
 			l.finish(attempt)
 			cancel(platformprocess.NewCancellationCause(platformprocess.CancellationReasonCanceled))
 			close(attempt.done)
+			l.pending.Done()
 			return err
 		}
 	}
 
 	run := func() {
+		defer l.pending.Done()
 		result, err := l.executeSafely(execCtx, request)
 		applied, canceled, processGone := l.finish(attempt)
 		if !applied {
@@ -245,6 +249,9 @@ func (l *attemptLifecycle) admitAttempt(
 ) (bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.stopped {
+		return false, dispatchplanning.ErrDispatchRuntimeStopped
+	}
 	if _, exists := l.active[attempt.dispatchID]; exists {
 		return false, nil
 	}
@@ -257,6 +264,7 @@ func (l *attemptLifecycle) admitAttempt(
 		return false, ErrAttemptCapacityExceeded
 	}
 	l.active[attempt.dispatchID] = attempt
+	l.pending.Add(1)
 	return true, nil
 }
 
@@ -479,6 +487,7 @@ func (l *attemptLifecycle) stop(ctx context.Context) error {
 		return fmt.Errorf("stop worker attempts: context is required")
 	}
 	l.mu.Lock()
+	l.stopped = true
 	attempts := make([]*activeAttempt, 0, len(l.active))
 	for _, attempt := range l.active {
 		attempt.canceled = true
@@ -489,12 +498,19 @@ func (l *attemptLifecycle) stop(ctx context.Context) error {
 	for _, attempt := range attempts {
 		attempt.cancel(platformprocess.NewCancellationCause(platformprocess.CancellationReasonCanceled))
 	}
-	for _, attempt := range attempts {
-		select {
-		case <-attempt.done:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+	// finish releases execution capacity before its terminal callbacks run.
+	// Join every admitted callback, including those already removed from active,
+	// before the host can finalize recording artifacts. Admission is closed
+	// under the same mutex that guards pending.Add, so Wait cannot miss new work.
+	drained := make(chan struct{})
+	go func() {
+		l.pending.Wait()
+		close(drained)
+	}()
+	select {
+	case <-drained:
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 	if stopper, ok := l.service.(interface{ Stop(context.Context) error }); ok {
 		return stopper.Stop(ctx)

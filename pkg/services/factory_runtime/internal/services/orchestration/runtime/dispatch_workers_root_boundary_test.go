@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -735,5 +736,70 @@ func assertOptionalExecutionFact(t *testing.T, label string, value *string, want
 	}
 	if *value != want {
 		t.Fatalf("%s = %q, want %q", label, *value, want)
+	}
+}
+
+func TestAttemptShutdownJoinsTerminalPublicationAfterCapacityRelease(t *testing.T) {
+	for _, prepared := range []bool{false, true} {
+		t.Run(map[bool]string{false: "dispatch result", true: "worker recording"}[prepared], func(t *testing.T) {
+			t.Parallel()
+			entered := make(chan struct{})
+			release := make(chan struct{})
+			service := attemptExecuteFunc(func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+				return workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+			})
+			lifecycle := newAttemptLifecycle(service, func() string { return "attempt" }, 1)
+			block := func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error) {
+				close(entered)
+				<-release
+			}
+			terminal := attemptTerminalFunc(block)
+			var prepare attemptPreparation
+			if prepared {
+				prepare = func(context.Context, *workers.ExecuteRequest) (attemptTerminalFunc, error) { return block, nil }
+				terminal = func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error) {}
+			}
+			if err := lifecycle.startWithPreparation(context.Background(), attemptTestRequest("dispatch", "attempt"), true, terminal, false, prepare); err != nil {
+				t.Fatal(err)
+			}
+			<-entered
+			// Execution has released its capacity, but its durable terminal
+			// publication is still in flight. Shutdown must continue joining it.
+			if got := lifecycle.activeCount(); got != 0 {
+				t.Errorf("active executions = %d, want 0", got)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			err := lifecycle.stop(ctx)
+			close(release)
+			if !errors.Is(err, context.Canceled) {
+				t.Errorf("stop with pending publication = %v, want cancellation", err)
+			}
+			if err := lifecycle.stop(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if err := lifecycle.start(context.Background(), attemptTestRequest("late-dispatch", "late-attempt"), false, terminal); !errors.Is(err, dispatchplanning.ErrDispatchRuntimeStopped) {
+				t.Errorf("admission after shutdown = %v, want runtime stopped", err)
+			}
+		})
+	}
+}
+
+func TestAttemptShutdownDrainsRejectedPreparation(t *testing.T) {
+	t.Parallel()
+	service := attemptExecuteFunc(func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		t.Error("execution began after rejected preparation")
+		return workers.ExecuteResult{}, nil
+	})
+	lifecycle := newAttemptLifecycle(service, func() string { return "attempt" }, 1)
+	want := errors.New("recording unavailable")
+	err := lifecycle.startWithPreparation(context.Background(), attemptTestRequest("dispatch", "attempt"), true,
+		func(context.Context, workers.ExecuteRequest, workers.ExecuteResult, error) {}, false,
+		func(context.Context, *workers.ExecuteRequest) (attemptTerminalFunc, error) { return nil, want })
+	if !errors.Is(err, want) {
+		t.Fatalf("prepare = %v, want %v", err, want)
+	}
+	if err := lifecycle.stop(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 }
