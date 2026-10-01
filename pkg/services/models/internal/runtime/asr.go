@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -18,17 +19,20 @@ type Backend func(
 	codecs.ASRRequest,
 ) (codecs.ASRResponse, []models.InferenceArtifact, error)
 
+type VideoAudioExtractor func(context.Context, []byte) ([]byte, error)
+
 type asr struct {
-	codec   codecs.ASRCodec
-	backend Backend
+	extractAudio VideoAudioExtractor
+	codec        codecs.ASRCodec
+	backend      Backend
 }
 
 // New constructs the Models-owned ASR invocation runtime.
-func New(backend Backend) (asr, error) {
+func New(backend Backend, extractAudio VideoAudioExtractor) (asr, error) {
 	if backend == nil {
 		return asr{}, models.ErrInvalidInferenceDependencies
 	}
-	return asr{codec: codecs.NewASRCodec(), backend: backend}, nil
+	return asr{codec: codecs.NewASRCodec(), backend: backend, extractAudio: extractAudio}, nil
 }
 
 func (runtime asr) Invoke(
@@ -48,7 +52,11 @@ func (runtime asr) Invoke(
 		return inference.InvocationRuntimeResult{}, err
 	}
 
-	backendRequest, err := runtime.codec.EncodeRequest(request.Request)
+	prepared, err := runtime.prepareVideoAudio(ctx, request.Request)
+	if err != nil {
+		return inference.InvocationRuntimeResult{}, err
+	}
+	backendRequest, err := runtime.codec.EncodeRequest(prepared)
 	if err != nil {
 		return inference.InvocationRuntimeResult{}, err
 	}
@@ -91,4 +99,53 @@ func artifactSources(artifacts []models.InferenceArtifact) []inference.Invocatio
 		})
 	}
 	return sources
+}
+
+// prepareVideoAudio replaces only the declared audio slot's video container.
+// The codec continues to validate the resulting audio and all other slots.
+func (runtime asr) prepareVideoAudio(ctx context.Context, request models.InvokeModelRequest) (models.InvokeModelRequest, error) {
+	inputs := request.Inputs
+	if len(inputs) == 0 {
+		inputs = []models.InferenceInput{request.Input}
+	}
+	prepared := append([]models.InferenceInput(nil), inputs...)
+	for index, input := range prepared {
+		if !asrVideoInput(input) {
+			continue
+		}
+
+		if runtime.extractAudio == nil {
+			return request, asrVideoFailure("ASR video audio extraction is unavailable", nil)
+		}
+		wav, err := runtime.extractAudio(ctx, []byte(input.Content))
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return request, err
+			}
+			return request, asrVideoFailure(fmt.Sprintf("ASR video audio extraction failed: %v", err), err)
+		}
+		if len(wav) == 0 {
+			return request, asrVideoFailure("ASR video input has no audio track", nil)
+		}
+		input.Modality, input.MediaType, input.ContentType, input.Content = models.ModalityAudio, "audio/wav", "audio/wav", string(wav)
+		prepared[index] = input
+	}
+	if len(request.Inputs) == 0 {
+		request.Input = prepared[0]
+	} else {
+		request.Inputs = prepared
+	}
+	return request, nil
+}
+
+func asrVideoFailure(message string, cause error) error {
+	return &models.InvocationFailure{Class: models.InvocationFailureClassMediaCapability, Operation: models.OperationASR, Message: message, Cause: cause}
+}
+
+func asrVideoInput(input models.InferenceInput) bool {
+	media := strings.TrimSpace(input.MediaType)
+	if media == "" {
+		media = strings.TrimSpace(input.ContentType)
+	}
+	return strings.TrimSpace(input.Name) == "audio" && strings.HasPrefix(strings.ToLower(media), "video/") && input.Artifact == nil && len(input.Content) > 0 && (input.Modality == models.ModalityAudio || input.Modality == models.ModalityVideo)
 }

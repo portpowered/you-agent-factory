@@ -11,6 +11,7 @@ func bindASRStaging(
 	tempDirectory RuntimeTempDirectory,
 	tempFile RuntimeCreateTempFile,
 	writeFile AssetWriteFile,
+	readFile AssetReadFile,
 	removeFile AssetRemovePath,
 ) invocationRuntimeOptions {
 	if options.ASRTempDirectory == nil && tempDirectory != nil {
@@ -23,6 +24,9 @@ func bindASRStaging(
 		options.ASRWriteFile = func(path string, content []byte) error {
 			return writeFile(path, content, 0o600)
 		}
+	}
+	if options.ASRReadFile == nil && readFile != nil {
+		options.ASRReadFile = func(path string) ([]byte, error) { return readFile(path) }
 	}
 	if options.ASRRemoveFile == nil && removeFile != nil {
 		options.ASRRemoveFile = func(path string) error { return removeFile(path) }

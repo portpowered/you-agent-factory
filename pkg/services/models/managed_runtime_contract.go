@@ -256,7 +256,7 @@ func genericASROperation() Operation {
 	return Operation{
 		Name: OperationASR,
 		Inputs: []OperationSlot{
-			genericOperationSlot("audio", ModalityAudio, true, false, "audio/*"),
+			genericOperationSlot("audio", ModalityAudio, true, false, "audio/*", "video/*"),
 			genericOperationSlot("prompt", ModalityText, false, false, "text/plain"),
 			genericOperationSlot("parameters", ModalityJSON, false, false, "application/json"),
 		},
@@ -376,12 +376,10 @@ func cloneInt64Pointer(value *int64) *int64 {
 	return &cloned
 }
 
-const genericInvocationOutputLimitBytes int64 = 16 << 20
-
 // NormalizeGenericInvocationOutputs validates and detaches named outputs from
 // one generic runtime response. It orders outputs by the declared operation
 // contract, merges inline content with matching artifact metadata, rejects
-// malformed or oversized responses, and never returns a partial output slice.
+// malformed responses, and never returns a partial output slice.
 func NormalizeGenericInvocationOutputs(
 	operation Operation,
 	content []InferenceContent,
@@ -561,11 +559,6 @@ func validateOutputContent(
 	slot OperationSlot,
 	index int,
 ) error {
-	if int64(len([]byte(content.Content))) > genericInvocationOutputLimitBytes {
-		return malformedInvocationOutputFailure(
-			fmt.Sprintf("output %q exceeds the response size limit", name), name,
-		)
-	}
 	if content.Modality != "" && content.Modality != slot.Modality {
 		return malformedInvocationOutputFailure(
 			fmt.Sprintf("output %d for slot %q has unsupported modality %q", index, name, content.Modality), name,
@@ -583,9 +576,9 @@ func validateOutputArtifact(artifact InferenceArtifact, name string, slot Operat
 	if artifact.Artifact.IsZero() {
 		return malformedInvocationOutputFailure("runtime returned an invalid artifact reference", name)
 	}
-	if artifact.SizeBytes < 0 || artifact.SizeBytes > genericInvocationOutputLimitBytes {
+	if artifact.SizeBytes < 0 {
 		return malformedInvocationOutputFailure(
-			fmt.Sprintf("output %q exceeds the response size limit", name), name,
+			fmt.Sprintf("output %q has a negative artifact size", name), name,
 		)
 	}
 	if media := strings.TrimSpace(artifact.MediaType); media != "" && !matchesMediaType(media, slot.MediaTypes) {

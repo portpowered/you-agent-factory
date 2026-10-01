@@ -442,14 +442,14 @@ curl -X POST http://localhost:7437/models/invocations \
   -F 'files=@clip.mp4;type=video/mp4'
 ```
 
-Each uploaded file must be nonempty and no larger than 8 MiB. The complete
-multipart body is limited to 64 MiB. JSON callers can continue to use
+Uploaded files must be nonempty. Direct Models requests have no fixed input
+size limit. JSON callers can continue to use
 `contentBase64` with the file bytes and `mediaType` for each media input.
 
 `ASR` preserves backend segment timestamps in the `segments` JSON output. Each
 segment contains `id`, `start`, `end`, and `text` fields.
 
-### Transcribe audio
+### Transcribe audio or video
 
 Map every ASR output explicitly:
 
@@ -458,6 +458,15 @@ you models invoke asr --operation ASR \
   --input audio=@meeting.wav \
   --output transcript=meeting.txt \
   --output segments=meeting.json
+```
+
+ASR also accepts a video file in the `audio` slot and transcribes its first
+audio stream. Video extraction requires `ffmpeg` and `ffprobe` on `PATH`. A
+video without audio fails with a diagnostic.
+
+```bash
+you models invoke asr --operation ASR --input audio=@demo.mp4 \
+  --output transcript=video.txt --output segments=video-asr.json
 ```
 
 The transcript file uses `text/plain`. The segments file uses
@@ -530,9 +539,10 @@ you models invoke qwen3-tts-0.6b --operation TTS \
 
 Use the same input and parameter form for an operator-configured IndexTTS
 model. The built-in `tts` model is VibeVoice; Qwen3-TTS and IndexTTS are not
-built-in model bundles. File inputs to direct `models invoke` are limited to
-8 MiB. A successful WAV output confirms synthesis, but voice similarity
-depends on the selected backend and reference audio.
+built-in model bundles. Direct `models invoke` accepts
+nonempty files without a fixed size limit. A successful WAV output confirms
+synthesis, but voice similarity depends on the selected backend and reference
+audio.
 
 ### Input and output failures
 
@@ -621,8 +631,8 @@ non-repeatable slot fails before generation.
 
 Prefix a file path with `@` to read its bytes and detect its media type. Common
 extensions map to their concrete types, including `.txt`, `.png`, `.wav`, and
-`.mp4`. Unknown extensions use content detection. Each file must be nonempty
-and no larger than 8 MiB.
+`.mp4`. Unknown extensions use content detection. Each file must be nonempty.
+Direct Models invocation does not impose a fixed file-size limit.
 
 ```bash
 you models invoke llm \
@@ -646,10 +656,11 @@ output. It rejects an explicit `max_tokens` parameter because the composed
 response cannot apply that token limit exactly. Single-modality `OMNI`
 invocations continue to support `max_tokens` and `usage`.
 
-The detected type must match the named slot. For example,
-`--input audio=@clip.mp4` is rejected before generation. The Models service
-classifies this as `MEDIA_CAPABILITY`. The CLI reports the safe
-`CLI_COMMAND_FAILED` diagnostic.
+The detected type must match the named slot. For `OMNI`,
+`--input audio=@clip.mp4` is rejected before generation; bind the clip to
+`video` instead. ASR accepts video containers in its `audio` slot. The Models
+service classifies unsupported media as `MEDIA_CAPABILITY`. The CLI reports the
+safe `CLI_COMMAND_FAILED` diagnostic.
 Unsupported modalities are never silently omitted or converted.
 The built-in `OMNI` operation has no general document or binary input slot.
 Convert a document to text or a supported media type before invocation.
@@ -683,7 +694,7 @@ For media understanding, stage an image, audio, or video file as Work and bind
 its content to the matching model input slot. The inference worker reads the
 staged file bytes before invoking Models, preserving the file's media type and
 the order of repeated inputs. Each media input is limited to 32 MiB in this
-path. Direct `you models invoke` file inputs use the 8 MiB limit above.
+path. Direct `you models invoke` file inputs have no fixed size limit.
 
 Use `you docs providers` for agent provider/model selection and limits. Use
 `you docs workers` for worker capabilities, `you docs workstations` for routing

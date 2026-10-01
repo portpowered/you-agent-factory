@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelcodecs "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
@@ -87,7 +86,7 @@ func (runtime operationInvocationRuntime) Invoke(
 func inferenceRuntime(options invocationRuntimeOptions) (invocationRuntime, error) {
 	runtime := operationInvocationRuntime{
 		generic: genericInvocationRuntime(options.Backend),
-		omni:    newInvocationRuntime(options.Client, options.Dialer, options.VideoAudioRunner),
+		omni:    newInvocationRuntime(options.Client, options.Dialer, videoAudioExtractor(options)),
 	}
 	if err := configureASRRuntime(&runtime, options); err != nil {
 		return nil, err
@@ -115,7 +114,7 @@ func configureASRRuntime(runtime *operationInvocationRuntime, options invocation
 	if backend == nil {
 		return nil
 	}
-	asr, err := newASRInvocationRuntime(backend)
+	asr, err := newASRInvocationRuntime(backend, videoAudioExtractor(options))
 	if err != nil {
 		return err
 	}
@@ -194,7 +193,7 @@ func (failClosedInvocationRuntime) Invoke(
 	}
 }
 
-func newASRInvocationRuntime(backend ASRBackend) (invocationRuntime, error) {
+func newASRInvocationRuntime(backend ASRBackend, extract localai.VideoAudioExtractor) (invocationRuntime, error) {
 	return modelsruntime.New(func(
 		ctx context.Context,
 		request modelcodecs.ASRRequest,
@@ -213,7 +212,7 @@ func newASRInvocationRuntime(backend ASRBackend) (invocationRuntime, error) {
 			}
 		}
 		return modelcodecs.ASRResponse{Text: response.Text, Segments: segments}, response.Artifacts, nil
-	})
+	}, modelsruntime.VideoAudioExtractor(extract))
 }
 
 func newEmbeddingInvocationRuntime(backend EmbeddingBackend) (invocationRuntime, error) {
@@ -251,7 +250,7 @@ type omniInvocationRuntime struct {
 func newInvocationRuntime(
 	client InvocationProtocolClient,
 	dialer InvocationProtocolDialer,
-	runners ...platformprocess.CommandRunner,
+	extractors ...localai.VideoAudioExtractor,
 ) invocationRuntime {
 	fallback := failClosedInvocationRuntime{}
 	if isNilDependency(client) {
@@ -264,12 +263,10 @@ func newInvocationRuntime(
 		protocolClient = localai.NewPinnedGRPCProtocolClient(dialer)
 	}
 	var extract localai.VideoAudioExtractor
-	if len(runners) > 0 && runners[0] != nil {
-		runner := runners[0]
-		extract = func(ctx context.Context, video []byte) ([]byte, error) {
-			return videoaudio.ExtractVideoAudio(ctx, runner, video)
-		}
+	if len(extractors) > 0 {
+		extract = extractors[0]
 	}
+
 	return omniInvocationRuntime{
 		codec:    localai.NewPinnedOmniCodec(protocolClient, extract),
 		fallback: fallback,
@@ -369,5 +366,14 @@ func cloneInvocationParameterValue(value any) any {
 		return cloned
 	default:
 		return value
+	}
+}
+
+func videoAudioExtractor(options invocationRuntimeOptions) localai.VideoAudioExtractor {
+	if options.VideoAudioRunner == nil {
+		return nil
+	}
+	return func(ctx context.Context, video []byte) ([]byte, error) {
+		return videoaudio.ExtractVideoAudio(ctx, options.VideoAudioRunner, video, options.ASRTempDirectory, options.ASRCreateTemp, options.ASRWriteFile, options.ASRReadFile, options.ASRRemoveFile)
 	}
 }

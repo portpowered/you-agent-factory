@@ -105,6 +105,7 @@ type invocationRuntimeOptions struct {
 	ASRTempDirectory func() string
 	ASRCreateTemp    localai.TempFileFactory
 	ASRWriteFile     localai.InputFileWriter
+	ASRReadFile      func(string) ([]byte, error)
 	ASRRemoveFile    localai.InputFileRemover
 	TTSTempDirectory func() string
 	TTSCreateTemp    localai.TempFileFactory
@@ -422,12 +423,12 @@ func composeModelsService(
 	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
 	runtimeEvidence = modelseffects.NewOrderedRuntimeEvidenceRecorder(runtimeEvidence)
 	runtimeOptions = bindASRStaging(
-		runtimeOptions, runtimeTempDir, runtimeTempFile, assetWriteFile, assetRemove,
+		runtimeOptions, runtimeTempDir, runtimeTempFile, assetWriteFile, assetReadFile, assetRemove,
 	)
 	runtimeOptions = bindTTSStaging(
 		runtimeOptions, runtimeTempDir, runtimeTempFile, assetWriteFile, runtimeInspect, assetReadFile, assetRemove,
 	)
-	if runtimeOptions.Client == nil && runtimeOptions.Dialer != nil {
+	if runtimeOptions.VideoAudioRunner == nil {
 		runtimeOptions.VideoAudioRunner = runtimeRunner
 	}
 	launcher, clock, createTempFile := adaptConstructionPorts(

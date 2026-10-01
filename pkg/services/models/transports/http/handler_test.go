@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -561,6 +562,40 @@ func TestGenericMultipartPreservesAudioVideoAndRepeatedSlotOrder(t *testing.T) {
 	}
 }
 
+// Uploads are not constrained by the old per-file, request-part, or total-body
+// limits. Stream the fixture body so the test does not retain a second upload.
+func TestGenericMultipartAcceptsLargeMediaAndPrompt(t *testing.T) {
+	t.Parallel()
+	const size = 65 << 20
+	prompt := strings.Repeat("p", 1<<20+1)
+	metadata := `{"scope":"factory-session:http-test","holder":"operator","model":{"nameOrUri":"asr"},"operation":"ASR","inputs":[{"name":"prompt","modality":"TEXT","content":"` + prompt + `"},{"name":"audio","modality":"AUDIO","mediaType":"video/mp4"}]}`
+	const boundary = "models-large-input"
+	prefix := "--" + boundary + "\r\nContent-Disposition: form-data; name=\"request\"\r\nContent-Type: application/json\r\n\r\n" + metadata + "\r\n--" + boundary + "\r\nContent-Disposition: form-data; name=\"files\"; filename=\"clip.mp4\"\r\nContent-Type: video/mp4\r\n\r\n"
+	body := io.MultiReader(strings.NewReader(prefix), io.LimitReader(zeroUploadReader{}, size), strings.NewReader("\r\n--"+boundary+"--\r\n"))
+	request := httptest.NewRequest(http.MethodPost, "/models/invocations", body)
+	request.Header.Set("Content-Type", "multipart/form-data; boundary="+boundary)
+	calls := 0
+	root := &rootFake{invokeGeneric: func(_ context.Context, request modelcontract.InvokeModelRequest) (modelcontract.InvokeModelResult, error) {
+		calls++
+		if len(request.Inputs) != 2 || request.Inputs[0].Content != prompt || len(request.Inputs[1].Content) != size || request.Inputs[1].MediaType != "video/mp4" {
+			t.Fatal("large multipart input was truncated or changed")
+		}
+		return modelcontract.InvokeModelResult{}, nil
+	}}
+	recorder := httptest.NewRecorder()
+	NewHandlerFromRoot(testRootBinding(root), zap.NewNop()).InvokeGenericModel(recorder, request)
+	if recorder.Code != http.StatusOK || calls != 1 {
+		t.Fatalf("large upload response = %d, calls = %d, want 200/1", recorder.Code, calls)
+	}
+}
+
+type zeroUploadReader struct{}
+
+func (zeroUploadReader) Read(data []byte) (int, error) {
+	clear(data)
+	return len(data), nil
+}
+
 func TestGenericMultipartRejectsInvalidPartsBeforeRoot(t *testing.T) {
 	t.Parallel()
 	base := `{"scope":"factory-session:http-test","holder":"operator","model":{"nameOrUri":"omni"},"operation":"OMNI","inputs":[{"name":"audio","modality":"AUDIO","mediaType":"audio/wav"}]}`
@@ -582,7 +617,6 @@ func TestGenericMultipartRejectsInvalidPartsBeforeRoot(t *testing.T) {
 		{name: "empty file", message: "must not be empty", parts: []multipartTestPart{requestPart, {name: "files", contentType: "audio/wav"}}},
 		{name: "ambiguous carrier", message: "only one content carrier", parts: []multipartTestPart{{name: "request", data: []byte(strings.Replace(base, `"mediaType":"audio/wav"`, `"mediaType":"audio/wav","content":"a","artifactRef":"models:asset"`, 1))}}},
 		{name: "file with existing carrier", message: "no matching", parts: []multipartTestPart{{name: "request", data: []byte(strings.Replace(base, `"mediaType":"audio/wav"`, `"mediaType":"audio/wav","content":"a"`, 1))}, filePart}},
-		{name: "oversized file", message: "exceeds 8 MiB", parts: []multipartTestPart{requestPart, {name: "files", contentType: "audio/wav", data: make([]byte, maxGenericFilePart+1)}}},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

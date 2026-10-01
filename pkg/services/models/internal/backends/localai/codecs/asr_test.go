@@ -136,7 +136,7 @@ func TestASRCodecRejectsInvalidInputsWithoutLeakingValues(t *testing.T) {
 	}
 }
 
-func TestASRCodecRejectsMalformedOversizedAndInvalidTimestampResponsesAtomically(t *testing.T) {
+func TestASRCodecRejectsMalformedAndInvalidTimestampResponsesAtomically(t *testing.T) {
 	codec := codecs.NewASRCodec()
 	tests := []struct {
 		name        string
@@ -147,7 +147,6 @@ func TestASRCodecRejectsMalformedOversizedAndInvalidTimestampResponsesAtomically
 		{name: "missing segments", payload: []byte(`{"text":"hello","segments":[]}`), slot: "segments", wantMessage: "ASR backend response is missing segments"},
 		{name: "invalid segment bounds", payload: []byte(`{"text":"hello","segments":[{"id":0,"start":2,"end":1,"text":"bad"}]}`), slot: "segments", wantMessage: "ASR backend response contains an invalid segment"},
 		{name: "trailing JSON", payload: []byte(`{"text":"hello","segments":[{"id":0,"start":0,"end":1,"text":"ok"}]} trailing`), slot: "", wantMessage: "ASR backend response is not valid JSON"},
-		{name: "oversized", payload: []byte(strings.Repeat("x", int(codecs.MaxASRResponseBytes)+1)), slot: "", wantMessage: "ASR backend response exceeds the size limit"},
 		{name: "missing transcript", payload: []byte(`{"text":"  ","segments":[{"id":0,"start":0,"end":1,"text":"ok"}]}`), slot: "transcript", wantMessage: "ASR backend response is missing the transcript"},
 	}
 	for _, test := range tests {
@@ -293,4 +292,42 @@ func durationTestWAV() []byte {
 	binary.LittleEndian.PutUint32(audio[40:44], 2)
 	audio[44], audio[45] = 0x01, 0x02
 	return audio
+}
+
+func TestASRCodecAcceptsLargeTranscriptAndSegmentOutputs(t *testing.T) {
+	text := strings.Repeat("spoken words ", (16<<20)/len("spoken words ")+1)
+	response := codecs.ASRResponse{Text: text, Segments: []codecs.ASRSegment{{ID: 0, Start: 0, End: 1, Text: text}}}
+	payload, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outputs, err := codecs.NewASRCodec().DecodeResponse(payload)
+	if err != nil || len(outputs) != 2 {
+		t.Fatalf("large ASR response output count=%d error=%v", len(outputs), err)
+	}
+	if outputs[0].Name != "transcript" || outputs[0].Content != text {
+		t.Fatal("large transcript was lost or truncated")
+	}
+	var segments []codecs.ASRSegment
+	if err := json.Unmarshal([]byte(outputs[1].Content), &segments); err != nil || len(segments) != 1 || segments[0] != response.Segments[0] {
+		t.Fatalf("large segment output was lost or truncated: %v", err)
+	}
+}
+func TestASRCodecAcceptsMoreThanMillionSegments(t *testing.T) {
+	const count = 1<<20 + 1
+	response := codecs.ASRResponse{Text: "long recording", Segments: make([]codecs.ASRSegment, count)}
+	for index := range response.Segments {
+		response.Segments[index] = codecs.ASRSegment{ID: int32(index), Start: int64(index), End: int64(index + 1), Text: "word"}
+	}
+	outputs, err := codecs.NewASRCodec().DecodeResponseValue(response)
+	if err != nil || len(outputs) != 2 {
+		t.Fatalf("long ASR segmentation output count=%d error=%v", len(outputs), err)
+	}
+	if strings.Count(outputs[1].Content, `"id":`) != count {
+		t.Fatal("long segment output lost timestamped entries")
+	}
+	last, err := json.Marshal(response.Segments[count-1])
+	if err != nil || !strings.HasSuffix(outputs[1].Content, string(last)+"]") {
+		t.Fatal("long segment output lost its final timestamped entry")
+	}
 }

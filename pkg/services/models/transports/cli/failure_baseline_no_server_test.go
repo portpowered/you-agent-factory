@@ -327,8 +327,8 @@ func remoteExactBinaryReader(png []byte) func(context.Context, string, int64) ([
 		if path != "fixture.png" {
 			return nil, fmt.Errorf("unexpected input path %q", path)
 		}
-		if maxBytes != genericCLIInputMaxFileBytes {
-			return nil, fmt.Errorf("input limit = %d, want %d", maxBytes, genericCLIInputMaxFileBytes)
+		if maxBytes != 0 {
+			return nil, fmt.Errorf("input limit = %d, want 0 (unlimited)", maxBytes)
 		}
 		return append([]byte(nil), png...), nil
 	}
@@ -484,7 +484,6 @@ func remoteInputFailureCases() []remoteInputFailureCase {
 		{inputs: []string{"prompt=hello", "image=inline"}, want: "requires a file value", gets: 1},
 		{inputs: []string{"prompt=hello", "image=@missing.png"}, want: "failed to load --input input", cause: "file does not exist"},
 		{inputs: []string{"prompt=hello", "image=@empty.png"}, want: "failed to load --input input", cause: "file is empty"},
-		{inputs: []string{"prompt=hello", "image=@large.png"}, want: "failed to load --input input", cause: "exceeds"},
 	}
 }
 
@@ -530,14 +529,12 @@ func (fixture *remoteInputFailureFixture) serve(writer http.ResponseWriter, requ
 	http.Error(writer, "unexpected invocation", http.StatusInternalServerError)
 }
 
-func (fixture *remoteInputFailureFixture) read(_ context.Context, path string, maxBytes int64) ([]byte, error) {
+func (fixture *remoteInputFailureFixture) read(_ context.Context, path string, _ int64) ([]byte, error) {
 	switch path {
 	case "missing.png":
 		return nil, errors.New("file does not exist")
 	case "empty.png":
 		return []byte{}, nil
-	case "large.png":
-		return bytes.Repeat([]byte{'x'}, int(maxBytes+1)), nil
 	default:
 		return []byte("not an image"), nil
 	}

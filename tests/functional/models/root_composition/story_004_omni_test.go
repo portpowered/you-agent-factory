@@ -385,6 +385,7 @@ func buildCoordinatedOmniEnvironmentWithOptions(
 		return selection, nil
 	}
 	edges.ModelInvocationProtocolClient = fixture
+	edges.ModelRuntimeCommandRunner = &omniVideoDecoder{silent: true}
 	if options.outputEffects != nil {
 		edges.ModelCLIOutputCreateTempFile = options.outputEffects.CreateTemp
 		edges.ModelCLIOutputInspectPath = options.outputEffects.Inspect

@@ -739,7 +739,7 @@ func provideModelsCLIInputFileReader(edges serviceedges.Edges) modelscli.InputFi
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			if int64(len(data)) > maxBytes {
+			if maxBytes > 0 && int64(len(data)) > maxBytes {
 				return nil, fmt.Errorf("file content exceeds the %d-byte limit", maxBytes)
 			}
 			return data, nil
@@ -752,8 +752,8 @@ func readModelsCLIInputFile(ctx context.Context, path string, maxBytes int64) ([
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if maxBytes <= 0 {
-		return nil, fmt.Errorf("file content limit must be positive")
+	if maxBytes < 0 {
+		return nil, fmt.Errorf("file content limit must not be negative")
 	}
 	file, err := os.Open(path)
 	if err != nil {
@@ -761,20 +761,22 @@ func readModelsCLIInputFile(ctx context.Context, path string, maxBytes int64) ([
 	}
 	defer file.Close()
 
-	readLimit := maxBytes
-	if maxBytes < int64(^uint64(0)>>1) {
-		readLimit++
+	var reader io.Reader = modelsCLIInputContextReader{ctx: ctx, reader: file}
+	if maxBytes > 0 {
+		readLimit := maxBytes
+		if maxBytes < int64(^uint64(0)>>1) {
+			readLimit++
+		}
+		reader = io.LimitReader(reader, readLimit)
 	}
-	data, err := io.ReadAll(io.LimitReader(modelsCLIInputContextReader{
-		ctx: ctx, reader: file,
-	}, readLimit))
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if int64(len(data)) > maxBytes {
+	if maxBytes > 0 && int64(len(data)) > maxBytes {
 		return nil, fmt.Errorf("file content exceeds the %d-byte limit", maxBytes)
 	}
 	return data, nil

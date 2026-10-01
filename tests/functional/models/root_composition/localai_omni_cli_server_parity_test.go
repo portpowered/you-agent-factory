@@ -257,6 +257,7 @@ func localAIOMNIParityEdges(
 	edges, network, compatibility, launcher := localAIConformanceEdges(home, fixture)
 	recorder.next = localAIInvocationProtocolClient{fixture: fixture}
 	edges.ModelInvocationProtocolClient = recorder
+	edges.ModelRuntimeCommandRunner = &omniVideoDecoder{silent: true}
 	return edges, network, compatibility, launcher
 }
 

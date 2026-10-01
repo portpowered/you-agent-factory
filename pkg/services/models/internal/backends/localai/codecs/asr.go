@@ -17,13 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 )
 
-const (
-	// MaxASRResponseBytes bounds the backend response retained by one
-	// transcription. It also bounds the canonical segments output.
-	MaxASRResponseBytes int64 = 16 << 20
-	maxASRSegments            = 1 << 20
-)
-
 var supportedASRParameters = []string{
 	"diarize",
 	"language",
@@ -185,9 +178,6 @@ func (codec ASRCodec) MarshalRequest(request models.InvokeModelRequest) ([]byte,
 // DecodeResponse validates a JSON response and returns both required named
 // outputs atomically. On failure it returns no partial output.
 func (codec ASRCodec) DecodeResponse(payload []byte) ([]models.InferenceContent, error) {
-	if int64(len(payload)) > MaxASRResponseBytes {
-		return nil, asrMalformedResponseFailure("", "ASR backend response exceeds the size limit")
-	}
 	var response ASRResponse
 	if err := asrDecodeSingleJSON(payload, &response); err != nil {
 		return nil, asrMalformedResponseFailure("", "ASR backend response is not valid JSON")
@@ -219,7 +209,7 @@ func decodeASRResponse(response ASRResponse, durationMilliseconds *float64) ([]m
 		return nil, err
 	}
 	segments, err := json.Marshal(response.Segments)
-	if err != nil || int64(len(segments)) > MaxASRResponseBytes {
+	if err != nil {
 		return nil, asrMalformedResponseFailure("segments", "ASR backend response segments could not be encoded")
 	}
 	return []models.InferenceContent{
@@ -240,9 +230,6 @@ func validateASRResponse(response ASRResponse, durationMilliseconds *float64) er
 	}
 	if len(response.Segments) == 0 {
 		return asrMalformedResponseFailure("segments", "ASR backend response is missing segments")
-	}
-	if len(response.Segments) > maxASRSegments {
-		return asrMalformedResponseFailure("segments", "ASR backend response contains too many segments")
 	}
 	return validateASRSegments(response.Segments, durationMilliseconds)
 }
@@ -281,8 +268,34 @@ func pcmWAVDurationMilliseconds(audio []byte) (float64, bool) {
 }
 
 func validPCMWAVEnvelope(audio []byte) bool {
-	return len(audio) >= 12 && string(audio[0:4]) == "RIFF" && string(audio[8:12]) == "WAVE" &&
-		uint64(binary.LittleEndian.Uint32(audio[4:8]))+8 == uint64(len(audio))
+	if len(audio) < 12 || string(audio[8:12]) != "WAVE" {
+		return false
+	}
+	if string(audio[0:4]) == "RIFF" {
+		return uint64(binary.LittleEndian.Uint32(audio[4:8]))+8 == uint64(len(audio))
+	}
+	_, ok := pcmRF64DataBytes(audio)
+	return ok
+}
+
+// RF64 stores the full file and data lengths in its leading ds64 chunk.
+// Read those lengths rather than interpreting the 32-bit sentinel as a cap.
+func pcmRF64DataBytes(audio []byte) (uint64, bool) {
+	if len(audio) < 48 || string(audio[0:4]) != "RF64" ||
+		binary.LittleEndian.Uint32(audio[4:8]) != math.MaxUint32 || string(audio[12:16]) != "ds64" {
+		return 0, false
+	}
+	chunkSize := uint64(binary.LittleEndian.Uint32(audio[16:20]))
+	if chunkSize < 28 || chunkSize > uint64(len(audio)-20) ||
+		binary.LittleEndian.Uint64(audio[20:28]) != uint64(len(audio)-8) {
+		return 0, false
+	}
+	tableEntries := uint64(binary.LittleEndian.Uint32(audio[44:48]))
+	if 28+tableEntries*12 > chunkSize {
+		return 0, false
+	}
+	dataBytes := binary.LittleEndian.Uint64(audio[28:36])
+	return dataBytes, dataBytes <= uint64(len(audio))
 }
 
 type pcmWAVFormat struct {
@@ -295,8 +308,12 @@ func parsePCMWAVChunks(audio []byte) (pcmWAVFormat, uint64, bool) {
 	var dataBytes uint64
 	formatFound, dataFound := false, false
 	position := 12
+	rf64Bytes, rf64 := pcmRF64DataBytes(audio)
 	for position+8 <= len(audio) {
 		chunkSize := uint64(binary.LittleEndian.Uint32(audio[position+4 : position+8]))
+		if rf64 && string(audio[position:position+4]) == "data" && chunkSize == math.MaxUint32 {
+			chunkSize = rf64Bytes
+		}
 		chunkStart := position + 8
 		chunkEnd := uint64(chunkStart) + chunkSize
 		next := chunkEnd + chunkSize%2

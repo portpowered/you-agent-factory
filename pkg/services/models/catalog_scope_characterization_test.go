@@ -338,7 +338,7 @@ func TestGenericOperationContractsDescribeExactSlotShapes(t *testing.T) {
 		{name: "audio", modality: models.ModalityAudio, required: true, mediaType: "audio/*"},
 	})
 	assertOperationSlots(t, contracts[3], []operationSlotExpectation{
-		{name: "audio", modality: models.ModalityAudio, required: true, mediaType: "audio/*"},
+		{name: "audio", modality: models.ModalityAudio, required: true, mediaType: "audio/*,video/*"},
 		{name: "prompt", modality: models.ModalityText, mediaType: "text/plain"},
 		{name: "parameters", modality: models.ModalityJSON, mediaType: "application/json"},
 	}, []operationSlotExpectation{
@@ -384,7 +384,7 @@ func assertOperationSlotList(
 		if actual.Required == nil || *actual.Required != expected.required {
 			t.Fatalf("%s[%d].Required = %v, want %t", label, index, actual.Required, expected.required)
 		}
-		if len(actual.MediaTypes) != 1 || actual.MediaTypes[0] != expected.mediaType {
+		if strings.Join(actual.MediaTypes, ",") != expected.mediaType {
 			t.Fatalf("%s[%d].MediaTypes = %#v, want [%q]", label, index, actual.MediaTypes, expected.mediaType)
 		}
 	}
