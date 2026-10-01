@@ -19,6 +19,9 @@ type ArtifactFacts struct {
 type Record struct {
 	Artifact              ArtifactFacts
 	ManagedRuntimeAliases []string
+	// RequiredArtifactTargets overrides the established CPU/Metal baseline only
+	// for a backend whose publication intentionally supports fewer targets.
+	RequiredArtifactTargets []string
 }
 
 // Records returns detached canonical backend records in stable order. Each
@@ -46,6 +49,14 @@ func Records() []Record {
 				SourceRepository: "https://github.com/mudler/vibevoice.cpp",
 				SourcePath:       "backend/go/vibevoice-cpp",
 			},
+		},
+		{
+			Artifact: ArtifactFacts{
+				ID:               "localai-qwen3-tts-cpp",
+				SourceRepository: "https://github.com/ServeurpersoCom/qwentts.cpp",
+				SourcePath:       "backend/go/qwen3-tts-cpp",
+			},
+			RequiredArtifactTargets: []string{"windows-amd64-cuda"},
 		},
 	}
 }

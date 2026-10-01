@@ -235,6 +235,33 @@ tree before retrying, and never re-issue the same request blind.
 
 ## Limitations of this note
 
+### 2026-10-01 dubbing Factory exercise
+
+- A read-only OpenCode research dispatch completed through MCP, session
+  `ccff2f32-daca-4e30-b4c6-c6f2a0304337`. Its response was excessively long
+  and included incorrect claims that ASR had no implementation. Local source
+  inspection and passing ASR tests contradicted that claim; the response was
+  not used as implementation evidence.
+- A bounded two-file Python editing dispatch using
+  `opencode/mimo-v2.6-flash-free` timed out after 900,000 ms, session
+  `03ceae93-5157-4e34-91df-a1f32250f756`, request
+  `ed926b9c-b929-4287-b58d-7cd848e7d550`. Neither requested file existed
+  afterward. The returned diagnostic correctly warned about possible partial
+  effects and reported that cleanup closed the live Factory Session. It
+  recorded reasoning activity at `2026-10-01T13:18:31.6200605Z`; this is
+  activity evidence, not proof of useful editing progress or a timeout cause.
+- A smaller single-file retry using `opencode/ling-3.0-flash-fin-free`
+  returned `factory_session.subagent.provider_unknown_failure` in about four
+  seconds, session `2bd7f3c8-5a5f-4f9b-9ca0-7ae402144c10`. The returned
+  `failureReason` was `unknown`; no more specific provider cause was supplied.
+  The requested file still did not exist. Implementation continued with an
+  available collaborating agent after these two failed editing attempts.
+- The MCP Factory Session list tool returned “factory session runtime is not
+  available: live session service is required.” The subagent timeout response
+  explicitly says its session ID is for log correlation and may no longer be
+  available for inspection. Durable inspection remains an operational gap for
+  these standalone subagent dispatches.
+
 - Re-reading the installed definition after the 19:22 build showed
   `policy: READ_ONLY` with no `workingRoot` again because OpenCode's separate
   MCP executable was stale. The nested entry has since been removed; a fresh

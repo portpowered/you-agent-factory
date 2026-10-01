@@ -46,7 +46,7 @@ func Validate(inputs Inputs) error {
 			continue
 		}
 		if resolution.Kind == ResolutionPinnedArtifact {
-			failures = append(failures, validatePinned(reference, inputs.PinnedArtifacts)...)
+			failures = append(failures, validatePinned(reference, inputs.PinnedArtifacts, inputs.RequiredArtifactTargets[reference.Identifier])...)
 		} else {
 			failures = append(failures, validateReleaseBuilt(reference, inputs.ReleaseBuiltCommands)...)
 		}
@@ -79,7 +79,7 @@ func countReleaseBuilt(identifier string, commands []ReleaseBuiltCommand) int {
 	return count
 }
 
-func validatePinned(reference Reference, artifacts []PinnedArtifact) []Failure {
+func validatePinned(reference Reference, artifacts []PinnedArtifact, required []string) []Failure {
 	matching := make([]PinnedArtifact, 0)
 	for _, artifact := range artifacts {
 		if artifact.BackendID == reference.Identifier {
@@ -91,7 +91,7 @@ func validatePinned(reference Reference, artifacts []PinnedArtifact) []Failure {
 	}
 
 	byTarget, failures := classifyPinnedTargets(reference, matching)
-	failures = append(failures, validateRequiredTargets(reference, byTarget)...)
+	failures = append(failures, validateRequiredTargets(reference, byTarget, required)...)
 	failures = append(failures, validateOptionalCUDATargets(reference, byTarget)...)
 	return failures
 }
@@ -132,9 +132,12 @@ func matchesCUDAFacts(artifact PinnedArtifact) bool {
 		sameStrings(artifact.Accelerators, []string{"cuda"})
 }
 
-func validateRequiredTargets(reference Reference, byTarget map[string][]PinnedArtifact) []Failure {
+func validateRequiredTargets(reference Reference, byTarget map[string][]PinnedArtifact, required []string) []Failure {
 	failures := make([]Failure, 0)
-	for _, target := range requiredTargets() {
+	if len(required) == 0 {
+		required = requiredTargets()
+	}
+	for _, target := range required {
 		entries := byTarget[target]
 		switch len(entries) {
 		case 0:

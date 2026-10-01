@@ -109,6 +109,9 @@ func discoverAssetDirectory(
 			return fmt.Errorf("inspect asset %q: %w", assetPath, walkErr)
 		}
 		if entry.IsDir() {
+			if entry.Name() == "__pycache__" {
+				return fs.SkipDir
+			}
 			return nil
 		}
 		if assetPath == root {

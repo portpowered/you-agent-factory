@@ -395,3 +395,27 @@ func assertBundledEntry(t *testing.T, entry any, targetPath, fileType, contentVa
 		t.Errorf("inline = %#v, want exact content %q", got, contentValue)
 	}
 }
+
+func TestAssemble_IgnoresPythonBytecodeCachesButRejectsBinaryScripts(t *testing.T) {
+	assets := fstest.MapFS{
+		"scripts/main.py":                                   {Data: []byte("import helper\n")},
+		"scripts/__pycache__/main.cpython-313.pyc":          {Data: []byte{0xff, 0xfe}},
+		"scripts/nested/__pycache__/helper.cpython-313.pyc": {Data: []byte{0xff}},
+	}
+	definition := Definition{Package: "@you/python", FactoryJSON: []byte(`{"name":"@you/python"}`), Assets: assets}
+	assembled, err := Assemble(definition)
+	if err != nil {
+		t.Fatalf("Assemble with generated Python caches: %v", err)
+	}
+	files := assembledBundledFiles(t, assembled)
+	if len(files) != 1 {
+		t.Fatalf("bundled files = %#v, want only authored Python source", files)
+	}
+	assertScriptEntry(t, files[0], scriptAsset{targetPath: "factory/scripts/main.py", content: "import helper\n"})
+	assets["scripts/binary.pyc"] = &fstest.MapFile{Data: []byte{0xff, 0xfe}}
+	_, err = Assemble(definition)
+	assertAssetError(t, err, definition.Package, "scripts/binary.pyc")
+	if !strings.Contains(err.Error(), "not valid UTF-8") {
+		t.Fatalf("error = %q, want real binary script rejection", err)
+	}
+}

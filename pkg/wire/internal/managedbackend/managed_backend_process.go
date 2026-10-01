@@ -131,15 +131,19 @@ func resolveManagedBackendLaunch(
 }
 
 func managedBackendEnvironment(backend, root string) []string {
-	if runtime.GOOS != "windows" || !strings.EqualFold(strings.TrimSpace(backend), "localai-vibevoice") {
+	if runtime.GOOS != "windows" {
 		return nil
 	}
-	// The pinned Windows VibeVoice package ships the DLL under this name,
-	// while its backend entrypoint otherwise defaults to the Unix fallback
-	// library when VIBEVOICECPP_LIBRARY is absent. Keep this correction
-	// private to the managed candidate launch; public model configuration and
-	// backend identity remain unchanged.
-	return []string{"VIBEVOICECPP_LIBRARY=" + filepath.Join(root, "libgovibevoicecpp.dll")}
+	// Windows backend wrappers need their packaged DLL rather than the Unix
+	// fallback selected when the library environment variable is absent.
+	switch strings.ToLower(strings.TrimSpace(backend)) {
+	case "localai-vibevoice":
+		return []string{"VIBEVOICECPP_LIBRARY=" + filepath.Join(root, "libgovibevoicecpp.dll")}
+	case "localai-qwen3-tts-cpp":
+		return []string{"QWEN3TTS_LIBRARY=" + filepath.Join(root, "libgoqwen3ttscpp.dll")}
+	default:
+		return nil
+	}
 }
 
 func materializeManagedBackend(
@@ -366,6 +370,8 @@ func managedBackendExecutableName(backend string) string {
 		return "whisper"
 	case "localai-vibevoice":
 		return "vibevoice-cpp"
+	case "localai-qwen3-tts-cpp":
+		return "qwen3-tts-cpp"
 	default:
 		return ""
 	}

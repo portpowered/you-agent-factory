@@ -27,8 +27,8 @@ func TestNoDanglingBackendReferenceConformance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collect repository backend references: %v", err)
 	}
-	if len(inputs.PinnedArtifacts) != 9 {
-		t.Fatalf("checked-in default manifest has %d artifacts, want the existing nine-entry baseline", len(inputs.PinnedArtifacts))
+	if len(inputs.PinnedArtifacts) != 10 {
+		t.Fatalf("checked-in default manifest has %d artifacts, want the nine-entry baseline plus one Qwen Windows CUDA publication", len(inputs.PinnedArtifacts))
 	}
 	if err := Validate(inputs); err != nil {
 		t.Fatal(err)
@@ -150,15 +150,23 @@ func repositoryConformanceInputs() (Inputs, error) {
 		return Inputs{}, fmt.Errorf("decode default backend manifest: %w", err)
 	}
 	pinnedArtifacts := pinnedArtifactsFromManifest(manifest)
+	qwenManifest, err := artifacts.QwenWindowsCUDAManifest()
+	if err != nil {
+		return Inputs{}, fmt.Errorf("decode Qwen backend manifest: %w", err)
+	}
+	pinnedArtifacts = append(pinnedArtifacts, pinnedArtifactsFromManifest(qwenManifest)...)
+	required := make(map[string][]string)
 
 	registeredBackends := make([]string, 0)
 	for _, record := range backendregistry.Records() {
 		registeredBackends = append(registeredBackends, record.Artifact.ID)
+		required[record.Artifact.ID] = append([]string(nil), record.RequiredArtifactTargets...)
 	}
 	return Inputs{
-		References:         references,
-		RegisteredBackends: registeredBackends,
-		PinnedArtifacts:    pinnedArtifacts,
+		References:              references,
+		RegisteredBackends:      registeredBackends,
+		PinnedArtifacts:         pinnedArtifacts,
+		RequiredArtifactTargets: required,
 	}, nil
 }
 
@@ -257,4 +265,36 @@ func canonicalPackagedFactoryBackend(identifier string) string {
 		return strings.ToLower(trimmed)
 	}
 	return trimmed
+}
+
+func TestQwenRequiresPublishedWindowsCUDAWithoutWeakeningEstablishedTargets(t *testing.T) {
+	t.Parallel()
+	inputs, err := repositoryConformanceInputs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := inputs.RequiredArtifactTargets["localai-qwen3-tts-cpp"]; len(got) != 1 || got[0] != TargetWindowsAmd64CUDA {
+		t.Fatalf("Qwen required targets = %v, want Windows CUDA only", got)
+	}
+	for _, backend := range []string{"localai-llamacpp", "localai-whisper", "localai-vibevoice"} {
+		if len(inputs.RequiredArtifactTargets[backend]) != 0 {
+			t.Fatalf("%s overrides the established three-target baseline", backend)
+		}
+	}
+	for _, omitted := range []string{"localai-qwen3-tts-cpp", "localai-whisper"} {
+		candidate := inputs
+		candidate.PinnedArtifacts = nil
+		for _, artifact := range inputs.PinnedArtifacts {
+			if artifact.BackendID == omitted && artifact.TargetID == TargetWindowsAmd64CUDA {
+				continue
+			}
+			if artifact.BackendID == omitted && artifact.TargetID == TargetLinuxAmd64 {
+				continue
+			}
+			candidate.PinnedArtifacts = append(candidate.PinnedArtifacts, artifact)
+		}
+		if err := Validate(candidate); err == nil || !strings.Contains(err.Error(), omitted) {
+			t.Fatalf("missing %s required artifact failure = %v", omitted, err)
+		}
+	}
 }

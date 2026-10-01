@@ -71,6 +71,7 @@ sizes exclude the additional platform-specific backend and runtime files.
 | `asr` | `ASR` | 148 MB |
 | `tts` | `TTS` | 1.714 GB |
 | `embed` | `EMBED` | 639 MB |
+| `qwen3-tts-base` | `TTS` with a reference WAV | 884 MB |
 
 Run `you --json models inspect <name>` to confirm the pinned source before a
 pull. After installation, `cacheBytes` reports the exact managed cache size.
@@ -310,7 +311,7 @@ A missing implicit Current Factory is not an error for a built-in invocation.
 An explicitly supplied or malformed Factory still returns its typed Factory
 error; the command never creates or initializes a Factory as a workaround.
 
-Built-in model names are `llm`, `asr`, `tts`, and `embed`. Use an uppercase
+Built-in model names are `llm`, `asr`, `tts`, `embed`, and `qwen3-tts-base`. Use an uppercase
 operation and bind inputs with repeatable `--input slot=value` flags.
 
 Use `@path` to bind file bytes. Models detects the media type from the path and
@@ -524,25 +525,34 @@ you --json models invoke tts --operation TTS \
   --output audio=speech.wav
 ```
 
-An operator-configured Qwen3-TTS or IndexTTS model can accept a reference WAV
-through the optional `voice:AUDIO` slot. Pass the reference transcript as the
-`ref_text` parameter when that backend requires it. For example, after
-configuring a model named `qwen3-tts-0.6b`:
+The built-in `qwen3-tts-base` model uses Qwen3-TTS 0.6B Base with a
+reference WAV. It downloads one talker and one tokenizer GGUF at immutable
+revision `b7ee2e8c7459c3bea99da23e3d178125a7d1713c` from
+`Serveurperso/Qwen3-TTS-GGUF`. Use the `voice:AUDIO` slot for the reference
+clip, `ref_text` for its transcript, and `language` for the output language.
+The reference must be a mono PCM WAV at 24 kHz for this backend.
 
 ```bash
-you models invoke qwen3-tts-0.6b --operation TTS \
-  --input text="Hello, this is a test." \
+you models invoke qwen3-tts-base --operation TTS \
+  --input text="你现在能帮我吗？" \
   --input voice=@reference.wav \
-  --parameter '{"name":"ref_text","value":"Zero."}' \
+  --parameter '{"name":"ref_text","value":"Can you assist me right now?"}' \
+  --parameter '{"name":"language","value":"Chinese"}' \
   --output audio=speech.wav
 ```
 
-Use the same input and parameter form for an operator-configured IndexTTS
-model. The built-in `tts` model is VibeVoice; Qwen3-TTS and IndexTTS are not
-built-in model bundles. Direct `models invoke` accepts
-nonempty files without a fixed size limit. A successful WAV output confirms
-synthesis, but voice similarity depends on the selected backend and reference
-audio.
+The native Windows CUDA backend is a manual test build for an NVIDIA RTX 4090.
+Its release notes identify the compiler, CUDA version, and source patches.
+Other GPU variants require a compatible backend build.
+
+The built-in `tts` model uses VibeVoice Realtime 0.5B and a packaged voice.
+It rejects reference WAV inputs because this model does not support runtime
+voice cloning. Operator-configured reference-capable models, including
+Qwen3-TTS and IndexTTS, can use the same input and parameter form shown above.
+
+Direct `models invoke` accepts nonempty files without a fixed size limit.
+A successful WAV output confirms synthesis. Voice similarity depends on the
+selected backend and reference audio.
 
 ### Input and output failures
 

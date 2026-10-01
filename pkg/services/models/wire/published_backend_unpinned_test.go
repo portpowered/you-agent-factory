@@ -504,3 +504,70 @@ func TestManualPublicationManifestProbe(t *testing.T) {
 		}
 	}
 }
+
+func TestPublishedQwenWindowsCUDAReleasePreservesOtherBackendFallbacks(t *testing.T) {
+	t.Parallel()
+	var document map[string]any
+	if err := json.Unmarshal(windowsCUDAPublicationFixture(t), &document); err != nil {
+		t.Fatal(err)
+	}
+	entry := document["artifacts"].([]any)[0].(map[string]any)
+	entry["id"] = "localai-qwen3-tts-cpp/windows-amd64-cuda"
+	entry["backend"] = map[string]any{"id": "localai-qwen3-tts-cpp", "source": map[string]any{
+		"repository": "https://github.com/ServeurpersoCom/qwentts.cpp",
+		"commit":     "d17c33d4ee2f56d15f9ca8a1bb82f7389305f838", "pinVariable": "QWEN3TTS_CPP_VERSION",
+	}}
+	entry["source"].(map[string]any)["path"] = "backend/go/qwen3-tts-cpp"
+	entry["target"] = map[string]any{"id": "windows-amd64-cuda", "operatingSystem": "windows", "architecture": "amd64", "accelerators": []string{"cuda"}}
+	document["artifacts"] = []any{entry}
+	manifest, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tag := publicationTag(t, manifest)
+	index := publicationIndex(t, tag, manifest)
+	resolver, err := NewPublishedBackendArtifactResolver(backendPublicationDoer(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.String() {
+		case backendReleasesURL:
+			return publicationResponse(index), nil
+		case backendReleaseBase + tag + "/manifest.json":
+			return publicationResponse(manifest), nil
+		default:
+			return nil, fmt.Errorf("unexpected publication request")
+		}
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := publishedWindowsRequest("localai-qwen3-tts-cpp")
+	request.Platform.CUDAAvailable = true
+	assertUnpinnedSelection(t, resolver, request, false, "cuda", tag)
+	request.Backend = "localai-whisper"
+	request.Platform.CUDAAvailable = false
+	selection, err := resolver(t.Context(), request, false)
+	if err != nil || selection.Accelerator != "cpu" || !strings.Contains(selection.Name, "localai-whisper") {
+		t.Fatalf("Whisper fallback after Qwen publication = %#v/%v", selection, err)
+	}
+}
+
+func TestPinnedQwenWindowsCUDACandidateAllowsOfflineSelectionAndRejectsCPU(t *testing.T) {
+	t.Parallel()
+	resolver, err := NewDefaultBackendArtifactResolver()
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := publishedWindowsRequest("localai-qwen3-tts-cpp")
+	selection, err := resolver(t.Context(), request, true)
+	if err != nil || selection.Accelerator != "cuda" || selection.Bytes != 446509483 || selection.SHA256 != "63f26241a917c5340b2bdbb611c6362ae04fcae9d8dd6a7682c71b5c628f33b4" {
+		t.Fatalf("pinned Qwen candidate = %#v/%v, want exact verified Windows archive", selection, err)
+	}
+	request.Platform.CUDAAvailable = false
+	if _, err := resolver(t.Context(), request, true); !errors.Is(err, artifacts.ErrIncompatibleAccelerator) {
+		t.Fatalf("Qwen CPU selection error = %v, want unavailable accelerator", err)
+	}
+	request.Platform.OperatingSystem = "darwin"
+	request.Platform.Architecture = "arm64"
+	if _, err := resolver(t.Context(), request, false); err == nil {
+		t.Fatal("Qwen Darwin selection succeeded without a published target")
+	}
+}

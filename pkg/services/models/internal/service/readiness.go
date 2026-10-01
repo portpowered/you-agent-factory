@@ -285,6 +285,16 @@ func joinedModelAssetRequirements(
 	definition models.ModelDefinition,
 	source string,
 ) ([]models.AssetRequirement, error) {
+	if strings.EqualFold(strings.TrimSpace(definition.Name), models.BuiltInModelNameQwen3TTSBase) &&
+		strings.EqualFold(strings.TrimSpace(definition.Backend), "localai-qwen3-tts-cpp") {
+		builtIn, _ := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameQwen3TTSBase)
+		if strings.TrimSpace(source) == builtIn.Source {
+			return []models.AssetRequirement{
+				{Name: "qwen-talker-0.6b-base-Q4_K_M.gguf", Bytes: 628905056, SHA256: "4b468ec7b1f62b90ef4ca316c0aa57deadfd54b2cf9651703ea753cedaf04226"},
+				{Name: "qwen-tokenizer-12hz-Q4_K_M.gguf", Bytes: 254974752, SHA256: "cf3788b4d50aaa665fb6e57c170396aae03a3555fea52d2b5d0cda902d658039"},
+			}, nil
+		}
+	}
 	if !strings.EqualFold(strings.TrimSpace(definition.Name), models.BuiltInModelNameTTS) ||
 		!strings.EqualFold(strings.TrimSpace(definition.Backend), "localai-vibevoice") {
 		return joinedSourceAssetRequirements(source), nil
@@ -409,6 +419,9 @@ func (o *Root) prepareJoinedGenericInvocation(
 	if err != nil {
 		return models.InvokeModelRequest{}, models.Operation{}, err
 	}
+	if err := validateTTSReferenceCapability(prepared, definition); err != nil {
+		return models.InvokeModelRequest{}, models.Operation{}, err
+	}
 	prepared.Operation = operation.Name
 	if len(prepared.Inputs) > 0 && inferenceInputIsZero(prepared.Input) {
 		prepared.Input = prepared.Inputs[0].Clone()
@@ -473,4 +486,22 @@ func genericRequestProjectorMediaSlot(request models.InvokeModelRequest) string 
 		}
 	}
 	return ""
+}
+
+func validateTTSReferenceCapability(request models.InvokeModelRequest, definition models.ModelDefinition) error {
+	builtIn, _ := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameTTS)
+	if request.Operation != models.OperationTTS || definition.Backend != builtIn.Backend || definition.Source != builtIn.Source {
+		return nil
+	}
+	for _, input := range request.Inputs {
+		if input.Name == "voice" {
+			return &models.InvocationFailure{
+				Class:     models.InvocationFailureClassMediaCapability,
+				Operation: models.OperationTTS, Model: request.Model, Slot: "voice",
+				Message: "VibeVoice Realtime 0.5B does not support reference WAV voice cloning; choose qwen3-tts-base or configure a reference-capable model",
+				Cause:   models.ErrUnsupportedOperation,
+			}
+		}
+	}
+	return nil
 }

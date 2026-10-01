@@ -65,3 +65,60 @@ func TestResolveManagedBackendLaunchBindsPinnedWindowsVibeVoiceLibrary(t *testin
 	}
 	launch.Cleanup()
 }
+
+func TestResolveManagedBackendLaunchBindsWindowsQwenReferenceBackendLibrary(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("the Qwen DLL binding is Windows-specific")
+	}
+	t.Parallel()
+	archivePath := filepath.Join(t.TempDir(), "qwen-backend.zip")
+	writeQwenWindowsArchive(t, archivePath)
+	launch, err := ResolveManagedBackendLaunch(t.Context(), serviceedges.HostProcessStartSpec{
+		Backend: "localai-qwen3-tts-cpp", BackendFiles: []string{archivePath},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := launch.Cleanup(); err != nil {
+			t.Error(err)
+		}
+	})
+	if filepath.Base(launch.Command) != "qwen3-tts-cpp.exe" || filepath.Dir(launch.Command) != launch.WorkDir {
+		t.Fatalf("launch command/workdir = %q/%q, want extracted Qwen wrapper", launch.Command, launch.WorkDir)
+	}
+	library := filepath.Join(launch.WorkDir, "libgoqwen3ttscpp.dll")
+	if _, err := os.Stat(library); err != nil {
+		t.Fatal(err)
+	}
+	if len(launch.Env) != 1 || launch.Env[0] != "QWEN3TTS_LIBRARY="+library {
+		t.Fatalf("launch environment = %v, want packaged Qwen DLL", launch.Env)
+	}
+	if len(launch.Args) != 1 || !strings.HasPrefix(launch.Args[0], "--addr=") {
+		t.Fatalf("launch arguments = %v, want controlled local gRPC endpoint", launch.Args)
+	}
+}
+
+func writeQwenWindowsArchive(t *testing.T, archivePath string) {
+	t.Helper()
+	archiveFile, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := zip.NewWriter(archiveFile)
+	for _, name := range []string{"qwen3-tts-cpp.exe", "libgoqwen3ttscpp.dll", "ggml-cuda.dll"} {
+		entry, err := writer.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := entry.Write([]byte("controlled backend file")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := archiveFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+}

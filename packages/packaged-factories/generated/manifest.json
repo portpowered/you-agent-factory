@@ -130,6 +130,37 @@
       ]
     },
     {
+      "name": "@you/dub-video",
+      "project": "builtin-dub-video",
+      "slug": "dub-video",
+      "json": {
+        "locator": "generated/factories/dub-video/factory.json",
+        "sha256": "d90ceae2a20a0bcb0e61ee5d67485e14a49d29901b8ce3012a8bde8ba39b45f8"
+      },
+      "yaml": {
+        "locator": "generated/factories/dub-video/factory.yaml",
+        "sha256": "885b07186701ac8728574300563a1859fe0c2fd19debc4c86553b8e61922ed32"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Transcribes a video, translates every speech segment, synthesizes speech from source audio references, and renders a dubbed video with subtitles."
+      },
+      "examples": [
+        {
+          "name": "dub-video-to-chinese",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Create Chinese speech and subtitles while preserving the source segment identities and timing."
+          },
+          "args": {
+            "language": "zh-CN",
+            "output": "video-dubbed.mp4",
+            "video": "demo.mp4"
+          }
+        }
+      ]
+    },
+    {
       "name": "@you/factory-builder",
       "project": "builtin-factory-builder",
       "slug": "factory-builder",

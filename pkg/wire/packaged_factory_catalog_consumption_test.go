@@ -48,6 +48,7 @@ func TestPackagedFactoryCatalogConsumption_ListResolveInstallUsesPublishedCatalo
 		t.Fatalf("ResolveBuiltInPackagedFactory(@you/missing) error = %v", err)
 	}
 	if !strings.Contains(err.Error(), "@you/deep-research") ||
+		!strings.Contains(err.Error(), "@you/dub-video") ||
 		!strings.Contains(err.Error(), "@you/tts") ||
 		strings.Contains(err.Error(), "generated/") {
 		t.Fatalf("unknown resolve error = %q, want stable public inventory", err.Error())
@@ -67,6 +68,7 @@ func assertPublishedPackagedFactoryNames(t *testing.T, listed factorydefinitions
 		"@you/agy-cold-watch",
 		"@you/classify",
 		"@you/deep-research",
+		"@you/dub-video",
 		"@you/factory-builder",
 		"@you/fix",
 		"@you/full-flow",

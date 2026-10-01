@@ -15,3 +15,12 @@ var defaultManifestData []byte
 func DefaultManifest() (Manifest, error) {
 	return Decode(defaultManifestData)
 }
+
+//go:embed qwen-windows-cuda-manifest.json
+var qwenWindowsCUDAManifestData []byte
+
+// QwenWindowsCUDAManifest records the immutable manual Windows CUDA test
+// publication separately so the established CPU and Metal pins stay unchanged.
+func QwenWindowsCUDAManifest() (Manifest, error) {
+	return Decode(qwenWindowsCUDAManifestData)
+}
