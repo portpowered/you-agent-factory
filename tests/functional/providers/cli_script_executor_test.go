@@ -656,9 +656,10 @@ func waitForScriptTimeoutDispatchResponse(
 			t.Fatalf("decode script timeout dispatch response: %v", err)
 		}
 		if wantOutcome == factoryapi.WorkOutcomeAccepted && payload.Outcome == factoryapi.WorkOutcomeFailed &&
-			payload.Error != nil && strings.Contains(*payload.Error, "execution timeout") {
-			// Keep waiting for the terminal acceptance; the exact sequence
-			// assertion below reports any extra timeout with full Work/Event state.
+			payload.FailureDetail != nil && payload.FailureDetail.Reason == factoryapi.WorkFailureTypeTimeout {
+			// Both Script execution and its enclosing agent run own the real
+			// deadline. Their wording differs; the public failure reason is stable.
+			// Every timeout is checked below before eventual recovery is accepted.
 			continue
 		}
 		if payload.Outcome != wantOutcome {
@@ -688,8 +689,8 @@ func assertScriptTimeoutRecovery(
 		Events      []factoryapi.FactoryEvent   `json:"events"`
 	}{runnerCalls, listed, events}
 
-	if runnerCalls != 2 {
-		t.Errorf("script runner call count = %d, want exactly 2; evidence=%#v", runnerCalls, evidence)
+	if runnerCalls < 2 {
+		t.Errorf("script runner call count = %d, want timeout and later retry; evidence=%#v", runnerCalls, evidence)
 	}
 	for _, want := range []struct {
 		place string
@@ -699,8 +700,8 @@ func assertScriptTimeoutRecovery(
 			t.Errorf("%s Work count = %d, want %d; evidence=%#v", want.place, got, want.count, evidence)
 		}
 	}
-	if len(responses) != 2 {
-		t.Errorf("dispatch response count = %d, want exactly 2; responses=%#v; evidence=%#v", len(responses), responses, evidence)
+	if len(responses) < 2 {
+		t.Errorf("dispatch response count = %d, want timeout and later recovery; responses=%#v; evidence=%#v", len(responses), responses, evidence)
 		return
 	}
 
@@ -708,11 +709,26 @@ func assertScriptTimeoutRecovery(
 	if first.Outcome != factoryapi.WorkOutcomeFailed || first.Error == nil || !strings.Contains(*first.Error, "execution timeout") {
 		t.Errorf("first dispatch response = %#v, want FAILED with execution timeout; evidence=%#v", first, evidence)
 	}
-	second := responses[1]
-	if second.Outcome != factoryapi.WorkOutcomeAccepted || second.Error != nil ||
-		second.Output == nil || *second.Output != "script-output-after-timeout-retry" {
-		t.Errorf("second dispatch response = %#v, want ACCEPTED with nil error and output %q; evidence=%#v",
-			second, "script-output-after-timeout-retry", evidence)
+	for index, response := range responses[:len(responses)-1] {
+		if response.Outcome != factoryapi.WorkOutcomeFailed || response.Error == nil || response.FailureDetail == nil ||
+			response.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout {
+			t.Errorf("dispatch response %d = %#v, want a classified timeout before recovery; evidence=%#v", index, response, evidence)
+		}
+	}
+	last := responses[len(responses)-1]
+	if last.Outcome != factoryapi.WorkOutcomeAccepted || last.Error != nil ||
+		last.Output == nil || *last.Output != "script-output-after-timeout-retry" {
+		t.Errorf("last dispatch response = %#v, want ACCEPTED with nil error and output %q; evidence=%#v",
+			last, "script-output-after-timeout-retry", evidence)
+	}
+	var responseTicks []int
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeDispatchResponse {
+			responseTicks = append(responseTicks, event.Context.Tick)
+		}
+	}
+	if responseTicks[len(responseTicks)-1] <= responseTicks[0] {
+		t.Errorf("recovered dispatch tick=%d, want later than first timeout tick=%d", responseTicks[len(responseTicks)-1], responseTicks[0])
 	}
 }
 
