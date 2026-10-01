@@ -150,17 +150,19 @@ const (
 )
 
 const (
-	BuiltInModelNameLLM   = "llm"
-	BuiltInModelNameASR   = "asr"
-	BuiltInModelNameTTS   = "tts"
-	BuiltInModelNameEmbed = "embed"
+	BuiltInModelNameLLM          = "llm"
+	BuiltInModelNameASR          = "asr"
+	BuiltInModelNameTTS          = "tts"
+	BuiltInModelNameEmbed        = "embed"
+	BuiltInModelNameQwen3TTSBase = "qwen3-tts-base"
 )
 
 const (
-	builtInLLMSource   = "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3"
-	builtInASRSource   = "hf://ggerganov/whisper.cpp/ggml-base.en.bin@5359861c739e955e79d9a303bcbc70fb988958b1"
-	builtInTTSSource   = "hf://mudler/vibevoice.cpp-models/vibevoice-realtime-0.5B-q8_0.gguf@a67807e65e3002e187179a856e96043f75060bc9"
-	builtInEmbedSource = "hf://Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf@370f27d7550e0def9b39c1f16d3fbaa13aa67728"
+	builtInLLMSource          = "hf://unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf@bfc15c382204943c3a8fff0c750b94ae2364d7a3"
+	builtInASRSource          = "hf://ggerganov/whisper.cpp/ggml-base.en.bin@5359861c739e955e79d9a303bcbc70fb988958b1"
+	builtInTTSSource          = "hf://mudler/vibevoice.cpp-models/vibevoice-realtime-0.5B-q8_0.gguf@a67807e65e3002e187179a856e96043f75060bc9"
+	builtInQwen3TTSBaseSource = "hf://Serveurperso/Qwen3-TTS-GGUF/qwen-talker-0.6b-base-Q4_K_M.gguf@b7ee2e8c7459c3bea99da23e3d178125a7d1713c"
+	builtInEmbedSource        = "hf://Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf@370f27d7550e0def9b39c1f16d3fbaa13aa67728"
 )
 
 // ModelDefinition describes one configured model name without resolving its
@@ -196,6 +198,7 @@ func (BuiltInCatalog) ModelDefinitions() []ModelDefinition {
 		builtInModelDefinition(BuiltInModelNameASR, builtInASRSource, "localai-whisper", OperationASR),
 		builtInModelDefinition(BuiltInModelNameTTS, builtInTTSSource, "localai-vibevoice", OperationTTS),
 		builtInModelDefinition(BuiltInModelNameEmbed, builtInEmbedSource, "localai-llamacpp", OperationEMBED),
+		builtInModelDefinition(BuiltInModelNameQwen3TTSBase, builtInQwen3TTSBaseSource, "localai-qwen3-tts-cpp", OperationTTS),
 	}
 }
 

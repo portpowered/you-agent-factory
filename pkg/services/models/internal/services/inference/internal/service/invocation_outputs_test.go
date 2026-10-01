@@ -168,7 +168,6 @@ func atomicArtifactFailureCases() []atomicArtifactFailureCase {
 		{name: "mismatched name", mutate: func(result *inference.InvocationRuntimeResult) { result.Artifacts[0].Name = "usage" }, wantClass: artifactFailure, wantCause: artifactCause},
 		{name: "mismatched media", mutate: func(result *inference.InvocationRuntimeResult) { result.Artifacts[0].MediaType = "application/json" }, wantClass: artifactFailure, wantCause: artifactCause},
 		{name: "negative size", mutate: func(result *inference.InvocationRuntimeResult) { result.Artifacts[0].SizeBytes = -1 }, wantClass: artifactFailure, wantCause: artifactCause},
-		{name: "oversized size", mutate: func(result *inference.InvocationRuntimeResult) { result.Artifacts[0].SizeBytes = 16<<20 + 1 }, wantClass: artifactFailure, wantCause: artifactCause},
 		{name: "mismatched size", mutate: func(result *inference.InvocationRuntimeResult) { result.Artifacts[0].SizeBytes++ }, wantClass: artifactFailure, wantCause: artifactCause},
 		{name: "malformed text", mutate: func(result *inference.InvocationRuntimeResult) { result.Content[0].Modality = models.ModalityJSON }, wantClass: malformed, wantCause: models.ErrInferenceFailed},
 		{name: "blank text", mutate: func(result *inference.InvocationRuntimeResult) { result.Content[0].Content = "  " }, wantClass: malformed, wantCause: models.ErrInferenceFailed},

@@ -675,8 +675,8 @@ func assertGenericCLIInputSuccessForms(
 	if err != nil || fileInput.Content != "file text" || fileInput.MediaType != "text/plain" {
 		t.Fatalf("file input = %#v, error = %v", fileInput, err)
 	}
-	if *readCalls != 1 || *readLimit != genericCLIInputMaxFileBytes {
-		t.Fatalf("file reader calls/limit = %d/%d, want 1/%d", *readCalls, *readLimit, genericCLIInputMaxFileBytes)
+	if *readCalls != 1 || *readLimit != 0 {
+		t.Fatalf("file reader calls/limit = %d/%d, want 1/0 (unlimited)", *readCalls, *readLimit)
 	}
 }
 
@@ -692,13 +692,6 @@ func assertGenericCLIInputFailureForms(
 	}
 	if _, err := genericCLIInputWithReader(cfg, genericCLIInputMapping{slot: "text", value: "@"}, textSlot, service.inputFileReader); err == nil {
 		t.Fatal("empty file path error = nil")
-	}
-
-	tooLarge := &rootService{inputFileReader: func(context.Context, string, int64) ([]byte, error) {
-		return []byte(strings.Repeat("x", int(genericCLIInputMaxFileBytes+1))), nil
-	}}
-	if _, err := genericCLIInputWithReader(cfg, genericCLIInputMapping{slot: "text", value: "@note.txt"}, textSlot, tooLarge.inputFileReader); err == nil {
-		t.Fatal("oversized file input error = nil")
 	}
 
 	cancelled, cancel := context.WithCancel(context.Background())

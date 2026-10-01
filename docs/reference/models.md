@@ -71,6 +71,7 @@ sizes exclude the additional platform-specific backend and runtime files.
 | `asr` | `ASR` | 148 MB |
 | `tts` | `TTS` | 1.714 GB |
 | `embed` | `EMBED` | 639 MB |
+| `qwen3-tts-base` | `TTS` with a reference WAV | 884 MB |
 
 Run `you --json models inspect <name>` to confirm the pinned source before a
 pull. After installation, `cacheBytes` reports the exact managed cache size.
@@ -310,7 +311,7 @@ A missing implicit Current Factory is not an error for a built-in invocation.
 An explicitly supplied or malformed Factory still returns its typed Factory
 error; the command never creates or initializes a Factory as a workaround.
 
-Built-in model names are `llm`, `asr`, `tts`, and `embed`. Use an uppercase
+Built-in model names are `llm`, `asr`, `tts`, `embed`, and `qwen3-tts-base`. Use an uppercase
 operation and bind inputs with repeatable `--input slot=value` flags.
 
 Use `@path` to bind file bytes. Models detects the media type from the path and
@@ -442,14 +443,14 @@ curl -X POST http://localhost:7437/models/invocations \
   -F 'files=@clip.mp4;type=video/mp4'
 ```
 
-Each uploaded file must be nonempty and no larger than 8 MiB. The complete
-multipart body is limited to 64 MiB. JSON callers can continue to use
+Uploaded files must be nonempty. Direct Models requests have no fixed input
+size limit. JSON callers can continue to use
 `contentBase64` with the file bytes and `mediaType` for each media input.
 
 `ASR` preserves backend segment timestamps in the `segments` JSON output. Each
 segment contains `id`, `start`, `end`, and `text` fields.
 
-### Transcribe audio
+### Transcribe audio or video
 
 Map every ASR output explicitly:
 
@@ -458,6 +459,15 @@ you models invoke asr --operation ASR \
   --input audio=@meeting.wav \
   --output transcript=meeting.txt \
   --output segments=meeting.json
+```
+
+ASR also accepts a video file in the `audio` slot and transcribes its first
+audio stream. Video extraction requires `ffmpeg` and `ffprobe` on `PATH`. A
+video without audio fails with a diagnostic.
+
+```bash
+you models invoke asr --operation ASR --input audio=@demo.mp4 \
+  --output transcript=video.txt --output segments=video-asr.json
 ```
 
 The transcript file uses `text/plain`. The segments file uses
@@ -515,24 +525,34 @@ you --json models invoke tts --operation TTS \
   --output audio=speech.wav
 ```
 
-An operator-configured Qwen3-TTS or IndexTTS model can accept a reference WAV
-through the optional `voice:AUDIO` slot. Pass the reference transcript as the
-`ref_text` parameter when that backend requires it. For example, after
-configuring a model named `qwen3-tts-0.6b`:
+The built-in `qwen3-tts-base` model uses Qwen3-TTS 0.6B Base with a
+reference WAV. It downloads one talker and one tokenizer GGUF at immutable
+revision `b7ee2e8c7459c3bea99da23e3d178125a7d1713c` from
+`Serveurperso/Qwen3-TTS-GGUF`. Use the `voice:AUDIO` slot for the reference
+clip, `ref_text` for its transcript, and `language` for the output language.
+The reference must be a mono PCM WAV at 24 kHz for this backend.
 
 ```bash
-you models invoke qwen3-tts-0.6b --operation TTS \
-  --input text="Hello, this is a test." \
+you models invoke qwen3-tts-base --operation TTS \
+  --input text="你现在能帮我吗？" \
   --input voice=@reference.wav \
-  --parameter '{"name":"ref_text","value":"Zero."}' \
+  --parameter '{"name":"ref_text","value":"Can you assist me right now?"}' \
+  --parameter '{"name":"language","value":"Chinese"}' \
   --output audio=speech.wav
 ```
 
-Use the same input and parameter form for an operator-configured IndexTTS
-model. The built-in `tts` model is VibeVoice; Qwen3-TTS and IndexTTS are not
-built-in model bundles. File inputs to direct `models invoke` are limited to
-8 MiB. A successful WAV output confirms synthesis, but voice similarity
-depends on the selected backend and reference audio.
+The native Windows CUDA backend is a manual test build for an NVIDIA RTX 4090.
+Its release notes identify the compiler, CUDA version, and source patches.
+Other GPU variants require a compatible backend build.
+
+The built-in `tts` model uses VibeVoice Realtime 0.5B and a packaged voice.
+It rejects reference WAV inputs because this model does not support runtime
+voice cloning. Operator-configured reference-capable models, including
+Qwen3-TTS and IndexTTS, can use the same input and parameter form shown above.
+
+Direct `models invoke` accepts nonempty files without a fixed size limit.
+A successful WAV output confirms synthesis. Voice similarity depends on the
+selected backend and reference audio.
 
 ### Input and output failures
 
@@ -621,8 +641,8 @@ non-repeatable slot fails before generation.
 
 Prefix a file path with `@` to read its bytes and detect its media type. Common
 extensions map to their concrete types, including `.txt`, `.png`, `.wav`, and
-`.mp4`. Unknown extensions use content detection. Each file must be nonempty
-and no larger than 8 MiB.
+`.mp4`. Unknown extensions use content detection. Each file must be nonempty.
+Direct Models invocation does not impose a fixed file-size limit.
 
 ```bash
 you models invoke llm \
@@ -646,10 +666,11 @@ output. It rejects an explicit `max_tokens` parameter because the composed
 response cannot apply that token limit exactly. Single-modality `OMNI`
 invocations continue to support `max_tokens` and `usage`.
 
-The detected type must match the named slot. For example,
-`--input audio=@clip.mp4` is rejected before generation. The Models service
-classifies this as `MEDIA_CAPABILITY`. The CLI reports the safe
-`CLI_COMMAND_FAILED` diagnostic.
+The detected type must match the named slot. For `OMNI`,
+`--input audio=@clip.mp4` is rejected before generation; bind the clip to
+`video` instead. ASR accepts video containers in its `audio` slot. The Models
+service classifies unsupported media as `MEDIA_CAPABILITY`. The CLI reports the
+safe `CLI_COMMAND_FAILED` diagnostic.
 Unsupported modalities are never silently omitted or converted.
 The built-in `OMNI` operation has no general document or binary input slot.
 Convert a document to text or a supported media type before invocation.
@@ -683,7 +704,7 @@ For media understanding, stage an image, audio, or video file as Work and bind
 its content to the matching model input slot. The inference worker reads the
 staged file bytes before invoking Models, preserving the file's media type and
 the order of repeated inputs. Each media input is limited to 32 MiB in this
-path. Direct `you models invoke` file inputs use the 8 MiB limit above.
+path. Direct `you models invoke` file inputs have no fixed size limit.
 
 Use `you docs providers` for agent provider/model selection and limits. Use
 `you docs workers` for worker capabilities, `you docs workstations` for routing

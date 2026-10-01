@@ -338,7 +338,7 @@ func TestGenericOperationContractsDescribeExactSlotShapes(t *testing.T) {
 		{name: "audio", modality: models.ModalityAudio, required: true, mediaType: "audio/*"},
 	})
 	assertOperationSlots(t, contracts[3], []operationSlotExpectation{
-		{name: "audio", modality: models.ModalityAudio, required: true, mediaType: "audio/*"},
+		{name: "audio", modality: models.ModalityAudio, required: true, mediaType: "audio/*,video/*"},
 		{name: "prompt", modality: models.ModalityText, mediaType: "text/plain"},
 		{name: "parameters", modality: models.ModalityJSON, mediaType: "application/json"},
 	}, []operationSlotExpectation{
@@ -384,7 +384,7 @@ func assertOperationSlotList(
 		if actual.Required == nil || *actual.Required != expected.required {
 			t.Fatalf("%s[%d].Required = %v, want %t", label, index, actual.Required, expected.required)
 		}
-		if len(actual.MediaTypes) != 1 || actual.MediaTypes[0] != expected.mediaType {
+		if strings.Join(actual.MediaTypes, ",") != expected.mediaType {
 			t.Fatalf("%s[%d].MediaTypes = %#v, want [%q]", label, index, actual.MediaTypes, expected.mediaType)
 		}
 	}
@@ -446,6 +446,12 @@ func TestBuiltInModelCatalogPublishesCanonicalDefinitions(t *testing.T) {
 			backend:   "localai-llamacpp",
 			operation: models.OperationEMBED,
 		},
+		{
+			name:      "qwen3-tts-base",
+			source:    "hf://Serveurperso/Qwen3-TTS-GGUF/qwen-talker-0.6b-base-Q4_K_M.gguf@b7ee2e8c7459c3bea99da23e3d178125a7d1713c",
+			backend:   "localai-qwen3-tts-cpp",
+			operation: models.OperationTTS,
+		},
 	}
 
 	definitions := builtIns.ModelDefinitions()
@@ -489,8 +495,8 @@ func TestBuiltInModelCatalogReturnsDetachedDefinitions(t *testing.T) {
 	delete(first, "asr")
 
 	second := builtIns.ModelCatalog()
-	if len(second) != 4 {
-		t.Fatalf("second catalog length = %d, want 4", len(second))
+	if len(second) != 5 {
+		t.Fatalf("second catalog length = %d, want 5", len(second))
 	}
 	if second["llm"].Operations[0].Inputs[0].Name != "prompt" {
 		t.Fatalf("second catalog retained nested mutation: %#v", second["llm"])

@@ -13,7 +13,6 @@ import (
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -797,12 +796,13 @@ func TestRootAdapter_InspectMapsTypedInvocationValidation(t *testing.T) {
 	}
 }
 
-func TestRootAdapter_InvokeGenericFileInputRejectsOversizedBeforeInvocation(t *testing.T) {
+func TestRootAdapter_InvokeGenericFileInputPreservesLargeContentWithoutDefaultLimit(t *testing.T) {
 	t.Parallel()
 
 	scope := testRuntimeScope(t)
 	invokes := 0
 	var receivedLimit int64
+	content := bytes.Repeat([]byte{'x'}, 8*1024*1024+1)
 	service := modelscli.NewService(modelscli.Config{
 		Models: stubModelsRoot{
 			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
@@ -814,14 +814,17 @@ func TestRootAdapter_InvokeGenericFileInputRejectsOversizedBeforeInvocation(t *t
 					modelinference.OperationSlot{Name: "transcript", Modality: modelinference.ModalityText},
 				), nil
 			},
-			invokeModel: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+			invokeModel: func(_ context.Context, request modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
 				invokes++
+				if len(request.Inputs) != 1 || request.Inputs[0].Content != string(content) {
+					t.Fatal("large file input bytes were changed before invocation")
+				}
 				return modelinference.InvokeModelResult{}, nil
 			},
 		},
 		InputFileReader: func(_ context.Context, _ string, maxBytes int64) ([]byte, error) {
 			receivedLimit = maxBytes
-			return bytes.Repeat([]byte{'x'}, int(maxBytes+1)), nil
+			return content, nil
 		},
 		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
 			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
@@ -832,12 +835,11 @@ func TestRootAdapter_InvokeGenericFileInputRejectsOversizedBeforeInvocation(t *t
 		Context: context.Background(), ModelName: "asr", Operation: modelinference.OperationASR,
 		InputMappings: []string{"audio=@oversized.wav"}, JSON: true, Output: io.Discard,
 	})
-	var localFailure *clidiag.LocalFailure
-	if err == nil || !errors.As(err, &localFailure) {
-		t.Fatalf("oversized generic input error = %v, want safe local failure", err)
+	if err != nil {
+		t.Fatalf("large generic input error = %v", err)
 	}
-	if receivedLimit <= 0 || invokes != 0 {
-		t.Fatalf("oversized generic input effects = limit:%d invokes:%d, want positive limit and zero invokes", receivedLimit, invokes)
+	if receivedLimit != 0 || invokes != 1 {
+		t.Fatalf("large generic input effects = limit:%d invokes:%d, want unlimited and one invocation", receivedLimit, invokes)
 	}
 }
 

@@ -790,6 +790,7 @@ var managedRuntimeDependencySpecs = map[string]managedRuntimeDependencySpec{
 	canonicalManagedRuntimeIdentity("asr"):              {backend: "LOCALAI-WHISPER"},
 	canonicalManagedRuntimeIdentity("tts"):              {backend: "LOCALAI-VIBEVOICE"},
 	canonicalManagedRuntimeIdentity("embed"):            {backend: "LOCALAI-LLAMACPP"},
+	canonicalManagedRuntimeIdentity("qwen3-tts-base"):   {backend: "LOCALAI-QWEN3-TTS-CPP"},
 }
 
 // managedRuntimeBackendAlias is the intentionally explicit Factory-side

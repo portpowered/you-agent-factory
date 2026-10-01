@@ -1,7 +1,9 @@
 package inference_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -21,7 +23,7 @@ func TestASRInvocationRuntimeMapsRequestAndReturnsNamedOutputs(t *testing.T) {
 		Text:     "hello world",
 		Segments: []codecs.ASRSegment{{ID: 0, Start: 0, End: 1500, Text: "hello world"}},
 	}}
-	runtime, err := asrruntime.New(backend.transcribe)
+	runtime, err := asrruntime.New(backend.transcribe, nil)
 	if err != nil {
 		t.Fatalf("asrruntime.New() error = %v", err)
 	}
@@ -70,7 +72,7 @@ func TestASRInvocationRuntimeClassifiesMalformedAndBackendFailuresAtomically(t *
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			backend := test.backend
-			runtime, err := asrruntime.New(backend.transcribe)
+			runtime, err := asrruntime.New(backend.transcribe, nil)
 			if err != nil {
 				t.Fatalf("asrruntime.New() error = %v", err)
 			}
@@ -109,7 +111,7 @@ func runASRRuntimeFailureEvidenceCase(t *testing.T, cause error) string {
 	if !errors.Is(failure, cause) {
 		t.Fatalf("test backend failure = %v, want its private transport cause", failure)
 	}
-	runtime, err := asrruntime.New(backend.transcribe)
+	runtime, err := asrruntime.New(backend.transcribe, nil)
 	if err != nil {
 		t.Fatalf("asrruntime.New() error = %v", err)
 	}
@@ -160,7 +162,7 @@ func TestASRInvocationRuntimeHonorsCancellationBeforeAndDuringBackendCall(t *tes
 	t.Parallel()
 
 	backend := &recordingASRBackend{waitForCancellation: true}
-	runtime, err := asrruntime.New(backend.transcribe)
+	runtime, err := asrruntime.New(backend.transcribe, nil)
 	if err != nil {
 		t.Fatalf("asrruntime.New() error = %v", err)
 	}
@@ -172,7 +174,7 @@ func TestASRInvocationRuntimeHonorsCancellationBeforeAndDuringBackendCall(t *tes
 	}
 
 	backend = &recordingASRBackend{waitForCancellation: true}
-	runtime, err = asrruntime.New(backend.transcribe)
+	runtime, err = asrruntime.New(backend.transcribe, nil)
 	if err != nil {
 		t.Fatalf("asrruntime.New() error = %v", err)
 	}
@@ -200,8 +202,8 @@ func TestASRInvocationRuntimeHonorsCancellationBeforeAndDuringBackendCall(t *tes
 func TestASRInvocationRuntimeRejectsNilBackend(t *testing.T) {
 	t.Parallel()
 
-	if _, err := asrruntime.New(nil); !errors.Is(err, models.ErrInvalidInferenceDependencies) {
-		t.Fatalf("asrruntime.New(nil) error = %v, want ErrInvalidInferenceDependencies", err)
+	if _, err := asrruntime.New(nil, nil); !errors.Is(err, models.ErrInvalidInferenceDependencies) {
+		t.Fatalf("asrruntime.New(nil, nil) error = %v, want ErrInvalidInferenceDependencies", err)
 	}
 }
 
@@ -239,4 +241,102 @@ func (backend *recordingASRBackend) transcribe(ctx context.Context, request code
 		return codecs.ASRResponse{}, nil, ctx.Err()
 	}
 	return backend.response, nil, backend.err
+}
+
+func TestASRInvocationRuntimeExtractsVideoBeforeCodecAndBoundsSegmentsByWAV(t *testing.T) {
+	t.Parallel()
+	for _, overDuration := range []bool{false, true} {
+		t.Run(map[bool]string{false: "video transcript", true: "segment exceeds decoded duration"}[overDuration], func(t *testing.T) {
+			wav := asrVideoRuntimeWAV(16000)
+			backend := &recordingASRBackend{response: codecs.ASRResponse{Text: "hello", Segments: []codecs.ASRSegment{{ID: 0, End: 1000, Text: "hello"}}}}
+			if overDuration {
+				backend.response.Segments[0].End = 2000
+			}
+			var extracted []byte
+			runtime, err := asrruntime.New(backend.transcribe, func(ctx context.Context, video []byte) ([]byte, error) {
+				extracted = append([]byte(nil), video...)
+				return wav, nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := asrRuntimeRequest()
+			request.Inputs[0].Content, request.Inputs[0].MediaType, request.Inputs[0].ContentType = "original MP4 bytes", "video/mp4", "video/mp4"
+			result, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{Request: request})
+			assertASRVideoTranscriptionRequest(t, backend.request, request, extracted, wav)
+			if overDuration {
+				var failure *models.InvocationFailure
+				if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMalformedResponse || result.Content != nil {
+					t.Fatalf("duration failure = %#v/%v", result, err)
+				}
+			} else if err != nil || len(result.Content) != 2 || result.Content[0].Content != "hello" {
+				t.Fatalf("video transcript = %#v/%v", result, err)
+			}
+		})
+	}
+}
+
+func TestASRInvocationRuntimeVideoFailuresStopBeforeTranscription(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []struct {
+		name    string
+		audio   []byte
+		err     error
+		message string
+	}{
+		{name: "silent video", message: "no audio track"},
+		{name: "missing decoder", err: errors.New("video audio decoder failed: ffmpeg executable not found"), message: "ffmpeg executable not found"},
+		{name: "canceled extraction", err: context.Canceled},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			backend := &recordingASRBackend{}
+			runtime, err := asrruntime.New(backend.transcribe, func(context.Context, []byte) ([]byte, error) { return scenario.audio, scenario.err })
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := asrRuntimeRequest()
+			request.Inputs[0].MediaType = "video/mp4"
+			result, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{Request: request})
+			if err == nil || result.Content != nil || backend.calls != 0 {
+				t.Fatalf("failed video reached transcription: %#v/%v calls=%d", result, err, backend.calls)
+			}
+			if scenario.err == context.Canceled {
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("cancellation lost: %v", err)
+				}
+				return
+			}
+			if !strings.Contains(err.Error(), scenario.message) {
+				t.Fatalf("unreadable video error = %v, want %q", err, scenario.message)
+			}
+		})
+	}
+}
+
+func asrVideoRuntimeWAV(samples int) []byte {
+	wav := make([]byte, 44+samples*2)
+	copy(wav, "RIFF")
+	binary.LittleEndian.PutUint32(wav[4:8], uint32(len(wav)-8))
+	copy(wav[8:12], "WAVE")
+	copy(wav[12:16], "fmt ")
+	binary.LittleEndian.PutUint32(wav[16:20], 16)
+	binary.LittleEndian.PutUint16(wav[20:22], 1)
+	binary.LittleEndian.PutUint16(wav[22:24], 1)
+	binary.LittleEndian.PutUint32(wav[24:28], 16000)
+	binary.LittleEndian.PutUint32(wav[28:32], 32000)
+	binary.LittleEndian.PutUint16(wav[32:34], 2)
+	binary.LittleEndian.PutUint16(wav[34:36], 16)
+	copy(wav[36:40], "data")
+	binary.LittleEndian.PutUint32(wav[40:44], uint32(samples*2))
+	return wav
+}
+
+func assertASRVideoTranscriptionRequest(t *testing.T, backend codecs.ASRRequest, request models.InvokeModelRequest, extracted, wav []byte) {
+	t.Helper()
+	if string(extracted) != "original MP4 bytes" || !bytes.Equal(backend.Audio, wav) || backend.MediaType != "audio/wav" || backend.Prompt != "meeting" {
+		t.Fatalf("video normalization lost audio or prompt: request=%#v extracted=%q", backend, extracted)
+	}
+	if request.Inputs[0].Content != "original MP4 bytes" || request.Inputs[0].MediaType != "video/mp4" {
+		t.Fatal("video preprocessing mutated caller-owned inputs")
+	}
 }

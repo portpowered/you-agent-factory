@@ -19,8 +19,6 @@ import (
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 
-const genericCLIInputMaxFileBytes int64 = 8 * 1024 * 1024
-
 type PresentationScopeRequest = modelinference.PresentationScopeRequest
 type PresentationScope = modelinference.PresentationScope
 type PresentationOperatorDefaults = modelinference.PresentationOperatorDefaults
@@ -222,7 +220,7 @@ func readGenericCLIInputFileForPreflight(
 			"--input", path, errors.New("Models CLI input filesystem is not configured"),
 		)
 	}
-	data, err := inputFileReader(cfg.Context, path, genericCLIInputMaxFileBytes)
+	data, err := inputFileReader(cfg.Context, path, 0)
 	if err != nil {
 		return nil, clidiag.NewLocalInputFailure("--input", path, err)
 	}
@@ -231,12 +229,6 @@ func readGenericCLIInputFileForPreflight(
 	}
 	if len(data) == 0 {
 		return nil, clidiag.NewLocalInputFailure("--input", path, errors.New("file is empty"))
-	}
-	if int64(len(data)) > genericCLIInputMaxFileBytes {
-		return nil, clidiag.NewLocalInputFailure(
-			"--input", path,
-			fmt.Errorf("file content exceeds the %d-byte limit", genericCLIInputMaxFileBytes),
-		)
 	}
 	return append([]byte(nil), data...), nil
 }
@@ -250,7 +242,7 @@ func cachedGenericCLIInputReader(
 			return nil, err
 		}
 		if data, ok := cache[path]; ok {
-			if int64(len(data)) > maxBytes {
+			if maxBytes > 0 && int64(len(data)) > maxBytes {
 				return nil, fmt.Errorf("file content exceeds the %d-byte limit", maxBytes)
 			}
 			return append([]byte(nil), data...), nil
@@ -499,7 +491,7 @@ func genericCLIInputWithReader(
 				"--input", path, errors.New("Models CLI input filesystem is not configured"),
 			)
 		}
-		data, err := inputFileReader(cfg.Context, path, genericCLIInputMaxFileBytes)
+		data, err := inputFileReader(cfg.Context, path, 0)
 		if err != nil {
 			return modelinference.InferenceInput{}, clidiag.NewLocalInputFailure("--input", path, err)
 		}
@@ -509,12 +501,6 @@ func genericCLIInputWithReader(
 		if len(data) == 0 {
 			return modelinference.InferenceInput{}, clidiag.NewLocalInputFailure(
 				"--input", path, errors.New("file is empty"),
-			)
-		}
-		if int64(len(data)) > genericCLIInputMaxFileBytes {
-			return modelinference.InferenceInput{}, clidiag.NewLocalInputFailure(
-				"--input", path,
-				fmt.Errorf("file content exceeds the %d-byte limit", genericCLIInputMaxFileBytes),
 			)
 		}
 		mediaType := genericCLIInputMediaType(path, data)

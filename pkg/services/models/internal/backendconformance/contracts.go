@@ -44,10 +44,11 @@ type ReleaseBuiltCommand struct {
 // Inputs is the detached, explicit input set for Validate. The validator does
 // not discover files, inspect the environment, or perform network IO.
 type Inputs struct {
-	References           []Reference
-	RegisteredBackends   []string
-	PinnedArtifacts      []PinnedArtifact
-	ReleaseBuiltCommands []ReleaseBuiltCommand
+	References              []Reference
+	RegisteredBackends      []string
+	RequiredArtifactTargets map[string][]string
+	PinnedArtifacts         []PinnedArtifact
+	ReleaseBuiltCommands    []ReleaseBuiltCommand
 }
 
 // ResolutionKind names the one supplying class assigned to a reference.

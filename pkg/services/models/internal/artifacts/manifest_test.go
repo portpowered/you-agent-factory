@@ -146,6 +146,7 @@ func TestManifestAcceptsEveryRegisteredArtifactBackend(t *testing.T) {
 		{id: "localai-llamacpp", repository: "https://github.com/ggerganov/llama.cpp", path: "backend/cpp/llama-cpp"},
 		{id: "localai-whisper", repository: "https://github.com/ggml-org/whisper.cpp", path: "backend/go/whisper"},
 		{id: "localai-vibevoice", repository: "https://github.com/mudler/vibevoice.cpp", path: "backend/go/vibevoice-cpp"},
+		{id: "localai-qwen3-tts-cpp", repository: "https://github.com/ServeurpersoCom/qwentts.cpp", path: "backend/go/qwen3-tts-cpp"},
 	}
 	for _, backend := range backends {
 		backend := backend

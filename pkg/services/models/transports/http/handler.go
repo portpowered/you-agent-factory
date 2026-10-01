@@ -99,7 +99,7 @@ func (h *Handler) InvokeModel(w http.ResponseWriter, r *http.Request, modelName 
 // contract. The response remains an ordered named-output list; no backend,
 // cache, process, or filesystem detail is exposed at this boundary.
 func (h *Handler) InvokeGenericModel(w http.ResponseWriter, r *http.Request) {
-	request, err := decodeGenericModelInvocationHTTP(w, r)
+	request, err := decodeGenericModelInvocationHTTP(r)
 	if err != nil {
 		message := "invalid request payload"
 		var validationErr requestValidationError
@@ -194,26 +194,18 @@ func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 	}
 }
 
-const (
-	maxGenericMultipartBody = 64 << 20
-	maxGenericRequestPart   = 1 << 20
-	maxGenericFilePart      = 8 << 20
-	maxGenericFileCount     = 64
-)
-
 type genericUpload struct {
 	content   []byte
 	mediaType string
 }
 
-func decodeGenericModelInvocationHTTP(w http.ResponseWriter, r *http.Request) (factoryapi.GenericModelInvocationRequest, error) {
+func decodeGenericModelInvocationHTTP(r *http.Request) (factoryapi.GenericModelInvocationRequest, error) {
 	mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err == nil && mediaType == "multipart/form-data" {
 		boundary := params["boundary"]
 		if boundary == "" {
 			return factoryapi.GenericModelInvocationRequest{}, requestValidationError{message: "multipart boundary is required"}
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, maxGenericMultipartBody)
 		return decodeGenericModelInvocationMultipart(multipart.NewReader(r.Body, boundary))
 	}
 	return decodeGenericModelInvocationRequestFromHTTP(r.Body)
@@ -239,9 +231,6 @@ func decodeGenericModelInvocationMultipart(reader *multipart.Reader) (factoryapi
 			requestSeen = true
 			request, err = decodeGenericMultipartRequestPart(part)
 		case "files":
-			if len(uploads) >= maxGenericFileCount {
-				return request, requestValidationError{message: "too many multipart files"}
-			}
 			var upload genericUpload
 			upload, err = decodeGenericMultipartFilePart(part)
 			if err == nil {
@@ -268,23 +257,17 @@ func decodeGenericMultipartRequestPart(part *multipart.Part) (factoryapi.Generic
 			return factoryapi.GenericModelInvocationRequest{}, requestValidationError{message: "multipart request part must be application/json"}
 		}
 	}
-	data, err := io.ReadAll(io.LimitReader(part, maxGenericRequestPart+1))
+	data, err := io.ReadAll(part)
 	if err != nil {
 		return factoryapi.GenericModelInvocationRequest{}, err
-	}
-	if len(data) > maxGenericRequestPart {
-		return factoryapi.GenericModelInvocationRequest{}, requestValidationError{message: "multipart request part exceeds 1 MiB"}
 	}
 	return decodeGenericModelInvocationRequestFromHTTP(bytes.NewReader(data))
 }
 
 func decodeGenericMultipartFilePart(part *multipart.Part) (genericUpload, error) {
-	data, err := io.ReadAll(io.LimitReader(part, maxGenericFilePart+1))
+	data, err := io.ReadAll(part)
 	if err != nil {
 		return genericUpload{}, err
-	}
-	if len(data) > maxGenericFilePart {
-		return genericUpload{}, requestValidationError{message: "multipart file exceeds 8 MiB"}
 	}
 	if len(data) == 0 {
 		return genericUpload{}, requestValidationError{message: "multipart file must not be empty"}

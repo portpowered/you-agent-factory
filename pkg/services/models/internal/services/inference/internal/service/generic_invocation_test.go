@@ -190,7 +190,7 @@ func TestNormalizeGenericInvocationOutputsPreservesNamesAndMetadata(t *testing.T
 	}
 }
 
-func TestNormalizeGenericInvocationOutputsRejectsMalformedAndOversizedResponsesAtomically(t *testing.T) {
+func TestNormalizeGenericInvocationOutputsRejectsMalformedResponsesAtomically(t *testing.T) {
 	t.Parallel()
 
 	operation := genericOperation(
@@ -204,7 +204,6 @@ func TestNormalizeGenericInvocationOutputsRejectsMalformedAndOversizedResponsesA
 		outputValue string
 	}{
 		{name: "unknown output", outputName: "unknown", outputValue: "bad"},
-		{name: "oversized output", outputName: "text", outputValue: strings.Repeat("x", 16<<20+1)},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			outputs, err := models.NormalizeGenericInvocationOutputs(
@@ -217,6 +216,38 @@ func TestNormalizeGenericInvocationOutputsRejectsMalformedAndOversizedResponsesA
 				t.Fatalf("outputs = %#v, error = %v, failure = %#v, want atomic malformed response", outputs, err, failure)
 			}
 		})
+	}
+}
+
+func TestNormalizeGenericInvocationOutputsPreservesLargeInlineAndArtifactOutputs(t *testing.T) {
+	t.Parallel()
+	artifact, err := (models.InferenceArtifactRef{}).Parse("artifact:segments")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Repeat("x", 16<<20+1)
+	artifactSize := int64(len(text))
+	operation := genericOperation(models.OperationASR, nil, []models.OperationSlot{
+		{Name: "transcript", Modality: models.ModalityText, MediaTypes: []string{"text/plain"}},
+		{Name: "segments", Modality: models.ModalityJSON, MediaTypes: []string{"application/json"}},
+	})
+	outputs, err := models.NormalizeGenericInvocationOutputs(operation,
+		[]models.InferenceContent{{Name: "transcript", Modality: models.ModalityText, MediaType: "text/plain", Content: text}},
+		[]models.InferenceArtifact{{Name: "segments", MediaType: "application/json", SizeBytes: artifactSize, Artifact: artifact}},
+	)
+	if err != nil || len(outputs) != 2 {
+		t.Fatalf("large output normalization count=%d, error=%v", len(outputs), err)
+	}
+	if outputs[0].Content != text || outputs[1].Artifact == nil || outputs[1].Artifact.SizeBytes != artifactSize || outputs[1].Artifact.Artifact != artifact {
+		t.Fatal("large normalized outputs changed content or artifact metadata")
+	}
+	outputs, err = models.NormalizeGenericInvocationOutputs(operation, nil,
+		[]models.InferenceArtifact{{Name: "segments", MediaType: "application/json", SizeBytes: -1, Artifact: artifact}},
+	)
+	var failure *models.InvocationFailure
+	if outputs != nil || !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMalformedResponse ||
+		!strings.Contains(failure.Message, "negative artifact size") {
+		t.Fatalf("negative artifact normalization count=%d, error=%v, want precise invalid-size diagnostic", len(outputs), err)
 	}
 }
 

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -876,4 +877,75 @@ func mustInferenceInvocationRef(t *testing.T, value string) models.ModelInvocati
 		t.Fatalf("parse invocation ref: %v", err)
 	}
 	return ref
+}
+
+func TestQwenBasePreparationIncludesOnlyVerifiedTalkerAndTokenizer(t *testing.T) {
+	t.Parallel()
+	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameQwen3TTSBase)
+	if !ok {
+		t.Fatal("Qwen Base definition missing")
+	}
+	request := models.InvokeModelRequest{Model: models.ModelReference{NameOrURI: definition.Name}}
+	configuration := modelseffects.ResolvedHostConfiguration{
+		ModelName: definition.Name, Backend: definition.Backend,
+		Source: models.ModelReference{NameOrURI: definition.Source},
+	}
+	prepared, err := joinedAssetPreparationRequestWithConfiguration(request, configuration, models.ResolvedModelReference{Definition: definition})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.Reference.NameOrURI != definition.Source || len(prepared.Artifacts) != 2 {
+		t.Fatalf("prepared Qwen source/artifacts = %q/%v, want pinned two-file bundle", prepared.Reference.NameOrURI, prepared.Artifacts)
+	}
+	want := []models.AssetRequirement{
+		{Name: "qwen-talker-0.6b-base-Q4_K_M.gguf", Bytes: 628905056, SHA256: "4b468ec7b1f62b90ef4ca316c0aa57deadfd54b2cf9651703ea753cedaf04226"},
+		{Name: "qwen-tokenizer-12hz-Q4_K_M.gguf", Bytes: 254974752, SHA256: "cf3788b4d50aaa665fb6e57c170396aae03a3555fea52d2b5d0cda902d658039"},
+	}
+	if !reflect.DeepEqual(prepared.Artifacts, want) {
+		t.Fatalf("Qwen artifacts = %v, want %v", prepared.Artifacts, want)
+	}
+	configuration.Source.NameOrURI = "C:/custom/qwen-bundle"
+	prepared, err = joinedAssetPreparationRequestWithConfiguration(request, configuration, models.ResolvedModelReference{Definition: definition})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prepared.Artifacts) != 0 {
+		t.Fatalf("local Qwen overlay artifacts = %v, want local directory discovery", prepared.Artifacts)
+	}
+}
+
+func TestKnownRealtimeVoiceReferenceFailsBeforeBackendActivation(t *testing.T) {
+	t.Parallel()
+	var events []string
+	root, scope, _ := newJoinedInvocationRoot(t, &events, &joinedInferenceService{})
+	request := models.InvokeModelRequest{
+		Scope: scope, Holder: "reference-probe", Model: models.ModelReference{NameOrURI: models.BuiltInModelNameTTS},
+		Operation: models.OperationTTS,
+		Inputs: []models.InferenceInput{
+			{Name: "text", Modality: models.ModalityText, MediaType: "text/plain", Content: "hello"},
+			{Name: "voice", Modality: models.ModalityAudio, MediaType: "audio/wav", Content: "reference bytes"},
+		},
+	}
+	_, err := root.InvokeModel(t.Context(), request)
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassMediaCapability || failure.Slot != "voice" {
+		t.Fatalf("reference failure = %v, want unsupported voice capability", err)
+	}
+	for _, event := range events {
+		if event != "resolve" {
+			t.Fatalf("unsupported reference activated effect %q", event)
+		}
+	}
+	definition, _ := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameQwen3TTSBase)
+	request.Model.NameOrURI = definition.Name
+	prepared, _, err := root.prepareJoinedGenericInvocation(t.Context(), request, models.ResolvedModelReference{Definition: definition})
+	if err != nil || len(prepared.Inputs) != 2 || prepared.Inputs[1].Content != "reference bytes" {
+		t.Fatalf("Qwen prepared reference = %#v, error = %v", prepared, err)
+	}
+	definition, _ = (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameTTS)
+	definition.Source = "hf://custom/VibeVoice-1.5B/model.gguf@revision"
+	prepared, _, err = root.prepareJoinedGenericInvocation(t.Context(), request, models.ResolvedModelReference{Definition: definition})
+	if err != nil || prepared.Inputs[1].Content != "reference bytes" {
+		t.Fatalf("custom VibeVoice prepared reference = %#v, error = %v", prepared, err)
+	}
 }

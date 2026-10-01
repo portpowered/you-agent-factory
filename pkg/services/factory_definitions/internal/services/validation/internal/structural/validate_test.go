@@ -129,6 +129,18 @@ func TestManagedRuntimeDependencyTargets_CharacterizesCurrentMembership(t *testi
 			wantMessage: `requires backend "LLAMACPP"`,
 		},
 		{
+			name:    "reference Qwen builtin uses its registered backend",
+			model:   "  qwen3-tts-base ",
+			backend: " localai-qwen3-tts-cpp ",
+		},
+		{
+			name:        "reference Qwen builtin rejects different backend",
+			model:       "qwen3-tts-base",
+			backend:     "localai-vibevoice",
+			wantCode:    factoryvalidation.CodeManagedRuntimeInvalidBackend,
+			wantMessage: `requires backend "LOCALAI-QWEN3-TTS-CPP"`,
+		},
+		{
 			name:        "unknown identity with managed backend",
 			model:       "UNKNOWN_MODEL",
 			backend:     "LLAMACPP",

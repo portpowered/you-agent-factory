@@ -26,7 +26,7 @@ const story004EmbedSource = "hf://Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding
 func TestModelsEmbedRootCompositionBehavior(t *testing.T) {
 	t.Parallel()
 	t.Run("zero-configuration", testModelsEmbedZeroConfigurationJourneyThroughRootBuildProcess)
-	t.Run("oversized-file", testModelsEmbedOversizedFileInputFailsBeforeBackendThroughRootBuildProcess)
+	t.Run("large-file", testModelsEmbedLargeFileInputReachesBackendThroughRootBuildProcess)
 	t.Run("invalid-vector", testModelsEmbedInvalidVectorUsesTypedRuntimeAndReleasesLease)
 	t.Run("named-generic-http-parity", testModelsNamedAndGenericHTTPInvocationShareBuiltinResolution)
 }
@@ -148,7 +148,7 @@ func assertStory004UnknownInput(
 	}
 }
 
-func testModelsEmbedOversizedFileInputFailsBeforeBackendThroughRootBuildProcess(t *testing.T) {
+func testModelsEmbedLargeFileInputReachesBackendThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()
 
 	hostServer := story004HostServer(t)
@@ -165,9 +165,10 @@ func testModelsEmbedOversizedFileInputFailsBeforeBackendThroughRootBuildProcess(
 		&joinedCompatibilityChecker{}, selection, fixture,
 	)
 	var receivedLimit int64
+	content := bytes.Repeat([]byte{'x'}, 8*1024*1024+1)
 	edges.ModelCLIInputReadFile = func(_ context.Context, _ string, maxBytes int64) ([]byte, error) {
 		receivedLimit = maxBytes
-		return bytes.Repeat([]byte{'x'}, int(maxBytes+1)), nil
+		return content, nil
 	}
 	process := functionalBuildProcess(t, edges)
 	support.CleanupProcess(t, process)
@@ -175,23 +176,16 @@ func testModelsEmbedOversizedFileInputFailsBeforeBackendThroughRootBuildProcess(
 
 	stdout, stderr, err := runStory004CLI(t, process, factoryDir, functionalHomeEnvironment(home),
 		[]string{"you", "models", "invoke", "embed", "--input", "text=@oversized.txt"})
-	if err == nil {
-		t.Fatal("oversized EMBED file error = nil, want local preflight failure")
+	assertStory004PlainOutput(t, err, stdout, stderr)
+	if receivedLimit != 0 || fixture.Calls() != 1 || launcher.Calls() != 1 || assetNetwork.Calls() != 0 {
+		t.Fatalf("large EMBED effects = limit:%d backend:%d starts:%d assets:%d, want unlimited input and one cached invocation", receivedLimit, fixture.Calls(), launcher.Calls(), assetNetwork.Calls())
 	}
-	if stdout != "" {
-		t.Fatalf("oversized EMBED file stdout = %q, want empty", stdout)
+	exchanges := fixture.Exchanges()
+	var request struct {
+		Prompt string `json:"prompt"`
 	}
-	var diagnostic factoryapi.ErrorResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(stderr)), &diagnostic); decodeErr != nil {
-		t.Fatalf("decode oversized EMBED diagnostic: %v\nstderr=%q", decodeErr, stderr)
-	}
-	if diagnostic.Code != factoryapi.ErrorResponseCode("CLI_LOCAL_INPUT_FAILED") ||
-		diagnostic.Family != factoryapi.ErrorFamilyBadRequest ||
-		!strings.Contains(diagnostic.Message, "failed to load --input") {
-		t.Fatalf("oversized EMBED diagnostic = %#v, want customer-safe local input failure", diagnostic)
-	}
-	if receivedLimit <= 0 || fixture.Calls() != 0 || launcher.Calls() != 0 || assetNetwork.Calls() != 0 {
-		t.Fatalf("oversized EMBED effects = limit:%d backend:%d starts:%d assets:%d, want positive limit and no downstream effects", receivedLimit, fixture.Calls(), launcher.Calls(), assetNetwork.Calls())
+	if len(exchanges) != 1 || json.Unmarshal([]byte(exchanges[0].ProtocolJSON), &request) != nil || request.Prompt != string(content) {
+		t.Fatal("large EMBED file bytes changed before reaching backend")
 	}
 }
 

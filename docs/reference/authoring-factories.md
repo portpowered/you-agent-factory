@@ -437,7 +437,7 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-The nineteen first-party packaged Factories also use the named-factory path.
+The twenty first-party packaged Factories also use the named-factory path.
 `you factory list` is the discovery source for their descriptions and runnable
 examples.
 
@@ -447,6 +447,7 @@ examples.
 | `@you/agy-cold-watch` | Graph | Review a completed cut from first principles, including visual chronology and audio. |
 | `@you/classify` | Graph | Route a request to a small, medium, or large model lane by complexity. |
 | `@you/deep-research` | JavaScript | Run bounded specialist investigations in parallel and synthesize their findings. |
+| `@you/dub-video` | Graph | Translate video speech into aligned, reference-conditioned dubbing with saved transcripts and subtitle artifacts. |
 | `@you/factory-builder` | Graph | Create and install one validated graph or JavaScript Factory from a request. |
 | `@you/fix` | Graph | Plans and iterates a requested fix in an isolated named worktree, then repeats independent review until approval or bounded failure. |
 | `@you/full-flow` | Graph | Plan implementation waves, work in isolated worktrees, merge, and replan until complete. |

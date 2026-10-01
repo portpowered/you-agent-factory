@@ -1,0 +1,204 @@
+name: "@you/dub-video"
+id: builtin-dub-video
+description:
+  type: LOCALIZABLE_ASSET
+  value: Transcribes a video, translates every speech segment, synthesizes speech from source audio references, and renders a dubbed video with subtitles.
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: video-dub
+  terminalState: complete
+invocationSignature:
+  unknownNamedArgumentPolicy: REJECT
+  outputContract:
+    mode: JSON
+    contentType: application/json
+    description: Paths to the dubbed video, saved ASR result, validated translations, SRT, and ASS, with the target language.
+  parameters:
+    - name: video
+      externalName: video
+      description: Source video path, relative to the caller's working directory or absolute.
+      typeHint: FILE_PATH
+      required: true
+      bindings:
+        - kind: NAMED
+    - name: language
+      externalName: language
+      description: Target speech and subtitle language, such as zh-CN.
+      defaultValue: zh-CN
+      bindings:
+        - kind: NAMED
+    - name: output
+      externalName: output-video
+      description: Dubbed MP4 or MKV output path, relative to the caller's working directory or absolute.
+      typeHint: FILE_PATH
+      required: true
+      bindings:
+        - kind: NAMED
+    - name: asrModel
+      externalName: asr-model
+      description: Models catalog name used for speech recognition.
+      defaultValue: asr
+      bindings:
+        - kind: NAMED
+    - name: llmModel
+      externalName: llm-model
+      description: Models catalog name used for segment translation.
+      defaultValue: llm
+      bindings:
+        - kind: NAMED
+    - name: ttsModel
+      externalName: tts-model
+      description: Models catalog name with reference-audio-conditioned speech synthesis support.
+      defaultValue: qwen3-tts-base
+      bindings:
+        - kind: NAMED
+    - name: ttsServer
+      externalName: tts-server
+      description: Optional Models HTTP server with a configured reference-audio speech model.
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: subtitles
+      externalName: subtitles
+      description: Optional existing ASS subtitle file to attach when rendering.
+      typeHint: FILE_PATH
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: preserveNames
+      externalName: preserve-names
+      description: Optional names to retain verbatim when present in source speech, one name per line.
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+examples:
+  - name: dub-video-to-chinese
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Create Chinese speech and subtitles while preserving the source segment identities and timing.
+    args:
+      video: demo.mp4
+      language: zh-CN
+      output: video-dubbed.mp4
+workTypes:
+  - name: video-dub
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: transcribed
+        type: PROCESSING
+      - name: translated
+        type: PROCESSING
+      - name: synthesized
+        type: PROCESSING
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+workers:
+  - name: transcribe-video
+    type: SCRIPT_WORKER
+    command: python
+    timeout: 20m
+    args:
+      - scripts/dub_video.py
+      - transcribe
+      - --video
+      - ${video}
+      - --language
+      - ${language}
+      - --output
+      - ${output}
+      - --asr-model
+      - ${asrModel}
+      - --llm-model
+      - ${llmModel}
+      - --tts-model
+      - ${ttsModel}
+      - --tts-server
+      - ${ttsServer}
+      - --subtitles
+      - ${subtitles}
+      - --preserve-names
+      - ${preserveNames}
+  - name: translate-video-segments
+    type: SCRIPT_WORKER
+    command: python
+    timeout: 20m
+    args:
+      - scripts/dub_video.py
+      - translate
+      - --manifest
+      - "{{ (index .Inputs 0).Payload }}"
+  - name: synthesize-video-segments
+    type: SCRIPT_WORKER
+    command: python
+    timeout: 20m
+    args:
+      - scripts/dub_video.py
+      - synthesize
+      - --manifest
+      - "{{ (index .Inputs 0).Payload }}"
+  - name: render-dubbed-video
+    type: SCRIPT_WORKER
+    command: python
+    timeout: 20m
+    args:
+      - scripts/dub_video.py
+      - render
+      - --manifest
+      - "{{ (index .Inputs 0).Payload }}"
+workstations:
+  - name: transcribe-and-save
+    type: SCRIPT_RUN
+    worker: transcribe-video
+    inputs:
+      - workType: video-dub
+        state: init
+    outputs:
+      - workType: video-dub
+        state: transcribed
+    onFailure:
+      - workType: video-dub
+        state: failed
+  - name: translate-and-validate
+    type: SCRIPT_RUN
+    worker: translate-video-segments
+    inputs:
+      - workType: video-dub
+        state: transcribed
+    outputs:
+      - workType: video-dub
+        state: translated
+    onFailure:
+      - workType: video-dub
+        state: failed
+  - name: synthesize-from-source-audio
+    type: SCRIPT_RUN
+    worker: synthesize-video-segments
+    inputs:
+      - workType: video-dub
+        state: translated
+    outputs:
+      - workType: video-dub
+        state: synthesized
+    onFailure:
+      - workType: video-dub
+        state: failed
+  - name: render-subtitles-and-dub
+    type: SCRIPT_RUN
+    worker: render-dubbed-video
+    inputs:
+      - workType: video-dub
+        state: synthesized
+    outputs:
+      - workType: video-dub
+        state: complete
+    onFailure:
+      - workType: video-dub
+        state: failed

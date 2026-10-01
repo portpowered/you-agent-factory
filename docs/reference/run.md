@@ -173,6 +173,59 @@ Project-local named Factories are resolved before operator-level named
 Factories. Use `you run --named team-review --help` to inspect a named Factory's
 signature.
 
+## Dub a video with its source voice
+
+`@you/dub-video` transcribes a video, translates each speech segment, and uses
+that segment's original audio and transcript as the reference for Chinese or
+another supported target language. The packaged reference-capable model is
+`qwen3-tts-base`; its first use downloads the model and an available backend.
+Install Python 3.10 or later, `ffmpeg`, and `ffprobe` on `PATH`.
+
+```bash
+you run --named @you/dub-video --video demo.mp4 --language zh-CN \
+  --output-video video-dubbed.mp4
+```
+
+Use `--output-video` for the media filename. The run-level `--output` flag
+controls terminal presentation. Add `--quiet` to return only the final JSON
+object containing the video, source ASR, translations, SRT, and ASS filenames.
+Intermediate files are retained in a unique directory beside the output video.
+The original video is preserved.
+
+Every translation must retain the exact source segment IDs and order. Source
+timestamps are preserved. Invalid model responses are retried up to three
+times, then fail before speech generation. A model may return its translation
+object directly or identify a JSON file within the output artifact directory.
+A separate model audit checks meaning, speaker/addressee, negation, and proper
+names before TTS. Rejected translations enter the same correction retry loop.
+Model audits can miss mistakes; review the saved source and translations when
+translation accuracy matters.
+
+Use `--preserve-names "Bubble Tea and Cigarettes"` for known names that must
+remain unchanged. Multiple names can be supplied as one newline-separated
+argument. The Factory rejects translations that omit or translate a listed name
+found in the source, even if the model audit approves them.
+
+Each TTS call receives a mono 24 kHz sample extracted from its original video
+segment, that segment's source transcript, and its translated text. The
+default VibeVoice Realtime model cannot encode arbitrary reference audio;
+use `qwen3-tts-base` or another configured reference-capable model. Override
+Models catalog names with `--asr-model`, `--llm-model`, and `--tts-model`.
+The default ASR model is English-only; select a configured multilingual ASR
+model when the source speech uses another language.
+`--tts-server` can select a configured Models HTTP endpoint for speech.
+
+Speech is fitted to each source segment without cutting off translated words.
+If fitting requires more than twice the normal speech speed, the Factory
+fails with a request to shorten that translation. Subtitle times remain
+aligned with the source video. The dubbed track replaces original audio; gaps
+between recognized speech segments are silent. Background music is not separated
+or mixed back in. MP4 embeds text subtitles and retains the ASS
+sidecar; MKV embeds the ASS track. Pass `--subtitles subtitles.ass` to attach
+an existing ASS file while retaining the generated SRT and ASS artifacts.
+
+Run `you run --named @you/dub-video --help` for the complete signature.
+
 ## Run a JavaScript Factory Session
 
 Passing a `.js`, `.mjs`, or `.cjs` workflow file to `--factory` selects the

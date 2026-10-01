@@ -1,6 +1,6 @@
 # Packaged Factories
 
-YOU ships **nineteen** first-party Factories under the `@you/` namespace. This
+YOU ships **twenty** first-party Factories under the `@you/` namespace. This
 page is the canonical operator guide for that catalog. The authored sources
 live in `packages/packaged-factories/factories/`; the published catalog is
 described by `packages/packaged-factories/generated/manifest.json`.
@@ -52,7 +52,7 @@ before replacing its help command with a work request.
 ### Verified discovery output
 
 These commands were run against the current `you` binary while maintaining
-this topic. The catalog output contained all nineteen `@you/*` names; the help
+this topic. The catalog output contained all twenty `@you/*` names; the help
 output below is the live boundary for `@you/goal`:
 
 ```text
@@ -146,6 +146,7 @@ it is not a promise of deterministic content.
 | Single bounded call | `@you/subagent` | Graph | Runs one bounded subagent with workspace tools and returns its result. |
 | Parallel investigation and selection | `@you/tournament` | JavaScript | Runs candidates through bounded 1v1 matches, uses a judge to advance each winner, and returns the champion result. |
 | Local media | `@you/tts` | Graph | Converts submitted text to audio with the packaged local text-to-speech model. |
+| Local media | `@you/dub-video` | Graph | Transcribes video speech, translates aligned segments, synthesizes speech from each source voice reference, and returns a dubbed video with subtitle artifacts. |
 | Media review | `@you/agy-clip-qa` | Graph | Gates a rendered clip against its shot specification with ANTIGRAVITY and returns a schema-validated pass-or-reroll verdict. |
 | Media review | `@you/agy-cold-watch` | Graph | Reviews a completed cut from first principles with ANTIGRAVITY, including chronology, temporal defects, audio, observed speech, and a pass-or-reroll recommendation. |
 
@@ -1135,6 +1136,20 @@ you run --named @you/tournament --no-record --quiet --rounds 4 --to "Propose a l
 Do not use the empty `--with-mock-workers` configuration as success evidence:
 its generic text is not valid judge JSON.
 
+## Video dubbing
+
+`@you/dub-video` transcribes a video, translates each timed segment, and
+synthesizes the translation using that segment's original audio and transcript
+as the voice reference. It writes the dubbed video, validated translations,
+SRT, ASS, and a manifest. Use `--language` to select the target language.
+MP4 contains soft subtitles; MKV supports native ASS.
+
+```powershell
+you run --named @you/dub-video --video demo.mp4 --language zh-CN --output-video video-dubbed.mp4
+```
+
+See `you docs run` for model selection and artifact details.
+
 ## Detailed local media entry
 
 ### `@you/tts`
@@ -1458,7 +1473,7 @@ you run --named @you/classify \
 
 ## Materialization and editing
 
-1. `you factory list` — see the nineteen catalog entries.
+1. `you factory list` — see the twenty catalog entries.
 2. `you run --named @you/goal --help` — materializes `@you/goal` without running
    work when you only need the generated help / local copy.
 3. Edit the materialized Factory under

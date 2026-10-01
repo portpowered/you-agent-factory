@@ -433,6 +433,7 @@ packaged-factory-package-verify: packaged-factory-package-smoke
 
 packaged-factory-package-script-test:
 	node --test scripts/packaged-factories-package-pack.test.mjs scripts/packaged-factories-package-candidate.test.mjs scripts/packaged-factories-package-consumer.test.mjs scripts/packaged-factories-package-pr-dry-run.test.mjs scripts/packaged-factories-package-registry.test.mjs scripts/packaged-factories-package-publish.test.mjs scripts/packaged-factories-package-development-command.test.mjs
+	$(PYTHON) -B -m unittest discover -s packages/packaged-factories/factories/dub-video/scripts -p 'test_dub_*.py'
 
 packaged-factory-package-pack-check: packaged-factory-catalog-check
 	node -e "require('node:fs').rmSync('.artifacts/packaged-factories-local-pack', { recursive: true, force: true })"

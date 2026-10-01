@@ -153,7 +153,15 @@ func (runner *omniVideoDecoder) Run(ctx context.Context, request platformprocess
 	if err := ctx.Err(); err != nil {
 		return platformprocess.CommandResult{}, err
 	}
-	runner.video = append([]byte(nil), request.Stdin...)
+	for index, arg := range request.Args {
+		if arg == "-i" && index+1 < len(request.Args) {
+			video, err := os.ReadFile(request.Args[index+1])
+			if err != nil {
+				return platformprocess.CommandResult{}, err
+			}
+			runner.video = video
+		}
+	}
 	switch request.Command {
 	case "ffprobe":
 		runner.probes++
@@ -163,7 +171,10 @@ func (runner *omniVideoDecoder) Run(ctx context.Context, request platformprocess
 		return platformprocess.CommandResult{Stdout: []byte(`{"streams":[{"codec_type":"video"},{"codec_type":"audio"}],"format":{"duration":"1"}}`)}, nil
 	case "ffmpeg":
 		runner.decodes++
-		return platformprocess.CommandResult{Stdout: runner.audio}, nil
+		if err := os.WriteFile(request.Args[len(request.Args)-1], runner.audio, 0o600); err != nil {
+			return platformprocess.CommandResult{}, err
+		}
+		return platformprocess.CommandResult{}, nil
 	default:
 		return platformprocess.CommandResult{}, fmt.Errorf("unexpected media process %q", request.Command)
 	}
@@ -358,4 +369,95 @@ func (client *invalidBackendPublication) Do(request *http.Request) (*http.Respon
 		return nil, fmt.Errorf("controlled unavailable backend: %s", request.URL)
 	}
 	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header), Request: request}, nil
+}
+
+// A video's audio slot is decoded before ASR and publishes the ordinary named outputs.
+func TestModelsASRVideoFileProducesTranscriptAndSegments(t *testing.T) {
+	t.Parallel()
+	home := functionalTempDir(t)
+	backend := functionalStartLocalAI(t)
+	writeGenericConformanceCaches(t, home)
+	edges, _, _, _ := localAIConformanceEdges(home, backend)
+	audio := localai.AudioBytes()
+	calls := 0
+	edges.ModelASRBackend = func(ctx context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+		calls++
+		if request.MediaType != "audio/wav" || !bytes.Equal(request.Audio, audio) {
+			return models.ASRBackendResponse{}, fmt.Errorf("ASR received media %q, want exact decoded WAV", request.MediaType)
+		}
+		return models.ASRBackendResponse{Text: "spoken video words", Segments: []models.ASRBackendSegment{{ID: 7, Start: 2, End: 19, Text: "spoken video words"}}}, ctx.Err()
+	}
+	runner := &asrVideoCommandRecorder{omniVideoDecoder: &omniVideoDecoder{audio: audio}}
+	edges.ModelRuntimeCommandRunner = runner
+	process := functionalBuildProcess(t, edges)
+	defer closeRootProcess(t, process, "close video ASR process")
+	dir := functionalTempDir(t)
+	video := append([]byte{0, 0, 0, 24}, []byte("ftypmp42")...)
+	video = append(video, bytes.Repeat([]byte{1}, 9<<20)...)
+	videoPath := filepath.Join(dir, "demo.mp4")
+	if err := os.WriteFile(videoPath, video, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	transcriptPath, segmentsPath := filepath.Join(dir, "transcript.txt"), filepath.Join(dir, "segments.json")
+	execute := func(transcript, segments string) error {
+		inputs := support.FakeInputs(t.Context(), []string{"you", "models", "invoke", "asr", "--input", "audio=@" + videoPath, "--output-map", "transcript=" + transcript, "--output-map", "segments=" + segments})
+		inputs.Input.Env = functionalHomeEnvironment(home)
+		inputs.Input.WorkingDirectory = dir
+		return process.Execute(inputs.Input)
+	}
+	if err := execute(transcriptPath, segmentsPath); err != nil {
+		t.Fatalf("ASR video invocation: %v", err)
+	}
+	transcript, err := os.ReadFile(transcriptPath)
+	if err != nil || string(transcript) != "spoken video words" {
+		t.Fatalf("named transcript=%q error=%v", transcript, err)
+	}
+	body, err := os.ReadFile(segmentsPath)
+	var segments []asrStoryOutputSegment
+	if err != nil || json.Unmarshal(body, &segments) != nil || len(segments) != 1 || segments[0] != (asrStoryOutputSegment{ID: 7, Start: 2, End: 19, Text: "spoken video words"}) {
+		t.Fatalf("named timestamped segments=%s error=%v", body, err)
+	}
+	if calls != 1 || runner.probes != 1 || runner.decodes != 1 || !bytes.Equal(runner.video, video) {
+		t.Fatalf("video ASR route backend=%d probes=%d decodes=%d", calls, runner.probes, runner.decodes)
+	}
+	assertASRVideoStagingRemoved(t, runner.paths)
+	runner.silent = true
+	absentTranscript, absentSegments := filepath.Join(dir, "silent.txt"), filepath.Join(dir, "silent.json")
+	if err := execute(absentTranscript, absentSegments); err == nil || !strings.Contains(err.Error(), "no audio track") {
+		t.Fatalf("silent video error=%v, want readable missing-audio failure", err)
+	}
+	if calls != 1 || runner.decodes != 1 {
+		t.Fatalf("silent video reached transcription: calls=%d decodes=%d", calls, runner.decodes)
+	}
+	for _, path := range []string{absentTranscript, absentSegments} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("silent video wrote named output %q: %v", path, err)
+		}
+	}
+	assertASRVideoStagingRemoved(t, runner.paths)
+}
+
+type asrVideoCommandRecorder struct {
+	*omniVideoDecoder
+	paths []string
+}
+
+func (runner *asrVideoCommandRecorder) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	for index, arg := range request.Args {
+		if arg == "-i" && index+1 < len(request.Args) {
+			runner.paths = append(runner.paths, request.Args[index+1])
+		}
+	}
+	if request.Command == "ffmpeg" {
+		runner.paths = append(runner.paths, request.Args[len(request.Args)-1])
+	}
+	return runner.omniVideoDecoder.Run(ctx, request)
+}
+func assertASRVideoStagingRemoved(t *testing.T, paths []string) {
+	t.Helper()
+	for _, path := range paths {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("video ASR staging left %q: %v", path, err)
+		}
+	}
 }

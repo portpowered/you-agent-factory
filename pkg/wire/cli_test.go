@@ -319,18 +319,27 @@ func TestModelsCLIInputFileReaderUsesExplicitEdges(t *testing.T) {
 			if path != "meeting.wav" {
 				t.Fatalf("input path = %q, want meeting.wav", path)
 			}
-			if maxBytes <= 0 {
-				t.Fatalf("input max bytes = %d, want positive limit", maxBytes)
+			if maxBytes != 0 {
+				t.Fatalf("input max bytes = %d, want unlimited", maxBytes)
 			}
 			return []byte{0x00, 0xff}, nil
 		},
 	})
-	got, err := reader(context.Background(), "meeting.wav", 2)
+	got, err := reader(context.Background(), "meeting.wav", 0)
 	if err != nil || string(got) != string([]byte{0x00, 0xff}) {
 		t.Fatalf("input reader = %x, %v; want exact edge bytes", got, err)
 	}
 	if !called {
 		t.Fatal("explicit input reader edge was not called")
+	}
+	reader = provideModelsCLIInputFileReader(serviceedges.Edges{
+		ModelAssetReadFile: func(string) ([]byte, error) { return []byte("unlimited input"), nil },
+	})
+	if got, err := reader(context.Background(), "meeting.wav", 0); err != nil || string(got) != "unlimited input" {
+		t.Fatalf("asset fallback unlimited reader = %q, %v", got, err)
+	}
+	if got, err := reader(context.Background(), "meeting.wav", 2); err == nil || got != nil {
+		t.Fatalf("asset fallback bounded reader = %q, %v, want limit error", got, err)
 	}
 }
 
@@ -348,6 +357,15 @@ func TestModelsCLIInputFileReaderDefaultBoundsContent(t *testing.T) {
 	}
 	if got != nil {
 		t.Fatalf("default input reader bytes = %q, want no partial content", got)
+	}
+	got, err = reader(context.Background(), path, 0)
+	if err != nil || string(got) != "0123456789" {
+		t.Fatalf("unlimited input reader = %q, %v, want complete content", got, err)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if got, err := reader(cancelled, path, 0); !errors.Is(err, context.Canceled) || got != nil {
+		t.Fatalf("cancelled unlimited input reader = %q, %v", got, err)
 	}
 }
 

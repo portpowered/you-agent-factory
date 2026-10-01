@@ -6,20 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
-	"strconv"
 	"strings"
-	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-)
-
-const (
-	maxVideoAudioInputBytes  = 8 << 20
-	maxVideoAudioOutputBytes = 4 << 20
-	videoAudioBytesPerSecond = 16000 * 2 // mono 16 kHz PCM s16le
-	videoAudioWAVHeaderBytes = 4096      // room for WAV metadata beyond PCM
-	videoAudioTimeout        = 2 * time.Minute
+	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 )
 
 // ExtractVideoAudio returns a mono 16 kHz WAV for the first audio track in a
@@ -29,20 +19,39 @@ func ExtractVideoAudio(
 	ctx context.Context,
 	runner platformprocess.CommandRunner,
 	video []byte,
+	tempDirectory func() string,
+	createTemp localai.TempFileFactory,
+	writeFile localai.InputFileWriter,
+	readFile func(string) ([]byte, error),
+	removeFile localai.InputFileRemover,
 ) ([]byte, error) {
 	if err := validateVideoAudioInput(ctx, runner, video); err != nil {
 		return nil, err
 	}
-	decodeCtx, cancel := context.WithTimeout(ctx, videoAudioTimeout)
-	defer cancel()
-	duration, hasAudio, err := probeVideoAudio(decodeCtx, runner, video)
+	if tempDirectory == nil || createTemp == nil || writeFile == nil || readFile == nil || removeFile == nil {
+		return nil, errors.New("video audio extraction requires temporary file staging")
+	}
+	inputPath, cleanupInput, err := reserveVideoAudioPath(tempDirectory, createTemp, removeFile, ".you-model-video-*")
+	if err != nil {
+		return nil, err
+	}
+	defer cleanupInput()
+	if err := writeFile(inputPath, video); err != nil {
+		return nil, fmt.Errorf("stage video audio input: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	hasAudio, err := probeVideoAudio(ctx, runner, inputPath)
 	if err != nil || !hasAudio {
 		return nil, err
 	}
-	if err := validateVideoAudioDuration(duration); err != nil {
+	outputPath, cleanupOutput, err := reserveVideoAudioPath(tempDirectory, createTemp, removeFile, ".you-model-video-audio-*.wav")
+	if err != nil {
 		return nil, err
 	}
-	return decodeVideoAudio(decodeCtx, runner, video)
+	defer cleanupOutput()
+	return decodeVideoAudio(ctx, runner, inputPath, outputPath, readFile)
 }
 
 func validateVideoAudioInput(ctx context.Context, runner platformprocess.CommandRunner, video []byte) error {
@@ -58,45 +67,39 @@ func validateVideoAudioInput(ctx context.Context, runner platformprocess.Command
 	if len(video) == 0 {
 		return errors.New("video audio extraction requires nonempty video data")
 	}
-	if len(video) > maxVideoAudioInputBytes {
-		return fmt.Errorf("video exceeds the %d-byte audio extraction limit", maxVideoAudioInputBytes)
-	}
+
 	return nil
 }
 
 func probeVideoAudio(
 	ctx context.Context,
 	runner platformprocess.CommandRunner,
-	video []byte,
-) (float64, bool, error) {
+	inputPath string,
+) (bool, error) {
 	probe, err := runVideoAudioCommand(ctx, runner, platformprocess.CommandRequest{
 		Command: "ffprobe",
 		Args: []string{
-			"-v", "error", "-show_entries", "stream=codec_type:format=duration",
-			"-of", "json", "-i", "pipe:0",
+			"-v", "error", "-show_entries", "stream=codec_type",
+			"-of", "json", "-i", inputPath,
 		},
-		Stdin: video,
 	}, "probe")
 	if err != nil {
-		return 0, false, err
+		return false, err
 	}
 	return parseVideoAudioProbe(probe.Stdout)
 }
 
-func parseVideoAudioProbe(payload []byte) (float64, bool, error) {
+func parseVideoAudioProbe(payload []byte) (bool, error) {
 	var metadata struct {
 		Streams *[]struct {
 			CodecType string `json:"codec_type"`
 		} `json:"streams"`
-		Format struct {
-			Duration string `json:"duration"`
-		} `json:"format"`
 	}
 	if err := json.Unmarshal(payload, &metadata); err != nil {
-		return 0, false, fmt.Errorf("video audio probe returned invalid metadata: %w", err)
+		return false, fmt.Errorf("video audio probe returned invalid metadata: %w", err)
 	}
 	if metadata.Streams == nil {
-		return 0, false, errors.New("video audio probe omitted stream metadata")
+		return false, errors.New("video audio probe omitted stream metadata")
 	}
 	var hasVideo, hasAudio bool
 	for _, stream := range *metadata.Streams {
@@ -104,52 +107,70 @@ func parseVideoAudioProbe(payload []byte) (float64, bool, error) {
 		hasAudio = hasAudio || stream.CodecType == "audio"
 	}
 	if !hasVideo {
-		return 0, false, errors.New("video audio probe found no video stream")
+		return false, errors.New("video audio probe found no video stream")
 	}
 	if !hasAudio {
-		return 0, false, nil
+		return false, nil
 	}
-	duration, err := strconv.ParseFloat(metadata.Format.Duration, 64)
-	if err != nil || math.IsNaN(duration) || math.IsInf(duration, 0) || duration <= 0 {
-		return 0, false, errors.New("video audio probe returned an invalid duration")
-	}
-	return duration, true, nil
+	return true, nil
 }
 
-func validateVideoAudioDuration(duration float64) error {
-	// The decoder's 4 MiB stdout guard must fit every PCM sample plus a WAV
-	// header. Reject a clip that would otherwise be truncated by ffmpeg -fs.
-	if duration*videoAudioBytesPerSecond+videoAudioWAVHeaderBytes > maxVideoAudioOutputBytes {
-		return fmt.Errorf("video audio duration exceeds the %d-byte decoded WAV limit", maxVideoAudioOutputBytes)
+func reserveVideoAudioPath(
+	tempDirectory func() string, createTemp localai.TempFileFactory,
+	removeFile localai.InputFileRemover, pattern string,
+) (string, func(), error) {
+	temporary, err := createTemp(tempDirectory(), pattern)
+	if err != nil || temporary == nil || strings.TrimSpace(temporary.Name()) == "" {
+		if temporary != nil {
+			path := temporary.Name()
+			_ = temporary.Close()
+			if path != "" {
+				_ = removeFile(path)
+			}
+		}
+		if err == nil {
+			err = errors.New("temporary file factory returned no usable path")
+		}
+		return "", func() {}, fmt.Errorf("reserve video audio temporary file: %w", err)
 	}
-	return nil
+	path := temporary.Name()
+	cleanup := func() { _ = removeFile(path) }
+	if err := temporary.Close(); err != nil {
+		cleanup()
+		return "", func() {}, fmt.Errorf("close video audio temporary file: %w", err)
+	}
+	return path, cleanup, nil
 }
 
 func decodeVideoAudio(
 	ctx context.Context,
 	runner platformprocess.CommandRunner,
-	video []byte,
+	inputPath, outputPath string,
+	readFile func(string) ([]byte, error),
 ) ([]byte, error) {
-	decoded, err := runVideoAudioCommand(ctx, runner, platformprocess.CommandRequest{
+	_, err := runVideoAudioCommand(ctx, runner, platformprocess.CommandRequest{
 		Command: "ffmpeg",
 		Args: []string{
-			"-nostdin", "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
+			"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", inputPath,
 			"-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000",
-			"-c:a", "pcm_s16le", "-f", "wav", "-fs", strconv.Itoa(maxVideoAudioOutputBytes), "pipe:1",
+			"-c:a", "pcm_s16le", "-f", "wav", "-rf64", "auto", outputPath,
 		},
-		Stdin: video,
 	}, "decoder")
 	if err != nil {
 		return nil, err
 	}
-	if len(decoded.Stdout) >= maxVideoAudioOutputBytes {
-		return nil, fmt.Errorf("decoded video audio exceeds the %d-byte limit", maxVideoAudioOutputBytes)
+	wav, err := readFile(outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("read decoded video audio: %w", err)
 	}
-	if len(decoded.Stdout) < 44 || !bytes.Equal(decoded.Stdout[:4], []byte("RIFF")) ||
-		!bytes.Equal(decoded.Stdout[8:12], []byte("WAVE")) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(wav) < 44 || (!bytes.Equal(wav[:4], []byte("RIFF")) && !bytes.Equal(wav[:4], []byte("RF64"))) ||
+		!bytes.Equal(wav[8:12], []byte("WAVE")) {
 		return nil, errors.New("video audio decoder returned an invalid WAV")
 	}
-	return decoded.Stdout, nil
+	return wav, nil
 }
 
 func runVideoAudioCommand(

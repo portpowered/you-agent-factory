@@ -154,6 +154,7 @@ func buildOmniFileInputFixture(t *testing.T, response string) *omniFileInputFixt
 		ModelAssetHostPlatform: models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
 		ModelHostHTTPClient:    modelServer.Client(), ModelRuntimeHTTPClient: modelServer.Client(),
 		ModelInvocationProtocolClient: fixture.protocol,
+		ModelRuntimeCommandRunner:     &omniVideoDecoder{silent: true},
 	})
 	prepare := support.FakeInputs(t.Context(), []string{
 		"you", "models", "invoke", models.BuiltInModelNameLLM, "--operation", models.OperationOMNI,

@@ -119,6 +119,7 @@ func TestProvidePackagedFactoryDefinitions_LoadsDetachedGeneratedCatalog(t *test
 		"@you/agy-cold-watch",
 		"@you/classify",
 		"@you/deep-research",
+		"@you/dub-video",
 		"@you/factory-builder",
 		"@you/fix",
 		"@you/full-flow",

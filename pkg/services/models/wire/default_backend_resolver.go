@@ -26,7 +26,17 @@ func NewDefaultBackendArtifactResolver() (BackendArtifactResolver, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode default backend artifact manifest: %w", err)
 	}
-	return backendArtifactResolver(manifest), nil
+	qwen, err := artifacts.QwenWindowsCUDAManifest()
+	if err != nil {
+		return nil, fmt.Errorf("decode Qwen Windows CUDA manifest: %w", err)
+	}
+	baselineResolver, qwenResolver := backendArtifactResolver(manifest), backendArtifactResolver(qwen)
+	return func(ctx context.Context, request ResolvedHostConfiguration, offline bool) (BackendArtifactSelection, error) {
+		if request.Backend == "localai-qwen3-tts-cpp" {
+			return qwenResolver(ctx, request, offline)
+		}
+		return baselineResolver(ctx, request, offline)
+	}, nil
 }
 
 func backendArtifactResolver(manifest artifacts.Manifest) BackendArtifactResolver {
@@ -108,7 +118,10 @@ func NewPublishedBackendArtifactResolver(client AssetHTTPDoer) (BackendArtifactR
 	if err != nil {
 		return nil, fmt.Errorf("decode default backend artifact manifest: %w", err)
 	}
-	baselineResolver := backendArtifactResolver(baseline)
+	baselineResolver, err := NewDefaultBackendArtifactResolver()
+	if err != nil {
+		return nil, err
+	}
 	var mu sync.Mutex
 	checked := false
 	var published []artifacts.Manifest
