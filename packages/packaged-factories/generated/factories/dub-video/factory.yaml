@@ -722,6 +722,9 @@ supportingFiles:
 
 
                 def main() -> int:
+                    for stream in (sys.stdout, sys.stderr):
+                        if hasattr(stream, "reconfigure"):
+                            stream.reconfigure(encoding="utf-8")
                     parser = argparse.ArgumentParser(description=__doc__)
                     parser.add_argument("stage", choices=["transcribe", "translate", "synthesize", "render"])
                     parser.add_argument("--manifest")
@@ -928,6 +931,7 @@ supportingFiles:
             inline: |
                 """Controlled proofs for source references, validation, and exact timelines."""
 
+                import io
                 import json
                 import tempfile
                 import unittest
@@ -940,6 +944,31 @@ supportingFiles:
 
 
                 class DubPipelineTests(unittest.TestCase):
+                    def test_main_reconfigures_windows_pipes_for_unicode_paths_and_errors(self):
+                        for failure in (False, True):
+                            with self.subTest(failure=failure):
+                                output, errors = io.BytesIO(), io.BytesIO()
+                                stdout = io.TextIOWrapper(output, encoding="cp1252")
+                                stderr = io.TextIOWrapper(errors, encoding="cp1252")
+                                result = {"video": "C:/视频/中文.mp4", "language": "zh-CN"}
+                                behavior = {"side_effect": ValueError("不能读取中文视频")} if failure else {"return_value": result}
+                                with patch.object(dub_video.sys, "stdout", stdout), \
+                                     patch.object(dub_video.sys, "stderr", stderr), \
+                                     patch.object(dub_video.sys, "argv", ["dub_video.py", "render", "--manifest", "manifest.json"]), \
+                                     patch.object(dub_video, "render", **behavior):
+                                    status = dub_video.main()
+                                    stdout.flush()
+                                    stderr.flush()
+                                self.assertEqual(status, 1 if failure else 0)
+                                if failure:
+                                    self.assertIn("不能读取中文视频", errors.getvalue().decode("utf-8"))
+                                    self.assertEqual(output.getvalue(), b"")
+                                else:
+                                    self.assertEqual(json.loads(output.getvalue().decode("utf-8")), result)
+                                    self.assertEqual(errors.getvalue(), b"")
+                                stdout.detach()
+                                stderr.detach()
+
                     def manifest(self, root, stage="translated"):
                         segments = [{"id": 7, "start": 40, "end": 60, "text": "Can you help?"}]
                         source = root / "source.mp4"

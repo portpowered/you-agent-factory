@@ -282,6 +282,9 @@ def render(path: str) -> dict:
 
 
 def main() -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=["transcribe", "translate", "synthesize", "render"])
     parser.add_argument("--manifest")
