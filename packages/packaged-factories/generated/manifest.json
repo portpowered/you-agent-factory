@@ -135,11 +135,11 @@
       "slug": "dub-video",
       "json": {
         "locator": "generated/factories/dub-video/factory.json",
-        "sha256": "d9d169dda0be03098a1de165a951dc914ee4f0a97ca43bb8089bf652f3d91579"
+        "sha256": "84f86cc4c184ae2f2a9623e5871d4485b961bf852e9657060d6a73b7f7ccc232"
       },
       "yaml": {
         "locator": "generated/factories/dub-video/factory.yaml",
-        "sha256": "34bb990b6aa607a804e304f33bfcf031e82693a812909156dcfd2febeb35b08d"
+        "sha256": "70fcdb7849f991e0341ea7b7a141b6fe7cad00cd084a2ab678e4a80f478d5faf"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

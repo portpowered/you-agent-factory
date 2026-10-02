@@ -412,58 +412,6 @@ supportingFiles:
         - content:
             encoding: utf-8
             inline: |
-                """GBNF response contracts for text-only Models generation.
-
-                Grammar constrains representation; source meaning still requires validation and
-                an independent semantic audit. JSON strings retain Unicode and legal escapes.
-                """
-
-                import json
-
-
-                # Unbounded inter-token whitespace allowed native generation to spend hundreds
-                # of tokens on blank lines instead of advancing to the next required cue.
-                # One optional character keeps spacing flexible without an unlimited stall.
-                # This does not constrain whitespace or length inside translated JSON strings.
-                JSON_RULES = r'''
-                ws ::= [ \t\n\r]?
-                text ::= "\"" character+ "\"" ws
-                character ::= [^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4})
-                '''
-
-
-                def literal(value):
-                    """Quote a complete JSON value as a GBNF terminal."""
-                    return json.dumps(json.dumps(value, ensure_ascii=False), ensure_ascii=False)
-
-
-                def translation_grammar(segments, language):
-                    cues = []
-                    for segment in segments:
-                        cues.append('"{" ws ' + literal("id") + ' ws ":" ws '
-                                    + literal(segment["id"]) + ' ws "," ws '
-                                    + literal("text") + ' ws ":" ws text "}" ws')
-                    body = ' "," ws '.join(cues)
-                    return ('root ::= ws "{" ws ' + literal("language") + ' ws ":" ws '
-                            + literal(language) + ' ws "," ws ' + literal("segments")
-                            + ' ws ":" ws "[" ws ' + body + ' "]" ws "}" ws\n' + JSON_RULES)
-
-
-                def audit_grammar(identifiers):
-                    ids = " | ".join(literal(identifier) for identifier in sorted(identifiers))
-                    return ('root ::= ws "{" ws ' + literal("valid") + ' ws ":" ws result "}" ws\n'
-                            'result ::= "true" ws "," ws ' + literal("issues") + ' ws ":" ws "[" ws "]" ws'
-                            ' | "false" ws "," ws ' + literal("issues")
-                            + ' ws ":" ws "[" ws issue ("," ws issue)* "]" ws\n'
-                            'issue ::= "{" ws ' + literal("segment_id") + ' ws ":" ws identifier ws "," ws '
-                            + literal("suggested_correction") + ' ws ":" ws text "}" ws\n'
-                            'identifier ::= ' + ids + '\n' + JSON_RULES)
-          id: factory/scripts/dub_grammar.py
-          targetPath: factory/scripts/dub_grammar.py
-          type: SCRIPT
-        - content:
-            encoding: utf-8
-            inline: |
                 """Seekable reference extraction, timeline assembly, and subtitle muxing."""
 
                 from __future__ import annotations
@@ -629,6 +577,67 @@ supportingFiles:
         - content:
             encoding: utf-8
             inline: |
+                """JSON Schema response contracts for text-only Models generation.
+
+                A schema constrains representation; source meaning still requires validation and
+                an independent semantic audit. Text fields stay unbounded so Unicode, embedded
+                quotes, and legal JSON escapes remain generatable, and no thinking, token, or
+                word-count cap is expressed here.
+
+                The pinned native converter reads ``prefixItems`` only when ``items`` is absent,
+                so the ordered cue tuple carries ``prefixItems`` with exact ``minItems`` and
+                ``maxItems`` and never an ``items`` keyword.
+                """
+
+                from __future__ import annotations
+
+
+                def _text():
+                    """Any nonempty JSON string, without a length cap or character pattern."""
+                    return {"type": "string", "minLength": 1}
+
+
+                def translation_schema(segments, language):
+                    """One closed object: the requested language plus one ordered cue per segment."""
+                    cues = [{"type": "object",
+                             "properties": {"id": {"const": segment["id"]}, "text": _text()},
+                             "required": ["id", "text"], "additionalProperties": False}
+                            for segment in segments]
+                    return {"type": "object",
+                            "properties": {
+                                "language": {"const": language},
+                                "segments": {"type": "array", "prefixItems": cues,
+                                             "minItems": len(cues), "maxItems": len(cues)}},
+                            "required": ["language", "segments"], "additionalProperties": False}
+
+
+                def audit_schema(identifiers):
+                    """One closed decision: no issues, or at least one indexed issue object.
+
+                    Segment IDs are constrained to the supplied set, so duplicate or unknown IDs
+                    remain a post-generation validation failure rather than a schema concern.
+                    """
+                    issue = {"type": "object",
+                             "properties": {"segment_id": {"enum": sorted(identifiers)},
+                                            "suggested_correction": _text()},
+                             "required": ["segment_id", "suggested_correction"],
+                             "additionalProperties": False}
+                    return {"type": "object",
+                            "oneOf": [
+                                {"type": "object",
+                                 "properties": {"valid": {"const": True}, "issues": {"const": []}},
+                                 "required": ["valid", "issues"], "additionalProperties": False},
+                                {"type": "object",
+                                 "properties": {"valid": {"const": False},
+                                                "issues": {"type": "array", "minItems": 1, "items": issue}},
+                                 "required": ["valid", "issues"], "additionalProperties": False},
+                            ]}
+          id: factory/scripts/dub_schema.py
+          targetPath: factory/scripts/dub_schema.py
+          type: SCRIPT
+        - content:
+            encoding: utf-8
+            inline: |
                 """File-oriented steps for the packaged video dubbing Factory.
 
                 Models execute through the public you CLI. Factory Work carries the manifest
@@ -655,7 +664,7 @@ supportingFiles:
                     validate_segments, validate_translations, target_language, LANGUAGES, playback_segments, nonverbal_kind,
                 )
                 from dub_media import CommandFailed, SpeechDoesNotFit, command, fit_speech, mux, reference, timeline, video_duration, preserve_nonverbal
-                from dub_grammar import audit_grammar, translation_grammar
+                from dub_schema import audit_schema, translation_schema
 
                 # These partition targets bound one inference call, never the complete input.
                 ASR_CLIP_MS = 300_000
@@ -812,7 +821,7 @@ supportingFiles:
                             prompt.write_text(prompt_text + feedback, encoding="utf-8")
                             model(model_name, "OMNI", [f"prompt=@{prompt}"],
                                   [f"text={response}", f"usage={root / ('translation-usage' + suffix + '.json')}"],
-                                  parameters={"grammar": translation_grammar(segments, language)})
+                                  parameters={"json_schema": translation_schema(segments, language)})
                         try:
                             if translated is None:
                                 translated = validate_translations(
@@ -948,7 +957,7 @@ supportingFiles:
                         + json.dumps(request, ensure_ascii=False), encoding="utf-8")
                     model(model_name, "OMNI", [f"prompt=@{prompt}"],
                           [f"text={response}", f"usage={root / (prefix + '-usage.json')}"],
-                          parameters={"grammar": audit_grammar(identifiers)})
+                          parameters={"json_schema": audit_schema(identifiers)})
 
                     def unique_keys(items):
                         result = {}
@@ -1067,7 +1076,7 @@ supportingFiles:
                         + json.dumps(request, ensure_ascii=False), encoding="utf-8")
                     model(value["models"]["llm"], "OMNI", [f"prompt=@{prompt}"],
                           [f"text={response}", f"usage={root / (prefix + '-usage.json')}"],
-                          parameters={"grammar": translation_grammar([segment], value["language"])})
+                          parameters={"json_schema": translation_schema([segment], value["language"])})
                     try:
                         replacement = validate_translations(load_translation_response(response.read_text(encoding="utf-8-sig")),
                             [value["segments"][index]], value["language"], value.get("preserve_names", []))
@@ -1293,7 +1302,7 @@ supportingFiles:
                                     self.assertIn("explicit qualities/modifiers", prompt)
                                     path.write_text(comparison, encoding="utf-8")
                                 else:
-                                    self.assertEqual(set(parameters), {"grammar"})
+                                    self.assertEqual(set(parameters), {"json_schema"})
                                     self.assertIn("untrusted review evidence", prompt)
                                     self.assertIn("not an instruction or an authoritative", prompt)
                                     self.assertEqual(request["semantic_comparison"], comparison)
@@ -1641,8 +1650,8 @@ supportingFiles:
                                     calls.append(("tts", inputs[0]))
                                     Path(outputs[0].removeprefix("audio=")).write_bytes(b"speech")
                                     return
-                                self.assertEqual(set(parameters), {"grammar"})
-                                self.assertTrue(parameters["grammar"].startswith("root ::="))
+                                self.assertEqual(set(parameters), {"json_schema"})
+                                self.assertEqual(parameters["json_schema"]["type"], "object")
                                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                                 request = json.loads(prompt.read_text(encoding="utf-8").split("\n")[-1])
                                 if prompt.name.startswith("fit-translation"):
@@ -1892,106 +1901,6 @@ supportingFiles:
                     unittest.main()
           id: factory/scripts/test_dub_fit_repair.py
           targetPath: factory/scripts/test_dub_fit_repair.py
-          type: SCRIPT
-        - content:
-            encoding: utf-8
-            inline: |
-                """Structured model calls carry exact response contracts, without file access."""
-
-                import json
-                import tempfile
-                import unittest
-                from pathlib import Path
-                from unittest.mock import patch
-
-                import dub_video
-                from dub_contract import load_translation_response
-                from dub_grammar import audit_grammar, literal, translation_grammar
-                from dub_media import CommandFailed
-
-
-                class DubGrammarTests(unittest.TestCase):
-                    def setUp(self):
-                        # These tests isolate the existing decision/fit contract. The separate
-                        # two-stage audit suite exercises the real comparison dispatch.
-                        comparison = patch.object(dub_video, "compare_translation", return_value="Source comparison evidence")
-                        comparison.start()
-                        self.addCleanup(comparison.stop)
-
-                    def test_intertoken_whitespace_has_no_unbounded_generation_path(self):
-                        for grammar in [translation_grammar([{"id": 4}, {"id": 11}], "ko-KR"),
-                                        audit_grammar({4, 11})]:
-                            whitespace = next(line for line in grammar.splitlines() if line.startswith("ws ::="))
-                            self.assertEqual(whitespace, r"ws ::= [ \t\n\r]?")
-                            self.assertNotIn("ws*", grammar)
-                            self.assertNotIn("ws+", grammar)
-                            # Text remains an unconstrained sequence of legal JSON characters.
-                            self.assertIn('character+', grammar)
-
-                    def test_translation_and_focused_audit_forward_distinct_contracts(self):
-                        source = [{"id": 4, "start": 0, "end": 1000, "text": "你好"}]
-                        calls = []
-                        with tempfile.TemporaryDirectory() as directory:
-                            root = Path(directory)
-
-                            def infer(name, operation, inputs, outputs, parameters=None):
-                                calls.append(parameters["grammar"])
-                                prompt = Path(inputs[0].removeprefix("prompt=@")).read_text(encoding="utf-8")
-                                self.assertNotIn('If returning a file', prompt)
-                                reply = {"valid": True, "issues": []} if len(calls) == 2 else \
-                                    {"language": "en-US", "segments": [{"id": 4, "text": "Hello"}]}
-                                dub_video.save_json(Path(outputs[0].removeprefix("text=")), reply)
-
-                            with patch.object(dub_video, "model", side_effect=infer):
-                                result = dub_video.translate_batch(root, source, "en-US", "llm", 0)
-                            self.assertEqual(result[0]["source_text"], "你好")
-                            self.assertEqual(calls, [translation_grammar(source, "en-US"), audit_grammar({4})])
-                            focused = audit_grammar({7})
-                            self.assertIn('identifier ::= "7"', focused)
-                            self.assertNotIn('identifier ::= "4"', focused)
-                            self.assertIn('"true"', focused)
-                            self.assertIn('"false"', focused)
-                            self.assertNotIn('filename', calls[0])
-
-                    def test_terminal_quoting_roundtrips_unicode_quotes_and_control_escapes(self):
-                        for value in ['zh-CN', '韩文 日本語 中文', 'quote"\\\n\t\x00', 59]:
-                            self.assertEqual(json.loads(json.loads(literal(value))), value)
-                        grammar = translation_grammar([{"id": 59}], "ko-KR")
-                        self.assertIn(r'\x00-\x1F', grammar)
-                        self.assertIn(r'"u" [0-9a-fA-F]{4}', grammar)
-
-                    def test_plain_model_response_cannot_follow_a_file_pointer(self):
-                        with tempfile.TemporaryDirectory() as directory:
-                            path = Path(directory) / "translation.json"
-                            path.write_text('{"language":"en-US","segments":[]}', encoding="utf-8")
-                            with self.assertRaisesRegex(ValueError, "not a filename"):
-                                load_translation_response(json.dumps({"filename": str(path)}))
-
-                    def test_audit_model_cancellation_propagates_without_regenerating_batch(self):
-                        source = [{"id": 4, "start": 0, "end": 1000, "text": "你好"}]
-                        calls = []
-                        with tempfile.TemporaryDirectory() as directory:
-                            root = Path(directory)
-                            failure = CommandFailed("you", 130, "caller canceled")
-
-                            def infer(name, operation, inputs, outputs, parameters=None):
-                                calls.append(operation)
-                                if len(calls) == 2:
-                                    raise failure
-                                dub_video.save_json(Path(outputs[0].removeprefix("text=")),
-                                    {"language": "en-US", "segments": [{"id": 4, "text": "Hello"}]})
-
-                            with patch.object(dub_video, "model", side_effect=infer):
-                                with self.assertRaises(CommandFailed) as caught:
-                                    dub_video.translate_batch(root, source, "en-US", "llm", 0)
-                            self.assertIs(caught.exception, failure)
-                            self.assertEqual(len(calls), 2)
-
-
-                if __name__ == "__main__":
-                    unittest.main()
-          id: factory/scripts/test_dub_grammar.py
-          targetPath: factory/scripts/test_dub_grammar.py
           type: SCRIPT
         - content:
             encoding: utf-8
@@ -2817,6 +2726,193 @@ supportingFiles:
                     unittest.main()
           id: factory/scripts/test_dub_playback.py
           targetPath: factory/scripts/test_dub_playback.py
+          type: SCRIPT
+        - content:
+            encoding: utf-8
+            inline: |
+                """Structured model calls carry exact JSON Schema contracts, without file access."""
+
+                import json
+                import tempfile
+                import unittest
+                from pathlib import Path
+                from unittest.mock import patch
+
+                import dub_video
+                from dub_contract import load_translation_response
+                from dub_media import CommandFailed
+                from dub_schema import audit_schema, translation_schema
+
+
+                class DubSchemaTests(unittest.TestCase):
+                    def setUp(self):
+                        # These tests isolate the existing decision/fit contract. The separate
+                        # two-stage audit suite exercises the real comparison dispatch.
+                        comparison = patch.object(dub_video, "compare_translation", return_value="Source comparison evidence")
+                        comparison.start()
+                        self.addCleanup(comparison.stop)
+
+                    def test_translation_and_focused_audit_forward_distinct_contracts(self):
+                        source = [{"id": 4, "start": 0, "end": 1000, "text": "你好"}]
+                        calls = []
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+
+                            def infer(name, operation, inputs, outputs, parameters=None):
+                                calls.append(parameters)
+                                prompt = Path(inputs[0].removeprefix("prompt=@")).read_text(encoding="utf-8")
+                                self.assertNotIn('If returning a file', prompt)
+                                reply = {"valid": True, "issues": []} if len(calls) == 2 else \
+                                    {"language": "en-US", "segments": [{"id": 4, "text": "Hello"}]}
+                                dub_video.save_json(Path(outputs[0].removeprefix("text=")), reply)
+
+                            with patch.object(dub_video, "model", side_effect=infer):
+                                result = dub_video.translate_batch(root, source, "en-US", "llm", 0)
+                            self.assertEqual(result[0]["source_text"], "你好")
+                            # The only forwarded parameter is the schema: thinking stays enabled and
+                            # no grammar, token, or word-length cap rides along with it.
+                            self.assertEqual(calls, [{"json_schema": translation_schema(source, "en-US")},
+                                                     {"json_schema": audit_schema({4})}])
+                            focused = audit_schema({7})
+                            self.assertIn(7, focused["oneOf"][1]["properties"]["issues"]["items"]["properties"]["segment_id"]["enum"])
+                            self.assertNotIn(4, focused["oneOf"][1]["properties"]["issues"]["items"]["properties"]["segment_id"]["enum"])
+
+                    def test_translation_schema_is_a_closed_object_of_ordered_cue_constants(self):
+                        schema = translation_schema([{"id": 4, "start": 0}, {"id": 11, "start": 1000}], "ko-KR")
+                        self.assertEqual(schema["type"], "object")
+                        self.assertEqual(schema["required"], ["language", "segments"])
+                        self.assertFalse(schema["additionalProperties"])
+                        self.assertEqual(schema["properties"]["language"], {"const": "ko-KR"})
+                        segments = schema["properties"]["segments"]
+                        self.assertEqual(segments["type"], "array")
+                        self.assertEqual([cue["properties"]["id"] for cue in segments["prefixItems"]],
+                                         [{"const": 4}, {"const": 11}])
+                        self.assertEqual(segments["minItems"], segments["maxItems"])
+                        self.assertEqual((segments["minItems"], segments["maxItems"]), (2, 2))
+                        for cue in segments["prefixItems"]:
+                            self.assertEqual(cue["required"], ["id", "text"])
+                            self.assertFalse(cue["additionalProperties"])
+                            self.assertEqual(cue["properties"]["text"], {"type": "string", "minLength": 1})
+
+                    def test_ordered_cue_tuple_never_adds_the_items_keyword(self):
+                        # The pinned native converter reads prefixItems only when items is absent.
+                        schema = translation_schema([{"id": 4}, {"id": 11}], "ko-KR")
+                        segments = schema["properties"]["segments"]
+                        self.assertIn("prefixItems", segments)
+                        self.assertNotIn("items", segments)
+                        self.assertEqual(len(translation_schema([], "ko-KR")["properties"]["segments"]["prefixItems"]), 0)
+
+                    def test_audit_schema_is_a_closed_decision_with_at_least_one_indexed_issue(self):
+                        schema = audit_schema({11, 4, 7})
+                        self.assertEqual(schema["type"], "object")
+                        self.assertNotIn("properties", schema)
+                        approved, rejected = schema["oneOf"]
+                        for branch in (approved, rejected):
+                            self.assertEqual(branch["required"], ["valid", "issues"])
+                            self.assertFalse(branch["additionalProperties"])
+                        self.assertEqual(approved["properties"]["valid"], {"const": True})
+                        self.assertEqual(approved["properties"]["issues"], {"const": []})
+                        self.assertEqual(rejected["properties"]["valid"], {"const": False})
+                        issues = rejected["properties"]["issues"]
+                        self.assertEqual((issues["type"], issues["minItems"]), ("array", 1))
+                        issue = issues["items"]
+                        self.assertEqual(issue["required"], ["segment_id", "suggested_correction"])
+                        self.assertFalse(issue["additionalProperties"])
+                        self.assertEqual(issue["properties"]["segment_id"]["enum"], [4, 7, 11])
+                        self.assertEqual(issue["properties"]["suggested_correction"],
+                                         {"type": "string", "minLength": 1})
+
+                    def test_no_schema_field_caps_text_tokens_or_word_length(self):
+                        translation = json.dumps(translation_schema([{"id": 59}], "ko-KR"), ensure_ascii=False)
+                        audit = json.dumps(audit_schema({59}), ensure_ascii=False)
+                        for document in (translation, audit):
+                            for cap in ("maxLength", "maxItems_beyond_cue_count", "pattern", "maxTokens"):
+                                self.assertNotIn(cap, document)
+                            self.assertNotIn("enable_thinking", document)
+                        # Only the cue count is bounded, and only by the exact number of cues.
+                        self.assertEqual(translation_schema([{"id": index} for index in range(64)], "ko-KR")
+                                         ["properties"]["segments"]["maxItems"], 64)
+
+                    def test_schema_constrains_representation_and_leaves_meaning_to_the_audit(self):
+                        source = [{"id": 4, "start": 0, "end": 1000, "text": "有没有好心人可以帮帮我？"}]
+                        calls = []
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+
+                            def infer(name, operation, inputs, outputs, parameters=None):
+                                calls.append(parameters)
+                                path = Path(outputs[0].removeprefix("text="))
+                                if len(calls) == 2:
+                                    dub_video.save_json(path, {"valid": True, "issues": []})
+                                    return
+                                dub_video.save_json(path, {"language": "en-US",
+                                                          "segments": [{"id": 4, "text": "Hello"}]})
+
+                            with patch.object(dub_video, "model", side_effect=infer):
+                                # A schema-valid object that drops the explicit 好心 modifier is
+                                # still accepted structurally: meaning needs the audit, not the schema.
+                                result = dub_video.translate_batch(root, source, "en-US", "llm", 0)
+                            self.assertEqual(result[0]["text"], "Hello")
+                            self.assertEqual(len(calls), 2)
+
+                    def test_unicode_and_escaped_text_stay_representable_under_the_schema(self):
+                        segments = [{"id": 59, "start": 0, "end": 1000, "text": "안녕하세요"}]
+                        text = "안녕하세요 日本語 中文 \"quoted\"\\ line\nbreak\ttab"
+                        reply = {"language": "ko-KR", "segments": [{"id": 59, "text": text}]}
+                        calls = []
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+
+                            def infer(name, operation, inputs, outputs, parameters=None):
+                                calls.append(parameters)
+                                path = Path(outputs[0].removeprefix("text="))
+                                if len(calls) == 2:
+                                    dub_video.save_json(path, {"valid": True, "issues": []})
+                                else:
+                                    dub_video.save_json(path, reply)
+
+                            with patch.object(dub_video, "model", side_effect=infer):
+                                result = dub_video.translate_batch(root, segments, "ko-KR", "llm", 0)
+                            self.assertEqual(result[0]["text"], text)
+                        # The forwarded schema survives a Unicode-safe JSON round trip unchanged.
+                        schema = calls[0]["json_schema"]
+                        self.assertEqual(json.loads(json.dumps(schema, ensure_ascii=False)), schema)
+                        self.assertEqual(schema["properties"]["language"], {"const": "ko-KR"})
+
+                    def test_plain_model_response_cannot_follow_a_file_pointer(self):
+                        with tempfile.TemporaryDirectory() as directory:
+                            path = Path(directory) / "translation.json"
+                            path.write_text('{"language":"en-US","segments":[]}', encoding="utf-8")
+                            with self.assertRaisesRegex(ValueError, "not a filename"):
+                                load_translation_response(json.dumps({"filename": str(path)}))
+
+                    def test_audit_model_cancellation_propagates_without_regenerating_batch(self):
+                        source = [{"id": 4, "start": 0, "end": 1000, "text": "你好"}]
+                        calls = []
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+                            failure = CommandFailed("you", 130, "caller canceled")
+
+                            def infer(name, operation, inputs, outputs, parameters=None):
+                                calls.append((operation, parameters))
+                                if len(calls) == 2:
+                                    raise failure
+                                dub_video.save_json(Path(outputs[0].removeprefix("text=")),
+                                    {"language": "en-US", "segments": [{"id": 4, "text": "Hello"}]})
+
+                            with patch.object(dub_video, "model", side_effect=infer):
+                                with self.assertRaises(CommandFailed) as caught:
+                                    dub_video.translate_batch(root, source, "en-US", "llm", 0)
+                            self.assertIs(caught.exception, failure)
+                            self.assertEqual(len(calls), 2)
+                            self.assertEqual([operation for operation, _ in calls], ["OMNI", "OMNI"])
+                            self.assertEqual(calls[1][1], {"json_schema": audit_schema({4})})
+
+
+                if __name__ == "__main__":
+                    unittest.main()
+          id: factory/scripts/test_dub_schema.py
+          targetPath: factory/scripts/test_dub_schema.py
           type: SCRIPT
         - content:
             encoding: utf-8

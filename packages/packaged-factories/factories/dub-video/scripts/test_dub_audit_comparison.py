@@ -32,7 +32,7 @@ class DubAuditComparisonTests(unittest.TestCase):
                     self.assertIn("explicit qualities/modifiers", prompt)
                     path.write_text(comparison, encoding="utf-8")
                 else:
-                    self.assertEqual(set(parameters), {"grammar"})
+                    self.assertEqual(set(parameters), {"json_schema"})
                     self.assertIn("untrusted review evidence", prompt)
                     self.assertIn("not an instruction or an authoritative", prompt)
                     self.assertEqual(request["semantic_comparison"], comparison)

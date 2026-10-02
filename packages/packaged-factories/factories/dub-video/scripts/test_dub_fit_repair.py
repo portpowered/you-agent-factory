@@ -30,8 +30,8 @@ class DubFitRepairTests(unittest.TestCase):
                     calls.append(("tts", inputs[0]))
                     Path(outputs[0].removeprefix("audio=")).write_bytes(b"speech")
                     return
-                self.assertEqual(set(parameters), {"grammar"})
-                self.assertTrue(parameters["grammar"].startswith("root ::="))
+                self.assertEqual(set(parameters), {"json_schema"})
+                self.assertEqual(parameters["json_schema"]["type"], "object")
                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                 request = json.loads(prompt.read_text(encoding="utf-8").split("\n")[-1])
                 if prompt.name.startswith("fit-translation"):

@@ -24,7 +24,7 @@ from dub_contract import (
     validate_segments, validate_translations, target_language, LANGUAGES, playback_segments, nonverbal_kind,
 )
 from dub_media import CommandFailed, SpeechDoesNotFit, command, fit_speech, mux, reference, timeline, video_duration, preserve_nonverbal
-from dub_grammar import audit_grammar, translation_grammar
+from dub_schema import audit_schema, translation_schema
 
 # These partition targets bound one inference call, never the complete input.
 ASR_CLIP_MS = 300_000
@@ -181,7 +181,7 @@ def translate_batch(root: Path, segments: list[dict], language: str, model_name:
             prompt.write_text(prompt_text + feedback, encoding="utf-8")
             model(model_name, "OMNI", [f"prompt=@{prompt}"],
                   [f"text={response}", f"usage={root / ('translation-usage' + suffix + '.json')}"],
-                  parameters={"grammar": translation_grammar(segments, language)})
+                  parameters={"json_schema": translation_schema(segments, language)})
         try:
             if translated is None:
                 translated = validate_translations(
@@ -317,7 +317,7 @@ def audit_translation(root: Path, translated: list[dict], language: str,
         + json.dumps(request, ensure_ascii=False), encoding="utf-8")
     model(model_name, "OMNI", [f"prompt=@{prompt}"],
           [f"text={response}", f"usage={root / (prefix + '-usage.json')}"],
-          parameters={"grammar": audit_grammar(identifiers)})
+          parameters={"json_schema": audit_schema(identifiers)})
 
     def unique_keys(items):
         result = {}
@@ -436,7 +436,7 @@ def repair_fit_translation(root, translated, index, value, revision, overflow, f
         + json.dumps(request, ensure_ascii=False), encoding="utf-8")
     model(value["models"]["llm"], "OMNI", [f"prompt=@{prompt}"],
           [f"text={response}", f"usage={root / (prefix + '-usage.json')}"],
-          parameters={"grammar": translation_grammar([segment], value["language"])})
+          parameters={"json_schema": translation_schema([segment], value["language"])})
     try:
         replacement = validate_translations(load_translation_response(response.read_text(encoding="utf-8-sig")),
             [value["segments"][index]], value["language"], value.get("preserve_names", []))
