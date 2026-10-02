@@ -3,7 +3,9 @@ package codecs
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 
@@ -53,6 +55,37 @@ func TestTTSCodecAcceptsRefTextParameter(t *testing.T) {
 	}
 	if request.Parameters["ref_text"] != "reference transcript" {
 		t.Fatalf("encoded TTS request parameters = %#v, want ref_text", request.Parameters)
+	}
+}
+
+func TestTTSCodecValidatesExplicitBudgetAndLeavesDefaultUnset(t *testing.T) {
+	t.Parallel()
+	text := models.InferenceInput{Name: "text", Modality: models.ModalityText, Content: "hello"}
+	for _, value := range []any{int(1), int32(1), uint64(1), float64(1), json.Number("1.0"), json.Number("1e0"), json.Number("1000e-3"), json.Number("2147483647.0000000"), json.Number("2.147483647e9"), int64(math.MaxInt32)} {
+		request, err := (TTSCodec{}).EncodeRequest(models.InvokeModelRequest{
+			Operation: models.OperationTTS, Inputs: []models.InferenceInput{text},
+			Parameters: []models.OperationParameter{{Name: " MAX_NEW_TOKENS ", Value: value}},
+		})
+		if err != nil || len(request.Parameters) != 1 {
+			t.Fatalf("explicit budget %v = %#v/%v", value, request, err)
+		}
+		if _, ok := TTSMaxNewTokens(request.Parameters["max_new_tokens"]); !ok {
+			t.Fatalf("encoded budget %v is invalid", value)
+		}
+	}
+	for _, value := range []any{0, -1, 1.5, "1", true, nil, []int{1}, math.NaN(), math.Inf(1), int64(math.MaxInt32) + 1, uint64(math.MaxUint64), json.Number("2147483648"), json.Number("1e100"), json.Number("1.0000000000000001"), json.Number("2147483647.0000001"), json.Number("1e999999999"), json.Number("1e-999999999")} {
+		_, err := (TTSCodec{}).EncodeRequest(models.InvokeModelRequest{
+			Operation: models.OperationTTS, Inputs: []models.InferenceInput{text},
+			Parameters: []models.OperationParameter{{Name: "max_new_tokens", Value: value}},
+		})
+		var failure *models.InvocationFailure
+		if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassInvalidParameter || failure.Parameter != "max_new_tokens" {
+			t.Fatalf("invalid budget %v = %v, want coded invalid parameter", value, err)
+		}
+	}
+	request, err := (TTSCodec{}).EncodeRequest(models.InvokeModelRequest{Operation: models.OperationTTS, Inputs: []models.InferenceInput{text}})
+	if err != nil || request.Parameters != nil {
+		t.Fatalf("omitted budget = %#v/%v, want no imposed parameters", request, err)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
@@ -261,6 +262,17 @@ func ttsProtocolRequest(path string, request codecs.TTSRequest) (*TTSRequest, er
 		Dst:   path,
 	}
 	for name, value := range request.Parameters {
+		if strings.EqualFold(strings.TrimSpace(name), "max_new_tokens") {
+			budget, ok := codecs.TTSMaxNewTokens(value)
+			if !ok {
+				return nil, ttsInvalidParameterFailure(name)
+			}
+			if result.Params == nil {
+				result.Params = make(map[string]string)
+			}
+			result.Params["max_new_tokens"] = strconv.FormatInt(int64(budget), 10)
+			continue
+		}
 		text, ok := value.(string)
 		if !ok || strings.TrimSpace(text) == "" {
 			return nil, ttsInvalidParameterFailure(name)

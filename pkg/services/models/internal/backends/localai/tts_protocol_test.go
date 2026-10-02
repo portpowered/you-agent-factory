@@ -3,6 +3,7 @@ package localai
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -158,15 +159,37 @@ func TestPinnedTTSBackendMapsRefTextToProtobufParams(t *testing.T) {
 		codecs.TTSRequest{
 			Text:       "hello",
 			Model:      "tts",
-			Parameters: map[string]any{"ref_text": "reference transcript"},
+			Parameters: map[string]any{"ref_text": "reference transcript", "max_new_tokens": json.Number("1.0")},
 		},
 	)
 	if err != nil {
 		t.Fatalf("backend error = %v", err)
 	}
 	params := connection.request.GetParams()
-	if len(params) != 1 || params["ref_text"] != "reference transcript" {
-		t.Fatalf("protobuf params = %v, want exactly ref_text=%q", params, "reference transcript")
+	if len(params) != 2 || params["ref_text"] != "reference transcript" || params["max_new_tokens"] != "1" {
+		t.Fatalf("protobuf params = %v, want ref_text and canonical integer budget", params)
+	}
+}
+
+func TestPinnedTTSBackendRejectsInvalidBudgetBeforeConnection(t *testing.T) {
+	t.Parallel()
+	for _, value := range []any{0, -1, 1.5, "1", true, nil, int64(2147483648)} {
+		dialer := &ttsProtocolDialer{connection: &ttsProtocolConnection{}}
+		backend := NewPinnedTTSBackend(
+			dialer, func() string { return "temp" },
+			func(string, string) (TempFile, error) { return &ttsProtocolTempFile{path: "temp/output.wav"}, nil },
+			ttsTestWriteFile,
+			func(string) (os.FileInfo, error) { t.Fatal("unexpected output inspection"); return nil, nil },
+			func(string) ([]byte, error) { t.Fatal("unexpected output read"); return nil, nil },
+			func(string) error { return nil },
+		)
+		_, err := backend(WithInvocationEndpoint(t.Context(), "127.0.0.1:45912"), codecs.TTSRequest{
+			Text: "hello", Parameters: map[string]any{"max_new_tokens": value},
+		})
+		var failure *models.InvocationFailure
+		if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassInvalidParameter || dialer.endpoint != "" {
+			t.Fatalf("invalid budget %v = %v endpoint=%q, want rejection before backend connection", value, err, dialer.endpoint)
+		}
 	}
 }
 

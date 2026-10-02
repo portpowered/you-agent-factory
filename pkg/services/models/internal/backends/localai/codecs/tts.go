@@ -7,7 +7,10 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
+	"math"
+	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -24,7 +27,7 @@ const (
 	MaxTTSResponseBytes = MaxTTSAudioBytes
 )
 
-var supportedTTSParameters = []string{"instructions", "language", "ref_text"}
+var supportedTTSParameters = []string{"instructions", "language", "max_new_tokens", "ref_text"}
 
 // TTSRequest is the provider-neutral request passed to the private LocalAI
 // protocol adapter. It deliberately contains no destination path, endpoint,
@@ -255,11 +258,84 @@ func addTTSParameter(parameters map[string]any, name string, value any) error {
 }
 
 func ttsParameterValueSupported(name string, value any) bool {
+	if name == "max_new_tokens" {
+		_, ok := TTSMaxNewTokens(value)
+		return ok
+	}
 	if name != "language" && name != "instructions" && name != "ref_text" {
 		return false
 	}
 	text, ok := value.(string)
 	return ok && strings.TrimSpace(text) != ""
+}
+
+// TTSMaxNewTokens validates the explicit budget against the native signed
+// 32-bit C int ABI. An omitted budget is never synthesized by the codec.
+func TTSMaxNewTokens(value any) (int32, bool) {
+	if number, ok := value.(json.Number); ok {
+		parsed, err := number.Float64()
+		if err != nil || !ttsNativeBudgetNumber(parsed) || !json.Valid([]byte(number)) {
+			return 0, false
+		}
+		return ttsExactJSONBudget(string(number))
+	}
+	reflected := reflect.ValueOf(value)
+	if !reflected.IsValid() {
+		return 0, false
+	}
+	var number float64
+	switch kind := reflected.Kind(); {
+	case kind >= reflect.Int && kind <= reflect.Int64:
+		number = float64(reflected.Int())
+	case kind >= reflect.Uint && kind <= reflect.Uintptr:
+		number = float64(reflected.Uint())
+	case kind == reflect.Float32 || kind == reflect.Float64:
+		number = reflected.Float()
+	default:
+		return 0, false
+	}
+	if !ttsNativeBudgetNumber(number) {
+		return 0, false
+	}
+	return int32(number), true
+}
+
+func ttsNativeBudgetNumber(number float64) bool {
+	return !math.IsNaN(number) && !math.IsInf(number, 0) && math.Trunc(number) == number && number > 0 && number <= math.MaxInt32
+}
+
+// Decimal shifts are checked against existing digits, never expanded into an
+// unbounded power of ten. The caller already checked syntax and native range.
+func ttsExactJSONBudget(text string) (int32, bool) {
+	scale := 0
+	if position := strings.IndexAny(text, "eE"); position >= 0 {
+		var err error
+		scale, err = strconv.Atoi(text[position+1:])
+		if err != nil {
+			return 0, false
+		}
+		text = text[:position]
+	}
+	if position := strings.IndexByte(text, '.'); position >= 0 {
+		scale -= len(text) - position - 1
+		text = text[:position] + text[position+1:]
+	}
+	text = strings.TrimLeft(text, "0")
+	if scale < 0 {
+		discard := -scale
+		if discard > len(text) || len(strings.TrimRight(text, "0")) > len(text)-discard {
+			return 0, false
+		}
+		text = text[:len(text)-discard]
+	}
+	if scale > 0 {
+		if scale > 10 || len(text) > 10-scale {
+			return 0, false
+		}
+		text += strings.Repeat("0", scale)
+	}
+	integer, err := strconv.ParseInt(text, 10, 32)
+	return int32(integer), err == nil && integer > 0
 }
 
 func containsTTSParameter(name string) bool {

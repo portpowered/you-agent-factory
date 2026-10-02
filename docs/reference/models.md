@@ -564,6 +564,12 @@ you models invoke qwen3-tts-base --operation TTS \
   --output audio=speech.wav
 ```
 
+For an explicit Qwen generation budget, pass
+`--parameter '{"name":"max_new_tokens","value":2048}'`. The value must be a
+positive integer that fits the backend's signed 32-bit C integer. Omitting it
+retains the native model default. Exhausting the budget before EOS fails the
+invocation and publishes no WAV.
+
 The native Windows CUDA backend is a manual test build for an NVIDIA RTX 4090.
 Its release notes identify the compiler, CUDA version, and source patches.
 Other GPU variants require a compatible backend build.
