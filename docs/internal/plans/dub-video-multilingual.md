@@ -444,6 +444,26 @@ tests cover measured overflow, complete candidate validation, source-context
 audit before TTS, unchanged neighbors/references, semantic rejection, three-version
 exhaustion, and immediate generic-error propagation.
 
+The first real fit repair returned an outer array using `segment_id` and
+`replacement_text` twice. Both replies were correctly rejected. The repair prompt
+now provides the concrete requested-language/ID `{language,segments:[{id,text}]}`
+object shape, explicitly distinguishes input metadata from output fields, and
+requires the previous rejection to be corrected. No invalid-array normalization
+was added. A controlled malformed-array then valid-object witness verifies the
+schema guidance, retained feedback, strict rejection, and audit before acceptance.
+
+The schema-fixed real reply `Can any kind person help me?` was then rejected by
+the audit in favor of the longer but equivalent `Is there anyone kind who can
+help me?`. Fit audits now select only changed original IDs using `focus_ids`;
+the two neighboring cues on each side remain source context and retain previous
+approval. The prompt explains equivalent concise interrogative grammar while
+continuing to reject lost meaning, changed roles, and inverted polarity. Focused
+issues must use the structured issue shape and identify a changed cue. Initial
+translation audits still select every segment. Four focused audit component tests
+cover selected IDs/source context, faithful concise grammar guidance, malformed
+or neighbor-directed issues, actual role reversal rejection, and invalid focus
+rejection before invocation. The Python suite passes 56 tests.
+
 The EOS repair is source commit `a344ad7c327b56e7c9fd26dc9db5914aa4522da1`.
 Its new immutable TTS-only Windows CUDA publication is
 `localai-backends-v1-847f8b8c954d54d913886ee5e43be40477e3f53e8d846f1f956b69be24ccca7d`.
@@ -539,3 +559,69 @@ passed all 24 canonical checkers without changing the package-file baseline.
 Unit CI found one stale archive assertion; commit `ce87516b42` changes only its
 expected TTS archive byte count and hash to the independently verified release,
 retaining offline selection, CUDA, CPU rejection, and Darwin assertions.
+
+
+### Qwen3-ASR 1.7B comparison on ambiguous Chinese speech
+
+A bounded native comparison tested the existing 0.6B model and a compatible
+1.7B Q8_0 candidate through the same pinned Windows CUDA loader and existing
+0.6B ForcedAligner. The pinned native converter explicitly supports 1.7B;
+the candidate GGUF metadata and tensor namespace match the loader. The official
+Qwen example pairs 1.7B ASR with that same 0.6B aligner. This validates native
+loading and inference, rather than assuming that a larger model fixes the clip.
+See the [pinned converter](https://github.com/predict-woo/qwen3-asr.cpp/blob/6dcc586e5073fd6e85ee5728e75f0903d6c70c6c/scripts/convert_hf_to_gguf.py)
+and [official model and alignment example](https://huggingface.co/Qwen/Qwen3-ASR-1.7B).
+
+The downloaded candidate is
+`hf://dseditor/qwen3-asr-1.7b-GGUF/qwen3-asr-1.7b-q8_0.gguf@ee6cf896a2ab854a0dcbedfd7002207120c842bf`.
+Its complete download was verified as 3,200,764,736 bytes with SHA-256
+`1e448ead1220e819c8ef6e8e30ba4355e5d7899ef19f03670a4a1a6e9a37d4bf`.
+The [immutable asset repository](https://huggingface.co/dseditor/qwen3-asr-1.7b-GGUF/tree/ee6cf896a2ab854a0dcbedfd7002207120c842bf)
+and local `C:/t/dub-qwen-asr-1p7b/provenance.json` record its provenance.
+The alternative `cstr` GGUF uses different metadata and tensor names and was
+not loaded as a substitute for this backend's compatible format.
+
+Both models received identical canonical mono 16 kHz PCM clips from the corrected
+source timeline for source cue IDs 25, 27, 52, and 57, with two seconds of
+context on each side, an explicit Chinese language hint, and four CPU threads.
+The comparison did not show a substantial correction of the reported ambiguous
+speech. Both emitted `为什么加` in cue 27 and `顶我的脸` in cue 57; both emitted
+`不耍我` in cue 52. Cue 25 retained `很贵` with 0.6B but became `不会` with 1.7B.
+These are observed decoder outputs, not a word-error-rate claim: no independently
+corrected human transcript was supplied. Short-context 0.6B output also differed
+from its full-video output, so this does not establish full-video accuracy.
+The default remains 0.6B because the measured result does not justify migration.
+
+On the RTX 4090, warm per-clip inference plus alignment times in cue-ID order were
+0.6B: 0.281, 0.125, 0.157, and 0.234 seconds; 1.7B: 0.265, 0.156, 0.157, and
+0.234 seconds. Complete model-plus-aligner load times were 1.047 and 1.812 seconds.
+Whole-device GPU memory used was 5,355 MiB with 0.6B and 7,869 MiB with 1.7B,
+an increase of 2,514 MiB; free memory was 18,784 and 16,270 MiB respectively.
+These are whole-device snapshots rather than exclusive process allocations.
+After both probe processes exited, usage returned to the 2,039 MiB baseline
+with 22,100 MiB free. The larger bundle would require 4.195 GB including the
+unchanged aligner, compared with the current 2.348 GB. The short measurements
+are not a long-input throughput guarantee.
+
+The initial direct Python `ctypes` research harness completed all four 0.6B
+inferences and saved the results, then failed during interpreter shutdown when
+native static-model destruction called `cudaFree` after CUDA driver shutdown.
+Explicitly releasing the native DLL while Python was still alive corrected
+that harness teardown; final 0.6B and 1.7B probes both exited zero. This was a
+direct research harness failure, not an observed MCP endpoint failure. Logs,
+clips, timed results, real word alignment, and the initial failure remain under
+`C:/t/dub-qwen-asr-1p7b/`. No native servers remain and no catalog, factory,
+backend archive, or production model default changed during this comparison.
+
+The real focused cue-2 repair now returned the exact required JSON object with
+`Can any kind person help me?`. Its focused contextual audit returned valid=true
+and no issues. Native reference-conditioned TTS produced a 1.840-second WAV,
+which fitted the unchanged 1.120-second source/playback interval at
+1.642857 times speed, below the preserved two-times guard. Reference SHA-256
+is `8ded3fda62bb22ecb779ed095a768a49085510d49cd84db8423d6857943b80e3`.
+The saved result is `C:/t/dub-multilingual-validation/fit-focused-audit-probe/fitted-segment.json`.
+All inference and fit steps completed; the standalone research script's final
+console print then raised a Windows cp1252 UnicodeEncodeError on Chinese source
+text. This is a research reporting failure, not a model or factory failure;
+the production entrypoint already reconfigures both streams to UTF-8. CPU
+inspection independently read the saved result, audit, and WAV duration.

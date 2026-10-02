@@ -95,7 +95,8 @@ class DubFitRepairTests(unittest.TestCase):
                     reply = {"language": "en-US", "segments": [{"id": 1, "text": "I can help you."}]}
                 else:
                     audits.append(request)
-                    reply = {"valid": False, "issues": ["Segment 1 reverses who helps whom"]}
+                    reply = {"valid": False, "issues": [{"segment_id": 1,
+                        "suggested_correction": "Is there anyone kind who can help me?"}]}
                 dub_video.save_json(Path(outputs[0].removeprefix("text=")), reply)
 
             def extract(video, segment, destination):
@@ -108,7 +109,7 @@ class DubFitRepairTests(unittest.TestCase):
                     dub_video.synthesize_segment(root, translated, 1, value)
             self.assertEqual(len(tts_calls), 1)
             self.assertEqual((len(repairs), len(audits)), (2, 2))
-            self.assertIn("reverses who helps whom", repairs[1]["previous_rejection"])
+            self.assertIn("Is there anyone kind who can help me?", repairs[1]["previous_rejection"])
             self.assertEqual(len(list(root.glob("*.fit-revision-*-rejected.json"))), 2)
             self.assertEqual(translated[1]["text"], "Is there anyone kind who can help me?")
 
@@ -182,6 +183,46 @@ class DubFitRepairTests(unittest.TestCase):
             self.assertEqual(len(saved), 65)
             self.assertEqual([item["text"] for item in saved if item["id"] != 32], ["Hello there"] * 64)
             self.assertEqual(translated[32]["text"], "Hello there")
+
+    def test_invalid_array_is_rejected_before_schema_guided_object_and_audit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            translated, value = self.inputs(root)
+            requests = []
+
+            def infer(name, operation, inputs, outputs):
+                prompt = Path(inputs[0].removeprefix("prompt=@"))
+                content = prompt.read_text(encoding="utf-8")
+                if prompt.name.startswith("fit-translation"):
+                    request = json.loads(content.splitlines()[-1])
+                    requests.append(request)
+                    example = next(json.loads(line) for line in content.splitlines()
+                                   if line.startswith('{"language"') and '"segments"' in line)
+                    self.assertEqual(set(example), {"language", "segments"})
+                    self.assertEqual(example["language"], "en-US")
+                    self.assertEqual(example["segments"][0]["id"], 1)
+                    self.assertEqual(set(example["segments"][0]), {"id", "text"})
+                    self.assertIn("never an outer array", content)
+                    self.assertIn("Input metadata is not the response schema", content)
+                    if len(requests) == 1:
+                        reply = [{"language": "en-US", "segment_id": 1,
+                                  "replacement_text": "Can someone kind help me?"}]
+                    else:
+                        self.assertIn("JSON object", request["previous_rejection"])
+                        example["segments"][0]["text"] = "Can someone kind help me?"
+                        reply = example
+                else:
+                    reply = {"valid": True, "issues": []}
+                dub_video.save_json(Path(outputs[0].removeprefix("text=")), reply)
+
+            overflow = SpeechDoesNotFit(1, 2320, 1120, 2.07)
+            with patch.object(dub_video, "model", side_effect=infer):
+                with self.assertRaises(dub_video.FitTranslationRejected) as rejected:
+                    dub_video.repair_fit_translation(root, translated, 1, value, 1, overflow)
+                repaired = dub_video.repair_fit_translation(root, translated, 1, value, 2, overflow, str(rejected.exception))
+            self.assertEqual(repaired["text"], "Can someone kind help me?")
+            self.assertFalse((root / "fit-translation-1-revision-1-candidate.json").exists())
+            self.assertTrue((root / "fit-translation-1-revision-2-candidate.json").exists())
 
 
 if __name__ == "__main__":
