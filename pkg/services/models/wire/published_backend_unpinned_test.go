@@ -558,8 +558,13 @@ func TestPinnedQwenWindowsCUDACandidateAllowsOfflineSelectionAndRejectsCPU(t *te
 	}
 	request := publishedWindowsRequest("localai-qwen3-tts-cpp")
 	selection, err := resolver(t.Context(), request, true)
-	if err != nil || selection.Accelerator != "cuda" || selection.Bytes != 445863586 || selection.SHA256 != "c2a3d82d9c8029e51298f17727a4e44535f080a64844d273ffe4068ae201b99d" {
+	if err != nil || selection.Accelerator != "cuda" || selection.Bytes != 445867793 || selection.SHA256 != "58fe20ab56dcf6f4e4e485d71138bfa2c24605c1823817a763617199c9172422" {
 		t.Fatalf("pinned Qwen candidate = %#v/%v, want exact verified Windows archive", selection, err)
+	}
+	const archiveName = "localai-backend-localai-qwen3-tts-cpp-windows-amd64-cuda-d17c33d4ee2f56d15f9ca8a1bb82f7389305f838-dea7691547a1.zip"
+	const releaseTag = "localai-backends-v1-53cf3a40d01e831eff5ba390a8f761badef03824e2b6439dfc1fd5ac0072cc87"
+	if selection.Name != archiveName || selection.Location != backendReleaseBase+releaseTag+"/"+archiveName {
+		t.Fatalf("pinned Qwen identity = %q/%q, want exact immutable sampler publication", selection.Name, selection.Location)
 	}
 	request.Platform.CUDAAvailable = false
 	if _, err := resolver(t.Context(), request, true); !errors.Is(err, artifacts.ErrIncompatibleAccelerator) {

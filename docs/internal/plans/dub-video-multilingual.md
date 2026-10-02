@@ -862,3 +862,51 @@ actual FFmpeg cue-0 proof remains separate. All 70 tests pass independently in
 0.249 seconds with the child process `PATH` empty, so neither FFmpeg nor ffprobe
 is available. The author also regenerated the catalog and passed its drift check.
 Final repaired-head CI and complete English-video acceptance remain required.
+
+### Native Windows sampler publication proof (2026-10-02)
+
+The native source repair is now built and published from committed recipe
+`dea7691547a1763721b3fd7ffffe9582d1b27c62`. The final cached Windows CUDA
+recipe passed its MSVC CPU sampler regression, native compilation, and Go
+failed-generation/no-artifact/recovery regression (0.027 seconds). The earlier
+repeat-build failure is preserved separately: applying the sampler changed
+zero-context EOS offsets, so the corrected recipe removes only its own sampler
+patch before checking the EOS base and reapplies it afterward. The `.cpp.in`
+template avoids Go package source discovery without changing C++ test content.
+
+Actual final-package inference on RTX 4090 passed original-reference English
+synthesis (88,364-byte WAV, 1.84 seconds), explicit `max_new_tokens=1` EOS failure
+with no WAV, and same-host English recovery with an identical WAV SHA-256. The
+bounded failure's private diagnostics record EOS logit 5.83163, raw rank 114,
+2,049 finite candidates and zero invalid candidates. Its original safe public
+exhaustion error and default 2,048-frame budget remain unchanged. A separate
+prior package of the same native source completed one default-random cry request
+in 3.52 seconds with EOS at frame 44. This does not establish the cause or
+resolution of earlier intermittent cry failures. The owned native probe hosts
+were stopped after testing.
+
+The immutable [Windows CUDA sampler release](https://github.com/portpowered/you-agent-factory/releases/tag/localai-backends-v1-53cf3a40d01e831eff5ba390a8f761badef03824e2b6439dfc1fd5ac0072cc87)
+contains the final archive and manifest. Its archive is 445,867,793 bytes with
+SHA-256 `58fe20ab56dcf6f4e4e485d71138bfa2c24605c1823817a763617199c9172422`.
+Independent assembly checks matched nine exact committed recipe inputs, 22
+payload/license hashes, and all 23 decompressed ZIP entries including complete
+native provenance. Downloading the published archive reproduced its exact size
+and SHA-256; the downloaded manifest matches the reviewed bytes with SHA-256
+`72a8b8c18aafc58f8b5cafbb340a82361feb6f5a5aa4b1f1d07232a614bc4421`.
+Publication used `--latest=false`; GitHub's default latest remains the separate
+`localai-backends-v1-3dc488f3dc9848f8e245954d28a3cd223aca1be42003e739d66ee3dd3b423598`.
+
+The protocol revision `ad62c6df07ae1169eb14411a565a689cd996b19c` is the actual
+Git blob ID of the pinned SDK's `backend/backend.proto`; its last-changing
+commit is separately recorded as `b00422e45fcfff5abb67066c9313e2628aea0d44`.
+Provenance also preserves SDK/native/ggml commits, compiled-source hashes,
+actual Go/MSVC/CUDA toolchain, original model/reference hashes and native probe
+artifacts. CUDA execution remains verified only for sm89 on RTX 4090.
+
+The embedded Qwen TTS manifest and exact offline selection regression now point
+to this publication, including archive identity/location, size and checksum.
+Raw final evidence is under `C:/t/dub-qwen-tts-sampler-final-proof/`, assembly
+under `C:/t/dub-qwen-tts-sampler-final-release/`, and remote verification under
+`C:/t/dub-qwen-tts-sampler-remote-verification/`. Public managed Models proof
+using the rebuilt CLI, full English Factory delivery, and final repaired-head
+CI remain separate pending gates; native publication alone does not satisfy them.
