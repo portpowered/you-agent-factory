@@ -1,0 +1,35 @@
+diff --git a/backend/go/qwen3-tts-cpp/cpp/goqwen3ttscpp.cpp b/backend/go/qwen3-tts-cpp/cpp/goqwen3ttscpp.cpp
+index 0cd62293..d12807fc 100644
+--- a/backend/go/qwen3-tts-cpp/cpp/goqwen3ttscpp.cpp
++++ b/backend/go/qwen3-tts-cpp/cpp/goqwen3ttscpp.cpp
+@@ -10,0 +11,2 @@ static qt_context *g_ctx = nullptr;
++const char *qt3_last_error(void) { return qt_last_error(); }
++
+diff --git a/backend/go/qwen3-tts-cpp/cpp/goqwen3ttscpp.h b/backend/go/qwen3-tts-cpp/cpp/goqwen3ttscpp.h
+index 5e7dd482..76d0dd7d 100644
+--- a/backend/go/qwen3-tts-cpp/cpp/goqwen3ttscpp.h
++++ b/backend/go/qwen3-tts-cpp/cpp/goqwen3ttscpp.h
+@@ -36,0 +37,3 @@ int qt3_tts_stream(const char *text, const char *lang, const char *instruct,
++// Read the native error on the same OS thread as the failed synthesis.
++const char *qt3_last_error(void);
++
+diff --git a/backend/go/qwen3-tts-cpp/goqwen3ttscpp.go b/backend/go/qwen3-tts-cpp/goqwen3ttscpp.go
+index e8b3b0fe..4b63c981 100644
+--- a/backend/go/qwen3-tts-cpp/goqwen3ttscpp.go
++++ b/backend/go/qwen3-tts-cpp/goqwen3ttscpp.go
+@@ -5,0 +6 @@ import (
++	"runtime"
+@@ -27,0 +29 @@ var (
++	CppLastError func() string
+@@ -152,0 +155,3 @@ func (q *Qwen3TtsCpp) TTS(req *pb.TTSRequest) error {
++	// qt_last_error uses thread-local storage; capture it before unlocking.
++	runtime.LockOSThread()
++	defer runtime.UnlockOSThread()
+@@ -158 +163 @@ func (q *Qwen3TtsCpp) TTS(req *pb.TTSRequest) error {
+-		return fmt.Errorf("qwen3-tts: synthesis failed")
++		return fmt.Errorf("qwen3-tts: synthesis failed: %s", CppLastError())
+diff --git a/backend/go/qwen3-tts-cpp/main.go b/backend/go/qwen3-tts-cpp/main.go
+--- a/backend/go/qwen3-tts-cpp/main.go
++++ b/backend/go/qwen3-tts-cpp/main.go
+@@ -41,0 +42 @@
++		{&CppLastError, "qt3_last_error"},

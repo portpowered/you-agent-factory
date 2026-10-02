@@ -37,11 +37,22 @@ $patch = Join-Path $PSScriptRoot 'localai-qwen3-tts-cuda-getrows.patch'
 & git -C $ggmlRoot apply --unidiff-zero --reverse --check $patch 2>$null
 if ($LASTEXITCODE -ne 0) { Invoke-Checked git @('-C', $ggmlRoot, 'apply', '--unidiff-zero', $patch) }
 
+# The native decoder must observe EOS; exhausting the caller/model budget is
+# a failed generation, never a successfully published truncated waveform.
+$eosPatch = Join-Path $PSScriptRoot 'localai-qwen3-tts-eos.patch'
+& git -C $sourceRoot apply --unidiff-zero --reverse --check $eosPatch 2>$null
+if ($LASTEXITCODE -ne 0) { Invoke-Checked git @('-C', $sourceRoot, 'apply', '--unidiff-zero', $eosPatch) }
+
 $main = Join-Path $backendRoot 'main.go'
 $loader = Join-Path $backendRoot 'localai-backend-library_windows.go'
 if (-not (Test-Path -LiteralPath $loader)) {
     Invoke-Checked node @((Join-Path $PSScriptRoot 'localai-backend-windows-patch.mjs'), $main, $loader, 'libgoqwen3ttscpp.dll', 'localai-qwen3-tts-cpp')
 }
+$errorPatch = Join-Path $PSScriptRoot 'localai-qwen3-tts-errors.patch'
+& git -C $LocalAIRoot apply --unidiff-zero --reverse --check $errorPatch 2>$null
+if ($LASTEXITCODE -ne 0) { Invoke-Checked git @('-C', $LocalAIRoot, 'apply', '--unidiff-zero', $errorPatch) }
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'localai-qwen3-tts-errors_test.go.in') -Destination (Join-Path $backendRoot 'termination_test.go') -Force
+
 $cmakePath = Join-Path $backendRoot 'CMakeLists.txt'
 $cmakeText = [IO.File]::ReadAllText($cmakePath)
 $cmakeText = $cmakeText.Replace('add_library(goqwen3ttscpp MODULE cpp/goqwen3ttscpp.cpp)', 'add_library(goqwen3ttscpp SHARED cpp/goqwen3ttscpp.cpp)')
@@ -69,6 +80,10 @@ try {
             '--go-grpc_opt=paths=source_relative', 'backend/backend.proto')
     } finally { Pop-Location }
     $env:CGO_ENABLED = '0'
+    # Upstream e2e_test.go directly uses Unix-only Dlopen. This CPU regression
+    # compiles the actual Windows backend without executing GPU inference.
+    Invoke-Checked go @('test', '-C', $backendRoot, 'audio.go', 'options.go', 'goqwen3ttscpp.go',
+        'main.go', 'localai-backend-library_windows.go', 'termination_test.go')
     Invoke-Checked go @('build', '-C', $backendRoot, '-o', (Join-Path $PackageRoot 'qwen3-tts-cpp.exe'), './')
 } finally {
     $env:GOBIN = $previousGoBin
@@ -90,3 +105,9 @@ if (-not $redist) { throw 'MSVC redistributables are required' }
 Get-ChildItem -LiteralPath (Join-Path $redist.FullName 'x64\Microsoft.VC143.CRT') -Filter '*.dll' | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $PackageRoot -Force
 }
+
+$licenses = Join-Path $PackageRoot 'licenses'
+New-Item -ItemType Directory -Path $licenses -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $LocalAIRoot 'LICENSE') -Destination (Join-Path $licenses 'LocalAI.LICENSE') -Force
+Copy-Item -LiteralPath (Join-Path $sourceRoot 'LICENSE') -Destination (Join-Path $licenses 'qwentts.LICENSE') -Force
+Copy-Item -LiteralPath (Join-Path $ggmlRoot 'LICENSE') -Destination (Join-Path $licenses 'ggml.LICENSE') -Force
