@@ -373,3 +373,20 @@ was absent afterward. No model inference/build/source edits were requested.
 Independent collaboration review and CPU sampler regression passed, but this
 dispatch produced no review evidence. The reason for its timeout is unproven;
 a five-minute allowance alone does not establish harness stability.
+
+## October 2 concurrent ten-minute dispatch timeouts
+
+Two concurrent OpenCode MCP dispatches using `opencode/mimo-v2.6-flash-free`
+each received a `timeoutMillis: 600000` allowance. One requested a CPU-only
+code/startup audit report; the other requested bounded dubbing prompt edits.
+Both timed out. Root checked afterward: the requested audit report was absent,
+and the requested dubbing prompt edits had no Git diff. The human-readable MCP
+responses reported that cleanup closed the sessions and that partial effects
+were possible. These observations do not identify the timeout cause or prove
+that no other partial effects occurred.
+
+The root wrapper did not retain the structured request/session IDs, so no IDs
+are assigned to these dispatches here. A live-inspection identifier beginning
+`07f22431` disappeared after cleanup; it does not establish the identity of the
+first dispatch. Collaboration-agent fallback implemented the prompt edits for
+independent review. No local Models inference was requested in either task.

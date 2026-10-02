@@ -910,3 +910,129 @@ under `C:/t/dub-qwen-tts-sampler-final-release/`, and remote verification under
 `C:/t/dub-qwen-tts-sampler-remote-verification/`. Public managed Models proof
 using the rebuilt CLI, full English Factory delivery, and final repaired-head
 CI remain separate pending gates; native publication alone does not satisfy them.
+
+
+## Public TTS selection and quality acceptance update (2026-10-02)
+
+### Explicit budgets and live publication identity
+
+Commit `c7954cd786339d20b6a7c11307c12c4671117a5d` forwards an explicit
+numeric, positive integral `max_new_tokens` through protobuf `Params` as a
+canonical decimal string. Only the native signed 32-bit C integer representation
+is bounded; omission leaves the parameter absent. Exact `json.Number`
+mantissa/exponent checks reject rounded fractions and accept integral decimal
+or exponent forms without expanding unbounded powers of ten. Invalid values
+fail before backend connection. No public seed parameter or default budget was
+introduced; focused codec/protocol tests and docs/maintainability gates pass.
+
+The first public positive/one-frame failure/recovery sequence used the older
+`a344ad7c` backend, as live installed provenance and DLL hashes proved. Those
+calls validate its public error handling, not the sampler publication. GitHub's
+release listing placed the older TTS publication (04:42:07 UTC) before the newer
+one (08:41:57 UTC); the resolver selected the first compatible entry. No separate
+model-cache invalidation defect was established. Commit
+`a676dad3b2b4ceb9683db47243ce133a42ee64df` sorts valid `published_at`
+values before manifest discovery, with stable ties and unknown missing/invalid
+dates. The failing old-first regression now selects the newer checksum;
+compatibility, CUDA preference, offline, retry and cancellation checks pass.
+
+Three normal managed Models invocations then confirmed the new publication:
+positive English exit 0 (1.36-second WAV), explicit one-frame limit exit 1
+(no WAV), and a subsequent English invocation exit 0 (2.48-second WAV).
+The failure is `MODEL_BACKEND_FAILURE`, message
+`TTS generation limit reached without EOS`, family `INTERNAL_SERVER_ERROR`.
+All three separate native hosts had executable SHA-256
+`6aabc6940bd104bb889c5ae0be5d5f5e14db81b12eb9d1704b15d175c0011c48`
+and DLL SHA-256
+`f71fcb7294c2f7219f0a2e87aa6ee9d87eac1555bdc957335db6712dcdb4362e`,
+matching the final package. Their installed provenance names `dea7691547a1`.
+The cached selected archive reproduces 445,867,793 bytes and SHA-256
+`58fe20ab56dcf6f4e4e485d71138bfa2c24605c1823817a763617199c9172422`.
+No override, configuration change, or weight/cache deletion was used. These
+separate-process calls do not prove same-host recovery; that remains the earlier
+direct native proof. All owned hosts exited. Raw identity/results are in
+`C:/t/dub-qwen-tts-sampler-public-confirmed-proof/verification.json`.
+
+CI run `36988478683` for exact head
+`a676dad3b2b4ceb9683db47243ce133a42ee64df` completed with all checks passing,
+including required Backend Lint and Verification Policy. Functional coverage
+measured 554 packages, gated 462, and reported zero gate failures; logging was
+70.7% against the unchanged 69.7% floor. Unit evaluation completed across 483
+packages. This is evidence for that head; later commits require their own CI.
+
+### English quality probe canceled before synthesis
+
+The fresh installed a676 CLI (SHA-256
+`730b93bc0dc5d638ebf8c890a2ecf4f939124c59b3edec63ec9ed8821ba38207`)
+completed 59-cue ASR and an initial translation candidate, then was canceled
+while the second global comparison was running. Cue 32 changed from
+`You're really unfamiliar with people.` to the auditor's proposed
+`Again, it's particularly unfamiliar (with people/in this setting).`.
+The raw ASR is `又特别又不熟。`; neither it nor neighboring cues supplies the
+parenthetical's referents. The slash-separated alternatives are translator
+commentary rather than natural spoken dialogue. Valid JSON and a constrained
+decision do not establish semantic quality. Earlier variations are historical
+outputs, not approved source corrections.
+
+Cancellation occurred at 09:30:53 UTC through the owned CLI session. Preserved
+provenance records exit 1, no primary result or CLI terminal envelope, no final
+video, and no remaining owned processes. The run did not reach TTS. Its recording
+and artifacts remain under
+`C:/t/dub-multilingual-validation/factory-english-published-order-recording.json`
+and `chinese-english-published-order-dub-8h3mjx1o/`. This is a canceled quality
+probe, not a delivered video or an unclassified native synthesis failure.
+
+Independent CPU frame review preserved 20 timestamped images and source/frame
+hashes in `C:/t/dub-multilingual-validation/source-caption-review/frame-evidence.json`.
+Visible captions conflict with noisy raw ASR:
+
+| Cue / frame | Raw ASR | Independently visible Chinese caption |
+| --- | --- | --- |
+| 25 / 107.160 s | 车路贵， | 又那么贵 |
+| 27 / 110.600 s | 我为什么家？ | 还回什么家啊 |
+| 32 / 126.960 s | 又特别又不熟。 | 你这提议不错 |
+| 52 / 207.600 s | 不刷我啊，兄弟， | 不要耍我兄弟 真的假的 |
+| 57 / 234.600 s | 爸爸，好，什么东西刚盯我的脸，那么痛啊！ | 刚叮我的脸那么痛啊 |
+
+Cue 32's caption is positive; no sampled frame establishes the proposed phonetic
+replacement `又特别又不俗`. Cue 57's speaker rubs his cheek. Captions may span
+neighboring cues or summarize speech, so they are independent review evidence,
+not automatic canonical ASR replacements. No production text was substituted.
+
+### Default Gemma probes and bounded larger-Qwen comparison
+
+Seven sequential public managed OMNI calls used the default Gemma-4-E4B-it
+Q4_K_M plus verified mmproj-F16, without ASR/caption hints, grammar, output-token
+caps, configuration changes, or model switches. All CLI calls exited zero;
+semantic accuracy was insufficient for automatic transcript repair. Of five
+caption-only probes, cues 25/27 matched exactly; cue 32 omitted/paraphrased,
+cue 52 corrupted the Chinese and included unwanted English, and cue 57 changed
+wording. Audio-only cue 32 returned `哎 / 你做給我做 / 怎麼`; combined
+image/audio returned caption `你提議不錯` and audio
+`Pizza 給你吃不說 / 怎麼啊`. These do not establish accurate speech understanding.
+The audio-only and combined calls took 69.734 and 83.312 seconds including
+managed startup/load. Saved commands, responses, usage and provenance are under
+`C:/t/dub-gemma-caption-native-proof/`; all observed owned hosts exited.
+
+Live modules confirmed CUDA/mtmd on the managed host despite the upstream
+`llama-cpp-cpu-all` payload name; projector CPU placement is separately intended.
+CPU routing inspection shows direct OMNI audio forwarding, with no wired ASR
+fallback. Module presence is not an instruction-level audio-encoder trace.
+A separate external cp1252 reporting error occurred after a successful saved
+UTF-8 Models result; it is not an inference failure.
+
+The larger-Qwen comparison then completed three harder frames with the same
+unprimed full-frame inputs/prompts: cue 52 matched exactly (279.953 seconds),
+cue 57 preserved the Chinese but copied `cctv12306.com` (188.828 seconds), and
+cue 32 matched exactly (175.453 seconds). Raw responses matched 2/3; Chinese
+caption characters matched 3/3, improving these three cases over Gemma. This is
+not a five-frame comparison or speech-accuracy certification. Lifecycle timings
+include startup/load. Whole-device sampling reached 23,825 MiB used and only
+314 MiB free on RTX 4090; this is not exclusive allocation, general capacity,
+131k-context, all-GPU placement, or MTP proof. All three owned hosts exited.
+Commands, responses, usage, hashes, CUDA/mtmd mappings and sampling are under
+`C:/t/dub-qwen-caption-native-proof/comparison.json` and `provenance.json`.
+No authored model/default/configuration or weight changes were made. No automatic canonical
+source repair or final model selection follows from these bounded measurements.
+Full English video delivery remains incomplete; PR 2668 stays draft and
+unmerged pending quality repair, complete artifact QA, and final-head CI.
