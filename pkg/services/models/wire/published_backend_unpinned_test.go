@@ -505,8 +505,8 @@ func TestManualPublicationManifestProbe(t *testing.T) {
 	}
 }
 
-func TestPublishedQwenWindowsCUDAReleasePreservesOtherBackendFallbacks(t *testing.T) {
-	t.Parallel()
+func qwenCUDAPublicationFixture(t *testing.T) []byte {
+	t.Helper()
 	var document map[string]any
 	if err := json.Unmarshal(windowsCUDAPublicationFixture(t), &document); err != nil {
 		t.Fatal(err)
@@ -524,6 +524,12 @@ func TestPublishedQwenWindowsCUDAReleasePreservesOtherBackendFallbacks(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
+	return manifest
+}
+
+func TestPublishedQwenWindowsCUDAReleasePreservesOtherBackendFallbacks(t *testing.T) {
+	t.Parallel()
+	manifest := qwenCUDAPublicationFixture(t)
 	tag := publicationTag(t, manifest)
 	index := publicationIndex(t, tag, manifest)
 	resolver, err := NewPublishedBackendArtifactResolver(backendPublicationDoer(func(request *http.Request) (*http.Response, error) {
@@ -548,6 +554,86 @@ func TestPublishedQwenWindowsCUDAReleasePreservesOtherBackendFallbacks(t *testin
 	if err != nil || selection.Accelerator != "cpu" || !strings.Contains(selection.Name, "localai-whisper") {
 		t.Fatalf("Whisper fallback after Qwen publication = %#v/%v", selection, err)
 	}
+}
+
+func TestPublishedQwenResolverUsesPublicationDateBeforeAPIListingOrder(t *testing.T) {
+	t.Parallel()
+	older := qwenCUDAPublicationFixture(t)
+	oldTag := publicationTag(t, older)
+	newTag := "localai-backends-v1-" + strings.Repeat("a", 64)
+	newer := bytes.ReplaceAll(older, []byte(oldTag), []byte(newTag))
+	newer = bytes.ReplaceAll(newer, []byte(strings.TrimPrefix(oldTag, "localai-backends-v1-")), []byte(strings.Repeat("a", 64)))
+	var newDocument map[string]any
+	if err := json.Unmarshal(newer, &newDocument); err != nil {
+		t.Fatal(err)
+	}
+	newDocument["artifacts"].([]any)[0].(map[string]any)["artifact"].(map[string]any)["sha256"] = strings.Repeat("b", 64)
+	newer, err := json.Marshal(newDocument)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, oldDate, newDate, wantTag string }{
+		{"old listed first", "2026-10-02T04:42:07Z", "2026-10-02T08:41:57Z", newTag},
+		{"invalid older date", "invalid", "2026-10-02T08:41:57Z", newTag},
+		{"missing dates preserve listing", "", "", oldTag},
+		{"tied dates preserve listing", "2026-10-02T08:41:57Z", "2026-10-02T08:41:57Z", oldTag},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			encoded := publicationIndexWithDates(t, older, newer, tc.oldDate, tc.newDate)
+			var fetched []string
+			resolver, err := NewPublishedBackendArtifactResolver(backendPublicationDoer(func(request *http.Request) (*http.Response, error) {
+				switch request.URL.String() {
+				case backendReleasesURL:
+					return publicationResponse(encoded), nil
+				case backendReleaseBase + oldTag + "/manifest.json":
+					fetched = append(fetched, oldTag)
+					return publicationResponse(older), nil
+				case backendReleaseBase + newTag + "/manifest.json":
+					fetched = append(fetched, newTag)
+					return publicationResponse(newer), nil
+				default:
+					return nil, fmt.Errorf("unexpected publication request")
+				}
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := publishedWindowsRequest("localai-qwen3-tts-cpp")
+			assertUnpinnedSelection(t, resolver, request, false, "cuda", tc.wantTag)
+			selection, err := resolver(t.Context(), request, false)
+			if err != nil || (tc.wantTag == newTag && selection.SHA256 != strings.Repeat("b", 64)) {
+				t.Fatalf("current archive checksum = %q/%v, want new publication's checksum", selection.SHA256, err)
+			}
+			if len(fetched) != 2 || fetched[0] != tc.wantTag {
+				t.Fatalf("manifest fetch order = %v, want selected publication fetched first", fetched)
+			}
+			assertUnpinnedSelection(t, resolver, request, true, "cuda", tc.wantTag)
+			if len(fetched) != 2 {
+				t.Fatal("cached offline selection fetched manifests again")
+			}
+		})
+	}
+}
+
+func publicationIndexWithDates(t *testing.T, older, newer []byte, oldDate, newDate string) []byte {
+	t.Helper()
+	var index []map[string]any
+	for _, publication := range []struct {
+		date string
+		data []byte
+	}{{oldDate, older}, {newDate, newer}} {
+		var entries []map[string]any
+		if err := json.Unmarshal(publicationIndex(t, publicationTag(t, publication.data), publication.data), &entries); err != nil {
+			t.Fatal(err)
+		}
+		entries[0]["published_at"] = publication.date
+		index = append(index, entries[0])
+	}
+	encoded, err := json.Marshal(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
 }
 
 func TestPinnedQwenWindowsCUDACandidateAllowsOfflineSelectionAndRejectsCPU(t *testing.T) {

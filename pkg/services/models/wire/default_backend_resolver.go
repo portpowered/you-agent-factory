@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -192,10 +193,11 @@ func selectPublishedBackendAccelerator(ctx context.Context, manifests []artifact
 }
 
 type backendRelease struct {
-	TagName    string `json:"tag_name"`
-	Draft      bool   `json:"draft"`
-	Prerelease bool   `json:"prerelease"`
-	Assets     []struct {
+	TagName     string `json:"tag_name"`
+	PublishedAt string `json:"published_at"`
+	Draft       bool   `json:"draft"`
+	Prerelease  bool   `json:"prerelease"`
+	Assets      []struct {
 		Name string `json:"name"`
 	} `json:"assets"`
 }
@@ -217,6 +219,14 @@ func fetchPublishedBackendManifests(ctx context.Context, client AssetHTTPDoer, p
 	if err := json.Unmarshal(index, &releases); err != nil {
 		return nil, fmt.Errorf("decode backend publication index: %w", err)
 	}
+	// GitHub's listing order need not match publication order (including
+	// releases published with latest=false). Fetch newer candidates first so
+	// an older compatible archive cannot mask a newer publication.
+	sort.SliceStable(releases, func(i, j int) bool {
+		left, _ := time.Parse(time.RFC3339, releases[i].PublishedAt)
+		right, _ := time.Parse(time.RFC3339, releases[j].PublishedAt)
+		return left.After(right)
+	})
 	var manifests []artifacts.Manifest
 	for _, release := range releases {
 		if release.Draft || release.Prerelease || !backendReleaseTag.MatchString(release.TagName) || !hasBackendManifest(release) {
