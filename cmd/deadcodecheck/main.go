@@ -16,6 +16,11 @@ const (
 	baselinePath = "docs/internal/baselines/deadcode-baseline.txt"
 	currentPath  = "bin/deadcode-current.txt"
 	deadcodeTool = "golang.org/x/tools/cmd/deadcode@v0.25.1"
+	// vendoredSDKDir is the exact repository-relative directory holding the
+	// preserved upstream ACP SDK sources. The root module compiles that package
+	// tree, so deadcode reports upstream helpers this repository does not
+	// author; those findings stay outside the authored report.
+	vendoredSDKDir = "third_party/acp-go-sdk/"
 )
 
 var (
@@ -132,7 +137,7 @@ func normalizeReport(report string) string {
 	portable := lines[:0]
 	for _, line := range lines {
 		line = positionPattern.ReplaceAllString(strings.TrimSpace(line), ":")
-		if !platformSpecificFinding(line) {
+		if !platformSpecificFinding(line) && !vendoredSDKFinding(line) {
 			portable = append(portable, line)
 		}
 	}
@@ -160,6 +165,16 @@ func platformSpecificFinding(line string) bool {
 		}
 	}
 	return false
+}
+
+// Exclude only the preserved upstream SDK's repository-relative source path.
+// The trailing separator preserves sibling and nested authored directories.
+func vendoredSDKFinding(line string) bool {
+	source, _, ok := strings.Cut(line, ".go:")
+	if !ok {
+		return false
+	}
+	return strings.HasPrefix(source, vendoredSDKDir)
 }
 
 func countFindings(report string) int {
