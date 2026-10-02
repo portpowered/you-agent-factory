@@ -793,3 +793,39 @@ CUDA reported. Its identified executable is recorded with build commands and
 toolchain evidence in `C:/t/dub-indextts-windows-native-proof/`. Reference-audio
 GPU inference, gRPC packaging, and public Models invocation are still pending;
 a compiled executable alone does not establish those requirements.
+
+### SDK repair, final structured schema, and native reference-audio proof
+
+The corrected SDK repair is committed as `71dffd4e3f`. It keeps the preserved
+SDK package under the root-owned `third_party` namespace and introduces no
+local `go.mod replace` and no nested module, so the published
+`go install ...@version` path remains intact. Root independently ran the full
+SDK race suite successfully in 7.432 seconds. The compiled EOF proof at the CLI
+provider boundary is still pending, so this remains a source and suite result
+rather than a compiled boundary acceptance.
+
+The final structured-schema change is committed as
+`a335e9cfb9943f354b2a0c58e3d6cbd28baa7ee1`. It retains thinking and the default
+uncapped generation path and excludes `ReasoningContent` from the final JSON
+answer. Root's independent localai and platform race runs passed in 1.217 and
+1.057 seconds. An isolated native CUDA build of that change is still pending,
+so this is not live native structured-generation acceptance.
+
+The standalone native IndexTTS Windows CUDA executable then produced actual
+reference-audio output for the original video cue 13.44-16.32 s: English in
+9.625 s and Chinese in 10.031 s, both exiting 0 and generating valid WAV files.
+Exact evidence:
+`C:/t/dub-indextts-windows-native-proof/native-reference-results.json`.
+
+The normal installed public Models ASR path also agreed exactly with the target
+text in both languages: English in 31.203 s and Chinese in 29.454 s. Exact
+evidence: `public-asr/acceptance-summary.json` in the same proof root.
+
+Taken together, these establish native conditioning invocation and intelligibility
+only. They do not establish perceptual voice similarity to the reference, the
+public `models IndexTTS` surface, gRPC packaging, or full English dub
+acceptance.
+
+One external QA script first failed on an erroneous nonexistent input path
+before any backend call; after the input was corrected, the Chinese run
+executed. That was a harness input error, not an MCP failure.
