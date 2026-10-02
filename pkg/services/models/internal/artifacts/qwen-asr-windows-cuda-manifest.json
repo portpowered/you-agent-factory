@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "kind": "localai-backend-artifacts",
   "publication": {
-    "id": "localai-backends-v1-8d2cd1a1c4337e1c8efb60bf64ffdfb9a559a91e6a6d06ec3eea7df2996e5e8a",
-    "releaseTag": "localai-backends-v1-8d2cd1a1c4337e1c8efb60bf64ffdfb9a559a91e6a6d06ec3eea7df2996e5e8a",
+    "id": "localai-backends-v1-58d1a323eb9679e5f19fa0cc48e0c9286e3448f0c34cf84519ba02dc7d62ad26",
+    "releaseTag": "localai-backends-v1-58d1a323eb9679e5f19fa0cc48e0c9286e3448f0c34cf84519ba02dc7d62ad26",
     "repository": "portpowered/you-agent-factory",
-    "pinFingerprint": "8d2cd1a1c4337e1c8efb60bf64ffdfb9a559a91e6a6d06ec3eea7df2996e5e8a",
-    "packagingRevision": 9,
+    "pinFingerprint": "58d1a323eb9679e5f19fa0cc48e0c9286e3448f0c34cf84519ba02dc7d62ad26",
+    "packagingRevision": 10,
     "source": {
       "repository": "https://github.com/mudler/LocalAI.git",
       "commit": "b224c96db6f4b87306a33a808650bfce63b12588"
@@ -52,10 +52,10 @@
         ]
       },
       "artifact": {
-        "name": "localai-backend-localai-qwen3-asr-cpp-windows-amd64-cuda-6dcc586e5073fd6e85ee5728e75f0903d6c70c6c-7e640360a555.zip",
-        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-8d2cd1a1c4337e1c8efb60bf64ffdfb9a559a91e6a6d06ec3eea7df2996e5e8a/localai-backend-localai-qwen3-asr-cpp-windows-amd64-cuda-6dcc586e5073fd6e85ee5728e75f0903d6c70c6c-7e640360a555.zip",
-        "sizeBytes": 441891463,
-        "sha256": "e20cafd64c87a5a0293f6a7a19ef20be3566aa1a0cc1af54f70c383b7fdb531c"
+        "name": "localai-backend-localai-qwen3-asr-cpp-windows-amd64-cuda-6dcc586e5073fd6e85ee5728e75f0903d6c70c6c-46520e803d8e.zip",
+        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-58d1a323eb9679e5f19fa0cc48e0c9286e3448f0c34cf84519ba02dc7d62ad26/localai-backend-localai-qwen3-asr-cpp-windows-amd64-cuda-6dcc586e5073fd6e85ee5728e75f0903d6c70c6c-46520e803d8e.zip",
+        "sizeBytes": 441956666,
+        "sha256": "8d5236e6fb43b3d1d4da8a3630efd29fca583ba80315efc0a6a8d30a7a0ba769"
       }
     }
   ]

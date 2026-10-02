@@ -1036,3 +1036,96 @@ No authored model/default/configuration or weight changes were made. No automati
 source repair or final model selection follows from these bounded measurements.
 Full English video delivery remains incomplete; PR 2668 stays draft and
 unmerged pending quality repair, complete artifact QA, and final-head CI.
+
+### Optional ASR language conditioning and exact digital silence
+
+The pinned native ASR implementation ignored its language argument. Commit
+`5ac4233dcefe8def0bc6564d34d3d29564666242` adds optional language conditioning,
+validated official tokenizer prefixes, BCP 47 aliases, and parsing that retains
+the first generated speech tokens. Omitted language still selects automatic
+detection. CPU GCC/MSVC helper tests, Go bridge tests with race detection,
+patch application/reversal, and Windows PowerShell 5.1 idempotence/failure
+propagation checks passed. This does not make a requested language an
+independently detected language or establish noisy-speech accuracy.
+
+The first rebuilt package exposed a semantic failure on five seconds of exact
+digital silence: forced English, Chinese, and Cantonese generated `The.`,
+`嗯。`, and `係。`, respectively. That package was not published. Commit
+`46520e803d8e7d22672b1b9b99c9b2f2de177a79` returns an empty result when a
+nonempty decoded sample buffer consists entirely of exact zero values, after
+validating an explicit language hint. It adds no amplitude threshold; quiet
+nonzero speech, denormals, noise, nonfinite values, empty buffers, and existing
+cancellation checks retain their established paths.
+
+The replacement native package built in 23.763 seconds and repeated in 11.197
+seconds with identical hashes for all 26 payload files. Independent review
+verified 13 authored inputs, three patched native sources, pinned dependency
+revisions, and payload hashes; the prior package remained unchanged. Its core
+DLL SHA-256 is
+`2e3e780d22bdc6f04d233d951d55c61acb0286070d6cef9d904f1ff68ac4146c`.
+The live native ABI probe verified loaded module paths/hashes, empty forced
+English/Chinese/Cantonese and automatic silence results, and unchanged known
+English `This is.` including its first words. Cancellation pending before a
+request was followed by successful recovery; mid-generation cancellation was
+not tested. The owned process exited and released its native library/GPU.
+Build evidence is in `C:/t/dub-asr-digital-silence-package/`; live evidence is in
+`C:/t/dub-asr-digital-silence-native-proof/`. At this checkpoint publication and
+canonical managed Models verification of the replacement have not run.
+
+The repaired package was subsequently published as immutable release
+`localai-backends-v1-58d1a323eb9679e5f19fa0cc48e0c9286e3448f0c34cf84519ba02dc7d62ad26`,
+targeting authored source `46520e803d8e7d22672b1b9b99c9b2f2de177a79` without
+marking it latest. A fresh public download matched the assembled archive:
+441,956,666 bytes, SHA-256
+`8d5236e6fb43b3d1d4da8a3630efd29fca583ba80315efc0a6a8d30a7a0ba769`;
+downloaded manifest SHA-256
+`13ecd0d03dfa5263ce37793ceda9c4da453abba6588bf5cdc74108dd2295c623`.
+Independent archive review verified all 50 entries: 26 payload files, 22 proof
+files, and two provenance/evidence documents. The previous failed silence and
+cue-32 probes remain historical evidence; the new acceptance covers exact-zero
+silence and known English speech, without claiming noisy-source quality repair.
+The source ASR publication baseline now selects this archive while retaining
+the pinned native, SDK and protocol identities. Normal public Models CLI
+verification of the published replacement remains pending.
+
+### Larger Whisper comparison and malformed full-video timestamps
+
+An isolated managed Whisper large-v3 comparison used the immutable
+`ggerganov/whisper.cpp` asset revision
+`5359861c739e955e79d9a303bcbc70fb988958b1`, with explicit Chinese recognition
+and no translation or caption hints. Six bounded public ASR calls completed,
+taking 44–52 seconds including lifecycle work. Some disputed words improved,
+but cue 32 remained incorrect; these observations do not justify replacing
+the Qwen default. Model, archive, process/module identities, inputs, outputs,
+and teardown evidence are under `C:/t/dub-whisper-large-v3-proof/`.
+
+The full original video then failed publicly with `MODEL_BACKEND_FAILURE` and
+an invalid ASR segment after 81.219 seconds, without output transcript or
+segment files. A separate raw RPC replay reconstructed the same public
+request policy and preserved all 107 native segments. Three lexical segments
+had equal start/end timestamps: IDs 41, 72, and 101. The failed public call's
+staged WAV and raw response were not retained, so the replay is a cause witness
+rather than proof of byte-identical responses. Its saved protobuf is a
+serialized received message, not captured transport-frame bytes.
+
+The raw full-video response also contained long repeated speech and concerning
+source-timing disagreements. No words were dropped, timestamps invented, or
+validation guards relaxed to accept it. A focused codec regression now asserts
+that valid initial speech followed by a zero-duration lexical segment fails
+atomically with no partial outputs. All trial-owned hosts exited. Larger models
+remain candidates when they improve measured quality and fit available memory;
+size alone does not select a default. English delivery and subsequent longer
+Japanese/Korean/Spanish runs remain outstanding.
+
+The latest native cue 32 comparison ran both Qwen3-ASR sizes through the
+reviewed `46520e80` DLL using identical ±2s and ±5s WAVs; all eight calls exited
+zero. Automatic and explicitly Chinese recognition results were identical for each model and
+window. Neither size restored the visible positive `你这提议不错` proposal meaning
+from the independent caption review; 1.7B returned `你吃的也不少，怎么？` at ±2s
+and `小姐，你干嘛去了？怎么样？跟车贼有仇？怎么？嗯，看来。` at ±5s. These are
+observed decoder outputs, not accuracy certification. Whole-device sampling at
+250 ms reached 7,991 MiB used and 16,148 MiB free with 1.7B, and 5,471 MiB used
+with 18,668 MiB free with 0.6B; these are whole-device snapshots, not exclusive
+process allocations. Both owned PIDs exited and released their libraries.
+Evidence: `C:/t/dub-qwen-asr-cue32-size-comparison/comparison.json`. No default
+switch and no final delivery follows.

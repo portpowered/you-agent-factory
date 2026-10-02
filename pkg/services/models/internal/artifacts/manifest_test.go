@@ -13,6 +13,34 @@ import (
 
 const fixtureProtocolRevision = "ad62c6df07ae1169eb14411a565a689cd996b19c"
 
+func TestPublishedQwenASRSelectsVerifiedLanguageAndSilenceArchive(t *testing.T) {
+	t.Parallel()
+	manifest, err := artifacts.QwenASRWindowsCUDAManifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := manifest.Select(artifacts.SelectionRequest{
+		Backend: "localai-qwen3-asr-cpp", OperatingSystem: "windows", Architecture: "amd64",
+		ProtocolRevision: fixtureProtocolRevision, Accelerator: "cuda",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const tag = "localai-backends-v1-58d1a323eb9679e5f19fa0cc48e0c9286e3448f0c34cf84519ba02dc7d62ad26"
+	const name = "localai-backend-localai-qwen3-asr-cpp-windows-amd64-cuda-6dcc586e5073fd6e85ee5728e75f0903d6c70c6c-46520e803d8e.zip"
+	if manifest.ArtifactCount() != 1 || descriptor.Publication.ReleaseTag != tag ||
+		descriptor.Artifact.Name != name || descriptor.Artifact.SizeBytes != 441956666 ||
+		descriptor.Artifact.SHA256 != "8d5236e6fb43b3d1d4da8a3630efd29fca583ba80315efc0a6a8d30a7a0ba769" ||
+		descriptor.Artifact.Location != "https://github.com/portpowered/you-agent-factory/releases/download/"+tag+"/"+name {
+		t.Fatalf("selected archive differs from verified publication: %#v", descriptor)
+	}
+	if descriptor.Backend.SourceCommit != "6dcc586e5073fd6e85ee5728e75f0903d6c70c6c" ||
+		descriptor.Source.Commit != "b224c96db6f4b87306a33a808650bfce63b12588" ||
+		descriptor.Source.Path != "pkg/grpc" || descriptor.Protocol.Revision != fixtureProtocolRevision {
+		t.Fatalf("selected archive changed pinned native/SDK/protocol identities: %#v", descriptor)
+	}
+}
+
 func TestDecodeAllowsUnusedVCPKGButRequiresPinnedPresentValue(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

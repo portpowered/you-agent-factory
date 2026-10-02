@@ -408,3 +408,28 @@ This demonstrates useful primary-result delivery for this bounded review. The
 model, prompt scope, and requested effects differed from the two ten-minute
 timeouts, so the successful retry does not identify their cause or demonstrate
 editing stability.
+
+## October 2 bounded dubbing context design audit completed
+
+OpenCode MCP with `opencode/big-pickle`, session
+`3451c58a-67dd-45fe-93ff-e18807887569`, completed a two-file read-only audit
+inside the workspace within its 300,000 ms allowance and returned a primary
+result. It identified the ASR segment projection and proposed a separate frame
+evidence artifact. Independent review confirmed that source evidence must also
+reach both audit passes and fit repair, not only initial translation.
+
+The result is design input, not accepted implementation: its proposed total
+evidence caps conflict with the large-input requirement; its suggested frame
+input slot was unverified; supplied ASS currently supplements rendered media
+and does not correct ASR. A conflict-only gate cannot recover the disputed
+source meaning. No edits or GPU inference were requested. This is another
+bounded primary-result success, with no new editing or concurrency guarantee.
+
+A subsequent bounded editing dispatch with the same model, session
+`31e8d34b-3ca2-4fe3-b06a-1249e624df62`, completed and appended the supplied
+Qwen ASR size-comparison facts to the plan. Root inspected the actual diff,
+checked it against the saved comparison, and corrected one phrase from
+identical requests to identical recognition results. No external reads or GPU
+calls were requested. This establishes one completed documentation edit and
+primary result; concurrent editing stability remains unproven. Both exact MCP
+results were retained externally for independent inspection.
