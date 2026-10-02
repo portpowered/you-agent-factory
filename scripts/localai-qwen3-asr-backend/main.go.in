@@ -18,16 +18,18 @@ import (
 )
 
 var native struct {
-	load       func(string, string, string) int
-	transcribe func(string, string, int) int
-	error      func() string
-	text       func() string
-	language   func() string
-	duration   func() float64
-	count      func() int64
-	word       func(int64) string
-	start      func(int64) int64
-	end        func(int64) int64
+	load        func(string, string, string) int
+	transcribe  func(string, string, int) int
+	error       func() string
+	text        func() string
+	language    func() string
+	duration    func() float64
+	count       func() int64
+	word        func(int64) string
+	start       func(int64) int64
+	end         func(int64) int64
+	resetCancel func()
+	cancel      func()
 }
 
 type model struct {
@@ -72,7 +74,31 @@ func (m *model) AudioTranscription(ctx context.Context, req *pb.TranscriptReques
 	if req.Translate || req.Diarize {
 		return pb.TranscriptResult{}, fmt.Errorf("qwen3-asr does not support translation or speaker diarization")
 	}
-	if native.transcribe(req.Dst, nativeLanguage(req.Language), int(req.Threads)) != 0 {
+	if req.Prompt != "" || req.Temperature != 0 {
+		return pb.TranscriptResult{}, fmt.Errorf("qwen3-asr native greedy decoder does not support prompt or temperature options")
+	}
+	for _, value := range req.TimestampGranularities {
+		if value != "word" && value != "segment" {
+			return pb.TranscriptResult{}, fmt.Errorf("qwen3-asr unsupported timestamp granularity %q", value)
+		}
+	}
+	native.resetCancel()
+	finished, joined := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(joined)
+		select {
+		case <-ctx.Done():
+			native.cancel()
+		case <-finished:
+		}
+	}()
+	status := native.transcribe(req.Dst, nativeLanguage(req.Language), int(req.Threads))
+	close(finished)
+	<-joined
+	if err := ctx.Err(); err != nil {
+		return pb.TranscriptResult{}, err
+	}
+	if status != 0 {
 		return pb.TranscriptResult{}, fmt.Errorf("qwen3-asr transcription: %s", native.error())
 	}
 	if err := ctx.Err(); err != nil {
@@ -87,6 +113,11 @@ func (m *model) AudioTranscription(ctx context.Context, req *pb.TranscriptReques
 		words = append(words, &pb.TranscriptWord{Text: text, Start: start, End: end})
 	}
 	result.Segments = phraseSegments(words, result.Language)
+	for _, segment := range result.Segments {
+		if segment.End <= segment.Start {
+			return pb.TranscriptResult{}, fmt.Errorf("qwen3-asr forced aligner returned no positive duration for speech")
+		}
+	}
 	return result, nil
 }
 
@@ -104,28 +135,50 @@ func phraseSegments(words []*pb.TranscriptWord, language string) []*pb.Transcrip
 		if strings.TrimSpace(word.Text) == "" {
 			continue
 		}
-		if current != nil && (word.Start-current.End > 500000000 || word.End-current.Start > 8000000000) {
+		if current != nil && current.End > current.Start && (word.Start-current.End > 500000000 || word.End-current.Start > 8000000000) {
 			result = append(result, current)
 			current = nil
 		}
 		if current == nil {
 			current = &pb.TranscriptSegment{Id: int32(len(result)), Start: word.Start}
 		} else {
-			current.Text += separator
+			current.Text += wordSeparator(current.Text, word.Text, separator)
 		}
 		current.Text += word.Text
 		current.End = word.End
 		current.Words = append(current.Words, word)
 		last, _ := utf8.DecodeLastRuneInString(strings.TrimSpace(word.Text))
-		if strings.ContainsRune(".!?。！？", last) {
+		if current.End > current.Start && strings.ContainsRune(".!?。！？", last) {
 			result = append(result, current)
 			current = nil
 		}
 	}
 	if current != nil {
-		result = append(result, current)
+		if current.End == current.Start && len(result) > 0 {
+			prior := result[len(result)-1]
+			prior.Text += wordSeparator(prior.Text, current.Text, separator) + current.Text
+			prior.End = current.End
+			prior.Words = append(prior.Words, current.Words...)
+		} else {
+			result = append(result, current)
+		}
 	}
 	return result
+}
+
+func wordSeparator(previous, next, fallback string) string {
+	first, _ := utf8.DecodeRuneInString(next)
+	last, _ := utf8.DecodeLastRuneInString(previous)
+	if strings.ContainsRune(".,!?;:。！？", first) {
+		return ""
+	}
+	latin := func(r rune) bool {
+		return r < 128 && ((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'))
+	}
+	if latin(first) && latin(last) {
+		return " "
+	}
+	return fallback
 }
 
 func nativeLanguage(value string) string {
@@ -161,7 +214,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	for name, fn := range map[string]any{"qa_load": &native.load, "qa_transcribe": &native.transcribe, "qa_error": &native.error, "qa_text": &native.text, "qa_language": &native.language, "qa_duration": &native.duration, "qa_word_count": &native.count, "qa_word_text": &native.word, "qa_word_start": &native.start, "qa_word_end": &native.end} {
+	for name, fn := range map[string]any{"qa_reset_cancel": &native.resetCancel, "qa_cancel": &native.cancel, "qa_load": &native.load, "qa_transcribe": &native.transcribe, "qa_error": &native.error, "qa_text": &native.text, "qa_language": &native.language, "qa_duration": &native.duration, "qa_word_count": &native.count, "qa_word_text": &native.word, "qa_word_start": &native.start, "qa_word_end": &native.end} {
 		// RegisterLibFunc accepts C strings as Go strings and copies returned strings
 		// before the next native call. Memory stays owned by the serialized DLL.
 		purego.RegisterLibFunc(fn, uintptr(handle), name)

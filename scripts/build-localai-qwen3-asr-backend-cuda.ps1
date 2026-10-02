@@ -34,6 +34,7 @@ $bridgeSource = Join-Path $PSScriptRoot 'localai-qwen3-asr-backend'
 Invoke-Checked cmake @('-S', $bridgeSource, '-B', $shimBuild, '-G', 'Visual Studio 17 2022', '-A', 'x64', "-DQWEN3_ASR_SOURCE=$SourceRoot", "-DQWEN3_ASR_BUILD=$nativeBuild")
 Invoke-Checked cmake @('--build', $shimBuild, '--config', 'Release', '--parallel', '4')
 Invoke-Checked (Join-Path $shimBuild 'Release/qwen3-asr-seam-test.exe') @()
+Invoke-Checked (Join-Path $shimBuild 'Release/qwen3-asr-wave-reader-test.exe') @()
 $backendRoot = Join-Path $LocalAIRoot 'backend\go\qwen3-asr-cpp'
 New-Item -ItemType Directory -Path $backendRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $PackageRoot -Force | Out-Null

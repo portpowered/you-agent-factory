@@ -15,3 +15,4 @@ target_include_directories(goqwen3asrcpp PRIVATE ${QWEN3_ASR_SOURCE}/include ${Q
 target_link_libraries(goqwen3asrcpp PRIVATE qwen3-asr)
 target_compile_definitions(goqwen3asrcpp PRIVATE NOMINMAX)
 add_executable(qwen3-asr-seam-test seam_test.cpp)
+add_executable(qwen3-asr-wave-reader-test wave_reader_test.cpp)

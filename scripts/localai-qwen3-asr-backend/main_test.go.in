@@ -4,12 +4,16 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	pb "github.com/mudler/LocalAI/pkg/grpc/proto"
 )
 
 func TestLoadedPairAndAlignedWireContract(t *testing.T) {
+	native.resetCancel = func() {}
+	native.cancel = func() {}
 	loads, calls := 0, 0
 	native.load = func(model, aligner, dictionary string) int {
 		loads++
@@ -72,6 +76,8 @@ func TestNaturalAlignedPhrases(t *testing.T) {
 	}{
 		{"English", []string{"Can", "anyone", "help?", "Yes."}, []string{"Can anyone help?", "Yes."}},
 		{"chinese", []string{"你", "好", "。", "再", "见", "！"}, []string{"你好。", "再见！"}},
+		{"Chinese", []string{"喜欢", "Silver", "Clouds", "。"}, []string{"喜欢Silver Clouds。"}},
+		{"English", []string{"Hello", "world", "!"}, []string{"Hello world!"}},
 	} {
 		var words []*pb.TranscriptWord
 		for i, text := range test.texts {
@@ -98,5 +104,52 @@ func TestNativeLanguageHints(t *testing.T) {
 		if got := nativeLanguage(value); got != want {
 			t.Fatalf("%q => %q want %q", value, got, want)
 		}
+	}
+}
+
+func TestCancellationJoinsBeforeNextNativeRequest(t *testing.T) {
+	var cancelled atomic.Bool
+	started, observed := make(chan struct{}), make(chan struct{})
+	native.resetCancel = func() { cancelled.Store(false) }
+	native.cancel = func() { cancelled.Store(true); close(observed) }
+	native.transcribe = func(string, string, int) int { close(started); <-observed; return 1 }
+	m := &model{}
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() { _, err := m.AudioTranscription(ctx, &pb.TranscriptRequest{}); result <- err }()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("native request never started")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error=%v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("native cancellation was not joined")
+	}
+	native.transcribe = func(string, string, int) int {
+		if cancelled.Load() {
+			t.Fatal("stale cancellation crossed requests")
+		}
+		return 0
+	}
+	native.text = func() string { return "" }
+	native.language = func() string { return "" }
+	native.duration = func() float64 { return 0 }
+	native.count = func() int64 { return 0 }
+	if _, err := m.AudioTranscription(context.Background(), &pb.TranscriptRequest{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestZeroDurationWordStaysWithRealPhrase(t *testing.T) {
+	words := []*pb.TranscriptWord{{Text: "啊", Start: 10960000000, End: 10960000000}, {Text: "啊！", Start: 16320000000, End: 18400000000}}
+	got := phraseSegments(words, "Chinese")
+	if len(got) != 1 || got[0].Text != "啊啊！" || got[0].Start != 10960000000 || got[0].End != 18400000000 || len(got[0].Words) != 2 {
+		t.Fatalf("lost upstream timing evidence: %v", got)
 	}
 }
