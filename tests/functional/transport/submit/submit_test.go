@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -120,6 +121,11 @@ func TestSubmitFamilyExecutesThroughRootBuiltProcess(t *testing.T) {
 	})
 }
 
+// submitLiveTerminalLimit bounds the convergence wait for the canonical Factory
+// Session result projection. It is a failure ceiling only; the wait returns as
+// soon as the public status converges.
+const submitLiveTerminalLimit = 15 * time.Second
+
 // TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure proves
 // live submit admission remains visible when the real provider boundary later
 // rejects the worker's structured output.
@@ -177,6 +183,12 @@ func TestSubmitFamilyEnqueuesWorkBeforeDownstreamStructuredOutputFailure(t *test
 		t.Fatalf("Worker Session observations = %#v, want one identified attempt", workers.Sessions)
 	}
 	readSubmitWorkerSessionTerminal(t, baseURL, sessionID, workers.Sessions[0].WorkerSessionId)
+	// The Worker Session publishes its terminal delivery before the runtime
+	// projects the Work's canonical failed result, so wait for the public
+	// Factory Session status to converge instead of polling the Work listing.
+	// The controlled provider edge already returns its one attempt, so no
+	// further edge signal is available to order this projection deterministically.
+	support.WaitForSessionTerminalStatus(t, baseURL, sessionID, submitLiveTerminalLimit)
 	listed := support.GetJSON[factoryapi.ListWorkResponse](t, sessionWorkURL(baseURL, sessionID))
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed CLI-submitted work = %d, want 1: %#v", got, listed)
