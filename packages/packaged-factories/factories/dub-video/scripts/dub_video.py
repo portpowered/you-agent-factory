@@ -23,7 +23,7 @@ from dub_contract import (
     load_translation_response, render_ass, render_srt, translation_prompt,
     validate_segments, validate_translations, target_language, LANGUAGES, playback_segments,
 )
-from dub_media import command, fit_speech, mux, reference, timeline, video_duration
+from dub_media import CommandFailed, command, fit_speech, mux, reference, timeline, video_duration
 
 # These partition targets bound one inference call, never the complete input.
 ASR_CLIP_MS = 300_000
@@ -288,6 +288,46 @@ def tts_language(language: str) -> str:
     return LANGUAGES[target_language(language).split("-")[0]][0]
 
 
+def tts_exhausted(error: CommandFailed) -> bool:
+    """Only the canonical structured Models diagnostic permits a retry."""
+    if error.returncode != 1:
+        return False
+    for line in reversed(error.detail.splitlines()):
+        try:
+            failure = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(failure, dict) and "code" in failure:
+            return (failure.get("code") == "MODEL_BACKEND_FAILURE"
+                    and failure.get("message") == "TTS generation limit reached without EOS")
+    return False
+
+
+def synthesize_speech(prefix, segment, ref, model_name, language, server):
+    # All retries use identical text, language, and original-audio bytes. Each
+    # attempt owns its output/evidence, so exhausted output can never be selected.
+    attempts = []
+    for attempt in range(1, 4):
+        speech = prefix.with_suffix(".speech.wav") if attempt == 1 else \
+            prefix.parent / f"{prefix.name}.speech-attempt-{attempt}.wav"
+        try:
+            model(model_name, "TTS", [f"text={segment['text']}", f"voice=@{ref}"],
+                  [f"audio={speech}"], {"language": tts_language(language)}, server)
+        except CommandFailed as error:
+            if not tts_exhausted(error):
+                raise
+            evidence = prefix.parent / f"{prefix.name}.tts-attempt-{attempt}-failure.json"
+            save_json(evidence, {"attempt": attempt, "audio": str(speech),
+                                "reason": "generation-exhausted-without-eos", "message": str(error)})
+            attempts.append({"attempt": attempt, "status": "failed", "evidence": str(evidence)})
+            if attempt == 3:
+                raise
+            continue
+        attempts.append({"attempt": attempt, "status": "succeeded", "audio": str(speech)})
+        segment["tts_attempts"] = attempts
+        return speech
+
+
 def synthesize(path: str) -> Path:
     manifest, value = load_manifest(path)
     if value.get("stage") != "translated":
@@ -300,11 +340,10 @@ def synthesize(path: str) -> Path:
     )
     for index, segment in enumerate(translated):
         prefix = manifest.parent / f"segment-{segment['id']}"
-        ref, speech, fitted = prefix.with_suffix(".reference.wav"), prefix.with_suffix(".speech.wav"), prefix.with_suffix(".pcm")
+        ref, fitted = prefix.with_suffix(".reference.wav"), prefix.with_suffix(".pcm")
         reference(Path(value["video"]), segment, ref)
-        model(value["models"]["tts"], "TTS", [f"text={segment['text']}", f"voice=@{ref}"],
-              [f"audio={speech}"], {"language": tts_language(value["language"])},
-              value.get("tts_server", ""))
+        speech = synthesize_speech(prefix, segment, ref, value["models"]["tts"],
+                                   value["language"], value.get("tts_server", ""))
         segment.update(reference_audio=str(ref), speech_audio=str(speech), fitted_audio=str(fitted),
                        reference_sha256=digest(ref),
                        speech_speed=fit_speech(speech, fitted, segment,

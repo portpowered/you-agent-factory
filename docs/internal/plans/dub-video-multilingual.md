@@ -260,7 +260,7 @@ does not claim every hardware/duration combination is tested.
 
 Packaged Python validation: `python -B -m unittest discover -s
 packages/packaged-factories/factories/dub-video/scripts -p 'test_*.py'` passes
-37 tests. New witnesses cover canonical/native target names and early invalid
+46 tests. New witnesses cover canonical/native target names and early invalid
 tags, Chinese source reference conditioning for English/Japanese/Korean,
 bounded ASR clips with silence and global ID/time offsets, Unicode prompt-size
 partitioning with an oversized individual segment, MP4/MKV language tags,
@@ -389,6 +389,46 @@ unchanged source evidence, absent/insufficient gaps, last-cue video limits,
 invalid/overlapping playback metadata, and shared PCM/subtitle presentation.
 The original reference-conditioning test also observes the bounded fit request
 and saved derived end while proving extraction still uses original cue bounds.
+
+The first post-audit TTS cue generated 163.84 seconds for `Ahhh!`: exactly the
+native default 2,048 frames at 80 ms each. The native backend had treated reaching
+`max_new_tokens` without EOS as successful completion. Native generation now
+rejects exhaustion before publishing a WAV and retains the precise error through
+the Go bridge. Models maps only that anchored native diagnostic to the safe
+message `TTS generation limit reached without EOS`; other private details remain
+in the error cause. Failed invocations expose no canonical audio output.
+
+Real repeated `Ahhh!` requests with the identical 7.52-second original crying
+reference and default random sampling produced: successful 8.40-second output,
+explicit exhaustion with no WAV, then successful 1.12-second output. This
+demonstrates stochastic recovery with unchanged conditioning, without promising
+all retries converge. The Factory permits three total attempts only for the
+structured `MODEL_BACKEND_FAILURE` plus the exact safe exhaustion message.
+All attempts use identical text, language, reference path/audio bytes, and
+parameters. Distinct retry audio paths and per-attempt failure JSON preserve
+evidence. Other errors and cancellation stop immediately; the two-times fit
+guard remains independent and unchanged. Four additional component tests prove
+unchanged retries, saved failures, the attempt ceiling, and rejection of generic,
+unstructured, non-exhaustion, and cancellation failures. The Python suite now
+contains 46 tests.
+
+The EOS repair is source commit `a344ad7c327b56e7c9fd26dc9db5914aa4522da1`.
+Its new immutable TTS-only Windows CUDA publication is
+`localai-backends-v1-847f8b8c954d54d913886ee5e43be40477e3f53e8d846f1f956b69be24ccca7d`.
+Anonymous download verified 445,863,586 bytes and SHA-256
+`c2a3d82d9c8029e51298f17727a4e44535f080a64844d273ffe4068ae201b99d`.
+The ASR publication remains unchanged. A real native request with a one-frame
+budget failed without a WAV; the next normal request reused the loaded model
+successfully. Independent CPU bridge tests verify failure/no output followed
+by successful output, and all provenance source hashes match the source tree.
+
+Functional CI on `9aaf678` passed its tests but measured logging coverage below
+the required floor (67.77% versus 69.67%). The unreachable `BuildLogger` default
+terminal policy is removed in favor of the existing canonical terminal builder.
+A public finite CLI failure test verifies error records, caller and stack trace
+retained in the runtime file, quiet normal terminal output, and verbose request
+details. Normal and race runs passed; the coverage floor is unchanged and the
+full CI gate must still measure the repaired tree.
 
 Record actual commands, measured artifacts, review results, and remaining limits
 after implementation. Do not claim semantic translation/voice quality solely

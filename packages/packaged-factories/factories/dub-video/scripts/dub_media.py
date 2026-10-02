@@ -10,11 +10,18 @@ from pathlib import Path
 from dub_contract import LANGUAGES, target_language
 
 
+class CommandFailed(ValueError):
+    def __init__(self, executable, returncode, detail):
+        super().__init__(f"{executable} failed ({returncode}): {detail[-4000:]}")
+        self.returncode = returncode
+        self.detail = detail
+
+
 def command(argv: list[str]) -> None:
     result = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     if result.returncode:
         detail = result.stderr.decode("utf-8", errors="replace").strip()
-        raise ValueError(f"{argv[0]} failed ({result.returncode}): {detail[-4000:]}")
+        raise CommandFailed(argv[0], result.returncode, detail)
 
 
 def probe(path: Path) -> dict:

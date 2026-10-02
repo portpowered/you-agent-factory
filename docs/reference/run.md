@@ -225,6 +225,10 @@ words or overlapping the next cue. The
 default VibeVoice Realtime model cannot encode arbitrary reference audio;
 use `qwen3-tts-base` or another configured reference-capable model. Override
 Models catalog names with `--asr-model`, `--llm-model`, and `--tts-model`.
+If the native TTS model reaches its generation limit without an end-of-speech
+token, the Factory repeats the same text and original audio reference. Each cue
+permits at most three attempts. Attempt audio paths and failure evidence remain
+in the artifact directory. Other failures and cancellation stop the step.
 The default `asr` uses Qwen3-ASR with its required forced aligner, including
 Chinese, English, Japanese, and Korean recognition. Recognition quality depends on the recording
 and language. Target tags include `en-US`, `zh-CN`, `zh-Hant-TW`, `ja-JP`, and

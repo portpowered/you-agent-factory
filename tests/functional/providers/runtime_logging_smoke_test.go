@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -405,4 +406,46 @@ func stringPointerValue[T ~string](value *T) string {
 		return ""
 	}
 	return string(*value)
+}
+
+// A finite CLI run keeps structured failure diagnostics in its runtime file.
+// Each case owns its process because terminal verbosity is fixed at startup.
+func TestRuntimeLoggingFiniteCLISeparatesDiagnosticsFromProgress(t *testing.T) {
+	t.Parallel()
+	for _, verbose := range []bool{false, true} {
+		t.Run(fmt.Sprintf("verbose=%t", verbose), func(t *testing.T) {
+			t.Parallel()
+			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+			testutil.WriteSeedFile(t, dir, "task", []byte("log diagnostic witness"))
+			logDir, home := t.TempDir(), t.TempDir()
+			process := support.BuildProcess(t, serviceedges.Edges{ScriptCommandRunner: runtimeLoggingSmokeRunner{stderr: "script failed safely", exitCode: 1}})
+			args := []string{"you", "run", "--dir", dir, "--runtime-log-dir", logDir}
+			if verbose {
+				args = append(args, "--verbose")
+			}
+			inputs := support.FakeInputs(t.Context(), args)
+			inputs.Input.WorkingDirectory = dir
+			inputs.Input.Env = append(inputs.Input.Env, "HOME="+home, "USERPROFILE="+home)
+			err := process.Execute(inputs.Input)
+			if err != nil {
+				t.Fatalf("finite CLI run: %v stdout=%q stderr=%q", err, inputs.Stdout(), inputs.Stderr())
+			}
+			records := readRuntimeLoggingSmokeRecords(t, requireAnyRuntimeLogPath(t, logDir))
+			failure := requireRuntimeLogMessage(t, records, "command runner: request failed")
+			if failure["level"] != "error" {
+				t.Fatalf("failure record level = %#v, want error", failure["level"])
+			}
+			for _, field := range []string{"caller", "stacktrace"} {
+				if value, ok := failure[field].(string); !ok || value == "" {
+					t.Fatalf("failure record lost %s diagnostics: %#v", field, failure)
+				}
+			}
+			if !verbose && strings.Contains(inputs.Stdout()+inputs.Stderr(), "command runner: request failed") {
+				t.Fatalf("normal terminal leaked structured failure log: stdout=%q stderr=%q", inputs.Stdout(), inputs.Stderr())
+			}
+			if verbose {
+				requireRuntimeLogMessage(t, records, "command runner: verbose request details")
+			}
+		})
+	}
 }

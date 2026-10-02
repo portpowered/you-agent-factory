@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"regexp"
 	"strings"
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
@@ -13,6 +14,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
+
+var ttsGenerationExhausted = regexp.MustCompile(`^qwen3-tts: synthesis failed: pipeline_tts_synthesize: generation exhausted max_new_tokens=[1-9][0-9]* without EOS$`)
 
 const (
 	localAITTSMethod        = "/backend.Backend/TTS"
@@ -195,7 +198,7 @@ func invokeTTSProtocol(
 		return ttsMalformedResultFailure()
 	}
 	if !result.GetSuccess() {
-		return ttsProtocolFailure("TTS backend did not produce audio", models.ErrInferenceFailed)
+		return ttsTransportFailure(ctx, "TTS backend did not produce audio", errors.New(result.GetMessage()))
 	}
 	return ctx.Err()
 }
@@ -307,10 +310,13 @@ func ttsTransportFailure(ctx context.Context, message string, err error) error {
 	if status.Code(err) == codes.FailedPrecondition {
 		return &models.InvocationFailure{
 			Class: models.InvocationFailureClassBackendProtocol, Operation: models.OperationTTS,
-			Message: "TTS backend protocol is incompatible", Cause: models.ErrInferenceFailed,
+			Message: "TTS backend protocol is incompatible", Cause: errors.Join(models.ErrInferenceFailed, err),
 		}
 	}
-	return ttsProtocolFailure(message, models.ErrInferenceFailed)
+	if ttsGenerationExhausted.MatchString(status.Convert(err).Message()) {
+		message = "TTS generation limit reached without EOS"
+	}
+	return ttsProtocolFailure(message, errors.Join(models.ErrInferenceFailed, err))
 }
 
 func ttsReadinessFailure(message string) error {

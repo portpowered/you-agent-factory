@@ -17,7 +17,7 @@ import (
   "go.uber.org/zap"
 )
 func fallback() {
-  _, _ = factorylogging.BuildLogger(false, false)
+  _, _ = factorylogging.BuildTerminalLogger("normal", false)
   _, _ = zap.NewDevelopment()
   _ = zap.L()
   _ = slog.Default()
@@ -29,7 +29,7 @@ func fallback() {
 	if err != nil {
 		t.Fatalf("scan fixture: %v", err)
 	}
-	for _, want := range []string{"BuildLogger", "NewDevelopment", "zap.L", "slog.Default", "standardlog.Printf", "accept or propagate an injected logger"} {
+	for _, want := range []string{"BuildTerminalLogger", "NewDevelopment", "zap.L", "slog.Default", "standardlog.Printf", "accept or propagate an injected logger"} {
 		if !containsFinding(findings, want) {
 			t.Errorf("findings %#v do not report %q", findings, want)
 		}
@@ -80,11 +80,14 @@ func disabledZap() *zap.Logger { return zap.NewNop() }`,
 
 func TestScanAllowsNarrowCompositionOwners(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
+		"pkg/wire/profiles.go": `package wire
+import "github.com/portpowered/infinite-you/pkg/platform/logging"
+func compose() { _, _ = logging.BuildTerminalLogger("normal", false) }`,
 		"pkg/transports/cli/root.go": `package cli
 import "github.com/portpowered/infinite-you/pkg/platform/logging"
-func compose() { _, _ = logging.BuildLogger(false, false) }`,
+func compose() { _, _ = logging.BuildTerminalLogger("normal", false) }`,
 		"pkg/transports/cli/terminalpolicy/policy.go": `package terminalpolicy
-func compose() { _, _ = logging.BuildLogger(false, false) }`,
+func compose() { _, _ = logging.BuildTerminalLogger("normal", false) }`,
 		"pkg/platform/logging/logger.go": `package logging
 import "go.uber.org/zap"
 func build() { _, _ = zap.NewProduction() }`,
