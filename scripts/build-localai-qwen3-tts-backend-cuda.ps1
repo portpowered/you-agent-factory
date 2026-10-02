@@ -53,7 +53,7 @@ if ($LASTEXITCODE -ne 0) { Invoke-Checked git @('-C', $sourceRoot, 'apply', '--u
 # retain private seed/EOS diagnostics without altering normal sampling defaults.
 & git -C $sourceRoot apply --unidiff-zero --reverse --check $samplingPatch 2>$null
 if ($LASTEXITCODE -ne 0) { Invoke-Checked git @('-C', $sourceRoot, 'apply', '--unidiff-zero', $samplingPatch) }
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'localai-qwen3-tts-sampling_test.cpp') -Destination (Join-Path $backendRoot 'sampling_test.cpp') -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'localai-qwen3-tts-sampling_test.cpp.in') -Destination (Join-Path $backendRoot 'sampling_test.cpp') -Force
 
 $main = Join-Path $backendRoot 'main.go'
 $loader = Join-Path $backendRoot 'localai-backend-library_windows.go'
