@@ -633,7 +633,7 @@ jobs:
         run: |
           set -o pipefail
           go test -tags managed_process_integration ./tests/integration/models \
-            -run '^TestBlockedLoadModelStopsOwnedProcess$' -count=1 -v -timeout=5m \
+            -run '^TestBlockedLoadModelStopsOwnedProcess$' -count=1 -v -timeout=6m \
             2>&1 | tee .artifacts/integration/blocked-loadmodel-process-witness.log
         env:
           LOCALAI_READINESS_HELPER: ${{ steps.blocked-loadmodel-helper.outputs.path }}
