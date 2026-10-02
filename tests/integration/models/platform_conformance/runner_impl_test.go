@@ -214,29 +214,6 @@ func (runner ControlledRunner) startControlledAttempt(ctx context.Context, optio
 	return channelForControlledWait(attempt.process)
 }
 
-// A concurrent fork can briefly inherit a staging writer until its exec closes
-// CLOEXEC descriptors. Only the kernel's executable-busy result is transient;
-// keep all other start failures immediate and the admitted timeout authoritative.
-func startControlledProcess(ctx context.Context, command *exec.Cmd, starter controlledProcessStarter) error {
-	const attempts = 5
-	for attempt := 0; ; attempt++ {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		err := starter(command)
-		if !errors.Is(err, syscall.ETXTBSY) || attempt == attempts-1 {
-			return err
-		}
-		timer := time.NewTimer(10 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return ctx.Err()
-		case <-timer.C:
-		}
-	}
-}
-
 func channelForControlledWait(command *exec.Cmd) <-chan error {
 	waitCh := make(chan error, 1)
 	go func() { waitCh <- command.Wait() }()
