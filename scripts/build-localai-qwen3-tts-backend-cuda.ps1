@@ -30,6 +30,12 @@ if (-not (Test-Path -LiteralPath $sourceRoot)) {
 Invoke-Checked git @('-C', $sourceRoot, 'checkout', '--detach', $qwenCommit)
 Invoke-Checked git @('-C', $sourceRoot, 'submodule', 'update', '--init', '--recursive')
 
+# The sampler patch shifts the zero-context EOS patch's line offsets. Remove
+# only our already-applied sampler patch before checking the pinned EOS base.
+$samplingPatch = Join-Path $PSScriptRoot 'localai-qwen3-tts-sampling.patch'
+& git -C $sourceRoot apply --unidiff-zero --reverse --check $samplingPatch 2>$null
+if ($LASTEXITCODE -eq 0) { Invoke-Checked git @('-C', $sourceRoot, 'apply', '--unidiff-zero', '--reverse', $samplingPatch) }
+
 # The pinned direct CUDA decode graphs gather Q6_K embedding rows. Backport
 # upstream's exact Q6_K gather kernel rather than silently changing model weights.
 $ggmlRoot = Join-Path $sourceRoot 'ggml'
@@ -45,7 +51,6 @@ if ($LASTEXITCODE -ne 0) { Invoke-Checked git @('-C', $sourceRoot, 'apply', '--u
 
 # Guard both Talker and CodePredictor sampling against invalid distributions;
 # retain private seed/EOS diagnostics without altering normal sampling defaults.
-$samplingPatch = Join-Path $PSScriptRoot 'localai-qwen3-tts-sampling.patch'
 & git -C $sourceRoot apply --unidiff-zero --reverse --check $samplingPatch 2>$null
 if ($LASTEXITCODE -ne 0) { Invoke-Checked git @('-C', $sourceRoot, 'apply', '--unidiff-zero', $samplingPatch) }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'localai-qwen3-tts-sampling_test.cpp') -Destination (Join-Path $backendRoot 'sampling_test.cpp') -Force
