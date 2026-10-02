@@ -550,6 +550,187 @@ func TestSubagentInvokeDeadlineWithObservedProviderErrorRefinesMessageAndAction(
 	}
 }
 
+// A real 20-minute subagent timeout retained a terminal provider error together
+// with a provider session reference. The observation is still timing evidence,
+// so it must refine the diagnostic instead of leaving the misleading slow-model
+// remedy in place, and it must not claim the reference was absent.
+func TestSubagentTimeoutWithObservedProviderSessionErrorRefinesMessageAndAction(t *testing.T) {
+	const secret = "private provider session reference and error payload"
+	now := time.Now()
+	timeout := int64(60_000)
+	for _, test := range []struct {
+		name       string
+		invokeErr  error
+		invoke     *factorysessions.InvocationResult
+		wantDetail map[string]string
+	}{
+		{
+			name: "terminal timed out",
+			invoke: &factorysessions.InvocationResult{
+				Status:    factorysessions.InvocationTerminalStatusTimedOut,
+				ErrorCode: "INVOCATION_TIMED_OUT",
+				Message:   "private provider output " + secret,
+				RequestID: "request-session-error",
+				TraceID:   "trace-session-error",
+				WorkID:    "work-session-error",
+			},
+			wantDetail: map[string]string{
+				"requestId": "request-session-error", "traceId": "trace-session-error", "workId": "work-session-error",
+			},
+		},
+		{name: "deadline exceeded", invokeErr: fmt.Errorf("private: %w", context.DeadlineExceeded)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			target := &subagentActivityTarget{
+				subagentTargetFake: &subagentTargetFake{invokeErr: test.invokeErr, invokeResult: test.invoke},
+				events: []factorysessions.FactoryResponseEvent{{
+					Kind: workers.KindError, Phase: workers.PhaseFailed, RecordedAt: now.Add(-time.Second),
+					Provenance:         workers.Provenance{Provider: secret},
+					ProviderSessionRef: secret,
+					Payload:            json.RawMessage(`{"error":"` + secret + `"}`),
+				}},
+			}
+			response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-session-error" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode", TimeoutMillis: &timeout})
+			if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" || !target.closed || !target.read {
+				t.Fatalf("timeout and cleanup = %#v, target = %#v", response, target)
+			}
+			assertObservedProviderSessionErrorDiagnostic(t, response, secret)
+			for key, want := range test.wantDetail {
+				if response.Error.Details[key] != want {
+					t.Fatalf("%s = %#v, want %q", key, response.Error.Details[key], want)
+				}
+			}
+		})
+	}
+}
+
+func assertObservedProviderSessionErrorDiagnostic(t *testing.T, response mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult], secret string) {
+	t.Helper()
+	envelope := response.Error
+	if envelope.Retryable || envelope.Details["partialEffectsPossible"] != true || envelope.SessionID != "session-1" {
+		t.Fatalf("timeout diagnostic = %#v", envelope)
+	}
+	assertObservedProviderSessionActivity(t, envelope)
+	assertObservedProviderSessionAction(t, envelope)
+	encoded, err := json.Marshal(response)
+	if err != nil || strings.Contains(string(encoded), secret) {
+		t.Fatalf("observed-session timeout leaked provider data: %s, %v", encoded, err)
+	}
+	assertSubagentObservedSessionErrorMCPContent(t, response, encoded, secret)
+}
+
+// A bounded snapshot of the observed activity carries fixed vocabulary only, so
+// the provider session reference itself never reaches the envelope.
+func assertObservedProviderSessionActivity(t *testing.T, envelope *mcpfactorysession.ToolErrorEnvelope) {
+	t.Helper()
+	if !strings.Contains(envelope.Message, "provider error was observed") {
+		t.Fatalf("timeout message = %q, want provider error evidence", envelope.Message)
+	}
+	activity, ok := envelope.Details["progress"].(map[string]any)["lastObservedProviderActivity"].(map[string]any)
+	if !ok || activity["kind"] != "ERROR" || activity["phase"] != "FAILED" || activity["providerSessionObserved"] != true || len(activity) != 4 {
+		t.Fatalf("last provider activity = %#v", activity)
+	}
+}
+
+func assertObservedProviderSessionAction(t *testing.T, envelope *mcpfactorysession.ToolErrorEnvelope) {
+	t.Helper()
+	action, ok := envelope.Details["suggestedAction"].(string)
+	if !ok || !strings.Contains(action, "a provider session reference was observed") || !strings.Contains(action, "longer timeout may not resolve") {
+		t.Fatalf("observed-session action = %#v", envelope.Details["suggestedAction"])
+	}
+	if strings.Contains(action, "no provider session reference was observed") || strings.Contains(action, "use another configured model or a longer timeout") {
+		t.Fatalf("observed-session action asserts absence or keeps the default remedy: %#v", action)
+	}
+}
+
+// The human-readable MCP text and structuredContent must carry the same refined
+// timeout evidence as the typed response.
+func assertSubagentObservedSessionErrorMCPContent(t *testing.T, response mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult], toolResponse []byte, secret string) {
+	t.Helper()
+	encoded, err := mcpfactorysession.MarshalDomainErrorCallToolResultJSON(toolResponse)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+		IsError           bool            `json:"isError"`
+		StructuredContent json.RawMessage `json:"structuredContent"`
+	}
+	if err := json.Unmarshal(encoded, &result); err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsError || len(result.Content) != 1 || result.Content[0].Text != response.Error.Message {
+		t.Fatalf("MCP content = %s", encoded)
+	}
+	var structured mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult]
+	if err := json.Unmarshal(result.StructuredContent, &structured); err != nil {
+		t.Fatal(err)
+	}
+	if structured.Error == nil || structured.Error.Code != response.Error.Code ||
+		structured.Error.Details["suggestedAction"] != response.Error.Details["suggestedAction"] {
+		t.Fatalf("MCP structured content = %s", encoded)
+	}
+	if strings.Contains(string(encoded), secret) {
+		t.Fatalf("MCP response leaked provider text: %s", encoded)
+	}
+}
+
+// An earlier provider error in the retained activity must not turn a completed
+// invocation into a failure.
+func TestSubagentCompletedInvocationIgnoresEarlierObservedProviderError(t *testing.T) {
+	const secret = "private provider session reference"
+	target := &subagentActivityTarget{
+		subagentTargetFake: &subagentTargetFake{},
+		events: []factorysessions.FactoryResponseEvent{{
+			Kind: workers.KindError, Phase: workers.PhaseFailed, RecordedAt: time.Now(),
+			Provenance:         workers.Provenance{Provider: "opencode"},
+			ProviderSessionRef: secret,
+		}},
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-completed-after-error" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
+	if response.Error != nil || response.Result == nil || response.Result.Text != "subagent answer" {
+		t.Fatalf("completed response = %#v", response)
+	}
+	if target.read || target.getCalls != 0 {
+		t.Fatalf("completed invocation read timeout evidence: read=%t getCalls=%d", target.read, target.getCalls)
+	}
+	if !target.closed {
+		t.Fatal("completed invocation skipped Factory Session cleanup")
+	}
+	if encoded, err := json.Marshal(response); err != nil || strings.Contains(string(encoded), secret) {
+		t.Fatalf("completed response leaked provider data: %s, %v", encoded, err)
+	}
+}
+
+// A later non-error activity is the last observation, so the default retry
+// guidance stays.
+func TestSubagentTimeoutWithLaterNonErrorActivityKeepsDefaultAction(t *testing.T) {
+	now := time.Now()
+	target := &subagentActivityTarget{
+		subagentTargetFake: &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusTimedOut}},
+		events: []factorysessions.FactoryResponseEvent{
+			{Kind: workers.KindError, Phase: workers.PhaseFailed, RecordedAt: now.Add(-time.Second), Provenance: workers.Provenance{Provider: "opencode"}},
+			{Kind: workers.KindReasoning, Phase: workers.PhaseDelta, RecordedAt: now, Provenance: workers.Provenance{Provider: "opencode"}},
+		},
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-later-reasoning" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
+	if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" {
+		t.Fatalf("timeout response = %#v", response)
+	}
+	if strings.Contains(response.Error.Message, "provider error was observed") {
+		t.Fatalf("superseded error refined the message: %q", response.Error.Message)
+	}
+	activity, ok := response.Error.Details["progress"].(map[string]any)["lastObservedProviderActivity"].(map[string]any)
+	if !ok || activity["kind"] != "REASONING" || activity["phase"] != "DELTA" {
+		t.Fatalf("last provider activity = %#v", activity)
+	}
+	if action, ok := response.Error.Details["suggestedAction"].(string); !ok || !strings.Contains(action, "use another configured model or a longer timeout") {
+		t.Fatalf("later non-error action = %#v", response.Error.Details["suggestedAction"])
+	}
+}
+
 func TestSubagentTimeoutWithNonTerminalProviderErrorKeepsDefaultAction(t *testing.T) {
 	now := time.Now()
 	target := &subagentActivityTarget{

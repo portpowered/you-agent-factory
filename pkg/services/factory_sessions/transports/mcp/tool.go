@@ -479,31 +479,48 @@ func subagentAttachProgress(details map[string]any, progress map[string]any) {
 	}
 }
 
-// subagentProviderErrorObserved reports whether the bounded timeout progress
-// captured a terminal provider error event without a provider session
-// reference. The observation is timing evidence only: it does not prove the
-// error caused the timeout, and no provider payload is exposed.
-func subagentProviderErrorObserved(progress map[string]any) bool {
+// subagentProviderErrorObservation reports whether the bounded timeout progress
+// captured a terminal provider error event as the last observed provider
+// activity, and whether a provider session reference was observed alongside it.
+// The observation is timing evidence only: it does not prove the error caused
+// the timeout, it is not a terminal Factory failure, and no provider payload or
+// reference value leaves this edge. A real timed-out dispatch can be observed
+// with a provider session reference, so the reference never suppresses the
+// observation.
+func subagentProviderErrorObservation(progress map[string]any) (errorObserved, providerSessionObserved bool) {
 	activity, ok := progress["lastObservedProviderActivity"].(map[string]any)
 	if !ok {
-		return false
+		return false, false
 	}
-	return activity["kind"] == string(workers.KindError) &&
-		activity["phase"] == string(workers.PhaseFailed) &&
-		activity["providerSessionObserved"] != true
+	if activity["kind"] != string(workers.KindError) || activity["phase"] != string(workers.PhaseFailed) {
+		return false, false
+	}
+	return true, activity["providerSessionObserved"] == true
 }
 
 // subagentTimeoutProviderErrorEvidence refines the timeout message and action
-// when the progress snapshot captured a terminal provider error without a
-// provider session reference. The default retry guidance assumes a slow model;
-// an observed provider error does not support that remedy, so the action points
-// at provider logs instead without claiming a cause or a provider session.
+// when the progress snapshot captured a terminal provider error. The default
+// retry guidance assumes a slow model; an observed provider error does not
+// support that remedy, so the action points at provider logs instead without
+// claiming a cause. The action states the observed provider session reference
+// only in the form actually observed, and never asserts its absence when one
+// was seen.
 func subagentTimeoutProviderErrorEvidence(envelope *ToolErrorEnvelope, progress map[string]any) {
-	if !subagentProviderErrorObserved(progress) {
+	errorObserved, providerSessionObserved := subagentProviderErrorObservation(progress)
+	if !errorObserved {
 		return
 	}
 	envelope.Message = "subagent timed out after a provider error was observed; workspace edits may have occurred"
-	envelope.Details["suggestedAction"] = "The last observed provider activity was an error before the deadline and no provider session reference was observed; a longer timeout may not resolve an observed provider error."
+	envelope.Details["suggestedAction"] = subagentProviderErrorSuggestedAction(providerSessionObserved)
+}
+
+func subagentProviderErrorSuggestedAction(providerSessionObserved bool) string {
+	observed := "a provider session reference was observed"
+	if !providerSessionObserved {
+		observed = "no provider session reference was observed"
+	}
+	return "The last observed provider activity was an error before the deadline and " + observed +
+		"; a longer timeout may not resolve an observed provider error."
 }
 
 // subagentPrimaryText joins the text parts of a completed invocation with
