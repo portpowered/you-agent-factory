@@ -558,7 +558,7 @@ func TestPinnedQwenWindowsCUDACandidateAllowsOfflineSelectionAndRejectsCPU(t *te
 	}
 	request := publishedWindowsRequest("localai-qwen3-tts-cpp")
 	selection, err := resolver(t.Context(), request, true)
-	if err != nil || selection.Accelerator != "cuda" || selection.Bytes != 446509483 || selection.SHA256 != "63f26241a917c5340b2bdbb611c6362ae04fcae9d8dd6a7682c71b5c628f33b4" {
+	if err != nil || selection.Accelerator != "cuda" || selection.Bytes != 445863586 || selection.SHA256 != "c2a3d82d9c8029e51298f17727a4e44535f080a64844d273ffe4068ae201b99d" {
 		t.Fatalf("pinned Qwen candidate = %#v/%v, want exact verified Windows archive", selection, err)
 	}
 	request.Platform.CUDAAvailable = false
