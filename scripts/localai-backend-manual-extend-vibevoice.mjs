@@ -13,10 +13,9 @@ const configPath = join(repositoryRoot, ".github", "localai-backend-artifacts.js
 const repository = "portpowered/you-agent-factory";
 const vibevoiceCudaID = "localai-vibevoice/windows-amd64-cuda";
 const digestPattern = /^[0-9a-f]{64}$/;
-// This extension is only valid against the future configuration that ships
-// packaging revision 5, which is the first revision that can build the
-// vibevoice Windows CUDA backend.
-const requiredPackagingRevision = 5;
+// Packaging revision 5 first supported the VibeVoice Windows CUDA backend.
+// This extension requires current revision 6 metadata and publication identity.
+const requiredPackagingRevision = 6;
 
 // Eleven-archive baseline: the nine CPU/metal archives plus the manually
 // published llama and whisper Windows CUDA archives. Linux CUDA still builds

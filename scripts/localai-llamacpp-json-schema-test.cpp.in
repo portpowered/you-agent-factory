@@ -1,0 +1,654 @@
+// LOCALAI_LLAMACPP_JSON_SCHEMA_TEST
+//
+// CPU regression for the authored json-schema forwarding patch on pinned llama.cpp
+// 6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef (tools/grpc-server/grpc-server.cpp).
+//
+// WHAT THIS WITNESSES
+//
+// The applicator inserts a header containing the exact pure request-schema helper
+// extracted from the patched server actually compiled. The first case executes
+// that helper directly; other cases exercise the pinned native grammar/parser:
+//
+//   * common/chat.cpp           - common_chat_templates_apply, the response-format frame,
+//                                 the generated grammar, the PEG parser arena
+//   * common/sampling.cpp       - included directly, so common_sampler_init and
+//                                 common_sampler_accept are the real ones
+//   * llama.cpp grammar sampler - llama_sampler_apply over the real GBNF produced above
+//
+// No approximation: this file never re-derives a grammar, never hand-parses reasoning, and
+// never simulates a sampler. The template is the supplied Qwen one, the grammar is the one
+// common_chat_templates_apply generated, the accept/reject decisions come from
+// llama_sampler_apply on that grammar, and the public/private split comes from
+// common_chat_parse on the PEG parser the template built.
+//
+// No model weights, no decode, no inference, no GPU: the vocabulary is loaded with
+// llama_model_params::vocab_only and n_gpu_layers = 0, so only tokenizer, grammar, template
+// and PEG CPU paths run.
+//
+// THE VALUE UNDER TEST
+//
+// Metadata arrives as one string. tools/grpc-server/grpc-server.cpp decodes it into a JSON
+// object and installs it as body_json["json_schema"]; tools/server/server-common.cpp:1040
+// then does inputs.json_schema = json_schema.dump(), and common/chat.cpp:2720 does
+// json::parse(inputs.json_schema). This file therefore feeds common_chat_templates_inputs
+// the metadata string itself, which is byte-for-byte the same value the production chain
+// hands down, and observes what the native consumer does with it.
+//
+// GRAMMAR CLASS
+//
+// tools/server/server-common.cpp:1095-1098 returns every template-generated grammar as
+// llama_params["grammar"] with grammar_type = "tool_calls", and tools/server/server-schema.cpp:
+// 271-272 maps exactly that to COMMON_GRAMMAR_TYPE_TOOL_CALLS. This file uses the same
+// class, so the sampler state under test is the state the server really builds for a
+// json_schema request. It is a generated grammar, not COMMON_GRAMMAR_TYPE_USER, and the
+// patch does not change either class.
+//
+// COVERAGE (each assertion observes pinned code; none restates the patch)
+//   metadata_value_drives_the_native_schema_path
+//     - a JSON object metadata value generates a nonempty grammar and a PEG parser, and the
+//       supplied template's thinking support and start/end tags come back unchanged;
+//     - the generated grammar is the same for the metadata string and for the canonical
+//       re-dump of its parsed object, which is what oaicompat_chat_params_parse passes on,
+//       so decoding the metadata cannot change the answer;
+//     - re-forwarding the same metadata yields the same grammar and the same generation
+//       prompt, so forwarding is idempotent in effect;
+//     - an empty metadata value produces no grammar and is not an error.
+//   nonobject_and_malformed_values_constrain_nothing
+//     - a JSON array, string, number, boolean, null, whitespace and malformed JSON each never
+//       produce a grammar. The pinned consumer either ignores them or throws out of the
+//       template, and its thrown message is nlohmann's, which ends with an excerpt of the
+//       payload. None of that is a good way to learn a request was malformed, which is why
+//       the patch refuses these values at the boundary instead of forwarding them: an
+//       unconstrained answer under a request that looked constrained is the real failure.
+//   thinking_template_private_reasoning_final_const
+//     - the whole realistic response - private reasoning containing a JSON decoy that
+//       contradicts the schema, then </think>, then the newlines the template emits, then
+//       the final object - is tokenized as one string and every token is accepted by the
+//       real grammar sampler;
+//     - the grammar is not complete before the final object, so an empty answer cannot end;
+//     - the real grammar accepts the right const and rejects the wrong const, in both cases
+//       with completely free private reasoning before it;
+//     - the PEG parser puts the decoy in reasoning_content and only the final object in
+//       content.
+//   thinking_template_two_prefix_items_order_and_language
+//     - the exact two-item tuple, in order, with the exact language, is accepted and complete;
+//     - reversed ids, a wrong language, a one-item array and an extra property are all
+//       rejected, each after unrestricted private reasoning;
+//     - the PEG content carries the language and both ids in order, and carries none of the
+//       private reasoning.
+//   nonthinking_template_still_constrained
+//     - the same schema with the template's thinking disabled is still enforced, and the
+//       parsed message is final-only with empty reasoning_content.
+//   schema_is_generic_over_media
+//     - the same schema on a user message that also carries a media marker produces a
+//       byte-identical generated grammar and a different prompt. The schema path does not
+//       branch on content shape, which is why no text-only rejection is needed.
+//
+// MERGED BPE AT THE CLOSING MARKER
+//
+// The whole response is tokenized once, as a single string, and fed token by token. That is
+// the merge-sensitive path: "</think>\n\n" does not tokenize as the marker vector plus the
+// newline vector, so the marker's own bytes and the following newlines share tokens. Whether
+// the marker vector survives contiguously is a property of the vocabulary under test - a
+// vocabulary whose <think> is one special token has no such seam - so that fact is printed
+// as a diagnostic and is not asserted. What is asserted is the behaviour that has to hold
+// either way: every token of the realistic response is accepted and the grammar completes.
+//
+// Build and run (vocabulary-only fixture, CPU, no model, no decode):
+//   cmake -S <llama.cpp> -B <build> -DCMAKE_BUILD_TYPE=Release
+//         -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF -DLLAMA_BUILD_EXAMPLES=OFF
+//   cmake --build <build> --config Release --target llama common
+//   cl /std:c++17 /EHsc /O1 /I<llama.cpp> /I<llama.cpp>/include /I<llama.cpp>/ggml/include
+//      /I<llama.cpp>/common
+//      scripts/localai-llamacpp-json-schema-test.cpp.in
+//      <build>/common/<cfg>/llama-common.lib <build>/src/<cfg>/llama.lib
+//      <build>/ggml/src/<cfg>/ggml.lib <build>/ggml/src/<cfg>/ggml-cpu.lib
+//      <build>/ggml/src/<cfg>/ggml-base.lib -o llm-js-test
+//   llm-js-test <llama.cpp>/models/ggml-vocab-qwen2.gguf
+//               <llama.cpp>/models/templates/Qwen3.5-4B.jinja
+//
+// The second argument is the supplied Qwen template. The fixture prints the generation
+// prompt it produced, so supplying a template whose thinking shape differs is visible rather
+// than silent. llama-common still contains common/sampling.cpp.o; archive members are only
+// extracted for unresolved symbols and this TU already defines every sampling.cpp symbol, so
+// that member is never pulled. If a toolchain does extract it, remove it from the archive
+// rather than allowing duplicate definitions.
+
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+
+#include "common/sampling.cpp"
+
+#include "common/chat.h"
+
+// common/chat.h only forward-declares the JSON type through peg-parser.h. The canonical
+// re-dump below needs the complete nlohmann definition.
+#include <nlohmann/json.hpp>
+
+#include <cstdio>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+static int failures = 0;
+
+static void require(bool ok, const std::string & name) {
+    if (!ok) {
+        std::fprintf(stderr, "FAIL %s\n", name.c_str());
+        failures++;
+    }
+}
+
+struct fixture {
+    llama_model *      model = nullptr;
+    const llama_vocab *vocab = nullptr;
+    common_chat_templates_ptr tmpls;
+};
+
+static std::string read_file(const std::string & path) {
+    std::ifstream in(path);
+    if (!in) {
+        std::fprintf(stderr, "FATAL cannot open %s\n", path.c_str());
+        std::exit(2);
+    }
+    std::ostringstream text;
+    text << in.rdbuf();
+    return text.str();
+}
+
+static fixture load_fixture(const char * vocab_path, const char * template_path) {
+    fixture fx;
+
+    auto mparams = llama_model_default_params();
+    mparams.n_gpu_layers = 0;
+    mparams.vocab_only = true;  // vocabulary only: no weights, no decode, no GPU
+
+    llama_backend_init();
+
+    fx.model = llama_model_load_from_file(vocab_path, mparams);
+    if (!fx.model) {
+        std::fprintf(stderr, "FATAL cannot load vocabulary-only fixture: %s\n", vocab_path);
+        std::exit(2);
+    }
+    fx.vocab = llama_model_get_vocab(fx.model);
+
+    // The supplied Qwen template, with the BOS/EOS markers it renders with.
+    fx.tmpls = common_chat_templates_init(nullptr, read_file(template_path),
+                                          "<|im_start|>", "<|im_end|>");
+    if (!fx.tmpls) {
+        std::fprintf(stderr, "FATAL cannot load chat template: %s\n", template_path);
+        std::exit(2);
+    }
+
+    return fx;
+}
+
+static void free_fixture(fixture & fx) {
+    fx.tmpls.reset();
+    llama_model_free(fx.model);
+    llama_backend_free();
+    fx = fixture{};
+}
+
+// Exactly how tools/server/server-common.cpp and common/sampling.cpp tokenize: no special
+// tokens, special tokens parsed. The whole response is tokenized in one call on purpose.
+static std::vector<llama_token> toks(const fixture & fx, const std::string & text) {
+    return common_tokenize(fx.vocab, text, /* add_special = */ false, /* parse_special = */ true);
+}
+
+static bool contains_contiguous(const std::vector<llama_token> & hay, const std::vector<llama_token> & needle) {
+    if (needle.empty() || needle.size() > hay.size()) {
+        return false;
+    }
+    for (size_t i = 0; i + needle.size() <= hay.size(); i++) {
+        if (std::equal(needle.begin(), needle.end(), hay.begin() + i)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// A request as the patched body_json produces it: messages plus the metadata
+// schema string. Nothing else is set, so the template sees exactly what
+// oaicompat_chat_params_parse hands common_chat_templates_apply.
+// ---------------------------------------------------------------------------
+
+static const char * kUserPrompt = "Return a JSON object.";
+
+static common_chat_templates_inputs request_inputs(const std::string & metadata_json_schema) {
+    common_chat_templates_inputs inputs;
+
+    inputs.messages.push_back({ "user", kUserPrompt });
+    inputs.use_jinja         = true;
+    inputs.enable_thinking   = true;
+    inputs.reasoning_format  = COMMON_REASONING_FORMAT_AUTO;
+    inputs.json_schema       = metadata_json_schema;  // metadata string == inputs.json_schema
+
+    return inputs;
+}
+
+static common_chat_params apply(const fixture & fx, const common_chat_templates_inputs & inputs) {
+    return common_chat_templates_apply(fx.tmpls.get(), inputs);
+}
+
+// What the pinned consumer does with a metadata value that is not a JSON object.
+// The value can never produce a constraint, but it can fail earlier: a well-formed non-object
+// is silently ignored, while malformed JSON is re-parsed inside common_chat_templates_apply
+// and throws out of it. Both outcomes are recorded; neither one constrains generation, and
+// neither is a good way to learn a request was malformed.
+enum class outcome {
+    grammar,        // a grammar was generated - only a JSON object gets here
+    no_grammar,     // accepted and silently ignored
+    threw,          // the pinned consumer refused it
+};
+
+static outcome constrain(const fixture & fx, const std::string & metadata_value, std::string & grammar_out) {
+    grammar_out.clear();
+    try {
+        grammar_out = apply(fx, request_inputs(metadata_value)).grammar;
+    } catch (const std::exception &) {
+        // The message is not inspected or printed: it is nlohmann's, and it ends with an
+        // excerpt of the payload, which is exactly what must not reach a caller.
+        return outcome::threw;
+    }
+    return grammar_out.empty() ? outcome::no_grammar : outcome::grammar;
+}
+
+// The sampler the pinned server builds for this chat params. The grammar class is the one
+// tools/server/server-common.cpp:1097 + server-schema.cpp:271-272 produce.
+static common_sampler_ptr sampler_for(const fixture & fx, const common_chat_params & chat) {
+    common_params_sampling params;
+
+    params.samplers.clear();  // an empty list leaves the pinned chain as just dist, free of model n_ctx
+    params.grammar             = { COMMON_GRAMMAR_TYPE_TOOL_CALLS, chat.grammar };
+    params.generation_prompt   = chat.generation_prompt;
+    params.reasoning_budget_tokens = -1;
+
+    return common_sampler_ptr(common_sampler_init(fx.model, params));
+}
+
+// One candidate token through the real GBNF sampler. apply() filters; it never advances.
+static bool allowed(common_sampler * g, llama_token token) {
+    llama_token_data        one  = { token, 0.0f, 1.0f };
+    llama_token_data_array  arr  = { &one, 1, -1, false };
+    llama_sampler_apply(g->grmr, &arr);
+    return one.logit != -INFINITY;
+}
+
+// The pinned grammar sampler only permits an EOG token once some stack is empty, which for
+// a response-format frame means the whole final object matched.
+static bool grammar_complete(const fixture & fx, common_sampler * g) {
+    const int n = llama_vocab_n_tokens(fx.vocab);
+    for (int id = 0; id < n; id++) {
+        if (llama_vocab_is_eog(fx.vocab, (llama_token) id) && allowed(g, (llama_token) id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Feeds a response token by token through the real sampler. Returns the index of the first
+// rejected token, or -1 when the whole response was accepted.
+static int feed_response(struct common_sampler * g,
+                         const std::vector<llama_token> & response,
+                         const llama_vocab *            vocab,
+                         std::string &                   rejected_piece) {
+    for (size_t i = 0; i < response.size(); i++) {
+        if (!allowed(g, response[i])) {
+            rejected_piece = common_token_to_piece(vocab, response[i], /* special = */ true);
+            return (int) i;
+        }
+        common_sampler_accept(g, response[i], /* is_generated = */ true);
+    }
+    return -1;
+}
+
+static bool run_response(const fixture & fx, const common_chat_params & chat, const std::string & response) {
+    common_sampler_ptr g = sampler_for(fx, chat);
+
+    std::string rejected_piece;
+    const int   at = feed_response(g.get(), toks(fx, response), fx.vocab, rejected_piece);
+
+    if (at >= 0) {
+        std::fprintf(stderr, "  rejected at token %d piece[%s] of the response\n", at, rejected_piece.c_str());
+        return false;
+    }
+    if (!grammar_complete(fx, g.get())) {
+        std::fprintf(stderr, "  response accepted but the final object never completed\n");
+        return false;
+    }
+    return true;
+}
+
+// The PEG parser exactly as the native constructor builds it. common_chat_parser_params only
+// copies format and generation_prompt; tools/server/server-schema.cpp:319 is the code that
+// loads the parser string, so that load is not optional here.
+static common_chat_msg parse(const common_chat_params & chat, const std::string & response) {
+    common_chat_parser_params parser(chat);
+    parser.parser.load(chat.parser);
+    parser.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+    return common_chat_parse(response, /* is_partial = */ false, parser);
+}
+
+// ---------------------------------------------------------------------------
+// The two schemas, exactly as a caller would send them in Metadata.
+// ---------------------------------------------------------------------------
+
+// A single object with one constant. Small enough that a wrong value cannot hide.
+static const char * kFrameSchema =
+    R"({"type":"object","properties":{"ok":{"const":true}},"required":["ok"],"additionalProperties":false})";
+
+// A language constant plus an ordered pair of typed segments. prefixItems with exact
+// minItems/maxItems is what pins the ids, their order, and the item shape.
+static const char * kTupleSchema =
+    R"({"type":"object","properties":{"language":{"const":"ko-KR"},"segments":{"type":"array","prefixItems":[)"
+    R"({"type":"object","properties":{"id":{"const":4},"text":{"type":"string"}},"required":["id","text"],"additionalProperties":false},)"
+    R"({"type":"object","properties":{"id":{"const":11},"text":{"type":"string"}},"required":["id","text"],"additionalProperties":false}],"minItems":2,"maxItems":2}},)"
+    R"("required":["language","segments"],"additionalProperties":false})";
+
+// Private reasoning for each case. Both carry a private marker that must not reach public
+// content, and a JSON decoy that contradicts the final answer so the split is observable.
+static const char * kFrameReasoning =
+    "FRAME-MEMO the candidate draft had {\"ok\":false}; I keep that out of the answer. ";
+static const char * kTupleReasoning =
+    "SEG-ORDER-MEMO and LANG-MEMO: the source order is 4 then 11, and the clips are Korean.";
+
+static const std::string frame_response() {
+    return std::string(kFrameReasoning) + "</think>\n\n" + "{\"ok\":true}";
+}
+
+static std::string tuple_response(const std::string & language, const std::string & segments) {
+    return std::string(kTupleReasoning) + "</think>\n\n" +
+           "{\"language\":\"" + language + "\",\"segments\":" + segments + "}";
+}
+
+// ---------------------------------------------------------------------------
+// Cases
+// ---------------------------------------------------------------------------
+
+static void request_schema_decode_guard(const fixture &) {
+    json body = {{"chat_template_kwargs", {{"enable_thinking", true}}}};
+    llama_grpc_apply_request_json_schema(R"({"type":"object"})", body);
+    require(body["json_schema"] == json({{"type", "object"}}), "request helper preserves schema object");
+    require(body["chat_template_kwargs"]["enable_thinking"] == true, "request helper preserves thinking");
+    const auto before = body;
+    llama_grpc_apply_request_json_schema(R"({"type":"object"})", body);
+    require(body == before, "request helper exact repeat is idempotent");
+    for (const std::string invalid : {"", "{}", "[]", "null", "true", "7", "secret-schema", "{\"secret\":"}) {
+        bool rejected = false;
+        try {
+            llama_grpc_apply_request_json_schema(invalid, body);
+        } catch (const std::invalid_argument & error) {
+            rejected = true;
+            require(std::string(error.what()).find("secret") == std::string::npos, "request helper does not expose schema");
+        }
+        require(rejected && body == before, "invalid explicit schema fails without changing body");
+    }
+}
+
+static void metadata_value_drives_the_native_schema_path(const fixture & fx) {
+    auto chat = apply(fx, request_inputs(kFrameSchema));
+
+    require(!chat.grammar.empty(),
+            "metadata: a JSON object metadata value generates a response-format grammar");
+    require(!chat.parser.empty(), "metadata: the template builds a PEG parser alongside the grammar");
+    require(chat.supports_thinking, "metadata: the supplied template's thinking support is unchanged");
+    require(chat.thinking_start_tag == "<think>" && chat.thinking_end_tag == "</think>",
+            "metadata: the thinking tags come back from the template, not from the test");
+
+    // The generation prompt must be the template's own. If the supplied template renders a
+    // different thinking shape this fails instead of quietly testing a different prefix.
+    require(chat.generation_prompt.find("<think>") != std::string::npos,
+            "metadata: the generation prompt opens the template's reasoning block");
+
+    std::fprintf(stderr, "generation prompt[%s] grammar bytes[%zu]\n",
+                 chat.generation_prompt.c_str(), chat.grammar.size());
+
+    // Decoding the metadata string cannot change what the template generates: the canonical
+    // re-dump of the parsed object is what oaicompat_chat_params_parse passes down, and it
+    // has to produce the identical grammar and prompt.
+    auto round = apply(fx, request_inputs(json::parse(std::string(kFrameSchema)).dump()));
+    require(round.grammar == chat.grammar,
+            "metadata: decoding and re-dumping the metadata object preserves the generated grammar");
+    require(round.generation_prompt == chat.generation_prompt,
+            "metadata: decoding the metadata object preserves the generation prompt");
+
+    // Forwarding the same metadata again is an assignment, not an accumulation, so a second
+    // forwarding reaches the template as the same value.
+    auto again = apply(fx, request_inputs(std::string(kFrameSchema)));
+    require(again.grammar == chat.grammar && again.generation_prompt == chat.generation_prompt,
+            "metadata: re-forwarding the same metadata produces the same grammar and prompt");
+
+    // An absent or empty value constrains nothing and is not an error.
+    require(apply(fx, request_inputs("")).grammar.empty(),
+            "metadata: an empty metadata value generates no grammar and is not an error");
+}
+
+static void nonobject_and_malformed_values_constrain_nothing(const fixture & fx) {
+    struct case_t {
+        const char * raw;
+        const char * what;
+    };
+
+    // Every one of these is a value the pinned consumer cannot turn into a constraint. That is
+    // why the patch refuses them at the boundary instead of forwarding them: an unconstrained
+    // answer, or an error raised deep inside the template, under a request that looked
+    // constrained is the failure being prevented. Whichever way the pinned consumer reacts, no
+    // grammar may come out.
+    const case_t cases[] = {
+        { "[]", "a JSON array" },
+        { "\"{\\\"type\\\":\\\"object\\\"}\"", "a JSON string holding a schema" },
+        { "7", "a JSON number" },
+        { "true", "a JSON boolean" },
+        { "null", "JSON null" },
+        { "{", "malformed JSON" },
+        { "{\"type\":}", "JSON with a missing value" },
+        { "{\"type\":\"object\"", "truncated JSON" },
+        { " ", "whitespace only" },
+    };
+
+    for (const auto & c : cases) {
+        std::string grammar;
+        const outcome what = constrain(fx, c.raw, grammar);
+        require(what != outcome::grammar,
+                std::string("nonobject: ") + c.what + " never produces a constraint, so it must never be forwarded");
+        std::fprintf(stderr, "  nonobject value (%s) -> %s\n", c.what,
+                     what == outcome::threw ? "refused by the template" : "silently ignored");
+    }
+}
+
+static void thinking_template_private_reasoning_final_const(const fixture & fx) {
+    auto chat = apply(fx, request_inputs(kFrameSchema));
+    require(!chat.grammar.empty(), "frame: the metadata schema generated a grammar to test");
+
+    const std::string response = frame_response();
+
+    // An empty final answer cannot end: the frame demands the object before an EOG token.
+    {
+        common_sampler_ptr g = sampler_for(fx, chat);
+        require(!grammar_complete(fx, g.get()),
+                "frame: private reasoning alone never completes the required object");
+    }
+
+    // The whole realistic response, one tokenization, merge-sensitive closing marker and all.
+    require(run_response(fx, chat, response),
+            "frame: every token of private reasoning, </think>, newlines and the final object is accepted");
+
+    // The wrong const is refused even though the private reasoning before it was unconstrained.
+    {
+        common_sampler_ptr g = sampler_for(fx, chat);
+        std::string rejected_piece;
+        const int   at = feed_response(g.get(),
+                                     toks(fx, std::string(kFrameReasoning) + "</think>\n\n" + "{\"ok\":false}"),
+                                     fx.vocab, rejected_piece);
+        require(at >= 0, "frame: the wrong final const is rejected despite free private reasoning");
+        require(!grammar_complete(fx, g.get()), "frame: a rejected final const never completes the object");
+    }
+
+    // The PEG parser is what the customer actually receives.
+    auto msg = parse(chat, response);
+    require(msg.content.find("{\"ok\":true}") != std::string::npos,
+            "frame: public content carries the final schema answer");
+    require(msg.content.find("false") == std::string::npos,
+            "frame: the private JSON decoy is absent from public content");
+    require(msg.content.find("FRAME-MEMO") == std::string::npos,
+            "frame: no private reasoning text reaches public content");
+    require(msg.reasoning_content.find("FRAME-MEMO") != std::string::npos,
+            "frame: the private reasoning is retained in the reasoning channel");
+    require(msg.reasoning_content.find("false") != std::string::npos,
+            "frame: the private JSON decoy is retained in the reasoning channel");
+}
+
+static void thinking_template_two_prefix_items_order_and_language(const fixture & fx) {
+    auto chat = apply(fx, request_inputs(kTupleSchema));
+    require(!chat.grammar.empty(), "tuple: the metadata schema generated a grammar to test");
+
+    const std::string valid = tuple_response("ko-KR", "[{\"id\":4,\"text\":\"hello\"},{\"id\":11,\"text\":\"world\"}]");
+    require(run_response(fx, chat, valid),
+            "tuple: the exact two items, in order, with the exact language are accepted and complete");
+
+    // Each wrong answer is refused after unrestricted private reasoning.
+    struct bad_case_t {
+        const char * response;
+        const char * what;
+    };
+    const bad_case_t bad[] = {
+        { "SEG-ORDER-MEMO and LANG-MEMO: the source order is 4 then 11, and the clips are Korean."
+          "</think>\n\n{\"language\":\"ko-KR\",\"segments\":[{\"id\":11,\"text\":\"hello\"},{\"id\":4,\"text\":\"world\"}]}",
+          "tuple: reversed ids are rejected despite free private reasoning" },
+        { "SEG-ORDER-MEMO and LANG-MEMO: the source order is 4 then 11, and the clips are Korean."
+          "</think>\n\n{\"language\":\"en-US\",\"segments\":[{\"id\":4,\"text\":\"hello\"},{\"id\":11,\"text\":\"world\"}]}",
+          "tuple: a wrong language is rejected despite free private reasoning" },
+        { "SEG-ORDER-MEMO and LANG-MEMO: the source order is 4 then 11, and the clips are Korean."
+          "</think>\n\n{\"language\":\"ko-KR\",\"segments\":[{\"id\":4,\"text\":\"hello\"}]}",
+          "tuple: a one-item array is rejected despite free private reasoning" },
+        { "SEG-ORDER-MEMO and LANG-MEMO: the source order is 4 then 11, and the clips are Korean."
+          "</think>\n\n{\"language\":\"ko-KR\",\"segments\":[{\"id\":4,\"text\":\"hello\"},{\"id\":11,\"text\":\"world\"}],\"extra\":1}",
+          "tuple: an extra property is rejected despite free private reasoning" },
+    };
+
+    for (const auto & c : bad) {
+        common_sampler_ptr g = sampler_for(fx, chat);
+        std::string rejected_piece;
+        const int at = feed_response(g.get(), toks(fx, c.response), fx.vocab, rejected_piece);
+        require(at >= 0, c.what);
+    }
+
+    auto msg = parse(chat, valid);
+    require(msg.content.find("\"ko-KR\"") != std::string::npos, "tuple: public content carries the language");
+    const size_t first  = msg.content.find("\"id\":4");
+    const size_t second = msg.content.find("\"id\":11");
+    require(first != std::string::npos && second != std::string::npos && first < second,
+            "tuple: public content carries both ids in order");
+    require(msg.content.find("SEG-ORDER-MEMO") == std::string::npos &&
+            msg.content.find("LANG-MEMO") == std::string::npos,
+            "tuple: no private reasoning text reaches public content");
+    require(msg.reasoning_content.find("SEG-ORDER-MEMO") != std::string::npos,
+            "tuple: the private reasoning is retained in the reasoning channel");
+}
+
+static void nonthinking_template_still_constrained(const fixture & fx) {
+    auto inputs = request_inputs(kFrameSchema);
+    inputs.enable_thinking = false;  // the template renders an already-closed reasoning block
+
+    auto chat = apply(fx, inputs);
+    require(!chat.grammar.empty(), "nonthinking: the same schema still generates a grammar");
+
+    const std::string plain = "{\"ok\":true}";
+    require(run_response(fx, chat, plain), "nonthinking: the schema is still enforced and completes");
+
+    {
+        common_sampler_ptr g = sampler_for(fx, chat);
+        std::string rejected_piece;
+        const int   at = feed_response(g.get(), toks(fx, "{\"ok\":false}"), fx.vocab, rejected_piece);
+        require(at >= 0, "nonthinking: the wrong const is rejected with thinking disabled");
+    }
+
+    auto msg = parse(chat, plain);
+    require(msg.content == plain, "nonthinking: parsed content is exactly the final object");
+    require(msg.reasoning_content.empty(), "nonthinking: no reasoning channel when the template disables thinking");
+}
+
+static void schema_is_generic_over_media(const fixture & fx) {
+    auto text_only = apply(fx, request_inputs(kTupleSchema));
+
+    // The same request with a media part attached to the user message. The schema must ride
+    // the same path: nothing about a media-bearing message changes the generated grammar.
+    auto inputs = request_inputs(kTupleSchema);
+    inputs.messages.front().content.clear();
+    inputs.messages.front().content_parts.push_back({ "text", kUserPrompt });
+    inputs.messages.front().content_parts.push_back({ "media_marker", "[MediaMarker-1]" });
+
+    auto with_media = apply(fx, inputs);
+
+    require(!with_media.grammar.empty(), "media: the schema still generates a grammar for a media request");
+    require(with_media.grammar == text_only.grammar,
+            "media: the generated grammar is identical whether or not the message carries media");
+    require(with_media.prompt != text_only.prompt,
+            "media: the prompt still differs, so the media marker really was carried into it");
+    require(with_media.prompt.find("[MediaMarker-1]") != std::string::npos,
+            "media: the media marker is present in the rendered prompt");
+}
+
+// ---------------------------------------------------------------------------
+
+static void report_merge_diagnostics(const fixture & fx) {
+    const auto end_tag   = toks(fx, "</think>");
+    const auto newlines  = toks(fx, "\n\n");
+    const auto joined    = toks(fx, "</think>\n\n");
+    const auto response  = toks(fx, frame_response());
+
+    // Diagnostic, not an assertion: a vocabulary whose think markers are single special
+    // tokens has no seam here, and losing the marker vector is exactly the merge the whole
+    // response tokenization above has to survive either way.
+    std::fprintf(stderr,
+                 "closing marker '%s' -> %zu tokens, '\\n\\n' -> %zu, '</think>\\n\\n' -> %zu, "
+                 "whole response -> %zu, marker contiguous in response: %s\n",
+                 "</think>", end_tag.size(), newlines.size(), joined.size(), response.size(),
+                 contains_contiguous(response, end_tag) ? "yes" : "no");
+}
+
+int main(int argc, char ** argv) {
+    if (argc < 3) {
+        std::fprintf(stderr, "usage: %s <vocab-only-gguf> <qwen-chat-template>\n", argv[0]);
+        return 2;
+    }
+
+    fixture fx = load_fixture(argv[1], argv[2]);
+
+    std::fprintf(stderr, "fixture vocabulary tokens = %d\n", llama_vocab_n_tokens(fx.vocab));
+
+    struct case_entry {
+        const char * name;
+        void (*run)(const fixture &);
+    };
+    const case_entry cases[] = {
+        { "request_schema_decode_guard", request_schema_decode_guard },
+        { "metadata_value_drives_the_native_schema_path",      metadata_value_drives_the_native_schema_path },
+        { "nonobject_and_malformed_values_constrain_nothing",  nonobject_and_malformed_values_constrain_nothing },
+        { "thinking_template_private_reasoning_final_const",   thinking_template_private_reasoning_final_const },
+        { "thinking_template_two_prefix_items_order_language", thinking_template_two_prefix_items_order_and_language },
+        { "nonthinking_template_still_constrained",            nonthinking_template_still_constrained },
+        { "schema_is_generic_over_media",                      schema_is_generic_over_media },
+    };
+
+    // Announced before each case so an abort inside the pinned code names the case that did it.
+    for (const auto & c : cases) {
+        std::fprintf(stderr, "case %s\n", c.name);
+        c.run(fx);
+    }
+
+    report_merge_diagnostics(fx);
+
+    free_fixture(fx);
+
+    if (failures > 0) {
+        std::fprintf(stderr, "%d assertion(s) failed\n", failures);
+        return 1;
+    }
+    std::fprintf(stderr, "all assertions passed\n");
+    return 0;
+}

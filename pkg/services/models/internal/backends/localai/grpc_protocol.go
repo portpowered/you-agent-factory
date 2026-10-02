@@ -280,6 +280,11 @@ func (client grpcProtocolClient) Predict(
 		return PredictResponse{}, protocolFailure("LocalAI Predict connection is unavailable", models.ErrUnavailable)
 	}
 	defer func() { _ = connection.Close() }()
+	if _, schema := options.Metadata[omniJSONSchemaParameter]; schema {
+		if err := requireJSONSchemaCapability(ctx, connection); err != nil {
+			return PredictResponse{}, err
+		}
+	}
 	responsePayload, err := connection.Invoke(ctx, localAIPredictMethod, payload)
 	if err != nil {
 		if contextErr := ctx.Err(); contextErr != nil {
@@ -288,6 +293,63 @@ func (client grpcProtocolClient) Predict(
 		return PredictResponse{}, protocolFailure("LocalAI Predict request failed", err)
 	}
 	return decodePredictResponse(responsePayload)
+}
+
+func (client grpcProtocolClient) ValidateJSONSchemaSupport(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	endpoint, _ := ctx.Value(invocationEndpointContextKey{}).(string)
+	if strings.TrimSpace(endpoint) == "" || client.dialer == nil {
+		return schemaCapabilityFailure(nil)
+	}
+	connection, err := client.dialer.Dial(ctx, endpoint)
+	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+		return schemaCapabilityFailure(err)
+	}
+	if connection == nil {
+		return schemaCapabilityFailure(models.ErrUnavailable)
+	}
+	defer func() { _ = connection.Close() }()
+	return requireJSONSchemaCapability(ctx, connection)
+}
+
+func requireJSONSchemaCapability(ctx context.Context, connection platformgrpc.Connection) error {
+	withHeaders, ok := connection.(platformgrpc.HeaderConnection)
+	if !ok {
+		return schemaCapabilityFailure(models.ErrHostProtocolIncompatible)
+	}
+	payload, err := proto.Marshal(&HealthMessage{})
+	if err != nil {
+		return schemaCapabilityFailure(err)
+	}
+	_, headers, err := withHeaders.InvokeWithHeaders(ctx, localAIHealthMethod, payload)
+	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return contextErr
+		}
+		return schemaCapabilityFailure(err)
+	}
+	values := headers["x-you-json-schema"]
+	if len(values) != 1 || values[0] != "1" {
+		return schemaCapabilityFailure(models.ErrHostProtocolIncompatible)
+	}
+	return nil
+}
+
+func schemaCapabilityFailure(cause error) error {
+	message := "unable to verify local backend JSON schema support; check local backend readiness and connectivity, then retry"
+	if errors.Is(cause, models.ErrHostProtocolIncompatible) {
+		message = "resolved local backend does not support request-scoped JSON schema; update or install a schema-capable backend"
+	}
+	return &models.InvocationFailure{
+		Class: models.InvocationFailureClassBackendProtocol, Operation: models.OperationOMNI,
+		Parameter: omniJSONSchemaParameter, Message: message,
+		Cause: cause,
+	}
 }
 
 // decodePredictResponse converts the pinned LocalAI Predict wire payload into
@@ -484,10 +546,14 @@ func mapPredictParameters(options *PredictOptions, parameters []models.Operation
 
 const omniMaxTokensParameter = "max_tokens"
 const omniGrammarParameter = "grammar"
+const omniJSONSchemaParameter = "json_schema"
 
 // Grammar is passed verbatim to llama.cpp's GBNF parser. It constrains one
 // text response; media observation and joining are not a grammar contract.
 func omniGrammar(request PredictRequest) (string, error) {
+	if err := validateOmniJSONSchema(request.Parameters); err != nil {
+		return "", err
+	}
 	var grammar string
 	for _, parameter := range request.Parameters {
 		if strings.TrimSpace(parameter.Name) != omniGrammarParameter {
@@ -511,6 +577,48 @@ func omniGrammarFailure(message string) error {
 	return &models.InvocationFailure{
 		Class:     models.InvocationFailureClassInvalidParameter,
 		Operation: models.OperationOMNI, Parameter: omniGrammarParameter,
+		Message: message,
+	}
+}
+
+// A response schema rides the existing Metadata object channel. Validate before
+// media extraction or protocol IO so malformed requests cannot silently lose
+// their final-answer constraint. The native template owns reasoning framing.
+func validateOmniJSONSchema(parameters []models.OperationParameter) error {
+	var schemaValue any
+	hasSchema, hasGrammar := false, false
+	for _, parameter := range parameters {
+		switch strings.TrimSpace(parameter.Name) {
+		case omniGrammarParameter:
+			hasGrammar = true
+		case omniJSONSchemaParameter:
+			if hasSchema {
+				return omniJSONSchemaFailure(`OMNI parameter "json_schema" must appear only once`)
+			}
+			hasSchema, schemaValue = true, parameter.Value
+		}
+	}
+	if !hasSchema {
+		return nil
+	}
+	if hasGrammar {
+		return omniJSONSchemaFailure(`OMNI parameters "grammar" and "json_schema" are mutually exclusive`)
+	}
+	encoded, err := json.Marshal(schemaValue)
+	if err != nil {
+		return omniJSONSchemaFailure(`OMNI parameter "json_schema" must be a nonempty JSON object`)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &object); err != nil || len(object) == 0 {
+		return omniJSONSchemaFailure(`OMNI parameter "json_schema" must be a nonempty JSON object`)
+	}
+	return nil
+}
+
+func omniJSONSchemaFailure(message string) error {
+	return &models.InvocationFailure{
+		Class:     models.InvocationFailureClassInvalidParameter,
+		Operation: models.OperationOMNI, Parameter: omniJSONSchemaParameter,
 		Message: message,
 	}
 }

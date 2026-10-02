@@ -1,0 +1,107 @@
+LocalAI request-scoped JSON schema forwarding.
+
+Authored against prepared llama.cpp6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef.
+Both Predict and PredictStream forward Metadata json_schema into the existing
+OAI chat-template schema path. Thinking stays enabled; native generated grammar
+frames private reasoning and constrains final content, while its PEG parser
+returns only final content. No sampler/protobuf changes or output caps.
+
+An explicitly present value must decode to a nonempty object. Malformed,
+empty and nonobject schemas fail without echoing raw schema/parser excerpts.
+Absent schema leaves existing behavior unchanged. Media uses the same path.
+The generic Go boundary also rejects raw grammar plus json_schema. Health advertises
+x-you-json-schema=1 as initial gRPC metadata, letting Models fail before Predict
+when an older backend lacks support; the Health message stays OK.
+
+Apply to the actually compiled prepared grpc-server.cpp; fail closed if the
+pinned source shape differs. The separate CPU fixture exercises real template,
+grammar sampler and PEG parser with vocabulary-only loading and no GPU.
+diff --git a/tools/grpc-server/grpc-server.cpp b/tools/grpc-server/grpc-server.cpp
+--- a/tools/grpc-server/grpc-server.cpp
++++ b/tools/grpc-server/grpc-server.cpp
+@@ -141,6 +141,41 @@
+         out.push_back(i + 2 < len ? tbl[triple & 0x3F]        : '=');
+     }
+     return out;
++}
++
++// LOCALAI_LLAMACPP_REQUEST_JSON_SCHEMA_FORWARD
++//
++// Decodes one request-scoped `json_schema` metadata value and installs it into the
++// OAI-compat request body. oaicompat_chat_params_parse reads a response schema only
++// from body_json's "json_schema" field, so a schema the Go layer delivers out of band
++// has to land there before that call. This is pure decoding: nothing but the metadata
++// value is inspected, so thinking, sampling, tools, media and USER grammar semantics are
++// untouched and a schema rides the same generic path as any media-bearing request.
++//
++// A value that is not a JSON object is rejected instead of forwarded.
++// oaicompat_chat_params_parse would dump it verbatim, common/chat.cpp would then see a
++// non-object, silently generate no grammar, and the caller would get an unconstrained
++// answer rather than an error. Failures report the reason only: the schema text, its
++// parse position, and the payload excerpt nlohmann embeds in its own message never reach
++// a log line or a client status.
++//
++// Assignment is not a merge, so forwarding the same metadata again reproduces the same
++// body - re-running this is idempotent. Absence is handled by the caller.
++static void llama_grpc_apply_request_json_schema(const std::string & raw, json & body_json) {
++    json schema;
++    try {
++        schema = json::parse(raw);
++    } catch (const json::parse_error &) {
++        // e.what() is deliberately not reported: nlohmann's parse message ends with a
++        // "last read:" excerpt of the payload, which would echo the schema back out.
++        throw std::invalid_argument("request metadata 'json_schema' is not valid JSON");
++    }
++
++    if (!schema.is_object() || schema.empty()) {
++        throw std::invalid_argument("request metadata 'json_schema' must be a nonempty JSON object");
++    }
++
++    body_json["json_schema"] = schema;
+ }
+ 
+ // END LocalAI
+@@ -1411,6 +1446,8 @@
+     grpc::Status Health(ServerContext* context, const backend::HealthMessage* /*request*/, backend::Reply* reply) override {
+         auto auth = checkAuth(context);
+         if (!auth.ok()) return auth;
++        // LOCALAI_LLAMACPP_REQUEST_JSON_SCHEMA_HEALTH
++        context->AddInitialMetadata("x-you-json-schema", "1");
+         // Implement Health RPC
+         reply->set_message("OK");
+         return Status::OK;
+@@ -1872,6 +1909,17 @@
+                     }
+                 }
+ 
++                // LOCALAI_LLAMACPP_REQUEST_JSON_SCHEMA_FORWARD_STREAM
++                // Forward a request-scoped json_schema that the Go layer delivered as
++                // request Metadata. This is the entire change: one metadata value
++                // becomes one body_json field, and the native chat template then
++                // generates and constrains the answer from it exactly as it already
++                // does for an in-body json_schema. Nothing else in the request is read.
++                auto js_it = metadata.find("json_schema");
++                if (js_it != metadata.end()) {
++                    llama_grpc_apply_request_json_schema(js_it->second, body_json);
++                }
++
+                 // Debug: Print full body_json before template processing (includes messages, tools, tool_choice, etc.)
+                 SRV_DBG("[CONVERSATION DEBUG] PredictStream: Full body_json before oaicompat_chat_params_parse:\n%s\n", body_json.dump(2).c_str());
+ 
+@@ -2438,6 +2486,16 @@
+                     }
+                 }
+ 
++                // LOCALAI_LLAMACPP_REQUEST_JSON_SCHEMA_FORWARD_PREDICT
++                // The non-streaming twin of the PredictStream forwarding above, placed at
++                // the same point: after the resolved chat_template_kwargs are merged and
++                // before oaicompat_chat_params_parse reads the body. Same decode, same
++                // rejection, same reason-only failure.
++                auto predict_js_it = predict_metadata.find("json_schema");
++                if (predict_js_it != predict_metadata.end()) {
++                    llama_grpc_apply_request_json_schema(predict_js_it->second, body_json);
++                }
++
+                 // Debug: Print full body_json before template processing (includes messages, tools, tool_choice, etc.)
+                 SRV_DBG("[CONVERSATION DEBUG] Predict: Full body_json before oaicompat_chat_params_parse:\n%s\n", body_json.dump(2).c_str());
+ 

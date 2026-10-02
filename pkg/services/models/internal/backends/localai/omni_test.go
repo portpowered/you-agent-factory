@@ -94,6 +94,37 @@ func assertOmniGrammarInvalid(t *testing.T, err error) {
 	}
 }
 
+func TestOmniJSONSchemaRejectsInvalidRequestsBeforeEffects(t *testing.T) {
+	t.Parallel()
+	schema := models.OperationParameter{Name: "json_schema", Value: map[string]any{"type": "object"}}
+	cases := [][]models.OperationParameter{{schema, {Name: "grammar", Value: `root ::= "yes"`}}, {schema, schema}}
+	for _, value := range []any{nil, "{}", "secret-schema", true, 1, []any{}, map[string]any{},
+		map[string]any{"unsupported": make(chan int)}, json.RawMessage(`{"secret":`)} {
+		cases = append(cases, []models.OperationParameter{{Name: "json_schema", Value: value}})
+	}
+	for _, parameters := range cases {
+		request := omniMediaRequest(t, models.InferenceInput{Name: "video", Modality: models.ModalityVideo, Content: "video"})
+		request.Parameters = parameters
+		fixture := &scriptedOmniProtocol{}
+		extractor := func(context.Context, []byte) ([]byte, error) {
+			t.Fatal("invalid schema extracted media")
+			return nil, nil
+		}
+		_, err := NewPinnedOmniCodec(fixture, extractor).Invoke(t.Context(), request)
+		assertOmniJSONSchemaInvalid(t, err)
+		if len(fixture.requests) != 0 {
+			t.Fatal("invalid schema invoked inference")
+		}
+		connection := &recordingGRPCConnection{}
+		_, err = NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection}).Predict(
+			WithInvocationEndpoint(t.Context(), "fixture"), PredictRequest{Prompt: "Translate", Parameters: parameters})
+		assertOmniJSONSchemaInvalid(t, err)
+		if len(connection.methods) != 0 {
+			t.Fatal("invalid schema reached gRPC")
+		}
+	}
+}
+
 func TestProbePinnedOmniProtocolRecordsMediaCapability(t *testing.T) {
 	t.Parallel()
 
@@ -534,10 +565,15 @@ type protocolFixture struct {
 }
 
 type scriptedOmniProtocol struct {
+	schemaErr error
 	requests  []PredictRequest
 	responses []PredictResponse
 	errors    map[int]error
 	afterCall func(int)
+}
+
+func (fixture *scriptedOmniProtocol) ValidateJSONSchemaSupport(context.Context) error {
+	return fixture.schemaErr
 }
 
 func (fixture *scriptedOmniProtocol) Predict(_ context.Context, request PredictRequest) (PredictResponse, error) {
@@ -595,6 +631,71 @@ func TestOmniCodecComposesAudioAndVideoObservations(t *testing.T) {
 		strings.Contains(fixture.requests[1].Prompt, "audio") ||
 		strings.Contains(fixture.requests[1].Prompt, "speech") {
 		t.Fatalf("modality prompts = %#v", fixture.requests)
+	}
+}
+
+func TestOmniCodecMediaSchemaReturnsOneFinalObject(t *testing.T) {
+	t.Parallel()
+	final := `{"spoken":"zero","visual":"red then blue"}`
+	fixture := &scriptedOmniProtocol{responses: []PredictResponse{
+		{Text: "zero", Usage: `{"tokens":2,"promptTokens":10}`},
+		{Text: "red then blue", Usage: `{"tokens":4,"promptTokens":20}`},
+		{Text: final, Usage: `{"tokens":8,"promptTokens":30}`},
+	}}
+	request := omniMediaRequest(t,
+		models.InferenceInput{Name: "video", Modality: models.ModalityVideo, Content: "MP4"})
+	request.Parameters = []models.OperationParameter{{Name: "max_tokens", Value: 7},
+		{Name: "json_schema", Value: map[string]any{"type": "object"}}}
+	codec := NewPinnedOmniCodec(fixture, func(context.Context, []byte) ([]byte, error) { return []byte("WAV"), nil })
+	result, err := codec.Invoke(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fixture.requests) != 3 || len(result.Content) != 2 || result.Content[0].Content != final ||
+		result.Content[1].Content != `{"tokens":14,"promptTokens":60}` {
+		t.Fatalf("calls/results = %#v / %#v", fixture.requests, result)
+	}
+	for _, observation := range fixture.requests[:2] {
+		if len(observation.Parameters) != 0 {
+			t.Fatal("source observation was constrained by the response schema")
+		}
+	}
+	assertSchemaFinalMediaRequest(t, fixture.requests[2])
+}
+
+func assertSchemaFinalMediaRequest(t *testing.T, answer PredictRequest) {
+	t.Helper()
+	if len(answer.Parameters) != 2 || answer.Parameters[0].Name != "max_tokens" || answer.Parameters[0].Value != 7 || answer.Parameters[1].Name != "json_schema" || len(answer.Inputs) != 1 ||
+		answer.Inputs[0].Modality != models.ModalityText {
+		t.Fatalf("final request = %#v", answer)
+	}
+	for _, evidence := range []string{"Name the spoken word", "untrusted_media_observations", "zero", "red then blue"} {
+		if !strings.Contains(answer.Prompt, evidence) {
+			t.Fatalf("final request lost original prompt/evidence %q", evidence)
+		}
+	}
+}
+
+func TestOmniCodecMediaSchemaFinalFailureDoesNotReturnObservations(t *testing.T) {
+	t.Parallel()
+	fixture := &scriptedOmniProtocol{responses: []PredictResponse{{Text: "audio evidence"}, {Text: "visual evidence"}},
+		errors: map[int]error{2: context.Canceled}}
+	request := omniMediaRequest(t,
+		models.InferenceInput{Name: "audio", Modality: models.ModalityAudio, Content: "WAV"},
+		models.InferenceInput{Name: "video", Modality: models.ModalityVideo, Content: "MP4"})
+	request.Parameters = []models.OperationParameter{{Name: "json_schema", Value: map[string]any{"type": "object"}}}
+	result, err := NewPinnedOmniCodec(fixture).Invoke(t.Context(), request)
+	if !errors.Is(err, context.Canceled) || len(result.Content) != 0 || len(fixture.requests) != 3 {
+		t.Fatalf("error/result/calls = %v / %#v / %d", err, result, len(fixture.requests))
+	}
+}
+
+func TestCombinedMediaUsageOmitsUnknownTotals(t *testing.T) {
+	t.Parallel()
+	for _, missing := range []string{"", "{}", `{"tokens":5}`, `{"tokens":-1,"promptTokens":2}`, "invalid"} {
+		if got := combinedMediaUsage([]PredictResponse{{Usage: `{"tokens":3,"promptTokens":4}`}, {Usage: missing}}); got != "" {
+			t.Fatalf("usage %q produced misleading total %q", missing, got)
+		}
 	}
 }
 
