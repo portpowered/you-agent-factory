@@ -40,28 +40,10 @@ type ToolOperation func(context.Context, string, json.RawMessage) (json.RawMessa
 // role.
 type ProviderIdentityResolver func(context.Context, string) (string, error)
 
-// RootDependencies are the process service and read roles consumed by MCP.
-type RootDependencies struct {
-	Recordings      RecordingsInspection
-	Prepare         RequestPreparation
-	Workflows       factoryruntime.WorkflowPreviewOperation
-	Sessions        factorysessionexecution.Service
-	GenerateID      factorysessionexecution.SessionIDGenerator
-	ResolveProvider ProviderIdentityResolver
-	WorkingRoot     string
-}
-
-// Bind constructs the canonical ToolOperation from explicit Sessions root
-// dependencies. Adapter tests replace Execution with a root-shaped fake
-// without constructing real session durability or live runtime state.
-func Bind(deps RootDependencies) ToolOperation {
-	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
-		return CallTool(ctx, deps.Prepare, deps.Workflows, name, input, deps.Recordings, deps.Sessions, deps.WorkingRoot, deps.GenerateID, deps.ResolveProvider)
-	}
-}
-
 // BindToolOperation binds the canonical tool registry to explicit Factory
 // Sessions and workflow roles without constructing an alternate MCP client.
+// Adapter tests bind root-shaped fakes directly instead of constructing real
+// session durability or live runtime state.
 func BindToolOperation(
 	recordingsService RecordingsInspection,
 	prepare RequestPreparation,
@@ -71,15 +53,9 @@ func BindToolOperation(
 	generateID factorysessionexecution.SessionIDGenerator,
 	resolveProvider ProviderIdentityResolver,
 ) ToolOperation {
-	return Bind(RootDependencies{
-		Recordings:      recordingsService,
-		Prepare:         prepare,
-		Workflows:       workflows,
-		Sessions:        sessions,
-		WorkingRoot:     workingRoot,
-		GenerateID:      generateID,
-		ResolveProvider: resolveProvider,
-	})
+	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+		return CallTool(ctx, prepare, workflows, name, input, recordingsService, sessions, workingRoot, generateID, resolveProvider)
+	}
 }
 
 func callToolJSON[Input any, Output any](
