@@ -610,3 +610,133 @@ Context-sensitive tokenization of ordinary thinking delimiters is under
 investigation. A syntax pass therefore did not establish correct behavior;
 the draft remains unaccepted and separate from the independently verified
 Windows CUDA image-boundary build.
+
+### Subsequent structured-output and ACP evidence
+
+A fresh stdio Space Bunny editing call completed as session
+`bc7c7ebe-5271-4733-b0e6-8b6281a5b24a` in 549.594 seconds. It added an actual
+protobuf decoder regression with mixed private reasoning and split final JSON
+content. The focused tests passed, but the first draft failed maintainability
+(complexity 21 versus limit 15). The author reported a temporary production
+decoder mutation and revert despite an only-test-file prompt; root confirmed
+the production diff was empty. This is a scoped-writing lapse, even though no
+production change remained. Exact result:
+`C:/t/dub-multilingual-validation/repaired-mcp-privacy-edit-proof/result.json`.
+
+A bounded follow-up completed as session
+`5f6745b1-457b-4abd-bbda-9ff8bd58efda` in 124.906 seconds and removed redundant
+assertions. Root independently ran the decoder tests and full maintainability
+gate successfully, then committed the final regression as `0d195960e5`.
+It proves that private reasoning, including a misleading JSON draft, does not
+enter final text. It does not prove live native structured generation. Thinking
+remains enabled. Exact result:
+`C:/t/dub-multilingual-validation/repaired-mcp-privacy-refine-proof/result.json`.
+
+The next pushed head, `e4dd9b69c4`, failed CI run `37059462705`. Unit verification
+failed the ACP version-classification case with a peer-disconnected error;
+integration verification failed to recognize startup cancellation. The captured
+successor actually exited 130 and emitted a canonical Zap console record whose
+context says `operation=run.service` and `outcome=cancelled`. The test previously
+accepted whole-line JSON or a plain cancellation line, so it missed that console
+representation. The exact captured record is preserved in
+`C:/t/dub-ci-e4dd-restart-diagnostics/cancellation-scenario.json`.
+
+Space Bunny delivered a narrowly scoped cancellation parser/test edit as session
+`7714ee5a-8daa-4087-abd2-f0d3447f8c21` in 229.844 seconds. Root independently
+reviewed the parser and ran all `TestBoardPersistenceReports` tests successfully.
+The compiled cancellation scenario has not yet been rerun with a current
+prebuilt artifact. A bounded Big Pickle refinement is pending to reduce the
+test function below the repository's 80-line review limit without losing cases.
+Exact author result:
+`C:/t/dub-multilingual-validation/repaired-mcp-restart-log-edit-proof/result.json`.
+
+Controlled in-memory experiments independently reproduced two ACP SDK v0.13.5
+ordering failures. With a buffered Initialize response and EOF both ready,
+16 draws produced six valid responses and ten peer-disconnected failures.
+With a held pre-response notification callback, a buffered final Prompt response,
+and EOF, 16 draws produced zero successes: ten failed waiting for notifications
+and six failed before reading the response. These are deterministic readiness
+arrangements with nondeterministic select outcomes, not timeout-cause guesses.
+Exact harnesses and logs:
+`C:/t/dub-acp-version-ordering-proof/sdk-order/`.
+The reviewed upstream release and main still point to the affected version.
+Repair of the canonical SDK dependency and parent-owned subprocess pipes is in
+progress; fixture keepalive alone cannot establish that the customer race is fixed.
+
+Two concurrent 20-minute Space Bunny schema-authoring calls timed out without
+primary results. Native session `aaf311fc...` left useful partial patch/fixture
+bytes, while Go session `c461eef0...` left no owned Go changes. Both reported
+closed-session cleanup, with partial effects possible. The native partial was
+archived before review; it required correction to reject explicitly empty
+schemas rather than silently permit unconstrained output. The initial ACP
+service-author call also reached its 20-minute bound without a primary result.
+The common duration does not establish a shared timeout cause. Narrow repairs
+continue using reviewed partials and bounded follow-up MCP tasks.
+
+Big Pickle completed the cancellation-test refinement as session
+`1689fee3-8c8b-46a2-b5fb-2aa2e60db565` through a fresh stdio server in 186.563
+seconds, with a primary result and child exit 0. Root independently reviewed
+the final diff and reran all fourteen console cases plus the existing helpers
+successfully (0.037 seconds). Commit `1378e88d48` retains the exact captured
+189-byte record, typed-field classification, and negative cases. This remains
+a parser-level proof; the compiled restart scenario still needs its current
+artifact run. Exact result:
+`C:/t/dub-multilingual-validation/repaired-mcp-restart-refine-proof/result.json`.
+
+The provider-validation edit first timed out after twenty minutes with partial
+edits and no primary result. A completed Big Pickle review found a real privacy
+defect in the non-not-found catalog error fallback. The subsequent ten-minute
+Big Pickle edit also timed out with partial changes and no primary result.
+Independent review finished and narrowed those changes, preserving previous
+failure assertions. Commit `8d0225132e` rejects unknown provider names before
+session creation, resolves configured aliases through the authoritative
+Providers catalog, keeps defaults, bounds catalog lookup by the invocation
+deadline, and uses fixed safe catalog-unavailable errors. Root's independent
+race run passed MCP (18.307 seconds), CLI MCP (1.299 seconds), and Wire (29.512
+seconds). The author also passed full maintainability and file-count gates.
+Fresh rebuilt-binary verification remains pending. Exact timeout evidence:
+`C:/t/dub-multilingual-validation/opencode-provider-validation-space-bunny-timeout-result.json`
+and `C:/t/dub-multilingual-validation/opencode-provider-catalog-privacy-bigpickle-timeout-result.json`.
+
+Root then built committed `8d0225132e` in an isolated clean source copy, excluding
+all concurrent ACP/native/schema drafts. A fresh server rejected the same bad
+provider in 1.500 seconds with `provider_not_found`, readable content text,
+matching structured error, and no session identity. A valid Big Pickle editing
+probe failed in 15.641 seconds with `provider_throttled`, retryable true and
+confirmed cleanup. Its existing suggested action still omitted the direct
+recovery of waiting/retrying or selecting another available model; that
+guidance improvement is delegated. Exact results:
+`C:/t/dub-multilingual-validation/repaired-mcp-provider-validation-proof/result.json`
+and `C:/t/dub-multilingual-validation/repaired-mcp-provider-valid-edit-proof/result.json`.
+
+The separate Space Bunny edit succeeded in 10.375 seconds as session
+`2f8afe30-1711-480e-b872-39a14ad6039f`. Root verified the exact requested file
+change, COMPLETED primary result, and child exit 0. Big Pickle's observed limit
+therefore does not establish unavailability of Space Bunny or failure of the
+new provider admission path. Exact result:
+`C:/t/dub-multilingual-validation/repaired-mcp-provider-valid-space-proof/result.json`.
+
+The same clean committed source was rebuilt with matching embedded VCS metadata
+and `vcs.modified=false`. The compiled Windows
+`TestRestartRecoveryCancellationBeforeReadinessDoesNotClaimSuccess` actually
+ran and passed (scenario 1.56 seconds, package 1.779 seconds), using that prebuilt
+artifact. Source revision, binary hash and captured evidence are recorded in
+`C:/t/dub-mcp-provider-validation-build/restart-proof/`. This supersedes the
+earlier skipped-artifact limitation for that Windows scenario; Linux CI and
+the broader integration suite still require their own verification.
+
+That clean binary is now installed at `C:/Users/andre/bin/you.exe`, SHA-256
+`48a2b10e63fdf7d28d30912f6031a97d05f44de60cfba2ad6ad3da3d4d314c52`.
+A new stdio child using the installed executable repeated unknown-provider
+rejection successfully in 0.735 seconds. Exact protocol and binary identity:
+`C:/t/dub-multilingual-validation/repaired-mcp-provider-installed-proof/result.json`.
+
+Separately, the normal public custom-model CLI discovered the published
+independent-image Windows CUDA package without a backend source override.
+The downloaded 443,193,250-byte archive hash and loaded executable/CUDA DLL
+hashes matched the reviewed release. It returned all three literal Chinese
+subtitles in the correct order, exited 0 after 405.406 seconds including asset
+preparation, and left no owned processes. Its cue-25 overlay hallucination
+(`EPISODE 01`) remains a semantic defect; this is not acceptance of a full dub
+or a general vision-quality claim. Exact evidence:
+`C:/t/dub-qwen-independent-images-managed-proof/`.
