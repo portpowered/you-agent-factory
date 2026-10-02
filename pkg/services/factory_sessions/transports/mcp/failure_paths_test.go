@@ -234,27 +234,41 @@ func TestSubagentTerminalFailureClassification(t *testing.T) {
 		reason     string
 		code       string
 		retryable  bool
-		actionText string
+		actionText []string
 	}{
 		{
+			name: "throttled", reason: string(workers.WorkFailureTypeThrottled),
+			code: "factory_session.subagent.provider_throttled", retryable: true,
+			actionText: []string{
+				"Wait for the provider usage or capacity limit to clear",
+				"select another available configured model or provider",
+			},
+		},
+		{
 			name: "permanent bad request", reason: string(workers.WorkFailureTypePermanentBadRequest),
-			code: "factory_session.subagent.provider_request_rejected", actionText: "selected model against the provider's advertised models and request settings",
+			code:       "factory_session.subagent.provider_request_rejected",
+			actionText: []string{"selected model against the provider's advertised models and request settings"},
 		},
 		{
 			name: "internal server error", reason: string(workers.WorkFailureTypeInternalServerError),
-			code: "factory_session.subagent.provider_internal_error", retryable: true, actionText: "Check provider status and logs",
+			code: "factory_session.subagent.provider_internal_error", retryable: true,
+			actionText: []string{"Check provider status and logs"},
 		},
 		{
 			name: "unknown", reason: string(workers.WorkFailureTypeUnknown),
-			code: "factory_session.subagent.provider_unknown_failure", actionText: "Check provider logs and configuration",
+			code:       "factory_session.subagent.provider_unknown_failure",
+			actionText: []string{"Check provider logs and configuration"},
 		},
 		{
-			name: "empty reason", code: "factory_session.subagent.execution_failed",
-			actionText: "Check provider logs and configuration",
+			name:       "empty reason",
+			code:       "factory_session.subagent.execution_failed",
+			actionText: []string{"Check provider logs and configuration"},
 		},
 		{
+			// An unrecognized reason has no classification-specific remedy, so the
+			// shared helper proves only the enrichment guidance.
 			name: "unrecognized reason", reason: "unrecognized-" + secret,
-			code: "factory_session.subagent.execution_failed", actionText: "Inspect the workspace for partial edits",
+			code: "factory_session.subagent.execution_failed",
 		},
 	}
 	for _, tt := range tests {
@@ -264,7 +278,7 @@ func TestSubagentTerminalFailureClassification(t *testing.T) {
 	}
 }
 
-func assertSubagentTerminalFailureClassification(t *testing.T, reason, code string, retryable bool, actionText, secret string) {
+func assertSubagentTerminalFailureClassification(t *testing.T, reason, code string, retryable bool, actionText []string, secret string) {
 	t.Helper()
 	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
 		Status:        factorysessions.InvocationTerminalStatusFailed,
@@ -279,8 +293,20 @@ func assertSubagentTerminalFailureClassification(t *testing.T, reason, code stri
 	if got := response.Error; got.Code != code || got.Retryable != retryable {
 		t.Fatalf("code = %q, retryable = %t; want %q, %t", got.Code, got.Retryable, code, retryable)
 	}
-	if action, ok := response.Error.Details["suggestedAction"].(string); !ok || !strings.Contains(action, actionText) {
-		t.Fatalf("suggestedAction = %#v, want text %q", response.Error.Details["suggestedAction"], actionText)
+	action, ok := response.Error.Details["suggestedAction"].(string)
+	if !ok {
+		t.Fatalf("suggestedAction = %#v", response.Error.Details["suggestedAction"])
+	}
+	for _, want := range actionText {
+		if !strings.Contains(action, want) {
+			t.Fatalf("suggestedAction = %q, want recovery text %q", action, want)
+		}
+	}
+	// Cleanup enrichment must keep partial-edit inspection and provider log
+	// correlation ahead of every classified remedy.
+	if !strings.Contains(action, "Inspect the workspace for partial edits") ||
+		!strings.Contains(action, "check provider logs") {
+		t.Fatalf("suggestedAction = %q, want partial-edit inspection and provider log guidance", action)
 	}
 	assertSubagentFailureReason(t, response.Error.Details, reason, secret)
 	encoded, err := json.Marshal(response)

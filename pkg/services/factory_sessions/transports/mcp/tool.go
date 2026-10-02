@@ -811,10 +811,13 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 func subagentClassifyFailure(envelope *ToolErrorEnvelope, reason workers.WorkFailureType, provider string) {
 	switch reason {
 	case workers.WorkFailureTypeThrottled:
+		// Keep recovery guidance fixed; cleanup adds partial-edit inspection
+		// and log correlation without exposing provider response text.
 		envelope.Code = "factory_session.subagent.provider_throttled"
 		envelope.Message = "provider is temporarily unavailable due to usage or capacity limits"
 		envelope.Retryable = true
 		envelope.Details["failureReason"] = string(workers.WorkFailureTypeThrottled)
+		envelope.Details["suggestedAction"] = "Wait for the provider usage or capacity limit to clear, then retry the same request. If the limit persists, select another available configured model or provider."
 	case workers.WorkFailureTypeAuthFailure:
 		envelope.Code = "factory_session.subagent.provider_auth_failure"
 		envelope.Message = "provider authentication failed"
