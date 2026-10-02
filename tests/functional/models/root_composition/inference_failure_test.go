@@ -462,7 +462,10 @@ func (clock *controlledGenericCLIHostClock) expireNextReadinessInterval(t testin
 		t.Fatal("timed out waiting for controlled readiness interval")
 	}
 	clock.mu.Lock()
-	clock.now = clock.now.Add(31 * time.Second)
+	// The virtual advance must cross the accepted production readiness deadline
+	// (five minutes) plus a margin, so the supervised host stops as a typed
+	// loading timeout instead of continuing to poll readiness intervals.
+	clock.now = clock.now.Add(5*time.Minute + time.Second)
 	now := clock.now
 	clock.mu.Unlock()
 	timer.fire(now)
