@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/ebitengine/purego"
@@ -135,7 +136,30 @@ func phraseSegments(words []*pb.TranscriptWord, language string) []*pb.Transcrip
 		if strings.TrimSpace(word.Text) == "" {
 			continue
 		}
-		if current != nil && current.End > current.Start && (word.Start-current.End > 500000000 || word.End-current.Start > 8000000000) {
+		// Punctuation has alignment evidence but is not a speech cue. Attach it
+		// before considering a pause or phrase length, including a closed phrase.
+		if punctuationOnly(word.Text) {
+			target := current
+			if target == nil && len(result) > 0 {
+				target = result[len(result)-1]
+			}
+			if target == nil {
+				current = &pb.TranscriptSegment{Id: int32(len(result)), Start: word.Start}
+				target = current
+			}
+			target.Text += wordSeparator(target.Text, word.Text, separator) + word.Text
+			target.End = word.End
+			target.Words = append(target.Words, word)
+			if target == current && !punctuationOnly(current.Text) {
+				last, _ := utf8.DecodeLastRuneInString(strings.TrimSpace(word.Text))
+				if current.End > current.Start && strings.ContainsRune(".!?。！？", last) {
+					result = append(result, current)
+					current = nil
+				}
+			}
+			continue
+		}
+		if current != nil && !punctuationOnly(current.Text) && current.End > current.Start && (word.Start-current.End > 500000000 || word.End-current.Start > 8000000000) {
 			result = append(result, current)
 			current = nil
 		}
@@ -154,6 +178,9 @@ func phraseSegments(words []*pb.TranscriptWord, language string) []*pb.Transcrip
 		}
 	}
 	if current != nil {
+		if punctuationOnly(current.Text) {
+			return result
+		}
 		if current.End == current.Start && len(result) > 0 {
 			prior := result[len(result)-1]
 			prior.Text += wordSeparator(prior.Text, current.Text, separator) + current.Text
@@ -164,6 +191,20 @@ func phraseSegments(words []*pb.TranscriptWord, language string) []*pb.Transcrip
 		}
 	}
 	return result
+}
+
+func punctuationOnly(text string) bool {
+	found := false
+	for _, r := range text {
+		if unicode.IsSpace(r) {
+			continue
+		}
+		if !unicode.IsPunct(r) {
+			return false
+		}
+		found = true
+	}
+	return found
 }
 
 func wordSeparator(previous, next, fallback string) string {

@@ -153,3 +153,38 @@ func TestZeroDurationWordStaysWithRealPhrase(t *testing.T) {
 		t.Fatalf("lost upstream timing evidence: %v", got)
 	}
 }
+
+func TestSeparatedPunctuationPreservesRealPhraseRanges(t *testing.T) {
+	words := []*pb.TranscriptWord{
+		{Text: "有没有好心人可以帮帮我", Start: 18400000000, End: 19520000000},
+		{Text: "？", Start: 21280000000, End: 21360000000},
+		{Text: "有没有好心人可以帮帮我？", Start: 21360000000, End: 22480000000},
+		{Text: "大叔", Start: 33840000000, End: 34240000000},
+		{Text: "，", Start: 34880000000, End: 34960000000},
+		{Text: "那去吧", Start: 34960000000, End: 35360000000},
+		{Text: "。", Start: 44000000000, End: 44080000000},
+	}
+	got := phraseSegments(words, "Chinese")
+	if len(got) != 3 {
+		t.Fatalf("punctuation became a standalone cue: %v", got)
+	}
+	if got[0].Text != "有没有好心人可以帮帮我？" || got[0].Start != 18400000000 || got[0].End != 21360000000 || len(got[0].Words) != 2 {
+		t.Fatalf("question span=%+v", got[0])
+	}
+	if got[2].Text != "大叔，那去吧。" || got[2].Start != 33840000000 || got[2].End != 44080000000 || len(got[2].Words) != 4 {
+		t.Fatalf("pause/duration split punctuation: %+v", got[2])
+	}
+	for _, segment := range got {
+		if punctuationOnly(segment.Text) {
+			t.Fatalf("punctuation cue=%+v", segment)
+		}
+	}
+	// A closed sentence still owns delayed standalone punctuation.
+	got = phraseSegments([]*pb.TranscriptWord{{Text: "Done.", Start: 0, End: 1000000000}, {Text: "!", Start: 3000000000, End: 3080000000}}, "English")
+	if len(got) != 1 || got[0].Text != "Done.!" || got[0].End != 3080000000 {
+		t.Fatalf("closed phrase=%v", got)
+	}
+	if got := phraseSegments([]*pb.TranscriptWord{{Text: "？", Start: 0, End: 80000000}}, "Chinese"); len(got) != 0 {
+		t.Fatalf("pure punctuation has no spoken cue: %v", got)
+	}
+}
