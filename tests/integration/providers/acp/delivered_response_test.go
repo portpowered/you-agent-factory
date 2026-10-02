@@ -28,20 +28,24 @@ func TestPrebuiltACPDeliveredResultsSurvivePeerExit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []string{"initialize-version", "prompt-result"} {
+	for _, mode := range []string{"initialize-version", "prompt-result", "custom-prompt-result"} {
 		t.Run(mode, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 			defer cancel()
 			directory := t.TempDir()
 			env := builtcliacceptance.ProcessEnvForIsolatedHome(directory)
+			provider := "opencode"
+			if mode == "custom-prompt-result" {
+				provider = "eof-peer"
+			}
 			launch := fmt.Sprintf("%q %q %s", node, peer, mode)
 			_, diagnostic, err := invokeCLI(ctx, binary, directory, env,
-				"workers", "acp", "add", "--name", "opencode", "--transport", "stdio", "--argument", launch)
+				"workers", "acp", "add", "--name", provider, "--transport", "stdio", "--argument", launch)
 			if err != nil {
 				t.Fatalf("register external peer: %v\n%s", err, diagnostic)
 			}
 			stdout, stderr, err := invokeCLI(ctx, binary, directory, env,
-				"run", "--named", "@you/subagent", "--worker-provider", "opencode",
+				"run", "--named", "@you/subagent", "--worker-provider", provider,
 				"--worker-model", "fixture", "--working-root", directory, "Return the fixture result")
 			if mode == "initialize-version" {
 				assertDeliveredUnsupportedVersion(t, stdout, stderr, err)
