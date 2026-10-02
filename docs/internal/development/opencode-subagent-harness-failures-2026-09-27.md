@@ -1045,3 +1045,54 @@ The latest appendix was authored through bounded OpenCode MCP session
 result. Independent review corrected the unknown-provider name, the second
 concurrency session ID and first reply duration, and the full CI run identity
 before retaining the appendix. The original log bytes were preserved.
+
+### 2026-10-02 CI run `37071707444` outcome and goal-resume evidence
+
+CI run `37071707444` at commit
+`9aa9fea9a82fe120f7ee671cfc387392c9f630ba` completed `FAILURE`. This
+supersedes the earlier "still in progress" record above. No final green, merge,
+live schema inference, or proven duplicate cause is claimed here.
+
+- **Backend lint.** It identifies two new direct `os.File` usages in the
+  Providers ACP `command_parse.go`. Proper Platform process ownership plus
+  explicit canonical Wire injection is being authored via MCP and is **not
+  accepted yet**.
+- **Functional.** The raw artifact shows one underlying failing scenario,
+  `TestPackagedGoalSharedScenarios/PausedSubmissionResumes`, plus its failed
+  parent suite; these are not two independent defects.
+  `shared_scenarios_test.go:177` observes two `execute-goal` dispatch
+  observations for the same Work where exactly one is expected after paused
+  submission and resume. The duplicate-dispatch cause remains unproven.
+- **Targeted repetition.** Root ran
+  `go test ./tests/functional/factory/packaged/goal -run
+  '^TestPackagedGoalSharedScenarios/PausedSubmissionResumes$' -count=10` in the
+  Windows live worktree, and it passed in 12.774s, so isolated repetition did
+  not reproduce the CI sibling-parallel context.
+- **In flight.** Root dispatched an actual installed `you.subagent` read-only
+  Space Bunny audit with a 600000 ms allowance. No conclusion yet.
+
+Exact external evidence:
+`C:/t/dub-multilingual-validation/ci-37071707444-functional-artifact/raw-failures/index.json`
+and `C:/t/dub-multilingual-validation/repaired-mcp-goal-resume-audit-proof`.
+
+### Canonical Windows CUDA schema build from `cb59c212d3`
+
+The canonical Windows CUDA schema build from commit
+`cb59c212d351f1a63235330b10ac5ae4a8dfe300` passed `exit 0` in 40m39.75s. The
+linked CPU schema, startup, and payload gates passed, with 23 authored inputs
+and 18 package files verified. Live inference and public release are still
+pending, so this is not native structured-answer acceptance. Exact evidence:
+`C:/t/dub-llamacpp-schema-build-proof/build-result.json` and
+`verified-package-provenance.json` in the same proof root.
+
+### 2026-10-02 parallel Goal suite repetition, log-edit terminal result, and author timeouts
+
+Root ran the full parallel Goal suite, `go test ./tests/functional/factory/packaged/goal -run '^TestPackagedGoalSharedScenarios$' -count=10`, and it also passed in 17.699s. Together with the earlier isolated scenario repetition, this does not reproduce `PausedSubmissionResumes` in the CI sibling-parallel context, so the duplicate-dispatch cause remains unproven and no duplicate defect is claimed fixed by repetition alone.
+
+The latest actual MCP attempt to edit this log wrote the requested 39-line appendix, but its terminal result is a failure: `isError` true, code `factory_session.subagent.provider_unknown_failure`, provider activity `FAILED`, `sessionClosed` true, elapsed 103.781s, session `2f046143-8fc4-4d70-bf6f-f1434730e439`. Server stderr contains only a peer connection closed line at 22:52:05, and provider log run `9828d7af` records no proven root cause. The partial edit is not counted as success, and the EOF peer-connection line is not evidence of a timeout or of a permission outcome. Exact evidence: `C:/t/dub-multilingual-validation/repaired-mcp-ci-resume-log-proof/result.json`.
+
+The IPC author timed out at 1200000 ms with partial edits and no primary result, session `769c0b53-a28f-4b36-9e0e-be7a5b5cc62a`, request `2f57f4fd-d338-425a-9fde-bc2b24e50ff1`, last `FILE_CHANGE` `22:51:37.6139021Z`; the session was closed. Independent review is finishing the proper pipe-ownership change.
+
+The six-file Index author also timed out at 600000 ms with partial edits and no primary result, session `3a91afb6-4a8d-475a-a570-82402e33085d`, request `10a4a143-e790-49a3-ad89-aed4cc301bc1`, closed, with no proven cause. A completed local edit does not convert either terminal timeout into a COMPLETED result.
+
+Root independently rehashed all 18 schema candidate payload files, and every size and hash matched. Public live schema proof is still pending, so no merge, green CI, or public structured-answer acceptance is claimed here.
