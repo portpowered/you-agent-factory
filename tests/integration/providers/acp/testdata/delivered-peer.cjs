@@ -14,7 +14,7 @@ input.on("line", (line) => {
     if (mode === "initialize-version") flushAndExit(reply);
     else process.stdout.write(reply);
   } else if (request.method === "session/new") {
-    process.stdout.write(result(request.id, { sessionId: "eof-fixture-session", configOptions: [] }));
+    process.stdout.write(result(request.id, { sessionId: "eof-fixture-session", configOptions: [{ id: "model", name: "Model", category: "model", type: "select", currentValue: "fixture", options: [{ value: "fixture", name: "Fixture" }] }] }));
   } else if (request.method === "session/prompt") {
     const notification = JSON.stringify({
       jsonrpc: "2.0", method: "session/update", params: {

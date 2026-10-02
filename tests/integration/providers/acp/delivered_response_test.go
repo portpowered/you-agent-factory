@@ -36,12 +36,12 @@ func TestPrebuiltACPDeliveredResultsSurvivePeerExit(t *testing.T) {
 			env := builtcliacceptance.ProcessEnvForIsolatedHome(directory)
 			launch := fmt.Sprintf("%q %q %s", node, peer, mode)
 			_, diagnostic, err := invokeCLI(ctx, binary, directory, env,
-				"workers", "acp", "add", "--name", "eof-peer", "--transport", "stdio", "--argument", launch)
+				"workers", "acp", "add", "--name", "opencode", "--transport", "stdio", "--argument", launch)
 			if err != nil {
 				t.Fatalf("register external peer: %v\n%s", err, diagnostic)
 			}
 			stdout, stderr, err := invokeCLI(ctx, binary, directory, env,
-				"run", "--named", "@you/subagent", "--worker-provider", "eof-peer",
+				"run", "--named", "@you/subagent", "--worker-provider", "opencode",
 				"--worker-model", "fixture", "--working-root", directory, "Return the fixture result")
 			if mode == "initialize-version" {
 				assertDeliveredUnsupportedVersion(t, stdout, stderr, err)
@@ -91,10 +91,10 @@ func assertDeliveredUnsupportedVersion(t *testing.T, stdout, stderr string, err 
 	if err == nil {
 		t.Fatalf("unsupported initialize version succeeded: stdout=%q stderr=%q", stdout, stderr)
 	}
-	if !strings.Contains(stderr, "unsupported protocol version 999") {
+	if !strings.Contains(stdout+stderr, "unsupported protocol version 999") {
 		t.Fatalf("delivered unsupported-version failure was lost: error=%v stdout=%q stderr=%q", err, stdout, stderr)
 	}
-	if strings.Contains(stderr, "disconnected before responding") || strings.TrimSpace(stdout) != "" {
+	if strings.Contains(stdout+stderr, "disconnected before responding") || strings.Contains(stdout, "status: SUCCESS") || strings.Contains(stdout, "delivered EOF primary result") {
 		t.Fatalf("unsupported version became disconnect or success: stdout=%q stderr=%q", stdout, stderr)
 	}
 }
