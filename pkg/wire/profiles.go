@@ -615,7 +615,9 @@ func provideMCPServerBuilder(
 			return nil, err
 		}
 		toolOperation := factorysessionmcp.BindToolOperation(
-			inspection, prepare, workflowPreview, sessions, workingRoot, factorysessions.SessionIDGenerator(uuid.NewString),
+			inspection, prepare, workflowPreview, sessions, workingRoot,
+			factorysessions.SessionIDGenerator(uuid.NewString),
+			subagentProviderIdentityResolver(providerService),
 		)
 		return mcpserver.New(mcpserver.Options{
 			Skills:    skills,
@@ -629,6 +631,24 @@ func provideMCPServerBuilder(
 				return toolOperation(ctx, name, raw)
 			},
 		})
+	}
+}
+
+// subagentProviderIdentityResolver projects one explicit you.subagent provider
+// selection through the authoritative Providers catalog. Production composition
+// binds it before the packaged subagent Factory Session starts, so an unknown
+// identifier is a validation failure instead of a runtime provider failure. The
+// caller context is preserved so a rejected selection cannot outlive its request.
+func subagentProviderIdentityResolver(providerService providers.Service) factorysessionmcp.ProviderIdentityResolver {
+	return func(ctx context.Context, identity string) (string, error) {
+		if providerService == nil {
+			return "", fmt.Errorf("resolve subagent provider: Providers service is required")
+		}
+		resolved, err := providerService.ResolveIdentity(ctx, providers.ResolveIdentityRequest{Identity: identity})
+		if err != nil {
+			return "", err
+		}
+		return resolved.ID.String(), nil
 	}
 }
 
