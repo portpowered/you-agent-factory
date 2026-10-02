@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -47,9 +48,10 @@ func TestGeneratedArtifactStoreUsesInjectedMechanicsOutsideApplicationWire(t *te
 		}
 	}
 	wantSelections := map[string]int{
-		"cmd/climanifestgen/main.go":   1,
-		"cmd/clicontractsmoke/main.go": 1,
-		"cmd/mcpdiscoverygen/main.go":  1,
+		"cmd/climanifestgen/main.go":      1,
+		"cmd/clicontractsmoke/main.go":    1,
+		"cmd/mcpdiscoverygen/main.go":     1,
+		"cmd/mcptoolinventorygen/main.go": 1,
 	}
 	gotSelections, err := generatedArtifactStoreSelections(repositoryRoot)
 	if err != nil {
@@ -809,4 +811,71 @@ func writeProductionDefaultTestBaseline(
 	if err := os.WriteFile(filepath.Join(repoRoot, productionDefaultSelectionBaselinePath), payload, 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestParentOwnedStdioAllowanceRequiresCanonicalWire(t *testing.T) {
+	for _, selected := range []bool{false, true} {
+		t.Run(fmt.Sprint(selected), func(t *testing.T) {
+			repoRoot := t.TempDir()
+			writeGoSourceFile(t, repoRoot, "pkg/platform/process/supervised_subprocess.go", `package process
+import "os"
+type channel struct { ends []*os.File }
+func NewParentOwnedStdio() { var file *os.File; _ = file }
+func openParentOwnedStdio() { var file *os.File; _ = file }
+`)
+			wireSource := "package wire\n// process.NewParentOwnedStdio is only documentation\n"
+			if selected {
+				wireSource = `package wire
+import process "github.com/portpowered/infinite-you/pkg/platform/process"
+var stdioFactory = process.NewParentOwnedStdio
+`
+			}
+			writeGoSourceFile(t, repoRoot, "pkg/wire/process.go", wireSource)
+			writeGoSourceFile(t, repoRoot, "pkg/services/providers/internal/services/acp/internal/service/command_parse.go", `package service
+import "os"
+var childEnds []*os.File
+`)
+			findings, err := scanProductionDefaultSelections(repoRoot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			platform, service := 0, 0
+			for _, finding := range findings {
+				if finding.symbol != "os.File" {
+					continue
+				}
+				if strings.HasPrefix(finding.filePath, "pkg/platform/process/") {
+					platform++
+				}
+				if strings.HasPrefix(finding.filePath, "pkg/services/providers/") {
+					service++
+				}
+			}
+			want := 3
+			if selected {
+				want = 0
+			}
+			if platform != want || service != 1 {
+				t.Fatalf("platform findings = %d (want %d), service findings = %d (want 1)", platform, want, service)
+			}
+		})
+	}
+}
+
+func TestParentOwnedStdioCannotBeSelectedInsideService(t *testing.T) {
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, "pkg/services/providers/stdio.go", `package providers
+import process "github.com/portpowered/infinite-you/pkg/platform/process"
+var ambientFactory = process.NewParentOwnedStdio
+`)
+	findings, err := scanProductionDefaultSelections(repoRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range findings {
+		if finding.kind == "platform-adapter-selection" && finding.symbol == repositoryImportPrefix+"pkg/platform/process.NewParentOwnedStdio" {
+			return
+		}
+	}
+	t.Fatalf("service-selected host factory was not rejected: %#v", findings)
 }

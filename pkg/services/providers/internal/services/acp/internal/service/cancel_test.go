@@ -9,6 +9,7 @@ import (
 
 	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -64,7 +65,7 @@ func newPipedConnection(t *testing.T, peer *fakeSessionPeer) *acpsdk.ClientSideC
 func TestServiceClaimAndTryCancelResolveAliasAndDelegateToDaemon(t *testing.T) {
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "custom-acp", Aliases: []string{"custom"}, Transport: "stdio", Command: "agent acp",
-	}}, nil, nil)
+	}}, nil, nil, platformprocess.NewParentOwnedStdio)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

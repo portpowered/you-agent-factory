@@ -5,6 +5,9 @@ package process
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -72,5 +75,68 @@ func TestExecCommandRunner_SupersededCauseReachesCleanupTelemetry(t *testing.T) 
 	assertCommandCleanupLogFields(t, last.fields, req, commandProcessCleanupReasonCancel)
 	if last.fields["cancellation_reason"] != string(CancellationReasonSuperseded) || last.fields["outcome"] != string(commandProcessCleanupOutcomeForceKillSuccess) {
 		t.Fatalf("cleanup completion = %#v, want SUPERSEDED force-kill success", last.fields)
+	}
+}
+
+func TestParentOwnedStdioOwnership(t *testing.T) {
+	for _, detach := range []bool{false, true} {
+		t.Run(fmt.Sprint(detach), func(t *testing.T) {
+			ends := []*os.File{{}, {}, {}, {}}
+			closed := map[*os.File]int{}
+			opens := 0
+			channel, err := openParentOwnedStdio(func() (*os.File, *os.File, error) {
+				i := opens * 2
+				opens++
+				return ends[i], ends[i+1], nil
+			}, func(file *os.File) error { closed[file]++; return nil })
+			if err != nil {
+				t.Fatal(err)
+			}
+			cmd := &exec.Cmd{}
+			channel.Attach(cmd)
+			if cmd.Stdin != ends[0] || cmd.Stdout != ends[3] || channel.Requests() != ends[1] || channel.Responses() != ends[2] {
+				t.Fatal("pipe direction or inherited descriptor changed")
+			}
+			if detach {
+				channel.Detach()
+				channel.Detach()
+				if closed[ends[0]] != 1 || closed[ends[3]] != 1 || closed[ends[1]] != 0 || closed[ends[2]] != 0 {
+					t.Fatal("detach must retain parent endpoints and release child copies exactly once")
+				}
+			}
+			channel.Close()
+			channel.Close()
+			for _, end := range ends {
+				if closed[end] != 1 {
+					t.Fatalf("endpoint closed %d times", closed[end])
+				}
+			}
+		})
+	}
+}
+
+func TestParentOwnedStdioOpenRollback(t *testing.T) {
+	for _, failAt := range []int{1, 2} {
+		t.Run(fmt.Sprint(failAt), func(t *testing.T) {
+			ends := []*os.File{{}, {}}
+			closed := map[*os.File]int{}
+			failure := errors.New("pipe allocation failed")
+			opens := 0
+			channel, err := openParentOwnedStdio(func() (*os.File, *os.File, error) {
+				opens++
+				if opens == failAt {
+					return nil, nil, failure
+				}
+				return ends[0], ends[1], nil
+			}, func(file *os.File) error { closed[file]++; return nil })
+			if channel != nil || !errors.Is(err, failure) {
+				t.Fatalf("allocation failure = %v, %v", channel, err)
+			}
+			for _, end := range ends {
+				if closed[end] != failAt-1 {
+					t.Fatalf("rollback closes = %d, want %d", closed[end], failAt-1)
+				}
+			}
+		})
 	}
 }

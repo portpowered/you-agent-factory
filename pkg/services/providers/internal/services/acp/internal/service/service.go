@@ -40,12 +40,23 @@ type Service struct {
 	aliases      map[string]providers.ID
 	newCommand   platformprocess.CommandFactory
 	locator      platformprocess.ExecutableLocator
+	stdioPipes   platformprocess.StdioPipeFactory
 }
 
 var _ acp.ContinuationService = (*Service)(nil)
 
-func New(integrations []providers.ACPIntegration, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) (acp.ContinuationService, error) {
-	service := &Service{newCommand: newCommand, locator: locator}
+// New constructs the ACP continuation owner. stdioPipes is the exact
+// parent-owned standard-stream channel factory this service is allowed to use;
+// it is never selected here, so a composition that omits it produces a clear
+// dependency failure on the first execution rather than a service that quietly
+// opens a host pipe for itself.
+func New(
+	integrations []providers.ACPIntegration,
+	newCommand platformprocess.CommandFactory,
+	locator platformprocess.ExecutableLocator,
+	stdioPipes platformprocess.StdioPipeFactory,
+) (acp.ContinuationService, error) {
+	service := &Service{newCommand: newCommand, locator: locator, stdioPipes: stdioPipes}
 	if err := service.Configure(context.Background(), integrations); err != nil {
 		return nil, err
 	}
@@ -192,7 +203,7 @@ func (service *Service) Configure(ctx context.Context, integrations []providers.
 			next[id] = current
 			continue
 		}
-		next[id] = newDaemon(command, service.newCommand, service.locator)
+		next[id] = newDaemon(command, service.newCommand, service.locator, service.stdioPipes)
 		if current := service.daemons[id]; current != nil {
 			retired[id] = current
 		}
@@ -236,9 +247,14 @@ func (service *Service) resolveLocked(id providers.ID) (providers.ID, bool) {
 	return canonical, ok
 }
 
-func newDaemon(command Command, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) *daemon {
+func newDaemon(
+	command Command,
+	newCommand platformprocess.CommandFactory,
+	locator platformprocess.ExecutableLocator,
+	stdioPipes platformprocess.StdioPipeFactory,
+) *daemon {
 	lifecycle, cancelLifecycle := context.WithCancel(context.Background())
-	daemon := &daemon{command: Command{Name: command.Name, Args: append([]string(nil), command.Args...)}, newCommand: newCommand, locator: locator, gate: make(chan struct{}, 1), lifecycle: lifecycle, cancelLifecycle: cancelLifecycle}
+	daemon := &daemon{command: Command{Name: command.Name, Args: append([]string(nil), command.Args...)}, newCommand: newCommand, locator: locator, stdioPipes: stdioPipes, gate: make(chan struct{}, 1), lifecycle: lifecycle, cancelLifecycle: cancelLifecycle}
 	daemon.gate <- struct{}{}
 	return daemon
 }
@@ -254,6 +270,7 @@ type daemon struct {
 	command         Command
 	newCommand      platformprocess.CommandFactory
 	locator         platformprocess.ExecutableLocator
+	stdioPipes      platformprocess.StdioPipeFactory
 
 	cmd         *exec.Cmd
 	stdin       io.WriteCloser
@@ -576,6 +593,24 @@ func classifyNegotiatedVersion(id providers.ID, initialized acpsdk.InitializeRes
 	}
 }
 
+// newACPStdio opens this peer's parent-owned standard-stream channel. The
+// factory is the exact effect injected at composition; a missing one is reported
+// as a dependency failure rather than defaulted here, so this service never
+// selects a pipe implementation for itself.
+func (daemon *daemon) newACPStdio() (platformprocess.StdioChannel, error) {
+	if daemon.stdioPipes == nil {
+		return nil, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP standard stream channel is unavailable"}
+	}
+	channel, err := daemon.stdioPipes()
+	if err != nil {
+		return nil, dependencyFailure(err.Error())
+	}
+	if channel == nil {
+		return nil, dependencyFailure("ACP standard stream channel factory returned nil")
+	}
+	return channel, nil
+}
+
 func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd string, environment []string, request providers.ExecuteRequest) error {
 	if daemon.connection != nil {
 		// A peer disconnect is authoritative even when cmd.Wait has not yet
@@ -595,6 +630,9 @@ func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd st
 	if daemon.newCommand == nil {
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP command is unavailable"}
 	}
+	if daemon.stdioPipes == nil {
+		return dependencyFailure("ACP standard stream channel is unavailable")
+	}
 	launchName, err := daemon.resolveLaunchName(id)
 	if err != nil {
 		return err
@@ -606,38 +644,43 @@ func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd st
 	cmd.Dir, cmd.Env = cwd, append([]string(nil), environment...)
 	daemon.stderr.Reset()
 	cmd.Stderr = &daemon.stderr
-	stdio, err := attachACPStdio(cmd)
+	// The parent-owned channel keeps the response reader independent of
+	// cmd.Wait: this process holds its own read end until the peer is retired,
+	// and releases only its copies of the child's ends once the start succeeds.
+	stdio, err := daemon.newACPStdio()
 	if err != nil {
-		return dependencyFailure(err.Error())
+		return err
 	}
+	stdio.Attach(cmd)
 	platformprocess.ConfigureSubprocessTree(cmd)
 	if err := cmd.Start(); err != nil {
-		stdio.close()
+		stdio.Close()
 		return dependencyFailure(fmt.Sprintf("start ACP provider %q: %v", id, err))
 	}
-	stdio.detach()
+	stdio.Detach()
 	tree, _ := platformprocess.AttachSubprocessTree(cmd)
 	finished := make(chan error, 1)
 	go func() { finished <- cmd.Wait() }()
+	requests, responses := stdio.Requests(), stdio.Responses()
 	client := &client{}
-	connection := acpsdk.NewClientSideConnection(client, stdio.requests, stdio.responses)
+	connection := acpsdk.NewClientSideConnection(client, requests, responses)
 	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{
 		ProtocolVersion:    acpsdk.ProtocolVersionNumber,
 		ClientCapabilities: acpClientCapabilities(),
 	})
 	if err != nil {
-		daemon.cmd, daemon.stdin, daemon.stdout, daemon.finished, daemon.tree = cmd, stdio.requests, stdio.responses, finished, tree
+		daemon.cmd, daemon.stdin, daemon.stdout, daemon.finished, daemon.tree = cmd, requests, responses, finished, tree
 		_ = daemon.stopLocked(context.Background())
 		return rpcFailure(ctx, "initialize", id, err, daemon.stderr.String(), request)
 	}
 	if version := classifyNegotiatedVersion(id, initialized); version != nil {
-		daemon.cmd, daemon.stdin, daemon.stdout, daemon.finished, daemon.tree = cmd, stdio.requests, stdio.responses, finished, tree
+		daemon.cmd, daemon.stdin, daemon.stdout, daemon.finished, daemon.tree = cmd, requests, responses, finished, tree
 		_ = daemon.stopLocked(context.Background())
 		return version
 	}
 	daemon.cmd = cmd
-	daemon.stdin = stdio.requests
-	daemon.stdout = stdio.responses
+	daemon.stdin = requests
+	daemon.stdout = responses
 	daemon.connection = connection
 	daemon.client = client
 	daemon.initialized = initialized

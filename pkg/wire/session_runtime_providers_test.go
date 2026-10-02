@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -27,6 +28,7 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -54,6 +56,72 @@ func TestProvideProvidersExecutableLocator(t *testing.T) {
 	got := provideProvidersExecutableLocator(serviceedges.Edges{ProvidersExecutableLocator: injected})
 	if got != injected {
 		t.Fatalf("Providers executable locator = %T %p, want injected locator %p", got, got, injected)
+	}
+}
+
+// TestProvideProvidersStdioPipeFactory pins the single canonical selection of
+// the parent-owned ACP standard-stream channel: an absent edge selects the
+// policy-free host channel, and an injected edge wins so functional callers can
+// replace that exact effect through the same BuildProcess bag.
+func TestProvideProvidersStdioPipeFactory(t *testing.T) {
+	t.Parallel()
+
+	if reflect.ValueOf(provideProvidersStdioPipeFactory(serviceedges.Edges{})).Pointer() != reflect.ValueOf(platformprocess.NewParentOwnedStdio).Pointer() {
+		t.Fatal("default Providers stdio factory must select the platform primitive")
+	}
+
+	injected := platformprocess.StdioPipeFactory(func() (platformprocess.StdioChannel, error) {
+		return nil, errors.New("injected channel")
+	})
+	got := provideProvidersStdioPipeFactory(serviceedges.Edges{ProvidersStdioPipeFactory: injected})
+	channel, err := got()
+	if channel != nil || err == nil || err.Error() != "injected channel" {
+		t.Fatalf("injected Providers stdio pipe factory = (%#v, %v), want the injected channel failure", channel, err)
+	}
+}
+
+// TestProvideConfiguredProvidersServiceProjectsInjectedStdioPipeFactory proves
+// the replaceable edge really reaches the private ACP service through canonical
+// composition. The sentinel failure the injected channel reports is the only way
+// the observation can succeed, so a service that selected a host channel for
+// itself, or ignored the edge, would fail this test.
+func TestProvideConfiguredProvidersServiceProjectsInjectedStdioPipeFactory(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	edges := serviceedges.Edges{
+		ProvidersStdioPipeFactory: func() (platformprocess.StdioChannel, error) {
+			calls++
+			return nil, errors.New("injected ACP channel unavailable")
+		},
+		// The launch name is resolved before the channel opens, so the locator
+		// must report the configured executable as present. The default command
+		// factory only builds an inert command; nothing is started because the
+		// channel factory reports the failure first.
+		ProvidersExecutableLocator: &wireTestExecutableLocator{},
+	}
+	service, err := provideConfiguredProvidersService(edges, []operatorsettings.ACPIntegration{{
+		ID: "wire-acp-channel", Name: "wire-acp-channel", Transport: "stdio", Command: "wire-acp-channel-agent acp",
+	}}, nil)
+	if err != nil {
+		t.Fatalf("provideConfiguredProvidersService() error = %v", err)
+	}
+
+	_, err = service.Execute(t.Context(), providers.ExecuteRequest{
+		Provider:         "wire-acp-channel",
+		AttemptID:        "wire-acp-channel-attempt",
+		UserMessage:      "exercise the projected channel",
+		WorkingDirectory: t.TempDir(),
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) || failure.Kind != providers.ExecuteFailureKindDependency {
+		t.Fatalf("Execute() error = %v (%T), want a dependency ExecuteFailure", err, err)
+	}
+	if !strings.Contains(failure.Message, "injected ACP channel unavailable") {
+		t.Fatalf("ExecuteFailure.Message = %q, want the injected channel failure", failure.Message)
+	}
+	if calls != 1 {
+		t.Fatalf("injected ACP stdio channel factory calls = %d, want exactly 1", calls)
 	}
 }
 

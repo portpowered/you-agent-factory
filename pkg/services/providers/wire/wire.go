@@ -104,6 +104,7 @@ type wireOptions struct {
 	acpIntegrations   []providers.ACPIntegration
 	commandFactory    platformprocess.CommandFactory
 	executableLocator platformprocess.ExecutableLocator
+	stdioPipes        platformprocess.StdioPipeFactory
 	registrations     ProviderRegistrations
 	logger            logging.Logger
 }
@@ -153,6 +154,20 @@ func (o commandFactoryOption) apply(opts *wireOptions) { opts.commandFactory = o
 // WithCommandFactory injects the only process-creation edge used by ACP.
 func WithCommandFactory(factory platformprocess.CommandFactory) Option {
 	return commandFactoryOption{factory: factory}
+}
+
+type stdioPipesOption struct {
+	factory platformprocess.StdioPipeFactory
+}
+
+func (o stdioPipesOption) apply(opts *wireOptions) { opts.stdioPipes = o.factory }
+
+// WithStdioPipeFactory injects the parent-owned ACP standard-stream channel
+// factory. Canonical composition selects it here; this package never defaults
+// it, so an ACP execution that reached Providers without one reports a missing
+// channel dependency instead of opening a host pipe from inside the service.
+func WithStdioPipeFactory(factory platformprocess.StdioPipeFactory) Option {
+	return stdioPipesOption{factory: factory}
 }
 
 type catalogOption struct {
@@ -313,6 +328,7 @@ func NewService(options ...Option) (providers.Service, error) {
 		acp,
 		config.commandFactory,
 		config.executableLocator,
+		config.stdioPipes,
 		config.logger,
 		config.registrations...,
 	)
@@ -361,77 +377,6 @@ func ACPIntegrationsFromRuntimeCatalog(document []byte) ([]providers.ACPIntegrat
 	return packaged.ACPIntegrations(), nil
 }
 
-// newRoot preserves the pre-cutover test construction shape while the typed
-// production constructor below owns Providers effects. The compatibility
-// parser is intentionally local to wire and is not part of providers.Service.
-func newRoot(catalogService catalog.Service, args ...any) (providers.Service, error) {
-	if len(args) >= 9 {
-		var commandRunner platformprocess.CommandRunner
-		if value, ok := args[0].(platformprocess.CommandRunner); ok {
-			commandRunner = value
-		}
-		var platform AgyPTYPlatformDependencies
-		if value, ok := args[4].(AgyPTYPlatformDependencies); ok {
-			platform = value
-		}
-		var integrations []providers.ACPIntegration
-		if value, ok := args[5].([]providers.ACPIntegration); ok {
-			integrations = value
-		}
-		var factory platformprocess.CommandFactory
-		if value, ok := args[6].(platformprocess.CommandFactory); ok {
-			factory = value
-		}
-		var locator platformprocess.ExecutableLocator
-		if value, ok := args[7].(platformprocess.ExecutableLocator); ok {
-			locator = value
-		}
-		var logger logging.Logger
-		if value, ok := args[8].(logging.Logger); ok {
-			logger = value
-		}
-		registrations := registrationsFromValues(args[9:])
-		return newRootWithOptions(
-			catalogService,
-			executionwire.AdaptPlatformCommandRunner(commandRunner),
-			providerservice.AdaptCommandRunner(args[2]),
-			asPlatformClock(args[3]),
-			platform,
-			integrations,
-			factory,
-			locator,
-			logger,
-			registrations...,
-		)
-	}
-	var commandRunner providerservice.CommandRunner
-	if value, ok := argsValue(args, 0).(providerservice.CommandRunner); ok {
-		commandRunner = value
-	}
-	var agyCommandRunner providerservice.CommandRunner
-	if value, ok := argsValue(args, 1).(providerservice.CommandRunner); ok {
-		agyCommandRunner = value
-	}
-	clock := asPlatformClock(argsValue(args, 2))
-	platform, _ := argsValue(args, 3).(AgyPTYPlatformDependencies)
-	integrations, _ := argsValue(args, 4).([]providers.ACPIntegration)
-	factory, _ := argsValue(args, 5).(platformprocess.CommandFactory)
-	locator, _ := argsValue(args, 6).(platformprocess.ExecutableLocator)
-	logger, _ := argsValue(args, 7).(logging.Logger)
-	return newRootWithOptions(
-		catalogService,
-		commandRunner,
-		agyCommandRunner,
-		clock,
-		platform,
-		integrations,
-		factory,
-		locator,
-		logger,
-		registrationsFromValues(args[8:])...,
-	)
-}
-
 func newRootWithOptions(
 	catalogService catalog.Service,
 	commandRunner providerservice.CommandRunner,
@@ -441,6 +386,7 @@ func newRootWithOptions(
 	acpIntegrations []providers.ACPIntegration,
 	commandFactory platformprocess.CommandFactory,
 	executableLocator platformprocess.ExecutableLocator,
+	stdioPipes platformprocess.StdioPipeFactory,
 	logger logging.Logger,
 	externalRegistrations ...Registration,
 ) (providers.Service, error) {
@@ -448,7 +394,7 @@ func newRootWithOptions(
 		return nil, fmt.Errorf("construct Providers: catalog is required")
 	}
 	registrations := executionserviceRegistrations(commandRunner, agyCommandRunner, agyCommandClock, agyPTYPlatform)
-	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator)
+	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator, stdioPipes)
 	if err != nil {
 		return nil, err
 	}
@@ -654,28 +600,6 @@ func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) [
 
 func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
 	return providers.Descriptor{ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessUnverified, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilitySessionResume}}
-}
-
-func argsValue(args []any, index int) any {
-	if index < 0 || index >= len(args) {
-		return nil
-	}
-	return args[index]
-}
-
-func asPlatformClock(value any) platformclock.Source {
-	clock, _ := value.(platformclock.Source)
-	return clock
-}
-
-func registrationsFromValues(values []any) []Registration {
-	registrations := make([]Registration, 0, len(values))
-	for _, value := range values {
-		if registration, ok := value.(Registration); ok {
-			registrations = append(registrations, registration)
-		}
-	}
-	return registrations
 }
 
 // NewFactory returns an inert constructor used for operator-configured ACP catalogs.

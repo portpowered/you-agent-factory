@@ -91,12 +91,13 @@ var productionDefaultSymbols = map[string]string{
 // selected only by canonical Wire or by an outer _test.go edge. Normal
 // compiled helpers must receive their owner-defined capabilities explicitly.
 var platformAdapterSelectionSymbols = map[string]struct{}{
-	repositoryImportPrefix + "pkg/platform/directoryreplace.Local":    {},
-	repositoryImportPrefix + "pkg/platform/directoryreplace.NewLocal": {},
-	repositoryImportPrefix + "pkg/platform/filesystem.Local":          {},
-	repositoryImportPrefix + "pkg/platform/inboxgitkeep.NewLocal":     {},
-	repositoryImportPrefix + "pkg/platform/locking.LocalFileSystem":   {},
-	repositoryImportPrefix + "pkg/platform/locking.New":               {},
+	repositoryImportPrefix + "pkg/platform/process.NewParentOwnedStdio": {},
+	repositoryImportPrefix + "pkg/platform/directoryreplace.Local":      {},
+	repositoryImportPrefix + "pkg/platform/directoryreplace.NewLocal":   {},
+	repositoryImportPrefix + "pkg/platform/filesystem.Local":            {},
+	repositoryImportPrefix + "pkg/platform/inboxgitkeep.NewLocal":       {},
+	repositoryImportPrefix + "pkg/platform/locking.LocalFileSystem":     {},
+	repositoryImportPrefix + "pkg/platform/locking.New":                 {},
 }
 
 type productionDefaultAllowance struct {
@@ -205,6 +206,9 @@ var productionDefaultAllowances = []productionDefaultAllowance{
 
 	// These become allowed only after Wire explicitly selects the adapter. Until
 	// then their ambient effects remain ordinary deletion-only findings.
+	{filePath: "pkg/platform/process/supervised_subprocess.go", operation: "NewParentOwnedStdio", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/process.NewParentOwnedStdio"},
+	{filePath: "pkg/platform/process/supervised_subprocess.go", operation: "openParentOwnedStdio", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/process.NewParentOwnedStdio"},
+	{filePath: "pkg/platform/process/supervised_subprocess.go", operation: "package", symbol: "os.File", wireSymbol: repositoryImportPrefix + "pkg/platform/process.NewParentOwnedStdio"},
 	{filePath: "pkg/platform/process/command.go", operation: "ExecCommandRunner.Run", symbol: "os/exec.Command", wireSymbol: repositoryImportPrefix + "pkg/platform/process.ExecCommandRunner"},
 	{filePath: "pkg/platform/process/managedchild/managed.go", operation: "Start", symbol: "os/exec.Command", wireSymbol: repositoryImportPrefix + "pkg/platform/process/managedchild.Start"},
 	{filePath: "pkg/platform/process/executable.go", operation: "HostExecutableLocator.LookPath", symbol: "os/exec.LookPath", wireSymbol: repositoryImportPrefix + "pkg/platform/process.HostExecutableLocator"},
@@ -399,6 +403,12 @@ func scanPlatformAdapterSelections(
 					selected = expression.Fun
 				case *ast.CompositeLit:
 					selected = expression.Type
+				case *ast.SelectorExpr:
+					qualified, _, imported := productionQualifiedSelector(expression, imports)
+					if !imported || qualified != repositoryImportPrefix+"pkg/platform/process.NewParentOwnedStdio" {
+						return true
+					}
+					selected = expression
 				default:
 					return true
 				}
@@ -514,6 +524,12 @@ func readWireProductionSelections(repoRoot string) (map[string]struct{}, error) 
 				selected = expression.Fun
 			case *ast.CompositeLit:
 				selected = expression.Type
+			case *ast.SelectorExpr:
+				qualified, _, imported := productionQualifiedSelector(expression, imports)
+				if imported && qualified == repositoryImportPrefix+"pkg/platform/process.NewParentOwnedStdio" {
+					selections[qualified] = struct{}{}
+				}
+				return true
 			default:
 				return true
 			}

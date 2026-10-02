@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -55,7 +56,7 @@ func TestBundledPiBridgeUsesCurrentExecutableWithoutYouOnPATH(t *testing.T) {
 		launched, arguments = name, append([]string(nil), args...)
 		return exec.Command(current, "-test.run=^TestACPArgumentRoundTripHelperProcess$")
 	}
-	daemon := newDaemon(Command{Name: "you", Args: []string{"pi-acp"}}, commandFactory, locator)
+	daemon := newDaemon(Command{Name: "you", Args: []string{"pi-acp"}}, commandFactory, locator, platformprocess.NewParentOwnedStdio)
 	t.Cleanup(func() { _ = daemon.close(context.Background()) })
 	_ = daemon.ensureStarted(context.Background(), providers.ID("pi"), t.TempDir(),
 		append(os.Environ(), argumentRoundTripHelperEnvironment+"=1"), providers.ExecuteRequest{})
@@ -77,7 +78,7 @@ func TestOtherACPCommandStillUsesConfiguredExecutable(t *testing.T) {
 		launched = name
 		return exec.Command(os.Args[0], "-test.run=^TestACPArgumentRoundTripHelperProcess$")
 	}
-	daemon := newDaemon(Command{Name: "other-agent", Args: []string{"acp"}}, commandFactory, locator)
+	daemon := newDaemon(Command{Name: "other-agent", Args: []string{"acp"}}, commandFactory, locator, platformprocess.NewParentOwnedStdio)
 	t.Cleanup(func() { _ = daemon.close(context.Background()) })
 	_ = daemon.ensureStarted(context.Background(), providers.ID("other"), t.TempDir(),
 		append(os.Environ(), argumentRoundTripHelperEnvironment+"=1"), providers.ExecuteRequest{})
@@ -102,7 +103,7 @@ func TestExecuteUsesLosslessQuotedLaunch(t *testing.T) {
 		Transport: "stdio",
 		Command:   `'agent'\''\tool' 'hello world' 'semi;colon' 'quote'\''s'`,
 		Arguments: wantArguments,
-	}}, commandFactory, availableLocator{})
+	}}, commandFactory, availableLocator{}, platformprocess.NewParentOwnedStdio)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -149,7 +150,7 @@ func TestParseACPCommandPreservesWindowsExecutablePath(t *testing.T) {
 func TestConfigureRetainsUnchangedDaemonAndReplacesChangedCommand(t *testing.T) {
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "custom-acp", Transport: "stdio", Command: "agent acp",
-	}}, nil, nil)
+	}}, nil, nil, platformprocess.NewParentOwnedStdio)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -229,7 +230,7 @@ func TestOpenCodeEnvironment(t *testing.T) {
 func TestConfigureRejectsMalformedReplacementWithoutChangingLiveSet(t *testing.T) {
 	serviceValue, err := New([]providers.ACPIntegration{{
 		ID: "entry-1", Name: "custom-acp", Transport: "stdio", Command: "agent acp",
-	}}, nil, nil)
+	}}, nil, nil, platformprocess.NewParentOwnedStdio)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

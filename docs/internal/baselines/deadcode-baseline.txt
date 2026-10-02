@@ -1961,12 +1961,8 @@ pkg/services/providers/wire/wire.go: unreachable func: CatalogOption
 pkg/services/providers/wire/wire.go: unreachable func: DefaultPTYSessionConfig
 pkg/services/providers/wire/wire.go: unreachable func: NewFactory
 pkg/services/providers/wire/wire.go: unreachable func: WithLogger
-pkg/services/providers/wire/wire.go: unreachable func: argsValue
-pkg/services/providers/wire/wire.go: unreachable func: asPlatformClock
 pkg/services/providers/wire/wire.go: unreachable func: catalogOption.apply
 pkg/services/providers/wire/wire.go: unreachable func: loggerOption.apply
-pkg/services/providers/wire/wire.go: unreachable func: newRoot
-pkg/services/providers/wire/wire.go: unreachable func: registrationsFromValues
 pkg/services/recordings/internal/artifacts/projection.go: unreachable func: ApplyJavaScriptProjectionFacts
 pkg/services/recordings/internal/artifacts/projection.go: unreachable func: resultFromJavaScriptProjection
 pkg/services/recordings/internal/contracts/contracts.go: unreachable func: LiveRecordingTargetPlannerFunc.PlanLiveRecordingTarget

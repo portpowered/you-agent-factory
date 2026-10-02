@@ -103,6 +103,10 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	embeddingBackend := ModelEmbeddingBackend(func(context.Context, models.EmbeddingBackendRequest) (models.EmbeddingBackendResponse, error) {
 		return models.EmbeddingBackendResponse{}, nil
 	})
+	stdioChannelSelected := errors.New("edge stdio channel selected")
+	stdioPipes := platformprocess.StdioPipeFactory(func() (platformprocess.StdioChannel, error) {
+		return nil, stdioChannelSelected
+	})
 
 	merged := Merge(Edges{
 		APIServerStarter:     defaultStarter,
@@ -143,6 +147,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 		},
 		WorkersExecutableLocator:           platformprocess.HostExecutableLocator{},
 		ProvidersExecutableLocator:         platformprocess.HostExecutableLocator{},
+		ProvidersStdioPipeFactory:          stdioPipes,
 		WorkersExecutableFileReader:        platformfilesystem.Local{},
 		WorkersOperatingSystem:             "replacement-os",
 		WorkersWorktreeFileSystem:          platformfilesystem.Local{},
@@ -270,6 +275,12 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	}
 	if _, ok := merged.ProvidersExecutableLocator.(platformprocess.HostExecutableLocator); !ok {
 		t.Fatalf("ProvidersExecutableLocator = %T, want explicit replacement", merged.ProvidersExecutableLocator)
+	}
+	if merged.ProvidersStdioPipeFactory == nil {
+		t.Fatal("ProvidersStdioPipeFactory = nil, want explicit replacement")
+	}
+	if channel, channelErr := merged.ProvidersStdioPipeFactory(); channel != nil || !errors.Is(channelErr, stdioChannelSelected) {
+		t.Fatalf("ProvidersStdioPipeFactory replacement = (%#v, %v), want the injected channel selection", channel, channelErr)
 	}
 	if _, ok := merged.WorkersExecutableFileReader.(platformfilesystem.Local); !ok {
 		t.Fatalf("WorkersExecutableFileReader = %T, want explicit replacement", merged.WorkersExecutableFileReader)
@@ -407,6 +418,40 @@ func TestMergeUsesCallerOwnedAgyPTYClock(t *testing.T) {
 	)
 	if merged.AgyPTYClock != replacement {
 		t.Fatal("Merge did not preserve the caller-owned Agy PTY clock edge")
+	}
+}
+
+// TestMergeUsesCallerOwnedProvidersStdioPipeFactory pins the replaceable
+// parent-owned ACP channel edge in both directions: a replacement edge wins, and
+// an absent replacement preserves the production default rather than clearing
+// it, so composition can always fall back to the canonical Wire selection.
+func TestMergeUsesCallerOwnedProvidersStdioPipeFactory(t *testing.T) {
+	t.Parallel()
+
+	replacementErr := errors.New("caller-owned stdio channel selected")
+	replacement := platformprocess.StdioPipeFactory(func() (platformprocess.StdioChannel, error) {
+		return nil, replacementErr
+	})
+	defaultSelected := false
+	productionDefault := platformprocess.StdioPipeFactory(func() (platformprocess.StdioChannel, error) {
+		defaultSelected = true
+		return nil, errors.New("production default stdio channel selected")
+	})
+
+	merged := Merge(
+		Edges{ProvidersStdioPipeFactory: productionDefault},
+		Edges{ProvidersStdioPipeFactory: replacement},
+	)
+	if channel, err := merged.ProvidersStdioPipeFactory(); channel != nil || !errors.Is(err, replacementErr) {
+		t.Fatalf("merged ProvidersStdioPipeFactory = (%#v, %v), want the caller-owned replacement", channel, err)
+	}
+	if defaultSelected {
+		t.Fatal("Merge invoked the production default stdio channel instead of the replacement")
+	}
+
+	preserved := Merge(Edges{ProvidersStdioPipeFactory: productionDefault}, Edges{})
+	if _, err := preserved.ProvidersStdioPipeFactory(); !defaultSelected || err == nil {
+		t.Fatal("Merge without a replacement did not preserve the production default stdio channel edge")
 	}
 }
 
