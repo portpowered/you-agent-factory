@@ -225,7 +225,12 @@ LINT_CHECKER_FALLBACK ?= 0
 LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
 LINT_CHECKER_DRIVER ?=
 LINT_LANE_PACKAGE := ./cmd/lintlane
+# Optional CI outputs can be defined but blank. Use the canonical lane budget
+# for blank handoffs; lintlane still rejects invalid nonblank overrides.
 LINT_JOBS ?= $(GO_LANE_BUDGET)
+ifeq ($(strip $(LINT_JOBS)),)
+override LINT_JOBS := $(GO_LANE_BUDGET)
+endif
 # Keep the recursive command available to lintlane without spelling the
 # special $(MAKE) variable in this recipe; GNU Make executes such recipes
 # during -n so recursive builds can receive the dry-run flag.

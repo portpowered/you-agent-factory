@@ -811,6 +811,7 @@ jobs:
         run: make test-functional-long-compile
       - name: Select Backend Lint runner parallelism
         id: backend-lint-parallelism
+        if: always()
         shell: bash
         run: |
           runner_cpus="$(nproc 2>/dev/null || true)"
@@ -841,7 +842,7 @@ jobs:
           printf 'exit_code=%s\n' "$status" >> "$GITHUB_OUTPUT"
           exit "$status"
         env:
-          LINT_JOBS: ${{ steps.backend-lint-parallelism.outputs.jobs }}
+          LINT_JOBS: ${{ steps.backend-lint-parallelism.outputs.jobs || '2' }}
       - name: Render Backend Lint summary and gate
         if: always()
         run: >-
