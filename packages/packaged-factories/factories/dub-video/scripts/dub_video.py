@@ -21,9 +21,9 @@ sys.dont_write_bytecode = True
 
 from dub_contract import (
     load_translation_response, render_ass, render_srt, translation_prompt,
-    validate_segments, validate_translations, target_language, LANGUAGES, playback_segments,
+    validate_segments, validate_translations, target_language, LANGUAGES, playback_segments, nonverbal_kind,
 )
-from dub_media import CommandFailed, SpeechDoesNotFit, command, fit_speech, mux, reference, timeline, video_duration
+from dub_media import CommandFailed, SpeechDoesNotFit, command, fit_speech, mux, reference, timeline, video_duration, preserve_nonverbal
 from dub_grammar import audit_grammar, translation_grammar
 
 # These partition targets bound one inference call, never the complete input.
@@ -465,6 +465,15 @@ def synthesize_segment(root, translated, index, value):
     ref = prefix.with_suffix(".reference.wav")
     reference(Path(value["video"]), original, ref)
     reference_hash = digest(ref)
+    kind = nonverbal_kind(original["source_text"], original["text"], value.get("preserve_names", []))
+    if kind:
+        working = dict(original)
+        fitted = prefix.with_suffix(".pcm")
+        preserve_nonverbal(ref, fitted, working)
+        working.update(reference_audio=str(ref), speech_audio=str(ref), fitted_audio=str(fitted),
+                       reference_sha256=reference_hash, speech_speed=1.0, audio_origin="source-nonverbal",
+                       nonverbal_kind=kind, tts_attempts=[], fit_attempts=[{"revision": 0, "status": "fitted"}])
+        return working
     limit = translated[index + 1]["start"] if index + 1 < len(translated) else value["duration_ms"]
     history, overflow, candidate, feedback = [], None, dict(original), ""
     for revision in range(3):
@@ -500,7 +509,8 @@ def synthesize_segment(root, translated, index, value):
             continue
         history.append({"revision": revision, "status": "fitted"})
         working.update(reference_audio=str(ref), speech_audio=str(speech), fitted_audio=str(fitted),
-                       reference_sha256=reference_hash, speech_speed=speed, fit_attempts=history)
+                       reference_sha256=reference_hash, speech_speed=speed, fit_attempts=history,
+                       audio_origin="reference-conditioned")
         return working
 
 

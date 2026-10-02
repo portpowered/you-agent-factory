@@ -69,6 +69,16 @@ def reference(video: Path, segment: dict, destination: Path) -> None:
         raise ValueError(f"Source segment {segment['id']} has no reference audio")
 
 
+def preserve_nonverbal(source: Path, destination: Path, segment: dict) -> None:
+    """Decode the original reference without time stretching or gap borrowing."""
+    command(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+             "-i", str(source), "-map", "0:a:0", "-c:a", "pcm_s16le", "-f", "s16le", str(destination)])
+    expected = (segment["end"] - segment["start"]) * 48
+    if destination.stat().st_size != expected:
+        raise ValueError(f"Source nonverbal cue {segment['id']} PCM does not match its original interval")
+    segment["speech_end"] = segment["end"]
+
+
 def fit_speech(source: Path, destination: Path, segment: dict, playback_limit=None) -> float:
     duration = float(probe(source).get("format", {}).get("duration", "nan"))
     if not math.isfinite(duration) or duration <= 0:

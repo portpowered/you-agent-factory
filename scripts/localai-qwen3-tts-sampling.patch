@@ -1,0 +1,89 @@
+diff --git a/src/sampling.h b/src/sampling.h
+--- a/src/sampling.h
++++ b/src/sampling.h
+@@ -68,0 +69,17 @@
++}
++
++// Negative infinity is an intentional mask. NaN, positive infinity, and
++// distributions without a finite candidate must never manufacture a token.
++static bool sampling_finite_candidates(const float * logits, int V) {
++    if (!logits || V <= 0) {
++        return false;
++    }
++    bool has_finite = false;
++    for (int i = 0; i < V; i++) {
++        if (std::isfinite(logits[i])) {
++            has_finite = true;
++        } else if (logits[i] != -INFINITY) {
++            return false;
++        }
++    }
++    return has_finite;
+@@ -93,0 +111,3 @@
++    if (!sampling_finite_candidates(logits, V)) {
++        return -1;
++    }
+@@ -105,0 +126,4 @@
++    }
++
++    if (!sampling_finite_candidates(logits, V)) {
++        return -1;
+@@ -134,0 +159,3 @@
++        }
++        if (!std::isfinite(sum_exp) || sum_exp <= 0.0f) {
++            return -1;
+@@ -173,0 +201,3 @@
++    if (!sampling_finite_candidates(logits, V)) {
++        return -1;
++    }
+@@ -183,0 +214,4 @@
++    }
++
++    if (!std::isfinite(sum) || sum <= 0.0f) {
++        return -1;
+diff --git a/src/pipeline-tts.cpp b/src/pipeline-tts.cpp
+--- a/src/pipeline-tts.cpp
++++ b/src/pipeline-tts.cpp
+@@ -619,0 +620,8 @@
++    qt_log(QT_LOG_INFO,
++           "[Sampler] seed=%lld max_frames=%d talker=(temp=%g k=%d p=%g repeat=%g) "
++           "subtalker=(temp=%g k=%d p=%g) eos=%d ref_audio=%d ref_codes=%d ref_text=%d",
++           (long long) resolved_seed, params->max_new_tokens, (double) talker_T, params->top_k,
++           (double) params->top_p, (double) talker_rp, (double) subtk_T, params->subtalker_top_k,
++           (double) params->subtalker_top_p, codec_eos_id, (int) has_ref_audio,
++           (int) (ref_codes_ptr != NULL), (int) (params->ref_text && params->ref_text[0]));
++
+@@ -671,0 +680,4 @@
++    float last_eos_logit = -INFINITY;
++    int last_eos_rank = 0;
++    int last_finite_candidates = 0;
++    int last_invalid_candidates = 0;
+@@ -717,0 +730,15 @@
++        last_eos_logit = (codec_eos_id >= 0 && codec_eos_id < talker_vocab) ?
++                             fw.logits_last[(size_t) codec_eos_id] : -INFINITY;
++        last_eos_rank = 0;
++        last_finite_candidates = 0;
++        last_invalid_candidates = 0;
++        for (float logit : fw.logits_last) {
++            if (std::isfinite(logit)) {
++                last_finite_candidates++;
++                if (logit > last_eos_logit) {
++                    last_eos_rank++;
++                }
++            } else if (logit != -INFINITY) {
++                last_invalid_candidates++;
++            }
++        }
+@@ -725 +752,5 @@
+-            qt_log(QT_LOG_ERROR, "[Pipeline] c0 sample returned no candidate");
++            qt_set_error("pipeline_tts_synthesize: invalid talker sampling distribution at frame %d", step);
++            qt_log(QT_LOG_ERROR,
++                   "[Sampler] invalid distribution step=%d seed=%lld eos_logit=%g eos_rank=%d finite=%d invalid=%d",
++                   step, (long long) resolved_seed, (double) last_eos_logit, last_eos_rank,
++                   last_finite_candidates, last_invalid_candidates);
+@@ -823 +854,4 @@
+-        qt_log(QT_LOG_ERROR, "[Pipeline] Generation exhausted %d frames without EOS", params->max_new_tokens);
++        qt_log(QT_LOG_ERROR,
++               "[Pipeline] Generation exhausted %d frames without EOS seed=%lld eos_logit=%g eos_rank=%d finite=%d invalid=%d",
++               params->max_new_tokens, (long long) resolved_seed, (double) last_eos_logit, last_eos_rank,
++               last_finite_candidates, last_invalid_candidates);

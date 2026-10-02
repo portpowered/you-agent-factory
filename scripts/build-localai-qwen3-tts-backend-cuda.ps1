@@ -43,6 +43,13 @@ $eosPatch = Join-Path $PSScriptRoot 'localai-qwen3-tts-eos.patch'
 & git -C $sourceRoot apply --unidiff-zero --reverse --check $eosPatch 2>$null
 if ($LASTEXITCODE -ne 0) { Invoke-Checked git @('-C', $sourceRoot, 'apply', '--unidiff-zero', $eosPatch) }
 
+# Guard both Talker and CodePredictor sampling against invalid distributions;
+# retain private seed/EOS diagnostics without altering normal sampling defaults.
+$samplingPatch = Join-Path $PSScriptRoot 'localai-qwen3-tts-sampling.patch'
+& git -C $sourceRoot apply --unidiff-zero --reverse --check $samplingPatch 2>$null
+if ($LASTEXITCODE -ne 0) { Invoke-Checked git @('-C', $sourceRoot, 'apply', '--unidiff-zero', $samplingPatch) }
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'localai-qwen3-tts-sampling_test.cpp') -Destination (Join-Path $backendRoot 'sampling_test.cpp') -Force
+
 $main = Join-Path $backendRoot 'main.go'
 $loader = Join-Path $backendRoot 'localai-backend-library_windows.go'
 if (-not (Test-Path -LiteralPath $loader)) {
@@ -56,10 +63,21 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'localai-qwen3-tts-errors_test.g
 $cmakePath = Join-Path $backendRoot 'CMakeLists.txt'
 $cmakeText = [IO.File]::ReadAllText($cmakePath)
 $cmakeText = $cmakeText.Replace('add_library(goqwen3ttscpp MODULE cpp/goqwen3ttscpp.cpp)', 'add_library(goqwen3ttscpp SHARED cpp/goqwen3ttscpp.cpp)')
+if (-not $cmakeText.Contains('add_executable(qwen-sampling-test')) {
+    $cmakeText += @'
+
+# Standalone CPU regression; no model, CUDA calls, or qwen-core linkage.
+add_executable(qwen-sampling-test sampling_test.cpp)
+target_include_directories(qwen-sampling-test PRIVATE ${QWENTTS_DIR}/src)
+set_target_properties(qwen-sampling-test PROPERTIES CXX_STANDARD 17 RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+'@
+}
 [IO.File]::WriteAllText($cmakePath, $cmakeText, [Text.UTF8Encoding]::new($false))
 Invoke-Checked cmake @('-S', $backendRoot, '-B', $BuildRoot, '-G', 'Visual Studio 17 2022', '-A', 'x64', '-T', "cuda=$CudaRoot",
     '-DBUILD_SHARED_LIBS=ON', '-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON', '-DGGML_BACKEND_DL=OFF', '-DGGML_NATIVE=OFF',
     '-DGGML_CUDA=ON', "-DCMAKE_CUDA_ARCHITECTURES=$CudaArchitectures", '-DCMAKE_CXX_STANDARD=17')
+Invoke-Checked cmake @('--build', $BuildRoot, '--config', 'Release', '--target', 'qwen-sampling-test', '--parallel', '4')
+Invoke-Checked (Join-Path $BuildRoot 'Release\qwen-sampling-test.exe') @()
 Invoke-Checked cmake @('--build', $BuildRoot, '--config', 'Release', '--target', 'goqwen3ttscpp', '--parallel', '4')
 
 New-Item -ItemType Directory -Path $PackageRoot -Force | Out-Null

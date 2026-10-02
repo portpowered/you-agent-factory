@@ -59,6 +59,7 @@ class DubFitRepairTests(unittest.TestCase):
                 ("audit", "Can anyone help me?"), ("audit", "Can anyone kind help me?"),
                 ("tts", "text=Can anyone kind help me?")])
             self.assertEqual(result["text"], "Can anyone kind help me?")
+            self.assertEqual(result["audio_origin"], "reference-conditioned")
             self.assertEqual(dub_video.read_json(root / "fit-translation-1-revision-1-approval.json")["audit_attempt"], 2)
             self.assertTrue((root / "fit-translation-1-revision-1-candidate-attempt-1.json").is_file())
             self.assertTrue((root / "fit-translation-1-revision-1-audit-rejection-1.json").is_file())

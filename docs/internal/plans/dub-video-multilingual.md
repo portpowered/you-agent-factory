@@ -780,3 +780,58 @@ runtime recording precedes end-of-tick snapshot publication. It now awaits the
 exact expected terminal Work identity/state and session categories before all
 unchanged assertions. Normal ×20 and race ×5 passed. This changes test readiness,
 not canonical event ordering or runtime state ownership. The in-flight HTTP test now awaits the exact scoped Work PROCESSING projection before its single Worker Sessions read. Normal and race runs ×3 passed; all original assertions and deadlines remain. Final-head CI remains required.
+
+
+## Conservative nonverbal source-audio preservation
+
+The fresh two-stage English run accepted all 59 translations but stopped at
+cue 0 after three explicit native TTS EOS-exhaustion failures. Source cue 0 is
+`啊啊！`, 5920–13440 ms, approved translation `Ahhh!`; the original reference
+is 7.52 seconds. No incomplete synthesized audio was accepted or truncated.
+Evidence remains under `C:/t/dub-multilingual-validation/chinese-english-audited-dub-8od5751h/`.
+
+A narrow pre-TTS policy now preserves original audio only when BOTH complete
+source and approved target strings match the same documented repeated-cry or
+laughter spelling category. The inventory supports Chinese, Japanese, Korean,
+English and Spanish phonetic forms; single interjections, mixed lexical phrases,
+annotations, different categories and operator glossary names do not qualify.
+This is not independent acoustic classification and cannot establish that an
+ASR interval contains no hidden words. It is never a backend-error fallback.
+
+Matched cues keep original start/end, approved caption, reference hash, normal
+speed, and exact mono24k decoded source PCM with no following-gap borrowing,
+additional padding or trimming after normal source-reference extraction. They record `audio_origin: source-nonverbal`, phonetic kind,
+no TTS attempts and one fitted source version. Other cues record
+`audio_origin: reference-conditioned` and retain all existing audit, TTS, source
+reference and 2x fit guards. Independent delivery verification separately checks
+the conservative spelling policy, exact source window and PCM equality against
+re-extracted original references; the ordinary synthesis lineage remains required.
+
+The actual cue-0 CPU-only production-helper proof preserved exactly 360960 PCM
+bytes in the 7.52-second source window with no model invocation. Its saved
+reference/provenance result is `C:/t/dub-multilingual-validation/source-nonverbal-cue0-proof/`.
+The complete 70-test suite passes, including multilingual positives/lexical
+negatives, exact WAV→PCM/timeline/subtitle positioning, no TTS dispatch, no
+backend-error fallback and reference-length mismatch rejection. This proves the
+isolated nonverbal path, not complete Factory delivery; another full run remains
+necessary. General native EOS stability for lexical speech remains under review.
+
+### Native sampler robustness repair (source validation)
+
+Source inspection found a separate numerical-safety defect: invalid sampling
+probabilities could fall through to a reserved token. No log evidence establishes
+that this caused the opening cry's three EOS failures. The new native patch
+rejects NaN, positive infinity, missing finite candidates, and invalid softmax
+sums while retaining deliberate negative-infinity masks and valid finite
+sampling order. Standalone CPU C++ regression tests cover these failures, greedy,
+top-k/nucleus, 128-seed finite multinomial behavior, and the EOS exemption.
+They pass with warnings treated as errors; patch application/reversal and the
+PowerShell recipe parse also pass.
+
+Private native diagnostics now record resolved seed, sampler settings,
+conditioning mode, and last EOS logit/rank/finite counts. Identical Factory
+requests use fresh native random seeds by default. Sampling defaults, generation
+budgets, strict EOS rejection, and the safe public exhaustion message remain
+unchanged. Native build, actual inference proof, checksum-verified publication,
+and Models manifest selection are pending; the currently installed archive does
+not yet contain this source repair.

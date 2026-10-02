@@ -95,6 +95,24 @@ def _contains_name(text, name):
                      text, re.IGNORECASE) is not None
 
 
+def nonverbal_kind(source_text, translation, preserve_names=None):
+    """A narrow phonetic-text policy, not independent acoustic classification."""
+    if any(_contains_name(source_text, name) for name in (preserve_names or [])):
+        return None
+    inventory = {
+        "cry": r"(?:啊{2,}|あ{3,}|ア{3,}|아{3,}|a+h{2,}|a{3,})",
+        "laugh": r"(?:哈{3,}|呵{3,}|は{3,}|ハ{3,}|하{3,}|히{3,}|ひ{3,}|(?:ha){3,}|(?:he){3,}|(?:ja){3,})",
+    }
+    # Only outer punctuation/space may be removed. Mixed words, annotations,
+    # single interjections and internal phrase boundaries remain unmatched.
+    source = source_text.strip(" \t\r\n.,!?…，。！？¡¿").casefold()
+    target = translation.strip(" \t\r\n.,!?…，。！？¡¿").casefold()
+    for kind, pattern in inventory.items():
+        if re.fullmatch(pattern, source) and re.fullmatch(pattern, target):
+            return kind
+    return None
+
+
 def _check_chinese(text, source_text, preserve_names):
     if re.search(r"[\u3400-\u9fff\U00020000-\U000323af]", text) or not re.search(r"[A-Za-z]", text):
         return

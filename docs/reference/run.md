@@ -219,7 +219,18 @@ and saved candidates/audits remain available for inspection.
 Each TTS call receives a mono 24 kHz sample extracted from its original video
 segment and its translated text. Qwen uses the audio's speaker embedding;
 the Factory omits `ref_text` to avoid generating source-language speech before
-the translation. Source transcripts and reference hashes remain in artifacts. The
+the translation. Source transcripts and reference hashes remain in artifacts.
+The Factory preserves the original audio for a narrowly matched nonverbal cue
+when both the complete source and approved translation spell the same kind of
+cry or laughter. Cry spellings are repeated Chinese 啊 (at least two), Japanese
+あ/ア or Korean 아 (at least three), or Latin `aaa`/`ahh` and longer repetitions.
+Laughter requires at least three repetitions of 哈/呵, は/ハ/ひ, 하/히, or
+Latin `ha`/`he`/`ja`. Outer punctuation may surround them; mixed words, single
+interjections, annotations, and glossary names do not qualify. These cues keep
+their source interval at normal speed and record `audio_origin: source-nonverbal`;
+spoken translations record `audio_origin: reference-conditioned`. This is a
+conservative text policy, not independent acoustic proof that no words occur.
+It runs before TTS and never acts as a fallback for synthesis errors. The
 generated speech can use the unoccupied gap after its source cue, up to the next
 cue's start or the video end. Only the needed part of that gap is used. Saved
 translations retain the source `start` and `end` and record a separate

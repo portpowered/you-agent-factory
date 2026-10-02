@@ -343,3 +343,17 @@ was absent when checked after the response. The activity delta does not prove
 useful review progress or explain the timeout. The earlier two concurrent
 dispatches remain verified successes; this later failure does not invalidate
 their results or establish a common cause.
+
+## OpenCode bounded review retry completed (2026-10-02)
+
+After the 120,000 ms review timeout recorded above, a bounded retry used
+`opencode/mimo-v2.6-flash-free` with a 300,000 ms allowance and a requested short
+report. Session `54e2230b-b1a4-4d34-8f1a-5e3a2e97af7f` returned `COMPLETED` and a
+primary result. The requested external report exists at
+`C:/t/dub-multilingual-validation/opencode-concurrency/two-stage-audit-review-retry.txt`.
+Root read it and corroborated its findings: comparison has no grammar/output
+cap, the indexed final decision treats comparison as untrusted evidence, and
+model failures/cancellation propagate. No source edits or local model calls
+were requested. This proves this retry completed and wrote the report with
+ordinary defaults; it does not prove the original timeout's cause or that a
+longer allowance alone explains the different result.
