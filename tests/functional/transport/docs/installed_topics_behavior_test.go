@@ -156,7 +156,7 @@ func testModelsDocumentation(t *testing.T, process support.Process) {
 	for _, want := range []string{
 		"local Models composition",
 		"| `llm` | `OMNI` | 5.0 GB |",
-		"| `asr` | `ASR` | 148 MB |",
+		"| `asr` | `ASR` with aligned timestamps | 2.348 GB |",
 		"| `tts` | `TTS` | 1.714 GB |",
 		"| `embed` | `EMBED` | 639 MB |",
 		"additional platform-specific backend and runtime files",

@@ -116,6 +116,7 @@ type Config struct {
 	StdinIsTTY                        func() bool
 	OutputIsTTY                       bool
 	ProgressIsTTY                     bool
+	ProgressColumns                   func() int
 	JSONOutput                        bool
 	InvocationOutputMode              string
 	InvocationOutputExplicit          bool

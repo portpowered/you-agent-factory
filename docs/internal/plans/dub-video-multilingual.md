@@ -1,0 +1,390 @@
+# Multilingual dubbing and readable concurrent progress
+
+## 1. Problem and desired outcome
+
+### Problem statement
+
+A customer cannot reliably dub Chinese video into English, and progress output
+overwrites/interleaves itself instead of remaining readable.
+
+### Current behavior and gap
+
+The attached Windows log fails transcription when Whisper's final segment ends
+1.283 seconds beyond decoded audio. The Factory defaults to English-only ASR,
+supports only Chinese TTS, batches translation by segment count alone, and has
+20-minute stage deadlines. Spinner and persistent event/log writes collide.
+
+### Desired outcome and success measures
+
+The customer's Chinese video completes with `--language en-US`, reference audio
+for every spoken segment, English translations/subtitles, and unchanged source
+video packets. Chinese, Japanese, English, and Korean regional/script language
+tags select supported target speech languages. Long content is processed in
+bounded batches without a fixed total input-size or duration rejection.
+
+## 2. Scope and constraints
+
+### In scope
+
+Multilingual ASR selection, safe timestamp normalization, language validation,
+translation batching, stage execution budgets, reference-conditioned synthesis,
+and one coordinated progress writer for concurrent worker observations.
+
+### Non-goals
+
+Music separation, new application lifecycle owners, new state projections, and guarantees of
+translation correctness or perceived speaker identity from structural checks.
+
+### Assumptions and constraints
+
+Use existing Models and Factory boundaries. Preserve source audio as the TTS
+reference. Model context and memory are physical constraints; partition work
+rather than reject the whole input. Keep machine output stable and UTF-8.
+
+### Open questions and replanning triggers
+
+Validate the requested Qwen3-ASR recognition and forced-alignment assets with
+the reproducible Windows CUDA backend before declaring the default operational.
+Replan if native ASR buffers an entire recording or if
+language normalization needs a new public Models contract. The current file
+is 240.067 seconds; the pasted log describes a 245.017-second decoded input.
+
+## 3. Recommended approach
+
+Three delegated tasks own multilingual dubbing, Models ASR, and concurrent CLI
+progress; the delivery owner integrates packaging and runs the real video.
+Use the existing models/renderer ownership and preserve canonical Factory
+events. Normalize only defensible native timestamp drift, retaining failures
+for invalid ranges and unsupported language/model combinations.
+
+### Decision record
+
+| Decision | Reason |
+| --- | --- |
+| Multilingual ASR for dubbing | An English-only model cannot transcribe the submitted Chinese speech. |
+| Qwen3-ASR as the general built-in ASR default | User requested the recognition model; real forced alignment supplies timed dubbing cues. |
+| One shared Factory GPU resource | ASR, translation, and TTS must serialize across concurrent Work within a Factory Session. |
+| Default model invocation capacity of one | Existing Models lease admission prevents overlapping unconfigured invocations within a runtime scope; explicit positive capacity remains configurable. |
+| Explicit supported target mapping | BCP 47 customer tags and native TTS language names are different boundary representations. |
+| Partition long inference work | A small per-call context must not become a total video input limit. |
+| One progress writer | Multiple workers can update progress without concurrent terminal writes. |
+
+## 4. Customer behavior
+
+Readable input/writable output follow OS permissions. Reject malformed or
+unsupported target tags before expensive model effects. Loading shows one
+compact status line in a terminal; redirected output contains stable milestones
+without animated frames. Success reports artifact paths; failure reports an
+actionable cause and keeps diagnostics. Terminal cancellation clears progress
+and releases rendering ownership. Keyboard and text accessibility are preserved;
+no browser or visual UI changes are needed.
+
+## 5. Contracts and data
+
+Models invocation and HTTP shapes remain unchanged. The authored Factory
+signature preserves existing parameters; multilingual ASR/default and execution
+budget changes are documented in the implementation record below after the
+model selection is confirmed. Language normalization retains the canonical
+BCP 47 tag in artifacts and translates it to the native TTS name only at invocation.
+The packaged Factory catalog is regenerated from authored source; no generated
+files are edited manually. Existing explicitly selected ASR models remain valid.
+
+CLI invocation (unchanged grammar):
+
+### Current and proposed configuration
+
+| Surface | Current | Proposed |
+| --- | --- | --- |
+| `asrModel` default | `asr` resolving English-only Whisper base.en | Same `asr` identity resolving pinned Qwen3-ASR 0.6B Q8_0 and forced aligner |
+| `language` | Default `zh-CN`, unchecked tags passed through | Same default; supported BCP 47 language/script/region/variant tags normalized; native Qwen names mapped explicitly |
+| SCRIPT workers | Four authored `timeout: 20m` values | Omit stage timeout; caller/session cancellation or explicit budget controls execution |
+| ASR inference input | Complete source video | Explicit video intervals of at most five minutes, global indexed IDs/timestamps, original video retained for voice references |
+| Translation inference input | Up to 64 segments regardless of text length | Complete UTF-8 prompt partition target 12,000 bytes plus 64 segments; no whole-input rejection; oversized single segments passed through |
+| MP4 language metadata | Ad hoc base-language mapping | Shared supported language mapping to ISO 639-2; MKV retains canonical customer tag |
+| TTS parameters | `{"ref_text":"original source transcript","language":"English"}` with `voice=@original-reference.wav` | `{"language":"English"}` with the same `voice=@original-reference.wav`; audio-only speaker embedding, source transcript remains artifact metadata |
+| Factory GPU scheduling | No declared shared GPU resource | `resources: [{name: gpu, capacity: 1}]`; transcription, translation, and synthesis each request `gpu` capacity 1; render does not request GPU |
+| Default Models capacity | Missing or nonpositive authored capacity permits unlimited leases | One lease per model/runtime scope; explicit positive capacity overrides it |
+
+Current authored Factory configuration (affected fields):
+
+```yaml
+resources: []
+workers:
+  - name: transcribe-video
+    type: SCRIPT_WORKER
+    timeout: 20m
+  - name: translate-video-segments
+    type: SCRIPT_WORKER
+    timeout: 20m
+  - name: synthesize-video-segments
+    type: SCRIPT_WORKER
+    timeout: 20m
+  - name: render-dubbed-video
+    type: SCRIPT_WORKER
+    timeout: 20m
+```
+
+Proposed authored Factory configuration (affected fields):
+
+```yaml
+resources:
+  - name: gpu
+    capacity: 1
+workers:
+  - name: transcribe-video
+    type: SCRIPT_WORKER
+  - name: translate-video-segments
+    type: SCRIPT_WORKER
+  - name: synthesize-video-segments
+    type: SCRIPT_WORKER
+  - name: render-dubbed-video
+    type: SCRIPT_WORKER
+workstations:
+  - name: transcribe-and-save
+    resources: [{name: gpu, capacity: 1}]
+  - name: translate-and-validate
+    resources: [{name: gpu, capacity: 1}]
+  - name: synthesize-from-source-audio
+    resources: [{name: gpu, capacity: 1}]
+```
+
+Current native English TTS invocation:
+
+```text
+you models invoke qwen3-tts-base --operation TTS --input "text=Can anyone help?" --input "voice=@original-reference.wav" --parameter "language=English" --parameter "ref_text=有沒有好心"
+```
+
+Proposed native English TTS invocation:
+
+```text
+you models invoke qwen3-tts-base --operation TTS --input "text=Can anyone help?" --input "voice=@original-reference.wav" --parameter "language=English"
+```
+
+Current built-in ASR binding and default admission:
+
+```text
+asr -> localai-whisper -> ggml-base.en.bin
+missing/nonpositive MODEL capacity -> unlimited concurrent leases
+```
+
+Proposed built-in ASR binding and default admission:
+
+```text
+asr -> localai-qwen3-asr-cpp -> qwen3-asr-0.6b-q8_0.gguf + qwen3-forced-aligner-0.6b-q8_0.gguf
+missing/nonpositive MODEL capacity -> 1 concurrent lease per model/runtime scope
+positive MODEL capacity -> authored capacity
+```
+
+Current backend publication toolchain constraint (affected field):
+
+```json
+{"vcpkgCommit":"<required immutable 40-character commit>"}
+```
+
+Proposed backend publication toolchain constraint (affected field):
+
+```json
+{}
+```
+
+`vcpkgCommit` may be absent for the Go/purego bridge, which does not consume
+vcpkg. Any supplied value must still be a valid immutable commit; existing C++
+publication metadata retains its actual vcpkg pin. All other toolchain metadata
+continues to describe the actual build. ASR is published separately from the
+existing TTS archive, with the custom bridge/recipe source commit and hashes
+recorded in its archive provenance.
+
+English/Chinese/Japanese/Korean examples are `en-US`, `zh-CN`, `zh-Hant-TW`,
+`ja-JP`, and `ko-KR`, mapping to English/Chinese/Japanese/Korean native speech.
+Region/script tags guide translation, not guaranteed accents. Five-minute clips
+bound Factory inference inputs; the Qwen backend reads overlapping 30-second
+audio windows. Factory clips may cut speech at a boundary, so source-word
+quality across a boundary remains a real-model validation concern. UTF-8 prompt
+bytes are a partition heuristic, not a tokenizer/context-window guarantee.
+
+```text
+you run --named @you/dub-video --video chinese.mp4 --language en-US --output-video english.mp4
+```
+
+Existing transcripts/translation artifacts remain inspectable. Model cache assets
+use immutable source identities. Rollback is a source revert and regeneration;
+already published output is not removed.
+
+## 6. Runtime flow and ownership
+
+Factory Work carries the manifest path between transcription, translation,
+synthesis, and rendering. Models owns ASR/native response handling and asset
+readiness. Packaged scripts own translation contracts and media alignment.
+CLI/Factory Visualization own presentation only; worker events remain canonical.
+No second runtime, opener, or persistent state graph is introduced.
+
+## 7. Tasks and sequencing
+
+1. Characterize native timestamp failure and correct multilingual ASR selection.
+2. Validate target tags and partition translation/synthesis for long recordings.
+3. Coordinate terminal writes and prove concurrent worker rendering/cleanup.
+4. Regenerate packaging, rebuild once, and run the submitted Chinese video.
+5. Independent review and focused shared-surface gates; resolve concrete failures.
+
+## 8. Validation plan
+
+| Behavior | Layer/boundary | Dependencies and isolation | Command/evidence |
+| --- | --- | --- | --- |
+| Native ASR timestamps and failure distinction | Models codec unit boundary | Controlled decoded response, independent fixtures | Focused Go codec tests |
+| Regional/script language tags and exact translation IDs | Python component boundary | Controlled model replies, temporary per-case files | Python `-B` unittest discovery |
+| Bounded multi-batch processing without total input rejection | Python component boundary | Generated transcript, controlled model edge | Long transcript tests |
+| Concurrent status/events and final cleanup | Renderer component boundary | Coordinated concurrent observations, isolated writer | Focused normal and race tests |
+| Public multilingual model/invocation behavior if changed | Functional `root.BuildProcess` + `Process.Execute` | Command-runner edges, explicit session/isolated profile | Focused Models functional tests |
+| Delivered Chinese-to-English pipeline | Integration/media proof | One externally built binary, real GPU/models, isolated output directory | Installed CLI invocation plus ffprobe/ref hashes |
+
+No unit test assembles the application. Functional tests do not build/spawn the
+CLI, and external effects are replaced only through `edges.Edges`. Native/GPU
+calls are serialized during manual validation to avoid contention. Large-scale
+stress is outside this task; representative long transcript/real video evidence
+does not claim every hardware/duration combination is tested.
+
+## 9. Acceptance criteria
+
+- [ ] Submitted Chinese video produces reference-conditioned English speech.
+- [x] Chinese/Japanese/English/Korean supported tags have focused contract proof.
+- [x] Long transcripts span bounded calls without losing segment IDs/timings.
+- [x] ASR accepts defensible Whisper final timestamp drift and rejects malformed ranges; Qwen keeps strict real alignment.
+- [x] Concurrent terminal updates do not interleave, wrap repeatedly, or leak frames.
+- [x] Redirected output has stable nonanimated milestones.
+- [x] Shared GPU capacity one serializes model stages and is reusable after failure.
+- [x] Default Models invocation capacity one prevents overlapping unconfigured leases; explicit capacity two remains usable.
+- [x] Managed Qwen3-ASR default pulls and invokes with both pinned assets.
+- [ ] Packaging and focused shared-surface gates pass.
+
+## 10. Delivery and remaining risks
+
+Packaged Python validation: `python -B -m unittest discover -s
+packages/packaged-factories/factories/dub-video/scripts -p 'test_*.py'` passes
+37 tests. New witnesses cover canonical/native target names and early invalid
+tags, Chinese source reference conditioning for English/Japanese/Korean,
+bounded ASR clips with silence and global ID/time offsets, Unicode prompt-size
+partitioning with an oversized individual segment, MP4/MKV language tags,
+clear wrong-script replies, and explicit interval extraction of short sources
+whose decoded audio can exceed the container duration.
+Real source extraction proved time-based trimming alone insufficient: the
+240.067-second video decoded to 245.017 seconds. Resampling before trimming to
+`duration_ms * 24` samples at 24 kHz and resetting timestamps produced
+`240.067000` seconds in
+`C:/t/dub-multilingual-validation/source-reference-sample-trim.wav`; no GPU/model
+call was needed for this media proof. That proved the length bound only;
+subsequent correlation showed that end-only trimming did not repair indexing.
+AAC packets near 5.011–5.018 seconds contain compressed timestamp durations,
+placing later decoded PCM about 5.001 seconds behind the container timeline.
+Original-video seek clips at 180/235 seconds correlate above 0.998 with plain
+full PCM at 185.001333/240.001333 seconds. Timestamp-aware resampling with
+`async=1:first_pts=0:min_hard_comp=0.001` produces 240.015667 seconds and aligns
+both source seek clips at their exact requested positions. Default asynchronous
+resampling retains about 34.667 milliseconds of residual drift, so the one
+millisecond hard-compensation threshold is explicit. Factory extraction applies
+this resampling before padding/trimming to the requested sample count; direct
+Models video ASR applies the same timestamp correction at 16 kHz.
+The final Factory extraction produced exactly 5,761,608 frames at 24 kHz
+(240.067 seconds). Independent two-second seeks each produced 48,000 frames;
+their strongest matches in the full normalized source are exactly 180.000 and
+235.000 seconds, correlations 0.998633 and 0.998420. CPU-only evidence is saved
+at `C:/t/dub-multilingual-validation/timing-review/aligned-correlation-proof.json`.
+The earlier direct native ASR result was valid for a 245-second decoded WAV and
+did not establish video-timeline correctness.
+Real Chinese-to-English execution and regenerated packaging remain owner gates.
+
+Real English TTS probe: ICL `ref_text` output lasted 4.48 seconds and multilingual
+ASR returned `有没有好心 Can anyone help?`. Omitting `ref_text` while retaining
+the identical original audio reference produced 1.44 seconds and ASR returned
+exactly `Can anyone help?`. The existing native Qwen speaker-embedding mode is
+used without a new adapter or a text-only fallback. Probe artifacts are under
+`C:/t/dub-multilingual-validation/`. Source transcripts, indexed cue timings,
+reference hashes, and original-video reference slices remain unchanged. Tests
+assert audio conditioning and absence of `ref_text` for all four priority targets.
+
+The GPU resource uses ordinary Factory resource acquisition/release, including
+failure/cancellation paths. Its capacity is shared among model stages within a
+Factory Session. Direct Models admission defaults to one invocation per model
+within a runtime scope using the existing lease owner. This does not provide an
+OS-wide GPU reservation across separate CLI processes or Factory Sessions.
+No new persistent scheduling state is added.
+
+The public `TestPackagedDubVideo` functional suite passed after GPU resource
+regeneration (6.45 seconds). Two Work items share a live Factory Session and
+controlled script-command gates. Public resource observations show total one,
+available zero, and one active model stage while blocked; normal completion and
+an initial ASR failure both leave the slot available and allow the peer Work to
+complete. The test uses `root.BuildProcess`/`Process.Execute`, no built CLI or
+fixed sleeps. Default-capacity host tests passed under Windows race detection:
+no resource, unspecified capacity, explicit capacity two, and release/reuse.
+
+The reproducible CUDA bridge's real English probe returned
+`Can you assist me right now?` twice with one resident recognition/aligner pair,
+including real word spans on a 4.872-second WAV. A 30-second interval from the
+submitted Chinese video returned nine phrase spans after correcting whitespace
+in detected language before alignment; it also exposed an upstream zero-duration
+word requiring truthful grouping with an adjacent positive-duration phrase
+before canonical ASR acceptance. A five-second silence probe returned
+empty text and zero segments twice. These are native backend proofs, not yet
+proof of managed pull or complete Factory delivery. Probe evidence is under
+`C:/t/dub-qwen-asr-probe-*.json` and the corresponding native server log.
+
+Final native repairs are committed as
+`db28671aeba6d17156c54086f2cade2626a95dfa`. A real 60-second interval from the
+Chinese source passed across three streamed windows, producing 16 positive-duration
+phrases with global timestamps through 55.84 seconds. Zero-duration aligned
+words stay in adjacent positive-duration phrases without inventing their times.
+Cancellation then an English request succeeded on the same loaded model pair.
+Cancellation during forced alignment waits for the current 30-second audio
+window; ASR token generation and window transitions check cancellation.
+Unsupported prompt, nonzero temperature, and unknown timestamp granularities
+fail explicitly. Segment/word granularities are accepted; phrase output retains
+word evidence on the native wire. Canonical saved ASR JSON contains phrase
+ID/start/end/text fields and does not promise a per-word JSON output.
+
+The native audio reader holds at most 480,000 float samples plus a 16 KiB
+conversion buffer. Its tests cover overlapping windows, PCM16/float32, RIFF/RF64,
+malformed/truncated input, and a sparse RF64 file above 4 GiB with a successful
+seek/read of its final known samples. Native audio-window memory is bounded;
+transcript/output storage and upstream CLI/media materialization still grow
+with input or output size. No whole-input size or duration rejection is added.
+
+Structured semantic audit issues with unique known source IDs can supply complete
+target-language replacements. Patch only those indexed texts, revalidate the
+entire candidate against the unchanged source IDs/times/glossary, and audit again.
+Generic/mixed/duplicate-ID issues and invalid replacements regenerate the batch.
+No path exceeds three total reviews. Saved candidate files preserve the evidence
+for each review. Tests prove unchanged neighbors, invalid glossary replacement
+rejection, duplicate-ID fallback, and the review ceiling without full regeneration.
+
+Record actual commands, measured artifacts, review results, and remaining limits
+after implementation. Do not claim semantic translation/voice quality solely
+from JSON validation, a same-model audit, or nonzero audio samples.
+
+The final native seam repair is commit
+`7e640360a555b8b8a7460deee87fced4e1aef14f`. Original overlapping word spans
+remain intact while phrase envelopes merge, rather than rejecting quantized
+seam evidence. Immutable Windows CUDA publication
+`localai-backends-v1-8d2cd1a1c4337e1c8efb60bf64ffdfb9a559a91e6a6d06ec3eea7df2996e5e8a`
+was anonymously downloaded and verified: 441,891,463 bytes, SHA-256
+`e20cafd64c87a5a0293f6a7a19ef20be3566aa1a0cc1af54f70c383b7fdb531c`.
+The managed `models invoke asr` endpoint now successfully processes the original
+Chinese MP4: 58 positive, nonoverlapping cues, ending at 239,920 ms on the
+timestamp-normalized 240.016-second audio. Saved proof is
+`C:/t/dub-multilingual-validation/qwen-final-chinese-asr.json`.
+
+The pinned upstream LocalAI SDK has a 50 MiB RPC message limit. Audio input
+travels by file path and this does not impose a recording-size limit; exceptionally
+large transcript responses can still exceed that upstream output limit. Factory
+ASR partitioning bounds each response, while direct whole-recording invocation
+does not yet partition its transcript response.
+
+The first fresh Factory attempt exposed a separate audio-format gap: its
+24 kHz reference WAV reached a backend requiring mono 16 kHz PCM16/float32.
+Models now normalizes unsupported ordinary audio formats through the existing
+FFmpeg/temp-file effects before the Qwen codec; native-format WAV avoids that
+conversion. Focused tests cover 24 kHz WAV, compressed audio, and the bypass.
+The rebuilt installed CLI completes the actual Factory transcription step:
+59 cues on its padded 240,067 ms reference clip, final cue ending at 240,000 ms.
+This is a separate resampling path from direct video ASR, so differing phrase
+counts do not imply reused or edited transcript evidence. Native inference
+errors retain their nested diagnostic cause instead of discarding it.

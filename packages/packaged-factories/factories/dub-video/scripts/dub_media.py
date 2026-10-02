@@ -7,6 +7,8 @@ import math
 import subprocess
 from pathlib import Path
 
+from dub_contract import LANGUAGES, target_language
+
 
 def command(argv: list[str]) -> None:
     result = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -44,6 +46,7 @@ def reference(video: Path, segment: dict, destination: Path) -> None:
         "-ss", f"{segment['start'] / 1000:.3f}", "-i", str(video),
         "-t", f"{(segment['end'] - segment['start']) / 1000:.3f}",
         "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "24000",
+        "-af", f"aresample=24000:async=1:first_pts=0:min_hard_comp=0.001,apad,atrim=end_sample={(segment['end'] - segment['start']) * 24},asetpts=N/SR/TB",
         "-c:a", "pcm_s16le", "-rf64", "auto", str(destination),
     ])
     duration = float(probe(destination).get("format", {}).get("duration", "nan"))
@@ -108,10 +111,8 @@ def timeline(segments: list[dict], duration_ms: int, destination: Path) -> None:
 
 def mux(video: Path, audio: Path, subtitles: Path, destination: Path, language: str) -> None:
     # MP4 uses ISO 639-2 codes, not customer-facing BCP47 language tags.
-    codes = {"zh": "zho", "en": "eng", "ja": "jpn", "ko": "kor", "de": "deu",
-             "fr": "fra", "ru": "rus", "pt": "por", "es": "spa", "it": "ita"}
-    container_language = language if destination.suffix.lower() == ".mkv" else codes.get(
-        language.split("-")[0].lower(), language if len(language) == 3 else "und")
+    language = target_language(language)
+    container_language = language if destination.suffix.lower() == ".mkv" else LANGUAGES[language.split("-")[0]][1]
     args = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", str(video),
             "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", str(audio), "-i", str(subtitles),
             "-map", "0:v:0", "-map", "1:a:0", "-map", "2:0",

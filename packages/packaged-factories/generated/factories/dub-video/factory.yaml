@@ -83,6 +83,9 @@ invocationSignature:
           name: preserveNames
     unknownNamedArgumentPolicy: REJECT
 name: dub-video
+resources:
+    - capacity: 1
+      name: gpu
 supportingFiles:
     bundledFiles:
         - content:
@@ -96,6 +99,50 @@ supportingFiles:
                 import re
                 import unicodedata
                 from pathlib import Path, PureWindowsPath
+
+
+                LANGUAGES = {"zh": ("Chinese", "zho"), "en": ("English", "eng"),
+                             "ja": ("Japanese", "jpn"), "ko": ("Korean", "kor"),
+                             "de": ("German", "deu"), "fr": ("French", "fra"),
+                             "ru": ("Russian", "rus"), "pt": ("Portuguese", "por"),
+                             "es": ("Spanish", "spa"), "it": ("Italian", "ita")}
+
+
+                def target_language(value):
+                    """Normalize supported BCP 47 language/script/region/variant tags."""
+                    if not isinstance(value, str) or not re.fullmatch(
+                            r"[A-Za-z]{2}(?:-[A-Za-z]{4})?(?:-[A-Za-z]{2}|-[0-9]{3})?"
+                            r"(?:-[A-Za-z0-9]{5,8}|-[0-9][A-Za-z0-9]{3})*"
+                            r"(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*"
+                            r"(?:-x(?:-[A-Za-z0-9]{1,8})+)?", value):
+                        raise ValueError("Target language needs a BCP 47 tag such as en-US, zh-CN, ja-JP, or ko-KR")
+                    parts = value.split("-")
+                    if parts[0].lower() not in LANGUAGES:
+                        raise ValueError("Unsupported target speech language: " + value)
+                    normalized = [parts[0].lower()]
+                    index = 1
+                    if index < len(parts) and len(parts[index]) == 4 and parts[index].isalpha():
+                        normalized.append(parts[index].title())
+                        index += 1
+                    if index < len(parts) and (len(parts[index]) == 2 or parts[index].isdigit() and len(parts[index]) == 3):
+                        normalized.append(parts[index].upper())
+                        index += 1
+                    variants, singletons, extensions = set(), set(), False
+                    for part in parts[index:]:
+                        part = part.lower()
+                        if part == "x":
+                            break  # Private-use subtags have no uniqueness requirement.
+                        if len(part) == 1:
+                            if part in singletons:
+                                raise ValueError("BCP 47 extension singletons must not repeat")
+                            singletons.add(part)
+                            extensions = True
+                        elif not extensions:
+                            if part in variants:
+                                raise ValueError("BCP 47 variants must not repeat")
+                            variants.add(part)
+                    normalized.extend(part.lower() for part in parts[index:])
+                    return "-".join(normalized)
 
 
                 def validate_segments(value, duration_ms=None):
@@ -143,6 +190,23 @@ supportingFiles:
                         raise ValueError("Chinese translation contains only Latin prose; proper names may remain unchanged")
 
 
+                def _check_target_script(text, source_text, language, preserve_names):
+                    base = target_language(language).split("-")[0]
+                    if base == "zh":
+                        _check_chinese(text, source_text, preserve_names)
+                        return
+                    if any(text.casefold().strip(" \t\r\n.,!?，。！？") == name.casefold()
+                           and _contains_name(source_text, name) for name in preserve_names):
+                        return
+                    if base == "en" and re.search(r"[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]", text) and not re.search(r"[A-Za-z]", text):
+                        raise ValueError("English translation contains only East Asian prose; declare name-only cues in preserve_names")
+                    if base in ("ja", "ko") and re.search(r"[A-Za-z]", text) and not re.search(
+                            r"[\u3400-\u9fff\u3040-\u30ff]" if base == "ja" else r"[\uac00-\ud7af]", text):
+                        words = re.findall(r"[A-Za-z]+", text)
+                        if text != source_text or len(words) > 3 or not all(word[0].isupper() for word in words):
+                            raise ValueError("Target translation contains only Latin prose; proper names may remain unchanged")
+
+
                 def validate_translations(value, source, language, preserve_names=None):
                     source = validate_segments(source)
                     preserve_names = [] if preserve_names is None else preserve_names
@@ -167,8 +231,7 @@ supportingFiles:
                         for name in preserve_names:
                             if _contains_name(original["text"], name) and not _contains_name(text, name):
                                 raise ValueError(f"Segment {original['id']} must preserve the full name verbatim: {name}")
-                        if language.split("-")[0].lower() == "zh":
-                            _check_chinese(text, original["text"], preserve_names)
+                        _check_target_script(text, original["text"], language, preserve_names)
                         result.append({"id": original["id"], "start": original["start"], "end": original["end"],
                                        "source_text": original["text"], "text": text})
                     return result
@@ -312,6 +375,8 @@ supportingFiles:
                 import subprocess
                 from pathlib import Path
 
+                from dub_contract import LANGUAGES, target_language
+
 
                 def command(argv: list[str]) -> None:
                     result = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
@@ -349,6 +414,7 @@ supportingFiles:
                         "-ss", f"{segment['start'] / 1000:.3f}", "-i", str(video),
                         "-t", f"{(segment['end'] - segment['start']) / 1000:.3f}",
                         "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "24000",
+                        "-af", f"aresample=24000:async=1:first_pts=0:min_hard_comp=0.001,apad,atrim=end_sample={(segment['end'] - segment['start']) * 24},asetpts=N/SR/TB",
                         "-c:a", "pcm_s16le", "-rf64", "auto", str(destination),
                     ])
                     duration = float(probe(destination).get("format", {}).get("duration", "nan"))
@@ -413,10 +479,8 @@ supportingFiles:
 
                 def mux(video: Path, audio: Path, subtitles: Path, destination: Path, language: str) -> None:
                     # MP4 uses ISO 639-2 codes, not customer-facing BCP47 language tags.
-                    codes = {"zh": "zho", "en": "eng", "ja": "jpn", "ko": "kor", "de": "deu",
-                             "fr": "fra", "ru": "rus", "pt": "por", "es": "spa", "it": "ita"}
-                    container_language = language if destination.suffix.lower() == ".mkv" else codes.get(
-                        language.split("-")[0].lower(), language if len(language) == 3 else "und")
+                    language = target_language(language)
+                    container_language = language if destination.suffix.lower() == ".mkv" else LANGUAGES[language.split("-")[0]][1]
                     args = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", str(video),
                             "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", str(audio), "-i", str(subtitles),
                             "-map", "0:v:0", "-map", "1:a:0", "-map", "2:0",
@@ -461,9 +525,19 @@ supportingFiles:
 
                 from dub_contract import (
                     load_translation_response, render_ass, render_srt, translation_prompt,
-                    validate_segments, validate_translations,
+                    validate_segments, validate_translations, target_language, LANGUAGES,
                 )
                 from dub_media import command, fit_speech, mux, reference, timeline, video_duration
+
+                # These partition targets bound one inference call, never the complete input.
+                ASR_CLIP_MS = 300_000
+                TRANSLATION_PROMPT_BYTES = 12_000
+
+
+                class TranslationAuditRejected(ValueError):
+                    def __init__(self, message, corrections=None):
+                        super().__init__(message)
+                        self.corrections = corrections
 
 
                 def save_json(path: Path, value) -> None:
@@ -503,6 +577,7 @@ supportingFiles:
 
 
                 def transcribe(args) -> Path:
+                    language = target_language(args.language)
                     video = Path(args.video.removeprefix("@")).expanduser().resolve(strict=True)
                     output = Path(args.output).expanduser().resolve()
                     if output.suffix.lower() not in (".mp4", ".mkv"):
@@ -516,13 +591,32 @@ supportingFiles:
                         raise ValueError("Supplied subtitle file must use .ass")
                     duration_ms = video_duration(video)
                     transcript, segments_file = root / "source.txt", root / "source-asr.json"
-                    model(args.asr_model, "ASR", [f"audio=@{video}"],
-                          [f"transcript={transcript}", f"segments={segments_file}"])
-                    segments = validate_segments(read_json(segments_file), duration_ms)
+                    segments, transcripts = [], []
+                    # Always extract the explicit video interval: a container can decode an
+                    # audio tail beyond its declared video duration even for short inputs.
+                    for index, start in enumerate(range(0, duration_ms, ASR_CLIP_MS)):
+                        end = min(start + ASR_CLIP_MS, duration_ms)
+                        clip = root / f"asr-clip-{index}.wav"
+                        text_file, json_file = root / f"asr-clip-{index}.txt", root / f"asr-clip-{index}.json"
+                        reference(video, {"id": index, "start": start, "end": end}, clip)
+                        try:
+                            model(args.asr_model, "ASR", [f"audio=@{clip}"],
+                                  [f"transcript={text_file}", f"segments={json_file}"])
+                            raw = read_json(json_file)
+                            # Silent clips are valid; the complete source must contain speech.
+                            for segment in [] if raw == [] else validate_segments(raw, end - start):
+                                segments.append({**segment, "id": len(segments),
+                                                 "start": segment["start"] + start, "end": segment["end"] + start})
+                            transcripts.append(text_file.read_text(encoding="utf-8-sig"))
+                        finally:
+                            clip.unlink(missing_ok=True)
+                    segments = validate_segments(segments, duration_ms)
+                    transcript.write_text("\n".join(transcripts), encoding="utf-8")
+                    save_json(segments_file, segments)
                     manifest = root / "manifest.json"
                     save_json(manifest, {
                         "version": 1, "video": str(video), "output": str(output), "root": str(root),
-                        "language": args.language, "duration_ms": duration_ms, "segments": segments,
+                        "language": language, "duration_ms": duration_ms, "segments": segments,
                         "preserve_names": [name.strip() for name in args.preserve_names.splitlines() if name.strip()],
                         "asr": str(segments_file), "transcript": str(transcript), "source_ass": str(source_ass or ""),
                         "models": {"asr": args.asr_model, "llm": args.llm_model, "tts": args.tts_model},
@@ -539,6 +633,7 @@ supportingFiles:
                     if Path(value["root"]).resolve() != manifest.parent:
                         raise ValueError("Dubbing manifest artifact directory does not match its location")
                     value["segments"] = validate_segments(value["segments"], value["duration_ms"])
+                    value["language"] = target_language(value["language"])
                     return manifest, value
 
 
@@ -546,9 +641,10 @@ supportingFiles:
                     manifest, value = load_manifest(path)
                     translated = []
                     # Partition work rather than reject long videos at a model context limit.
-                    for start in range(0, len(value["segments"]), 64):
-                        translated.extend(translate_batch(manifest.parent, value["segments"][start:start + 64],
-                                                          value["language"], value["models"]["llm"], start // 64,
+                    for index, batch in enumerate(translation_batches(value["segments"], value["language"],
+                                                                    value.get("preserve_names", []))):
+                        translated.extend(translate_batch(manifest.parent, batch,
+                                                          value["language"], value["models"]["llm"], index,
                                                           value.get("preserve_names", [])))
                     translated_file = manifest.parent / "translated-asr.json"
                     save_json(translated_file, {"language": value["language"], "segments": translated})
@@ -557,28 +653,56 @@ supportingFiles:
                     return manifest
 
 
+                def translation_batches(segments, language, preserve_names):
+                    batch = []
+                    for segment in segments:
+                        candidate = batch + [segment]
+                        size = len(translation_prompt(candidate, language, preserve_names).encode("utf-8"))
+                        if batch and (size > TRANSLATION_PROMPT_BYTES or len(candidate) > 64):
+                            yield batch
+                            batch = []
+                        batch.append(segment)
+                    if batch:
+                        # An individually large segment is passed through, not rejected by a file cap.
+                        yield batch
+
+
                 def translate_batch(root: Path, segments: list[dict], language: str, model_name: str, index: int,
                                     preserve_names: list[str] | None = None) -> list[dict]:
                     suffix = "" if index == 0 else f"-{index}"
                     prompt = root / f"translation-prompt{suffix}.txt"
                     response = root / f"translation-response{suffix}.txt"
                     prompt_text = translation_prompt(segments, language, preserve_names)
-                    last_error = None
+                    last_error, translated = None, None
                     for attempt in range(3):
                         feedback = "" if last_error is None else f"\nYour last response was invalid: {last_error}. Return a corrected complete JSON object."
-                        prompt.write_text(prompt_text + feedback, encoding="utf-8")
-                        model(model_name, "OMNI", [f"prompt=@{prompt}"],
-                              [f"text={response}", f"usage={root / ('translation-usage' + suffix + '.json')}"])
+                        if translated is None:
+                            prompt.write_text(prompt_text + feedback, encoding="utf-8")
+                            model(model_name, "OMNI", [f"prompt=@{prompt}"],
+                                  [f"text={response}", f"usage={root / ('translation-usage' + suffix + '.json')}"])
                         try:
-                            translated = validate_translations(
-                                load_translation_response(response.read_text(encoding="utf-8-sig"), root),
-                                segments, language, preserve_names,
-                            )
+                            if translated is None:
+                                translated = validate_translations(
+                                    load_translation_response(response.read_text(encoding="utf-8-sig"), root),
+                                    segments, language, preserve_names,
+                                )
+                            save_json(root / f"translation-candidate{suffix}-attempt-{attempt + 1}.json",
+                                      {"language": language, "segments": translated})
                             audit_translation(root, translated, language, model_name, suffix, attempt + 1)
                             return translated
                         except (ValueError, OSError, KeyError, TypeError) as error:
                             last_error = str(error)
                             print(f"Translation validation attempt {attempt + 1}: {last_error}", file=sys.stderr)
+                            corrections = error.corrections if isinstance(error, TranslationAuditRejected) else None
+                            if corrections and translated is not None:
+                                try:
+                                    translated = validate_translations({"language": language, "segments": [
+                                        {"id": item["id"], "text": corrections.get(item["id"], item["text"])}
+                                        for item in translated]}, segments, language, preserve_names)
+                                    continue
+                                except ValueError as correction_error:
+                                    last_error += f"; indexed correction invalid: {correction_error}"
+                            translated = None
                     raise ValueError(f"Translation failed validation after three attempts: {last_error}")
 
 
@@ -609,7 +733,8 @@ supportingFiles:
                         "and issues (array). Use valid=true and issues=[] only if every segment passes; otherwise "
                         "valid=false and describe each concrete issue with its segment ID and a suggested correction. "
                         "Each issue may be a nonempty string or an object with exactly segment_id (original integer ID) "
-                        "and suggested_correction (nonempty string). "
+                        "and suggested_correction (the complete replacement translation in the target language, "
+                        "not an explanation or editing instructions). Use each segment ID at most once. "
                         "No commentary, filename pointers, or additional keys.\n"
                         + json.dumps(request, ensure_ascii=False), encoding="utf-8")
                     model(model_name, "OMNI", [f"prompt=@{prompt}"],
@@ -647,15 +772,16 @@ supportingFiles:
                             raise ValueError("Translation audit issue must be nonempty text or exactly an original "
                                              "segment_id and nonempty suggested_correction")
                     if not audit["valid"]:
-                        raise ValueError("Translation semantic audit rejected: " + "; ".join(issues))
+                        structured = [issue for issue in audit["issues"] if isinstance(issue, dict)]
+                        corrections = {issue["segment_id"]: issue["suggested_correction"] for issue in structured}
+                        if len(structured) != len(audit["issues"]) or len(corrections) != len(structured):
+                            corrections = None
+                        raise TranslationAuditRejected("Translation semantic audit rejected: " + "; ".join(issues), corrections)
 
 
                 def tts_language(language: str) -> str:
                     # Qwen3-TTS names languages; preserve BCP47 in customer output artifacts.
-                    names = {"zh": "Chinese", "en": "English", "ja": "Japanese", "ko": "Korean",
-                             "de": "German", "fr": "French", "ru": "Russian", "pt": "Portuguese",
-                             "es": "Spanish", "it": "Italian"}
-                    return names.get(language.split("-")[0].lower(), language)
+                    return LANGUAGES[target_language(language).split("-")[0]][0]
 
 
                 def synthesize(path: str) -> Path:
@@ -673,7 +799,7 @@ supportingFiles:
                         ref, speech, fitted = prefix.with_suffix(".reference.wav"), prefix.with_suffix(".speech.wav"), prefix.with_suffix(".pcm")
                         reference(Path(value["video"]), segment, ref)
                         model(value["models"]["tts"], "TTS", [f"text={segment['text']}", f"voice=@{ref}"],
-                              [f"audio={speech}"], {"ref_text": segment["source_text"], "language": tts_language(value["language"])},
+                              [f"audio={speech}"], {"language": tts_language(value["language"])},
                               value.get("tts_server", ""))
                         segment.update(reference_audio=str(ref), speech_audio=str(speech), fitted_audio=str(fitted),
                                        reference_sha256=digest(ref),
@@ -944,6 +1070,118 @@ supportingFiles:
 
 
                 class DubPipelineTests(unittest.TestCase):
+                    def test_target_language_normalizes_native_names_and_rejects_bad_tags_before_effects(self):
+                        for tag, normalized, native in [("EN-us", "en-US", "English"),
+                                ("zh-hant-tw", "zh-Hant-TW", "Chinese"), ("ja-JP", "ja-JP", "Japanese"),
+                                ("ko-KR", "ko-KR", "Korean"), ("en-US-u-ca-gregory-x-demo", "en-US-u-ca-gregory-x-demo", "English")]:
+                            self.assertEqual(dub_video.target_language(tag), normalized)
+                            self.assertEqual(dub_video.tts_language(tag), native)
+                        for tag in ("english", "en_US", "zh--CN", "en-US-", "ar-SA",
+                                    "en-variant-VARIANT", "en-u-ca-gregory-U-nu-latn"):
+                            with self.subTest(tag=tag), patch.object(dub_video, "model") as infer:
+                                with self.assertRaisesRegex(ValueError, "BCP 47|Unsupported"):
+                                    dub_video.transcribe(SimpleNamespace(language=tag))
+                                infer.assert_not_called()
+
+                    def test_target_script_rejects_clear_passthrough_but_allows_declared_names(self):
+                        source = [{"id": 1, "start": 0, "end": 100, "text": "你能帮我吗？"}]
+                        for language, bad in [("en-US", "你能帮我吗？"), ("ja-JP", "Can you help me?"), ("ko-KR", "Can you help me?")]:
+                            with self.subTest(language=language), self.assertRaisesRegex(ValueError, "translation contains only"):
+                                dub_video.validate_translations({"language": language, "segments": [{"id": 1, "text": bad}]}, source, language)
+                        name_source = [{"id": 1, "start": 0, "end": 100, "text": "李白"}]
+                        result = dub_video.validate_translations({"language": "en-US", "segments": [{"id": 1, "text": "李白"}]},
+                                                                name_source, "en-US", ["李白"])
+                        self.assertEqual(result[0]["text"], "李白")
+
+                    def test_short_asr_extracts_explicit_interval_instead_of_decoding_container_tail(self):
+                        with patch.object(dub_media, "command") as run, \
+                             patch.object(dub_media, "probe", return_value={"format": {"duration": "240.067"}}):
+                            dub_media.reference(Path("tail.mp4"), {"id": 0, "start": 0, "end": 240067}, Path("clip.wav"))
+                        argv = run.call_args.args[0]
+                        self.assertEqual(argv[argv.index("-t") + 1], "240.067")
+                        self.assertEqual(argv[argv.index("-map") + 1], "0:a:0")
+                        self.assertEqual(argv[argv.index("-af") + 1],
+                                         "aresample=24000:async=1:first_pts=0:min_hard_comp=0.001,apad,atrim=end_sample=5761608,asetpts=N/SR/TB")
+
+                    def test_prompt_partition_measures_unicode_and_keeps_oversized_single_segments(self):
+                        segments = [{"id": i, "start": i * 100, "end": (i + 1) * 100,
+                                     "text": "你好" * (300 if i != 2 else 5000)} for i in range(4)]
+                        with patch.object(dub_video, "TRANSLATION_PROMPT_BYTES", 4000):
+                            batches = list(dub_video.translation_batches(segments, "en-US", []))
+                        self.assertEqual([item for batch in batches for item in batch], segments)
+                        self.assertGreater(len(batches), 1)
+                        self.assertIn([segments[2]], batches)
+                        for batch in batches:
+                            if len(batch) > 1:
+                                self.assertLessEqual(len(dub_video.translation_prompt(batch, "en-US").encode("utf-8")), 4000)
+
+                    def test_chinese_source_target_speech_keeps_indexed_original_conditioning(self):
+                        for language, text, native in [("en-US", "Can you help me?", "English"),
+                                ("ja-JP", "手伝ってくれますか？", "Japanese"),
+                                ("ko-KR", "도와줄 수 있나요?", "Korean")]:
+                            with self.subTest(language=language), tempfile.TemporaryDirectory() as directory:
+                                root = Path(directory)
+                                manifest = self.manifest(root)
+                                value = dub_video.read_json(manifest)
+                                value["language"] = language
+                                value["segments"][0]["text"] = "你能帮我吗？"
+                                dub_video.save_json(manifest, value)
+                                dub_video.save_json(Path(value["translations"]), {"language": language,
+                                    "segments": [{"id": 7, "text": text}]})
+
+                                def extract(source, segment, destination):
+                                    self.assertEqual(source, Path(value["video"]))
+                                    self.assertEqual((segment["id"], segment["start"], segment["end"]), (7, 40, 60))
+                                    destination.write_bytes(b"original Chinese voice")
+
+                                def infer(name, operation, inputs, outputs, parameters, server):
+                                    self.assertEqual(inputs[0], "text=" + text)
+                                    self.assertEqual(Path(inputs[1].removeprefix("voice=@")).read_bytes(), b"original Chinese voice")
+                                    self.assertEqual(parameters, {"language": native})
+                                    Path(outputs[0].removeprefix("audio=")).write_bytes(b"target voice")
+
+                                with patch.object(dub_video, "reference", side_effect=extract), \
+                                     patch.object(dub_video, "model", side_effect=infer) as infer, \
+                                     patch.object(dub_video, "fit_speech", return_value=1.0):
+                                    dub_video.synthesize(str(manifest))
+                                infer.assert_called_once()
+
+                    def test_long_asr_clips_offset_timestamps_and_keep_original_reference_source(self):
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+                            video = root / "中文 source.mp4"
+                            video.write_bytes(b"original")
+                            args = SimpleNamespace(video=str(video), output=str(root / "dubbed.mp4"), language="en-US",
+                                subtitles="", asr_model="asr", llm_model="llm", tts_model="qwen3-tts-base", tts_server="",
+                                preserve_names="")
+                            intervals, clips = [], []
+
+                            def extract(source, interval, destination):
+                                self.assertEqual(source, video)
+                                intervals.append((interval["start"], interval["end"]))
+                                destination.write_bytes(b"bounded PCM")
+
+                            def infer(name, operation, inputs, outputs):
+                                clip = Path(inputs[0].removeprefix("audio=@"))
+                                clips.append(clip)
+                                self.assertEqual(clip.read_bytes(), b"bounded PCM")
+                                Path(outputs[0].removeprefix("transcript=")).write_text("你好", encoding="utf-8")
+                                dub_video.save_json(Path(outputs[1].removeprefix("segments=")),
+                                    [] if len(clips) == 2 else [{"id": 9, "start": 0, "end": 50, "text": "你好"}])
+
+                            with patch.object(dub_video, "ASR_CLIP_MS", 100), \
+                                 patch.object(dub_video, "video_duration", return_value=250), \
+                                 patch.object(dub_video, "reference", side_effect=extract), \
+                                 patch.object(dub_video, "model", side_effect=infer):
+                                manifest = dub_video.transcribe(args)
+                            value = dub_video.read_json(manifest)
+                            self.assertEqual(intervals, [(0, 100), (100, 200), (200, 250)])
+                            self.assertEqual(value["video"], str(video))
+                            self.assertEqual(value["language"], "en-US")
+                            self.assertEqual([(s["id"], s["start"], s["end"]) for s in value["segments"]],
+                                             [(0, 0, 50), (1, 200, 250)])
+                            self.assertTrue(all(not clip.exists() for clip in clips))
+
                     def test_main_reconfigures_windows_pipes_for_unicode_paths_and_errors(self):
                         for failure in (False, True):
                             with self.subTest(failure=failure):
@@ -984,7 +1222,7 @@ supportingFiles:
                             "translations": str(translations), "output": str(root / "dubbed.mp4")})
                         return path
 
-                    def test_each_tts_call_uses_original_audio_and_source_transcript(self):
+                    def test_each_tts_call_uses_original_audio_without_generating_source_transcript(self):
                         with tempfile.TemporaryDirectory() as directory:
                             root = Path(directory)
                             manifest = self.manifest(root)
@@ -1014,11 +1252,12 @@ supportingFiles:
                             name, operation, inputs, parameters = calls[0]
                             self.assertEqual((name, operation), ("qwen3-tts-base", "TTS"))
                             self.assertEqual(inputs[0], "text=你能帮我吗？")
-                            self.assertEqual(parameters, {"ref_text": "Can you help?", "language": "Chinese"})
+                            self.assertEqual(parameters, {"language": "Chinese"})
                             result = dub_video.read_json(manifest)
                             self.assertEqual(result["stage"], "synthesized")
                             item = dub_video.read_json(Path(result["translations"]))["segments"][0]
                             self.assertEqual((item["id"], item["start"], item["end"]), (7, 40, 60))
+                            self.assertEqual(item["source_text"], "Can you help?")
                             self.assertEqual(item["reference_sha256"], dub_video.digest(Path(item["reference_audio"])))
 
                     def test_transcription_stores_trimmed_operator_glossary_in_manifest(self):
@@ -1031,12 +1270,15 @@ supportingFiles:
                                 preserve_names="  Silver Clouds  \n\nAlice Smith\r\n ")
 
                             def infer(name, operation, inputs, outputs):
-                                self.assertEqual((name, operation, inputs), ("asr", "ASR", [f"audio=@{video}"]))
+                                self.assertEqual((name, operation), ("asr", "ASR"))
+                                self.assertEqual(Path(inputs[0].removeprefix("audio=@")).read_bytes(), b"bounded PCM")
                                 Path(outputs[0].removeprefix("transcript=")).write_text("Silver Clouds", encoding="utf-8")
                                 dub_video.save_json(Path(outputs[1].removeprefix("segments=")),
                                                     [{"id": 7, "start": 0, "end": 100, "text": "Silver Clouds"}])
 
                             with patch.object(dub_video, "video_duration", return_value=100), \
+                                 patch.object(dub_video, "reference", side_effect=lambda source, segment, destination:
+                                              destination.write_bytes(b"bounded PCM")), \
                                  patch.object(dub_video, "model", side_effect=infer):
                                 manifest = dub_video.transcribe(args)
                             self.assertEqual(dub_video.read_json(manifest)["preserve_names"], ["Silver Clouds", "Alice Smith"])
@@ -1174,6 +1416,95 @@ supportingFiles:
                                     {"segment_id": 7, "suggested_correction": issue}]})
                             self.assertEqual(dub_video.read_json(manifest)["stage"], "transcribed")
                             self.assertFalse((root / "translated-asr.json").exists())
+
+                    def test_indexed_audit_correction_keeps_neighbors_and_reaudits_without_regeneration(self):
+                        source = [{"id": i, "start": i * 100, "end": (i + 1) * 100, "text": "你好"}
+                                  for i in range(55, 59)]
+                        corrected = "I met someone on the street who looked distressed."
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+                            translations, audits = [], []
+
+                            def infer(name, operation, inputs, outputs):
+                                prompt = Path(inputs[0].removeprefix("prompt=@"))
+                                request = json.loads(prompt.read_text(encoding="utf-8").split("\n")[-1])
+                                if prompt.name.startswith("translation-audit"):
+                                    audits.append(request)
+                                    reply = {"valid": True, "issues": []} if len(audits) == 2 else {
+                                        "valid": False, "issues": [{"segment_id": 57, "suggested_correction": corrected}]}
+                                else:
+                                    translations.append(request)
+                                    reply = {"language": "en-US", "segments": [{"id": s["id"], "text": f"Hello {s['id']}"} for s in source]}
+                                dub_video.save_json(Path(outputs[0].removeprefix("text=")), reply)
+
+                            with patch.object(dub_video, "model", side_effect=infer):
+                                result = dub_video.translate_batch(root, source, "en-US", "llm", 0)
+                            self.assertEqual((len(translations), len(audits)), (1, 2))
+                            self.assertEqual([s["text"] for s in result], ["Hello 55", "Hello 56", corrected, "Hello 58"])
+                            self.assertEqual([(s["id"], s["start"], s["end"], s["source_text"]) for s in result],
+                                             [(s["id"], s["start"], s["end"], s["text"]) for s in source])
+                            self.assertEqual(audits[1]["segments"][2]["translation"], corrected)
+                            self.assertTrue((root / "translation-candidate-attempt-2.json").exists())
+
+                    def test_invalid_indexed_glossary_correction_falls_back_and_remains_bounded(self):
+                        source = [{"id": 7, "start": 0, "end": 100, "text": "Please play Silver Clouds."}]
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+                            translations, audits = [], []
+
+                            def infer(name, operation, inputs, outputs):
+                                self.assertEqual(operation, "OMNI")
+                                prompt = Path(inputs[0].removeprefix("prompt=@"))
+                                if prompt.name.startswith("translation-audit"):
+                                    audits.append(prompt)
+                                    reply = {"valid": False, "issues": [{"segment_id": 7, "suggested_correction": "Please play clouds."}]}
+                                else:
+                                    translations.append(prompt.read_text(encoding="utf-8"))
+                                    reply = {"language": "en-US", "segments": [{"id": 7, "text": "Please play Silver Clouds."}]}
+                                dub_video.save_json(Path(outputs[0].removeprefix("text=")), reply)
+
+                            with patch.object(dub_video, "model", side_effect=infer):
+                                with self.assertRaisesRegex(ValueError, "three attempts.*indexed correction invalid.*Silver Clouds"):
+                                    dub_video.translate_batch(root, source, "en-US", "llm", 0, ["Silver Clouds"])
+                            self.assertEqual((len(translations), len(audits)), (3, 3))
+                            self.assertIn("indexed correction invalid", translations[1])
+
+                    def test_duplicate_structured_audit_ids_are_not_automatically_applied(self):
+                        translated = [{"id": 7, "source_text": "你好", "text": "Hello"}]
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+
+                            def infer(name, operation, inputs, outputs):
+                                dub_video.save_json(Path(outputs[0].removeprefix("text=")), {"valid": False, "issues": [
+                                    {"segment_id": 7, "suggested_correction": "Good morning"},
+                                    {"segment_id": 7, "suggested_correction": "Good evening"}]})
+
+                            with patch.object(dub_video, "model", side_effect=infer):
+                                with self.assertRaises(dub_video.TranslationAuditRejected) as failure:
+                                    dub_video.audit_translation(root, translated, "en-US", "llm", "", 1)
+                            self.assertIsNone(failure.exception.corrections)
+
+                    def test_indexed_corrections_do_not_reset_three_review_budget(self):
+                        source = [{"id": 7, "start": 0, "end": 100, "text": "你好"}]
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+                            calls = {"translations": 0, "audits": 0}
+
+                            def infer(name, operation, inputs, outputs):
+                                prompt = Path(inputs[0].removeprefix("prompt=@"))
+                                if prompt.name.startswith("translation-audit"):
+                                    calls["audits"] += 1
+                                    reply = {"valid": False, "issues": [{"segment_id": 7, "suggested_correction":
+                                                                          f"Hello correction {calls['audits']}"}]}
+                                else:
+                                    calls["translations"] += 1
+                                    reply = {"language": "en-US", "segments": [{"id": 7, "text": "Hello"}]}
+                                dub_video.save_json(Path(outputs[0].removeprefix("text=")), reply)
+
+                            with patch.object(dub_video, "model", side_effect=infer):
+                                with self.assertRaisesRegex(ValueError, "three attempts"):
+                                    dub_video.translate_batch(root, source, "en-US", "llm", 0)
+                            self.assertEqual(calls, {"translations": 1, "audits": 3})
 
                     def test_semantic_feedback_can_correct_translation_before_publication(self):
                         with tempfile.TemporaryDirectory() as directory:
@@ -1316,15 +1647,18 @@ supportingFiles:
 
                     def test_mux_uses_container_supported_subtitles_and_preserves_video(self):
                         streams = {"streams": [{"codec_type": kind} for kind in ("video", "audio", "subtitle")]}
-                        for extension, codec in (("mp4", "mov_text"), ("mkv", "ass")):
-                            with self.subTest(extension=extension), patch.object(dub_media, "command") as run, \
+                        for extension, codec, language, code in (
+                                ("mp4", "mov_text", "zh-CN", "zho"), ("mkv", "ass", "zh-CN", "zh-CN"),
+                                ("mp4", "mov_text", "en-US", "eng"), ("mkv", "ass", "en-US", "en-US"),
+                                ("mp4", "mov_text", "ja-JP", "jpn"), ("mp4", "mov_text", "ko-KR", "kor")):
+                            with self.subTest(extension=extension, language=language), patch.object(dub_media, "command") as run, \
                                  patch.object(dub_media, "probe", return_value=streams):
                                 dub_media.mux(Path("source.mp4"), Path("timeline.pcm"), Path("中文 subtitles.ass"),
-                                              Path("dubbed." + extension), "zh-CN")
+                                              Path("dubbed." + extension), language)
                                 argv = run.call_args.args[0]
                                 self.assertEqual(argv[argv.index("-c:v") + 1], "copy")
                                 self.assertEqual(argv[argv.index("-c:s") + 1], codec)
-                                self.assertEqual(argv.count("language=" + ("zho" if extension == "mp4" else "zh-CN")), 2)
+                                self.assertEqual(argv.count("language=" + code), 2)
                                 self.assertIn("中文 subtitles.ass", argv)
                                 self.assertIn("s16le", argv)
 
@@ -1375,7 +1709,6 @@ workers:
         - ${preserveNames}
       command: python
       name: transcribe-video
-      timeout: 20m
       type: SCRIPT_WORKER
     - args:
         - scripts/dub_video.py
@@ -1384,7 +1717,6 @@ workers:
         - '{{ (index .Inputs 0).Payload }}'
       command: python
       name: translate-video-segments
-      timeout: 20m
       type: SCRIPT_WORKER
     - args:
         - scripts/dub_video.py
@@ -1393,7 +1725,6 @@ workers:
         - '{{ (index .Inputs 0).Payload }}'
       command: python
       name: synthesize-video-segments
-      timeout: 20m
       type: SCRIPT_WORKER
     - args:
         - scripts/dub_video.py
@@ -1402,7 +1733,6 @@ workers:
         - '{{ (index .Inputs 0).Payload }}'
       command: python
       name: render-dubbed-video
-      timeout: 20m
       type: SCRIPT_WORKER
 workstations:
     - inputs:
@@ -1415,6 +1745,9 @@ workstations:
       outputs:
         - state: transcribed
           workType: video-dub
+      resources:
+        - capacity: 1
+          name: gpu
       type: SCRIPT_RUN
       worker: transcribe-video
     - inputs:
@@ -1427,6 +1760,9 @@ workstations:
       outputs:
         - state: translated
           workType: video-dub
+      resources:
+        - capacity: 1
+          name: gpu
       type: SCRIPT_RUN
       worker: translate-video-segments
     - inputs:
@@ -1439,6 +1775,9 @@ workstations:
       outputs:
         - state: synthesized
           workType: video-dub
+      resources:
+        - capacity: 1
+          name: gpu
       type: SCRIPT_RUN
       worker: synthesize-video-segments
     - inputs:

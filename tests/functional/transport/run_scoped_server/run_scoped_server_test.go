@@ -101,10 +101,8 @@ func TestRunScopedServerAndSiteOwnNamedAndFileInvocationLifecycles(t *testing.T)
 				!strings.HasSuffix(stdout, wantInvocationResponse) {
 				t.Fatalf("invocation stdout=%q stderr=%q", stdout, stderr)
 			}
-			if !strings.Contains(stderr, "dispatch ") ||
-				!strings.Contains(stderr, "active at "+goalWorkstationName) ||
-				!strings.Contains(stderr, "worker ") {
-				t.Fatalf("invocation progress stderr=%q", stderr)
+			if stderr != "" || !strings.Contains(stdout, "workstation started: "+goalWorkstationName) {
+				t.Fatalf("redirected invocation omitted stable milestones or leaked diagnostics: stdout=%q stderr=%q", stdout, stderr)
 			}
 			if listenerStarts.Load() != 1 || listenerStops.Load() != 1 {
 				t.Fatalf(

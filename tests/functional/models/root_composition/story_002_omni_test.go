@@ -32,6 +32,12 @@ func TestModelsVideoEmbeddedAudioAndExplicitAudioReachLLM(t *testing.T) {
 	source := filepath.Join(home, "llm-source")
 	writeVideoReadinessModelSource(t, source, true)
 	writeVideoReadinessOperatorConfig(t, home, source)
+	// This media composition witness uses the controlled Whisper backend;
+	// the canonical Qwen installation is Windows CUDA only.
+	writeGenericModelSourceOverride(t, home, models.BuiltInModelNameASR, pullToReadySource, "localai-whisper")
+	writeGenericBuiltinModelCache(t, home, pullToReadySource)
+	selection, backendBody := fixtureBackendSelection("localai-whisper")
+	writeGenericBackendCache(t, home, "localai-whisper", selection, backendBody)
 	writeVideoReadinessManagedCache(t, home, true)
 	edges, _, _, _ := localAIConformanceEdges(home, backend)
 	edges.ModelInvocationProtocolClient = nil
@@ -442,6 +448,38 @@ type asrVideoCommandRecorder struct {
 	paths []string
 }
 
+func TestModelsASRNoDetectedSpeechWritesEmptyNamedOutputs(t *testing.T) {
+	t.Parallel()
+	home := functionalTempDir(t)
+	backend := functionalStartLocalAI(t)
+	writeGenericConformanceCaches(t, home)
+	edges, _, _, _ := localAIConformanceEdges(home, backend)
+	edges.ModelASRBackend = func(ctx context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+		return models.ASRBackendResponse{Text: " \n"}, ctx.Err()
+	}
+	process := functionalBuildProcess(t, edges)
+	defer closeRootProcess(t, process, "close no-speech ASR process")
+	dir := functionalTempDir(t)
+	audioPath := filepath.Join(dir, "silence.wav")
+	if err := os.WriteFile(audioPath, localai.AudioBytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	transcript, segments := filepath.Join(dir, "transcript.txt"), filepath.Join(dir, "segments.json")
+	inputs := support.FakeInputs(t.Context(), []string{"you", "models", "invoke", "asr", "--input", "audio=@" + audioPath,
+		"--output-map", "transcript=" + transcript, "--output-map", "segments=" + segments})
+	inputs.Input.Env = functionalHomeEnvironment(home)
+	inputs.Input.WorkingDirectory = dir
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("no-speech ASR invocation: %v", err)
+	}
+	for path, expected := range map[string]string{transcript: "", segments: "[]"} {
+		body, err := os.ReadFile(path)
+		if err != nil || string(body) != expected {
+			t.Fatalf("no-speech named output %q = %q, error=%v, want %q", path, body, err, expected)
+		}
+	}
+}
+
 func (runner *asrVideoCommandRecorder) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	for index, arg := range request.Args {
 		if arg == "-i" && index+1 < len(request.Args) {
@@ -449,6 +487,9 @@ func (runner *asrVideoCommandRecorder) Run(ctx context.Context, request platform
 		}
 	}
 	if request.Command == "ffmpeg" {
+		if !strings.Contains(strings.Join(request.Args, " "), "-af aresample=16000:async=1:first_pts=0:min_hard_comp=0.001") {
+			return platformprocess.CommandResult{}, fmt.Errorf("video ASR decoder must preserve container audio timestamps")
+		}
 		runner.paths = append(runner.paths, request.Args[len(request.Args)-1])
 	}
 	return runner.omniVideoDecoder.Run(ctx, request)

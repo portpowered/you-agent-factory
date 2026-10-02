@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
 )
@@ -68,6 +69,68 @@ func TestWiredHostDelegatesLeaseOperationsToNestedOwner(t *testing.T) {
 	leases := internalservice.LeasesService(service)
 	if leases == nil {
 		t.Fatal("LeasesService returned nil nested owner")
+	}
+}
+
+func TestWiredHostDefaultCapacityPreventsOverlappingModelLeases(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name           string
+		capacity       int
+		removeResource bool
+	}{
+		{name: "no resource", removeResource: true},
+		{name: "unspecified capacity"},
+		{name: "explicit concurrent capacity", capacity: 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cache := t.TempDir()
+			writeCacheFixture(t, cache, true)
+			scopes := newScopes(t, "default-capacity")
+			cfg := runtimeConfig()
+			cfg.Resources[0].Capacity = test.capacity
+			if test.removeResource {
+				cfg.Resources = nil
+			}
+			ref := openScope(t, scopes, cache, cfg)
+			// Cache availability is controlled independently from authored resource
+			// lookup, so the no-resource case tests real default lease admission.
+			assets := &backendRuntimeInspectionAssets{Service: mustAssetsService(t, scopes),
+				inspection: scopedassets.RuntimeCacheInspection{Supported: true, Installed: true, CachePath: cache}}
+			host, err := runtimehostwire.NewService(scopes, assets,
+				&recordingProcessLauncher{}, http.DefaultClient, testHostClock{}, nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx := context.Background()
+			first, err := host.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{
+				Scope: ref, Name: "OMNIVOICE_Q4_K_M", Holder: "first"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			second, err := host.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{
+				Scope: ref, Name: "OMNIVOICE_Q4_K_M", Holder: "second"})
+			if test.capacity == 2 {
+				if err != nil {
+					t.Fatalf("explicit capacity 2: %v", err)
+				}
+				if _, err := host.ReleaseModelLease(ctx, models.ReleaseModelLeaseRequest{
+					Scope: ref, Lease: second.Lease.Lease}); err != nil {
+					t.Fatal(err)
+				}
+			} else if !errors.Is(err, models.ErrHostCapacityExhausted) {
+				t.Fatalf("overlapping unconfigured model lease = %v, want capacity exhausted", err)
+			}
+			if _, err := host.ReleaseModelLease(ctx, models.ReleaseModelLeaseRequest{
+				Scope: ref, Lease: first.Lease.Lease}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := host.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{
+				Scope: ref, Name: "OMNIVOICE_Q4_K_M", Holder: "after-release"}); err != nil {
+				t.Fatalf("released capacity was not reusable: %v", err)
+			}
+		})
 	}
 }
 

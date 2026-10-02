@@ -26,7 +26,7 @@ func TestModelsPublicRemoveWorkflowDefaultsToRevisionOnlyForASR(t *testing.T) {
 	cacheRoot := filepath.Join(home, "managed-model-cache")
 	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	fixture := writeDefaultASRRemovalFixture(t, cacheRoot)
-	process := functionalSharedDefaultProcess(t)
+	process := functionalBuildProcess(t, serviceedges.Edges{})
 	environment := isolatedModelEnvironment(home, cacheRoot)
 	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "models", "remove", models.BuiltInModelNameASR})
 	inputs.Input.Env = environment
@@ -76,6 +76,10 @@ func writeDefaultASRRemovalFixture(t *testing.T, cacheRoot string) defaultASRRem
 	if !ok {
 		t.Fatal("built-in catalog did not publish ASR")
 	}
+	// These small controlled snapshots exercise removal policy for an explicit
+	// Whisper operator model, independently of the canonical Qwen bundle.
+	definition.Source, definition.Backend = pullToReadySource, "localai-whisper"
+	writeGenericModelSourceOverride(t, filepath.Dir(cacheRoot), definition.Name, definition.Source, definition.Backend)
 	sourceParts := strings.SplitN(definition.Source, "@", 2)
 	if len(sourceParts) != 2 || strings.TrimSpace(sourceParts[1]) == "" {
 		t.Fatalf("built-in ASR source %q has no pinned revision", definition.Source)

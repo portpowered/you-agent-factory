@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "kind": "localai-backend-artifacts",
+  "publication": {
+    "id": "localai-backends-v1-8d2cd1a1c4337e1c8efb60bf64ffdfb9a559a91e6a6d06ec3eea7df2996e5e8a",
+    "releaseTag": "localai-backends-v1-8d2cd1a1c4337e1c8efb60bf64ffdfb9a559a91e6a6d06ec3eea7df2996e5e8a",
+    "repository": "portpowered/you-agent-factory",
+    "pinFingerprint": "8d2cd1a1c4337e1c8efb60bf64ffdfb9a559a91e6a6d06ec3eea7df2996e5e8a",
+    "packagingRevision": 9,
+    "source": {
+      "repository": "https://github.com/mudler/LocalAI.git",
+      "commit": "b224c96db6f4b87306a33a808650bfce63b12588"
+    },
+    "protocol": {
+      "path": "backend/backend.proto",
+      "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+    },
+    "toolchain": {
+      "goVersion": "1.26.0",
+      "cmakeVersion": "4.4.1",
+      "protobufVersion": "1.36.11",
+      "grpcVersion": "1.80.0",
+      "grpcCommit": "397e45edaa68f8763773bbaaf539cf7894169cd2"
+    }
+  },
+  "artifacts": [
+    {
+      "id": "localai-qwen3-asr-cpp/windows-amd64-cuda",
+      "backend": {
+        "id": "localai-qwen3-asr-cpp",
+        "source": {
+          "repository": "https://github.com/predict-woo/qwen3-asr.cpp",
+          "commit": "6dcc586e5073fd6e85ee5728e75f0903d6c70c6c",
+          "pinVariable": "sourceCommit"
+        }
+      },
+      "source": {
+        "repository": "https://github.com/mudler/LocalAI.git",
+        "commit": "b224c96db6f4b87306a33a808650bfce63b12588",
+        "path": "pkg/grpc"
+      },
+      "protocol": {
+        "path": "backend/backend.proto",
+        "revision": "ad62c6df07ae1169eb14411a565a689cd996b19c"
+      },
+      "target": {
+        "id": "windows-amd64-cuda",
+        "operatingSystem": "windows",
+        "architecture": "amd64",
+        "accelerators": [
+          "cuda"
+        ]
+      },
+      "artifact": {
+        "name": "localai-backend-localai-qwen3-asr-cpp-windows-amd64-cuda-6dcc586e5073fd6e85ee5728e75f0903d6c70c6c-7e640360a555.zip",
+        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-8d2cd1a1c4337e1c8efb60bf64ffdfb9a559a91e6a6d06ec3eea7df2996e5e8a/localai-backend-localai-qwen3-asr-cpp-windows-amd64-cuda-6dcc586e5073fd6e85ee5728e75f0903d6c70c6c-7e640360a555.zip",
+        "sizeBytes": 441891463,
+        "sha256": "e20cafd64c87a5a0293f6a7a19ef20be3566aa1a0cc1af54f70c383b7fdb531c"
+      }
+    }
+  ]
+}

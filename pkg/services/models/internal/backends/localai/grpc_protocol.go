@@ -29,6 +29,18 @@ const (
 )
 
 type invocationEndpointContextKey struct{}
+type invocationBackendContextKey struct{}
+
+// WithInvocationBackend carries the selected protocol dialect privately.
+func WithInvocationBackend(ctx context.Context, backend string) context.Context {
+	return context.WithValue(ctx, invocationBackendContextKey{}, strings.TrimSpace(backend))
+}
+
+// InvocationBackend returns the resolved private protocol dialect.
+func InvocationBackend(ctx context.Context) string {
+	backend, _ := ctx.Value(invocationBackendContextKey{}).(string)
+	return backend
+}
 
 // WithInvocationEndpoint attaches the private, already-selected host address
 // to one invocation. The endpoint never enters a public Models request or

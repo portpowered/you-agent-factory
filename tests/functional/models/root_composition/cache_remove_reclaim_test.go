@@ -28,6 +28,7 @@ func TestModelsPublicOptInRemoveReclaimsUnsharedASRThroughCLIAndHTTP(t *testing.
 
 	factoryDir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	localHome := functionalTempDir(t)
+	localProcess := functionalBuildProcess(t, serviceedges.Edges{})
 	localCache := filepath.Join(localHome, "model-cache")
 	localFixture := writeDefaultASRRemovalFixture(t, localCache)
 	localEnvironment := isolatedModelEnvironment(localHome, localCache)
@@ -38,7 +39,7 @@ func TestModelsPublicOptInRemoveReclaimsUnsharedASRThroughCLIAndHTTP(t *testing.
 	})
 	localInputs.Input.Env = localEnvironment
 	localInputs.Input.WorkingDirectory = factoryDir
-	if err := functionalSharedDefaultProcess(t).Execute(localInputs.Input); err != nil {
+	if err := localProcess.Execute(localInputs.Input); err != nil {
 		t.Fatalf("Process.Execute(local opt-in ASR remove) error = %v\nstdout=%s\nstderr=%s",
 			err, localInputs.Stdout(), localInputs.Stderr())
 	}
@@ -54,7 +55,7 @@ func TestModelsPublicOptInRemoveReclaimsUnsharedASRThroughCLIAndHTTP(t *testing.
 	})
 	localRepeat.Input.Env = localEnvironment
 	localRepeat.Input.WorkingDirectory = factoryDir
-	localRepeatErr := functionalSharedDefaultProcess(t).Execute(localRepeat.Input)
+	localRepeatErr := localProcess.Execute(localRepeat.Input)
 	assertASRReclaimRepeatNotFound(t, "local", localRepeatErr, localRepeat.Stdout(), localRepeat.Stderr())
 
 	serverHome := functionalTempDir(t)
@@ -123,7 +124,7 @@ func TestModelsPublicOptInRemoveRetainsSharedBackendCandidateOnce(t *testing.T) 
 	})
 	inputs.Input.Env = isolatedModelEnvironment(home, cacheRoot)
 	inputs.Input.WorkingDirectory = factoryDir
-	if err := functionalSharedDefaultProcess(t).Execute(inputs.Input); err != nil {
+	if err := functionalBuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
 		t.Fatalf("Process.Execute(shared opt-in remove) error = %v\nstdout=%s\nstderr=%s",
 			err, inputs.Stdout(), inputs.Stderr())
 	}
@@ -384,7 +385,7 @@ func TestModelsPublicOptInRemoveFailsClosedOnUnsafeSiblingReference(t *testing.T
 	})
 	inputs.Input.Env = isolatedModelEnvironment(home, cacheRoot)
 	inputs.Input.WorkingDirectory = factoryDir
-	removeErr := functionalSharedDefaultProcess(t).Execute(inputs.Input)
+	removeErr := functionalBuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
 	if removeErr == nil || !errors.Is(removeErr, modelscli.ErrModelCacheReferenceUncertain) {
 		t.Fatalf("unsafe-reference remove = %v, want ErrModelCacheReferenceUncertain; stdout=%q stderr=%q",
 			removeErr, inputs.Stdout(), inputs.Stderr())

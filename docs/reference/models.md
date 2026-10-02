@@ -36,6 +36,18 @@ modalities, managed-runtime readiness and lifecycle, and resource count.
 `inspect` shows one model's worker capabilities and readiness diagnostics. Add
 the global `--json` flag when scripts need the structured response.
 
+The built-in `asr` selects Qwen3-ASR 0.6B Q8_0 with a separate Qwen3 forced
+aligner for speech timestamps, including Chinese, Japanese, Korean, and English.
+Its immutable recognition source is
+`hf://OpenVoiceOS/qwen3-asr-0.6b-q8-0/qwen3-asr-0.6b-q8_0.gguf@47fe022389f25564002e574e5d82aa32a268893b`.
+The bundled aligner is independently pinned to
+`OpenVoiceOS/qwen3-forced-aligner-0.6b-q8-0@efe4002aa7d567851883c05f9950c869debe8847`.
+The native Qwen ASR backend is currently distributed for Windows AMD64 with
+CUDA; this manual testing release does not provide CPU, Linux, or Metal builds.
+Recognition quality varies by language and recording. Use the ASR `language`
+parameter when the source language is known; translation into a target language
+is a separate operation.
+
 Use these managed-runtime fields when deciding what to do next:
 
 | `readinessState` | Meaning |
@@ -68,7 +80,7 @@ sizes exclude the additional platform-specific backend and runtime files.
 | Name | Operation | Pinned model payload |
 | --- | --- | ---: |
 | `llm` | `OMNI` | 5.0 GB |
-| `asr` | `ASR` | 148 MB |
+| `asr` | `ASR` with aligned timestamps | 2.348 GB |
 | `tts` | `TTS` | 1.714 GB |
 | `embed` | `EMBED` | 639 MB |
 | `qwen3-tts-base` | `TTS` with a reference WAV | 884 MB |
@@ -82,7 +94,18 @@ before pulling or invoking it.
 
 ### Built-in Windows ASR backend provenance
 
-This backend identity is pinned to merged build
+The default Qwen3-ASR CUDA backend uses `qwen3-asr.cpp` source
+`6dcc586e5073fd6e85ee5728e75f0903d6c70c6c`, the LocalAI SDK at
+`b224c96db6f4b87306a33a808650bfce63b12588`, and the repository bridge at
+`7e640360a555b8b8a7460deee87fced4e1aef14f`. Its immutable publication is
+`localai-backends-v1-8d2cd1a1c4337e1c8efb60bf64ffdfb9a559a91e6a6d06ec3eea7df2996e5e8a`.
+The Windows AMD64 archive is 441,891,463 bytes, with SHA-256
+`e20cafd64c87a5a0293f6a7a19ef20be3566aa1a0cc1af54f70c383b7fdb531c`.
+The recognition and forced-alignment model files are separate downloads.
+
+### Earlier Windows Whisper backend provenance
+
+This earlier backend identity is pinned to merged build
 `8f945b0eadcf9863821585c7f5edeb84d855f471`. It describes the Windows Whisper
 CPU backend ZIP, separate from the ASR model payload listed above.
 

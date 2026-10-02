@@ -273,3 +273,15 @@ tree before retrying, and never re-issue the same request blind.
   handling.
 - This note documents a single-operator desktop environment. Results may differ
   on other hosts.
+
+## October 1 multilingual follow-up
+
+A bounded read-only OpenCode audit (`opencode/mimo-v2.6-flash-free`, 60-second
+budget) inspected only the dubbing scripts inside the managed workspace. It
+returned `factory_session.subagent.timed_out` without a primary result. Session
+`6cc5268e-09ea-44ed-89ee-7e836ffab278`, request
+`088c09d0-757c-4aa0-a2c9-66e6b3f1c38c`. The structured outcome recorded one
+in-flight dispatch and a provider reasoning delta, and reported that cleanup
+closed the live Factory Session. This bounded outcome does not establish the
+cause of previous long timeouts. Implementation continued with the existing
+collaboration agents rather than repeating the same probe.

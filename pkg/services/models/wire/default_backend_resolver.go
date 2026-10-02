@@ -30,8 +30,16 @@ func NewDefaultBackendArtifactResolver() (BackendArtifactResolver, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode Qwen Windows CUDA manifest: %w", err)
 	}
+	qwenASR, err := artifacts.QwenASRWindowsCUDAManifest()
+	if err != nil {
+		return nil, fmt.Errorf("decode Qwen ASR Windows CUDA manifest: %w", err)
+	}
 	baselineResolver, qwenResolver := backendArtifactResolver(manifest), backendArtifactResolver(qwen)
+	qwenASRResolver := backendArtifactResolver(qwenASR)
 	return func(ctx context.Context, request ResolvedHostConfiguration, offline bool) (BackendArtifactSelection, error) {
+		if request.Backend == "localai-qwen3-asr-cpp" {
+			return qwenASRResolver(ctx, request, offline)
+		}
 		if request.Backend == "localai-qwen3-tts-cpp" {
 			return qwenResolver(ctx, request, offline)
 		}

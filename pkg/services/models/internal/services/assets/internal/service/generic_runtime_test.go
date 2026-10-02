@@ -370,54 +370,60 @@ func TestInspectRuntimeCacheRejectsIncompleteGenericManifest(t *testing.T) {
 	}
 }
 
-func TestInspectRuntimeCacheRejectsLegacyBuiltinLLMManifestWithoutProjector(t *testing.T) {
+func TestInspectRuntimeCacheRejectsLegacyBuiltinManifestWithoutCompanion(t *testing.T) {
 	t.Parallel()
 
-	cacheDirectory := t.TempDir()
-	modelDirectory := filepath.Join(cacheDirectory, canonicalModelName(models.BuiltInModelNameLLM))
-	if err := os.MkdirAll(modelDirectory, 0o755); err != nil {
-		t.Fatalf("create built-in LLM cache directory: %v", err)
-	}
-	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameLLM)
-	if !ok {
-		t.Fatal("built-in LLM definition is missing")
-	}
-	source, err := parseGenericSource(definition.Source)
-	if err != nil {
-		t.Fatalf("parse built-in LLM source: %v", err)
-	}
-	metadata, err := json.Marshal(cacheMetadata{
-		ModelName: models.BuiltInModelNameLLM,
-		Revision:  source.revision,
-		Files: []metadataFile{{
-			Path: builtInGemmaLLMModelName, Bytes: builtInGemmaLLMModelBytes,
-			SHA256: builtInGemmaLLMModelSHA256,
-		}},
-	})
-	if err != nil {
-		t.Fatalf("marshal legacy LLM metadata: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(modelDirectory, metadataFileName), metadata, 0o644); err != nil {
-		t.Fatalf("write legacy LLM metadata: %v", err)
-	}
+	for _, name := range []string{models.BuiltInModelNameLLM, models.BuiltInModelNameASR} {
+		t.Run(name, func(t *testing.T) {
+			cacheDirectory := t.TempDir()
+			modelDirectory := filepath.Join(cacheDirectory, canonicalModelName(name))
+			if err := os.MkdirAll(modelDirectory, 0o755); err != nil {
+				t.Fatalf("create built-in model cache directory: %v", err)
+			}
+			definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(name)
+			if !ok {
+				t.Fatal("built-in model definition is missing")
+			}
+			source, err := parseGenericSource(definition.Source)
+			if err != nil {
+				t.Fatalf("parse built-in model source: %v", err)
+			}
+			source.modelName = name
+			required := genericRuntimeExpectedArtifacts(source)
+			metadata, err := json.Marshal(cacheMetadata{
+				ModelName: name,
+				Revision:  source.revision,
+				Files: []metadataFile{{
+					Path: required[0].Name, Bytes: required[0].Bytes,
+					SHA256: required[0].SHA256,
+				}},
+			})
+			if err != nil {
+				t.Fatalf("marshal legacy model metadata: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(modelDirectory, metadataFileName), metadata, 0o644); err != nil {
+				t.Fatalf("write legacy model metadata: %v", err)
+			}
 
-	scopes := newScopes(t, "legacy-llm-projector")
-	scope := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
-	service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
-		t.Fatal("legacy LLM inspection used the network")
-		return nil, nil
-	}), func(string) string { return "" })
-	inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
-		Scope: scope, Name: models.BuiltInModelNameLLM,
-	})
-	if err != nil {
-		t.Fatalf("InspectRuntimeCache: %v", err)
-	}
-	if !inspection.ManifestPresent || !inspection.ManifestValid || inspection.Installed ||
-		inspection.FailureReason != "managed cache does not satisfy configured model requirements" ||
-		len(inspection.ExpectedArtifacts) != 2 || len(inspection.MissingAssets) != 1 ||
-		inspection.MissingAssets[0] != builtInGemmaLLMProjectorName {
-		t.Fatalf("legacy LLM inspection = %#v, want projector missing and cache unavailable", inspection)
+			scopes := newScopes(t, "legacy-companion")
+			scope := openScope(t, scopes, cacheDirectory, models.RuntimeConfig{})
+			service := newGenericService(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+				t.Fatal("legacy model inspection used the network")
+				return nil, nil
+			}), func(string) string { return "" })
+			inspection, err := service.InspectRuntimeCache(context.Background(), models.InspectModelAssetsRequest{
+				Scope: scope, Name: name,
+			})
+			if err != nil {
+				t.Fatalf("InspectRuntimeCache: %v", err)
+			}
+			if !inspection.ManifestPresent || !inspection.ManifestValid || inspection.Installed ||
+				inspection.FailureReason != "managed cache does not satisfy configured model requirements" ||
+				len(inspection.ExpectedArtifacts) != 2 || len(inspection.MissingAssets) != 1 ||
+				inspection.MissingAssets[0] != required[1].Name {
+				t.Fatalf("legacy model inspection = %#v, want companion missing and cache unavailable", inspection)
+			}
+		})
 	}
 }
 

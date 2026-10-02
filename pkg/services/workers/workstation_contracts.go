@@ -52,7 +52,8 @@ const (
 	WorkstationDispatchCancelOutcomeAlreadyTerminal   WorkstationDispatchCancelOutcome = "ALREADY_TERMINAL"
 
 	// DefaultWorkstationExecutionTimeout is the hard execution limit used when
-	// an authored worker does not provide an explicit positive timeout.
+	// an authored agent worker does not provide an explicit positive timeout.
+	// Script workers without an authored timeout use caller/session cancellation.
 	// Supervision and the workstation executor both consume this value so the
 	// deadline is not silently changed at either boundary.
 	DefaultWorkstationExecutionTimeout = 2 * time.Hour

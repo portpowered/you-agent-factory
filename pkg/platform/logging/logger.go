@@ -36,7 +36,7 @@ func EnsureLogger(l Logger) Logger {
 }
 
 func NewDefaultLogger() (*zap.Logger, error) {
-	return BuildLogger(false, false)
+	return BuildTerminalMutedLogger()
 }
 
 // BuildLogger creates a zap.Logger with the appropriate verbosity level.
@@ -67,7 +67,7 @@ func BuildTerminalMutedLogger() (*zap.Logger, error) {
 		zapcore.AddSync(io.Discard),
 		zapcore.WarnLevel,
 	)
-	return zap.New(core), nil
+	return zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel)), nil
 }
 
 // BuildTerminalLogger selects a process terminal logger for the resolved CLI

@@ -13,6 +13,39 @@ import (
 
 const fixtureProtocolRevision = "ad62c6df07ae1169eb14411a565a689cd996b19c"
 
+func TestDecodeAllowsUnusedVCPKGButRequiresPinnedPresentValue(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		value   any
+		present bool
+		valid   bool
+	}{
+		{name: "unused", valid: true},
+		{name: "pinned", present: true, value: strings.Repeat("a", 40), valid: true},
+		{name: "empty", present: true, value: ""},
+		{name: "null", present: true},
+		{name: "unpinned", present: true, value: "main"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			data := mutatedFixture(t, func(document map[string]any) {
+				toolchain := document["publication"].(map[string]any)["toolchain"].(map[string]any)
+				delete(toolchain, "vcpkgCommit")
+				if test.present {
+					toolchain["vcpkgCommit"] = test.value
+				}
+			})
+			_, err := artifacts.Decode(data)
+			if test.valid && err != nil {
+				t.Fatalf("Decode: %v", err)
+			}
+			if !test.valid && !errors.Is(err, artifacts.ErrManifestMalformed) {
+				t.Fatalf("Decode error = %v, want malformed", err)
+			}
+		})
+	}
+}
+
 func TestDecodeSelectsDetachedDescriptorAndVerifiesFixtureBytes(t *testing.T) {
 	t.Parallel()
 

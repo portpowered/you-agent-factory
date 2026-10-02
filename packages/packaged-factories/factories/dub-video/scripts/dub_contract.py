@@ -8,6 +8,50 @@ import unicodedata
 from pathlib import Path, PureWindowsPath
 
 
+LANGUAGES = {"zh": ("Chinese", "zho"), "en": ("English", "eng"),
+             "ja": ("Japanese", "jpn"), "ko": ("Korean", "kor"),
+             "de": ("German", "deu"), "fr": ("French", "fra"),
+             "ru": ("Russian", "rus"), "pt": ("Portuguese", "por"),
+             "es": ("Spanish", "spa"), "it": ("Italian", "ita")}
+
+
+def target_language(value):
+    """Normalize supported BCP 47 language/script/region/variant tags."""
+    if not isinstance(value, str) or not re.fullmatch(
+            r"[A-Za-z]{2}(?:-[A-Za-z]{4})?(?:-[A-Za-z]{2}|-[0-9]{3})?"
+            r"(?:-[A-Za-z0-9]{5,8}|-[0-9][A-Za-z0-9]{3})*"
+            r"(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*"
+            r"(?:-x(?:-[A-Za-z0-9]{1,8})+)?", value):
+        raise ValueError("Target language needs a BCP 47 tag such as en-US, zh-CN, ja-JP, or ko-KR")
+    parts = value.split("-")
+    if parts[0].lower() not in LANGUAGES:
+        raise ValueError("Unsupported target speech language: " + value)
+    normalized = [parts[0].lower()]
+    index = 1
+    if index < len(parts) and len(parts[index]) == 4 and parts[index].isalpha():
+        normalized.append(parts[index].title())
+        index += 1
+    if index < len(parts) and (len(parts[index]) == 2 or parts[index].isdigit() and len(parts[index]) == 3):
+        normalized.append(parts[index].upper())
+        index += 1
+    variants, singletons, extensions = set(), set(), False
+    for part in parts[index:]:
+        part = part.lower()
+        if part == "x":
+            break  # Private-use subtags have no uniqueness requirement.
+        if len(part) == 1:
+            if part in singletons:
+                raise ValueError("BCP 47 extension singletons must not repeat")
+            singletons.add(part)
+            extensions = True
+        elif not extensions:
+            if part in variants:
+                raise ValueError("BCP 47 variants must not repeat")
+            variants.add(part)
+    normalized.extend(part.lower() for part in parts[index:])
+    return "-".join(normalized)
+
+
 def validate_segments(value, duration_ms=None):
     if duration_ms is not None and (type(duration_ms) is not int or duration_ms <= 0):
         raise ValueError("Video duration must be a positive integer in milliseconds")
@@ -53,6 +97,23 @@ def _check_chinese(text, source_text, preserve_names):
         raise ValueError("Chinese translation contains only Latin prose; proper names may remain unchanged")
 
 
+def _check_target_script(text, source_text, language, preserve_names):
+    base = target_language(language).split("-")[0]
+    if base == "zh":
+        _check_chinese(text, source_text, preserve_names)
+        return
+    if any(text.casefold().strip(" \t\r\n.,!?，。！？") == name.casefold()
+           and _contains_name(source_text, name) for name in preserve_names):
+        return
+    if base == "en" and re.search(r"[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]", text) and not re.search(r"[A-Za-z]", text):
+        raise ValueError("English translation contains only East Asian prose; declare name-only cues in preserve_names")
+    if base in ("ja", "ko") and re.search(r"[A-Za-z]", text) and not re.search(
+            r"[\u3400-\u9fff\u3040-\u30ff]" if base == "ja" else r"[\uac00-\ud7af]", text):
+        words = re.findall(r"[A-Za-z]+", text)
+        if text != source_text or len(words) > 3 or not all(word[0].isupper() for word in words):
+            raise ValueError("Target translation contains only Latin prose; proper names may remain unchanged")
+
+
 def validate_translations(value, source, language, preserve_names=None):
     source = validate_segments(source)
     preserve_names = [] if preserve_names is None else preserve_names
@@ -77,8 +138,7 @@ def validate_translations(value, source, language, preserve_names=None):
         for name in preserve_names:
             if _contains_name(original["text"], name) and not _contains_name(text, name):
                 raise ValueError(f"Segment {original['id']} must preserve the full name verbatim: {name}")
-        if language.split("-")[0].lower() == "zh":
-            _check_chinese(text, original["text"], preserve_names)
+        _check_target_script(text, original["text"], language, preserve_names)
         result.append({"id": original["id"], "start": original["start"], "end": original["end"],
                        "source_text": original["text"], "text": text})
     return result

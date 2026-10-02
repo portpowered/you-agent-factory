@@ -23,6 +23,20 @@ import (
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
+func TestBuiltInASRAlignerUsesIndependentlyPinnedCompanionSource(t *testing.T) {
+	definition, _ := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameASR)
+	source, err := parseGenericSource(definition.Source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := &service{endpoints: models.RuntimeAssetEndpoints{BaseURL: "https://huggingface.co"}}
+	got := service.genericAssetURL(source, "qwen3-forced-aligner-0.6b-q8_0.gguf")
+	want := "https://huggingface.co/OpenVoiceOS/qwen3-forced-aligner-0.6b-q8-0/resolve/efe4002aa7d567851883c05f9950c869debe8847/qwen3-forced-aligner-0.6b-q8_0.gguf?download=true"
+	if got != want {
+		t.Fatalf("aligner source=%q want=%q", got, want)
+	}
+}
+
 const genericTestRevision = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 func TestPrepareGenericAssetsUsesOrderedHFCachesWithoutNetworkOnHit(t *testing.T) {

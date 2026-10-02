@@ -90,7 +90,7 @@ func (s *service) slotFacts(
 		snapshot,
 	)
 
-	capacity := 0
+	capacity := models.DefaultInvocationCapacity
 	if resource := modelScopedResource(binding.RuntimeConfig(), modelName); resource != nil &&
 		resource.Capacity > 0 {
 		capacity = resource.Capacity

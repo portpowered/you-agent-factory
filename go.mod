@@ -25,6 +25,7 @@ require (
 	github.com/tdewolff/parse/v2 v2.8.13
 	go.uber.org/zap v1.27.1
 	golang.org/x/sys v0.41.0
+	golang.org/x/term v0.40.0
 	golang.org/x/text v0.34.0
 	google.golang.org/grpc v1.65.0
 	google.golang.org/protobuf v1.36.6

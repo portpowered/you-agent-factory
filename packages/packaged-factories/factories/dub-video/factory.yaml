@@ -100,11 +100,13 @@ workTypes:
         type: TERMINAL
       - name: failed
         type: FAILED
+resources:
+  - name: gpu
+    capacity: 1
 workers:
   - name: transcribe-video
     type: SCRIPT_WORKER
     command: python
-    timeout: 20m
     args:
       - scripts/dub_video.py
       - transcribe
@@ -129,7 +131,6 @@ workers:
   - name: translate-video-segments
     type: SCRIPT_WORKER
     command: python
-    timeout: 20m
     args:
       - scripts/dub_video.py
       - translate
@@ -138,7 +139,6 @@ workers:
   - name: synthesize-video-segments
     type: SCRIPT_WORKER
     command: python
-    timeout: 20m
     args:
       - scripts/dub_video.py
       - synthesize
@@ -147,7 +147,6 @@ workers:
   - name: render-dubbed-video
     type: SCRIPT_WORKER
     command: python
-    timeout: 20m
     args:
       - scripts/dub_video.py
       - render
@@ -157,6 +156,9 @@ workstations:
   - name: transcribe-and-save
     type: SCRIPT_RUN
     worker: transcribe-video
+    resources:
+      - name: gpu
+        capacity: 1
     inputs:
       - workType: video-dub
         state: init
@@ -169,6 +171,9 @@ workstations:
   - name: translate-and-validate
     type: SCRIPT_RUN
     worker: translate-video-segments
+    resources:
+      - name: gpu
+        capacity: 1
     inputs:
       - workType: video-dub
         state: transcribed
@@ -181,6 +186,9 @@ workstations:
   - name: synthesize-from-source-audio
     type: SCRIPT_RUN
     worker: synthesize-video-segments
+    resources:
+      - name: gpu
+        capacity: 1
     inputs:
       - workType: video-dub
         state: translated

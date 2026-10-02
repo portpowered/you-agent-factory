@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
@@ -22,17 +23,18 @@ type Backend func(
 type VideoAudioExtractor func(context.Context, []byte) ([]byte, error)
 
 type asr struct {
-	extractAudio VideoAudioExtractor
-	codec        codecs.ASRCodec
-	backend      Backend
+	extractAudio   VideoAudioExtractor
+	normalizeAudio VideoAudioExtractor
+	codec          codecs.ASRCodec
+	backend        Backend
 }
 
 // New constructs the Models-owned ASR invocation runtime.
-func New(backend Backend, extractAudio VideoAudioExtractor) (asr, error) {
+func New(backend Backend, extractAudio, normalizeAudio VideoAudioExtractor) (asr, error) {
 	if backend == nil {
 		return asr{}, models.ErrInvalidInferenceDependencies
 	}
-	return asr{codec: codecs.NewASRCodec(), backend: backend, extractAudio: extractAudio}, nil
+	return asr{codec: codecs.NewASRCodec(), backend: backend, extractAudio: extractAudio, normalizeAudio: normalizeAudio}, nil
 }
 
 func (runtime asr) Invoke(
@@ -65,9 +67,14 @@ func (runtime asr) Invoke(
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return inference.InvocationRuntimeResult{}, err
 		}
+		message := "ASR backend invocation failed"
+		var failure *models.InvocationFailure
+		if errors.As(err, &failure) && failure.Message != "" {
+			message = failure.Message
+		}
 		return inference.InvocationRuntimeResult{}, &models.InvocationFailure{
 			Class: models.InvocationFailureClassBackendProtocol, Operation: models.OperationASR,
-			Message: "ASR backend invocation failed", Cause: models.ErrInferenceFailed,
+			Message: message, Cause: errors.Join(models.ErrInferenceFailed, err),
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -110,14 +117,14 @@ func (runtime asr) prepareVideoAudio(ctx context.Context, request models.InvokeM
 	}
 	prepared := append([]models.InferenceInput(nil), inputs...)
 	for index, input := range prepared {
-		if !asrVideoInput(input) {
+		extract, required := runtime.audioPreparation(ctx, input)
+		if !required {
 			continue
 		}
-
-		if runtime.extractAudio == nil {
-			return request, asrVideoFailure("ASR video audio extraction is unavailable", nil)
+		if extract == nil {
+			return request, asrVideoFailure("ASR audio normalization is unavailable", nil)
 		}
-		wav, err := runtime.extractAudio(ctx, []byte(input.Content))
+		wav, err := extract(ctx, []byte(input.Content))
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return request, err
@@ -136,6 +143,22 @@ func (runtime asr) prepareVideoAudio(ctx context.Context, request models.InvokeM
 		request.Inputs = prepared
 	}
 	return request, nil
+}
+
+func (runtime asr) audioPreparation(ctx context.Context, input models.InferenceInput) (VideoAudioExtractor, bool) {
+	if asrVideoInput(input) {
+		return runtime.extractAudio, true
+	}
+	media := strings.ToLower(strings.TrimSpace(input.MediaType))
+	if media == "" {
+		media = strings.ToLower(strings.TrimSpace(input.ContentType))
+	}
+	if localai.InvocationBackend(ctx) == "localai-qwen3-asr-cpp" && strings.TrimSpace(input.Name) == "audio" &&
+		input.Modality == models.ModalityAudio && input.Artifact == nil && strings.HasPrefix(media, "audio/") && len(input.Content) > 0 &&
+		!codecs.IsMono16KPCMWAV([]byte(input.Content)) {
+		return runtime.normalizeAudio, true
+	}
+	return nil, false
 }
 
 func asrVideoFailure(message string, cause error) error {

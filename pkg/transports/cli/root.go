@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 
+	"golang.org/x/term"
+
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
@@ -589,9 +591,13 @@ func configureRunProgressOutput(cmd *cobra.Command, cfg *runcli.RunConfig, polic
 	// stderr when that policy permits human terminal output.
 	cfg.ProgressOutput = nil
 	cfg.ProgressIsTTY = false
+	cfg.ProgressColumns = nil
 	if policy.AllowsHumanTerminalOutput() {
 		cfg.ProgressOutput = cmd.ErrOrStderr()
-		cfg.ProgressIsTTY = startupcli.StderrIsTTY(cmd.Context())
+		cfg.ProgressIsTTY = startupcli.StderrIsTTY(cmd.Context()) && !policy.VerboseEnabled()
+		if descriptor, ok := cfg.ProgressOutput.(interface{ Fd() uintptr }); ok {
+			cfg.ProgressColumns = func() int { columns, _, _ := term.GetSize(int(descriptor.Fd())); return columns }
+		}
 	}
 }
 

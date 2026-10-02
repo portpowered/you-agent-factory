@@ -24,3 +24,11 @@ var qwenWindowsCUDAManifestData []byte
 func QwenWindowsCUDAManifest() (Manifest, error) {
 	return Decode(qwenWindowsCUDAManifestData)
 }
+
+//go:embed qwen-asr-windows-cuda-manifest.json
+var qwenASRWindowsCUDAManifestData []byte
+
+// QwenASRWindowsCUDAManifest preserves the independent native ASR publication.
+func QwenASRWindowsCUDAManifest() (Manifest, error) {
+	return Decode(qwenASRWindowsCUDAManifestData)
+}

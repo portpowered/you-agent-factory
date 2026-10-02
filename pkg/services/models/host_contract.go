@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+// DefaultInvocationCapacity keeps an unconfigured model from admitting
+// overlapping inference attempts. Factories additionally model shared GPU
+// resources to prevent different models from contending for the same device.
+const DefaultInvocationCapacity = 1
+
 var (
 	// ErrInvalidHostDependencies classifies model-host construction failures.
 	ErrInvalidHostDependencies = errors.New("model host dependencies are invalid")

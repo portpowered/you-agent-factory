@@ -27,8 +27,8 @@ func TestNoDanglingBackendReferenceConformance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collect repository backend references: %v", err)
 	}
-	if len(inputs.PinnedArtifacts) != 10 {
-		t.Fatalf("checked-in default manifest has %d artifacts, want the nine-entry baseline plus one Qwen Windows CUDA publication", len(inputs.PinnedArtifacts))
+	if len(inputs.PinnedArtifacts) != 11 {
+		t.Fatalf("checked-in default manifest has %d artifacts, want the nine-entry baseline plus two Qwen Windows CUDA publications", len(inputs.PinnedArtifacts))
 	}
 	if err := Validate(inputs); err != nil {
 		t.Fatal(err)
@@ -155,6 +155,11 @@ func repositoryConformanceInputs() (Inputs, error) {
 		return Inputs{}, fmt.Errorf("decode Qwen backend manifest: %w", err)
 	}
 	pinnedArtifacts = append(pinnedArtifacts, pinnedArtifactsFromManifest(qwenManifest)...)
+	qwenASRManifest, err := artifacts.QwenASRWindowsCUDAManifest()
+	if err != nil {
+		return Inputs{}, fmt.Errorf("decode Qwen ASR backend manifest: %w", err)
+	}
+	pinnedArtifacts = append(pinnedArtifacts, pinnedArtifactsFromManifest(qwenASRManifest)...)
 	required := make(map[string][]string)
 
 	registeredBackends := make([]string, 0)
@@ -273,15 +278,17 @@ func TestQwenRequiresPublishedWindowsCUDAWithoutWeakeningEstablishedTargets(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := inputs.RequiredArtifactTargets["localai-qwen3-tts-cpp"]; len(got) != 1 || got[0] != TargetWindowsAmd64CUDA {
-		t.Fatalf("Qwen required targets = %v, want Windows CUDA only", got)
+	for _, backend := range []string{"localai-qwen3-tts-cpp", "localai-qwen3-asr-cpp"} {
+		if got := inputs.RequiredArtifactTargets[backend]; len(got) != 1 || got[0] != TargetWindowsAmd64CUDA {
+			t.Fatalf("%s required targets = %v, want Windows CUDA only", backend, got)
+		}
 	}
 	for _, backend := range []string{"localai-llamacpp", "localai-whisper", "localai-vibevoice"} {
 		if len(inputs.RequiredArtifactTargets[backend]) != 0 {
 			t.Fatalf("%s overrides the established three-target baseline", backend)
 		}
 	}
-	for _, omitted := range []string{"localai-qwen3-tts-cpp", "localai-whisper"} {
+	for _, omitted := range []string{"localai-qwen3-tts-cpp", "localai-qwen3-asr-cpp", "localai-llamacpp"} {
 		candidate := inputs
 		candidate.PinnedArtifacts = nil
 		for _, artifact := range inputs.PinnedArtifacts {

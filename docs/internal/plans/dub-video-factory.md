@@ -42,8 +42,9 @@ separation, automatic remote services, and new runtime or model-host APIs.
 
 Python 3.10 or newer, `you`, `ffmpeg`, and `ffprobe` are installed on PATH.
 Selected models are configured and support the requested operations; the TTS
-model must accept reference audio and reference text. Workers have a 20-minute
-execution timeout. There is no fixed input byte, output byte, or token ceiling
+model must accept audio-only speaker conditioning. SCRIPT workers omit a
+stage timeout; caller/session cancellation or explicit budgets govern execution.
+There is no fixed input byte, output byte, or token ceiling
 introduced by this Factory. Hardware and selected model context limits still
 apply. Windows uses the ordinary `python` executable.
 
@@ -57,7 +58,7 @@ preservation and cancellation still need delivered-journey validation.
 
 ### Replanning triggers
 
-Replan if the chosen TTS backend cannot condition on both source audio and text,
+Replan if the chosen TTS backend cannot condition on source audio while speaking translated text,
 if subtitles cannot preserve segment timing, or if packaged script resolution
 does not retain caller path semantics. Do not claim voice preservation from an
 unconditioned fallback.
@@ -256,8 +257,8 @@ unfinished final media on render failure; no legacy path needs deprecation.
 ### Performance, reliability, cost, and observability
 
 One stage is dispatched at a time for each Work item; segment synthesis consumes
-the configured model rather than starting another backend. Each dispatch has a
-20-minute timeout; there is no arbitrary byte/token limit. Model call count is
+the configured model rather than starting another backend. Each dispatch follows
+the caller/session execution budget; there is no arbitrary byte/token limit. Model call count is
 recorded from real invocations, with one reference-conditioned TTS call per
 validated segment. Stage failures retain manifests and artifact evidence.
 Privacy: local media stays local unless the customer selects a remote Models
@@ -300,9 +301,11 @@ pure contracts. No load/stress suite is introduced.
 
 Paid validation is not required. Real validation uses one short source clip,
 one ASR call, and one TTS call per source segment. Translation processes batches
-of up to 64 segments, with at most three translation attempts per batch; each
-structurally valid attempt adds a separate model audit call. Retain each raw
-audit and feed rejection issues into the next translation attempt;
+of up to 64 segments and a 12,000-byte complete UTF-8 prompt partition target,
+with at most three validation attempts and three model audit reviews per batch.
+Structured corrections patch only uniquely identified source segments before
+complete revalidation and another audit; generic issues regenerate the batch.
+Retain each candidate and raw audit;
 cache evidence by source digest, language, model/backend revisions, and script
 revision. Native Windows CUDA reference conditioning and the first complete
 named Factory MP4 journey passed. Remaining delivered edges include clean-room

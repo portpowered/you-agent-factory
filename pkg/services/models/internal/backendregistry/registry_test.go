@@ -6,8 +6,8 @@ func TestRecordsKeepArtifactSupportSeparateFromManagedRuntimeAliases(t *testing.
 	t.Parallel()
 
 	records := Records()
-	if len(records) != 4 {
-		t.Fatalf("Records length = %d, want four artifact records", len(records))
+	if len(records) != 5 {
+		t.Fatalf("Records length = %d, want five artifact records", len(records))
 	}
 
 	want := map[string]struct {
@@ -31,6 +31,10 @@ func TestRecordsKeepArtifactSupportSeparateFromManagedRuntimeAliases(t *testing.
 		"localai-qwen3-tts-cpp": {
 			repository: "https://github.com/ServeurpersoCom/qwentts.cpp",
 			path:       "backend/go/qwen3-tts-cpp",
+		},
+		"localai-qwen3-asr-cpp": {
+			repository: "https://github.com/predict-woo/qwen3-asr.cpp",
+			path:       "pkg/grpc",
 		},
 	}
 	for _, record := range records {

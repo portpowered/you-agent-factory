@@ -982,6 +982,12 @@ func resolvedHardExecutionTimeout(execution workers.WorkstationExecutionRequest)
 	if execution.Timeout > 0 {
 		return execution.Timeout
 	}
+	// Script jobs can process recordings longer than the default agent budget.
+	// Without an authored deadline, their caller/session owns cancellation, as
+	// it already does in the Workers script executor.
+	if strings.TrimSpace(execution.RunnerID) == "script" {
+		return 0
+	}
 	if strings.TrimSpace(execution.WorkerType) != "" {
 		return workers.DefaultWorkstationExecutionTimeout
 	}

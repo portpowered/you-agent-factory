@@ -1,7 +1,10 @@
 package wire
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -66,6 +69,57 @@ func TestInferenceRuntimeRoutesDefaultASRThroughPinnedProtocol(t *testing.T) {
 	}
 	if result.Content[1].Name != "segments" || dialer.connection.closed != 1 {
 		t.Fatalf("default ASR outputs/connection = %#v/%d, want segments and one close", result.Content, dialer.connection.closed)
+	}
+}
+
+func TestQwenASRNormalizesNoncanonicalAudioBeforeCodec(t *testing.T) {
+	t.Parallel()
+	wav24 := ttsRouteWAV()
+	wav16 := append([]byte(nil), wav24...)
+	binary.LittleEndian.PutUint32(wav16[24:28], 16000)
+	binary.LittleEndian.PutUint32(wav16[28:32], 32000)
+	for _, test := range []struct {
+		name, media string
+		audio       []byte
+		normalized  int
+	}{
+		{"24k WAV", "audio/wav", wav24, 1},
+		{"padded slot", "audio/wav", wav24, 1},
+		{"compressed MP3", "audio/mpeg", []byte("controlled MP3"), 1},
+		{"canonical WAV", "audio/wav", wav16, 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			calls := 0
+			backendError := errors.New("native backend detailed failure")
+			runtime, err := newASRInvocationRuntime(func(_ context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+				if !bytes.Equal(request.Audio, wav16) || request.MediaType != "audio/wav" {
+					t.Fatalf("backend received unnormalized audio: %s", request.MediaType)
+				}
+				return models.ASRBackendResponse{}, backendError
+			}, nil, func(_ context.Context, audio []byte) ([]byte, error) {
+				calls++
+				if !bytes.Equal(audio, test.audio) {
+					t.Fatal("normalization lost original audio")
+				}
+				return wav16, nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			slotName := "audio"
+			if test.name == "padded slot" {
+				slotName = " audio "
+			}
+			_, err = runtime.Invoke(localai.WithInvocationBackend(context.Background(), "localai-qwen3-asr-cpp"), inference.InvocationRuntimeRequest{
+				Request: models.InvokeModelRequest{Operation: models.OperationASR, Inputs: []models.InferenceInput{{Name: slotName, Modality: models.ModalityAudio, MediaType: test.media, ContentType: test.media, Content: string(test.audio)}}},
+			})
+			if !errors.Is(err, backendError) || !errors.Is(err, models.ErrInferenceFailed) {
+				t.Fatalf("backend cause lost: %v", err)
+			}
+			if calls != test.normalized {
+				t.Fatalf("normalization calls=%d want=%d", calls, test.normalized)
+			}
+		})
 	}
 }
 

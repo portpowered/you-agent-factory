@@ -25,6 +25,23 @@ func ExtractVideoAudio(
 	readFile func(string) ([]byte, error),
 	removeFile localai.InputFileRemover,
 ) ([]byte, error) {
+	return extractAudio(ctx, runner, video, tempDirectory, createTemp, writeFile, readFile, removeFile, true)
+}
+
+// NormalizeAudio converts an audio container to mono 16 kHz PCM WAV using the
+// same seekable staging and timestamp correction as video extraction.
+func NormalizeAudio(ctx context.Context, runner platformprocess.CommandRunner, audio []byte,
+	tempDirectory func() string, createTemp localai.TempFileFactory,
+	writeFile localai.InputFileWriter, readFile func(string) ([]byte, error), removeFile localai.InputFileRemover,
+) ([]byte, error) {
+	return extractAudio(ctx, runner, audio, tempDirectory, createTemp, writeFile, readFile, removeFile, false)
+}
+
+func extractAudio(ctx context.Context, runner platformprocess.CommandRunner, video []byte,
+	tempDirectory func() string, createTemp localai.TempFileFactory,
+	writeFile localai.InputFileWriter, readFile func(string) ([]byte, error), removeFile localai.InputFileRemover,
+	videoContainer bool,
+) ([]byte, error) {
 	if err := validateVideoAudioInput(ctx, runner, video); err != nil {
 		return nil, err
 	}
@@ -42,9 +59,11 @@ func ExtractVideoAudio(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	hasAudio, err := probeVideoAudio(ctx, runner, inputPath)
-	if err != nil || !hasAudio {
-		return nil, err
+	if videoContainer {
+		hasAudio, err := probeVideoAudio(ctx, runner, inputPath)
+		if err != nil || !hasAudio {
+			return nil, err
+		}
 	}
 	outputPath, cleanupOutput, err := reserveVideoAudioPath(tempDirectory, createTemp, removeFile, ".you-model-video-audio-*.wav")
 	if err != nil {
@@ -153,6 +172,10 @@ func decodeVideoAudio(
 		Args: []string{
 			"-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", inputPath,
 			"-map", "0:a:0", "-vn", "-ac", "1", "-ar", "16000",
+			// Preserve the container timeline across packet gaps/overlaps and
+			// delayed audio starts so inference timestamps refer to the video.
+			// Correct at 1 ms; ffmpeg's default 100 ms threshold leaves drift.
+			"-af", "aresample=16000:async=1:first_pts=0:min_hard_comp=0.001",
 			"-c:a", "pcm_s16le", "-f", "wav", "-rf64", "auto", outputPath,
 		},
 	}, "decoder")

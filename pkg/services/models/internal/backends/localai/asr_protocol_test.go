@@ -3,6 +3,7 @@ package localai
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"math"
@@ -12,11 +13,29 @@ import (
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
+
+func TestQwenASRFormatFailureIsActionableWithoutExposingArbitraryBackendText(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct{ detail, want string }{
+		{"qwen3-asr transcription: ASR requires mono 16 kHz PCM16 or float32 WAV", "ASR requires mono 16 kHz"},
+		{"private token in /operator/source.wav", "ASR backend request failed"},
+	} {
+		cause := status.Error(codes.Internal, test.detail)
+		err := protocolContextOrFailure(WithInvocationBackend(t.Context(), "localai-qwen3-asr-cpp"), "ASR backend request failed", cause)
+		if !strings.Contains(err.Error(), test.want) || !errors.Is(err, cause) {
+			t.Fatalf("failure=%v, cause=%v", err, cause)
+		}
+		if strings.Contains(err.Error(), "private token") {
+			t.Fatalf("backend text exposed: %v", err)
+		}
+	}
+}
 
 func TestPinnedASRBackendStagesExactAudioAndMapsPinnedFields(t *testing.T) {
 	t.Parallel()
@@ -392,12 +411,52 @@ func TestTranscriptResponseRejectsMalformedTimestampsAtomically(t *testing.T) {
 	}
 }
 
-func TestTranscriptResponsePreservesNilBackendResponse(t *testing.T) {
+func TestTranscriptResponseRejectsAbsentBackendResponse(t *testing.T) {
 	t.Parallel()
 
 	mapped, err := transcriptResponse(nil)
-	if err != nil || mapped.Text != "" || mapped.Segments != nil || mapped.Artifacts != nil {
-		t.Fatalf("transcriptResponse(nil) = response:%#v error:%v, want empty response without error", mapped, err)
+	if err == nil || mapped.Text != "" || mapped.Segments != nil || mapped.Artifacts != nil {
+		t.Fatalf("transcriptResponse(nil) = response:%#v error:%v, want absent response failure", mapped, err)
+	}
+}
+
+func TestPinnedASRBackendMapsSuccessfulEmptyProtobufSpeechResult(t *testing.T) {
+	t.Parallel()
+	connection := &asrProtocolConnection{}
+	connection.response, _ = proto.Marshal(&TranscriptResult{})
+	temporary := &asrProtocolTempFile{path: "temp/asr-silence.wav"}
+	backend := NewPinnedASRBackend(&asrProtocolDialer{connection: connection},
+		func() string { return "temp" },
+		func(string, string) (TempFile, error) { return temporary, nil },
+		func(string, []byte) error { return nil }, func(string) error { return nil })
+	response, err := backend(WithInvocationEndpoint(context.Background(), "127.0.0.1:45902"),
+		models.ASRBackendRequest{Audio: whisperBoundsWAV(1000), MediaType: "audio/wav"})
+	if err != nil || response.Text != "" || response.Segments == nil || len(response.Segments) != 0 {
+		t.Fatalf("successful no-speech protobuf response=%#v err=%v", response, err)
+	}
+}
+
+func TestASRProviderNormalizationAppliesOnlyToWhisper(t *testing.T) {
+	t.Parallel()
+	for _, backendID := range []string{"localai-whisper", "localai-qwen3-asr-cpp"} {
+		t.Run(backendID, func(t *testing.T) {
+			connection := &asrProtocolConnection{}
+			connection.response, _ = proto.Marshal(&TranscriptResult{Text: "speech", Segments: []*TranscriptSegment{
+				{Id: 0, Start: 240000 * 1_000_000, End: 246300 * 1_000_000, Text: "speech"},
+			}})
+			backend := NewPinnedASRBackend(&asrProtocolDialer{connection: connection}, func() string { return "temp" },
+				func(string, string) (TempFile, error) { return &asrProtocolTempFile{path: "temp/audio.wav"}, nil },
+				func(string, []byte) error { return nil }, func(string) error { return nil })
+			ctx := WithInvocationBackend(WithInvocationEndpoint(context.Background(), "localhost:1234"), backendID)
+			response, err := backend(ctx, models.ASRBackendRequest{Audio: whisperBoundsWAV(245017), MediaType: "audio/wav"})
+			wantEnd := int64(246300)
+			if backendID == "localai-whisper" {
+				wantEnd = 245017
+			}
+			if err != nil || len(response.Segments) != 1 || response.Segments[0].Start != 240000 || response.Segments[0].End != wantEnd {
+				t.Fatalf("provider bounds response=%#v error=%v wantEnd=%d", response, err, wantEnd)
+			}
+		})
 	}
 }
 
@@ -582,4 +641,62 @@ func (file *asrProtocolTempFile) Name() string { return file.path }
 func (file *asrProtocolTempFile) Close() error {
 	file.closeCalls++
 	return file.closeErr
+}
+
+func TestWhisperFinalTimestampNormalizationPreservesStrictMediaBounds(t *testing.T) {
+	t.Parallel()
+	audio := whisperBoundsWAV(245017)
+	for _, test := range []struct {
+		name     string
+		segments []models.ASRBackendSegment
+		wantEnd  int64
+		valid    bool
+	}{
+		{"natural padded final timestamp", []models.ASRBackendSegment{{ID: 47, Start: 240000, End: 246300, Text: "最后一句"}}, 245017, true},
+		{"already bounded", []models.ASRBackendSegment{{ID: 47, Start: 240000, End: 245000, Text: "最后一句"}}, 245000, true},
+		{"beyond final inference window", []models.ASRBackendSegment{{ID: 47, Start: 240000, End: 270001, Text: "invalid"}}, 270001, false},
+		{"start outside input", []models.ASRBackendSegment{{ID: 47, Start: 245018, End: 246300, Text: "invalid"}}, 246300, false},
+		{"negative start", []models.ASRBackendSegment{{ID: 47, Start: -1, End: 246300, Text: "invalid"}}, 246300, false},
+		{"crosses inference windows", []models.ASRBackendSegment{{ID: 47, Start: 1000, End: 246300, Text: "invalid"}}, 246300, false},
+		{"reversed range", []models.ASRBackendSegment{{ID: 47, Start: 240000, End: 230000, Text: "invalid"}}, 230000, false},
+		{"nonterminal overshoot", []models.ASRBackendSegment{{ID: 46, Start: 240000, End: 246000, Text: "invalid"}, {ID: 47, Start: 244000, End: 246300, Text: "invalid"}}, 245017, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			originalEnd := test.segments[len(test.segments)-1].End
+			response := boundWhisperFinalSegment(models.ASRBackendResponse{Text: "transcript", Segments: test.segments}, audio)
+			if got := response.Segments[len(response.Segments)-1].End; got != test.wantEnd {
+				t.Fatalf("final end = %d, want %d", got, test.wantEnd)
+			}
+			if test.segments[len(test.segments)-1].End != originalEnd {
+				t.Fatal("normalization mutated the backend response")
+			}
+			segments := make([]codecs.ASRSegment, len(response.Segments))
+			for index, segment := range response.Segments {
+				segments[index] = codecs.ASRSegment{ID: segment.ID, Start: segment.Start, End: segment.End, Text: segment.Text}
+			}
+			outputs, err := (codecs.ASRCodec{}).DecodeResponseValueWithinAudio(codecs.ASRResponse{Text: response.Text, Segments: segments}, audio)
+			if (err == nil) != test.valid || (!test.valid && len(outputs) != 0) {
+				t.Fatalf("response validity = %v, outputs = %d, want %v", err, len(outputs), test.valid)
+			}
+		})
+	}
+}
+
+func whisperBoundsWAV(milliseconds int) []byte {
+	// One sample per millisecond makes the exact regression endpoint explicit.
+	dataBytes := milliseconds * 2
+	audio := make([]byte, 44+dataBytes)
+	copy(audio, "RIFF")
+	binary.LittleEndian.PutUint32(audio[4:8], uint32(len(audio)-8))
+	copy(audio[8:16], "WAVEfmt ")
+	binary.LittleEndian.PutUint32(audio[16:20], 16)
+	binary.LittleEndian.PutUint16(audio[20:22], 1)
+	binary.LittleEndian.PutUint16(audio[22:24], 1)
+	binary.LittleEndian.PutUint32(audio[24:28], 1000)
+	binary.LittleEndian.PutUint32(audio[28:32], 2000)
+	binary.LittleEndian.PutUint16(audio[32:34], 2)
+	binary.LittleEndian.PutUint16(audio[34:36], 16)
+	copy(audio[36:40], "data")
+	binary.LittleEndian.PutUint32(audio[40:44], uint32(dataBytes))
+	return audio
 }

@@ -29,6 +29,7 @@ const (
 	pullToReadyModelName = modelsservice.BuiltInModelNameASR
 	pullToReadyRevision  = "5359861c739e955e79d9a303bcbc70fb988958b1"
 	pullToReadyAsset     = "ggml-base.en.bin"
+	pullToReadySource    = "hf://ggerganov/whisper.cpp/ggml-base.en.bin@" + pullToReadyRevision
 )
 
 // TestModelsPullToReadySurvivesProcessReconstruction proves the public local
@@ -42,6 +43,7 @@ func TestModelsPullToReadySurvivesProcessReconstruction(t *testing.T) {
 	backendSelection := pullToReadyBackendSelection(backendBody)
 	assetClient := newPullToReadyAssetClient(assetBody, backendBody, backendSelection.Location)
 	homeDirectory := functionalTempDir(t)
+	writeGenericModelSourceOverride(t, homeDirectory, pullToReadyModelName, pullToReadySource, "localai-whisper")
 	selectedCache := filepath.Join(homeDirectory, "managed-cache")
 	edges := pullToReadyEdges(assetClient, homeDirectory, backendSelection)
 

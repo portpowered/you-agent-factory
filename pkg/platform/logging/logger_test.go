@@ -1,6 +1,8 @@
 package logging
 
 import (
+	"io"
+	"os"
 	"testing"
 
 	"go.uber.org/zap/zapcore"
@@ -169,5 +171,34 @@ func TestBuildTerminalMutedLogger_EnablesWarnAndDiscardsOutput(t *testing.T) {
 	}
 	if !logger.Core().Enabled(zapcore.WarnLevel) {
 		t.Fatal("expected terminal-muted logger to enable warn level")
+	}
+}
+
+func TestDefaultLoggerDoesNotInterleaveTerminalDiagnostics(t *testing.T) {
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer read.Close()
+	previous := os.Stderr
+	os.Stderr = write
+	defer func() { os.Stderr = previous; _ = write.Close() }()
+	logger, err := NewDefaultLogger()
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.Warn("background warning")
+	logger.Error("background error")
+	_ = logger.Sync()
+	_ = write.Close()
+	got, err := io.ReadAll(read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("default terminal emitted raw runtime diagnostics: %q", got)
+	}
+	if !logger.Core().Enabled(zapcore.WarnLevel) {
+		t.Fatal("file tee lost warning eligibility")
 	}
 }
