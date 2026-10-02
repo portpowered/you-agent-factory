@@ -88,6 +88,26 @@ $llamaRoot = Join-Path $env:LOCALAI_ROOT 'backend\cpp\llama-cpp'
 $llamaSource = Join-Path $llamaRoot 'llama.cpp'
 $serverSource = Join-Path $llamaSource 'tools\grpc-server\grpc-server.cpp'
 if (-not (Test-Path -LiteralPath $serverSource)) { throw 'pinned llama gRPC source must be prepared before the MSVC build' }
+
+# Independent still images must not share adjacent native media markers: pinned
+# mtmd groups equal-sized neighbors as temporal frames. Patch the prepared header
+# actually compiled, after source verification, and run its standalone CPU
+# regression before the native dependency/backend build. Unknown header shapes fail.
+$independentImagesPatch = Join-Path $PSScriptRoot 'localai-llamacpp-independent-images.patch'
+$independentImagesTest = Join-Path $PSScriptRoot 'localai-llamacpp-independent-images_test.cpp.in'
+$independentImagesHeader = Join-Path $llamaSource 'tools\grpc-server\message_content.h'
+Invoke-Checked node @((Join-Path $PSScriptRoot 'localai-llamacpp-independent-images-patch.mjs'), 'apply',
+    '--header', $independentImagesHeader, '--patch', $independentImagesPatch,
+    '--test-template', $independentImagesTest,
+    '--test-destination', (Join-Path $llamaSource 'tools\grpc-server\message_content_independent_images_test.cpp'))
+$independentImagesCpuRoot = Join-Path $llamaRoot 'independent-images-cpu'
+New-Item -ItemType Directory -Path $independentImagesCpuRoot -Force | Out-Null
+$independentImagesCpuExecutable = Join-Path $independentImagesCpuRoot 'independent-images-test.exe'
+Invoke-Checked cl @('/nologo', '/std:c++17', '/EHsc', '/W4', '/WX',
+    "/I$(Join-Path $llamaSource 'vendor')", "/I$(Join-Path $llamaSource 'tools\grpc-server')",
+    (Join-Path $llamaSource 'tools\grpc-server\message_content_independent_images_test.cpp'),
+    "/Fe$independentImagesCpuExecutable", "/Fo$(Join-Path $independentImagesCpuRoot 'independent-images-test.obj')")
+Invoke-Checked $independentImagesCpuExecutable @()
 $source = Get-Content -LiteralPath $serverSource -Raw
 $needle = 'reply->set_message(arr);'
 $patchedNeedle = 'reply->set_message(arr.dump());'
@@ -289,6 +309,13 @@ Invoke-Checked cmake @('--build', $llamaBuild, '--config', 'Release', '--target'
 $packageRoot = Join-Path $llamaRoot 'package'
 if (Test-Path -LiteralPath $packageRoot) { Remove-GeneratedDirectory -Path $packageRoot -Parent $llamaRoot -ExpectedName 'package' }
 New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
+# Record the native patch and its regression as repeatable build inputs next to
+# build-metadata.json; the regression gates the build and is not shipped as code.
+# A publication that cannot name the authored inputs that produced it is not
+# reproducible.
+Invoke-Checked node @((Join-Path $PSScriptRoot 'localai-llamacpp-independent-images-patch.mjs'), 'provenance',
+    '--repository-root', $repositoryRoot, '--patch', $independentImagesPatch,
+    '--test-template', $independentImagesTest, '--output', (Join-Path $packageRoot 'source-patches.json'))
 $server = Get-ChildItem -LiteralPath $llamaBuild -Recurse -File -Filter 'grpc-server.exe' | Where-Object Length -gt 0 | Select-Object -First 1
 if (-not $server) { throw 'MSVC CUDA build did not produce grpc-server.exe' }
 Copy-Item -LiteralPath $server.FullName -Destination (Join-Path $packageRoot 'llama-cpp-cpu-all.exe')

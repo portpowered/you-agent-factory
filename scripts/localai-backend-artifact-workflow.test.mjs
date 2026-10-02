@@ -514,6 +514,33 @@ test("the Windows CUDA gRPC checkout avoids recursive bloaty submodules", async 
 	assert.match(cudaScript, /fetch', '--depth', '1', 'origin', \$env:GRPC_COMMIT/);
 });
 
+test("the Windows CUDA recipe applies the patch after verify-source and records the inputs", async () => {
+	const cudaScript = await readFile("scripts/build-localai-backend-cuda.ps1", "utf8");
+	// The patch must be applied to the prepared header that is actually compiled,
+	// after verify-source pins LOCALAI_ROOT/BACKEND_SOURCE_COMMIT, so the pinned
+	// upstream commits stay unchanged.
+	const verifySourceIndex = cudaScript.indexOf("'verify-source'");
+	const applyIndex = cudaScript.indexOf("localai-llamacpp-independent-images-patch.mjs'), 'apply'");
+	assert.ok(verifySourceIndex >= 0, "the CUDA recipe verifies the pinned source");
+	assert.ok(applyIndex > verifySourceIndex, "the patch is applied after verify-source");
+	const cpuCompileIndex = cudaScript.indexOf("Invoke-Checked cl @(");
+	const nativeBuildIndex = cudaScript.indexOf("Invoke-Checked cmake @('--build'", applyIndex);
+	assert.ok(cpuCompileIndex > applyIndex && cpuCompileIndex < nativeBuildIndex,
+		"the actual patched helper regression runs before the native build");
+	assert.match(cudaScript, /Invoke-Checked \$independentImagesCpuExecutable @\(\)/);
+	assert.match(cudaScript, /\$independentImagesHeader = Join-Path \$llamaSource 'tools\\grpc-server\\message_content\.h'/);
+	assert.match(cudaScript, /\$independentImagesPatch = Join-Path \$PSScriptRoot 'localai-llamacpp-independent-images\.patch'/);
+	assert.match(cudaScript, /\$independentImagesTest = Join-Path \$PSScriptRoot 'localai-llamacpp-independent-images_test\.cpp\.in'/);
+	assert.match(cudaScript, /'--test-destination', \(Join-Path \$llamaSource 'tools\\grpc-server\\message_content_independent_images_test\.cpp'\)/);
+	// Provenance lands next to build-metadata.json inside the published package.
+	const provenanceIndex = cudaScript.indexOf("localai-llamacpp-independent-images-patch.mjs'), 'provenance'");
+	const metadataIndex = cudaScript.indexOf("'metadata'");
+	assert.ok(provenanceIndex > 0, "the recipe records the authored inputs");
+	assert.ok(provenanceIndex < metadataIndex, "provenance is staged before the metadata sidecar");
+	assert.match(cudaScript, /'--output', \(Join-Path \$packageRoot 'source-patches\.json'\)/);
+	assert.match(cudaScript, /'--repository-root', \$repositoryRoot/);
+});
+
 test("the Windows CUDA retry reuses the retained gRPC checkout and patch", async () => {
 	const cudaScript = await readFile("scripts/build-localai-backend-cuda.ps1", "utf8");
 	assert.match(cudaScript, /reply->set_message\(arr\.dump\(\)\)/);
