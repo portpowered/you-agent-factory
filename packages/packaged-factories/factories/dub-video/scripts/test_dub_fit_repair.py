@@ -12,6 +12,13 @@ from dub_media import SpeechDoesNotFit
 
 
 class DubFitRepairTests(unittest.TestCase):
+    def setUp(self):
+        # These tests isolate the existing decision/fit contract. The separate
+        # two-stage audit suite exercises the real comparison dispatch.
+        comparison = patch.object(dub_video, "compare_translation", return_value="Source comparison evidence")
+        comparison.start()
+        self.addCleanup(comparison.stop)
+
     def test_indexed_correction_is_reaudited_before_replacement_speech(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -799,8 +799,14 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 		message = fmt.Sprintf("ACP provider %q is temporarily unavailable due to usage or capacity limits", id)
 	} else if isACPPeerClosedFailure(err) {
 		message = fmt.Sprintf("ACP provider %q disconnected before responding; retry the request", id)
-	} else if detail := safeACPStderr(stderr, request.EnvVars); detail != "" {
-		message += " (stderr: " + detail + ")"
+	}
+	// A disconnect can accompany an agent's final stderr diagnostic. Keep
+	// that redacted evidence without exposing private model/throttle details
+	// or changing the authoritative RPC failure classification.
+	if !piModelConnection && kind != providers.ExecuteFailureKindThrottled {
+		if detail := safeACPStderr(stderr, request.EnvVars); detail != "" {
+			message += " (stderr: " + detail + ")"
+		}
 	}
 	if method == "initialize" {
 		native := strings.ToLower(err.Error())

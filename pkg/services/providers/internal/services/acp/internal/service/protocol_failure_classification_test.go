@@ -473,6 +473,35 @@ func TestSafeACPStderrRedactsSensitiveEnvironmentValues(t *testing.T) {
 	}
 }
 
+func TestPeerDisconnectRetainsRedactedStderrAndCancellationPrecedence(t *testing.T) {
+	const secret = "super-secret-token"
+	request := providers.ExecuteRequest{EnvVars: map[string]string{"ACP_TEST_API_TOKEN": secret}}
+	for _, marker := range []string{"peer disconnected before response", "peer disconnected while waiting for pre-response notifications"} {
+		t.Run(marker, func(t *testing.T) {
+			err := &acpsdk.RequestError{Code: -32603, Message: "Internal error", Data: map[string]any{"error": marker}}
+			got := rpcFailure(context.Background(), "initialize", "cursor-acp", err, "agent diagnostic token="+secret, request)
+			var failure providers.ExecuteFailure
+			if !errors.As(got, &failure) || failure.Kind != providers.ExecuteFailureKindDependency {
+				t.Fatalf("failure = %#v, want dependency classification", got)
+			}
+			want := `ACP provider "cursor-acp" disconnected before responding; retry the request (stderr: agent diagnostic token=<redacted>)`
+			if failure.Message != want || strings.Contains(failure.Message, secret) {
+				t.Fatalf("failure message = %q, want %q", failure.Message, want)
+			}
+			if failure.Diagnostics == nil || len(failure.Diagnostics.Progress) != 1 ||
+				failure.Diagnostics.Progress[0].Detail != want || failure.Diagnostics.Progress[0].Metadata["error_code"] != "ACP_PEER_CLOSED" {
+				t.Fatalf("diagnostics = %#v, want same redacted message and peer-closed code", failure.Diagnostics)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			cancelled := rpcFailure(ctx, "initialize", "cursor-acp", err, "agent diagnostic token="+secret, request)
+			if !errors.As(cancelled, &failure) || failure.Kind != providers.ExecuteFailureKindCanceled || strings.Contains(failure.Message, "agent diagnostic") {
+				t.Fatalf("cancelled failure = %#v, want cancellation before diagnostic classification", cancelled)
+			}
+		})
+	}
+}
+
 type availableLocator struct{}
 
 func (availableLocator) LookPath(file string) (string, error) { return file, nil }

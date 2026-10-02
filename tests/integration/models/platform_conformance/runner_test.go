@@ -12,9 +12,44 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
+
+func TestControlledProcessStartBusyRetryIsBoundedAndCancellationAware(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		err       error
+		cancel    bool
+		wantCalls int
+	}{
+		{"busy bound", syscall.ETXTBSY, false, 5},
+		{"ordinary failure", errors.New("injected start failure"), false, 1},
+		{"cancel busy wait", syscall.ETXTBSY, true, 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			calls := 0
+			err := startControlledProcess(ctx, &exec.Cmd{}, func(*exec.Cmd) error {
+				calls++
+				if test.cancel {
+					cancel()
+				}
+				return test.err
+			})
+			want := test.err
+			if test.cancel {
+				want = context.Canceled
+			}
+			if calls != test.wantCalls || !errors.Is(err, want) {
+				t.Fatalf("start calls=%d error=%v, want calls=%d error=%v", calls, err, test.wantCalls, want)
+			}
+		})
+	}
+}
 
 func TestPortableControlledRunner(t *testing.T) {
 	cases := []struct {

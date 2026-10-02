@@ -710,3 +710,73 @@ This confirms the public parameter/native transport enforces representation
 without a global reasoning change. The deliberately contrary prompts provide
 no semantic-accuracy or complete-video-delivery evidence. The actual cue-2
 repair and reference-conditioned TTS probe remains a separate acceptance step.
+
+
+## Freeform comparison before constrained semantic decisions
+
+The real grammar-backed cue-2 fit probe produced `Can anyone help me?` and its
+11-token audit approved it despite the explicit kindness modifier in the source.
+This is an observed false approval. It does not establish grammar as the cause;
+prior runs, context, and generation differ. The isolated uncapped freeform
+comparison subsequently explained the missing modifier and proposed faithful
+alternatives, using 1093 tokens. It also criticized tone, so an independent
+final decision must distinguish stylistic preferences from proposition changes.
+Evidence: `C:/t/dub-multilingual-validation/fit-grammar-correction-probe/` and
+`C:/t/dub-multilingual-validation/audit-freeform-reasoning-probe/`.
+
+Every semantic audit now first obtains and saves freeform source-first comparison
+prose: source actors, actions, recipient, explicit modifiers, quantities, polarity,
+and names are compared with candidate wording. The second call receives the
+original source/candidate and that comparison as untrusted review evidence;
+it independently checks claims and returns the existing constrained indexed
+decision. No default token, text-length, or reasoning cap is added. This adds
+one model call per audit review, retaining the same focused IDs, three-review
+ceilings, validated correction re-audits, original reference audio, and 2x speech
+guard. Empty comparison fails before a decision; model failures and cancellation
+propagate from either stage. Earlier decision/fit tests isolate the comparison
+boundary, while three dedicated component tests exercise actual two-dispatch
+ordering/evidence forwarding, empty evidence, and both-stage model failures.
+The complete 65-test suite passes. Native bad/faithful modifier, role-reversal,
+and polarity cases remain required before another full delivery claim.
+
+### Native two-stage semantic audit proof (2026-10-02)
+
+The actual built-in LLM passed four source/candidate cases through the public
+Models CLI with the new sequential freeform comparison and grammar-constrained
+decision. It rejected an omitted explicit kindness qualifier, reversed helper
+roles, and the incorrect negative rendering of Chinese 不少. It accepted the
+faithful concise question “Can any kind person help me?”. Comparison usage was
+926–1223 generated tokens; final decisions used 11–36. No output/reasoning cap
+was supplied. Prompts, both responses, usage, corrections, and exit-zero proof
+are retained under `C:/t/dub-multilingual-validation/audit-two-stage-native-proof/`.
+These controlled cases support the repair; they do not establish complete-video
+translation accuracy or native-speaker fluency.
+
+An eight-minute fixture was prepared from two repetitions of the original demo
+with copied video packets and clock-normalized AAC audio. Its measured container
+length is 480.223242 seconds and size 88,573,882 bytes. The original was preserved.
+`C:/t/dub-multilingual-validation/chinese-long-8min.mp4` crosses the five-minute
+ASR partition; post-merge Japanese/Korean/Spanish end-to-end runs remain pending.
+
+### Exact-head CI repair notes (2026-10-02)
+
+CI for `02b9c9dc593066355166f0d1f5b6d9b4158846d4` completed with failures;
+coverage floors were not evaluated because tests failed. Vet found a test-only
+protobuf mutex copy in formatting, corrected to format its pointer. An ACP SDK
+peer-disconnect outcome skipped otherwise safe redacted stderr; normalization
+now retains that evidence while preserving dependency classification and
+cancellation precedence. Focused normal tests ×10 and race tests ×2 passed.
+
+The controlled integration runner, a test harness, observed Linux `ETXTBSY` on
+start. Its repair retries only that exact transient error at most five times,
+with 10 ms cancellation-aware waits; other errors remain immediate. A real held
+write descriptor demonstrates failure then successful execution after close,
+including the existing identity/report/ledger/cleanup assertions. Full Linux
+and Windows platform-conformance suites and targeted Linux race tests passed.
+The original transient descriptor origin in CI is not proven.
+
+The rollout test treated `DISPATCH_RESPONSE` as a projection barrier, although
+runtime recording precedes end-of-tick snapshot publication. It now awaits the
+exact expected terminal Work identity/state and session categories before all
+unchanged assertions. Normal ×20 and race ×5 passed. This changes test readiness,
+not canonical event ordering or runtime state ownership. The in-flight HTTP test now awaits the exact scoped Work PROCESSING projection before its single Worker Sessions read. Normal and race runs ×3 passed; all original assertions and deadlines remain. Final-head CI remains required.

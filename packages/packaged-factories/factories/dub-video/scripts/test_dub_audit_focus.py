@@ -10,6 +10,13 @@ import dub_video
 
 
 class DubAuditFocusTests(unittest.TestCase):
+    def setUp(self):
+        # These tests isolate the existing decision/fit contract. The separate
+        # two-stage audit suite exercises the real comparison dispatch.
+        comparison = patch.object(dub_video, "compare_translation", return_value="Source comparison evidence")
+        comparison.start()
+        self.addCleanup(comparison.stop)
+
     def segments(self):
         return [{"id": 0, "source_text": "你好", "text": "Hello"},
                 {"id": 1, "source_text": "有没有好心人可以帮帮我？", "text": "Can any kind person help me?"},

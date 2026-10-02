@@ -4,9 +4,41 @@ package platform_conformance
 
 import (
 	"errors"
+	"os"
 	"os/exec"
+	"runtime"
 	"syscall"
+	"testing"
 )
+
+func TestPortableControlledRunnerRecoversAfterExecutableWriterCloses(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux denies executing an inode held open for writing")
+	}
+	fixture := newControlledFixture(t, controlledHelperModeSuccess)
+	runner := mustControlledRunner(t)
+	starts := 0
+	runner.starter = func(command *exec.Cmd) error {
+		starts++
+		if starts != 1 {
+			return command.Start()
+		}
+		writer, err := os.OpenFile(command.Path, os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		busy := command.Start()
+		closeErr := writer.Close()
+		if !errors.Is(busy, syscall.ETXTBSY) || closeErr != nil {
+			t.Fatalf("write-held executable start=%v close=%v, want ETXTBSY", busy, closeErr)
+		}
+		return busy
+	}
+	testControlledSuccess(t, runner, fixture)
+	if starts != 2 {
+		t.Fatalf("recovered run starts=%d, want busy attempt then successful start", starts)
+	}
+}
 
 // controlledProcessTree is one process group created exclusively for a
 // controlled attempt. Negative-pgid signals cannot reach an unrelated peer

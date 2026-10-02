@@ -57,6 +57,11 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	}
 
 	runner.waitStarted(t)
+	// Command start can precede the initial tick's published Work boundary.
+	// The Work projection has no completion notification, so observe the exact
+	// scoped Work in processing before testing the Work-specific read route.
+	// Do not retry the Worker Sessions route: its missing-Work 404 is valid.
+	waitForScopedProcessingWork(t, server.URL(), sessionID, workID)
 	inFlight := support.GetJSON[factoryapi.ListWorkerSessionsResponse](t, workerSessionsListURL(server.URL(), sessionID, workID))
 	cliInFlight := executeWorkerSessionsListJSON(t, server, sessionID, workID)
 	assertWorkerSessionReadIdentityEqual(t, "in-flight", cliInFlight, inFlight)
@@ -89,6 +94,26 @@ func TestWorkerSessionHTTPReadDuringFactoryWork(t *testing.T) {
 	}
 	if completed.Sessions[0].State != factoryapi.WorkerSessionObservationStateCompleted {
 		t.Fatalf("completed Worker Session state = %q, want COMPLETED", completed.Sessions[0].State)
+	}
+}
+
+func waitForScopedProcessingWork(t *testing.T, baseURL, sessionID, workID string) {
+	t.Helper()
+	endpoint := baseURL + "/factory-sessions/" + url.PathEscape(sessionID) + "/work"
+	listed, err := support.WaitForObservation(functionalWorkerSignalTimeout,
+		func() (factoryapi.ListWorkResponse, error) {
+			return support.GetJSON[factoryapi.ListWorkResponse](t, endpoint), nil
+		}, func(listed factoryapi.ListWorkResponse) bool {
+			for _, item := range listed.Results {
+				if support.StringPointerValue(item.WorkId) == workID && item.State != nil &&
+					item.State.Type == factoryapi.WorkStateTypePROCESSING {
+					return true
+				}
+			}
+			return false
+		})
+	if err != nil {
+		t.Fatalf("Work %q processing projection was not observable: %v; last=%#v", workID, err, listed)
 	}
 }
 

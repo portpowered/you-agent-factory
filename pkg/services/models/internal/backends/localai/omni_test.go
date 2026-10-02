@@ -39,7 +39,7 @@ func TestOmniGrammarReachesDedicatedWireFieldUnchanged(t *testing.T) {
 		t.Fatalf("grammar duplicated in metadata: %#v", connection.request.Metadata)
 	}
 	if connection.request.Metadata["temperature"] != "0.2" || connection.request.Tokens != 0 {
-		t.Fatalf("unrelated/default parameters changed: %#v", connection.request)
+		t.Fatalf("unrelated/default parameters changed: %#v", &connection.request)
 	}
 }
 

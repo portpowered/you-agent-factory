@@ -198,8 +198,11 @@ times, then fail before speech generation. Text inference uses a constrained
 JSON grammar for the complete translation object; the model has no filesystem
 access and must return the object directly. Semantic meaning remains a separate
 validation concern.
-A separate model audit checks meaning, speaker/addressee, negation, and proper
-names before TTS. Rejected translations enter the same correction retry loop.
+A separate model audit first saves a freeform source/candidate comparison, then
+checks that evidence against the source before returning a constrained decision
+about meaning, speaker/addressee, modifiers, negation, and proper names. The
+comparison is review evidence, not authoritative instructions. Rejected
+translations enter the same correction retry loop.
 Model audits can miss mistakes; review the saved source and translations when
 translation accuracy matters.
 

@@ -13,6 +13,13 @@ import dub_video
 
 
 class DubPipelineTests(unittest.TestCase):
+    def setUp(self):
+        # These tests isolate the existing decision/fit contract. The separate
+        # two-stage audit suite exercises the real comparison dispatch.
+        comparison = patch.object(dub_video, "compare_translation", return_value="Source comparison evidence")
+        comparison.start()
+        self.addCleanup(comparison.stop)
+
     def test_target_language_normalizes_native_names_and_rejects_bad_tags_before_effects(self):
         for tag, normalized, native in [("EN-us", "en-US", "English"),
                 ("zh-hant-tw", "zh-Hant-TW", "Chinese"), ("ja-JP", "ja-JP", "Japanese"),

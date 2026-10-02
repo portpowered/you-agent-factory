@@ -13,6 +13,13 @@ from dub_media import CommandFailed
 
 
 class DubGrammarTests(unittest.TestCase):
+    def setUp(self):
+        # These tests isolate the existing decision/fit contract. The separate
+        # two-stage audit suite exercises the real comparison dispatch.
+        comparison = patch.object(dub_video, "compare_translation", return_value="Source comparison evidence")
+        comparison.start()
+        self.addCleanup(comparison.stop)
+
     def test_intertoken_whitespace_has_no_unbounded_generation_path(self):
         for grammar in [translation_grammar([{"id": 4}, {"id": 11}], "ko-KR"),
                         audit_grammar({4, 11})]:

@@ -325,3 +325,21 @@ was requested. This demonstrates a successful bounded editing dispatch and
 useful primary-result delivery through the MCP infrastructure. It does not
 establish the cause of the previous timeout, approval, or connection failures,
 or prove general outside-workspace permission handling.
+
+## October 2 two-stage audit review timeout
+
+A subsequent OpenCode MCP review using `opencode/mimo-v2.6-flash-free`
+and `timeoutMillis: 120000` returned
+`factory_session.subagent.timed_out` without a primary result. Session:
+`b3437d1a-ec69-4236-8fef-31fad5cf14d5`; request:
+`c79d0302-2370-4c37-8c16-e24703585a7f`. The structured result recorded a
+provider reasoning activity delta at `2026-10-02T07:00:20.1545846Z`, reported
+that cleanup closed the Factory Session, and warned that partial effects
+were possible.
+
+The requested external report,
+`C:/t/dub-multilingual-validation/opencode-concurrency/two-stage-audit-review.txt`,
+was absent when checked after the response. The activity delta does not prove
+useful review progress or explain the timeout. The earlier two concurrent
+dispatches remain verified successes; this later failure does not invalidate
+their results or establish a common cause.

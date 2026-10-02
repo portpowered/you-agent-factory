@@ -185,17 +185,17 @@ func (runner ControlledRunner) executeControlledAttempt(ctx context.Context, spe
 	attempt.process.Stderr = attempt.stderr
 	attempt.process.WaitDelay = runner.waitDelay
 	configureControlledProcessTree(attempt.process)
-	waitCh := runner.startControlledAttempt(options, attempt)
+	waitCh := runner.startControlledAttempt(ctx, options, attempt)
 	runner.waitControlledAttempt(ctx, waitCh, attempt)
 	runner.collectControlledAttempt(spec, attempt)
 }
 
-func (runner ControlledRunner) startControlledAttempt(options ControlledRunOptions, attempt *controlledAttempt) <-chan error {
+func (runner ControlledRunner) startControlledAttempt(ctx context.Context, options ControlledRunOptions, attempt *controlledAttempt) <-chan error {
 	starter := runner.starter
 	if starter == nil {
 		starter = func(command *exec.Cmd) error { return command.Start() }
 	}
-	if err := starter(attempt.process); err != nil {
+	if err := startControlledProcess(ctx, attempt.process, starter); err != nil {
 		attempt.startErr = err
 		attempt.cleanupErr = err
 		return nil
@@ -212,6 +212,29 @@ func (runner ControlledRunner) startControlledAttempt(options ControlledRunOptio
 	}
 	attempt.treeAttached = true
 	return channelForControlledWait(attempt.process)
+}
+
+// A concurrent fork can briefly inherit a staging writer until its exec closes
+// CLOEXEC descriptors. Only the kernel's executable-busy result is transient;
+// keep all other start failures immediate and the admitted timeout authoritative.
+func startControlledProcess(ctx context.Context, command *exec.Cmd, starter controlledProcessStarter) error {
+	const attempts = 5
+	for attempt := 0; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := starter(command)
+		if !errors.Is(err, syscall.ETXTBSY) || attempt == attempts-1 {
+			return err
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func channelForControlledWait(command *exec.Cmd) <-chan error {
