@@ -520,3 +520,59 @@ func TestDecodePredictResponseReasoningOnly(t *testing.T) {
 		t.Fatalf("decoded reasoning-only reply shape = %#v", response)
 	}
 }
+
+// A reasoning-enabled LocalAI Predict reply leaves the legacy message bytes
+// empty and streams the assistant answer as chat-delta content interleaved with
+// private reasoning content that can itself contain a JSON object shaped like a
+// final answer. Decoding must reassemble only the content deltas into the exact
+// structured answer bytes while still reporting the reasoning bytes.
+//
+// The nil delta covers the empty-delta case, and exact equality against the
+// whole expected answer already proves that neither the JSON decoy nor any
+// reasoning prose leaked into the decoded text, so no narrower containment
+// assertions are needed.
+func TestDecodePredictResponseSeparatesStructuredFinalAnswerFromPrivateReasoning(t *testing.T) {
+	t.Parallel()
+
+	const finalAnswer = `{"status":"ok","findings":[{"file":"grpc_protocol.go","severity":"low"}],"count":1}`
+	contentChunks := []string{`{"status":"ok",`, `"findings":[{"file":"grpc_protocol.go","severity":"low"}],`, `"count":1}`}
+	reasoning := []string{
+		"The operator asked for one structured answer. ",
+		`draft shape: {"status":"ok","findings":[],"count":0}`,
+		"the answer must stay a single object",
+	}
+	payload, err := proto.Marshal(&Reply{
+		Tokens: 512, PromptTokens: 64,
+		ChatDeltas: []*ChatDelta{
+			{ReasoningContent: reasoning[0]},
+			{Content: contentChunks[0]},
+			{ReasoningContent: reasoning[1]},
+			nil,
+			{Content: contentChunks[1]},
+			{ReasoningContent: reasoning[2]},
+			{Content: contentChunks[2]},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal reasoning reply payload: %v", err)
+	}
+
+	response, err := decodePredictResponse(payload)
+	if err != nil {
+		t.Fatalf("decodePredictResponse() error = %v", err)
+	}
+	if response.Text != finalAnswer {
+		t.Fatalf("decoded text = %q, want the exact reassembled content deltas %q", response.Text, finalAnswer)
+	}
+	wantReasoningBytes := 0
+	for _, fragment := range reasoning {
+		wantReasoningBytes += len(fragment)
+	}
+	if response.ReasoningBytes != wantReasoningBytes {
+		t.Fatalf("decoded reasoning bytes = %d, want %d from reasoning delta content only", response.ReasoningBytes, wantReasoningBytes)
+	}
+	if response.MessageBytes != 0 || response.ReplyBytes != len(payload) ||
+		response.ChatDeltaCount != 7 || response.GeneratedTokens != 512 || response.PromptTokens != 64 {
+		t.Fatalf("decoded reply diagnostics = %#v, want absent message bytes and one count per wire delta", response)
+	}
+}
