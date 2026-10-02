@@ -462,3 +462,29 @@ The rebuilt installed CLI completes the actual Factory transcription step:
 This is a separate resampling path from direct video ASR, so differing phrase
 counts do not imply reused or edited transcript evidence. Native inference
 errors retain their nested diagnostic cause instead of discarding it.
+
+The fresh Factory run on `fa2ff80` passed transcription, English translation,
+and its first semantic audit, then saved the translated manifest. Its Python
+worker exited with code zero, but the command monitor classified it as
+`PROCESS_GONE` and cancelled the attempt before TTS started. Runtime evidence
+is the `command_runner.completed` record with `exit_code: 0`,
+`cancellation_reason: PROCESS_GONE`, and duration 322,008 ms. The operator did
+not cancel this run.
+
+The process monitor previously allowed only 50 ms between observing leader exit
+and declaring the process lost, although `exec.Cmd.Wait` must also join output
+copying and observer callbacks. It now respects the existing bounded orphaned
+output-pipe drain allowance, with the existing observation margin, and checks
+Wait completion before publishing process loss. Caller cancellation and actual
+exit errors retain their original handling. A deterministic component test
+covers output completion after the former 50 ms threshold; real-process tests
+cover zero exit with inherited pipes, nonzero/killed processes, and interruption.
+Focused race tests and the short process race suite passed.
+
+Two unrelated CI repairs preserve existing assertions and limits: EOS tests
+were consolidated into the existing protocol test file to satisfy the package
+file-count limit; the metrics deadline test now observes its behavior deadline
+before starting its existing cleanup watchdog, removing the deadline/watchdog
+race under coverage. Neither repair changes production timeout policy or
+coverage floors. The installed CLI was rebuilt with the lifecycle repair before
+a fresh full English acceptance run.

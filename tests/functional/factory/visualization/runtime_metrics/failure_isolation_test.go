@@ -241,6 +241,9 @@ func TestMetricsSessionTimeoutReturnsNoPartialReport(t *testing.T) {
 	command := support.StartProcessCommand(t, runtimeMetricsCLIProcess, inputs.Input)
 	command.AcceptError()
 	waitBoundarySignal(t, eventsStarted, command.Done(), "timeout event request")
+	// Observe the behavior deadline before bounding cleanup. Starting both
+	// clocks together races command teardown against the deadline under coverage.
+	<-ctx.Done()
 	select {
 	case <-command.Done():
 	case <-time.After(5 * time.Second):

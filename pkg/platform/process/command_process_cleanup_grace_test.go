@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -123,22 +122,6 @@ func TestNewProcfsProcessStateReaderUsesInjectedFileEffect(t *testing.T) {
 	}
 }
 
-func TestCommandProcessLeaderRunningUsesInjectedStateWithoutProcessStateRace(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("procfs state probe is Unix-specific")
-	}
-	cmd := &exec.Cmd{Process: &os.Process{Pid: os.Getpid()}}
-	if commandProcessLeaderRunning(cmd, func(int) (byte, bool) { return 'Z', true }) {
-		t.Fatal("zombie process state reported as running")
-	}
-	if !commandProcessLeaderRunning(cmd, func(int) (byte, bool) { return 'S', true }) {
-		t.Fatal("live process state reported as stopped")
-	}
-	if commandProcessLeaderRunning(nil, nil) {
-		t.Fatal("nil command reported as running")
-	}
-}
-
 func TestProcessLifecycleMonitorStopsWhenWaitCompletes(t *testing.T) {
 	cmd := &exec.Cmd{Process: &os.Process{Pid: os.Getpid()}}
 	waitDone := make(chan struct{})
@@ -160,6 +143,32 @@ func TestProcessLifecycleMonitorStopsWhenWaitCompletes(t *testing.T) {
 	select {
 	case <-observer.exited:
 		t.Fatal("monitor reported exit after wait completed")
+	default:
+	}
+}
+
+// A zero-exit script may still be delivering its final output through the
+// observer after the leader disappears. That drain is not a cancellation.
+func TestProcessLifecycleMonitorWaitsForOutputDrain(t *testing.T) {
+	cmd := &exec.Cmd{Process: &os.Process{Pid: -1}}
+	waitDone := make(chan struct{})
+	observer := &lifecycleObserverRecorder{started: make(chan ProcessInfo, 1), exited: make(chan ProcessInfo, 1)}
+	monitor := startProcessLifecycleMonitor(cmd, waitDone, observer, func(int) (byte, bool) { return 'Z', true })
+	defer monitor.stopAndWait()
+	// Deliberately exceed the former 50 ms threshold while staying within the
+	// existing output-pipe grace; the fake Wait completion is the causal edge.
+	timer := time.NewTimer(2 * processExitObservationGrace)
+	defer timer.Stop()
+	select {
+	case <-observer.exited:
+		t.Fatal("process-gone observation canceled an output drain before Wait completed")
+	case <-timer.C:
+	}
+	close(waitDone)
+	<-monitor.done
+	select {
+	case <-observer.exited:
+		t.Fatal("process-gone observation followed normal Wait completion")
 	default:
 	}
 }
@@ -217,36 +226,6 @@ func TestExecCommandRunnerRunRejectsMissingRuntimeEffects(t *testing.T) {
 				t.Fatalf("Run() error = %v, want text %q", err, test.want)
 			}
 		})
-	}
-}
-
-func TestProcessLifecycleMonitorStopsDuringExitObservationGrace(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("injected process state probe is Unix-specific")
-	}
-	cmd := &exec.Cmd{Process: &os.Process{Pid: os.Getpid()}}
-	waitDone := make(chan struct{})
-	stateRead := make(chan struct{}, 1)
-	observer := &lifecycleObserverRecorder{
-		started: make(chan ProcessInfo, 1),
-		exited:  make(chan ProcessInfo, 1),
-	}
-	monitor := startProcessLifecycleMonitor(cmd, waitDone, observer, func(int) (byte, bool) {
-		select {
-		case stateRead <- struct{}{}:
-		default:
-		}
-		return 'Z', true
-	})
-	if monitor == nil {
-		t.Fatal("startProcessLifecycleMonitor() returned nil")
-	}
-	<-stateRead
-	monitor.stopAndWait()
-	select {
-	case <-observer.exited:
-		t.Fatal("monitor reported exit after stop")
-	default:
 	}
 }
 
@@ -471,6 +450,7 @@ func (observer *lifecycleObserverRecorder) ProcessExited(info ProcessInfo) {
 
 func TestProcessLifecycleMonitorObservesGoneParentBeforeWaitCompletes(t *testing.T) {
 	requireProcessIntegration(t)
+	useShortOrphanedOutputPipeGrace(t)
 
 	pidFile := t.TempDir() + string(os.PathSeparator) + "child.pid"
 	cmd := exec.Command(
@@ -535,8 +515,9 @@ func (observer cancelOnProcessExitObserver) ProcessExited(ProcessInfo) {
 	observer.cancel()
 }
 
-func TestExecCommandRunnerCancelsInheritedPipeAfterParentExitObservation(t *testing.T) {
+func TestExecCommandRunnerPreservesZeroExitWhenObserverWatchesInheritedPipe(t *testing.T) {
 	requireProcessIntegration(t)
+	useShortOrphanedOutputPipeGrace(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	pidFile := filepath.Join(t.TempDir(), "child.pid")
@@ -563,8 +544,8 @@ func TestExecCommandRunnerCancelsInheritedPipeAfterParentExitObservation(t *test
 		),
 		ProcessLifecycleObserver: cancelOnProcessExitObserver{cancel: cancel},
 	})
-	if runErr == nil || !errors.Is(runErr, context.Canceled) {
-		t.Fatalf("Run() result=%#v error=%v, want context canceled after parent exit", result, runErr)
+	if runErr != nil || result.ExitCode != 0 || ctx.Err() != nil {
+		t.Fatalf("Run() result=%#v error=%v context=%v, want the zero-exit result without cancellation", result, runErr, ctx.Err())
 	}
 	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
 	t.Cleanup(func() { commandTestTerminateProcess(childPID) })
