@@ -8,7 +8,7 @@ diff --git a/src/qwen3_asr.cpp b/src/qwen3_asr.cpp
  
  #include <chrono>
  #include <algorithm>
-@@ -83,6 +84,10 @@
+@@ -83,6 +84,15 @@
      transcribe_result result;
      int64_t t_total_start = get_time_ms();
  
@@ -16,10 +16,15 @@ diff --git a/src/qwen3_asr.cpp b/src/qwen3_asr.cpp
 +        result.error_msg = "Unsupported explicit ASR language: " + params.language;
 +        return result;
 +    }
++    if (qwen_asr_language::exact_digital_silence(samples, n_samples)) {
++        result.success = true;
++        result.t_total_ms = get_time_ms() - t_total_start;
++        return result;
++    }
      encoder_.set_n_threads(params.n_threads);
      decoder_.set_n_threads(params.n_threads);
      
-@@ -134,12 +139,10 @@
+@@ -134,12 +144,10 @@
      result.t_decode_ms = get_time_ms() - t_decode_start;
      
      result.tokens = output_tokens;
@@ -36,7 +41,7 @@ diff --git a/src/qwen3_asr.cpp b/src/qwen3_asr.cpp
      result.success = true;
      
      result.t_total_ms = get_time_ms() - t_total_start;
-@@ -207,7 +210,7 @@
+@@ -207,7 +215,7 @@
      tokens.push_back(assistant_token);
      tokens.push_back(newline);
      

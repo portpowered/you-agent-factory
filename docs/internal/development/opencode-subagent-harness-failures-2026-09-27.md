@@ -390,3 +390,21 @@ are assigned to these dispatches here. A live-inspection identifier beginning
 `07f22431` disappeared after cleanup; it does not establish the identity of the
 first dispatch. Collaboration-agent fallback implemented the prompt edits for
 independent review. No local Models inference was requested in either task.
+
+## October 2 bounded startup audit retry completed
+
+A narrower read-only OpenCode MCP retry using `opencode/big-pickle`, session
+`7a3300f5-1a6d-4183-990d-07a85b61a713`, completed within its 300,000 ms allowance
+and returned a primary result. It reviewed two files inside `workingRoot`,
+without requesting report files, edits, or local Models inference. Root
+corroborated the reported full-file hash calls in `findGenericArtifact`
+(`generic_cache.go`) and `verifyGenericCachedArtifact` (`generic_source.go`)
+before known-size rejection, plus conditional additional hashing during legacy
+repair. This identifies source-level opportunities for repeated reads; it does
+not prove how many passes one Models invocation performs or explain the
+observed 143 GB read volume.
+
+This demonstrates useful primary-result delivery for this bounded review. The
+model, prompt scope, and requested effects differed from the two ten-minute
+timeouts, so the successful retry does not identify their cause or demonstrate
+editing stability.

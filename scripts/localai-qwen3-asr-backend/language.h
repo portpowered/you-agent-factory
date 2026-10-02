@@ -97,6 +97,12 @@ template<class Piece> void validate(int32_t vocabulary_size, Piece piece) {
         if (piece(expected.first) != expected.second)
             throw std::runtime_error("ASR vocabulary has incompatible language prefix token");
 }
+// Exact decoded digital silence has no speech. Signed zero is also zero;
+// quiet nonzero samples, noise and nonfinite values retain the inference path.
+inline bool exact_digital_silence(const float* samples, int count) {
+    if (!samples || count <= 0) return false;
+    return std::all_of(samples, samples + count, [](float sample) { return sample == 0.0f; });
+}
 inline void append(std::vector<int32_t>& tokens, const std::string& name) {
     if (name.empty()) return;
     const auto* language = find(name);

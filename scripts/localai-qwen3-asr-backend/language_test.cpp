@@ -1,6 +1,7 @@
 #include "language.h"
 #include <iostream>
 #include <map>
+#include <limits>
 
 using namespace qwen_asr_language;
 void require(bool condition, const char* message) {
@@ -51,6 +52,20 @@ void parsing_tests() {
     require(parse({151645}, "English", decode).language.empty(), "EOS-only forced silence labelled speech");
     require(parse({11528,3,delimiter}, "", decode).language.empty(), "None detected as language");
 }
+void digital_silence_tests() {
+    const float zeros[] = {0.0f, -0.0f, 0.0f};
+    require(exact_digital_silence(zeros, 3), "signed digital zeros must be empty speech");
+    require(!exact_digital_silence(zeros, 0), "empty input must retain validation path");
+    require(!exact_digital_silence(nullptr, 3), "missing samples are not silence");
+    for (const auto nonzero : {std::numeric_limits<float>::denorm_min(),
+                              -std::numeric_limits<float>::min(), 0.000001f,
+                              std::numeric_limits<float>::infinity(),
+                              std::numeric_limits<float>::quiet_NaN()}) {
+        const float mixed[] = {0.0f, nonzero, -0.0f};
+        require(!exact_digital_silence(mixed, 3), "nonzero or nonfinite audio must reach inference");
+        require(exact_digital_silence(mixed, 1), "only the supplied sample range may be inspected");
+    }
+}
 void vocabulary_tests() {
     std::map<int32_t, std::string> pieces(ordinary_pieces.begin(), ordinary_pieces.end());
     pieces[delimiter] = "[PAD151704]";
@@ -75,8 +90,8 @@ void vocabulary_tests() {
 }
 int main() {
     try {
-        prefix_tests(); parsing_tests(); vocabulary_tests();
-        std::cout << "ASR language prefix/parser/vocabulary tests passed\n";
+        prefix_tests(); parsing_tests(); vocabulary_tests(); digital_silence_tests();
+        std::cout << "ASR language prefix/parser/vocabulary/digital-silence tests passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n'; return 1;
     }
