@@ -17,6 +17,14 @@ class CommandFailed(ValueError):
         self.detail = detail
 
 
+class SpeechDoesNotFit(ValueError):
+    def __init__(self, identifier, duration_ms, available_ms, speed):
+        super().__init__(f"Segment {identifier} needs {speed:.2f}x speech speed to fit; "
+                         "shorten its translation before rendering to avoid unintelligible dubbing")
+        self.duration_ms = duration_ms
+        self.available_ms = available_ms
+
+
 def command(argv: list[str]) -> None:
     result = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     if result.returncode:
@@ -74,10 +82,7 @@ def fit_speech(source: Path, destination: Path, segment: dict, playback_limit=No
     target = (end - segment["start"]) / 1000
     speed = max(1.0, duration / target)
     if speed > 2.0:
-        raise ValueError(
-            f"Segment {segment['id']} needs {speed:.2f}x speech speed to fit; "
-            "shorten its translation before rendering to avoid unintelligible dubbing"
-        )
+        raise SpeechDoesNotFit(segment['id'], math.ceil(duration * 1000), end - segment['start'], speed)
     command([
         "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", str(source),
         "-af", f"atempo={speed:.8f},apad,atrim=duration={target:.3f}",

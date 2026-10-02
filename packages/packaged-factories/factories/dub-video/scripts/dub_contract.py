@@ -161,7 +161,9 @@ def translation_prompt(source, language, preserve_names=None):
     source = validate_segments(source)
     if not isinstance(language, str) or not language.strip():
         raise ValueError("Target language must be nonempty")
-    request = {"language": language, "segments": [{"id": item["id"], "text": item["text"]} for item in source]}
+    request = {"language": language, "segments": [
+        {"id": item["id"], "text": item["text"], "duration_ms": item["end"] - item["start"]}
+        for item in source]}
     if preserve_names:
         request["preserve_names"] = preserve_names
     return (
@@ -169,6 +171,10 @@ def translation_prompt(source, language, preserve_names=None):
         "Return exactly one JSON object with only language and segments. Preserve the requested language, "
         "segment count, integer IDs, and order. Each segment must have only id and text. Do not return "
         "timestamps, commentary, extra keys, or empty translations. Preserve meaning and proper names. "
+        "The source duration_ms describes each cue's speech window. Use concise natural spoken phrasing "
+        "that can fit that duration; short cues need compact wording. Preserve the complete proposition, "
+        "questions, roles, negation, and names; never drop meaning just to shorten speech. Use neighboring "
+        "source context to choose natural word order across fragments without moving meaning arbitrarily. "
         "Preserve who is speaking and who is being addressed. A request for the listener to help "
         "must remain a request, never an offer by the speaker to help the listener. Preserve semantic "
         "polarity using the source language's idioms, not mechanical negation of individual words. "

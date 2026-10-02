@@ -412,6 +412,38 @@ unchanged retries, saved failures, the attempt ceiling, and rejection of generic
 unstructured, non-exhaustion, and cancellation failures. The Python suite now
 contains 46 tests.
 
+The next real run passed semantic review and recovered an EOS failure, then cue
+2 failed the fit guard: 2,320 ms of speech in a 1,120 ms window needs 2.0714x.
+Initial translation prompts now supply each source cue's duration and request
+compact natural speech without a hard word count or omitted meaning. Only a
+measured `SpeechDoesNotFit` rejection can request a targeted concise revision.
+There are at most three text versions including the original. Revisions receive
+the measured duration, available playback duration, unchanged original source,
+and two neighbors on each side. The complete candidate is structurally validated;
+the changed cue and its source neighbors are audited before regeneration.
+Unchanged cues retain previous semantic approval. Full candidate and failed
+speech/evidence remain saved, while canonical translations change only after
+successful fitting. Every version retains the identical original audio reference,
+source bounds, and IDs. Generic model/media errors and cancellation remain fatal.
+The two-times speed guard and indexed playback constraints remain unchanged.
+
+Current initial translation prompt segment:
+
+```json
+{"id":2,"text":"有没有好心人可以帮帮我？"}
+```
+
+Proposed initial translation prompt segment:
+
+```json
+{"id":2,"text":"有没有好心人可以帮帮我？","duration_ms":1120}
+```
+
+Output segments still allow only original ID and target text. Focused controlled
+tests cover measured overflow, complete candidate validation, source-context
+audit before TTS, unchanged neighbors/references, semantic rejection, three-version
+exhaustion, and immediate generic-error propagation.
+
 The EOS repair is source commit `a344ad7c327b56e7c9fd26dc9db5914aa4522da1`.
 Its new immutable TTS-only Windows CUDA publication is
 `localai-backends-v1-847f8b8c954d54d913886ee5e43be40477e3f53e8d846f1f956b69be24ccca7d`.
@@ -488,3 +520,22 @@ before starting its existing cleanup watchdog, removing the deadline/watchdog
 race under coverage. Neither repair changes production timeout policy or
 coverage floors. The installed CLI was rebuilt with the lifecycle repair before
 a fresh full English acceptance run.
+
+The rebuilt lifecycle run completed translation and its first audit, then
+entered TTS normally. The first cry cue exercised the real native EOS failure:
+the factory saved its structured failure, retried unchanged text/reference,
+and produced a successful two-second WAV on attempt two. The next cue completed.
+Cue 2 then correctly failed the preserved fit guard: its source/playback interval
+was 16,320–17,440 ms with no trailing silence, and the nine-word English request
+required 2.320 seconds, or 2.0714 times the available interval. This is a separate
+translation-duration issue, not a lifecycle cancellation or swallowed error.
+The acceptance loop therefore adds duration-aware initial wording and bounded,
+audited targeted shortening for measured speech overflows, retaining source
+alignment and reference conditioning rather than weakening the timing guard.
+
+Functional CI on `ef503c42` passed and measured logging coverage at 70.7% above
+the unchanged 69.7% reported floor; all 462 gated packages passed. Backend lint
+passed all 24 canonical checkers without changing the package-file baseline.
+Unit CI found one stale archive assertion; commit `ce87516b42` changes only its
+expected TTS archive byte count and hash to the independently verified release,
+retaining offline selection, CUDA, CPU rejection, and Darwin assertions.

@@ -220,14 +220,17 @@ cue's start or the video end. Only the needed part of that gap is used. Saved
 translations retain the source `start` and `end` and record a separate
 `speech_end` for playback. Generated subtitles follow the playback window;
 operator-supplied ASS files retain their authored timing. Speech that still
-requires more than twice normal speed fails before rendering rather than losing
-words or overlapping the next cue. The
+requires more than twice normal speed triggers a concise translation revision.
+The revision must preserve the complete meaning and pass validation and a model
+audit with source context before new speech is generated. Each cue permits the
+original text and at most two revisions. Unresolved fit or semantic failures
+stop before rendering. Failed candidates and speech remain inspectable. The
 default VibeVoice Realtime model cannot encode arbitrary reference audio;
 use `qwen3-tts-base` or another configured reference-capable model. Override
 Models catalog names with `--asr-model`, `--llm-model`, and `--tts-model`.
 If the native TTS model reaches its generation limit without an end-of-speech
-token, the Factory repeats the same text and original audio reference. Each cue
-permits at most three attempts. Attempt audio paths and failure evidence remain
+token, the Factory repeats the same text and original audio reference. Each text
+version permits at most three TTS attempts. Attempt audio paths and failure evidence remain
 in the artifact directory. Other failures and cancellation stop the step.
 The default `asr` uses Qwen3-ASR with its required forced aligner, including
 Chinese, English, Japanese, and Korean recognition. Recognition quality depends on the recording
