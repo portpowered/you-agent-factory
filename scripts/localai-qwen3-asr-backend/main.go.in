@@ -147,9 +147,7 @@ func phraseSegments(words []*pb.TranscriptWord, language string) []*pb.Transcrip
 				current = &pb.TranscriptSegment{Id: int32(len(result)), Start: word.Start}
 				target = current
 			}
-			target.Text += wordSeparator(target.Text, word.Text, separator) + word.Text
-			target.End = word.End
-			target.Words = append(target.Words, word)
+			appendAlignedWord(target, word, separator)
 			if target == current && !punctuationOnly(current.Text) {
 				last, _ := utf8.DecodeLastRuneInString(strings.TrimSpace(word.Text))
 				if current.End > current.Start && strings.ContainsRune(".!?。！？", last) {
@@ -165,12 +163,8 @@ func phraseSegments(words []*pb.TranscriptWord, language string) []*pb.Transcrip
 		}
 		if current == nil {
 			current = &pb.TranscriptSegment{Id: int32(len(result)), Start: word.Start}
-		} else {
-			current.Text += wordSeparator(current.Text, word.Text, separator)
 		}
-		current.Text += word.Text
-		current.End = word.End
-		current.Words = append(current.Words, word)
+		appendAlignedWord(current, word, separator)
 		last, _ := utf8.DecodeLastRuneInString(strings.TrimSpace(word.Text))
 		if current.End > current.Start && strings.ContainsRune(".!?。！？", last) {
 			result = append(result, current)
@@ -184,11 +178,41 @@ func phraseSegments(words []*pb.TranscriptWord, language string) []*pb.Transcrip
 		if current.End == current.Start && len(result) > 0 {
 			prior := result[len(result)-1]
 			prior.Text += wordSeparator(prior.Text, current.Text, separator) + current.Text
-			prior.End = current.End
+			prior.End = max(prior.End, current.End)
+			prior.Start = min(prior.Start, current.Start)
 			prior.Words = append(prior.Words, current.Words...)
 		} else {
 			result = append(result, current)
 		}
+	}
+	return mergeOverlappingPhrases(result, separator)
+}
+
+func appendAlignedWord(phrase *pb.TranscriptSegment, word *pb.TranscriptWord, separator string) {
+	if phrase.Text != "" {
+		phrase.Text += wordSeparator(phrase.Text, word.Text, separator)
+	}
+	phrase.Text += word.Text
+	phrase.Start = min(phrase.Start, word.Start)
+	phrase.End = max(phrase.End, word.End)
+	phrase.Words = append(phrase.Words, word)
+}
+
+// A quantized word at a window seam can genuinely overlap its neighbor. Keep
+// lexical order and every word span, combining only their speech envelopes.
+func mergeOverlappingPhrases(phrases []*pb.TranscriptSegment, separator string) []*pb.TranscriptSegment {
+	var result []*pb.TranscriptSegment
+	for _, phrase := range phrases {
+		for len(result) > 0 && phrase.Start < result[len(result)-1].End {
+			prior := result[len(result)-1]
+			result = result[:len(result)-1]
+			phrase.Text = prior.Text + wordSeparator(prior.Text, phrase.Text, separator) + phrase.Text
+			phrase.Start = min(prior.Start, phrase.Start)
+			phrase.End = max(prior.End, phrase.End)
+			phrase.Words = append(prior.Words, phrase.Words...)
+		}
+		phrase.Id = int32(len(result))
+		result = append(result, phrase)
 	}
 	return result
 }

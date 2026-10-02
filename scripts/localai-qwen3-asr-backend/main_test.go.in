@@ -188,3 +188,32 @@ func TestSeparatedPunctuationPreservesRealPhraseRanges(t *testing.T) {
 		t.Fatalf("pure punctuation has no spoken cue: %v", got)
 	}
 }
+
+func TestNativeSeamOverlapKeepsEveryWordAndMergesEnvelopes(t *testing.T) {
+	words := []*pb.TranscriptWord{
+		{Text: "疯子", Start: 167000000000, End: 168400000000},
+		{Text: "。", Start: 168480000000, End: 168480000000},
+		{Text: "跟", Start: 168400000000, End: 170240000000},
+		{Text: "我。", Start: 170240000000, End: 171000000000},
+		{Text: "后来。", Start: 172000000000, End: 173000000000},
+	}
+	got := phraseSegments(words, "Chinese")
+	if len(got) != 2 || got[0].Text != "疯子。跟我。" || got[0].Start != 167000000000 || got[0].End != 171000000000 || len(got[0].Words) != 4 || got[1].Id != 1 {
+		t.Fatalf("actual seam evidence lost: %v", got)
+	}
+	if got[0].Words[1] != words[1] || got[0].Words[2] != words[2] {
+		t.Fatal("word spans were rewritten")
+	}
+	// Positive speech spans can overlap by one 80 ms alignment class too.
+	a, b := &pb.TranscriptWord{Text: "First.", Start: 1000000000, End: 2000000000}, &pb.TranscriptWord{Text: "Next.", Start: 1920000000, End: 3000000000}
+	got = phraseSegments([]*pb.TranscriptWord{a, b}, "English")
+	if len(got) != 1 || got[0].Text != "First. Next." || got[0].Start != 1000000000 || got[0].End != 3000000000 || got[0].Words[0] != a || got[0].Words[1] != b {
+		t.Fatalf("positive overlap was dropped or clipped: %v", got)
+	}
+	// A last aligned word may end inside a preceding word. Envelopes must use
+	// extrema, preserving the complete evidence rather than just first/last.
+	got = phraseSegments([]*pb.TranscriptWord{{Text: "Long", Start: 1000000000, End: 4000000000}, {Text: "inside.", Start: 2000000000, End: 3000000000}}, "English")
+	if len(got) != 1 || got[0].End != 4000000000 {
+		t.Fatalf("phrase excluded a word span: %v", got)
+	}
+}

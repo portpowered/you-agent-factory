@@ -17,7 +17,7 @@ std::unique_ptr<qwen3_asr::Qwen3ASR> asr;
 std::unique_ptr<qwen3_asr::ForcedAligner> aligner;
 std::string error, text, language;
 double duration;
-struct Word { std::string text; int64_t start, end; };
+struct Word { std::string text; int64_t start, end; uint64_t window; };
 std::vector<Word> words;
 std::atomic<bool> cancelled{false};
 void check_cancelled() { if (cancelled.load(std::memory_order_relaxed)) throw std::runtime_error("ASR request canceled"); }
@@ -103,11 +103,12 @@ API int qa_transcribe(const char* path, const char* requested_language, int thre
                     const auto base = static_cast<int64_t>(offset / rate) * 1000000000;
                     const auto start = base + std::llround(word.start * 1000.0) * 1000000;
                     const auto end = base + std::llround(word.end * 1000.0) * 1000000;
-                    if (!words.empty() && start < words.back().end) {
-                        if (word.word == words.back().text) continue;
-                        throw std::runtime_error("Forced alignment contains conflicting overlapping word spans");
-                    }
-                    words.push_back({word.word, start, end});
+                    // Only duplicate evidence crossing two window decodes is
+                    // redundant. Genuine word overlap stays intact; the Go
+                    // phrase mapper merges envelopes without changing words.
+                    if (!words.empty() && words.back().window != offset &&
+                        start < words.back().end && word.word == words.back().text) continue;
+                    words.push_back({word.word, start, end, offset});
                 }
             }
             if (offset + count == audio.frames) break;
