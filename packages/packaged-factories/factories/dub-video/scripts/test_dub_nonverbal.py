@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import dub_video
+import dub_media
 from dub_contract import nonverbal_kind, render_srt
 from dub_media import CommandFailed, preserve_nonverbal, timeline
 
@@ -42,6 +43,15 @@ class DubNonverbalTests(unittest.TestCase):
             output.writeframes(samples)
         return samples
 
+    def decode_wave_command(self, argv):
+        """Controlled command edge; native FFmpeg is a separate artifact proof."""
+        source = Path(argv[argv.index("-i") + 1])
+        destination = Path(argv[-1])
+        with wave.open(str(source), "rb") as input_wave:
+            self.assertEqual((input_wave.getnchannels(), input_wave.getsampwidth(), input_wave.getframerate()),
+                             (1, 2, 24000))
+            destination.write_bytes(input_wave.readframes(input_wave.getnframes()))
+
     def test_source_audio_pcm_is_exact_with_original_bounds_and_no_tts(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -56,6 +66,7 @@ class DubNonverbalTests(unittest.TestCase):
             value = {"video": str(root / "video.mp4"), "duration_ms": 5000,
                      "language": "en-US", "models": {"tts": "tts", "llm": "llm"}}
             with patch.object(dub_video, "reference", side_effect=reference), \
+                 patch.object(dub_media, "command", side_effect=self.decode_wave_command), \
                  patch.object(dub_video, "model") as model:
                 output = dub_video.synthesize_segment(root, [segment], 0, value)
             model.assert_not_called()
@@ -95,8 +106,9 @@ class DubNonverbalTests(unittest.TestCase):
             ref = root / "reference.wav"
             self.write_wave(ref)
             segment = {"id": 0, "start": 0, "end": 500}
-            with self.assertRaisesRegex(ValueError, "original interval"):
-                preserve_nonverbal(ref, root / "output.pcm", segment)
+            with patch.object(dub_media, "command", side_effect=self.decode_wave_command):
+                with self.assertRaisesRegex(ValueError, "original interval"):
+                    preserve_nonverbal(ref, root / "output.pcm", segment)
             self.assertNotIn("speech_end", segment)
 
 

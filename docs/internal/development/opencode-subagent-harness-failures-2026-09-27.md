@@ -357,3 +357,19 @@ model failures/cancellation propagate. No source edits or local model calls
 were requested. This proves this retry completed and wrote the report with
 ordinary defaults; it does not prove the original timeout's cause or that a
 longer allowance alone explains the different result.
+
+## October 2 native sampler review timeout
+
+A bounded two-file native sampler/recipe review using
+`opencode/mimo-v2.6-flash-free` and `timeoutMillis: 300000` returned
+`factory_session.subagent.timed_out`. Session
+`9370501b-5db6-4a64-9e06-4b50922bc4a8`, request
+`6709d5c7-062c-413f-a8ce-4cd44cbb7fd2`. Human-readable MCP text and structured
+error both reported the timeout; cleanup closed the live Factory Session and
+partial effects were possible. The last recorded provider reasoning delta was
+`2026-10-02T08:35:41.0208094Z`. The requested external report
+`C:/t/dub-multilingual-validation/opencode-concurrency/native-sampler-review.txt`
+was absent afterward. No model inference/build/source edits were requested.
+Independent collaboration review and CPU sampler regression passed, but this
+dispatch produced no review evidence. The reason for its timeout is unproven;
+a five-minute allowance alone does not establish harness stability.

@@ -835,3 +835,30 @@ budgets, strict EOS rejection, and the safe public exhaustion message remain
 unchanged. Native build, actual inference proof, checksum-verified publication,
 and Models manifest selection are pending; the currently installed archive does
 not yet contain this source repair.
+
+
+### CI source-discovery and hermetic test repairs (2026-10-02)
+
+CI run `36984316435` for head `49d340c247f9df15c2eae77ca2c8e4eb598c1db2`
+finished with five failed checks: Backend Lint, Backend Unit Coverage, Backend
+Functional Coverage, Development Package / Packaged Factories Package, and the
+downstream Verification Policy. Unit and functional coverage floors were not
+evaluated: their `go list -deps -test -mod=readonly ./...` preflight rejected the
+new C++ sampler regression in the existing Go `scripts` package. The same
+source-discovery error prevented vet and deadcode measurement. Other lanes,
+including Backend Integration and TTS Clean-Install Windows, passed.
+
+Commit `dea7691547a1763721b3fd7ffffe9582d1b27c62` renames the sampler template
+from `.cpp` to `.cpp.in` and updates the native recipe's copy path; its contents
+and copied native regression remain unchanged. Independent
+`go test ./scripts -run '^$'` now passes. This is a source-placement repair,
+not a new native inference or archive-publication proof.
+
+The package check separately found two nonverbal Python component tests invoking
+FFmpeg on CI without that executable. Their command edge now decodes the fixture
+WAV with Python `wave`, preserving the exact PCM/timeline/subtitle assertions and
+the reference-length mismatch failure. Production behavior is unchanged; the
+actual FFmpeg cue-0 proof remains separate. All 70 tests pass independently in
+0.249 seconds with the child process `PATH` empty, so neither FFmpeg nor ffprobe
+is available. The author also regenerated the catalog and passed its drift check.
+Final repaired-head CI and complete English-video acceptance remain required.
