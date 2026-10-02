@@ -224,9 +224,7 @@ func TestBind_ApplyDocumentUpdateInvalidJSONReturnsBadRequestWithoutInvokingFake
 	t.Parallel()
 
 	var invoked bool
-	operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{
-		Settings: fakeSettingsRoot{invoked: &invoked},
-	})
+	operation := mcpoperatorsettings.BindToolOperation(fakeSettingsRoot{invoked: &invoked})
 	raw, err := operation(
 		context.Background(),
 		mcpoperatorsettings.ToolApplyDocumentUpdate,
@@ -271,7 +269,7 @@ func TestApplyDocumentUpdateErrorEnvelope_UsesDocumentFailurePathWhenPresent(t *
 func mustCallApplyDocumentUpdate(t *testing.T, fake fakeSettingsRoot, inputJSON string) json.RawMessage {
 	t.Helper()
 
-	operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{Settings: fake})
+	operation := mcpoperatorsettings.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcpoperatorsettings.ToolApplyDocumentUpdate,

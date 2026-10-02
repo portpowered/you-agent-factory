@@ -1762,7 +1762,6 @@ pkg/services/operator_settings/transports/http/resolve_effective_mapping.go: unr
 pkg/services/operator_settings/transports/http/resolve_effective_mapping.go: unreachable func: overrideFactsFromHTTP
 pkg/services/operator_settings/transports/http/resolve_effective_operations.go: unreachable func: Adapter.ResolveEffective
 pkg/services/operator_settings/transports/http/root_binding.go: unreachable func: NewAdapterFromRoot
-pkg/services/operator_settings/transports/mcp/client.go: unreachable func: Bind
 pkg/services/operator_settings/transports/mcp/client.go: unreachable func: BindToolOperation
 pkg/services/operator_settings/transports/mcp/client.go: unreachable func: CallTool
 pkg/services/operator_settings/transports/mcp/configure_subagents.go: unreachable func: ConfigureSubagentsTool

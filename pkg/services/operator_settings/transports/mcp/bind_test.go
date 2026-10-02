@@ -33,7 +33,7 @@ func TestBind_FakeRootInvokedThroughCanonicalLoadDocumentTool(t *testing.T) {
 			}, nil
 		},
 	}
-	operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{Settings: fake})
+	operation := mcpoperatorsettings.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcpoperatorsettings.ToolLoadDocument,

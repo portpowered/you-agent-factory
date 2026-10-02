@@ -180,9 +180,7 @@ func TestBind_LoadDocumentContextCanceledBeforeRootReturnsDocumentedEnvelope(t *
 	t.Parallel()
 
 	var invoked bool
-	operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{
-		Settings: fakeSettingsRoot{invoked: &invoked},
-	})
+	operation := mcpoperatorsettings.BindToolOperation(fakeSettingsRoot{invoked: &invoked})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	raw, err := operation(
@@ -211,7 +209,7 @@ func TestBind_LoadDocumentContextCanceledBeforeRootReturnsDocumentedEnvelope(t *
 func mustCallLoadDocument(t *testing.T, fake fakeSettingsRoot, inputJSON string) json.RawMessage {
 	t.Helper()
 
-	operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{Settings: fake})
+	operation := mcpoperatorsettings.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcpoperatorsettings.ToolLoadDocument,
@@ -273,9 +271,7 @@ func TestBind_LoadDocumentInvalidJSONReturnsBadRequestWithoutInvokingFakeRoot(t 
 	t.Parallel()
 
 	var invoked bool
-	operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{
-		Settings: fakeSettingsRoot{invoked: &invoked},
-	})
+	operation := mcpoperatorsettings.BindToolOperation(fakeSettingsRoot{invoked: &invoked})
 	raw, err := operation(
 		context.Background(),
 		mcpoperatorsettings.ToolLoadDocument,

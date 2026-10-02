@@ -16,27 +16,13 @@ var errMissingRequestContext = errors.New("MCP request context is required")
 // protocol tests replace this exact function role.
 type ToolOperation func(context.Context, string, json.RawMessage) (json.RawMessage, error)
 
-// RootDependencies are the accepted Operator Settings root roles consumed by
-// the MCP adapter. Operator Settings is the singular Service root; transports
-// inject an implementation or test fake rather than importing Operator Settings
-// internals or constructing canonical state.
-type RootDependencies struct {
-	Settings operatorsettings.Service
-}
-
-// Bind constructs the canonical ToolOperation from explicit Operator Settings
-// root dependencies. Adapter tests replace Settings with a root-shaped fake
-// without constructing real document, resolution, or service-local Wire graphs.
-func Bind(deps RootDependencies) ToolOperation {
-	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
-		return CallTool(ctx, deps.Settings, name, input)
-	}
-}
-
 // BindToolOperation binds the canonical tool registry to an explicit Operator
-// Settings Service root without constructing an alternate MCP client.
+// Settings Service root. Adapter tests pass a root-shaped fake rather than
+// constructing real document, resolution, or service-local Wire graphs.
 func BindToolOperation(service operatorsettings.Service) ToolOperation {
-	return Bind(RootDependencies{Settings: service})
+	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+		return CallTool(ctx, service, name, input)
+	}
 }
 
 func callToolJSON[Input any, Output any](
