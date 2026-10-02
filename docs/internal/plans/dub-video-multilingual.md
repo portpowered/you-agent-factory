@@ -1088,6 +1088,26 @@ The source ASR publication baseline now selects this archive while retaining
 the pinned native, SDK and protocol identities. Normal public Models CLI
 verification of the published replacement remains pending.
 
+That managed public check subsequently passed four sequential default `asr`
+CLI invocations using the clean `3ac900ddab81dd714886d9ec13955ed24fba848e`
+binary and a fresh child-only home. Ordinary discovery downloaded the paired
+model assets and selected the `58d1` publication without backend/configuration
+overrides. The cached 441,956,666-byte archive independently hashes to
+`8d5236e6fb43b3d1d4da8a3630efd29fca583ba80315efc0a6a8d30a7a0ba769`.
+All four actual hosts' loaded executable, shim, core and CUDA module paths and
+hashes match the published package. Public `en-US` recognition returns
+`This is.` with segment 480–1040 ms; exact-zero WAVs with `en-US`, `zh-CN`,
+and `yue-HK` each publish an empty transcript and `[]` segments. Every call
+exits zero, and all observed CLI/native process identities are absent afterward.
+
+Fresh startup took 98.203 seconds, including model/backend asset preparation.
+The three later silence calls took 32.063, 31.062 and 27.594 seconds, including
+their separate host lifecycles; these are not pure inference timings or
+resident-host reuse proofs. Evidence is in
+`C:/t/dub-asr-language-public-proof/`. Unsupported hints and mid-generation
+cancellation were not exercised by these public calls. No noisy full-video
+or accepted English dubbing output follows from this bounded proof.
+
 ### Larger Whisper comparison and malformed full-video timestamps
 
 An isolated managed Whisper large-v3 comparison used the immutable
@@ -1129,3 +1149,58 @@ with 18,668 MiB free with 0.6B; these are whole-device snapshots, not exclusive
 process allocations. Both owned PIDs exited and released their libraries.
 Evidence: `C:/t/dub-qwen-asr-cue32-size-comparison/comparison.json`. No default
 switch and no final delivery follows.
+
+### Source-context diagnostic and independent-image packing
+
+The larger supplied Qwen model received the same text-only source evidence,
+comparison prompt, and decision grammar as the earlier diagnostic. Inputs
+included timestamped caption/OCR observations and neighboring ASR cues, without
+audio, image inputs, expected English hints, or new output/context caps.
+Independent review checked the saved commands, responses, and evidence hashes
+in `C:/t/dub-source-context-qwen-diagnostic/`.
+
+Freeform comparison completed in 330.485 seconds. It recognized the positive
+cue-32 proposal meaning and suggested `Your suggestion is good.` It left the
+opening of cue 57 unresolved. Other classifications still require review; this
+prose does not establish corrected acoustic transcripts or semantic acceptance.
+The subsequent grammar-constrained decision failed after 227.406 seconds with
+`MODEL_BACKEND_FAILURE`: the backend returned reasoning bytes but no text
+output. No decision artifact was available for validation. The diagnostic
+reported 15,087 prompt tokens and 1,155 generated tokens for that failed stage;
+it showed no reported memory error. Whole-device sampling reached 23,621 MiB
+used and 518 MiB free. All observed owned hosts exited. Useful freeform analysis
+does not establish reliable structured decisions or justify a default switch.
+
+A separate public image trial supplied three independent 1280×60 caption crops
+in cue order 25, 32, 57. It completed in 264.125 seconds, but assigned the
+second crop's caption to cue 25 and the third crop's caption to cue 32. It then
+reported `NO_CAPTION` for cue 57 and invented an unrelated watermark. No named
+cue matched its corresponding crop. Gemma's earlier same-crop trial retained
+order but misread caption characters; these selected trials do not rank models
+generally. Crop commands, transforms, responses, identities, and teardown are
+in `C:/t/dub-qwen-crop-batch-proof/`.
+
+CPU inspection found a concrete independent-image packing defect in the pinned
+native path. The actual Qwen projector selects temporal merging of adjacent
+equal-size images; native reconstruction appends the independent crops with
+contiguous media markers. The saved tokenizer source therefore groups the first
+two crops together, leaving two logical image groups for three independent
+inputs. This is consistent with the observed attribution failure. No live merge
+trace was captured, so it does not explain which merged image the model favored,
+the watermark invention, or every recognition error.
+
+A proposed counterfactual separates independent media with nonwhitespace text
+boundaries while preserving deliberate within-video grouping. Plain-prompt
+separators cannot interleave the native appended image parts. Whitespace alone
+may be normalized by the actual chat template. A rebuilt, identified backend
+must prove actual grouping and correspondence before accepting that repair.
+The CPU trace is in `cpu-image-packing-review.md` beside the crop evidence.
+These diagnostics do not produce an accepted English video or authorize source
+ASR replacement; full dubbing quality and delivery remain incomplete.
+
+The independent OpenCode engine review also timed out after its 300,000 ms
+allowance without a primary result. Its saved error identifies session
+`4d14464f-f822-449c-8a0a-38ba485bdae6`; cleanup closed the live Factory Session,
+and partial effects remained possible. Root's workspace inspection found only
+expected files. The timeout cause is unknown; this dispatch adds no review
+evidence or harness stability proof.

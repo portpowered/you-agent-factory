@@ -493,6 +493,19 @@ you models invoke asr --operation ASR --input audio=@demo.mp4 \
   --output transcript=video.txt --output segments=video-asr.json
 ```
 
+The built-in Qwen3-ASR model accepts an optional `language` hint, including
+`en-US`, `zh-CN`, `ja-JP`, `ko-KR`, and `yue-HK`. Omit the hint for automatic
+language detection. The hint conditions recognition; it does not translate
+speech or certify the spoken language.
+
+When you know the source language, pass its language hint:
+
+```bash
+you models invoke asr --operation ASR --input audio=@meeting.wav \
+  --parameter '{"name":"language","value":"en-US"}' \
+  --output transcript=meeting.txt --output segments=meeting.json
+```
+
 The transcript file uses `text/plain`. The segments file uses
 `application/json`. Both files are published atomically after all outputs are
 validated.

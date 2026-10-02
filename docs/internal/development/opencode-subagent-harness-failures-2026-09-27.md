@@ -433,3 +433,18 @@ identical requests to identical recognition results. No external reads or GPU
 calls were requested. This establishes one completed documentation edit and
 primary result; concurrent editing stability remains unproven. Both exact MCP
 results were retained externally for independent inspection.
+
+## October 2 engine review timeout
+
+The OpenCode MCP engine review using `opencode/big-pickle` and a 300,000 ms
+allowance returned `factory_session.subagent.timed_out`, with no primary
+result. Session `4d14464f-f822-449c-8a0a-38ba485bdae6`, request
+`dc8610e3-8079-4073-a3d5-11cf16fc6739`. Human-readable text and structured
+error both reported cleanup closing the live Factory Session and possible
+partial effects. The last retained provider observation was a reasoning delta
+at `2026-10-02T11:48:59.5075866Z`; one dispatch remained in flight.
+
+Root inspected Git status afterward and found only expected files. This does
+not prove that no partial effects occurred. The cause remains unknown, and the
+dispatch supplies no independent engine review. The exact MCP response is
+saved at `C:/t/dub-multilingual-validation/opencode-engine-review-timeout-result.json`.
