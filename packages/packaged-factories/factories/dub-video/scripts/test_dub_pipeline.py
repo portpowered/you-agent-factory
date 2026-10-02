@@ -104,7 +104,7 @@ class DubPipelineTests(unittest.TestCase):
                 intervals.append((interval["start"], interval["end"]))
                 destination.write_bytes(b"bounded PCM")
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 clip = Path(inputs[0].removeprefix("audio=@"))
                 clips.append(clip)
                 self.assertEqual(clip.read_bytes(), b"bounded PCM")
@@ -215,7 +215,7 @@ class DubPipelineTests(unittest.TestCase):
                 subtitles="", asr_model="asr", llm_model="llm", tts_model="qwen3-tts-base", tts_server="",
                 preserve_names="  Silver Clouds  \n\nAlice Smith\r\n ")
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 self.assertEqual((name, operation), ("asr", "ASR"))
                 self.assertEqual(Path(inputs[0].removeprefix("audio=@")).read_bytes(), b"bounded PCM")
                 Path(outputs[0].removeprefix("transcript=")).write_text("Silver Clouds", encoding="utf-8")
@@ -238,7 +238,7 @@ class DubPipelineTests(unittest.TestCase):
             value["preserve_names"] = ["Silver Clouds"]
             dub_video.save_json(manifest, value)
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                 self.assertFalse(prompt.name.startswith("translation-audit"))
                 self.assertEqual(operation, "OMNI")
@@ -286,7 +286,7 @@ class DubPipelineTests(unittest.TestCase):
             root = Path(directory)
             manifest = self.manifest(root, stage="transcribed")
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 self.assertEqual([item.split('=', 1)[0] for item in outputs], ['text', 'usage'])
                 Path(outputs[0].removeprefix("text=")).write_text(
                     '{"language":"zh-CN","segments":[]}', encoding="utf-8")
@@ -308,7 +308,7 @@ class DubPipelineTests(unittest.TestCase):
             value["duration_ms"] = 650
             dub_video.save_json(manifest, value)
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                 request = json.loads(prompt.read_text(encoding="utf-8").split("\n")[-1])
                 if prompt.name.startswith("translation-audit"):
@@ -333,7 +333,7 @@ class DubPipelineTests(unittest.TestCase):
             manifest = self.manifest(root, stage="transcribed")
             translation_prompts = []
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 self.assertEqual((name, operation), ("llm", "OMNI"))
                 self.assertEqual([item.split("=", 1)[0] for item in outputs], ["text", "usage"])
                 prompt = Path(inputs[0].removeprefix("prompt=@"))
@@ -371,7 +371,7 @@ class DubPipelineTests(unittest.TestCase):
             root = Path(directory)
             translations, audits = [], []
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                 request = json.loads(prompt.read_text(encoding="utf-8").split("\n")[-1])
                 if prompt.name.startswith("translation-audit"):
@@ -398,7 +398,7 @@ class DubPipelineTests(unittest.TestCase):
             root = Path(directory)
             translations, audits = [], []
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 self.assertEqual(operation, "OMNI")
                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                 if prompt.name.startswith("translation-audit"):
@@ -420,7 +420,7 @@ class DubPipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 dub_video.save_json(Path(outputs[0].removeprefix("text=")), {"valid": False, "issues": [
                     {"segment_id": 7, "suggested_correction": "Good morning"},
                     {"segment_id": 7, "suggested_correction": "Good evening"}]})
@@ -436,7 +436,7 @@ class DubPipelineTests(unittest.TestCase):
             root = Path(directory)
             calls = {"translations": 0, "audits": 0}
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                 if prompt.name.startswith("translation-audit"):
                     calls["audits"] += 1
@@ -458,7 +458,7 @@ class DubPipelineTests(unittest.TestCase):
             manifest = self.manifest(root, stage="transcribed")
             attempts = 0
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 nonlocal attempts
                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                 if prompt.name.startswith("translation-audit"):
@@ -494,7 +494,7 @@ class DubPipelineTests(unittest.TestCase):
             root = Path(directory)
             for response in responses:
                 with self.subTest(response=response):
-                    def infer(name, operation, inputs, outputs):
+                    def infer(name, operation, inputs, outputs, parameters=None):
                         prompt = Path(inputs[0].removeprefix("prompt=@")).read_text(encoding="utf-8")
                         self.assertIn("Determine intended context from the SOURCE segments", prompt)
                         self.assertIn("Never propose changing explicit play/resume music", prompt)
@@ -508,7 +508,7 @@ class DubPipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             for response in [payload, "```json\n" + payload + "\n```", "```\n" + payload + "\n```"]:
                 with self.subTest(response=response):
-                    def infer(name, operation, inputs, outputs):
+                    def infer(name, operation, inputs, outputs, parameters=None):
                         Path(outputs[0].removeprefix("text=")).write_text(response, encoding="utf-8")
                     with patch.object(dub_video, "model", side_effect=infer):
                         dub_video.audit_translation(Path(directory), translated, "zh-CN", "llm", "", 1)

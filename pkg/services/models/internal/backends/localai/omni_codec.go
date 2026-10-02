@@ -132,7 +132,14 @@ func (codec *OmniCodec) Encode(request models.InvokeModelRequest) (PredictReques
 	if err != nil {
 		return PredictRequest{}, err
 	}
-	return mapPredictRequest(prepared)
+	predict, err := mapPredictRequest(prepared)
+	if err != nil {
+		return PredictRequest{}, err
+	}
+	if _, err := omniGrammar(predict); err != nil {
+		return PredictRequest{}, err
+	}
+	return predict, nil
 }
 
 // Invoke performs one protocol call after Encode has completed all local

@@ -646,6 +646,27 @@ supplied, it sets the LocalAI generation token limit (`PredictOptions.Tokens`)
 and is excluded from request metadata. When omitted, generation stays
 unbounded (`Tokens=0`) and context size stays model-derived (`ContextSize=0`).
 
+### Constrain OMNI text output
+
+Pass a nonempty GBNF grammar string through the `grammar` parameter:
+
+```bash
+you models invoke llm --operation OMNI --input prompt="Reply yes or no" \
+  --parameter '{"name":"grammar","value":"root ::= \"yes\" | \"no\""}'
+```
+
+The LocalAI backend receives the string unchanged in `PredictOptions.Grammar`
+(field `29`). The parameter is excluded from request metadata. Empty values
+and values other than strings return `BAD_REQUEST` before inference.
+
+This parameter supports text input only. Requests with images, audio, or video
+return `BAD_REQUEST`. Supply GBNF directly; Models does not convert JSON Schema
+into a grammar. The backend parses the grammar. A grammar constrains output
+format, but it does not verify translation meaning.
+
+Omitting `grammar` preserves freeform generation. Supplying it does not add an
+output token limit or change the model's reasoning settings.
+
 ### Add Images In Command Order
 
 Repeat the `image` binding to preserve the supplied image order:

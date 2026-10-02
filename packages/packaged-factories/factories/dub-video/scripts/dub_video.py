@@ -24,6 +24,7 @@ from dub_contract import (
     validate_segments, validate_translations, target_language, LANGUAGES, playback_segments,
 )
 from dub_media import CommandFailed, SpeechDoesNotFit, command, fit_speech, mux, reference, timeline, video_duration
+from dub_grammar import audit_grammar, translation_grammar
 
 # These partition targets bound one inference call, never the complete input.
 ASR_CLIP_MS = 300_000
@@ -179,11 +180,12 @@ def translate_batch(root: Path, segments: list[dict], language: str, model_name:
         if translated is None:
             prompt.write_text(prompt_text + feedback, encoding="utf-8")
             model(model_name, "OMNI", [f"prompt=@{prompt}"],
-                  [f"text={response}", f"usage={root / ('translation-usage' + suffix + '.json')}"])
+                  [f"text={response}", f"usage={root / ('translation-usage' + suffix + '.json')}"],
+                  parameters={"grammar": translation_grammar(segments, language)})
         try:
             if translated is None:
                 translated = validate_translations(
-                    load_translation_response(response.read_text(encoding="utf-8-sig"), root),
+                    load_translation_response(response.read_text(encoding="utf-8-sig")),
                     segments, language, preserve_names,
                 )
             save_json(root / f"translation-candidate{suffix}-attempt-{attempt + 1}.json",
@@ -191,6 +193,8 @@ def translate_batch(root: Path, segments: list[dict], language: str, model_name:
             audit_translation(root, translated, language, model_name, suffix, attempt + 1)
             return translated
         except (ValueError, OSError, KeyError, TypeError) as error:
+            if isinstance(error, CommandFailed):
+                raise
             last_error = str(error)
             print(f"Translation validation attempt {attempt + 1}: {last_error}", file=sys.stderr)
             corrections = error.corrections if isinstance(error, TranslationAuditRejected) else None
@@ -239,7 +243,7 @@ def audit_translation(root: Path, translated: list[dict], language: str,
     identifiers, focus_instructions = translation_audit_focus(translated, focus_ids)
     if focus_ids is not None:
         request["focus_ids"] = focus_ids
-    issue_shape = "Each issue may be a nonempty string or " if focus_ids is None else "Each issue must be "
+    issue_shape = "Each issue must be "
     prompt.write_text(
         focus_instructions +
         "Independently audit these translations against the original source and surrounding segment context. "
@@ -272,7 +276,8 @@ def audit_translation(root: Path, translated: list[dict], language: str,
         "No commentary, filename pointers, or additional keys.\n"
         + json.dumps(request, ensure_ascii=False), encoding="utf-8")
     model(model_name, "OMNI", [f"prompt=@{prompt}"],
-          [f"text={response}", f"usage={root / (prefix + '-usage.json')}"])
+          [f"text={response}", f"usage={root / (prefix + '-usage.json')}"],
+          parameters={"grammar": audit_grammar(identifiers)})
 
     def unique_keys(items):
         result = {}
@@ -386,25 +391,42 @@ def repair_fit_translation(root, translated, index, value, revision, overflow, f
         + json.dumps(output_example, ensure_ascii=False) + "\nINPUT DATA:\n"
         + json.dumps(request, ensure_ascii=False), encoding="utf-8")
     model(value["models"]["llm"], "OMNI", [f"prompt=@{prompt}"],
-          [f"text={response}", f"usage={root / (prefix + '-usage.json')}"])
+          [f"text={response}", f"usage={root / (prefix + '-usage.json')}"],
+          parameters={"grammar": translation_grammar([segment], value["language"])})
     try:
-        replacement = validate_translations(load_translation_response(response.read_text(encoding="utf-8-sig"), root),
+        replacement = validate_translations(load_translation_response(response.read_text(encoding="utf-8-sig")),
             [value["segments"][index]], value["language"], value.get("preserve_names", []))
-        candidate = [dict(item) for item in translated]
-        candidate[index]["text"] = replacement[0]["text"]
-        validate_translations({"language": value["language"], "segments": [
-            {"id": item["id"], "text": item["text"]} for item in candidate]},
-            value["segments"], value["language"], value.get("preserve_names", []))
-        save_json(root / f"{prefix}-candidate.json", {"language": value["language"], "segments": candidate})
-        # Unchanged cues retain their previous approval. Review the repaired
-        # cue with source neighbors; do not re-audit a whole long recording.
-        audit_translation(root, candidate[max(0, index - 2):index + 3], value["language"],
-                          value["models"]["llm"], f"-{prefix}", 1, focus_ids=[segment["id"]])
-        return candidate[index]
+        return audit_fit_candidate(root, translated, index, value, prefix, replacement[0]["text"])
     except (ValueError, KeyError, TypeError) as error:
         if isinstance(error, CommandFailed):
             raise
         raise FitTranslationRejected(str(error)) from error
+
+
+def audit_fit_candidate(root, translated, index, value, prefix, text):
+    """Recheck bounded indexed corrections before any replacement reaches TTS."""
+    identifier = translated[index]["id"]
+    for attempt in range(1, 4):
+        candidate = [dict(item) for item in translated]
+        candidate[index]["text"] = text
+        validate_translations({"language": value["language"], "segments": [
+            {"id": item["id"], "text": item["text"]} for item in candidate]},
+            value["segments"], value["language"], value.get("preserve_names", []))
+        document = {"language": value["language"], "segments": candidate}
+        save_json(root / f"{prefix}-candidate-attempt-{attempt}.json", document)
+        try:
+            audit_translation(root, candidate[max(0, index - 2):index + 3], value["language"],
+                              value["models"]["llm"], f"-{prefix}", attempt, focus_ids=[identifier])
+        except TranslationAuditRejected as error:
+            save_json(root / f"{prefix}-audit-rejection-{attempt}.json",
+                      {"message": str(error), "corrections": error.corrections})
+            if attempt == 3 or not error.corrections or set(error.corrections) != {identifier}:
+                raise
+            text = error.corrections[identifier]
+            continue
+        save_json(root / f"{prefix}-candidate.json", document)
+        save_json(root / f"{prefix}-approval.json", {"audit_attempt": attempt, "segment_id": identifier})
+        return candidate[index]
 
 
 def synthesize_segment(root, translated, index, value):

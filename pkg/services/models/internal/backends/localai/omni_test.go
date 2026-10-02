@@ -1,6 +1,7 @@
 package localai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,7 +12,87 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 )
+
+func TestOmniGrammarReachesDedicatedWireFieldUnchanged(t *testing.T) {
+	t.Parallel()
+	const grammar = "root ::= \"English\"\n"
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&Reply{Message: []byte("English")})
+	client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
+	_, err := client.Predict(WithInvocationEndpoint(t.Context(), "fixture"), PredictRequest{
+		Prompt: "Translate", Parameters: []models.OperationParameter{
+			{Name: "grammar", Value: grammar}, {Name: "temperature", Value: 0.2},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := protowire.AppendTag(nil, 29, protowire.BytesType)
+	want = protowire.AppendString(want, grammar)
+	if !bytes.Contains(connection.predictPayload, want) || connection.request.Grammar != grammar {
+		t.Fatalf("wire = %x, grammar = %q, want exact field 29", connection.predictPayload, connection.request.Grammar)
+	}
+	if _, present := connection.request.Metadata["grammar"]; present {
+		t.Fatalf("grammar duplicated in metadata: %#v", connection.request.Metadata)
+	}
+	if connection.request.Metadata["temperature"] != "0.2" || connection.request.Tokens != 0 {
+		t.Fatalf("unrelated/default parameters changed: %#v", connection.request)
+	}
+}
+
+func TestOmniGrammarRejectsInvalidValuesBeforeInference(t *testing.T) {
+	t.Parallel()
+	for _, value := range []any{nil, 1, true, []string{"root"}, map[string]any{"root": "a"}, "", " \n\t"} {
+		request := omniMediaRequest(t)
+		request.Parameters = []models.OperationParameter{{Name: "grammar", Value: value}}
+		fixture := &scriptedOmniProtocol{}
+		_, err := NewPinnedOmniCodec(fixture).Invoke(t.Context(), request)
+		assertOmniGrammarInvalid(t, err)
+		if len(fixture.requests) != 0 {
+			t.Fatalf("invalid grammar %#v invoked backend", value)
+		}
+		connection := &recordingGRPCConnection{}
+		client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
+		_, err = client.Predict(WithInvocationEndpoint(t.Context(), "fixture"), PredictRequest{
+			Prompt: "Translate", Parameters: request.Parameters,
+		})
+		assertOmniGrammarInvalid(t, err)
+		if len(connection.methods) != 0 {
+			t.Fatalf("invalid grammar %#v reached gRPC", value)
+		}
+	}
+}
+
+func TestOmniGrammarSupportsTextOnlyBeforeMediaExtraction(t *testing.T) {
+	t.Parallel()
+	for _, modality := range []models.Modality{models.ModalityImage, models.ModalityAudio, models.ModalityVideo} {
+		request := omniMediaRequest(t, models.InferenceInput{Name: strings.ToLower(string(modality)),
+			Modality: modality, Content: "media"})
+		request.Parameters = []models.OperationParameter{{Name: "grammar", Value: `root ::= "yes"`}}
+		fixture := &scriptedOmniProtocol{}
+		extractor := func(context.Context, []byte) ([]byte, error) {
+			t.Fatal("grammar rejection must precede media extraction")
+			return nil, nil
+		}
+		_, err := NewPinnedOmniCodec(fixture, extractor).Invoke(t.Context(), request)
+		assertOmniGrammarInvalid(t, err)
+		if len(fixture.requests) != 0 {
+			t.Fatalf("grammar with %s invoked inference", modality)
+		}
+	}
+}
+
+func assertOmniGrammarInvalid(t *testing.T, err error) {
+	t.Helper()
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassInvalidParameter ||
+		failure.Operation != models.OperationOMNI || failure.Parameter != "grammar" {
+		t.Fatalf("error = %v, want typed OMNI grammar InvalidParameter", err)
+	}
+}
 
 func TestProbePinnedOmniProtocolRecordsMediaCapability(t *testing.T) {
 	t.Parallel()

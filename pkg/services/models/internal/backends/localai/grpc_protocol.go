@@ -420,9 +420,16 @@ func predictOptions(request PredictRequest) (*PredictOptions, error) {
 // PredictOptions. Tokens stays zero (the pinned backend's unbounded default)
 // unless an explicit canonical max_tokens parameter is present. Embedding
 // keeps the legacy behavior with mapping disabled so its wire shape is
-// unchanged; only the OMNI path promotes max_tokens to Tokens.
-func buildPredictOptions(request PredictRequest, mapMaxTokens bool) (*PredictOptions, error) {
+// unchanged; only OMNI promotes max_tokens and grammar to dedicated fields.
+func buildPredictOptions(request PredictRequest, mapOmniParameters bool) (*PredictOptions, error) {
 	options := &PredictOptions{Prompt: request.Prompt}
+	if mapOmniParameters {
+		grammar, err := omniGrammar(request)
+		if err != nil {
+			return nil, err
+		}
+		options.Grammar = grammar
+	}
 	if strings.TrimSpace(request.Prompt) != "" {
 		// The pinned llama backend interprets zero Tokens as n_predict=-1.
 		// Leave generation length uncapped by this adapter, including reasoning.
@@ -440,35 +447,73 @@ func buildPredictOptions(request PredictRequest, mapMaxTokens bool) (*PredictOpt
 			options.Videos = append(options.Videos, value)
 		}
 	}
-	if len(request.Parameters) == 0 {
-		return options, nil
+	if err := mapPredictParameters(options, request.Parameters, mapOmniParameters); err != nil {
+		return nil, err
 	}
-	for _, parameter := range request.Parameters {
+	return options, nil
+}
+
+func mapPredictParameters(options *PredictOptions, parameters []models.OperationParameter, mapOmniParameters bool) error {
+	for _, parameter := range parameters {
 		name := strings.TrimSpace(parameter.Name)
 		if name == "" {
 			continue
 		}
-		if mapMaxTokens && name == omniMaxTokensParameter {
+		if mapOmniParameters && name == omniGrammarParameter {
+			continue
+		}
+		if mapOmniParameters && name == omniMaxTokensParameter {
 			tokens, err := decodeOmniMaxTokens(parameter.Value)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			options.Tokens = tokens
 			continue
 		}
 		value, err := json.Marshal(parameter.Value)
 		if err != nil {
-			return nil, fmt.Errorf("parameter %q: %w", name, err)
+			return fmt.Errorf("parameter %q: %w", name, err)
 		}
 		if options.Metadata == nil {
-			options.Metadata = make(map[string]string, len(request.Parameters))
+			options.Metadata = make(map[string]string, len(parameters))
 		}
 		options.Metadata[name] = string(value)
 	}
-	return options, nil
+	return nil
 }
 
 const omniMaxTokensParameter = "max_tokens"
+const omniGrammarParameter = "grammar"
+
+// Grammar is passed verbatim to llama.cpp's GBNF parser. It constrains one
+// text response; media observation and joining are not a grammar contract.
+func omniGrammar(request PredictRequest) (string, error) {
+	var grammar string
+	for _, parameter := range request.Parameters {
+		if strings.TrimSpace(parameter.Name) != omniGrammarParameter {
+			continue
+		}
+		value, ok := parameter.Value.(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			return "", omniGrammarFailure(`OMNI parameter "grammar" must be a nonempty GBNF string`)
+		}
+		for _, input := range request.Inputs {
+			if input.Modality != models.ModalityText {
+				return "", omniGrammarFailure(`OMNI parameter "grammar" supports text-only input`)
+			}
+		}
+		grammar = value
+	}
+	return grammar, nil
+}
+
+func omniGrammarFailure(message string) error {
+	return &models.InvocationFailure{
+		Class:     models.InvocationFailureClassInvalidParameter,
+		Operation: models.OperationOMNI, Parameter: omniGrammarParameter,
+		Message: message,
+	}
+}
 
 // decodeOmniMaxTokens validates one canonical OMNI max_tokens value: a
 // positive integer that fits in the pinned int32 Tokens field. The value is

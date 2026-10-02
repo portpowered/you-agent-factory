@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -19,6 +20,46 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func TestModelsOmniInvalidGrammarReturnsCodedDiagnosticWithoutInference(t *testing.T) {
+	t.Parallel()
+	fixture := buildOmniFileInputFixture(t, "must not be generated")
+	t.Cleanup(func() { closeRootProcess(t, fixture.process, "close invalid-grammar process") })
+	before := fixture.protocol.Calls()
+	for _, value := range []any{true, ""} {
+		parameter, err := json.Marshal(map[string]any{"name": "grammar", "value": value})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var stdout, stderr bytes.Buffer
+		inputs := support.FakeInputs(t.Context(), []string{
+			"you", "--json", "models", "invoke", "llm", "--input", "prompt=Translate",
+			"--parameter", string(parameter),
+		})
+		inputs.Input.Env = functionalHomeEnvironment(fixture.home)
+		inputs.Input.WorkingDirectory = fixture.dir
+		inputs.Input.Stdout, inputs.Input.Stderr = &stdout, &stderr
+		err = fixture.process.Execute(inputs.Input)
+		var failure *models.InvocationFailure
+		if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassInvalidParameter ||
+			failure.Parameter != "grammar" || failure.Operation != models.OperationOMNI {
+			t.Fatalf("grammar %#v: error = %v, want OMNI grammar InvalidParameter", value, err)
+		}
+		var diagnostic struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(stderr.Bytes(), &diagnostic); err != nil {
+			t.Fatalf("decode stderr %q: %v", stderr.String(), err)
+		}
+		if diagnostic.Code != "BAD_REQUEST" || !strings.Contains(diagnostic.Message, "grammar") || stdout.Len() != 0 {
+			t.Fatalf("grammar %#v: stdout=%q diagnostic=%#v", value, stdout.String(), diagnostic)
+		}
+	}
+	if fixture.protocol.Calls() != before {
+		t.Fatal("invalid grammar reached inference")
+	}
+}
 
 func TestModelsOmniFileInputsPreserveDetectedTypesAndImageOrderThroughRootBuildProcess(t *testing.T) {
 	t.Parallel()

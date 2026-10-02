@@ -285,8 +285,7 @@ supportingFiles:
                         "The preserve_names metadata is an operator glossary: when a complete listed name occurs in a "
                         "source segment, retain that full phrase verbatim in its translation, including conjunctions "
                         "and spaces; do not translate its individual words or add absent glossary terms. "
-                        "If returning a file, return only {\"filename\":\"relative-file.json\"}; the file must stay inside "
-                        "the artifact directory and contain the complete object.\n"
+                        "Return the complete object directly, without filename pointers or additional keys.\n"
                         + json.dumps(request, ensure_ascii=False)
                     )
 
@@ -315,10 +314,12 @@ supportingFiles:
                     return value
 
 
-                def load_translation_response(text, root):
+                def load_translation_response(text, root=None):
                     value = _json_object(text)
                     if set(value) != {"filename"}:
                         return value
+                    if root is None:
+                        raise ValueError("Constrained model translation must contain the complete object, not a filename")
                     filename = value["filename"]
                     if not isinstance(filename, str) or not filename.strip():
                         raise ValueError("Translation filename must be a relative JSON filename")
@@ -385,6 +386,58 @@ supportingFiles:
                     return header + "".join(lines)
           id: factory/scripts/dub_contract.py
           targetPath: factory/scripts/dub_contract.py
+          type: SCRIPT
+        - content:
+            encoding: utf-8
+            inline: |
+                """GBNF response contracts for text-only Models generation.
+
+                Grammar constrains representation; source meaning still requires validation and
+                an independent semantic audit. JSON strings retain Unicode and legal escapes.
+                """
+
+                import json
+
+
+                # Unbounded inter-token whitespace allowed native generation to spend hundreds
+                # of tokens on blank lines instead of advancing to the next required cue.
+                # One optional character keeps spacing flexible without an unlimited stall.
+                # This does not constrain whitespace or length inside translated JSON strings.
+                JSON_RULES = r'''
+                ws ::= [ \t\n\r]?
+                text ::= "\"" character+ "\"" ws
+                character ::= [^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4})
+                '''
+
+
+                def literal(value):
+                    """Quote a complete JSON value as a GBNF terminal."""
+                    return json.dumps(json.dumps(value, ensure_ascii=False), ensure_ascii=False)
+
+
+                def translation_grammar(segments, language):
+                    cues = []
+                    for segment in segments:
+                        cues.append('"{" ws ' + literal("id") + ' ws ":" ws '
+                                    + literal(segment["id"]) + ' ws "," ws '
+                                    + literal("text") + ' ws ":" ws text "}" ws')
+                    body = ' "," ws '.join(cues)
+                    return ('root ::= ws "{" ws ' + literal("language") + ' ws ":" ws '
+                            + literal(language) + ' ws "," ws ' + literal("segments")
+                            + ' ws ":" ws "[" ws ' + body + ' "]" ws "}" ws\n' + JSON_RULES)
+
+
+                def audit_grammar(identifiers):
+                    ids = " | ".join(literal(identifier) for identifier in sorted(identifiers))
+                    return ('root ::= ws "{" ws ' + literal("valid") + ' ws ":" ws result "}" ws\n'
+                            'result ::= "true" ws "," ws ' + literal("issues") + ' ws ":" ws "[" ws "]" ws'
+                            ' | "false" ws "," ws ' + literal("issues")
+                            + ' ws ":" ws "[" ws issue ("," ws issue)* "]" ws\n'
+                            'issue ::= "{" ws ' + literal("segment_id") + ' ws ":" ws identifier ws "," ws '
+                            + literal("suggested_correction") + ' ws ":" ws text "}" ws\n'
+                            'identifier ::= ' + ids + '\n' + JSON_RULES)
+          id: factory/scripts/dub_grammar.py
+          targetPath: factory/scripts/dub_grammar.py
           type: SCRIPT
         - content:
             encoding: utf-8
@@ -570,6 +623,7 @@ supportingFiles:
                     validate_segments, validate_translations, target_language, LANGUAGES, playback_segments,
                 )
                 from dub_media import CommandFailed, SpeechDoesNotFit, command, fit_speech, mux, reference, timeline, video_duration
+                from dub_grammar import audit_grammar, translation_grammar
 
                 # These partition targets bound one inference call, never the complete input.
                 ASR_CLIP_MS = 300_000
@@ -725,11 +779,12 @@ supportingFiles:
                         if translated is None:
                             prompt.write_text(prompt_text + feedback, encoding="utf-8")
                             model(model_name, "OMNI", [f"prompt=@{prompt}"],
-                                  [f"text={response}", f"usage={root / ('translation-usage' + suffix + '.json')}"])
+                                  [f"text={response}", f"usage={root / ('translation-usage' + suffix + '.json')}"],
+                                  parameters={"grammar": translation_grammar(segments, language)})
                         try:
                             if translated is None:
                                 translated = validate_translations(
-                                    load_translation_response(response.read_text(encoding="utf-8-sig"), root),
+                                    load_translation_response(response.read_text(encoding="utf-8-sig")),
                                     segments, language, preserve_names,
                                 )
                             save_json(root / f"translation-candidate{suffix}-attempt-{attempt + 1}.json",
@@ -737,6 +792,8 @@ supportingFiles:
                             audit_translation(root, translated, language, model_name, suffix, attempt + 1)
                             return translated
                         except (ValueError, OSError, KeyError, TypeError) as error:
+                            if isinstance(error, CommandFailed):
+                                raise
                             last_error = str(error)
                             print(f"Translation validation attempt {attempt + 1}: {last_error}", file=sys.stderr)
                             corrections = error.corrections if isinstance(error, TranslationAuditRejected) else None
@@ -785,7 +842,7 @@ supportingFiles:
                     identifiers, focus_instructions = translation_audit_focus(translated, focus_ids)
                     if focus_ids is not None:
                         request["focus_ids"] = focus_ids
-                    issue_shape = "Each issue may be a nonempty string or " if focus_ids is None else "Each issue must be "
+                    issue_shape = "Each issue must be "
                     prompt.write_text(
                         focus_instructions +
                         "Independently audit these translations against the original source and surrounding segment context. "
@@ -818,7 +875,8 @@ supportingFiles:
                         "No commentary, filename pointers, or additional keys.\n"
                         + json.dumps(request, ensure_ascii=False), encoding="utf-8")
                     model(model_name, "OMNI", [f"prompt=@{prompt}"],
-                          [f"text={response}", f"usage={root / (prefix + '-usage.json')}"])
+                          [f"text={response}", f"usage={root / (prefix + '-usage.json')}"],
+                          parameters={"grammar": audit_grammar(identifiers)})
 
                     def unique_keys(items):
                         result = {}
@@ -932,25 +990,42 @@ supportingFiles:
                         + json.dumps(output_example, ensure_ascii=False) + "\nINPUT DATA:\n"
                         + json.dumps(request, ensure_ascii=False), encoding="utf-8")
                     model(value["models"]["llm"], "OMNI", [f"prompt=@{prompt}"],
-                          [f"text={response}", f"usage={root / (prefix + '-usage.json')}"])
+                          [f"text={response}", f"usage={root / (prefix + '-usage.json')}"],
+                          parameters={"grammar": translation_grammar([segment], value["language"])})
                     try:
-                        replacement = validate_translations(load_translation_response(response.read_text(encoding="utf-8-sig"), root),
+                        replacement = validate_translations(load_translation_response(response.read_text(encoding="utf-8-sig")),
                             [value["segments"][index]], value["language"], value.get("preserve_names", []))
-                        candidate = [dict(item) for item in translated]
-                        candidate[index]["text"] = replacement[0]["text"]
-                        validate_translations({"language": value["language"], "segments": [
-                            {"id": item["id"], "text": item["text"]} for item in candidate]},
-                            value["segments"], value["language"], value.get("preserve_names", []))
-                        save_json(root / f"{prefix}-candidate.json", {"language": value["language"], "segments": candidate})
-                        # Unchanged cues retain their previous approval. Review the repaired
-                        # cue with source neighbors; do not re-audit a whole long recording.
-                        audit_translation(root, candidate[max(0, index - 2):index + 3], value["language"],
-                                          value["models"]["llm"], f"-{prefix}", 1, focus_ids=[segment["id"]])
-                        return candidate[index]
+                        return audit_fit_candidate(root, translated, index, value, prefix, replacement[0]["text"])
                     except (ValueError, KeyError, TypeError) as error:
                         if isinstance(error, CommandFailed):
                             raise
                         raise FitTranslationRejected(str(error)) from error
+
+
+                def audit_fit_candidate(root, translated, index, value, prefix, text):
+                    """Recheck bounded indexed corrections before any replacement reaches TTS."""
+                    identifier = translated[index]["id"]
+                    for attempt in range(1, 4):
+                        candidate = [dict(item) for item in translated]
+                        candidate[index]["text"] = text
+                        validate_translations({"language": value["language"], "segments": [
+                            {"id": item["id"], "text": item["text"]} for item in candidate]},
+                            value["segments"], value["language"], value.get("preserve_names", []))
+                        document = {"language": value["language"], "segments": candidate}
+                        save_json(root / f"{prefix}-candidate-attempt-{attempt}.json", document)
+                        try:
+                            audit_translation(root, candidate[max(0, index - 2):index + 3], value["language"],
+                                              value["models"]["llm"], f"-{prefix}", attempt, focus_ids=[identifier])
+                        except TranslationAuditRejected as error:
+                            save_json(root / f"{prefix}-audit-rejection-{attempt}.json",
+                                      {"message": str(error), "corrections": error.corrections})
+                            if attempt == 3 or not error.corrections or set(error.corrections) != {identifier}:
+                                raise
+                            text = error.corrections[identifier]
+                            continue
+                        save_json(root / f"{prefix}-candidate.json", document)
+                        save_json(root / f"{prefix}-approval.json", {"audit_attempt": attempt, "segment_id": identifier})
+                        return candidate[index]
 
 
                 def synthesize_segment(root, translated, index, value):
@@ -1119,7 +1194,7 @@ supportingFiles:
                         with tempfile.TemporaryDirectory() as directory:
                             root = Path(directory)
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 prompt = Path(inputs[0].removeprefix("prompt=@")).read_text(encoding="utf-8")
                                 request = json.loads(prompt.splitlines()[-1])
                                 self.assertEqual(request["focus_ids"], [1])
@@ -1143,7 +1218,7 @@ supportingFiles:
                         with tempfile.TemporaryDirectory() as directory:
                             root = Path(directory)
                             for reply in replies:
-                                def infer(name, operation, inputs, outputs):
+                                def infer(name, operation, inputs, outputs, parameters=None):
                                     dub_video.save_json(Path(outputs[0].removeprefix("text=")), reply)
                                 with self.subTest(reply=reply), patch.object(dub_video, "model", side_effect=infer):
                                     with self.assertRaises(ValueError) as rejected:
@@ -1156,7 +1231,7 @@ supportingFiles:
                             segments = self.segments()
                             segments[1]["text"] = "I can help you."
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 dub_video.save_json(Path(outputs[0].removeprefix("text=")), {"valid": False, "issues": [
                                     {"segment_id": 1, "suggested_correction": "Can any kind person help me?"}]})
 
@@ -1363,6 +1438,50 @@ supportingFiles:
 
 
                 class DubFitRepairTests(unittest.TestCase):
+                    def test_indexed_correction_is_reaudited_before_replacement_speech(self):
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+                            translated, value = self.inputs(root)
+                            calls = []
+
+                            def infer(name, operation, inputs, outputs, parameters=None, server=""):
+                                if operation == "TTS":
+                                    calls.append(("tts", inputs[0]))
+                                    Path(outputs[0].removeprefix("audio=")).write_bytes(b"speech")
+                                    return
+                                self.assertEqual(set(parameters), {"grammar"})
+                                self.assertTrue(parameters["grammar"].startswith("root ::="))
+                                prompt = Path(inputs[0].removeprefix("prompt=@"))
+                                request = json.loads(prompt.read_text(encoding="utf-8").split("\n")[-1])
+                                if prompt.name.startswith("fit-translation"):
+                                    reply = {"language": "en-US", "segments": [{"id": 1, "text": "Can anyone help me?"}]}
+                                else:
+                                    text = request["segments"][1]["translation"]
+                                    calls.append(("audit", text))
+                                    reply = {"valid": text == "Can anyone kind help me?", "issues": []}
+                                    if not reply["valid"]:
+                                        reply["issues"] = [{"segment_id": 1, "suggested_correction": "Can anyone kind help me?"}]
+                                dub_video.save_json(Path(outputs[0].removeprefix("text=")), reply)
+
+                            def fit(speech, fitted, segment, limit):
+                                if segment["text"].startswith("Is there"):
+                                    raise SpeechDoesNotFit(1, 2320, 1120, 2.07)
+                                fitted.write_bytes(b"fitted")
+                                segment["speech_end"] = 2120
+                                return 1.64
+
+                            with patch.object(dub_video, "reference", side_effect=lambda v, s, d: d.write_bytes(b"reference")), \
+                                 patch.object(dub_video, "model", side_effect=infer), \
+                                 patch.object(dub_video, "fit_speech", side_effect=fit):
+                                result = dub_video.synthesize_segment(root, translated, 1, value)
+                            self.assertEqual(calls, [("tts", "text=Is there anyone kind who can help me?"),
+                                ("audit", "Can anyone help me?"), ("audit", "Can anyone kind help me?"),
+                                ("tts", "text=Can anyone kind help me?")])
+                            self.assertEqual(result["text"], "Can anyone kind help me?")
+                            self.assertEqual(dub_video.read_json(root / "fit-translation-1-revision-1-approval.json")["audit_attempt"], 2)
+                            self.assertTrue((root / "fit-translation-1-revision-1-candidate-attempt-1.json").is_file())
+                            self.assertTrue((root / "fit-translation-1-revision-1-audit-rejection-1.json").is_file())
+
                     def inputs(self, root):
                         source = [{"id": 0, "start": 0, "end": 900, "text": "你好"},
                                   {"id": 1, "start": 1000, "end": 2120, "text": "有没有好心人可以帮帮我？"},
@@ -1459,7 +1578,7 @@ supportingFiles:
                                 with self.assertRaises(dub_video.FitTranslationRejected):
                                     dub_video.synthesize_segment(root, translated, 1, value)
                             self.assertEqual(len(tts_calls), 1)
-                            self.assertEqual((len(repairs), len(audits)), (2, 2))
+                            self.assertEqual((len(repairs), len(audits)), (2, 6))
                             self.assertIn("Is there anyone kind who can help me?", repairs[1]["previous_rejection"])
                             self.assertEqual(len(list(root.glob("*.fit-revision-*-rejected.json"))), 2)
                             self.assertEqual(translated[1]["text"], "Is there anyone kind who can help me?")
@@ -1514,7 +1633,7 @@ supportingFiles:
                             value = {"segments": source, "language": "en-US", "models": {"llm": "llm"}}
                             audits = []
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                                 request = json.loads(prompt.read_text(encoding="utf-8").split("\n")[-1])
                                 if prompt.name.startswith("translation-audit"):
@@ -1541,7 +1660,7 @@ supportingFiles:
                             translated, value = self.inputs(root)
                             requests = []
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                                 content = prompt.read_text(encoding="utf-8")
                                 if prompt.name.startswith("fit-translation"):
@@ -1580,6 +1699,99 @@ supportingFiles:
                     unittest.main()
           id: factory/scripts/test_dub_fit_repair.py
           targetPath: factory/scripts/test_dub_fit_repair.py
+          type: SCRIPT
+        - content:
+            encoding: utf-8
+            inline: |
+                """Structured model calls carry exact response contracts, without file access."""
+
+                import json
+                import tempfile
+                import unittest
+                from pathlib import Path
+                from unittest.mock import patch
+
+                import dub_video
+                from dub_contract import load_translation_response
+                from dub_grammar import audit_grammar, literal, translation_grammar
+                from dub_media import CommandFailed
+
+
+                class DubGrammarTests(unittest.TestCase):
+                    def test_intertoken_whitespace_has_no_unbounded_generation_path(self):
+                        for grammar in [translation_grammar([{"id": 4}, {"id": 11}], "ko-KR"),
+                                        audit_grammar({4, 11})]:
+                            whitespace = next(line for line in grammar.splitlines() if line.startswith("ws ::="))
+                            self.assertEqual(whitespace, r"ws ::= [ \t\n\r]?")
+                            self.assertNotIn("ws*", grammar)
+                            self.assertNotIn("ws+", grammar)
+                            # Text remains an unconstrained sequence of legal JSON characters.
+                            self.assertIn('character+', grammar)
+
+                    def test_translation_and_focused_audit_forward_distinct_contracts(self):
+                        source = [{"id": 4, "start": 0, "end": 1000, "text": "你好"}]
+                        calls = []
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+
+                            def infer(name, operation, inputs, outputs, parameters=None):
+                                calls.append(parameters["grammar"])
+                                prompt = Path(inputs[0].removeprefix("prompt=@")).read_text(encoding="utf-8")
+                                self.assertNotIn('If returning a file', prompt)
+                                reply = {"valid": True, "issues": []} if len(calls) == 2 else \
+                                    {"language": "en-US", "segments": [{"id": 4, "text": "Hello"}]}
+                                dub_video.save_json(Path(outputs[0].removeprefix("text=")), reply)
+
+                            with patch.object(dub_video, "model", side_effect=infer):
+                                result = dub_video.translate_batch(root, source, "en-US", "llm", 0)
+                            self.assertEqual(result[0]["source_text"], "你好")
+                            self.assertEqual(calls, [translation_grammar(source, "en-US"), audit_grammar({4})])
+                            focused = audit_grammar({7})
+                            self.assertIn('identifier ::= "7"', focused)
+                            self.assertNotIn('identifier ::= "4"', focused)
+                            self.assertIn('"true"', focused)
+                            self.assertIn('"false"', focused)
+                            self.assertNotIn('filename', calls[0])
+
+                    def test_terminal_quoting_roundtrips_unicode_quotes_and_control_escapes(self):
+                        for value in ['zh-CN', '韩文 日本語 中文', 'quote"\\\n\t\x00', 59]:
+                            self.assertEqual(json.loads(json.loads(literal(value))), value)
+                        grammar = translation_grammar([{"id": 59}], "ko-KR")
+                        self.assertIn(r'\x00-\x1F', grammar)
+                        self.assertIn(r'"u" [0-9a-fA-F]{4}', grammar)
+
+                    def test_plain_model_response_cannot_follow_a_file_pointer(self):
+                        with tempfile.TemporaryDirectory() as directory:
+                            path = Path(directory) / "translation.json"
+                            path.write_text('{"language":"en-US","segments":[]}', encoding="utf-8")
+                            with self.assertRaisesRegex(ValueError, "not a filename"):
+                                load_translation_response(json.dumps({"filename": str(path)}))
+
+                    def test_audit_model_cancellation_propagates_without_regenerating_batch(self):
+                        source = [{"id": 4, "start": 0, "end": 1000, "text": "你好"}]
+                        calls = []
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+                            failure = CommandFailed("you", 130, "caller canceled")
+
+                            def infer(name, operation, inputs, outputs, parameters=None):
+                                calls.append(operation)
+                                if len(calls) == 2:
+                                    raise failure
+                                dub_video.save_json(Path(outputs[0].removeprefix("text=")),
+                                    {"language": "en-US", "segments": [{"id": 4, "text": "Hello"}]})
+
+                            with patch.object(dub_video, "model", side_effect=infer):
+                                with self.assertRaises(CommandFailed) as caught:
+                                    dub_video.translate_batch(root, source, "en-US", "llm", 0)
+                            self.assertIs(caught.exception, failure)
+                            self.assertEqual(len(calls), 2)
+
+
+                if __name__ == "__main__":
+                    unittest.main()
+          id: factory/scripts/test_dub_grammar.py
+          targetPath: factory/scripts/test_dub_grammar.py
           type: SCRIPT
         - content:
             encoding: utf-8
@@ -1690,7 +1902,7 @@ supportingFiles:
                                 intervals.append((interval["start"], interval["end"]))
                                 destination.write_bytes(b"bounded PCM")
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 clip = Path(inputs[0].removeprefix("audio=@"))
                                 clips.append(clip)
                                 self.assertEqual(clip.read_bytes(), b"bounded PCM")
@@ -1801,7 +2013,7 @@ supportingFiles:
                                 subtitles="", asr_model="asr", llm_model="llm", tts_model="qwen3-tts-base", tts_server="",
                                 preserve_names="  Silver Clouds  \n\nAlice Smith\r\n ")
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 self.assertEqual((name, operation), ("asr", "ASR"))
                                 self.assertEqual(Path(inputs[0].removeprefix("audio=@")).read_bytes(), b"bounded PCM")
                                 Path(outputs[0].removeprefix("transcript=")).write_text("Silver Clouds", encoding="utf-8")
@@ -1824,7 +2036,7 @@ supportingFiles:
                             value["preserve_names"] = ["Silver Clouds"]
                             dub_video.save_json(manifest, value)
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                                 self.assertFalse(prompt.name.startswith("translation-audit"))
                                 self.assertEqual(operation, "OMNI")
@@ -1872,7 +2084,7 @@ supportingFiles:
                             root = Path(directory)
                             manifest = self.manifest(root, stage="transcribed")
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 self.assertEqual([item.split('=', 1)[0] for item in outputs], ['text', 'usage'])
                                 Path(outputs[0].removeprefix("text=")).write_text(
                                     '{"language":"zh-CN","segments":[]}', encoding="utf-8")
@@ -1894,7 +2106,7 @@ supportingFiles:
                             value["duration_ms"] = 650
                             dub_video.save_json(manifest, value)
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                                 request = json.loads(prompt.read_text(encoding="utf-8").split("\n")[-1])
                                 if prompt.name.startswith("translation-audit"):
@@ -1919,7 +2131,7 @@ supportingFiles:
                             manifest = self.manifest(root, stage="transcribed")
                             translation_prompts = []
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 self.assertEqual((name, operation), ("llm", "OMNI"))
                                 self.assertEqual([item.split("=", 1)[0] for item in outputs], ["text", "usage"])
                                 prompt = Path(inputs[0].removeprefix("prompt=@"))
@@ -1957,7 +2169,7 @@ supportingFiles:
                             root = Path(directory)
                             translations, audits = [], []
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                                 request = json.loads(prompt.read_text(encoding="utf-8").split("\n")[-1])
                                 if prompt.name.startswith("translation-audit"):
@@ -1984,7 +2196,7 @@ supportingFiles:
                             root = Path(directory)
                             translations, audits = [], []
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 self.assertEqual(operation, "OMNI")
                                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                                 if prompt.name.startswith("translation-audit"):
@@ -2006,7 +2218,7 @@ supportingFiles:
                         with tempfile.TemporaryDirectory() as directory:
                             root = Path(directory)
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 dub_video.save_json(Path(outputs[0].removeprefix("text=")), {"valid": False, "issues": [
                                     {"segment_id": 7, "suggested_correction": "Good morning"},
                                     {"segment_id": 7, "suggested_correction": "Good evening"}]})
@@ -2022,7 +2234,7 @@ supportingFiles:
                             root = Path(directory)
                             calls = {"translations": 0, "audits": 0}
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                                 if prompt.name.startswith("translation-audit"):
                                     calls["audits"] += 1
@@ -2044,7 +2256,7 @@ supportingFiles:
                             manifest = self.manifest(root, stage="transcribed")
                             attempts = 0
 
-                            def infer(name, operation, inputs, outputs):
+                            def infer(name, operation, inputs, outputs, parameters=None):
                                 nonlocal attempts
                                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                                 if prompt.name.startswith("translation-audit"):
@@ -2080,7 +2292,7 @@ supportingFiles:
                             root = Path(directory)
                             for response in responses:
                                 with self.subTest(response=response):
-                                    def infer(name, operation, inputs, outputs):
+                                    def infer(name, operation, inputs, outputs, parameters=None):
                                         prompt = Path(inputs[0].removeprefix("prompt=@")).read_text(encoding="utf-8")
                                         self.assertIn("Determine intended context from the SOURCE segments", prompt)
                                         self.assertIn("Never propose changing explicit play/resume music", prompt)
@@ -2094,7 +2306,7 @@ supportingFiles:
                         with tempfile.TemporaryDirectory() as directory:
                             for response in [payload, "```json\n" + payload + "\n```", "```\n" + payload + "\n```"]:
                                 with self.subTest(response=response):
-                                    def infer(name, operation, inputs, outputs):
+                                    def infer(name, operation, inputs, outputs, parameters=None):
                                         Path(outputs[0].removeprefix("text=")).write_text(response, encoding="utf-8")
                                     with patch.object(dub_video, "model", side_effect=infer):
                                         dub_video.audit_translation(Path(directory), translated, "zh-CN", "llm", "", 1)

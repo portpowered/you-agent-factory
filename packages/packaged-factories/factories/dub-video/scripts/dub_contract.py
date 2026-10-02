@@ -192,8 +192,7 @@ def translation_prompt(source, language, preserve_names=None):
         "The preserve_names metadata is an operator glossary: when a complete listed name occurs in a "
         "source segment, retain that full phrase verbatim in its translation, including conjunctions "
         "and spaces; do not translate its individual words or add absent glossary terms. "
-        "If returning a file, return only {\"filename\":\"relative-file.json\"}; the file must stay inside "
-        "the artifact directory and contain the complete object.\n"
+        "Return the complete object directly, without filename pointers or additional keys.\n"
         + json.dumps(request, ensure_ascii=False)
     )
 
@@ -222,10 +221,12 @@ def _json_object(text):
     return value
 
 
-def load_translation_response(text, root):
+def load_translation_response(text, root=None):
     value = _json_object(text)
     if set(value) != {"filename"}:
         return value
+    if root is None:
+        raise ValueError("Constrained model translation must contain the complete object, not a filename")
     filename = value["filename"]
     if not isinstance(filename, str) or not filename.strip():
         raise ValueError("Translation filename must be a relative JSON filename")

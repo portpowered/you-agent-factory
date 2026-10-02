@@ -19,7 +19,7 @@ class DubAuditFocusTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 prompt = Path(inputs[0].removeprefix("prompt=@")).read_text(encoding="utf-8")
                 request = json.loads(prompt.splitlines()[-1])
                 self.assertEqual(request["focus_ids"], [1])
@@ -43,7 +43,7 @@ class DubAuditFocusTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for reply in replies:
-                def infer(name, operation, inputs, outputs):
+                def infer(name, operation, inputs, outputs, parameters=None):
                     dub_video.save_json(Path(outputs[0].removeprefix("text=")), reply)
                 with self.subTest(reply=reply), patch.object(dub_video, "model", side_effect=infer):
                     with self.assertRaises(ValueError) as rejected:
@@ -56,7 +56,7 @@ class DubAuditFocusTests(unittest.TestCase):
             segments = self.segments()
             segments[1]["text"] = "I can help you."
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 dub_video.save_json(Path(outputs[0].removeprefix("text=")), {"valid": False, "issues": [
                     {"segment_id": 1, "suggested_correction": "Can any kind person help me?"}]})
 

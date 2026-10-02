@@ -12,6 +12,50 @@ from dub_media import SpeechDoesNotFit
 
 
 class DubFitRepairTests(unittest.TestCase):
+    def test_indexed_correction_is_reaudited_before_replacement_speech(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            translated, value = self.inputs(root)
+            calls = []
+
+            def infer(name, operation, inputs, outputs, parameters=None, server=""):
+                if operation == "TTS":
+                    calls.append(("tts", inputs[0]))
+                    Path(outputs[0].removeprefix("audio=")).write_bytes(b"speech")
+                    return
+                self.assertEqual(set(parameters), {"grammar"})
+                self.assertTrue(parameters["grammar"].startswith("root ::="))
+                prompt = Path(inputs[0].removeprefix("prompt=@"))
+                request = json.loads(prompt.read_text(encoding="utf-8").split("\n")[-1])
+                if prompt.name.startswith("fit-translation"):
+                    reply = {"language": "en-US", "segments": [{"id": 1, "text": "Can anyone help me?"}]}
+                else:
+                    text = request["segments"][1]["translation"]
+                    calls.append(("audit", text))
+                    reply = {"valid": text == "Can anyone kind help me?", "issues": []}
+                    if not reply["valid"]:
+                        reply["issues"] = [{"segment_id": 1, "suggested_correction": "Can anyone kind help me?"}]
+                dub_video.save_json(Path(outputs[0].removeprefix("text=")), reply)
+
+            def fit(speech, fitted, segment, limit):
+                if segment["text"].startswith("Is there"):
+                    raise SpeechDoesNotFit(1, 2320, 1120, 2.07)
+                fitted.write_bytes(b"fitted")
+                segment["speech_end"] = 2120
+                return 1.64
+
+            with patch.object(dub_video, "reference", side_effect=lambda v, s, d: d.write_bytes(b"reference")), \
+                 patch.object(dub_video, "model", side_effect=infer), \
+                 patch.object(dub_video, "fit_speech", side_effect=fit):
+                result = dub_video.synthesize_segment(root, translated, 1, value)
+            self.assertEqual(calls, [("tts", "text=Is there anyone kind who can help me?"),
+                ("audit", "Can anyone help me?"), ("audit", "Can anyone kind help me?"),
+                ("tts", "text=Can anyone kind help me?")])
+            self.assertEqual(result["text"], "Can anyone kind help me?")
+            self.assertEqual(dub_video.read_json(root / "fit-translation-1-revision-1-approval.json")["audit_attempt"], 2)
+            self.assertTrue((root / "fit-translation-1-revision-1-candidate-attempt-1.json").is_file())
+            self.assertTrue((root / "fit-translation-1-revision-1-audit-rejection-1.json").is_file())
+
     def inputs(self, root):
         source = [{"id": 0, "start": 0, "end": 900, "text": "你好"},
                   {"id": 1, "start": 1000, "end": 2120, "text": "有没有好心人可以帮帮我？"},
@@ -108,7 +152,7 @@ class DubFitRepairTests(unittest.TestCase):
                 with self.assertRaises(dub_video.FitTranslationRejected):
                     dub_video.synthesize_segment(root, translated, 1, value)
             self.assertEqual(len(tts_calls), 1)
-            self.assertEqual((len(repairs), len(audits)), (2, 2))
+            self.assertEqual((len(repairs), len(audits)), (2, 6))
             self.assertIn("Is there anyone kind who can help me?", repairs[1]["previous_rejection"])
             self.assertEqual(len(list(root.glob("*.fit-revision-*-rejected.json"))), 2)
             self.assertEqual(translated[1]["text"], "Is there anyone kind who can help me?")
@@ -163,7 +207,7 @@ class DubFitRepairTests(unittest.TestCase):
             value = {"segments": source, "language": "en-US", "models": {"llm": "llm"}}
             audits = []
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                 request = json.loads(prompt.read_text(encoding="utf-8").split("\n")[-1])
                 if prompt.name.startswith("translation-audit"):
@@ -190,7 +234,7 @@ class DubFitRepairTests(unittest.TestCase):
             translated, value = self.inputs(root)
             requests = []
 
-            def infer(name, operation, inputs, outputs):
+            def infer(name, operation, inputs, outputs, parameters=None):
                 prompt = Path(inputs[0].removeprefix("prompt=@"))
                 content = prompt.read_text(encoding="utf-8")
                 if prompt.name.startswith("fit-translation"):

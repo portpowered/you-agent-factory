@@ -417,7 +417,7 @@ The next real run passed semantic review and recovered an EOS failure, then cue
 Initial translation prompts now supply each source cue's duration and request
 compact natural speech without a hard word count or omitted meaning. Only a
 measured `SpeechDoesNotFit` rejection can request a targeted concise revision.
-There are at most three text versions including the original. Revisions receive
+There are at most three speech versions including the original; intermediate audited text candidates are bounded separately. Revisions receive
 the measured duration, available playback duration, unchanged original source,
 and two neighbors on each side. The complete candidate is structurally validated;
 the changed cue and its source neighbors are audited before regeneration.
@@ -625,3 +625,88 @@ console print then raised a Windows cp1252 UnicodeEncodeError on Chinese source
 text. This is a research reporting failure, not a model or factory failure;
 the production entrypoint already reconfigures both streams to UTF-8. CPU
 inspection independently read the saved result, audit, and WAV duration.
+
+
+## Constrained text responses and bounded fit correction review
+
+The latest full English run stopped legitimately at cue 2. Its first concise
+proposal omitted kindness; the next omitted the person receiving help. Both
+were rejected before replacement speech. There is no final delivery acceptance
+or merge claim from that run.
+
+Text-only Models calls now receive explicit GBNF for translation, fit proposals,
+and audits. Translation grammar fixes the original ordered IDs and requested
+language; audit grammar permits either approval with an empty issue list or
+rejection with structured corrections for permitted source IDs. Unicode text and
+legal JSON escapes remain supported. File pointers cannot be followed by these
+plain model calls. Grammar constrains representation and does not establish
+semantic accuracy; structural checks, glossary checks, source-context audits,
+and the 2x speech guard remain required. Real native grammar/reasoning
+compatibility is pending; no global reasoning setting or output cap changed.
+
+For each of the two possible replacement speech versions, a fit proposal permits
+at most three audited candidate forms. An indexed audit suggestion is validated
+against the complete source and glossary, then audited again with the same
+focused cue and neighboring source context. Only an approved form reaches TTS.
+Intermediate complete candidates and rejections are retained; an approval file
+identifies the accepted audit round. Model errors and cancellation propagate.
+A controlled component witness reproduces missing-kindness rejection, faithful
+indexed correction, re-audit approval, and only then replacement TTS; another
+witness bounds repeated semantic rejection to three reviews per proposal.
+
+
+The first native grammar probe enforced the requested Korean object/ID prefix
+despite a prompt requesting plain prose, but exhausted its explicit research
+512-token budget after producing hundreds of inter-token blank lines. The
+incomplete output is preserved under `C:/t/dub-multilingual-validation/native-grammar-proof`.
+The grammar now permits at most one optional whitespace character between JSON
+tokens, preventing that unbounded whitespace path. Translation strings remain
+unbounded legal JSON text; this adds no token, reasoning, or text-length cap.
+The 62-test component suite passes; a repeat native probe remains required.
+
+
+## Supplied larger Qwen: actual managed comparison
+
+The supplied local Qwen GGUF was successfully pulled and invoked through the
+installed public Models CLI using an isolated named operator configuration;
+this supersedes the earlier external note's untested managed-route statement.
+The exact model/projector hashes were preserved. The first offline invocation
+selected the CPU archive and failed before load after a CUDA pull; normal
+managed invocation succeeded. This observed offline-selection issue remains
+recorded without a speculative resolver fix.
+
+A managed text call produced 16 complete translations of four clean Chinese
+propositions into English, Japanese, Korean, and Spanish. The positive meanings
+of 不少/不错 and the complete band name/music-playback action were retained.
+These are proposition checks, not native-speaker fluency certification. The
+response was a fenced outer array despite a requested object: this was a schema
+failure, not output-budget truncation. The complete UTF-8 artifacts are preserved
+under `C:/t/dub-local-qwen-managed/`; a later cp1252 reporting error did not
+invalidate the successful Models invocation.
+
+Observed device free memory reached only 430 MiB during the multilingual call.
+The managed effective context was not exposed, the projector was not exercised,
+and neither 131k context nor projector/MTP settings were proven. English cue 2
+remained ten words, with no demonstrated concise-fit or TTS-duration advantage.
+The larger model is usable when resources permit, but the built-in default
+remains unchanged. Source-ASR ambiguities and self-audit limitations remain.
+The customer preference for easier/freeform agent outputs is retained; plain
+model steps requiring indexed data use constrained grammar. Full Japanese,
+Korean, and Spanish long-video tests remain pending after merge, alongside the
+still-required successful English full delivery. Comparison evidence is in
+`C:/t/dub-local-qwen-comparison/comparison.md` (final public-route sections).
+
+
+The repeat native probe with bounded whitespace exited successfully and returned
+a complete object with exact language `ko-KR` and ordered IDs 4,11 in 62 tokens,
+although its prompt requested plain Korean text without JSON. The audit call
+returned exactly `{"valid":true,"issues":[]}` in 16 tokens despite a prompt
+requesting the plain word INVALID. Both completed below their explicit research
+512-token budgets. Saved grammars exactly match the current Factory generators;
+independent CPU inspection confirmed response schemas, IDs, language, usage,
+and proof-file agreement. Evidence: `C:/t/dub-multilingual-validation/native-grammar-bounded-ws-proof/`
+and `C:/t/dub-multilingual-validation/independent-review/current/native-grammar-proof.json`.
+This confirms the public parameter/native transport enforces representation
+without a global reasoning change. The deliberately contrary prompts provide
+no semantic-accuracy or complete-video-delivery evidence. The actual cue-2
+repair and reference-conditioned TTS probe remains a separate acceptance step.

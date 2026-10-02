@@ -194,8 +194,10 @@ The original video is preserved.
 
 Every translation must retain the exact source segment IDs and order. Source
 timestamps are preserved. Invalid model responses are retried up to three
-times, then fail before speech generation. A model may return its translation
-object directly or identify a JSON file within the output artifact directory.
+times, then fail before speech generation. Text inference uses a constrained
+JSON grammar for the complete translation object; the model has no filesystem
+access and must return the object directly. Semantic meaning remains a separate
+validation concern.
 A separate model audit checks meaning, speaker/addressee, negation, and proper
 names before TTS. Rejected translations enter the same correction retry loop.
 Model audits can miss mistakes; review the saved source and translations when
@@ -223,7 +225,10 @@ operator-supplied ASS files retain their authored timing. Speech that still
 requires more than twice normal speed triggers a concise translation revision.
 The revision must preserve the complete meaning and pass validation and a model
 audit with source context before new speech is generated. Each cue permits the
-original text and at most two revisions. Unresolved fit or semantic failures
+original speech version and at most two replacement versions. Each replacement
+proposal permits at most three audited candidate forms: a suggested indexed
+correction is validated and audited again before TTS. This bounds intermediate
+text reviews separately from generated speech versions. Unresolved fit or semantic failures
 stop before rendering. Failed candidates and speech remain inspectable. The
 default VibeVoice Realtime model cannot encode arbitrary reference audio;
 use `qwen3-tts-base` or another configured reference-capable model. Override

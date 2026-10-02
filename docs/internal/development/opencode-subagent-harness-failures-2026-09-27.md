@@ -235,6 +235,30 @@ tree before retrying, and never re-issue the same request blind.
 
 ## Limitations of this note
 
+### 2026-10-01 concurrent MCP reports outside the workspace
+
+Two concurrent outer MCP dispatches used provider `opencode`, model
+`opencode/mimo-v2.6-flash-free`, `timeoutMillis: 120000`, and the managed
+worktree as `workingRoot`. Both returned `COMPLETED` with primary results;
+the combined elapsed time was 44.5 seconds. No permission or edit-policy
+override was supplied.
+
+- Grammar audit session: `8ad25445-a152-42a3-9744-900b861f8d4d`.
+  Requested report: `C:/t/dub-multilingual-validation/opencode-concurrency/grammar-audit.txt`.
+- Resource audit session: `cea7278e-a97f-4ac8-8cfc-e5f54fda3e82`.
+  Requested report: `C:/t/dub-multilingual-validation/opencode-concurrency/resources-audit.txt`.
+
+Independent reads verified both distinct reports existed outside
+`workingRoot`. The grammar report described the authored translation and
+audit GBNF shapes and `PredictOptions.Grammar` field 29. The resource report
+identified GPU capacity 1, the ASR/translation/TTS guards, and unguarded
+rendering. Neither report claimed native inference was exercised.
+
+This proves concurrent MCP dispatch, primary-result delivery, and these
+requested writes outside the workspace. No permission elicitation trace was
+captured, so it does not prove how a permission request was granted or resolve
+the causes of earlier timeouts.
+
 ### 2026-10-01 dubbing Factory exercise
 
 - A read-only OpenCode research dispatch completed through MCP, session
@@ -285,3 +309,19 @@ in-flight dispatch and a provider reasoning delta, and reported that cleanup
 closed the live Factory Session. This bounded outcome does not establish the
 cause of previous long timeouts. Implementation continued with the existing
 collaboration agents rather than repeating the same probe.
+
+## October 1 successful GPU-resource editing audit
+
+A fresh outer MCP `you_subagent` dispatch using
+`opencode/mimo-v2.6-flash-free` completed in 21.1 seconds with a primary result,
+session `5a50809d-985f-4a58-94d0-41c547fa46bf`. Its 120-second budget was not
+exhausted. The managed worktree was supplied as `workingRoot`; no edit-policy
+or approval override was passed. It read only the dubbing Factory YAML and
+created `docs/internal/development/opencode-gpu-resource-audit-2026-10-01.md`.
+Independent inspection confirmed the sole requested file was created and its
+claims match the source: one GPU capacity unit guards ASR, translation, and
+TTS; rendering does not request it. No Models inference or browser operation
+was requested. This demonstrates a successful bounded editing dispatch and
+useful primary-result delivery through the MCP infrastructure. It does not
+establish the cause of the previous timeout, approval, or connection failures,
+or prove general outside-workspace permission handling.

@@ -44,6 +44,7 @@ message ChatDelta {
 message PredictOptions {
   string Prompt = 1;
   int32 Tokens = 4;
+  string Grammar = 29;
   string Embeddings = 36;
   repeated string Images = 42;
   bool UseTokenizerTemplate = 43;
