@@ -2082,7 +2082,6 @@ pkg/services/recordings/transports/http/workstation_projection.go: unreachable f
 pkg/services/recordings/transports/http/workstation_projection.go: unreachable func: valueOrNil
 pkg/services/recordings/transports/mcp/append_event.go: unreachable func: AppendEvent
 pkg/services/recordings/transports/mcp/append_event.go: unreachable func: canonicalEventInput.toCanonicalEvent
-pkg/services/recordings/transports/mcp/client.go: unreachable func: Bind
 pkg/services/recordings/transports/mcp/client.go: unreachable func: BindToolOperation
 pkg/services/recordings/transports/mcp/client.go: unreachable func: CallTool
 pkg/services/recordings/transports/mcp/client.go: unreachable func: callToolJSON

@@ -205,7 +205,7 @@ func assertRecordingsMCPTransportActivatesAfterLifecycle(
 	t.Helper()
 
 	ctx := context.Background()
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: service})
+	operation := mcprecording.BindToolOperation(service)
 
 	malformedRaw, err := operation(ctx, mcprecording.ToolReadPortableArtifact, json.RawMessage(`{`))
 	if err != nil {

@@ -33,7 +33,7 @@ func TestBind_QueryStatusSuccessReturnsStatusFactsFromInjectedRoot(t *testing.T)
 			}, nil
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolQueryStatus,
@@ -71,7 +71,7 @@ func TestBind_QueryStatusMissingTargetReturnsTypedErrorEnvelope(t *testing.T) {
 			return recordings.RecordingStatusResult{}, recordings.ErrMissingRecordingTarget
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolQueryStatus,
@@ -100,7 +100,7 @@ func TestBind_QueryStatusInvalidScopeReturnsTypedErrorEnvelope(t *testing.T) {
 			return recordings.RecordingStatusResult{}, recordings.ErrInvalidRecordingScope
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolQueryStatus,
@@ -125,9 +125,7 @@ func TestBind_QueryStatusInvalidJSONReturnsBadRequestWithoutInvokingFakeRoot(t *
 	t.Parallel()
 
 	var invoked bool
-	operation := mcprecording.Bind(mcprecording.RootDependencies{
-		Recordings: fakeRecordingsRoot{invoked: &invoked},
-	})
+	operation := mcprecording.BindToolOperation(fakeRecordingsRoot{invoked: &invoked})
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolQueryStatus,
@@ -145,7 +143,7 @@ func TestBind_QueryStatusInvalidJSONReturnsBadRequestWithoutInvokingFakeRoot(t *
 func TestBind_QueryStatusNilServiceReturnsUnavailableEnvelope(t *testing.T) {
 	t.Parallel()
 
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: nil})
+	operation := mcprecording.BindToolOperation(nil)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolQueryStatus,

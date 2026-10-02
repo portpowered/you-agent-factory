@@ -37,7 +37,7 @@ func TestBind_AppendEventSuccessReturnsAcceptedFactsFromInjectedRoot(t *testing.
 			}, nil
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolAppendEvent,
@@ -72,7 +72,7 @@ func TestBind_AppendEventSuccessEncodesCallToolResultTransport(t *testing.T) {
 			return recordings.AppendRecordedEventResult{Event: request.Event}, nil
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolAppendEvent,
@@ -118,7 +118,7 @@ func TestBind_AppendEventInvalidAppendReturnsTypedErrorEnvelope(t *testing.T) {
 			return recordings.AppendRecordedEventResult{}, recordings.ErrInvalidAppendEvent
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolAppendEvent,
@@ -173,9 +173,7 @@ func TestBind_AppendEventInvalidJSONReturnsBadRequestWithoutInvokingFakeRoot(t *
 	t.Parallel()
 
 	var invoked bool
-	operation := mcprecording.Bind(mcprecording.RootDependencies{
-		Recordings: fakeRecordingsRoot{invoked: &invoked},
-	})
+	operation := mcprecording.BindToolOperation(fakeRecordingsRoot{invoked: &invoked})
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolAppendEvent,
@@ -194,9 +192,7 @@ func TestBind_AppendEventInvalidRecordedAtReturnsBadRequestWithoutInvokingFakeRo
 	t.Parallel()
 
 	var invoked bool
-	operation := mcprecording.Bind(mcprecording.RootDependencies{
-		Recordings: fakeRecordingsRoot{invoked: &invoked},
-	})
+	operation := mcprecording.BindToolOperation(fakeRecordingsRoot{invoked: &invoked})
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolAppendEvent,
@@ -214,7 +210,7 @@ func TestBind_AppendEventInvalidRecordedAtReturnsBadRequestWithoutInvokingFakeRo
 func mustCallAppendEvent(t *testing.T, fake fakeRecordingsRoot) json.RawMessage {
 	t.Helper()
 
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolAppendEvent,
@@ -229,7 +225,7 @@ func mustCallAppendEvent(t *testing.T, fake fakeRecordingsRoot) json.RawMessage 
 func mustCallQueryStatus(t *testing.T, fake fakeRecordingsRoot) json.RawMessage {
 	t.Helper()
 
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolQueryStatus,

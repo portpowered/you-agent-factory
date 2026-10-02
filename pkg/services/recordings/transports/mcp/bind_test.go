@@ -30,7 +30,7 @@ func TestBind_FakeRootInvokedThroughCanonicalQueryStatusTool(t *testing.T) {
 			}, nil
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolQueryStatus,
@@ -82,7 +82,7 @@ func TestBind_FakeRootInvokedThroughHistoricalQueryTool(t *testing.T) {
 			}, nil
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolQueryHistory,
@@ -117,7 +117,7 @@ func TestBind_HistoricalQueryTypedFailureReturnsStableErrorEnvelope(t *testing.T
 			}
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolQueryHistory,
