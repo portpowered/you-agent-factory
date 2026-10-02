@@ -314,6 +314,9 @@ jobs:
           GO_UNIT_COVERAGE_PROFILE: .artifacts/unit-coverage/coverage.out
           GO_UNIT_COVERAGE_JSON_OUTPUT: .artifacts/unit-coverage/coverage-summary.json
           GO_UNIT_COVERAGE_TIMING_OUTPUT: .artifacts/unit-coverage/unit-timing-summary.json
+      - name: Run retained ACP SDK regression tests
+        if: matrix.suite == 'unit'
+        run: make test-acp-sdk
       - name: Save unit coverage Go build and test cache
         if: always() && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
@@ -679,6 +682,10 @@ jobs:
           path: .artifacts/integration/runtime-metrics-session-probe.log
           if-no-files-found: error
           retention-days: 14
+      - name: Run delivered ACP response integration
+        run: make test-acp-provider-prebuilt
+        env:
+          INFINITE_YOU_INTEGRATION_BINARY: ${{ github.workspace }}/.artifacts/integration/bin/you
       - name: Run pinned real ACP integration
         run: go test ./tests/integration/transport/acp/realclient -run '^TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt$' -count=1 -timeout=15m
         env:

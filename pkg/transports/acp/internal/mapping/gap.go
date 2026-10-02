@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	acpsdk "github.com/coder/acp-go-sdk"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )

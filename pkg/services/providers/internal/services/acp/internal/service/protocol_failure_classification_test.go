@@ -12,13 +12,100 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
-	acpsdk "github.com/coder/acp-go-sdk"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
 const protocolHelperEnvironment = "YOU_TEST_ACP_PROTOCOL_HELPER"
+
+// newScriptedInitializeConnection wires a real acpsdk.ClientSideConnection to
+// an in-process ACP peer that answers initialize with protocolVersion and then
+// keeps its response end open. It crosses no OS process boundary, so what the
+// classification sees depends only on the response itself.
+func newScriptedInitializeConnection(t *testing.T, protocolVersion int) (*acpsdk.ClientSideConnection, func()) {
+	t.Helper()
+	peerReader, peerWriter := io.Pipe()
+	connectionReader, connectionWriter := io.Pipe()
+	served := make(chan struct{})
+	go func() {
+		defer close(served)
+		scanner := bufio.NewScanner(connectionReader)
+		for scanner.Scan() {
+			var request struct {
+				ID     json.RawMessage `json:"id"`
+				Method string          `json:"method"`
+			}
+			if json.Unmarshal(scanner.Bytes(), &request) != nil || request.Method != "initialize" {
+				continue
+			}
+			_, _ = fmt.Fprintf(peerWriter, `{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":%d,"agentCapabilities":{},"authMethods":[]}}`+"\n", request.ID, protocolVersion)
+			return
+		}
+	}()
+	connection := acpsdk.NewClientSideConnection(&client{}, connectionWriter, peerReader)
+	return connection, func() {
+		_ = peerWriter.Close()
+		_ = connectionWriter.Close()
+		<-served
+	}
+}
+
+// TestNegotiatedProtocolVersionClassificationIsDeterministic proves the
+// unsupported-protocol-version guarantee at the classification this daemon
+// owns, against a real ACP initialize exchange that crosses no OS process. An
+// agent negotiating another protocol version is an operator-correctable
+// provider configuration, so it must be reported as misconfigured and must
+// name the negotiated version; the version this SDK speaks must not be
+// rejected. The scripted peer keeps the connection open, so the outcome cannot
+// be decided by whether a closing peer's buffered response happens to be
+// observed before end-of-stream.
+func TestNegotiatedProtocolVersionClassificationIsDeterministic(t *testing.T) {
+	for _, test := range []struct {
+		name            string
+		protocolVersion int
+		want            providers.ExecuteFailureKind
+	}{
+		{name: "unsupported version", protocolVersion: acpsdk.ProtocolVersionNumber + 998, want: providers.ExecuteFailureKindMisconfigured},
+		{name: "supported version", protocolVersion: acpsdk.ProtocolVersionNumber},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			connection, closePeer := newScriptedInitializeConnection(t, test.protocolVersion)
+			defer closePeer()
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{
+				ProtocolVersion:    acpsdk.ProtocolVersionNumber,
+				ClientCapabilities: acpClientCapabilities(),
+			})
+			if err != nil {
+				t.Fatalf("Initialize() error = %v, want the scripted peer response", err)
+			}
+			if int(initialized.ProtocolVersion) != test.protocolVersion {
+				t.Fatalf("negotiated protocol version = %v, want %d", initialized.ProtocolVersion, test.protocolVersion)
+			}
+			got := classifyNegotiatedVersion(providers.ID("cursor-acp"), initialized)
+			if test.want == "" {
+				if got != nil {
+					t.Fatalf("classifyNegotiatedVersion() = %v, want nil for protocol version %d", got, test.protocolVersion)
+				}
+				return
+			}
+			var failure providers.ExecuteFailure
+			if !errors.As(got, &failure) {
+				t.Fatalf("classifyNegotiatedVersion() = %v (%T), want ExecuteFailure", got, got)
+			}
+			if failure.Kind != test.want {
+				t.Fatalf("classifyNegotiatedVersion() kind = %q, want %q", failure.Kind, test.want)
+			}
+			if !strings.Contains(failure.Message, fmt.Sprint(test.protocolVersion)) {
+				t.Fatalf("classifyNegotiatedVersion() message = %q, want the negotiated version %d named", failure.Message, test.protocolVersion)
+			}
+		})
+	}
+}
 
 // TestACPProtocolFailureHelperProcess is the OS-process peer for direct ACP
 // service classification tests. It is not a Factory/process-boundary cell.
@@ -606,9 +693,13 @@ func handleProtocolFailureInitialize(mode string, writer *bufio.Writer, id json.
 	if err := writeRPCResult(writer, id, fmt.Sprintf(`{"protocolVersion":%d,"agentCapabilities":{},"authMethods":[]}`, version)); err != nil {
 		return false, err
 	}
-	// version mode exits the peer cleanly after the initialize response so
-	// the client observes EOF and rejects the unsupported protocol version.
-	return mode == "version", nil
+	// The peer stays connected after answering initialize. A client rejects an
+	// unsupported protocol version from the response itself and then closes
+	// this channel, so exiting here would only decide whether the client's
+	// reader observed the buffered response or end-of-stream first - a
+	// property of ACP response/EOF ordering, not of the classification this
+	// row proves.
+	return false, nil
 }
 
 func handleProtocolFailureSessionNew(mode string, writer *bufio.Writer, id json.RawMessage) (bool, error) {

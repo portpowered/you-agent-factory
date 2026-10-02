@@ -3,7 +3,6 @@ module github.com/portpowered/infinite-you
 go 1.25.0
 
 require (
-	github.com/coder/acp-go-sdk v0.13.5
 	github.com/creack/pty v1.1.24
 	github.com/dop251/goja v0.0.0-20251201205617-2bb4c724c0f9
 	github.com/fsnotify/fsnotify v1.9.0

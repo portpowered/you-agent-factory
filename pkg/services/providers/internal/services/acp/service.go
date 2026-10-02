@@ -4,8 +4,8 @@ package acp
 import (
 	"context"
 
-	acpsdk "github.com/coder/acp-go-sdk"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
 // Service owns configured ACP peers and their protocol lifecycle. Execution

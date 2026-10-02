@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -30,6 +30,31 @@ test("unit coverage owns the only required backend unit execution", () => {
 	assert.doesNotMatch(workflow, /backend-unit-latency-evidence/);
 	assert.doesNotMatch(workflow, /needs: \[[^\]]*backend-unit-latency/);
 	assert.doesNotMatch(workflow, /RUN_BACKEND_UNIT_LATENCY|BACKEND_UNIT_LATENCY_RESULT/);
+});
+
+test("the ACP replacement SDK and delivered-response boundary retain explicit CI gates", () => {
+	const workflow = read(".github/workflows/ci.yml");
+	const sdkStep = stepSection(backendCoverageJob(workflow),
+		"      - name: Run retained ACP SDK regression tests",
+		"      - name: Save unit coverage Go build and test cache");
+	assert.match(sdkStep, /if: matrix\.suite == 'unit'/);
+	assert.match(sdkStep, /run: make test-acp-sdk/);
+	const processStep = stepSection(workflow,
+		"      - name: Run delivered ACP response integration",
+		"      - name: Run pinned real ACP integration");
+	assert.match(processStep, /run: make test-acp-provider-prebuilt/);
+	assert.match(processStep, /INFINITE_YOU_INTEGRATION_BINARY:.*\.artifacts\/integration\/bin\/you/);
+	const makefile = read("Makefile");
+	assert.match(makefile, /test-acp-sdk:\n\t\$\(GO\) test -race \.\/third_party\/acp-go-sdk\/\.\.\./);
+	assert.match(makefile, /test-acp-provider-prebuilt: export INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT := 1/);
+});
+
+test("the preserved ACP SDK remains part of the installable root module", () => {
+	assert.doesNotMatch(read("go.mod"), /^\s*replace(?:\s|\()/m);
+	assert.equal(existsSync(join(repositoryRoot, "third_party/acp-go-sdk/go.mod")), false);
+	assert.match(read("third_party/acp-go-sdk/upstream-go.mod.txt"), /module github\.com\/coder\/acp-go-sdk/);
+	assert.match(read("pkg/services/providers/internal/services/acp/internal/service/service.go"),
+		/acpsdk "github\.com\/portpowered\/infinite-you\/third_party\/acp-go-sdk"/);
 });
 
 test("unit coverage uses a shallow checkout and an explicit reusable Go cache", () => {

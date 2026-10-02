@@ -1,0 +1,560 @@
+{
+  "schema_version": 1,
+  "purpose": "Provenance record for the locally vendored github.com/coder/acp-go-sdk copy: its exact upstream origin, its pristine inventory, the single-file semantic repair, and four mechanical example import changes.",
+  "recorded_on": "2026-10-02",
+  "module": {
+    "upstream_path": "github.com/coder/acp-go-sdk",
+    "upstream_go_directive": "1.21",
+    "root_owned_import_path": "github.com/portpowered/infinite-you/third_party/acp-go-sdk",
+    "vendored_at": "third_party/acp-go-sdk",
+    "root_go_mod": {
+      "replace_directive_present": false,
+      "upstream_dependency_removed": true,
+      "sdk_go_sum_entries_removed": 2,
+      "upstream_go_mod_preserved_as": "upstream-go.mod.txt"
+    }
+  },
+  "upstream": {
+    "repository": "https://github.com/coder/acp-go-sdk",
+    "release_tag": "v0.13.5",
+    "release_published_at": "2026-06-02T14:24:21Z",
+    "commit": "0845a3bb9eddda5bfc22a94dd3598c90cb842451",
+    "connection_go_git_blob_sha": "e33beb070605b58159638552bd8ef841c83bf65c",
+    "checked_for_newer_release_on": "2026-10-02",
+    "is_latest_upstream_release": true,
+    "upstream_fix_available": false,
+    "upstream_fix_note": "Official latest release v0.13.5 and upstream main both carry no fix for a delivered response lost to receive EOF, nor for a response notification watermark that cannot finish after receive EOF.",
+    "license": {
+      "spdx_id": "Apache-2.0",
+      "file": "LICENSE",
+      "bytes": 11354,
+      "sha256": "3cf3fec4549ad049b3defd633001ce9e89923cdaee3d45d5ff4686750706e3cd",
+      "modified": false
+    },
+    "protocol_version_stamp": {
+      "file": "version",
+      "content": "0.13.5",
+      "sha256": "44712a66e62881fe24778a22d0f57d0e74084311fd2cd84070fc7fa9ce0f65bf"
+    },
+    "pristine_copy": {
+      "files": 79,
+      "bytes": 1075368,
+      "verified_before_patch": true,
+      "external_input_manifest": "C:/t/dub-acp-version-ordering-proof/upstream-v0.13.5-inputs.json"
+    }
+  },
+  "local_patch": {
+    "files_changed": 5,
+    "api_changes": "Exported identifiers and ACP wire schema unchanged; Go type import namespace now belongs to the root module.",
+    "public_surface_changes": "Go SDK namespace relocated; no ACP wire or REST changes.",
+    "exported_symbols_changed": "none",
+    "generated_files_touched": "none",
+    "schema_or_protocol_changes": "none",
+    "configuration_flags_or_wrappers_added": "none",
+    "dependency_graph_changes": "The upstream SDK module requirement and local replace are removed; SDK code is part of the published root module.",
+    "changes": [
+      {
+        "path": "connection.go",
+        "original_sha256": "f47f0c609db5a9a5e65362ed53e24b4be4c5eda8a7ac2ab95f5a1a2209570796",
+        "original_bytes": 24261,
+        "local_sha256": "f43c9e52b1f93b54c152aa12bf311a86540bd1a2cf4f1d4fc2eb0b4371c7663a",
+        "local_bytes": 26986,
+        "functions": [
+          "SendRequest",
+          "SendRequestNoResult",
+          "waitForResponse",
+          "waitNotificationsUpTo",
+          "callerEndedErr"
+        ],
+        "summary": "Prefer already delivered responses over subsequent receive EOF, finish their received notification watermark within the existing inbound drain, and give ended caller contexts precedence before response acceptance and final result publication.",
+        "invariants_preserved": [
+          "Receive EOF with an empty pending buffer still fails as the typed peer-disconnect error.",
+          "Caller context cancellation and deadlines still end the request and still report their own cause.",
+          "The upstream notificationQueueDrainTimeout bound is unchanged.",
+          "An inbound drain that cannot finish still fails safely with the typed pre-response-notification error."
+        ]
+      },
+      {
+        "path": "example/agent/main.go",
+        "original_sha256": "dba4b2e857de795dad40ed56bcf2d3490f04b5e5fdacb109e87073ef83418775",
+        "original_bytes": 14665,
+        "local_sha256": "261ad243d12364c7a8123204f09096e85317c5a653c3b08f57c20766ce1d0f03",
+        "local_bytes": 14696,
+        "summary": "Mechanical import namespace update only, from upstream module to the preserved root-owned SDK package."
+      },
+      {
+        "path": "example/claude-code/main.go",
+        "original_sha256": "419175b991ba3310e94ab488881a7a39a159a653d913849ab8f4212c728578d6",
+        "original_bytes": 9280,
+        "local_sha256": "27ba5f59772e9a984ae1f167c17a3aef2df05a1308fbea7cd8ca444ce43dcc95",
+        "local_bytes": 9311,
+        "summary": "Mechanical import namespace update only, from upstream module to the preserved root-owned SDK package."
+      },
+      {
+        "path": "example/client/main.go",
+        "original_sha256": "937ef3f7ffb93e9df5c3c924622fe911c04f9a0d727d43ea41bdac12e7c85c01",
+        "original_bytes": 8689,
+        "local_sha256": "701dbaf7f363147e9c9e879183b1f26811b2c3f2d92b06fbc0a0ab05a58228ee",
+        "local_bytes": 8720,
+        "summary": "Mechanical import namespace update only, from upstream module to the preserved root-owned SDK package."
+      },
+      {
+        "path": "example/gemini/main.go",
+        "original_sha256": "a5e313b5082ebb5d06e87a517f412ef19c74f434eaf4129e258345697615b0e3",
+        "original_bytes": 9716,
+        "local_sha256": "549f0da602bbbbc8eaf65ceac8ff3f40f589df260c6c6cbd06c94e129384b49b",
+        "local_bytes": 9747,
+        "summary": "Mechanical import namespace update only, from upstream module to the preserved root-owned SDK package."
+      }
+    ],
+    "local_files_added": [
+      {
+        "path": "connection_eof_repair_test.go",
+        "role": "Deterministic in-memory regression tests for the two repaired boundaries."
+      },
+      {
+        "path": "LOCAL_PATCHES.md",
+        "role": "Human-readable patch record and review guidance."
+      },
+      {
+        "path": "upstream-provenance.json",
+        "role": "This machine-readable provenance and inventory record."
+      }
+    ],
+    "relocated_files": [
+      {
+        "from": "go.mod",
+        "to": "upstream-go.mod.txt",
+        "bytes": 44,
+        "sha256": "dfbacd788612fc9479a4257fa4ef7af8a5af88a64ebbc86d6f66145b22ddbbcf",
+        "reason": "Preserve the upstream module declaration as provenance without creating a nested module excluded from the root publication."
+      }
+    ],
+    "upstream_generated_vet_diagnostics": {
+      "analyzer": "unreachable",
+      "count": 12,
+      "file": "types_gen.go",
+      "preserved_file_bytes": true,
+      "pristine_upstream_reproduced": true,
+      "root_owned_vet_scope": "cmd, contracts, docs, internal, packages, pkg, scripts, tests, ui"
+    }
+  },
+  "evidence": {
+    "findings": "C:/t/dub-acp-version-ordering-proof/findings.md",
+    "delivered_response_witness": "C:/t/dub-acp-version-ordering-proof/sdk-order/repeated.go",
+    "notification_watermark_witness": "C:/t/dub-acp-version-ordering-proof/sdk-order/notification.go",
+    "upstream_latest_release_capture": "C:/t/dub-acp-version-ordering-proof/upstream-latest.json",
+    "upstream_connection_metadata": "C:/t/dub-acp-version-ordering-proof/upstream-connection-metadata.json",
+    "report": "C:/t/dub-acp-version-ordering-proof/space-bunny-sdk-report.md",
+    "cancellation_witness": "C:/t/dub-acp-version-ordering-proof/sdk-order/canceled-ready.go",
+    "final_sdk_race": "C:/t/dub-acp-version-ordering-proof/root-owned-sdk-full-race.log"
+  },
+  "files": [
+    {
+      "path": ".gitignore",
+      "bytes": 94,
+      "sha256": "b77059ddbadd220b736f07daf35f1a98419da3e0d3f7403c2c13768490fc5356"
+    },
+    {
+      "path": "acp_test.go",
+      "bytes": 52706,
+      "sha256": "b2f041250e6fc082aa343d3d6ff74b93904f6b73b4755dc3433d9047de28b267"
+    },
+    {
+      "path": "agent_gen.go",
+      "bytes": 18297,
+      "sha256": "e230317c8029043b3c1686680cc0c068b6076bad24d50fd840d60017980e1a73"
+    },
+    {
+      "path": "agent.go",
+      "bytes": 991,
+      "sha256": "d41b1a76f5a532d83681e3b37565757c0cb2c15309008e41e49a22df690417ed"
+    },
+    {
+      "path": "AGENTS.md",
+      "bytes": 2595,
+      "sha256": "4ad3b430b8c9d69e7000112d80c4fe2d2980778e8cfc3373d51d2c347f62a77d"
+    },
+    {
+      "path": "client_gen.go",
+      "bytes": 13097,
+      "sha256": "daa7ff1f9abe726662cee0f5d95c9f7eadda77d955986a625177efbad54545a1"
+    },
+    {
+      "path": "client.go",
+      "bytes": 873,
+      "sha256": "6a6896f84c29e838ffdeaa8464d9c7c600d25ffafcf600cf4c4023058c93d4a9"
+    },
+    {
+      "path": "communique.toml",
+      "bytes": 1042,
+      "sha256": "55c7c7b40323be4288f8c00117b2a473d3a32c8a3f42c3542dad2f497b914130"
+    },
+    {
+      "path": "connection_cancel_test.go",
+      "bytes": 17184,
+      "sha256": "d349286c43692d3b6f0b8841b013770e10a8a09ca6646410bb11a407d8769f42"
+    },
+    {
+      "path": "connection_notification_barrier_test.go",
+      "bytes": 10272,
+      "sha256": "effa53300488c7eb952a52d1cfb83fb2c03db5e3374f73b07cb1f78e9e41172b"
+    },
+    {
+      "path": "connection.go",
+      "bytes": 24261,
+      "sha256": "f47f0c609db5a9a5e65362ed53e24b4be4c5eda8a7ac2ab95f5a1a2209570796",
+      "local_sha256": "f43c9e52b1f93b54c152aa12bf311a86540bd1a2cf4f1d4fc2eb0b4371c7663a",
+      "local_bytes": 26986
+    },
+    {
+      "path": "constants_gen.go",
+      "bytes": 2566,
+      "sha256": "f64e0e432b6db352d4c61533fc4c3739e6699a8599213039d503da63cde04d63"
+    },
+    {
+      "path": "defaults_test.go",
+      "bytes": 4391,
+      "sha256": "41385d57e06b9b4c0d00e753874fb44f6db4c28fb7d048f5a6cff5e464bd44c4"
+    },
+    {
+      "path": "doc.go",
+      "bytes": 273,
+      "sha256": "23e8149b3342669e9dbfbd79658d4bc1b2ec09c03ce8321a9d326623b87119aa"
+    },
+    {
+      "path": "errors_test.go",
+      "bytes": 610,
+      "sha256": "de6391acfcfb76ea7fdb93cea7f3f13951983ed1deba47585bd773a833bf3584"
+    },
+    {
+      "path": "errors.go",
+      "bytes": 2323,
+      "sha256": "f4f45247e75348d7b4c82b24743f30a35f14e4923b074d4d6bc37220d0b9c7de"
+    },
+    {
+      "path": "example_agent_test.go",
+      "bytes": 4528,
+      "sha256": "719efcdf3ccf19c3712a645d87ad7ddbe75c4072fc267ce738de1223798eedf5"
+    },
+    {
+      "path": "example_client_test.go",
+      "bytes": 4312,
+      "sha256": "583cd38a40032716f6b136f40403e1e795e28fa1ac326864796e37611ad614eb"
+    },
+    {
+      "path": "example_gemini_test.go",
+      "bytes": 2993,
+      "sha256": "91e9978f5a5692c7e7f73f2066b433686fa4a5928037a4f01931808695f3e7bf"
+    },
+    {
+      "path": "extensions.go",
+      "bytes": 3409,
+      "sha256": "f0a766a65f0fbbf5558ae00b8adda515677e44407f10f33459de4489b1bcb276"
+    },
+    {
+      "path": "go.mod",
+      "bytes": 44,
+      "sha256": "dfbacd788612fc9479a4257fa4ef7af8a5af88a64ebbc86d6f66145b22ddbbcf",
+      "vendored_path": "upstream-go.mod.txt"
+    },
+    {
+      "path": "helpers_gen.go",
+      "bytes": 6228,
+      "sha256": "f8da4115da946424e6ddaf1b587cabf7a14fbb316f5853bf0766f08d115c6996"
+    },
+    {
+      "path": "helpers.go",
+      "bytes": 8208,
+      "sha256": "d5b7d1110aaeffcb4f9b48bc57e746c934b848c7522091bcba83f3b938fba199"
+    },
+    {
+      "path": "json_parity_test.go",
+      "bytes": 11690,
+      "sha256": "df65f15e705bbf7d2385c058fd9815f8db6b8bca6d076bdbdede490e7ebbb934"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 11354,
+      "sha256": "3cf3fec4549ad049b3defd633001ce9e89923cdaee3d45d5ff4686750706e3cd"
+    },
+    {
+      "path": "Makefile",
+      "bytes": 3451,
+      "sha256": "9d2031c72e60ae42ece3b01f0332f3b7eb2f48f79ac2b2f308edb46476534611"
+    },
+    {
+      "path": "mise.lock",
+      "bytes": 12368,
+      "sha256": "b4db2cc9c570f36e313489dca615f742f65ea9574357d0cade1d1e381212c017"
+    },
+    {
+      "path": "mise.toml",
+      "bytes": 935,
+      "sha256": "b7ce7761a161b3cf53d54c4d2468c015df7821f28284a245540f9c29484035d9"
+    },
+    {
+      "path": "README.md",
+      "bytes": 5228,
+      "sha256": "67e6a00a7720e3cd2637af41ce4ea048ebe85c436ce096122e386fd6feb022b2"
+    },
+    {
+      "path": "RELEASING.md",
+      "bytes": 3240,
+      "sha256": "049de5dec80eaf2a6178d137d946b5748a36175ab267b999f55fb2ac986f5bd4"
+    },
+    {
+      "path": "treefmt.toml",
+      "bytes": 847,
+      "sha256": "c43f67f0738b9ff4fdf4af333f599bee1f5a4c7c89ab32cdb039c18318ce0950"
+    },
+    {
+      "path": "types_gen.go",
+      "bytes": 304532,
+      "sha256": "13c09386250c7b6d3bd36efdca873dde74eafc6bb01a59f02d3e7f7fdacd29ff"
+    },
+    {
+      "path": "unstable_types_test.go",
+      "bytes": 3913,
+      "sha256": "72e02c04d4c0ac750f9cde32a3860cd402a6c39037243cd1fa0706403ec4e76e"
+    },
+    {
+      "path": "version",
+      "bytes": 7,
+      "sha256": "44712a66e62881fe24778a22d0f57d0e74084311fd2cd84070fc7fa9ce0f65bf"
+    },
+    {
+      "path": ".github/dependabot.yaml",
+      "bytes": 750,
+      "sha256": "126b7987ac8a7adcfe936e8b2e4058b994209f47e377c17220c902c06d409ae6"
+    },
+    {
+      "path": ".github/workflows/ci.yaml",
+      "bytes": 998,
+      "sha256": "4031079f69b8f6d929242fdf73a0f4dc35545d18d0c8ef37519eadbbb64052d9"
+    },
+    {
+      "path": ".github/workflows/release-notes.yaml",
+      "bytes": 3143,
+      "sha256": "b45c69d9663d4f945f874b969ac677140e2a756692cac7dd5a324f9519ef56ea"
+    },
+    {
+      "path": "example/agent/main.go",
+      "bytes": 14665,
+      "sha256": "dba4b2e857de795dad40ed56bcf2d3490f04b5e5fdacb109e87073ef83418775",
+      "local_sha256": "261ad243d12364c7a8123204f09096e85317c5a653c3b08f57c20766ce1d0f03",
+      "local_bytes": 14696
+    },
+    {
+      "path": "example/claude-code/main.go",
+      "bytes": 9280,
+      "sha256": "419175b991ba3310e94ab488881a7a39a159a653d913849ab8f4212c728578d6",
+      "local_sha256": "27ba5f59772e9a984ae1f167c17a3aef2df05a1308fbea7cd8ca444ce43dcc95",
+      "local_bytes": 9311
+    },
+    {
+      "path": "example/client/main.go",
+      "bytes": 8689,
+      "sha256": "937ef3f7ffb93e9df5c3c924622fe911c04f9a0d727d43ea41bdac12e7c85c01",
+      "local_sha256": "701dbaf7f363147e9c9e879183b1f26811b2c3f2d92b06fbc0a0ab05a58228ee",
+      "local_bytes": 8720
+    },
+    {
+      "path": "example/gemini/main.go",
+      "bytes": 9716,
+      "sha256": "a5e313b5082ebb5d06e87a517f412ef19c74f434eaf4129e258345697615b0e3",
+      "local_sha256": "549f0da602bbbbc8eaf65ceac8ff3f40f589df260c6c6cbd06c94e129384b49b",
+      "local_bytes": 9747
+    },
+    {
+      "path": "schema/meta.json",
+      "bytes": 950,
+      "sha256": "9a33a0049faec80db5e1fb11524e38ebbccb0811c60682272d4aefcf6d2af029"
+    },
+    {
+      "path": "schema/meta.unstable.json",
+      "bytes": 1852,
+      "sha256": "6e17db561428dda78dc1812a737f8ab529544da282a8302dba876a9908630278"
+    },
+    {
+      "path": "schema/schema.json",
+      "bytes": 165658,
+      "sha256": "0da9fe718746ccc2e8ef789efa6687e64a252dea3a8789faae9a1acbe60e0d3b"
+    },
+    {
+      "path": "schema/schema.unstable.json",
+      "bytes": 315332,
+      "sha256": "9e1a31a28775e2a4194a60912278d6b34a03f3ab7e95d63aa4bab6e5618390e2"
+    },
+    {
+      "path": "schema/version",
+      "bytes": 7,
+      "sha256": "44712a66e62881fe24778a22d0f57d0e74084311fd2cd84070fc7fa9ce0f65bf"
+    },
+    {
+      "path": "testdata/json_golden/cancel_notification.json",
+      "bytes": 39,
+      "sha256": "5514421c0f6225b34db45f954bad5d732634809df8c9f51fdffbe4bde8b17abe"
+    },
+    {
+      "path": "testdata/json_golden/content_audio.json",
+      "bytes": 105,
+      "sha256": "2bc7f72011841608c3813763ea1b0e822dca09cae842340a7b89a20862158516"
+    },
+    {
+      "path": "testdata/json_golden/content_image.json",
+      "bytes": 98,
+      "sha256": "8146412a048728e790611093d60bee64fb42b31e88d11c8b42c310c71ed9b6a4"
+    },
+    {
+      "path": "testdata/json_golden/content_resource_blob.json",
+      "bytes": 146,
+      "sha256": "ebc3d5b9568383967ab8df5214de8309192ab24f7aa7ef5b8454a3cd7715b215"
+    },
+    {
+      "path": "testdata/json_golden/content_resource_link.json",
+      "bytes": 151,
+      "sha256": "83ef94a87c27bafa0a9338702ddcdd428fd99c7e713e08000fe63378bf14ae5a"
+    },
+    {
+      "path": "testdata/json_golden/content_resource_text.json",
+      "bytes": 176,
+      "sha256": "e233706405c5f287bdf4909a8c2ad26c40958f24c54291c9cba3051e1859c4ec"
+    },
+    {
+      "path": "testdata/json_golden/content_text.json",
+      "bytes": 65,
+      "sha256": "c02143fab838dfaf5cb28a6cb1c43eb95439d70283e1f05f96cccb8607dce849"
+    },
+    {
+      "path": "testdata/json_golden/fs_read_text_file_request.json",
+      "bytes": 112,
+      "sha256": "1b1dd39577443c087e163b7edc52eb859d1fe94f9fbba8b80533f7df97a4ddda"
+    },
+    {
+      "path": "testdata/json_golden/fs_read_text_file_response.json",
+      "bytes": 68,
+      "sha256": "5864ef7e6afa5952a68c0d7de99b545f8bbbbad7883b8c037cd63720479f1e2c"
+    },
+    {
+      "path": "testdata/json_golden/fs_write_text_file_request.json",
+      "bytes": 150,
+      "sha256": "1d8aa3d6004a39084cd32c93d5e1543c26ae502a7e62b1395997fd36cacb78a4"
+    },
+    {
+      "path": "testdata/json_golden/initialize_request.json",
+      "bytes": 148,
+      "sha256": "e40990ddb228cbbf2f2b2585dab9e7a3bef7b9d95fd5882b9828b80e514f690f"
+    },
+    {
+      "path": "testdata/json_golden/initialize_response.json",
+      "bytes": 283,
+      "sha256": "c3446a6a0a1731ad5a1988bd0cab7302728b0aafb40f69f88bc7e5c452a51bbe"
+    },
+    {
+      "path": "testdata/json_golden/new_session_request.json",
+      "bytes": 180,
+      "sha256": "25f144d9a676036db6a88447f9dce76653639db57e91d9182d2bcf52e2a5e0c0"
+    },
+    {
+      "path": "testdata/json_golden/new_session_response.json",
+      "bytes": 39,
+      "sha256": "5514421c0f6225b34db45f954bad5d732634809df8c9f51fdffbe4bde8b17abe"
+    },
+    {
+      "path": "testdata/json_golden/permission_outcome_cancelled.json",
+      "bytes": 29,
+      "sha256": "c1648f6d0652c7194b0bb6588991d484c613c578b6484f4f0c557ab922c65024"
+    },
+    {
+      "path": "testdata/json_golden/permission_outcome_selected.json",
+      "bytes": 56,
+      "sha256": "1b1d2405d124c7c03a9f466e85fcc913f3c3f35e56dc4883de9e1d51f0ac928c"
+    },
+    {
+      "path": "testdata/json_golden/prompt_request.json",
+      "bytes": 400,
+      "sha256": "e5a14f378faa910b6e29b890e015b64293b49f5520332a136a2927aebda73f3d"
+    },
+    {
+      "path": "testdata/json_golden/request_permission_request.json",
+      "bytes": 306,
+      "sha256": "2f9f3eab3fac481eae4d6713ce0945e157b2d7d8874d70e59612ae35bccd2761"
+    },
+    {
+      "path": "testdata/json_golden/request_permission_response_selected.json",
+      "bytes": 79,
+      "sha256": "ebfe1c26f99775a2ce2aeeaffe83b9bafe810e3a552dfd8ce2a81137ebd05021"
+    },
+    {
+      "path": "testdata/json_golden/session_update_agent_message_chunk.json",
+      "bytes": 131,
+      "sha256": "a921fae49a8593b7032d9142285b4ca8134e82e3f306ea80575202e267e3ea1e"
+    },
+    {
+      "path": "testdata/json_golden/session_update_agent_thought_chunk.json",
+      "bytes": 131,
+      "sha256": "234e68e111df17139c3628bfddc34228e243864f34a294629977afeff8e751fc"
+    },
+    {
+      "path": "testdata/json_golden/session_update_plan.json",
+      "bytes": 276,
+      "sha256": "5af56d26cc1bd86d1405b8c35f526c1ec282739d6851a3b0c448b36c7550c283"
+    },
+    {
+      "path": "testdata/json_golden/session_update_tool_call_edit.json",
+      "bytes": 317,
+      "sha256": "a78bd4e1262a5f71ebc25740ea7cf371afef3426ddea3ea14c739f6ca40fe84a"
+    },
+    {
+      "path": "testdata/json_golden/session_update_tool_call_locations_rawinput.json",
+      "bytes": 245,
+      "sha256": "f3929d7fb70d867d04271afe55ba2386c4926dd8cd528c56d1cf300d44f66b25"
+    },
+    {
+      "path": "testdata/json_golden/session_update_tool_call_read.json",
+      "bytes": 300,
+      "sha256": "f7eb90e96887108df1af538864fa5e683dd59cafb1a2af97f8e92a3dfb2ec751"
+    },
+    {
+      "path": "testdata/json_golden/session_update_tool_call_update_content.json",
+      "bytes": 254,
+      "sha256": "aa65051294fa634bdfb25d9aca708c5312d31515869629458c1851a811b1e797"
+    },
+    {
+      "path": "testdata/json_golden/session_update_tool_call_update_more_fields.json",
+      "bytes": 484,
+      "sha256": "2011e55f416be451799c1a6eb0399b9bd195a9b950c0ae47cc791a48de420b28"
+    },
+    {
+      "path": "testdata/json_golden/session_update_tool_call.json",
+      "bytes": 145,
+      "sha256": "eed6295ed7111877715091dbb8ac8b127ae6f795977f93578cea9199202fdbc5"
+    },
+    {
+      "path": "testdata/json_golden/session_update_user_message_chunk.json",
+      "bytes": 128,
+      "sha256": "26d44644361f2956dcf3eca96ae6fc14be655fbb5dc9f115a56fa5c79846660c"
+    },
+    {
+      "path": "testdata/json_golden/tool_content_content_text.json",
+      "bytes": 113,
+      "sha256": "4470f79d00cde5798dcdc41cad142d58926de0161903eab8fefcc855e54aaf4b"
+    },
+    {
+      "path": "testdata/json_golden/tool_content_diff_no_old.json",
+      "bytes": 109,
+      "sha256": "a477d3defc53016b63881e4009a67e6fbf9b0827a13c423833c365d95bc56805"
+    },
+    {
+      "path": "testdata/json_golden/tool_content_diff.json",
+      "bytes": 150,
+      "sha256": "8d1b4bee46170b797c2f7da6b7d82abb228525511088518c82521943af77de0a"
+    },
+    {
+      "path": "testdata/json_golden/tool_content_terminal.json",
+      "bytes": 53,
+      "sha256": "d62ef4ed0c710d721347a3658afa4d70c18eac3d06155de93a4842aea93889c1"
+    }
+  ]
+}

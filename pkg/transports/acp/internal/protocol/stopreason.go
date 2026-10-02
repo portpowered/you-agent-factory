@@ -1,7 +1,7 @@
 package protocol
 
 import (
-	acpsdk "github.com/coder/acp-go-sdk"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
 // TerminalOutcome is the closed set of Factory turn terminal outcomes this

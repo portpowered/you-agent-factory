@@ -19,11 +19,11 @@ import (
 	"sync"
 	"time"
 
-	acpsdk "github.com/coder/acp-go-sdk"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service/cancelwindow"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
 // Command is one configured stdio ACP launch command.
@@ -257,6 +257,7 @@ type daemon struct {
 
 	cmd         *exec.Cmd
 	stdin       io.WriteCloser
+	stdout      io.ReadCloser
 	connection  *acpsdk.ClientSideConnection
 	client      *client
 	initialized acpsdk.InitializeResponse
@@ -560,6 +561,21 @@ func (daemon *daemon) resolveLaunchName(id providers.ID) (string, error) {
 	return name, nil
 }
 
+// classifyNegotiatedVersion owns the decision to reject an initialize
+// response this service cannot speak. An agent that negotiates another
+// protocol version is a provider configuration the operator must correct, so
+// it is reported as a misconfigured provider rather than a dependency outage.
+// It returns nil for the version this SDK speaks.
+func classifyNegotiatedVersion(id providers.ID, initialized acpsdk.InitializeResponse) error {
+	if initialized.ProtocolVersion == acpsdk.ProtocolVersionNumber {
+		return nil
+	}
+	return providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindMisconfigured,
+		Message: fmt.Sprintf("ACP provider %q negotiated unsupported protocol version %v", id, initialized.ProtocolVersion),
+	}
+}
+
 func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd string, environment []string, request providers.ExecuteRequest) error {
 	if daemon.connection != nil {
 		// A peer disconnect is authoritative even when cmd.Wait has not yet
@@ -588,41 +604,40 @@ func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd st
 		return dependencyFailure("ACP command factory returned nil")
 	}
 	cmd.Dir, cmd.Env = cwd, append([]string(nil), environment...)
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return dependencyFailure(err.Error())
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return dependencyFailure(err.Error())
-	}
 	daemon.stderr.Reset()
 	cmd.Stderr = &daemon.stderr
+	stdio, err := attachACPStdio(cmd)
+	if err != nil {
+		return dependencyFailure(err.Error())
+	}
 	platformprocess.ConfigureSubprocessTree(cmd)
 	if err := cmd.Start(); err != nil {
+		stdio.close()
 		return dependencyFailure(fmt.Sprintf("start ACP provider %q: %v", id, err))
 	}
+	stdio.detach()
 	tree, _ := platformprocess.AttachSubprocessTree(cmd)
 	finished := make(chan error, 1)
 	go func() { finished <- cmd.Wait() }()
 	client := &client{}
-	connection := acpsdk.NewClientSideConnection(client, stdin, stdout)
+	connection := acpsdk.NewClientSideConnection(client, stdio.requests, stdio.responses)
 	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{
 		ProtocolVersion:    acpsdk.ProtocolVersionNumber,
 		ClientCapabilities: acpClientCapabilities(),
 	})
 	if err != nil {
-		daemon.cmd, daemon.stdin, daemon.finished, daemon.tree = cmd, stdin, finished, tree
+		daemon.cmd, daemon.stdin, daemon.stdout, daemon.finished, daemon.tree = cmd, stdio.requests, stdio.responses, finished, tree
 		_ = daemon.stopLocked(context.Background())
 		return rpcFailure(ctx, "initialize", id, err, daemon.stderr.String(), request)
 	}
-	if initialized.ProtocolVersion != acpsdk.ProtocolVersionNumber {
-		daemon.cmd, daemon.stdin, daemon.finished, daemon.tree = cmd, stdin, finished, tree
+	if version := classifyNegotiatedVersion(id, initialized); version != nil {
+		daemon.cmd, daemon.stdin, daemon.stdout, daemon.finished, daemon.tree = cmd, stdio.requests, stdio.responses, finished, tree
 		_ = daemon.stopLocked(context.Background())
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindMisconfigured, Message: fmt.Sprintf("ACP provider %q negotiated unsupported protocol version %v", id, initialized.ProtocolVersion)}
+		return version
 	}
 	daemon.cmd = cmd
-	daemon.stdin = stdin
+	daemon.stdin = stdio.requests
+	daemon.stdout = stdio.responses
 	daemon.connection = connection
 	daemon.client = client
 	daemon.initialized = initialized
@@ -688,8 +703,17 @@ func (daemon *daemon) clearProcess() {
 	if daemon.cmd != nil {
 		platformprocess.CloseSubprocessTree(daemon.cmd, daemon.tree)
 	}
+	if daemon.stdin != nil {
+		_ = daemon.stdin.Close()
+	}
+	// The response reader outlives the peer only while the peer is retained;
+	// releasing it here keeps a retired peer from holding an open pipe handle.
+	if daemon.stdout != nil {
+		_ = daemon.stdout.Close()
+	}
 	daemon.cmd = nil
 	daemon.stdin = nil
+	daemon.stdout = nil
 	daemon.connection = nil
 	daemon.client = nil
 	daemon.finished = nil

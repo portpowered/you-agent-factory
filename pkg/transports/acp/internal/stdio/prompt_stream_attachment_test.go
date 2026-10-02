@@ -11,7 +11,6 @@ import (
 	"sync"
 	"testing"
 
-	acpsdk "github.com/coder/acp-go-sdk"
 	"github.com/portpowered/infinite-you/pkg/platform/wiretranscript"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
@@ -20,6 +19,7 @@ import (
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/mapping"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
 func TestAttachmentCacheResumeAttachmentID(t *testing.T) {

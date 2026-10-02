@@ -3,7 +3,7 @@ package acp
 import (
 	"errors"
 
-	acpsdk "github.com/coder/acp-go-sdk"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
 // FactoryTargetOptionID is the stable ACP session configuration option id
