@@ -54,11 +54,17 @@ def reference(video: Path, segment: dict, destination: Path) -> None:
         raise ValueError(f"Source segment {segment['id']} has no reference audio")
 
 
-def fit_speech(source: Path, destination: Path, segment: dict) -> float:
+def fit_speech(source: Path, destination: Path, segment: dict, playback_limit=None) -> float:
     duration = float(probe(source).get("format", {}).get("duration", "nan"))
-    target = (segment["end"] - segment["start"]) / 1000
     if not math.isfinite(duration) or duration <= 0:
         raise ValueError(f"TTS returned empty audio for segment {segment['id']}")
+    limit = segment["end"] if playback_limit is None else playback_limit
+    if type(limit) is not int or limit < segment["end"]:
+        raise ValueError("Speech playback limit must not precede the source cue end")
+    # Borrow only as much following silence as the generated speech needs.
+    # Source bounds still identify the original voice reference and ASR evidence.
+    end = min(limit, max(segment["end"], segment["start"] + math.ceil(duration * 1000)))
+    target = (end - segment["start"]) / 1000
     speed = max(1.0, duration / target)
     if speed > 2.0:
         raise ValueError(
@@ -70,6 +76,7 @@ def fit_speech(source: Path, destination: Path, segment: dict) -> float:
         "-af", f"atempo={speed:.8f},apad,atrim=duration={target:.3f}",
         "-ac", "1", "-ar", "24000", "-c:a", "pcm_s16le", "-f", "s16le", str(destination),
     ])
+    segment["speech_end"] = end
     return speed
 
 

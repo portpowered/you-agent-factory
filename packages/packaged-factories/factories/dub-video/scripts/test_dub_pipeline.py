@@ -182,9 +182,11 @@ class DubPipelineTests(unittest.TestCase):
                 self.assertEqual(reference.read_bytes(), b"original voice reference")
                 Path(outputs[0].removeprefix("audio=")).write_bytes(b"conditioned speech")
 
-            def fit(source, destination, segment):
+            def fit(source, destination, segment, playback_limit):
                 self.assertEqual(source.read_bytes(), b"conditioned speech")
-                destination.write_bytes(b"\x01\x00" * 480)
+                self.assertEqual(playback_limit, 100)
+                segment["speech_end"] = 80
+                destination.write_bytes(b"\x01\x00" * 960)
                 return 1.0
 
             with patch.object(dub_video, "reference", side_effect=extract), \
@@ -201,6 +203,7 @@ class DubPipelineTests(unittest.TestCase):
             item = dub_video.read_json(Path(result["translations"]))["segments"][0]
             self.assertEqual((item["id"], item["start"], item["end"]), (7, 40, 60))
             self.assertEqual(item["source_text"], "Can you help?")
+            self.assertEqual(item["speech_end"], 80)
             self.assertEqual(item["reference_sha256"], dub_video.digest(Path(item["reference_audio"])))
 
     def test_transcription_stores_trimmed_operator_glossary_in_manifest(self):

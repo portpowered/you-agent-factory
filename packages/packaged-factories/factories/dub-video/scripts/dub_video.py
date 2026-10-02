@@ -21,7 +21,7 @@ sys.dont_write_bytecode = True
 
 from dub_contract import (
     load_translation_response, render_ass, render_srt, translation_prompt,
-    validate_segments, validate_translations, target_language, LANGUAGES,
+    validate_segments, validate_translations, target_language, LANGUAGES, playback_segments,
 )
 from dub_media import command, fit_speech, mux, reference, timeline, video_duration
 
@@ -219,6 +219,14 @@ def audit_translation(root: Path, translated: list[dict], language: str,
         "I can help YOU. Check names of people, bands, artists, products, and titles using source context: "
         "preserve their original proper names rather than literally translating words in those names. "
         "Determine intended context from the SOURCE segments, not from the candidate translation. "
+        "Derive each source proposition first, then compare the candidate with it. Interpret semantic "
+        "polarity using source-language idioms, not mechanical negation of individual words: Chinese "
+        "不少 means many/quite a few and 不错 means good/not bad. Do not reverse these into not many "
+        "or not good. Irony or sarcasm does not authorize replacing the literal proposition with "
+        "an inferred opposite claim. Flag concrete meaning errors, not stylistic preferences or "
+        "equivalent natural paraphrases. Before suggesting a correction, check that the complete "
+        "replacement preserves source meaning, polarity, roles, and proper names at least as well "
+        "as the candidate. Do not invent a correction merely to make the review look thorough. "
         "If neighboring source segments mention music, treat the noun phrase in a play/resume request "
         "as a band, artist, or song name, preserving it verbatim even if ASR lowercases ordinary words. "
         "The correct action remains music playback: do not criticize a correct playback verb because "
@@ -290,7 +298,7 @@ def synthesize(path: str) -> Path:
             {"id": item["id"], "text": item["text"]} for item in translated_document["segments"]
         ]}, value["segments"], value["language"], value.get("preserve_names", []),
     )
-    for segment in translated:
+    for index, segment in enumerate(translated):
         prefix = manifest.parent / f"segment-{segment['id']}"
         ref, speech, fitted = prefix.with_suffix(".reference.wav"), prefix.with_suffix(".speech.wav"), prefix.with_suffix(".pcm")
         reference(Path(value["video"]), segment, ref)
@@ -299,7 +307,8 @@ def synthesize(path: str) -> Path:
               value.get("tts_server", ""))
         segment.update(reference_audio=str(ref), speech_audio=str(speech), fitted_audio=str(fitted),
                        reference_sha256=digest(ref),
-                       speech_speed=fit_speech(speech, fitted, segment))
+                       speech_speed=fit_speech(speech, fitted, segment,
+                           translated[index + 1]["start"] if index + 1 < len(translated) else value["duration_ms"]))
     save_json(Path(value["translations"]), {"language": value["language"], "segments": translated})
     value.update(stage="synthesized")
     save_json(manifest, value)
@@ -318,11 +327,12 @@ def render(path: str) -> dict:
         if any(segment.get(key) != expected[key] for key in ("start", "end", "source_text")):
             raise ValueError("Translated timestamps or source text changed after synthesis")
     output = Path(value["output"])
+    playback = playback_segments(segments, value["duration_ms"])
     srt, ass = manifest.parent / "subtitles.srt", manifest.parent / "subtitles.ass"
-    srt.write_text(render_srt(segments), encoding="utf-8")
-    ass.write_text(render_ass(segments), encoding="utf-8")
+    srt.write_text(render_srt(playback), encoding="utf-8")
+    ass.write_text(render_ass(playback), encoding="utf-8")
     audio = manifest.parent / "dubbed.pcm"
-    timeline(segments, value["duration_ms"], audio)
+    timeline(playback, value["duration_ms"], audio)
     staged_video = manifest.parent / ("dubbed" + output.suffix)
     selected_ass = Path(value["source_ass"]) if value["source_ass"] else ass
     mux(Path(value["video"]), audio, selected_ass, staged_video, value["language"])

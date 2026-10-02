@@ -215,6 +215,13 @@ Each TTS call receives a mono 24 kHz sample extracted from its original video
 segment and its translated text. Qwen uses the audio's speaker embedding;
 the Factory omits `ref_text` to avoid generating source-language speech before
 the translation. Source transcripts and reference hashes remain in artifacts. The
+generated speech can use the unoccupied gap after its source cue, up to the next
+cue's start or the video end. Only the needed part of that gap is used. Saved
+translations retain the source `start` and `end` and record a separate
+`speech_end` for playback. Generated subtitles follow the playback window;
+operator-supplied ASS files retain their authored timing. Speech that still
+requires more than twice normal speed fails before rendering rather than losing
+words or overlapping the next cue. The
 default VibeVoice Realtime model cannot encode arbitrary reference audio;
 use `qwen3-tts-base` or another configured reference-capable model. Override
 Models catalog names with `--asr-model`, `--llm-model`, and `--tts-model`.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -454,14 +455,22 @@ func TestModelsASRNoDetectedSpeechWritesEmptyNamedOutputs(t *testing.T) {
 	backend := functionalStartLocalAI(t)
 	writeGenericConformanceCaches(t, home)
 	edges, _, _, _ := localAIConformanceEdges(home, backend)
+	// This no-speech witness uses canonical mono 16 kHz PCM, so no decoder process is needed.
+	audio := localai.AudioBytes()
+	binary.LittleEndian.PutUint32(audio[24:28], 16000)
+	binary.LittleEndian.PutUint32(audio[28:32], 32000)
+	clear(audio[44:])
 	edges.ModelASRBackend = func(ctx context.Context, request models.ASRBackendRequest) (models.ASRBackendResponse, error) {
+		if request.MediaType != "audio/wav" || !bytes.Equal(request.Audio, audio) {
+			return models.ASRBackendResponse{}, fmt.Errorf("no-speech ASR received different canonical audio")
+		}
 		return models.ASRBackendResponse{Text: " \n"}, ctx.Err()
 	}
 	process := functionalBuildProcess(t, edges)
 	defer closeRootProcess(t, process, "close no-speech ASR process")
 	dir := functionalTempDir(t)
 	audioPath := filepath.Join(dir, "silence.wav")
-	if err := os.WriteFile(audioPath, localai.AudioBytes(), 0o600); err != nil {
+	if err := os.WriteFile(audioPath, audio, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	transcript, segments := filepath.Join(dir, "transcript.txt"), filepath.Join(dir, "segments.json")

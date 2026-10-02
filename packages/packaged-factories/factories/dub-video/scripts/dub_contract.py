@@ -76,6 +76,19 @@ def validate_segments(value, duration_ms=None):
     return result
 
 
+def playback_segments(segments, duration_ms):
+    """Derive presentation windows without changing source alignment evidence."""
+    validate_segments(segments, duration_ms)
+    result = []
+    for index, segment in enumerate(segments):
+        limit = segments[index + 1]["start"] if index + 1 < len(segments) else duration_ms
+        end = segment.get("speech_end", segment["end"])
+        if type(end) is not int or not segment["end"] <= end <= limit:
+            raise ValueError(f"Segment {segment['id']} playback must stay inside its trailing silent gap")
+        result.append({**segment, "end": end})
+    return result
+
+
 def _contains_name(text, name):
     # Latin identifiers must match whole names; Chinese can adjoin a name.
     return re.search(r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])",
@@ -157,7 +170,11 @@ def translation_prompt(source, language, preserve_names=None):
         "segment count, integer IDs, and order. Each segment must have only id and text. Do not return "
         "timestamps, commentary, extra keys, or empty translations. Preserve meaning and proper names. "
         "Preserve who is speaking and who is being addressed. A request for the listener to help "
-        "must remain a request, never an offer by the speaker to help the listener. Preserve negation. "
+        "must remain a request, never an offer by the speaker to help the listener. Preserve semantic "
+        "polarity using the source language's idioms, not mechanical negation of individual words. "
+        "For example, Chinese 不少 means many/quite a few, and 不错 means good/not bad; do not turn "
+        "them into not many or not good. Preserve the literal proposition when speech is ironic "
+        "or sarcastic; do not substitute an inferred opposite claim. "
         "Use neighboring segments to resolve context. In music playback requests, preserve artist, band, "
         "and song names verbatim in the source language, even when ASR lowercases them; do not literally "
         "translate the name's words. Treat the noun phrase requested after play/resume as a band, artist, "

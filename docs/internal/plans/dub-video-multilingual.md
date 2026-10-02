@@ -356,6 +356,40 @@ No path exceeds three total reviews. Saved candidate files preserve the evidence
 for each review. Tests prove unchanged neighbors, invalid glossary replacement
 rejection, duplicate-ID fallback, and the review ceiling without full regeneration.
 
+A real review proposed changing Chinese `也不少` from many to not many. Translation
+and audit prompts now require source-language idiomatic polarity, preserving the
+literal proposition under irony, and checking proposed corrections against the
+source before rejecting an equivalent paraphrase. This guidance does not provide
+a deterministic semantic guarantee; the three-review ceiling and saved source,
+candidate, and audit evidence remain necessary for diagnosing model mistakes.
+
+An actual 320 ms source cue (`这是，`) generated 1.120 seconds of English speech
+(`This is,`) and failed the unchanged two-times speech-speed guard. The next
+source cue starts at 67,200 ms, leaving enough unoccupied trailing silence.
+Synthesis now borrows only the required trailing gap, bounded by the next cue
+or video end. ASR/source `start`/`end`, IDs, original reference slices, and hashes
+remain evidence; `speech_end` records the derived playback end. Generated SRT,
+ASS, and PCM share that playback window. Operator-supplied ASS remains authored.
+Insufficient gaps still fail the two-times guard; no output overlaps the next cue.
+
+Current affected translation artifact:
+
+```json
+{"id":16,"start":65120,"end":65440,"text":"This is,","source_text":"这是，"}
+```
+
+Proposed affected translation artifact:
+
+```json
+{"id":16,"start":65120,"end":65440,"speech_end":66240,"text":"This is,","source_text":"这是，"}
+```
+
+Five focused playback component tests cover measured-duration gap borrowing,
+unchanged source evidence, absent/insufficient gaps, last-cue video limits,
+invalid/overlapping playback metadata, and shared PCM/subtitle presentation.
+The original reference-conditioning test also observes the bounded fit request
+and saved derived end while proving extraction still uses original cue bounds.
+
 Record actual commands, measured artifacts, review results, and remaining limits
 after implementation. Do not claim semantic translation/voice quality solely
 from JSON validation, a same-model audit, or nonzero audio samples.

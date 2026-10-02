@@ -364,8 +364,8 @@ func TestCLIRunEmptyPrimaryAndSelectorRecovery(t *testing.T) {
 		behavior:      modesRouteSuccess,
 	})
 	assertHumanResponseStream(t, defaultMode.stdout)
-	if defaultMode.stderr == "" {
-		t.Fatal("default output stderr is empty, want human progress after selector reset")
+	if defaultMode.stderr != "" {
+		t.Fatalf("default output stderr = %q, want empty redirected diagnostics after selector reset", defaultMode.stderr)
 	}
 }
 
