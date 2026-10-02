@@ -1204,3 +1204,41 @@ allowance without a primary result. Its saved error identifies session
 and partial effects remained possible. Root's workspace inspection found only
 expected files. The timeout cause is unknown; this dispatch adds no review
 evidence or harness stability proof.
+
+### Later Windows verification and remaining delivery gates
+
+The independent-image counterfactual is now built and published as a manual
+Windows CUDA release from `6d1aede58898fcaf3466fc3becbc91639d395b97`:
+[reviewed native package](https://github.com/portpowered/you-agent-factory/releases/tag/localai-backends-v1-8e455ae80c18ad5221a58be52d3d3a1a7bb651061fa6191353b64069d946d3ab).
+Actual CPU grouping tests and a native GPU call accepted the boundary repair.
+A subsequent normal public `you models invoke customqwen` call discovered that
+release without a backend source override, verified the downloaded archive and
+loaded executable/CUDA DLL identities, and returned the three caption literals
+in the correct cue order. The normal call completed in 405.406 seconds including
+asset preparation and exited cleanly. Evidence:
+`C:/t/dub-qwen-independent-images-managed-proof/`.
+
+The same output invented `EPISODE 01` as an overlay on cue 25. Consequently,
+correct image grouping and these three subtitle readings do not establish
+general recognition quality or acceptance of the complete English dub.
+Raw source ASR remains preserved; unresolved cue interpretation and independent
+final translation/dubbing review are still required.
+
+The thinking repair now uses the pinned native chat template's schema-aware
+grammar/parser path rather than a separate reasoning state machine. Linked CPU
+tests exercise ordinary BPE thinking delimiters, misleading private JSON,
+ordered translation tuples, audit variants, and final-content separation.
+Go/native transport integration, capability detection that rejects older
+backends before unconstrained inference, media observation followed by one
+schema-constrained final answer, and a new identified native build remain in
+progress. No production default disables thinking. CPU validation alone is not
+live public structured-inference acceptance.
+
+Required CI passed on `0a83cd7816` (run `37056730593`), but the later pushed
+`e4dd9b69c4` failed run `37059462705` on ACP version classification and restart
+cancellation recognition. The cancellation test repair is committed as
+`1378e88d48`; its compiled Windows scenario passed with clean committed
+`8d0225132e` and matching embedded VCS identity. ACP response/EOF and notification
+ordering repairs still need their compiled public-boundary proof and CI.
+The PR remains unmerged. Current-head CI, accepted full English output, and
+postmerge long Japanese/Korean/Spanish runs remain delivery requirements.
