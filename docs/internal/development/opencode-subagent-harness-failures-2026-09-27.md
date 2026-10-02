@@ -956,3 +956,92 @@ unknown/partial source rejection and mixed-source rejection without mutation.
 Root's combined CI/applicator run passed all eleven tests. A new isolated
 canonical CUDA build is live from the frozen committed inputs; runtime native
 structured-answer acceptance remains pending.
+
+### Versioned install, compiled EOF suite, and concurrency evidence
+
+The normal network versioned install path now works with the preserved
+`third_party` namespace arrangement:
+`go install github.com/portpowered/infinite-you/cmd/factory@14a917cd88a164b045a65211256b747a511ec778`
+succeeded using an isolated GOBIN with GOWORK off, and Go auto-selected toolchain
+1.26.8. The resulting binary has SHA-256
+`16b6284525348cfbf40e118dacb956c9aab838f31968eb014003b31dd6f5900a` and is installed at
+`C:/Users/andre/bin/you.exe`. This is the first published `go install ...@version`
+verification recorded for the repaired dependency layout.
+
+The compiled three-row EOF suite passes against that artifact: root's independent
+run completed in 10.022 seconds and verifies the immediate-EOF `Initialize` case
+returning the unsupported protocol version `999` error, the Prompt primary-result
+case, and the registered custom `eof-peer` provider on the actual ACP route. The
+provider repair is `c09d7254f4`; the previously recorded unsupported-runner repair
+is no longer pending.
+
+An unregistered provider `unregistered-acp-proof` supplied to the installed binary was rejected
+at canonical provider-selection activation, before any session, workstation, or
+external execution, in 1.082 seconds. Exact evidence:
+`C:/t/dub-acp-version-ordering-proof/versioned-14a917`.
+
+Two queued tool calls on the same server both returned COMPLETED, sessions
+`fd7261b6-acc1-414b-8255-95a47151390e` and `651a89b8-f30d-48e3-bdbe-f951d667b923`,
+replying at 17.359 s and 27.343 s with a 27.484 s total, exit 0, and both requested
+exact edits passed independent inspection. Exact evidence:
+`C:/t/dub-multilingual-validation/concurrent-installed-14-proof`.
+
+A stronger live probe captured 16 snapshots while both calls were pending. The
+final-correlated session IDs `4c200484-7e20-488e-a887-4a53af8fc50d` and
+`e7e75f73-dfda-4d3d-8de2-e80c772e49c3` were simultaneously live from 1.844 s to
+17.469 s. Replies returned COMPLETED at 18.078 s and 37.360 s, total 37.422 s, exit
+0. Task (a) passed exact edit inspection; task (b) omitted the requested period and
+failed exact inspection, which the task itself admitted was model judgment rather
+than a harness requirement. Evidence is under `concurrent-installed-14-live-proof`
+in the same proof root. This proves two live sessions and a responsive session list
+during pending calls; it does not prove precise provider-worker execution overlap
+or semantic correctness.
+
+An invalid-model probe against the installed path returned the typed
+`provider_request_rejected` outcome with `isError` true in 2.485 seconds, and
+cleanup closed session `bd546097-8d1d-48e4-aafd-195dd2fb9f70`. Root record:
+`repaired-mcp-public-invalid-model-proof`. The correct recovery for this input is to
+verify the advertised model list before retrying.
+
+The settings injection flatten completed through actual MCP in 143.875 seconds,
+session `d3c61847-73cf-4dbc-a45a-b9b184390e0d`. Root independently reviewed the
+change and the owning and functional race suites passed; it is committed as
+`879601d1a8`. It removed one owned deadcode baseline line (3153 to 3152) with no
+baseline increase.
+
+CI run `37070592713` at head `14a917cd88a1` failed at the BackendLint fmt-check step because a new catalog test file
+lacked a final newline. The selector step was skipped after that failure, and the
+inventory step, configured with `if: always()`, received an empty `LINT_JOBS`, which the strict parser
+rejected with exit 2 and no inventory output. Commit
+`9aa9fea9a82fe120f7ee671cfc387392c9f630ba` adds the gofmt final newline, makes the
+selector always run with a positive fallback output, and gives the Make target a
+blank-only fallback to the existing budget; nonempty invalid values keep strict
+validation. Root's 20 Node checks passed in 32.216 seconds. CI run `37071707444` was
+still in progress as recorded; no green claim is made for it.
+
+A bounded Make-author task timed out at 300000 ms, session
+`3b7646bc-f23c-4e33-830e-356059a52bb5`, request
+`69f04bed-f1e9-4c00-821a-81b1026b640d`, with last FILE_CHANGE
+`2026-10-02T22:13:23.5849185Z`; the session was closed and partial effects are
+possible. The partial sources were independently reviewed and finalized. A completed
+local edit does not convert that timeout into a COMPLETED result.
+
+The native structured-schema build is live at this checkpoint; there is still no final native
+structured-answer acceptance. The IndexTTS gRPC build and two reference RPCs
+succeeded, which is not yet public Models acceptance, and no new ASR exactness claim
+is made.
+
+### Correction to the compiled ACP boundary paragraph
+
+The earlier phrase "Both are custom-runner rejections ahead of any peer response"
+overstates the model-advertisement failure. Only the unsupported-runner trial failed
+before the peer was invoked. The advertisement error for the requested model
+`fixture` occurred after the `Initialize` and `session/new` replies and before
+`session/prompt`. The earlier paragraph is left unchanged; this section corrects its
+scope.
+
+The latest appendix was authored through bounded OpenCode MCP session
+`4d31efe1-adff-4fe5-86d0-030d24cfbcd6`, which returned a COMPLETED primary
+result. Independent review corrected the unknown-provider name, the second
+concurrency session ID and first reply duration, and the full CI run identity
+before retaining the appendix. The original log bytes were preserved.
