@@ -542,3 +542,71 @@ interleaving and requiring a public Factory completion barrier before asserting
 the Work projection. This is a completed source audit, not a repaired test or
 proof of the cleanup failure's cause. Exact result:
 `C:/t/dub-multilingual-validation/opencode-submit-observer-space-bunny-result.json`.
+
+The follow-up bounded editing task on `opencode/space-bunny-free` completed as
+session `659e972f-1558-4d52-82a9-66c0670f972c`, with a primary blocker report
+and no final test diff. It verified that the public open mapping selects SERVICE
+mode, which deliberately does not terminate when Work finishes. A natural
+`RUN_RESPONSE` therefore cannot provide this test's requested completion
+barrier. Independent source review confirmed that contract. The author removed
+its temporary probe; the owned submit package had no remaining diff. This is
+useful completed analysis, not a delivered test repair. Exact result:
+`C:/t/dub-multilingual-validation/opencode-submit-barrier-space-bunny-result.json`.
+
+### Rebuilt stdio server and actionable failure classification
+
+Space Bunny completed the timeout-advisory implementation as session
+`5f884551-b1ab-4cef-af98-f21f2a08f6a4`. Commit `ca27b505d5` now reports a last
+observed provider ERROR/FAILED even when a provider-session reference was
+observed. It preserves timeout classification, cleanup and partial-effects
+metadata, and excludes raw provider payloads. Root independently reviewed the
+diff and ran the owning MCP package race suite successfully in 18.264 seconds.
+This corrects diagnostic evidence; it does not establish the cause of the
+earlier Mimo stall. Exact author result:
+`C:/t/dub-multilingual-validation/opencode-mcp-diagnostic-space-bunny-edit.json`.
+
+The rebuilt executable was installed as `C:/Users/andre/bin/you.exe`, SHA-256
+`6e91728f298ea7115ee48ec70a49d1ae0ea02325c1b25150935b33f7aa011a85`.
+Its committed Go production inputs include `ca27b505d5`; unrelated live native
+draft/test artifacts were present in the worktree during compilation, so this
+is not a clean-whole-tree build claim. A fresh `you server mcp` child performed
+initialize, tools/list and an actual default-editing call on
+`opencode/space-bunny-free`. Session
+`1fe8d108-4798-492c-bd33-e4d7a429cb43` returned COMPLETED with a primary result;
+root confirmed the requested file bytes and child exit 0 after closing stdin.
+The whole fresh-server probe took 68.093 seconds. Exact protocol and executable
+identity: `C:/t/dub-multilingual-validation/repaired-mcp-proof/result.json`.
+
+A second fresh-server probe deliberately supplied an unregistered provider.
+It returned human-readable text, `isError=true`, and matching structured error
+metadata, and exited 0 in 1.328 seconds. However, it classified that known bad
+input as `factory_session.subagent.provider_unknown_failure` with message
+"provider failed for an unknown reason". That ambiguity is an observed remaining
+defect; provider validation/classification repair is delegated. Exact result:
+`C:/t/dub-multilingual-validation/repaired-mcp-error-proof/result.json`.
+
+Space Bunny subsequently delivered the submit projection barrier as session
+`4e6b840f-f650-4e8f-bcd8-9d857802f782`. It uses the existing public status
+terminality observer before reading Work and preserves every failed/done
+assertion. Independent full submit race suite, three runs, passed in 41.633
+seconds; maintainability and diff checks passed. This addresses the source
+ordering risk, not a proven cause of the earlier CI failure. The previously
+pushed `0a83cd7816` already passed required CI, run `37056730593`; newer local
+changes still require their own CI. Exact author result:
+`C:/t/dub-multilingual-validation/opencode-submit-status-barrier-space-bunny-result.json`.
+
+The separate native final-answer grammar editing call reached its 1200000 ms
+timeout without a primary result but left patch/test drafts. Those partial
+edits were inspected, the fixture renamed `.cpp.in`, and an actual MSVC syntax
+check passed. They have not yet passed linked sampler execution or live
+thinking-enabled inference and are not accepted as production-ready. Thinking
+remains enabled; reasoning is never promoted into the public structured answer.
+
+The first linked execution of that native draft subsequently failed: the
+Qwen2 vocab-only fixture did not enter COUNTING from its generation prefix,
+and the eager grammar consumed the reasoning decoy. The original failure is
+preserved at `C:/t/dub-llamacpp-final-grammar-cpu-review/native-test-result.json`.
+Context-sensitive tokenization of ordinary thinking delimiters is under
+investigation. A syntax pass therefore did not establish correct behavior;
+the draft remains unaccepted and separate from the independently verified
+Windows CUDA image-boundary build.
