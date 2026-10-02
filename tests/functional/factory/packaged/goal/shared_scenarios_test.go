@@ -586,7 +586,13 @@ func assertPackagedGoalScenarioPublicWitnessesWithTransitions(
 	assertPackagedGoalEventScope(t, scenario, events, workID)
 	dispatches := support.ObserveDispatchEvents(t, events)
 	if len(dispatches) != len(wantTransitions) {
-		t.Fatalf("%s Goal dispatches = %#v, want transitions %v", scenario.name, dispatches, wantTransitions)
+		t.Fatalf(
+			"%s Goal dispatches = %d, want transitions %v; observed dispatch request/response/cancellation payloads: %s",
+			scenario.name,
+			len(dispatches),
+			wantTransitions,
+			packagedGoalDispatchDiagnostics(dispatches),
+		)
 	}
 	for index, dispatch := range dispatches {
 		if dispatch.Request.TransitionId != wantTransitions[index] {
@@ -600,6 +606,22 @@ func assertPackagedGoalScenarioPublicWitnessesWithTransitions(
 		}
 	}
 	assertPackagedGoalRetainedReplay(t, scenario, events)
+}
+
+// packagedGoalDispatchDiagnostics serializes the full dispatch observation
+// slice so failure output shows nested request, response, and cancellation
+// payload contents instead of pointer values from %#v formatting.
+func packagedGoalDispatchDiagnostics(dispatches []support.DispatchEventObservation) string {
+	encoded, err := json.MarshalIndent(dispatches, "", "  ")
+	if err != nil {
+		return fmt.Sprintf(
+			"<json marshal failed: %v; %#v fallback follows>\n%#v",
+			err,
+			dispatches,
+			dispatches,
+		)
+	}
+	return string(encoded)
 }
 
 func listPackagedGoalSessionWork(

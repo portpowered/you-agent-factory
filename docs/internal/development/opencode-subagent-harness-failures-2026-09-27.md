@@ -1096,3 +1096,46 @@ The IPC author timed out at 1200000 ms with partial edits and no primary result,
 The six-file Index author also timed out at 600000 ms with partial edits and no primary result, session `3a91afb6-4a8d-475a-a570-82402e33085d`, request `10a4a143-e790-49a3-ad89-aed4cc301bc1`, closed, with no proven cause. A completed local edit does not convert either terminal timeout into a COMPLETED result.
 
 Root independently rehashed all 18 schema candidate payload files, and every size and hash matched. Public live schema proof is still pending, so no merge, green CI, or public structured-answer acceptance is claimed here.
+
+### 2026-10-02 Index follow-up and Goal audit terminal outcomes
+
+The narrowed Index repair completed with a primary result in 99s, session
+`05a99439-5955-4780-944b-5e7a1c22ec64`. It corrected two fixtures, removed a
+needless exported constant, and corrected a discovery comment. It also adjusted
+two characterization-test references outside its three named paths but inside
+the approved owner scope. Independent Models, backend-registry, and wire tests
+passed in 0.030s, 0.026s, and 0.036s. Exact result:
+`C:/t/dub-indextts-localai-grpc-proof/opencode-public-integration-repair-result.json`.
+
+Two launcher edit requests failed immediately with
+`factory_session.subagent.provider_unknown_failure`, `INVOCATION_RUNTIME_FAILURE`,
+and cleanup closed: Space Bunny session
+`c86c01d9-3d8f-4e9e-b413-395c1a3b8d47`, then BigPickle session
+`d9cfaec9-8924-40dd-b211-107e14d71398`. No launcher edits were observed. A later
+Space Bunny request to append these notes also failed immediately with the same
+classification, session `06c38510-f2c0-4914-8a7b-e42ea674b9e5`; no note edit was
+observed, so this appendix was written manually. The causes remain unknown.
+These three calls used the exposed `you.subagent` connector from `functions.exec`,
+with the managed worktree as `workingRoot`; its server binary identity was not
+exposed. They did not use root's installed-binary stdio proof client, so the
+results do not establish failure of that separately successful invocation path.
+Exact results are `opencode-launch-writer-space-result.json`,
+`opencode-launch-writer-bigpickle-result.json`, and
+`opencode-deferred-notes-result.json` in the same external proof root.
+
+The user prioritized Qwen full dubbing. With root approval, the six owned
+optional Index drafts were preserved externally and removed from the release
+tree; unrelated changes were preserved. The exact patch is
+`C:/t/dub-indextts-localai-grpc-proof/deferred-index-public-integration.patch`,
+SHA256 `9a66d7b3f76fa3339c34f6fbff3f05c2445a6af438acad566ef9aac4f7ca249a`.
+`deferred-index-public-integration-provenance.json` records the per-file hashes
+and Git identities. Private Index CUDA reference-audio and actual production
+codec interoperability proofs remain retained. Normal public Index discovery
+and invocation remain incomplete.
+
+The root Goal read-only audit timed out at its 600000ms allowance, measured
+elapsed 602.406s, session `129dc0b4-66ed-4d6f-bf48-371362cc370b`, request
+`71b71e61-4341-4817-8613-2efd72786cff`. Its last activity was `REASONING` at
+`22:57:36.8893634Z`; cleanup closed the session. It returned no conclusion and
+made no observed edits. The timeout cause remains unknown. A narrower Goal
+diagnostic writer is in progress; that is not acceptance evidence.
