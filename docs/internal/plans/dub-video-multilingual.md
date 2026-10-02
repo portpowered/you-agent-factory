@@ -1242,3 +1242,51 @@ cancellation recognition. The cancellation test repair is committed as
 ordering repairs still need their compiled public-boundary proof and CI.
 The PR remains unmerged. Current-head CI, accepted full English output, and
 postmerge long Japanese/Korean/Spanish runs remain delivery requirements.
+
+
+### 2026-10-02 current release priority and verified gates
+
+The user explicitly prioritizes a mostly working dubbing pipeline and merging,
+accepting imperfect translation and pronunciation. Full valid video output with
+reference-conditioned audio and final-head CI remain merge prerequisites;
+exhaustive Japanese/Korean/Spanish long-video QA and a public IndexTTS path stay
+post-merge follow-ups. PR 2668 remains draft and unmerged.
+
+The Factory migrated from raw final grammar to `json_schema` at translation,
+audit, and fit repair. Thinking stays enabled privately, and the final public
+structured response omits reasoning/thinking keys. The packaged Python suite
+passes 74 tests, and the canonical catalog check passes.
+
+The native Windows CUDA schema release
+`localai-backends-v1-90eb06d7fb9a54cb8ae9ca83172ca599cbd1252d500446dedbf8400a9405add5`
+is published. A normal full Factory run downloaded the 443,212,798-byte archive
+with SHA-256
+`272233b21ce0d353b10bfdd31dffb5d37bfc21a55a2efee5dd57490be34a2c19` and a loaded
+executable SHA-256
+`8ece891bfd64a1526a58a22cd4e82bf8bab572aaaea4f8372a03fb33c2e7c475`. A
+prerelease public Models fixture proved 855 private reasoning bytes separated
+from the final schema JSON; it returned English text, so it is representation
+separation evidence, not Korean translation quality.
+
+The normal CLI installed immutable module `b050`. Its compiled three-row ACP EOF
+proof passed in 6.746 seconds and a fresh MCP edit completed in 33.954 seconds
+under session `96929d18-8a1e-46c3-90ed-8ce92a00b1f5`. Source head
+`8e1daf1b861f8341c83512a22c1d1d0d5ac611bc` fixes two stale controlled-clock tests
+left behind when the readiness default became five minutes; focused race and the
+full owning package pass, with no production, assertion, or wall-clock limit
+change. CI run `37078759573` was still running with no failures at observation;
+the preceding b050 CI failed exactly those tests and cascaded into Verification
+Policy.
+
+The full original 240-second Chinese video to en-US runs against the supplied
+`customqwen` model and default Qwen ASR/reference-audio TTS, with no overrides,
+thinking disable, or token caps. It produced 59 source cues and a valid initial
+translation; the audit applied three indexed corrections and its second audit is
+active. No final accepted video exists yet. Model cold unload/reload and
+multi-minute audit inference are observed operational latency limitations, and
+causes beyond the measured timings remain unproven.
+
+Evidence roots: `C:/t/dub-schema-english-end-to-end`,
+`C:/t/dub-ci-b050-review`,
+`C:/t/dub-multilingual-validation/installed-versioned-b050-proof`, and
+`C:/t/dub-schema-small-public-candidate-proof`.

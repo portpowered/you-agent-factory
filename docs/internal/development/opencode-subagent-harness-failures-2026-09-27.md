@@ -1139,3 +1139,86 @@ elapsed 602.406s, session `129dc0b4-66ed-4d6f-bf48-371362cc370b`, request
 `22:57:36.8893634Z`; cleanup closed the session. It returned no conclusion and
 made no observed edits. The timeout cause remains unknown. A narrower Goal
 diagnostic writer is in progress; that is not acceptance evidence.
+
+### 2026-10-02 versioned `b050` install, native release download, and CI outcome
+
+- The normal network versioned Go install of
+  `b050291bfd91b847410e2d0c08810b851b5185ba` succeeded and produced
+  `C:/Users/andre/bin/you.exe`, SHA256
+  `fe20cf4fb9a2b38cdb421b1ab758c45854d27e8c0501b3adfe699c7b261b9384`, from
+  module `v0.0.8-0.20261002232031-b050291bfd91`.
+- The compiled ACP EOF three-row proof passed in 6.746s against that install.
+- A fresh installed stdio MCP edit completed in 33.954s, session
+  `96929d18-8a1e-46c3-90ed-8ce92a00b1f5`. The exact edit was independently
+  verified and the server exited 0. Proof:
+  `C:/t/dub-multilingual-validation/installed-versioned-b050-proof`.
+- Codex config was pointing at the old `you-model-infer-20260929.exe`. The
+  command was updated to `you.exe` with `tool_timeout_sec` 3700 preserved, but
+  already loaded connector processes remain the old ones. An exposed connector
+  edit nevertheless completed in 7.816s, session
+  `03b79549-318b-4091-9b28-a78cae00c155`; that success is not a new binary
+  identity proof.
+- The native schema Windows CUDA archive was published at release
+  `localai-backends-v1-90eb06d7fb9a54cb8ae9ca83172ca599cbd1252d500446dedbf8400a9405add5`,
+  archive SHA256
+  `272233b21ce0d353b10bfdd31dffb5d37bfc21a55a2efee5dd57490be34a2c19`.
+  A full normal installed factory downloaded that exact archive and uses native
+  executable SHA256
+  `8ece891bfd64a1526a58a22cd4e82bf8bab572aaaea4f8372a03fb33c2e7c475`.
+- The public prerelease Models schema proof retained 855 private reasoning bytes
+  while the public JSON omitted the reasoning/thinking keys. The Korean prompt
+  fixture returned English, so this is representation acceptance, not Korean
+  translation acceptance.
+- The full actual original 240-second Chinese video is still running toward
+  en-US. ASR produced 59 cues and the initial exact ordered 59-cue translation
+  completed; the semantic audit is in progress and no final dubbed output is
+  accepted yet.
+- CI run `37077160500` on `b050` completed with Backend Functional Coverage and
+  Verification Policy failure. Diagnosis is in progress; no merge or green CI
+  claim is made.
+
+The bounded installed-`b050` MCP author for this section returned `COMPLETED`
+with a primary result in 53.782s, session
+`38acf72d-5647-4284-b81d-9e540eb79fc0`, and the server exited 0. Root
+independently verified the exact append-only 37-line edit; no other file was
+touched and no Git mutation was run. This records authoring provenance for the
+section above only and adds no new install, native, CI, or dubbing evidence.
+Exact raw result:
+`C:/t/dub-multilingual-validation/b050-release-progress-log-proof/result.json`.
+
+### 2026-10-02 controlled-clock CI repair and bounded MCP outcomes
+
+The preceding `b050` CI run `37077160500` failed
+`TestModelsASRControlledHealthTimeoutStopsReadiness` and
+`TestModelsGenericCLIProcessTimeoutStopsReadinessAndPublishesNothing` because
+the shared fake clock still advanced only 31 seconds, below the new five-minute
+production deadline those tests now assert. The Verification Policy failure was
+cascading from those two tests and was not a separate defect.
+
+The installed-`b050` MCP OpenCode Space Bunny author returned `COMPLETED` in
+54.047s, session
+`fbad23a4-9ce7-4d0f-9d7d-12650d28a124`, and changed one test helper only, running
+against the same actual installed server SHA256
+`fe20cf4fb9a2b38cdb421b1ab758c45854d27e8c0501b3adfe699c7b261b9384`. Root
+independently verified the focused race pass in 2.651s and the full Models
+`root_composition` pass in 25.907s. Public error and cleanup assertions and
+wall-clock waits were unchanged, and no production code changed. The fix was
+committed and pushed as
+`8e1daf1b861f8341c83512a22c1d1d0d5ac611bc`. CI run `37078759573` Backend
+Integration passed, including the real five-minute blocked-load witness. The
+functional lane was still active with no failures observed, and no merge is
+claimed here. Exact evidence: `C:/t/dub-ci-b050-review/proof.json`.
+
+Separately, a documentation provenance paragraph author returned `COMPLETED`
+with a primary result in 397.578s and server exit 0, session
+`08c0fd90-4ed3-42dd-8d9d-64a4f296c05b`, with a verified additive 9-line edit
+only. That call was not a timeout, but the cause of the long latency remains
+unproven, and the different prompts mean it does not establish before/after
+performance. It overlapped the 54.047s one-test writer; both completed
+independently in separate source paths with no conflicting edits. Raw result:
+`C:/t/dub-multilingual-validation/b050-log-terminal-proof/result.json`.
+
+A subsequent plan author returned `COMPLETED` in 46.469s, session
+`b1cbd733-8e70-49c6-994f-494083b937e9`, with an independently verified
+append-only 48-line edit and no other file changed. Raw result:
+`C:/t/dub-multilingual-validation/b050-current-delivery-plan-proof/result.json`.
