@@ -8,12 +8,27 @@ const target = 'tools/grpc-server/grpc-server.cpp';
 const markers = ['REQUEST_JSON_SCHEMA_FORWARD\n', 'REQUEST_JSON_SCHEMA_FORWARD_STREAM',
 	'REQUEST_JSON_SCHEMA_FORWARD_PREDICT', 'REQUEST_JSON_SCHEMA_HEALTH'];
 
-function git(root, arguments_) {
-	return spawnSync('git', ['-C', root, 'apply', ...arguments_], { encoding: 'utf8' });
+// git apply matches patch context against the prepared bytes byte for byte, so it has to
+// read the validated logical patch text on stdin at the prepared file's own line ending.
+// The authored patch file is never rewritten and prepared bytes are never reflowed.
+function git(root, arguments_, patchText) {
+	return spawnSync('git', ['-C', root, 'apply', ...arguments_, '-'],
+		{ encoding: 'utf8', input: Buffer.from(patchText, 'utf8') });
 }
 
 function checked(result, action) {
 	if (result.status !== 0) throw new Error(`${action} failed: ${result.stderr || result.error || result.status}`);
+}
+
+function preparedEol(source) {
+	const crlf = (source.match(/\r\n/g) || []).length;
+	const bareLf = (source.match(/\n/g) || []).length - crlf;
+	if (crlf > 0 && bareLf > 0) throw new Error('prepared source mixes line endings');
+	return crlf > 0 ? '\r\n' : '\n';
+}
+
+function atEol(patchText, eol) {
+	return eol === '\n' ? patchText : patchText.replace(/\n/g, eol);
 }
 
 export function extractSchemaHelper(source) {
@@ -39,11 +54,12 @@ export function applySchemaPatch({ server, patch, testTemplate, testDestination,
 	const counts = markers.map(marker => logical.split(`LOCALAI_LLAMACPP_${marker}`).length - 1);
 	const applied = counts.every(count => count === 1);
 	if (!applied && !counts.every(count => count === 0)) throw new Error('partially applied or duplicate schema markers');
-	if (applied) checked(git(root, ['--reverse', '--check', patch]), 'schema reverse check');
+	const appliable = atEol(patchText, preparedEol(source));
+	if (applied) checked(git(root, ['--reverse', '--check'], appliable), 'schema reverse check');
 	else {
-		checked(git(root, ['--check', patch]), 'schema patch check');
-		checked(git(root, [patch]), 'schema patch application');
-		checked(git(root, ['--reverse', '--check', patch]), 'schema applied-byte verification');
+		checked(git(root, ['--check'], appliable), 'schema patch check');
+		checked(git(root, [], appliable), 'schema patch application');
+		checked(git(root, ['--reverse', '--check'], appliable), 'schema applied-byte verification');
 	}
 	const compiled = readFileSync(server, 'utf8');
 	const helper = extractSchemaHelper(compiled);
