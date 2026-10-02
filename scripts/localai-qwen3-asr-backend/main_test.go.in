@@ -100,10 +100,29 @@ func TestNaturalAlignedPhrases(t *testing.T) {
 }
 
 func TestNativeLanguageHints(t *testing.T) {
-	for value, want := range map[string]string{"en-US": "English", "zh-Hans": "Chinese", "ja": "Japanese", "ko_KR": "Korean", "english": "English", "Chinese": "Chinese", "": "", "auto": ""} {
-		if got := nativeLanguage(value); got != want {
-			t.Fatalf("%q => %q want %q", value, got, want)
+	for value, want := range map[string]string{"en-US": "English", "zh-Hans": "Chinese", "zh-HK": "Chinese", "zh-TW": "Chinese", "ja-JP": "Japanese", "ko_KR": "Korean", "yue-HK": "Cantonese", "fil-PH": "Filipino", "tl": "Filipino", "english": "English", "Chinese": "Chinese", "": "", "auto": ""} {
+		if got, err := nativeLanguage(value); got != want || err != nil {
+			t.Fatalf("%q => %q err=%v want %q", value, got, err, want)
 		}
+	}
+	for _, value := range []string{"unknown", "bn", "Bengali", "auto-US"} {
+		if _, err := nativeLanguage(value); err == nil {
+			t.Fatalf("unsupported language %q accepted", value)
+		}
+	}
+}
+
+func TestUnsupportedExplicitLanguageDoesNotReachNative(t *testing.T) {
+	native.resetCancel = func() { t.Fatal("unsupported language reset native state") }
+	native.transcribe = func(string, string, int) int {
+		t.Fatal("unsupported language reached native inference")
+		return 1
+	}
+	result, err := (&model{}).AudioTranscription(context.Background(), &pb.TranscriptRequest{
+		Dst: "source.wav", Language: "unknown",
+	})
+	if err == nil || result.Text != "" || len(result.Segments) != 0 {
+		t.Fatalf("unsupported language published a result: %+v err=%v", result, err)
 	}
 }
 

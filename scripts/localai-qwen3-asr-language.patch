@@ -1,0 +1,72 @@
+diff --git a/src/qwen3_asr.cpp b/src/qwen3_asr.cpp
+--- a/src/qwen3_asr.cpp
++++ b/src/qwen3_asr.cpp
+@@ -1,5 +1,6 @@
+ #include "qwen3_asr.h"
+ #include "timing.h"
++#include "qwen_asr_language.h"
+ 
+ #include <chrono>
+ #include <algorithm>
+@@ -83,6 +84,10 @@
+     transcribe_result result;
+     int64_t t_total_start = get_time_ms();
+ 
++    if (!params.language.empty() && !qwen_asr_language::find(params.language)) {
++        result.error_msg = "Unsupported explicit ASR language: " + params.language;
++        return result;
++    }
+     encoder_.set_n_threads(params.n_threads);
+     decoder_.set_n_threads(params.n_threads);
+     
+@@ -134,12 +139,10 @@
+     result.t_decode_ms = get_time_ms() - t_decode_start;
+     
+     result.tokens = output_tokens;
+-    const size_t text_start = std::min<size_t>(output_tokens.size(), 2);  // remove language prefix tokens
+-    std::vector text_tokens(output_tokens.begin() + text_start, output_tokens.end());
+-    result.text = decoder_.decode_tokens(text_tokens);
+-    if (output_tokens.size() >= 2) {
+-        result.language = decoder_.decode_token(output_tokens[1]);
+-    }
++    const auto parsed = qwen_asr_language::parse(output_tokens, params.language,
++        [this](const std::vector<int32_t>& tokens) { return decoder_.decode_tokens(tokens); });
++    result.text = parsed.text;
++    result.language = parsed.language;
+     result.success = true;
+     
+     result.t_total_ms = get_time_ms() - t_total_start;
+@@ -207,7 +210,7 @@
+     tokens.push_back(assistant_token);
+     tokens.push_back(newline);
+     
+-    (void)language;
++    qwen_asr_language::append(tokens, language);
+     
+     return tokens;
+ }
+diff --git a/src/text_decoder.cpp b/src/text_decoder.cpp
+--- a/src/text_decoder.cpp
++++ b/src/text_decoder.cpp
+@@ -1,5 +1,6 @@
+ #include "text_decoder.h"
+ #include "timing.h"
++#include "qwen_asr_language.h"
+ 
+ #include <cmath>
+ #include <cstring>
+@@ -833,6 +834,14 @@
+     for (int64_t i = 0; i < n_vocab; ++i) {
+         vocab_[i] = gguf_get_arr_str(ctx, tokens_idx, i);
+     }
++    try {
++        qwen_asr_language::validate(model_.config.vocab_size, [this](int32_t id) {
++            return id >= 0 && id < static_cast<int32_t>(vocab_.size()) ? vocab_[id] : "";
++        });
++    } catch (const std::exception& error) {
++        error_msg_ = error.what();
++        return false;
++    }
+     
+     return true;
+ }

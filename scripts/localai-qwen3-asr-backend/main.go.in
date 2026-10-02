@@ -83,6 +83,10 @@ func (m *model) AudioTranscription(ctx context.Context, req *pb.TranscriptReques
 			return pb.TranscriptResult{}, fmt.Errorf("qwen3-asr unsupported timestamp granularity %q", value)
 		}
 	}
+	language, err := nativeLanguage(req.Language)
+	if err != nil {
+		return pb.TranscriptResult{}, err
+	}
 	native.resetCancel()
 	finished, joined := make(chan struct{}), make(chan struct{})
 	go func() {
@@ -93,7 +97,7 @@ func (m *model) AudioTranscription(ctx context.Context, req *pb.TranscriptReques
 		case <-finished:
 		}
 	}()
-	status := native.transcribe(req.Dst, nativeLanguage(req.Language), int(req.Threads))
+	status := native.transcribe(req.Dst, language, int(req.Threads))
 	close(finished)
 	<-joined
 	if err := ctx.Err(); err != nil {
@@ -246,22 +250,22 @@ func wordSeparator(previous, next, fallback string) string {
 	return fallback
 }
 
-func nativeLanguage(value string) string {
+func nativeLanguage(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	primary := strings.ToLower(strings.SplitN(strings.ReplaceAll(value, "_", "-"), "-", 2)[0])
-	names := map[string]string{"en": "English", "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "yue": "Cantonese", "ar": "Arabic", "de": "German", "fr": "French", "es": "Spanish", "pt": "Portuguese", "ru": "Russian", "it": "Italian", "hi": "Hindi", "bn": "Bengali", "th": "Thai", "id": "Indonesian", "ms": "Malay", "vi": "Vietnamese", "tr": "Turkish", "nl": "Dutch", "pl": "Polish", "el": "Greek", "hu": "Hungarian", "fi": "Finnish", "sv": "Swedish", "da": "Danish", "cs": "Czech", "ro": "Romanian", "fa": "Persian", "mk": "Macedonian", "tl": "Filipino"}
+	names := map[string]string{"en": "English", "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "yue": "Cantonese", "ar": "Arabic", "de": "German", "fr": "French", "es": "Spanish", "pt": "Portuguese", "ru": "Russian", "it": "Italian", "hi": "Hindi", "th": "Thai", "id": "Indonesian", "ms": "Malay", "vi": "Vietnamese", "tr": "Turkish", "nl": "Dutch", "pl": "Polish", "el": "Greek", "hu": "Hungarian", "fi": "Finnish", "sv": "Swedish", "da": "Danish", "cs": "Czech", "ro": "Romanian", "fa": "Persian", "mk": "Macedonian", "tl": "Filipino", "fil": "Filipino"}
 	if name, ok := names[primary]; ok {
-		return name
+		return name, nil
 	}
-	if primary == "auto" {
-		return ""
+	if value == "" || strings.EqualFold(value, "auto") {
+		return "", nil
 	}
 	for _, name := range names {
 		if strings.EqualFold(value, name) {
-			return name
+			return name, nil
 		}
 	}
-	return value
+	return "", fmt.Errorf("qwen3-asr unsupported explicit language %q", value)
 }
 
 func main() {

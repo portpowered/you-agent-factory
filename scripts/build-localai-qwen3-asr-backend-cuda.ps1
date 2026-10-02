@@ -23,6 +23,17 @@ if (-not (Test-Path -LiteralPath $SourceRoot)) {
 }
 Invoke-Checked git @('-C', $SourceRoot, 'checkout', '--detach', $sourceCommit)
 Invoke-Checked git @('-C', $SourceRoot, 'submodule', 'update', '--init', '--recursive')
+$languagePatch = Join-Path $PSScriptRoot 'localai-qwen3-asr-language.patch'
+# An unapplied patch is an expected negative probe. Windows PowerShell can
+# otherwise promote native stderr to a terminating error before exit inspection.
+$patchProbePreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Continue'
+    & git -C $SourceRoot apply --reverse --check $languagePatch 2>$null
+    $languagePatchApplied = $LASTEXITCODE -eq 0
+} finally { $ErrorActionPreference = $patchProbePreference }
+if (-not $languagePatchApplied) { Invoke-Checked git @('-C', $SourceRoot, 'apply', $languagePatch) }
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'localai-qwen3-asr-backend/language.h') -Destination (Join-Path $SourceRoot 'src/qwen_asr_language.h') -Force
 if ((& git -C (Join-Path $SourceRoot 'ggml') rev-parse HEAD).Trim() -cne $ggmlCommit) { throw "GGML checkout must be $ggmlCommit" }
 $nativeBuild = Join-Path $BuildRoot 'native'
 $shimBuild = Join-Path $BuildRoot 'bridge'
@@ -35,6 +46,7 @@ Invoke-Checked cmake @('-S', $bridgeSource, '-B', $shimBuild, '-G', 'Visual Stud
 Invoke-Checked cmake @('--build', $shimBuild, '--config', 'Release', '--parallel', '4')
 Invoke-Checked (Join-Path $shimBuild 'Release/qwen3-asr-seam-test.exe') @()
 Invoke-Checked (Join-Path $shimBuild 'Release/qwen3-asr-wave-reader-test.exe') @()
+Invoke-Checked (Join-Path $shimBuild 'Release/qwen3-asr-language-test.exe') @()
 $backendRoot = Join-Path $LocalAIRoot 'backend\go\qwen3-asr-cpp'
 New-Item -ItemType Directory -Path $backendRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $PackageRoot -Force | Out-Null
@@ -68,6 +80,16 @@ New-Item -ItemType Directory -Path (Join-Path $PackageRoot 'licenses') -Force | 
 Copy-Item -LiteralPath (Join-Path $SourceRoot 'LICENSE') -Destination (Join-Path $PackageRoot 'licenses/qwen3-asr-MIT.txt') -Force
 Copy-Item -LiteralPath (Join-Path $SourceRoot 'ggml/LICENSE') -Destination (Join-Path $PackageRoot 'licenses/ggml-MIT.txt') -Force
 Copy-Item -LiteralPath (Join-Path $LocalAIRoot 'LICENSE') -Destination (Join-Path $PackageRoot 'licenses/LocalAI-MIT.txt') -Force
+$languageProvenance = [ordered]@{
+    nativeCommit = $sourceCommit
+    tokenizerRevision = '5eb144179a02acc5e5ba31e748d22b0cf3e303b0'
+    upstreamPatch = 'localai-qwen3-asr-language.patch'
+    patchSha256 = (Get-FileHash -LiteralPath $languagePatch -Algorithm SHA256).Hash.ToLowerInvariant()
+    helperSha256 = (Get-FileHash -LiteralPath (Join-Path $bridgeSource 'language.h') -Algorithm SHA256).Hash.ToLowerInvariant()
+    compiledSourceSha256 = (Get-FileHash -LiteralPath (Join-Path $SourceRoot 'src/qwen3_asr.cpp') -Algorithm SHA256).Hash.ToLowerInvariant()
+    compiledDecoderSha256 = (Get-FileHash -LiteralPath (Join-Path $SourceRoot 'src/text_decoder.cpp') -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+$languageProvenance | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PackageRoot 'language-conditioning-provenance.json') -Encoding utf8
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../LICENSE.md') -Destination (Join-Path $PackageRoot 'licenses/you-agent-factory.txt') -Force
 foreach ($name in @('cudart64_13.dll', 'cublas64_13.dll', 'cublasLt64_13.dll')) {
     $runtimePath = Find-CudaRuntimeFile -CudaRoot $CudaRoot -Name $name
