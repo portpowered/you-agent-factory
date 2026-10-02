@@ -50,12 +50,7 @@ func TestRuntimeStateSnapshotPublishesWholeDispatchBatchBeforeExecution(t *testi
 		if len(recorded) != 2 || len(snapshot.Dispatches) != 2 || snapshot.InFlightCount != 2 {
 			t.Fatalf("before execution %q: recorded=%d dispatches=%d in-flight=%d, want complete batch", dispatch.DispatchID, len(recorded), len(snapshot.Dispatches), snapshot.InFlightCount)
 		}
-		for _, id := range []string{"first", "second"} {
-			entry := snapshot.Dispatches[id]
-			if entry == nil || len(entry.HeldMutations) != 1 || entry.HeldMutations[0].TokenID != id {
-				t.Fatalf("before execution %q: reservation %q=%#v, want its held GPU token", dispatch.DispatchID, id, entry)
-			}
-		}
+		assertHeldDispatchReservations(t, snapshot.Dispatches, dispatch.DispatchID, "first", "second")
 		// Observe supplies the immutable topology to the detached snapshot.
 		snapshot.Topology = net
 		usage := factorystatus.ProjectFromSnapshot(&snapshot).Resources
@@ -72,6 +67,20 @@ func TestRuntimeStateSnapshotPublishesWholeDispatchBatchBeforeExecution(t *testi
 	}
 	if len(hook.submits) != 2 {
 		t.Fatalf("submitted dispatches=%d, want 2", len(hook.submits))
+	}
+}
+
+// assertHeldDispatchReservations checks that every dispatch in a published batch
+// is already reserved, holding exactly the GPU token named by its own ID, at the
+// first possible external effect of the batch. executingID names the dispatch
+// currently being submitted so failures point at the observed boundary.
+func assertHeldDispatchReservations(t *testing.T, dispatches map[string]*interfaces.DispatchEntry, executingID string, tokenIDs ...string) {
+	t.Helper()
+	for _, tokenID := range tokenIDs {
+		entry := dispatches[tokenID]
+		if entry == nil || len(entry.HeldMutations) != 1 || entry.HeldMutations[0].TokenID != tokenID {
+			t.Fatalf("before execution %q: reservation %q=%#v, want its held GPU token", executingID, tokenID, entry)
+		}
 	}
 }
 
