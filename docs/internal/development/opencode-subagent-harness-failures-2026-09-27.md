@@ -740,3 +740,56 @@ preparation, and left no owned processes. Its cue-25 overlay hallucination
 (`EPISODE 01`) remains a semantic defect; this is not acceptance of a full dub
 or a general vision-quality claim. Exact evidence:
 `C:/t/dub-qwen-independent-images-managed-proof/`.
+
+Two later bounded real editing tasks completed successfully on Space Bunny.
+Session `ad458be5-2931-4bc4-b289-a67753459b74` removed the MCP binding dependency
+bag and forwarding wrapper in 94.625 seconds. Root reviewed every converted
+injection argument and ran the full owning MCP suite successfully (17.114
+seconds), then committed the two-file flattening as `44310080b4`. Exact result:
+`C:/t/dub-multilingual-validation/repaired-mcp-flatten-bind-proof/result.json`.
+
+Session `8646ba5f-f544-477d-aabe-f72b8365abbb` delivered the throttled recovery
+guidance in 218 seconds. Root reviewed the final two-file change and independently
+ran the classification race test three times successfully (1.056 seconds).
+The remedy now explicitly recommends waiting/retrying or another available
+configured model/provider, while preserving partial-edit inspection, log
+correlation, typed failure and private-payload protection. Exact author result:
+`C:/t/dub-multilingual-validation/opencode-throttle-action-space-bunny-result.json`.
+
+The IndexTTS feasibility audit first received a typed Big Pickle throttle after
+117 seconds, then completed on Space Bunny after 281 seconds as session
+`b859380c-79b3-49cd-8450-271538b943cd`. Independent source review confirmed the
+current pinned LocalAI source has no audio-cpp backend. A newer immutable
+LocalAI/audio.cpp pair documents Windows MSVC/CUDA and reference-audio IndexTTS
+support, but it needs a distinct source/protobuf build and actual invocation
+proof. The audit is useful planning evidence, not verified runtime support.
+Exact results and source review:
+`C:/t/dub-multilingual-validation/opencode-indextts-feasibility-result.json`,
+`C:/t/dub-multilingual-validation/opencode-indextts-space-bunny-result.json`, and
+`C:/t/dub-multilingual-validation/indextts-windows-feasibility-review.md`.
+
+The initial SDK edit completed with a primary result, but its claim of no false
+success was contradicted by an independent already-canceled-caller witness:
+fourteen of sixteen buffered-response/EOF draws falsely succeeded. A bounded
+five-minute Space Bunny corrective call then timed out with partial guards and
+an incomplete decoder regression. Independent review finished the correction,
+and root ran the full SDK race suite successfully in 7.388 seconds, including
+the new EOF, notification, cancellation, deadline and decode cases. This does
+not establish the compiled provider boundary until its separate test runs.
+
+Root review also found that the proposed local `go.mod replace` would break the
+published `go install ...@version` path. The replacement arrangement is therefore
+unaccepted and is being changed to one preserved SDK package within the root
+module, with mechanical namespace changes and truthful provenance. The twelve
+unreachable-code vet findings in upstream generated SDK code were reproduced
+on pristine upstream bytes; authored application checks must remain intact.
+No SDK draft has been included in the installed clean `8d0225132e` executable.
+
+The IndexTTS build-author task reached its five-minute timeout without a
+primary result or authored wrapper. The reviewer then executed the unmodified
+official immutable Windows MSVC/CUDA build script. That standalone native build
+passed in 419.740 seconds, and its help/version commands succeeded with CPU and
+CUDA reported. Its identified executable is recorded with build commands and
+toolchain evidence in `C:/t/dub-indextts-windows-native-proof/`. Reference-audio
+GPU inference, gRPC packaging, and public Models invocation are still pending;
+a compiled executable alone does not establish those requirements.
