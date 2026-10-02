@@ -448,3 +448,97 @@ Root inspected Git status afterward and found only expected files. This does
 not prove that no partial effects occurred. The cause remains unknown, and the
 dispatch supplies no independent engine review. The exact MCP response is
 saved at `C:/t/dub-multilingual-validation/opencode-engine-review-timeout-result.json`.
+
+A read-only retry with `opencode/big-pickle`, session
+`881987fb-f1cf-48f6-a3fe-19ba325490dd`, completed within a 1,200,000 ms
+allowance and returned a primary review. The exact response is saved at
+`C:/t/dub-multilingual-validation/opencode-engine-review-completed-result.json`.
+It found no blocking correctness defect in publishing the complete reserved
+dispatch batch before external execution. It raised the fatal submission-error
+path as nonblocking and suggested deleting unsubmitted tail entries.
+
+Independent source review confirmed that all batch resource mutations already
+precede submission, and a submission error already aborts the runtime loop.
+Root rejected deleting entries alone: it would discard held-mutation and
+recovery lineage without restoring consumed resources or resolving recorded
+dispatch events. No partial rollback was implemented. This review does not
+show actual execution overlap. It proves one completed read-only retry;
+timeout allowance and prompt scope both changed, so timeout causation and
+general harness stability remain unproven.
+
+## October 2 engine regression complexity edit
+
+The first bounded editing request used provider `opencode`, unqualified model
+`big-pickle`, and a 1,200,000 ms allowance. It returned
+`factory_session.subagent.provider_request_rejected`, with
+`failureReason: permanent_bad_request`, session
+`c22a773a-18d3-4a8f-9ad0-e58d6fc37214`, and cleanup closing the live session.
+The requested test file had no diff afterward. The unqualified model identifier
+may have affected the request; the saved error does not establish that cause.
+Exact result: `C:/t/dub-multilingual-validation/opencode-engine-complexity-bad-request-result.json`.
+
+After that terminal result, the next editing dispatch requested
+`opencode/space-bunny-free` with the same allowance. Session
+`71f62be8-f48d-4b3b-9f2d-275c4fad1730` returned `COMPLETED` and a primary
+result. The actual diff extracted the held-resource reservation assertion into
+a private test helper in `engine_runtime_snapshot_test.go`, preserving every
+assertion. Independent review confirmed the change; final repository
+maintainability and engine race checks passed. No production/native files,
+baselines, model defaults, or GPU inference changed in this task. Exact result:
+`C:/t/dub-multilingual-validation/opencode-engine-complexity-space-bunny-result.json`.
+This establishes one successful bounded edit with the requested model. Both
+model and identifier form changed, so it does not identify the first rejection
+cause or prove general concurrent editing stability.
+
+## October 2 native independent-image implementation dispatches
+
+The implementation request using `opencode/mimo-v2.6-flash-free` timed out
+with a 1,200,000 ms allowance, without a primary result or the requested edits
+in the inspected scope. Session `57888254-fb89-45af-b963-e2c3d3dd673c`, request
+`ae266748-da6d-42df-8143-b00019494cec`. Its retained provider activity had
+`kind: ERROR`, `phase: FAILED`, and `providerSessionObserved: true` at
+`2026-10-02T12:02:42.3171664Z`, but omitted the underlying error payload.
+Cleanup closed the live session; the terminal response reported possible
+partial effects. The cause remains unknown. A later session lookup returning
+404 does not prove a lookup bug: the response explicitly documents its session
+ID as correlation-only and warns that lookup may return `session.not_found`.
+
+A BigPickle retry completed with a primary result, session
+`7b2f5175-1a52-48e0-8ee0-6a4d3ea65393`, and actual native packing source edits
+plus CPU evidence. Independent review corrected the author's inaccurate
+per-text-part trim assumption, comments, test/recipe execution, and incomplete
+provenance. The actual template trims the whole rendered content; interior
+whitespace remains intact. Nonwhitespace ordinal media boundaries were retained.
+The reviewed source was committed as `6d1aede588`; native compilation is active,
+with no public inference or correspondence acceptance from these CPU proofs.
+This is author delivery followed by independent repair and review, not proof
+that the initial implementation needed no correction or that timeout causes
+are understood.
+
+Exact terminal results and the reviewed handoff are preserved under
+`C:/t/dub-llama-independent-images-source-proof/` in
+`opencode-dispatch-terminal.json`, `opencode-bigpickle-terminal.json`, and
+`handoff.md`. Workspace observations cover the inspected owned scope; they do
+not rule out all other partial effects.
+
+A subsequent read-only native review requested `opencode/space-bunny-free`
+with a 1,200,000 ms allowance. Session
+`1b0daa67-8099-48c2-aaaa-c6fbdca0a625` completed with a primary result. It
+traced the pinned LocalAI/llama.cpp rendering and media-tokenization chain,
+found no blocking Windows defect, and ran the applicator helper's five tests
+successfully. Its observation of pre-existing Git modifications does not alone
+prove absence of other effects; root independently checked that workspace
+changes were limited to expected notes. The result is saved as
+`C:/t/dub-llama-independent-images-source-proof/opencode-space-bunny-native-review.json`.
+This establishes one completed bounded review, without native inference
+acceptance or a claim that non-Windows recipes received the same repair.
+
+A separate read-only `opencode/space-bunny-free` dispatch with a 1,200,000 ms
+allowance completed as session `2095f3d8-747e-44d8-97e8-d0dbdf9d2c60`. Its
+primary result corroborated that Worker Session terminal publication precedes
+canonical Factory result acceptance and projection publication. Independent
+review accepts that ordering, while retaining uncertainty about the precise CI
+interleaving and requiring a public Factory completion barrier before asserting
+the Work projection. This is a completed source audit, not a repaired test or
+proof of the cleanup failure's cause. Exact result:
+`C:/t/dub-multilingual-validation/opencode-submit-observer-space-bunny-result.json`.
