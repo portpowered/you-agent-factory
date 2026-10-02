@@ -145,8 +145,11 @@ func setupASRStory(t *testing.T) asrStory {
 	if !ok {
 		t.Fatal("built-in catalog did not publish the ASR model definition")
 	}
+	// This byte-identity protocol witness selects an explicit Whisper model.
+	modelDefinition.Name, modelDefinition.Source, modelDefinition.Backend = "whisper-asr-fixture", pullToReadySource, "localai-whisper"
 	home := functionalTempDir(t)
 	writeGenericBuiltinModelCache(t, home, modelDefinition.Source)
+	writeGenericModelSourceOverride(t, home, modelDefinition.Name, modelDefinition.Source, modelDefinition.Backend)
 	selection, backendBody := fixtureBackendSelection(modelDefinition.Backend)
 	writeGenericBackendCache(t, home, modelDefinition.Backend, selection, backendBody)
 
@@ -181,7 +184,7 @@ func setupASRStory(t *testing.T) asrStory {
 	compatibility := &joinedCompatibilityChecker{}
 	assetFiles := functionalModelAssetFileSystem{home: home}
 	var backendSelections []serviceedges.ModelBackendArtifactSelectionRequest
-	dir := functionalScaffoldFactory(t, asrModelFactoryConfig(modelServer.URL, modelDefinition.Name, modelDefinition.Backend))
+	dir := functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig())
 	process := functionalBuildProcess(t, serviceedges.Edges{
 		ModelAssetHTTPClient:           rejectingNetwork,
 		ModelAssetMakeDirectories:      assetFiles.MkdirAll,
@@ -461,6 +464,7 @@ func newASRStoryEdgeSet(
 ) asrStoryEdgeSet {
 	t.Helper()
 	writeGenericBuiltinModelCache(t, home, modelDefinition.Source)
+	writeGenericModelSourceOverride(t, home, modelDefinition.Name, modelDefinition.Source, modelDefinition.Backend)
 	selection, backendBody := fixtureBackendSelection(modelDefinition.Backend)
 	writeGenericBackendCache(t, home, modelDefinition.Backend, selection, backendBody)
 	network := &rejectingModelAssetHTTP{}
@@ -593,38 +597,10 @@ func assertASRStoryEdgeEffects(
 	}
 	for _, request := range *edges.backendSelections {
 		if request.Backend != modelDefinition.Backend {
-			t.Fatalf("%s resolved backend request = %#v, want production catalog backend %q", label, request, modelDefinition.Backend)
+			t.Fatalf("%s resolved backend request = %#v, want configured fixture backend %q", label, request, modelDefinition.Backend)
 		}
 	}
-	t.Logf("%s production catalog backend resolution: model=%s backend=%s requests=%d", label, modelDefinition.Name, modelDefinition.Backend, len(*edges.backendSelections))
-}
-
-func asrModelFactoryConfig(endpoint, modelName, backend string) map[string]any {
-	config := localModelReadinessAssetsHostFactoryConfig(endpoint)
-	resources := config["resources"].([]map[string]any)
-	resources[0]["name"] = "asr-cache"
-	resources[0]["model"] = modelName
-	resources[0]["backend"] = backend
-	workers := config["workers"].([]map[string]any)
-	workers[0]["name"] = "asr-worker"
-	workers[0]["model"] = modelName
-	workers[0]["command"] = "whisper"
-	workers[0]["args"] = []string{"--grpc-endpoint", endpoint}
-	workerResources := workers[0]["resources"].([]map[string]any)
-	workerResources[0]["name"] = "asr-cache"
-	workers[0]["operations"] = []map[string]any{{
-		"name": "ASR",
-		"inputs": []map[string]any{
-			{"name": "audio", "contentTypes": []string{interfaces.ModelOperationContentTypeAudio}, "required": true},
-			{"name": "prompt", "contentTypes": []string{interfaces.ModelOperationContentTypeText}},
-			{"name": "parameters", "contentTypes": []string{interfaces.ModelOperationContentTypeJSON}},
-		},
-		"outputs": []map[string]any{
-			{"name": "transcript", "contentTypes": []string{interfaces.ModelOperationContentTypeText}},
-			{"name": "segments", "contentTypes": []string{interfaces.ModelOperationContentTypeJSON}},
-		},
-	}}
-	return config
+	t.Logf("%s configured fixture backend resolution: model=%s backend=%s requests=%d", label, modelDefinition.Name, modelDefinition.Backend, len(*edges.backendSelections))
 }
 
 func pinnedASRBackendSelection() serviceedges.ModelBackendArtifactSelection {

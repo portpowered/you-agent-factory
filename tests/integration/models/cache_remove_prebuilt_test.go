@@ -11,7 +11,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -88,6 +87,7 @@ func runStory004LocalRemove(
 ) story004RemoveResponse {
 	t.Helper()
 	home := t.TempDir()
+	writeStory004OperatorSource(t, home, fixture.source)
 	result := runStory001Command(t, t.Context(), binaryPath, workDir,
 		story001Environment(home, fixture.cacheRoot, "http://127.0.0.1:1"),
 		"--json", "models", "remove", "asr", "--reclaim-unused-cache")
@@ -106,6 +106,7 @@ func runStory004ConfiguredServerRemove(
 ) story004RemoveResponse {
 	t.Helper()
 	serverHome := t.TempDir()
+	writeStory004OperatorSource(t, serverHome, fixture.source)
 	environment := story001Environment(serverHome, fixture.cacheRoot, "http://127.0.0.1:1")
 	address := reserveStory001Loopback(t)
 	process := startStory001Command(t, t.Context(), binaryPath, workDir, environment, "server", "--listen", address)
@@ -161,6 +162,7 @@ func runStory004ConfiguredServerRemove(
 
 type story004ASRRemovalFixture struct {
 	cacheRoot       string
+	source          string
 	revision        string
 	revisionPath    string
 	revisionBytes   int64
@@ -177,26 +179,38 @@ func writeStory004ASRRemovalFixture(t testing.TB, cacheRoot string) story004ASRR
 	if !ok {
 		t.Fatal("built-in catalog did not publish ASR")
 	}
+	// Tiny paired weights belong to an operator fixture, never the immutable
+	// built-in source whose real byte counts and hashes remain enforced.
+	definition.Source = "hf://fixture/prebuilt-qwen-asr@0000000000000000000000000000000000000000"
 	sourceParts := strings.SplitN(definition.Source, "@", 2)
 	if len(sourceParts) != 2 || strings.TrimSpace(sourceParts[1]) == "" {
 		t.Fatalf("built-in ASR source %q has no pinned revision", definition.Source)
 	}
-	revision, assetName := sourceParts[1], path.Base(sourceParts[0])
+	revision, assetName := sourceParts[1], "qwen3-asr-0.6b-q8_0.gguf"
+	alignerName := "qwen3-forced-aligner-0.6b-q8_0.gguf"
+	alignerBody := []byte("prebuilt ASR forced aligner fixture")
+	alignerDigest := sha256Hex(alignerBody)
 	modelBody := []byte("prebuilt ASR model fixture")
 	modelDigest := sha256Hex(modelBody)
 	modelRoot := filepath.Join(cacheRoot, "ASR")
 	revisionPath := filepath.Join(modelRoot, revision)
 	writeStory004File(t, filepath.Join(revisionPath, assetName), modelBody)
+	writeStory004File(t, filepath.Join(revisionPath, alignerName), alignerBody)
 	siblingPath := filepath.Join(modelRoot, "sibling-revision", "sibling.bin")
 	writeStory004File(t, siblingPath, []byte("preserved sibling revision"))
 
-	modelIdentity := fmt.Sprintf("model|%s|%s:%d:%s", definition.Source, assetName, len(modelBody), modelDigest)
+	modelIdentity := fmt.Sprintf("model|%s|%s:%d:%s,%s:%d:%s", definition.Source,
+		assetName, len(modelBody), modelDigest, alignerName, len(alignerBody), alignerDigest)
 	modelIdentityHash := sha256.Sum256([]byte(modelIdentity))
 	modelSnapshot := filepath.Join(cacheRoot, ".you-content-addressed", "model", fmt.Sprintf("%x", modelIdentityHash[:]))
 	writeStory004File(t, filepath.Join(modelSnapshot, assetName), modelBody)
+	writeStory004File(t, filepath.Join(modelSnapshot, alignerName), alignerBody)
 	writeStory004Metadata(t, filepath.Join(modelSnapshot, ".you-assets.json"), map[string]any{
 		"kind": "model", "identity": modelIdentity, "source": definition.Source, "sourceKey": definition.Source,
-		"artifacts": []map[string]any{{"Name": assetName, "Bytes": len(modelBody), "SHA256": modelDigest}},
+		"artifacts": []map[string]any{
+			{"Name": assetName, "Bytes": len(modelBody), "SHA256": modelDigest},
+			{"Name": alignerName, "Bytes": len(alignerBody), "SHA256": alignerDigest},
+		},
 	})
 
 	backendBody := []byte("prebuilt ASR backend fixture")
@@ -219,7 +233,10 @@ func writeStory004ASRRemovalFixture(t testing.TB, cacheRoot string) story004ASRR
 	}
 	managedMetadata := map[string]any{
 		"modelName": "ASR", "revision": revision,
-		"files": []map[string]any{{"path": assetName, "bytes": len(modelBody), "sha256": modelDigest}},
+		"files": []map[string]any{
+			{"path": assetName, "bytes": len(modelBody), "sha256": modelDigest},
+			{"path": alignerName, "bytes": len(alignerBody), "sha256": alignerDigest},
+		},
 		"backend": map[string]any{
 			"cachePath": filepath.ToSlash(backendRelative), "revision": "fixture-backend",
 			"files": []map[string]any{{"path": backendName, "bytes": len(backendBody), "sha256": backendDigest}},
@@ -227,11 +244,18 @@ func writeStory004ASRRemovalFixture(t testing.TB, cacheRoot string) story004ASRR
 	}
 	writeStory004Metadata(t, filepath.Join(modelRoot, ".managed-cache.json"), managedMetadata)
 	return story004ASRRemovalFixture{
-		cacheRoot: cacheRoot, revision: revision, revisionPath: revisionPath,
+		cacheRoot: cacheRoot, source: definition.Source, revision: revision, revisionPath: revisionPath,
 		revisionBytes: story004RegularFileBytes(t, revisionPath), siblingPath: siblingPath,
 		modelSnapshot: modelSnapshot, modelBytes: story004RegularFileBytes(t, modelSnapshot),
 		backendSnapshot: backendSnapshot, backendBytes: story004RegularFileBytes(t, backendSnapshot),
 	}
+}
+
+func writeStory004OperatorSource(t testing.TB, home, source string) {
+	t.Helper()
+	writeStory004Metadata(t, filepath.Join(home, ".you-agent-factory", "config.json"), map[string]any{
+		"models": map[string]any{"ASR": map[string]any{"source": source}},
+	})
 }
 
 func writeStory004File(t testing.TB, filePath string, body []byte) {

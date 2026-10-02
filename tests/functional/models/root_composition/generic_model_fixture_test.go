@@ -58,6 +58,10 @@ func writeGenericModelSourceOverride(t *testing.T, home, modelName, source, back
 	if backend != "" {
 		llmConfig["backend"] = backend
 	}
+	if modelName == "whisper-asr-fixture" {
+		llmConfig["loadPolicy"] = "ON_DEMAND"
+		llmConfig["operations"] = []string{models.OperationASR}
+	}
 
 	data, err := json.Marshal(config)
 	if err != nil {
