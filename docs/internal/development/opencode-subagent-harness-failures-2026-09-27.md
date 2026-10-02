@@ -829,3 +829,130 @@ acceptance.
 One external QA script first failed on an erroneous nonexistent input path
 before any backend call; after the input was corrected, the Chinese run
 executed. That was a harness input error, not an MCP failure.
+
+### Compiled ACP boundary acceptance and installed clean a335 verification
+
+A clean build of committed `a335e9cfb9943f354b2a0c58e3d6cbd28baa7ee1` is now
+installed at `C:/Users/andre/bin/you.exe`, SHA-256
+`38964fcd5f8f7ca908523e8801b3bf3d65d1a654958a7ce201b94cec54f50704`. This
+replaces the previously installed `8d0225132e` binary and is the first
+installed executable that contains the corrected SDK repair, so the earlier
+"no SDK draft has been included in the installed clean executable" statement no
+longer describes the installed artifact.
+
+The compiled CLI provider boundary case was never skipped: its earlier compiled
+trials FAILED before the peer was invoked. The first attempt failed with
+`execution catalog resolution failed: runner is not a supported built-in
+identity`, and the next attempt failed with `ACP session does not advertise
+requested model "fixture"`. Both are custom-runner rejections ahead of any
+peer response, not delivery evidence. After the fixture correction in
+`72c209d9ff` advertised its capabilities, both advertised-fixture cases passed
+against the current prebuilt artifact: `Initialize` negotiated against protocol
+version `999` under immediate EOF, and the Prompt primary-result case also
+passed under immediate EOF. Source and compiled passes are accepted now; root's
+independent suite run passed in 5.721 seconds and the preserved compiled run
+passed in 4.977 seconds, with one compiled trial per mode. This closes the
+pending compiled-boundary item recorded above for the EOF arrangement only; it
+is not evidence about the broader timeout cause.
+
+A real MCP editing call on the clean candidate
+`C:/t/dub-acp-version-ordering-proof/you-a335-eof.exe`, SHA-256
+`38964fcd5f8f7ca908523e8801b3bf3d65d1a654958a7ce201b94cec54f50704`, returned
+`COMPLETED` in 38.750 seconds, session
+`fdc04954-0606-4560-98a2-9c19a76f91df`. That same candidate SHA is what was
+installed at `C:/Users/andre/bin/you.exe`; the edit itself ran on the candidate
+path, not on the installed path. This is a bounded editing success with the
+requested model, not a general editing or concurrency guarantee.
+
+The installed path itself validated unknown-provider rejection: a readable
+content text plus matching structured error metadata and `isError=true` were
+returned in 1.110 seconds, rejected before dispatch. This confirms the provider
+admission path is present in the installed artifact, and narrows the previously
+delegated classification ambiguity for this input.
+
+The installed path also ran an intentional 5000 ms timeout probe, which
+returned in 6.360 seconds with the typed `timed_out` outcome. Cleanup closed the
+live Factory Session, and the structured result carried private reasoning
+activity metadata without the reasoning text. Session
+`406a90a4-8826-475d-9961-51bcaadb43b9`, request
+`9d3c2c04-050d-409b-ab3b-191927ac1308`. The suggested action named
+partial-edit inspection, log correlation, a longer timeout, or another model,
+with no raw provider payload. This verifies typed timeout reporting and
+redaction on the installed binary; it deliberately proves no successful
+long-running edit.
+
+Exact evidence directories:
+`C:/t/dub-multilingual-validation/repaired-mcp-a335-edit-proof/`,
+`C:/t/dub-multilingual-validation/repaired-mcp-a335-installed-invalid-proof/`,
+and
+`C:/t/dub-multilingual-validation/repaired-mcp-a335-timeout-proof/`.
+
+### Recordings MCP flatten and deadcode gate
+
+Two separate bounded tasks both completed successfully, and they are not a
+before/after or candidate comparison.
+
+The first task ran against the previously installed clean `8d0225132e`
+executable and took 163.266 seconds, session
+`d77b24c9-bef3-407e-901e-934f47a79a50`. It implemented the Recordings
+injection flatten across seven owned files: `client.go` lost the
+`RootDependencies` struct and the `Bind` wrapper while `BindToolOperation` began
+binding directly by closure, and 29 call sites across six owning MCP test files
+were converted.
+
+The second task was different work, not a faster rerun of the first: it ran on
+the `a335` candidate and took 107.187 seconds, session
+`858301d8-90a5-44d0-bab9-0b33d8e17389`. It updated one functional caller,
+`tests/functional/recordings/root_composition/portable_transport_activation_test.go`,
+and deleted one stale deadcode baseline line for the retired recordings `Bind`.
+
+Root ran the full owning tests and the functional race suite, which passed in
+15.552 seconds, and the combined change is committed as `87e55a1fb9`. The two
+durations bound two distinct tasks and identify no cost attribution.
+
+The deadcode gate started from a baseline of 3154 and reported 3171 current
+findings, so the additions exceeded the baseline by seventeen. Eighteen of the
+added findings were upstream ACP SDK helpers in the preserved dependency tree
+that the root module compiles but this repository does not author; the one
+removal was the repository's own
+`pkg/services/recordings/transports/mcp/client.go: unreachable func: Bind`,
+unrelated to the SDK. Exact preserved-dependency handling drops those eighteen
+dependency findings, and the separately removed stale baseline line drops the
+baseline from 3154 to 3153, so the remaining 3153 owned findings match the 3153
+baseline and root's authoritative gate run passes. This makes the gate count
+comparable instead of including dependency code; it does not reduce the review
+burden on owned paths.
+
+### Open items
+
+A fresh native structured-schema build failed after 5.7 seconds, before any
+dependency download. The cause was a patch written with CRLF line endings
+applied to LF-prepared source. A real `git apply`-based fix and its test are
+underway. This is a build-plumbing failure, not native endpoint acceptance, and
+the pending native structured-generation claim above remains pending.
+
+The unsupported-runner bug for a custom named ACP provider is newly reproduced
+and fails before dispatch. Repair is underway and no success is claimed for that
+configuration.
+
+### Independent evidence correction and bounded writer timeout
+
+The evidence entry above was authored through MCP session
+`d9070497-837d-4651-bdb2-72a728d70dfc` in 68.500 seconds. Independent review
+found reversed baseline/current counts, an invalid comparison between two
+separate editing tasks, and confusion between the candidate and installed
+executable paths. A bounded corrective Space Bunny task applied those
+corrections but timed out after 121.688 seconds without a primary result:
+session `9c06e220-aa1d-4602-bd0b-93faec41f200`, request
+`c7045e88-8fd6-4b58-9e66-f0167364bc80`. The MCP response reported the timeout,
+closed session, last activity, partial effects and concrete retry guidance.
+Root independently reviewed the corrected partial edit before retaining it;
+a completed file edit does not convert the terminal timeout into success.
+Exact terminal: `C:/t/dub-multilingual-validation/repaired-mcp-evidence-log-correction-proof/result.json`.
+
+The line-ending repair is now committed as `cb59c212d3`. Actual Git tests cover
+LF and CRLF prepared sources with opposite patch endings, repeat application,
+unknown/partial source rejection and mixed-source rejection without mutation.
+Root's combined CI/applicator run passed all eleven tests. A new isolated
+canonical CUDA build is live from the frozen committed inputs; runtime native
+structured-answer acceptance remains pending.
