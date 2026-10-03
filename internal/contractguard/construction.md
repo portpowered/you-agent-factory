@@ -209,6 +209,12 @@ baselines. Enforced observations count separately from prior rules. No owner is
 enabled by this increment; readiness and full provenance checking belong to
 subsequent rollout work.
 
+Package-boundary historical baseline collection runs only the legacy boundary
+rules. It does not validate current construction metadata against historical
+trees, whose registered declarations may be absent or have older signatures.
+Current-tree construction validation and observations remain independent of
+`--base-ref` suppression.
+
 The source surface is handwritten `cmd`, `internal`, and `pkg` Go source.
 Generated files, `_test.go` outer-edge fixtures, vendor, testdata, hidden
 metadata, and build output are excluded. Compiled helpers such as
