@@ -519,3 +519,43 @@ func assertPublicProviderFailureSurfacesRedactSensitiveMaterial(
 		t.Fatalf("public provider failure surfaces failed sanitization: %v", err)
 	}
 }
+
+// TestProviderCodexServerOverloadedTaskCompleteIsRetriedAsThrottle proves a
+// Codex model-capacity overload reported only through a task_complete record
+// (null final message, codex_error_info server_overloaded) re-dispatches
+// through the throttle retry path, bounded by the default retry limits, rather
+// than failing the dispatch terminally on the first attempt.
+func TestProviderCodexServerOverloadedTaskCompleteIsRetriedAsThrottle(t *testing.T) {
+	t.Parallel()
+	const defaultThrottleRetryCalls = 3 * 3
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
+		"CODEX",
+	))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"codex capacity overload"}`))
+
+	results := make([]platformprocess.CommandResult, 12)
+	for i := range results {
+		results[i] = platformprocess.CommandResult{
+			ExitCode: 1,
+			Stdout: []byte(`{"type":"thread.started","thread_id":"t1"}` + "\n" +
+				`{"type":"task_complete","last_agent_message":null,"error":{"message":"overloaded","codex_error_info":"server_overloaded"}}` + "\n"),
+		}
+	}
+	runner := testutil.NewProviderCommandRunner(results...)
+	_, listed, events := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
+		commandRunner: runner,
+	}, 20*time.Second)
+
+	if runner.CallCount() != defaultThrottleRetryCalls {
+		t.Fatalf("provider command runner calls = %d, want %d bounded throttle retries", runner.CallCount(), defaultThrottleRetryCalls)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed place tokens = %d, want 1 after bounded retries exhausted", got)
+	}
+	if reason := terminalInferenceFailureReason(t, events); reason != factoryapi.WorkFailureTypeThrottled {
+		t.Fatalf("terminal failure reason = %q, want throttled", reason)
+	}
+}

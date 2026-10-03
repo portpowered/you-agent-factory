@@ -141,3 +141,24 @@ type codexCommandRunnerStub struct {
 func (stub codexCommandRunnerStub) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	return stub.result, nil
 }
+
+func TestCodexCommandEffectClassifiesServerOverloadedExitOutputAsThrottled(t *testing.T) {
+	t.Parallel()
+
+	effect := codex.NewCommandEffect(codexCommandRunnerStub{
+		result: platformprocess.CommandResult{
+			ExitCode: 1,
+			Stdout:   []byte(`{"type":"item.completed","item":{"type":"reasoning"}}` + "\n"),
+			Stderr:   []byte(`codex_error_info=server_overloaded`),
+		},
+	}, platformclock.Real{})
+	_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
+
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v, want providers.ExecuteFailure", err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindThrottled {
+		t.Fatalf("failure kind = %q, want throttled", failure.Kind)
+	}
+}

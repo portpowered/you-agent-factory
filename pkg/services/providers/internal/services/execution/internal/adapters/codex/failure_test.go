@@ -51,6 +51,31 @@ func TestCodexRootNormalizesFailureStagesWithoutFabricatingCandidates(t *testing
 			wantKind:  providers.ExecuteFailureKindThrottled,
 		},
 		{
+			name: "task_complete server_overloaded with null final message is throttled",
+			stream: "{\"type\":\"thread.started\",\"thread_id\":\"t1\"}\n" +
+				"{\"type\":\"task_complete\",\"last_agent_message\":null,\"error\":{" +
+				"\"message\":\"opaque\",\"codex_error_info\":\"server_overloaded\"}}\n",
+			effectErr: errors.New("exit included " + codexFailureSecret),
+			wantKind:  providers.ExecuteFailureKindThrottled,
+		},
+		{
+			name: "turn.failed at-capacity text mid-message is throttled",
+			stream: "{\"type\":\"turn.failed\",\"error\":{\"message\":" +
+				"\"ERROR: Selected model is at capacity. Please try a different model.\"}}\n",
+			wantKind: providers.ExecuteFailureKindThrottled,
+		},
+		{
+			name:      "task_complete with no error is not a failure signal",
+			stream:    "{\"type\":\"task_complete\",\"last_agent_message\":null}\n",
+			wantKind:  providers.ExecuteFailureKindDependency,
+			wantStage: "final_parse",
+		},
+		{
+			name:     "unrecognized task_complete error stays unknown",
+			stream:   "{\"type\":\"task_complete\",\"error\":{\"message\":\"" + codexFailureSecret + "\"}}\n",
+			wantKind: providers.ExecuteFailureKindUnknown,
+		},
+		{
 			name:      "recognized native failure beats unknown stream failure",
 			stream:    "{\"type\":\"error\",\"message\":\"" + codexFailureSecret + "\"}\n",
 			effectErr: providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication},
