@@ -46,6 +46,10 @@ func TestModelsFixedLeavesKeepExplicitSessionResultsAndRecoveryIsolated(t *testi
 		t.Parallel()
 		runFixedLeafSessionCancellation(t, server.URL(), routes)
 	})
+	t.Run("fault and retry while peer is accepted", func(t *testing.T) {
+		t.Parallel()
+		runFixedLeafSessionFaultWithHeldPeer(t, server.URL(), routes)
+	})
 }
 
 // Complete mutable profile initialization through this same public process
