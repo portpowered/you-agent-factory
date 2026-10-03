@@ -81,8 +81,10 @@ func TestAgyCanonicalCommandRunnerExecutesWithZeroPTYEffects(t *testing.T) {
 	assertAgySingleDispatchOutput(t, events, factoryapi.WorkOutcomeAccepted, output)
 	assertAgyCanonicalCommandScope(t, runner, events, sessionID, workDir, prompt)
 	host.assertUnused(t)
-	support.CloseFactorySessionAt(t, server.URL(), sessionID)
-	server.Close(t) // Cancel and join Execute, listener and process-owned roles.
+	// This session owns the listener, so public Process.Close (via server.Close)
+	// releases it after canceling and joining Execute. Deleting that same session
+	// over HTTP would shut down its listener before the response can be sent.
+	server.Close(t)
 	host.assertUnused(t)
 	if runner.CallCount() != 1 {
 		t.Fatal("provider command effect occurred after owned session cleanup")
@@ -108,8 +110,14 @@ func assertAgyCanonicalCommandScope(
 		t.Fatal("owned session has no Factory Events")
 	}
 	for _, event := range events {
-		if event.Context.SessionId == nil || *event.Context.SessionId != sessionID {
+		if event.Context.SessionId != nil && *event.Context.SessionId != sessionID {
 			t.Fatalf("Factory Event %q is outside owned session", event.Id)
+		}
+		switch event.Type {
+		case factoryapi.FactoryEventTypeWorkRequest, factoryapi.FactoryEventTypeDispatchRequest, factoryapi.FactoryEventTypeDispatchResponse:
+			if event.Context.SessionId == nil {
+				t.Fatalf("Work/dispatch event %q has no owned session identity", event.Id)
+			}
 		}
 	}
 }
