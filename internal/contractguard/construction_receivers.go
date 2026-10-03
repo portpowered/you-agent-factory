@@ -1,6 +1,9 @@
 package contractguard
 
-import "go/ast"
+import (
+	"go/ast"
+	"go/token"
+)
 
 // A concrete declared result establishes method identity, not the returned
 // instance's requiredness. Keep this separate from constructor storage tracing.
@@ -12,6 +15,12 @@ func constructionMethodReceiverType(expr ast.Expr, source *constructionSource, v
 	switch value := expr.(type) {
 	case *ast.ParenExpr:
 		return constructionMethodReceiverType(value.X, source, visited)
+	case *ast.StarExpr:
+		return constructionMethodReceiverType(value.X, source, visited)
+	case *ast.UnaryExpr:
+		if value.Op == token.AND {
+			return constructionMethodReceiverType(value.X, source, visited)
+		}
 	case *ast.Ident:
 		if value.Obj != nil && !visited[value.Obj] {
 			// Assignment changes the instance, not the binding's declared Go type.
