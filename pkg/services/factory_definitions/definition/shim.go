@@ -8,7 +8,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
-	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 )
 
@@ -108,7 +107,7 @@ func NewWithCatalogPackagesAndInstallation(
 
 func NewWithCompilation(
 	host Host,
-	compilationService compilationservice.Service,
+	compilationService lifecycle.CompilationOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
 	return lifecycle.NewWithCompilation(host, compilationService, versionFileSystems...)

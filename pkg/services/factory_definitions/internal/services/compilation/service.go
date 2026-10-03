@@ -17,6 +17,10 @@ import (
 // Service owns effective-source compilation behind the CTR-DEF root compile
 // slice.
 type Service interface {
+	LoadCanonicalFactorySource(
+		[]byte,
+		factorydefinitions.WorkstationLoader,
+	) (factorydefinitions.MutableLoadedFactorySource, error)
 	CompileEffectiveFactorySource(
 		context.Context,
 		factorydefinitions.CompileEffectiveFactorySourceRequest,

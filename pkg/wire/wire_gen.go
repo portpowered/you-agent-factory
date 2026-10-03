@@ -389,34 +389,34 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v84 := provideFactoryDefinitionLoader(v79, v80, v81, loadingFileSystem, namedPathResolver, authoredLayoutReaderFileSystem, v82, portableBundledFileInspection, v83)
-	v85 := provideOrchestratorDefinitionValidator(javaScriptWorkflows)
-	validationOperations := provideFactoryDefinitionValidationService(javaScriptWorkflows, v84, v85)
-	v86 := provideFactoryDefinitionValidator(validationOperations)
+	v85 := provideFactoryDefinitionCompilation(v84)
+	v86 := provideOrchestratorDefinitionValidator(javaScriptWorkflows)
+	validationOperations := provideFactoryDefinitionValidationService(javaScriptWorkflows, v85, v86)
+	v87 := provideFactoryDefinitionValidator(validationOperations)
 	definitionRuntimeRouter := provideFactoryDefinitionsRuntimeRouter()
-	v87, err := providePortableBundledDocsPruner(portablefilesFileSystem)
+	v88, err := providePortableBundledDocsPruner(portablefilesFileSystem)
 	if err != nil {
 		return nil, err
 	}
-	v88 := providePortableBundledFileWritesValidator(portablefilesFileSystem)
-	v89 := providePortableBundledFilesCopier(portablefilesFileSystem)
+	v89 := providePortableBundledFileWritesValidator(portablefilesFileSystem)
+	v90 := providePortableBundledFilesCopier(portablefilesFileSystem)
 	authoredLayoutWriterFileSystem := provideFactoryDefinitionAuthoredWriterFileSystem(edges2)
 	inputInboxSentinelEnsurer := provideFactoryDefinitionInputInboxSentinelEnsurer(authoredLayoutWriterFileSystem)
 	persistenceFileSystem := provideFactoryDefinitionPersistenceFileSystem(edges2)
 	directoryReplacementStore := provideFactoryDefinitionDirectoryReplacementStore(edges2)
-	v90, err := provideFactoryDefinitionPersistence(v86, v84, v87, v81, v88, v89, authoredLayoutWriterFileSystem, inputInboxSentinelEnsurer, persistenceFileSystem, namedPathResolver, directoryReplacementStore)
+	v91, err := provideFactoryDefinitionPersistence(v87, v84, v88, v81, v89, v90, authoredLayoutWriterFileSystem, inputInboxSentinelEnsurer, persistenceFileSystem, namedPathResolver, directoryReplacementStore)
 	if err != nil {
 		return nil, err
 	}
-	v91 := provideFactoryDefinitionCompilation(v84)
-	v92 := provideFactoryDefinitionValidationOwner(validationOperations, v84, v83, v85)
+	v92 := provideFactoryDefinitionValidationOwner(validationOperations, v85, v83, v86)
 	v93 := provideFactoryDefinitionRuntimeSnapshot(v84, definitionRuntimeRouter)
 	v94 := wire3.NewCatalogService(namedPathResolver, namedFactoryCatalogFileSystem)
 	factorydefinitionsClock := provideFactoryDefinitionClock(edges2)
 	versionFileSystem := provideFactoryDefinitionVersionFileSystem(edges2)
 	packagedInstallationFileSystem := provideFactoryDefinitionPackagedInstallationFileSystem(edges2)
 	packagedInstallationDirectoryCreator := provideFactoryDefinitionPackagedInstallationDirectoryCreator(edges2)
-	packagedFactoryInstallationOperations := providePackagedFactoryInstallation(v90, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, loggingLogger)
-	factorydefinitionsService, err := provideFactoryDefinitionsRoot(definitionRuntimeRouter, v86, v90, v84, v91, v92, v93, v79, v80, namedPathResolver, v94, factorydefinitionsClock, versionFileSystem, effectiveFactoryCatalogOperation, packagedFactoryCatalogOperations, packagedFactoryInstallationOperations, v83, v85, portablefilesFileSystem, directoryReplacementStore)
+	packagedFactoryInstallationOperations := providePackagedFactoryInstallation(v91, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, loggingLogger)
+	factorydefinitionsService, err := provideFactoryDefinitionsRoot(definitionRuntimeRouter, v87, v91, v84, v85, v92, v93, v79, v80, namedPathResolver, v94, factorydefinitionsClock, versionFileSystem, effectiveFactoryCatalogOperation, packagedFactoryCatalogOperations, packagedFactoryInstallationOperations, v83, v86, portablefilesFileSystem, directoryReplacementStore)
 	if err != nil {
 		return nil, err
 	}
@@ -424,7 +424,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v95 := provideLoadedFactoryLoader(v84)
 	v96 := provideLoadedFactorySourceFactory()
 	v97 := &wire.FactoryDefinitionsPorts{
-		Validator:                     v86,
+		Validator:                     v87,
 		NamedPaths:                    namedPathResolver,
 		Service:                       factorydefinitionsService,
 		RuntimeRouter:                 definitionRuntimeRouter,
@@ -591,8 +591,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	submitWorkOperation := provideSubmitWorkOperation(payloadFileReader, wireExtendedCLIHTTPProtocol)
 	factoryRequestBatchPreparation := work.NewFactoryRequestBatchPreparation()
 	submitBatchOperation := provideSubmitBatchOperation(wireExtendedCLIHTTPProtocol, factoryRequestBatchPreparation)
-	flattenFactoryConfigOperation := provideFlattenFactoryConfigOperation(v90)
-	expandFactoryConfigOperation := provideExpandFactoryConfigOperation(v90)
+	flattenFactoryConfigOperation := provideFlattenFactoryConfigOperation(v91)
+	expandFactoryConfigOperation := provideExpandFactoryConfigOperation(v91)
 	configureInitOperation, err := provideConfigureInitOperation(operatorsettingsService)
 	if err != nil {
 		return nil, err
@@ -607,7 +607,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v138 := provideNamedFactoryPersistenceOperation(v90)
+	v138 := provideNamedFactoryPersistenceOperation(v91)
 	createFactoryFromFileOperation := provideCreateFactoryFromFileOperation(v138, authoredFactorySourceLoader)
 	replaceFactoryCurrentOperation := provideReplaceFactoryCurrentOperation(wireStandardCLIHTTPProtocol)
 	updateFactoryFromFileOperation := provideUpdateFactoryFromFileOperation(v138, authoredFactorySourceLoader)
@@ -811,7 +811,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v155 := provideSystemInitializationInspectPath(edges2)
-	systeminitializationService, err := provideSystemInitializationService(v90, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v155, loggingLogger)
+	systeminitializationService, err := provideSystemInitializationService(v91, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v155, loggingLogger)
 	if err != nil {
 		return nil, err
 	}

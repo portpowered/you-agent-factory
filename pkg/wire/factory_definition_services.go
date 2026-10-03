@@ -527,11 +527,11 @@ func provideFactoryRuntimeRoot(
 
 func provideFactoryDefinitionValidationOwner(
 	operations factorydefinitions.ValidationOperations,
-	loader *factorydefinitionswire.Loader,
+	compilation factorydefinitionswire.Compilation,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) factorydefinitionswire.Validation {
-	return factorydefinitionswire.NewValidationService(operations, operations, loader.LoadSourceFromCanonicalJSON, requiredToolChecker, orchestratorValidator)
+	return factorydefinitionswire.NewValidationService(operations, operations, compilation.LoadCanonicalFactorySource, requiredToolChecker, orchestratorValidator)
 }
 
 // provideFactoryDefinitionRuntimeSnapshot binds the session query without executing it.
