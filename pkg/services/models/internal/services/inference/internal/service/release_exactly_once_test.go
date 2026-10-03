@@ -388,11 +388,16 @@ func TestCancelAcceptedInvocationPreservesPeerScopeCapacity(t *testing.T) {
 	if host.leases[peerLease.String()].Status != models.ModelLeaseStatusActive {
 		t.Fatalf("selected cancellation changed peer capacity: %#v", host.leases[peerLease.String()])
 	}
+	assertPeerCancellationScope(t, service, host, selectedScope, peer)
+}
+
+func assertPeerCancellationScope(t *testing.T, service inference.Service, host *recordingInferenceHost, selectedScope models.RuntimeScopeRef, peer models.InvokeModelResult) {
+	t.Helper()
 	wrongScope, err := service.CancelInvocation(t.Context(), models.CancelInvocationRequest{Scope: selectedScope, Invocation: peer.Invocation})
 	if !errors.Is(err, models.ErrInvocationNotFound) || wrongScope.Outcome != "" || host.releaseCalls != 1 {
 		t.Fatalf("foreign cancellation = (%#v, %v), releases=%d", wrongScope, err, host.releaseCalls)
 	}
-	peerCancelled, err := service.CancelInvocation(t.Context(), models.CancelInvocationRequest{Scope: peerScope, Invocation: peer.Invocation})
+	peerCancelled, err := service.CancelInvocation(t.Context(), models.CancelInvocationRequest{Scope: peer.Scope, Invocation: peer.Invocation})
 	if err != nil || peerCancelled.Outcome != models.InvocationCancellationRequested || peerCancelled.LeaseDisposition != models.InvocationLeaseReleased || host.releaseCalls != 2 {
 		t.Fatalf("peer-owned cancellation = (%#v, %v), releases=%d", peerCancelled, err, host.releaseCalls)
 	}
