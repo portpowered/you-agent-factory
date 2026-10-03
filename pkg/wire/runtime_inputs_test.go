@@ -632,55 +632,77 @@ func TestFactoryRuntimeEffectProvidersSelectExactProcessEdges(t *testing.T) {
 	}
 }
 
-func TestFactoryRuntimeMetricsClockSelectsTimerCapableEdgeOrReal(t *testing.T) {
+// The legacy fallback was characterized before cutover. Providers now receive
+// the normalized pair from BuildProcess and must preserve its exact scheduler.
+func TestFactoryRuntimeMetricsClockSelectsNormalizedScheduler(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"now-only", "timer-capable", "absent"} {
+	for _, name := range []string{"now-only", "timer-capable", "default", "explicit-scheduler"} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			base := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
 			logical := platformclock.NewDeterministic(base, time.Second)
-			var source platformclock.Source
+			edges := serviceedges.Edges{Clock: logical, ProcessScheduler: logical}
 			switch name {
 			case "now-only":
-				source = metricsNowOnlyClock{at: base}
-			case "timer-capable":
-				source = logical
+				edges.Clock = metricsNowOnlyClock{at: base}
+				edges.ProcessScheduler = platformclock.Real{}
+			case "default":
+				edges.Clock = platformclock.Real{}
+				edges.ProcessScheduler = platformclock.Real{}
+			case "explicit-scheduler":
+				edges.Clock = metricsNowOnlyClock{at: base.Add(time.Hour)}
 			}
-			got := provideFactoryRuntimeMetricsClock(serviceedges.Edges{Clock: source})
-			if name != "timer-capable" {
-				if _, ok := got.(platformclock.Real); !ok {
-					t.Fatalf("metrics clock = %T, want explicit legacy Real fallback", got)
-				}
+			got := provideFactoryRuntimeMetricsClock(edges)
+			if got != edges.ProcessScheduler {
+				t.Fatalf("metrics scheduler = %v, want exact selected scheduler %v", got, edges.ProcessScheduler)
+			}
+			assertSelectedTimeProjections(t, edges)
+			if name == "now-only" || name == "default" {
 				assertLegacyMetricsWallTimerDelivery(t, got, base)
 				return
 			}
-			if got != logical || !got.Now().Equal(base) {
-				t.Fatalf("metrics clock = %v, want exact logical source at %v", got, base)
-			}
-			timer := got.NewTimer(time.Second)
-			defer timer.Stop()
-			select {
-			case <-timer.C():
-				t.Fatal("logical timer fired before tick advance")
-			default:
-			}
-			logical.SetTick(1)
-			select {
-			case at := <-timer.C():
-				if !at.Equal(base.Add(time.Second)) {
-					t.Fatalf("logical timer timestamp = %v", at)
-				}
-			default:
-				t.Fatal("logical timer did not fire after tick advance")
-			}
+			assertLogicalMetricsTimerDelivery(t, got, logical, base)
 		})
+	}
+}
+
+func assertSelectedTimeProjections(t *testing.T, edges serviceedges.Edges) {
+	t.Helper()
+	for name, got := range map[string]platformclock.Source{
+		"runtime":              provideFactoryRuntimeClock(edges),
+		"provider observation": effectiveProviderCommandClock(edges),
+		"resolver":             provideFactoryRuntimeClockResolver(provideFactoryRuntimeClock(edges))(nil),
+	} {
+		if got != edges.Clock || !got.Now().Equal(edges.Clock.Now()) {
+			t.Fatalf("%s clock = %v, want selected source %v", name, got, edges.Clock)
+		}
+	}
+}
+
+func assertLogicalMetricsTimerDelivery(t *testing.T, clock platformclock.TimerSource, logical *platformclock.Deterministic, base time.Time) {
+	t.Helper()
+	timer := clock.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case <-timer.C():
+		t.Fatal("logical timer fired before tick advance")
+	default:
+	}
+	logical.SetTick(1)
+	select {
+	case at := <-timer.C():
+		if !at.Equal(base.Add(time.Second)) {
+			t.Fatalf("logical timer timestamp = %v", at)
+		}
+	default:
+		t.Fatal("logical timer did not fire after tick advance")
 	}
 }
 
 func assertLegacyMetricsWallTimerDelivery(t *testing.T, clock platformclock.TimerSource, base time.Time) {
 	t.Helper()
-	// A zero-duration timer proves the selected fallback delivers without
-	// advancing the timestamp-only source; the timeout is a failure ceiling.
+	// A zero-duration timer proves the explicitly selected wall scheduler delivers
+	// without advancing the timestamp-only source; timeout is a failure ceiling.
 	timer := clock.NewTimer(0)
 	defer timer.Stop()
 	select {
@@ -972,3 +994,11 @@ type watchWaitTimer struct {
 
 func (timer *watchWaitTimer) C() <-chan time.Time { return timer.ticks }
 func (timer *watchWaitTimer) Stop() bool          { timer.stopped = true; return true }
+
+// Direct provider fixtures supply the same selected pair required by Wire;
+// construction through root.BuildProcess performs this selection in production.
+func selectedTestTimeEdges(overrides serviceedges.Edges) serviceedges.Edges {
+	return serviceedges.Merge(serviceedges.Edges{
+		Clock: platformclock.Real{}, ProcessScheduler: platformclock.Real{},
+	}, overrides)
+}

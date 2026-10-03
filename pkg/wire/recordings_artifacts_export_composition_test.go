@@ -23,7 +23,7 @@ func TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory(t *testi
 	t.Parallel()
 
 	edges := injectedRecordingArtifactEdges()
-	if _, err := InjectBundle(t.Context(), edges); err != nil {
+	if _, err := InjectBundle(t.Context(), selectedTestTimeEdges(edges)); err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
 

@@ -171,9 +171,6 @@ func provideModelRuntimeEvidenceRecorder() (modelswire.RuntimeEvidenceRecorder, 
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	processClock := edges.Clock
-	if processClock == nil {
-		processClock = platformclock.Real{}
-	}
 	assetPlatform := provideModelAssetHostPlatform(edges)
 	assetEndpoints := edges.ModelAssetEndpoints
 	assetEnvironment := edges.ModelAssetResolveEnvironment
