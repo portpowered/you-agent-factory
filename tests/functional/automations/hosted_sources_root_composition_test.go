@@ -8,13 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
-	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -55,12 +54,8 @@ func newHostedIngressScenarios(t *testing.T) *hostedIngressScenarios {
 		h.scenarios[key] = hostedSessionScenario{directory: dir, route: route}
 		h.router.routes[key] = route
 	}
-	files := &hostedCheckpointFailure{directory: h.scenarios["owned-hosted-failure-secret"].directory, secret: "owned-hosted-failure-secret"}
-	checkpoints, err := automationswire.NewHostedLinearCheckpointStore(files)
-	if err != nil {
-		t.Fatal(err)
-	}
-	h.checkpoints = checkpoints
+	h.checkpoints = newHostedCheckpointFailure(automations.HostedLinearCheckpointStore(nil),
+		h.scenarios["owned-hosted-failure-secret"].directory, "owned-hosted-failure-secret")
 	return h
 }
 
@@ -144,20 +139,43 @@ func assertHostedRequestRetry(t *testing.T, baseURL, sourceDir, peerDir string, 
 	assertHostedNormalizedWork(t, support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, sourceID, "/work")))
 }
 
-// The production checkpoint adapter still performs real atomic file IO. Only
-// the second commit in this scenario's directory fails, after a prior commit.
-type hostedCheckpointFailure struct {
-	platformfilesystem.Local
+// This controlled checkpoint edge retains exact values by path and fails the
+// second owned Save. Real atomic filesystem IO is proved by the checkpoint
+// owner's tests, not this composed Work/HTTP recovery witness.
+// Type inference carries the existing edge's private checkpoint value without
+// exposing a new public alias or importing the private owner or its Wire.
+type hostedCheckpointFailure[T any] struct {
+	mu        sync.Mutex
+	values    map[string]T
 	directory string
 	secret    string
-	commits   atomic.Int32
+	commits   int
 }
 
-func (f *hostedCheckpointFailure) Rename(from, to string) error {
-	if strings.HasPrefix(filepath.Clean(to), filepath.Clean(f.directory)+string(filepath.Separator)) && f.commits.Add(1) == 2 {
-		return fmt.Errorf("owned-hosted-checkpoint-unavailable: %s", f.secret)
+func newHostedCheckpointFailure[T any](_ interface {
+	Load(string) (T, error)
+	Save(string, T) error
+}, directory, secret string) *hostedCheckpointFailure[T] {
+	return &hostedCheckpointFailure[T]{values: make(map[string]T), directory: directory, secret: secret}
+}
+
+func (f *hostedCheckpointFailure[T]) Load(path string) (T, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.values[path], nil
+}
+
+func (f *hostedCheckpointFailure[T]) Save(path string, value T) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if strings.HasPrefix(filepath.Clean(path), filepath.Clean(f.directory)+string(filepath.Separator)) {
+		f.commits++
+		if f.commits == 2 {
+			return fmt.Errorf("owned-hosted-checkpoint-unavailable: %s", f.secret)
+		}
 	}
-	return f.Local.Rename(from, to)
+	f.values[path] = value
+	return nil
 }
 
 func assertHostedCheckpointRecovery(t *testing.T, baseURL, sourceDir, peerDir string, source, peer *hostedCycleRoute) {
