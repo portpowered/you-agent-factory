@@ -75,19 +75,22 @@ func encodeTestConfig(config operatorsettings.Config) ([]byte, error) {
 }
 
 func testConfigDocumentService() operatorsettings.ConfigDocumentService {
+	return testConfigDocumentServiceWithCatalog(controlledProviderCatalog)
+}
+
+func testConfigDocumentServiceWithCatalog(catalog operatorsettings.ProviderCatalog) operatorsettings.ConfigDocumentService {
 	return operatorsettings.ConfigDocumentService{
-		Files:           testFiles,
-		CreateTemp:      testCreateTemp,
-		Providers:       controlledProviderCatalog,
 		Decoder:         decodeTestConfig,
 		Encoder:         encodeTestConfig,
 		PersistenceLock: &sync.Mutex{},
-		DocumentOwner: settingswire.NewDocumentOwner(
+		DocumentOwner: settingswire.NewDocumentService(
 			testFiles,
 			testCreateTemp,
 			decodeTestConfig,
 			encodeTestConfig,
-			controlledProviderCatalog,
+			catalog,
+			nil,
+			nil,
 		),
 	}
 }
@@ -95,8 +98,6 @@ func testConfigDocumentService() operatorsettings.ConfigDocumentService {
 func TestLoadConfigDocument_AbsentFileProducesMergeableEmptyConfig(t *testing.T) {
 	t.Parallel()
 	service := testConfigDocumentService()
-	service.Files = testFiles
-	service.Providers = controlledProviderCatalog
 	document, err := service.Load(filepath.Join(t.TempDir(), "missing.json"))
 	if err != nil {
 		t.Fatalf("LoadConfigDocument() error = %v", err)
@@ -123,7 +124,6 @@ func TestConfigDocumentServiceLoad_RequiresFilesystem(t *testing.T) {
 func TestMergeProviderModelDefaults_PreservesUnrelatedSemanticValues(t *testing.T) {
 	t.Parallel()
 	service := testConfigDocumentService()
-	service.Providers = controlledProviderCatalog
 	input := []byte(`{
   "backendScopeID": "local-11111111-1111-4111-8111-111111111111",
   "defaults": {"workerModelProvider": "claude", "workerModel": "old-model"},
@@ -158,7 +158,6 @@ func TestMergeProviderModelDefaults_PreservesUnrelatedSemanticValues(t *testing.
 func TestMergeProviderModelDefaults_OmittedFieldsPreserveExistingDefaults(t *testing.T) {
 	t.Parallel()
 	service := testConfigDocumentService()
-	service.Providers = controlledProviderCatalog
 	document, err := service.Parse([]byte(`{"defaults":{"workerModelProvider":"codex","workerModel":"existing-model"}}`))
 	if err != nil {
 		t.Fatalf("ParseConfigDocument() error = %v", err)
@@ -198,7 +197,6 @@ func TestMergeProviderModelDefaults_ValidatesProviderThroughInjectedCatalog(t *t
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			service := testConfigDocumentService()
-			service.Providers = controlledProviderCatalog
 			merged, mergeErr := service.MergeProviderModelDefaults(document, operatorsettings.ProviderModelUpdate{Provider: &test.provider})
 			if mergeErr != nil {
 				t.Fatalf("MergeProviderModelDefaults() error = %v", mergeErr)
@@ -228,8 +226,7 @@ func TestMergeProviderModelDefaults_RejectsInvalidRequiredProvider(t *testing.T)
 		{name: "catalog required", provider: "codex", wantError: "provider catalog is required"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			service := testConfigDocumentService()
-			service.Providers = test.catalog
+			service := testConfigDocumentServiceWithCatalog(test.catalog)
 			_, mergeErr := service.MergeProviderModelDefaults(document, operatorsettings.ProviderModelUpdate{Provider: &test.provider})
 			if mergeErr == nil || !strings.Contains(mergeErr.Error(), test.wantError) {
 				t.Fatalf("MergeProviderModelDefaults() error = %v, want %q", mergeErr, test.wantError)
@@ -273,7 +270,6 @@ func controlledProviderCatalog(value string) (string, bool) {
 func TestLoadConfigDocument_InvalidContentFailsBeforeMutation(t *testing.T) {
 	t.Parallel()
 	service := testConfigDocumentService()
-	service.Files = testFiles
 	for _, test := range []struct{ name, data string }{
 		{name: "malformed", data: `{"defaults":`},
 		{name: "trailing", data: `{} {}`},

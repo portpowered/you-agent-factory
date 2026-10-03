@@ -17,6 +17,7 @@ import (
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
@@ -58,7 +59,11 @@ var servicesSet = wire.NewSet(
 	provideOperatorSettingsProviderCatalog,
 	provideOperatorSettingsLogger,
 	provideChatSessionsService,
-	provideOperatorSettingsService,
+	settingswire.NewDocumentService,
+	settingswire.NewResolutionService,
+	settingswire.NewService,
+	settingswire.NewCLIService,
+	provideOperatorSettingsDocumentPreserver,
 	provideOperatorSettingsIDGenerator,
 	provideChatSessionsFactoryTargetCatalogService,
 	provideACPServerFactorySessionStartResolver,

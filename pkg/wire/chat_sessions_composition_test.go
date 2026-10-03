@@ -139,7 +139,7 @@ func newTestOperatorSettingsService(t *testing.T, logger logging.Logger) operato
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	operatorSettings, err := provideOperatorSettingsService(
+	operatorSettings, err := newOperatorSettingsTestService(
 		files,
 		provideOperatorSettingsCreateTemporaryFile(edges),
 		provideOperatorSettingsProviderCatalog(providersRoot),
@@ -151,7 +151,7 @@ func newTestOperatorSettingsService(t *testing.T, logger logging.Logger) operato
 		logger,
 	)
 	if err != nil {
-		t.Fatalf("provideOperatorSettingsService() error = %v", err)
+		t.Fatalf("newOperatorSettingsTestService() error = %v", err)
 	}
 	return operatorSettings
 }
@@ -159,7 +159,7 @@ func newTestOperatorSettingsService(t *testing.T, logger logging.Logger) operato
 // TestProvideChatSessionsFactoryTargetCatalogServiceComposesThroughTheCanonicalWireGraph
 // proves the exact provider chain pkg/wire registers for the Chat Sessions
 // Factory target-catalog root (provideChatSessionsFactoryTargetCatalogService
-// consuming the same provideOperatorSettingsService chain and canonical
+// consuming the same settingswire.NewService chain and canonical
 // process logger as every other canonical consumer) performs direct single
 // injection with no dependency bag, threads a real logger into the
 // operation's started/finished logs, observes live Factory Definitions
