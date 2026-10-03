@@ -840,11 +840,16 @@ func TestNew_RestoresConsumedFailedCronWithoutReseeding(t *testing.T) {
 	if len(restored.CompletedDispatches) != 1 || len(restored.FailedDispatches) != 1 || len(restored.ActiveDispatches) != 0 {
 		t.Fatal("failed restore changed completed, failed, or active dispatch history")
 	}
+	assertFailedCronRecoveryWarning(t, logger, beforeInput.ID)
+}
+
+func assertFailedCronRecoveryWarning(t *testing.T, logger *recordingLogger, workID string) {
+	t.Helper()
 	warnings := 0
 	for _, entry := range logger.entries {
 		if entry.fields["event"] == "run.restore.disposition" {
 			warnings++
-			if entry.level != "warn" || entry.fields["work_id"] != beforeInput.ID ||
+			if entry.level != "warn" || entry.fields["work_id"] != workID ||
 				entry.fields["dispatch_id"] != "synthetic-failed-dispatch" || entry.fields["outcome"] != "FAILED" {
 				t.Fatalf("recovery warning = %#v", entry)
 			}

@@ -30,45 +30,9 @@ func restoredConclusiveFailedCronDispatch(restored *interfaces.FactoryWorldState
 	if count != 1 || !restoredFailedCronCompletionMatches(candidate, item) {
 		return "", false
 	}
-	transition := net.Transitions[candidate.TransitionID]
-	if transition == nil || transition.Name != item.Tags[interfaces.TimeWorkTagKeyCronWorkstation] {
-		return "", false
-	}
-	consumesPending := false
-	for _, arc := range transition.InputArcs {
-		if arc.PlaceID == interfaces.SystemTimePendingPlaceID && arc.Mode == interfaces.ArcModeConsume {
-			consumesPending = true
-		}
-	}
-	if !consumesPending {
-		return "", false
-	}
-	failedCount := 0
-	for _, failure := range restored.FailedDispatches {
-		if !restoredDispatchContainsWork(failure.WorkItemIDs, workID) {
-			continue
-		}
-		if failure.DispatchID != candidate.DispatchID || failure.TransitionID != candidate.TransitionID ||
-			!restoredFailedCronCompletionMatches(failure, item) {
-			return "", false
-		}
-		failedCount++
-	}
-	if failedCount != 1 {
-		return "", false
-	}
-	for _, move := range restored.WorkStateChangesByWorkID[workID] {
-		if !completionFollowsRestoredMove(candidate, move) {
-			return "", false
-		}
-	}
-	// The consumed payload ref must still be the latest canonical admission.
-	// A later admission (even within the same tick) creates a different ref.
-	consumed := restored.PayloadLineage.ResolveConsumedInputSnapshot(candidate.DispatchID, workID)
-	if consumed.Status != work.WorkPayloadResolutionResolved || consumed.Snapshot == nil ||
-		consumed.Snapshot.WorkID != workID || !isCronAutomationWork(consumed.Snapshot.WorkItem) ||
-		consumed.Snapshot.WorkItem.Tags[interfaces.TimeWorkTagKeyCronWorkstation] != item.Tags[interfaces.TimeWorkTagKeyCronWorkstation] ||
-		restored.PayloadLineage.LatestSnapshotIDByWorkID[workID] != consumed.Snapshot.SnapshotID {
+	if !restoredFailedCronTransitionMatches(net, candidate, item) ||
+		!restoredFailedCronHistoryMatches(restored, candidate, item) ||
+		!restoredFailedCronOwnershipMatches(restored, candidate, item) {
 		return "", false
 	}
 	return candidate.DispatchID, true
@@ -81,6 +45,10 @@ func restoredFailedCronCompletionMatches(completion interfaces.FactoryWorldDispa
 		(completion.TerminalWork != nil && completion.TerminalWork.WorkItem.ID == item.ID) {
 		return false
 	}
+	return restoredFailedCronConsumedInputMatches(completion, item)
+}
+
+func restoredFailedCronConsumedInputMatches(completion interfaces.FactoryWorldDispatchCompletion, item work.FactoryWorkItem) bool {
 	matched := 0
 	for _, input := range completion.ConsumedInputs {
 		if input.WorkItem == nil || input.WorkItem.ID != item.ID {
@@ -95,6 +63,61 @@ func restoredFailedCronCompletionMatches(completion interfaces.FactoryWorldDispa
 		matched++
 	}
 	return matched == 1
+}
+
+func restoredFailedCronTransitionMatches(net *state.Net, candidate interfaces.FactoryWorldDispatchCompletion, item work.FactoryWorkItem) bool {
+	transition := net.Transitions[candidate.TransitionID]
+	if transition == nil || transition.Name != item.Tags[interfaces.TimeWorkTagKeyCronWorkstation] {
+		return false
+	}
+	consumesPending := false
+	for _, arc := range transition.InputArcs {
+		if arc.PlaceID == interfaces.SystemTimePendingPlaceID && arc.Mode == interfaces.ArcModeConsume {
+			consumesPending = true
+		}
+	}
+	if !consumesPending {
+		return false
+	}
+	return true
+}
+
+func restoredFailedCronHistoryMatches(restored *interfaces.FactoryWorldState, candidate interfaces.FactoryWorldDispatchCompletion, item work.FactoryWorkItem) bool {
+	workID := item.ID
+	failedCount := 0
+	for _, failure := range restored.FailedDispatches {
+		if !restoredDispatchContainsWork(failure.WorkItemIDs, workID) {
+			continue
+		}
+		if failure.DispatchID != candidate.DispatchID || failure.TransitionID != candidate.TransitionID ||
+			!restoredFailedCronCompletionMatches(failure, item) {
+			return false
+		}
+		failedCount++
+	}
+	if failedCount != 1 {
+		return false
+	}
+	return true
+}
+
+func restoredFailedCronOwnershipMatches(restored *interfaces.FactoryWorldState, candidate interfaces.FactoryWorldDispatchCompletion, item work.FactoryWorkItem) bool {
+	workID := item.ID
+	for _, move := range restored.WorkStateChangesByWorkID[workID] {
+		if !completionFollowsRestoredMove(candidate, move) {
+			return false
+		}
+	}
+	// The consumed payload ref must still be the latest canonical admission.
+	// A later admission (even within the same tick) creates a different ref.
+	consumed := restored.PayloadLineage.ResolveConsumedInputSnapshot(candidate.DispatchID, workID)
+	if consumed.Status != work.WorkPayloadResolutionResolved || consumed.Snapshot == nil ||
+		consumed.Snapshot.WorkID != workID || !isCronAutomationWork(consumed.Snapshot.WorkItem) ||
+		consumed.Snapshot.WorkItem.Tags[interfaces.TimeWorkTagKeyCronWorkstation] != item.Tags[interfaces.TimeWorkTagKeyCronWorkstation] ||
+		restored.PayloadLineage.LatestSnapshotIDByWorkID[workID] != consumed.Snapshot.SnapshotID {
+		return false
+	}
+	return true
 }
 
 func logRestoredWorkRecovery(cfg *runtimeConfig, recovery restoredWorkRecovery) {

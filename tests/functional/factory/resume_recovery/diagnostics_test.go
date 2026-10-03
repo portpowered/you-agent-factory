@@ -68,6 +68,14 @@ func TestResumeRecovery(t *testing.T) {
 		t.Parallel()
 		assertFailedCronSuccessor(t, process, &routes)
 	})
+	t.Run("F03/interrupted-cron", func(t *testing.T) {
+		t.Parallel()
+		assertInterruptedCron(t, process, &routes)
+	})
+	t.Run("F04/operator-move", func(t *testing.T) {
+		t.Parallel()
+		assertMoveRoundTrip(t, process, &routes)
+	})
 	for _, debug := range []bool{false, true} {
 		t.Run(fmt.Sprintf("F05/debug=%t", debug), func(t *testing.T) {
 			t.Parallel()

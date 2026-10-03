@@ -309,7 +309,7 @@ func validateRestoredOccupancy(
 		if placeID == "" {
 			return nil, fmt.Errorf("restore Work board: occupancy contains an empty place ID")
 		}
-		if entry.PlaceID == "" || entry.PlaceID != placeKey {
+		if entry.PlaceID != placeKey {
 			return nil, fmt.Errorf(
 				"restore Work board: occupancy entry %q has inconsistent place ID %q",
 				placeKey,
