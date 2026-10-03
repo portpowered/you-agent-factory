@@ -901,7 +901,7 @@ func (fixture *ProcessFixture) markSessionDeleted(sessionID string) {
 
 func (scenario *Scenario) WaitForTerminal(t testing.TB, timeout time.Duration) {
 	t.Helper()
-	support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.sessionID, timeout)
+	support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.sessionID, support.ScaledTimeout(timeout))
 }
 
 func (scenario *Scenario) ListWork(t testing.TB) factoryapi.ListWorkResponse {

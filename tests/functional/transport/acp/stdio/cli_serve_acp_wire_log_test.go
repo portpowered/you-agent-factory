@@ -184,7 +184,11 @@ func finishTranscriptConversation(
 	if err := stdinWrite.Close(); err != nil {
 		t.Fatalf("close stdin: %v", err)
 	}
-	<-command.Done()
+	select {
+	case <-command.Done():
+	case <-time.After(support.ScaledTimeout(rpcLineReadCeiling)):
+		t.Fatal("Process.Execute(you server acp) did not return after stdin EOF")
+	}
 	if err := command.Err(); err != nil {
 		t.Fatalf("Process.Execute(you server acp) error = %v", err)
 	}
