@@ -19,6 +19,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
+import dub_checkpoint
 from dub_contract import (
     load_translation_response, render_ass, render_srt, translation_prompt,
     validate_segments, validate_translations, target_language, LANGUAGES, playback_segments, nonverbal_kind,
@@ -522,9 +523,11 @@ def synthesize_segment(root, translated, index, value):
                 raise
             continue
         history.append({"revision": revision, "status": "fitted"})
+        # Both fit branches record the full presentation, so every reused cue
+        # carries the same set of fields and none can be missing.
         working.update(reference_audio=str(ref), speech_audio=str(speech), fitted_audio=str(fitted),
                        reference_sha256=reference_hash, speech_speed=speed, fit_attempts=history,
-                       audio_origin="reference-conditioned")
+                       audio_origin="reference-conditioned", nonverbal_kind=None)
         return working
 
 
@@ -532,15 +535,22 @@ def synthesize(path: str) -> Path:
     manifest, value = load_manifest(path)
     if value.get("stage") != "translated":
         raise ValueError("Reference-audio TTS requires validated translations")
-    translated_document = read_json(Path(value["translations"]))
+    document = read_json(Path(value["translations"]))
     translated = validate_translations(
-        {"language": translated_document["language"], "segments": [
-            {"id": item["id"], "text": item["text"]} for item in translated_document["segments"]
+        {"language": document["language"], "segments": [
+            {"id": item["id"], "text": item["text"]} for item in document["segments"]
         ]}, value["segments"], value["language"], value.get("preserve_names", []),
     )
+    # Completed cues are persisted one at a time into the same translations
+    # artifact, so an in-memory loss never discards evidence that already fit.
+    progress = dub_checkpoint.Progress(manifest.parent, value, translated, document["segments"])
+    pending = [dict(item) for item in translated]
     for index in range(len(translated)):
-        translated[index] = synthesize_segment(manifest.parent, translated, index, value)
-    save_json(Path(value["translations"]), {"language": value["language"], "segments": translated})
+        if progress.completed[index] is None:
+            pending[index] = synthesize_segment(manifest.parent, pending, index, value)
+            progress.completed[index] = progress.complete(pending[index])
+            progress.save()
+    progress.save()
     value.update(stage="synthesized")
     save_json(manifest, value)
     return manifest

@@ -1,15 +1,34 @@
-"""Controlled proofs for source references, validation, and exact timelines."""
+"""Controlled proofs for source references, validation, and exact timelines.
+
+Every edge that could leave this process - the installed you, ffmpeg, an
+operator config, a model cache, or a GPU - is closed for the whole suite. A test
+that tries to reach one fails on its own assertion instead of quietly depending
+on the developer's machine.
+"""
 
 import io
 import json
 import tempfile
 import unittest
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import dub_checkpoint
 import dub_media
 import dub_video
+
+# ffmpeg, ffprobe, and you are never launched from this suite.
+EXTERNAL_COMMANDS = ("ffmpeg", "ffprobe", "you")
+
+
+def external_only(*arguments, **keywords):
+    """Fail loudly instead of launching an installed tool this suite owns."""
+    argv = next((item for item in arguments if isinstance(item, (list, tuple))), ())
+    if argv and Path(str(argv[0])).stem.lower() in EXTERNAL_COMMANDS:
+        raise AssertionError(f"this suite must not launch an installed {argv[0]}")
+    raise AssertionError(f"unexpected subprocess: {arguments} {keywords}")
 
 
 class DubPipelineTests(unittest.TestCase):
@@ -19,6 +38,28 @@ class DubPipelineTests(unittest.TestCase):
         comparison = patch.object(dub_video, "compare_translation", return_value="Source comparison evidence")
         comparison.start()
         self.addCleanup(comparison.stop)
+        for module in (dub_media, dub_checkpoint, dub_video):
+            runner = patch.object(module.subprocess, "run", side_effect=external_only)
+            runner.start()
+            self.addCleanup(runner.stop)
+
+    @contextmanager
+    def hermetic_synthesis(self, fit):
+        """Close every real provenance and media edge for one stage.
+
+        The stage still reaches TTS, but no installed you can be resolved, no
+        operator config is read, no model asset is hashed, and no ffmpeg runs.
+        """
+        def unreachable(*arguments, **keywords):
+            raise AssertionError("synthesis must not read operator config or run ffmpeg")
+
+        with ExitStack() as stack:
+            enter = stack.enter_context
+            enter(patch.object(dub_checkpoint, "models_executable", return_value=None))
+            enter(patch.object(dub_checkpoint, "operator_config_path", side_effect=unreachable))
+            enter(patch.object(dub_media, "command", side_effect=unreachable))
+            enter(patch.object(dub_video, "fit_speech", side_effect=fit))
+            yield
 
     def test_target_language_normalizes_native_names_and_rejects_bad_tags_before_effects(self):
         for tag, normalized, native in [("EN-us", "en-US", "English"),
@@ -90,11 +131,20 @@ class DubPipelineTests(unittest.TestCase):
                     self.assertEqual(parameters, {"language": native})
                     Path(outputs[0].removeprefix("audio=")).write_bytes(b"target voice")
 
+                def fit(source, destination, segment, playback_limit):
+                    segment["speech_end"] = segment["end"]
+                    destination.write_bytes(b"\x01\x00" * (segment["end"] - segment["start"]) * 24)
+                    return 1.0
+
                 with patch.object(dub_video, "reference", side_effect=extract), \
-                     patch.object(dub_video, "model", side_effect=infer) as infer, \
-                     patch.object(dub_video, "fit_speech", return_value=1.0):
+                     self.hermetic_synthesis(fit), \
+                     patch.object(dub_video, "model", side_effect=infer) as infer:
                     dub_video.synthesize(str(manifest))
                 infer.assert_called_once()
+                item = dub_video.read_json(Path(value["translations"]))["segments"][0]
+                self.assertEqual((item["id"], item["start"], item["end"], item["text"]), (7, 40, 60, text))
+                self.assertEqual(item["reference_sha256"], dub_video.digest(Path(item["reference_audio"])))
+                self.assertNotIn("checkpoint", item, "an unprovable identity claims no progress")
 
     def test_long_asr_clips_offset_timestamps_and_keep_original_reference_source(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -197,8 +247,8 @@ class DubPipelineTests(unittest.TestCase):
                 return 1.0
 
             with patch.object(dub_video, "reference", side_effect=extract), \
-                 patch.object(dub_video, "model", side_effect=infer), \
-                 patch.object(dub_video, "fit_speech", side_effect=fit):
+                 self.hermetic_synthesis(fit), \
+                 patch.object(dub_video, "model", side_effect=infer):
                 dub_video.synthesize(str(manifest))
             self.assertEqual(len(calls), 1)
             name, operation, inputs, parameters = calls[0]
