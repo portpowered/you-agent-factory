@@ -2,7 +2,8 @@ package workerexecution
 
 import (
 	"context"
-	"math/rand"
+	"hash/fnv"
+	"strconv"
 	"time"
 
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -31,10 +32,16 @@ type ThrottleRetryPolicy struct {
 	InitialDelay time.Duration
 	MaxDelay     time.Duration
 	Window       time.Duration
-	// Now reads the clock that measures the window. Nil means time.Now.
+	// Now reads the injected clock that measures the window. Nil measures the
+	// window by the total time spent waiting instead.
 	Now func() time.Time
-	// Jitter returns a value in [0,1). Nil means math/rand.
-	Jitter func() float64
+	// JitterSeed (typically the dispatch ID) deterministically spreads waits
+	// across concurrent workers without a hidden random source. An empty seed
+	// means no jitter.
+	JitterSeed string
+	// Jitter overrides the seeded jitter with a value in [0,1) for the given
+	// zero-based wait index. Tests use it for exact waits.
+	Jitter func(wait int) float64
 }
 
 // DefaultThrottleRetryPolicy returns the production throttle retry policy.
@@ -63,6 +70,7 @@ type ThrottleRetry struct {
 	started time.Time
 	begun   bool
 	waits   int
+	waited  time.Duration
 }
 
 // NewThrottleRetry starts a request-scoped throttle retry tracker.
@@ -70,11 +78,19 @@ func NewThrottleRetry(policy ThrottleRetryPolicy) *ThrottleRetry {
 	return &ThrottleRetry{policy: policy}
 }
 
-func (r *ThrottleRetry) now() time.Time {
-	if r.policy.Now != nil {
-		return r.policy.Now()
+// elapsed reports how much of the window has been used. With a clock it is
+// the time since the first throttled failure; without one it is the total time
+// spent waiting, which keeps the window bounded with no ambient clock.
+func (r *ThrottleRetry) elapsed() time.Duration {
+	if r.policy.Now == nil {
+		return r.waited
 	}
-	return time.Now()
+	now := r.policy.Now()
+	if !r.begun {
+		r.begun = true
+		r.started = now
+	}
+	return now.Sub(r.started)
 }
 
 // Wait sleeps before the next throttled attempt using sleep. It reports false
@@ -84,12 +100,7 @@ func (r *ThrottleRetry) Wait(
 	ctx context.Context,
 	sleep func(context.Context, time.Duration) error,
 ) (bool, error) {
-	now := r.now()
-	if !r.begun {
-		r.begun = true
-		r.started = now
-	}
-	remaining := r.policy.Window - now.Sub(r.started)
+	remaining := r.policy.Window - r.elapsed()
 	if remaining <= 0 {
 		return false, nil
 	}
@@ -100,6 +111,7 @@ func (r *ThrottleRetry) Wait(
 	if err := sleep(ctx, delay); err != nil {
 		return false, err
 	}
+	r.waited += delay
 	return true, nil
 }
 
@@ -108,17 +120,29 @@ func (r *ThrottleRetry) nextDelay() time.Duration {
 	for i := 0; i < r.waits && delay < r.policy.MaxDelay; i++ {
 		delay *= 2
 	}
+	wait := r.waits
 	r.waits++
 	if delay > r.policy.MaxDelay {
 		delay = r.policy.MaxDelay
 	}
-	jitter := rand.Float64
-	if r.policy.Jitter != nil {
-		jitter = r.policy.Jitter
-	}
-	scaled := time.Duration(float64(delay) * (1 - throttleRetryJitterSpread + 2*throttleRetryJitterSpread*jitter()))
+	scaled := time.Duration(float64(delay) * (1 - throttleRetryJitterSpread + 2*throttleRetryJitterSpread*r.jitter(wait)))
 	if scaled > r.policy.MaxDelay {
 		scaled = r.policy.MaxDelay
 	}
 	return scaled
+}
+
+// jitter returns a fraction in [0,1) for the given wait index. It is stable
+// for one seed and wait, and differs across seeds so concurrent workers that
+// hit the same capacity event do not retry in lockstep.
+func (r *ThrottleRetry) jitter(wait int) float64 {
+	if r.policy.Jitter != nil {
+		return r.policy.Jitter(wait)
+	}
+	if r.policy.JitterSeed == "" {
+		return 0.5
+	}
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(r.policy.JitterSeed + "/" + strconv.Itoa(wait)))
+	return float64(hash.Sum32()) / (1 << 32)
 }

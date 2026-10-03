@@ -326,7 +326,9 @@ func (s *Service) executeProviderWithRetry(
 	request workers.RunnerExecutionRequest,
 	execute func(workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error),
 ) (workers.RunnerExecutionResult, error) {
-	throttle := workerexecution.NewThrottleRetry(workerexecution.DefaultThrottleRetryPolicy(s.clock))
+	throttlePolicy := workerexecution.DefaultThrottleRetryPolicy(s.clock)
+	throttlePolicy.JitterSeed = request.Dispatch.DispatchID
+	throttle := workerexecution.NewThrottleRetry(throttlePolicy)
 	sleep := s.providerRetrySleep()
 	retryCount := 0
 	for {

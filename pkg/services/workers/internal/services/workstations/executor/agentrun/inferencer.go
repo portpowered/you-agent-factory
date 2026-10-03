@@ -40,7 +40,9 @@ func (i *runnerInferencer) Infer(ctx context.Context, req messages.InferenceRequ
 	runnerReq.SystemPrompt = systemPrompt
 	runnerReq.UserMessage = userMessage
 
-	throttle := workerinternal.NewThrottleRetry(i.throttlePolicy)
+	throttlePolicy := i.throttlePolicy
+	throttlePolicy.JitterSeed = i.baseReq.Dispatch.DispatchID
+	throttle := workerinternal.NewThrottleRetry(throttlePolicy)
 	retryCount := 0
 	for {
 		resp, err := i.runner.Execute(ctx, runnerReq)
