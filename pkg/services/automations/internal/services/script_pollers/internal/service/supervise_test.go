@@ -11,6 +11,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -126,6 +127,11 @@ func TestStartScriptPoller_RestartsOnMalformedOutputWithBackoff(t *testing.T) {
 		t.Fatal("expected restart log for malformed poller output")
 	}
 	entry := observedLogs.FilterMessage("script poller restarting").All()[0]
+	for field, want := range map[string]string{"workstation": poller.Name, "worker": worker.Name} {
+		if got := entry.ContextMap()[field]; got != want {
+			t.Fatalf("restart %s = %#v, want %q", field, got, want)
+		}
+	}
 	if got := entry.ContextMap()["error"]; got == nil || !strings.Contains(got.(string), "malformed stdout") {
 		t.Fatalf("restart error = %#v, want malformed stdout context", got)
 	}
@@ -317,6 +323,7 @@ type scriptPollersServiceOptions struct {
 	logger          *zap.Logger
 	executionPolicy factorydefinitionfixtures.WorkstationExecutionPolicy
 	cursorRecorder  scriptpollers.CursorRecorder
+	cursors         scriptpollers.CursorScopes
 }
 
 func newScriptPollersServiceWithOptions(options scriptPollersServiceOptions) scriptpollers.Service {
@@ -332,23 +339,18 @@ func newScriptPollersServiceWithOptions(options scriptPollersServiceOptions) scr
 			},
 		}
 	}
-	deps := scriptpollers.Dependencies{
-		Logger: func(workstationName, workerName string) *zap.Logger {
-			return logger
-		},
-		CommandRunner: func() platformprocess.CommandRunner {
-			return options.runner
-		},
-		ExecutionPolicy: executionPolicy,
-		CursorRecorder:  options.cursorRecorder,
+	clock := options.clock
+	if clock == nil {
+		clock = clockwork.NewRealClock()
 	}
-	if options.clock != nil {
-		clock := options.clock
-		deps.Clock = func() clockwork.Clock {
-			return clock
+	cursors := options.cursors
+	if cursors == nil {
+		cursors = scriptpollerswire.NewCursorScopes(nil)
+		if options.cursorRecorder != nil {
+			cursors = scopedTestRecorder{options.cursorRecorder}
 		}
 	}
-	return scriptpollerswire.NewService(deps)
+	return scriptpollerswire.NewService(logger, clock, options.runner, nil, executionPolicy, cursors)
 }
 
 func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waiters int) {
@@ -370,4 +372,22 @@ func waitForScriptPollerRunnerCalls(t *testing.T, runner *sequenceCommandRunner,
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %d runner call(s); got %d", want, runner.callCount())
+}
+
+// scopedTestRecorder keeps serializer/failure doubles at the unit-test boundary.
+// Production recovery uses CursorScopes directly and has no recorder adapter.
+type scopedTestRecorder struct {
+	scriptpollers.CursorRecorder
+}
+
+func (scopedTestRecorder) ReleaseScope(scriptpollers.CursorScope) {
+	panic("unexpected scope release in unscoped recorder fixture")
+}
+
+func (r scopedTestRecorder) GetCursor(ctx context.Context, _ scriptpollers.CursorScope, request automations.GetCursorRequest) (automations.GetCursorResult, error) {
+	return r.CursorRecorder.GetCursor(ctx, request)
+}
+
+func (r scopedTestRecorder) CommitCursor(ctx context.Context, _ scriptpollers.CursorScope, request scriptpollers.CommitCursorRequest) error {
+	return r.CursorRecorder.CommitCursor(ctx, request)
 }

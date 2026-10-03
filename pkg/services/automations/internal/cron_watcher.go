@@ -38,13 +38,13 @@ func (s *Service) StartCronWatchersForRuntime(
 		return
 	}
 
-	schedulerClock := s.supervisorClock()
+	schedulerClock := s.clock
 	scheduler, err := gocron.NewScheduler(
 		gocron.WithClock(schedulerClock),
 		gocron.WithLocation(time.UTC),
 	)
 	if err != nil {
-		s.logger().Error("cron scheduler disabled", zap.Error(err))
+		s.loggerValue.Error("cron scheduler disabled", zap.Error(err))
 		return
 	}
 
@@ -55,15 +55,15 @@ func (s *Service) StartCronWatchersForRuntime(
 	}
 
 	scheduler.Start()
-	s.logger().Info("cron scheduler started", zap.Int("jobs", registered))
+	s.loggerValue.Info("cron scheduler started", zap.Int("jobs", registered))
 	sidecars.Add(1)
 	go func() {
 		defer sidecars.Done()
 		<-ctx.Done()
 		if err := scheduler.Shutdown(); err != nil {
-			s.logger().Warn("cron scheduler shutdown failed", zap.Error(err))
+			s.loggerValue.Warn("cron scheduler shutdown failed", zap.Error(err))
 		}
-		s.logger().Info("cron scheduler stopped")
+		s.loggerValue.Info("cron scheduler stopped")
 	}()
 }
 
@@ -96,13 +96,13 @@ func (s *Service) registerCronJobs(
 			continue
 		}
 		if ws.Cron == nil {
-			s.logger().Warn("cron watcher disabled", zap.String("workstation", ws.Name), zap.String("reason", "missing cron configuration"))
+			s.loggerValue.Warn("cron watcher disabled", zap.String("workstation", ws.Name), zap.String("reason", "missing cron configuration"))
 			continue
 		}
 		var err error
 		if strings.TrimSpace(ws.Cron.Every) != "" {
 			if _, invocationScoped := invocationParameterReference(ws.Cron.Every); invocationScoped {
-				s.logger().Info("invocation interval watcher awaiting controller Work",
+				s.loggerValue.Info("invocation interval watcher awaiting controller Work",
 					zap.String("workstation", ws.Name),
 					zap.String("every", ws.Cron.Every),
 				)
@@ -117,7 +117,7 @@ func (s *Service) registerCronJobs(
 			}
 		}
 		if err != nil {
-			s.logger().Warn("cron watcher disabled",
+			s.loggerValue.Warn("cron watcher disabled",
 				zap.String("workstation", ws.Name),
 				zap.Error(err),
 			)
@@ -152,7 +152,7 @@ func (s *Service) registerIntervalJob(
 	if err != nil {
 		return fmt.Errorf("register interval %q: %w", ws.Cron.Every, err)
 	}
-	s.logger().Info("interval watcher registered", zap.String("workstation", ws.Name), zap.String("every", ws.Cron.Every))
+	s.loggerValue.Info("interval watcher registered", zap.String("workstation", ws.Name), zap.String("every", ws.Cron.Every))
 	return nil
 }
 
@@ -175,7 +175,7 @@ func (s *Service) registerCronJob(
 	if err != nil {
 		return fmt.Errorf("register schedule %q: %w", schedule, err)
 	}
-	s.logger().Info("cron watcher registered",
+	s.loggerValue.Info("cron watcher registered",
 		zap.String("workstation", ws.Name),
 		zap.String("schedule", schedule),
 	)
@@ -208,7 +208,7 @@ func (s *Service) runCronJob(
 		if ctx.Err() != nil {
 			return
 		}
-		s.logger().Error("cron watcher trigger failed",
+		s.loggerValue.Error("cron watcher trigger failed",
 			zap.String("workstation", ws.Name),
 			zap.Error(err),
 		)
@@ -275,15 +275,17 @@ func (s *Service) submitCronTickForRuntime(
 			zap.Error(err),
 		}
 		if !failure.Retryable || attempt == attempts {
-			s.logger().Error("cron watcher trigger exhausted", fields...)
+			s.loggerValue.Error("cron watcher trigger exhausted", fields...)
 			return err
 		}
 
-		s.logger().Warn("cron watcher trigger retrying", fields...)
+		s.loggerValue.Warn("cron watcher trigger retrying", fields...)
+		timer := s.clock.NewTimer(cronRetryBackoff)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
-		case <-time.After(cronRetryBackoff):
+		case <-timer.Chan():
 		}
 	}
 	return nil
@@ -323,7 +325,7 @@ func (s *Service) submitCronTickAttempt(
 		return fmt.Errorf("cron workstation %q: expected submitted tick at %s", ws.Name, firedAt.Format(time.RFC3339Nano))
 	}
 	metadata := submission.Metadata
-	s.logger().Info("cron watcher trigger submitted",
+	s.loggerValue.Info("cron watcher trigger submitted",
 		zap.String("workstation", ws.Name),
 		zap.String("work_type", interfaces.SystemTimeWorkTypeID),
 		zap.String("state", interfaces.SystemTimePendingState),

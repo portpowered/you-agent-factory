@@ -12,16 +12,31 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/jonboulle/clockwork"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
+	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
+
+// CursorScopes exposes the private recovery owner to canonical composition.
+type CursorScopes = scriptpollers.CursorScopes
+
+// CursorPersistenceFileSystem is the cursor owner's exact external effect.
+type CursorPersistenceFileSystem = scriptpollerswire.CursorPersistenceFileSystem
+
+// NewCursorScopes constructs the scoped recovery owner without filesystem IO.
+func NewCursorScopes(files CursorPersistenceFileSystem) CursorScopes {
+	return scriptpollerswire.NewCursorScopes(files)
+}
 
 // HostedSourceInputs is the cohesive set of external effects needed to
 // compose Automations-owned hosted-source and cursor-persistence
@@ -124,7 +139,7 @@ func newService(
 
 	service := automationinternal.NewWithCursorFileSystem(
 		logger,
-		clock,
+		selectLegacyScheduler(clock),
 		commandRunner,
 		workflowID,
 		defaultFactoryDir,
@@ -132,11 +147,23 @@ func newService(
 		resolveTemplates,
 		executionPolicy,
 		cursorFileSystem,
+		cronwire.NewService(),
+		fswire.NewService(),
 	)
 	if service == nil {
 		return nil, fmt.Errorf("construct Automations: implementation rejected its dependencies")
 	}
 	return service, nil
+}
+
+// selectLegacyScheduler preserves the owner boundary's Now-only compatibility
+// until the canonical TimerSource/ClockView cutover. Internal operations and
+// runtime activation receive the same selected scheduler directly.
+func selectLegacyScheduler(clock automations.Clock) clockwork.Clock {
+	if scheduler, ok := clock.(clockwork.Clock); ok && scheduler != nil {
+		return scheduler
+	}
+	return clockwork.NewRealClock()
 }
 
 type hostedPollersRootAdapter struct {

@@ -2,7 +2,9 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -11,8 +13,11 @@ import (
 	"github.com/jonboulle/clockwork"
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -20,12 +25,12 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestNilServiceUsesSafeSchedulerDefaults(t *testing.T) {
+func TestExplicitServiceConstructionDoesNotExecuteCommandRunner(t *testing.T) {
 	t.Parallel()
-
-	var svc *Service
-	if svc.logger() == nil || svc.commandRunner() == nil || svc.supervisorClock() == nil || svc.pollerLogger("workstation", "worker") == nil {
-		t.Fatal("nil worker service did not provide safe scheduler defaults")
+	runner := &internalScriptPollerRunner{outcomes: []internalScriptPollerOutcome{{}}}
+	service := New(zap.NewNop(), clockwork.NewFakeClock(), runner, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
+	if service == nil || len(runner.outcomes) != 1 {
+		t.Fatal("construction executed the supplied command runner")
 	}
 }
 
@@ -52,7 +57,9 @@ func TestSchedulerSidecarsReconcileLifecycleBeforeCanonicalWorkSubmission(t *tes
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{},
 	}
 	service := New(
-		zap.NewNop(), clock, nil, workflowID, "", nil, nil, nil,
+		zap.NewNop(), clock, &internalScriptPollerRunner{}, workflowID, "", nil, nil, nil,
+		cronwire.NewService(),
+		fswire.NewService(),
 	)
 	identity := automations.SourceIdentity{
 		AutomationID: workflowID,
@@ -115,7 +122,7 @@ func TestSchedulerSidecarsReconcileLifecycleBeforeCanonicalWorkSubmission(t *tes
 }
 
 func TestSchedulerSourceObservationAttachesBeforeStartEffectInitialization(t *testing.T) {
-	service := New(zap.NewNop(), clockwork.NewFakeClock(), nil, "", "", nil, nil, nil)
+	service := New(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	identity := automations.SourceIdentity{
 		AutomationID: "workflow-start-barrier",
 		SourceID:     runtimeSchedulerSourceID,
@@ -169,7 +176,9 @@ func TestProductionRootUsesScriptPollersOwner(t *testing.T) {
 	t.Parallel()
 
 	service := NewService(
-		zap.NewNop(), clockwork.NewFakeClock(), nil, "workflow-script-pollers", "", nil, nil, nil,
+		zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "workflow-script-pollers", "", nil, nil, nil,
+		cronwire.NewService(),
+		fswire.NewService(),
 	)
 	if service.scriptPollers == nil {
 		t.Fatal("expected script pollers owner on production Automations root")
@@ -201,6 +210,8 @@ func TestProductionRootScriptPollerCursorThroughCompositionPath(t *testing.T) {
 		nil,
 		nil,
 		factorydefinitioncomposition.WorkstationExecutionPolicy{},
+		cronwire.NewService(),
+		fswire.NewService(),
 	)
 	poller := internalCanonicalScriptPollerWorkstation()
 	worker := internalCanonicalScriptPollerWorker()
@@ -331,7 +342,9 @@ func startProductionRootScheduler(
 ) (*Service, automations.SourceIdentity, *sync.WaitGroup, context.CancelFunc) {
 	t.Helper()
 	service := NewService(
-		zap.NewNop(), clockwork.NewFakeClock(), nil, workflowID, "", nil, nil, nil,
+		zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, workflowID, "", nil, nil, nil,
+		cronwire.NewService(),
+		fswire.NewService(),
 	)
 	identity := automations.SourceIdentity{
 		AutomationID: workflowID,
@@ -531,7 +544,7 @@ func startSchedulerConcurrently(
 }
 
 func TestSchedulerSidecarsReconcileDifferentRuntimeIdentitiesConcurrently(t *testing.T) {
-	service := New(zap.NewNop(), clockwork.NewFakeClock(), nil, "", "", nil, nil, nil)
+	service := New(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	factoryConfig := &interfaces.FactoryConfig{}
 	directories := []string{t.TempDir(), t.TempDir()}
 	contexts := make([]context.Context, len(directories))
@@ -616,4 +629,138 @@ func assertSubmittedWorkRequests(
 		(*submitted)[len(*submitted)-1].Works[0].WorkID == (*submitted)[len(*submitted)-2].Works[0].WorkID {
 		t.Fatal("real restarted transition repeated the prior canonical Work identity")
 	}
+}
+
+// F10b/j service-contract evidence: reads preserve the committed opaque facts
+// and never execute the next command or admit another Work request.
+func TestGetCursorPreservesOpaqueFactsWithoutCommandOrAdmission(t *testing.T) {
+	t.Parallel()
+	for _, durable := range []bool{false, true} {
+		t.Run(fmt.Sprintf("durable=%t", durable), func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			dir := t.TempDir()
+			base := ""
+			if durable {
+				base = dir
+			}
+			const cursor = "opaque:/雪\nembedded  spaces\t\"quoted\""
+			const checkpoint = "checkpoint:{\"key\":\"é\"}\nopaque=value"
+			output, err := json.Marshal(map[string]any{
+				"requestId": "opaque-request", "type": "FACTORY_REQUEST_BATCH",
+				"works":  []map[string]string{{"name": "opaque-work", "workTypeName": "task"}},
+				"cursor": cursor, "checkpoint": checkpoint,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			runner := &internalScriptPollerRunner{outcomes: []internalScriptPollerOutcome{
+				{result: platformprocess.CommandResult{Stdout: output}}, {},
+			}}
+			service := New(zap.NewNop(), clockwork.NewFakeClock(), runner, "opaque-workflow", base, nil, nil,
+				factorydefinitioncomposition.WorkstationExecutionPolicy{}, cronwire.NewService(), fswire.NewService())
+			poller, worker := internalCanonicalScriptPollerWorkstation(), internalCanonicalScriptPollerWorker()
+			admissions := 0
+			err = service.RunScriptPoller(ctx, runner, internalScriptPollerLoadedRuntimeConfig(t, dir, poller, worker), poller, worker,
+				func(context.Context, work.WorkRequest) error { admissions++; return nil })
+			if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
+				t.Fatalf("poll cycle = %v, want terminal exit after commit", err)
+			}
+			request := automations.GetCursorRequest{InstanceID: scriptpollers.SupervisionFor("opaque-workflow", poller.Name).InstanceID}
+			before, err := service.Root().GetCursor(ctx, request)
+			if err != nil || before.AutomationID != "opaque-workflow" || before.InstanceID != request.InstanceID ||
+				before.Cursor != cursor || before.Checkpoint != checkpoint {
+				t.Fatalf("GetCursor = %+v, %v, want exact committed facts", before, err)
+			}
+			request.ExpectedCursor = "stale"
+			_, err = service.Root().GetCursor(ctx, request)
+			assertCursorReadError(t, err, automations.ErrorCodeConflict, automations.ErrConflict)
+			request.ExpectedCursor = cursor
+			after, err := service.Root().GetCursor(ctx, request)
+			if err != nil || after != before {
+				t.Fatalf("read after conflict = %+v, %v, want %+v", after, err, before)
+			}
+			if len(runner.outcomes) != 1 || admissions != 1 {
+				t.Fatalf("reads caused effects: remaining commands=%d admissions=%d", len(runner.outcomes), admissions)
+			}
+		})
+	}
+}
+
+// F10g component evidence uses the existing Root contract after a failed
+// replacement. Public Work, diagnostics and peer progress need separate
+// composed evidence; these direct admissions do not establish that journey.
+func TestGetCursorAfterFailedReplacementPreservesPriorOpaqueFacts(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	dir := t.TempDir()
+	files := &cursorReplacementFaultFileSystem{}
+	runner := &internalScriptPollerRunner{}
+	service := NewWithCursorFileSystem(zap.NewNop(), clockwork.NewFakeClock(), runner, "opaque-replacement", dir, nil, nil,
+		factorydefinitioncomposition.WorkstationExecutionPolicy{}, files, cronwire.NewService(), fswire.NewService())
+	poller, worker := internalCanonicalScriptPollerWorkstation(), internalCanonicalScriptPollerWorker()
+	config := internalScriptPollerLoadedRuntimeConfig(t, dir, poller, worker)
+	admissions := 0
+	const cursor = "prior:/雪\nembedded  spaces\t\"quoted\""
+	const checkpoint = "prior:{\"key\":\"é\"}\nopaque=value"
+	output, err := json.Marshal(map[string]any{
+		"requestId": "prior-request", "type": "FACTORY_REQUEST_BATCH",
+		"works":  []map[string]string{{"name": "prior-work", "workTypeName": "task"}},
+		"cursor": cursor, "checkpoint": checkpoint,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner.outcomes = []internalScriptPollerOutcome{{result: platformprocess.CommandResult{Stdout: output}}}
+	submit := func(context.Context, work.WorkRequest) error { admissions++; return nil }
+	err = service.RunScriptPoller(ctx, runner, config, poller, worker, submit)
+	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
+		t.Fatalf("initial poll = %v, want successful commit then terminal exit", err)
+	}
+	request := automations.GetCursorRequest{InstanceID: scriptpollers.SupervisionFor("opaque-replacement", poller.Name).InstanceID}
+	before, err := service.Root().GetCursor(ctx, request)
+	if err != nil || before.Cursor != cursor || before.Checkpoint != checkpoint {
+		t.Fatalf("initial read = %+v, %v, want exact prior opaque facts", before, err)
+	}
+	files.err = errors.New("controlled cursor replacement failure")
+	runner.outcomes = []internalScriptPollerOutcome{{result: platformprocess.CommandResult{Stdout: cursorPollerOutput("replacement")}}, {}}
+	err = service.RunScriptPoller(ctx, runner, config, poller, worker, submit)
+	var typed *automations.Error
+	if !errors.As(err, &typed) || typed.Op != scriptpollers.CommitCursorOperation ||
+		typed.Code != automations.ErrorCodeFailed || !errors.Is(err, files.err) {
+		t.Fatalf("replacement poll = %v, want typed commit failure retaining error identity", err)
+	}
+	assertRetainedOpaqueCursorReads(t, service.Root(), request, before)
+	if admissions != 2 || len(runner.outcomes) != 1 {
+		t.Fatalf("reads caused effects: admissions=%d remaining commands=%d", admissions, len(runner.outcomes))
+	}
+}
+
+func assertRetainedOpaqueCursorReads(t *testing.T, root automations.Root, request automations.GetCursorRequest, before automations.GetCursorResult) {
+	t.Helper()
+	ctx := context.Background()
+	after, err := root.GetCursor(ctx, request)
+	if err != nil || after != before {
+		t.Fatalf("read after failed replacement = %+v, %v, want %+v", after, err, before)
+	}
+	request.ExpectedCursor = "cursor-replacement"
+	_, err = root.GetCursor(ctx, request)
+	assertCursorReadError(t, err, automations.ErrorCodeConflict, automations.ErrConflict)
+	request.ExpectedCursor = before.Cursor
+	after, err = root.GetCursor(ctx, request)
+	if err != nil || after != before {
+		t.Fatalf("read after stale conflict = %+v, %v, want %+v", after, err, before)
+	}
+}
+
+type cursorReplacementFaultFileSystem struct {
+	platformfilesystem.Local
+	err error
+}
+
+func (f *cursorReplacementFaultFileSystem) Rename(from, to string) error {
+	if f.err != nil {
+		return f.err
+	}
+	return f.Local.Rename(from, to)
 }

@@ -3,7 +3,10 @@ package service_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
+
+	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
@@ -33,7 +36,7 @@ func TestSourceLifecycleRestartRestoresDetachedObservations(t *testing.T) {
 			t.Parallel()
 
 			effects := &recordingEffects{}
-			service := reconciliationwire.NewService(effects.bundle())
+			service := reconciliationwire.NewService(effects)
 			identity := sourceIdentity("restart-" + test.name)
 			resume := automations.SourceObservation{
 				Identity:   identity,
@@ -103,7 +106,7 @@ func TestSourceLifecycleRestartContinuesTransitionalObservation(t *testing.T) {
 			t.Parallel()
 
 			effects := &recordingEffects{waitStates: []automations.ObservedLifecycleState{test.observed}}
-			service := reconciliationwire.NewService(effects.bundle())
+			service := reconciliationwire.NewService(effects)
 			identity := sourceIdentity("transition-" + test.suffix)
 			resume := automations.SourceObservation{
 				Identity: identity, InstanceID: "persisted-" + test.suffix,
@@ -154,7 +157,7 @@ func TestSourceLifecycleRejectsStaleAndForeignResumeWithoutMutation(t *testing.T
 	t.Parallel()
 
 	effects := &recordingEffects{}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	identity := sourceIdentity("authoritative")
 	original := automations.SourceObservation{
 		Identity: identity, InstanceID: "persisted-authoritative",
@@ -203,5 +206,127 @@ func TestSourceLifecycleRejectsStaleAndForeignResumeWithoutMutation(t *testing.T
 	}
 	if got := effects.counts(); got != (effectCounts{}) {
 		t.Fatalf("invalid resume effects = %+v, want none", got)
+	}
+}
+
+func TestRuntimeSourceControlIsolatesSharedIdentityAndRetainsResume(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	identity := sourceIdentity("shared-runtime-source")
+	var starts, stops, waits []string
+	service := reconciliationwire.NewService(lifecycleFixture{
+		start: func(_ context.Context, e reconciliation.StartEffect) error {
+			starts = append(starts, e.RuntimeID)
+			return nil
+		},
+		stop: func(_ context.Context, e reconciliation.StopEffect) error {
+			stops = append(stops, e.RuntimeID)
+			return nil
+		},
+		wait: func(_ context.Context, e reconciliation.WaitEffect) (automations.SourceObservation, error) {
+			waits = append(waits, e.RuntimeID)
+			observation, err := convergedWait(ctx, e)
+			observation.Cursor = automations.Cursor("cursor-" + e.RuntimeID)
+			return observation, err
+		},
+	})
+	request := automations.StartSourceRequest{Identity: identity, Kind: "schedule"}
+	var instanceID string
+	for _, runtimeID := range []string{"A", "B", ""} {
+		started, err := service.StartSourceForRuntime(ctx, runtimeID, request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if instanceID != "" && started.Outcome.Observation.InstanceID != instanceID {
+			t.Fatal("runtime scope changed public instance identity")
+		}
+		instanceID = started.Outcome.Observation.InstanceID
+		waitScopedSource(t, service, runtimeID, identity, automations.DesiredLifecycleRunning, "cursor-"+automations.Cursor(runtimeID))
+	}
+	if _, err := service.StopSourceForRuntime(ctx, "A", automations.StopSourceRequest{Identity: identity}); err != nil {
+		t.Fatal(err)
+	}
+	stopped := waitScopedSource(t, service, "A", identity, automations.DesiredLifecycleStopped, "cursor-A")
+	for _, runtimeID := range []string{"B", ""} {
+		result := waitScopedSource(t, service, runtimeID, identity, automations.DesiredLifecycleRunning, "cursor-"+automations.Cursor(runtimeID))
+		if !result.Outcome.Idempotent {
+			t.Fatal("stopping A disturbed peer convergence")
+		}
+	}
+	assertDetachedScopeCursor(t, service, identity, instanceID)
+	request.Resume = &stopped.Outcome.Observation
+	restarted, err := service.StartSourceForRuntime(ctx, "A", request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertLifecycle(t, restarted.Outcome, automations.DesiredLifecycleRunning, automations.ObservedLifecycleStarting, automations.ConvergenceStatusProgressing, false)
+	if restarted.Outcome.Observation.Cursor != "cursor-A" {
+		t.Fatal("restart lost A resume facts")
+	}
+	if _, err := service.StartSourceForRuntime(ctx, "B", request); !errors.Is(err, automations.ErrConflict) {
+		t.Fatalf("foreign resume error = %v, want conflict", err)
+	}
+	if !reflect.DeepEqual(starts, []string{"A", "B", "", "A"}) || !reflect.DeepEqual(stops, []string{"A"}) || !reflect.DeepEqual(waits, []string{"A", "B", "", "A"}) {
+		t.Fatalf("effect scopes start/stop/wait = %v/%v/%v", starts, stops, waits)
+	}
+}
+
+func waitScopedSource(t *testing.T, service reconciliation.Service, runtimeID string, identity automations.SourceIdentity, desired automations.DesiredLifecycleState, cursor automations.Cursor) automations.WaitSourceResult {
+	t.Helper()
+	result, err := service.WaitSourceForRuntime(context.Background(), runtimeID, automations.WaitSourceRequest{Identity: identity, Desired: desired})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome.Convergence != automations.ConvergenceStatusConverged || result.Outcome.Observation.Cursor != cursor {
+		t.Fatalf("runtime %q wait = %+v, want converged cursor %q", runtimeID, result, cursor)
+	}
+	return result
+}
+
+func assertDetachedScopeCursor(t *testing.T, service reconciliation.Service, identity automations.SourceIdentity, instanceID string) {
+	t.Helper()
+	status, err := service.SourceStatus(context.Background(), automations.SourceStatusRequest{Identity: identity})
+	if err != nil || status.Observation.State != automations.ObservedLifecycleRunning || status.Observation.Cursor != "cursor-" {
+		t.Fatalf("detached source = %+v, %v", status, err)
+	}
+	cursor, err := service.GetCursor(context.Background(), automations.GetCursorRequest{InstanceID: instanceID, ExpectedCursor: "cursor-"})
+	if err != nil || cursor.Cursor != "cursor-" {
+		t.Fatalf("detached cursor = %+v, %v", cursor, err)
+	}
+	instance, err := service.GetStatus(context.Background(), automations.GetStatusRequest{InstanceID: instanceID})
+	if err != nil || instance.Status != automations.ObservedLifecycleRunning {
+		t.Fatalf("detached instance = %+v, %v", instance, err)
+	}
+}
+
+func TestRuntimeSourceControlInstanceOwnershipIsRuntimeLocal(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service := reconciliationwire.NewService(&recordingEffects{})
+	identity := sourceIdentity("first")
+	resume := automations.SourceObservation{Identity: identity, InstanceID: "same-persisted-instance", State: automations.ObservedLifecycleRunning, Cursor: "first-cursor"}
+	request := automations.StartSourceRequest{Identity: identity, Kind: "hosted", Resume: &resume}
+	if _, err := service.StartSourceForRuntime(ctx, "A", request); err != nil {
+		t.Fatal(err)
+	}
+	resume.Identity = sourceIdentity("second")
+	resume.Cursor = "second-cursor"
+	request.Identity = resume.Identity
+	if _, err := service.StartSourceForRuntime(ctx, "A", request); !errors.Is(err, automations.ErrConflict) {
+		t.Fatalf("same-runtime alias error = %v, want conflict", err)
+	}
+	if _, err := service.StartSourceForRuntime(ctx, "B", request); err != nil {
+		t.Fatalf("peer resume: %v", err)
+	}
+	waitScopedSource(t, service, "A", identity, automations.DesiredLifecycleRunning, "first-cursor")
+	waitScopedSource(t, service, "B", request.Identity, automations.DesiredLifecycleRunning, "second-cursor")
+	if _, err := service.GetCursor(ctx, automations.GetCursorRequest{InstanceID: resume.InstanceID}); !errors.Is(err, automations.ErrNotFound) {
+		t.Fatalf("scoped instance leaked into detached reads: %v", err)
+	}
+	if _, err := service.GetStatus(ctx, automations.GetStatusRequest{InstanceID: resume.InstanceID}); !errors.Is(err, automations.ErrNotFound) {
+		t.Fatalf("scoped status leaked into detached reads: %v", err)
+	}
+	if _, err := service.StopSource(ctx, automations.StopSourceRequest{Identity: identity}); !errors.Is(err, automations.ErrNotFound) {
+		t.Fatalf("detached stop reached scoped instance: %v", err)
 	}
 }

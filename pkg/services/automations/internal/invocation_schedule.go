@@ -176,7 +176,7 @@ func (s *Service) newPreparedInvocationSchedule(
 	maxFailures int,
 ) (*preparedInvocationSchedule, error) {
 	scheduler, err := gocron.NewScheduler(
-		gocron.WithClock(s.supervisorClock()),
+		gocron.WithClock(s.clock),
 		gocron.WithLocation(time.UTC),
 	)
 	if err != nil {
@@ -230,7 +230,7 @@ func (entry *preparedInvocationSchedule) commit(result work.WorkRequestSubmitRes
 	entry.mu.Lock()
 	entry.controllerWorkID = result.WorkID
 	entry.controllerTraceID = result.TraceID
-	entry.nextNominal = entry.owner.supervisorClock().Now().UTC().Add(entry.every)
+	entry.nextNominal = entry.owner.clock.Now().UTC().Add(entry.every)
 	entry.mu.Unlock()
 	entry.scheduler.Start()
 	go func() {
@@ -238,7 +238,7 @@ func (entry *preparedInvocationSchedule) commit(result work.WorkRequestSubmitRes
 		_ = entry.scheduler.Shutdown()
 	}()
 	if entry.triggerAtStart {
-		entry.fireAt(entry.owner.supervisorClock().Now().UTC())
+		entry.fireAt(entry.owner.clock.Now().UTC())
 	}
 }
 
@@ -270,7 +270,7 @@ func (entry *preparedInvocationSchedule) fireAt(nominal time.Time) {
 			ExecutionWorkType: entry.executionWorkType,
 		})
 		if err != nil {
-			entry.owner.logger().Error("invocation interval observation failed", zap.Error(err))
+			entry.owner.loggerValue.Error("invocation interval observation failed", zap.Error(err))
 			return
 		}
 	}
@@ -281,14 +281,14 @@ func (entry *preparedInvocationSchedule) fireAt(nominal time.Time) {
 		entry.mu.Unlock()
 		if failureCeilingReached && entry.request.FailController != nil {
 			if err := entry.request.FailController(entry.ctx, controllerWorkID); err != nil && entry.ctx.Err() == nil {
-				entry.owner.logger().Error("invocation interval failure ceiling transition failed",
+				entry.owner.loggerValue.Error("invocation interval failure ceiling transition failed",
 					zap.String("workstation", entry.workstation.Name), zap.Error(err))
 			}
 		}
 		return
 	}
 
-	actual := entry.owner.supervisorClock().Now().UTC()
+	actual := entry.owner.clock.Now().UTC()
 	state := entry.executionState
 	outcome := triggerOutcomeScheduled
 	if observation.ExecutionActive {
@@ -319,7 +319,7 @@ func (entry *preparedInvocationSchedule) fireAt(nominal time.Time) {
 		}},
 	}
 	if err := entry.request.Submitter(entry.ctx, request); err != nil && entry.ctx.Err() == nil {
-		entry.owner.logger().Error("invocation interval trigger failed",
+		entry.owner.loggerValue.Error("invocation interval trigger failed",
 			zap.String("workstation", entry.workstation.Name),
 			zap.Int64("sequence", sequence), zap.Error(err))
 	}

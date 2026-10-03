@@ -247,31 +247,36 @@ func TestStartCronWatchersForRuntime_LogsTriggerFailure(t *testing.T) {
 		Clock:  fakeClock,
 	})
 
-	runCtx, cancelRun := context.WithCancel(context.Background())
+	runCtx, cancelRun := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelRun()
 	var sidecars sync.WaitGroup
-	svc.StartCronWatchersForRuntime(
-		runCtx,
-		&sidecars,
-		"factory-alpha",
-		factoryCfg,
-		runtimeCfg,
-		func(context.Context, work.WorkRequest) error {
-			return errors.New("cron submit rejected")
-		},
-	)
+	started := make(chan struct{})
+	go func() {
+		svc.StartCronWatchersForRuntime(
+			runCtx,
+			&sidecars,
+			"factory-alpha",
+			factoryCfg,
+			runtimeCfg,
+			func(context.Context, work.WorkRequest) error {
+				return errors.New("cron submit rejected")
+			},
+		)
+		close(started)
+	}()
+	for range automationinternal.CronMaxRetries {
+		waitForFakeClockWaiters(t, fakeClock, 1)
+		fakeClock.Advance(10 * time.Millisecond)
+	}
+	<-started
 	t.Cleanup(func() {
 		cancelRun()
 		sidecars.Wait()
 	})
 
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		if observedLogs.FilterMessage("cron watcher trigger failed").Len() > 0 {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	if observedLogs.FilterMessage("cron watcher trigger failed").Len() != 1 {
+		t.Fatal("expected one cron watcher trigger failed log after bounded retries")
 	}
-	t.Fatal("expected cron watcher trigger failed log")
 }
 
 func TestStartSchedulerSidecarsForRuntime_NoOpsOnNilInput(t *testing.T) {

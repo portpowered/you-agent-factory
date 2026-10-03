@@ -68,7 +68,9 @@ func (s *Service) scriptPollerSupervision(
 	if s == nil {
 		return scriptpollers.ScriptPollerSupervision{}
 	}
-	return scriptpollers.SupervisionFor(strings.TrimSpace(s.workflowID), workstation.Name)
+	supervision := scriptpollers.SupervisionFor(strings.TrimSpace(s.workflowID), workstation.Name)
+	supervision.CursorScope = s.cursorScope
+	return supervision
 }
 
 // ScriptPollerCommandRequest builds the command invocation for a script poller worker.

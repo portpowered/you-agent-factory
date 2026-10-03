@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
@@ -15,7 +16,7 @@ func TestStartSourceSuccessDoesNotReportStartingAfterSupersedingStop(t *testing.
 
 	identity := sourceIdentity("stale-start-success")
 	effects := newBlockingStartEffects(nil)
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	results, errs := startSourceAsync(service, identity)
 	<-effects.entered
 
@@ -58,7 +59,7 @@ func TestStartSourceFailureDoesNotOverwriteSupersedingStop(t *testing.T) {
 
 	identity := sourceIdentity("superseded-start-failure")
 	effects := newBlockingStartEffects(errors.New("late start failure"))
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	results, errs := startSourceAsync(service, identity)
 	<-effects.entered
 
@@ -98,7 +99,7 @@ func TestStartSourceCancellationDoesNotOverwriteNewerRunningObservation(t *testi
 
 	identity := sourceIdentity("stale-start-cancellation")
 	effects := newBlockingStartEffects(context.Canceled)
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	results, errs := startSourceAsync(service, identity)
 	<-effects.entered
 
@@ -158,14 +159,86 @@ func newBlockingStartEffects(err error) *blockingStartEffects {
 	}
 }
 
-func (f *blockingStartEffects) bundle() reconciliation.Effects {
-	return reconciliation.Effects{
-		Start: func(context.Context, reconciliation.StartEffect) error {
-			f.entered <- struct{}{}
-			<-f.release
-			return f.err
-		},
-		Stop: func(context.Context, reconciliation.StopEffect) error { return nil },
-		Wait: convergedWait,
+func (f *blockingStartEffects) Start(context.Context, reconciliation.StartEffect) error {
+	f.entered <- struct{}{}
+	<-f.release
+	return f.err
+}
+
+func (*blockingStartEffects) Stop(context.Context, reconciliation.StopEffect) error { return nil }
+
+func (*blockingStartEffects) Wait(ctx context.Context, effect reconciliation.WaitEffect) (automations.SourceObservation, error) {
+	return convergedWait(ctx, effect)
+}
+
+func TestRuntimeSourceControlStaleStartDoesNotOverwriteStopOrPeer(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		lateErr error
+	}{{"success", nil}, {"failure", errors.New("late failure")}} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			identity := sourceIdentity("shared-stale-start")
+			entered, release := make(chan struct{}), make(chan struct{})
+			service := reconciliationwire.NewService(lifecycleFixture{
+				start: func(ctx context.Context, effect reconciliation.StartEffect) error {
+					if effect.RuntimeID != "A" {
+						return nil
+					}
+					close(entered)
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-release:
+						return test.lateErr
+					}
+				},
+				stop: func(_ context.Context, effect reconciliation.StopEffect) error {
+					if effect.RuntimeID != "A" {
+						return errors.New("stop routed to peer")
+					}
+					return nil
+				},
+				wait: convergedWait,
+			})
+			results := make(chan automations.StartSourceResult, 1)
+			errs := make(chan error, 1)
+			request := automations.StartSourceRequest{Identity: identity, Kind: "schedule"}
+			go func() {
+				result, err := service.StartSourceForRuntime(ctx, "A", request)
+				results <- result
+				errs <- err
+			}()
+			select {
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			case <-entered:
+			}
+			if _, err := service.StartSourceForRuntime(ctx, "B", request); err != nil {
+				t.Fatal(err)
+			}
+			waitScopedSource(t, service, "B", identity, automations.DesiredLifecycleRunning, "")
+			if _, err := service.StopSourceForRuntime(ctx, "A", automations.StopSourceRequest{Identity: identity}); err != nil {
+				t.Fatal(err)
+			}
+			waitScopedSource(t, service, "A", identity, automations.DesiredLifecycleStopped, "")
+			close(release)
+			select {
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			case err := <-errs:
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			assertLifecycle(t, (<-results).Outcome, automations.DesiredLifecycleRunning, automations.ObservedLifecycleStopped, automations.ConvergenceStatusProgressing, true)
+			peer := waitScopedSource(t, service, "B", identity, automations.DesiredLifecycleRunning, "")
+			if !peer.Outcome.Idempotent {
+				t.Fatal("stale A completion disturbed B")
+			}
+		})
 	}
 }

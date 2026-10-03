@@ -34,6 +34,8 @@ type runtimeInstance struct {
 	mu       sync.Mutex
 	starting bool
 	started  bool
+	cursorMu sync.Mutex
+	released bool
 }
 
 type runtimeSnapshotConfig struct {
@@ -184,7 +186,7 @@ func (s *Service) getCursorFromActiveRuntime(
 		if instance == nil || instance.owner == nil || instance.owner == s {
 			continue
 		}
-		result, err := instance.owner.GetCursor(ctx, request)
+		result, err := instance.getCursor(ctx, request)
 		if err == nil {
 			return result, true, nil
 		}
@@ -353,15 +355,18 @@ func (s *Service) buildRuntimeInstance(
 	if strings.TrimSpace(workflowID) == "" {
 		workflowID = s.workflowID
 	}
-	owner := NewWithCursorFileSystem(
-		s.logger(), s.clock, s.commandRunner(), workflowID, request.Snapshot.FactoryDir,
+	owner := newService(
+		s.loggerValue, s.clock, s.commandRunnerEdge, workflowID, request.Snapshot.FactoryDir,
 		s.hostedPollers, s.resolveTemplates, s.executionPolicy, s.cursorFileSystem,
+		s.cron, s.filesystemWatchers,
+		s.scriptPollers, s.cursors,
 	)
 	if owner == nil {
 		return nil, runtimeLifecycleError(
 			"ActivateRuntime", automations.ErrorCodeFailed, fmt.Errorf("runtime Automations owner is unavailable"),
 		)
 	}
+	owner.cursorScope.RuntimeID = request.RuntimeID
 	runtimeCtx, cancel := context.WithCancel(ctx)
 	instance := &runtimeInstance{
 		runtimeID:        request.RuntimeID,
@@ -381,7 +386,7 @@ func (s *Service) buildRuntimeInstance(
 		watcherConfig := runtimeFilesystemConfig(
 			request.Snapshot.FactoryDir,
 			filesystemInputs,
-			s.logger(),
+			s.loggerValue,
 			request.Inputs.Submitter,
 		)
 		instance.watcherRoot = watcherConfig.Dir
@@ -491,7 +496,7 @@ func (instance *runtimeInstance) observeWatcherTermination(err error) {
 		zap.String("runtime_id", instance.runtimeID),
 		zap.String("watch_root", instance.watcherRoot),
 	}
-	logger := instance.owner.logger()
+	logger := instance.owner.loggerValue
 	if err != nil {
 		logger.Error("filesystem watcher stopped with error", append(fields, zap.Error(err))...)
 		return
@@ -510,6 +515,7 @@ func (instance *runtimeInstance) stop(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {
 		instance.sidecars.Wait()
+		instance.releaseCursorScope()
 		close(done)
 	}()
 	if ctx == nil {
@@ -520,6 +526,26 @@ func (instance *runtimeInstance) stop(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+// Cursor reads and release exclude each other after supervision has joined.
+// A retained old instance cannot recreate or release a replacement's scope.
+func (instance *runtimeInstance) getCursor(ctx context.Context, request automations.GetCursorRequest) (automations.GetCursorResult, error) {
+	instance.cursorMu.Lock()
+	defer instance.cursorMu.Unlock()
+	if instance.released {
+		return automations.GetCursorResult{}, automations.ErrNotFound
+	}
+	return instance.owner.GetCursor(ctx, request)
+}
+
+func (instance *runtimeInstance) releaseCursorScope() {
+	instance.cursorMu.Lock()
+	defer instance.cursorMu.Unlock()
+	if !instance.released {
+		instance.owner.cursors.ReleaseScope(instance.owner.cursorScope)
+		instance.released = true
 	}
 }
 

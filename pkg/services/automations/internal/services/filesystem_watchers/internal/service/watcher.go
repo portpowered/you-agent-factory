@@ -101,10 +101,6 @@ func newWatcher(config filesystemwatchers.Config) *watcher {
 			knownWorkTypes[workType] = true
 		}
 	}
-	clock := config.Clock
-	if clock == nil {
-		clock = clockwork.NewRealClock()
-	}
 	debounceWindow := config.DebounceWindow
 	if debounceWindow <= 0 {
 		debounceWindow = defaultDebounceWindow
@@ -119,7 +115,7 @@ func newWatcher(config filesystemwatchers.Config) *watcher {
 		walkDirectory:     config.WalkDirectory,
 		workRequestIDs:    config.WorkRequestIDs,
 		newWatcher:        newFSNotifyEventWatcher,
-		clock:             clock,
+		clock:             config.Clock,
 		debounceWindow:    debounceWindow,
 		handledIdentities: config.HandledIdentities,
 	}
@@ -617,7 +613,7 @@ func (fw *watcher) readFileWithRetry(path string, maxRetries int, delay time.Dur
 			return content, nil
 		}
 		if i < maxRetries-1 {
-			time.Sleep(delay)
+			fw.clock.Sleep(delay)
 		}
 	}
 	return content, nil

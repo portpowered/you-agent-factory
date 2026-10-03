@@ -28,6 +28,7 @@ type ScriptPollerSupervision struct {
 	SourceID       string
 	InstanceID     string
 	ExpectedCursor automations.Cursor
+	CursorScope    CursorScope
 }
 
 // CursorRecorder persists opaque script-poller recovery facts without exposing
@@ -35,6 +36,22 @@ type ScriptPollerSupervision struct {
 type CursorRecorder interface {
 	GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error)
 	CommitCursor(context.Context, CommitCursorRequest) error
+}
+
+// CursorScope selects runtime-owned recovery state. BaseDir retains the
+// authored durable destination; a blank BaseDir selects runtime-local memory.
+type CursorScope struct {
+	RuntimeID string
+	BaseDir   string
+}
+
+// CursorScopes owns recovery behavior without constructing a service per runtime.
+type CursorScopes interface {
+	GetCursor(context.Context, CursorScope, automations.GetCursorRequest) (automations.GetCursorResult, error)
+	CommitCursor(context.Context, CursorScope, CommitCursorRequest) error
+	// ReleaseScope discards runtime resources after the caller has stopped and
+	// joined all scope users. Durable recovery files remain available on restart.
+	ReleaseScope(CursorScope)
 }
 
 // CommitCursorRequest records one advanced opaque cursor/checkpoint fact.

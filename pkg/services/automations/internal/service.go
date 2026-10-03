@@ -9,7 +9,6 @@ package internal
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync"
 
@@ -17,9 +16,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
-	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
-	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
@@ -33,8 +30,9 @@ var _ automations.Service = (*Service)(nil)
 // WorkRequestSubmitter submits parsed poller or cron work requests into the runtime.
 type WorkRequestSubmitter = automations.WorkRequestSubmitter
 
-// Clock is the automation time source needed for scheduling and supervision.
-type Clock = automations.Clock
+// Clock is the required automation scheduler. Owner Wire selects its
+// scheduling capabilities before constructing behavior or runtime resources.
+type Clock = clockwork.Clock
 
 // Service supervises cron, poller, and watcher automation using injected collaborators.
 type Service struct {
@@ -49,6 +47,8 @@ type Service struct {
 	cursorFileSystem   scriptpollerswire.CursorPersistenceFileSystem
 	reconciler         reconciliation.Service
 	scriptPollers      scriptpollers.Service
+	cursors            scriptpollers.CursorScopes
+	cursorScope        scriptpollers.CursorScope
 	cron               cron.Service
 	filesystemWatchers filesystemwatchers.Service
 	schedulerMu        sync.Mutex
@@ -69,8 +69,10 @@ func New(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cronService cron.Service,
+	filesystemWatchers filesystemwatchers.Service,
 ) *Service {
-	return newService(
+	return NewWithCursorFileSystem(
 		logger,
 		clock,
 		commandRunner,
@@ -80,6 +82,8 @@ func New(
 		resolveTemplates,
 		executionPolicy,
 		nil,
+		cronService,
+		filesystemWatchers,
 	)
 }
 
@@ -96,7 +100,11 @@ func NewWithCursorFileSystem(
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
+	cronService cron.Service,
+	filesystemWatchers filesystemwatchers.Service,
 ) *Service {
+	cursors := scriptpollerswire.NewCursorScopes(cursorFileSystem)
+	pollers := scriptpollerswire.NewService(logger, clock, commandRunner, resolveTemplates, executionPolicy, cursors)
 	return newService(
 		logger,
 		clock,
@@ -107,6 +115,10 @@ func NewWithCursorFileSystem(
 		resolveTemplates,
 		executionPolicy,
 		cursorFileSystem,
+		cronService,
+		filesystemWatchers,
+		pollers,
+		cursors,
 	)
 }
 
@@ -120,46 +132,36 @@ func newService(
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
+	cronService cron.Service,
+	filesystemWatchers filesystemwatchers.Service,
+	pollers scriptpollers.Service,
+	cursors scriptpollers.CursorScopes,
 ) *Service {
 	service := &Service{
-		loggerValue:       logger,
-		clock:             clock,
-		commandRunnerEdge: commandRunner,
-		workflowID:        workflowID,
-		defaultFactoryDir: defaultFactoryDir,
-		hostedPollers:     hostedPollers,
-		resolveTemplates:  resolveTemplates,
-		executionPolicy:   executionPolicy,
-		cursorFileSystem:  cursorFileSystem,
-		schedulerSources:  make(map[automations.SourceIdentity]*schedulerSource),
-		runtimes:          make(map[string]*runtimeInstance),
-		runtimeActivating: make(map[string]struct{}),
+		loggerValue:        logger,
+		clock:              clock,
+		commandRunnerEdge:  commandRunner,
+		workflowID:         workflowID,
+		defaultFactoryDir:  defaultFactoryDir,
+		hostedPollers:      hostedPollers,
+		resolveTemplates:   resolveTemplates,
+		executionPolicy:    executionPolicy,
+		cursorFileSystem:   cursorFileSystem,
+		cron:               cronService,
+		filesystemWatchers: filesystemWatchers,
+		scriptPollers:      pollers,
+		cursors:            cursors,
+		schedulerSources:   make(map[automations.SourceIdentity]*schedulerSource),
+		runtimes:           make(map[string]*runtimeInstance),
+		runtimeActivating:  make(map[string]struct{}),
 	}
 	service.reconciler = service.newSchedulerReconciler()
-	service.scriptPollers = service.newScriptPollers()
-	service.cron = cronwire.NewService()
-	service.filesystemWatchers = fswire.NewService()
-	return service
-}
-
-func (s *Service) newScriptPollers() scriptpollers.Service {
-	cursorRecorder := scriptpollers.NewMemoryCursorRecorder()
-	// The process-scoped root has no factory-local base until a runtime is
-	// activated. Keep that inert owner memory-backed rather than allowing an
-	// empty base to resolve durable state relative to the daemon CWD.
-	if strings.TrimSpace(s.defaultFactoryDir) != "" && s.cursorFileSystem != nil {
-		if durable, err := scriptpollerswire.NewDurableCursorRecorder(s.defaultFactoryDir, s.cursorFileSystem); err == nil {
-			cursorRecorder = durable
-		}
+	// Preserve the memory-only owner fixture when no persistence edge is supplied.
+	// A blank process-root directory also remains memory-backed, never CWD-relative.
+	if cursorFileSystem != nil {
+		service.cursorScope.BaseDir = strings.TrimSpace(defaultFactoryDir)
 	}
-	return scriptpollerswire.NewService(scriptpollers.Dependencies{
-		Logger:           s.pollerLogger,
-		Clock:            s.supervisorClock,
-		CommandRunner:    s.commandRunner,
-		ResolveTemplates: s.resolveTemplates,
-		ExecutionPolicy:  s.executionPolicy,
-		CursorRecorder:   cursorRecorder,
-	})
+	return service
 }
 
 // NewService constructs the Automations root contract for composition.
@@ -172,6 +174,8 @@ func NewService(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cronService cron.Service,
+	filesystemWatchers filesystemwatchers.Service,
 ) *Service {
 	return New(
 		logger,
@@ -182,6 +186,8 @@ func NewService(
 		hostedPollers,
 		resolveTemplates,
 		executionPolicy,
+		cronService,
+		filesystemWatchers,
 	)
 }
 
@@ -244,43 +250,7 @@ func (s *Service) GetCursor(
 		if result, handled, err := s.getCursorFromActiveRuntime(ctx, request); handled {
 			return result, err
 		}
-		return s.scriptPollers.GetCursor(ctx, request)
+		return s.scriptPollers.GetCursorForScope(ctx, s.cursorScope, request)
 	}
 	return s.reconciler.GetCursor(ctx, request)
-}
-
-func (s *Service) logger() *zap.Logger {
-	if s == nil || s.loggerValue == nil {
-		return zap.NewNop()
-	}
-	return s.loggerValue
-}
-
-func (s *Service) commandRunner() platformprocess.CommandRunner {
-	if s != nil && s.commandRunnerEdge != nil {
-		return s.commandRunnerEdge
-	}
-	return unavailableCommandRunner{}
-}
-
-type unavailableCommandRunner struct{}
-
-func (unavailableCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	return platformprocess.CommandResult{}, errors.New("automation command runner is required")
-}
-
-func (s *Service) supervisorClock() clockwork.Clock {
-	if s != nil {
-		if clock, ok := s.clock.(clockwork.Clock); ok && clock != nil {
-			return clock
-		}
-	}
-	return clockwork.NewRealClock()
-}
-
-func (s *Service) pollerLogger(workstationName, workerName string) *zap.Logger {
-	return s.logger().With(
-		zap.String("workstation", workstationName),
-		zap.String("worker", workerName),
-	)
 }

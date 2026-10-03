@@ -81,11 +81,23 @@ func (s *Service) StartSchedulerSidecarsForRuntime(
 }
 
 func (s *Service) newSchedulerReconciler() reconciliation.Service {
-	return reconciliationwire.NewService(reconciliation.Effects{
-		Start: s.startSchedulerSource,
-		Stop:  s.stopSchedulerSource,
-		Wait:  s.waitSchedulerSource,
-	})
+	return reconciliationwire.NewService(schedulerLifecycle{owner: s})
+}
+
+// schedulerLifecycle bridges the existing scheduler operations during the
+// source-owner cutover. Runtime resource ownership still lives in Service.
+type schedulerLifecycle struct{ owner *Service }
+
+func (l schedulerLifecycle) Start(ctx context.Context, effect reconciliation.StartEffect) error {
+	return l.owner.startSchedulerSource(ctx, effect)
+}
+
+func (l schedulerLifecycle) Stop(ctx context.Context, effect reconciliation.StopEffect) error {
+	return l.owner.stopSchedulerSource(ctx, effect)
+}
+
+func (l schedulerLifecycle) Wait(ctx context.Context, effect reconciliation.WaitEffect) (automations.SourceObservation, error) {
+	return l.owner.waitSchedulerSource(ctx, effect)
 }
 
 func (s *Service) schedulerSourceIdentity(factoryDir string) automations.SourceIdentity {
@@ -163,14 +175,14 @@ func (s *Service) monitorSchedulerSource(
 	if _, err := s.reconciler.StopSource(stopCtx, automations.StopSourceRequest{
 		Identity: identity,
 	}); err != nil {
-		s.logger().Error("stop scheduler source reconciliation failed", zap.Error(err))
+		s.loggerValue.Error("stop scheduler source reconciliation failed", zap.Error(err))
 		return
 	}
 	if _, err := s.reconciler.WaitSource(stopCtx, automations.WaitSourceRequest{
 		Identity: identity,
 		Desired:  automations.DesiredLifecycleStopped,
 	}); err != nil {
-		s.logger().Error("wait scheduler source reconciliation failed", zap.Error(err))
+		s.loggerValue.Error("wait scheduler source reconciliation failed", zap.Error(err))
 	}
 }
 

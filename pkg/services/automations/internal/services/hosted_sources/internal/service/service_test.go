@@ -2,9 +2,13 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jonboulle/clockwork"
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
@@ -13,9 +17,11 @@ import (
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
-func TestNewConstructsHostedSourcesServiceWithDefaults(t *testing.T) {
+func TestNewConstructsHostedSourcesServiceWithExplicitLogger(t *testing.T) {
 	t.Parallel()
 
 	checkpoints, err := hostedlinear.NewCheckpointStore(platformfilesystem.Local{})
@@ -24,7 +30,7 @@ func TestNewConstructsHostedSourcesServiceWithDefaults(t *testing.T) {
 	}
 
 	service := New(
-		nil,
+		zap.NewNop(),
 		clockwork.NewFakeClock(),
 		&http.Client{Timeout: hostedlinear.DefaultRequestTimeout},
 		hostedlinear.NewSecretResolver(func(string) string { return "" }, nil),
@@ -34,9 +40,6 @@ func TestNewConstructsHostedSourcesServiceWithDefaults(t *testing.T) {
 	)
 	if service == nil {
 		t.Fatal("New() returned nil")
-	}
-	if service.logger == nil {
-		t.Fatal("New() did not apply default logger")
 	}
 	if service.linearEndpoint != hostedlinear.DefaultEndpoint {
 		t.Fatalf("linearEndpoint = %q, want %q", service.linearEndpoint, hostedlinear.DefaultEndpoint)
@@ -104,49 +107,49 @@ func TestNewLinearPollerRejectsMissingDependencies(t *testing.T) {
 		{
 			name: "clock",
 			run: func() error {
-				_, err := NewLinearPoller(nil, nil, httpClient, secretResolver, checkpoints, "", runtimeCfg, workstation, worker, nil, submitter)
+				_, err := NewLinearPoller(zap.NewNop(), nil, httpClient, secretResolver, checkpoints, "", runtimeCfg, workstation, worker, nil, submitter)
 				return err
 			},
 		},
 		{
 			name: "http client",
 			run: func() error {
-				_, err := NewLinearPoller(nil, clock, nil, secretResolver, checkpoints, "", runtimeCfg, workstation, worker, nil, submitter)
+				_, err := NewLinearPoller(zap.NewNop(), clock, nil, secretResolver, checkpoints, "", runtimeCfg, workstation, worker, nil, submitter)
 				return err
 			},
 		},
 		{
 			name: "secret resolver",
 			run: func() error {
-				_, err := NewLinearPoller(nil, clock, httpClient, nil, checkpoints, "", runtimeCfg, workstation, worker, nil, submitter)
+				_, err := NewLinearPoller(zap.NewNop(), clock, httpClient, nil, checkpoints, "", runtimeCfg, workstation, worker, nil, submitter)
 				return err
 			},
 		},
 		{
 			name: "checkpoint store",
 			run: func() error {
-				_, err := NewLinearPoller(nil, clock, httpClient, secretResolver, nil, "", runtimeCfg, workstation, worker, nil, submitter)
+				_, err := NewLinearPoller(zap.NewNop(), clock, httpClient, secretResolver, nil, "", runtimeCfg, workstation, worker, nil, submitter)
 				return err
 			},
 		},
 		{
 			name: "runtime config",
 			run: func() error {
-				_, err := NewLinearPoller(nil, clock, httpClient, secretResolver, checkpoints, "", nil, workstation, worker, nil, submitter)
+				_, err := NewLinearPoller(zap.NewNop(), clock, httpClient, secretResolver, checkpoints, "", nil, workstation, worker, nil, submitter)
 				return err
 			},
 		},
 		{
 			name: "worker",
 			run: func() error {
-				_, err := NewLinearPoller(nil, clock, httpClient, secretResolver, checkpoints, "", runtimeCfg, workstation, nil, nil, submitter)
+				_, err := NewLinearPoller(zap.NewNop(), clock, httpClient, secretResolver, checkpoints, "", runtimeCfg, workstation, nil, nil, submitter)
 				return err
 			},
 		},
 		{
 			name: "submitter",
 			run: func() error {
-				_, err := NewLinearPoller(nil, clock, httpClient, secretResolver, checkpoints, "", runtimeCfg, workstation, worker, nil, nil)
+				_, err := NewLinearPoller(zap.NewNop(), clock, httpClient, secretResolver, checkpoints, "", runtimeCfg, workstation, worker, nil, nil)
 				return err
 			},
 		},
@@ -168,7 +171,7 @@ func TestServiceValidateLinearPollerDelegates(t *testing.T) {
 
 	runtimeCfg, workstation, worker, checkpoints := validLinearPollerFixture(t)
 	service := New(
-		nil,
+		zap.NewNop(),
 		clockwork.NewFakeClock(),
 		&http.Client{Timeout: hostedlinear.DefaultRequestTimeout},
 		hostedlinear.NewSecretResolver(func(string) string { return "" }, nil),
@@ -193,7 +196,7 @@ func TestServiceStartLinearPollerRejectsMissingAuth(t *testing.T) {
 	runtimeCfg, workstation, worker, checkpoints := validLinearPollerFixture(t)
 	worker.Auth = nil
 	service := New(
-		nil,
+		zap.NewNop(),
 		clockwork.NewFakeClock(),
 		&http.Client{Timeout: hostedlinear.DefaultRequestTimeout},
 		hostedlinear.NewSecretResolver(func(string) string { return "" }, nil),
@@ -213,5 +216,75 @@ func TestServiceStartLinearPollerRejectsMissingAuth(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("StartLinearPoller() accepted missing auth configuration")
+	}
+}
+
+// hostedHTTPFunc keeps the network boundary controlled without a local server.
+type hostedHTTPFunc func(*http.Request) (*http.Response, error)
+
+func (f hostedHTTPFunc) Do(request *http.Request) (*http.Response, error) {
+	return f(request)
+}
+
+func TestServiceInjectedLoggerPreservesScopedRedactedDiagnostics(t *testing.T) {
+	t.Parallel()
+	core, logs := observer.New(zap.InfoLevel)
+	logger := zap.New(core).With(zap.String("origin", "selected-backend"))
+	for _, name := range []string{"source-a", "source-b"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			runtimeCfg, workstation, worker, checkpoints := validLinearPollerFixture(t)
+			workstation.Name, worker.Name = name, name+"-worker"
+			clock := clockwork.NewFakeClock()
+			var effects atomic.Int32
+			secret := "private-" + name
+			service := New(logger, clock, hostedHTTPFunc(func(request *http.Request) (*http.Response, error) {
+				effects.Add(1)
+				return nil, fmt.Errorf("transport failure for %s", request.Header.Get("Authorization"))
+			}), func(context.Context, hostedlinear.RuntimePaths, string) (string, error) {
+				effects.Add(1)
+				return secret, nil
+			}, "https://linear.example/graphql", platformrandom.SourceFunc(func(bound int64) (int64, error) {
+				effects.Add(1)
+				return bound / 2, nil
+			}), checkpoints)
+			submitter := Submitter(func(context.Context, work.WorkRequest) error {
+				t.Error("failed provider request admitted Work")
+				return nil
+			})
+			if err := service.ValidateLinearPoller(runtimeCfg, workstation, worker, submitter); err != nil {
+				t.Fatal(err)
+			}
+			if effects.Load() != 0 || logs.FilterField(zap.String("workstation", name)).Len() != 0 {
+				t.Fatal("construction or validation executed a hosted effect")
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			var sidecars sync.WaitGroup
+			t.Cleanup(func() { cancel(); sidecars.Wait() })
+			if err := service.StartLinearPoller(ctx, &sidecars, runtimeCfg, workstation, worker, submitter); err != nil {
+				t.Fatal(err)
+			}
+			// Registration follows the restart log, so this observes completed failure handling.
+			if err := clock.BlockUntilContext(ctx, 1); err != nil {
+				t.Fatal(err)
+			}
+			cancel()
+			sidecars.Wait()
+			scoped := logs.FilterField(zap.String("workstation", name))
+			for _, message := range []string{"hosted linear poller started", "hosted linear poller restarting", "hosted linear poller stopped"} {
+				entries := scoped.FilterMessage(message).All()
+				if len(entries) != 1 {
+					t.Fatalf("%s: got %d diagnostics", message, len(entries))
+				}
+				fields := entries[0].ContextMap()
+				if fields["origin"] != "selected-backend" || fields["worker"] != worker.Name || fields["provider"] != interfaces.HostedWorkerProviderLinear {
+					t.Fatalf("%s lost injected source context: %v", message, fields)
+				}
+			}
+			failure := fieldString(scoped.FilterMessage("hosted linear poller restarting").All()[0].ContextMap()["error"])
+			if strings.Contains(failure, secret) || !strings.Contains(failure, "[REDACTED]") {
+				t.Fatalf("unsafe or missing failure diagnostic: %q", failure)
+			}
+		})
 	}
 }

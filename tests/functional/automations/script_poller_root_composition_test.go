@@ -3,15 +3,274 @@ package automations
 import (
 	"context"
 	"encoding/json"
-	"sync"
+	"fmt"
+	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// API-owned session opening activates each source without selecting ~default.
+// The cells share the root-built host but own their command route, directory,
+// session and cleanup. The next command proves the previous cycle completed;
+// no internal cursor file or service pointer is used as a public observer.
+func TestScriptPollerSessionRecoveryAndEmptyCycle(t *testing.T) {
+	t.Parallel()
+	recoveryDir := support.ScaffoldFactory(t, scriptPollerFactoryConfig())
+	emptyDir := support.ScaffoldFactory(t, scriptPollerFactoryConfig())
+	support.ClearSeedInputs(t, recoveryDir)
+	support.ClearSeedInputs(t, emptyDir)
+	cursor, checkpoint := "cursor-雪-\\opaque", "checkpoint-λ-\"quoted\""
+	output, err := json.Marshal(map[string]any{
+		"request": json.RawMessage(scriptPollerExternalWorkRequestJSON(t)),
+		"cursor":  cursor, "checkpoint": checkpoint,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recovery := newScriptCycleRoute()
+	empty := newScriptCycleRoute()
+	restartDir := support.ScaffoldFactory(t, scriptPollerFactoryConfig())
+	peerDir := support.ScaffoldFactory(t, scriptPollerFactoryConfig())
+	support.ClearSeedInputs(t, restartDir)
+	support.ClearSeedInputs(t, peerDir)
+	restart, peer := newScriptCycleRoute(), newScriptCycleRoute()
+	router := scriptCycleRouter{routes: map[string]*scriptCycleRoute{
+		filepath.Clean(recoveryDir): recovery,
+		filepath.Clean(emptyDir):    empty,
+		filepath.Clean(restartDir):  restart,
+		filepath.Clean(peerDir):     peer,
+	}}
+	server := startScriptCycleHost(t, router)
+	t.Run("stopped_source_joins_and_recovers_while_peer_progresses", func(t *testing.T) {
+		t.Parallel()
+		assertScriptSourceRestart(t, server.URL(), restartDir, peerDir, restart, peer, output, cursor, checkpoint)
+	})
+	for _, cell := range []struct {
+		name  string
+		dir   string
+		route *scriptCycleRoute
+	}{
+		{"committed_opaque_facts_resume_with_public_Work", recoveryDir, recovery},
+		{"completed_empty_cycle_admits_no_Work", emptyDir, empty},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
+			sessionID := support.OpenFactorySessionAt(t, server.URL(), cell.dir).Session.Id
+			t.Cleanup(func() { support.CloseFactorySessionAt(t, server.URL(), sessionID) })
+			first := awaitScriptCycleCommand(t, cell.route)
+			if len(first.request.Env) != 0 {
+				t.Fatalf("first command unexpectedly resumed: %#v", first.request.Env)
+			}
+			if cell.route == empty {
+				first.output <- nil
+			} else {
+				first.output <- output
+			}
+			// The successor acknowledges parsing, admission and commit/empty handling.
+			resumed := awaitScriptCycleCommand(t, cell.route)
+			listed := support.GetJSON[factoryapi.ListWorkResponse](t,
+				support.SessionWorkURL(server.URL(), sessionID, "/work"))
+			if cell.route == empty {
+				if len(listed.Results) != 0 || len(resumed.request.Env) != 0 {
+					t.Fatalf("empty cycle Work=%#v env=%#v, want no admission/advancement", listed.Results, resumed.request.Env)
+				}
+				return
+			}
+			assertScriptResumeEnvironment(t, resumed.request, cursor, checkpoint)
+			assertScriptIngressWork(t, listed)
+		})
+	}
+}
+
+func startScriptCycleHost(t *testing.T, router scriptCycleRouter) *support.FunctionalAPIServer {
+	t.Helper()
+	hostDir := support.ScaffoldFactory(t, map[string]any{
+		"name": "idle-automation-host", "workTypes": []map[string]any{{
+			"name": "idle", "states": []map[string]string{
+				{"name": "init", "type": "INITIAL"}, {"name": "done", "type": "TERMINAL"},
+			},
+		}},
+	})
+	support.ClearSeedInputs(t, hostDir)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: hostDir, Edges: serviceedges.Edges{ScriptCommandRunner: router},
+		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
+			for dir, route := range router.routes {
+				select {
+				case <-route.entered:
+					tb.Fatalf("BuildProcess invoked a script source at %q before activation", dir)
+				default:
+				}
+			}
+			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, hostDir)
+		},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+	return server
+}
+
+func assertScriptSourceRestart(t *testing.T, baseURL, sourceDir, peerDir string,
+	source, peer *scriptCycleRoute, output []byte, cursor, checkpoint string,
+) {
+	t.Helper()
+	opened := support.OpenFactorySessionAt(t, baseURL, sourceDir)
+	sessionID := opened.Session.Id
+	t.Cleanup(func() {
+		if sessionID != "" {
+			support.CloseFactorySessionAt(t, baseURL, sessionID)
+		}
+	})
+	peerID := support.OpenFactorySessionAt(t, baseURL, peerDir).Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, peerID) })
+	if sessionID == peerID || sessionID == "~default" || peerID == "~default" {
+		t.Fatalf("source/peer sessions = %q/%q, want distinct explicit identities", sessionID, peerID)
+	}
+	first := awaitScriptCycleCommand(t, source)
+	peerFirst := awaitScriptCycleCommand(t, peer)
+	first.output <- output
+	pending := awaitScriptCycleCommand(t, source)
+	assertScriptResumeEnvironment(t, pending.request, cursor, checkpoint)
+	assertScriptIngressWork(t, support.GetJSON[factoryapi.ListWorkResponse](t,
+		support.SessionWorkURL(baseURL, sessionID, "/work")))
+
+	// Termination stops execution; closing also deactivates and joins source
+	// sidecars. Use that full existing control before claiming source shutdown.
+	support.CloseFactorySessionAt(t, baseURL, sessionID)
+	select {
+	case <-pending.canceled:
+	case <-time.After(10 * time.Second):
+		t.Fatal("stopped source command did not acknowledge cancellation")
+	}
+	// Deliver a late result to the canceled invocation only. It must never reach
+	// admission or be consumed by a new invocation after the source restarts.
+	pending.output <- scriptPollerNamedWorkRequestJSON(t, "stopped-interval-work")
+	peerFirst.output <- output
+	peerNext := awaitScriptCycleCommand(t, peer)
+	assertScriptResumeEnvironment(t, peerNext.request, cursor, checkpoint)
+	assertScriptIngressWork(t, support.GetJSON[factoryapi.ListWorkResponse](t,
+		support.SessionWorkURL(baseURL, peerID, "/work")))
+	select {
+	case command := <-source.entered:
+		t.Fatalf("stopped source executed another command: %#v", command.request)
+	default:
+	}
+
+	// Deleting the joined live session and opening the same folder/target is the
+	// supported logical-target restart; the new live UUID is intentionally distinct.
+	priorSessionID := sessionID
+	sessionID = ""
+	reopened := support.OpenFactorySessionAt(t, baseURL, sourceDir)
+	if reopened.Session.Id == priorSessionID || reopened.Session.FactoryDir != opened.Session.FactoryDir ||
+		reopened.Session.FolderPath != opened.Session.FolderPath {
+		t.Fatalf("reopened session = %#v, want same logical target and new live identity", reopened.Session)
+	}
+	sessionID = reopened.Session.Id
+	resumed := awaitScriptCycleCommand(t, source)
+	assertScriptResumeEnvironment(t, resumed.request, cursor, checkpoint)
+	resumed.output <- scriptPollerNamedWorkRequestJSON(t, "reactivated-work")
+	_ = awaitScriptCycleCommand(t, source)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, sessionID, "/work"))
+	location := support.WorkCustomerLocation(scriptPollerWorkTypeName, scriptPollerOutputStateName)
+	if !support.HasWorkAtCustomerState(listed, "reactivated-work", location) ||
+		support.HasWorkAtCustomerState(listed, "stopped-interval-work", location) {
+		t.Fatalf("restarted session Work = %#v, want eligible Work and no late stopped result", listed.Results)
+	}
+}
+
+func scriptPollerNamedWorkRequestJSON(t *testing.T, workID string) []byte {
+	t.Helper()
+	return []byte(strings.ReplaceAll(string(scriptPollerExternalWorkRequestJSON(t)), scriptPollerExternalWorkID, workID))
+}
+
+func assertScriptResumeEnvironment(t *testing.T, request platformprocess.CommandRequest, cursor, checkpoint string) {
+	t.Helper()
+	for _, expected := range []string{
+		"INFINITE_YOU_SCRIPT_POLLER_CURSOR=" + cursor,
+		"INFINITE_YOU_SCRIPT_POLLER_CHECKPOINT=" + checkpoint,
+	} {
+		if !slices.Contains(request.Env, expected) {
+			t.Fatalf("resumed source command missing exact %q", expected)
+		}
+	}
+}
+
+func assertScriptIngressWork(t *testing.T, listed factoryapi.ListWorkResponse) {
+	t.Helper()
+	location := support.WorkCustomerLocation(scriptPollerWorkTypeName, scriptPollerOutputStateName)
+	if len(listed.Results) != 1 || !support.HasWorkAtCustomerState(listed, scriptPollerExternalWorkID, location) {
+		t.Fatalf("session Work=%#v, want one %q at %q", listed.Results, scriptPollerExternalWorkID, location)
+	}
+	payload, ok := listed.Results[0].Payload.(map[string]any)
+	if !ok || payload["id"] != "ISSUE-101" || payload["title"] != "External ingress item" {
+		t.Fatalf("admitted payload=%#v, want preserved external item", listed.Results[0].Payload)
+	}
+}
+
+type scriptCycleRouter struct{ routes map[string]*scriptCycleRoute }
+
+func (r scriptCycleRouter) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	// A POLLER workstation also executes its SCRIPT_WORKER for admitted Work.
+	// Worker attempts have an execution scope and receive Work on stdin; source
+	// polling has neither. Keep the real worker path separate from source gates.
+	if request.ExecutionScopeID != "" {
+		return platformprocess.CommandResult{Stdout: request.Stdin}, nil
+	}
+	route := r.routes[filepath.Clean(request.WorkDir)]
+	if route == nil {
+		return platformprocess.CommandResult{}, fmt.Errorf("unowned script command directory %q", request.WorkDir)
+	}
+	return route.Run(ctx, request)
+}
+
+type scriptCycleRoute struct {
+	entered chan scriptCycleCommand
+}
+
+type scriptCycleCommand struct {
+	request  platformprocess.CommandRequest
+	output   chan []byte
+	canceled chan struct{}
+}
+
+func newScriptCycleRoute() *scriptCycleRoute {
+	return &scriptCycleRoute{entered: make(chan scriptCycleCommand, 4)}
+}
+
+func (r *scriptCycleRoute) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	command := scriptCycleCommand{request: request, output: make(chan []byte, 1), canceled: make(chan struct{})}
+	select {
+	case r.entered <- command:
+	case <-ctx.Done():
+		close(command.canceled)
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	select {
+	case output := <-command.output:
+		return platformprocess.CommandResult{Stdout: output}, nil
+	case <-ctx.Done():
+		close(command.canceled)
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+}
+
+func awaitScriptCycleCommand(t *testing.T, route *scriptCycleRoute) scriptCycleCommand {
+	t.Helper()
+	select {
+	case request := <-route.entered:
+		return request
+	case <-time.After(10 * time.Second):
+		t.Fatal("session source did not reach its owned script command edge")
+		return scriptCycleCommand{}
+	}
+}
 
 const (
 	scriptPollerWorkTypeName      = "story"
@@ -22,66 +281,6 @@ const (
 	scriptPollerWorkstationName   = "poll-tasks"
 	scriptPollerWorkerName        = "script-poller"
 )
-
-// TestBuildProcessRemainsScriptPollerInertBeforeRuntimeLifecycle proves BuildProcess
-// does not invoke script poller commands before the runtime lifecycle starts.
-func TestBuildProcessRemainsScriptPollerInertBeforeRuntimeLifecycle(t *testing.T) {
-	t.Parallel()
-
-	runner := newScriptPollerIngressCommandRunner(t, nil)
-	_ = support.BuildProcess(t, serviceedges.Edges{
-		ScriptCommandRunner: runner,
-	})
-	if runner.callCount() != 0 {
-		t.Fatalf(
-			"BuildProcess() invoked script command runner %d times, want zero before runtime lifecycle",
-			runner.callCount(),
-		)
-	}
-}
-
-// TestAutomationsScriptPollerAdmitsWorkThroughRuntimeLifecycle proves script poller
-// workstations admit Work through the runtime lifecycle after BuildProcess composition.
-func TestAutomationsScriptPollerAdmitsWorkThroughRuntimeLifecycle(t *testing.T) {
-	t.Parallel()
-
-	dir := support.ScaffoldFactory(t, scriptPollerFactoryConfig())
-	support.ClearSeedInputs(t, dir)
-
-	runner := newScriptPollerIngressCommandRunner(t, scriptPollerExternalWorkRequestJSON(t))
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-		Edges: serviceedges.Edges{
-			ScriptCommandRunner: runner,
-		},
-	})
-	t.Cleanup(func() { server.Stop(t) })
-
-	outputLocation := support.WorkCustomerLocation(scriptPollerWorkTypeName, scriptPollerOutputStateName)
-	listed := waitForScriptPollerListedWorkAtCustomerState(
-		t,
-		server.URL(),
-		outputLocation,
-		1,
-		10*time.Second,
-	)
-	if got := support.CountWorkAtCustomerState(listed, outputLocation); got != 1 {
-		t.Fatalf("CountWorkAtCustomerState(%q) = %d, want 1; listed=%#v", outputLocation, got, listed)
-	}
-	if !support.HasWorkAtCustomerState(listed, scriptPollerExternalWorkID, outputLocation) {
-		t.Fatalf(
-			"listed work = %#v, want work %q at %q",
-			listed.Results,
-			scriptPollerExternalWorkID,
-			outputLocation,
-		)
-	}
-	if runner.callCount() < 1 {
-		t.Fatalf("script poller command calls = %d, want at least one external poll invocation", runner.callCount())
-	}
-}
 
 func scriptPollerFactoryConfig() map[string]any {
 	return map[string]any{
@@ -130,84 +329,3 @@ func scriptPollerExternalWorkRequestJSON(t *testing.T) []byte {
 	}
 	return payload
 }
-
-func waitForScriptPollerListedWorkAtCustomerState(
-	t *testing.T,
-	baseURL string,
-	location string,
-	wantCount int,
-	timeout time.Duration,
-) factoryapi.ListWorkResponse {
-	t.Helper()
-
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	var last factoryapi.ListWorkResponse
-	for {
-		last = support.ListDefaultSessionWork(t, baseURL)
-		if support.CountWorkAtCustomerState(last, location) >= wantCount {
-			return last
-		}
-		select {
-		case <-ticker.C:
-		case <-deadline.C:
-			t.Fatalf(
-				"timed out waiting for %d work at %s; listed=%#v",
-				wantCount,
-				location,
-				last.Results,
-			)
-		}
-	}
-}
-
-type scriptPollerIngressCommandRunner struct {
-	mu       sync.Mutex
-	stdout   []byte
-	calls    int
-	pollDone chan struct{}
-}
-
-func newScriptPollerIngressCommandRunner(t *testing.T, stdout []byte) *scriptPollerIngressCommandRunner {
-	t.Helper()
-	return &scriptPollerIngressCommandRunner{
-		stdout:   append([]byte(nil), stdout...),
-		pollDone: make(chan struct{}, 1),
-	}
-}
-
-func (r *scriptPollerIngressCommandRunner) Run(
-	_ context.Context,
-	_ platformprocess.CommandRequest,
-) (platformprocess.CommandResult, error) {
-	r.mu.Lock()
-	r.calls++
-	callNumber := r.calls
-	stdout := append([]byte(nil), r.stdout...)
-	r.mu.Unlock()
-
-	r.signalPollCycle()
-
-	if callNumber == 1 {
-		return platformprocess.CommandResult{Stdout: stdout}, nil
-	}
-	return platformprocess.CommandResult{}, nil
-}
-
-func (r *scriptPollerIngressCommandRunner) callCount() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.calls
-}
-
-func (r *scriptPollerIngressCommandRunner) signalPollCycle() {
-	select {
-	case r.pollDone <- struct{}{}:
-	default:
-	}
-}
-
-var _ platformprocess.CommandRunner = (*scriptPollerIngressCommandRunner)(nil)
