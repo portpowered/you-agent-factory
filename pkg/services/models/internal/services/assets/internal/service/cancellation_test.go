@@ -17,6 +17,7 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
 func TestPreparationUsesConstructionSelectedCoordination(t *testing.T) {
@@ -746,4 +747,35 @@ func TestPrepareGenericAssetsOfflinePartialSnapshotReportsOnlyMissingMembers(t *
 		t.Fatalf("offline partial network requests = %d, want 0", requests.Load())
 	}
 	assertFileBody(t, filepath.Join(legacySnapshot, modelRequirement.Name), body)
+}
+
+func newGenericServiceWithOptions(
+	t *testing.T,
+	scopes runtimescopes.Service,
+	client modelseffects.AssetHTTPDoer,
+	options assets.ConstructionOptions,
+) *service {
+	t.Helper()
+	value := New(
+		scopes,
+		models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		client,
+		models.RuntimeAssetEndpoints{BaseURL: "https://assets.example.test", APIBaseURL: "https://api.example.test"},
+		os.MkdirAll,
+		os.Stat,
+		os.UserHomeDir,
+		os.WriteFile,
+		os.Rename,
+		os.Remove,
+		os.ReadFile,
+		os.ReadDir,
+		func(path string) (io.WriteCloser, error) { return os.Create(path) },
+		func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		options,
+	)
+	service, ok := value.(*service)
+	if !ok {
+		t.Fatalf("New returned %T, want *service", value)
+	}
+	return service
 }
