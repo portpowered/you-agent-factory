@@ -2,7 +2,9 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"io"
+	"os/exec"
 	"reflect"
 	"testing"
 	"time"
@@ -27,6 +29,16 @@ func (h *recordingAgyPTYHost) Allocate(context.Context) (platformpty.Allocation,
 }
 func (*recordingAgyPTYHost) Start(platformpty.ProcessLaunch, platformpty.Allocation) (platformpty.Process, io.ReadCloser, error) {
 	return nil, nil, nil
+}
+
+type defaultAgyPTYObserver struct {
+	recordingAgyPTYHost
+	started bool
+}
+
+func (h *defaultAgyPTYObserver) Start(platformpty.ProcessLaunch, platformpty.Allocation) (platformpty.Process, io.ReadCloser, error) {
+	h.started = true
+	return nil, nil, errors.New("unexpected legacy PTY start")
 }
 
 func TestEdgesDoNotExposeComposedAgyPTYAllocator(t *testing.T) {
@@ -126,5 +138,50 @@ func TestProvideProvidersServicePrefersAgyCommandRunnerWithInjectedPTYHost(t *te
 	}
 	if !reflect.DeepEqual(request.Args, wantArgs) {
 		t.Fatalf("provider argv = %#v, want %#v", request.Args, wantArgs)
+	}
+}
+
+// Deliberate command preparation failure proves default selection without
+// discovering or launching an installed AGY executable. Real host execution
+// remains the responsibility of the separately authorized live smoke gate.
+func TestProvideProvidersServiceDefaultsToAgyCommandAdapterWithoutOverride(t *testing.T) {
+	t.Parallel()
+	host := &defaultAgyPTYObserver{}
+	var commands []string
+	var arguments [][]string
+	service, err := provideProvidersService(serviceedges.Edges{
+		AgyPTYHost: host,
+		PlatformProcessCommandFactory: func(name string, args ...string) *exec.Cmd {
+			commands = append(commands, name)
+			arguments = append(arguments, append([]string(nil), args...))
+			return nil // Fail closed before command start; no synthetic executable.
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commands) != 0 || host.allocated || host.started {
+		t.Fatal("provider construction executed command or PTY effects")
+	}
+	workDir := t.TempDir()
+	result, err := service.Execute(context.Background(), providers.ExecuteRequest{
+		Provider: providers.IDAntigravity, AttemptID: "agy-default-selection",
+		Model: "gemini-3.6-flash-high", SkipPermissions: true,
+		WorkingDirectory: workDir, UserMessage: "default selection",
+	})
+	if !errors.Is(err, providers.ErrExecuteFailed) || !reflect.DeepEqual(result, providers.ExecuteResult{}) {
+		t.Fatalf("Execute() = %#v, %v; want typed failure and no content", result, err)
+	}
+	if !reflect.DeepEqual(commands, []string{"agy"}) {
+		t.Fatalf("commands = %#v, want exactly one agy preparation", commands)
+	}
+	wantArgs := []string{"-p", "default selection", "--output-format", "stream-json",
+		"--add-dir", workDir, "--disable-slash-commands", "--model", "gemini-3.6-flash-high",
+		"--dangerously-skip-permissions", "--print-timeout", "5m"}
+	if !reflect.DeepEqual(arguments, [][]string{wantArgs}) {
+		t.Fatalf("argv = %#v, want %#v", arguments, wantArgs)
+	}
+	if host.allocated || host.started {
+		t.Fatal("default command preparation fell back to legacy PTY")
 	}
 }
