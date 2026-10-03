@@ -231,13 +231,8 @@ func TestStopModelHostRejectsActiveCapacityHolder(t *testing.T) {
 func TestIdleUnloadStopsRuntimeAfterLastCapacityReleased(t *testing.T) {
 	t.Parallel()
 	host, clock, process, ref := newControlledIdleHost(t)
-	acquired, err := host.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M", Holder: "worker-a"})
-	if err != nil {
-		t.Fatalf("acquire: %v", err)
-	}
-	if _, err := host.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{Scope: ref, Lease: acquired.Lease.Lease}); err != nil {
-		t.Fatalf("release: %v", err)
-	}
+	acquired := acquireIdleLease(t, host, ref, "worker-a")
+	releaseIdleLease(t, host, acquired)
 	if clock.timerCount() != 1 {
 		t.Fatalf("idle timers = %d, want 1", clock.timerCount())
 	}
@@ -252,20 +247,12 @@ func TestIdleUnloadStopsRuntimeAfterLastCapacityReleased(t *testing.T) {
 func TestIdleUnloadDoesNotStopActiveCapacityHolder(t *testing.T) {
 	t.Parallel()
 	host, clock, process, ref := newControlledIdleHost(t)
-	acquire := models.AcquireModelLeaseRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M", Holder: "worker-a"}
-	acquired, err := host.AcquireModelLease(context.Background(), acquire)
-	if err != nil {
-		t.Fatalf("acquire: %v", err)
-	}
-	if _, err := host.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{Scope: ref, Lease: acquired.Lease.Lease}); err != nil {
-		t.Fatalf("release: %v", err)
-	}
+	acquired := acquireIdleLease(t, host, ref, "worker-a")
+	releaseIdleLease(t, host, acquired)
 	if clock.timerCount() != 1 {
 		t.Fatalf("idle timers = %d, want 1", clock.timerCount())
 	}
-	if _, err := host.AcquireModelLease(context.Background(), acquire); err != nil {
-		t.Fatalf("reacquire: %v", err)
-	}
+	acquireIdleLease(t, host, ref, "worker-a")
 	if clock.timerCount() != 0 {
 		t.Fatalf("reacquire did not cancel idle timer")
 	}
@@ -618,128 +605,268 @@ func TestCloseRuntimeScopeRevokesLeasesOwnedByStoppedHost(t *testing.T) {
 
 func TestIdleUnloadStopsRuntimeAfterLeaseRelease(t *testing.T) {
 	t.Parallel()
-
-	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(healthServer.Close)
-
-	var stopCount atomic.Int32
-	cacheDirectory := t.TempDir()
-	writeCacheFixture(t, cacheDirectory, true)
-	scopes := newScopes(t, "idle-unload-lease-release")
-	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
-	service := internalservice.NewWithLeasesFacts(
-		scopes,
-		mustAssetsService(t, scopes),
-		&fakeProcessLauncher{
-			newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
-				process := newFakeManagedProcess(healthServer.URL, nil)
-				process.stopFn = func() error {
-					stopCount.Add(1)
-					return process.defaultStop()
-				}
-				return process
-			},
-		},
-		http.DefaultClient,
-		realHostClock{},
-		nil,
-		nil,
-		leaseReadySlotFacts{capacity: 1},
-		internalservice.HostPolicyTestConfig{IdleUnloadAfter: 40 * time.Millisecond},
-	)
-
-	_, err := service.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
-		Scope: ref,
-		Name:  "OMNIVOICE_Q4_K_M",
-	})
-	if err != nil {
-		t.Fatalf("EnsureModelHost: %v", err)
+	host, clock, refs, processes := newDeadlineIdleHosts(t, 1)
+	ref, process := refs[0], processes[0]
+	acquired := acquireIdleLease(t, host, ref, "worker-a")
+	releasedAt := clock.Now()
+	releaseIdleLease(t, host, acquired)
+	timer := clock.timersFor(t, 1)[0]
+	if timer.duration != controlledIdleDuration || !timer.due.Equal(releasedAt.Add(controlledIdleDuration)) {
+		t.Fatalf("supplied scheduler duration/deadline = %s/%s, want %s/%s", timer.duration, timer.due, controlledIdleDuration, releasedAt.Add(controlledIdleDuration))
 	}
-
-	leases := internalservice.LeasesService(service)
-	acquired, err := leases.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
-		Scope:  ref,
-		Name:   "OMNIVOICE_Q4_K_M",
-		Holder: "worker-a",
-	})
-	if err != nil {
-		t.Fatalf("AcquireModelLease: %v", err)
+	clock.advanceTo(timer.due.Add(-time.Nanosecond))
+	assertIdleHostState(t, host, ref, process, models.LifecycleStateLoaded, 0)
+	clock.advanceTo(timer.due)
+	assertIdleStopCompleted(t, host, ref, process)
+	clock.advanceTo(timer.due.Add(controlledIdleDuration))
+	stopped, err := host.StopModelHost(context.Background(), models.StopModelHostRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"})
+	if err != nil || stopped.Outcome != models.HostStopAlreadyStopped || stopped.Host.LifecycleState != models.LifecycleStateInstalled || process.stopCalls.Load() != 1 {
+		t.Fatalf("already unloaded: result=%#v err=%v stops=%d", stopped, err, process.stopCalls.Load())
 	}
-	if _, err := leases.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{
-		Scope: ref,
-		Lease: acquired.Lease.Lease,
-	}); err != nil {
-		t.Fatalf("ReleaseModelLease: %v", err)
-	}
+	t.Logf("C02/C03: supplied scheduler release=%s duration=%s due=%s; pre-deadline READY/LOADED, deadline INSTALLED (asset readiness remains READY), ALREADY_STOPPED, actual Stop calls=1", releasedAt, timer.duration, timer.due)
+}
 
-	deadline := time.Now().Add(2 * time.Second)
-	for stopCount.Load() == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for idle unload after lease release")
-		}
-		time.Sleep(10 * time.Millisecond)
+func assertIdleHostState(t *testing.T, host runtimehost.Service, ref models.RuntimeScopeRef, process *observedIdleProcess, lifecycle models.LifecycleState, stops int32) {
+	t.Helper()
+	inspected, err := host.InspectModelHost(context.Background(), models.InspectModelHostRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"})
+	if err != nil || inspected.Host.LifecycleState != lifecycle || inspected.Host.ReadinessState != models.ReadinessStateReady || process.stopCalls.Load() != stops {
+		t.Fatalf("scope %s: host=%#v err=%v stops=%d, want %s/READY stops=%d", ref, inspected, err, process.stopCalls.Load(), lifecycle, stops)
 	}
 }
 
+// All clock and timer state uses one lock; delivery is buffered and happens once.
+// Virtual advancement triggers behavior. awaitSignal uses real time only as a failure ceiling.
+type deadlineHostClock struct {
+	mu     sync.Mutex
+	now    time.Time
+	timers []*deadlineHostTimer
+}
+
+type deadlineHostTimer struct {
+	clock    *deadlineHostClock
+	duration time.Duration
+	due      time.Time
+	channel  chan time.Time
+	stopped  bool
+	fired    bool
+}
+
+func (clock *deadlineHostClock) Now() time.Time {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	return clock.now
+}
+
+func (clock *deadlineHostClock) NewTimer(duration time.Duration) modelseffects.HostTimer {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	timer := &deadlineHostTimer{clock: clock, duration: duration, due: clock.now.Add(duration), channel: make(chan time.Time, 1)}
+	clock.timers = append(clock.timers, timer)
+	return timer
+}
+
+func (clock *deadlineHostClock) advanceTo(now time.Time) {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	if now.Before(clock.now) {
+		panic("controlled scheduler cannot move backwards")
+	}
+	clock.now = now
+	for _, timer := range clock.timers {
+		if !timer.stopped && !timer.fired && !now.Before(timer.due) {
+			timer.fired = true
+			timer.channel <- timer.due
+		}
+	}
+}
+
+func (timer *deadlineHostTimer) C() <-chan time.Time { return timer.channel }
+
+func (timer *deadlineHostTimer) Stop() bool {
+	timer.clock.mu.Lock()
+	defer timer.clock.mu.Unlock()
+	if timer.stopped || timer.fired {
+		return false
+	}
+	timer.stopped = true
+	return true
+}
+
+type observedIdleProcess struct {
+	*controlledManagedProcess
+	stopCalls     atomic.Int32
+	stopCompleted chan struct{}
+	completedOnce sync.Once
+}
+
+func (process *observedIdleProcess) Stop(ctx context.Context) error {
+	// Count entry before the underlying fake's sync.Once can mask duplicate effects.
+	process.stopCalls.Add(1)
+	err := process.controlledManagedProcess.Stop(ctx)
+	process.completedOnce.Do(func() { close(process.stopCompleted) })
+	return err
+}
+
+const controlledIdleDuration = 40 * time.Millisecond
+
 func TestIdleUnloadDoesNotStopActiveLeaseHolder(t *testing.T) {
 	t.Parallel()
+	host, clock, refs, processes := newDeadlineIdleHosts(t, 1)
+	first := acquireIdleLease(t, host, refs[0], "worker-a")
+	second := acquireIdleLease(t, host, refs[0], "worker-b")
+	releaseIdleLease(t, host, first)
+	clock.advanceTo(clock.Now().Add(2 * controlledIdleDuration))
+	assertIdleHostState(t, host, refs[0], processes[0], models.LifecycleStateLoaded, 0)
+	assertActiveIdleLease(t, host, second)
+	clock.timersFor(t, 0)
+	releaseIdleLease(t, host, second)
+	timer := clock.timersFor(t, 1)[0]
+	clock.advanceTo(timer.due.Add(-time.Nanosecond))
+	assertIdleHostState(t, host, refs[0], processes[0], models.LifecycleStateLoaded, 0)
+	clock.advanceTo(timer.due)
+	assertIdleStopCompleted(t, host, refs[0], processes[0])
+	t.Logf("C04: two accepted leases; first release + virtual 2D preserves ACTIVE/LOADED, no timer/Stop; final release unloads once at %s", timer.due)
+}
 
-	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(healthServer.Close)
+func TestIdleUnloadReacquisitionCancelsAndReplacesDeadline(t *testing.T) {
+	t.Parallel()
+	host, clock, refs, processes := newDeadlineIdleHosts(t, 1)
+	lease := acquireIdleLease(t, host, refs[0], "worker-a")
+	releaseIdleLease(t, host, lease)
+	original := clock.timersFor(t, 1)[0]
+	clock.advanceTo(original.due.Add(-controlledIdleDuration / 2))
+	active := acquireIdleLease(t, host, refs[0], "worker-a")
+	clock.assertCanceled(t, original)
+	clock.advanceTo(original.due)
+	assertIdleHostState(t, host, refs[0], processes[0], models.LifecycleStateLoaded, 0)
+	assertActiveIdleLease(t, host, active)
+	releaseIdleLease(t, host, active)
+	replacement := clock.timersFor(t, 2)[1]
+	if !replacement.due.Equal(original.due.Add(controlledIdleDuration)) {
+		t.Fatalf("replacement due = %s, want %s", replacement.due, original.due.Add(controlledIdleDuration))
+	}
+	clock.advanceTo(replacement.due.Add(-time.Nanosecond))
+	assertIdleHostState(t, host, refs[0], processes[0], models.LifecycleStateLoaded, 0)
+	clock.advanceTo(replacement.due)
+	assertIdleStopCompleted(t, host, refs[0], processes[0])
+	clock.advanceTo(replacement.due.Add(controlledIdleDuration))
+	assertIdleHostState(t, host, refs[0], processes[0], models.LifecycleStateInstalled, 1)
+	t.Logf("C05/C06: supplied timer Stop canceled due=%s; active lease survives former deadline; replacement due=%s unloads exactly once", original.due, replacement.due)
+}
 
-	var stopCount atomic.Int32
-	cacheDirectory := t.TempDir()
-	writeCacheFixture(t, cacheDirectory, true)
-	scopes := newScopes(t, "idle-active-lease-holder")
-	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
-	service := internalservice.NewWithLeasesFacts(
-		scopes,
-		mustAssetsService(t, scopes),
-		&fakeProcessLauncher{
-			newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
-				process := newFakeManagedProcess(healthServer.URL, nil)
-				process.stopFn = func() error {
-					stopCount.Add(1)
-					return process.defaultStop()
-				}
-				return process
-			},
-		},
-		http.DefaultClient,
-		realHostClock{},
-		nil,
-		nil,
-		leaseReadySlotFacts{capacity: 2},
-		internalservice.HostPolicyTestConfig{IdleUnloadAfter: 40 * time.Millisecond},
+func TestIdleUnloadSelectedDeadlinePreservesActivePeer(t *testing.T) {
+	t.Parallel()
+	host, clock, refs, processes := newDeadlineIdleHosts(t, 2)
+	selected := acquireIdleLease(t, host, refs[0], "worker-selected")
+	peer := acquireIdleLease(t, host, refs[1], "worker-peer")
+	releaseIdleLease(t, host, selected)
+	timer := clock.timersFor(t, 1)[0]
+	clock.advanceTo(timer.due)
+	assertIdleStopCompleted(t, host, refs[0], processes[0])
+	assertIdleHostState(t, host, refs[1], processes[1], models.LifecycleStateLoaded, 0)
+	assertActiveIdleLease(t, host, peer)
+	retained, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{Scope: refs[1], Name: "OMNIVOICE_Q4_K_M"})
+	if err != nil || retained.Outcome != models.HostEnsureAlreadyReady {
+		t.Fatalf("peer ensure = %#v, %v, want ALREADY_READY", retained, err)
+	}
+	acquireIdleLease(t, host, refs[1], "worker-peer-next")
+	t.Logf("C07: selected deadline=%s Stop=1/INSTALLED; peer Stop=0/LOADED/ALREADY_READY, original and next leases ACTIVE", timer.due)
+}
+
+func newDeadlineIdleHosts(t *testing.T, count int) (runtimehost.Service, *deadlineHostClock, []models.RuntimeScopeRef, []*observedIdleProcess) {
+	t.Helper()
+	clock := &deadlineHostClock{now: time.Unix(0, 0).UTC()}
+	scopes := newScopes(t, t.Name())
+	refs := make([]models.RuntimeScopeRef, count)
+	processes := make([]*observedIdleProcess, count)
+	for i := range refs {
+		cache := t.TempDir()
+		writeCacheFixture(t, cache, true)
+		cfg := supervisedRuntimeConfig()
+		cfg.Resources[0].Capacity = 2
+		refs[i] = openScope(t, scopes, cache, cfg)
+		processes[i] = &observedIdleProcess{controlledManagedProcess: newControlledManagedProcess("http://controlled.invalid"), stopCompleted: make(chan struct{})}
+	}
+	host, err := internalservice.NewWiredWithSupervisorConfig(
+		scopes, mustAssetsService(t, scopes), &idlePeerLauncher{processes: processes}, http.DefaultClient,
+		clock, nil, nil, internalservice.SupervisorTestConfig{HealthChecker: alwaysHealthyChecker{}},
+		internalservice.HostPolicyTestConfig{IdleUnloadAfter: controlledIdleDuration},
 	)
-
-	_, err := service.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
-		Scope: ref,
-		Name:  "OMNIVOICE_Q4_K_M",
-	})
 	if err != nil {
-		t.Fatalf("EnsureModelHost: %v", err)
+		t.Fatalf("construct host: %v", err)
 	}
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+	for _, ref := range refs {
+		if _, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"}); err != nil {
+			t.Fatalf("ensure: %v", err)
+		}
+	}
+	return host, clock, refs, processes
+}
 
-	leases := internalservice.LeasesService(service)
-	if _, err := leases.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
-		Scope:  ref,
-		Name:   "OMNIVOICE_Q4_K_M",
-		Holder: "worker-a",
-	}); err != nil {
-		t.Fatalf("AcquireModelLease: %v", err)
-	}
+type idlePeerLauncher struct {
+	mu        sync.Mutex
+	processes []*observedIdleProcess
+}
 
-	deadline := time.Now().Add(200 * time.Millisecond)
-	for time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
+func (launcher *idlePeerLauncher) Start(context.Context, modelseffects.HostProcessStartSpec) (modelseffects.HostManagedProcess, error) {
+	launcher.mu.Lock()
+	defer launcher.mu.Unlock()
+	if len(launcher.processes) == 0 {
+		return nil, errors.New("unexpected extra runtime launch")
 	}
-	if stopCount.Load() != 0 {
-		t.Fatalf("stop count = %d, want 0 while lease holder active", stopCount.Load())
+	process := launcher.processes[0]
+	launcher.processes = launcher.processes[1:]
+	return process, nil
+}
+
+func acquireIdleLease(t *testing.T, host runtimehost.Service, ref models.RuntimeScopeRef, holder string) models.ModelLease {
+	t.Helper()
+	result, err := host.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M", Holder: holder})
+	if err != nil || result.Lease.Status != models.ModelLeaseStatusActive {
+		t.Fatalf("accepted lease = %#v, %v", result, err)
+	}
+	return result.Lease
+}
+
+func releaseIdleLease(t *testing.T, host runtimehost.Service, lease models.ModelLease) {
+	t.Helper()
+	if _, err := host.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{Scope: lease.Scope, Lease: lease.Lease}); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+}
+
+func assertActiveIdleLease(t *testing.T, host runtimehost.Service, lease models.ModelLease) {
+	t.Helper()
+	result, err := host.GetModelLease(context.Background(), models.GetModelLeaseRequest{Scope: lease.Scope, Lease: lease.Lease})
+	if err != nil || result.Lease.Status != models.ModelLeaseStatusActive || result.Lease.Holder != lease.Holder {
+		t.Fatalf("active lease = %#v, %v, want holder %s ACTIVE", result, err, lease.Holder)
+	}
+}
+
+func assertIdleStopCompleted(t *testing.T, host runtimehost.Service, ref models.RuntimeScopeRef, process *observedIdleProcess) {
+	t.Helper()
+	awaitSignal(t, process.stopCompleted, "selected deadline did not complete process Stop")
+	awaitSignal(t, process.waited, "selected deadline did not complete process Wait")
+	assertIdleHostState(t, host, ref, process, models.LifecycleStateInstalled, 1)
+}
+
+func (clock *deadlineHostClock) timersFor(t *testing.T, count int) []*deadlineHostTimer {
+	t.Helper()
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	if len(clock.timers) != count {
+		t.Fatalf("supplied scheduler timer count = %d, want %d", len(clock.timers), count)
+	}
+	return append([]*deadlineHostTimer(nil), clock.timers...)
+}
+
+func (clock *deadlineHostClock) assertCanceled(t *testing.T, timer *deadlineHostTimer) {
+	t.Helper()
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	if !timer.stopped || timer.fired {
+		t.Fatalf("supplied timer stopped/fired = %v/%v, want true/false", timer.stopped, timer.fired)
 	}
 }
 

@@ -62,7 +62,14 @@ func TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork(t *test
 	}
 
 	network := &rejectingModelAssetHTTP{}
-	environment := append(os.Environ(), "INFINITE_YOU_OMNIVOICE_CACHE_DIR="+cacheDirectory)
+	// Isolate HOME/USERPROFILE: inheriting the runner's real home makes every
+	// parallel server contend for the shared global packaged-factory install root.
+	homeDir := t.TempDir()
+	environment := append(os.Environ(),
+		"INFINITE_YOU_OMNIVOICE_CACHE_DIR="+cacheDirectory,
+		"HOME="+homeDir,
+		"USERPROFILE="+homeDir,
+	)
 	server := startFunctionalServer(t, dir, false, withEnvironment(environment), func(config *support.FunctionalAPIServerConfig) {
 		config.Edges.ModelAssetHTTPClient = network
 	})

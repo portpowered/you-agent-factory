@@ -244,6 +244,37 @@ func readRPCFrame(t *testing.T, r *bufio.Reader) rpcFrame {
 	return frame
 }
 
+// rpcLineReadCeiling bounds one blocking stdout line read. Pipe reads have no
+// deadline, so a stalled server would otherwise hang the whole package until
+// the go test timeout and hide which exchange stalled. It is a failure ceiling,
+// not a sleep: the read returns as soon as the line arrives.
+const rpcLineReadCeiling = 60 * time.Second
+
+// readRPCLineBounded reads one newline-terminated line from the server stdout
+// pipe, failing the test with the stalled exchange instead of blocking forever.
+func readRPCLineBounded(t *testing.T, r *bufio.Reader) string {
+	t.Helper()
+	type result struct {
+		line string
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		line, err := r.ReadString('\n')
+		done <- result{line, err}
+	}()
+	select {
+	case res := <-done:
+		if res.err != nil {
+			t.Fatalf("read RPC line: %v", res.err)
+		}
+		return res.line
+	case <-time.After(support.ScaledTimeout(rpcLineReadCeiling)):
+		t.Fatalf("no RPC line from you server acp within %s", support.ScaledTimeout(rpcLineReadCeiling))
+	}
+	return ""
+}
+
 // assertLineIsProtocolFrame proves a captured stdout line parses as a
 // complete JSON-RPC 2.0 object, so no CLI/log/banner text ever reaches
 // stdout alongside real ACP protocol traffic.

@@ -3,8 +3,10 @@ package petri
 import (
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestDependencyGuard_AllDependenciesMet(t *testing.T) {
@@ -412,6 +414,48 @@ func TestSameNameGuardRuntime_UsesSingleExactLegacyChildWithoutRegistration(t *t
 	)
 	if !ok || len(matched) != 1 || matched[0].Color.WorkID != "review-current" {
 		t.Fatalf("legacy same-name binding = %#v, %t; want exact child review-current", matched, ok)
+	}
+}
+
+func TestSameNameGuardRuntime_RetiredRegistrationUsesSingleReworkedChild(t *testing.T) {
+	parent := &factorytoken.Token{
+		ID:    "task-token",
+		Color: factorytoken.Color{WorkID: "task-work", Name: "t20"},
+	}
+	consumed := factorytoken.Token{
+		ID:    "review-2",
+		Color: factorytoken.Color{Name: "t20", WorkID: "review-2", ParentID: "task-work"},
+	}
+	reworked := consumed
+	reworked.ID = "review-64"
+	reworked.Color.WorkID = "review-64"
+	ctx := RuntimeGuardContext{ParentChildRegistrations: ParentChildRegistrationProjection{
+		"task-work": {Children: []factorytoken.Token{consumed}, Complete: true},
+	}}
+	bindings := map[string]*factorytoken.Token{"task": parent}
+
+	matched, ok := (&SameNameGuard{MatchBinding: "task"}).EvaluateRuntime(
+		ctx,
+		[]factorytoken.Token{reworked},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{reworked.ID: &reworked}},
+	)
+	if !ok || len(matched) != 1 || matched[0].Color.WorkID != "review-64" {
+		t.Fatalf("retired registration binding = %#v, %t; want reworked review-64", matched, ok)
+	}
+
+	// A registered child still held by an active dispatch keeps the
+	// registration authoritative.
+	ctx.ActiveDispatches = map[string]*interfaces.DispatchEntry{
+		"dispatch-review": {ConsumedTokens: []workerexecution.Token{factorytoken.ToWorker(consumed)}},
+	}
+	if matched, ok := (&SameNameGuard{MatchBinding: "task"}).EvaluateRuntime(
+		ctx,
+		[]factorytoken.Token{reworked},
+		bindings,
+		&MarkingSnapshot{Tokens: map[string]*factorytoken.Token{reworked.ID: &reworked}},
+	); ok || len(matched) != 0 {
+		t.Fatalf("registered child in active dispatch allowed unregistered child: matched=%#v ok=%t", matched, ok)
 	}
 }
 

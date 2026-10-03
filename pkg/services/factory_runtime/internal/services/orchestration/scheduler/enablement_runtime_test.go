@@ -290,6 +290,61 @@ func TestEnablementEvaluator_SameNameParentGuardFailsClosedForInvalidRegistratio
 	}
 }
 
+func TestEnablementEvaluator_SameNameGuardIgnoresRetiredRegistrationAfterRework(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := sameNameGuardNet()
+	parent := &factorytoken.Token{ID: "task-token", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "t20", WorkID: "task-work"}}
+	consumed := factorytoken.Token{ID: "review-2", PlaceID: "task:ready", Color: factorytoken.Color{Name: "t20", WorkID: "review-2", ParentID: "task-work"}}
+	reworked := consumed
+	reworked.ID = "review-64"
+	reworked.Color.WorkID = "review-64"
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		parent.ID:   parent,
+		reworked.ID: &reworked,
+	})
+	// The only registered child was consumed (review REJECTED) and the rework
+	// transition emitted an unregistered replacement.
+	marking.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+		"task-work": {Children: []factorytoken.Token{consumed}, Complete: true},
+	}
+
+	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	if len(enabled) != 1 {
+		t.Fatalf("enabled transitions after rework = %d, want 1", len(enabled))
+	}
+	if got := tokenIDs(enabled[0].Bindings["task"]); strings.Join(got, ",") != reworked.ID {
+		t.Fatalf("task binding tokens = %v, want [%s]", got, reworked.ID)
+	}
+}
+
+func TestEnablementEvaluator_SameNameParentGuardIgnoresRetiredRegistrationAfterRework(t *testing.T) {
+	eval := NewEnablementEvaluator(nil, testNow, nil)
+	n := sameNameGuardNet()
+	transition := n.Transitions["match-items"]
+	transition.InputArcs[0].Guard = &petri.SameNameGuard{MatchBinding: "task"}
+	transition.InputArcs[1].Guard = nil
+	parent := &factorytoken.Token{ID: "task-token", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "t20", WorkID: "task-work"}}
+	consumed := factorytoken.Token{ID: "review-2", PlaceID: "task:ready", Color: factorytoken.Color{Name: "t20", WorkID: "review-2", ParentID: "task-work"}}
+	reworked := consumed
+	reworked.ID = "review-64"
+	reworked.Color.WorkID = "review-64"
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		parent.ID:   parent,
+		reworked.ID: &reworked,
+	})
+	marking.ParentChildRegistrations = petri.ParentChildRegistrationProjection{
+		"task-work": {Children: []factorytoken.Token{consumed}, Complete: true},
+	}
+
+	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	if len(enabled) != 1 {
+		t.Fatalf("enabled transitions after rework = %d, want 1", len(enabled))
+	}
+	if got := tokenIDs(enabled[0].Bindings["task"]); strings.Join(got, ",") != reworked.ID {
+		t.Fatalf("task binding tokens = %v, want [%s]", got, reworked.ID)
+	}
+}
+
 func TestSameNameMatchBinding_HandlesNestedAndMalformedGuards(t *testing.T) {
 	valid := &petri.SameNameGuard{MatchBinding: "parent"}
 	nested := &petri.AllGuard{Guards: []petri.Guard{&petri.DependencyGuard{}, valid}}
