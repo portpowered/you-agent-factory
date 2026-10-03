@@ -49,6 +49,9 @@ type CursorScope struct {
 type CursorScopes interface {
 	GetCursor(context.Context, CursorScope, automations.GetCursorRequest) (automations.GetCursorResult, error)
 	CommitCursor(context.Context, CursorScope, CommitCursorRequest) error
+	// ReleaseScope discards runtime resources after the caller has stopped and
+	// joined all scope users. Durable recovery files remain available on restart.
+	ReleaseScope(CursorScope)
 }
 
 // CommitCursorRequest records one advanced opaque cursor/checkpoint fact.

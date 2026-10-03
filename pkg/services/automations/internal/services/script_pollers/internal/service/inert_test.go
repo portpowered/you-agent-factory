@@ -58,6 +58,10 @@ type observedCursorRecorder struct {
 	calls int
 }
 
+func (r *observedCursorRecorder) ReleaseScope(scriptpollers.CursorScope) {
+	r.calls++
+}
+
 func (r *observedCursorRecorder) GetCursor(context.Context, scriptpollers.CursorScope, automations.GetCursorRequest) (automations.GetCursorResult, error) {
 	r.calls++
 	return automations.GetCursorResult{}, nil

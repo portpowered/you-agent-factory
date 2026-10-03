@@ -380,6 +380,10 @@ type scopedTestRecorder struct {
 	scriptpollers.CursorRecorder
 }
 
+func (scopedTestRecorder) ReleaseScope(scriptpollers.CursorScope) {
+	panic("unexpected scope release in unscoped recorder fixture")
+}
+
 func (r scopedTestRecorder) GetCursor(ctx context.Context, _ scriptpollers.CursorScope, request automations.GetCursorRequest) (automations.GetCursorResult, error) {
 	return r.CursorRecorder.GetCursor(ctx, request)
 }
