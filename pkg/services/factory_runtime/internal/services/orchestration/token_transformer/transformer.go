@@ -500,6 +500,11 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 		TraceID:                  traceID,
 		ParentID:                 parentID,
 	}
+	if parentID != "" {
+		// Expose the origin as the PARENT_CHILD relation Work reads already
+		// surface, so a Work minted for another type names its exact origin.
+		color.Relations = []work.Relation{{Type: work.RelationParentChild, TargetWorkID: parentID}}
+	}
 	ensureWorkOutputDataType(&color, targetTypeID, t.workTypes)
 	return color, nil
 }
