@@ -16,9 +16,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
-	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
-	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
@@ -69,6 +67,8 @@ func New(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cronService cron.Service,
+	filesystemWatchers filesystemwatchers.Service,
 ) *Service {
 	return newService(
 		logger,
@@ -80,6 +80,8 @@ func New(
 		resolveTemplates,
 		executionPolicy,
 		nil,
+		cronService,
+		filesystemWatchers,
 	)
 }
 
@@ -96,6 +98,8 @@ func NewWithCursorFileSystem(
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
+	cronService cron.Service,
+	filesystemWatchers filesystemwatchers.Service,
 ) *Service {
 	return newService(
 		logger,
@@ -107,6 +111,8 @@ func NewWithCursorFileSystem(
 		resolveTemplates,
 		executionPolicy,
 		cursorFileSystem,
+		cronService,
+		filesystemWatchers,
 	)
 }
 
@@ -120,25 +126,27 @@ func newService(
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
+	cronService cron.Service,
+	filesystemWatchers filesystemwatchers.Service,
 ) *Service {
 	service := &Service{
-		loggerValue:       logger,
-		clock:             clock,
-		commandRunnerEdge: commandRunner,
-		workflowID:        workflowID,
-		defaultFactoryDir: defaultFactoryDir,
-		hostedPollers:     hostedPollers,
-		resolveTemplates:  resolveTemplates,
-		executionPolicy:   executionPolicy,
-		cursorFileSystem:  cursorFileSystem,
-		schedulerSources:  make(map[automations.SourceIdentity]*schedulerSource),
-		runtimes:          make(map[string]*runtimeInstance),
-		runtimeActivating: make(map[string]struct{}),
+		loggerValue:        logger,
+		clock:              clock,
+		commandRunnerEdge:  commandRunner,
+		workflowID:         workflowID,
+		defaultFactoryDir:  defaultFactoryDir,
+		hostedPollers:      hostedPollers,
+		resolveTemplates:   resolveTemplates,
+		executionPolicy:    executionPolicy,
+		cursorFileSystem:   cursorFileSystem,
+		cron:               cronService,
+		filesystemWatchers: filesystemWatchers,
+		schedulerSources:   make(map[automations.SourceIdentity]*schedulerSource),
+		runtimes:           make(map[string]*runtimeInstance),
+		runtimeActivating:  make(map[string]struct{}),
 	}
 	service.reconciler = service.newSchedulerReconciler()
 	service.scriptPollers = service.newScriptPollers()
-	service.cron = cronwire.NewService()
-	service.filesystemWatchers = fswire.NewService()
 	return service
 }
 
@@ -169,6 +177,8 @@ func NewService(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cronService cron.Service,
+	filesystemWatchers filesystemwatchers.Service,
 ) *Service {
 	return New(
 		logger,
@@ -179,6 +189,8 @@ func NewService(
 		hostedPollers,
 		resolveTemplates,
 		executionPolicy,
+		cronService,
+		filesystemWatchers,
 	)
 }
 

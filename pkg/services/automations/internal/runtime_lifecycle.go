@@ -356,6 +356,7 @@ func (s *Service) buildRuntimeInstance(
 	owner := NewWithCursorFileSystem(
 		s.loggerValue, s.clock, s.commandRunnerEdge, workflowID, request.Snapshot.FactoryDir,
 		s.hostedPollers, s.resolveTemplates, s.executionPolicy, s.cursorFileSystem,
+		s.cron, s.filesystemWatchers,
 	)
 	if owner == nil {
 		return nil, runtimeLifecycleError(

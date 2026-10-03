@@ -10,6 +10,8 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
+	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -42,6 +44,8 @@ func newAutomationService(fixture automationFixture) *automationinternal.Service
 		fixture.HostedPollers,
 		fixture.ResolveTemplates,
 		automationWorkstationExecutionPolicy(),
+		cronwire.NewService(),
+		fswire.NewService(),
 	)
 }
 

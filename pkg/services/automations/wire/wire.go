@@ -15,6 +15,8 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
+	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
@@ -144,6 +146,8 @@ func newService(
 		resolveTemplates,
 		executionPolicy,
 		cursorFileSystem,
+		cronwire.NewService(),
+		fswire.NewService(),
 	)
 	if service == nil {
 		return nil, fmt.Errorf("construct Automations: implementation rejected its dependencies")
