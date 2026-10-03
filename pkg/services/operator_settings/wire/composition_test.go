@@ -110,15 +110,7 @@ func TestWireCompositionDelegatesDocumentAndResolutionOperations(t *testing.T) {
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	root, err := settingswire.NewServiceFromConfigDocument(
-		testConfigDocumentService(),
-		internaltestproviders.StandardCatalog(),
-		testIDGenerator(),
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
-	}
+	root := newPreservationWireService(t)
 
 	loaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: configPath})
 	if err != nil {
@@ -231,30 +223,12 @@ func newWireCompositionRoot(t *testing.T) (operatorsettings.Service, string) {
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	providersRoot := internaltestproviders.StandardCatalog()
-	root, err := settingswire.NewServiceFromConfigDocument(
-		settingswire.NewConfigDocumentService(
-			platformfilesystem.Local{},
-			func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-				return os.CreateTemp(dir, pattern)
-			},
-			globalconfigmapping.Decode,
-			globalconfigmapping.Encode,
-			wireCompositionProviderCatalog,
-			&sync.Mutex{},
-		),
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
-	}
+	root := newPreservationWireService(t)
 	return root, configPath
 }
 
 // TestWireCompositionServesDocumentAndResolutionOperations characterizes the
-// compatibility construction contract; it does not prove transport activation.
+// completed-owner construction contract; it does not prove transport activation.
 func TestWireCompositionServesDocumentAndResolutionOperations(t *testing.T) {
 	t.Parallel()
 
