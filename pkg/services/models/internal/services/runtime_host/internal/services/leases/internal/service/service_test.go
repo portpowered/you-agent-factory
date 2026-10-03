@@ -163,7 +163,8 @@ func TestGetModelLeaseReportsExpiredLeaseAndFreesCapacity(t *testing.T) {
 	start := time.Date(2026, time.July, 27, 12, 0, 0, 0, time.UTC)
 	clock := &advanceableHostClock{now: start}
 	scope := mustRuntimeScopeRef(t, "leases-get-expired")
-	service := internalservice.New(clock, readySlotFacts{capacity: 1}, noopCoordinator{})
+	coordinator := &recordingSlotCapacityCoordinator{}
+	service := internalservice.New(clock, readySlotFacts{capacity: 1}, coordinator)
 	request := models.AcquireModelLeaseRequest{
 		Scope:  scope,
 		Name:   "local-model",
@@ -206,6 +207,10 @@ func TestGetModelLeaseReportsExpiredLeaseAndFreesCapacity(t *testing.T) {
 	if afterExpiry.Lease.Lease.IsZero() {
 		t.Fatal("expected lease after expiry freed capacity")
 	}
+	if coordinator.acquired != 2 || coordinator.released != 1 {
+		t.Fatalf("expiry notifications = %d/%d, want 2 acquired / 1 released", coordinator.acquired, coordinator.released)
+	}
+
 }
 
 func TestReleaseModelLeaseRejectsExpiredWithoutDoubleFree(t *testing.T) {
@@ -214,7 +219,8 @@ func TestReleaseModelLeaseRejectsExpiredWithoutDoubleFree(t *testing.T) {
 	start := time.Date(2026, time.July, 27, 12, 0, 0, 0, time.UTC)
 	clock := &advanceableHostClock{now: start}
 	scope := mustRuntimeScopeRef(t, "leases-release-expired")
-	service := internalservice.New(clock, readySlotFacts{capacity: 1}, noopCoordinator{})
+	coordinator := &recordingSlotCapacityCoordinator{}
+	service := internalservice.New(clock, readySlotFacts{capacity: 1}, coordinator)
 
 	acquired, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
 		Scope:  scope,
@@ -253,6 +259,10 @@ func TestReleaseModelLeaseRejectsExpiredWithoutDoubleFree(t *testing.T) {
 	if reacquired.Lease.Lease.IsZero() {
 		t.Fatal("capacity should remain available exactly once after expiry")
 	}
+	if coordinator.acquired != 2 || coordinator.released != 1 {
+		t.Fatalf("expiry notifications = %d/%d, want 2 acquired / 1 released", coordinator.acquired, coordinator.released)
+	}
+
 }
 
 func TestAcquireModelLeaseRejectsContendedCapacity(t *testing.T) {

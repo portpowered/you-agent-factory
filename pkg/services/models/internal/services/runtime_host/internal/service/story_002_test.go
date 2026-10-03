@@ -3,9 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
-	"net/http"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,6 +12,8 @@ import (
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
+	"net/http"
+	"path/filepath"
 )
 
 const (

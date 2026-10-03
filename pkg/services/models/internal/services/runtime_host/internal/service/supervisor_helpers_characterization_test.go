@@ -2,12 +2,12 @@ package service
 
 import (
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	"path/filepath"
 )
 
 func TestBuiltInLLMResolvesPackagedGRPCHostStartSpec(t *testing.T) {

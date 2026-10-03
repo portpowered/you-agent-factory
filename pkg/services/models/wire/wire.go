@@ -9,12 +9,12 @@ package wire
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"reflect"
 	"time"
 
+	"encoding/hex"
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"

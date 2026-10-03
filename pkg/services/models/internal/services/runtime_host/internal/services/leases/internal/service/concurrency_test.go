@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service"
+	"sync/atomic"
 )
 
 func TestConcurrentAcquireBarrierRespectsConfiguredCapacity(t *testing.T) {

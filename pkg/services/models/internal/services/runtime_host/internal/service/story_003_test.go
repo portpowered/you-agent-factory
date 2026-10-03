@@ -3,7 +3,6 @@ package service_test
 import (
 	"context"
 	"errors"
-	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +13,7 @@ import (
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
+	"net/http"
 )
 
 func TestManagedLocalAIPreflightRejectsUnsupportedHostBeforeProcessStart(t *testing.T) {

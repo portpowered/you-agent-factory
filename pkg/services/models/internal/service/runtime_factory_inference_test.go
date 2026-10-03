@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"net/http"
 	"os"
 	"reflect"
 	"strings"
@@ -27,6 +26,7 @@ import (
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+	"net/http"
 )
 
 type constructionInvocationRuntime struct{}

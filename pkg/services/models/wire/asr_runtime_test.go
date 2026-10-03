@@ -3,12 +3,12 @@ package wire
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"os"
 	"testing"
 	"time"
 
+	"encoding/binary"
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"

@@ -3,10 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,6 +12,9 @@ import (
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 )
 
 func TestStopModelHostStopsReadySupervisedProcess(t *testing.T) {

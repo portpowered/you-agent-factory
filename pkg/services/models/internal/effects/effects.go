@@ -7,13 +7,13 @@ package effects
 import (
 	"context"
 	"io"
-	"net/http"
 	"os"
-	"sync/atomic"
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"go.uber.org/zap"
+	"net/http"
+	"sync/atomic"
 )
 
 type runtimeCorrelationContextKey struct{}

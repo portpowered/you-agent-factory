@@ -2,18 +2,15 @@ package service_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"encoding/json"
 	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
@@ -23,6 +20,9 @@ import (
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 )
 
 func TestConstructionAllocatesHostStateWithoutLaunchingProcess(t *testing.T) {
