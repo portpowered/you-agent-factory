@@ -6,9 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
+	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -231,6 +233,81 @@ func TestRunScriptPoller_CursorPersistFailureDoesNotReportSuccess(t *testing.T) 
 type failingCursorRecorder struct {
 	commitErr error
 }
+
+func TestRunScriptPoller_FailedDurableReplacementResumesPriorCommit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	factoryDir := t.TempDir()
+	supervision := scriptpollers.ScriptPollerSupervision{AutomationID: "durable-workflow", InstanceID: "durable-instance"}
+	recorder, err := scriptpollerswire.NewDurableCursorRecorder(factoryDir, platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("construct durable recorder: %v", err)
+	}
+	if err := recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+		AutomationID: supervision.AutomationID, InstanceID: supervision.InstanceID,
+		Cursor: "cursor-prior", Checkpoint: "checkpoint-prior",
+	}); err != nil {
+		t.Fatalf("seed prior commit: %v", err)
+	}
+	persistErr := errors.New("cursor destination unavailable")
+	failing, err := scriptpollerswire.NewDurableCursorRecorder(factoryDir, cursorRenameFailure{err: persistErr})
+	if err != nil {
+		t.Fatalf("construct failing recorder: %v", err)
+	}
+	runner := &sequenceCommandRunner{outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: []byte(
+		`{"requestId":"admitted-before-failure","type":"FACTORY_REQUEST_BATCH","works":[{"name":"retained","workTypeName":"task"}],"cursor":"cursor-next","checkpoint":"checkpoint-next"}`),
+	}}}}
+	submitted := &recordingSubmitter{}
+	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{runner: runner, cursorRecorder: failing})
+	poller, worker := newCanonicalScriptPollerWorkstation(), newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
+	err = svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, supervision, submitted.submit)
+	var typed *automations.Error
+	if !errors.As(err, &typed) || typed.Op != scriptpollers.CommitCursorOperation || typed.Code != automations.ErrorCodeFailed || !errors.Is(err, persistErr) {
+		t.Fatalf("poll error = %v, want classified durable replacement failure", err)
+	}
+	if submitted.calls != 1 || submitted.submissions[0].RequestID != "admitted-before-failure" {
+		t.Fatalf("admissions = %+v, want retained Work before failure", submitted)
+	}
+	got, err := svc.GetCursor(ctx, automations.GetCursorRequest{InstanceID: supervision.InstanceID})
+	if err != nil || got.Cursor != "cursor-prior" || got.Checkpoint != "checkpoint-prior" {
+		t.Fatalf("cursor after failed poll = %+v, %v, want prior commit", got, err)
+	}
+	assertDurablePollRecovery(t, factoryDir, supervision, runner, submitted)
+}
+
+func assertDurablePollRecovery(t *testing.T, factoryDir string, supervision scriptpollers.ScriptPollerSupervision, runner *sequenceCommandRunner, submitted *recordingSubmitter) {
+	t.Helper()
+	ctx := context.Background()
+	poller, worker := newCanonicalScriptPollerWorkstation(), newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
+	// A new recorder reads the durable result; no in-memory prior state can
+	// accidentally make this recovery proof pass.
+	recovered, err := scriptpollerswire.NewDurableCursorRecorder(factoryDir, platformfilesystem.Local{})
+	if err != nil {
+		t.Fatalf("reconstruct recorder: %v", err)
+	}
+	next := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{runner: runner, cursorRecorder: recovered})
+	err = next.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, supervision, submitted.submit)
+	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") || submitted.calls != 2 {
+		t.Fatalf("recovery poll = %v, admissions = %d, want successful submit and terminal exit", err, submitted.calls)
+	}
+	if len(runner.reqs) != 2 || !containsEnv(runner.reqs[1].Env, scriptpollers.ScriptPollerCursorEnvVar+"=cursor-prior") ||
+		!containsEnv(runner.reqs[1].Env, scriptpollers.ScriptPollerCheckpointEnvVar+"=checkpoint-prior") {
+		t.Fatalf("recovery command = %+v, want prior committed env facts", runner.reqs)
+	}
+	got, err := next.GetCursor(ctx, automations.GetCursorRequest{InstanceID: supervision.InstanceID})
+	if err != nil || got.Cursor != "cursor-next" || got.Checkpoint != "checkpoint-next" {
+		t.Fatalf("cursor after recovery = %+v, %v, want next commit", got, err)
+	}
+}
+
+type cursorRenameFailure struct {
+	platformfilesystem.Local
+	err error
+}
+
+func (f cursorRenameFailure) Rename(string, string) error { return f.err }
 
 func (f failingCursorRecorder) GetCursor(
 	_ context.Context,
