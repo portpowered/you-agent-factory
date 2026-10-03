@@ -24,8 +24,9 @@ type ProviderModelUpdate struct {
 }
 
 // ConfigDocumentService is a service-local compatibility adapter. It contains
-// injected ports and a private DocumentOwner; it is not the peer-facing
-// Operator Settings authority. New code should depend on Service.
+// a completed DocumentOwner and config codecs; it is not the peer-facing
+// Operator Settings authority. New code should depend on Service. Legacy ports
+// remain only for the construction entries awaiting compatibility retirement.
 type ConfigDocumentService struct {
 	Files                 FileSystem
 	CreateTemp            CreateTemporaryFile
@@ -53,7 +54,9 @@ func (service ConfigDocumentService) owner() (DocumentOwner, error) {
 // Load reads and validates a complete operator configuration. A missing
 // destination is represented by an empty, valid document.
 func (service ConfigDocumentService) Load(path string) (ConfigDocument, error) {
-	if service.Files == nil {
+	// Preserve the legacy port-only boundary's failure while completed owners
+	// retain responsibility for their own filesystem and persistence effects.
+	if service.DocumentOwner == nil && service.Files == nil {
 		return ConfigDocument{}, fmt.Errorf("operator settings filesystem is required")
 	}
 	if service.PersistenceLock != nil {
@@ -266,10 +269,10 @@ func (service ConfigDocumentService) validatePersistencePorts(path string) error
 	if strings.TrimSpace(path) == "" {
 		return fmt.Errorf("operator config path is required")
 	}
-	if service.Files == nil {
+	if service.DocumentOwner == nil && service.Files == nil {
 		return fmt.Errorf("operator settings filesystem is required")
 	}
-	if service.CreateTemp == nil {
+	if service.DocumentOwner == nil && service.CreateTemp == nil {
 		return fmt.Errorf("operator settings temporary-file creator is required")
 	}
 	return nil

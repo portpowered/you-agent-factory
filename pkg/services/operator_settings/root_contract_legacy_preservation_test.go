@@ -15,11 +15,8 @@ func TestConfigDocumentServiceRetainsCompletedOwnerPolicy(t *testing.T) {
 		persistError: persistError,
 	}
 	service := ConfigDocumentService{
-		DocumentOwner:         owner,
-		Files:                 bindingFileSystem{},
-		CreateTemp:            func(string, string) (TemporaryFile, error) { return nil, persistError },
-		PersistenceLock:       &sync.Mutex{},
-		PreserveUnknownFields: func(_, encoded []byte) ([]byte, error) { return encoded, nil },
+		DocumentOwner:   owner,
+		PersistenceLock: &sync.Mutex{},
 	}
 	loaded, err := service.Load("config.json")
 	if err != nil || loaded.FileConfig().Defaults.WorkerModel != "bound-model" {
@@ -38,11 +35,44 @@ func TestConfigDocumentServiceRetainsCompletedOwnerPolicy(t *testing.T) {
 	}
 }
 
+func TestConfigDocumentServicePreservesCompletedOwnerFailures(t *testing.T) {
+	t.Parallel()
+	failure := DocumentFailure{Kind: DocumentFailureKindMalformed, Message: "controlled malformed document"}
+	service := ConfigDocumentService{
+		DocumentOwner:   boundDocumentOwner{operationError: failure},
+		PersistenceLock: &sync.Mutex{},
+	}
+	for _, test := range []struct {
+		name   string
+		invoke func() (ConfigDocument, error)
+	}{
+		{name: "load", invoke: func() (ConfigDocument, error) { return service.Load("config.json") }},
+		{name: "merge", invoke: func() (ConfigDocument, error) {
+			return service.MergeProviderModelDefaults(ConfigDocument{}, ProviderModelUpdate{})
+		}},
+		{name: "update", invoke: func() (ConfigDocument, error) {
+			return service.ConfigureProviderModel(context.Background(), "config.json", ProviderModelUpdate{})
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			document, err := test.invoke()
+			if !errors.Is(err, ErrDocumentMalformed) || document.BackendScopeID() != "" || document.FileConfig().Defaults != (Defaults{}) {
+				t.Fatalf("operation = %#v, %v, want empty result and malformed failure", document.FileConfig(), err)
+			}
+			var got DocumentFailure
+			if !errors.As(err, &got) || got.Message != failure.Message {
+				t.Fatalf("operation failure = %v, want unchanged typed owner failure", err)
+			}
+		})
+	}
+}
+
 // The legacy hook deliberately supplies a different policy. The compatibility
 // adapter must preserve the completed owner's results and errors instead.
 type boundDocumentOwner struct {
-	document     Document
-	persistError error
+	document       Document
+	persistError   error
+	operationError error
 }
 
 func (owner boundDocumentOwner) RebindDocumentOwner(
@@ -58,20 +88,26 @@ func (owner boundDocumentOwner) RebindDocumentOwnerWithPreserver(
 }
 
 func (owner boundDocumentOwner) LoadDocument(LoadDocumentRequest) (LoadDocumentResult, error) {
+	if owner.operationError != nil {
+		return LoadDocumentResult{}, owner.operationError
+	}
 	return LoadDocumentResult{Document: owner.document}, nil
 }
 
 func (owner boundDocumentOwner) MergeDocumentProviderModel(Document, DocumentProviderModelUpdate) (Document, error) {
+	if owner.operationError != nil {
+		return Document{}, owner.operationError
+	}
 	return owner.document, nil
 }
 
 func (owner boundDocumentOwner) ApplyDocumentUpdate(ApplyDocumentUpdateRequest) (ApplyDocumentUpdateResult, error) {
+	if owner.operationError != nil {
+		return ApplyDocumentUpdateResult{}, owner.operationError
+	}
 	return ApplyDocumentUpdateResult{Document: owner.document}, nil
 }
 
 func (owner boundDocumentOwner) PersistDocument(context.Context, PersistDocumentRequest) error {
 	return owner.persistError
 }
-
-// No filesystem operation is needed for an adapter with a completed owner.
-type bindingFileSystem struct{ FileSystem }

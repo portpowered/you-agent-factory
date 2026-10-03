@@ -1,6 +1,7 @@
 package wire_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -75,10 +76,10 @@ func TestNewServiceFromConfigDocumentUsesInjectedDocumentOwner(t *testing.T) {
 	}
 }
 
-func TestNewConfigDocumentServiceConstructsDocumentOwner(t *testing.T) {
+func TestNewConfigDocumentServiceUsesCompletedDocumentForRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	service := settingswire.NewConfigDocumentService(
+	owner := settingswire.NewDocumentService(
 		platformfilesystem.Local{},
 		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 			return os.CreateTemp(dir, pattern)
@@ -86,10 +87,21 @@ func TestNewConfigDocumentServiceConstructsDocumentOwner(t *testing.T) {
 		globalconfigmapping.Decode,
 		globalconfigmapping.Encode,
 		testProviderCatalog,
-		&sync.Mutex{},
+		nil,
+		nil,
 	)
-	if service.Files == nil || service.Decoder == nil || service.DocumentOwner == nil {
-		t.Fatalf("NewConfigDocumentService() = %#v, want populated document ports", service)
+	service := settingswire.NewConfigDocumentService(owner, globalconfigmapping.Decode, globalconfigmapping.Encode, &sync.Mutex{})
+	path := filepath.Join(t.TempDir(), "config.json")
+	provider, model := "codex", "completed-model"
+	updated, err := service.ConfigureProviderModel(context.Background(), path, operatorsettings.ProviderModelUpdate{
+		Provider: &provider, Model: &model,
+	})
+	if err != nil {
+		t.Fatalf("ConfigureProviderModel() = %v", err)
+	}
+	reloaded, err := service.Load(path)
+	if err != nil || reloaded.FileConfig().Defaults != updated.FileConfig().Defaults {
+		t.Fatalf("Load() = %#v, %v, want persisted defaults %#v", reloaded.FileConfig(), err, updated.FileConfig().Defaults)
 	}
 }
 
@@ -180,16 +192,19 @@ func TestNewServiceFromConfigDocumentRejectsMissingIDGenerator(t *testing.T) {
 }
 
 func testConfigDocumentService() operatorsettings.ConfigDocumentService {
-	return settingswire.NewConfigDocumentService(
-		platformfilesystem.Local{},
-		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		globalconfigmapping.Decode,
-		globalconfigmapping.Encode,
-		testProviderCatalog,
-		&sync.Mutex{},
-	)
+	files := platformfilesystem.Local{}
+	create := func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
+		return os.CreateTemp(dir, pattern)
+	}
+	// The remaining legacy root-constructor classifications still require their
+	// old port view until that construction entry is retired in story 003.
+	return operatorsettings.ConfigDocumentService{
+		Files: files, CreateTemp: create, Providers: testProviderCatalog,
+		Decoder: globalconfigmapping.Decode, Encoder: globalconfigmapping.Encode,
+		PersistenceLock: &sync.Mutex{},
+		DocumentOwner: settingswire.NewDocumentService(files, create, globalconfigmapping.Decode,
+			globalconfigmapping.Encode, testProviderCatalog, nil, nil),
+	}
 }
 
 func testProviderCatalog(value string) (string, bool) {
