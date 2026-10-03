@@ -101,7 +101,7 @@ func (a activeFleetFixture) assertPages(t *testing.T, ctx context.Context) {
 				t.Fatalf("active HTTP status=%d body=%s", httpPage.status, httpPage.raw)
 			}
 			for _, row := range httpPage.list.Sessions {
-				assertActiveFleetObservation(t, row, works, sessions, expectedIDs)
+				assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "AVAILABLE")
 			}
 			assertActiveFleetPageParity(t, []byte(inputs.Stdout()), httpPage.raw)
 			wantCount := 2 - page
@@ -109,7 +109,7 @@ func (a activeFleetFixture) assertPages(t *testing.T, ctx context.Context) {
 				t.Fatalf("active page %d = %#v, want %d rows bounded by 2", page, cli, wantCount)
 			}
 			for _, row := range cli.Sessions {
-				assertActiveFleetObservation(t, row, works, sessions, expectedIDs)
+				assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "AVAILABLE")
 				order = append(order, row.WorkerSessionID)
 			}
 			token = cli.PaginationContext.NextToken
@@ -145,10 +145,10 @@ func (a activeFleetFixture) assertWorkReads(t *testing.T, ctx context.Context) {
 		if len(scoped.Sessions) != 1 {
 			t.Fatalf("Work-scoped list=%#v, want single owned attempt", scoped)
 		}
-		assertActiveFleetObservation(t, scoped.Sessions[0], works, sessions, expectedIDs)
+		assertActiveFleetObservation(t, scoped.Sessions[0], works, sessions, expectedIDs, "AVAILABLE")
 		httpScoped := support.GetJSON[workerSessionListJSON](t, f.baseURL+"/factory-sessions/"+sessions[workID]+"/worker-sessions?workId="+url.QueryEscape(workID))
 		for _, row := range httpScoped.Sessions {
-			assertActiveFleetObservation(t, row, works, sessions, expectedIDs)
+			assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "AVAILABLE")
 		}
 		left, _ := json.Marshal(scoped)
 		right, _ := json.Marshal(httpScoped)
@@ -207,17 +207,14 @@ func (a activeFleetFixture) assertOptionalLoss(t *testing.T, ctx context.Context
 			t.Fatalf("optional provider loss hid active identities: %#v", lost)
 		}
 		for _, row := range lost.Sessions {
-			assertActiveFleetObservation(t, row, works, sessions, expectedIDs)
-			if row.WorkName != nil && *row.WorkName == "worker-session-fleet-alpha" && row.Transcript != "UNAVAILABLE" {
-				t.Fatalf("unreadable provider transcript claimed availability: %#v", row)
-			}
+			assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "UNAVAILABLE")
 		}
 		httpPage := fetchBoundedFleetHTTPPageWithQuery(t, ctx, f.baseURL, url.Values{"scope": {scope}, "state": {"RUNNING", "STARTING"}, "maxResults": {"25"}})
 		if httpPage.status != http.StatusOK {
 			t.Fatalf("optional loss HTTP status=%d body=%s", httpPage.status, httpPage.raw)
 		}
 		for _, row := range httpPage.list.Sessions {
-			assertActiveFleetObservation(t, row, works, sessions, expectedIDs)
+			assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "UNAVAILABLE")
 		}
 		assertActiveFleetPageParity(t, []byte(inputs.Stdout()), httpPage.raw)
 	}
@@ -278,11 +275,11 @@ func (a activeFleetFixture) assertCanceledRead(t *testing.T, ctx context.Context
 	}
 	for workID := range works {
 		row := waitForWorkerSessionState(t, ctx, f.process, env, c.factoryDir, f.baseURL, sessions[workID], workID, "RUNNING")
-		assertActiveFleetObservation(t, row, works, sessions, expectedIDs)
+		assertActiveFleetObservation(t, row, works, sessions, expectedIDs, "AVAILABLE")
 	}
 }
 
-func assertActiveFleetObservation(t *testing.T, row workerSessionJSON, works, sessions, ids map[string]string) {
+func assertActiveFleetObservation(t *testing.T, row workerSessionJSON, works, sessions, ids map[string]string, alphaTranscript string) {
 	t.Helper()
 	if row.WorkID == nil || row.WorkName == nil || row.FactorySessionID == nil {
 		t.Fatalf("active row omitted attribution: %#v", row)
@@ -298,11 +295,14 @@ func assertActiveFleetObservation(t *testing.T, row workerSessionJSON, works, se
 		if row.ProviderSession == nil || !row.ProviderSessionAvailable || row.ProviderSession.ID != "session_fixture_codex_fleet_alpha" || row.ProviderSession.Provider != "codex" || row.ProviderSession.Kind != "session_id" {
 			t.Fatalf("streamed active row lost provider reference: %#v", row)
 		}
-		if row.Transcript == "AVAILABLE" {
+		if row.Transcript != alphaTranscript {
+			t.Fatalf("active provider transcript=%q, want %q: %#v", row.Transcript, alphaTranscript, row)
+		}
+		if alphaTranscript == "AVAILABLE" {
 			if row.TokenUsage == nil || row.TokenUsage.InputTokens == nil || *row.TokenUsage.InputTokens != 8 || row.TokenUsage.OutputTokens == nil || *row.TokenUsage.OutputTokens != 12 || row.TokenUsage.TotalTokens == nil || *row.TokenUsage.TotalTokens != 20 {
 				t.Fatalf("available provider usage changed or disappeared: %#v", row.TokenUsage)
 			}
-		} else if row.Transcript != "UNAVAILABLE" || row.TokenUsage != nil {
+		} else if row.TokenUsage != nil {
 			// Current active usage comes from the optional native projection;
 			// missing storage must report absence, never synthesize zero usage.
 			t.Fatalf("unavailable provider usage is untruthful: %#v", row)
