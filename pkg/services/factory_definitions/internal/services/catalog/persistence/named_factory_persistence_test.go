@@ -27,7 +27,7 @@ func TestPersistNamedFactoryOwnsCreateReplaceAndCurrentPointerPolicy(t *testing.
 	var preparedPayloads []string
 	var currentNames []string
 	service, err := catalogpersistence.New(
-		factoryvalidation.New(nil),
+		factoryvalidation.New(nil, validPersistenceValidationRequest().CanonicalFactoryLoader),
 		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validPersistenceValidationRequest(), nil
 		},
@@ -124,7 +124,7 @@ func TestPersistNamedFactoryReturnsResolvedTargetWithPersistenceFailure(t *testi
 
 	wantErr := errors.New("prepare failed")
 	service, err := catalogpersistence.New(
-		factoryvalidation.New(nil),
+		factoryvalidation.New(nil, validPersistenceValidationRequest().CanonicalFactoryLoader),
 		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return factorydefinitions.DefinitionValidationRequest{}, wantErr
 		},

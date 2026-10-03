@@ -27,7 +27,7 @@ import (
 )
 
 func packagedInstallationTestPersistence() factorydefinitions.PackagedFactoryPersistence {
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON)
 	mapper := factorymapping.NewFactoryConfigMapper()
 	fileSystem := platformfilesystem.Local{}
 	writer := factoryauthoredlayout.NewWriter(

@@ -109,7 +109,7 @@ func TestSaveUpsertNamedAndActivateForSession_ReplacesExistingNamedFactory(t *te
 	if err != nil {
 		t.Fatalf("Marshal versioned payload: %v", err)
 	}
-	if _, err := persistNamedFactoryForTest(sessionRoot, "imported-target", versioned, factoryvalidation.New(nil)); err != nil {
+	if _, err := persistNamedFactoryForTest(sessionRoot, "imported-target", versioned, factoryvalidation.New(nil, testCanonicalFactoryLoader)); err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
 
@@ -201,7 +201,7 @@ func (h *upsertDefinitionHost) PrepareFactoryLayoutPayload(
 		context.Background(),
 		segment,
 		payload,
-		factoryvalidation.New(nil),
+		factoryvalidation.New(nil, testCanonicalFactoryLoader),
 	)
 }
 func (h *upsertDefinitionHost) PersistNamedFactoryWithPrepared(

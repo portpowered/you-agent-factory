@@ -49,7 +49,7 @@ func newAuthoringLayoutService(t *testing.T) authoringlayout.Service {
 
 	mapper := factorymapping.NewFactoryConfigMapper()
 	svc, err := authoringlayoutwire.NewService(authoringlayout.Dependencies{
-		Validator: factoryvalidation.New(nil),
+		Validator: factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON),
 		MapInput: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validationentry.MapFactoryJSONForPersistence(payload, func(
 				payload []byte,
@@ -208,7 +208,7 @@ func TestFlattenExpandFactoryLayout_PreservesFactoryIdentityAcrossRoundTrip(t *t
 	t.Parallel()
 
 	composition := newAuthoringLayoutTestComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON)
 	rootDir := t.TempDir()
 	payload := validAlphaPayload(t)
 
@@ -372,7 +372,7 @@ func TestCreateNamedFactory_CreatesDurableNamedFactoryLayout(t *testing.T) {
 	t.Parallel()
 
 	composition := newAuthoringLayoutTestComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON)
 	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator)
 	rootDir := t.TempDir()
 	payload := validAlphaPayload(t)
@@ -408,7 +408,7 @@ func TestReplaceNamedFactory_ReplacesExistingLayoutAtomically(t *testing.T) {
 	t.Parallel()
 
 	composition := newAuthoringLayoutTestComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON)
 	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator)
 	rootDir := t.TempDir()
 	payload := validAlphaPayload(t)
@@ -455,7 +455,7 @@ func TestCreateNamedFactory_RejectsStagingValidationWithoutPartialTarget(t *test
 	t.Parallel()
 
 	composition := newAuthoringLayoutTestComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON)
 	svc := newAuthoringLayoutServiceWithCorruptingWrite(t, composition, validator)
 	rootDir := t.TempDir()
 	payload := validAlphaPayload(t)
@@ -502,7 +502,7 @@ func TestReplaceNamedFactory_PreservesExistingLayoutOnRejectedWrite(t *testing.T
 	t.Parallel()
 
 	composition := newAuthoringLayoutTestComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, newAuthoringLayoutTestComposition(t).LoadCanonicalJSON)
 	svc := newAuthoringLayoutServiceFromComposition(t, composition, validator)
 	rootDir := t.TempDir()
 	validPayload := validAlphaPayload(t)

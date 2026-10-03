@@ -11,9 +11,9 @@ import (
 // injected orchestrator and canonical-load ports.
 func NewValidationOperations(
 	orchestrators factorydefinitions.OrchestratorDefinitionValidator,
-	loadCanonical ...factorydefinitions.CanonicalFactoryJSONLoader,
+	loadCanonical factorydefinitions.CanonicalFactoryJSONLoader,
 ) factorydefinitions.ValidationOperations {
-	return wirevalidation.NewValidationOperations(orchestrators, loadCanonical...)
+	return wirevalidation.NewValidationOperations(orchestrators, loadCanonical)
 }
 
 var (

@@ -38,7 +38,7 @@ func stubLoadCanonical(payload []byte, _ factoryroot.WorkstationLoader) (factory
 
 func TestWire_NewServiceConstructsValidationSubservice(t *testing.T) {
 	t.Parallel()
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, stubLoadCanonical)
 	svc := validationwire.NewService(validator, validator, stubLoadCanonical, nil, nil)
 	var _ validationservice.Service = svc
 }
