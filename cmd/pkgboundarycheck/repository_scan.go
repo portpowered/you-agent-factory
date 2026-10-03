@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
@@ -34,6 +36,14 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	}
 
 	result := scanResult{}
+	if cfg.constructionRegistry != nil {
+		result.constructionFindings, err = contractguard.ScanConstruction(repoRoot, *cfg.constructionRegistry)
+	} else {
+		result.constructionFindings, err = contractguard.ScanRepositoryConstruction(repoRoot)
+	}
+	if err != nil {
+		return scanResult{}, err
+	}
 	if err := scanRootPackageFamilies(repoRoot, scanRoot, cfg, policy, &result); err != nil {
 		return scanResult{}, err
 	}
