@@ -249,6 +249,13 @@ func setupTTSStory(t *testing.T) ttsStory {
 			return os.Rename(oldPath, newPath)
 		},
 	})
+	// F01: observe the external boundaries before any command starts lifecycle.
+	// The journey below then proves the same inert process can invoke TTS.
+	starts, _, _, active := host.Snapshot()
+	if starts != 0 || active != 0 || len(protocol.Calls()) != 0 || generic.Calls() != 0 || rejectingNetwork.Calls() != 0 {
+		t.Fatalf("construction started model effects: hosts=%d active=%d protocol=%d generic=%d downloads=%d",
+			starts, active, len(protocol.Calls()), generic.Calls(), rejectingNetwork.Calls())
+	}
 	t.Cleanup(func() { closeRootProcess(t, process, "close TTS root process") })
 	return ttsStory{
 		process: process, dir: dir, environment: functionalHomeEnvironment(home), home: home,

@@ -669,7 +669,7 @@ func writeControlledArchiveModel(t *testing.T) (string, []byte) {
 func openVerifiedArchiveScope(t *testing.T) (models.Service, models.RuntimeScopeRef, *verifiedArchiveProcessLauncher) {
 	t.Helper()
 	launcher := &verifiedArchiveProcessLauncher{}
-	service, err := provideModelsService(serviceedges.Edges{
+	service, err := newModelsServiceFixture(serviceedges.Edges{
 		ModelAssetHostPlatform: models.AssetHostPlatform{
 			OperatingSystem: "windows",
 			Architecture:    "amd64",

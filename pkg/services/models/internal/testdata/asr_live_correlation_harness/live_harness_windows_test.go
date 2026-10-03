@@ -538,30 +538,61 @@ func newASRLiveCorrelationModelsService(
 	protocol := modelswire.NewPinnedGRPCHostProtocolNegotiator(
 		platformgrpc.NetworkDialer{}, platformfilesystem.Local{}.EvalSymlinks,
 	)
-	service, err := modelswire.NewServiceWithBackendArtifactResolverAndInvocationProtocolAndDialerAndRuntimeEvidence(
-		models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64"},
-		asrLiveCorrelationDenyHTTP{}, models.RuntimeAssetEndpoints{},
-		os.MkdirAll, os.Stat,
-		func() (string, error) { return manifest.StateRoot, nil },
-		os.WriteFile, os.Rename, os.Remove, os.ReadFile, os.ReadDir,
+
+	platform := models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64"}
+	tempDirectory := modelswire.RuntimeTempDirectory(func() string { return manifest.StagingRoot })
+	createTemp := modelswire.RuntimeCreateTempFile(func(directory, pattern string) (modelswire.RuntimeTempFile, error) {
+		file, createErr := os.CreateTemp(directory, pattern)
+		if createErr != nil {
+			return nil, createErr
+		}
+		return file, nil
+	})
+	scopes, err := modelswire.NewRuntimeScopes(platformrandom.CryptoSource{})
+	if err != nil {
+		t.Fatalf("construct runtime scopes: %v", err)
+	}
+	assets, err := modelswire.NewAssets(scopes, platform, asrLiveCorrelationDenyHTTP{},
+		modelswire.NormalizeAssetEndpoints(models.RuntimeAssetEndpoints{}), os.MkdirAll, os.Stat,
+		func() (string, error) { return manifest.StateRoot, nil }, os.WriteFile, os.Rename, os.Remove, os.ReadFile, os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
-		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		launcher, asrLiveCorrelationDenyHTTP{}, asrLiveCorrelationHostClock{}, commandRunner,
-		asrLiveCorrelationDenyHTTP{}, os.Stat,
-		func() string { return manifest.StagingRoot },
-		func(directory, pattern string) (modelswire.RuntimeTempFile, error) {
-			file, createErr := os.CreateTemp(directory, pattern)
-			if createErr != nil {
-				return nil, createErr
-			}
-			return file, nil
-		},
-		zap.NewNop(), time.Now, platformrandom.CryptoSource{},
-		nil, nil, nil, modelseffects.LocalRuntimeHooks{}, os.Getenv,
-		protocol, compatibility, coordination, platformfilesystem.Local{}.EvalSymlinks,
-		backendResolver, nil, platformgrpc.NetworkDialer{}, nil, nil, nil,
-		modelseffects.NewOrderedRuntimeEvidenceRecorder(evidenceSink),
-	)
+		func(path string) (io.ReadCloser, error) { return os.Open(path) }, os.Getenv,
+		modelswire.NewUnresolvedAssetRevisionResolver(), coordination)
+	if err != nil {
+		t.Fatalf("construct assets: %v", err)
+	}
+	catalog, err := modelswire.NewCatalog(scopes, modelswire.NewCatalogReadinessQuery(assets))
+	if err != nil {
+		t.Fatalf("construct catalog: %v", err)
+	}
+	state := modelswire.NewSlotState()
+	clock := asrLiveCorrelationHostClock{}
+	facts := modelswire.NewSlotFacts(scopes, assets, state)
+	coordinator := modelswire.NewSlotCoordinator(state, scopes, clock, nil, nil, 0)
+	leases, err := modelswire.NewHostLeases(clock, facts, coordinator)
+	if err != nil {
+		t.Fatalf("construct leases: %v", err)
+	}
+	evidence := modelseffects.NewOrderedRuntimeEvidenceRecorder(evidenceSink)
+	host, err := modelswire.NewRuntimeHost(scopes, assets, leases, state, launcher, asrLiveCorrelationDenyHTTP{}, clock,
+		nil, nil, platform, protocol, compatibility, platformfilesystem.Local{}.EvalSymlinks, evidence, 0, 0)
+	if err != nil {
+		t.Fatalf("construct runtime host: %v", err)
+	}
+	runtime, err := modelswire.NewInvocationRuntime(nil, nil, nil, nil, platformgrpc.NetworkDialer{}, commandRunner,
+		tempDirectory, createTemp, os.WriteFile, os.Stat, os.ReadFile, os.Remove)
+	if err != nil {
+		t.Fatalf("construct invocation runtime: %v", err)
+	}
+	inference, err := modelswire.NewInference(scopes, assets, catalog, host, runtime,
+		modelswire.NewInertInvocationArtifactFileSystem(), time.Now)
+	if err != nil {
+		t.Fatalf("construct inference: %v", err)
+	}
+	service, err := modelswire.NewService(scopes, assets, catalog, host, inference,
+		launcher, asrLiveCorrelationDenyHTTP{}, clock, commandRunner, asrLiveCorrelationDenyHTTP{}, os.Stat,
+		tempDirectory, createTemp, zap.NewNop(), time.Now, nil, nil, nil, modelseffects.LocalRuntimeHooks{},
+		evidence, nil, backendResolver, platform)
 	if err != nil {
 		t.Fatalf("construct private Models service: %v", err)
 	}

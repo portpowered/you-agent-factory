@@ -16,7 +16,94 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
+
+func TestPreparationUsesConstructionSelectedCoordination(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"success", "failure", "absent"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			cache := t.TempDir()
+			body := []byte("selected coordination cache")
+			writeGenericHFFixture(t, cache, body)
+			scopes := newScopes(t, "selected-coordination-"+mode)
+			scope := openScope(t, scopes, cache, models.RuntimeConfig{})
+			wantErr := errors.New("selected coordination denied")
+			calls, closes := 0, 0
+			var paths []string
+			var coordination modelseffects.AssetStagingCoordination = constructionStagingCoordination(func(got context.Context, path string) (io.Closer, error) {
+				calls++
+				paths = append(paths, path)
+				if got != ctx || !strings.HasPrefix(path, cache+string(os.PathSeparator)) {
+					t.Fatalf("coordination context/path = %v/%q, want selected context/cache", got, path)
+				}
+				if mode == "failure" {
+					return nil, wantErr
+				}
+				return constructionStagingCloser(func() error { closes++; return nil }), nil
+			})
+			if mode == "absent" {
+				coordination = nil
+			}
+			service := newGenericServiceWithEffects(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+				t.Fatal("fully described cached preparation contacted HTTP")
+				return nil, nil
+			}), func(string) string { return "" }, func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, coordination)
+			if calls != 0 {
+				t.Fatal("construction acquired staging ownership")
+			}
+			request := models.PrepareModelAssetsRequest{
+				Scope:     scope,
+				Reference: models.ModelReference{NameOrURI: "hf://owner/repo/weights.bin@" + genericTestRevision},
+				Artifacts: []models.AssetRequirement{{Name: "weights.bin", Bytes: int64(len(body)), SHA256: sha256Hex(body)}},
+				Offline:   true,
+			}
+			result, err := service.PrepareModelAssets(ctx, request)
+			if mode != "success" {
+				assertConstructionCoordinationFailure(t, mode, err, wantErr, calls, closes)
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertGenericHFCachedResult(t, result, body, 0)
+			repeated, err := service.PrepareModelAssets(ctx, request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertGenericHFCachedResult(t, repeated, body, 0)
+			if calls != 2 || closes != 2 || paths[0] != paths[1] {
+				t.Fatalf("repeat coordination calls/closes/paths = %d/%d/%v, want two balanced acquisitions at the selected path", calls, closes, paths)
+			}
+		})
+	}
+}
+
+func assertConstructionCoordinationFailure(t *testing.T, mode string, err, wantErr error, calls, closes int) {
+	t.Helper()
+	var stageErr *models.PullStageError
+	if !errors.Is(err, models.ErrAssetPreparationInterrupted) || !errors.As(err, &stageErr) || stageErr.Stage != models.PullStageCacheInstallation {
+		t.Fatalf("coordination failure = %v, want cache-installation interruption", err)
+	}
+	if mode == "failure" && (!errors.Is(err, wantErr) || calls != 1) {
+		t.Fatalf("selected failure = %v, calls=%d, want preserved cause and one acquisition", err, calls)
+	}
+	if closes != 0 || (mode == "absent" && calls != 0) {
+		t.Fatalf("failed acquisition calls/closes = %d/%d, want no release or absent-effect call", calls, closes)
+	}
+}
+
+type constructionStagingCoordination func(context.Context, string) (io.Closer, error)
+
+func (coordination constructionStagingCoordination) Lock(ctx context.Context, path string) (io.Closer, error) {
+	return coordination(ctx, path)
+}
+
+type constructionStagingCloser func() error
+
+func (closer constructionStagingCloser) Close() error { return closer() }
 
 func TestPrepareModelAssetsRejectsPreCancelledRequestBeforeEffects(t *testing.T) {
 	t.Parallel()
@@ -55,6 +142,89 @@ func TestPrepareModelAssetsRejectsPreCancelledRequestBeforeEffects(t *testing.T)
 			sourceRequests.Load(),
 			mutations.Load(),
 		)
+	}
+}
+
+func TestGenericRevisionConstructionPreservesSelectionAndFailureMapping(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"absent", "nil", "selected", "failure", "invalid", "cancelled", "immutable"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			calls := 0
+			privateErr := errors.New("private resolver failure")
+			resolver := func(got context.Context, source string) (string, error) {
+				calls++
+				if got != ctx || source != "hf://owner/repo/weights.bin@main" {
+					t.Fatalf("revision effect received %v, %q, want selected context and source", got, source)
+				}
+				switch mode {
+				case "failure":
+					return "", privateErr
+				case "invalid":
+					return "main", nil
+				case "cancelled":
+					cancel()
+					return "", privateErr
+				}
+				return genericTestRevision, nil
+			}
+			resolvers := []func(context.Context, string) (string, error){resolver}
+			if mode == "absent" {
+				resolvers = nil
+			} else if mode == "nil" {
+				resolvers[0] = nil
+			}
+			service := newGenericService(t, nil, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+				t.Fatal("revision resolution unexpectedly contacted HTTP")
+				return nil, nil
+			}), nil, resolvers...)
+			if calls != 0 {
+				t.Fatal("construction executed the revision resolver")
+			}
+			source := "hf://owner/repo/weights.bin@main"
+			if mode == "immutable" {
+				source = "hf://owner/repo/weights.bin@" + genericTestRevision
+			}
+			result, err := service.resolveGenericSource(ctx, models.RuntimeScopeConfig{}, source)
+			assertRevisionConstructionOutcome(t, mode, result, err, privateErr, calls)
+		})
+	}
+}
+
+func assertRevisionConstructionOutcome(t *testing.T, mode string, result genericSource, err, privateErr error, calls int) {
+	t.Helper()
+	wantCalls := 1
+	if mode == "absent" || mode == "nil" || mode == "immutable" {
+		wantCalls = 0
+	}
+	if calls != wantCalls {
+		t.Fatalf("revision effect calls = %d, want %d", calls, wantCalls)
+	}
+	assertRevisionSelectionResult(t, mode, result, err, privateErr)
+}
+
+func assertRevisionSelectionResult(t *testing.T, mode string, result genericSource, err, privateErr error) {
+	t.Helper()
+	if mode == "selected" || mode == "immutable" {
+		if err != nil || result.revision != genericTestRevision || result.safe != "hf://owner/repo/weights.bin@"+genericTestRevision {
+			t.Fatalf("revision result = %#v, %v, want pinned selected source", result, err)
+		}
+		return
+	}
+	if mode == "cancelled" {
+		if !errors.Is(err, models.ErrAssetCancelled) || !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled resolver = %v, want pull cancellation and context cause", err)
+		}
+		return
+	}
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassRevisionResolution || !errors.Is(err, models.ErrModelRevisionUnresolved) {
+		t.Fatalf("revision failure = %v, want existing typed revision-resolution failure", err)
+	}
+	if errors.Is(err, privateErr) || strings.Contains(err.Error(), privateErr.Error()) {
+		t.Fatalf("revision failure exposed private resolver cause: %v", err)
 	}
 }
 
@@ -576,4 +746,37 @@ func TestPrepareGenericAssetsOfflinePartialSnapshotReportsOnlyMissingMembers(t *
 		t.Fatalf("offline partial network requests = %d, want 0", requests.Load())
 	}
 	assertFileBody(t, filepath.Join(legacySnapshot, modelRequirement.Name), body)
+}
+
+func newGenericServiceWithEffects(
+	t *testing.T,
+	scopes runtimescopes.Service,
+	client modelseffects.AssetHTTPDoer,
+	environment modelseffects.AssetResolveEnvironment,
+	resolver func(context.Context, string) (string, error),
+	coordination modelseffects.AssetStagingCoordination,
+) *service {
+	t.Helper()
+	value := New(
+		scopes,
+		models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
+		client,
+		models.RuntimeAssetEndpoints{BaseURL: "https://assets.example.test", APIBaseURL: "https://api.example.test"},
+		os.MkdirAll,
+		os.Stat,
+		os.UserHomeDir,
+		os.WriteFile,
+		os.Rename,
+		os.Remove,
+		os.ReadFile,
+		os.ReadDir,
+		func(path string) (io.WriteCloser, error) { return os.Create(path) },
+		func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		environment, resolver, coordination,
+	)
+	service, ok := value.(*service)
+	if !ok {
+		t.Fatalf("New returned %T, want *service", value)
+	}
+	return service
 }
