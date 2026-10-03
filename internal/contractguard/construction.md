@@ -132,9 +132,10 @@ classification/debt before whole-set readiness.
 This bounded scan does not yet establish interface-promoted
 methods, generic receiver instantiations, package-variable execution provenance,
 storage through arbitrary returned owner objects, assertion-status helper returns,
-the remaining service-locator forms, recursive providers or complete effect ancestry. Those remaining
-story-002 cases must be proved before a capability set can claim complete
-enforcement coverage.
+the remaining service-locator forms or complete effect ancestry. Provider
+recursion is covered only by the bounded same-package walk described below.
+The remaining analysis must be proved before a capability set can claim complete
+enforcement coverage; this foundation does not complete T20.
 
 Symbols identify an import path, optional receiver type (without a pointer),
 and declaration name. Required parameter indices count individual parameters,
@@ -216,7 +217,30 @@ platform variants are indexed; multiple declarations of a registered identity
 are classification failures, rather than an arbitrary target selection.
 
 A clean report for the initial set is not whole-repository enforcement or
-runtime behavior evidence. Interface-promoted/generic methods, package-stored values,
-unresolved storage/status summaries, topology, and effect ancestry still require
-fixtures and analysis before enabling a capability set. Cross-package helper
-return equivalence is outside this bounded same-package summary.
+runtime behavior evidence. Interface implementation selection, generic methods,
+arbitrary package-stored callable identity, unresolved storage/status summaries,
+topology, and effect ancestry still require fixtures and analysis before enabling
+a capability set. The package-value walk above does not prove arbitrary stored
+value identity. Cross-package helper return equivalence is outside this bounded
+same-package summary.
+
+## Remaining enforcement work
+
+This retained foundation contributes to FI-A4, FI-A5, FI-A8, S01 and G02.
+Full T20 and Project acceptance remain incomplete. The following obligations
+belong to separately admitted slices:
+
+- `T20-FULL-MATRIX`: complete the lint N/X matrix, noncyclic secondary graphs,
+  remaining locator forms and build/platform classification.
+- `T20-CALLABLE`: prove callable returns, field/callback identity and
+  cross-package dispatch. Current unresolved dispatch remains debt.
+- `T20-PROVENANCE-EFFECTS`: complete getter, named/tuple result and storage
+  provenance, plus clock/logger origin and effect ancestry with T23/T24.
+- `T20-TOPOLOGY`: relocate the five Wire source/topology assertions into
+  static enforcement while preserving runtime behavioral witnesses.
+- `T20-ENABLEMENT`: establish each owner's readiness and zero findings before
+  progressively enabling its set after the owning migration merges.
+
+T29 owns final repository scope; S01 and independent Project validation own
+the composed acceptance. Static fixtures do not prove customer execution,
+session isolation, replay, shutdown, retention or performance.
