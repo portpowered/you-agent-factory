@@ -1456,3 +1456,50 @@ source, plan, or baseline file changed, nothing was staged or committed, and no
 install was replaced. Unrelated live ACP, dub Python, and CLI edits already
 present in the tree were preserved untouched. The prior user priority stands:
 a valid mostly working dub plus a merge, with imperfect wording acceptable.
+
+## 2026-10-02: accepted recovered video; two CI repair authors timed out
+
+The compiled public Factory run at immutable `63f555985a9f7fd1315d8866071852174491f5ac`
+completed all 59 cues in 16.843 seconds after explicit reconstruction and
+seeding of verified checkpoints. Two independent CPU reviews accepted the
+240.067-second H264/AAC/subtitle video, all 59 cue identities and timing, and
+7,202 unchanged source video packets. There are 57 original-audio
+reference-conditioned TTS cues and two preserved nonverbal cues. Output:
+`C:/t/dub-schema-english-recovery/chinese-english.mp4`, SHA-256
+`76d4ce661e512c6caa8582e4da3fca50be8140509e8fba769272a069e0225737`.
+This is explicit recovered work, not a fresh one-shot success. Cue 50 needed
+the manual punctuation-only `Hey,` to `Hey!` change; proposed `Hello.` was
+rejected. No generic EOS cure or voice-similarity proof is claimed. Evidence:
+`C:/t/dub-schema-english-recovery/result.json`,
+`independent-final-acceptance.json`, and
+`independent-review/delivery-acceptance.json` in that directory.
+
+The published `495ccf342cd4652cb5652388ed59f6cd9d99a1fe` CI run
+`37087859555` failed seven functional tests. Functional coverage floors were
+not evaluated. All other product jobs passed, including Backend Lint; its
+normalized deadcode finding set is exactly the unchanged 3148 baseline.
+Merge is pending those required repairs.
+
+Two actual `you.subagent` calls through the normal immutable `495` binary and
+`opencode/space-bunny-free` reached the requested 1,200,000-ms bound:
+
+| Task | Observed duration | Session | Request |
+| --- | --- | --- | --- |
+| ACP functional fixture repair | 1203.531 s | `f03ab86d-6114-4a21-b5d8-2c55d986d694` | `44bbcc52-6901-4cee-9140-26a952e7747c` |
+| Canonical topology event test repair | 1206 s | `000ab856-4762-4c4f-8a62-9dce5cc1f5af` | `a057c400-6048-424a-83ea-05e59f8a126b` |
+
+Both returned `isError: true`, typed `factory_session.subagent.timed_out`,
+human-readable content explaining possible partial edits, `sessionClosed: true`,
+and correlation IDs. Neither returned a primary result; both owned MCP servers
+exited 0. The ACP patch is preserved with SHA-256
+`b05eb866e6963cfa84938def4905fe680e29c2e9c255760d822ad0238ad445ca`;
+the topology task left temporary diagnostic edits. Last observed provider
+activity was `REASONING`, phase `COMPLETED`, which is not evidence of a final
+operation result. Causes remain unproven. Reviewers are finishing narrow manual
+fallbacks after preserving the terminal evidence, without restarting another
+20-minute author. Exact receipts:
+`C:/t/dub-multilingual-validation/mcp-acp-functional-495-repair-proof/result.json`
+and `C:/t/dub-multilingual-validation/functional-495/topology-mcp/result.json`.
+
+This entry was appended directly by root after inspecting the receipts; it is
+not another claimed MCP author success. The broader goal remains incomplete.
