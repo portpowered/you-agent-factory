@@ -140,8 +140,7 @@ func (codec PortableRecordingCodec) DecodeMetadata(reader io.Reader) (string, er
 			PortableRecordingCodeMalformedContract, "document", "", "decode recording metadata: "+err.Error(),
 		)
 	}
-	var kind, schemaVersion, compatibilityVersion, sessionID string
-	var seenKind, seenSchema, seenCompat, seenSession bool
+	var scan portableMetadataScan
 	decoder := json.NewDecoder(reader)
 	if token, err := decoder.Token(); err != nil {
 		return "", malformed(err)
@@ -151,43 +150,70 @@ func (codec PortableRecordingCodec) DecodeMetadata(reader io.Reader) (string, er
 	// Return as soon as the identity members have been read: a summary costs
 	// the size of the header, not of the recording. Members that precede the
 	// identity fields are skipped token by token without being retained.
-	for decoder.More() && !(seenKind && seenSchema && seenCompat && seenSession) {
+	for decoder.More() && !scan.complete() {
 		token, err := decoder.Token()
 		if err != nil {
 			return "", malformed(err)
 		}
 		key, _ := token.(string)
-		switch key {
-		case "recordingKind":
-			seenKind, err = true, decoder.Decode(&kind)
-		case "schemaVersion":
-			seenSchema, err = true, decoder.Decode(&schemaVersion)
-		case "replayCompatibilityVersion":
-			seenCompat, err = true, decoder.Decode(&compatibilityVersion)
-		case "session":
-			var session struct {
-				ID string `json:"id"`
-			}
-			seenSession, err = true, decoder.Decode(&session)
-			sessionID = session.ID
-		default:
-			err = skipPortableJSONValue(decoder)
-		}
-		if err != nil {
+		if err := scan.read(decoder, key); err != nil {
 			return "", malformed(err)
 		}
 	}
 	if err := validatePortableRecordingCompatibilityWithPolicy(
-		codec.effectivePolicy(), kind, schemaVersion, compatibilityVersion,
+		codec.effectivePolicy(), scan.kind, scan.schemaVersion, scan.compatibilityVersion,
 	); err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(sessionID) == "" {
+	if strings.TrimSpace(scan.sessionID) == "" {
 		return "", portableRecordingDiagnostic(
 			PortableRecordingCodeInvalidIdentity, "session", "session.id", "is required",
 		)
 	}
-	return strings.TrimSpace(sessionID), nil
+	return strings.TrimSpace(scan.sessionID), nil
+}
+
+// portableMetadataScan accumulates the identity members of a portable
+// recording as its top-level members are streamed.
+type portableMetadataScan struct {
+	kind, schemaVersion, compatibilityVersion, sessionID string
+	seen                                                 map[string]bool
+}
+
+func (scan *portableMetadataScan) complete() bool {
+	return len(scan.seen) == 4
+}
+
+// read consumes the value of one top-level member, retaining only identity
+// members.
+func (scan *portableMetadataScan) read(decoder *json.Decoder, key string) error {
+	var target any
+	var session struct {
+		ID string `json:"id"`
+	}
+	switch key {
+	case "recordingKind":
+		target = &scan.kind
+	case "schemaVersion":
+		target = &scan.schemaVersion
+	case "replayCompatibilityVersion":
+		target = &scan.compatibilityVersion
+	case "session":
+		target = &session
+	default:
+		return skipPortableJSONValue(decoder)
+	}
+	if scan.seen == nil {
+		scan.seen = map[string]bool{}
+	}
+	scan.seen[key] = true
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if key == "session" {
+		scan.sessionID = session.ID
+	}
+	return nil
 }
 
 // skipPortableJSONValue consumes one JSON value token by token without
