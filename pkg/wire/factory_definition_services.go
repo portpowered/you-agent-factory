@@ -462,6 +462,7 @@ func provideFactoryDefinitionsRoot(
 	persistence factorydefinitions.Persistence,
 	loader *factorydefinitionswire.Loader,
 	compilation factorydefinitionswire.Compilation,
+	validationService factorydefinitionswire.Validation,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
@@ -486,6 +487,7 @@ func provideFactoryDefinitionsRoot(
 		persistence,
 		loader,
 		compilation,
+		validationService,
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,
@@ -519,4 +521,13 @@ func provideFactoryRuntimeRoot(
 		},
 		nil,
 	)
+}
+
+func provideFactoryDefinitionValidationOwner(
+	operations factorydefinitions.ValidationOperations,
+	loader *factorydefinitionswire.Loader,
+	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
+) factorydefinitionswire.Validation {
+	return factorydefinitionswire.NewValidationService(operations, operations, loader.LoadSourceFromCanonicalJSON, requiredToolChecker, orchestratorValidator)
 }

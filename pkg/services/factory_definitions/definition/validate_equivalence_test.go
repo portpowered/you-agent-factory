@@ -14,7 +14,6 @@ import (
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
-	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -34,14 +33,7 @@ func newRootValidateServiceForPeer(t *testing.T) factoryroot.Service {
 	catalogService := catalogwire.NewService(paths, fileSystem)
 
 	validator := testFactoryDefinitionValidator()
-	validationService, err := validationwire.NewService(validationservice.Dependencies{
-		Operations:    validator,
-		Effective:     validator,
-		LoadCanonical: testCanonicalFactoryLoader,
-	})
-	if err != nil {
-		t.Fatalf("validationwire.NewService: %v", err)
-	}
+	validationService := validationwire.NewService(validator, validator, testCanonicalFactoryLoader, nil, nil)
 	return factorydefinition.NewWithValidation(nil, factorydefinition.StubActivationGateway(), catalogService, validationService)
 }
 

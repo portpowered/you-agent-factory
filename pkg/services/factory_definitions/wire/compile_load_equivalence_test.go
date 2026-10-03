@@ -92,6 +92,7 @@ func newWireRootWithCompileLoader(t *testing.T) (factorydefinitions.Service, *fa
 		ports.persistence,
 		ports.loader,
 		compilationForLoader(ports.loader),
+		validationForLoader(ports.loader, ports.requiredToolChecker, ports.orchestratorValidator),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
@@ -417,4 +418,10 @@ func compilationForLoader(loader *compilationloading.Loader) factorydefinitionsw
 		loader.LoadSourceFromFactoryDir,
 		factorydefinitionswire.FactoryConfigJSONEncoder(),
 	)
+}
+
+// validationForLoader supplies real validation operations with the fixture loader.
+func validationForLoader(loader *compilationloading.Loader, checker factorydefinitions.RequiredToolChecker, orchestrator factorydefinitions.OrchestratorDefinitionValidator) factorydefinitionswire.Validation {
+	operations := factorydefinitionswire.NewValidationOperations(orchestrator, loader.LoadSourceFromCanonicalJSON)
+	return factorydefinitionswire.NewValidationService(operations, operations, loader.LoadSourceFromCanonicalJSON, checker, orchestrator)
 }
