@@ -384,6 +384,81 @@ func TestResourcePressureEvictsIdleRuntime(t *testing.T) {
 	}
 }
 
+func TestResourcePressureDoesNotEvictPeerScopeActiveLeaseHolder(t *testing.T) {
+	t.Parallel()
+
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+	cacheDirectoryA, cacheDirectoryB := t.TempDir(), t.TempDir()
+	writeCacheFixture(t, cacheDirectoryA, true)
+	writeCacheFixture(t, cacheDirectoryB, true)
+	scopes := newScopes(t, "pressure-active-peer")
+	refA := openScope(t, scopes, cacheDirectoryA, supervisedRuntimeConfig())
+	refB := openScope(t, scopes, cacheDirectoryB, supervisedRuntimeConfig())
+	var stopCount atomic.Int32
+	launcher := &fakeProcessLauncher{
+		newProcess: func(modelseffects.HostProcessStartSpec) *fakeManagedProcess {
+			process := newFakeManagedProcess(healthServer.URL, nil)
+			process.stopFn = func() error {
+				stopCount.Add(1)
+				return process.defaultStop()
+			}
+			return process
+		},
+	}
+	host, err := internalservice.NewWiredWithSupervisorConfig(
+		scopes, mustAssetsService(t, scopes), launcher, http.DefaultClient,
+		realHostClock{}, nil, nil, internalservice.SupervisorTestConfig{},
+		internalservice.HostPolicyTestConfig{MaxLoadedRuntimes: 1},
+	)
+	if err != nil {
+		t.Fatalf("construct Runtime Host: %v", err)
+	}
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+	ctx := context.Background()
+	requestA := models.EnsureModelHostRequest{Scope: refA, Name: "OMNIVOICE_Q4_K_M"}
+	requestB := models.EnsureModelHostRequest{Scope: refB, Name: "OMNIVOICE_Q4_K_M"}
+	if _, err := host.EnsureModelHost(ctx, requestA); err != nil {
+		t.Fatalf("EnsureModelHost A: %v", err)
+	}
+	leases := internalservice.LeasesService(host)
+	acquired, err := leases.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{
+		Scope: refA, Name: requestA.Name, Holder: "worker-a",
+	})
+	if err != nil {
+		t.Fatalf("AcquireModelLease A: %v", err)
+	}
+	if _, err := host.EnsureModelHost(ctx, requestB); !errors.Is(err, models.ErrHostCapacityExhausted) {
+		t.Fatalf("EnsureModelHost B under pressure = %v, want ErrHostCapacityExhausted", err)
+	}
+	if stopCount.Load() != 0 || launcher.startCount() != 1 {
+		t.Fatalf("pressure stops/starts = %d/%d, want 0/1", stopCount.Load(), launcher.startCount())
+	}
+	retained, err := host.EnsureModelHost(ctx, requestA)
+	if err != nil || retained.Outcome != models.HostEnsureAlreadyReady {
+		t.Fatalf("retained A = %#v, %v, want already ready", retained, err)
+	}
+	if _, err := leases.GetModelLease(ctx, models.GetModelLeaseRequest{
+		Scope: refA, Lease: acquired.Lease.Lease,
+	}); err != nil {
+		t.Fatalf("peer pressure invalidated A lease: %v", err)
+	}
+	if _, err := leases.ReleaseModelLease(ctx, models.ReleaseModelLeaseRequest{
+		Scope: refA, Lease: acquired.Lease.Lease,
+	}); err != nil {
+		t.Fatalf("ReleaseModelLease A: %v", err)
+	}
+	ready, err := host.EnsureModelHost(ctx, requestB)
+	if err != nil || ready.Host.ReadinessState != models.ReadinessStateReady {
+		t.Fatalf("EnsureModelHost B after release = %#v, %v, want ready", ready, err)
+	}
+	if stopCount.Load() != 1 || launcher.startCount() != 2 {
+		t.Fatalf("release/retry stops/starts = %d/%d, want 1/2", stopCount.Load(), launcher.startCount())
+	}
+}
+
 func TestShutdownStopsSupervisedRuntimesAndCancelsIdleTimers(t *testing.T) {
 	t.Parallel()
 
