@@ -589,7 +589,7 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,
-		fileSystem,
+		factorydefinitionswire.NewCatalogService(namedPaths, fileSystem),
 		factorydefinitionswire.StaticClock(time.Unix(0, 0)),
 		fileSystem,
 		listEffective,

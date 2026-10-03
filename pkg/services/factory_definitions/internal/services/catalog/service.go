@@ -26,11 +26,3 @@ type Service interface {
 	GetCurrentFactoryPointer(context.Context, factorydefinitions.GetCurrentFactoryPointerRequest) (factorydefinitions.GetCurrentFactoryPointerResult, error)
 	SetCurrentFactoryPointer(context.Context, factorydefinitions.SetCurrentFactoryPointerRequest) (factorydefinitions.SetCurrentFactoryPointerResult, error)
 }
-
-// Dependencies are the exact host-effect ports required by catalog.
-// They are supplied by Factory Definitions composition and never selected here:
-// catalog does not choose host filesystem/SQL/OS adapters or Wire/root constructors.
-type Dependencies struct {
-	Paths      factorydefinitions.NamedPathResolver
-	FileSystem factorydefinitions.NamedFactoryCatalogFileSystem
-}
