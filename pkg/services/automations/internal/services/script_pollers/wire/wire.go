@@ -14,6 +14,11 @@ import (
 // script-poller composition boundary.
 type CursorPersistenceFileSystem = scriptpollersservice.CursorPersistenceFileSystem
 
+// NewCursorScopes constructs one inert recovery owner for all runtime scopes.
+func NewCursorScopes(files CursorPersistenceFileSystem) scriptpollers.CursorScopes {
+	return scriptpollersservice.NewCursorScopes(files)
+}
+
 // NewService constructs inert script-poller supervision from direct collaborators.
 func NewService(
 	logger *zap.Logger,
