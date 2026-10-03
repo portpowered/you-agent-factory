@@ -23,6 +23,7 @@ import (
 	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
 	canonicalledgerwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
 	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
+	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
 	replaywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire"
@@ -98,13 +99,11 @@ func TestNewServiceWithLifecycleEffectsUsesProvidedPublicationAndPlanner(t *test
 			return recordings.LiveRecordingTarget{ServicePath: "service/path"}, nil
 		},
 	)
-	if got := NewService(&stubLedger{}, NewProjectionService(), planner); got == nil {
+	if got := NewService(&stubLedger{}, projectionquerywire.NewService(), planner); got == nil {
 		t.Fatal("NewService with planner returned nil")
 	}
 	if got := NewServiceWithLifecycleEffects(
-		&stubLedger{},
-		NewProjectionService(),
-		planner,
+		&stubLedger{}, projectionquerywire.NewService(), planner,
 		nil,
 		nil,
 		publication,
@@ -117,7 +116,7 @@ func TestCombinedServicePlainSlices_SuccessAndTypedFailures(t *testing.T) {
 	t.Parallel()
 
 	ledger := &stubLedger{}
-	svc := NewService(ledger, NewProjectionService())
+	svc := NewService(ledger, projectionquerywire.NewService())
 	if svc == nil {
 		t.Fatal("NewService returned nil")
 	}
@@ -132,7 +131,7 @@ func TestCombinedServicePlainSlices_SuccessAndTypedFailures(t *testing.T) {
 func TestCombinedServiceRecordingLifecycleAdapterPreservesDetachedOutcomes(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(&stubLedger{}, NewProjectionService())
+	svc := NewService(&stubLedger{}, projectionquerywire.NewService())
 	lifecycle, ok := svc.(recordings.RecordingLifecycle)
 	if !ok {
 		t.Fatal("Recordings root does not implement RecordingLifecycle")
@@ -1063,9 +1062,7 @@ func TestCombinedServicePortableExportAndReadDelegates(t *testing.T) {
 		t.Fatalf("NewPortableArtifactPublication: %v", err)
 	}
 	svc := NewServiceWithLifecycleEffects(
-		ledger,
-		NewProjectionService(),
-		nil,
+		ledger, projectionquerywire.NewService(), nil,
 		nil,
 		nil,
 		publication,
@@ -1116,7 +1113,7 @@ func TestCombinedServicePortableExportAndReadDelegates(t *testing.T) {
 
 func TestProjectionServiceDelegates(t *testing.T) {
 	t.Parallel()
-	projection := NewProjectionService()
+	projection := projectionquerywire.NewService()
 	state, err := projection.ReconstructFactoryWorldState(nil, 0)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
@@ -1156,9 +1153,7 @@ func TestCombinedServiceReplayArtifactCapabilityRoundTripsDetachedOutcomes(t *te
 		t.Fatalf("NewPortableArtifactPublication: %v", err)
 	}
 	svc := NewServiceWithLifecycleEffects(
-		&stubLedger{},
-		NewProjectionService(),
-		nil,
+		&stubLedger{}, projectionquerywire.NewService(), nil,
 		nil,
 		nil,
 		publication,
@@ -1329,7 +1324,7 @@ func hasReplayArtifactErrorKind(err error, want recordings.ReplayArtifactErrorKi
 func TestCombinedServiceReadHelpersPreserveOwnerFailures(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
+	svc := NewService(&stubLedger{}, projectionquerywire.NewService()).(*combinedService)
 	svc.historicalQuery = unavailableHistoricalOwner{}
 	_, err := svc.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{})
 	var historicalErr *recordings.HistoricalRecordingQueryError
@@ -1345,7 +1340,7 @@ func TestCombinedServiceReadHelpersPreserveOwnerFailures(t *testing.T) {
 func TestCombinedServiceReadHelpersRejectMalformedReplayCursor(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
+	svc := NewService(&stubLedger{}, projectionquerywire.NewService()).(*combinedService)
 	if err := svc.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
 		Scope:  recordings.CanonicalEventScope{FactorySessionID: "session-1"},
 		Cursor: recordings.CanonicalEventCursor{Sequence: -1},
@@ -1401,7 +1396,7 @@ func TestCombinedServiceReadHelpersNormalizeRecordingClock(t *testing.T) {
 	if got := clockNow(); !got.Equal(want) {
 		t.Fatalf("recordingClockNow callback returned %v, want %v", got, want)
 	}
-	svc := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
+	svc := NewService(&stubLedger{}, projectionquerywire.NewService()).(*combinedService)
 	svc.clock = staticRecordingClock{}
 	if got := svc.recordingFinishedAt(); !got.IsZero() {
 		t.Fatalf("finished time from zero clock = %v, want zero", got)
@@ -1470,7 +1465,7 @@ func characterizeAbandonedRecording(t *testing.T, clocks ...recordings.Recording
 	var snapshot recordings.RecordingSnapshot
 	writes := 0
 	root := NewServiceWithLifecycleEffects(
-		&stubLedger{}, NewProjectionService(), nil,
+		&stubLedger{}, projectionquerywire.NewService(), nil,
 		func(_ string, value recordings.RecordingSnapshot) error {
 			observationsMu.Lock()
 			defer observationsMu.Unlock()
@@ -1530,7 +1525,7 @@ func characterizeAbandonedRecording(t *testing.T, clocks ...recordings.Recording
 func TestRecordingLifecycleAdapterRejectsDetachedInputs(t *testing.T) {
 	t.Parallel()
 
-	service := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
+	service := NewService(&stubLedger{}, projectionquerywire.NewService()).(*combinedService)
 	lifecycle := recordings.RecordingLifecycle(service)
 	if _, err := service.LoadResumeInput(recordings.LoadResumeInputRequest{Path: "missing.json"}); !errors.Is(err, recordings.ErrMissingReplayArtifact) {
 		t.Fatalf("LoadResumeInput without a replay source = %v, want ErrMissingReplayArtifact", err)
@@ -1550,7 +1545,7 @@ func TestRecordingLifecycleAdapterCompletesBeginStopFinish(t *testing.T) {
 	t.Parallel()
 
 	var persisted recordings.RecordingSnapshot
-	service := NewServiceWithLifecycleEffects(&stubLedger{}, NewProjectionService(), nil,
+	service := NewServiceWithLifecycleEffects(&stubLedger{}, projectionquerywire.NewService(), nil,
 		func(_ string, snapshot recordings.RecordingSnapshot) error {
 			persisted = snapshot
 			return nil
@@ -1587,7 +1582,7 @@ func TestRecordingLifecycleAdapterCompletesBeginStopFinish(t *testing.T) {
 func TestRecordingLifecycleAdapterBindsAndReportsFailure(t *testing.T) {
 	t.Parallel()
 
-	service := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
+	service := NewService(&stubLedger{}, projectionquerywire.NewService()).(*combinedService)
 	lifecycle := recordings.RecordingLifecycle(service)
 	bound, err := lifecycle.Bind(recordings.BindLifecycleRequest{
 		RecordingID: "adapter-bind",
@@ -1638,7 +1633,7 @@ func TestRecordingLifecycleAdapterBindsAndReportsFailure(t *testing.T) {
 func TestRecordingLifecycleAdapterRejectsTerminalAppendAfterFailedFinish(t *testing.T) {
 	t.Parallel()
 
-	service := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
+	service := NewService(&stubLedger{}, projectionquerywire.NewService()).(*combinedService)
 	lifecycle := recordings.RecordingLifecycle(service)
 	bound, err := lifecycle.Bind(recordings.BindLifecycleRequest{
 		RecordingID: "adapter-terminal",
@@ -1983,14 +1978,14 @@ func NewRuntimeRootWithHistoricalQueryAndAppender(
 	clocks ...recordings.RecordingClock,
 ) recordings.Service {
 	router := newRuntimeLedgerRouter(recordingClockNow(clocks...))
-	projection := NewProjectionService()
+	projection := projectionquerywire.NewService()
 	var writer recordings.RecordingSnapshotWriter
 	var tickers recordings.RecordingFlushTickerFactory
 	if writeFile != nil {
-		writer = newReplayRecordingSnapshotWriter(
+		writer = NewReplayRecordingSnapshotWriter(
 			writeFile,
 			appendFile,
-			replayV2TargetPreparation(readFile),
+			readFile,
 		)
 		tickers = NewRecordingFlushTickerFactory()
 	}
@@ -2098,8 +2093,7 @@ func TestCombinedServiceForwardsCompletedOwnerFailures(t *testing.T) {
 	lifecycleErr := errors.New("injected lifecycle selection failure")
 	artifactsErr := errors.New("injected portable artifact failure")
 	replayErr := errors.New("injected replay plan failure")
-	service := NewCombinedService(&stubLedger{}, NewProjectionService(),
-		injectedLifecycleOwner{err: lifecycleErr}, injectedArtifactsOwner{err: artifactsErr},
+	service := NewCombinedService(&stubLedger{}, projectionquerywire.NewService(), injectedLifecycleOwner{err: lifecycleErr}, injectedArtifactsOwner{err: artifactsErr},
 		injectedReplayOwner{err: replayErr}, injectedCanonicalOwner{err: canonicalErr}, unavailableHistoricalOwner{},
 		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil)
 	_, err := service.Append(recordings.AppendRecordedEventRequest{})

@@ -7,6 +7,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
+	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"strings"
 	"testing"
@@ -33,9 +34,7 @@ func TestLifecycleRuntimeRecorderRecordsRuntimeEventsAndTerminalEvent(t *testing
 	startedAt := time.Date(2026, 7, 27, 17, 0, 0, 0, time.UTC)
 	finishedAt := startedAt.Add(2 * time.Minute)
 	root := NewServiceWithLifecycleEffects(
-		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil),
-		NewProjectionService(),
-		nil,
+		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil), projectionquerywire.NewService(), nil,
 		nil,
 		nil,
 		nil,
@@ -255,8 +254,7 @@ func TestRuntimeOpeningReconstructsCanonicalFactoryWorldStateFromFixture(t *test
 
 	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 	root := NewService(
-		NewRuntimeLedger(nil, func() time.Time { return base }, "roundtrip", nil),
-		NewProjectionService(),
+		NewRuntimeLedger(nil, func() time.Time { return base }, "roundtrip", nil), projectionquerywire.NewService(),
 	)
 	opening, ok := root.(recordings.RuntimeScopeService)
 	if !ok {

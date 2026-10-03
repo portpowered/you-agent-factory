@@ -15,12 +15,13 @@ import (
 	"github.com/portpowered/infinite-you/internal/testpath"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 )
 
 func TestLoadReplayArtifactTypedFailuresAndSuccess(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(&unusedLedger{}, NewProjectionService()).(*combinedService)
+	svc := NewService(&unusedLedger{}, projectionquerywire.NewService()).(*combinedService)
 	if _, err := svc.LoadReplayArtifact(recordings.LoadReplayArtifactRequest{}); !errors.Is(err, recordings.ErrMissingReplayArtifact) {
 		t.Fatalf("missing artifact = %v, want ErrMissingReplayArtifact", err)
 	}
@@ -253,7 +254,7 @@ func closedScopeCalls(fixture *scopedQueryFixture) map[string]func() error {
 func TestRecordingScopeQueriesRemainIsolatedAcrossConcurrentScopes(t *testing.T) {
 	t.Parallel()
 
-	root := NewService(&stubLedger{}, NewProjectionService())
+	root := NewService(&stubLedger{}, projectionquerywire.NewService())
 	opened := make([]openedScopedQuery, 2)
 	for index, sessionID := range []string{"query-scope-a", "query-scope-b"} {
 		eventScope := recordings.CanonicalEventScope{FactorySessionID: sessionID}
@@ -313,7 +314,7 @@ func assertConcurrentScopeProjections(t *testing.T, root recordings.Service, ope
 func TestBindReplayExecutionPublishedSuccessShape(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(&unusedLedger{}, NewProjectionService()).(*combinedService)
+	svc := NewService(&unusedLedger{}, projectionquerywire.NewService()).(*combinedService)
 	if _, err := svc.BindReplayExecution(recordings.BindReplayExecutionRequest{}); !errors.Is(err, recordings.ErrUnsupportedReplayBinding) {
 		t.Fatalf("missing artifact = %v, want ErrUnsupportedReplayBinding", err)
 	}

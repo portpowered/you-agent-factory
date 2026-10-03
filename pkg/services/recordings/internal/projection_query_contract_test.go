@@ -14,6 +14,7 @@ import (
 	"time"
 
 	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
+	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
 )
@@ -22,7 +23,7 @@ func TestProjectionQueries_AreEquivalentForRetainedAndReplayedCanonicalFacts(t *
 	t.Parallel()
 
 	ledger := &stubLedger{}
-	svc := NewService(ledger, NewProjectionService())
+	svc := NewService(ledger, projectionquerywire.NewService())
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-query"}
 	retained := appendProjectionFacts(t, svc, scope)
 
@@ -75,7 +76,7 @@ func TestProjectionQueries_AreEquivalentForRetainedAndReplayedCanonicalFacts(t *
 func TestProjectionQueries_RejectInvalidScopeOrderAndView(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(&stubLedger{}, NewProjectionService())
+	svc := NewService(&stubLedger{}, projectionquerywire.NewService())
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-query"}
 	first := canonicalProjectionFact("event-1", 0, scope)
 
@@ -538,7 +539,7 @@ func TestRecordingScopeLiveSubscriptionAndCursorValidation(t *testing.T) {
 	t.Parallel()
 
 	ledger := &stubLedger{}
-	root := NewService(ledger, NewProjectionService())
+	root := NewService(ledger, projectionquerywire.NewService())
 	scope := recordings.CanonicalEventScope{FactorySessionID: "live-scope"}
 	started, err := root.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
 		Enabled: true, Scope: scope, Target: recordings.RecordingTargetRequest{Artifact: "recording://live"},
@@ -573,7 +574,7 @@ func TestRecordingScopeActiveBoundariesPreserveCancellationAndReadFailures(t *te
 	t.Parallel()
 
 	ledger := &stubLedger{}
-	root := NewService(ledger, NewProjectionService())
+	root := NewService(ledger, projectionquerywire.NewService())
 	scope := recordings.CanonicalEventScope{FactorySessionID: "active-boundaries"}
 	started, err := root.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
 		Enabled: true,
@@ -795,7 +796,7 @@ func TestBeginRecordingScopeCancellationWithoutClockCleansUp(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	planner := cancelingRecordingTargetPlanner{cancel: cancel}
 	root := NewServiceWithLifecycleEffects(
-		&stubLedger{}, NewProjectionService(), planner, nil, nil, nil,
+		&stubLedger{}, projectionquerywire.NewService(), planner, nil, nil, nil,
 	)
 	if _, err := root.BeginRecordingScope(ctx, recordings.BeginRecordingScopeRequest{
 		Enabled: true,
@@ -971,7 +972,7 @@ func newScopedQueryRootWithLogger(t *testing.T, logger logging.Logger) recording
 		t.Fatalf("NewPortableArtifactPublication: %v", err)
 	}
 	root := NewServiceWithLifecycleEffectsAndLogger(
-		&stubLedger{}, NewProjectionService(), nil, nil, nil, publication,
+		&stubLedger{}, projectionquerywire.NewService(), nil, nil, nil, publication,
 		logger,
 	)
 	if root == nil {

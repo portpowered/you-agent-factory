@@ -1965,7 +1965,6 @@ pkg/services/recordings/internal/artifacts/projection.go: unreachable func: resu
 pkg/services/recordings/internal/contracts/contracts.go: unreachable func: LiveRecordingTargetPlannerFunc.PlanLiveRecordingTarget
 pkg/services/recordings/internal/events/event_history_session_lifecycle.go: unreachable func: FactoryStateToDurableLifecycleStatus
 pkg/services/recordings/internal/lifecycle_effects.go: unreachable func: NewRecordingSnapshotWriter
-pkg/services/recordings/internal/lifecycle_effects.go: unreachable func: NewReplayRecordingSnapshotWriter
 pkg/services/recordings/internal/projections/world_state_session_lifecycle.go: unreachable func: buildFactoryWorldSessionBracketProjection
 pkg/services/recordings/internal/projections/world_view.go: unreachable func: filterCustomerPlaceIDs
 pkg/services/recordings/internal/projections/world_view.go: unreachable func: isSystemTimeWorkstation

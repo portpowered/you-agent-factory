@@ -5,6 +5,7 @@ import (
 	"errors"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	"reflect"
 	"strings"
@@ -16,7 +17,7 @@ import (
 func TestCombinedServiceCanonicalAppendCanRecordReplayAndExport(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(&stubLedger{}, NewProjectionService())
+	svc := NewService(&stubLedger{}, projectionquerywire.NewService())
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-canonical"}
 	appended, err := svc.Append(recordings.AppendRecordedEventRequest{
 		Event: recordings.CanonicalEvent{
@@ -133,7 +134,7 @@ func TestCombinedServiceRejectsMalformedCanonicalReplayEvents(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			svc := NewService(&stubLedger{}, NewProjectionService())
+			svc := NewService(&stubLedger{}, projectionquerywire.NewService())
 			corrupt := cloneReplayRecording(valid)
 			mutate(&corrupt)
 			result, err := svc.CreateReplayPlan(replayPlanRequest(corrupt))
@@ -239,7 +240,7 @@ func TestRecordingScopesBeginAppendFlushFinalizeAndClose(t *testing.T) {
 func beginLifecycleScope(t *testing.T) (*stubLedger, recordings.Service, recordings.BeginRecordingScopeResult, recordings.CanonicalEvent) {
 	t.Helper()
 	ledger := &stubLedger{}
-	root := NewService(ledger, NewProjectionService())
+	root := NewService(ledger, projectionquerywire.NewService())
 	if root == nil {
 		t.Fatal("NewService returned nil")
 	}
@@ -365,7 +366,7 @@ func assertClosedScopeRejectsAppend(t *testing.T, root recordings.Service, scope
 func TestRecordingScopesPreserveGlobalCanonicalOrderAcrossScopes(t *testing.T) {
 	t.Parallel()
 
-	service := NewService(&stubLedger{}, NewProjectionService())
+	service := NewService(&stubLedger{}, projectionquerywire.NewService())
 	opened := make([]recordings.BeginRecordingScopeResult, 2)
 	for index, sessionID := range []string{"scope-order-a", "scope-order-b"} {
 		result, err := service.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
@@ -410,8 +411,8 @@ func TestRecordingScopesPreserveGlobalCanonicalOrderAcrossScopes(t *testing.T) {
 func TestRecordingScopesRejectMalformedForeignStaleAndFinalizedReferences(t *testing.T) {
 	t.Parallel()
 
-	first := NewService(&stubLedger{}, NewProjectionService())
-	second := NewService(&stubLedger{}, NewProjectionService())
+	first := NewService(&stubLedger{}, projectionquerywire.NewService())
+	second := NewService(&stubLedger{}, projectionquerywire.NewService())
 	opened, err := first.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
 		Enabled: true,
 		Scope:   recordings.CanonicalEventScope{FactorySessionID: "scope-errors"},
@@ -473,7 +474,7 @@ func TestRecordingScopeAppendDoesNotPublishWhenLifecycleRejects(t *testing.T) {
 	t.Parallel()
 
 	ledger := &stubLedger{}
-	root := NewService(ledger, NewProjectionService()).(*combinedService)
+	root := NewService(ledger, projectionquerywire.NewService()).(*combinedService)
 	started, err := root.BeginRecordingScope(context.Background(), recordings.BeginRecordingScopeRequest{
 		Enabled: true,
 		Scope:   recordings.CanonicalEventScope{FactorySessionID: "atomic-rejection"},
@@ -517,9 +518,7 @@ func TestRecordingScopeCancellationAfterTargetPlanningRemovesBinding(t *testing.
 		release: make(chan struct{}),
 	}
 	root := NewServiceWithLifecycleEffects(
-		&stubLedger{},
-		NewProjectionService(),
-		planner,
+		&stubLedger{}, projectionquerywire.NewService(), planner,
 		nil,
 		nil,
 		nil,
@@ -557,7 +556,7 @@ func TestRecordingScopeCancellationAfterTargetPlanningRemovesBinding(t *testing.
 func TestRecordingScopesKeepConcurrentSessionsIsolated(t *testing.T) {
 	t.Parallel()
 
-	service := NewService(&stubLedger{}, NewProjectionService())
+	service := NewService(&stubLedger{}, projectionquerywire.NewService())
 	type openedScope struct {
 		ref   recordings.RecordingScopeRef
 		event recordings.CanonicalEvent

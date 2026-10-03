@@ -10,7 +10,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
+
+	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
@@ -18,7 +19,7 @@ func TestAcceptedRecordingsRootUsesPrivateCanonicalLedger(t *testing.T) {
 	t.Parallel()
 
 	ledger := &stubLedger{}
-	root := testRecordingRoot(ledger, recordingsinternal.NewProjectionService())
+	root := testRecordingRoot(ledger, projectionquerywire.NewService())
 	if root == nil {
 		t.Fatal("NewService returned nil")
 	}

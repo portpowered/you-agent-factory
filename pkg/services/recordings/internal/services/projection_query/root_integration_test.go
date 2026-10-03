@@ -8,7 +8,8 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
+
+	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
@@ -20,8 +21,7 @@ func TestAcceptedRecordingsRootUsesPrivateProjectionQuery(t *testing.T) {
 	t.Parallel()
 
 	root := testRecordingRoot(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
+		&unusedLedger{}, projectionquerywire.NewService(),
 	)
 	malformed := recordings.CanonicalEvent{
 		ID:       "malformed",

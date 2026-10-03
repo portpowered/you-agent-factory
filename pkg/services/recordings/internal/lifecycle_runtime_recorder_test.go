@@ -16,6 +16,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
+	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 )
 
 type runtimeRecorderTestClock struct{ now time.Time }
@@ -38,9 +39,7 @@ func TestLifecycleRuntimeRecorderUsesComposedRootForBindingFailuresAndFinalizati
 		return nil
 	}
 	root := NewServiceWithLifecycleEffects(
-		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil),
-		NewProjectionService(),
-		nil,
+		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil), projectionquerywire.NewService(), nil,
 		writer,
 		nil,
 		nil,
@@ -106,10 +105,8 @@ func TestReplayRecordingSnapshotWriterPreservesReplayCompatibility(t *testing.T)
 	path := filepath.Join(t.TempDir(), "recording.jsonl")
 	storage := platformreplay.NewLocal(runtime.GOOS)
 	root := NewServiceWithLifecycleEffects(
-		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil),
-		NewProjectionService(),
-		nil,
-		NewReplayRecordingSnapshotWriter(storage.WriteFile, storage.AppendFile),
+		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil), projectionquerywire.NewService(), nil,
+		NewReplayRecordingSnapshotWriter(storage.WriteFile, storage.AppendFile, nil),
 		nil,
 		nil,
 		runtimeRecorderTestClock{now: startedAt},
@@ -344,9 +341,7 @@ func TestLifecycleRuntimeRecorderStopAndIdempotentRecordEvent(t *testing.T) {
 
 	startedAt := time.Date(2026, 7, 27, 16, 0, 0, 0, time.UTC)
 	root := NewServiceWithLifecycleEffects(
-		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil),
-		NewProjectionService(),
-		nil,
+		NewRuntimeLedger(nil, func() time.Time { return startedAt }, "generation", nil), projectionquerywire.NewService(), nil,
 		nil,
 		nil,
 		nil,

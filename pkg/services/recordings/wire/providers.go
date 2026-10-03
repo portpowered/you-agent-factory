@@ -19,6 +19,7 @@ import (
 	canonicalledgerwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
 	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
 	historicalquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query/wire"
+	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
 	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
@@ -81,7 +82,7 @@ func NewReplayInputLoader(
 // NewProjectionService constructs the Recordings projection capability for
 // process-graph composition.
 func NewProjectionService() recordings.ProjectionService {
-	return recordingsinternal.NewProjectionService()
+	return projectionquerywire.NewService()
 }
 
 // NewRuntimeLedger constructs a runtime event ledger for process-graph
@@ -203,7 +204,7 @@ func NewReplayRecordingSnapshotWriter(
 	appendFile func(string, []byte) error,
 	readFile recordings.RecordingReadFile,
 ) recordings.RecordingSnapshotWriter {
-	return recordingsinternal.NewReplayRecordingSnapshotWriterWithReader(writeFile, appendFile, readFile)
+	return recordingsinternal.NewReplayRecordingSnapshotWriter(writeFile, appendFile, readFile)
 }
 
 func NewRecordingFlushTickerFactory() recordings.RecordingFlushTickerFactory {

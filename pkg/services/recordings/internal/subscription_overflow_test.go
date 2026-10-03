@@ -8,6 +8,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 )
 
 func TestCombinedServiceRealLedgerOverflowReportsGapAndReconnects(t *testing.T) {
@@ -16,7 +17,7 @@ func TestCombinedServiceRealLedgerOverflowReportsGapAndReconnects(t *testing.T) 
 	const eventCount = 512
 	now := time.Unix(1_700_000_000, 0).UTC()
 	ledger := NewRuntimeLedger(nil, func() time.Time { return now }, "overflow-generation", nil)
-	svc := NewService(ledger, NewProjectionService())
+	svc := NewService(ledger, projectionquerywire.NewService())
 	if svc == nil {
 		t.Fatal("NewService returned nil")
 	}

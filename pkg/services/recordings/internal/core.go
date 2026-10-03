@@ -17,14 +17,9 @@ import (
 	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
 	canonicalledger "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger"
 	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
-	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
 )
-
-func NewProjectionService() recordings.ProjectionService {
-	return projectionquerywire.NewService()
-}
 
 type combinedService struct {
 	recordings.Ledger
