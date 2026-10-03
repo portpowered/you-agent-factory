@@ -331,13 +331,14 @@ func observeFSCP01CanonicalDispatch(
 		// eventual publication while the provider remains gated, but retain the
 		// first-snapshot failure until that ordering has actually been witnessed.
 		// The retained histories expose no single publication readiness signal.
+		followUpStarted := time.Now()
 		last, err := support.WaitForObservation(5*time.Second,
 			func() (fscp01CanonicalDispatchFacts, error) {
 				return readFSCP01CanonicalDispatch(t, serverURL, sessionID, dispatchID), nil
 			},
 			func(observed fscp01CanonicalDispatchFacts) bool { return observed.HasAssociation },
 		)
-		t.Fatalf("public canonical history for dispatch %q has no Worker Session association in first snapshot; bounded follow-up association=%t workerSessionId=%q dispatchStart=%t error=%v", dispatchID, last.HasAssociation, last.WorkerSessionID, last.HasDispatchStart, err)
+		t.Fatalf("public canonical history for dispatch %q has no Worker Session association in first snapshot (historical run37111629237/job111170601279); bounded follow-up elapsed=%s association=%t workerSessionId=%q dispatchStart=%t error=%v", dispatchID, time.Since(followUpStarted), last.HasAssociation, last.WorkerSessionID, last.HasDispatchStart, err)
 	}
 	if !facts.HasDispatchStart {
 		t.Fatalf("canonical history for dispatch %q has no DISPATCH_QUEUED or DISPATCH_REQUEST", dispatchID)
