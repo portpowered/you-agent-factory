@@ -38,7 +38,7 @@ import (
 func TestProvideProviderRegistryComposesBuiltIns(t *testing.T) {
 	t.Parallel()
 
-	providersService, err := provideProvidersService(serviceedges.Edges{})
+	providersService, err := provideProvidersService(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -77,16 +77,17 @@ func TestProvideWorkStopSummaryProjectorDelegatesToFactorySessions(t *testing.T)
 	}
 }
 
-func TestFactoryRuntimeClockResolverPreservesOverrideAndSelectsPlatformDefault(t *testing.T) {
+func TestFactoryRuntimeClockResolverPreservesOverrideAndSelectsProcessSource(t *testing.T) {
 	t.Parallel()
 
-	resolver := provideFactoryRuntimeClockResolver()
+	processClock := platformclock.NewDeterministic(time.Unix(100, 0), time.Second)
+	resolver := provideFactoryRuntimeClockResolver(processClock)
 	override := &wireTestClock{}
 	if got := resolver(override); got != override {
 		t.Fatalf("resolved override = %#v, want original clock", got)
 	}
-	if _, ok := resolver(nil).(platformclock.Real); !ok {
-		t.Fatalf("resolved default = %T, want platform clock", resolver(nil))
+	if got := resolver(nil); got != processClock || !got.Now().Equal(processClock.Now()) {
+		t.Fatalf("resolved default = %v, want selected process clock", got)
 	}
 }
 
@@ -669,7 +670,7 @@ func writeControlledArchiveModel(t *testing.T) (string, []byte) {
 func openVerifiedArchiveScope(t *testing.T) (models.Service, models.RuntimeScopeRef, *verifiedArchiveProcessLauncher) {
 	t.Helper()
 	launcher := &verifiedArchiveProcessLauncher{}
-	service, err := provideModelsService(serviceedges.Edges{
+	service, err := provideModelsService(selectedTestTimeEdges(serviceedges.Edges{
 		ModelAssetHostPlatform: models.AssetHostPlatform{
 			OperatingSystem: "windows",
 			Architecture:    "amd64",
@@ -677,7 +678,7 @@ func openVerifiedArchiveScope(t *testing.T) (models.Service, models.RuntimeScope
 		ModelHostProcessLauncher:      launcher,
 		ModelHostProtocolNegotiator:   verifiedArchiveProtocolNegotiator{},
 		ModelHostCompatibilityChecker: verifiedArchiveCompatibilityChecker{},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("provideModelsService: %v", err)
 	}
@@ -974,4 +975,12 @@ type verifiedArchiveCompatibilityChecker struct{}
 
 func (verifiedArchiveCompatibilityChecker) Check(context.Context, serviceedges.ModelHostCompatibilityRequest) error {
 	return nil
+}
+
+// Direct provider fixtures supply the same selected pair required by Wire;
+// construction through root.BuildProcess performs this selection in production.
+func selectedTestTimeEdges(overrides serviceedges.Edges) serviceedges.Edges {
+	return serviceedges.Merge(serviceedges.Edges{
+		Clock: platformclock.Real{}, ProcessScheduler: platformclock.Real{},
+	}, overrides)
 }

@@ -51,7 +51,7 @@ func (workerRecordingReaderCompositionProbe) LoadWorkerRecording(context.Context
 func TestInjectBundleComposesRecordingsNeutralReplayThroughWireFactory(t *testing.T) {
 	t.Parallel()
 
-	if _, err := InjectBundle(t.Context(), serviceedges.Edges{}); err != nil {
+	if _, err := InjectBundle(t.Context(), selectedTestTimeEdges(serviceedges.Edges{})); err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
 

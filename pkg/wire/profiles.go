@@ -469,20 +469,17 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 	}
 }
 
-func provideFactoryRuntimeClockResolver() factoryruntime.ClockResolver {
+func provideFactoryRuntimeClockResolver(processClock factoryruntime.Clock) factoryruntime.ClockResolver {
 	return func(clock factoryruntime.Clock) factoryruntime.Clock {
 		if clock != nil {
 			return clock
 		}
-		return platformclock.Real{}
+		return processClock
 	}
 }
 
 func provideFactoryRuntimeMetricsClock(edges serviceedges.Edges) platformclock.TimerSource {
-	if clock, ok := edges.Clock.(platformclock.TimerSource); ok {
-		return clock
-	}
-	return platformclock.Real{}
+	return edges.ProcessScheduler
 }
 
 func providePprofCommandLineReader() platformhttpserver.CommandLineReader {

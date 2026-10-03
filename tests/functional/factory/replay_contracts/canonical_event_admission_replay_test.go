@@ -147,7 +147,7 @@ func assertMalformedReplayIsRejected(
 	runner := &rejectingReplayRunner{}
 	process := support.BuildProcess(t, serviceedges.Edges{
 		FactorySessionReplayRecordingReader: func(path string) ([]byte, error) {
-			if path != invalidPath {
+			if path != invalidPath && path != artifactPath {
 				return nil, fmt.Errorf("unexpected replay path %q", path)
 			}
 			return os.ReadFile(path)
@@ -160,14 +160,37 @@ func assertMalformedReplayIsRejected(
 	})
 	inputs.Input.Env = isolatedReplayEnvironment(t)
 	inputs.Input.WorkingDirectory = t.TempDir()
-	if err := process.Execute(inputs.Input); err == nil {
+	err = process.Execute(inputs.Input)
+	if err == nil {
 		t.Fatal("malformed canonical replay succeeded")
+	}
+	var invalidPayload *json.UnmarshalTypeError
+	if !errors.As(err, &invalidPayload) || invalidPayload.Value != "array" {
+		t.Fatalf("malformed replay error = %v, want typed array payload validation failure", err)
 	}
 	if runner.calls.Load() != 0 {
 		t.Fatalf("provider calls during malformed replay = %d, want 0", runner.calls.Load())
 	}
 	if _, err := os.Stat(artifactPath); err != nil {
 		t.Fatalf("source artifact after malformed replay: %v", err)
+	}
+	if got, err := os.ReadFile(invalidPath); err != nil || !bytes.Equal(got, payload) {
+		t.Fatalf("malformed replay mutated its source: %v", err)
+	}
+	assertValidReplayAfterRejectedPayload(t, process, artifactPath, inputs.Input.Env)
+	if runner.calls.Load() != 0 {
+		t.Fatalf("provider calls during recording recovery = %d, want 0", runner.calls.Load())
+	}
+}
+
+func assertValidReplayAfterRejectedPayload(t *testing.T, process support.Process, artifactPath string, environment []string) {
+	t.Helper()
+	dir := t.TempDir()
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir, "--replay", artifactPath, "--no-record", "--quiet"})
+	inputs.Env = environment
+	inputs.WorkingDirectory = dir
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("public replay of original recording after rejected payload: %v", err)
 	}
 }
 
