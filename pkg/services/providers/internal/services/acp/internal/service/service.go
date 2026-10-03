@@ -585,16 +585,6 @@ func (a *attempt) retire() bool {
 	return true
 }
 
-// retiredState reports whether this attempt has been retired. It is a pure
-// observation: it never retires anything, so a caller asserting that a
-// configuration change left an attempt alone cannot be the reason that attempt
-// was retired.
-func (a *attempt) retiredState() bool {
-	a.stateMu.Lock()
-	defer a.stateMu.Unlock()
-	return a.retired
-}
-
 // beginLaunch claims this attempt's right to launch its process, and refuses
 // once retirement has begun. Because that refusal is decided in the same
 // critical section that records retirement, a spawn either happens entirely

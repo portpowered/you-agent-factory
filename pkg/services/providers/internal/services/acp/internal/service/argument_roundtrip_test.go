@@ -467,3 +467,13 @@ func TestConfigureRejectsMalformedReplacementWithoutChangingLiveSet(t *testing.T
 		t.Fatal("malformed replacement mutated the live provider set")
 	}
 }
+
+// retiredState reports whether this attempt has been retired. It is a pure
+// observation: it never retires anything, so a caller asserting that a
+// configuration change left an attempt alone cannot be the reason that attempt
+// was retired.
+func (a *attempt) retiredState() bool {
+	a.stateMu.Lock()
+	defer a.stateMu.Unlock()
+	return a.retired
+}
