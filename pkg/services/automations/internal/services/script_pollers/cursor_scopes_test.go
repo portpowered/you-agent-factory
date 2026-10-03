@@ -30,6 +30,47 @@ func TestCursorScopes_BlankBaseUsesIsolatedMemoryWithoutIO(t *testing.T) {
 	}
 }
 
+func TestCursorScopes_ReleasedMemoryRestartsEmptyAndRetainsPeers(t *testing.T) {
+	t.Parallel()
+	owner := scriptpollerswire.NewCursorScopes(unexpectedCursorIO{})
+	scope := scriptpollers.CursorScope{RuntimeID: "runtime-a", BaseDir: " "}
+	peer := scriptpollers.CursorScope{RuntimeID: "runtime-b"}
+	detached := scriptpollers.CursorScope{}
+	commitScopedCursor(t, owner, scope, "", "old-a")
+	commitScopedCursor(t, owner, peer, "", "peer")
+	commitScopedCursor(t, owner, detached, "", "detached")
+
+	scope.BaseDir = ""
+	owner.ReleaseScope(scope)
+	owner.ReleaseScope(scope)
+	_, err := owner.GetCursor(context.Background(), scope, automations.GetCursorRequest{InstanceID: "shared-instance"})
+	if !errors.Is(err, automations.ErrNotFound) {
+		t.Fatalf("released memory recovery error=%v, want not found", err)
+	}
+	commitScopedCursor(t, owner, scope, "", "new-a")
+	assertScopedCursor(t, owner, scope, "new-a")
+	assertScopedCursor(t, owner, peer, "peer")
+	assertScopedCursor(t, owner, detached, "detached")
+}
+
+func TestCursorScopes_ReleasePreservesDurableRecoveryAndPeer(t *testing.T) {
+	t.Parallel()
+	owner := scriptpollerswire.NewCursorScopes(osFileSystem{})
+	scope := scriptpollers.CursorScope{RuntimeID: "runtime-a", BaseDir: t.TempDir()}
+	peer := scriptpollers.CursorScope{RuntimeID: "runtime-b", BaseDir: t.TempDir()}
+	commitScopedCursor(t, owner, scope, "", "committed-a")
+	commitScopedCursor(t, owner, peer, "", "committed-b")
+
+	owner.ReleaseScope(scope)
+	owner.ReleaseScope(scope)
+	assertScopedCursor(t, owner, scope, "committed-a")
+	commitScopedCursor(t, owner, scope, "committed-a", "resumed-a")
+	assertScopedCursor(t, owner, scope, "resumed-a")
+	assertScopedCursor(t, owner, peer, "committed-b")
+	fresh := scriptpollerswire.NewCursorScopes(osFileSystem{})
+	assertScopedCursor(t, fresh, scope, "resumed-a")
+}
+
 func TestCursorScopes_DurableRecoveryRetainsAuthoredDestination(t *testing.T) {
 	t.Parallel()
 	owner := scriptpollerswire.NewCursorScopes(osFileSystem{})
@@ -108,6 +149,7 @@ func TestCursorScopes_BlockedDurableReadDoesNotBlockPeer(t *testing.T) {
 	owner := scriptpollerswire.NewCursorScopes(files)
 	blocked := scriptpollers.CursorScope{RuntimeID: "blocked", BaseDir: t.TempDir()}
 	peer := scriptpollers.CursorScope{RuntimeID: "peer"}
+	commitScopedCursor(t, owner, peer, "", "prior-peer-cursor")
 	finished := make(chan error, 1)
 	go func() {
 		_, err := owner.GetCursor(context.Background(), blocked, automations.GetCursorRequest{InstanceID: "shared-instance"})
@@ -126,6 +168,8 @@ func TestCursorScopes_BlockedDurableReadDoesNotBlockPeer(t *testing.T) {
 	}
 	progress := make(chan error, 1)
 	go func() {
+		// Release concerns the joined peer only; blocked still owns its read.
+		owner.ReleaseScope(peer)
 		progress <- owner.CommitCursor(context.Background(), peer, scriptpollers.CommitCursorRequest{
 			InstanceID: "shared-instance", Cursor: "peer-cursor", Checkpoint: "checkpoint-peer-cursor",
 		})
