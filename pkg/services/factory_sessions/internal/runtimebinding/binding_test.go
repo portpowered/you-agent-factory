@@ -694,9 +694,7 @@ func TestFailStartupClosesActivationBeforeRetirementAndRetainsIncompleteCleanup(
 			active.SetActive(t.Context(), session.ID, handle)
 			closed := false
 			runtimebinding.SessionStateFrom(session).Activation = startupActivationClose(func(ctx context.Context) error {
-				if ctx.Err() != nil || !handle.Completed() || sessions.Resolve(session.ID) == nil {
-					t.Fatal("activation cleanup must follow runtime join and precede retirement with a live cleanup context")
-				}
+				assertStartupCleanupBeforeRetirement(t, ctx, handle, sessions.Resolve(session.ID))
 				closed = true
 				if phase == "activation failure" {
 					return cleanupErr
@@ -727,6 +725,13 @@ func TestFailStartupClosesActivationBeforeRetirementAndRetainsIncompleteCleanup(
 				t.Fatalf("incomplete rollback error = %v, closed = %t; want retained record and cleanup failure", err, closed)
 			}
 		})
+	}
+}
+
+func assertStartupCleanupBeforeRetirement(t *testing.T, ctx context.Context, handle factory.RuntimeRun, session *livesession.LiveSession) {
+	t.Helper()
+	if ctx.Err() != nil || !handle.Completed() || session == nil {
+		t.Fatal("activation cleanup must follow runtime join and precede retirement with a live cleanup context")
 	}
 }
 
