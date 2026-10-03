@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -23,10 +25,8 @@ import (
 // no internal cursor file or service pointer is used as a public observer.
 func TestScriptPollerSessionRecoveryAndEmptyCycle(t *testing.T) {
 	t.Parallel()
-	recoveryDir := support.ScaffoldFactory(t, scriptPollerFactoryConfig())
-	emptyDir := support.ScaffoldFactory(t, scriptPollerFactoryConfig())
-	support.ClearSeedInputs(t, recoveryDir)
-	support.ClearSeedInputs(t, emptyDir)
+	recoveryDir, recovery := newScriptCycleFactory(t)
+	emptyDir, empty := newScriptCycleFactory(t)
 	cursor, checkpoint := "cursor-雪-\\opaque", "checkpoint-λ-\"quoted\""
 	output, err := json.Marshal(map[string]any{
 		"request": json.RawMessage(scriptPollerExternalWorkRequestJSON(t)),
@@ -35,20 +35,25 @@ func TestScriptPollerSessionRecoveryAndEmptyCycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	recovery := newScriptCycleRoute()
-	empty := newScriptCycleRoute()
-	restartDir := support.ScaffoldFactory(t, scriptPollerFactoryConfig())
-	peerDir := support.ScaffoldFactory(t, scriptPollerFactoryConfig())
-	support.ClearSeedInputs(t, restartDir)
-	support.ClearSeedInputs(t, peerDir)
-	restart, peer := newScriptCycleRoute(), newScriptCycleRoute()
+	restartDir, restart := newScriptCycleFactory(t)
+	peerDir, peer := newScriptCycleFactory(t)
+	failureDir, failure := newScriptCycleFactory(t)
+	failurePeerDir, failurePeer := newScriptCycleFactory(t)
+	files := &scriptReplacementFailure{directory: failureDir}
 	router := scriptCycleRouter{routes: map[string]*scriptCycleRoute{
-		filepath.Clean(recoveryDir): recovery,
-		filepath.Clean(emptyDir):    empty,
-		filepath.Clean(restartDir):  restart,
-		filepath.Clean(peerDir):     peer,
+		filepath.Clean(recoveryDir):    recovery,
+		filepath.Clean(emptyDir):       empty,
+		filepath.Clean(restartDir):     restart,
+		filepath.Clean(peerDir):        peer,
+		filepath.Clean(failureDir):     failure,
+		filepath.Clean(failurePeerDir): failurePeer,
 	}}
-	server := startScriptCycleHost(t, router)
+	server := startScriptCycleHost(t, router, files)
+	t.Run("failed_replacement_retains_Work_and_prior_resume_while_peer_progresses", func(t *testing.T) {
+		t.Parallel()
+		assertScriptReplacementRecovery(t, server.URL(), failureDir, failurePeerDir,
+			failure, failurePeer, output, cursor, checkpoint)
+	})
 	t.Run("stopped_source_joins_and_recovers_while_peer_progresses", func(t *testing.T) {
 		t.Parallel()
 		assertScriptSourceRestart(t, server.URL(), restartDir, peerDir, restart, peer, output, cursor, checkpoint)
@@ -85,12 +90,19 @@ func TestScriptPollerSessionRecoveryAndEmptyCycle(t *testing.T) {
 				return
 			}
 			assertScriptResumeEnvironment(t, resumed.request, cursor, checkpoint)
-			assertScriptIngressWork(t, listed)
+			assertScriptIngressWork(t, readScriptQueuedWork(t, server.URL(), sessionID, scriptPollerExternalWorkID))
 		})
 	}
 }
 
-func startScriptCycleHost(t *testing.T, router scriptCycleRouter) *support.FunctionalAPIServer {
+func newScriptCycleFactory(t *testing.T) (string, *scriptCycleRoute) {
+	t.Helper()
+	dir := support.ScaffoldFactory(t, scriptPollerFactoryConfig())
+	support.ClearSeedInputs(t, dir)
+	return dir, newScriptCycleRoute()
+}
+
+func startScriptCycleHost(t *testing.T, router scriptCycleRouter, files *scriptReplacementFailure) *support.FunctionalAPIServer {
 	t.Helper()
 	hostDir := support.ScaffoldFactory(t, map[string]any{
 		"name": "idle-automation-host", "workTypes": []map[string]any{{
@@ -101,7 +113,8 @@ func startScriptCycleHost(t *testing.T, router scriptCycleRouter) *support.Funct
 	})
 	support.ClearSeedInputs(t, hostDir)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: hostDir, Edges: serviceedges.Edges{ScriptCommandRunner: router},
+		FactoryDir: hostDir,
+		Edges:      serviceedges.Edges{ScriptCommandRunner: router, AutomationsCursorFileSystem: files},
 		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
 			for dir, route := range router.routes {
 				select {
@@ -115,6 +128,62 @@ func startScriptCycleHost(t *testing.T, router scriptCycleRouter) *support.Funct
 	})
 	t.Cleanup(func() { server.Stop(t) })
 	return server
+}
+
+func assertScriptReplacementRecovery(t *testing.T, baseURL, sourceDir, peerDir string,
+	source, peer *scriptCycleRoute, output []byte, cursor, checkpoint string,
+) {
+	t.Helper()
+	sourceID := support.OpenFactorySessionAt(t, baseURL, sourceDir).Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, sourceID) })
+	peerID := support.OpenFactorySessionAt(t, baseURL, peerDir).Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, peerID) })
+	first, peerFirst := awaitScriptCycleCommand(t, source), awaitScriptCycleCommand(t, peer)
+	first.output <- output
+	replacement := awaitScriptCycleCommand(t, source)
+	assertScriptResumeEnvironment(t, replacement.request, cursor, checkpoint)
+	// Admission precedes durable replacement. The fault is at the existing
+	// filesystem edge, after a real prior commit, and scoped to this directory.
+	var next map[string]any
+	if err := json.Unmarshal(output, &next); err != nil {
+		t.Fatal(err)
+	}
+	next["request"] = json.RawMessage(strings.ReplaceAll(
+		string(scriptPollerNamedWorkRequestJSON(t, "admitted-before-replacement-failure")),
+		scriptPollerExternalRequestID, "replacement-failure-request"))
+	next["cursor"], next["checkpoint"] = "uncommitted-next-cursor", "uncommitted-next-checkpoint"
+	failedOutput, err := json.Marshal(next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement.output <- failedOutput
+	resumed := awaitScriptCycleCommand(t, source)
+	assertScriptResumeEnvironment(t, resumed.request, cursor, checkpoint)
+	listed := readScriptQueuedWork(t, baseURL, sourceID, scriptPollerExternalWorkID, "admitted-before-replacement-failure")
+	location := support.WorkCustomerLocation(scriptPollerWorkTypeName, scriptPollerOutputStateName)
+	if len(listed.Results) != 2 || !support.HasWorkAtCustomerState(listed, scriptPollerExternalWorkID, location) ||
+		!support.HasWorkAtCustomerState(listed, "admitted-before-replacement-failure", location) {
+		t.Fatalf("Work after failed replacement = %#v, want both admitted items retained", listed.Results)
+	}
+	peerFirst.output <- output
+	peerNext := awaitScriptCycleCommand(t, peer)
+	assertScriptResumeEnvironment(t, peerNext.request, cursor, checkpoint)
+	assertScriptIngressWork(t, readScriptQueuedWork(t, baseURL, peerID, scriptPollerExternalWorkID))
+}
+
+const scriptReplacementFailureDetail = "owned-script-cursor-replacement-unavailable"
+
+type scriptReplacementFailure struct {
+	platformfilesystem.Local
+	directory    string
+	replacements atomic.Int32
+}
+
+func (f *scriptReplacementFailure) Rename(from, to string) error {
+	if strings.HasPrefix(filepath.Clean(to), filepath.Clean(f.directory)+string(filepath.Separator)) && f.replacements.Add(1) > 1 {
+		return fmt.Errorf("%s", scriptReplacementFailureDetail)
+	}
+	return f.Local.Rename(from, to)
 }
 
 func assertScriptSourceRestart(t *testing.T, baseURL, sourceDir, peerDir string,
@@ -138,8 +207,7 @@ func assertScriptSourceRestart(t *testing.T, baseURL, sourceDir, peerDir string,
 	first.output <- output
 	pending := awaitScriptCycleCommand(t, source)
 	assertScriptResumeEnvironment(t, pending.request, cursor, checkpoint)
-	assertScriptIngressWork(t, support.GetJSON[factoryapi.ListWorkResponse](t,
-		support.SessionWorkURL(baseURL, sessionID, "/work")))
+	assertScriptIngressWork(t, readScriptQueuedWork(t, baseURL, sessionID, scriptPollerExternalWorkID))
 
 	// Termination stops execution; closing also deactivates and joins source
 	// sidecars. Use that full existing control before claiming source shutdown.
@@ -155,8 +223,7 @@ func assertScriptSourceRestart(t *testing.T, baseURL, sourceDir, peerDir string,
 	peerFirst.output <- output
 	peerNext := awaitScriptCycleCommand(t, peer)
 	assertScriptResumeEnvironment(t, peerNext.request, cursor, checkpoint)
-	assertScriptIngressWork(t, support.GetJSON[factoryapi.ListWorkResponse](t,
-		support.SessionWorkURL(baseURL, peerID, "/work")))
+	assertScriptIngressWork(t, readScriptQueuedWork(t, baseURL, peerID, scriptPollerExternalWorkID))
 	select {
 	case command := <-source.entered:
 		t.Fatalf("stopped source executed another command: %#v", command.request)
@@ -177,7 +244,7 @@ func assertScriptSourceRestart(t *testing.T, baseURL, sourceDir, peerDir string,
 	assertScriptResumeEnvironment(t, resumed.request, cursor, checkpoint)
 	resumed.output <- scriptPollerNamedWorkRequestJSON(t, "reactivated-work")
 	_ = awaitScriptCycleCommand(t, source)
-	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, sessionID, "/work"))
+	listed := readScriptQueuedWork(t, baseURL, sessionID, "reactivated-work")
 	location := support.WorkCustomerLocation(scriptPollerWorkTypeName, scriptPollerOutputStateName)
 	if !support.HasWorkAtCustomerState(listed, "reactivated-work", location) ||
 		support.HasWorkAtCustomerState(listed, "stopped-interval-work", location) {
@@ -200,6 +267,44 @@ func assertScriptResumeEnvironment(t *testing.T, request platformprocess.Command
 			t.Fatalf("resumed source command missing exact %q", expected)
 		}
 	}
+}
+
+// A resumed poll proves source-cycle completion, not downstream worker completion.
+// Observe the retained public dispatch completion event before reading queued Work.
+func readScriptQueuedWork(t *testing.T, baseURL, sessionID string, workIDs ...string) factoryapi.ListWorkResponse {
+	t.Helper()
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, sessionID))
+	defer stream.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	pending := make(map[string]bool, len(workIDs))
+	for _, id := range workIDs {
+		pending[id] = true
+	}
+	for len(pending) > 0 {
+		event := stream.NextEventContext(ctx)
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if event.Context.SessionId == nil || *event.Context.SessionId != sessionID {
+			t.Fatalf("dispatch event belongs to session %v, want %q", event.Context.SessionId, sessionID)
+		}
+		if payload.Outcome != factoryapi.WorkOutcomeAccepted {
+			t.Fatalf("script dispatch outcome=%q, want accepted", payload.Outcome)
+		}
+		if payload.OutputWork != nil {
+			for _, output := range *payload.OutputWork {
+				if output.WorkId != nil && output.State != nil && output.State.Name == scriptPollerOutputStateName {
+					delete(pending, *output.WorkId)
+				}
+			}
+		}
+	}
+	return support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, sessionID, "/work"))
 }
 
 func assertScriptIngressWork(t *testing.T, listed factoryapi.ListWorkResponse) {
