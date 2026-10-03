@@ -27,10 +27,9 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
-// NewService constructs an inert Factory Definitions root from construction and
-// process-edge ports. It composes the accepted root through parent-private catalog
-// Wire and the accepted service assembly without publishing owner types on the
-// returned peer surface.
+// NewService constructs an inert Factory Definitions root from completed catalog
+// and compilation owners plus construction and process-edge ports. Private owner
+// types remain behind the returned peer surface.
 func NewService(
 	sessionHost factorydefinitions.SessionHost,
 	activationGateway factorydefinitions.DefinitionActivationGateway,
