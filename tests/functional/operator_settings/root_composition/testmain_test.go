@@ -18,7 +18,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -555,9 +554,8 @@ func (router *operatorSettingsEffectRouter) routeCount() int {
 
 var _ operatorsettings.FileSystem = (*operatorSettingsEffectRouter)(nil)
 
-// TestMain registers Operator Settings composition hooks before functional proofs run.
+// TestMain closes the shared process after all functional proofs finish.
 func TestMain(m *testing.M) {
-	settingswire.RegisterTestComposition()
 	exitCode := m.Run()
 	if err := closeSharedOperatorSettingsFixture(); err != nil {
 		fmt.Fprintf(os.Stderr, "shared Operator Settings fixture cleanup: %v\n", err)

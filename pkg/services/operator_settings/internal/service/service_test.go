@@ -25,12 +25,13 @@ func TestRootDelegatesResolveEffectiveToPrivateOwner(t *testing.T) {
 	t.Parallel()
 
 	providersRoot := internaltestproviders.StandardCatalog()
-	documentService := documentwire.NewService(
+	documentService := documentwire.NewServiceWithPreserver(
 		&rootTestFileSystem{},
 		rootTestCreateTemporaryFile,
 		rootTestConfigDecoder,
 		rootTestConfigEncoder,
 		rootTestProviderCatalog,
+		nil,
 		nil,
 	)
 	resolutionService, err := resolutionwire.NewService(providersRoot)
@@ -93,12 +94,13 @@ func TestNew_RejectsNilDocument(t *testing.T) {
 func TestNew_RejectsNilResolution(t *testing.T) {
 	t.Parallel()
 
-	documentService := documentwire.NewService(
+	documentService := documentwire.NewServiceWithPreserver(
 		&rootTestFileSystem{},
 		rootTestCreateTemporaryFile,
 		rootTestConfigDecoder,
 		rootTestConfigEncoder,
 		rootTestProviderCatalog,
+		nil,
 		nil,
 	)
 
@@ -355,12 +357,13 @@ type filesystemRootOptions struct {
 func newFilesystemRootWithOptions(t *testing.T, opts filesystemRootOptions) operatorsettings.Service {
 	t.Helper()
 
-	documentService := documentwire.NewService(
+	documentService := documentwire.NewServiceWithPreserver(
 		opts.files,
 		opts.createTemp,
 		opts.decode,
 		opts.encode,
 		rootTestProviderCatalog,
+		nil,
 		opts.decodeWithDiagnostics,
 	)
 	resolutionService, err := resolutionwire.NewService(internaltestproviders.StandardCatalog())
