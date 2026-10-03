@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -55,13 +56,7 @@ func TestProviderSessionStorageFailuresReturnSafeAPIErrors(t *testing.T) {
 			}
 		},
 	}
-	dir := support.ScaffoldSingleStepFactory(t, "provider-session-storage-failures")
-	support.ClearSeedInputs(t, dir)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir, WaitForServiceModeRuntime: true, Edges: edges,
-		Env: []string{"HOME=" + home, "USERPROFILE=" + home},
-	})
-	t.Cleanup(func() { server.Stop(t) })
+	server := startStorageFailureHost(t, home, edges)
 	t.Run("F11-U3 truncated record retains valid transcript", func(t *testing.T) {
 		t.Parallel()
 		assertMixedCorruptDetail(t, server.URL(), mixedID, home)
@@ -129,18 +124,29 @@ func TestCodexProviderSessionWalkFailureReturnsSafeAPIError(t *testing.T) {
 			return privateStorageFault()
 		},
 	}
-	dir := support.ScaffoldSingleStepFactory(t, "provider-session-walk-failure")
-	support.ClearSeedInputs(t, dir)
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: dir, WaitForServiceModeRuntime: true, Edges: edges,
-		Env: []string{"HOME=" + home, "USERPROFILE=" + home},
-	})
-	t.Cleanup(func() { server.Stop(t) })
+	server := startStorageFailureHost(t, home, edges)
 	body := getAPIProviderSessionDetailErrorBody(t, server.URL(), "codex", "session_id", "session_fixture_codex_walk_fault", http.StatusInternalServerError)
 	assertStorageFailureResponse(t, body, home)
 	if walks.Load() != 1 {
 		t.Fatalf("faulted directory walks = %d, want 1", walks.Load())
 	}
+}
+
+func startStorageFailureHost(t *testing.T, home string, edges serviceedges.Edges) *support.FunctionalAPIServer {
+	t.Helper()
+	dir := support.ScaffoldSingleStepFactory(t, "provider-session-storage-failures")
+	support.ClearSeedInputs(t, dir)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, WaitForServiceModeRuntime: true, Edges: edges,
+		Env: []string{"HOME=" + home, "USERPROFILE=" + home},
+		// First-run installation is fixture setup, not the reader behavior.
+		// Complete it before starting the host's observable readiness window.
+		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
+			support.InitializeCustomerHomeWithProcess(tb, process, input.Env, input.WorkingDirectory)
+		},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+	return server
 }
 
 func assertStorageFailureResponse(t *testing.T, body, home string) {
