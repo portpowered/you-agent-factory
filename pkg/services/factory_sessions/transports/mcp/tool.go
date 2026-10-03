@@ -777,6 +777,21 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 	if result.ErrorCode != "" {
 		envelope.Details["invocationCode"] = result.ErrorCode
 	}
+	// Cleanup closes the live Factory Session for every terminal result, so the
+	// runtime correlation identities it published are recorded on the envelope
+	// before the outcome branch decides timeout evidence or failure
+	// classification. They are fixed runtime vocabulary, so they carry no
+	// provider, prompt, or workspace content, and an unpublished identity is
+	// omitted rather than reported as empty.
+	if result.RequestID != "" {
+		envelope.Details["requestId"] = result.RequestID
+	}
+	if result.TraceID != "" {
+		envelope.Details["traceId"] = result.TraceID
+	}
+	if result.WorkID != "" {
+		envelope.Details["workId"] = result.WorkID
+	}
 	if result.Status == factorysessionexecution.InvocationTerminalStatusTimedOut {
 		envelope.Code = "factory_session.subagent.timed_out"
 		envelope.Message = "subagent timed out before producing a result; workspace edits may have occurred"
@@ -790,15 +805,6 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		}
 		if timeoutMillis > 0 {
 			envelope.Details["timeoutMillis"] = timeoutMillis
-		}
-		if result.RequestID != "" {
-			envelope.Details["requestId"] = result.RequestID
-		}
-		if result.TraceID != "" {
-			envelope.Details["traceId"] = result.TraceID
-		}
-		if result.WorkID != "" {
-			envelope.Details["workId"] = result.WorkID
 		}
 		subagentAttachProgress(envelope.Details, progress)
 		subagentTimeoutProviderErrorEvidence(&envelope, progress)

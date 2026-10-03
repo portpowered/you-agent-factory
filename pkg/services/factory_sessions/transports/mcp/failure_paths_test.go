@@ -285,6 +285,9 @@ func assertSubagentTerminalFailureClassification(t *testing.T, reason, code stri
 		ErrorCode:     "INVOCATION_RUNTIME_FAILURE",
 		Message:       "sensitive output " + secret,
 		FailureReason: reason,
+		RequestID:     "request-classification-runtime",
+		TraceID:       "trace-classification-runtime",
+		WorkID:        "work-classification-runtime",
 	}}
 	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-classification" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
 	if response.Result != nil || response.Error == nil {
@@ -308,7 +311,7 @@ func assertSubagentTerminalFailureClassification(t *testing.T, reason, code stri
 		!strings.Contains(action, "check provider logs") {
 		t.Fatalf("suggestedAction = %q, want partial-edit inspection and provider log guidance", action)
 	}
-	assertSubagentFailureReason(t, response.Error.Details, reason, secret)
+	assertSubagentFailureDetails(t, response.Error.Details, reason, secret)
 	encoded, err := json.Marshal(response)
 	if err != nil {
 		t.Fatal(err)
@@ -321,7 +324,8 @@ func assertSubagentTerminalFailureClassification(t *testing.T, reason, code stri
 	}
 }
 
-func assertSubagentFailureReason(t *testing.T, details map[string]any, reason, secret string) {
+// Cleanup guidance points operators at these runtime identities, so every classified failure keeps them while withholding the private provider message.
+func assertSubagentFailureDetails(t *testing.T, details map[string]any, reason, secret string) {
 	t.Helper()
 	if reason == "" || strings.Contains(reason, secret) {
 		if _, ok := details["failureReason"]; ok {
@@ -329,6 +333,11 @@ func assertSubagentFailureReason(t *testing.T, details map[string]any, reason, s
 		}
 	} else if got := details["failureReason"]; got != reason {
 		t.Fatalf("failureReason = %#v, want %q", got, reason)
+	}
+	for key, want := range map[string]string{"requestId": "request-classification-runtime", "traceId": "trace-classification-runtime", "workId": "work-classification-runtime"} {
+		if got := details[key]; got != want {
+			t.Fatalf("%s = %#v, want %q", key, got, want)
+		}
 	}
 }
 
