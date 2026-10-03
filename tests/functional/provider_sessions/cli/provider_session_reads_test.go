@@ -2,7 +2,6 @@ package cli_test
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +44,7 @@ func TestTerminalProviderSessionReadsPreserveTranscriptOutcomes(t *testing.T) {
 			if terminal.ProviderSession == nil || terminal.ProviderSession.ID != test.id || terminal.ProviderSession.Provider != test.provider || terminal.ProviderSession.Kind != "session_id" {
 				t.Fatalf("terminal association = %#v, want %s/%s", terminal.ProviderSession, test.provider, test.id)
 			}
+			assertProviderSessionTerminalIdentity(t, terminal, terminal, sessionID, workID)
 			assertTerminalProviderSessionRead(t, ctx, fixture, caseFixture, env, sessionID, workID, terminal, test)
 		})
 	}
@@ -56,47 +56,56 @@ func assertTerminalProviderSessionRead(t *testing.T, ctx context.Context, fixtur
 	t.Helper()
 	args := []string{"--server", fixture.baseURL, "worker-sessions", "read", "--session", sessionID,
 		"--provider", test.provider, "--kind", "session_id", "--id", test.id, "--output", "json"}
-	if test.errorCode != "" {
-		inputs, err := executeCLIExpectError(t, ctx, fixture.process, env, caseFixture.factoryDir, args...)
-		if err == nil {
-			t.Fatal("unavailable transcript returned success")
-		}
-		assertFleetJSONErrorCode(t, []byte(inputs.Stderr()), test.errorCode, test.name)
-		if strings.TrimSpace(inputs.Stdout()) != "" {
-			t.Fatalf("unavailable transcript fabricated stdout: %s", inputs.Stdout())
-		}
-		assertProviderSessionReadSafe(t, err.Error()+inputs.Stderr(), fixture.homeDir)
-		return
-	}
 	showArgs := append([]string(nil), args...)
 	showArgs[3] = "show"
-	shownInputs := executeCLI(t, ctx, fixture.process, env, caseFixture.factoryDir, showArgs...)
-	var shown workerSessionJSON
-	decodeCLIJSON(t, shownInputs, &shown)
-	if shown.WorkerSessionID != terminal.WorkerSessionID || shown.ProviderSession == nil || *shown.ProviderSession != *terminal.ProviderSession {
-		t.Fatalf("show changed terminal identity: %#v", shown)
-	}
-	if test.provider == "codex" && (shown.Parse.MalformedLineCount != 1 || len(shown.Parse.Errors) != 1 || shown.Parse.Errors[0].Message != "truncated JSON event record") {
-		t.Fatalf("mixed rollout parse = %#v, want one truncated diagnostic", shown.Parse)
-	}
 	for range 2 {
+		shownInputs := executeCLI(t, ctx, fixture.process, env, caseFixture.factoryDir, showArgs...)
+		var shown workerSessionJSON
+		decodeCLIJSON(t, shownInputs, &shown)
+		assertProviderSessionTerminalIdentity(t, shown, terminal, sessionID, workID)
+		assertProviderSessionReadSafe(t, shownInputs.Stdout(), fixture.homeDir)
+		if test.errorCode != "" {
+			inputs, err := executeCLIExpectError(t, ctx, fixture.process, env, caseFixture.factoryDir, args...)
+			if err == nil {
+				t.Fatal("unavailable transcript returned success")
+			}
+			assertFleetJSONErrorCode(t, []byte(inputs.Stderr()), test.errorCode, test.name)
+			if strings.TrimSpace(inputs.Stdout()) != "" {
+				t.Fatalf("unavailable transcript fabricated stdout: %s", inputs.Stdout())
+			}
+			assertProviderSessionReadSafe(t, err.Error()+inputs.Stderr(), fixture.homeDir)
+			continue
+		}
+		if test.provider == "codex" && (shown.Parse.MalformedLineCount != 1 || len(shown.Parse.Errors) != 1 || shown.Parse.Errors[0].Message != "truncated JSON event record") {
+			t.Fatalf("mixed rollout parse = %#v, want one truncated diagnostic", shown.Parse)
+		}
 		inputs := executeCLI(t, ctx, fixture.process, env, caseFixture.factoryDir, args...)
 		var transcript transcriptJSON
 		decodeCLIJSON(t, inputs, &transcript)
-		if transcript.WorkerSessionID != terminal.WorkerSessionID || transcript.ProviderSession != *terminal.ProviderSession || !containsString(transcript.WorkIDs, workID) {
+		if transcript.WorkerSessionID != terminal.WorkerSessionID || transcript.ProviderSession != *terminal.ProviderSession || transcript.State != "COMPLETED" || len(transcript.WorkIDs) != 1 || transcript.WorkIDs[0] != workID {
 			t.Fatalf("read changed terminal association: %#v", transcript)
 		}
-		encoded, err := json.Marshal(transcript.Entries)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if test.text != "" && !strings.Contains(string(encoded), test.text) {
-			t.Fatalf("read omitted retained text: %s", encoded)
-		}
-		if len(transcript.Entries) != 1 {
+		if len(transcript.Entries) != 1 || transcript.Entries[0].Text != test.text || transcript.Entries[0].Type != "assistant_message" {
 			t.Fatalf("mixed rollout transcript = %#v, want only the retained valid entry", transcript.Entries)
 		}
 		assertProviderSessionReadSafe(t, inputs.Stdout()+shownInputs.Stdout(), fixture.homeDir)
+	}
+	// Read failures and successful reads must both leave the terminal association intact.
+	finalInputs := executeCLI(t, ctx, fixture.process, env, caseFixture.factoryDir, showArgs...)
+	var final workerSessionJSON
+	decodeCLIJSON(t, finalInputs, &final)
+	assertProviderSessionTerminalIdentity(t, final, terminal, sessionID, workID)
+	assertProviderSessionReadSafe(t, finalInputs.Stdout(), fixture.homeDir)
+}
+
+func assertProviderSessionTerminalIdentity(t *testing.T, observed, terminal workerSessionJSON, sessionID, workID string) {
+	t.Helper()
+	if observed.WorkerSessionID == "" || observed.WorkerSessionID != terminal.WorkerSessionID ||
+		observed.ProviderSession == nil || *observed.ProviderSession != *terminal.ProviderSession ||
+		observed.FactorySessionID == nil || *observed.FactorySessionID != sessionID || observed.State != "COMPLETED" ||
+		observed.WorkID == nil || *observed.WorkID != workID || len(observed.WorkIDs) != 1 || observed.WorkIDs[0] != workID {
+		t.Fatalf("terminal association = %#v, want Worker %s, Provider %#v, Factory Session %s and singleton Work %s",
+			observed, terminal.WorkerSessionID, terminal.ProviderSession, sessionID, workID)
 	}
 }
 
