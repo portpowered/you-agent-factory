@@ -22,6 +22,11 @@ func TestConstructionImportedHelperReceiver(t *testing.T) {
 		`owner, _ := selected.PairAlias(service); owner.Lookup()`,
 		`owner, _ := selected.Grouped(service); owner.Lookup()`,
 		`owner, _ := selected.Select(service).Pair(); owner.Lookup()`,
+		`owner, _ := selected.Pair(service); owner = service; owner.Lookup()`,
+		`_, owner := selected.Reverse(service); owner = nil; owner.Lookup()`,
+		`var owner, _ = selected.PairAlias(service); owner = service; owner.Lookup()`,
+		`owner, _ := selected.Pair(service); alias := owner; alias = service; alias.Lookup()`,
+		`owner := selected.Select(service); func() { owner = service }(); owner.Lookup()`,
 	} {
 		t.Run(operation, func(t *testing.T) {
 			t.Parallel()
@@ -82,6 +87,18 @@ func TestConstructionTupleReceiverPositions(t *testing.T) {
 		{"parenthesized tuple", `func Pair(s *Service) (*Service, error) { return s, nil }`, `owner, _ := (Pair(s)); owner.Lookup()`, 1},
 		{"named results", `func Pair(s *Service) (owner *Service, err error) { return s, nil }`, `owner, _ := Pair(s); owner.Lookup()`, 1},
 		{"generic concrete", `func Pair[T any](s *Service, value T) (*Service, T) { return s, value }`, `owner, _ := Pair[int](s, 0); owner.Lookup()`, 1},
+		{"reassigned tuple", `func Pair(s *Service) (*Service, error) { return s, nil }`, `owner, _ := Pair(s); owner = s; owner.Lookup()`, 1},
+		{"reassigned reverse tuple", `func Pair(s *Service) (error, *Service) { return nil, s }`, `_, owner := Pair(s); owner = nil; owner.Lookup()`, 1},
+		{"reassigned grouped declaration", `func Pair(s *Service) (*Service, error) { return s, nil }`, `var owner, _ = Pair(s); owner = s; owner.Lookup()`, 1},
+		{"closure writes tuple", `func Pair(s *Service) (*Service, error) { return s, nil }`, `owner, _ := Pair(s); func() { owner = s }(); owner.Lookup()`, 1},
+		{"range writes tuple", `func Pair(s *Service) (*Service, error) { return s, nil }`, `owner, _ := Pair(s); for _, owner = range []*Service{s} {}; owner.Lookup()`, 1},
+		{"alias of reassigned tuple", `func Pair(s *Service) (*Service, error) { return s, nil }`, `owner, _ := Pair(s); owner = s; alias := owner; alias.Lookup()`, 1},
+		{"reassigned tuple alias", `func Pair(s *Service) (*Service, error) { return s, nil }`, `owner, _ := Pair(s); alias := owner; alias = s; alias.Lookup()`, 1},
+		{"reassigned single result", `func Select(s *Service) *Service { return s }`, `owner := Select(s); owner = s; owner.Lookup()`, 1},
+		{"reassigned concrete generic tuple", `func Pair[T any](s *Service, value T) (*Service, T) { return s, value }`, `owner, _ := Pair[int](s, 0); owner = s; owner.Lookup()`, 1},
+		{"reassigned unrelated result", `type Other struct{}; func (*Other) Lookup() Port { return nil }; func Pair(s *Service) (*Service, *Other) { return s, nil }`, `_, owner := Pair(s); owner = &Other{}; owner.Lookup()`, 0},
+		{"shadow after tuple write", `type Other struct{}; func (*Other) Lookup() Port { return nil }; func Pair(s *Service) (*Service, error) { return s, nil }`, `owner, _ := Pair(s); owner = s; _ = owner; { owner := &Other{}; owner.Lookup() }`, 0},
+		{"reassigned generic parameter", `type Other struct{}; func (*Other) Lookup() Port { return nil }; func Pair[Service any](s *Service) (*Service, error) { return s, nil }`, `owner, _ := Pair[Other](&Other{}); owner = &Other{}; owner.Lookup()`, 0},
 		{"unrelated second result", `type Other struct{}; func (*Other) Lookup() Port { return nil }; func Pair(s *Service) (*Service, *Other) { return s, nil }`, `_, owner := Pair(s); owner.Lookup()`, 0},
 		{"unrelated first result", `type Other struct{}; func (*Other) Lookup() Port { return nil }; func Pair(s *Service) (*Other, *Service) { return nil, s }`, `owner, _ := Pair(s); owner.Lookup()`, 0},
 		{"shadowed owner", `type Other struct{}; func (*Other) Lookup() Port { return nil }; func Pair(s *Service) (*Service, error) { return s, nil }`, `owner, _ := Pair(s); _ = owner; { owner := &Other{}; owner.Lookup() }`, 0},
@@ -112,6 +129,11 @@ func (s *Service) Run() { `+tc.operation+` }
 					if finding.Rule != "service-getter-locator" || finding.Caller != (ConstructionSymbol{ImportPath: fixtureOwner, Receiver: "Service", Name: "Run"}) || finding.Callee != (ConstructionSymbol{ImportPath: fixtureOwner, Receiver: "Service", Name: "Lookup"}) || finding.FilePath != "pkg/owner/service.go" || finding.Line != 6 {
 						t.Fatalf("unexpected getter diagnostic: %+v", finding)
 					}
+				}
+				var output bytes.Buffer
+				WriteConstructionFindings(&output, findings)
+				if strings.Contains(output.String(), tc.operation) || strings.Contains(output.String(), tc.helper) {
+					t.Fatalf("diagnostic discloses source: %s", output.String())
 				}
 			}
 		})

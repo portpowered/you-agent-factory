@@ -48,7 +48,10 @@ Concrete helper result signatures also establish a method receiver's
 declared type, including imported helpers, authored result aliases, named results,
 immutable helper values and method chains. Tuple assignments and grouped local
 declarations select the exact declared result position, including grouped/named
-results and aliases of the selected receiver. Generic helpers are covered only when
+results and aliases of the selected receiver. Reassignments, closure writes and
+range writes to these receiver bindings preserve their declared Go type and
+qualified method identity. They do not prove instance equivalence. Helper
+function values still require immutable bindings. Generic helpers are covered only when
 their result is a concrete indexed type. This establishes qualified method
 identity, not helper-return equivalence or required storage provenance; constructor
 field tracing still uses its separate allocation/alias rules. Interface
@@ -88,7 +91,7 @@ Escaped or unused getter values report `unresolved-service-getter-reference`.
 Parameterized views, optional fields, domain/state/resource results and returns
 inside nested closures do not become peer getters. This does not yet establish
 interface-dispatched getters, complete named/tuple result provenance, opaque or
-mutated tuple receiver bindings or arbitrary implementation selection; those limits still require
+arbitrary implementation selection; those limits still require
 classification/debt before whole-set readiness.
 
 This bounded scan does not yet establish promoted
