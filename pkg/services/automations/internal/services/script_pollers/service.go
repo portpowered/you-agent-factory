@@ -23,6 +23,7 @@ const ScriptPollerRestartBackoffMin = 25 * time.Millisecond
 // Service owns script command/source polling supervision. Only explicit
 // supervision operations apply injected command, clock, and admission effects.
 type Service interface {
+	ScopedCursorReader
 	GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error)
 	StartScriptPoller(
 		context.Context,
@@ -42,6 +43,11 @@ type Service interface {
 		ScriptPollerSupervision,
 		automations.WorkRequestSubmitter,
 	) error
+}
+
+// ScopedCursorReader reads recovery facts for one runtime-owned scope.
+type ScopedCursorReader interface {
+	GetCursorForScope(context.Context, CursorScope, automations.GetCursorRequest) (automations.GetCursorResult, error)
 }
 
 // Scheduler supplies the selected time source for script-poller supervision.

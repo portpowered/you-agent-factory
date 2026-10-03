@@ -28,6 +28,7 @@ type ScriptPollerSupervision struct {
 	SourceID       string
 	InstanceID     string
 	ExpectedCursor automations.Cursor
+	CursorScope    CursorScope
 }
 
 // CursorRecorder persists opaque script-poller recovery facts without exposing

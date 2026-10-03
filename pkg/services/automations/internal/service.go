@@ -49,6 +49,7 @@ type Service struct {
 	cursorFileSystem   scriptpollerswire.CursorPersistenceFileSystem
 	reconciler         reconciliation.Service
 	scriptPollers      scriptpollers.Service
+	cursorScope        scriptpollers.CursorScope
 	cron               cron.Service
 	filesystemWatchers filesystemwatchers.Service
 	schedulerMu        sync.Mutex
@@ -143,22 +144,19 @@ func newService(
 }
 
 func (s *Service) newScriptPollers() scriptpollers.Service {
-	cursorRecorder := scriptpollers.NewMemoryCursorRecorder()
-	// The process-scoped root has no factory-local base until a runtime is
-	// activated. Keep that inert owner memory-backed rather than allowing an
-	// empty base to resolve durable state relative to the daemon CWD.
-	if strings.TrimSpace(s.defaultFactoryDir) != "" && s.cursorFileSystem != nil {
-		if durable, err := scriptpollerswire.NewDurableCursorRecorder(s.defaultFactoryDir, s.cursorFileSystem); err == nil {
-			cursorRecorder = durable
-		}
+	// Preserve the memory-only owner fixture when no persistence edge is supplied.
+	// A blank process-root directory also remains memory-backed, never CWD-relative.
+	if s.cursorFileSystem != nil {
+		s.cursorScope.BaseDir = strings.TrimSpace(s.defaultFactoryDir)
 	}
+	cursors := scriptpollerswire.NewCursorScopes(s.cursorFileSystem)
 	return scriptpollerswire.NewService(
 		s.logger(),
 		s.supervisorClock(),
 		s.commandRunner(),
 		s.resolveTemplates,
 		s.executionPolicy,
-		cursorRecorder,
+		cursors,
 	)
 }
 
@@ -244,7 +242,7 @@ func (s *Service) GetCursor(
 		if result, handled, err := s.getCursorFromActiveRuntime(ctx, request); handled {
 			return result, err
 		}
-		return s.scriptPollers.GetCursor(ctx, request)
+		return s.scriptPollers.GetCursorForScope(ctx, s.cursorScope, request)
 	}
 	return s.reconciler.GetCursor(ctx, request)
 }
