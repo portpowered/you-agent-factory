@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -718,4 +720,219 @@ func mustJSON(t *testing.T, value any) json.RawMessage {
 		t.Fatalf("json.Marshal: %v", err)
 	}
 	return encoded
+}
+
+type eventStatusFailure struct {
+	recordings.Service
+	err error
+}
+
+func (s eventStatusFailure) QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error) {
+	return recordings.RecordingStatusResult{}, s.err
+}
+
+func TestCanonicalReadEventsRetainedPrecedence(t *testing.T) {
+	t.Parallel()
+	for _, empty := range []bool{false, true} {
+		t.Run(fmt.Sprint(empty), func(t *testing.T) {
+			t.Parallel()
+			retained := startedAndProgressEvents(runningSessionID)
+			if empty {
+				retained.Events = nil
+			}
+			ledger := newScriptedRecordingsRoot(scriptedExecutionService{readEvents: func(context.Context, string, factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error) {
+				return retained, nil
+			}})
+			// Any fallback would panic on this deliberately unused service.
+			client := newTestClientWithRecordings(scriptedExecutionService{}, nil, ledger)
+			response, err := client.ReadEvents(t.Context(), mcpfactorysession.ReadEventsInput{SessionID: runningSessionID})
+			if err != nil || response.Error != nil || response.Result == nil || len(response.Result.Events) != len(retained.Events) {
+				t.Fatalf("retained read = %#v, %v", response, err)
+			}
+			assertDurableReadOutcome(t, durableReadCase{facts: retained}, response)
+		})
+	}
+}
+
+func TestCanonicalReadEventsRetainedDecodeFailureDoesNotFallback(t *testing.T) {
+	t.Parallel()
+	ledger := newScriptedRecordingsRoot(scriptedExecutionService{readEvents: func(context.Context, string, factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error) {
+		return factorysessions.EventReadResult{SessionID: runningSessionID, Events: []json.RawMessage{json.RawMessage(`{`)}}, nil
+	}})
+	input := mcpfactorysession.ReadEventsInput{SessionID: runningSessionID}
+	want := mcpfactorysession.ReadEvents(t.Context(), ledger, input)
+	got, err := newTestClientWithRecordings(scriptedExecutionService{}, nil, ledger).ReadEvents(t.Context(), input)
+	if err != nil || want.Error == nil || !reflect.DeepEqual(got.Error, want.Error) || got.Result != nil {
+		t.Fatalf("retained decode error = %#v, %v; want %#v", got, err, want)
+	}
+}
+
+func TestCanonicalReadEventsNonMissingFailuresDoNotFallback(t *testing.T) {
+	t.Parallel()
+	failures := []error{recordings.ErrServiceUnavailable, recordings.ErrPortableArtifactUnavailable, recordings.ErrReconnectCursorExpired, recordings.ErrReconnectCursorUnavailable, recordings.ErrReconnectCursorNotFound, errors.New("private/path prompt"), &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorMissingHistory}, &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorUnavailable}}
+	for i, failure := range failures {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			t.Parallel()
+			ledger := eventStatusFailure{err: failure}
+			input := mcpfactorysession.ReadEventsInput{SessionID: runningSessionID}
+			want := mcpfactorysession.ReadEvents(t.Context(), ledger, input)
+			got, err := newTestClientWithRecordings(scriptedExecutionService{}, nil, ledger).ReadEvents(t.Context(), input)
+			if err != nil || !reflect.DeepEqual(got.Error, want.Error) {
+				t.Fatalf("error precedence = %#v, %v; want %#v", got, err, want)
+			}
+		})
+	}
+}
+
+type durableReadCase struct {
+	name            string
+	input           mcpfactorysession.ReadEventsInput
+	getErr, readErr error
+	facts           factorysessions.EventReadResult
+	code            string
+	read            bool
+	cursor          factorysessions.EventReconnectRequest
+}
+
+func durableReadCases() []durableReadCase {
+	negative, one, two := -1, 1, 2
+	return []durableReadCase{
+		{name: "missing", facts: startedAndProgressEvents(runningSessionID), read: true},
+		{name: "unknown", getErr: factorysessions.ErrDurableSessionNotFound, code: "factory_session.session.not_found"},
+		{name: "unknown before invalid cursor", input: mcpfactorysession.ReadEventsInput{AfterSequence: &negative}, getErr: factorysessions.ErrDurableSessionNotFound, code: "factory_session.session.not_found"},
+		{name: "negative", input: mcpfactorysession.ReadEventsInput{AfterSequence: &negative}, code: "BAD_REQUEST"},
+		{name: "ID wins", input: mcpfactorysession.ReadEventsInput{AfterEventID: " evt-started ", AfterSequence: &negative}, facts: factorysessions.EventReadResult{SessionID: runningSessionID, Events: startedAndProgressEvents(runningSessionID).Events[1:]}, read: true, cursor: factorysessions.EventReconnectRequest{AfterEventID: "evt-started"}},
+		{name: "tail", input: mcpfactorysession.ReadEventsInput{AfterSequence: &two}, facts: factorysessions.EventReadResult{SessionID: runningSessionID}, read: true, cursor: factorysessions.EventReconnectRequest{AfterSequence: &two}},
+		{name: "sequence suffix", input: mcpfactorysession.ReadEventsInput{AfterSequence: &one}, facts: factorysessions.EventReadResult{SessionID: runningSessionID, Events: startedAndProgressEvents(runningSessionID).Events[1:]}, read: true, cursor: factorysessions.EventReconnectRequest{AfterSequence: &one}},
+		{name: "absent ID", input: mcpfactorysession.ReadEventsInput{AfterEventID: "absent"}, cursor: factorysessions.EventReconnectRequest{AfterEventID: "absent"}, readErr: factorysessions.ErrReconnectCursorNotFound, read: true, code: "factory_session.events.reconnect_cursor_not_found"},
+		{name: "absent sequence", input: mcpfactorysession.ReadEventsInput{AfterSequence: &two}, cursor: factorysessions.EventReconnectRequest{AfterSequence: &two}, readErr: factorysessions.ErrReconnectCursorNotFound, read: true, code: "factory_session.events.reconnect_cursor_not_found"},
+		{name: "get canceled", getErr: context.Canceled, code: "factory_session.request.canceled"},
+		{name: "get deadline", getErr: context.DeadlineExceeded, code: "factory_session.request.timed_out"},
+		{name: "get internal", getErr: errors.New("private/path prompt"), code: "factory_session.execution.internal"},
+		{name: "read canceled", readErr: context.Canceled, read: true, code: "factory_session.request.canceled"},
+		{name: "read deadline", readErr: context.DeadlineExceeded, read: true, code: "factory_session.request.timed_out"},
+		{name: "internal", readErr: errors.New("private/path prompt"), read: true, code: "factory_session.execution.internal"},
+		{name: "malformed", facts: factorysessions.EventReadResult{SessionID: runningSessionID, Events: []json.RawMessage{canonicalEvent("valid", "SESSION_STARTED", runningSessionID, 1), json.RawMessage(`{`)}}, read: true, code: "factory_session.execution.internal"},
+		{name: "foreign result", facts: startedAndProgressEvents("dur-sess-peer"), read: true, code: "factory_session.execution.internal"},
+		{name: "foreign event", facts: factorysessions.EventReadResult{SessionID: runningSessionID, Events: startedAndProgressEvents("dur-sess-peer").Events}, read: true, code: "factory_session.execution.internal"},
+	}
+}
+
+type durableEventReader struct {
+	scriptedExecutionService
+	t *testing.T
+}
+
+func (s durableEventReader) Get(ctx context.Context, request factorysessions.SessionGetRequest) (factorysessions.SessionGetResult, error) {
+	if request.Mode != factorysessions.SessionOperationModeDurable {
+		s.t.Fatalf("confirmation mode = %s", request.Mode)
+	}
+	return s.scriptedExecutionService.Get(ctx, request)
+}
+
+func TestCanonicalReadEventsDurableFallback(t *testing.T) {
+	t.Parallel()
+	for _, tc := range durableReadCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			reads := 0
+			service := scriptedExecutionService{
+				getSession: func(ctx context.Context, id string) (factorysessions.SessionReadResult, error) {
+					if id != runningSessionID || ctx != t.Context() {
+						t.Fatal("confirmation lost identity/context")
+					}
+					return factorysessions.SessionReadResult{SessionID: id}, tc.getErr
+				},
+				readEvents: func(ctx context.Context, id string, cursor factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error) {
+					reads++
+					if id != runningSessionID || ctx != t.Context() || !reflect.DeepEqual(cursor, tc.cursor) {
+						t.Fatalf("read identity/context/cursor = %q, %#v", id, cursor)
+					}
+					return tc.facts, tc.readErr
+				},
+			}
+			tc.input.SessionID = runningSessionID
+			missing := recordings.ErrMissingRecordingTarget
+			if tc.name != "missing" {
+				missing = fmt.Errorf("wrapped: %w", missing)
+			}
+			client := newTestClientWithRecordings(durableEventReader{scriptedExecutionService: service, t: t}, nil, eventStatusFailure{err: missing})
+			response, err := client.ReadEvents(t.Context(), tc.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (reads == 1) != tc.read {
+				t.Fatalf("read calls = %d", reads)
+			}
+			assertDurableReadOutcome(t, tc, response)
+		})
+	}
+}
+
+func assertDurableReadOutcome(t *testing.T, tc durableReadCase, response mcpfactorysession.ToolResponse[mcpfactorysession.ReadEventsResult]) {
+	t.Helper()
+	if tc.code != "" {
+		if response.Error == nil || response.Error.Code != tc.code || response.Result != nil {
+			t.Fatalf("error = %#v, want %s", response, tc.code)
+		}
+		encoded, _ := json.Marshal(response)
+		if strings.Contains(string(encoded), "private/path") {
+			t.Fatal("internal detail leaked")
+		}
+		if response.Error.Retryable != (tc.code == "factory_session.request.timed_out") {
+			t.Fatalf("retryable = %v", response.Error.Retryable)
+		}
+		if tc.code == "factory_session.events.reconnect_cursor_not_found" && (response.Error.SessionID != runningSessionID || response.Error.Details["reason"] != "RECONNECT_CURSOR_NOT_FOUND") {
+			t.Fatalf("cursor correlation = %#v", response.Error)
+		}
+		return
+	}
+	if response.Error != nil || response.Result == nil || response.Result.SessionID != runningSessionID || len(response.Result.Events) != len(tc.facts.Events) {
+		t.Fatalf("facts = %#v", response)
+	}
+	for i, event := range response.Result.Events {
+		var want, got map[string]any
+		_ = json.Unmarshal(tc.facts.Events[i], &want)
+		encoded, _ := json.Marshal(event)
+		_ = json.Unmarshal(encoded, &got)
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("fact changed: %s vs %s", encoded, tc.facts.Events[i])
+		}
+	}
+}
+
+func TestCanonicalReadEventsValidationAndContextPrecedence(t *testing.T) {
+	t.Parallel()
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	expired, stop := context.WithDeadline(t.Context(), time.Time{})
+	defer stop()
+	for _, tc := range []struct {
+		name string
+		ctx  context.Context
+		raw  string
+		code string
+	}{
+		{"malformed", t.Context(), `{"sessionId":`, "BAD_REQUEST"},
+		{"missing", t.Context(), `{}`, "BAD_REQUEST"},
+		{"blank", t.Context(), `{"sessionId":"  "}`, "BAD_REQUEST"},
+		{"canceled before missing", canceled, `{}`, "factory_session.request.canceled"},
+		{"deadline before missing", expired, `{}`, "factory_session.request.timed_out"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			client := newTestClientWithRecordings(scriptedExecutionService{}, nil, eventStatusFailure{err: recordings.ErrMissingRecordingTarget})
+			raw, err := client.CallTool(tc.ctx, mcpfactorysession.ToolReadEvents, json.RawMessage(tc.raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var response mcpfactorysession.ToolResponse[mcpfactorysession.ReadEventsResult]
+			if err := json.Unmarshal(raw, &response); err != nil {
+				t.Fatal(err)
+			}
+			if response.Error == nil || response.Error.Code != tc.code || response.Result != nil {
+				t.Fatalf("validation = %s", raw)
+			}
+		})
+	}
 }

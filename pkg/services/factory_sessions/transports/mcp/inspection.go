@@ -95,6 +95,81 @@ func ReadEvents(ctx context.Context, service RecordingsInspection, input ReadEve
 	return ToolResponse[ReadEventsResult]{Result: &result}
 }
 
+// readEventsCanonical keeps retained Recordings authoritative, using the
+// already-injected durable owner only when Recordings has no target. This MCP
+// representation adapter preserves canonical facts without rewriting history.
+func readEventsCanonical(
+	ctx context.Context,
+	sessions factorysessionexecution.Service,
+	service RecordingsInspection,
+	input ReadEventsInput,
+) ToolResponse[ReadEventsResult] {
+	if ctx == nil {
+		envelope := executionErrorEnvelope(errMissingRequestContext)
+		return ToolResponse[ReadEventsResult]{Error: &envelope}
+	}
+	if response, done := requestContextErrorResponse[ReadEventsResult](ctx); done {
+		return response
+	}
+	result, err := readFactorySessionEvents(ctx, service, input)
+	if errors.Is(err, recordings.ErrMissingRecordingTarget) {
+		result, err = rootReadEvents(ctx, sessions, input)
+		if err != nil {
+			envelope := eventReadErrorEnvelope(input.SessionID, err)
+			var validationErr *factorysessionexecution.ExecutionValidationError
+			if envelope.Code == errorCodeBadRequest && !errors.Is(err, recordings.ErrInvalidReconnectCursor) && !errors.As(err, &validationErr) {
+				// Durable failures and malformed canonical facts are not caller
+				// validation messages. Keep their internal contents private.
+				envelope = unmappedExecutionErrorEnvelope()
+			}
+			return ToolResponse[ReadEventsResult]{Error: &envelope}
+		}
+	}
+	if err != nil {
+		envelope := eventReadErrorEnvelope(input.SessionID, err)
+		return ToolResponse[ReadEventsResult]{Error: &envelope}
+	}
+	return ToolResponse[ReadEventsResult]{Result: &result}
+}
+
+func rootReadEvents(
+	ctx context.Context,
+	sessions factorysessionexecution.Service,
+	input ReadEventsInput,
+) (ReadEventsResult, error) {
+	if _, err := sessions.Get(ctx, factorysessionexecution.SessionGetRequest{
+		SessionID: input.SessionID, Mode: factorysessionexecution.SessionOperationModeDurable,
+	}); err != nil {
+		return ReadEventsResult{}, err
+	}
+	reconnect := factorysessionexecution.EventReconnectRequest{AfterEventID: strings.TrimSpace(input.AfterEventID)}
+	if reconnect.AfterEventID == "" {
+		if input.AfterSequence != nil && *input.AfterSequence < 0 {
+			return ReadEventsResult{}, recordings.ErrInvalidReconnectCursor
+		}
+		reconnect.AfterSequence = input.AfterSequence
+	}
+	facts, err := sessions.ReadEvents(ctx, input.SessionID, reconnect)
+	if err != nil {
+		return ReadEventsResult{}, err
+	}
+	if facts.SessionID != input.SessionID {
+		return ReadEventsResult{}, errors.New("canonical event read returned a different Session")
+	}
+	events := make([]factoryapi.FactoryEvent, 0, len(facts.Events))
+	for _, raw := range facts.Events {
+		var event factoryapi.FactoryEvent
+		if err := json.Unmarshal(raw, &event); err != nil {
+			return ReadEventsResult{}, err
+		}
+		if event.Context.SessionId == nil || *event.Context.SessionId != facts.SessionID {
+			return ReadEventsResult{}, errors.New("canonical event belongs to a different Session")
+		}
+		events = append(events, event)
+	}
+	return ReadEventsResult{SessionID: facts.SessionID, Events: events}, nil
+}
+
 // ControlInput is the MCP request shape for you.factory_session.control.
 type ControlInput struct {
 	SessionID         string                                        `json:"sessionId"`
