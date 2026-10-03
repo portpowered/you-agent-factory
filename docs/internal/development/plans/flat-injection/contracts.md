@@ -2662,13 +2662,14 @@ sink resources, without installing behavior through `SetRuntimeLogger`.
 | Role/value | Existing source or additive proposal | Authority and lifetime |
 | --- | --- | --- |
 | LoadedFactoryLoader/LoadedConfig | factory_runtime/session_build_spec.go:12–22; Definitions internal/contracts/application.go:183–189,271–275 | Fixed loading capability; fresh session-owned definition. No process service lookup. |
-| WorkstationLoader/InvocationInterpolationService/FileReader | Definitions root contracts, invocation_interpolation_contract.go:8 | Existing loading/interpolation/IO roles, directly injected. |
+| WorkstationLoader/InvocationInterpolationService/FileReader | Definitions internal/contracts/workstations.go:4; invocation_interpolation_contract.go:8–16 | Existing loading/interpolation/IO roles, directly injected. |
 | IDGenerator/Logger | factory_runtime/clock.go:22; logger.go:6 | Existing effects; selected origin and per-request correlation. |
 | Workers Service/ProgressPublisher | workers/workstation_contracts.go:194; progress_observations.go:57 | Existing execution/progress roles; complete correlation routes observation, no captured mutable session. |
 | runtimePromptRenderer | orchestration/runtime/factory.go:77 | RenderPrompt(string, []workers.Token, *workers.Context) (string,error). |
 | runtimeTemplateFieldResolver | workstation_routes.go:108 | ResolveTemplateFields(string,map[string]string,[]workers.Token,*workers.Context,string) (*workers.ResolvedTemplateFields,error). |
 | expectedArtifactFileSystem | workstation_routes.go:18 | Existing Glob/Stat/EvalSymlinks interface, shown below. |
-| BuildDefaults/SessionBuildValues/PreparedSessionValues/WorkstationRequestValues/binding | Explicit T31-local additive proposals | Config/state, never collaborators/getters. Binding retains injected resolver plus detached values. |
+| BuildDefaults/SessionBuildValues/PreparedSessionValues/WorkstationRequestValues | Explicit T31-local additive proposals | Configuration and detached session/request data, never collaborators/getters. RuntimeDefinitionLookup is Definitions internal/contracts/factory_runtime.go:223; Net is orchestration/state/net.go. |
+| workstationRequestBinding | Explicit T31-local additive scoped adapter | Retains one injected resolver reference and detached values; constructs no reusable behavior. |
 | instancehost.Service/LifecycleService | instance_host/service.go:34; host/service.go:12; contracts.md T14/AM08 | Existing/proposed keyed host/readiness authority; full T14 remains required. |
 
 The existing filesystem role remains unchanged and is injected directly; the
@@ -2775,7 +2776,7 @@ or share mutable definition/Net/request state.
 | --- | --- | --- | --- |
 | TestRuntimeRootActivationUnwindsFailedStartAndCanRetry, factory_runtime/wire/runtime_activation_test.go:256 | Unit, direct Root, controlled activation/cleanup, parallel test-owned state | Activation failure, one unwind, Observe ErrNotRunning, retry. Not real startup/full authority. | T14-U03; T15-F03 |
 | TestRuntimeRootFailedCleanupRemainsExplicitlyRetryable, same:294 | Unit, controlled Close failure | No live state, conflict while pending, failed/successful Deactivate, STOPPED and three Close calls. | T14-U03; T15-F03 |
-| TestRootProcessStartFailureThenRetrySucceedsWithoutLiveSession, T13 #2724/process_start_retry_test.go:30 | Functional, root.BuildProcess/Process.Execute, public live-list/detail, controlled APIServerStarter | Listener unwind/no ghost, same-process retry/linked session/shutdown. Retained head a367ac26bb3abb39e5ca89da3a5c9e375145e282 outside this pin/main; no T31 execution PASS. | T13/T15/T17-F03 |
+| TestRootProcessStartFailureThenRetrySucceedsWithoutLiveSession, T13 #2724, tests/functional/sessions/root_composition/process_start_retry_test.go:30 | Functional, root.BuildProcess/Process.Execute, public live-list/detail, controlled APIServerStarter | Listener unwind/no ghost, same-process retry/linked session/shutdown. Retained head a367ac26bb3abb39e5ca89da3a5c9e375145e282 outside this pin/main; no T31 execution PASS. | T13/T15/T17-F03 |
 | TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement, tests/functional/events/response_events/session_runtime_replace_test.go:54 | Functional, public open/invoke/replace/read, controlled command edge | Explicit session post-replacement sequences exceed previous max, no duplicates. Not failed replacement/artifact isolation. | T15/T17-F04 |
 
 Source rehearsal proves the proposal's obligations and source correspondence,
