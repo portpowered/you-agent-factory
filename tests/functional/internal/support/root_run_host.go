@@ -117,7 +117,7 @@ func StartRootRunFunctionalHost(
 	if timeout <= 0 {
 		timeout = rootRunFunctionalHostStartupTimeout
 	}
-	readyCtx, readyCancel := context.WithTimeout(ctx, timeout)
+	readyCtx, readyCancel := context.WithTimeout(ctx, ScaledTimeout(timeout))
 	defer readyCancel()
 	readinessStarted := time.Now()
 	if err := host.waitUntilReady(readyCtx); err != nil {
@@ -125,7 +125,7 @@ func StartRootRunFunctionalHost(
 		if listener != nil {
 			_ = listener.Close()
 		}
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), rootRunFunctionalHostCleanupTimeout)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), ScaledTimeout(rootRunFunctionalHostCleanupTimeout))
 		defer cleanupCancel()
 		return nil, host.startupFailure(err, time.Since(readinessStarted), cleanupCtx)
 	}
