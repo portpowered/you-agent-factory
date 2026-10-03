@@ -12,38 +12,23 @@ func constructionInterfaceSelector(owner ConstructionSymbol, name string, source
 	}
 	visited[owner] = true
 	defer delete(visited, owner)
-	contract, ok := declaration.typeSpec.Type.(*ast.InterfaceType)
-	if !ok {
-		return constructionInterfaceExpressionSelector(declaration.typeSpec.Type, name, declaration.source, source, visited)
-	}
-	known := true
-	for _, field := range contract.Methods.List {
-		if len(field.Names) != 0 {
-			for _, method := range field.Names {
-				if method.Name == name && (ast.IsExported(name) || owner.ImportPath == source.importPath) {
-					return true, true
-				}
-			}
-			continue
-		}
-		matched, complete := constructionInterfaceExpressionSelector(field.Type, name, declaration.source, source, visited)
-		if matched {
-			return true, true
-		}
-		known = known && complete
-	}
-	return false, known
+	return constructionInterfaceExpressionSelector(declaration.typeSpec.Type, name, declaration.source, source, visited)
 }
 
 // Predeclared interfaces have known method sets. Authored declarations with
 // the same name take precedence, including declarations in another source file.
 func constructionInterfaceExpressionSelector(expr ast.Expr, name string, declaringSource, source *constructionSource, visited map[ConstructionSymbol]bool) (bool, bool) {
-	if ident, ok := expr.(*ast.Ident); ok {
-		symbol := ConstructionSymbol{ImportPath: declaringSource.importPath, Name: ident.Name}
+	switch value := expr.(type) {
+	case *ast.ParenExpr:
+		return constructionInterfaceExpressionSelector(value.X, name, declaringSource, source, visited)
+	case *ast.InterfaceType:
+		return constructionInterfaceMethodsSelector(value, name, declaringSource, source, visited)
+	case *ast.Ident:
+		symbol := ConstructionSymbol{ImportPath: declaringSource.importPath, Name: value.Name}
 		if source.declarations[symbol].typeSpec != nil {
 			return constructionInterfaceSelector(symbol, name, source, visited)
 		}
-		switch ident.Name {
+		switch value.Name {
 		case "any":
 			return false, true
 		case "error":
@@ -55,4 +40,24 @@ func constructionInterfaceExpressionSelector(expr ast.Expr, name string, declari
 		return false, false
 	}
 	return constructionInterfaceSelector(symbol, name, source, visited)
+}
+
+func constructionInterfaceMethodsSelector(contract *ast.InterfaceType, name string, declaringSource, source *constructionSource, visited map[ConstructionSymbol]bool) (bool, bool) {
+	known := true
+	for _, field := range contract.Methods.List {
+		if len(field.Names) != 0 {
+			for _, method := range field.Names {
+				if method.Name == name && (ast.IsExported(name) || declaringSource.importPath == source.importPath) {
+					return true, true
+				}
+			}
+			continue
+		}
+		matched, complete := constructionInterfaceExpressionSelector(field.Type, name, declaringSource, source, visited)
+		if matched {
+			return true, true
+		}
+		known = known && complete
+	}
+	return false, known
 }
