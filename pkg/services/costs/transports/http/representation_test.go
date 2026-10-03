@@ -3,12 +3,13 @@ package http
 import (
 	"context"
 	"encoding/json"
-	costs "github.com/portpowered/infinite-you/pkg/services/costs"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	costs "github.com/portpowered/infinite-you/pkg/services/costs"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"go.uber.org/zap"
 )
 
 func TestCostsReportRepresentationPricingCases(t *testing.T) {
@@ -52,15 +53,14 @@ type publicBoundaryCase struct {
 	tokens                        publicBoundaryTokenWant
 	unpricedDispatchCount         int
 	rows                          []costs.LineItem
-	human, noHuman                []string
 }
 
 func representationCases() []publicBoundaryCase {
 	return []publicBoundaryCase{
-		{name: "all-priced", status: costs.StatusPriced, knownCost: "11.75", tokens: publicBoundaryTokenWant{1000000, 2000000, 3000000, 250000, 500000}, rows: make([]costs.LineItem, 1), human: []string{"Status: PRICED", "Cost (USD): $11.75", "Total tokens: 3000000"}, noHuman: []string{"?? unknown"}},
-		{name: "none-priced", status: costs.StatusUnpriced, tokens: publicBoundaryTokenWant{100, 50, 150, 25, 10}, unpricedDispatchCount: 1, unpricedPair: "CODEX/unpriced", rows: make([]costs.LineItem, 1), human: []string{"Status: UNPRICED", "Cost (USD): ?? unknown", "Unpriced dispatches: 1", "CODEX/unpriced: 1 dispatches", "Total tokens: 150"}, noHuman: []string{"$0.00"}},
-		{name: "mixed", status: costs.StatusPartial, knownCost: "11.75", tokens: publicBoundaryTokenWant{1000100, 2000050, 3000150, 250025, 500010}, unpricedDispatchCount: 1, unpricedPair: "CODEX/unpriced", rows: make([]costs.LineItem, 2), human: []string{"Status: PARTIAL", "Cost (USD): $11.75 + ?? unknown", "Unpriced dispatches: 1", "CODEX/unpriced: 1 dispatches", "Total tokens: 3000150"}},
-		{name: "unknown-model", status: costs.StatusUnpriced, tokens: publicBoundaryTokenWant{20, 10, 30, 5, 3}, unpricedDispatchCount: 1, unpricedPair: "CODEX/unknown-model", rows: make([]costs.LineItem, 1), human: []string{"Status: UNPRICED", "Cost (USD): ?? unknown", "CODEX/unknown-model: 1 dispatches", "Total tokens: 30"}, noHuman: []string{"$0.00"}},
+		{name: "all-priced", status: costs.StatusPriced, knownCost: "11.75", tokens: publicBoundaryTokenWant{1000000, 2000000, 3000000, 250000, 500000}, rows: make([]costs.LineItem, 1)},
+		{name: "none-priced", status: costs.StatusUnpriced, tokens: publicBoundaryTokenWant{100, 50, 150, 25, 10}, unpricedDispatchCount: 1, unpricedPair: "CODEX/unpriced", rows: make([]costs.LineItem, 1)},
+		{name: "mixed", status: costs.StatusPartial, knownCost: "11.75", tokens: publicBoundaryTokenWant{1000100, 2000050, 3000150, 250025, 500010}, unpricedDispatchCount: 1, unpricedPair: "CODEX/unpriced", rows: make([]costs.LineItem, 2)},
+		{name: "unknown-model", status: costs.StatusUnpriced, tokens: publicBoundaryTokenWant{20, 10, 30, 5, 3}, unpricedDispatchCount: 1, unpricedPair: "CODEX/unknown-model", rows: make([]costs.LineItem, 1)},
 	}
 }
 func assertPublicAPIReport(t *testing.T, report factoryapi.CostsReport, testCase publicBoundaryCase) {
