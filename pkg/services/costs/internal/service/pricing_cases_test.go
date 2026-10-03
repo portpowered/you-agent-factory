@@ -2,11 +2,12 @@ package service
 
 import (
 	"context"
+	"testing"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	costs "github.com/portpowered/infinite-you/pkg/services/costs"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	"testing"
 )
 
 func TestCostsValuationPricingCases(t *testing.T) {
