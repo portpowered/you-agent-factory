@@ -130,7 +130,7 @@ func TestReconcileEquivalentDetachedInputsProduceStableCanonicalResults(t *testi
 func TestReconcileOrdersSourcesWithinOneAutomation(t *testing.T) {
 	t.Parallel()
 
-	service := reconciliationwire.NewService()
+	service := reconciliationwire.NewService(lifecycleFixture{})
 	result, err := service.Reconcile(context.Background(), automations.ReconcileRequest{
 		Desired: []automations.DesiredSpec{
 			{AutomationID: "automation", SourceID: "source-b", Kind: "schedule", State: automations.DesiredLifecycleRunning},
@@ -242,5 +242,38 @@ func reconcileOne(
 }
 
 func newService() reconciliation.Service {
-	return reconciliationwire.NewService()
+	return reconciliationwire.NewService(lifecycleFixture{})
+}
+
+// lifecycleFixture makes omitted test effects explicitly unavailable. Production
+// constructors have no default lifecycle implementation.
+type lifecycleFixture struct {
+	start func(context.Context, reconciliation.StartEffect) error
+	stop  func(context.Context, reconciliation.StopEffect) error
+	wait  func(context.Context, reconciliation.WaitEffect) (automations.SourceObservation, error)
+}
+
+func (f lifecycleFixture) Start(ctx context.Context, effect reconciliation.StartEffect) error {
+	if f.start == nil {
+		return unavailableLifecycle("StartSource")
+	}
+	return f.start(ctx, effect)
+}
+
+func (f lifecycleFixture) Stop(ctx context.Context, effect reconciliation.StopEffect) error {
+	if f.stop == nil {
+		return unavailableLifecycle("StopSource")
+	}
+	return f.stop(ctx, effect)
+}
+
+func (f lifecycleFixture) Wait(ctx context.Context, effect reconciliation.WaitEffect) (automations.SourceObservation, error) {
+	if f.wait == nil {
+		return automations.SourceObservation{}, unavailableLifecycle("WaitSource")
+	}
+	return f.wait(ctx, effect)
+}
+
+func unavailableLifecycle(op string) error {
+	return &automations.Error{Op: op, Code: automations.ErrorCodeNotReady, Err: automations.ErrNotReady}
 }

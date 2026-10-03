@@ -16,7 +16,7 @@ func TestStartSourceSuccessDoesNotReportStartingAfterSupersedingStop(t *testing.
 
 	identity := sourceIdentity("stale-start-success")
 	effects := newBlockingStartEffects(nil)
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	results, errs := startSourceAsync(service, identity)
 	<-effects.entered
 
@@ -59,7 +59,7 @@ func TestStartSourceFailureDoesNotOverwriteSupersedingStop(t *testing.T) {
 
 	identity := sourceIdentity("superseded-start-failure")
 	effects := newBlockingStartEffects(errors.New("late start failure"))
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	results, errs := startSourceAsync(service, identity)
 	<-effects.entered
 
@@ -99,7 +99,7 @@ func TestStartSourceCancellationDoesNotOverwriteNewerRunningObservation(t *testi
 
 	identity := sourceIdentity("stale-start-cancellation")
 	effects := newBlockingStartEffects(context.Canceled)
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	results, errs := startSourceAsync(service, identity)
 	<-effects.entered
 
@@ -159,16 +159,16 @@ func newBlockingStartEffects(err error) *blockingStartEffects {
 	}
 }
 
-func (f *blockingStartEffects) bundle() reconciliation.Effects {
-	return reconciliation.Effects{
-		Start: func(context.Context, reconciliation.StartEffect) error {
-			f.entered <- struct{}{}
-			<-f.release
-			return f.err
-		},
-		Stop: func(context.Context, reconciliation.StopEffect) error { return nil },
-		Wait: convergedWait,
-	}
+func (f *blockingStartEffects) Start(context.Context, reconciliation.StartEffect) error {
+	f.entered <- struct{}{}
+	<-f.release
+	return f.err
+}
+
+func (*blockingStartEffects) Stop(context.Context, reconciliation.StopEffect) error { return nil }
+
+func (*blockingStartEffects) Wait(ctx context.Context, effect reconciliation.WaitEffect) (automations.SourceObservation, error) {
+	return convergedWait(ctx, effect)
 }
 
 func TestRuntimeSourceControlStaleStartDoesNotOverwriteStopOrPeer(t *testing.T) {
@@ -183,8 +183,8 @@ func TestRuntimeSourceControlStaleStartDoesNotOverwriteStopOrPeer(t *testing.T) 
 			defer cancel()
 			identity := sourceIdentity("shared-stale-start")
 			entered, release := make(chan struct{}), make(chan struct{})
-			service := reconciliationwire.NewService(reconciliation.Effects{
-				Start: func(ctx context.Context, effect reconciliation.StartEffect) error {
+			service := reconciliationwire.NewService(lifecycleFixture{
+				start: func(ctx context.Context, effect reconciliation.StartEffect) error {
 					if effect.RuntimeID != "A" {
 						return nil
 					}
@@ -196,13 +196,13 @@ func TestRuntimeSourceControlStaleStartDoesNotOverwriteStopOrPeer(t *testing.T) 
 						return test.lateErr
 					}
 				},
-				Stop: func(_ context.Context, effect reconciliation.StopEffect) error {
+				stop: func(_ context.Context, effect reconciliation.StopEffect) error {
 					if effect.RuntimeID != "A" {
 						return errors.New("stop routed to peer")
 					}
 					return nil
 				},
-				Wait: convergedWait,
+				wait: convergedWait,
 			})
 			results := make(chan automations.StartSourceResult, 1)
 			errs := make(chan error, 1)
