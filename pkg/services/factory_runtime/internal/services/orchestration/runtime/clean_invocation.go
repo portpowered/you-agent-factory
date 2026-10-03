@@ -22,6 +22,10 @@ import (
 
 var _ factory.Service = (*factoryImpl)(nil)
 
+func restoredWorkError(reason factory.WorkRestoreReason, workID string, placeIDs []string, cause error) error {
+	return &factory.WorkRestoreError{Reason: reason, WorkID: workID, PlaceIDs: placeIDs, Cause: cause}
+}
+
 func (f *factoryImpl) Observe(ctx context.Context, req factory.ObserveRequest) (factory.ObserveResult, error) {
 	if !validObservationScope(req.Scope) {
 		return factory.ObserveResult{}, factory.ErrInvalidObservationScope
@@ -324,10 +328,11 @@ func validateRestoredOccupancy(
 		}
 		place, exists := net.Places[placeID]
 		if !exists || place == nil {
-			return nil, fmt.Errorf(
-				"restore Work board: occupied place %q is not present in the current Factory topology",
-				placeID,
-			)
+			workID := ""
+			if len(entry.WorkItemIDs) > 0 {
+				workID = entry.WorkItemIDs[0]
+			}
+			return nil, restoredWorkError(factory.WorkRestoreUnknownPlace, workID, []string{placeID}, nil)
 		}
 		for _, workID := range entry.WorkItemIDs {
 			if strings.TrimSpace(workID) == "" {
@@ -342,12 +347,7 @@ func validateRestoredOccupancy(
 				)
 			}
 			if previousPlace, exists := seenWorkIDs[workID]; exists {
-				return nil, fmt.Errorf(
-					"restore Work board: Work %q is occupied at both %q and %q",
-					workID,
-					previousPlace,
-					placeID,
-				)
+				return nil, restoredWorkError(factory.WorkRestoreConflictingPlacement, workID, []string{previousPlace, placeID}, nil)
 			}
 			seenWorkIDs[workID] = placeID
 			if _, overridden := authoritativePlacements[workID]; overridden {
@@ -375,14 +375,10 @@ func validateRestoredPlacementMap(
 		}
 		place, exists := net.Places[placeID]
 		if !exists || place == nil {
-			return fmt.Errorf(
-				"restore Work board: Work %q references place %q, which is not present in the current Factory topology",
-				workID,
-				placeID,
-			)
+			return restoredWorkError(factory.WorkRestoreUnknownPlace, workID, []string{placeID}, nil)
 		}
 		if _, isResourcePlace := resourcePlaceIDs[placeID]; isResourcePlace {
-			return fmt.Errorf("restore Work board: Work %q references resource place %q", workID, placeID)
+			return restoredWorkError(factory.WorkRestoreInvalidHistory, workID, []string{placeID}, nil)
 		}
 		item, exists := items[workID]
 		if !exists {
@@ -523,47 +519,26 @@ func validateRestoredWorkSourceIdentities(
 
 func validateRestoredWorkIdentity(category, workID, itemID string, strict bool) error {
 	if strict && (strings.TrimSpace(workID) == "" || strings.TrimSpace(itemID) == "") {
-		return fmt.Errorf("restore Work board: Work index key %q does not match Work identity %q", workID, itemID)
+		return restoredWorkError(factory.WorkRestoreInvalidHistory, workID, nil, nil)
 	}
 	if !strict && strings.TrimSpace(workID) == "" && strings.TrimSpace(itemID) == "" {
-		return fmt.Errorf("restore Work board: %s Work entry has no Work identity", category)
+		return restoredWorkError(factory.WorkRestoreInvalidHistory, "", nil, nil)
 	}
 	if workID != "" && itemID != "" && workID != itemID {
-		return fmt.Errorf(
-			"restore Work board: %s Work index key %q does not match Work identity %q",
-			category,
-			workID,
-			itemID,
-		)
+		return restoredWorkError(factory.WorkRestoreInvalidHistory, workID, nil, nil)
 	}
 	return nil
 }
 
 func validateRestoredWorkItemPlacement(workID string, item work.FactoryWorkItem, place *petri.Place) error {
 	if item.ID != workID {
-		return fmt.Errorf(
-			"restore Work board: Work index key %q does not match Work identity %q",
-			workID,
-			item.ID,
-		)
+		return restoredWorkError(factory.WorkRestoreInvalidHistory, workID, []string{place.ID}, nil)
 	}
 	if item.WorkTypeID != "" && place.TypeID != "" && item.WorkTypeID != place.TypeID {
-		return fmt.Errorf(
-			"restore Work board: Work %q type %q is incompatible with place %q type %q",
-			workID,
-			item.WorkTypeID,
-			place.ID,
-			place.TypeID,
-		)
+		return restoredWorkError(factory.WorkRestoreInvalidHistory, workID, []string{place.ID}, nil)
 	}
 	if item.State != "" && place.State != "" && item.State != place.State {
-		return fmt.Errorf(
-			"restore Work board: Work %q state %q is incompatible with place %q state %q",
-			workID,
-			item.State,
-			place.ID,
-			place.State,
-		)
+		return restoredWorkError(factory.WorkRestoreInvalidHistory, workID, []string{place.ID}, nil)
 	}
 	return nil
 }
@@ -585,11 +560,7 @@ func requireRestoredWorkPlacements(
 			continue
 		}
 		if _, exists := placements[workID]; !exists {
-			return fmt.Errorf(
-				"restore Work board: %s Work %q has no current place occupancy",
-				category,
-				workID,
-			)
+			return restoredWorkError(factory.WorkRestoreMissingPlacement, workID, nil, nil)
 		}
 	}
 	return nil

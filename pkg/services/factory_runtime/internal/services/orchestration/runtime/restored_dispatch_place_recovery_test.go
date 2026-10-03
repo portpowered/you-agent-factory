@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -752,5 +754,104 @@ func assertRecoveredMissingInitialWork(t *testing.T, seeded map[string]struct{},
 		!reflect.DeepEqual(token.Color.Tags, map[string]string{"lane": "recovery"}) ||
 		len(token.Color.Relations) != 1 || token.Color.Relations[0].TargetWorkID != "parent-work" {
 		t.Fatalf("recovered Work metadata = %#v, want recorded request/lineage/relation metadata", token.Color)
+	}
+}
+
+func TestNew_RestoreUnknownPlaceDiagnosticNamesWork(t *testing.T) {
+	t.Parallel()
+	restored := &interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-corrupt": {ID: "work-corrupt", WorkTypeID: "task", State: "missing"},
+		},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:missing": {PlaceID: "task:missing", WorkItemIDs: []string{"work-corrupt"}},
+		},
+	}
+	_, err := newTestFactory(withNet(buildSimpleNet()), withRestoredWorldState(restored))
+	if err == nil || !strings.Contains(err.Error(), "work-corrupt") || !strings.Contains(err.Error(), "task:missing") {
+		t.Fatalf("restore diagnostic = %v, want offending Work and unknown place", err)
+	}
+	var restore *factoryruntime.WorkRestoreError
+	if !errors.As(err, &restore) || restore.Reason != factoryruntime.WorkRestoreUnknownPlace || restore.WorkID != "work-corrupt" {
+		t.Fatalf("restore error = %#v, want typed unknown-place context", restore)
+	}
+}
+
+// This wholly authored history characterizes the pre-fix failure: the cron
+// input was consumed, a distinct task was emitted, and no dispatch still owns it.
+func syntheticFailedCronRestoreState() *interfaces.FactoryWorldState {
+	cron := work.FactoryWorkItem{
+		ID: "synthetic-cron-input", WorkTypeID: interfaces.SystemTimeWorkTypeID,
+		State: interfaces.SystemTimePendingState,
+		Tags: map[string]string{
+			interfaces.TimeWorkTagKeySource:          interfaces.TimeWorkSourceCron,
+			interfaces.TimeWorkTagKeyCronWorkstation: "cron-refresh",
+		},
+	}
+	output := work.FactoryWorkItem{ID: "synthetic-downstream-task", WorkTypeID: "task", State: "failed"}
+	completion := interfaces.FactoryWorldDispatchCompletion{
+		DispatchID: "synthetic-failed-dispatch", TransitionID: "cron-refresh",
+		WorkItemIDs: []string{cron.ID, output.ID},
+		ConsumedInputs: []interfaces.WorkstationInput{{
+			TokenID: cron.ID, PlaceID: interfaces.SystemTimePendingPlaceID, WorkItem: &cron,
+		}},
+		InputWorkItems: []work.FactoryWorkItem{cron}, OutputWorkItems: []work.FactoryWorkItem{output},
+		Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed), Error: "synthetic failure"},
+	}
+	return &interfaces.FactoryWorldState{
+		WorkItemsByID:       map[string]work.FactoryWorkItem{cron.ID: cron, output.ID: output},
+		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{cron.ID: cron},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:failed": {PlaceID: "task:failed", WorkItemIDs: []string{output.ID}},
+		},
+		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{completion},
+		FailedDispatches:    []interfaces.FactoryWorldDispatchCompletion{completion},
+	}
+}
+
+func TestNew_CharacterizesConsumedFailedCronMissingPlacement(t *testing.T) {
+	t.Parallel()
+	restored := syntheticFailedCronRestoreState()
+	beforeInput := restored.WorkItemsByID["synthetic-cron-input"]
+	beforeOutput := restored.PlaceOccupancyByID["task:failed"]
+	_, err := newTestFactory(withNet(buildCronRestoreNet()), withRestoredWorldState(restored))
+	want := `restore Factory Runtime Work board: restore Work board: Work "synthetic-cron-input" has no current place occupancy`
+	if err == nil || err.Error() != want {
+		t.Fatalf("New error = %v, want %q", err, want)
+	}
+	if !reflect.DeepEqual(restored.WorkItemsByID[beforeInput.ID], beforeInput) ||
+		!reflect.DeepEqual(restored.PlaceOccupancyByID["task:failed"], beforeOutput) {
+		t.Fatal("failed restore changed historical input or downstream placement")
+	}
+	if len(restored.CompletedDispatches) != 1 || len(restored.FailedDispatches) != 1 || len(restored.ActiveDispatches) != 0 {
+		t.Fatal("failed restore changed completed, failed, or active dispatch history")
+	}
+}
+
+func TestRestoreValidatorsReturnStructuralContext(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		reason   factoryruntime.WorkRestoreReason
+		validate func() error
+		places   []string
+	}{
+		{"missing", factoryruntime.WorkRestoreMissingPlacement, func() error {
+			return requireRestoredWorkPlacements("failed", map[string]work.FactoryWorkItem{"work-corrupt": {ID: "work-corrupt"}}, nil, nil)
+		}, nil},
+		{"conflict", factoryruntime.WorkRestoreConflictingPlacement, func() error {
+			return addRestoredPlacement(map[string]string{"work-corrupt": "task:init"}, "work-corrupt", "task:done")
+		}, []string{"task:init", "task:done"}},
+		{"history", factoryruntime.WorkRestoreInvalidHistory, func() error {
+			return validateRestoredWorkIdentity("work", "work-corrupt", "different-work", true)
+		}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var restore *factoryruntime.WorkRestoreError
+			if err := tc.validate(); !errors.As(err, &restore) || restore.Reason != tc.reason || restore.WorkID != "work-corrupt" || !reflect.DeepEqual(restore.PlaceIDs, tc.places) {
+				t.Fatalf("restore error = %v (%#v), want %s Work and place context", err, restore, tc.reason)
+			}
+		})
 	}
 }

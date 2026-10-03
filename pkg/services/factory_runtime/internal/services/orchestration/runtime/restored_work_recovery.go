@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
@@ -631,7 +632,7 @@ func addRestoredPlacement(placements map[string]string, workID, placeID string) 
 	}
 	if existing, exists := placements[workID]; exists {
 		if existing != placeID {
-			return fmt.Errorf("restore Work board: Work %q has conflicting current places %q and %q", workID, existing, placeID)
+			return restoredWorkError(factory.WorkRestoreConflictingPlacement, workID, []string{existing, placeID}, nil)
 		}
 		return nil
 	}

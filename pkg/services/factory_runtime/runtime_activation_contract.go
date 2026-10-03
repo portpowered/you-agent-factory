@@ -4,10 +4,83 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
+
+// WorkRestoreReason identifies a structural failure while restoring a Work
+// board. It is independent of transport error codes and recording formats.
+type WorkRestoreReason string
+
+const (
+	WorkRestoreMissingPlacement     WorkRestoreReason = "missing_current_placement"
+	WorkRestoreConflictingPlacement WorkRestoreReason = "conflicting_current_placements"
+	WorkRestoreUnknownPlace         WorkRestoreReason = "unknown_place"
+	WorkRestoreInvalidHistory       WorkRestoreReason = "invalid_history"
+	workRestoreIdentifierLimit                        = 128
+	workRestorePlaceLimit                             = 8
+)
+
+// WorkRestoreError carries structural identifiers only. Cause retains error
+// identity but is never rendered: it may contain prompts or other private data.
+type WorkRestoreError struct {
+	Reason   WorkRestoreReason
+	WorkID   string
+	PlaceIDs []string
+	Cause    error
+}
+
+func (e *WorkRestoreError) Error() string {
+	if e == nil {
+		return ""
+	}
+	workID := quoteRestoreIdentifier(e.WorkID)
+	places := make([]string, 0, min(len(e.PlaceIDs), workRestorePlaceLimit))
+	for i, placeID := range e.PlaceIDs {
+		if i == workRestorePlaceLimit {
+			places = append(places, "...")
+			break
+		}
+		places = append(places, quoteRestoreIdentifier(placeID))
+	}
+	switch e.Reason {
+	case WorkRestoreMissingPlacement:
+		return fmt.Sprintf("restore Work board: Work %s has no current place occupancy", workID)
+	case WorkRestoreConflictingPlacement:
+		return fmt.Sprintf("restore Work board: Work %s has conflicting current places %s", workID, strings.Join(places, " and "))
+	case WorkRestoreUnknownPlace:
+		return fmt.Sprintf("restore Work board: Work %s references place %s, which is not present in the current Factory topology", workID, strings.Join(places, ", "))
+	case WorkRestoreInvalidHistory:
+		return fmt.Sprintf("restore Work board: Work %s has inconsistent recorded placement or history (places: %s)", workID, strings.Join(places, ", "))
+	default:
+		return "restore Work board: structural restore failed"
+	}
+}
+
+func (e *WorkRestoreError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+// QuoteToASCII also escapes control and directional characters. Bound the
+// identifier before quoting so untrusted recording IDs cannot flood output.
+func quoteRestoreIdentifier(value string) string {
+	var bounded strings.Builder
+	characters := 0
+	for _, char := range value {
+		if characters == workRestoreIdentifierLimit {
+			bounded.WriteString("...")
+			break
+		}
+		bounded.WriteRune(char)
+		characters++
+	}
+	return strconv.QuoteToASCII(bounded.String())
+}
 
 // RuntimeLifecycleState is the process-root lifecycle state returned by the
 // explicit Runtime activation boundary.

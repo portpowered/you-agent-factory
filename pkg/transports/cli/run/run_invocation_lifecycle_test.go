@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"io"
 	"strings"
 	"testing"
@@ -288,5 +290,103 @@ func TestRunFactoryServiceAndEmitResultLeavesEngineErrorsUnclassified(t *testing
 	)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("error = %v, want original engine error", err)
+	}
+}
+
+func TestMapServerFailure_CharacterizesUncodedRestoreCauseRedaction(t *testing.T) {
+	t.Parallel()
+	for _, debug := range []bool{false, true} {
+		t.Run(fmt.Sprintf("debug=%t", debug), func(t *testing.T) {
+			t.Parallel()
+			cause := errors.New(`restore Work board: active Work "synthetic-cron-input" has no current place occupancy; payload=PRIVATE`)
+			startup := &initializer.RuntimeHostStartupError{Cause: fmt.Errorf("activate resumed runtime: %w", cause)}
+			mapped := MapServerFailureForInvocation(startup, true)
+			var stderr bytes.Buffer
+			if !WriteInvocationError(&stderr, mapped, debug) {
+				t.Fatal("startup failure did not render a standard error response")
+			}
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(stderr.Bytes(), &response); err != nil {
+				t.Fatalf("decode error response: %v", err)
+			}
+			want := "requested server did not start: runtime startup failed (failure_class=runtime_startup_failed)"
+			if string(response.Code) != ServerStartFailedCode || response.Family != factoryapi.ErrorFamilyInternalServerError || response.Message != want {
+				t.Fatalf("response = %#v, want generic startup failure", response)
+			}
+			if strings.Contains(stderr.String(), "PRIVATE") || strings.Contains(stderr.String(), "synthetic-cron-input") {
+				t.Fatal("uncoded restore cause leaked into stderr")
+			}
+			if !errors.Is(mapped, cause) {
+				t.Fatal("startup mapping lost the underlying cause identity")
+			}
+		})
+	}
+}
+
+func TestMapServerFailure_RestoreContextIsSafeThroughStartupWrappers(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		reason factoryruntime.WorkRestoreReason
+		places []string
+		want   []string
+	}{
+		{"missing", factoryruntime.WorkRestoreMissingPlacement, nil, []string{"work-corrupt", "has no current place occupancy"}},
+		{"conflict", factoryruntime.WorkRestoreConflictingPlacement, []string{"task:ready", "task:done"}, []string{"work-corrupt", "task:ready", "task:done", "conflicting current places"}},
+		{"topology", factoryruntime.WorkRestoreUnknownPlace, []string{"task:missing"}, []string{"work-corrupt", "task:missing", "not present in the current Factory topology"}},
+		{"history", factoryruntime.WorkRestoreInvalidHistory, []string{"task:ready"}, []string{"work-corrupt", "task:ready", "inconsistent recorded placement or history"}},
+	} {
+		for _, debug := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/debug=%t", tc.name, debug), func(t *testing.T) {
+				t.Parallel()
+				secret := errors.New("PRIVATE-PROMPT token=PRIVATE-TOKEN")
+				restore := &factoryruntime.WorkRestoreError{Reason: tc.reason, WorkID: "work-corrupt", PlaceIDs: tc.places, Cause: secret}
+				activation := &factoryruntime.RuntimeActivationError{Kind: factoryruntime.RuntimeActivationErrorFailed, Cause: fmt.Errorf("restore: %w", restore)}
+				startup := &initializer.RuntimeHostStartupError{Cause: activation}
+				mapped := MapServerFailureForInvocation(startup, true)
+				var stderr bytes.Buffer
+				if !WriteInvocationError(&stderr, mapped, debug) {
+					t.Fatal("restore error was not rendered")
+				}
+				var response factoryapi.ErrorResponse
+				if err := json.Unmarshal(stderr.Bytes(), &response); err != nil {
+					t.Fatal(err)
+				}
+				if string(response.Code) != ServerStartFailedCode || response.Family != factoryapi.ErrorFamilyInternalServerError {
+					t.Fatalf("response = %#v, want stable startup code/family", response)
+				}
+				for _, want := range append(tc.want, "requested server did not start:", "failure_class=runtime_startup_failed") {
+					if !strings.Contains(response.Message, want) {
+						t.Fatalf("message %q missing %q", response.Message, want)
+					}
+				}
+				if strings.Contains(stderr.String(), "PRIVATE") {
+					t.Fatal("raw cause leaked")
+				}
+				var gotRestore *factoryruntime.WorkRestoreError
+				var gotActivation *factoryruntime.RuntimeActivationError
+				if !errors.Is(mapped, secret) || !errors.As(mapped, &gotRestore) || gotRestore != restore || !errors.As(mapped, &gotActivation) || gotActivation != activation {
+					t.Fatal("mapping lost error-chain identity")
+				}
+			})
+		}
+	}
+}
+
+func TestMapServerFailure_RestoreUnknownReasonAndOrdinaryReplayKeepFallback(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		reason factoryruntime.WorkRestoreReason
+		resume bool
+	}{
+		{"PRIVATE-UNKNOWN", true}, {factoryruntime.WorkRestoreMissingPlacement, false},
+	} {
+		restore := &factoryruntime.WorkRestoreError{Reason: tc.reason, WorkID: "PRIVATE-ID", Cause: errors.New("PRIVATE-PROMPT")}
+		mapped := MapServerFailureForInvocation(&initializer.RuntimeHostStartupError{Cause: restore}, tc.resume)
+		var stderr bytes.Buffer
+		WriteInvocationError(&stderr, mapped, true)
+		if strings.Contains(stderr.String(), "PRIVATE") || !strings.Contains(stderr.String(), "runtime startup failed") {
+			t.Fatalf("fallback changed or leaked context: %s", stderr.String())
+		}
 	}
 }
