@@ -17,8 +17,10 @@ import (
 	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionscli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -506,6 +508,8 @@ func TestProductionWorkResolvedHandlerExecutesWatch(t *testing.T) {
 			_, err := io.WriteString(cfg.Output, "watched\n")
 			return err
 		},
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	}).NewCommand(nil, nil, nil)
 
 	var stdout, stderr bytes.Buffer
@@ -532,6 +536,8 @@ func TestWorkerSessionsListCommandMapsManifestInputsToOperation(t *testing.T) {
 			got = config
 			return nil
 		},
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	})
 	root := factory.NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
@@ -563,6 +569,8 @@ func TestWorkerSessionsInvokeCommandMapsManifestInputsToOperation(t *testing.T) 
 			got = config
 			return nil
 		},
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	})
 	root := factory.NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
@@ -587,6 +595,8 @@ func TestWorkerSessionsContinueCommandMapsManifestInputsToOperation(t *testing.T
 			got = config
 			return nil
 		},
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	})
 	root := factory.NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
@@ -618,6 +628,8 @@ func TestWorkerSessionsInterruptCommandMapsManifestInputs(t *testing.T) {
 			interrupt = config
 			return nil
 		},
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	})
 	root := factory.NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
@@ -646,7 +658,9 @@ func TestWorkerSessionsControlCommandsMapManifestInputs(t *testing.T) {
 	} {
 		t.Run(strings.ToLower(string(action)), func(t *testing.T) {
 			var control workersessionscli.ControlConfig
-			operations := CommandFactory{}
+			operations := CommandFactory{
+				sessionResolvedHandlers: testSessionHandlers(nil, nil),
+			}
 			operation := func(config workersessionscli.ControlConfig) error {
 				control = config
 				return nil
@@ -714,7 +728,9 @@ func TestWorkerSessionsInterruptAndControlCommandsRequireOperations(t *testing.T
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			root := withTestInjectedPlatformRoles(CommandFactory{}).NewCommand(nil, nil, nil)
+			root := withTestInjectedPlatformRoles(CommandFactory{
+				sessionResolvedHandlers: testSessionHandlers(nil, nil),
+			}).NewCommand(nil, nil, nil)
 			root.SetOut(io.Discard)
 			root.SetErr(io.Discard)
 			root.SetArgs(test.args)
@@ -800,6 +816,8 @@ func TestWorkerSessionsShowCommandMapsManifestInputsToOperation(t *testing.T) {
 			got = config
 			return nil
 		},
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	})
 	root := factory.NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
@@ -828,6 +846,8 @@ func TestWorkerSessionsStreamCommandMapsManifestInputsToOperation(t *testing.T) 
 			got = config
 			return nil
 		},
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	})
 	root := factory.NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
@@ -859,6 +879,8 @@ func TestWorkerSessionsStreamRejectsReplayOnlyFollowBeforeOperation(t *testing.T
 			operationCalls++
 			return nil
 		},
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	})
 	root := factory.NewCommand(nil, nil, nil)
 	var stdout, stderr bytes.Buffer
@@ -890,6 +912,8 @@ func TestWorkerSessionsReadCommandMapsManifestInputsToOperation(t *testing.T) {
 			got = config
 			return nil
 		},
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	})
 	root := factory.NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
@@ -908,5 +932,45 @@ func TestWorkerSessionsReadCommandMapsManifestInputsToOperation(t *testing.T) {
 	}
 	if got.Server != "http://factory.test:7437" || got.OutputFormat != "json" || !got.JSON {
 		t.Fatalf("output/config = %#v, want server and json values", got)
+	}
+}
+
+func TestCommandDiagnosticsUsesCurrentInvocationPolicyAndWriter(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name                    string
+		verbose, debug, central bool
+		want                    string
+	}{
+		{name: "normal"},
+		{name: "verbose", verbose: true, want: "diagnostic"},
+		{name: "debug", debug: true, want: "diagnostic"},
+		{name: "central", central: true, want: "diagnostic"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var output bytes.Buffer
+			cmd := &cobra.Command{Use: "session"}
+			cmd.Flags().Bool("verbose", test.verbose, "")
+			cmd.Flags().Bool("debug", test.debug, "")
+			cmd.SetContext(clidiag.WithCentralDiagnostics(context.Background(), test.central))
+			cmd.SetErr(&output)
+			writer := CommandDiagnostics(cmd)
+			if test.want == "" {
+				if writer != nil {
+					t.Fatal("normal diagnostics must remain disabled")
+				}
+				return
+			}
+			if _, err := io.WriteString(writer, "diagnostic"); err != nil {
+				t.Fatal(err)
+			}
+			if output.String() != test.want {
+				t.Fatalf("diagnostics = %q, want %q", output.String(), test.want)
+			}
+			if test.central && writer != cmd.ErrOrStderr() {
+				t.Fatal("central diagnostic writer identity was lost")
+			}
+		})
 	}
 }

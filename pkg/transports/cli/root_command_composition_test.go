@@ -126,7 +126,9 @@ func TestSessionListCommand_ConflictingFlagsFailBeforeHTTP(t *testing.T) {
 
 func TestSessionListCommand_ConflictingFlagsRenderTypedDiagnostic(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	err := withTestInjectedPlatformRoles(CommandFactory{}).ExecuteCommand(startupcli.CommandInvocation{
+	err := withTestInjectedPlatformRoles(CommandFactory{
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+	}).ExecuteCommand(startupcli.CommandInvocation{
 		Arguments: []string{
 			"--server", "http://127.0.0.1:1",
 			"session", "list", "--live-only", "--history-only",
@@ -179,7 +181,9 @@ func TestMain(m *testing.M) {
 }
 
 func TestProductionRunSubmitFamilyCutoverEnabled(t *testing.T) {
-	root := (CommandFactory{ModelsCLI: rootModelsCLI}).NewCommand(nil, nil, nil)
+	root := (CommandFactory{ModelsCLI: rootModelsCLI,
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+	}).NewCommand(nil, nil, nil)
 	for _, path := range [][]string{{"run"}, {"submit"}, {"submit", "batch"}} {
 		cmd, remaining, err := root.Find(path)
 		if err != nil {
@@ -212,6 +216,8 @@ func TestProductionServerStopDispatchesOnlyInjectedOperation(t *testing.T) {
 			_, _ = config.Output.Write([]byte("stopped\n"))
 			return nil
 		},
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	})
 	var stdout, stderr bytes.Buffer
 	err := factory.ExecuteCommand(startupcli.CommandInvocation{
@@ -259,6 +265,8 @@ func TestProductionMetricsCostsTimeoutDiagnosticPreservesEndpointAcrossModes(t *
 			config.RequestTimeout = requestTimeout
 			return operation(ctx, config)
 		},
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	})
 
 	wantMessage := fmt.Sprintf(

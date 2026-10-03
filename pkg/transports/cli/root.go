@@ -40,6 +40,7 @@ import (
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
@@ -194,6 +195,7 @@ type CommandOperations struct {
 // CommandFactory constructs a fresh Cobra tree for each invocation from
 // immutable Wire-supplied entrypoints and invocation-local process edges.
 type CommandFactory struct {
+	sessionResolvedHandlers           commandregistry.SessionResolvedHandlers
 	observeCLI                        platformprocess.CLIObserver
 	homeDir                           func() (string, error)
 	lookupEnv                         func(string) (string, bool)
@@ -272,8 +274,9 @@ type CommandFactory struct {
 }
 
 // NewCommandFactory copies the Wire-built graph without installing defaults.
-func NewCommandFactory(operations CommandOperations) CommandFactory {
+func NewCommandFactory(operations CommandOperations, sessionHandlers commandregistry.SessionResolvedHandlers) CommandFactory {
 	return CommandFactory{
+		sessionResolvedHandlers:           sessionHandlers,
 		observeCLI:                        operations.ObserveCLI,
 		namedFactoryCatalog:               operations.NamedFactoryCatalog,
 		completeFactoryNames:              operations.CompleteFactoryNames,
@@ -548,6 +551,17 @@ func (opts *cliDiagnosticsOptions) writer(cmd *cobra.Command) io.Writer {
 		return cmd.ErrOrStderr()
 	}
 	return opts.resolvePolicy(false).DiagnosticsWriter(cmd.ErrOrStderr())
+}
+
+// CommandDiagnostics resolves diagnostic policy from the current invocation.
+// Prebound handlers never capture a command's flags or writers.
+func CommandDiagnostics(cmd *cobra.Command) io.Writer {
+	if clidiag.CentralDiagnosticsEnabled(cmd.Context()) {
+		return cmd.ErrOrStderr()
+	}
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	debug, _ := cmd.Flags().GetBool("debug")
+	return terminalpolicy.Resolve(terminalpolicy.Options{Verbose: verbose, Debug: debug}).DiagnosticsWriter(cmd.ErrOrStderr())
 }
 
 func newMCPCommand(options CommandFactory) (*cobra.Command, error) {

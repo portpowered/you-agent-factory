@@ -38,6 +38,8 @@ func TestResolveOperatorDefaultsDelegatesExactObservedLayers(t *testing.T) {
 			}
 			return want, nil
 		},
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	}
 	got, err := resolveOperatorDefaults(command, &cliOperatorDefaultsOptions{providerOverride: "codex"}, factory, "/home/customer")
 	if err != nil {
@@ -51,6 +53,8 @@ func TestResolveOperatorDefaultsDelegatesExactObservedLayers(t *testing.T) {
 func TestRootGlobalResolutionIsAvailableToAttachedCommandFamilies(t *testing.T) {
 	factory := withTestInjectedPlatformRoles(CommandFactory{
 		ModelsCLI: rootModelsCLI,
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	})
 	root := factory.NewCommand(
 		func() (string, error) { return t.TempDir(), nil },
@@ -84,6 +88,8 @@ func TestRootGlobalResolutionIsAvailableToAttachedCommandFamilies(t *testing.T) 
 func TestRunParsingResolvesRunScopedProvider(t *testing.T) {
 	factory := withTestInjectedPlatformRoles(CommandFactory{
 		ModelsCLI: rootModelsCLI,
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	})
 	root := factory.NewCommand(
 		func() (string, error) { return t.TempDir(), nil },

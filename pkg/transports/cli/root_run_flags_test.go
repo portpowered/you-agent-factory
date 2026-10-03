@@ -135,7 +135,9 @@ func TestRunCommand_LocalSessionSelectsIsolatedSession(t *testing.T) {
 func TestRunCommand_LocalBatchSessionSelectsIsolatedSession(t *testing.T) {
 	const sessionID = "session-batch-explicit"
 	var captured runcli.RunConfig
-	factory := withTestInjectedPlatformRoles(CommandFactory{})
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+	})
 	root := factory.NewCommand(
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
@@ -576,6 +578,8 @@ func TestRemoteRunRejectsLocalHostingBeforeRunSideEffects(t *testing.T) {
 					remoteCalls++
 					return factoryapi.FactorySessionExecutionResponse{}, nil
 				}),
+
+				sessionResolvedHandlers: testSessionHandlers(nil, nil),
 			})
 			factory.browserOpener = func(context.Context, string) error {
 				browserCalls++
@@ -629,7 +633,9 @@ func TestRemoteRunRejectsLocalHostingBeforeRunSideEffects(t *testing.T) {
 }
 
 func TestRunHelpDocumentsRemotePlacementAndLocalHosting(t *testing.T) {
-	factory := withTestInjectedPlatformRoles(CommandFactory{})
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+	})
 	root := factory.NewCommand(os.UserHomeDir, os.LookupEnv, startupcli.Functions{})
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
@@ -659,7 +665,9 @@ func TestRemoteRunDispatchesExactNormalizedRequestWithoutOpeningLocalRun(t *test
 			SessionId: "dur-sess-root", Status: factoryapi.FactorySessionDurableLifecycleStatusQueued,
 		}, nil
 	})
-	factory := withTestInjectedPlatformRoles(CommandFactory{remoteInvocation: remote})
+	factory := withTestInjectedPlatformRoles(CommandFactory{remoteInvocation: remote,
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+	})
 	factory.prepareInvocationInput = programmedRemoteArgumentsInput("same request")
 
 	localRunCalls := 0
@@ -703,7 +711,9 @@ func TestRemoteRunDispatchesExactNormalizedRequestWithoutOpeningLocalRun(t *test
 
 func TestRunServerPlacementRejectsRemoteLocalOnlyCommandBeforeRun(t *testing.T) {
 	globals := &cliGlobalOptions{remote: true}
-	options := withTestInjectedPlatformRoles(CommandFactory{})
+	options := withTestInjectedPlatformRoles(CommandFactory{
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+	})
 	commands, err := buildRunServerProductionCommands(
 		globals, &cliDiagnosticsOptions{}, &cliOperatorDefaultsOptions{}, options,
 	)
@@ -729,7 +739,9 @@ func TestRemoteRunFailureDoesNotFallBackToLocalRun(t *testing.T) {
 	remote := rootRemoteInvocationFunc(func(context.Context, runcli.RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 		return factoryapi.FactorySessionExecutionResponse{}, errors.New("selected remote failed")
 	})
-	factory := withTestInjectedPlatformRoles(CommandFactory{remoteInvocation: remote})
+	factory := withTestInjectedPlatformRoles(CommandFactory{remoteInvocation: remote,
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+	})
 	factory.prepareInvocationInput = programmedRemoteArgumentsInput("same request")
 	localRunCalls := 0
 	root := factory.NewCommand(os.UserHomeDir, os.LookupEnv, startupcli.Functions{

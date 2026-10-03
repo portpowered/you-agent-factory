@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,12 +48,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	serverstopcli "github.com/portpowered/infinite-you/pkg/transports/cli/serverstop"
 	generatedhttpclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -941,6 +944,32 @@ func provideCLIObserver(edges serviceedges.Edges) platformprocess.CLIObserver {
 	return edges.CLIObserver
 }
 
-func provideCLICommandFactory(operations cli.CommandOperations) cli.CommandFactory {
-	return cli.NewCommandFactory(operations)
+func provideCLICommandFactory(operations cli.CommandOperations, handlers commandregistry.SessionResolvedHandlers) cli.CommandFactory {
+	return cli.NewCommandFactory(operations, handlers)
+}
+
+func provideSessionListPreparation(service factorysessions.Service) func(context.Context, *sessioncli.ListConfig) error {
+	return func(_ context.Context, cfg *sessioncli.ListConfig) error {
+		if cfg.LiveOnly || cfg.HistoryOnly {
+			return nil
+		}
+		scope := factorysessions.SessionListScope(strings.TrimSpace(cfg.Scope))
+		if scope != factorysessions.SessionListScopePersisted && scope != factorysessions.SessionListScopeAll {
+			return nil
+		}
+		cfg.DurableLister = func(ctx context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+			result, err := service.List(ctx, factorysessions.SessionListRequest{Mode: factorysessions.SessionOperationModeDurable, Filters: request.Filters})
+			if err != nil {
+				return factorysessions.ListSessionsResult{}, err
+			}
+			return factorysessions.ListSessionsResult{Scope: request.Scope, DurableSessions: result.DurableSessions}, nil
+		}
+		return nil
+	}
+}
+
+func provideCommandDiagnostics() func(*cobra.Command) io.Writer { return cli.CommandDiagnostics }
+
+func provideSessionResolvedHandlers(local cli.LocalSessionsCLIService, remote sessioncli.Service, prepareList func(context.Context, *sessioncli.ListConfig) error, diagnostics func(*cobra.Command) io.Writer) commandregistry.SessionResolvedHandlers {
+	return commandregistry.BindSessionResolvedHandlers(local, remote, prepareList, diagnostics)
 }

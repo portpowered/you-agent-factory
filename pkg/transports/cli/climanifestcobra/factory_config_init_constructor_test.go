@@ -147,7 +147,7 @@ func TestSessionResolvedHandlersMapDefaultsChangedValuesAndStableArguments(t *te
 		deletes []sessioncli.DeleteConfig
 		diag    bytes.Buffer
 	)
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		Create: func(cfg sessioncli.CreateConfig) error {
 			creates = append(creates, cfg)
 			return nil
@@ -160,7 +160,7 @@ func TestSessionResolvedHandlersMapDefaultsChangedValuesAndStableArguments(t *te
 			deletes = append(deletes, cfg)
 			return nil
 		},
-	}, nil, func(*cobra.Command) io.Writer { return &diag })
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(*cobra.Command) io.Writer { return &diag })
 
 	if err := executeResolvedSession(t, services, "session", "create", "--dir", "fleet"); err != nil {
 		t.Fatalf("default create Execute() error = %v", err)
@@ -201,7 +201,7 @@ func TestSessionResolvedHandlersMapDefaultsChangedValuesAndStableArguments(t *te
 
 func TestSessionResolvedHandlersRejectInvalidInputsBeforeOperation(t *testing.T) {
 	calls := 0
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		Create: func(sessioncli.CreateConfig) error {
 			calls++
 			return nil
@@ -210,7 +210,7 @@ func TestSessionResolvedHandlersRejectInvalidInputsBeforeOperation(t *testing.T)
 			calls++
 			return nil
 		},
-	}, nil, nil)
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 	if err := executeResolvedSession(
 		t, services, "session", "create", "--dir", "fleet", "--port", "not-an-int",
 	); err == nil {
@@ -227,9 +227,9 @@ func TestSessionResolvedHandlersRejectInvalidInputsBeforeOperation(t *testing.T)
 func TestSessionResolvedCreatePreservesHumanOutputAndDebugDiagnostics(t *testing.T) {
 	var requests []factoryapi.OpenFactorySessionRequest
 	protocol := newSessionCreateTestProtocol(t, &requests)
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		Create: sessioncli.NewCreate(protocol),
-	}, nil, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 
 	stdout, stderr, err := executeResolvedSessionWithOutput(
 		t, services,
@@ -253,9 +253,9 @@ func TestSessionResolvedCreatePreservesHumanOutputAndDebugDiagnostics(t *testing
 func TestSessionResolvedCreatePreservesJSONAndValidationOnly(t *testing.T) {
 	var requests []factoryapi.OpenFactorySessionRequest
 	protocol := newSessionCreateTestProtocol(t, &requests)
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		Create: sessioncli.NewCreate(protocol),
-	}, nil, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 
 	stdout, stderr, err := executeResolvedSessionWithOutput(
 		t, services,
@@ -282,12 +282,12 @@ func TestSessionResolvedCreatePreservesJSONAndValidationOnly(t *testing.T) {
 
 func TestSessionResolvedCreateRejectsConflictBeforeOperation(t *testing.T) {
 	calls := 0
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		Create: func(sessioncli.CreateConfig) error {
 			calls++
 			return nil
 		},
-	}, nil, nil)
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 	stdout, _, err := executeResolvedSessionWithOutput(
 		t, services,
 		"session", "create", "--dir", "/workspace/fleet",
@@ -313,9 +313,9 @@ func TestSessionResolvedDeletePreservesExecutableBehavior(t *testing.T) {
 		deletedPaths = append(deletedPaths, request.URL.EscapedPath())
 		return sessionTestResponse(http.StatusNoContent, ""), nil
 	})
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		Delete: sessioncli.NewDelete(protocol),
-	}, nil, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 
 	stdout, stderr, err := executeResolvedSessionWithOutput(
 		t, services, "--verbose", "session", "delete", "session/beta",
@@ -396,11 +396,11 @@ func TestSessionResolvedServerSelectionRoutesDeleteAndStopControls(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewProtocol() error = %v", err)
 	}
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		Delete:    sessioncli.NewDelete(protocol),
 		Cancel:    sessioncli.NewCancel(protocol),
 		Terminate: sessioncli.NewTerminate(protocol),
-	}, nil, nil)
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 
 	commands := []struct {
 		name string
@@ -441,14 +441,14 @@ func TestSessionResolvedServerSelectionRoutesDeleteAndStopControls(t *testing.T)
 
 func TestSessionResolvedStopAndDeleteRejectLegacyPortBeforeOperation(t *testing.T) {
 	calls := 0
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		Delete: func(sessioncli.DeleteConfig) error { calls++; return nil },
 		Cancel: func(sessioncli.LifecycleControlConfig) error { calls++; return nil },
 		Terminate: func(sessioncli.LifecycleControlConfig) error {
 			calls++
 			return nil
 		},
-	}, nil, nil)
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 
 	for _, operation := range []string{"delete", "cancel", "terminate"} {
 		t.Run(operation, func(t *testing.T) {
@@ -469,23 +469,23 @@ func TestSessionResolvedCreateDeletePreserveOperationFailures(t *testing.T) {
 	tests := []struct {
 		name     string
 		args     []string
-		services commandregistry.SessionResolvedServices
+		services commandregistry.SessionResolvedHandlers
 		want     error
 	}{
 		{
 			name: "create failure",
 			args: []string{"session", "create", "--dir", "/workspace/fleet"},
-			services: commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+			services: commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 				Create: func(sessioncli.CreateConfig) error { return operationFailure },
-			}, nil, nil),
+			}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }),
 			want: operationFailure,
 		},
 		{
 			name: "delete cancellation",
 			args: []string{"session", "delete", "session-beta"},
-			services: commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+			services: commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 				Delete: func(sessioncli.DeleteConfig) error { return context.Canceled },
-			}, nil, nil),
+			}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }),
 			want: context.Canceled,
 		},
 	}
@@ -502,12 +502,12 @@ func TestSessionResolvedCreateDeletePreserveOperationFailures(t *testing.T) {
 	}
 
 	calls := 0
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		Delete: func(sessioncli.DeleteConfig) error {
 			calls++
 			return nil
 		},
-	}, nil, nil)
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 	for _, args := range [][]string{
 		{"session", "delete"},
 		{"session", "delete", "one", "two"},
@@ -547,7 +547,7 @@ func TestSessionResolvedInspectionPreservesLiveAndPersistedListing(t *testing.T)
 		}`), nil
 	})
 	list := sessioncli.NewList(protocol, sessionListPreparation(prepareSessionListRequest))
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		List: func(cfg sessioncli.ListConfig) error {
 			cfg.DurableLister = func(
 				_ context.Context,
@@ -565,7 +565,7 @@ func TestSessionResolvedInspectionPreservesLiveAndPersistedListing(t *testing.T)
 			}
 			return list(cfg)
 		},
-	}, nil, nil)
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 
 	stdout, _, err := executeResolvedSessionWithOutput(t, services, "--json", "session", "list", "--scope", "live")
 	if err != nil {
@@ -616,9 +616,9 @@ func TestSessionResolvedInspectionPreservesShow(t *testing.T) {
 			}}
 		}`), nil
 	})
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		Show: sessioncli.NewShow(protocol),
-	}, nil, func(cmd *cobra.Command) io.Writer {
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer {
 		return cmd.ErrOrStderr()
 	})
 
@@ -649,9 +649,9 @@ func TestSessionResolvedShowPreservesDurableProjection(t *testing.T) {
 			"resolvedSource": {"kind": "WORKFLOW_FILE", "sourceRef": "workflows/review.js"}
 		}`), nil
 	})
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		Show: sessioncli.NewShow(protocol),
-	}, nil, nil)
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 
 	stdout, _, err := executeResolvedSessionWithOutput(
 		t, services, "--json", "session", "show", "dur-sess-review-001",
@@ -671,24 +671,21 @@ func TestSessionResolvedShowPreservesDurableProjection(t *testing.T) {
 
 func TestSessionResolvedInspectionRejectsInvalidInputsBeforeSideEffects(t *testing.T) {
 	var listCalls, showCalls int
-	services := commandregistry.SessionResolvedServices{
-		PrepareList: func(context.Context, *sessioncli.ListConfig) error {
-			return errors.New("scope must be live, persisted, or all")
+	services := commandregistry.BindSessionResolvedHandlers(sessioncli.Bind(sessioncli.Operations{
+		List: func(sessioncli.ListConfig) error {
+			listCalls++
+			return nil
 		},
-		LocalSessions: sessioncli.Bind(sessioncli.Operations{
-			List: func(sessioncli.ListConfig) error {
-				listCalls++
-				return nil
-			},
-			Show: func(cfg sessioncli.ShowConfig) error {
-				showCalls++
-				if cfg.SessionID != "" {
-					t.Fatalf("default show SessionID = %q, want empty compatibility target", cfg.SessionID)
-				}
-				return errors.New("default session unavailable")
-			},
-		}),
-	}
+		Show: func(cfg sessioncli.ShowConfig) error {
+			showCalls++
+			if cfg.SessionID != "" {
+				t.Fatalf("default show SessionID = %q, want empty compatibility target", cfg.SessionID)
+			}
+			return errors.New("default session unavailable")
+		},
+	}), disabledSessionTestService("remote"), func(context.Context, *sessioncli.ListConfig) error {
+		return errors.New("scope must be live, persisted, or all")
+	}, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 	stdout, _, err := executeResolvedSessionWithOutput(t, services, "session", "show")
 	if err == nil || stdout != "" {
 		t.Fatalf("default show error = %v, stdout = %q", err, stdout)
@@ -713,11 +710,11 @@ func TestSessionResolvedInspectionRejectsInvalidInputsBeforeSideEffects(t *testi
 
 func TestSessionResolvedHandlersRejectDeprecatedPortBeforeSideEffects(t *testing.T) {
 	var operationCalls int
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		Show:   func(sessioncli.ShowConfig) error { operationCalls++; return nil },
 		Pause:  func(sessioncli.LifecycleControlConfig) error { operationCalls++; return nil },
 		Resume: func(sessioncli.LifecycleControlConfig) error { operationCalls++; return nil },
-	}, nil, nil)
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 	for _, args := range [][]string{
 		{"session", "show", "session-alpha", "--port", "7444"},
 		{"session", "pause", "--port", "7444"},
@@ -741,21 +738,21 @@ func TestSessionResolvedInspectionPreservesFailuresAndCancellation(t *testing.T)
 	tests := []struct {
 		name     string
 		args     []string
-		services commandregistry.SessionResolvedServices
+		services commandregistry.SessionResolvedHandlers
 		want     error
 	}{
 		{
 			name: "list failure", args: []string{"session", "list"},
-			services: commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+			services: commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 				List: func(sessioncli.ListConfig) error { return operationFailure },
-			}, nil, nil),
+			}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }),
 			want: operationFailure,
 		},
 		{
 			name: "show cancellation", args: []string{"session", "show", "session-alpha"},
-			services: commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+			services: commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 				Show: func(sessioncli.ShowConfig) error { return context.Canceled },
-			}, nil, nil),
+			}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }),
 			want: context.Canceled,
 		},
 	}
@@ -885,7 +882,7 @@ func assertSessionResolvedState(
 
 func executeResolvedSession(
 	t *testing.T,
-	services commandregistry.SessionResolvedServices,
+	services commandregistry.SessionResolvedHandlers,
 	args ...string,
 ) error {
 	t.Helper()
@@ -895,7 +892,7 @@ func executeResolvedSession(
 
 func executeResolvedSessionWithOutput(
 	t *testing.T,
-	services commandregistry.SessionResolvedServices,
+	services commandregistry.SessionResolvedHandlers,
 	args ...string,
 ) (string, string, error) {
 	t.Helper()

@@ -19,6 +19,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	eventswire "github.com/portpowered/infinite-you/pkg/services/events/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
@@ -979,4 +980,36 @@ func newACPCLIOwnerRoots(t *testing.T) (operatorsettings.Service, providers.Serv
 		t.Fatalf("provideOperatorSettingsService() error = %v", err)
 	}
 	return settings, providersRoot
+}
+
+type canonicalSessionListStub struct {
+	factorysessions.Service
+	request factorysessions.SessionListRequest
+	result  factorysessions.SessionListResult
+}
+
+func (stub *canonicalSessionListStub) List(_ context.Context, request factorysessions.SessionListRequest) (factorysessions.SessionListResult, error) {
+	stub.request = request
+	return stub.result, nil
+}
+
+func TestSessionListPrepareUsesCanonicalDurableInventory(t *testing.T) {
+	stub := &canonicalSessionListStub{result: factorysessions.SessionListResult{
+		DurableSessions: []factorysessions.DurableSessionListSummary{{SessionID: "durable-1", Phase: "COMPLETE", ArtifactCount: 3}},
+	}}
+	cfg := &sessioncli.ListConfig{Scope: string(factorysessions.SessionListScopePersisted)}
+	if err := provideSessionListPreparation(stub)(context.Background(), cfg); err != nil {
+		t.Fatalf("prepare session list: %v", err)
+	}
+	filters := factorysessions.SessionListFilters{SourceRef: "workflow.js"}
+	listed, err := cfg.DurableLister(context.Background(), factorysessions.ListSessionsRequest{Scope: factorysessions.SessionListScopePersisted, Filters: filters})
+	if err != nil {
+		t.Fatalf("list durable sessions: %v", err)
+	}
+	if stub.request.Mode != factorysessions.SessionOperationModeDurable || stub.request.Filters.SourceRef != filters.SourceRef {
+		t.Fatalf("canonical list request = %#v, want durable mode and filters", stub.request)
+	}
+	if len(listed.DurableSessions) != 1 || listed.DurableSessions[0].Phase != "COMPLETE" || listed.DurableSessions[0].ArtifactCount != 3 {
+		t.Fatalf("durable rows = %#v, want rich canonical row", listed.DurableSessions)
+	}
 }

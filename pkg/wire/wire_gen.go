@@ -684,15 +684,18 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		CostsCLI:                          cliOperation,
 		ServerStopCLI:                     serverstopOperation,
 	}
-	commandFactory := provideCLICommandFactory(commandOperations)
+	v84 := provideSessionListPreparation(factorysessionsService)
+	v85 := provideCommandDiagnostics()
+	sessionResolvedHandlers := provideSessionResolvedHandlers(localSessionsCLIService, sessionService, v84, v85)
+	commandFactory := provideCLICommandFactory(commandOperations, sessionResolvedHandlers)
 	stdioOpener := stdio.NewOpener()
 	wireMcpServerBuilder := provideMCPServerBuilder(workingDirectory, operatorsettingsService, service, fileSystem, homeDirectoryResolver)
 	stdioHandler, err := provideStdioHandler(factorysessionsService, recordingsService, lifecycleRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v67, workflowPreviewOperation)
 	if err != nil {
 		return nil, err
 	}
-	v84 := provideSystemInitializationInspectPath(edges2)
-	systeminitializationService, err := provideSystemInitializationService(v40, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v84, loggingLogger)
+	v86 := provideSystemInitializationInspectPath(edges2)
+	systeminitializationService, err := provideSystemInitializationService(v40, packagedInstallationFileSystem, packagedInstallationDirectoryCreator, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v86, loggingLogger)
 	if err != nil {
 		return nil, err
 	}
@@ -993,6 +996,9 @@ var cliCommandOperationsSet = wire5.NewSet(
 	provideTerminateWorkerSessionOperation,
 	provideLocalWorkerSessionsBoundary, wire5.Bind(new(workersessions.LocalInvokeBoundary), new(*localWorkerSessionsBoundary)), wire5.Bind(new(workersessions.LocalControlBoundary), new(*localWorkerSessionsBoundary)), provideInvokeWorkerSessionOperation,
 	provideSessionsCLIService,
+	provideSessionListPreparation,
+	provideCommandDiagnostics,
+	provideSessionResolvedHandlers,
 	provideLocalSessionsCLIService,
 	provideModelsCLIService,
 	provideProvidersCLIService,

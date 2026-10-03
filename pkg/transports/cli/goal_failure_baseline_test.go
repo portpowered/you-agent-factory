@@ -141,6 +141,8 @@ func newGoalFailureNamedRunEnvironmentWithInvocation(
 	}
 	factory := withTestInjectedPlatformRoles(CommandFactory{
 		namedFactoryCatalog: goalFailureNamedFactoryCatalog{factoryDir: factoryDir},
+
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
 	})
 	if prepare.prepare != nil {
 		factory.prepareInvocationInput = prepare

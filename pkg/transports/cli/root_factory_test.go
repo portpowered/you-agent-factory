@@ -42,7 +42,9 @@ func TestLocalRunResolvesHomeOnceBeforeSystemInitialization(t *testing.T) {
 		return err
 	}
 
-	factory := withTestInjectedPlatformRoles(CommandFactory{})
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+	})
 	root := factory.NewCommand(func() (string, error) {
 		resolverCalls++
 		return home, nil
@@ -105,7 +107,9 @@ func TestLocalRunHomeDisclosureKeepsJSONStdoutParseable(t *testing.T) {
 		return err
 	}
 
-	factory := withTestInjectedPlatformRoles(CommandFactory{})
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+	})
 	root := factory.NewCommand(func() (string, error) { return home, nil }, func(string) (string, bool) { return "", false }, startupcli.Functions{
 		InitializeSystemFunc: func(context.Context, string) error { return nil },
 		RunFunc: func(ctx context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
@@ -149,7 +153,9 @@ func TestLocalServerResolvesHomeOnceBeforeSystemInitialization(t *testing.T) {
 		return err
 	}
 
-	factory := withTestInjectedPlatformRoles(CommandFactory{})
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+	})
 	root := factory.NewCommand(func() (string, error) { return home, nil }, os.LookupEnv, startupcli.Functions{
 		InitializeSystemFunc: func(_ context.Context, initializedHome string) error {
 			if initializedHome != home {
@@ -199,7 +205,9 @@ func TestProductionMCPServeGeneratedMetadataDelegatesStdioInitializer(t *testing
 	resolveHome := factorysessions.HomeDirectoryResolver(func() (string, error) {
 		return t.TempDir(), nil
 	})
-	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI}).NewCommand(resolveHome, nil, startupcli.Functions{StdioFunc: initializeStdio})
+	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+	}).NewCommand(resolveHome, nil, startupcli.Functions{StdioFunc: initializeStdio})
 	root.SetIn(stdin)
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
@@ -895,7 +903,9 @@ func TestFactoryQueryCommand_IsUnknownAfterRename(t *testing.T) {
 }
 
 func TestProductionFactoryConfigInitCommandsUsesGeneratedFamily(t *testing.T) {
-	commands := productionFactoryConfigInitCommands(&cliDiagnosticsOptions{}, CommandFactory{})
+	commands := productionFactoryConfigInitCommands(&cliDiagnosticsOptions{}, CommandFactory{
+		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+	})
 	if commands.Factory == nil || commands.Config == nil || commands.Init == nil {
 		t.Fatalf("production commands = %#v, want factory/config/init", commands)
 	}

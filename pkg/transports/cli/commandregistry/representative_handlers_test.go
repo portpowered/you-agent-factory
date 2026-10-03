@@ -3,6 +3,7 @@ package commandregistry_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -155,7 +156,7 @@ func TestNewSessionResolvedRegistryRejectsInvalidManifestBindings(t *testing.T) 
 			test.mutate(manifest.Commands)
 			if _, err := commandregistry.NewSessionResolvedRegistry(
 				manifest,
-				commandregistry.SessionResolvedServices{},
+				commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), disabledSessionTestService("remote"), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }),
 			); err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("NewSessionResolvedRegistry() error = %v, want %q", err, test.want)
 			}
@@ -170,7 +171,7 @@ func TestSessionResolvedHandlersRejectMissingOperations(t *testing.T) {
 	}
 	registry, err := commandregistry.NewSessionResolvedRegistry(
 		manifest,
-		commandregistry.SessionResolvedServices{},
+		commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), disabledSessionTestService("remote"), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }),
 	)
 	if err != nil {
 		t.Fatalf("NewSessionResolvedRegistry() error = %v", err)
@@ -196,14 +197,14 @@ func TestSessionResolvedHandlersRejectMissingOperations(t *testing.T) {
 
 	registry, err = commandregistry.NewSessionResolvedRegistry(
 		manifest,
-		commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+		commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 			Create: func(sessioncli.CreateConfig) error { return nil },
 			Delete: func(sessioncli.DeleteConfig) error { return nil },
 			List:   func(sessioncli.ListConfig) error { return nil },
 			Show:   func(sessioncli.ShowConfig) error { return nil },
 			Pause:  func(sessioncli.LifecycleControlConfig) error { return nil },
 			Resume: func(sessioncli.LifecycleControlConfig) error { return nil },
-		}, nil, nil),
+		}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }),
 	)
 	if err != nil {
 		t.Fatalf("NewSessionResolvedRegistry(valid services) error = %v", err)
@@ -250,10 +251,7 @@ func TestSessionLifecycleHandlersSelectRequestedPlacement(t *testing.T) {
 			Terminate: capture("terminate"),
 		})
 	}
-	registry, err := commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.SessionResolvedServices{
-		LocalSessions:  service("local"),
-		RemoteSessions: service("remote"),
-	})
+	registry, err := commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.BindSessionResolvedHandlers(service("local"), service("remote"), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }))
 	if err != nil {
 		t.Fatalf("NewSessionResolvedRegistry() error = %v", err)
 	}
@@ -333,7 +331,7 @@ func TestSessionLifecyclePlacementFallbackAndMissingServiceAreExplicit(t *testin
 			return nil
 		},
 	})
-	registry, err := commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.SessionResolvedServices{LocalSessions: compatibility})
+	registry, err := commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.BindSessionResolvedHandlers(compatibility, disabledSessionTestService("remote"), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }))
 	if err != nil {
 		t.Fatalf("NewSessionResolvedRegistry(explicit local service) error = %v", err)
 	}
@@ -347,7 +345,7 @@ func TestSessionLifecyclePlacementFallbackAndMissingServiceAreExplicit(t *testin
 	if !called {
 		t.Fatal("explicit local service did not receive local pause")
 	}
-	missingRegistry, err := commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.SessionResolvedServices{})
+	missingRegistry, err := commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), disabledSessionTestService("remote"), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }))
 	if err != nil {
 		t.Fatalf("NewSessionResolvedRegistry(missing) error = %v", err)
 	}
@@ -393,7 +391,7 @@ func TestSessionLifecycleRemotePlacementDoesNotUseLocalFallback(t *testing.T) {
 	compatibility := sessioncli.Bind(sessioncli.Operations{
 		Pause: func(sessioncli.LifecycleControlConfig) error { return nil },
 	})
-	registry, err := commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.SessionResolvedServices{LocalSessions: compatibility})
+	registry, err := commandregistry.NewSessionResolvedRegistry(manifest, commandregistry.BindSessionResolvedHandlers(compatibility, disabledSessionTestService("remote"), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }))
 	if err != nil {
 		t.Fatalf("NewSessionResolvedRegistry() error = %v", err)
 	}
@@ -416,14 +414,12 @@ func TestSessionLifecycleRemotePlacementDoesNotUseLocalFallback(t *testing.T) {
 func TestSessionResourceSetResolvedHandlerMapsStableInputs(t *testing.T) {
 	var got sessioncli.ResourceCapacityConfig
 	var diagnostics bytes.Buffer
-	handlers := commandregistry.BindSessionResolvedHandlers(
-		commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
-			SetResourceCapacity: func(cfg sessioncli.ResourceCapacityConfig) error {
-				got = cfg
-				return nil
-			},
-		}, nil, func(*cobra.Command) io.Writer { return &diagnostics }),
-	)
+	handlers := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
+		SetResourceCapacity: func(cfg sessioncli.ResourceCapacityConfig) error {
+			got = cfg
+			return nil
+		},
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(*cobra.Command) io.Writer { return &diagnostics })
 	ctx := context.WithValue(context.Background(), struct{}{}, "session-resource-set")
 	var output bytes.Buffer
 	cmd := &cobra.Command{Use: "set"}
@@ -446,11 +442,9 @@ func TestSessionResourceSetResolvedHandlerMapsStableInputs(t *testing.T) {
 }
 
 func TestSessionResourceSetResolvedHandlerRejectsMissingInputs(t *testing.T) {
-	handlers := commandregistry.BindSessionResolvedHandlers(
-		commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
-			SetResourceCapacity: func(sessioncli.ResourceCapacityConfig) error { return nil },
-		}, nil, func(*cobra.Command) io.Writer { return io.Discard }),
-	)
+	handlers := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
+		SetResourceCapacity: func(sessioncli.ResourceCapacityConfig) error { return nil },
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(*cobra.Command) io.Writer { return io.Discard })
 	cmd := &cobra.Command{Use: "set"}
 	inherited := resolvedFactoryGlobals(t, true, false, true)
 	base := resourceSetResolvedInputValues(t)
@@ -487,4 +481,22 @@ func TestNewRepresentativeRegistryRejectsMissingHandlers(t *testing.T) {
 
 func stringPtr(value string) *string {
 	return &value
+}
+
+func disabledSessionTestService(placement string) sessioncli.Service {
+	control := func(operation string) func(sessioncli.LifecycleControlConfig) error {
+		return func(sessioncli.LifecycleControlConfig) error {
+			return fmt.Errorf("session %s service is required for %s placement", operation, placement)
+		}
+	}
+	return sessioncli.Bind(sessioncli.Operations{
+		Create: func(sessioncli.CreateConfig) error { return fmt.Errorf("session create service is required") },
+		Delete: func(sessioncli.DeleteConfig) error { return fmt.Errorf("session delete service is required") },
+		List:   func(sessioncli.ListConfig) error { return fmt.Errorf("session list service is required") },
+		Show:   func(sessioncli.ShowConfig) error { return fmt.Errorf("session show service is required") },
+		SetResourceCapacity: func(sessioncli.ResourceCapacityConfig) error {
+			return fmt.Errorf("session resource capacity service is required")
+		},
+		Pause: control("pause"), Resume: control("resume"), Cancel: control("cancel"), Terminate: control("terminate"),
+	})
 }

@@ -86,7 +86,7 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	if err != nil {
 		panic(fmt.Sprintf("build representative handler registry: %v", err))
 	}
-	sessionRegistry, err := newSessionHandlerRegistry(diagnostics, options)
+	sessionRegistry, err := newSessionHandlerRegistry(options)
 	if err != nil {
 		panic(fmt.Sprintf("build session handler registry: %v", err))
 	}
