@@ -18,64 +18,6 @@ import (
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
-func TestNewServiceFromConfigDocumentRequiresDocumentPorts(t *testing.T) {
-	t.Parallel()
-
-	_, err := settingswire.NewServiceFromConfigDocument(
-		operatorsettings.ConfigDocumentService{},
-		internaltestproviders.StandardCatalog(),
-		testIDGenerator(),
-		logging.NoopLogger{},
-	)
-	if err == nil || !strings.Contains(err.Error(), "operator settings document ports are required") {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v, want document ports required", err)
-	}
-}
-
-func TestNewServiceFromConfigDocumentConstructsFromPorts(t *testing.T) {
-	t.Parallel()
-
-	root, err := settingswire.NewServiceFromConfigDocument(
-		testConfigDocumentService(),
-		internaltestproviders.StandardCatalog(),
-		testIDGenerator(),
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
-	}
-	if root == nil {
-		t.Fatal("NewServiceFromConfigDocument() = nil, want Settings root")
-	}
-}
-
-func TestNewServiceFromConfigDocumentUsesInjectedDocumentOwner(t *testing.T) {
-	t.Parallel()
-
-	service := testConfigDocumentService()
-	service.DocumentOwner = settingswire.NewDocumentOwner(
-		service.Files,
-		service.CreateTemp,
-		service.Decoder,
-		service.Encoder,
-		service.Providers,
-		nil,
-	)
-
-	root, err := settingswire.NewServiceFromConfigDocument(
-		service,
-		internaltestproviders.StandardCatalog(),
-		testIDGenerator(),
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
-	}
-	if root == nil {
-		t.Fatal("NewServiceFromConfigDocument() = nil, want Settings root")
-	}
-}
-
 func TestNewConfigDocumentServiceUsesCompletedDocumentForRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -178,36 +120,6 @@ func TestWireCompositionDelegatesDocumentAndResolutionOperations(t *testing.T) {
 	})
 	if !errors.Is(err, operatorsettings.ErrResolutionUnsupportedOverride) {
 		t.Fatalf("unsupported override error = %v, want ErrResolutionUnsupportedOverride", err)
-	}
-}
-
-func TestNewServiceFromConfigDocumentRejectsMissingIDGenerator(t *testing.T) {
-	t.Parallel()
-
-	_, err := settingswire.NewServiceFromConfigDocument(
-		testConfigDocumentService(),
-		internaltestproviders.StandardCatalog(),
-		nil,
-		logging.NoopLogger{},
-	)
-	if err == nil || err.Error() != "operator settings ID generator is required" {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v, want missing ID generator", err)
-	}
-}
-
-func testConfigDocumentService() operatorsettings.ConfigDocumentService {
-	files := platformfilesystem.Local{}
-	create := func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-		return os.CreateTemp(dir, pattern)
-	}
-	// The remaining legacy root-constructor classifications still require their
-	// old port view until that construction entry is retired in story 003.
-	return operatorsettings.ConfigDocumentService{
-		Files: files, CreateTemp: create, Providers: testProviderCatalog,
-		Decoder: globalconfigmapping.Decode, Encoder: globalconfigmapping.Encode,
-		PersistenceLock: &sync.Mutex{},
-		DocumentOwner: settingswire.NewDocumentService(files, create, globalconfigmapping.Decode,
-			globalconfigmapping.Encode, testProviderCatalog, nil, nil),
 	}
 }
 
@@ -367,63 +279,7 @@ func TestWireCompositionUpdateACPAgentProfileRejectsBlankCandidate(t *testing.T)
 	}
 }
 
-func TestWireCompositionFromHomePortsConstructsSettingsRoot(t *testing.T) {
-	t.Parallel()
-
-	providersRoot := internaltestproviders.StandardCatalog()
-	root, err := settingswire.NewServiceFromHomePorts(
-		platformfilesystem.Local{},
-		globalconfigmapping.Decode,
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
-	}
-	if root == nil {
-		t.Fatal("NewServiceFromHomePorts() = nil, want Settings root")
-	}
-}
-
-func TestWireCompositionFromHomePortsRejectsMissingPorts(t *testing.T) {
-	t.Parallel()
-
-	providersRoot := internaltestproviders.StandardCatalog()
-	_, err := settingswire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{})
-	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
-		t.Fatalf("NewServiceFromHomePorts(nil, decode) error = %v, want filesystem required", err)
-	}
-
-	_, err = settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, nil, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{})
-	if err == nil || !strings.Contains(err.Error(), "decoder is required") {
-		t.Fatalf("NewServiceFromHomePorts(files, nil) error = %v, want decoder required", err)
-	}
-}
-
-func TestWireCompositionRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership(t *testing.T) {
-	t.Parallel()
-
-	settingswire.RegisterDefaultsResolutionFromHome()
-}
-
-func TestResolveFromHomeRejectsMissingFilesystemPorts(t *testing.T) {
-	t.Parallel()
-
-	providersRoot := internaltestproviders.StandardCatalog()
-	_, err := settingswire.NewServiceFromHomePorts(
-		nil,
-		globalconfigmapping.Decode,
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
-	)
-	if err == nil || !strings.Contains(err.Error(), "operator settings filesystem is required") {
-		t.Fatalf("NewServiceFromHomePorts() error = %v, want home-port construction failure", err)
-	}
-}
-
-func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
+func TestResolveFromHomeUsesCompletedSettingsOwners(t *testing.T) {
 	t.Parallel()
 
 	homeDir := t.TempDir()
@@ -440,17 +296,7 @@ func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	providersRoot := internaltestproviders.StandardCatalog()
-	settingsRoot, err := settingswire.NewServiceFromHomePorts(
-		platformfilesystem.Local{},
-		globalconfigmapping.Decode,
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
-	}
+	settingsRoot := newPreservationWireService(t)
 	resolved, err := settingsRoot.ResolveFromHomeWithEnvironment(
 		homeDir,
 		operatorsettings.Defaults{},
@@ -464,46 +310,40 @@ func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
 	}
 }
 
-func TestWireCompositionFromConfigDocumentConstructsFromDocumentPorts(t *testing.T) {
+// Optional effects are accepted by inert composition and fail only when needed.
+func TestCompletedSettingsOwnersRejectUnavailableIdentityEffectsWithoutWriting(t *testing.T) {
 	t.Parallel()
-
-	providersRoot := internaltestproviders.StandardCatalog()
-	root, err := settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{
-		Files:     platformfilesystem.Local{},
-		Decoder:   globalconfigmapping.Decode,
-		Encoder:   globalconfigmapping.Encode,
-		Providers: wireCompositionProviderCatalog,
-		CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-	}, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{})
-	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
-	}
-	if root == nil {
-		t.Fatal("NewServiceFromConfigDocument() = nil, want Settings root")
-	}
-}
-
-func TestWireCompositionFromConfigDocumentRejectsMissingDocumentPorts(t *testing.T) {
-	t.Parallel()
-
-	providersRoot := internaltestproviders.StandardCatalog()
-	_, err := settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{}, providersRoot, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{})
-	if err == nil || !strings.Contains(err.Error(), "operator settings document ports are required") {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v, want document ports required", err)
-	}
-}
-
-func wireCompositionProviderCatalog(value string) (string, bool) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "codex", "openai":
-		return "CODEX", true
-	case "claude", "anthropic":
-		return "CLAUDE", true
-	case "gemini":
-		return "GEMINI", true
-	default:
-		return "", false
+	for _, test := range []struct {
+		name    string
+		files   operatorsettings.FileSystem
+		decoder operatorsettings.ConfigDecoder
+		id      operatorsettings.IDGenerator
+		want    string
+	}{
+		{"filesystem", nil, globalconfigmapping.Decode, testIDGenerator(), "operator settings filesystem is required"},
+		{"decoder", platformfilesystem.Local{}, nil, testIDGenerator(), "operator settings decoder is required"},
+		{"identity", platformfilesystem.Local{}, globalconfigmapping.Decode, nil, "operator settings ID generator is required"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "config.json")
+			create := func(dir, pattern string) (operatorsettings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) }
+			document := settingswire.NewDocumentService(test.files, create, test.decoder, globalconfigmapping.Encode, testProviderCatalog, nil, nil)
+			resolution, err := settingswire.NewResolutionService(internaltestproviders.StandardCatalog())
+			if err != nil {
+				t.Fatal(err)
+			}
+			root, err := settingswire.NewService(document, resolution, test.files, create, test.decoder, globalconfigmapping.Encode, test.id, logging.NoopLogger{}, nil)
+			if err != nil {
+				t.Fatalf("inert NewService() = %v", err)
+			}
+			_, err = root.EnsureLocalBackendScope(path)
+			if err == nil || err.Error() != test.want {
+				t.Fatalf("EnsureLocalBackendScope() = %v, want %q", err, test.want)
+			}
+			if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("failed identity operation created destination: %v", err)
+			}
+		})
 	}
 }
