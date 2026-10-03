@@ -433,6 +433,7 @@ func newWireLifecycleBehaviorService(
 		loader,
 		compilationForLoader(loader),
 		validationForLoader(loader, stubRequiredToolChecker{}, stubOrchestratorValidator{}),
+		runtimeSnapshotForLoader(loader, cfg.sessionHost),
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,

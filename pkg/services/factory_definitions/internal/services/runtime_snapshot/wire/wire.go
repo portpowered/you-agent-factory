@@ -2,8 +2,6 @@
 package wire
 
 import (
-	"fmt"
-
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	runtimesnapshot "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot"
 	runtimesnapshotimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot/internal"
@@ -16,10 +14,6 @@ func NewService(
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	workstationLoader func() factorydefinitions.WorkstationLoader,
 	readFile factorydefinitions.FileReader,
-) (runtimesnapshot.Service, error) {
-	service, err := runtimesnapshotimpl.New(loadCanonical, loadFactory, workstationLoader, readFile)
-	if err != nil {
-		return nil, fmt.Errorf("construct Factory Definitions runtime snapshot resolver: %w", err)
-	}
-	return service, nil
+) runtimesnapshot.Service {
+	return runtimesnapshotimpl.New(loadCanonical, loadFactory, workstationLoader, readFile)
 }
