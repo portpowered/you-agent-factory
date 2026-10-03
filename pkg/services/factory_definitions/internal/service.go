@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
-	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 )
@@ -35,7 +34,7 @@ func NewWithAuthoringLayout(
 	captureFactorySnapshot factoryroot.FactorySnapshotCapturer,
 	replaceFactoryLayout factoryroot.FactoryLayoutReplacer,
 	namedPaths factoryroot.NamedPathResolver,
-	namedFactoryCatalogFileSystem factoryroot.NamedFactoryCatalogFileSystem,
+	catalogService catalog.Service,
 	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
 	requiredToolChecker factoryroot.RequiredToolChecker,
@@ -44,7 +43,7 @@ func NewWithAuthoringLayout(
 	options ...CompositionOption,
 ) factoryroot.Service {
 	if sessionHost == nil || activationGateway == nil || clock == nil || versionFileSystem == nil ||
-		namedPaths == nil || namedFactoryCatalogFileSystem == nil ||
+		namedPaths == nil ||
 		packagedCatalog.List == nil || packagedCatalog.Resolve == nil ||
 		packagedInstaller.Install == nil {
 		return nil
@@ -78,12 +77,6 @@ func NewWithAuthoringLayout(
 	if err != nil {
 		return nil
 	}
-	// The exact ports were rejected above, which exhausts the catalog
-	// constructor's failure cases.
-	catalogService, _ := catalogwire.NewService(catalog.Dependencies{
-		Paths:      namedPaths,
-		FileSystem: namedFactoryCatalogFileSystem,
-	})
 	operations, _ := validator.(factoryroot.DefinitionValidationOperation)
 	effective, _ := validator.(factoryroot.EffectiveDefinitionValidationOperation)
 	validationService, _ := validationwire.NewService(validationservice.Dependencies{

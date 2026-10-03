@@ -41,7 +41,7 @@ func NewService(
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
-	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+	catalogService Catalog,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
@@ -62,7 +62,6 @@ func NewService(
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,
-		namedFactoryCatalogFileSystem,
 		clock,
 		versionFileSystem,
 		listEffective,
@@ -78,7 +77,7 @@ func NewService(
 	return composeService(
 		sessionHost, activationGateway, validator, persistence, loader, compilation,
 		applySupportedFiles, applyStarterWork, namedPaths,
-		namedFactoryCatalogFileSystem, clock, versionFileSystem, listEffective,
+		catalogService, clock, versionFileSystem, listEffective,
 		packagedCatalog, packagedInstaller, requiredToolChecker,
 		orchestratorValidator, portableFileSystem, directoryReplacementStore,
 		options...,
@@ -95,7 +94,7 @@ func composeService(
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
-	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+	catalogService Catalog,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
@@ -148,7 +147,7 @@ func composeService(
 		captureFactorySnapshot,
 		persistence.ReplaceFactoryLayout,
 		namedPaths,
-		namedFactoryCatalogFileSystem,
+		catalogService,
 		packagedCatalog,
 		packagedInstaller,
 		requiredToolChecker,
@@ -279,7 +278,6 @@ func validateDependencies(
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
-	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
@@ -313,9 +311,6 @@ func validateDependencies(
 	}
 	if namedPaths == nil {
 		return fmt.Errorf("construct Factory Definitions: named path resolver is required")
-	}
-	if namedFactoryCatalogFileSystem == nil {
-		return fmt.Errorf("construct Factory Definitions: named Factory catalog filesystem is required")
 	}
 	if clock == nil {
 		return fmt.Errorf("construct Factory Definitions: clock is required")
