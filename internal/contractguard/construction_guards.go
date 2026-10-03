@@ -14,6 +14,7 @@ func (index constructionIndex) scanRequiredConstructionGuards(registry Construct
 		decl := index.declarations[constructor.Symbol]
 		required := constructionRequiredObjects(decl.function, constructor.RequiredParameters)
 		fields := constructionRequiredFields(decl, constructor, required)
+		helperRequired := index.constructionHelperRequired(decl, required, fields)
 		for _, source := range index.sources {
 			for _, declaration := range source.file.Decls {
 				function, ok := declaration.(*ast.FuncDecl)
@@ -29,12 +30,9 @@ func (index constructionIndex) scanRequiredConstructionGuards(registry Construct
 						receiver = field.Names[0].Obj
 					}
 				}
-				origins := map[*ast.Object]bool{}
-				if function == decl.function {
-					origins = required
-				}
+				origins := helperRequired[function]
 				stored := fields[ConstructionSymbol{ImportPath: caller.ImportPath, Name: caller.Receiver}]
-				provenance := constructionGuardProvenance{required: origins, receiver: receiver, fields: stored,
+				provenance := constructionGuardProvenance{source: source, required: origins, receiver: receiver, fields: stored,
 					mutations: constructionGuardMutations(function.Body), fieldMutations: constructionGuardFieldMutations(function.Body, receiver)}
 				ast.Inspect(function.Body, func(node ast.Node) bool {
 					comparison, ok := node.(*ast.BinaryExpr)
@@ -64,14 +62,14 @@ func (index constructionIndex) scanRequiredConstructionGuards(registry Construct
 	return findings
 }
 
-func constructionRequiredObjects(function *ast.FuncDecl, parameters []ConstructionParameter) map[*ast.Object]bool {
-	required := make(map[*ast.Object]bool)
+func constructionRequiredObjects(function *ast.FuncDecl, parameters []ConstructionParameter) map[*ast.Object]string {
+	required := make(map[*ast.Object]string)
 	position := 0
 	for _, field := range function.Type.Params.List {
 		for offset := range max(1, len(field.Names)) {
 			for _, parameter := range parameters {
 				if parameter.Index == position && offset < len(field.Names) {
-					required[field.Names[offset].Obj] = true
+					required[field.Names[offset].Obj] = "required-dependency-guard"
 				}
 			}
 			position++
@@ -80,12 +78,12 @@ func constructionRequiredObjects(function *ast.FuncDecl, parameters []Constructi
 	return required
 }
 
-func constructionRequiredFields(decl constructionDeclaration, constructor ConstructionConstructor, required map[*ast.Object]bool) map[ConstructionSymbol]map[string]string {
+func constructionRequiredFields(decl constructionDeclaration, constructor ConstructionConstructor, required map[*ast.Object]string) map[ConstructionSymbol]map[string]string {
 	fields := make(map[ConstructionSymbol]map[string]string)
 	if decl.function.Body == nil {
 		return fields
 	}
-	provenance := constructionGuardProvenance{required: required, mutations: constructionGuardMutations(decl.function.Body)}
+	provenance := constructionGuardProvenance{source: decl.source, required: required, mutations: constructionGuardMutations(decl.function.Body)}
 	ast.Inspect(decl.function.Body, func(node ast.Node) bool {
 		literal, ok := node.(*ast.CompositeLit)
 		if !ok {
@@ -130,7 +128,9 @@ func constructionNilOperand(comparison *ast.BinaryExpr) ast.Expr {
 }
 
 type constructionGuardProvenance struct {
-	required       map[*ast.Object]bool
+	source         *constructionSource
+	helpers        map[*ast.FuncDecl]bool
+	required       map[*ast.Object]string
 	receiver       *ast.Object
 	fields         map[string]string
 	mutations      map[*ast.Object]bool
@@ -141,6 +141,10 @@ func (p constructionGuardProvenance) origin(expr ast.Expr, visited map[*ast.Obje
 	switch value := expr.(type) {
 	case *ast.ParenExpr:
 		return p.origin(value.X, visited)
+	case *ast.TypeAssertExpr:
+		return p.origin(value.X, visited)
+	case *ast.CallExpr:
+		return p.helperOrigin(value)
 	case *ast.SelectorExpr:
 		ident, ok := value.X.(*ast.Ident)
 		if ok && p.receiver != nil && ident.Obj == p.receiver {
@@ -155,14 +159,12 @@ func (p constructionGuardProvenance) origin(expr ast.Expr, visited map[*ast.Obje
 		}
 		visited[value.Obj] = true
 		rule := ""
-		if p.required[value.Obj] {
-			rule = "required-dependency-guard"
+		if p.required[value.Obj] != "" {
+			rule = p.required[value.Obj]
 		} else {
 			switch declaration := value.Obj.Decl.(type) {
 			case *ast.AssignStmt:
-				if len(declaration.Lhs) == 1 && len(declaration.Rhs) == 1 {
-					rule = p.origin(declaration.Rhs[0], visited)
-				}
+				rule = p.origin(constructionAssignedValue(value.Obj, declaration.Lhs, declaration.Rhs), visited)
 			case *ast.ValueSpec:
 				if len(declaration.Names) == 1 && len(declaration.Values) == 1 {
 					rule = p.origin(declaration.Values[0], visited)
