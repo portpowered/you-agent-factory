@@ -16,9 +16,9 @@ no observed resource counts, timing samples or runtime feasibility results.
 Stock Delve is not reconsidered; its earlier rejection remains in
 [baseline-observer-runbook.md](baseline-observer-runbook.md).
 
-This runbook implements story 001 of
-`fi-t27-no-write-reader-qualification-20261003`. Story 002 must separately
-repeat the decisive rejection from a fresh original-pin checkout. The author
+This runbook delivers stories 001 and 002 of
+`fi-t27-no-write-reader-qualification-20261003`. The fresh original-pin author
+rehearsal below reproduces the decisive rejection. The author
 does not issue independent RQ-VAL or RQ-REVIEW verdicts. Observer release,
 T27/T22, FI-A6 and P01 remain BLOCKED.
 
@@ -140,6 +140,52 @@ Admission rule: if exact native implementation, patches and correspondence
 cannot be established, stop here before any target operation. No command for
 launch, attach, stop, read, resume or detach is admitted by this runbook.
 
+## Fresh-pin author rejection rehearsal
+
+Story 002 repeated the target-free decision on 2026-10-03 from newly created
+`C:/Users/andre/work/portos/fi-gdb-rehearsal-pin-20261003-002`.
+This is author evidence, not independent validation. Creation used:
+
+```powershell
+git worktree add --detach C:/Users/andre/work/portos/fi-gdb-rehearsal-pin-20261003-002 95e213cfb35b50236fd7a34ad66c797d2ee7b5b6
+```
+
+Creation exited 0. With `$scratch` set to that fresh path, the identity and
+hash commands in Target-free reproduction exited successfully. Both initial
+and final `git rev-parse HEAD` returned the exact product pin (exit 0), and
+both `git status --porcelain` outputs were empty (exit 0). Candidate, compiler,
+init and both pinned owner hashes exactly matched the identity table.
+Version/configuration again returned GDB 16.3 with the same configuration,
+each exit 0; cached Go version returned Go 1.25.0 windows/amd64, exit 0.
+The init text was unchanged.
+
+The installation inventory and the literal cache-search command above were
+repeated once for the four previously completed roots. Per-command elapsed
+times are filesystem-search diagnostics, never P01 measurements:
+
+| Rehearsal root | Exit / output | Elapsed seconds |
+| --- | --- | --- |
+| `C:/ProgramData/mingw64` | 0; installed binaries/support and unrelated archives/headers, no native implementation or matching source archive | 0.0713898 |
+| `C:/Users/andre/.cache` | 1; no matching paths | 0.2132261 |
+| `C:/Users/andre/Downloads` | 1; no matching paths | 0.8864906 |
+| `C:/Users/andre/scoop/cache` | 1; no matching paths | 0.0235419 |
+| `C:/Users/andre/source` | 1; no matching paths | 0.0238950 |
+
+The previously denied/incomplete Temp search was not repeated; its contents
+remain unknown. These bounded results reproduce the same missing matching
+native implementation/patch/binary-provenance prerequisite. They do not prove
+exhaustive source absence. Admission again rejects before target access:
+`missing_prerequisite`. No safety audit of an unavailable implementation can
+be completed from these identity results.
+
+No target or support was built, launched or attached; no target lifecycle
+command was attempted. There is no runtime transcript, target executable,
+support executable, target PID, resource value or timing-comparability claim.
+Conditional support tests and the admitted runtime smoke are inapplicable to
+this rejection branch. RQ-2, observer release, T27/T22 and P01 remain BLOCKED.
+The clean scratch is retained for source evidence; the cleanup rule below
+applies to both owned scratch paths.
+
 ## Required observations and unchecked obligations
 
 The pinned owner/writer, retained-status and checkpoint contract remains in
@@ -207,8 +253,9 @@ The explicit lint target selects the required package-file-count check through
 the lint lane and the direct Make target; it does not claim the entire
 repository lint suite.
 Record actual results in local progress and the PR conversation. CI-run
-evidence never belongs in a commit. Push story 001 as a draft while story 002
-remains. RQ-D final handoff is not yet claimed.
+evidence never belongs in a commit. At final author handoff, update the existing
+PR, mark it ready, push the final head and record CI start in a PR comment.
+Stop at RQ-D; terminal CI and merge belong to independent review.
 
 Independent RQ-VAL/RQ-REVIEW must use the
 [validation loopback template](../../../../../factory/docs/standards/validation-loopback-template.md)
@@ -217,6 +264,17 @@ dossier properties separately from BLOCKED feasibility. A reviewer may accept
 the rejection dossier without releasing the observer. T27/T22 retain P01;
 I01 retains CLI shutdown/flush; T29/S01, G01/G02 and VAL01 retain their Project
 gates. No Project criterion is certified by this slice.
+
+Independent replay inputs are the final pushed delivery head, the immutable
+pin and identity table, the literal target-free commands and search patterns,
+and a new reviewer-owned clean scratch path. The reviewer must personally
+repeat them; author scratch cleanliness does not substitute for that replay.
+Record RQ-1/RQ-3 dossier results separately from BLOCKED RQ-2 feasibility,
+RQ-Q quality results separately from runtime proof, and RQ-V/RQ-R independent
+review separately from RQ-D author delivery. No retained prebuilt artifacts
+are supplied because none were produced. If candidate identities or source
+availability differ, record the discrepancy and reassess admission rather
+than carrying forward the author's rejection or inventing a runtime PASS.
 
 The smallest owner decision is to retain this rejection and the blocked
 measurement gate, or authorize a new bounded investigation with a locally
