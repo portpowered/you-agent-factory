@@ -775,37 +775,6 @@ func newGenericService(
 	})
 }
 
-func newGenericServiceWithOptions(
-	t *testing.T,
-	scopes runtimescopes.Service,
-	client modelseffects.AssetHTTPDoer,
-	options assets.ConstructionOptions,
-) *service {
-	t.Helper()
-	value := New(
-		scopes,
-		models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
-		client,
-		models.RuntimeAssetEndpoints{BaseURL: "https://assets.example.test", APIBaseURL: "https://api.example.test"},
-		os.MkdirAll,
-		os.Stat,
-		os.UserHomeDir,
-		os.WriteFile,
-		os.Rename,
-		os.Remove,
-		os.ReadFile,
-		os.ReadDir,
-		func(path string) (io.WriteCloser, error) { return os.Create(path) },
-		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		options,
-	)
-	service, ok := value.(*service)
-	if !ok {
-		t.Fatalf("New returned %T, want *service", value)
-	}
-	return service
-}
-
 func genericManifestClient(
 	name string,
 	body []byte,
