@@ -154,6 +154,8 @@ func TestCronExecutionTimeout_ReturnsCanonicalLimitError(t *testing.T) {
 }
 
 func TestSubmitCronTick_RetryableFailureRetriesBeforeSuccess(t *testing.T) {
+	t.Parallel()
+	fakeClock := clockwork.NewFakeClock()
 	retryErr := errors.New("temporary submission ingress failure")
 	attempt := 0
 	submitCalls := 0
@@ -166,16 +168,20 @@ func TestSubmitCronTick_RetryableFailureRetriesBeforeSuccess(t *testing.T) {
 		return nil
 	}
 	logCore, observedLogs := observer.New(zap.InfoLevel)
-	svc := newAutomationService(automationFixture{Logger: zap.New(logCore)})
+	svc := newAutomationService(automationFixture{Logger: zap.New(logCore), Clock: fakeClock})
 
-	if err := svc.SubmitCronTick(
-		context.Background(),
-		nil,
-		"",
-		submitter,
-		cronWorkstationConfigForTest("poll-for-work"),
-		time.Now(),
-	); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- svc.SubmitCronTick(ctx, nil, "", submitter,
+			cronWorkstationConfigForTest("poll-for-work"), fakeClock.Now())
+	}()
+	for range automationinternal.CronMaxRetries {
+		waitForFakeClockWaiters(t, fakeClock, 1)
+		fakeClock.Advance(10 * time.Millisecond)
+	}
+	if err := <-done; err != nil {
 		t.Fatalf("cron tick should succeed after retryable failures: %v", err)
 	}
 	if submitCalls != automationinternal.CronMaxRetries+1 {
@@ -186,6 +192,31 @@ func TestSubmitCronTick_RetryableFailureRetriesBeforeSuccess(t *testing.T) {
 	}
 	if observedLogs.FilterMessage("cron watcher trigger exhausted").Len() != 0 {
 		t.Fatal("cron retry success should not log exhaustion")
+	}
+}
+
+func TestSubmitCronTick_CancelDuringControlledBackoffPreventsRetry(t *testing.T) {
+	t.Parallel()
+	fakeClock := clockwork.NewFakeClock()
+	svc := newAutomationService(automationFixture{Clock: fakeClock})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	submitCalls := 0
+	done := make(chan error, 1)
+	go func() {
+		done <- svc.SubmitCronTick(ctx, nil, "", func(context.Context, work.WorkRequest) error {
+			submitCalls++
+			return errors.New("temporary admission failure")
+		}, cronWorkstationConfigForTest("poll-for-work"), fakeClock.Now())
+	}()
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("cron tick error = %v, want cancellation", err)
+	}
+	fakeClock.Advance(time.Hour)
+	if submitCalls != 1 {
+		t.Fatalf("cron submit attempts = %d, want only the initial attempt", submitCalls)
 	}
 }
 

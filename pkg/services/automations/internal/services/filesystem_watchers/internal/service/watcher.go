@@ -617,7 +617,7 @@ func (fw *watcher) readFileWithRetry(path string, maxRetries int, delay time.Dur
 			return content, nil
 		}
 		if i < maxRetries-1 {
-			time.Sleep(delay)
+			fw.clock.Sleep(delay)
 		}
 	}
 	return content, nil
