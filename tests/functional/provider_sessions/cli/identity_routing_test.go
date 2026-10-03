@@ -162,6 +162,29 @@ func (runner *providerCommandRouteRunner) Run(
 	return cloneCommandResult(route.result), nil
 }
 
+// The active repair fixture holds alpha after genuine native output has been
+// emitted; its peers remain before their first provider-session reference.
+// All other routes retain the non-streaming edge's complete-output behavior.
+func (runner *providerCommandRouteRunner) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observe platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	key := providerCommandRouteKey(request)
+	streamed := false
+	if key == "worker-session-fleet-alpha" && observe != nil {
+		runner.mu.Lock()
+		route, ok := runner.routes[key]
+		runner.mu.Unlock()
+		if ok {
+			observe(platformprocess.OutputStreamStdout, append([]byte(nil), route.result.Stdout...))
+			streamed = true
+		}
+	}
+	result, err := runner.Run(ctx, request)
+	if observe != nil && !streamed {
+		observe(platformprocess.OutputStreamStdout, append([]byte(nil), result.Stdout...))
+		observe(platformprocess.OutputStreamStderr, append([]byte(nil), result.Stderr...))
+	}
+	return result, err
+}
+
 func (runner *providerCommandRouteRunner) CallCount() int {
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
