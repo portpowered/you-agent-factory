@@ -632,6 +632,66 @@ func TestFactoryRuntimeEffectProvidersSelectExactProcessEdges(t *testing.T) {
 	}
 }
 
+func TestFactoryRuntimeMetricsClockSelectsTimerCapableEdgeOrReal(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"now-only", "timer-capable", "absent"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			base := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
+			logical := platformclock.NewDeterministic(base, time.Second)
+			var source platformclock.Source
+			switch name {
+			case "now-only":
+				source = metricsNowOnlyClock{at: base}
+			case "timer-capable":
+				source = logical
+			}
+			got := provideFactoryRuntimeMetricsClock(serviceedges.Edges{Clock: source})
+			if name != "timer-capable" {
+				if _, ok := got.(platformclock.Real); !ok {
+					t.Fatalf("metrics clock = %T, want explicit legacy Real fallback", got)
+				}
+				// A zero-duration timer proves the selected fallback delivers without
+				// advancing the timestamp-only source; the timeout is a failure ceiling.
+				timer := got.NewTimer(0)
+				defer timer.Stop()
+				select {
+				case at := <-timer.C():
+					if at.IsZero() || at.Equal(base) {
+						t.Fatalf("host timer timestamp = %v", at)
+					}
+				case <-time.After(time.Second):
+					t.Fatal("legacy host timer did not deliver")
+				}
+				return
+			}
+			if got != logical || !got.Now().Equal(base) {
+				t.Fatalf("metrics clock = %v, want exact logical source at %v", got, base)
+			}
+			timer := got.NewTimer(time.Second)
+			defer timer.Stop()
+			select {
+			case <-timer.C():
+				t.Fatal("logical timer fired before tick advance")
+			default:
+			}
+			logical.SetTick(1)
+			select {
+			case at := <-timer.C():
+				if !at.Equal(base.Add(time.Second)) {
+					t.Fatalf("logical timer timestamp = %v", at)
+				}
+			default:
+				t.Fatal("logical timer did not fire after tick advance")
+			}
+		})
+	}
+}
+
+type metricsNowOnlyClock struct{ at time.Time }
+
+func (clock metricsNowOnlyClock) Now() time.Time { return clock.at }
+
 func TestFactoryRuntimeEffectProvidersDefaultCommandRunnersWhenUnset(t *testing.T) {
 	t.Parallel()
 	providerRunner, err := provideFactoryRuntimeProviderCommandRunner(serviceedges.Edges{})
