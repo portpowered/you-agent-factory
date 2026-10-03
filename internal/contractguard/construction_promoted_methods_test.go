@@ -24,6 +24,19 @@ func TestConstructionPromotedGetter(t *testing.T) {
 		{"own method before opaque embedding", `type Generic[T any] struct { value T }; type View struct { Generic[int] }; func (v *View) Lookup() Port { return nil }`, `view.Lookup()`, 0},
 		{"scalar sibling", `type Scalar int; type View struct { *Service; Scalar }`, `view.Lookup()`, 1},
 		{"named function sibling", `type Callback func(); type View struct { *Service; Callback }`, `view.Lookup()`, 1},
+		{"empty interface sibling", `type Empty interface {}; type View struct { *Service; Empty }`, `view.Lookup()`, 1},
+		{"unrelated interface sibling", `type Observer interface { Observe() }; type View struct { *Service; Observer }`, `view.Lookup()`, 1},
+		{"interface alias sibling", `type Observer interface { Observe() }; type Alias = Observer; type View struct { *Service; Alias }`, `view.Lookup()`, 1},
+		{"defined interface sibling", `type Observer interface { Observe() }; type Copy Observer; type View struct { *Service; Copy }`, `view.Lookup()`, 1},
+		{"embedded interface sibling", `type Observer interface { Observe() }; type Combined interface { Observer }; type View struct { *Service; Combined }`, `view.Lookup()`, 1},
+		{"interface before deeper getter", `type Empty interface {}; type Inner struct { *Service }; type View struct { Empty; Inner }`, `view.Lookup()`, 1},
+		{"interface sibling method value", `type Empty interface {}; type View struct { *Service; Empty }`, `lookup := view.Lookup; lookup()`, 1},
+		{"interface sibling method expression", `type Empty interface {}; type View struct { *Service; Empty }`, `(*View).Lookup(view)`, 1},
+		{"interface collision", `type Getter interface { Lookup() Port }; type View struct { *Service; Getter }`, `view.Lookup()`, 0},
+		{"embedded interface collision", `type Getter interface { Lookup() Port }; type Combined interface { Getter }; type View struct { *Service; Combined }`, `view.Lookup()`, 0},
+		{"shallower interface method", `type Getter interface { Lookup() Port }; type Inner struct { *Service }; type View struct { Getter; Inner }`, `view.Lookup()`, 0},
+		{"opaque interface embedding", `type Combined interface { Unknown }; type View struct { *Service; Combined }`, `view.Lookup()`, 0},
+		{"cyclic interface embedding", `type Combined interface { Combined }; type View struct { *Service; Combined }`, `view.Lookup()`, 0},
 		{"own method shadows", `type View struct { *Service }; func (*View) Lookup() Port { return nil }`, `view.Lookup()`, 0},
 		{"field shadows", `type View struct { *Service; Lookup func() Port }`, `view.Lookup()`, 0},
 		{"shallower field", `type Inner struct { *Service }; type View struct { Inner; Lookup func() Port }`, `view.Lookup()`, 0},
@@ -78,6 +91,13 @@ func TestConstructionImportedPromotedGetter(t *testing.T) {
 		{"imported wrapper alias", `type View = selected.View`, `view.Lookup()`, 1},
 		{"imported method expression", `type View struct { *selected.Service }`, `(*View).Lookup(view)`, 1},
 		{"imported method value", `type View struct { *selected.Service }`, `lookup := view.Lookup; lookup()`, 1},
+		{"imported empty interface", `type View struct { *selected.Service; selected.Empty }`, `view.Lookup()`, 1},
+		{"imported unrelated interface", `type View struct { *selected.Service; selected.Observer }`, `view.Lookup()`, 1},
+		{"imported interface alias", `type Alias = selected.Observer; type View struct { *selected.Service; Alias }`, `view.Lookup()`, 1},
+		{"imported defined interface", `type Copy selected.Observer; type View struct { *selected.Service; Copy }`, `view.Lookup()`, 1},
+		{"imported embedded interface", `type View struct { *selected.Service; selected.Combined }`, `view.Lookup()`, 1},
+		{"imported interface method collision", `type View struct { *selected.Service; selected.Getter }`, `view.Lookup()`, 0},
+		{"imported interface shadows deeper getter", `type Inner struct { *selected.Service }; type View struct { selected.Getter; Inner }`, `view.Lookup()`, 0},
 		{"imported defined service", `type Copy selected.Service; type View struct { Copy }`, `view.Lookup()`, 0},
 		{"imported private method", `type View struct { *selected.Service }`, `view.private()`, 0},
 		{"imported shadow", `type View struct { *selected.Service }; func (*View) Lookup() selected.Port { return nil }`, `view.Lookup()`, 0},
@@ -90,6 +110,10 @@ func TestConstructionImportedPromotedGetter(t *testing.T) {
 type Port interface { Execute() }
 type Service struct { port Port }
 type View struct { *Service }
+type Empty interface {}
+type Observer interface { Observe() }
+type Combined interface { Observer }
+type Getter interface { Lookup() Port }
 func New(port Port) (*Service, error) { return &Service{port: port}, nil }
 func (s *Service) Lookup() Port { return s.port }
 func (s *Service) private() Port { return s.port }

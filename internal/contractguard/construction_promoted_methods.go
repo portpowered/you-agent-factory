@@ -23,6 +23,12 @@ func constructionPromotedMethod(typ ConstructionSymbol, name string, source *con
 				selected = method
 				continue
 			}
+			if matched, known := constructionInterfaceSelector(owner, name, source, map[ConstructionSymbol]bool{}); known {
+				if matched {
+					matches += paths
+				}
+				continue
+			}
 			structure, declaringSource, known := constructionUnderlyingStruct(owner, source.declarations, map[ConstructionSymbol]bool{})
 			if structure == nil {
 				// An unavailable or interface embedding might hide a deeper method.
