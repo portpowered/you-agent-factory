@@ -234,7 +234,7 @@ The audit found no issues in these areas:
 
 ## v1.1 amendment impact and counted owners
 
-AM01–AM16 dispatch authority is the [plan amendment table](plan.md#authorized-amendment-flat-injection-v11); task packets and contracts carry the native changes. These are planned dispositions, not terminal production proof. Preserve existing T30 terminal rows, T12/T19 live work and T25 #2676 rows.
+AM01–AM17 dispatch authority is the [plan amendment table](plan.md#authorized-amendment-flat-injection-v11); task packets and contracts carry the native changes. These are planned dispositions, not terminal production proof. Preserve existing T30 terminal rows, T12/T19 live work and T25 #2676 rows.
 
 | AM / owner | Additional impact or classification | Required disposition / gate |
 | --- | --- | --- |
@@ -267,3 +267,19 @@ Pin: `95e213cfb35b50236fd7a34ad66c797d2ee7b5b6`. FI engineering baseline-observa
 | Goroutines | Process runtime observation | Same quiescent checkpoints on same artifact/environment; peer/co-tenant ownership and noise recorded explicitly. |
 
 Runbook proof includes access/tool identity, owner synchronization, nonmutation, lifecycle checkpoint ownership and comparable timing methodology. T27 emits original median/p95/ranges plus 100-cycle retention only after that proof; T22 repeats matching final observations. No inferred resource count or fabricated P01 result.
+
+### AM17 — T12 evidence boundaries
+
+Binding authority: operator mailbox `C:/Users/andre/work/portos/infinite-you/docs/temp/operator-mailbox/responses/flat-injection.md`, Decisions 2026-10-03T12:01Z A and 12:57Z. AM17 corrects evidence classification under flat-injection-v1.1; it changes no endpoint, service signature, configuration, event, persistence, policy or acceptance criterion. AM16 is merged historical authority, not a live Work dependency. The retained T12 successor consumes merged AM17 before planning and continues from [#2683](https://github.com/portpowered/you-agent-factory/pull/2683) / `62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7`; stories 002/003 and full F10/S01 remain unproven. No T20/WSV wait or queue mutation is required.
+
+Follow [the AM17 resolution](plan.md#authorized-amendment-flat-injection-v11) to [the complete F10 requirements ledger](tasks.md#am17--t12-evidence-boundaries). T12 owns both proofs below; independent VAL01 confirms composed behavior. The existing `automations.Root.GetCursor` delegates the service operation (`pkg/services/automations/contracts.go:215–222,457–474`). Durable reads validate `ExpectedCursor` and return detached opaque facts (`pkg/services/automations/internal/services/script_pollers/internal/service/durable_cursor.go:74–108`). The cursor HTTP adapter (`pkg/services/automations/transports/http/convergence_operations.go:52–97`) is unbound in canonical Wire/HTTP; adapter tests are component evidence. Neither that adapter nor `AutomationsRootFromEdges` is a composed functional entry point. Canonical construction/execution remains `pkg/root/process.go:17` / `pkg/initializer/application/process.go:185`.
+
+| Obligation | Component/service-contract evidence — T12-F10-COMPONENT | Composed evidence — T12-F10 / VAL01 | Owner |
+| --- | --- | --- | --- |
+| F10b | Existing GetCursor returns exact committed opaque cursor/checkpoint facts | Existing customer activation admits public Work; resumed command receives the same exact committed environment facts | T12; both proofs required |
+| F10g | After failed replacement, GetCursor returns prior exact committed opaque cursor/checkpoint facts | Admitted public Work remains; existing error/diagnostic is visible; next command resumes prior-commit environment facts; peer progresses | T12; both proofs required |
+| F10j | GetCursor with stale ExpectedCursor returns the existing typed conflict; exact committed cursor/checkpoint facts remain unchanged; no mutation, extra command or Work | No composed public cursor endpoint is required or invented; admission/restart/diagnostic/isolation obligations remain in F10b/g and the other F10 rows | T12 component/service-contract proof |
+
+All F10a–m success, failure and recovery obligations remain required on the successor head. C01–C16 native shapes, exactly one named interface per private service root, same-PR obsolete-helper/stale-baseline deletion, deletion-only baselines, deadcode allowance 0, T12-S01/G01/G02 and FI-A1–A8 remain unchanged. This amendment yields documentation/source/static evidence only, never runtime PASS.
+
+AM17-DOC-TRACE/INVARIANTS/LINT belong to the docs author. Author delivery stops at final head pushed, PR open, required CI started and blocking feedback addressed. Independent ordinary review owns AM17-DOC-VAL: a fresh isolated candidate checkout, the [validation loopback report](../../../../../factory/docs/standards/validation-loopback-template.md) with AM17-1..6, AM17-DELIVERY and FI-A1–A8 individually PASS/FAIL/BLOCKED, and a smallest delta request for findings without silent repair. AM17-DOC-REVIEW owns terminal passing own-head CI, conflicts, current-main rebase, immediate premerge `make lint pkg-file-count`, and merge. `make generate-wire` plus clean diff applies only to a separately authorized graph change. Merge releases corrected successor planning; runtime gates and aggregate Project acceptance remain later work.
