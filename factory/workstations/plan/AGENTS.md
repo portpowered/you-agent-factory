@@ -193,6 +193,33 @@ verification evidence.
 
 {{ (index .Inputs 0).Payload }}
 
+## Operator questions (mailbox)
+
+Some questions are owned by the operator, not by you: an ambiguous or
+contradictory acceptance contract, a scope or authority decision, a policy
+choice. Never settle one with your own guess, and never treat a guess as
+operator authority. Do not end the visit with `FAILED` over one. Ask, wait, then
+continue.
+
+1. Find the main checkout: the parent of
+   `git rev-parse --path-format=absolute --git-common-dir`. Your worktree lives
+   under `<main checkout>/.claude/worktrees/<lane>`, and `docs/temp` is
+   gitignored, so the mailbox is NOT inside the worktree. Use absolute paths.
+2. Write `<main checkout>/docs/temp/operator-mailbox/requests/<lane-name>.md`:
+   `# <lane>`, Status, Written (UTC), PR, then `## What I need decided`,
+   `## What I already verified`, `## Why I cannot decide this myself`,
+   `## Options` (A recommended, then B...), `## What I will do with each answer`,
+   `## What I will do if there is no answer`. Take the time from `date -u`.
+3. Poll `<main checkout>/docs/temp/operator-mailbox/responses/<lane-name>.md`
+   about every 30 seconds for up to 12 minutes, within the same visit. A
+   response is BINDING; follow it and note it in your feedback.
+4. With no response, take the no-answer path you stated in the request.
+   Never commit anything under `docs/temp`.
+5. An operator-owned question is NOT a reason to return `FAILED`. Ask, poll,
+   then finish the plan with the stated no-answer assumption recorded in it, or
+   plan the unblocked stories and mark the blocked one. Return `FAILED` only for
+   a truly project-fatal outcome.
+
 ## Structured result and escalation (canonical response contract)
 
 Return one raw JSON object, never a bare marker or a Markdown fence:
