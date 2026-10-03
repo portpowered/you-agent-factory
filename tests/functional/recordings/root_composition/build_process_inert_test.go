@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	root "github.com/portpowered/infinite-you/pkg/root"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -755,4 +756,25 @@ func recordPublicRecordingFact(t *testing.T, service recordings.Service, status 
 		t.Fatalf("RecordRecordingEvent: %v", err)
 	}
 	return event
+}
+
+type absentRecordingClock struct{}
+
+func (*absentRecordingClock) Now() time.Time { panic("typed-nil process clock activated") }
+
+func TestBuildProcessRejectsTypedNilRecordingClockBeforeActivation(t *testing.T) {
+	t.Parallel()
+	var clock *absentRecordingClock
+	observed := false
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		Clock:                  clock,
+		RecordingsRootObserver: func(recordings.Service) { observed = true },
+		RecordingWriteFile:     func(string, []byte) error { t.Error("recording activated before invalid clock rejection"); return nil },
+	})
+	if err == nil || process != nil || !strings.Contains(err.Error(), "construct Recordings: clock is required") {
+		t.Fatalf("BuildProcess = %v, %v; want clock construction error", process, err)
+	}
+	if observed {
+		t.Fatal("invalid clock published a usable Recordings root")
+	}
 }

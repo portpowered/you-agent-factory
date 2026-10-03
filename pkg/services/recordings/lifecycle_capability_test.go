@@ -13,7 +13,6 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
 type lifecycleTestLedger struct{}
@@ -46,7 +45,7 @@ func newTestRecordingLifecycleWithWriter(
 	writeFile func(string, []byte) error,
 ) recordings.RecordingLifecycle {
 	t.Helper()
-	service, err := recordingswire.NewService(
+	service, err := testNewService(
 		lifecycleTestLedger{},
 		nil,
 		writeFile,

@@ -6,16 +6,19 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
 func TestAcceptedRecordingsRootUsesPrivateCanonicalLedger(t *testing.T) {
 	t.Parallel()
 
 	ledger := &stubLedger{}
-	root := recordingsinternal.NewService(ledger, recordingsinternal.NewProjectionService())
+	root := testRecordingRoot(ledger, recordingsinternal.NewProjectionService())
 	if root == nil {
 		t.Fatal("NewService returned nil")
 	}
@@ -114,4 +117,13 @@ func scopedLegacyEvent(
 			SessionSequence: &sessionSequence,
 		},
 	}
+}
+
+func testRecordingRoot(ledger recordings.Ledger, projection recordings.ProjectionService) recordings.Service {
+	clock := platformclock.Real{}
+	lifecycle := recordingswire.NewRecordingLifecycleOwner(nil, nil, nil, clock)
+	return recordingswire.NewService(ledger, projection, lifecycle,
+		recordingswire.NewArtifactsExportOwner(lifecycle, nil),
+		recordingswire.NewReplayOwner(lifecycle, projection, nil, nil),
+		recordingswire.NewCanonicalLedgerOwner(ledger), recordingswire.NewHistoricalQueryOwner(nil, projection), clock, logging.NoopLogger{}, nil, nil, nil, nil, nil)
 }

@@ -9,7 +9,6 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/internal/service"
 )
 
@@ -43,11 +42,7 @@ func TestRecordingsRootSelectsAndBindsOneStableGeneratedTarget(t *testing.T) {
 		reserver,
 		filepath.Join,
 	)
-	root := recordingsinternal.NewService(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
-		planner,
-	)
+	root := lifecycleservice.New(planner, nil, nil, fixedRecordingClock{})
 	request := recordings.StartRecordingRequest{
 		Enabled:     true,
 		RecordingID: "recording-explicit",
@@ -108,11 +103,7 @@ func TestRecordingsRootDisabledAndInvalidStartsAreInert(t *testing.T) {
 			}, nil
 		},
 	)
-	root := recordingsinternal.NewService(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
-		planner,
-	)
+	root := lifecycleservice.New(planner, nil, nil, fixedRecordingClock{})
 
 	disabled, err := root.StartRecording(recordings.StartRecordingRequest{
 		Target: recordings.RecordingTargetRequest{HomeDir: "ignored"},
@@ -149,11 +140,7 @@ func TestRecordingsRootExplicitTargetDoesNotInvokeGeneratedTargetEffects(t *test
 			return recordings.LiveRecordingTarget{}, errors.New("unexpected target generation")
 		},
 	)
-	root := recordingsinternal.NewService(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
-		planner,
-	)
+	root := lifecycleservice.New(planner, nil, nil, fixedRecordingClock{})
 	started, err := root.StartRecording(recordings.StartRecordingRequest{
 		Enabled:     true,
 		RecordingID: "recording-explicit",

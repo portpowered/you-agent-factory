@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
@@ -711,7 +712,7 @@ func newReplayHarness(t *testing.T) (
 			return recordings.LiveRecordingTarget{}, nil
 		},
 	)
-	lifecycle := recordinglifecyclewire.NewService(planner, nil, nil)
+	lifecycle := recordinglifecyclewire.NewService(planner, nil, nil, platformclock.Real{})
 	projection := projectionquerywire.NewService()
 	replay := replayservice.New(lifecycle, projection, nil, nil)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-replay-load-plan"}

@@ -56,7 +56,7 @@ func (ledger *behavioralLedger) AppendRecordedEvent(event factorydefinitions.Fac
 
 func newWireFoldService(t *testing.T, ledger recordings.Ledger) recordings.Service {
 	t.Helper()
-	service, err := recordingswire.NewServiceWithProjectionAndEffects(
+	service, err := testNewServiceWithProjectionAndEffects(
 		ledger,
 		recordingswire.NewProjectionService(),
 		nil,

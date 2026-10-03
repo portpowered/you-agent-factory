@@ -3,6 +3,10 @@
 package internal
 
 import (
+	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
+	canonicalledger "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger"
+	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,9 +17,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
+	canonicalledgerwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
+	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
+	replaywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire"
 )
 
 type stubLedger struct {
@@ -66,16 +76,6 @@ func (ledger *stubLedger) AppendRecordedEventWithValidation(
 	}
 	ledger.events = append(ledger.events, event)
 	return event, nil
-}
-
-func TestNewServiceRejectsNilDependencies(t *testing.T) {
-	t.Parallel()
-	if got := NewService(nil, NewProjectionService()); got != nil {
-		t.Fatalf("NewService(nil, projection) = %#v, want nil", got)
-	}
-	if got := NewService(&stubLedger{}, nil); got != nil {
-		t.Fatalf("NewService(ledger, nil) = %#v, want nil", got)
-	}
 }
 
 func TestNewServiceWithLifecycleEffectsUsesProvidedPublicationAndPlanner(t *testing.T) {
@@ -1326,10 +1326,11 @@ func hasReplayArtifactErrorKind(err error, want recordings.ReplayArtifactErrorKi
 	var artifactErr *recordings.ReplayArtifactError
 	return errors.As(err, &artifactErr) && artifactErr.Kind == want
 }
-func TestCombinedServiceReadHelpersRejectUnavailableCapabilities(t *testing.T) {
+func TestCombinedServiceReadHelpersPreserveOwnerFailures(t *testing.T) {
 	t.Parallel()
 
 	svc := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
+	svc.historicalQuery = unavailableHistoricalOwner{}
 	_, err := svc.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{})
 	var historicalErr *recordings.HistoricalRecordingQueryError
 	if !errors.As(err, &historicalErr) || historicalErr.Kind != recordings.HistoricalRecordingQueryErrorUnavailable {
@@ -1401,9 +1402,9 @@ func TestCombinedServiceReadHelpersNormalizeRecordingClock(t *testing.T) {
 		t.Fatalf("recordingClockNow callback returned %v, want %v", got, want)
 	}
 	svc := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
-	svc.clock = nil
+	svc.clock = staticRecordingClock{}
 	if got := svc.recordingFinishedAt(); !got.IsZero() {
-		t.Fatalf("finished time without clock = %v, want zero", got)
+		t.Fatalf("finished time from zero clock = %v, want zero", got)
 	}
 	svc.clock = staticRecordingClock{at: want}
 	if got := svc.recordingFinishedAt(); !got.Equal(want.UTC()) || got.Location() != time.UTC {
@@ -1426,7 +1427,7 @@ func TestCombinedServiceAbandonedScopeFinishesAtInjectedClock(t *testing.T) {
 	}
 }
 
-func TestCombinedServiceAbandonedScopeWithoutClockRejectsZeroTimestamp(t *testing.T) {
+func TestCombinedServiceAbandonedScopeZeroClockRejectsZeroTimestamp(t *testing.T) {
 	t.Parallel()
 	snapshot, status, err := characterizeAbandonedRecording(t)
 	if !errors.Is(err, recordings.ErrInvalidRecordingTerminalMetadata) {
@@ -1732,5 +1733,394 @@ func TestRuntimeLedgerRouterPublishesCallbacksAndRoutesOptionalProvenance(t *tes
 	}
 	if generation := router.StreamGenerationID(); generation != "recordings-root" {
 		t.Fatalf("router stream generation = %q, want recordings-root", generation)
+	}
+}
+
+func NewService(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets ...recordings.LiveRecordingTargetPlanner,
+) recordings.Service {
+	return NewServiceWithLifecycleEffects(
+		ledger,
+		projection,
+		firstTargetPlanner(targets),
+		nil,
+		nil,
+		nil,
+	)
+}
+
+func firstTargetPlanner(
+	targets []recordings.LiveRecordingTargetPlanner,
+) recordings.LiveRecordingTargetPlanner {
+	if len(targets) == 0 {
+		return nil
+	}
+	return targets[0]
+}
+
+// NewServiceWithLifecycleEffects constructs the Recordings root with the exact
+// active-flush persistence and scheduling effects selected by Wire.
+func NewServiceWithLifecycleEffects(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targetPlanner recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+	publication portableArtifactPublication,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
+	return newServiceWithLifecycleEffects(
+		ledger,
+		projection,
+		targetPlanner,
+		writer,
+		tickers,
+		publication,
+		logging.NoopLogger{},
+		nil,
+		nil,
+		nil,
+		clocks...,
+	)
+}
+
+// NewServiceWithLifecycleEffectsAndLogger constructs the Recordings root with
+// the process logger selected by canonical Wire. The logger is intentionally
+// separate from the legacy test-friendly constructor so existing owner tests
+// continue to exercise a no-op service without manufacturing an application
+// logging graph.
+func NewServiceWithLifecycleEffectsAndLogger(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targetPlanner recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+	publication portableArtifactPublication,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
+	return newServiceWithLifecycleEffects(
+		ledger,
+		projection,
+		targetPlanner,
+		writer,
+		tickers,
+		publication,
+		logger,
+		nil,
+		nil,
+		nil,
+		clocks...,
+	)
+}
+
+// NewServiceWithLifecycleEffectsAndHistoricalQuery constructs the Recordings
+// root with a Wire-selected historical read capability and no-op logging.
+func NewServiceWithLifecycleEffectsAndHistoricalQuery(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targetPlanner recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+	publication portableArtifactPublication,
+	historicalQuery historicalquery.Service,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
+	return newServiceWithLifecycleEffects(
+		ledger,
+		projection,
+		targetPlanner,
+		writer,
+		tickers,
+		publication,
+		logging.NoopLogger{},
+		historicalQuery,
+		nil,
+		nil,
+		clocks...,
+	)
+}
+
+func newServiceWithLifecycleEffects(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targetPlanner recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+	publication portableArtifactPublication,
+	logger logging.Logger,
+	historicalQuery historicalquery.Service,
+	readFile recordings.RecordingReadFile,
+	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
+	if ledger == nil || projection == nil {
+		return nil
+	}
+	if historicalQuery == nil {
+		historicalQuery = unavailableHistoricalOwner{}
+	}
+	clock := firstRecordingClock(clocks)
+	if clock == nil {
+		clock = staticRecordingClock{}
+	}
+	lifecycle := recordinglifecyclewire.NewService(targetPlanner, writer, tickers, clock)
+	return NewCombinedService(ledger, projection, lifecycle,
+		artifactsexportwire.NewService(lifecycle, publication),
+		replaywire.NewService(lifecycle, projection, readFile, decodeFactorySnapshot),
+		canonicalledgerwire.NewService(ledger), historicalQuery, clock, logging.EnsureLogger(logger),
+		nil, nil, nil, nil, nil)
+}
+
+func firstRecordingClock(clocks []recordings.RecordingClock) recordings.RecordingClock {
+	for _, clock := range clocks {
+		if clock != nil {
+			return clock
+		}
+	}
+	return nil
+}
+
+func recordingClockNow(clocks ...recordings.RecordingClock) func() time.Time {
+	clock := firstRecordingClock(clocks)
+	if clock == nil {
+		return nil
+	}
+	return func() time.Time { return clock.Now() }
+}
+
+// NewRuntimeRoot constructs the one process-scoped Recordings root. Runtime
+// ledgers and lifecycle bindings are acquired through OpenRuntime; no caller
+// receives a constructor for those private resources.
+func NewRuntimeRoot(
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	readFile recordings.RecordingReadFile,
+	publication interface {
+		Publish(context.Context, string, []byte) error
+		Read(context.Context, string) ([]byte, error)
+	},
+	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
+	return NewRuntimeRootWithHistoricalQuery(
+		targets,
+		writeFile,
+		readFile,
+		publication,
+		captureSnapshot,
+		decodeSnapshot,
+		decodeRuntimeConfig,
+		replayInputs,
+		logger,
+		nil,
+		clocks...,
+	)
+}
+
+// NewRuntimeRootWithHistoricalQuery constructs the process-scoped Recordings
+// root with the Wire-selected durable historical reader.
+func NewRuntimeRootWithHistoricalQuery(
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	readFile recordings.RecordingReadFile,
+	publication interface {
+		Publish(context.Context, string, []byte) error
+		Read(context.Context, string) ([]byte, error)
+	},
+	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
+	historicalQuery historicalquery.Service,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
+	return NewRuntimeRootWithHistoricalQueryAndAppender(
+		targets,
+		writeFile,
+		nil,
+		readFile,
+		publication,
+		captureSnapshot,
+		decodeSnapshot,
+		decodeRuntimeConfig,
+		replayInputs,
+		logger,
+		historicalQuery,
+		clocks...,
+	)
+}
+
+var _ recordings.Service = (*combinedService)(nil)
+var _ recordings.RuntimeScopeService = (*combinedService)(nil)
+
+// NewRuntimeRootWithHistoricalQueryAndAppender constructs the process-scoped
+// Recordings root with separate replacement and append effects. The optional
+// append effect is used only for new .jsonl replay recordings; v1 readers and
+// explicit .json replacement flows remain on writeFile.
+func NewRuntimeRootWithHistoricalQueryAndAppender(
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	appendFile func(string, []byte) error,
+	readFile recordings.RecordingReadFile,
+	publication interface {
+		Publish(context.Context, string, []byte) error
+		Read(context.Context, string) ([]byte, error)
+	},
+	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
+	logger logging.Logger,
+	historicalQuery historicalquery.Service,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
+	router := newRuntimeLedgerRouter(recordingClockNow(clocks...))
+	projection := NewProjectionService()
+	var writer recordings.RecordingSnapshotWriter
+	var tickers recordings.RecordingFlushTickerFactory
+	if writeFile != nil {
+		writer = newReplayRecordingSnapshotWriter(
+			writeFile,
+			appendFile,
+			replayV2TargetPreparation(readFile),
+		)
+		tickers = NewRecordingFlushTickerFactory()
+	}
+	service := NewServiceWithLifecycleEffectsAndHistoricalQueryAndLoggerAndReplaySource(
+		router,
+		projection,
+		targets,
+		writer,
+		tickers,
+		publication,
+		historicalQuery,
+		readFile,
+		decodeSnapshot,
+		logger,
+		clocks...,
+	)
+	root, ok := service.(*combinedService)
+	if !ok || root == nil {
+		return nil
+	}
+	root.runtimeRouter = router
+	root.runtimeSnapshotCapture = captureSnapshot
+	root.replaySnapshotDecoder = decodeSnapshot
+	root.replayConfigDecoder = decodeRuntimeConfig
+	root.replayInputs = replayInputs
+	return root
+}
+
+// NewServiceWithLifecycleEffectsAndHistoricalQueryAndLoggerAndReplaySource
+// constructs the process-scoped root with the selected logger, historical
+// reader, and explicit resume source.
+func NewServiceWithLifecycleEffectsAndHistoricalQueryAndLoggerAndReplaySource(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targetPlanner recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+	publication portableArtifactPublication,
+	historicalQuery historicalquery.Service,
+	readFile recordings.RecordingReadFile,
+	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	logger logging.Logger,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
+	return newServiceWithLifecycleEffects(
+		ledger,
+		projection,
+		targetPlanner,
+		writer,
+		tickers,
+		publication,
+		logger,
+		historicalQuery,
+		readFile,
+		decodeFactorySnapshot,
+		clocks...,
+	)
+}
+
+type unavailableHistoricalOwner struct{}
+
+func (unavailableHistoricalOwner) QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+	return recordings.HistoricalRecordingQueryResult{}, &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorUnavailable}
+}
+
+type injectedCanonicalOwner struct {
+	canonicalledger.Service
+	err error
+}
+
+func (owner injectedCanonicalOwner) Append(recordings.AppendRecordedEventRequest) (recordings.AppendRecordedEventResult, error) {
+	return recordings.AppendRecordedEventResult{}, owner.err
+}
+
+type injectedLifecycleOwner struct {
+	recordinglifecycle.Service
+	err error
+}
+
+func (owner injectedLifecycleOwner) StartRecording(recordings.StartRecordingRequest) (recordings.StartRecordingResult, error) {
+	return recordings.StartRecordingResult{}, owner.err
+}
+
+type injectedArtifactsOwner struct {
+	artifactsexport.Service
+	err error
+}
+
+func (owner injectedArtifactsOwner) BuildPortableArtifact(recordings.BuildPortableArtifactRequest) (recordings.BuildPortableArtifactResult, error) {
+	return recordings.BuildPortableArtifactResult{}, owner.err
+}
+
+type injectedReplayOwner struct {
+	recordingsreplay.Service
+	err error
+}
+
+func (owner injectedReplayOwner) CreateReplayPlan(recordings.CreateReplayPlanRequest) (recordings.CreateReplayPlanResult, error) {
+	return recordings.CreateReplayPlanResult{}, owner.err
+}
+
+func TestCombinedServiceForwardsCompletedOwnerFailures(t *testing.T) {
+	t.Parallel()
+	canonicalErr := errors.New("injected canonical admission failure")
+	lifecycleErr := errors.New("injected lifecycle selection failure")
+	artifactsErr := errors.New("injected portable artifact failure")
+	replayErr := errors.New("injected replay plan failure")
+	service := NewCombinedService(&stubLedger{}, NewProjectionService(),
+		injectedLifecycleOwner{err: lifecycleErr}, injectedArtifactsOwner{err: artifactsErr},
+		injectedReplayOwner{err: replayErr}, injectedCanonicalOwner{err: canonicalErr}, unavailableHistoricalOwner{},
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil)
+	_, err := service.Append(recordings.AppendRecordedEventRequest{})
+	if !errors.Is(err, canonicalErr) {
+		t.Fatalf("Append error = %v, want injected canonical cause", err)
+	}
+	_, err = service.StartRecording(recordings.StartRecordingRequest{})
+	if !errors.Is(err, lifecycleErr) {
+		t.Fatalf("StartRecording error = %v, want injected lifecycle cause", err)
+	}
+	_, err = service.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{})
+	if !errors.Is(err, artifactsErr) {
+		t.Fatalf("BuildPortableArtifact error = %v, want injected artifacts cause", err)
+	}
+	_, err = service.CreateReplayPlan(recordings.CreateReplayPlanRequest{})
+	if !errors.Is(err, replayErr) {
+		t.Fatalf("CreateReplayPlan error = %v, want injected replay cause", err)
+	}
+	_, err = service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{})
+	var historicalErr *recordings.HistoricalRecordingQueryError
+	if !errors.As(err, &historicalErr) || historicalErr.Kind != recordings.HistoricalRecordingQueryErrorUnavailable {
+		t.Fatalf("QueryHistoricalRecording error = %v, want owner unavailable cause", err)
 	}
 }
