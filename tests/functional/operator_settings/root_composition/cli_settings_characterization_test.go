@@ -58,9 +58,35 @@ func TestCLISettingsUnknownFieldsPrecedenceAndSafeFailure(t *testing.T) {
 	t.Parallel()
 	fixture := ensureSharedOperatorSettingsFixture(t)
 	t.Run("F12-R1 unknown fields round trip", func(t *testing.T) { checkSettingsUnknownFieldRoundTrip(t, fixture) })
+	t.Run("F12-E1 malformed prerequisite", func(t *testing.T) { checkMalformedSettingsPrerequisite(t, fixture) })
 	t.Run("F12-E2 persistence unavailable", func(t *testing.T) { checkSettingsPersistenceFailure(t, fixture) })
 	t.Run("F12-B2 independent profiles", func(t *testing.T) { checkIndependentSettingsProfiles(t, fixture) })
 	t.Run("runtime precedence", func(t *testing.T) { checkSettingsRuntimePrecedence(t, fixture) })
+}
+
+func checkMalformedSettingsPrerequisite(t *testing.T, fixture *sharedOperatorSettingsFixture) {
+	t.Helper()
+	t.Parallel()
+	home := writeOperatorConfigForActivation(t, "codex", "before")
+	path := filepath.Join(home, ".you-agent-factory", "config.json")
+	original := []byte(`{"defaults":{"workerModelProvider":"codex","workerModel":"before"}} {}`)
+	if err := os.WriteFile(path, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	fixture.withOperatorSettingsDocumentRoute(t, t.Name(), home, home, identityActivationGeneratedUUID, nil, func(*operatorSettingsEffectRoute) {
+		input := settingsCLIInput(t, home, home, "init", "--provider", "claude", "--model", "after")
+		var stdout, stderr bytes.Buffer
+		input.Stdout, input.Stderr = &stdout, &stderr
+		err := fixture.process.Execute(input)
+		var failure operatorsettings.DocumentFailure
+		if !errors.As(err, &failure) || failure.Kind != operatorsettings.DocumentFailureKindMalformed {
+			t.Fatalf("init error = %v, want malformed document failure", err)
+		}
+		after, readErr := os.ReadFile(path)
+		if readErr != nil || !bytes.Equal(original, after) || strings.Contains(stdout.String(), "Configured default provider") {
+			t.Fatalf("malformed prerequisite changed destination or reported success: %v\n%s\n%s", readErr, after, &stdout)
+		}
+	})
 }
 
 func checkSettingsUnknownFieldRoundTrip(t *testing.T, fixture *sharedOperatorSettingsFixture) {
@@ -68,7 +94,7 @@ func checkSettingsUnknownFieldRoundTrip(t *testing.T, fixture *sharedOperatorSet
 	t.Parallel()
 	home := writeOperatorConfigForActivation(t, "codex", "before")
 	path := filepath.Join(home, ".you-agent-factory", "config.json")
-	initial := []byte(`{"backendScopeID":"local-11111111-1111-4111-8111-111111111111","defaults":{"workerModelProvider":"codex","workerModel":"before","futureDefault":{"enabled":true}},"futureRoot":{"secret":"preserve"},"workerPresets":[{"id":"research","modelProvider":"CODEX","model":"gpt-5"}]}`)
+	initial := []byte(`{"backendScopeID":"local-11111111-1111-4111-8111-111111111111","defaults":{"workerModelProvider":"codex","workerModel":"before","futureDefault":{"enabled":true}},"futureRoot":{"secret":"preserve"},"models":{"custom":{"source":"hf://owner/repo","backend":"backend","loadPolicy":"ON_DEMAND","operations":["OMNI"],"futureModel":{"enabled":true}}},"workerPresets":[{"id":"research","modelProvider":"CODEX","model":"gpt-5","futurePreset":"kept"}]}`)
 	if err := os.WriteFile(path, initial, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +114,11 @@ func checkSettingsUnknownFieldRoundTrip(t *testing.T, fixture *sharedOperatorSet
 			t.Fatal(err)
 		}
 		defaults := document["defaults"].(map[string]any)
-		wantPresets := []any{map[string]any{"id": "research", "modelProvider": "CODEX", "model": "gpt-5"}}
+		wantPresets := []any{map[string]any{"id": "research", "modelProvider": "CODEX", "model": "gpt-5", "futurePreset": "kept"}}
+		wantModels := map[string]any{"custom": map[string]any{"source": "hf://owner/repo", "backend": "backend", "loadPolicy": "ON_DEMAND", "operations": []any{"OMNI"}, "futureModel": map[string]any{"enabled": true}}}
+		if !reflect.DeepEqual(document["models"], wantModels) {
+			t.Fatalf("rewritten settings lost model map fields: %s", payload)
+		}
 		if !reflect.DeepEqual(document["futureRoot"], map[string]any{"secret": "preserve"}) || !reflect.DeepEqual(defaults["futureDefault"], map[string]any{"enabled": true}) || defaults["workerModel"] != "after" || defaults["workerModelProvider"] != "claude" || document["backendScopeID"] != "local-11111111-1111-4111-8111-111111111111" || !reflect.DeepEqual(document["workerPresets"], wantPresets) {
 			t.Fatalf("rewritten settings lost fields: %s", payload)
 		}
