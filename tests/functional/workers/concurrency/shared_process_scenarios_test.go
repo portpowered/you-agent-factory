@@ -185,9 +185,9 @@ func (fixture *concurrencySharedProcessFixture) runSessionCancellationIsolation(
 func (fixture *concurrencySharedProcessFixture) runAdmittedWorkCancellation(t *testing.T) {
 	t.Helper()
 	canceled := fixture.openCase(t, "AWC-A", 1, concurrencyRunnerHold, "cc09-canceled", "", 0)
-	canceledEvents := openAdmittedWorkEvents(t, canceled)
+	ownAdmittedWorkSession(t, canceled, false)
 	survivor := fixture.openCase(t, "AWC-B", 1, concurrencyRunnerHold, "cc09-survivor", "", 0)
-	survivorEvents := openAdmittedWorkEvents(t, survivor)
+	survivorEvents := ownAdmittedWorkSession(t, survivor, true)
 	first := submitConcurrencyWork(t, canceled, canceled.marker)
 	second := submitConcurrencyWork(t, survivor, survivor.marker)
 	canceledCall := canceled.runner.waitStarted(t, concurrencySharedProcessTimeout)
@@ -212,17 +212,7 @@ func (fixture *concurrencySharedProcessFixture) runAdmittedWorkCancellation(t *t
 		t.Fatalf("AWC canceled call = %d, want original %d", observedCancel.index, canceledCall.index)
 	}
 	canceled.runner.joinCalls(t)
-	terminal := awaitAdmittedWorkEvent(t, canceledEvents, func(event factoryapi.FactoryEvent) bool {
-		if event.Type != factoryapi.FactoryEventTypeSessionLifecycleControl {
-			return false
-		}
-		payload, err := event.Payload.AsSessionLifecycleControlEventPayload()
-		return err == nil && payload.Operation == factoryapi.FactorySessionLifecycleControlKindCancel &&
-			payload.Outcome == factoryapi.FactorySessionLifecycleControlOutcomeAccepted && payload.NewStatus == factoryapi.FactorySessionDurableLifecycleStatusCanceled
-	})
-	if terminal.Context.SessionId == nil || *terminal.Context.SessionId != canceled.id {
-		t.Fatalf("AWC cancel terminal context = %#v, want selected session", terminal.Context)
-	}
+	terminal := admittedWorkCancellationEvent(t, canceled)
 	assertAdmittedWorkCanceled(t, canceled, first, firstDispatch)
 	if survivor.runner.activeCallCount() != 1 || survivor.runner.callCount() != 1 || survivor.runner.canceledCount() != 0 || channelClosed(survivorCall.returned) ||
 		!reflect.DeepEqual(peerBefore, concurrencyWorkByID(t, survivor, second.WorkId)) {
@@ -241,7 +231,7 @@ func (fixture *concurrencySharedProcessFixture) runAdmittedWorkCancellation(t *t
 	assertAdmittedWorkCanceled(t, canceled, first, firstDispatch)
 }
 
-func openAdmittedWorkEvents(t *testing.T, session *concurrencySession) *support.FactoryEventStream {
+func ownAdmittedWorkSession(t *testing.T, session *concurrencySession, liveEvents bool) *support.FactoryEventStream {
 	t.Helper()
 	// Register before opening the stream or admitting Work, including failure
 	// paths. Close the owned session before joining commands, then drain the
@@ -262,9 +252,11 @@ func openAdmittedWorkEvents(t *testing.T, session *concurrencySession) *support.
 		session.fixture.router.unregister(session.dir)
 	}
 	t.Cleanup(cleanup)
-	stream = support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(session.fixture.baseURL, session.id))
-	// Run our ordered cleanup before the stream helper's automatic Close.
-	t.Cleanup(cleanup)
+	if liveEvents {
+		stream = support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(session.fixture.baseURL, session.id))
+		// Run our ordered cleanup before the stream helper's automatic Close.
+		t.Cleanup(cleanup)
+	}
 	return stream
 }
 

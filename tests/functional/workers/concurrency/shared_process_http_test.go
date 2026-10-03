@@ -489,6 +489,28 @@ func assertAdmittedWorkCanceled(t *testing.T, session *concurrencySession, respo
 	t.Logf("AWC selected-session mapping: session=%s CANCELED; work=%s state=%s; no accepted success/output", session.id, stringPointerValue(response.WorkId), work.State.Name)
 }
 
+func admittedWorkCancellationEvent(t *testing.T, session *concurrencySession) factoryapi.FactoryEvent {
+	t.Helper()
+	// Cancellation closes the live SSE stream. Control returns after recording
+	// its canonical fact, which remains inspectable through retained events.
+	events := concurrencySessionEvents(t, session.fixture.baseURL, session.id)
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeSessionLifecycleControl {
+			continue
+		}
+		payload, err := event.Payload.AsSessionLifecycleControlEventPayload()
+		if err == nil && payload.Operation == factoryapi.FactorySessionLifecycleControlKindCancel &&
+			payload.Outcome == factoryapi.FactorySessionLifecycleControlOutcomeAccepted && payload.NewStatus == factoryapi.FactorySessionDurableLifecycleStatusCanceled {
+			if event.Context.SessionId == nil || *event.Context.SessionId != session.id {
+				t.Fatalf("AWC cancel terminal context = %#v, want selected session", event.Context)
+			}
+			return event
+		}
+	}
+	t.Fatalf("AWC session %s has no attributable canonical cancellation fact: %s", session.id, concurrencyEventSummary(events))
+	return factoryapi.FactoryEvent{}
+}
+
 func completeAdmittedWork(t *testing.T, session *concurrencySession, stream *support.FactoryEventStream, response factoryapi.SubmitWorkResponse, call concurrencyStartedCall, marker string) {
 	t.Helper()
 	dispatchID := admittedWorkDispatch(t, session, response)
