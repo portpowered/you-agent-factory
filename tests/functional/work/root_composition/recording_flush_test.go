@@ -31,6 +31,7 @@ func TestWorkListConfirmsStateAfterRecordingFlush(t *testing.T) {
 		ProviderCommandRunner: flushCommandRunner{run: func(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 			for _, scenario := range cases {
 				if strings.Contains(string(request.Stdin), scenario.sessionID) {
+					scenario.dispatches.Add(1)
 					scenario.hold.Store(true)
 				}
 			}
@@ -100,6 +101,9 @@ func runFlushCase(t *testing.T, process support.Process, scenario *flushCase) {
 		command.Stop(t)
 	})
 	baseURL := scenario.api.WaitForURL(t)
+	if scenario.name == "disabled storage" {
+		assertInvalidAdmissionBeforeDispatch(t, process, scenario, baseURL)
+	}
 	name := "flush-characterization"
 	submitted := support.SubmitSessionWorkAt(t, baseURL, scenario.sessionID, factoryapi.SubmitWorkRequest{
 		Name: &name, WorkTypeName: "task", Payload: map[string]string{"title": scenario.sessionID},
@@ -109,6 +113,9 @@ func runFlushCase(t *testing.T, process support.Process, scenario *flushCase) {
 	}
 	workID := *submitted.WorkId
 	waitForFlushWork(t, baseURL, scenario.sessionID, workID, factoryapi.UNCONFIRMED)
+	if scenario.dispatches.Load() == 0 {
+		t.Fatal("completed valid Work did not reach the controlled provider command")
+	}
 	assertFlushListParity(t, process, scenario, baseURL, workID, factoryapi.UNCONFIRMED)
 	if scenario.name == "disabled storage" {
 		return
