@@ -43,13 +43,7 @@ func TestNormalizeProcessTimeSelection(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if clock == nil {
-				if _, ok := gotClock.(platformclock.Real); !ok {
-					t.Fatalf("omitted Clock selected %T", gotClock)
-				}
-			} else if got := gotClock.Now(); !got.Equal(base) {
-				t.Fatalf("selected timestamp = %s, want %s", got, base)
-			}
+			assertSelectedProcessTimestamp(t, gotClock, clock, base)
 			switch name {
 			case "explicit", "legacy-explicit", "scheduler-only":
 				if gotScheduler != explicit {
@@ -67,6 +61,19 @@ func TestNormalizeProcessTimeSelection(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func assertSelectedProcessTimestamp(t *testing.T, selected, supplied platformclock.Source, want time.Time) {
+	t.Helper()
+	if supplied == nil {
+		if _, ok := selected.(platformclock.Real); !ok {
+			t.Fatalf("omitted Clock selected %T", selected)
+		}
+		return
+	}
+	if got := selected.Now(); !got.Equal(want) {
+		t.Fatalf("selected timestamp = %s, want %s", got, want)
 	}
 }
 

@@ -651,18 +651,7 @@ func TestFactoryRuntimeMetricsClockSelectsTimerCapableEdgeOrReal(t *testing.T) {
 				if _, ok := got.(platformclock.Real); !ok {
 					t.Fatalf("metrics clock = %T, want explicit legacy Real fallback", got)
 				}
-				// A zero-duration timer proves the selected fallback delivers without
-				// advancing the timestamp-only source; the timeout is a failure ceiling.
-				timer := got.NewTimer(0)
-				defer timer.Stop()
-				select {
-				case at := <-timer.C():
-					if at.IsZero() || at.Equal(base) {
-						t.Fatalf("host timer timestamp = %v", at)
-					}
-				case <-time.After(time.Second):
-					t.Fatal("legacy host timer did not deliver")
-				}
+				assertLegacyMetricsWallTimerDelivery(t, got, base)
 				return
 			}
 			if got != logical || !got.Now().Equal(base) {
@@ -685,6 +674,22 @@ func TestFactoryRuntimeMetricsClockSelectsTimerCapableEdgeOrReal(t *testing.T) {
 				t.Fatal("logical timer did not fire after tick advance")
 			}
 		})
+	}
+}
+
+func assertLegacyMetricsWallTimerDelivery(t *testing.T, clock platformclock.TimerSource, base time.Time) {
+	t.Helper()
+	// A zero-duration timer proves the selected fallback delivers without
+	// advancing the timestamp-only source; the timeout is a failure ceiling.
+	timer := clock.NewTimer(0)
+	defer timer.Stop()
+	select {
+	case at := <-timer.C():
+		if at.IsZero() || at.Equal(base) {
+			t.Fatalf("host timer timestamp = %v", at)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("legacy host timer did not deliver")
 	}
 }
 
