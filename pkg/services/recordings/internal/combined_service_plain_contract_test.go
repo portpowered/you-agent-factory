@@ -79,53 +79,46 @@ func (ledger *stubLedger) AppendRecordedEventWithValidation(
 	return event, nil
 }
 
-func TestNewServiceWithLifecycleEffectsUsesProvidedPublicationAndPlanner(t *testing.T) {
+func TestCanonicalOwnerPlainSlicesSuccessAndTypedFailures(t *testing.T) {
 	t.Parallel()
+	ledger := &stubLedger{}
+	assertAppendSubscribe(t, canonicalledgerwire.NewService(ledger), ledger)
+}
 
-	publication, err := NewPortableArtifactPublication(
-		os.MkdirAll,
-		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.Rename,
-		os.ReadFile,
-	)
-	if err != nil {
-		t.Fatalf("NewPortableArtifactPublication: %v", err)
-	}
-	planner := recordings.LiveRecordingTargetPlannerFunc(
-		func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
-			return recordings.LiveRecordingTarget{ServicePath: "service/path"}, nil
-		},
-	)
-	if got := NewService(&stubLedger{}, projectionquerywire.NewService(), planner); got == nil {
-		t.Fatal("NewService with planner returned nil")
-	}
-	if got := NewServiceWithLifecycleEffects(
-		&stubLedger{}, projectionquerywire.NewService(), planner,
-		nil,
-		nil,
-		publication,
-	); got == nil {
-		t.Fatal("NewServiceWithLifecycleEffects with publication returned nil")
+func TestLifecycleOwnerPlainSlicesSuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+	assertRecordingLifecycle(t, recordinglifecyclewire.NewService(nil, nil, nil, staticRecordingClock{}))
+}
+
+func TestCombinedServiceProjectionPlainSlicesSuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+	projection := &plainReplayProjection{}
+	root := NewCombinedService(nil, projection, nil, nil, nil, nil, unavailableHistoricalOwner{},
+		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil)
+	assertProjectionQuery(t, root, projection)
+}
+
+func TestReplayOwnerPlainSlicesSuccessAndTypedFailures(t *testing.T) {
+	t.Parallel()
+	snapshots := &plainOwnerSnapshots{byID: make(map[recordings.RecordingID]recordinglifecycle.Snapshot)}
+	projection := &plainReplayProjection{}
+	svc := replaywire.NewService(snapshots, projection, nil, nil)
+	loaded := assertReplayLoadAndCompletion(t, svc, snapshots)
+	assertReplayTypedFailures(t, svc, loaded)
+	assertReplayDivergence(t, svc, loaded)
+	assertReplayOrderedProgress(t, svc)
+	if len(projection.events) != 2 || projection.events[1].Id != "state-1" {
+		t.Fatalf("replay projection prefix = %#v, want both ordered state events", projection.events)
 	}
 }
 
-func TestCombinedServicePlainSlices_SuccessAndTypedFailures(t *testing.T) {
+func TestArtifactsOwnerPlainSlicesSuccessAndTypedFailures(t *testing.T) {
 	t.Parallel()
-
-	ledger := &stubLedger{}
-	svc := NewService(ledger, projectionquerywire.NewService())
-	if svc == nil {
-		t.Fatal("NewService returned nil")
-	}
-
-	assertAppendSubscribe(t, svc, ledger)
-	assertProjectionQuery(t, svc)
-	assertRecordingLifecycle(t, svc)
-	assertReplay(t, svc)
-	assertArtifactExport(t, svc)
+	snapshots := &plainOwnerSnapshots{byID: make(map[recordings.RecordingID]recordinglifecycle.Snapshot)}
+	svc := artifactsexportwire.NewService(snapshots, nil)
+	artifact := buildServicePortableArtifact(t, svc, snapshots)
+	assertServicePortableRoundTrip(t, svc, artifact)
+	assertServicePortableFailures(t, svc, artifact)
 }
 
 func TestCombinedServiceRecordingLifecycleAdapterPreservesDetachedOutcomes(t *testing.T) {
@@ -202,13 +195,13 @@ func TestCombinedServiceRecordingLifecycleAdapterPreservesDetachedOutcomes(t *te
 	}
 }
 
-func assertAppendSubscribe(t *testing.T, svc recordings.Service, ledger *stubLedger) {
+func assertAppendSubscribe(t *testing.T, svc canonicalledger.Service, ledger *stubLedger) {
 	t.Helper()
 	assertOrderedAppend(t, svc, ledger)
 	assertReconnectSubscription(t, svc, ledger)
 }
 
-func assertOrderedAppend(t *testing.T, svc recordings.Service, ledger *stubLedger) {
+func assertOrderedAppend(t *testing.T, svc canonicalledger.Service, ledger *stubLedger) {
 	t.Helper()
 	event := recordings.CanonicalEvent{
 		ID:         "evt-1",
@@ -242,7 +235,7 @@ func assertOrderedAppend(t *testing.T, svc recordings.Service, ledger *stubLedge
 
 func assertInvalidAppendsDoNotMutate(
 	t *testing.T,
-	svc recordings.Service,
+	svc canonicalledger.Service,
 	ledger *stubLedger,
 	valid recordings.CanonicalEvent,
 ) {
@@ -277,7 +270,7 @@ func assertInvalidAppendsDoNotMutate(
 	}
 }
 
-func assertReconnectSubscription(t *testing.T, svc recordings.Service, ledger *stubLedger) {
+func assertReconnectSubscription(t *testing.T, svc canonicalledger.Service, ledger *stubLedger) {
 	t.Helper()
 	assertSubscribeFailures(t, svc, ledger)
 	first := assertScopedRetainedAndReconnect(t, svc, ledger)
@@ -285,7 +278,7 @@ func assertReconnectSubscription(t *testing.T, svc recordings.Service, ledger *s
 	assertScopedDeliveryGap(t, svc, ledger)
 }
 
-func assertSubscribeFailures(t *testing.T, svc recordings.Service, ledger *stubLedger) {
+func assertSubscribeFailures(t *testing.T, svc canonicalledger.Service, ledger *stubLedger) {
 	t.Helper()
 	if _, err := svc.SubscribeFrom(context.Background(), recordings.SubscribeRequest{
 		Scope: recordings.CanonicalEventScope{FactorySessionID: "   "},
@@ -305,7 +298,7 @@ func assertSubscribeFailures(t *testing.T, svc recordings.Service, ledger *stubL
 
 func assertScopedRetainedAndReconnect(
 	t *testing.T,
-	svc recordings.Service,
+	svc canonicalledger.Service,
 	ledger *stubLedger,
 ) recordings.SubscriptionOutcome {
 	t.Helper()
@@ -351,7 +344,7 @@ func assertScopedRetainedAndReconnect(
 
 func assertScopedLiveDelivery(
 	t *testing.T,
-	svc recordings.Service,
+	svc canonicalledger.Service,
 	ledger *stubLedger,
 	cursor recordings.CanonicalEventCursor,
 ) {
@@ -374,7 +367,7 @@ func assertScopedLiveDelivery(
 	}
 }
 
-func assertScopedDeliveryGap(t *testing.T, svc recordings.Service, ledger *stubLedger) {
+func assertScopedDeliveryGap(t *testing.T, svc canonicalledger.Service, ledger *stubLedger) {
 	t.Helper()
 	ledger.subscribeStream.Events = nil
 	ledger.subscribeStream.History = []factorydefinitions.FactoryEvent{
@@ -414,7 +407,7 @@ func scopedLegacyEvent(
 	}
 }
 
-func assertProjectionQuery(t *testing.T, svc recordings.Service) {
+func assertProjectionQuery(t *testing.T, svc recordings.Service, projection *plainReplayProjection) {
 	t.Helper()
 	historical, err := svc.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
 		Recording: recordings.HistoricalRecordingIdentity{RecordingID: "unavailable"},
@@ -460,10 +453,10 @@ func assertProjectionQuery(t *testing.T, svc recordings.Service) {
 	}); !errors.Is(err, recordings.ErrUnsupportedProjectionView) {
 		t.Fatalf("QueryWorkstationRequests unsupported view = %v, want ErrUnsupportedProjectionView", err)
 	}
-	assertReconnectReplayValidation(t, svc)
+	assertReconnectReplayValidation(t, svc, projection)
 }
 
-func assertReconnectReplayValidation(t *testing.T, svc recordings.Service) {
+func assertReconnectReplayValidation(t *testing.T, svc recordings.Service, projection *plainReplayProjection) {
 	t.Helper()
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-query"}
 	history := []recordings.CanonicalEvent{
@@ -478,6 +471,13 @@ func assertReconnectReplayValidation(t *testing.T, svc recordings.Service) {
 	}); err != nil {
 		t.Fatalf("ValidateReconnectReplayFrom interleaved scoped history: %v", err)
 	}
+	if len(projection.reconnectEvents) != len(history) || projection.reconnectEvents[2].Id != string(history[2].ID) ||
+		projection.reconnectCursor.AfterSequence == nil || *projection.reconnectCursor.AfterSequence != 2 ||
+		projection.reconnectScope.SessionID != scope.FactorySessionID {
+		t.Fatalf("reconnect collaborator request = (%#v, %#v, %#v), want ordered scoped history and cursor 2",
+			projection.reconnectEvents, projection.reconnectCursor, projection.reconnectScope)
+	}
+	projection.reconnectErr = recordings.ErrReconnectCursorNotFound
 	if err := svc.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
 		Events: history[1:],
 		Cursor: history[0].Cursor,
@@ -488,6 +488,7 @@ func assertReconnectReplayValidation(t *testing.T, svc recordings.Service) {
 			err,
 		)
 	}
+	projection.reconnectErr = nil
 	malformed := append([]recordings.CanonicalEvent(nil), history...)
 	malformed[1], malformed[2] = malformed[2], malformed[1]
 	if err := svc.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
@@ -531,14 +532,14 @@ func canonicalProjectionEvent(
 	}
 }
 
-func assertRecordingLifecycle(t *testing.T, svc recordings.Service) {
+func assertRecordingLifecycle(t *testing.T, svc recordinglifecycle.Service) {
 	t.Helper()
 	assertRecordingLifecycleBindingCollision(t, svc)
 	assertRecordingLifecycleHappyPath(t, svc)
 	assertRecordingLifecycleFlushFailure(t, svc)
 }
 
-func assertRecordingLifecycleHappyPath(t *testing.T, svc recordings.Service) {
+func assertRecordingLifecycleHappyPath(t *testing.T, svc recordinglifecycle.Service) {
 	t.Helper()
 	if _, err := svc.BindRecording(recordings.BindRecordingRequest{}); !errors.Is(err, recordings.ErrMissingRecordingTarget) {
 		t.Fatalf("BindRecording empty artifact = %v, want ErrMissingRecordingTarget", err)
@@ -602,7 +603,7 @@ func assertRecordingLifecycleHappyPath(t *testing.T, svc recordings.Service) {
 	}
 }
 
-func assertRecordingLifecycleFlushFailure(t *testing.T, svc recordings.Service) {
+func assertRecordingLifecycleFlushFailure(t *testing.T, svc recordinglifecycle.Service) {
 	t.Helper()
 	boundFail, err := svc.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "flush-fail",
@@ -637,7 +638,7 @@ func assertRecordingLifecycleFlushFailure(t *testing.T, svc recordings.Service) 
 	}
 }
 
-func assertRecordingLifecycleBindingCollision(t *testing.T, svc recordings.Service) {
+func assertRecordingLifecycleBindingCollision(t *testing.T, svc recordinglifecycle.Service) {
 	t.Helper()
 	assertGeneratedServiceRecordingIDDoesNotCollide(t, svc)
 	request := recordings.BindRecordingRequest{
@@ -695,7 +696,7 @@ func assertRecordingLifecycleBindingCollision(t *testing.T, svc recordings.Servi
 	assertServiceBindingCollision(t, svc, request, terminal, "terminal")
 }
 
-func assertGeneratedServiceRecordingIDDoesNotCollide(t *testing.T, svc recordings.Service) {
+func assertGeneratedServiceRecordingIDDoesNotCollide(t *testing.T, svc recordinglifecycle.Service) {
 	t.Helper()
 	explicit, err := svc.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "recording-1",
@@ -721,7 +722,7 @@ func assertGeneratedServiceRecordingIDDoesNotCollide(t *testing.T, svc recording
 
 func assertServiceBindingCollision(
 	t *testing.T,
-	svc recordings.Service,
+	svc recordinglifecycle.Service,
 	request recordings.BindRecordingRequest,
 	want recordings.RecordingStatusFacts,
 	phase string,
@@ -762,7 +763,9 @@ func assertServiceBindingCollision(
 
 func recordingLifecycleStatus(
 	t *testing.T,
-	svc recordings.Service,
+	svc interface {
+		QueryRecordingStatus(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error)
+	},
 	recordingID recordings.RecordingID,
 ) recordings.RecordingStatusFacts {
 	t.Helper()
@@ -775,17 +778,10 @@ func recordingLifecycleStatus(
 	return result.Status
 }
 
-func assertReplay(t *testing.T, svc recordings.Service) {
-	t.Helper()
-	loaded := assertReplayLoadAndCompletion(t, svc)
-	assertReplayTypedFailures(t, svc, loaded)
-	assertReplayDivergence(t, svc, loaded)
-	assertReplayOrderedProgress(t, svc)
-}
-
 func assertReplayLoadAndCompletion(
 	t *testing.T,
-	svc recordings.Service,
+	svc recordingsreplay.Service,
+	snapshots *plainOwnerSnapshots,
 ) recordings.ReplayRecordingFacts {
 	t.Helper()
 	if _, err := svc.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
@@ -793,25 +789,17 @@ func assertReplayLoadAndCompletion(
 	}); !errors.Is(err, recordings.ErrReplayRecordingNotFound) {
 		t.Fatalf("LoadReplayRecording missing = %v, want ErrReplayRecordingNotFound", err)
 	}
-	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
-		Artifact: "artifact:replay-service",
-	})
-	if err != nil {
-		t.Fatalf("BindRecording replay = %v", err)
-	}
-	if _, err := svc.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-	}); !errors.Is(err, recordings.ErrReplayRecordingNotFinalized) {
+	const recordingID recordings.RecordingID = "recording-replay-service"
+	snapshots.byID[recordingID] = recordinglifecycle.Snapshot{Status: recordings.RecordingStatusFacts{RecordingID: recordingID}}
+	if _, err := svc.LoadReplayRecording(recordings.LoadReplayRecordingRequest{RecordingID: recordingID}); !errors.Is(err, recordings.ErrReplayRecordingNotFinalized) {
 		t.Fatalf("LoadReplayRecording active = %v, want ErrReplayRecordingNotFinalized", err)
 	}
-	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_000, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording replay = %v", err)
-	}
+	finishedAt := time.Unix(1_700_000_000, 0).UTC()
+	snapshot := snapshots.byID[recordingID]
+	snapshot.Status.FinalizedAt = &finishedAt
+	snapshots.byID[recordingID] = snapshot
 	loaded, err := svc.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
+		RecordingID: recordingID,
 	})
 	if err != nil {
 		t.Fatalf("LoadReplayRecording = %v", err)
@@ -833,7 +821,7 @@ func assertReplayLoadAndCompletion(
 
 func assertReplayTypedFailures(
 	t *testing.T,
-	svc recordings.Service,
+	svc recordingsreplay.Service,
 	recording recordings.ReplayRecordingFacts,
 ) {
 	t.Helper()
@@ -860,7 +848,7 @@ func assertReplayTypedFailures(
 
 func assertReplayDivergence(
 	t *testing.T,
-	svc recordings.Service,
+	svc recordingsreplay.Service,
 	recording recordings.ReplayRecordingFacts,
 ) {
 	t.Helper()
@@ -886,7 +874,7 @@ func assertReplayDivergence(
 	}
 }
 
-func assertReplayOrderedProgress(t *testing.T, svc recordings.Service) {
+func assertReplayOrderedProgress(t *testing.T, svc recordingsreplay.Service) {
 	t.Helper()
 	events := []recordings.CanonicalEvent{
 		replayStateEvent(0, `{"state":"RUNNING"}`),
@@ -930,57 +918,68 @@ func replayStateEvent(sequence recordings.CanonicalEventSequence, payload string
 	}
 }
 
-func assertArtifactExport(t *testing.T, svc recordings.Service) {
-	t.Helper()
-	artifact := buildServicePortableArtifact(t, svc)
-	assertServicePortableRoundTrip(t, svc, artifact)
-	assertServicePortableFailures(t, svc, artifact)
+// Snapshot doubles supply detached owner inputs without constructing a lifecycle.
+// Nil embedded methods fail unexpected collaborator calls.
+type plainOwnerSnapshots struct {
+	recordinglifecycle.Service
+	byID map[recordings.RecordingID]recordinglifecycle.Snapshot
 }
 
-func buildServicePortableArtifact(
-	t *testing.T,
-	svc recordings.Service,
-) recordings.PortableArtifact {
+func (snapshots *plainOwnerSnapshots) Snapshot(id recordings.RecordingID) (recordinglifecycle.Snapshot, error) {
+	snapshot, ok := snapshots.byID[id]
+	if !ok {
+		return recordinglifecycle.Snapshot{}, recordings.ErrMissingRecordingTarget
+	}
+	return snapshot, nil
+}
+
+type plainReplayProjection struct {
+	recordings.ProjectionService
+	events          []recordings.FactoryEvent
+	reconnectErr    error
+	reconnectEvents []recordings.FactoryEvent
+	reconnectCursor recordings.FactoryEventReconnectCursor
+	reconnectScope  recordings.FactoryEventReconnectScope
+}
+
+func (projection *plainReplayProjection) ReconstructFactoryWorldState(events []recordings.FactoryEvent, tick int) (recordings.FactoryWorldState, error) {
+	projection.events = append([]recordings.FactoryEvent(nil), events...)
+	return recordings.FactoryWorldState{Tick: tick}, nil
+}
+
+func (*plainReplayProjection) SimpleDashboardRenderData(recordings.FactoryWorldState) recordings.SimpleDashboardRenderData {
+	return recordings.SimpleDashboardRenderData{}
+}
+
+func (*plainReplayProjection) ProjectWorkstationRequests(recordings.FactoryWorldState) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice {
+	return recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{}
+}
+
+func (projection *plainReplayProjection) ValidateReconnectReplay(events []recordings.FactoryEvent, cursor recordings.FactoryEventReconnectCursor, scope recordings.FactoryEventReconnectScope) error {
+	projection.reconnectEvents = append([]recordings.FactoryEvent(nil), events...)
+	projection.reconnectCursor = cursor
+	projection.reconnectScope = scope
+	return projection.reconnectErr
+}
+func buildServicePortableArtifact(t *testing.T, svc artifactsexport.Service, snapshots *plainOwnerSnapshots) recordings.PortableArtifact {
 	t.Helper()
-	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: "recording-export",
-		Artifact:    "artifact:export",
-		Scope: recordings.CanonicalEventScope{
-			FactorySessionID: "session-service-1",
-		},
-	})
-	if err != nil {
-		t.Fatalf("BindRecording portable artifact: %v", err)
+	const id recordings.RecordingID = "recording-export"
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-service-1"}
+	snapshot := recordinglifecycle.Snapshot{
+		Status: recordings.RecordingStatusFacts{RecordingID: id, Artifact: "artifact:export", Scope: scope},
+		Events: []recordings.CanonicalEvent{{ID: "export-event", Kind: "WORK_REQUEST", Scope: scope,
+			RecordedAt: time.Unix(1_700_000_000, 0).UTC(), Payload: "{}",
+			Cursor: recordings.CanonicalEventCursor{StreamGenerationID: "generation-export"}}},
 	}
-	event := recordings.CanonicalEvent{
-		ID: "export-event", Kind: "WORK_REQUEST",
-		Scope:      bound.Status.Scope,
-		RecordedAt: time.Unix(1_700_000_000, 0).UTC(),
-		Payload:    "{}",
-		Cursor: recordings.CanonicalEventCursor{
-			StreamGenerationID: "generation-export",
-		},
-	}
-	if _, err := svc.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-		RecordingID: bound.Status.RecordingID,
-		Event:       event,
-	}); err != nil {
-		t.Fatalf("RecordRecordingEvent portable artifact: %v", err)
-	}
-	if _, err := svc.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
-		RecordingID: bound.Status.RecordingID,
-	}); !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
+	snapshots.byID[id] = snapshot
+	if _, err := svc.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{RecordingID: id}); !errors.Is(err, recordings.ErrPortableArtifactUnavailable) {
 		t.Fatalf("BuildPortableArtifact active = %v", err)
 	}
-	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording portable artifact: %v", err)
-	}
-	built, err := svc.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
-		RecordingID: bound.Status.RecordingID,
-	})
+	finishedAt := time.Unix(1_700_000_001, 0).UTC()
+	snapshot.Status.State = recordings.RecordingFinalized
+	snapshot.Status.FinalizedAt = &finishedAt
+	snapshots.byID[id] = snapshot
+	built, err := svc.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{RecordingID: id})
 	if err != nil {
 		t.Fatalf("BuildPortableArtifact: %v", err)
 	}
@@ -989,7 +988,7 @@ func buildServicePortableArtifact(
 
 func assertServicePortableRoundTrip(
 	t *testing.T,
-	svc recordings.Service,
+	svc artifactsexport.Service,
 	artifact recordings.PortableArtifact,
 ) {
 	t.Helper()
@@ -1021,7 +1020,7 @@ func assertServicePortableRoundTrip(
 
 func assertServicePortableFailures(
 	t *testing.T,
-	svc recordings.Service,
+	svc artifactsexport.Service,
 	artifact recordings.PortableArtifact,
 ) {
 	t.Helper()
@@ -1041,73 +1040,49 @@ func assertServicePortableFailures(
 	}
 }
 
-func TestCombinedServicePortableExportAndReadDelegates(t *testing.T) {
-	t.Parallel()
+type plainPublicationFailure struct {
+	destination string
+	published   bool
+	read        bool
+}
 
-	destination := filepath.Join(t.TempDir(), "destination-is-directory")
-	if err := os.Mkdir(destination, 0o700); err != nil {
-		t.Fatalf("Mkdir: %v", err)
-	}
-	ledger := &stubLedger{}
-	publication, err := NewPortableArtifactPublication(
-		os.MkdirAll,
-		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.Rename,
-		os.ReadFile,
-	)
-	if err != nil {
-		t.Fatalf("NewPortableArtifactPublication: %v", err)
-	}
-	svc := NewServiceWithLifecycleEffects(
-		ledger, projectionquerywire.NewService(), nil,
-		nil,
-		nil,
-		publication,
-	)
+func (publication *plainPublicationFailure) Publish(_ context.Context, destination string, _ []byte) error {
+	publication.destination = destination
+	publication.published = true
+	return os.ErrPermission
+}
+func (publication *plainPublicationFailure) Read(_ context.Context, destination string) ([]byte, error) {
+	publication.destination = destination
+	publication.read = true
+	return nil, os.ErrPermission
+}
+
+func TestArtifactsOwnerPortablePublicationFailures(t *testing.T) {
+	t.Parallel()
+	const id recordings.RecordingID = "recording-export-delegate"
+	const destination recordings.RecordingArtifactReference = "artifact:export-delegate"
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-export-delegate"}
-	bound, err := svc.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: "recording-export-delegate",
-		Artifact:    recordings.RecordingArtifactReference(destination),
-		Scope:       scope,
-	})
-	if err != nil {
-		t.Fatalf("BindRecording: %v", err)
-	}
-	event := recordings.CanonicalEvent{
-		ID: "export-delegate-event", Kind: "WORK_REQUEST",
-		Scope:      scope,
-		RecordedAt: time.Unix(1_700_000_000, 0).UTC(),
-		Payload:    "{}",
-		Cursor: recordings.CanonicalEventCursor{
-			StreamGenerationID: "generation-export-delegate",
-		},
-	}
-	if _, err := svc.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-		RecordingID: bound.Status.RecordingID,
-		Event:       event,
-	}); err != nil {
-		t.Fatalf("RecordRecordingEvent: %v", err)
-	}
-	if _, err := svc.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording: %v", err)
-	}
-	if _, err := svc.ExportPortableArtifact(context.Background(), recordings.ExportPortableArtifactRequest{
-		RecordingID: bound.Status.RecordingID,
-	}); !errors.Is(err, recordings.ErrPortableArtifactExportFailed) {
+	finishedAt := time.Unix(1_700_000_001, 0).UTC()
+	snapshots := &plainOwnerSnapshots{byID: map[recordings.RecordingID]recordinglifecycle.Snapshot{
+		id: {Status: recordings.RecordingStatusFacts{RecordingID: id, Artifact: destination, Scope: scope,
+			State: recordings.RecordingFinalized, FinalizedAt: &finishedAt},
+			Events: []recordings.CanonicalEvent{{ID: "export-delegate-event", Kind: "WORK_REQUEST", Scope: scope,
+				RecordedAt: time.Unix(1_700_000_000, 0).UTC(), Payload: "{}",
+				Cursor: recordings.CanonicalEventCursor{StreamGenerationID: "generation-export-delegate"}}}},
+	}}
+	publication := &plainPublicationFailure{}
+	svc := artifactsexportwire.NewService(snapshots, publication)
+	if _, err := svc.ExportPortableArtifact(context.Background(), recordings.ExportPortableArtifactRequest{RecordingID: id}); !errors.Is(err, recordings.ErrPortableArtifactExportFailed) {
 		t.Fatalf("ExportPortableArtifact = %v, want ErrPortableArtifactExportFailed", err)
 	}
-	if _, err := svc.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
-		RecordingID: bound.Status.RecordingID,
-		Reference:   recordings.RecordingArtifactReference(destination),
-	}); !errors.Is(err, recordings.ErrPortableArtifactUnavailable) &&
-		!errors.Is(err, recordings.ErrInvalidPortableArtifact) {
-		t.Fatalf("ReadPortableArtifact = %v, want ErrPortableArtifactUnavailable or ErrInvalidPortableArtifact", err)
+	if !publication.published || publication.destination != string(destination) {
+		t.Fatalf("publication = %#v, want export to selected artifact", publication)
+	}
+	if _, err := svc.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{RecordingID: id, Reference: destination}); !errors.Is(err, recordings.ErrInvalidPortableArtifact) {
+		t.Fatalf("ReadPortableArtifact = %v, want ErrInvalidPortableArtifact", err)
+	}
+	if !publication.read || publication.destination != string(destination) {
+		t.Fatalf("publication = %#v, want read of selected artifact", publication)
 	}
 }
 
