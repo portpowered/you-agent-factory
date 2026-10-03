@@ -58,6 +58,10 @@ func TestCostsScopedReportsAndQueryRecovery(t *testing.T) {
 		t.Parallel()
 		group.checkMetricsRecovery(t)
 	})
+	t.Run("physical settings directory failure and recovery", func(t *testing.T) {
+		t.Parallel()
+		group.checkPhysicalSettingsRecovery(t)
+	})
 }
 
 func (group *costsProcessGroup) checkPricing(t *testing.T, name, model, status, amount string) {
@@ -313,13 +317,16 @@ func (fixture costsSessionFixture) assertFailure(t *testing.T, id string, status
 	if response.StatusCode != status || string(failure.Code) != code {
 		t.Fatalf("failure status=%d body=%s", response.StatusCode, body.String())
 	}
-	if strings.Contains(body.String(), "secret-token") || strings.Contains(body.String(), "private-path") || strings.Contains(body.String(), "line_items") {
+	if strings.Contains(body.String(), "secret-token") || strings.Contains(body.String(), "private-path") || strings.Contains(body.String(), "line_items") || strings.Contains(body.String(), fixture.home) || strings.Contains(body.String(), "not a directory") {
 		t.Fatalf("unsafe/partial error body=%s", body.String())
 	}
 	output, err := fixture.cli(t, id)
 	var typed *costscli.CostsError
 	if !errors.As(err, &typed) || typed.Code != code || strings.TrimSpace(output) != "" {
 		t.Fatalf("CLI failure=%v output=%q", err, output)
+	}
+	if strings.Contains(err.Error(), fixture.home) || strings.Contains(err.Error(), "secret-token") || strings.Contains(err.Error(), "private-path") || strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("unsafe CLI error=%v", err)
 	}
 }
 
