@@ -61,7 +61,7 @@ func assertConfigureParity(
 
 	serviceOut, serviceErr := run(service.Configure)
 	commandOut, commandErr := run(func(invocation operatorsettingscli.ConfigureConfig) error {
-		return operatorsettingscli.Configure(invocation, root)
+		return operatorsettingscli.BindConfigure(root)(invocation)
 	})
 
 	if (serviceErr == nil) != (commandErr == nil) {
@@ -353,7 +353,7 @@ func TestConstructedService_ConfigureHonorsMidPromptContextCancellationParity(t 
 	}
 
 	serviceErr := service.Configure(cfg)
-	commandErr := operatorsettingscli.Configure(cfg, root)
+	commandErr := operatorsettingscli.BindConfigure(root)(cfg)
 	if (serviceErr == nil) != (commandErr == nil) {
 		t.Fatalf("service error = %v, command error = %v", serviceErr, commandErr)
 	}

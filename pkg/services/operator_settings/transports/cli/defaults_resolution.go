@@ -15,19 +15,6 @@ type ResolveOperatorDefaultsConfig struct {
 	Flags       operatorsettings.FlagOverrides
 }
 
-// ResolveOperatorDefaults delegates defaults-resolution intent to the
-// Settings-owned CLI adapter Service.
-func ResolveOperatorDefaults(
-	cfg ResolveOperatorDefaultsConfig,
-	root operatorsettings.Service,
-) (operatorsettings.ResolvedDefaults, error) {
-	adapter := New(root)
-	if adapter == nil {
-		return operatorsettings.ResolvedDefaults{}, fmt.Errorf("operator settings service is required")
-	}
-	return adapter.ResolveOperatorDefaults(cfg)
-}
-
 func (service *service) ResolveOperatorDefaults(
 	cfg ResolveOperatorDefaultsConfig,
 ) (operatorsettings.ResolvedDefaults, error) {

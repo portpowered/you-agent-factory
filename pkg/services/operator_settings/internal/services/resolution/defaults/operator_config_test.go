@@ -88,6 +88,7 @@ func testConfigDocumentService() operatorsettings.ConfigDocumentService {
 			decodeTestConfig,
 			encodeTestConfig,
 			controlledProviderCatalog,
+			nil,
 		),
 	}
 }

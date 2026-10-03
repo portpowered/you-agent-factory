@@ -3,9 +3,9 @@ package service_test
 import (
 	"testing"
 
-	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	settingsdocument "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document"
 	resolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 // These inert leaves deliberately have no operations: only construction's
@@ -29,7 +29,7 @@ func TestConstructionBoundaryNilAndTypedNilClassification(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			root, err := operatorservice.New(tc.document, tc.resolution, nil, nil, nil, nil, nil, nil)
+			root, err := settingswire.NewService(tc.document, tc.resolution, nil, nil, nil, nil, nil, nil, nil)
 			if tc.wantError != "" {
 				if root != nil || err == nil || err.Error() != tc.wantError {
 					t.Fatalf("New = (%v, %v), want %q", root, err, tc.wantError)

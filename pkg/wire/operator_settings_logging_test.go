@@ -1,19 +1,23 @@
 package wire
 
 import (
-	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"go.uber.org/zap/zapcore"
+	"path/filepath"
 )
 
 // TestProvideOperatorSettingsServiceLogsThroughTheCanonicalWireLogger proves the
 // exact provider chain pkg/wire's generated injector uses to construct the
 // Operator Settings service (provideOperatorSettingsLogger converting the
-// canonical process logger, then provideOperatorSettingsService consuming it)
+// canonical process logger, then settingswire.NewService consuming it)
 // actually threads a real logger into ResolveACPAgentProfile/
 // UpdateACPAgentProfile operation logs, not just a test-injected spy that the
 // production wiring never reaches.
@@ -29,7 +33,7 @@ func TestProvideOperatorSettingsServiceLogsThroughTheCanonicalWireLogger(t *test
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	settings, err := provideOperatorSettingsService(
+	settings, err := newOperatorSettingsTestService(
 		files,
 		provideOperatorSettingsCreateTemporaryFile(edges),
 		provideOperatorSettingsProviderCatalog(providersRoot),
@@ -41,7 +45,7 @@ func TestProvideOperatorSettingsServiceLogsThroughTheCanonicalWireLogger(t *test
 		logger,
 	)
 	if err != nil {
-		t.Fatalf("provideOperatorSettingsService() error = %v", err)
+		t.Fatalf("newOperatorSettingsTestService() error = %v", err)
 	}
 
 	path := filepath.Join(t.TempDir(), "config.json")
@@ -59,4 +63,26 @@ func TestProvideOperatorSettingsServiceLogsThroughTheCanonicalWireLogger(t *test
 	if !slices.Contains(messages, "operator_settings.resolve_acp_agent_profile.finished") {
 		t.Fatalf("observed log messages = %v, want a finished log proving the canonical wire logger reached the service", messages)
 	}
+}
+
+// newOperatorSettingsTestService mirrors the focused providers in servicesSet.
+func newOperatorSettingsTestService(
+	files operatorsettings.FileSystem,
+	createTemp operatorsettings.CreateTemporaryFile,
+	catalog operatorsettings.ProviderCatalog,
+	decode operatorsettings.ConfigDecoder,
+	diagnostics operatorsettings.ConfigDiagnosticsDecoder,
+	encode operatorsettings.ConfigEncoder,
+	generateID operatorsettings.IDGenerator,
+	providersRoot providers.Service,
+	logger logging.Logger,
+) (operatorsettings.Service, error) {
+	document := settingswire.NewDocumentService(files, createTemp, decode, encode, catalog,
+		provideOperatorSettingsDocumentPreserver(), diagnostics)
+	resolution, err := settingswire.NewResolutionService(providersRoot)
+	if err != nil {
+		return nil, err
+	}
+	return settingswire.NewService(document, resolution, files, createTemp, decode, encode,
+		generateID, logger, diagnostics)
 }

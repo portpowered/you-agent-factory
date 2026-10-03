@@ -33,9 +33,9 @@ func New(
 	decoder operatorsettings.ConfigDecoder,
 	encoder operatorsettings.ConfigEncoder,
 	providers operatorsettings.ProviderCatalog,
-	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
+	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder,
 ) *Service {
-	return newService(files, createTemp, decoder, encoder, providers, nil, diagnosticDecoders...)
+	return newService(files, createTemp, decoder, encoder, providers, nil, diagnosticDecoder)
 }
 
 // NewWithPreserver constructs the private document owner with the optional
@@ -47,9 +47,9 @@ func NewWithPreserver(
 	encoder operatorsettings.ConfigEncoder,
 	providers operatorsettings.ProviderCatalog,
 	preserveUnknown operatorsettings.ConfigDocumentPreserver,
-	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
+	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder,
 ) *Service {
-	return newService(files, createTemp, decoder, encoder, providers, preserveUnknown, diagnosticDecoders...)
+	return newService(files, createTemp, decoder, encoder, providers, preserveUnknown, diagnosticDecoder)
 }
 
 func newService(
@@ -59,12 +59,8 @@ func newService(
 	encoder operatorsettings.ConfigEncoder,
 	providers operatorsettings.ProviderCatalog,
 	preserveUnknown operatorsettings.ConfigDocumentPreserver,
-	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
+	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder,
 ) *Service {
-	var diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder
-	if len(diagnosticDecoders) > 0 {
-		diagnosticDecoder = diagnosticDecoders[0]
-	}
 	return &Service{
 		files:             files,
 		createTemp:        createTemp,
@@ -88,7 +84,7 @@ func (service *Service) RebindDocumentOwner(
 	providers operatorsettings.ProviderCatalog,
 	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) operatorsettings.DocumentOwner {
-	return New(files, createTemp, decoder, encoder, providers, diagnosticDecoders...)
+	return New(files, createTemp, decoder, encoder, providers, firstDiagnosticDecoder(diagnosticDecoders))
 }
 
 // RebindDocumentOwnerWithPreserver returns a new owner over compatibility
@@ -103,7 +99,7 @@ func (service *Service) RebindDocumentOwnerWithPreserver(
 	preserveUnknown operatorsettings.ConfigDocumentPreserver,
 	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) operatorsettings.DocumentOwner {
-	return NewWithPreserver(files, createTemp, decoder, encoder, providers, preserveUnknown, diagnosticDecoders...)
+	return NewWithPreserver(files, createTemp, decoder, encoder, providers, preserveUnknown, firstDiagnosticDecoder(diagnosticDecoders))
 }
 
 func (service *Service) LoadDocument(
@@ -151,4 +147,11 @@ func (service *Service) PersistDocument(
 		return err
 	}
 	return service.persistDocument(ctx, request)
+}
+
+func firstDiagnosticDecoder(decoders []operatorsettings.ConfigDiagnosticsDecoder) operatorsettings.ConfigDiagnosticsDecoder {
+	if len(decoders) == 0 {
+		return nil
+	}
+	return decoders[0]
 }

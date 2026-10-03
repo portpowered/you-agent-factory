@@ -17,9 +17,9 @@ func NewService(
 	decoder operatorsettings.ConfigDecoder,
 	encoder operatorsettings.ConfigEncoder,
 	providers operatorsettings.ProviderCatalog,
-	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
+	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder,
 ) settingsdocument.Service {
-	return internalservice.New(files, createTemp, decoder, encoder, providers, diagnosticDecoders...)
+	return internalservice.New(files, createTemp, decoder, encoder, providers, diagnosticDecoder)
 }
 
 // NewServiceWithPreserver constructs the private document owner with the
@@ -32,7 +32,7 @@ func NewServiceWithPreserver(
 	encoder operatorsettings.ConfigEncoder,
 	providers operatorsettings.ProviderCatalog,
 	preserveUnknown operatorsettings.ConfigDocumentPreserver,
-	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
+	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder,
 ) settingsdocument.Service {
-	return internalservice.NewWithPreserver(files, createTemp, decoder, encoder, providers, preserveUnknown, diagnosticDecoders...)
+	return internalservice.NewWithPreserver(files, createTemp, decoder, encoder, providers, preserveUnknown, diagnosticDecoder)
 }

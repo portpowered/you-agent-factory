@@ -18,7 +18,7 @@ func NewDocumentOwner(
 	providers operatorsettings.ProviderCatalog,
 	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) operatorsettings.DocumentOwner {
-	return settingsdocumentwire.NewService(files, createTemp, decoder, encoder, providers, diagnosticDecoders...)
+	return settingsdocumentwire.NewService(files, createTemp, decoder, encoder, providers, firstDiagnosticDecoder(diagnosticDecoders))
 }
 
 // NewConfigDocumentService constructs a root ConfigDocumentService whose load,

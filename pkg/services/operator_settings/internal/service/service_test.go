@@ -13,11 +13,11 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	documentwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire"
 	resolutionwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/wire"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -31,12 +31,13 @@ func TestRootDelegatesResolveEffectiveToPrivateOwner(t *testing.T) {
 		rootTestConfigDecoder,
 		rootTestConfigEncoder,
 		rootTestProviderCatalog,
+		nil,
 	)
 	resolutionService, err := resolutionwire.NewService(providersRoot)
 	if err != nil {
 		t.Fatalf("resolutionwire.NewService() = %v", err)
 	}
-	root, err := operatorservice.New(
+	root, err := settingswire.NewService(
 		documentService,
 		resolutionService,
 		&rootTestFileSystem{},
@@ -44,6 +45,7 @@ func TestRootDelegatesResolveEffectiveToPrivateOwner(t *testing.T) {
 		rootTestConfigDecoder,
 		rootTestConfigEncoder,
 		func() string { return "00000000-0000-4000-8000-000000000001" },
+		logging.NoopLogger{},
 		nil,
 	)
 	if err != nil {
@@ -82,7 +84,7 @@ func TestNew_RejectsNilDocument(t *testing.T) {
 		t.Fatalf("resolutionwire.NewService() = %v", err)
 	}
 
-	service, err := operatorservice.New(nil, resolutionService, nil, nil, nil, nil, nil, nil)
+	service, err := settingswire.NewService(nil, resolutionService, nil, nil, nil, nil, nil, nil, nil)
 	if err == nil || service != nil {
 		t.Fatalf("New(nil, resolution) = (%v, %v), want error", service, err)
 	}
@@ -97,9 +99,10 @@ func TestNew_RejectsNilResolution(t *testing.T) {
 		rootTestConfigDecoder,
 		rootTestConfigEncoder,
 		rootTestProviderCatalog,
+		nil,
 	)
 
-	service, err := operatorservice.New(documentService, nil, nil, nil, nil, nil, nil, nil)
+	service, err := settingswire.NewService(documentService, nil, nil, nil, nil, nil, nil, nil, nil)
 	if err == nil || service != nil {
 		t.Fatalf("New(document, nil) = (%v, %v), want error", service, err)
 	}
@@ -364,7 +367,7 @@ func newFilesystemRootWithOptions(t *testing.T, opts filesystemRootOptions) oper
 	if err != nil {
 		t.Fatalf("resolutionwire.NewService() = %v", err)
 	}
-	root, err := operatorservice.New(
+	root, err := settingswire.NewService(
 		documentService,
 		resolutionService,
 		opts.files,
@@ -376,7 +379,7 @@ func newFilesystemRootWithOptions(t *testing.T, opts filesystemRootOptions) oper
 		opts.decodeWithDiagnostics,
 	)
 	if err != nil {
-		t.Fatalf("operatorservice.New() = %v", err)
+		t.Fatalf("settingswire.NewService() = %v", err)
 	}
 	return root
 }

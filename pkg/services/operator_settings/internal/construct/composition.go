@@ -3,6 +3,7 @@ package construct
 import (
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	settingsdocument "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document"
@@ -32,6 +33,7 @@ func newServiceRoot(
 	if !ok {
 		return nil, fmt.Errorf("operator settings document owner must implement the document service")
 	}
+	diagnostics := firstDiagnosticDecoder(diagnosticDecoders)
 	return operatorservice.New(
 		documentService,
 		resolutionService,
@@ -40,7 +42,7 @@ func newServiceRoot(
 		decoder,
 		encoder,
 		idGenerator,
-		nil,
-		diagnosticDecoders...,
+		logging.NoopLogger{},
+		diagnostics,
 	)
 }

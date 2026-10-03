@@ -14,9 +14,9 @@ func NewDocumentOwner(
 	decoder operatorsettings.ConfigDecoder,
 	encoder operatorsettings.ConfigEncoder,
 	providers operatorsettings.ProviderCatalog,
-	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
+	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder,
 ) operatorsettings.DocumentOwner {
-	return settingsdocumentwire.NewService(files, createTemp, decoder, encoder, providers, diagnosticDecoders...)
+	return settingsdocumentwire.NewService(files, createTemp, decoder, encoder, providers, diagnosticDecoder)
 }
 
 // NewDocumentOwnerWithPreserver constructs the nested document owner with
@@ -28,9 +28,9 @@ func NewDocumentOwnerWithPreserver(
 	encoder operatorsettings.ConfigEncoder,
 	providers operatorsettings.ProviderCatalog,
 	preserveUnknown operatorsettings.ConfigDocumentPreserver,
-	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
+	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder,
 ) operatorsettings.DocumentOwner {
-	return settingsdocumentwire.NewServiceWithPreserver(files, createTemp, decoder, encoder, providers, preserveUnknown, diagnosticDecoders...)
+	return settingsdocumentwire.NewServiceWithPreserver(files, createTemp, decoder, encoder, providers, preserveUnknown, diagnosticDecoder)
 }
 
 // NewConfigDocumentService constructs a root ConfigDocumentService whose load,
@@ -51,7 +51,7 @@ func NewConfigDocumentService(
 		Decoder:           decoder,
 		DiagnosticDecoder: firstDiagnosticDecoder(diagnosticDecoders),
 		Encoder:           encoder,
-		DocumentOwner:     NewDocumentOwner(files, createTemp, decoder, encoder, providers, diagnosticDecoders...),
+		DocumentOwner:     NewDocumentOwner(files, createTemp, decoder, encoder, providers, firstDiagnosticDecoder(diagnosticDecoders)),
 		PersistenceLock:   persistenceLock,
 	}
 }
@@ -76,7 +76,7 @@ func NewConfigDocumentServiceWithPreserver(
 		DiagnosticDecoder:     firstDiagnosticDecoder(diagnosticDecoders),
 		Encoder:               encoder,
 		PreserveUnknownFields: preserveUnknown,
-		DocumentOwner:         NewDocumentOwnerWithPreserver(files, createTemp, decoder, encoder, providers, preserveUnknown, diagnosticDecoders...),
+		DocumentOwner:         NewDocumentOwnerWithPreserver(files, createTemp, decoder, encoder, providers, preserveUnknown, firstDiagnosticDecoder(diagnosticDecoders)),
 		PersistenceLock:       persistenceLock,
 	}
 }
@@ -86,4 +86,19 @@ func firstDiagnosticDecoder(decoders []operatorsettings.ConfigDiagnosticsDecoder
 		return nil
 	}
 	return decoders[0]
+}
+
+// NewDocumentService constructs the completed document owner with the selected
+// preservation and diagnostics policy, without reading or writing settings.
+func NewDocumentService(
+	files operatorsettings.FileSystem,
+	createTemp operatorsettings.CreateTemporaryFile,
+	decoder operatorsettings.ConfigDecoder,
+	encoder operatorsettings.ConfigEncoder,
+	providers operatorsettings.ProviderCatalog,
+	preserveUnknown operatorsettings.ConfigDocumentPreserver,
+	diagnostics operatorsettings.ConfigDiagnosticsDecoder,
+) DocumentService {
+	return settingsdocumentwire.NewServiceWithPreserver(files, createTemp, decoder, encoder,
+		providers, preserveUnknown, diagnostics)
 }
