@@ -21,7 +21,7 @@ flowchart TB
     s_services_provider_sessions["provider sessions<br/>5402 LOC · 2 subservices"]
     s_services_providers["providers<br/>16412 LOC · 4 subservices"]
     s_services_worker_sessions["worker sessions<br/>18363 LOC · 0 subservices"]
-    s_services_workers["workers<br/>21946 LOC · 2 subservices"]
+    s_services_workers["workers<br/>21967 LOC · 2 subservices"]
   end
   subgraph recordings["Recordings and events"]
     s_services_events["events<br/>1939 LOC · 0 subservices"]
@@ -139,4 +139,4 @@ Each arrow shows a service's most frequent direct import. Its color identifies t
 | [`webhooks`](services/webhooks.md) | — |
 | [`work`](services/work.md) | (subservice) content materialization (704 LOC)<br/>(subservice) content staging (369 LOC)<br/>(subservice) state access (527 LOC) |
 | [`worker_sessions`](services/worker_sessions.md) | — |
-| [`workers`](services/workers.md) | (subservice) runners (5686 LOC)<br/>(subservice) workstations (2456 LOC) |
+| [`workers`](services/workers.md) | (subservice) runners (5707 LOC)<br/>(subservice) workstations (2456 LOC) |
