@@ -38,12 +38,13 @@ func ListLiveFactorySessions(ctx context.Context, host LiveReadHost) ([]factorys
 		}
 		projectionCtx, err := host.BuildSessionProjectionContext(ctx, session)
 		if err != nil {
+			placement := session.Placement()
 			reads = append(reads, factorysessions.ReadProjection{
 				Context: factorysessions.ProjectionContext{
 					Session: &factorysessions.ScopedLiveSessionSummary{
 						ID: livesession.CanonicalID(session), FactoryDir: session.FactoryDir,
-						FolderPath: session.FolderPath, Project: session.Project,
-						IsDefault: session.IsDefault, Target: session.Target,
+						FolderPath: placement.FolderPath, Project: placement.Project,
+						IsDefault: session.IsDefault, Target: placement.Target,
 					},
 					FactorySessionID: livesession.CanonicalID(session),
 				},

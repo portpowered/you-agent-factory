@@ -92,9 +92,10 @@ func projectLiveSession(session *livesession.LiveSession) *factorysessions.Scope
 	if session == nil {
 		return nil
 	}
+	placement := session.Placement()
 	return &factorysessions.ScopedLiveSessionSummary{
 		ID: livesession.CanonicalID(session), FactoryDir: session.FactoryDir,
-		FolderPath: session.FolderPath, Project: session.Project,
-		IsDefault: session.IsDefault, Target: session.Target,
+		FolderPath: placement.FolderPath, Project: placement.Project,
+		IsDefault: session.IsDefault, Target: placement.Target,
 	}
 }

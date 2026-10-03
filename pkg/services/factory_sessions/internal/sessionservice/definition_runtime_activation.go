@@ -24,7 +24,7 @@ func NamedFactoryActivationPaths(factoryRoot, configuredRoot string, session *li
 		return persistRoot, folderPath
 	}
 	persistRoot = logicaltarget.SessionFactoryPersistRoot(factoryRoot, session)
-	if sessionFolder := strings.TrimSpace(session.FolderPath); sessionFolder != "" {
+	if sessionFolder := strings.TrimSpace(session.Placement().FolderPath); sessionFolder != "" {
 		folderPath = sessionFolder
 	} else {
 		folderPath = persistRoot
