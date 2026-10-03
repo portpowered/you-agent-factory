@@ -22,13 +22,3 @@ type Service interface {
 		factorydefinitions.CompileEffectiveFactorySourceRequest,
 	) (factorydefinitions.CompileEffectiveFactorySourceResult, error)
 }
-
-// Dependencies are the exact collaborator ports required by compilation.
-// They are supplied by Factory Definitions composition and never selected here:
-// compilation does not construct Runtime/Petri implementations or choose host
-// filesystem adapters.
-type Dependencies struct {
-	LoadCanonical      factorydefinitions.CanonicalFactoryJSONLoader
-	LoadFromFactoryDir factorydefinitions.LoadedFactoryLoader
-	EncodeFactory      factorydefinitions.FactoryConfigJSONEncoder
-}

@@ -431,6 +431,7 @@ func newWireLifecycleBehaviorService(
 		validator,
 		persistence,
 		loader,
+		compilationForLoader(loader),
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,

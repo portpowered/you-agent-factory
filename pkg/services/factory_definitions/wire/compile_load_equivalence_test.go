@@ -90,6 +90,7 @@ func newWireRootWithCompileLoader(t *testing.T) (factorydefinitions.Service, *fa
 		ports.validator,
 		ports.persistence,
 		ports.loader,
+		compilationForLoader(ports.loader),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,

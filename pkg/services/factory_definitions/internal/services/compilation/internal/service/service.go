@@ -27,9 +27,6 @@ func New(
 	loadFromFactoryDir factoryroot.LoadedFactoryLoader,
 	encodeFactory factoryroot.FactoryConfigJSONEncoder,
 ) *Service {
-	if loadCanonical == nil || loadFromFactoryDir == nil || encodeFactory == nil {
-		return nil
-	}
 	return &Service{
 		loadCanonical:      loadCanonical,
 		loadFromFactoryDir: loadFromFactoryDir,
@@ -42,9 +39,6 @@ func (s *Service) CompileEffectiveFactorySource(
 	ctx context.Context,
 	request factoryroot.CompileEffectiveFactorySourceRequest,
 ) (factoryroot.CompileEffectiveFactorySourceResult, error) {
-	if err := s.requirePorts(); err != nil {
-		return factoryroot.CompileEffectiveFactorySourceResult{}, err
-	}
 	if err := ctx.Err(); err != nil {
 		return factoryroot.CompileEffectiveFactorySourceResult{}, err
 	}
@@ -119,14 +113,4 @@ func mapCompileError(err error) error {
 		return factoryroot.ErrInvalidAuthoredFactorySource
 	}
 	return fmt.Errorf("%w: %w", factoryroot.ErrInvalidAuthoredFactorySource, err)
-}
-
-func (s *Service) requirePorts() error {
-	if s == nil || s.loadCanonical == nil || s.loadFromFactoryDir == nil {
-		return fmt.Errorf("Factory Definition compilation collaborator is required")
-	}
-	if s.encodeFactory == nil {
-		return fmt.Errorf("canonical Factory encoder is required")
-	}
-	return nil
 }
