@@ -25,7 +25,7 @@ type service struct {
 	runner           platformprocess.CommandRunner
 	resolveTemplates workers.TemplateFieldResolver
 	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
-	recorder         scriptpollers.CursorRecorder
+	cursors          scriptpollers.CursorScopes
 }
 
 var _ scriptpollers.Service = (*service)(nil)
@@ -37,7 +37,7 @@ func New(
 	commandRunner platformprocess.CommandRunner,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	cursorRecorder scriptpollers.CursorRecorder,
+	cursors scriptpollers.CursorScopes,
 ) scriptpollers.Service {
 	return &service{
 		logger:           logger,
@@ -45,7 +45,7 @@ func New(
 		runner:           commandRunner,
 		resolveTemplates: resolveTemplates,
 		executionPolicy:  executionPolicy,
-		recorder:         cursorRecorder,
+		cursors:          cursors,
 	}
 }
 
@@ -53,11 +53,15 @@ func (s *service) GetCursor(
 	ctx context.Context,
 	request automations.GetCursorRequest,
 ) (automations.GetCursorResult, error) {
-	recorder := s.recorder
-	if recorder == nil {
-		return automations.GetCursorResult{}, unavailableCursorRecorderError()
-	}
-	return recorder.GetCursor(ctx, request)
+	return s.GetCursorForScope(ctx, scriptpollers.CursorScope{}, request)
+}
+
+func (s *service) GetCursorForScope(
+	ctx context.Context,
+	scope scriptpollers.CursorScope,
+	request automations.GetCursorRequest,
+) (automations.GetCursorResult, error) {
+	return s.cursors.GetCursor(ctx, scope, request)
 }
 
 func (s *service) StartScriptPoller(
@@ -201,16 +205,11 @@ func (s *service) resolveScriptPollerResume(
 		return scriptpollers.ResumeCursor{}, nil
 	}
 
-	recorder := s.recorder
-	if recorder == nil {
-		return scriptpollers.ResumeCursor{}, unavailableCursorRecorderError()
-	}
-
 	request := automations.GetCursorRequest{InstanceID: instanceID}
 	if supervision.ExpectedCursor != "" {
 		request.ExpectedCursor = supervision.ExpectedCursor
 	}
-	current, err := recorder.GetCursor(ctx, request)
+	current, err := s.GetCursorForScope(ctx, supervision.CursorScope, request)
 	if err != nil {
 		var typed *automations.Error
 		if errors.As(err, &typed) && typed.Code == automations.ErrorCodeNotFound {
@@ -241,11 +240,7 @@ func (s *service) commitScriptPollerRecovery(
 	if instanceID == "" {
 		return nil
 	}
-	recorder := s.recorder
-	if recorder == nil {
-		return unavailableCursorRecorderError()
-	}
-	return scriptpollers.CursorPersistError(recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+	return scriptpollers.CursorPersistError(s.cursors.CommitCursor(ctx, supervision.CursorScope, scriptpollers.CommitCursorRequest{
 		AutomationID:   supervision.AutomationID,
 		InstanceID:     instanceID,
 		ExpectedCursor: resume.Cursor,
@@ -309,12 +304,4 @@ func (s *service) pollerLogger(workstationName, workerName string) *zap.Logger {
 		zap.String("workstation", workstationName),
 		zap.String("worker", workerName),
 	)
-}
-
-func unavailableCursorRecorderError() error {
-	return &automations.Error{
-		Op:   scriptpollers.GetCursorOperation,
-		Code: automations.ErrorCodeNotReady,
-		Err:  automations.ErrNotReady,
-	}
 }

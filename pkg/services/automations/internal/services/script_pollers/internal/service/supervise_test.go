@@ -11,6 +11,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -322,6 +323,7 @@ type scriptPollersServiceOptions struct {
 	logger          *zap.Logger
 	executionPolicy factorydefinitionfixtures.WorkstationExecutionPolicy
 	cursorRecorder  scriptpollers.CursorRecorder
+	cursors         scriptpollers.CursorScopes
 }
 
 func newScriptPollersServiceWithOptions(options scriptPollersServiceOptions) scriptpollers.Service {
@@ -341,7 +343,14 @@ func newScriptPollersServiceWithOptions(options scriptPollersServiceOptions) scr
 	if clock == nil {
 		clock = clockwork.NewRealClock()
 	}
-	return scriptpollerswire.NewService(logger, clock, options.runner, nil, executionPolicy, options.cursorRecorder)
+	cursors := options.cursors
+	if cursors == nil {
+		cursors = scriptpollerswire.NewCursorScopes(nil)
+		if options.cursorRecorder != nil {
+			cursors = scopedTestRecorder{options.cursorRecorder}
+		}
+	}
+	return scriptpollerswire.NewService(logger, clock, options.runner, nil, executionPolicy, cursors)
 }
 
 func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waiters int) {
@@ -363,4 +372,18 @@ func waitForScriptPollerRunnerCalls(t *testing.T, runner *sequenceCommandRunner,
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %d runner call(s); got %d", want, runner.callCount())
+}
+
+// scopedTestRecorder keeps serializer/failure doubles at the unit-test boundary.
+// Production recovery uses CursorScopes directly and has no recorder adapter.
+type scopedTestRecorder struct {
+	scriptpollers.CursorRecorder
+}
+
+func (r scopedTestRecorder) GetCursor(ctx context.Context, _ scriptpollers.CursorScope, request automations.GetCursorRequest) (automations.GetCursorResult, error) {
+	return r.CursorRecorder.GetCursor(ctx, request)
+}
+
+func (r scopedTestRecorder) CommitCursor(ctx context.Context, _ scriptpollers.CursorScope, request scriptpollers.CommitCursorRequest) error {
+	return r.CursorRecorder.CommitCursor(ctx, request)
 }

@@ -58,12 +58,12 @@ type observedCursorRecorder struct {
 	calls int
 }
 
-func (r *observedCursorRecorder) GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error) {
+func (r *observedCursorRecorder) GetCursor(context.Context, scriptpollers.CursorScope, automations.GetCursorRequest) (automations.GetCursorResult, error) {
 	r.calls++
 	return automations.GetCursorResult{}, nil
 }
 
-func (r *observedCursorRecorder) CommitCursor(context.Context, scriptpollers.CommitCursorRequest) error {
+func (r *observedCursorRecorder) CommitCursor(context.Context, scriptpollers.CursorScope, scriptpollers.CommitCursorRequest) error {
 	r.calls++
 	return nil
 }

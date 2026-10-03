@@ -26,9 +26,9 @@ func NewService(
 	commandRunner platformprocess.CommandRunner,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	cursorRecorder scriptpollers.CursorRecorder,
+	cursors scriptpollers.CursorScopes,
 ) scriptpollers.Service {
-	return scriptpollersservice.New(logger, scheduler, commandRunner, resolveTemplates, executionPolicy, cursorRecorder)
+	return scriptpollersservice.New(logger, scheduler, commandRunner, resolveTemplates, executionPolicy, cursors)
 }
 
 // NewDurableCursorRecorder constructs the Automations-owned durable cursor
