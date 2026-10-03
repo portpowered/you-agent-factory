@@ -193,6 +193,7 @@ func WorkRequestRecordFromSubmitRequests(requestID string, source string, reques
 			PreviousChainingTraceIDs: lineagegraph.CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
 			TraceID:                  req.TraceID,
 			Content:                  append([]ContentPart(nil), req.Content...),
+			Payload:                  append([]byte(nil), req.Payload...),
 			Tags:                     maps.Clone(req.Tags),
 		})
 	}

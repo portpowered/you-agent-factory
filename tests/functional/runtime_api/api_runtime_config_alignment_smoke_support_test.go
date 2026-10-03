@@ -365,7 +365,7 @@ func waitForRuntimeConfigAlignmentStopWordDispatch(
 ) {
 	t.Helper()
 
-	deadline := time.Now().Add(runtimeConfigAlignmentSignalTimeout)
+	deadline := time.Now().Add(support.ScaledTimeout(runtimeConfigAlignmentSignalTimeout))
 	for time.Now().Before(deadline) {
 		dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
 		for _, dispatch := range dispatches {
@@ -389,7 +389,7 @@ func waitForRuntimeConfigAlignmentInFlightResourceConsumption(
 ) {
 	t.Helper()
 
-	if !runner.waitForFirstDispatch(runtimeConfigAlignmentSignalTimeout) {
+	if !runner.waitForFirstDispatch(support.ScaledTimeout(runtimeConfigAlignmentSignalTimeout)) {
 		session := server.Session(t)
 		t.Fatalf(
 			"timed out waiting for %s to start; marking=%#v",
@@ -398,7 +398,7 @@ func waitForRuntimeConfigAlignmentInFlightResourceConsumption(
 		)
 	}
 
-	deadline := time.Now().Add(runtimeConfigAlignmentSignalTimeout)
+	deadline := time.Now().Add(support.ScaledTimeout(runtimeConfigAlignmentSignalTimeout))
 	for time.Now().Before(deadline) {
 		session := server.Session(t)
 		available, _, ok := runtimeConfigAlignmentResourceUsage(session, "agent-slot")
@@ -426,7 +426,7 @@ func waitForRuntimeConfigAlignmentTimeoutAndRequeue(
 ) {
 	t.Helper()
 
-	if !runner.waitForFirstTimeout(runtimeConfigAlignmentSignalTimeout) {
+	if !runner.waitForFirstTimeout(support.ScaledTimeout(runtimeConfigAlignmentSignalTimeout)) {
 		t.Fatalf("timed out waiting for %s to hit limits.maxExecutionTime", runtimeConfigAlignmentExecuteWorkstation)
 	}
 	elapsed, ok := runner.firstTimeoutElapsed()
@@ -442,11 +442,11 @@ func waitForRuntimeConfigAlignmentTimeoutAndRequeue(
 		)
 	}
 
-	if !runner.waitForSecondDispatch(runtimeConfigAlignmentSignalTimeout) {
+	if !runner.waitForSecondDispatch(support.ScaledTimeout(runtimeConfigAlignmentSignalTimeout)) {
 		t.Fatalf("timed out waiting for %s retry dispatch after the timeout requeue", runtimeConfigAlignmentExecuteWorkstation)
 	}
 
-	deadline := time.Now().Add(runtimeConfigAlignmentSignalTimeout)
+	deadline := time.Now().Add(support.ScaledTimeout(runtimeConfigAlignmentSignalTimeout))
 	for time.Now().Before(deadline) {
 		if _, ok := runtimeConfigAlignmentFindDispatch(
 			support.ObserveDispatchEvents(t, server.GetFactoryEvents(t)),

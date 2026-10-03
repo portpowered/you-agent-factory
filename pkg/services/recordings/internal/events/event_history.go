@@ -643,6 +643,7 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workers
 			Usage:                       dispatchUsageEventPayload(result, completed),
 		},
 	))
+	h.recordOutputParentLineage(tick, result.DispatchID, eventTime, completed)
 }
 
 // dispatchUsageEventPayload derives the usage facts that belong on the

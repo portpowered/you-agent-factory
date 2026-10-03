@@ -197,6 +197,29 @@ func TestConstructedService_MapServerFailureMatchesPackageCommand(t *testing.T) 
 	}
 }
 
+func TestConstructedService_MapServerFailureRendersOnlyKnownRestoreReasons(t *testing.T) {
+	t.Parallel()
+	service := constructedRuntimeCLIService(t, nil)
+	secret := errors.New("PRIVATE-PROMPT")
+	for _, reason := range []factoryruntime.WorkRestoreReason{
+		factoryruntime.WorkRestoreMissingPlacement, factoryruntime.WorkRestoreConflictingPlacement,
+		factoryruntime.WorkRestoreUnknownPlace, factoryruntime.WorkRestoreInvalidHistory, "PRIVATE-UNKNOWN",
+	} {
+		restore := &factoryruntime.WorkRestoreError{Reason: reason, WorkID: "work-corrupt", PlaceIDs: []string{"task:ready", "task:done"}, Cause: secret}
+		mapped := service.MapServerFailure(fmt.Errorf("wrapped: %w", restore))
+		var invocation *factoryruntimecli.InvocationError
+		if reason == "PRIVATE-UNKNOWN" {
+			if errors.As(mapped, &invocation) {
+				t.Fatal("unknown reason became a public diagnostic")
+			}
+			continue
+		}
+		if !errors.As(mapped, &invocation) || invocation.Code != factoryruntimecli.ServerStartFailedCode || !strings.Contains(invocation.Message, "work-corrupt") || strings.Contains(invocation.Message, "PRIVATE") || !errors.Is(mapped, secret) {
+			t.Fatalf("mapped restore failure = %#v", invocation)
+		}
+	}
+}
+
 func TestConstructedService_MapInvocationFailurePreservesCancellationAndTimeout(t *testing.T) {
 	t.Parallel()
 

@@ -200,9 +200,9 @@ var canonicalToolHandlersByID = map[string]canonicalToolBinding{
 			return ListArtifacts(ctx, recordingsService, request)
 		})
 	}),
-	stableToolID(ToolReadEvents): handwrittenToolBinding(ToolReadEvents, func(ctx context.Context, _ RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, recordingsService RecordingsInspection, _ factorysessionexecution.Service, _ string, _ factorysessionexecution.SessionIDGenerator, _ ProviderIdentityResolver, input json.RawMessage) (json.RawMessage, error) {
+	stableToolID(ToolReadEvents): handwrittenToolBinding(ToolReadEvents, func(ctx context.Context, _ RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, recordingsService RecordingsInspection, sessions factorysessionexecution.Service, _ string, _ factorysessionexecution.SessionIDGenerator, _ ProviderIdentityResolver, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode read events input", func(request ReadEventsInput) ToolResponse[ReadEventsResult] {
-			return ReadEvents(ctx, recordingsService, request)
+			return readEventsCanonical(ctx, sessions, recordingsService, request)
 		})
 	}),
 	stableToolID(ToolControl): handwrittenToolBinding(ToolControl, func(ctx context.Context, prepare RequestPreparation, _ factoryruntime.WorkflowPreviewOperation, _ RecordingsInspection, sessions factorysessionexecution.Service, _ string, _ factorysessionexecution.SessionIDGenerator, _ ProviderIdentityResolver, input json.RawMessage) (json.RawMessage, error) {

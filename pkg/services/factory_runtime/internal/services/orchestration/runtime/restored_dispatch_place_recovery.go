@@ -8,6 +8,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -823,10 +824,7 @@ func addRestoredMissingInitialWorkPlacements(
 		}
 		placeID, ok := restoredMissingInitialWorkPlace(restored, net, resourcePlaceIDs, workID)
 		if !ok {
-			return fmt.Errorf(
-				"restore Work board: active Work %q has no current place occupancy",
-				workID,
-			)
+			return restoredWorkError(factory.WorkRestoreMissingPlacement, workID, nil, nil)
 		}
 		placements[workID] = placeID
 	}

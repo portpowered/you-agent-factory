@@ -168,13 +168,23 @@ func mapCurrentFactoryFailure(err error) error {
 }
 
 func mapServerFailure(err error) error {
-	if err == nil ||
-		(!platformhttpserver.IsBindError(err) && !cliserver.IsLocalBindError(err)) {
+	if err == nil {
 		return err
 	}
-	return &InvocationError{
-		Code: ServerBindFailedCode, Message: strings.TrimSpace(err.Error()), Cause: err,
+	if platformhttpserver.IsBindError(err) || cliserver.IsLocalBindError(err) {
+		return &InvocationError{
+			Code: ServerBindFailedCode, Message: strings.TrimSpace(err.Error()), Cause: err,
+		}
 	}
+	var restore *factoryruntime.WorkRestoreError
+	if errors.As(err, &restore) && restore != nil {
+		switch restore.Reason {
+		case factoryruntime.WorkRestoreMissingPlacement, factoryruntime.WorkRestoreConflictingPlacement,
+			factoryruntime.WorkRestoreUnknownPlace, factoryruntime.WorkRestoreInvalidHistory:
+			return &InvocationError{Code: ServerStartFailedCode, Message: restore.Error(), Cause: err}
+		}
+	}
+	return err
 }
 
 func mapInvocationFailure(err error) error {

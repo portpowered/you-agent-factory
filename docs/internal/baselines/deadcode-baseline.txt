@@ -3014,6 +3014,7 @@ tests/functional/internal/support/standard_inputs.go: unreachable func: Captured
 tests/functional/internal/support/standard_inputs.go: unreachable func: CapturedInputs.Stdout
 tests/functional/internal/support/standard_inputs.go: unreachable func: FakeInputs
 tests/functional/internal/support/standard_inputs.go: unreachable func: testStreamIsTerminal
+tests/functional/internal/support/timeout_scale.go: unreachable func: ScaledTimeout
 tests/functional/internal/support/tokens.go: unreachable func: FirstInputPayload
 tests/functional/internal/support/tokens.go: unreachable func: FirstInputTags
 tests/functional/internal/support/tokens.go: unreachable func: FirstInputWorkID

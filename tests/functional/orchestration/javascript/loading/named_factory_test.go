@@ -26,7 +26,7 @@ const (
 // backendsizecheck:ignore-function pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption
 func TestNamedJavaScriptFactoryUsesSameFactorySessionControls(t *testing.T) {
 	t.Parallel()
-	fixture := loadingFixtureForTest(t)
+	fixture := loadingExclusiveFixtureForTest(t)
 	runNamedJavaScriptFactoryUsesSameFactorySessionControls(t, fixture)
 }
 
@@ -387,7 +387,7 @@ func readNamedJavaScriptDurableSession(
 
 func waitForNamedJavaScriptSessionStarted(t *testing.T, baseURL string, sessionID string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), namedJavaScriptSessionControlWait)
+	ctx, cancel := context.WithTimeout(t.Context(), support.ScaledTimeout(namedJavaScriptSessionControlWait))
 	defer cancel()
 	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, sessionID))
 	for {

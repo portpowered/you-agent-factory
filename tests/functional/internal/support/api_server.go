@@ -149,7 +149,7 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	if cfg.ServerReadyTimeout > 0 {
 		readyTimeout = cfg.ServerReadyTimeout
 	}
-	baseURL, err := api.WaitForBaseURL(readyTimeout)
+	baseURL, err := api.WaitForBaseURL(ScaledTimeout(readyTimeout))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func (fs *FunctionalAPIServer) Close(t testing.TB) {
 		if fs.closeProcess == nil {
 			return
 		}
-		closeCtx, cancelClose := context.WithTimeout(context.Background(), processCommandStopTimeout)
+		closeCtx, cancelClose := context.WithTimeout(context.Background(), ScaledTimeout(processCommandStopTimeout))
 		defer cancelClose()
 		fs.closeErr = fs.closeProcess(closeCtx)
 	})
@@ -428,7 +428,7 @@ func GetWorkerSessionEventsForSessionByIDAt(
 	if strings.TrimSpace(workerSessionID) == "" {
 		t.Fatal("worker session id is empty")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), functionalServerReadyTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), ScaledTimeout(functionalServerReadyTimeout))
 	defer cancel()
 	endpoint := strings.TrimSuffix(baseURL, "/") +
 		"/factory-sessions/" + url.PathEscape(sessionID) +
@@ -520,7 +520,7 @@ func readWorkerSessionReplay(
 
 func readFactoryEventsInvalidCursorErrorFromURL(t testing.TB, endpoint string) FactoryEventsInvalidCursorError {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), functionalServerReadyTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), ScaledTimeout(functionalServerReadyTimeout))
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -559,7 +559,7 @@ func readFactoryEventsInvalidCursorErrorFromURL(t testing.TB, endpoint string) F
 
 func readFactoryEventStreamRecoveryFromURL(t testing.TB, endpoint string) factoryapi.FactorySessionEventStreamRecovery {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), functionalServerReadyTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), ScaledTimeout(functionalServerReadyTimeout))
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -645,7 +645,7 @@ func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.Factor
 	}()
 
 	collected := make([]factoryapi.FactoryEvent, 0, retainedCount)
-	deadline := time.NewTimer(functionalServerReadyTimeout)
+	deadline := time.NewTimer(ScaledTimeout(functionalServerReadyTimeout))
 	defer deadline.Stop()
 	for len(collected) < retainedCount {
 		select {
@@ -671,7 +671,7 @@ func GetFactoryResponseEventsAt(
 	sessionID string,
 ) []factoryapi.FactoryResponseEvent {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), functionalServerReadyTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), ScaledTimeout(functionalServerReadyTimeout))
 	defer cancel()
 	endpoint := strings.TrimSuffix(baseURL, "/") +
 		"/factory-sessions/" + sessionID + "/response-events"
@@ -711,7 +711,7 @@ func GetFactoryResponseEventsAt(
 	}()
 
 	var collected []factoryapi.FactoryResponseEvent
-	deadline := time.NewTimer(functionalServerReadyTimeout)
+	deadline := time.NewTimer(ScaledTimeout(functionalServerReadyTimeout))
 	defer deadline.Stop()
 	quiet := time.NewTimer(25 * time.Millisecond)
 	defer quiet.Stop()

@@ -431,7 +431,7 @@ type replayRun struct {
 
 func executeReplay(t *testing.T, process support.Process, factoryDir, replayPath string, env []string) replayRun {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), support.ScaledTimeout(90*time.Second))
 	defer cancel()
 	inputs := support.FakeInputs(ctx, []string{"you", "run", "--dir", factoryDir, "--replay", replayPath, "--no-record"})
 	inputs.Input.Env = env

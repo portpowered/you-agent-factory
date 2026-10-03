@@ -2,6 +2,7 @@ package projections
 
 import (
 	"fmt"
+	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
@@ -111,4 +112,33 @@ func (r *factoryWorldReducer) rearmInterruptedDispatch(dispatch interfaces.Facto
 		}
 		r.addToken(resource.TokenID, placeID, tokenKindResource)
 	}
+}
+
+// A downstream terminal Work does not replace the consumed cron input's own
+// failure history. Keep that input inspectable, without inventing occupancy.
+func (r *factoryWorldReducer) recordConsumedFailedCronInputs(completion interfaces.FactoryWorldDispatchCompletion) {
+	for _, input := range completion.ConsumedInputs {
+		if input.WorkItem == nil {
+			continue
+		}
+		item := *input.WorkItem
+		if item.ID == "" || item.WorkTypeID != interfaces.SystemTimeWorkTypeID ||
+			item.State != interfaces.SystemTimePendingState || input.PlaceID != interfaces.SystemTimePendingPlaceID ||
+			item.Tags[interfaces.TimeWorkTagKeySource] != interfaces.TimeWorkSourceCron ||
+			strings.TrimSpace(item.Tags[interfaces.TimeWorkTagKeyCronWorkstation]) == "" ||
+			r.tokenPlaces[input.TokenID] != "" || len(completion.OutputWorkItems) == 0 ||
+			completionOutputsWork(completion, item.ID) {
+			continue
+		}
+		r.recordFailedWorkDetail(completion, item)
+	}
+}
+
+func completionOutputsWork(completion interfaces.FactoryWorldDispatchCompletion, workID string) bool {
+	for _, item := range completion.OutputWorkItems {
+		if item.ID == workID {
+			return true
+		}
+	}
+	return completion.TerminalWork != nil && completion.TerminalWork.WorkItem.ID == workID
 }

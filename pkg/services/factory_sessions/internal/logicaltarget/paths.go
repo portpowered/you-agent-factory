@@ -89,8 +89,9 @@ func SessionFactoryRootDir(serviceRootDir string, session *livesession.LiveSessi
 	if session == nil {
 		return ""
 	}
-	rootDir := session.FolderPath
-	if session.FolderPath == "" || session.FactoryDir == "" || !SameFactoryDir(session.FactoryDir, session.FolderPath) {
+	folderPath := session.Placement().FolderPath
+	rootDir := folderPath
+	if folderPath == "" || session.FactoryDir == "" || !SameFactoryDir(session.FactoryDir, folderPath) {
 		return rootDir
 	}
 	serviceRoot := filepath.Clean(serviceRootDir)
@@ -102,8 +103,10 @@ func SessionFactoryRootDir(serviceRootDir string, session *livesession.LiveSessi
 
 // SessionFactoryPersistRoot resolves the on-disk definition persistence root.
 func SessionFactoryPersistRoot(serviceRootDir string, session *livesession.LiveSession) string {
-	if session != nil && !session.IsDefault && strings.TrimSpace(session.FolderPath) != "" {
-		return session.FolderPath
+	if session != nil && !session.IsDefault {
+		if folderPath := session.Placement().FolderPath; strings.TrimSpace(folderPath) != "" {
+			return folderPath
+		}
 	}
 	return SessionFactoryRootDir(serviceRootDir, session)
 }

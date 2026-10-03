@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
@@ -21,9 +21,10 @@ const (
 )
 
 type restoredWorkRecovery struct {
-	excludedWorkIDs  map[string]struct{}
-	toleratedWorkIDs map[string]struct{}
-	legacyWorkIDs    map[string]struct{}
+	excludedWorkIDs       map[string]struct{}
+	toleratedWorkIDs      map[string]struct{}
+	legacyWorkIDs         map[string]struct{}
+	failedCronDispatchIDs map[string]string
 }
 
 func restoreRestoredWorkMarking(
@@ -77,6 +78,18 @@ func classifyRestoredWorkRecovery(
 	recovery := restoredWorkRecovery{}
 	if restored == nil {
 		return recovery
+	}
+	// Examine canonical history even when the corrected projection has already
+	// removed the consumed input from the active index.
+	for workID, item := range items {
+		if dispatchID, ok := restoredConclusiveFailedCronDispatch(restored, net, workID, item); ok {
+			recovery.excludedWorkIDs = addRestoredRecoveryWorkID(recovery.excludedWorkIDs, workID)
+			recovery.toleratedWorkIDs = addRestoredRecoveryWorkID(recovery.toleratedWorkIDs, workID)
+			if recovery.failedCronDispatchIDs == nil {
+				recovery.failedCronDispatchIDs = make(map[string]string)
+			}
+			recovery.failedCronDispatchIDs[workID] = dispatchID
+		}
 	}
 
 	for workID, terminal := range restored.TerminalWorkByID {
@@ -631,7 +644,7 @@ func addRestoredPlacement(placements map[string]string, workID, placeID string) 
 	}
 	if existing, exists := placements[workID]; exists {
 		if existing != placeID {
-			return fmt.Errorf("restore Work board: Work %q has conflicting current places %q and %q", workID, existing, placeID)
+			return restoredWorkError(factory.WorkRestoreConflictingPlacement, workID, []string{existing, placeID}, nil)
 		}
 		return nil
 	}
@@ -711,27 +724,6 @@ func restoredDispatchContainsWork(workIDs []string, workID string) bool {
 		}
 	}
 	return false
-}
-
-func logRestoredWorkRecovery(cfg *runtimeConfig, recovery restoredWorkRecovery) {
-	if cfg == nil || len(recovery.legacyWorkIDs) == 0 {
-		return
-	}
-	workIDs := make([]string, 0, len(recovery.legacyWorkIDs))
-	for workID := range recovery.legacyWorkIDs {
-		workIDs = append(workIDs, workID)
-	}
-	sort.Strings(workIDs)
-	logger := logging.EnsureLogger(cfg.logger)
-	for _, workID := range workIDs {
-		logger.Warn(
-			"restore Factory Runtime Work board: skipping completed automation Work without recoverable place",
-			"session_id", sessionIDFromFactoryConfig(cfg),
-			"recording_id", strings.TrimSpace(cfg.recordingID),
-			"work_id", workID,
-			"disposition", restoredLegacyAutomationDisposition,
-		)
-	}
 }
 
 func validateRestoredDispatchWorkReferences(

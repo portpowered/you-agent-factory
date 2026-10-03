@@ -661,6 +661,7 @@ func factoryWorkItemFromEventWork(eventWork work.WorkRequestEventWork) workdomai
 		PreviousChainingTraceIDs: append([]string(nil), eventWork.PreviousChainingTraceIDs...),
 		TraceID:                  eventWork.TraceID,
 		Content:                  content,
+		Payload:                  append(json.RawMessage(nil), eventWork.Payload...),
 		StructuredResult:         jsonvalue.Clone(eventWork.StructuredResult),
 		Tags:                     cloneStringMap(eventWork.Tags),
 		StructuredResultPresent:  jsonvalue.Present(eventWork.StructuredResult, eventWork.StructuredResultPresent),

@@ -119,8 +119,9 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 		startedAt = bundle.StartTime()
 	}
 	backendScopeID = runtimebinding.BackendScopeID(fs.backendScopeID, session)
+	placement := session.Placement()
 	resolvedIdentity, err := fs.identity.Normalize(ctx, identity.NormalizeRequest{
-		BackendScopeID: backendScopeID, FolderPath: session.FolderPath, Target: session.Target,
+		BackendScopeID: backendScopeID, FolderPath: placement.FolderPath, Target: placement.Target,
 	})
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err

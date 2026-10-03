@@ -326,14 +326,26 @@ func (s *Service) executeProviderWithRetry(
 	request workers.RunnerExecutionRequest,
 	execute func(workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error),
 ) (workers.RunnerExecutionResult, error) {
-	for retryCount := 0; ; retryCount++ {
+	throttlePolicy := workerexecution.DefaultThrottleRetryPolicy(s.clock)
+	throttlePolicy.JitterSeed = request.Dispatch.DispatchID
+	throttle := workerexecution.NewThrottleRetry(throttlePolicy)
+	sleep := s.providerRetrySleep()
+	retryCount := 0
+	for {
 		result, err := execute(request)
 		if err == nil {
 			return result, nil
 		}
 
 		providerErr := workers.NormalizeProviderExecutionError(err)
-		if providerErr == nil || !retryableProviderFailure(providerErr) || retryCount >= detachedProviderMaxRetries {
+		if providerErr == nil || !retryableProviderFailure(providerErr) {
+			return result, err
+		}
+		// Provider capacity is an infrastructure condition: wait it out with
+		// backoff inside the throttle window instead of spending the short
+		// attempt budget. Waiting holds this attempt (and its executor slot).
+		throttled := workerexecution.IsThrottleFailure(providerErr)
+		if !throttled && retryCount >= detachedProviderMaxRetries {
 			return result, err
 		}
 
@@ -353,10 +365,28 @@ func (s *Service) executeProviderWithRetry(
 				workers.RunnerOptionalCapabilitySessionResume,
 			)
 		}
-		if err := sleepForDetachedProviderRetry(ctx, detachedProviderInitialBackoff<<retryCount); err != nil {
+		if throttled {
+			retry, waitErr := throttle.Wait(ctx, sleep)
+			if waitErr != nil {
+				return result, waitErr
+			}
+			if !retry {
+				return result, err
+			}
+			continue
+		}
+		if err := sleep(ctx, detachedProviderInitialBackoff<<retryCount); err != nil {
 			return result, err
 		}
+		retryCount++
 	}
+}
+
+func (s *Service) providerRetrySleep() func(context.Context, time.Duration) error {
+	if s.retrySleep != nil {
+		return s.retrySleep
+	}
+	return sleepForDetachedProviderRetry
 }
 
 func retryableProviderFailure(providerErr *workers.ProviderError) bool {

@@ -210,6 +210,7 @@ func registerReplacementSession(
 	serviceCtx context.Context,
 	isActive bool,
 ) *livesession.LiveSession {
+	placement := session.Placement()
 	executionBaseDir := strings.TrimSpace(session.ExecutionBaseDir)
 	if replacement != nil && replacement.LoadedRuntimeConfig() != nil {
 		if runtimeBaseDir := strings.TrimSpace(replacement.LoadedRuntimeConfig().RuntimeBaseDir()); runtimeBaseDir != "" {
@@ -242,10 +243,10 @@ func registerReplacementSession(
 	handle.inheritApplicationValues(previous)
 	state.Register(sessionruntime.Registration{
 		SessionID: session.ID, FactoryDir: replacement.Directory(),
-		FolderPath: session.FolderPath, ExecutionBaseDir: executionBaseDir,
+		FolderPath: placement.FolderPath, ExecutionBaseDir: executionBaseDir,
 		RuntimeFactorySessionID: session.RuntimeFactorySessionID,
 		RuntimeEventSessionID:   session.RuntimeEventSessionID,
-		Target:                  session.Target,
+		Target:                  placement.Target,
 		Handle:                  handle,
 		Runtime: &factorysessions.LiveRuntime{
 			Factory: replacement.RuntimeService(), BackendScopeID: replacement.BackendScope(),
@@ -257,7 +258,7 @@ func registerReplacementSession(
 			LiveChangeAdmission:   NewLiveChangeAdmission(replacement.RuntimeService()),
 			LiveChangeLogger:      replacement.RuntimeLogger(),
 		},
-		Default: session.IsDefault, Project: session.Project,
+		Default: session.IsDefault, Project: placement.Project,
 		Select: isActive, AddEventTypeRecorder: replacement.AddEventTypeRecorder,
 		AddEventTypeRecorderWithReady: replacement.AddEventTypeRecorderWithReady,
 	})

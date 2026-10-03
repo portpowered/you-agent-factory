@@ -365,9 +365,525 @@ Remove BindCoordinator, CoordinatorBindable and the mutable coordinator setter; 
 
 ## T12 — Automations runtime/source isolation
 
-**AM16 / T12 — deferred: needs operator decision.** The 2026-10-03T09:05Z operator amendment records the late private-contract conflict witnessed in `docs/temp/projects/flat-injection/reconciliation/wake-report68-20261003/t12-correction-evidence.md:5-15`. Retain draft [#2683](https://github.com/portpowered/you-agent-factory/pull/2683) at `62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7`; stories 002/003 and full F10/S01 remain incomplete. T12 owns source behavior, private contract placement and obsolete-helper removal; T20 owns service-root interface-count enforcement, the script_pollers baseline and deadcode measurement. A corrected private layout/packet needs operator disposition and consistent T12/T20 ownership before successor admission. No checker allowance, baseline debt, acceptance/API/persistence-policy change or implementation repair is authorized by this docs amendment. Release requires that decision and reviewed corrected packet, then the retained implementation successor's exact-head quality, full F10/S01 and independent review/merge. This hold does not block the amendment PR. The proposed T12 shapes below are held planning intent, not an approved gate-compatible layout; do not implement them until the corrected packet resolves the root-interface conflict.
+**AM16 / T12 — approved private behavior-owner decomposition (binding 2026-10-03T10:20Z).** Authority: `C:/Users/andre/work/portos/infinite-you/docs/temp/operator-mailbox/responses/flat-injection.md`, Decision 2026-10-03T10:20Z; this supersedes the 09:05Z deferral only. Retain draft [#2683](https://github.com/portpowered/you-agent-factory/pull/2683) at `62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7`; its stories 002/003 and full F10/S01 remain incomplete. The separately authorized `fi-plan-amendment-am16-t12-20261003` docs lane depends on merged v1.1 #2685 and owns only this six-companion packet. AM16 is now merged historical authority; the retained T12 successor consumes merged AM17 before planning, with no historical AM16 Work dependency or T20/WSV wait. T12 owns implementation, same-PR stale script_pollers baseline deletion and obsolete-helper removal. T20 owns unchanged one-interface enforcement and measurement; deadcode allowance remains 0. No public API, configuration, event, persistence-policy or acceptance change is authorized. Native capability/provider/caller/removal pairs C01–C16 are canonical in [contracts.md](contracts.md#t12--automations-runtimesource-isolation). The docs author handoff requires final head pushed, open PR, CI started and blocking feedback addressed; independent AM16-DOC-VAL/REVIEW owns clean-room loopback, terminal CI and current-main merge. The successor still requires exact-head T12-F10 (F10a–m), T12-S01 and T12-G01/G02, independent review and merge. Historical partial evidence never substitutes for those gates.
 
-Authored source: `pkg/services/automations/internal/service.go`.
+### AM17 — T12 evidence boundaries
+
+Binding authority: operator mailbox `C:/Users/andre/work/portos/infinite-you/docs/temp/operator-mailbox/responses/flat-injection.md`, Decisions 2026-10-03T12:01Z A and 12:57Z. AM17 corrects evidence classification under flat-injection-v1.1; it changes no endpoint, service signature, configuration, event, persistence, policy or acceptance criterion. AM16 is merged historical authority, not a live Work dependency. The retained T12 successor consumes merged AM17 before planning and continues from [#2683](https://github.com/portpowered/you-agent-factory/pull/2683) / `62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7`; stories 002/003 and full F10/S01 remain unproven. No T20/WSV wait or queue mutation is required.
+
+Follow [the AM17 resolution](plan.md#authorized-amendment-flat-injection-v11) to [the complete F10 requirements ledger](tasks.md#am17--t12-evidence-boundaries). T12 owns both proofs below; independent VAL01 confirms composed behavior. The existing `automations.Root.GetCursor` delegates the service operation (`pkg/services/automations/contracts.go:215–222,457–474`). Durable reads validate `ExpectedCursor` and return detached opaque facts (`pkg/services/automations/internal/services/script_pollers/internal/service/durable_cursor.go:74–108`). The cursor HTTP adapter (`pkg/services/automations/transports/http/convergence_operations.go:52–97`) is unbound in canonical Wire/HTTP; adapter tests are component evidence. Neither that adapter nor `AutomationsRootFromEdges` is a composed functional entry point. Canonical construction/execution remains `pkg/root/process.go:17` / `pkg/initializer/application/process.go:185`.
+
+| Obligation | Component/service-contract evidence — T12-F10-COMPONENT | Composed evidence — T12-F10 / VAL01 | Owner |
+| --- | --- | --- | --- |
+| F10b | Existing GetCursor returns exact committed opaque cursor/checkpoint facts | Existing customer activation admits public Work; resumed command receives the same exact committed environment facts | T12; both proofs required |
+| F10g | After failed replacement, GetCursor returns prior exact committed opaque cursor/checkpoint facts | Admitted public Work remains; existing error/diagnostic is visible; next command resumes prior-commit environment facts; peer progresses | T12; both proofs required |
+| F10j | GetCursor with stale ExpectedCursor returns the existing typed conflict; exact committed cursor/checkpoint facts remain unchanged; no mutation, extra command or Work | No composed public cursor endpoint is required or invented; admission/restart/diagnostic/isolation obligations remain in F10b/g and the other F10 rows | T12 component/service-contract proof |
+
+All F10a–m success, failure and recovery obligations remain required on the successor head. C01–C16 native shapes, exactly one named interface per private service root, same-PR obsolete-helper/stale-baseline deletion, deletion-only baselines, deadcode allowance 0, T12-S01/G01/G02 and FI-A1–A8 remain unchanged. This amendment yields documentation/source/static evidence only, never runtime PASS.
+
+AM17-DOC-TRACE/INVARIANTS/LINT belong to the docs author. Author delivery stops at final head pushed, PR open, required CI started and blocking feedback addressed. Independent ordinary review owns AM17-DOC-VAL: a fresh isolated candidate checkout, the [validation loopback report](../../../../../factory/docs/standards/validation-loopback-template.md) with AM17-1..6, AM17-DELIVERY and FI-A1–A8 individually PASS/FAIL/BLOCKED, and a smallest delta request for findings without silent repair. AM17-DOC-REVIEW owns terminal passing own-head CI, conflicts, current-main rebase, immediate premerge `make lint pkg-file-count`, and merge. `make generate-wire` plus clean diff applies only to a separately authorized graph change. Merge releases corrected successor planning; runtime gates and aggregate Project acceptance remain later work.
+
+### AM16 construction and lifetime
+
+Current shapes below are focused native declaration excerpts from the explicitly named source basis; imports and bodies are omitted. Retained #2683 is the successor starting point, not current-main runtime evidence. This docs lane changes no Go or generated files.
+
+Construct recovery C04/C07 → script C05/C06/C12; independently construct cron/watch/hosted C16 → lifecycle C01/C08 → reconciliation C02/C03 → owner C09 → public Root C14. Canonical `pkg/wire` supplies each completed behavior once through owner Wire aliases. Neither lifecycle nor reconciliation depends on the final owner. No recursive provider, parent callback, SourceDriver concrete alias, RuntimeSourceRegistration interface, dependency bag or service getter is introduced.
+
+Root activation allocates runtime identity/config/context/watcher resources C15, calls lifecycle ConfigureRuntimeSource with those domain facts, then reconciliation runtime-keyed Start/Wait. Deactivation calls Stop/Wait, joins all source users, then ReleaseRuntimeSource and recovery ReleaseScope. Preserve old-instance guards so an old runtime cannot release replacement state. Blank-base memory behavior, durable destinations/bytes, cursor conflicts, checkpoint ordering, hosted retry/redaction and Now-only public caller acceptance remain unchanged. C06 consumes the existing selected clockwork view; retain T01 TimerSource/ClockView and override precedence without real-time fallback.
+
+
+### C01 — Lifecycle and registration have one private behavior owner
+
+Authored source: `pkg/services/automations/internal/services/sourcelifecycle/service.go (new root)`.
+
+Source basis: new package absent on main and retained head.
+
+Source locators: New root absent from retained tree; proposed `sourcelifecycle/service.go` above.
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```go
+# Not present
+```
+
+Proposed:
+
+```go
+package sourcelifecycle
+
+type RuntimeSourceConfiguration struct {
+	RuntimeID string
+	FactorySessionID string
+	Snapshot factorydefinitions.RuntimeSnapshot
+	Inputs automations.RuntimeActivationInputs
+}
+
+type StartEffect struct {
+	RuntimeID   string
+	Kind        string
+	Observation automations.SourceObservation
+}
+
+type StopEffect struct {
+	RuntimeID   string
+	Observation automations.SourceObservation
+}
+
+type WaitEffect struct {
+	RuntimeID   string
+	Desired     automations.DesiredLifecycleState
+	Observation automations.SourceObservation
+}
+
+type SourceLifecycle interface {
+	ConfigureRuntimeSource(context.Context, RuntimeSourceConfiguration) error
+	ReleaseRuntimeSource(context.Context, string) error
+	Start(context.Context, StartEffect) error
+	Stop(context.Context, StopEffect) error
+	Wait(context.Context, WaitEffect) (automations.SourceObservation, error)
+}
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `pkg/services/automations/internal/services/reconciliation/internal/service`; `pkg/services/automations/internal/services/reconciliation/wire`; `pkg/services/automations/wire; root activation through focused wire alias`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 moves schedulerSources/start/stop/wait and registration into sourcelifecycle/internal/service. Remove root callbacks and schedulerLifecycle bridge; no parent-Service dependency.
+
+### C02 — Reconciliation owns runtime controls on its existing single Service
+
+Authored source: `pkg/services/automations/internal/services/reconciliation/service.go`.
+
+Source basis: retained #2683/62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7.
+
+Source locators: `pkg/services/automations/internal/services/reconciliation/service.go:15` (Service), `:28` (RuntimeSourceControl), `:37` (SourceLifecycle).
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```go
+type Service interface {
+	RuntimeSourceControl
+	Reconcile(context.Context, automations.ReconcileRequest) (automations.ReconcileResult, error)
+	StartSource(context.Context, automations.StartSourceRequest) (automations.StartSourceResult, error)
+	StopSource(context.Context, automations.StopSourceRequest) (automations.StopSourceResult, error)
+	WaitSource(context.Context, automations.WaitSourceRequest) (automations.WaitSourceResult, error)
+	SourceStatus(context.Context, automations.SourceStatusRequest) (automations.SourceStatusResult, error)
+	GetStatus(context.Context, automations.GetStatusRequest) (automations.GetStatusResult, error)
+	GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error)
+}
+
+type RuntimeSourceControl interface {
+	StartSourceForRuntime(context.Context, string, automations.StartSourceRequest) (automations.StartSourceResult, error)
+	StopSourceForRuntime(context.Context, string, automations.StopSourceRequest) (automations.StopSourceResult, error)
+	WaitSourceForRuntime(context.Context, string, automations.WaitSourceRequest) (automations.WaitSourceResult, error)
+}
+
+type SourceLifecycle interface {
+	Start(context.Context, StartEffect) error
+	Stop(context.Context, StopEffect) error
+	Wait(context.Context, WaitEffect) (automations.SourceObservation, error)
+}
+
+type StartEffect struct {
+	RuntimeID   string
+	Kind        string
+	Observation automations.SourceObservation
+}
+
+type StopEffect struct {
+	RuntimeID   string
+	Observation automations.SourceObservation
+}
+
+type WaitEffect struct {
+	RuntimeID   string
+	Desired     automations.DesiredLifecycleState
+	Observation automations.SourceObservation
+}
+```
+
+Proposed:
+
+```go
+package reconciliation
+
+type Service interface {
+	StartSourceForRuntime(context.Context, string, automations.StartSourceRequest) (automations.StartSourceResult, error)
+	StopSourceForRuntime(context.Context, string, automations.StopSourceRequest) (automations.StopSourceResult, error)
+	WaitSourceForRuntime(context.Context, string, automations.WaitSourceRequest) (automations.WaitSourceResult, error)
+	Reconcile(context.Context, automations.ReconcileRequest) (automations.ReconcileResult, error)
+	StartSource(context.Context, automations.StartSourceRequest) (automations.StartSourceResult, error)
+	StopSource(context.Context, automations.StopSourceRequest) (automations.StopSourceResult, error)
+	WaitSource(context.Context, automations.WaitSourceRequest) (automations.WaitSourceResult, error)
+	SourceStatus(context.Context, automations.SourceStatusRequest) (automations.SourceStatusResult, error)
+	GetStatus(context.Context, automations.GetStatusRequest) (automations.GetStatusResult, error)
+	GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error)
+}
+
+// Value aliases preserve identity without a second representation.
+type StartEffect = sourcelifecycle.StartEffect
+type StopEffect = sourcelifecycle.StopEffect
+type WaitEffect = sourcelifecycle.WaitEffect
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `pkg/services/automations/internal/runtime_sidecars.go`; `pkg/services/automations/internal/runtime_lifecycle.go`; `pkg/services/automations/internal/services/reconciliation/internal/service`; `pkg/services/automations/internal/services/reconciliation/wire`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 deletes named RuntimeSourceControl/SourceLifecycle from reconciliation root. Do not add RuntimeSourceRegistration there; configure/release belongs to the lifecycle owner called directly by root activation. Reconciliation owns the three existing runtime-keyed control methods, inlined on Service.
+
+### C03 — Reconciliation consumes the completed lifecycle owner directly
+
+Authored source: `pkg/services/automations/internal/services/reconciliation/wire/wire.go; internal/service/service.go`.
+
+Source basis: retained #2683/62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7.
+
+Source locators: `pkg/services/automations/internal/services/reconciliation/wire/wire.go:11`; `pkg/services/automations/internal/services/reconciliation/internal/service/service.go:26`.
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```go
+func NewService(lifecycle reconciliation.SourceLifecycle) reconciliation.Service
+
+func New(lifecycle reconciliation.SourceLifecycle) reconciliation.Service
+```
+
+Proposed:
+
+```go
+func NewService(lifecycle sourcelifecycle.SourceLifecycle) reconciliation.Service
+
+func New(lifecycle sourcelifecycle.SourceLifecycle) reconciliation.Service
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `pkg/services/automations/wire.NewReconciliation`; `pkg/services/automations/internal/services/reconciliation/owner fixtures`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 deletes Effects variadic/default path and intermediate callback adapter; implementation stores the lifecycle owner directly.
+
+### C04 — Cursor recovery has one private owner
+
+Authored source: `pkg/services/automations/internal/services/cursorscopes/service.go (new root)`.
+
+Source basis: new package absent on main and retained head.
+
+Source locators: New root absent from retained tree; recovery values originate at `pkg/services/automations/internal/services/script_pollers/cursor.go:43` (scope), `:49` (interface), `:60` (commit), `:69` (resume).
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```go
+# Not present
+```
+
+Proposed:
+
+```go
+package cursorscopes
+
+type CursorScope struct {
+	RuntimeID string
+	BaseDir   string
+}
+
+type CommitCursorRequest struct {
+	AutomationID   string
+	InstanceID     string
+	ExpectedCursor automations.Cursor
+	Cursor         automations.Cursor
+	Checkpoint     string
+}
+
+type ResumeCursor struct {
+	Cursor     automations.Cursor
+	Checkpoint string
+}
+
+type CursorScopes interface {
+	GetCursor(context.Context, CursorScope, automations.GetCursorRequest) (automations.GetCursorResult, error)
+	CommitCursor(context.Context, CursorScope, CommitCursorRequest) error
+	// ReleaseScope discards runtime resources after the caller has stopped and
+	// joined all scope users. Durable recovery files remain available on restart.
+	ReleaseScope(CursorScope)
+}
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `pkg/services/automations/internal/services/script_pollers/internal/service`; `pkg/services/automations/internal/services/script_pollers/wire`; `pkg/services/automations/internal/services/sourcelifecycle/internal/service; release after stop/join`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 moves cursor_scopes.go and durable serializer/resource operations under cursorscopes/internal/service; preserve bytes/path and retained race/cursor tests. One named CursorScopes interface in this root.
+
+### C05 — Scoped cursor reads stay on script supervision Service
+
+Authored source: `pkg/services/automations/internal/services/script_pollers/service.go; cursor.go`.
+
+Source basis: retained #2683/62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7.
+
+Source locators: `pkg/services/automations/internal/services/script_pollers/service.go:25` (Service), `:49` (scoped reader), `:54` (Scheduler); `pkg/services/automations/internal/services/script_pollers/cursor.go:36` (recorder), `:49` (scopes).
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```go
+type Service interface {
+	ScopedCursorReader
+	GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error)
+	StartScriptPoller(
+		context.Context,
+		*sync.WaitGroup,
+		factorydefinitions.RuntimeConfigLookup,
+		factorydefinitions.FactoryWorkstationConfig,
+		*factorydefinitions.FactoryWorkerConfig,
+		ScriptPollerSupervision,
+		automations.WorkRequestSubmitter,
+	)
+	RunScriptPoller(
+		context.Context,
+		platformprocess.CommandRunner,
+		factorydefinitions.RuntimeConfigLookup,
+		factorydefinitions.FactoryWorkstationConfig,
+		*factorydefinitions.FactoryWorkerConfig,
+		ScriptPollerSupervision,
+		automations.WorkRequestSubmitter,
+	) error
+}
+
+type ScopedCursorReader interface {
+	GetCursorForScope(context.Context, CursorScope, automations.GetCursorRequest) (automations.GetCursorResult, error)
+}
+
+type Scheduler interface {
+	Now() time.Time
+	After(time.Duration) <-chan time.Time
+}
+
+type CursorScopes interface {
+	GetCursor(context.Context, CursorScope, automations.GetCursorRequest) (automations.GetCursorResult, error)
+	CommitCursor(context.Context, CursorScope, CommitCursorRequest) error
+	// ReleaseScope discards runtime resources after the caller has stopped and
+	// joined all scope users. Durable recovery files remain available on restart.
+	ReleaseScope(CursorScope)
+}
+
+type CursorRecorder interface {
+	GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error)
+	CommitCursor(context.Context, CommitCursorRequest) error
+}
+```
+
+Proposed:
+
+```go
+package script_pollers
+
+type Service interface {
+	GetCursorForScope(context.Context, CursorScope, automations.GetCursorRequest) (automations.GetCursorResult, error)
+	GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error)
+	StartScriptPoller(
+		context.Context,
+		*sync.WaitGroup,
+		factorydefinitions.RuntimeConfigLookup,
+		factorydefinitions.FactoryWorkstationConfig,
+		*factorydefinitions.FactoryWorkerConfig,
+		ScriptPollerSupervision,
+		automations.WorkRequestSubmitter,
+	)
+	RunScriptPoller(
+		context.Context,
+		platformprocess.CommandRunner,
+		factorydefinitions.RuntimeConfigLookup,
+		factorydefinitions.FactoryWorkstationConfig,
+		*factorydefinitions.FactoryWorkerConfig,
+		ScriptPollerSupervision,
+		automations.WorkRequestSubmitter,
+	) error
+}
+
+// Domain value aliases; no new named interface in this root.
+type CursorScope = cursorscopes.CursorScope
+type CommitCursorRequest = cursorscopes.CommitCursorRequest
+type ResumeCursor = cursorscopes.ResumeCursor
+
+// Removed: ScopedCursorReader, Scheduler, CursorScopes, CursorRecorder.
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `pkg/services/automations/internal cursor/supervision routing`; `pkg/services/automations/internal/services/script_pollers/internal/service`; `pkg/services/automations/internal/services/script_pollers/wire`; `pkg/services/automations/wire`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 deletes the four non-Service interface declarations. RuntimeSourceControl and ScopedCursorReader are existing-owner method sets; they gain no redundant forwarding services. Scheduler uses existing library clockwork.Clock, already required by the retained internal Automations Clock; no new clock interface root or real-time selection is introduced.
+
+### C06 — Script provider consumes recovery owner and existing selected clock view
+
+Authored source: `pkg/services/automations/internal/services/script_pollers/wire/wire.go; internal/service/service.go`.
+
+Source basis: retained #2683/62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7.
+
+Source locators: `pkg/services/automations/internal/services/script_pollers/wire/wire.go:23`; `pkg/services/automations/internal/services/script_pollers/internal/service/service.go:34`.
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```go
+func NewService(
+	logger *zap.Logger,
+	scheduler scriptpollers.Scheduler,
+	commandRunner platformprocess.CommandRunner,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cursors scriptpollers.CursorScopes,
+) scriptpollers.Service
+
+func New(
+	logger *zap.Logger,
+	scheduler scriptpollers.Scheduler,
+	commandRunner platformprocess.CommandRunner,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cursors scriptpollers.CursorScopes,
+) scriptpollers.Service
+```
+
+Proposed:
+
+```go
+func NewService(
+	logger *zap.Logger,
+	scheduler clockwork.Clock,
+	commandRunner platformprocess.CommandRunner,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cursors cursorscopes.CursorScopes,
+) scriptpollers.Service
+
+func New(
+	logger *zap.Logger,
+	scheduler clockwork.Clock,
+	commandRunner platformprocess.CommandRunner,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cursors cursorscopes.CursorScopes,
+) scriptpollers.Service
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `pkg/services/automations/wire.NewScriptPollers`; `pkg/services/automations/internal/services/script_pollers/unit fixtures`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 removes scriptpollers.Scheduler and scriptpollers.CursorScopes parameter references. clockwork.Clock is the existing external gocron/time boundary view, not a new service capability. Preserve T01 selected TimerSource/ClockView and override precedence obligations; do not copy retained selectLegacyScheduler fallback into the final graph.
+
+### C07 — Focused recovery provider exposes the private owner through Wire
+
+Authored source: `pkg/services/automations/internal/services/cursorscopes/wire/wire.go (new); pkg/services/automations/internal/services/script_pollers/wire/wire.go`.
+
+Source basis: retained #2683/62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7.
+
+Source locators: `pkg/services/automations/internal/services/script_pollers/wire/wire.go:18`; proposed recovery provider absent.
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```go
+func NewCursorScopes(files CursorPersistenceFileSystem) scriptpollers.CursorScopes
+```
+
+Proposed:
+
+```go
+// cursorscopes/wire/wire.go
+type CursorPersistenceFileSystem = cursorscopesservice.CursorPersistenceFileSystem
+func NewService(files CursorPersistenceFileSystem) cursorscopes.CursorScopes
+
+// Removed: script_pollers/wire.NewCursorScopes; callers use the recovery owner.
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `pkg/services/automations/wire.NewCursorScopes`; `pkg/services/automations/internal/services/script_pollers/internal/service`; `pkg/services/automations/internal/services/sourcelifecycle/internal/service`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 moves the unchanged filesystem effect definition to cursorscopes/internal/service and exposes it through recovery Wire; no public FS contract change. Remove the old script_pollers/wire.NewCursorScopes wrapper and migrate recovery fixtures to their owner. Each provider constructs exactly one completed implementation.
+
+### C08 — Focused lifecycle provider exposes its single interface
+
+Authored source: `pkg/services/automations/internal/services/sourcelifecycle/wire/wire.go (new); pkg/services/automations/wire/wire.go`.
+
+Source basis: providers absent on retained head; supersedes retained PRD planned SourceDriver/RuntimeSourceRegistration.
+
+Source locators: Both focused lifecycle/reconciliation exports absent from retained tree; sources are the new Wire paths above.
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```go
+# Not present
+```
+
+Proposed:
+
+```go
+// sourcelifecycle/wire/wire.go; private implementation has the same direct inputs.
+func NewService(logger *zap.Logger, clock clockwork.Clock,
+	scriptPollers scriptpollers.Service, cronService cron.Service,
+	filesystemWatchers filesystemwatchers.Service,
+	hostedPollers automations.HostedPollers,
+	cursors cursorscopes.CursorScopes) sourcelifecycle.SourceLifecycle
+
+// automations/wire/wire.go; one provider per behavior, no SourceDriver concrete alias.
+type SourceLifecycle = sourcelifecycle.SourceLifecycle
+type Reconciliation = reconciliation.Service
+type CursorScopes = cursorscopes.CursorScopes
+func NewSourceLifecycle(logger *zap.Logger, clock Clock,
+	scriptPollers ScriptPollers, cronService Cron,
+	filesystemWatchers FilesystemWatchers,
+	hostedPollers automations.HostedPollers,
+	cursors CursorScopes) SourceLifecycle
+func NewReconciliation(lifecycle SourceLifecycle) Reconciliation
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `pkg/wire named Automations providers`; `pkg/services/automations/wire focused set; owner fixtures`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 replaces retained PRD SourceDriver/RuntimeSourceRegistration interface outputs with the completed SourceLifecycle interface. ConfigureRuntimeSource/ReleaseRuntimeSource are its cohesive registration/lifetime methods; no second named interface or root callback.
+
+### C09 — Automations root receives completed lifecycle and reconciliation owners
+
+Authored source: `pkg/services/automations/internal/service.go; pkg/services/automations/wire/wire.go`.
+
+Source basis: retained #2683/62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7.
+
+Source locators: `pkg/services/automations/internal/service.go:125`; `pkg/services/automations/wire/wire.go:57` (Root), `:91` (Service).
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
 
 Current:
 
@@ -382,51 +898,396 @@ func newService(
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
+	cronService cron.Service,
+	filesystemWatchers filesystemwatchers.Service,
+	pollers scriptpollers.Service,
+	cursors scriptpollers.CursorScopes,
 ) *Service
+
+func NewRoot(
+	logger *zap.Logger,
+	clock automations.Clock,
+	commandRunner platformprocess.CommandRunner,
+	workflowID string,
+	defaultFactoryDir string,
+	hosted HostedSourceInputs,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+) (automations.Root, error)
+
+func NewService(
+	logger *zap.Logger,
+	clock automations.Clock,
+	commandRunner platformprocess.CommandRunner,
+	workflowID string,
+	defaultFactoryDir string,
+	hostedPollers automations.HostedPollers,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+) (automations.Service, error)
 ```
 
 Proposed:
 
 ```go
-func newService(
-	logger *zap.Logger,
-	clock Clock,
-	reconciler reconciliation.Service,
-	scriptPollers scriptpollers.Service,
-	cronService cron.Service,
-	filesystemWatchers filesystemwatchers.Service,
-	hostedPollers automations.HostedPollers,
-) *Service
+// automations/internal/service.go
+func newService(logger *zap.Logger, clock Clock,
+	lifecycle sourcelifecycle.SourceLifecycle,
+	reconciler reconciliation.Service, scriptPollers scriptpollers.Service,
+	cronService cron.Service, filesystemWatchers filesystemwatchers.Service,
+	hostedPollers automations.HostedPollers) *Service
+func New(logger *zap.Logger, clock Clock,
+	lifecycle sourcelifecycle.SourceLifecycle,
+	reconciler reconciliation.Service, scriptPollers scriptpollers.Service,
+	cronService cron.Service, filesystemWatchers filesystemwatchers.Service,
+	hostedPollers automations.HostedPollers) *Service
+
+// automations/wire/wire.go
+type Owner = automationinternal.Service
+type Reconciliation = reconciliation.Service
+type ScriptPollers = scriptpollers.Service
+type Cron = cron.Service
+type FilesystemWatchers = filesystemwatchers.Service
+type Clock = automationinternal.Clock
+func NewService(logger *zap.Logger, clock Clock, lifecycle SourceLifecycle,
+	reconciler Reconciliation, scriptPollers ScriptPollers, cronService Cron,
+	filesystemWatchers FilesystemWatchers,
+	hostedPollers automations.HostedPollers) *Owner
+func NewRoot(service *Owner) automations.Root
 ```
 
-Runner, template, policy and cursor effects move to their consuming leaves. Workflow/directory values come from runtime activation snapshots; they no longer select a newly constructed runtime service tree. Preserve existing default-workflow resolution in request preparation.
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
 
-Authored source: `pkg/services/automations/internal/services/reconciliation/service.go`.
+Callers/consumers: `pkg/wire canonical Automations provider registrations`; `pkg/services/automations/internal/runtime_lifecycle.go; runtime_sidecars.go`; `pkg/services/automations/wire fixtures`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 removes per-runtime newService/NewWithCursorFileSystem/runtimeInstance.owner, parent callback constructor and duplicate runtime reconciler. Activation configures lifecycle domain facts before runtime-keyed reconciliation Start/Wait; deactivation Stop/Wait joins before ReleaseRuntimeSource. An old instance cannot release replacement state. Root projects unchanged Operations/Lifecycle/Runtime; no public Root fields change.
+
+The retained internal `New` at `service.go:63`, `NewWithCursorFileSystem` at `:93` and `NewService` at `:168` route through the nested construction path. T12 migrates their fixtures to completed owner providers and removes the obsolete alternate wrappers at cutover; the proposed internal `New` above takes only completed collaborators. Registration/release are operations on the injected lifecycle owner, never a constructor callback.
+
+### C10 — Retire unreachable cursor constructors at cutover
+
+Authored source: `pkg/services/automations/internal/services/script_pollers/cursor.go; pkg/services/automations/internal/services/script_pollers/wire/wire.go; pkg/services/automations/internal/services/script_pollers/internal/service/durable_cursor.go`.
+
+Source basis: retained #2683/62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7.
+
+Source locators: `pkg/services/automations/internal/services/script_pollers/cursor.go:36` and `:106`; `pkg/services/automations/internal/services/script_pollers/wire/wire.go:36`; `pkg/services/automations/internal/services/script_pollers/internal/service/durable_cursor.go:53`.
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
 
 Current:
 
 ```go
-type Effects struct {
-	Start func(context.Context, StartEffect) error
-	Stop  func(context.Context, StopEffect) error
-	Wait  func(context.Context, WaitEffect) (automations.SourceObservation, error)
+type CursorRecorder interface {
+	GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error)
+	CommitCursor(context.Context, CommitCursorRequest) error
+}
+
+func NewMemoryCursorRecorder() CursorRecorder
+
+func NewDurableCursorRecorder(
+	baseDir string,
+	files CursorPersistenceFileSystem,
+) (scriptpollers.CursorRecorder, error)
+
+func NewDurableCursorRecorder(
+	baseDir string,
+	files CursorPersistenceFileSystem,
+) (scriptpollers.CursorRecorder, error)
+```
+
+Proposed:
+
+```go
+# Removed
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `T12 owner fixtures migrate to CursorScopes; cursor serializer behavior retained in its owner unit suite`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 deletes obsolete unscoped recorder/constructors and only newly unreachable legacy helpers in this same PR. Do not delete live durable serialization/load/persist operations. Seven local findings are diagnostic, not a fixed inventory or waiver of 3154; measure newly unreachable symbols after cutover. Tests must not keep dead production constructors alive.
+
+### C11 — Delete only the stale script_pollers interface-count baseline entry
+
+Authored source: `docs/internal/baselines/package-structure-baseline.json / entries selected by rule and filePath`.
+
+Source basis: amended main b5e4523d3d04649cfee4e05e203115504edcfbcb; exact selected entries object.
+
+Source locators: `docs/internal/baselines/package-structure-baseline.json:2090` on amended main (selected stale interface-count object).
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```json
+{
+  "rule": "service-root-interface-count",
+  "filePath": "pkg/services/automations/internal/services/script_pollers",
+  "target": "pkg/services/automations/internal/services/script_pollers/cursor.go:CursorRecorder,pkg/services/automations/internal/services/script_pollers/service.go:Service"
+}
+```
+
+Proposed:
+
+```json
+# Removed
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `cmd/pkgstructurecheck; canonical Backend Lint`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 deletes this exact entry in its code PR when the root has only Service. T20 owns unchanged checker semantics/measurement, not this deletion prerequisite. Other baseline rows and deadcode allowance 0 are preserved.
+
+### C12 — Outer owner exports direct recovery and script providers
+
+Authored source: `pkg/services/automations/wire/wire.go`.
+
+Source basis: retained #2683/62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7.
+
+Source locators: `pkg/services/automations/wire/wire.go:31` (alias), `:34` (filesystem alias), `:37` (provider); NewScriptPollers absent.
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```go
+type CursorScopes = scriptpollers.CursorScopes
+
+type CursorPersistenceFileSystem = scriptpollerswire.CursorPersistenceFileSystem
+
+func NewCursorScopes(files CursorPersistenceFileSystem) CursorScopes
+
+// NewScriptPollers is not present.
+```
+
+Proposed:
+
+```go
+type CursorScopes = cursorscopes.CursorScopes
+type CursorPersistenceFileSystem = cursorscopeswire.CursorPersistenceFileSystem
+func NewCursorScopes(files CursorPersistenceFileSystem) CursorScopes
+func NewScriptPollers(logger *zap.Logger, clock Clock,
+	commandRunner platformprocess.CommandRunner,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cursors CursorScopes) ScriptPollers
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `pkg/wire canonical provider set`; `pkg/services/automations/wire.NewSourceLifecycle/NewService`; `pkg/services/automations/internal/services/script_pollers/component fixtures`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 updates NewCursorScopes to call cursorscopeswire.NewService and NewScriptPollers to call scriptpollerswire.NewService; each constructs one implementation. Old CursorScopes alias points to the new owner; no private implementation escapes.
+
+### C13 — Remove the root callback-construction caller
+
+Authored source: `pkg/services/automations/internal/runtime_sidecars.go / newSchedulerReconciler`.
+
+Source basis: retained #2683/62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7.
+
+Source locators: `pkg/services/automations/internal/runtime_sidecars.go:83`.
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```go
+func (s *Service) newSchedulerReconciler() reconciliation.Service {
+	return reconciliationwire.NewService(schedulerLifecycle{owner: s})
 }
 ```
 
 Proposed:
 
 ```go
-// Removed: Effects dependency bag.
-type SourceLifecycle interface {
-	Start(context.Context, StartEffect) error
-	Stop(context.Context, StopEffect) error
-	Wait(context.Context, WaitEffect) (automations.SourceObservation, error)
+# Removed
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `pkg/services/automations/internal/service.go / initialization; runtime activation uses injected reconciliation`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 deletes newSchedulerReconciler and schedulerLifecycle{owner:*Service} with Start/Stop/Wait forwarding in the same successor. No registration or lifecycle owner depends on the final root.
+
+### C14 — Canonical root provider consumes completed owner
+
+Authored source: `pkg/wire/session_runtime_providers.go / provideAutomationsRoot`.
+
+Source basis: retained #2683/62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7.
+
+Source locators: `pkg/wire/session_runtime_providers.go:591`.
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```go
+func provideAutomationsRoot(
+	hostedSourceInputs automationswire.HostedSourceInputs,
+	logger *zap.Logger,
+	clock factoryruntime.Clock,
+	commandRunner platformprocess.CommandRunner,
+	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
+) (automations.Root, error) {
+	return automationswire.NewRoot(
+		logger,
+		clock,
+		commandRunner,
+		"",
+		"",
+		hostedSourceInputs,
+		workerswire.ResolveTemplateFields,
+		workstationExecution,
+	)
 }
 ```
 
-Extract `schedulerSources` and its start/stop/wait behavior into the source-lifecycle owner. Inject that owner into reconciliation, rather than callbacks into Automations Root. Expose construction aliases `Reconciliation`, `ScriptPollers`, `Cron`, `FilesystemWatchers` and `SourceLifecycle` through `automations/wire`. They alias the corresponding private contracts, not concrete implementations.
+Proposed:
 
-Keep `buildRuntimeInstance(context.Context, automations.RuntimeActivationRequest) (*runtimeInstance, error)` as scoped state/resource allocation. Delete its `NewWithCursorFileSystem` call and `runtimeInstance.owner *Service`. Retain runtime/session/source identities, snapshots, cursor values, watcher handles, contexts, cancel functions, wait groups and startup flags. Inject cursor behavior; select the existing authored destination by runtime/source identity. Characterize and preserve the existing durable-cursor-error-to-memory behavior during structural migration. A separately reviewed persistence policy delta is required before replacing that fallback with a surfaced error.
+```go
+func provideAutomationsRoot(service *automationswire.Owner) automations.Root {
+	return automationswire.NewRoot(service)
+}
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `pkg/wire servicesSet and generated Wire; initializer/runtime consumers of unchanged automations.Root`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 removes hosted effect bag/clock/runner selection from this root projection. Canonical Wire registers the focused owner providers C07/C08/C12/C16 and supplies each once; current-head generation proves actual wiring.
+
+### C15 — Runtime instance retains only scoped data and resource handles
+
+Authored source: `pkg/services/automations/internal/runtime_lifecycle.go / runtimeInstance`.
+
+Source basis: retained #2683/62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7.
+
+Source locators: `pkg/services/automations/internal/runtime_lifecycle.go:19`.
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```go
+type runtimeInstance struct {
+	runtimeID        string
+	factorySessionID string
+	snapshot         interfaces.RuntimeSnapshot
+	activationInputs runtimeActivationInputIdentity
+	owner            *Service
+	runtimeConfig    *runtimeSnapshotConfig
+	watcher          automations.FilesystemWatcher
+	watcherRoot      string
+	submit           automations.WorkRequestSubmitter
+	startSchedulers  bool
+	ctx              context.Context
+	cancel           context.CancelFunc
+	sidecars         sync.WaitGroup
+
+	mu       sync.Mutex
+	starting bool
+	started  bool
+	cursorMu sync.Mutex
+	released bool
+}
+```
+
+Proposed:
+
+```go
+type runtimeInstance struct {
+	runtimeID        string
+	factorySessionID string
+	snapshot         interfaces.RuntimeSnapshot
+	activationInputs runtimeActivationInputIdentity
+	runtimeConfig    *runtimeSnapshotConfig
+	watcher          automations.FilesystemWatcher
+	watcherRoot      string
+	submit           automations.WorkRequestSubmitter
+	startSchedulers  bool
+	ctx              context.Context
+	cancel           context.CancelFunc
+	sidecars         sync.WaitGroup
+
+	mu       sync.Mutex
+	starting bool
+	started  bool
+	cursorMu sync.Mutex
+	released bool
+}
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `pkg/services/automations/internal/runtime_lifecycle.go / buildRuntimeInstance,start,stop; source/cursor routing`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 removes runtimeInstance.owner and its newService call together. Build allocates only this scoped state/config/context/watcher resource; root calls injected lifecycle ConfigureRuntimeSource before StartSourceForRuntime/WaitSourceForRuntime. StopSourceForRuntime/WaitSourceForRuntime joins before lifecycle ReleaseRuntimeSource; preserve cursorMu/released old-instance guard. No reusable service construction remains in activation.
+
+### C16 — Hosted leaf has a focused provider instead of effect bag
+
+Authored source: `pkg/services/automations/wire/wire.go / HostedSourceInputs, NewHostedPollers`.
+
+Source basis: retained #2683/62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7.
+
+Source locators: `pkg/services/automations/wire/wire.go:45` (bag); focused NewHostedPollers export absent.
+
+Owner: AM16 docs: fi-plan-amendment-am16-t12-20261003; implementation/removal: T12; checker unchanged: T20.
+
+Current:
+
+```go
+type HostedSourceInputs struct {
+	Clock            automations.HostedLinearClock
+	HTTPClient       automations.HostedLinearHTTPDoer
+	SecretResolver   automations.HostedLinearSecretResolver
+	LinearEndpoint   string
+	CheckpointStore  automations.HostedLinearCheckpointStore
+	CursorFileSystem scriptpollerswire.CursorPersistenceFileSystem
+}
+
+// Focused NewHostedPollers export is not present.
+```
+
+Proposed:
+
+```go
+// Removed: HostedSourceInputs.
+func NewHostedPollers(logger *zap.Logger, clock automations.HostedLinearClock,
+	httpClient automations.HostedLinearHTTPDoer,
+	secretResolver automations.HostedLinearSecretResolver,
+	linearEndpoint string,
+	checkpointStore automations.HostedLinearCheckpointStore) automations.HostedPollers
+```
+
+Compatibility and rollout: Docs specification only in this lane; T12 applies the private delta in its retained successor. Public Automations API, CLI, configuration, event/status fields, cursor schema/destination, Now-only caller acceptance and persistence fallback policy remain unchanged. No migration or feature flag.
+
+Callers/consumers: `pkg/wire named Automations hosted provider functions; C08 lifecycle and C09 root`.
+
+Generated outputs: None in docs lane; T12 regenerates pkg/wire/wire_gen.go with make generate-wire.
+
+Removal and migration owner: T12 removes HostedSourceInputs/composeHostedPollers graph construction when migrating NewRoot callers. This focused provider delegates to already-owned hosted source construction with explicit effects; retained required-checkpoint/logger signatures and public hosted policy remain unchanged. Remove the unused composite bag builder in the same PR.
+
+### Required proof and release
+
+T12 retains F01 inert construction and all F10a–m/full T12 obligations in tasks.md. C10 deletes only newly unreachable constructors/helpers after moving live serializer/load/persist behavior and its owner tests. C11 removes only the selected stale script_pollers baseline entry in that same successor PR, without a T20 dependency. Hosted deadcode 3154/zero allowance is failed historical evidence and pkg-structure is unmeasured. Compare main and successor using the same tool/config before attribution; pre-existing main findings are not T12 cleanup scope. Seven local findings are diagnostic, not a fixed removal inventory or an explanation of 3154.
+
+T12-G01/G02 measures boundary/cycle/construction/logging, interface counts, baseline freshness, deadcode, package file counts and generated Wire on the successor head. Independent review rebases current origin/main and immediately runs `make lint pkg-file-count`, plus `make generate-wire` and clean diff when Wire changed. This packet proves no runtime or Project FI-A1–A8 acceptance. Independent docs validation and retained implementation gates remain required.
+
 
 ## T13 — Sessions directory, response state and durable leaves
 
@@ -844,29 +1705,232 @@ Update Sessions' structurally equivalent `FactoryRuntimeRoot` and Activate calle
 
 ## T16 — Worker Sessions keyed attempt supervision
 
-Authored source: `pkg/services/factory_runtime/composition_contracts.go`.
+This is the AM09 first-step documentation contract, not a production cutover or runtime PASS. Source basis: `5c800e49c959b01ae436efaa392d7b4f2cb869cf` (HEAD and origin/main at authoring). Current blocks are native declaration excerpts; imports and function bodies are omitted. The separately reviewed contract PR must merge before characterization and ANY structural T16 PR. T16 owns characterization and complete factory removal; T15 consumes the completed cutover; WSV construction additions wait for FI. No public API, configuration, persistence, event, CLI or identity policy changes are authorized here.
+
+### Native request, operation and construction pairs
+
+Authored destination: `pkg/services/worker_sessions/contracts.go / RuntimeAttemptRequest; destination docs/internal/development/plans/flat-injection/contracts.md §T16`.
 
 Current:
 
 ```go
-type WorkerSessionsFactory func(workers.Service, platformclock.Source) (workersessions.Service, error)
+type RuntimeAttemptRequest struct {
+	ID        string
+	AttemptID string
+	Execution workers.WorkstationDispatchRequest
+}
+
+type RuntimeAttempt func(context.Context, workers.WorkstationDispatchResult, error) error
 ```
 
 Proposed:
 
 ```go
-// Removed: WorkerSessionsFactory.
-type WorkerAttemptOpener interface {
+// RuntimeAttemptKey is a process-local lookup key, never a wire identifier.
+type RuntimeAttemptKey struct {
+	RuntimeID  string
+	DispatchID string
+}
+
+// ID is the existing stable Worker Session ID, not a derived key string.
+// AttemptID is physical; empty preserves the dispatch-ID default.
+// Execution retains the canonical Workers request, including FactorySessionID,
+// RuntimeID, RecordingID, GenerationID and Dispatch.DispatchID.
+// Key must agree with Execution.Execution.RuntimeID and its Dispatch.DispatchID.
+type RuntimeAttemptRequest struct {
+	Key       RuntimeAttemptKey
+	ID        string
+	AttemptID string
+	Execution workers.WorkstationDispatchRequest
+}
+
+// Unchanged: Complete is idempotent and retains the existing terminal contract.
+type RuntimeAttempt func(context.Context, workers.WorkstationDispatchResult, error) error
+```
+
+Documentation proposal only. Internal callers later supply an explicit key matching canonical execution correlation. Preserve stable Worker Session and physical attempt IDs, replay associations, empty AttemptID semantics, duplicate Worker Session rejection and canonical Topics. No serialized key, new identity policy or persisted migration.
+
+Authored destination: `pkg/services/factory_runtime/composition_contracts.go / WorkerSessionsFactory; pkg/services/worker_sessions/internal/service/invoke_session.go / structural BeginRuntimeAttempt capability; destination docs/internal/development/plans/flat-injection/contracts.md §T16`.
+
+Current:
+
+```go
+type WorkerSessionsFactory func(workers.Service, platformclock.Source) (workersessions.Service, error)
+
+var _ interface {
 	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest) (workersessions.RuntimeAttempt, error)
+} = (*registry)(nil)
+```
+
+Proposed:
+
+```go
+// Removed in the later T16 structural PR: WorkerSessionsFactory.
+// Request data and behavioral inputs remain separate explicit arguments.
+// execution is the already-selected runtime handle carrying provider and
+// command-runner overrides, replay-runner precedence and runtime resolution.
+// clock supplies scoped fact timestamps; scheduler supplies safety deadlines.
+// cancel is the exact Runtime-owned attempt control handle, installed atomically.
+type WorkerAttemptOpener interface {
+	BeginRuntimeAttempt(
+		context.Context,
+		workersessions.RuntimeAttemptRequest,
+		workers.Service,
+		platformclock.Source,
+		platformclock.TimerSource,
+		func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
+	) (workersessions.RuntimeAttempt, error)
+
+	// Compatibility runtime invocation enters the same keyed supervision.
+	// It uses the supplied runtime handle, never the process default executor.
+	InvokeRuntimeSession(
+		context.Context,
+		workersessions.RuntimeAttemptRequest,
+		workersessions.RetryPolicy,
+		workers.Service,
+		platformclock.Source,
+		platformclock.TimerSource,
+	) (workersessions.InvokeSessionResult, error)
+
+	// Correlation.RuntimeID and DispatchID must match the explicit key.
+	// Commit exact provider association and Worker observations before forwarding.
+	PublishRuntimeProgress(
+		context.Context,
+		workersessions.RuntimeAttemptKey,
+		workers.ProgressFragment,
+		workers.ProgressPublisher,
+	) error
+
+	// Join only this runtime's live attempts and recording handles.
+	// Preserve terminal metadata, latest dispatch identity and Events retention.
+	CloseRuntimeAttempts(context.Context, string) error
 }
 ```
 
-Inject the process Worker Sessions service and its attempt-opening capability directly; remove `provideWorkerSessionsFactoryWithRecorder`. Retain existing attempt request, idempotent completion handle, association and Events contracts. Recorder/progress routing uses explicit session/attempt identities; it must not construct another service or overwrite shared mutable routing when sessions overlap. Observation retention remains owned by Worker Sessions and Events.
+The whole attempt-opening request is the operation input above: domain data plus explicit runtime execution, fact clock, deadline scheduler and cancellation resource arguments. No constructor bag, service getter, secondary graph or shared override setter. Keep direct Service.Start/InvokeSession and control/read contracts unchanged; runtime-only compatibility paths use InvokeRuntimeSession. Existing provider progress fallback/suppression and terminal classifications remain. No production deletion in this documentation PR.
 
+Authored destination: `pkg/services/worker_sessions/wire/wire.go / NewService; destination docs/internal/development/plans/flat-injection/contracts.md §T16`.
 
-> Validation review: the proposed `NewService` above has the same signature as the current one. The real change is per-attempt routing: today each runtime builds Worker Sessions with its own `workers.Service`. That service carries the session's provider and command-runner overrides, replay runner, session/runtime/recording IDs and clock (`factory_runtime/internal/runtime_build.go:477-505,621-631`). State is keyed by bare dispatch ID (`worker_sessions/.../invoke_session.go:294-310`). AM09: T16 removes WorkerSessionsFactory declaration, provider and all call sites after its separately merged keyed-attempt contract PR and characterization. T15 consumes shared supervision and depends on T16; it does not delete the factory.
+Current:
 
-**Pending — authored by T16 as its first required step, in its own PR (operator decision, 2026-10-02).** Add here the current/proposed Go pair for the attempt request. That request carries the runtime ID, the execution handle, the session overrides and the clock/scheduler, and Worker Sessions state is keyed by (runtime ID, dispatch ID). If keying is not feasible, T16 stops and returns a delta plan (plan §2 replanning trigger); no structural T16 work proceeds first.
+```go
+func NewService(
+	execution workers.Service,
+	eventsAppender EventsAppender,
+	logger logging.Logger,
+	clock platformclock.Source,
+	providerSessions providersessions.Service,
+	recording recordings.WorkerSessionRecordingService,
+) (workersessions.Service, error)
+```
+
+Proposed:
+
+```go
+func NewService(
+	execution workers.Service,
+	eventsAppender EventsAppender,
+	logger logging.Logger,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+	providerSessions providersessions.Service,
+	recording recordings.WorkerSessionRecordingService,
+) (workersessions.Service, error)
+```
+
+Construct one inert supervisor in canonical Wire. The executor and clock here are process defaults for direct Worker Sessions. Runtime operations receive their selected handles explicitly and never mutate these defaults. Scheduler is required and selected at composition; no newSupervisionDeadlineTimer host fallback. Current TimerSource has NewTimer; T01 owns its After addition, not this lane. Preserve explicit legacy clock precedence and scoped replay facts versus OS deadlines.
+
+The complete operation input is the request plus its separate behavior arguments, not a dependency bag. `WorkerAttemptOpener` is the Factory Runtime consuming capability in `pkg/services/factory_runtime/composition_contracts.go`; the shared Worker Sessions implementation satisfies it structurally. Request/key records belong to the Worker Sessions root. Canonical Wire constructs one inert supervisor with the fixed dependencies shown above. No attempt operation constructs a service, returns a service getter, substitutes constructor dependencies or mutates process defaults. The selected runtime handle is an existing execution capability; its eventual T09 replacement must preserve the same selected behavior without introducing another constructor path.
+
+### Identity and source-to-target trace
+
+`RuntimeAttemptKey` is process-local and comparable; neither it nor a concatenated representation is serialized. RuntimeID and logical DispatchID are required and must agree with `Execution.Execution.RuntimeID` and `Execution.Execution.Dispatch.DispatchID` before mutation. Keep the canonical request detached. Runtime callers first preserve the existing correlation fallback (`IW:337-367`) by normalizing the request RuntimeID to that already-resolved canonical value, then derive and validate the key; a blank legacy field is not a new public rejection policy. The stable Worker Session `ID` and physical `AttemptID` remain distinct: empty AttemptID retains the logical-dispatch default, retries retain their current physical allocation, and replay uses the recorded Worker Session association. The execution request's `FactorySessionID`, `RuntimeID`, `RecordingID` and `GenerationID` are all strings (`workers/execution_requests.go:181-198`); dispatch/request/work lineage remains the existing `work.WorkDispatch`. `workers.ExecutionCorrelation` retains string FactorySessionID, RuntimeID, GenerationID, DispatchID, AttemptID, RequestID and TraceID (`execution_requests.go:452-460`). RecordingID stays in the execution request, not a new correlation field.
+
+Paths below are repo-relative. Runtime implementation abbreviations: RB = `pkg/services/factory_runtime/internal/runtime_build.go`; DC = `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover.go`; IW = the adjacent `invoke_worker.go`; WS = `pkg/services/worker_sessions/internal/service/`. These anchors describe current source, not executed evidence.
+
+| Current input / source witness | Explicit preservation route | Later proof owner / gate |
+| --- | --- | --- |
+| Runtime-specific execution at `RB:34-45,477-529`; provider, command runner, replay runner, model/permission overrides, resolver, mock policy | Pass that selected `workers.Service` into Begin/InvokeRuntimeSession; retain replay runner precedence (`RB:52-97`) and invocation permission copy. Never fall back to the shared executor or change shared override state. Detached Runtime execution remains Runtime-owned. | T09/T16, U03-T16 selection, F05a-d |
+| Factory Session/runtime/recording IDs at `RB:503-517`; normalized request at `IW:337-367` | Key validates canonical runtime/dispatch; Execution carries all session, recording, generation, request and Work facts unchanged. Selected handle retains runtime resolution. | T16, U03-T16, F06 |
+| Selected clock passed into factory; late observer binding at `RB:621-631` | Each opening retains its explicit fact clock and scheduler; progress closure captures the runtime key and its downstream publisher. Replace Bind rather than rebinding a shared observer. | T01/T16, U03-T16 selection, U01/F15/F16 |
+| Current Begin and later cancellation binding at `DC:80-164`; `WS/invoke_session.go:89-130,240-310` | Begin installs the exact Runtime cancel closure atomically with keyed ownership before return. Closure still calls that runtime's attempts.cancel; no bare-dispatch process lookup. Opening remains a before-worker-effect barrier. | T16, U03-T16 lifecycle, F05d |
+| Compatibility `startThroughWorkerSessions` at `DC:25-77`; the compatibility branch of `factoryImpl.InvokeWorker` at `IW:599-660` | Both runtime paths enter InvokeRuntimeSession with key, selected handle, fact clock and scheduler. Direct Service.Start/InvokeSession retains process defaults and existing customer contracts. | T16, U03-T16, F05 |
+| `dispatchOwners`, runtime control handles and retained latest IDs at `WS/service.go:68-93`, `WS/invoke_session.go:290-310,435-450` | Runtime reverse owner lookup uses the pair key. Worker-ID registries remain Worker identity-owned; live physical-attempt guards prevent stale completion/control/progress from selecting a replacement. Preserve retained latest logical DispatchID for terminal NOOP responses. | T16, U03-T16 lifecycle, F06 |
+| Default Worker ID and replay association at `DC:35-44,177-197` | Preserve existing ID/retry/replay allocation here. Distinct supplied IDs make the synthetic trace feasible; production defaults remain an explicit hold below. | T16-CHAR-PRODUCTION-ID then T16-IDENTITY-DELTA |
+| Topic at `pkg/services/worker_sessions/topic.go:11-12`; recording request at `WS/service.go:218-229`; recorder validation at `pkg/services/recordings/internal/services/worker_capture/ports.go:30-51` | Keep `Topic(ID)` = `worker-session/<id>/events`. Start capture with the exact RecordingID, FactorySessionID, WorkerSessionID and Topic; own its returned handle per attempt. Never add runtime scope to topic bytes. | T16/Recordings, U03-T16, F07/F08 |
+| Now-only fallback and deadlines at `WS/service.go:928-966`; `pkg/platform/clock/clock.go:13-31` | Explicit TimerSource supplies NewTimer; use scheduler.Now for safety elapsed time and the fact clock for records. Stop the selected timer on attempt completion. Preserve existing durations; logical replay facts cannot implicitly select OS scheduling. T01 owns After addition. | T01/T16, U03-T16 selection, F05c/F16 |
+| Provider association before forwarding at `pkg/services/worker_sessions/publish.go:84-121,181-199`; windows at `WS/publish_record.go:587-603` and provider binding at `:650-710` | PublishRuntimeProgress validates key against Correlation.RuntimeID/DispatchID and fragment.DispatchID, plus the active physical attempt. Resolve the exact Worker owner, bind its Providers-owned reference, commit source-native observations, then forward to supplied next publisher under existing suppression/fallback. | T16, U03-T16 lifecycle, F06 |
+
+Public unkeyed operations remain unchanged. Runtime progress must not call their bare-dispatch lookups against a shared registry: the keyed operation resolves the immutable owner first, then applies the existing association/publication rules to that owner. Direct supervision keeps its existing dispatch route separate. The runtime-scoped progress closure uses its immutable admitted correlation for compatibility fragments with missing correlation; explicitly conflicting fields are rejected and never overwritten. It must carry the physical attempt at emission, not fill a stale fragment from whichever attempt is currently live. Existing canonical-draft payload and public dispatch bytes remain unchanged; U03-T16 selection/lifecycle must characterize both fully correlated and compatibility fragments. Provider identity, opaque continuation, first-reference acceptance, repeated-reference idempotency and conflicting-reference rejection remain Providers/Worker Sessions contracts. Worker Sessions does not fabricate Provider Session identity or take provider execution policy.
+
+### Opening, control, retention and failure rules
+
+Begin validates the request, matching key and required behavior inputs before any mutation or worker effect. Duplicate Worker identity reservation still returns `ErrSessionAlreadyExists` and leaves the original unchanged; existing reserved-identity invocation/startability rules remain. Claim key and physical attempt without allowing a peer owner to be overwritten. Commit and verify opening Events publication and establish the exact recording association before handing back the immutable completion function. An opening/capture error cannot imply successful admission or start a command; unwind only the owned reservation/route/capture under current failure classification, retaining joined causes where cleanup also fails. Runtime remains admission/execution authority for detached attempts; InvokeRuntimeSession preserves the same supervision/retry/classification state machine and synchronous wait contract as the existing compatibility path.
+
+Controls still address stable Worker Session ID. Resolve its exact retained key and live physical attempt, then invoke the installed cancellation handle. Failed cancellation returns the current failed disposition without fabricating application; unsupported pause/resume stays unsupported. Terminal state is absorbing; completion is idempotent, exactly one terminal classification wins, and Terminate joins the associated callback. Old handles cannot complete or cancel a newer physical attempt. Keep current public logical DispatchID responses and terminal NOOP semantics. Opening/control/completion races must be characterized before changing implementation.
+
+PublishRuntimeProgress commits the exact provider association before forwarding reference-bearing output. Preserve provider agreement checks, bookkeeping-fragment suppression and the existing unassociated-progress fallback selected by the runtime publisher. The key is never inferred from a bare dispatch string. Late or stale progress cannot reopen a terminal publication window or attach to a replacement attempt: retain `ErrPublicationNotOpen`, `ErrOutOfOrderPublication`, exact Events retry/idempotency behavior and safe error logging. Failure to commit an observation does not invent a successful record or a new provider execution.
+
+CloseRuntimeAttempts(ctx, runtimeID) selects only that runtime's live physical attempts, prevents new scoped admission during close, cancels/joins through their exact handles and joins their recording capture handles. Repeated close is idempotent; unsuccessful cleanup retains the owned handle for retry and returns the current cause. Stop owned timers and release live execution/cancel/publisher references after users join, without deleting terminal Worker metadata, immutable observations, latest dispatch identity, provider links or Events retention/cursors. A caller wait cancellation does not substitute for the explicit execution cancel boundary. Runtime owns retained/reused session-generation worktree lifetime; T09 releases attempt resources and nonretained checkouts under existing RetainWorktree policy. Close cannot unconditionally delete retained worktrees or claim P01 retention proof.
+
+Events owns process-local source-native order, retained reads, cursors, subscriptions, gaps and backpressure. Recordings owns durable Factory history and capture/replay. Closing an attempt or a runtime does not erase either history or make Worker Sessions the Factory ledger. Factory dispatch/Worker association remains recorded into the owning runtime ledger; replay resolves the recorded association before opening, rather than allocating a replacement identity. Final completion releases each exact capture handle once and retains its truthful health/classification on failure (`WS/classify.go:49-98`, `WS/publish_record.go:913-937`). The injected logger records opening/control/terminal/close intent and outcome with safe runtime, Factory Session, Worker and physical-attempt identifiers; publication failures retain current safe causes and suppression behavior, without raw provider payloads. High-frequency progress success may use the current sampled/aggregate policy; no new diagnostics or public outcome policy is introduced.
+
+### Equal-dispatch design rehearsal (static only)
+
+Let A carry `(runtime-a, dispatch-1)`, supplied Worker ID `worker-a`, physical attempt `attempt-a`, Factory Session `session-a`, recording `recording-a`, execution handle EA, fact clock CA, scheduler SA and cancel XA. B carries corresponding b values and the same logical dispatch-1. Supplied distinct Worker IDs are valid only for this synthetic witness; they are not a production allocation fix.
+
+| Operation | A route and observable contract | B isolation / remaining proof |
+| --- | --- | --- |
+| Open/start | Begin(key A, request A, EA, CA, SA, XA) commits worker-a opening/capture before handoff; compatibility InvokeRuntimeSession uses EA. | B uses key B/EB/CB/SB/XB and worker-b; U03-T16/F05a later executes this. |
+| Supervise/replay | Immutable A handle keeps physical attempt-a and selected overrides; replay runner wins and recorded Worker association is honored. | EB and recorded B identity remain selected independently; U03-T16 selection/F16. |
+| Progress/provider link | Key A plus matching runtime/dispatch/physical correlation selects worker-a; exact provider association precedes next-A output. | Key B selects worker-b and next-B; no shared Bind; U03-T16/F06. |
+| Cancel | Cancel(worker-a) resolves A and XA; failed control is truthful; terminal NOOP retains dispatch-1. | XB is untouched, B can complete; F05d and lifecycle races. |
+| Observe/retain | Reads by worker-a or exact Factory Session/Work scope retain A observations and provider links after terminal. | worker-b and scoped B reads stay attributable; Events cursor/retention rules unchanged; F06. |
+| Record/complete | Topic(worker-a) and recording-a/session-a capture exact source records; A completion normalizes once using current outcome mapping. | Topic(worker-b), recording-b/session-b and B completion are separate; F07/F08 later. |
+| Close | CloseRuntimeAttempts(runtime-a) joins only A resources and capture; retains terminal identity/history. | B remains usable and later closes independently; U03-T16 lifecycle, I01/P01. |
+
+D01 happy follows the table. D02 failed control leaves A truthful and B live. D03 duplicate supplied Worker ID rejects before any peer topic/owner mutation. D04 replay keeps the recorded ID, replay runner precedence and separately selected safety scheduler. D05 opening/capture failure produces no worker effect or false handoff and closes only its scope. D06 terminal A rejects late publication under current window rules while retaining readable identity and leaving B live. D07 production defaults yield the same Worker ID/topic as shown below, so this documentation cannot report runtime isolation PASS. Each case needs independent contract review, then its separately owned executable evidence.
+
+### Binding production identity boundary
+
+Verbatim operator response retained from the admitted packet (`docs/temp/operator-mailbox/responses/fi-t16-keyed-attempt-contract-am09-20261003.md`):
+
+```text
+# Response — fi-t16-keyed-attempt-contract-am09-20261003 (2026-10-03T10:47Z) — BINDING
+**Option A**, with one hard condition. For the synthetic collision witness, distinct Worker Session IDs, already supplied, are valid.
+Keep duplicate Worker Session identity rejection and the canonical topics (worker-session/<id>/events) unchanged.
+CONDITION: the later T16 characterization MUST prove what production actually allocates, and it is expected to FAIL today.
+runtimeWorkerSessionID defaults to the dispatch ID (dispatch_worker_sessions_cutover.go:185-197), and dispatch IDs repeat
+across Factory Sessions by contract (decided for the MCP correction at 10:28Z: dispatch-queued IDs = prefix+DispatchID;
+equal "dispatch-1" across Sessions observed). With shared process Events and recorder (pkg/wire/worker_sessions_providers.go:95-103),
+two runtimes that both dispatch "dispatch-1" would collide on worker-session/dispatch-1/events. Write that characterization
+as a red-first witness. When it is red, stop structural cutover work and file the smallest identity delta (e.g. scope the
+default Worker Session ID by runtime/Factory Session) to the flat-injection lead as a named prerequisite. Don't paper over it.
+Record this boundary verbatim in the plan.
+```
+
+A pair key does not fix canonical Worker identity collisions. `runtimeWorkerSessionID` currently defaults to logical DispatchID outside retry/replay; the compatibility path does likewise. With shared Events/recorder, equal default `dispatch-1` IDs address the same canonical topic even with separate runtime registries. The later T16 owner must write T16-CHAR-PRODUCTION-ID red-first through actual production allocation, retain the expected failure, stop structural cutover and request the smallest named T16-IDENTITY-DELTA prerequisite from the flat-injection Lead. No new allocation, topic encoding, duplicate-ID waiver or inferred authority is approved here.
+
+### Exact later removal and gates
+
+T16 removes the entire `WorkerSessionsFactory` declaration/provider/caller chain together after this contract merges and characterization succeeds (including disposition of the expected-red identity prerequisite). Current production identities:
+
+- Declaration: `pkg/services/factory_runtime/composition_contracts.go:84`.
+- Providers: `pkg/wire/worker_sessions_providers.go:61,95` (`provideWorkerSessionsFactory`, `provideWorkerSessionsFactoryWithRecorder`); registration `pkg/wire/wire.go:47`.
+- Construction call: `pkg/services/factory_runtime/internal/build.go:400`; threaded factory inputs in NewRuntime/newRuntimeFromBundle (`:140,362`).
+- Assembly storage and propagation: `pkg/services/factory_runtime/internal/assembly.go:28,40,164`; owner Wire NewAssembly at `pkg/services/factory_runtime/wire/assembly.go:76-80`.
+- Runtime bundle/replay propagation: RB `:258,334,370,385,435,456-475,545-552,605-631`; remove bindProviderSessionProgress and its late publisher.Bind coupling, not a peer's unrelated functionality.
+- Generated consumers: `pkg/wire/wire_gen.go:218,242,752`, regenerated only by later T16 via `make generate-wire`; affected factory fixtures/callers must be updated together. Remove the separate BindRuntimeAttemptCancellation structural call at DC `:111-151` when Begin installs cancellation atomically.
+
+The similarly named `workerSessionsFactorySessionScopeResolver` in `pkg/wire/runtime_inputs.go` resolves Factory Session observation scope; it is not a WorkerSessionsFactory constructor and is not authorized for deletion by a name match. Run a fresh symbol/caller inventory on the later structural head; these anchors are a current-source removal checklist, not an exhaustive future path allowlist. T15 waits for completed T16; AM16/T12 and other companion sections are unchanged.
+
+Later T16 owns U03-T16 component-isolated unit cases for distinct supplied IDs with equal dispatch, selected overrides/replay/clocks, opening/capture failures, failed controls, stale retries/late progress, idempotent completion and exact scoped close/retained observations. First characterize the current per-runtime factory; only port the witness after approved cutover. T16-CHAR-PRODUCTION-ID is functional through reusable `root.BuildProcess` + public `Process.Execute`/explicit Factory Sessions with supported external edges, actual default allocation and equal dispatch IDs; expected FAIL today. It cannot be replaced by supplied IDs, source scanning or internal-map assertions.
+
+T08/T09/T16 retain every selected F05a success, F05b denial/no unauthorized command, F05c selected-scheduler normalized timeout and F05d one-of-two cancellation witness; F06 overlaps four explicit sessions with attributable output/events/log correlation/cursors. Plan the complete customer matrix before adding tests. Functional cases share one safe root process per immutable edge shape, allocate explicit sessions before runtime construction, own profiles/routes/streams/files/fakes, run with bounded parallelism and synchronize on admission/opening/terminal signals rather than sleeps. Unit tests use isolated narrow owner fakes; later concurrent changes need focused normal/race evidence. Functional tests build no binary; I01 consumes the invoking build lane's prebuilt artifact, P01 stays in dedicated stress, inventories in lint/static checks.
+
+This author slice proves only T16-DOC-SOURCE and T16-DOC-REHEARSAL at local-real source fidelity, plus T16-DOC-LINT (`go run ./cmd/markdown-linter docs/internal/development/plans/flat-injection`, `git diff --check`). Independent review from a clean pushed-head checkout owns T16-CONTRACT-REVIEW/LOOPBACK using `factory/docs/standards/validation-loopback-template.md`: repeat D01-D07 and source/lint procedures, report criterion IDs PASS/FAIL/BLOCKED without silent repairs, and request the smallest delta on failure. Review owns terminal required CI, current-main rebase and immediately premerge `make lint pkg-file-count`; no stale-green merge. Implementation stops at final head pushed, PR open, CI started and blocking feedback addressed.
+
+U03-T16, F05a-d/F06/F07/F08, T16-CHAR-PRODUCTION-ID/T16-IDENTITY-DELTA, S01-T16/G01/T16-CUTOVER, U01/F15/F16, U02/F14, S01/G02, I01/P01 and independent integrated VAL01 remain unproven. FI-A1/FI-A4/FI-A8 remain Project obligations; documentation is no runtime, speed, resource-release or Project acceptance claim. Preserve the dedicated P01 baseline/final ten-sample median/p95 nonregression and lifecycle-cycle requirements unchanged.
 
 ## T17 — Sessions opening and removal of peer-service bags
 

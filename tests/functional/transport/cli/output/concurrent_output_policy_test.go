@@ -1,0 +1,353 @@
+package output_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+// The cohort starts on the parent goroutine rather than parallel child bodies:
+// all five effects must enter even with go test -parallel 1. No gate holds a
+// shared invocation lock; each invocation owns its session, profile and streams.
+func TestConcurrentQuietAndVerboseInvocationsKeepOwnFraming(t *testing.T) {
+	t.Parallel()
+	selections := [][]string{
+		{"--quiet"}, {"--json", "--output", "primary"},
+		{"--json", "--output", "response-stream"}, {}, {"--verbose", "--debug"},
+	}
+	var cohort []*concurrentOutputCall
+	for index, flags := range selections {
+		call := newConcurrentOutputCall(t, index+1, flags)
+		cohort = append(cohort, call)
+	}
+	for _, call := range cohort {
+		call.start()
+	}
+	for _, call := range cohort {
+		select {
+		case <-call.runner.entered:
+		case <-call.done:
+			t.Fatalf("%s completed before worker entry: %v", call.marker, call.err)
+		case <-call.ctx.Done():
+			t.Fatalf("%s worker entry: %v", call.marker, call.ctx.Err())
+		}
+	}
+	for _, call := range cohort {
+		select {
+		case <-call.done:
+			t.Fatalf("%s completed before cohort release", call.marker)
+		default:
+		}
+	}
+	t.Log("all five owned provider effects entered before any release; all invocations remain live")
+	for _, call := range cohort {
+		call.runner.release()
+	}
+	for _, call := range cohort {
+		call.join(t)
+	}
+	for index, call := range cohort {
+		t.Run(call.marker, func(t *testing.T) {
+			t.Parallel()
+			assertConcurrentOutputSuccess(t, index, call, cohort)
+		})
+	}
+	for index, flags := range [][]string{{"--quiet", "--json"}, {"--quiet", "--output", "primary"}} {
+		t.Run([]string{"F14-C06", "F14-C07"}[index], func(t *testing.T) {
+			t.Parallel()
+			assertConcurrentOutputConflict(t, index+6, flags)
+		})
+	}
+}
+
+type concurrentOutputCall struct {
+	fixture    *machineOutputFixture
+	inputs     *support.CapturedInputs
+	sessionID  string
+	factoryDir string
+	marker     string
+	runner     *concurrentOutputRunner
+	ctx        context.Context
+	done       chan struct{}
+	started    bool
+	err        error
+}
+
+func newConcurrentOutputCall(t *testing.T, number int, flags []string) *concurrentOutputCall {
+	t.Helper()
+	marker := fmt.Sprintf("F14-C%02d", number)
+	args := append([]string{"you", "run"}, flags...)
+	args = append(args, "--named", goalFactoryName, "--executor-provider", "codex",
+		"--executor-model", "gpt-5-codex", "--no-record", "owned input "+marker)
+	fixture, inputs, factoryDir := newMachineOutputInputs(t, args, goalFactoryName)
+	opened := support.OpenFactorySessionAt(t, fixture.baseURL, factoryDir)
+	sessionID := opened.Session.Id
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	inputs.Input.Context = ctx
+	runner := &concurrentOutputRunner{sessionID: sessionID,
+		entered: make(chan struct{}), gate: make(chan struct{})}
+	payload, err := json.Marshal(map[string]string{"decision": "accepted", "feedback": "", "output": marker})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner.delegate = support.NewShapedProviderCommandRunner(platformprocess.CommandResult{Stdout: payload})
+	route := fixture.router.bind(sessionID, runner)
+	inputs.Input.Args = append([]string{"you", "--remote", "--server", fixture.baseURL,
+		"run", "--session", sessionID}, args[2:]...)
+	call := &concurrentOutputCall{fixture: fixture, inputs: inputs, sessionID: sessionID, factoryDir: factoryDir,
+		marker: marker, runner: runner, ctx: ctx, done: make(chan struct{})}
+	t.Cleanup(func() {
+		runner.release()
+		cancel()
+		if call.started {
+			call.join(t)
+		}
+		support.CloseFactorySessionAt(t, fixture.baseURL, sessionID)
+		fixture.router.unbind(route)
+	})
+	return call
+}
+
+func (call *concurrentOutputCall) start() {
+	call.started = true
+	go func() {
+		call.err = call.fixture.process.Execute(call.inputs.Input)
+		close(call.done)
+	}()
+}
+
+func (call *concurrentOutputCall) join(t *testing.T) {
+	t.Helper()
+	select {
+	case <-call.done:
+	case <-time.After(2 * time.Minute):
+		t.Fatalf("%s invocation did not join", call.marker)
+	}
+}
+
+type concurrentOutputRunner struct {
+	sessionID              string
+	entered, gate          chan struct{}
+	entryOnce, releaseOnce sync.Once
+	calls                  atomic.Int64
+	delegate               platformprocess.CommandRunner
+}
+
+func (runner *concurrentOutputRunner) release() {
+	runner.releaseOnce.Do(func() { close(runner.gate) })
+}
+
+func (runner *concurrentOutputRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.calls.Add(1)
+	if request.ExecutionScopeID != runner.sessionID {
+		return platformprocess.CommandResult{}, errors.New("provider effect entered peer session")
+	}
+	runner.entryOnce.Do(func() { close(runner.entered) })
+	select {
+	case <-runner.gate:
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	return runner.delegate.Run(ctx, request)
+}
+
+func assertConcurrentOutputSuccess(t *testing.T, index int, call *concurrentOutputCall, peers []*concurrentOutputCall) {
+	t.Helper()
+	stdout, stderr := call.inputs.Stdout(), call.inputs.Stderr()
+	t.Logf("controlled CLI session=%s executionScopeID=%s error=%v stdout=%q stderr=%q", call.sessionID, call.runner.sessionID, call.err, stdout, stderr)
+	if call.err != nil || stderr != "" {
+		t.Fatalf("success error=%v stderr=%q", call.err, stderr)
+	}
+	for _, peer := range peers {
+		if peer != call && strings.Contains(stdout+stderr, peer.marker) {
+			t.Fatalf("peer result %s leaked into %s", peer.marker, call.marker)
+		}
+	}
+	switch index {
+	case 0:
+		if stdout != call.marker {
+			t.Fatalf("quiet stdout=%q, want only raw result %q", stdout, call.marker)
+		}
+	case 1:
+		decoder := json.NewDecoder(strings.NewReader(stdout))
+		var response factoryapi.InvocationResponse
+		if err := decoder.Decode(&response); err != nil {
+			t.Fatal(err)
+		}
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			t.Fatalf("data after single JSON response: %v", err)
+		}
+		assertConcurrentOutputResult(t, call, response)
+		assertNoPrivateRuntimeKeysInJSON(t, stdout, "stdout")
+	case 2:
+		assertConcurrentOutputNDJSON(t, call, stdout)
+	default:
+		assertConcurrentOutputHuman(t, call, stdout)
+	}
+	events := support.GetFactoryEventsForSessionAt(t, call.fixture.baseURL, call.sessionID)
+	if support.CountFactoryEvents(events, factoryapi.FactoryEventTypeWorkRequest) == 0 || support.CountFactoryEvents(events, factoryapi.FactoryEventTypeDispatchRequest) == 0 {
+		t.Fatal("owned public admission/dispatch not observed")
+	}
+}
+
+func assertConcurrentOutputHuman(t *testing.T, call *concurrentOutputCall, stdout string) {
+	t.Helper()
+	assertHumanStdoutFreeOfStructuredEnvelopeNoise(t, stdout)
+	lines := nonEmptyStdoutLines(stdout)
+	if len(lines) < 3 || lines[len(lines)-2] != "--- primary result ---" || lines[len(lines)-1] != call.marker {
+		t.Fatalf("human result framing=%q", stdout)
+	}
+	for _, line := range lines[:len(lines)-2] {
+		if !isHumanFactoryLifecycleLine(line) {
+			t.Fatalf("unexpected human lifecycle line: %q", line)
+		}
+	}
+	previous := -1
+	for _, prefix := range []string{"factory started", "work accepted:", "workstation started:", "workstation completed:"} {
+		position := strings.Index(stdout, prefix)
+		if position <= previous {
+			t.Fatalf("human lifecycle is missing or out of order at %q: %q", prefix, stdout)
+		}
+		previous = position
+	}
+}
+
+func assertConcurrentOutputResult(t *testing.T, call *concurrentOutputCall, response factoryapi.InvocationResponse) {
+	t.Helper()
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted || invocationPrimaryResultText(t, response) != call.marker {
+		t.Fatalf("terminal result=%#v", response)
+	}
+	if response.SessionId == nil || *response.SessionId != call.sessionID {
+		t.Fatalf("terminal session=%v, want %s", response.SessionId, call.sessionID)
+	}
+}
+
+func assertConcurrentOutputNDJSON(t *testing.T, call *concurrentOutputCall, stdout string) {
+	t.Helper()
+	records := decodeNDJSONRecords(t, stdout)
+	if len(records) < 2 {
+		t.Fatal("want public events followed by terminal result")
+	}
+	sequence, sessionSequence := -1, -1
+	for index, record := range records {
+		if index == len(records)-1 {
+			if record.RecordType != invocationResultType {
+				t.Fatal("last record is not invocation_result")
+			}
+			var response factoryapi.InvocationResponse
+			if err := json.Unmarshal(record.Payload, &response); err != nil {
+				t.Fatal(err)
+			}
+			assertConcurrentOutputResult(t, call, response)
+			assertNoPrivateRuntimeKeysInJSON(t, string(record.Payload), "terminal result")
+			continue
+		}
+		if record.RecordType != factoryEventRecordType {
+			t.Fatalf("nonterminal record type=%s", record.RecordType)
+		}
+		assertFactoryEventRecord(t, record, index)
+		assertFactoryEventSequenceMonotonic(t, record, index, &sequence, &sessionSequence)
+		var event factoryapi.FactoryEvent
+		if err := json.Unmarshal(record.Payload, &event); err != nil {
+			t.Fatal(err)
+		}
+		switch index {
+		case 0, 1, 3:
+			assertConcurrentOutputStartup(t, call, event, index)
+		default:
+			if event.Context.SessionId == nil || *event.Context.SessionId != call.sessionID {
+				t.Fatalf("event belongs to peer session: %#v", event.Context)
+			}
+			if index == 2 && (event.Type != factoryapi.FactoryEventTypeSessionStarted || event.Id != "factory-event/session-started" || event.Context.Sequence != 2) {
+				t.Fatalf("owned session start frame=%#v", event)
+			}
+		}
+	}
+	if sessionSequence < 0 {
+		t.Fatal("no public session sequence observed")
+	}
+}
+
+func assertConcurrentOutputStartup(t *testing.T, call *concurrentOutputCall, event factoryapi.FactoryEvent, index int) {
+	t.Helper()
+	// Binding operator decisions 2026-10-03T10:44Z and 10:50Z: characterize
+	// exactly the current three sessionless startup frames. A later policy fix
+	// must update this proof; no other sessionless frame is permitted.
+	if event.Context.SessionId != nil || event.Context.Sequence != index {
+		t.Fatalf("current startup context=%#v, want sessionless sequence %d", event.Context, index)
+	}
+	var factory factoryapi.Factory
+	switch index {
+	case 0:
+		if event.Id != "factory-event/run-started" || event.Type != factoryapi.FactoryEventTypeRunRequest {
+			t.Fatalf("run-started frame=%#v", event)
+		}
+		payload, err := event.Payload.AsRunRequestEventPayload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		factory = payload.Factory
+	case 1:
+		if event.Id != "factory-event/initial-structure/0" || event.Type != factoryapi.FactoryEventTypeInitialStructureRequest {
+			t.Fatalf("initial structure frame=%#v", event)
+		}
+		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		factory = payload.Factory
+	case 3:
+		if event.Id != "factory-event/factory-state-change/0/RUNNING" || event.Type != factoryapi.FactoryEventTypeFactoryStateResponse {
+			t.Fatalf("initial running-state frame=%#v", event)
+		}
+		payload, err := event.Payload.AsFactoryStateResponseEventPayload()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if payload.PreviousState == nil || *payload.PreviousState != factoryapi.FactoryStateIdle || payload.State != factoryapi.FactoryStateRunning || payload.Reason == nil || *payload.Reason != "run started" {
+			t.Fatalf("initial running-state payload=%#v", payload)
+		}
+		return
+	}
+	if factory.FactoryDirectory == nil || filepath.Clean(*factory.FactoryDirectory) != filepath.Clean(call.factoryDir) {
+		t.Fatalf("startup Factory directory=%v, want owned directory %s", factory.FactoryDirectory, call.factoryDir)
+	}
+}
+
+func assertConcurrentOutputConflict(t *testing.T, number int, flags []string) {
+	t.Helper()
+	call := newConcurrentOutputCall(t, number, flags)
+	call.start()
+	call.join(t)
+	stdout, stderr := call.inputs.Stdout(), call.inputs.Stderr()
+	t.Logf("controlled CLI session=%s error=%v stdout=%q stderr=%q", call.sessionID, call.err, stdout, stderr)
+	var invocationError *runcli.InvocationError
+	if !errors.As(call.err, &invocationError) || invocationError.Code != runcli.InvocationOutputConflictCode {
+		t.Fatalf("error=%v, want typed output conflict", call.err)
+	}
+	response := decodeSingleJSONErrorResponse(t, stderr)
+	if stdout != "" || response.Code != runcli.InvocationOutputConflictCode || response.Family != factoryapi.ErrorFamilyBadRequest || response.Message != "--quiet cannot be used with --json or --output" {
+		t.Fatalf("conflict stdout=%q response=%#v", stdout, response)
+	}
+	if call.runner.calls.Load() != 0 {
+		t.Fatal("conflict dispatched provider effect")
+	}
+	for _, event := range support.GetFactoryEventsForSessionAt(t, call.fixture.baseURL, call.sessionID) {
+		if event.Type == factoryapi.FactoryEventTypeWorkRequest || event.Type == factoryapi.FactoryEventTypeDispatchRequest {
+			t.Fatalf("conflict admitted/dispatched: %#v", event)
+		}
+	}
+}

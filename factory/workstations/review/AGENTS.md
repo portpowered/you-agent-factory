@@ -320,19 +320,74 @@ review summary and acceptance-criteria checklist in the envelope's `feedback`
 field. Set `decision` to:
 
 - `ACCEPTED` only when the PR is complete, approved, and merged;
-- `CONTINUE` when required checks are still non-terminal or this is a repeat
-  pass on an unchanged head with no new independent findings. A hold posts no
-  PR comment, routes the task back through the `ci-wait` gate, and re-enters
-  review without a failed worker session or consecutive-failure strike;
-- `REJECTED` when concrete executor rework remains that the executor has not
-  already been given, such as a newly raised blocker, a new blocker on a
-  pushed head, or an actionable required-CI timeout on the current head; or
-- `FAILED` when review execution cannot complete or an authority/plan
-  contradiction prevents a valid decision.
+- `CONTINUE` = waiting on CI or on external state, with no author change
+  needed. This includes a repeat pass on an unchanged head with no new
+  independent findings, and INCLUDES a red required check whose failing test is
+  untouched by the PR diff: rerun the failed jobs once with
+  `gh run rerun <id> --failed`, then return `CONTINUE`. If it fails identically
+  on the same head with the same signature, ask the mailbox (see "Operator
+  questions (mailbox)") naming the test, and still return `CONTINUE`. A hold
+  posts no PR comment, routes the task back through the `ci-wait` gate, and
+  re-enters review without a failed worker session or consecutive-failure
+  strike;
+- `REJECTED` = the PR's own diff needs author changes; the task goes back to
+  process. Use it for concrete executor rework the executor has not already
+  been given, such as a newly raised blocker, a new blocker on a pushed head,
+  or an actionable required-CI timeout on the current head; or
+- `FAILED` = ONLY when the lane itself is unrecoverable, for example the PR was
+  closed by its owner, or the scope is already merged elsewhere. `FAILED` KILLS
+  THE WHOLE LANE: it escalates and fails the lane's idea. Missing
+  prerequisites, baseline-ownership questions, unrelated red checks and
+  evidence-authority questions are NEVER `FAILED`; they are `CONTINUE` plus a
+  mailbox request.
 
 Never return a bare routing value, a marker-only line, or a Markdown-wrapped
 response. The configured `decision-envelope` parser is the only response
 routing contract for this workstation.
+
+## Operator questions (mailbox)
+
+Before asking: if the packet contradicts repository reality and a
+conservative reading exists that weakens no acceptance criterion, raises no
+baseline and widens no scope, take it, record it (in `progress.txt` and the PR body), and
+continue. Ask the mailbox only when no such reading exists. Examples:
+
+- A packet names a new file or export that a ratchet gate forbids (a new test
+  file in a deletion-only `pkg-file-count` package, a production constructor
+  only tests call under the deadcode baseline): put the test in an existing
+  file or delete the dead export, and never raise the baseline.
+- A literal criterion contradicts documented current behavior (for example
+  "quiet emits no output" when the docs say quiet emits the raw result, or
+  "every event has sessionId" when startup frames have none): characterize
+  what exists and record the gap.
+- A criterion assumes an ID is globally unique when the contract makes it
+  session-scoped: assert uniqueness within the session.
+
+Some questions are owned by the operator, not by you: an ambiguous or
+contradictory acceptance contract, a scope or authority decision, a policy
+choice, baseline ownership, or an unrelated red required check that persists
+after one rerun. Never settle one with your own guess, and never treat a guess
+as operator authority. Never return `FAILED` over one.
+
+1. Find the main checkout: the parent of
+   `git rev-parse --path-format=absolute --git-common-dir`. Your worktree lives
+   under `<main checkout>/.claude/worktrees/<lane>`, and `docs/temp` is
+   gitignored, so the mailbox is NOT inside the worktree. Use absolute paths.
+2. Write `<main checkout>/docs/temp/operator-mailbox/requests/<lane-name>.md`:
+   `# <lane>`, Status, Written (UTC), PR, then `## What I need decided`,
+   `## What I already verified`, `## Why I cannot decide this myself`,
+   `## Options` (A recommended, then B...), `## What I will do with each answer`,
+   `## What I will do if there is no answer`. Take the time from `date -u`.
+3. Do NOT poll. Review is REPEATER-driven: return `CONTINUE` right after
+   writing the request, with the blocker and the request path in `feedback`. A
+   later review visit re-reads
+   `<main checkout>/docs/temp/operator-mailbox/responses/<lane-name>.md`; a
+   response is BINDING, so follow it and note it in your feedback.
+4. With no response on a later visit, take the no-answer path you stated in the
+   request, and keep returning `CONTINUE` while the blocker is external. Never
+   commit anything under `docs/temp`.
+5. An operator-owned question is NOT a reason to return `FAILED`. Ask, return
+   `CONTINUE`, and let a later visit read the response.
 
 ## addenda
 
@@ -362,7 +417,10 @@ this workstation's own delivery gate is satisfied, never that all Project
 criteria are satisfied. CONTINUE means actionable work remains in this slice.
 REJECTED means an invalid plan at planning/execution, or actionable code changes
 at review. FAILED means execution could not complete or a review discovered a
-plan/authority contradiction. Put the failure category (transient,
+plan/authority contradiction; at review it is lane-fatal and reserved for an
+unrecoverable lane (PR closed by its owner, scope already merged elsewhere),
+never for missing prerequisites, baseline ownership, unrelated red checks or
+evidence-authority questions. Put the failure category (transient,
 implementation_defect, plan_defect, missing_prerequisite, contract_conflict, or
 shared_infrastructure), evidence, attempt history, and smallest next action in
 feedback. Preserve work and do not weaken the governing contract. A repeated

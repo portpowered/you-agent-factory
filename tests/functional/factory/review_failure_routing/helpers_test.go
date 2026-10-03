@@ -31,14 +31,20 @@ type reviewFailureScenario struct {
 }
 
 type reviewFailureSeed struct {
-	Name      string
-	WorkID    string
-	WorkType  string
-	State     string
-	TraceID   string
-	Payload   string
-	Tags      map[string]string
-	StateType factoryapi.WorkStateType
+	Name     string
+	WorkID   string
+	WorkType string
+	State    string
+	TraceID  string
+	Payload  string
+	// PayloadValue, when set, is submitted as the Work payload instead of
+	// Payload so scenarios can send a structured JSON object.
+	PayloadValue any
+	// DependsOn names a Work this item waits on in state DependsOnState.
+	DependsOn      string
+	DependsOnState string
+	Tags           map[string]string
+	StateType      factoryapi.WorkStateType
 }
 
 func openReviewFailureScenario(
@@ -103,11 +109,28 @@ func (scenario *reviewFailureScenario) close(t testing.TB) {
 func (scenario *reviewFailureScenario) submit(t *testing.T, requestID string, seeds ...reviewFailureSeed) {
 	t.Helper()
 	works := make([]factoryapi.Work, 0, len(seeds))
+	var relations []factoryapi.WorkRequestRelation
 	for _, seed := range seeds {
 		if seed.StateType == "" {
 			seed.StateType = reviewFailureStateType(seed.State)
 		}
-		state := &factoryapi.WorkState{Name: seed.State, Type: seed.StateType}
+		var state *factoryapi.WorkState
+		if seed.State != "" {
+			state = &factoryapi.WorkState{Name: seed.State, Type: seed.StateType}
+		}
+		var payload any = seed.Payload
+		if seed.PayloadValue != nil {
+			payload = seed.PayloadValue
+		}
+		if seed.DependsOn != "" {
+			required := seed.DependsOnState
+			relations = append(relations, factoryapi.WorkRequestRelation{
+				Type:           factoryapi.RelationTypeDependsOn,
+				SourceWorkName: seed.Name,
+				TargetWorkName: &seed.DependsOn,
+				RequiredState:  &required,
+			})
+		}
 		workID := seed.WorkID
 		traceID := seed.TraceID
 		workType := seed.WorkType
@@ -123,7 +146,7 @@ func (scenario *reviewFailureScenario) submit(t *testing.T, requestID string, se
 			State:                  state,
 			CurrentChainingTraceId: &traceID,
 			TraceId:                &traceID,
-			Payload:                seed.Payload,
+			Payload:                payload,
 			Tags:                   tags,
 		})
 	}
@@ -132,10 +155,20 @@ func (scenario *reviewFailureScenario) submit(t *testing.T, requestID string, se
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
 		Works:     &works,
 	}
+	if len(relations) > 0 {
+		request.Relations = &relations
+	}
 	payload, err := json.Marshal(request)
 	if err != nil {
 		t.Fatalf("marshal review-failure Work request: %v", err)
 	}
+	scenario.putWorkRequest(t, requestID, payload, len(seeds))
+}
+
+// putWorkRequest PUTs an already-encoded Work request body, so tests control
+// the exact bytes (for example unicode escapes) the server receives.
+func (scenario *reviewFailureScenario) putWorkRequest(t *testing.T, requestID string, payload []byte, wantWorks int) {
+	t.Helper()
 	endpoint := support.SessionWorkURL(
 		scenario.fixture.baseURL,
 		scenario.sessionID,
@@ -159,8 +192,8 @@ func (scenario *reviewFailureScenario) submit(t *testing.T, requestID string, se
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
 		t.Fatalf("decode review-failure Work request response: %v", err)
 	}
-	if result.RequestId != requestID || len(result.Works) != len(seeds) {
-		t.Fatalf("review-failure Work request result = %#v, want request %q and %d works", result, requestID, len(seeds))
+	if result.RequestId != requestID || len(result.Works) != wantWorks {
+		t.Fatalf("review-failure Work request result = %#v, want request %q and %d works", result, requestID, wantWorks)
 	}
 }
 
