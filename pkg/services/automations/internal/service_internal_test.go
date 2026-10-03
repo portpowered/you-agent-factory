@@ -730,17 +730,26 @@ func TestGetCursorAfterFailedReplacementPreservesPriorOpaqueFacts(t *testing.T) 
 		typed.Code != automations.ErrorCodeFailed || !errors.Is(err, files.err) {
 		t.Fatalf("replacement poll = %v, want typed commit failure retaining error identity", err)
 	}
-	after, err := service.Root().GetCursor(ctx, request)
+	assertRetainedOpaqueCursorReads(t, service.Root(), request, before)
+	if admissions != 2 || len(runner.outcomes) != 1 {
+		t.Fatalf("reads caused effects: admissions=%d remaining commands=%d", admissions, len(runner.outcomes))
+	}
+}
+
+func assertRetainedOpaqueCursorReads(t *testing.T, root automations.Root, request automations.GetCursorRequest, before automations.GetCursorResult) {
+	t.Helper()
+	ctx := context.Background()
+	after, err := root.GetCursor(ctx, request)
 	if err != nil || after != before {
 		t.Fatalf("read after failed replacement = %+v, %v, want %+v", after, err, before)
 	}
 	request.ExpectedCursor = "cursor-replacement"
-	_, err = service.Root().GetCursor(ctx, request)
+	_, err = root.GetCursor(ctx, request)
 	assertCursorReadError(t, err, automations.ErrorCodeConflict, automations.ErrConflict)
-	request.ExpectedCursor = cursor
-	after, err = service.Root().GetCursor(ctx, request)
-	if err != nil || after != before || admissions != 2 || len(runner.outcomes) != 1 {
-		t.Fatalf("reads changed prior facts or caused effects: cursor=%+v err=%v admissions=%d remaining commands=%d", after, err, admissions, len(runner.outcomes))
+	request.ExpectedCursor = before.Cursor
+	after, err = root.GetCursor(ctx, request)
+	if err != nil || after != before {
+		t.Fatalf("read after stale conflict = %+v, %v, want %+v", after, err, before)
 	}
 }
 
