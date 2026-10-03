@@ -1433,3 +1433,20 @@ func newModelsCLICharacterizationRoot(
 	root.SetErr(io.Discard)
 	return root, &stdout
 }
+
+func TestMissingCommandOperationFailsExecutionWithRequiredEdgeError(t *testing.T) {
+	t.Parallel()
+
+	root := newTestCommandFactory(CommandOperations{ModelsCLI: injectedModelsCLIService{}}).NewCommand(
+		func() (string, error) { return t.TempDir(), nil },
+		func(string) (string, bool) { return "", false },
+		nil,
+	)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"models", "list"})
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "models list service is required") {
+		t.Fatalf("error = %v, want explicit required-edge failure", err)
+	}
+}
