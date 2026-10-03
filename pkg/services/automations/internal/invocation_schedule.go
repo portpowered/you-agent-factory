@@ -176,7 +176,7 @@ func (s *Service) newPreparedInvocationSchedule(
 	maxFailures int,
 ) (*preparedInvocationSchedule, error) {
 	scheduler, err := gocron.NewScheduler(
-		gocron.WithClock(s.supervisorClock()),
+		gocron.WithClock(s.clock),
 		gocron.WithLocation(time.UTC),
 	)
 	if err != nil {
@@ -230,7 +230,7 @@ func (entry *preparedInvocationSchedule) commit(result work.WorkRequestSubmitRes
 	entry.mu.Lock()
 	entry.controllerWorkID = result.WorkID
 	entry.controllerTraceID = result.TraceID
-	entry.nextNominal = entry.owner.supervisorClock().Now().UTC().Add(entry.every)
+	entry.nextNominal = entry.owner.clock.Now().UTC().Add(entry.every)
 	entry.mu.Unlock()
 	entry.scheduler.Start()
 	go func() {
@@ -238,7 +238,7 @@ func (entry *preparedInvocationSchedule) commit(result work.WorkRequestSubmitRes
 		_ = entry.scheduler.Shutdown()
 	}()
 	if entry.triggerAtStart {
-		entry.fireAt(entry.owner.supervisorClock().Now().UTC())
+		entry.fireAt(entry.owner.clock.Now().UTC())
 	}
 }
 
@@ -288,7 +288,7 @@ func (entry *preparedInvocationSchedule) fireAt(nominal time.Time) {
 		return
 	}
 
-	actual := entry.owner.supervisorClock().Now().UTC()
+	actual := entry.owner.clock.Now().UTC()
 	state := entry.executionState
 	outcome := triggerOutcomeScheduled
 	if observation.ExecutionActive {

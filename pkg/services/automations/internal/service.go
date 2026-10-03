@@ -30,8 +30,9 @@ var _ automations.Service = (*Service)(nil)
 // WorkRequestSubmitter submits parsed poller or cron work requests into the runtime.
 type WorkRequestSubmitter = automations.WorkRequestSubmitter
 
-// Clock is the automation time source needed for scheduling and supervision.
-type Clock = automations.Clock
+// Clock is the required automation scheduler. Owner Wire selects its
+// scheduling capabilities before constructing behavior or runtime resources.
+type Clock = clockwork.Clock
 
 // Service supervises cron, poller, and watcher automation using injected collaborators.
 type Service struct {
@@ -159,7 +160,7 @@ func (s *Service) newScriptPollers() scriptpollers.Service {
 	cursors := scriptpollerswire.NewCursorScopes(s.cursorFileSystem)
 	return scriptpollerswire.NewService(
 		s.loggerValue,
-		s.supervisorClock(),
+		s.clock,
 		s.commandRunnerEdge,
 		s.resolveTemplates,
 		s.executionPolicy,
@@ -256,13 +257,4 @@ func (s *Service) GetCursor(
 		return s.scriptPollers.GetCursorForScope(ctx, s.cursorScope, request)
 	}
 	return s.reconciler.GetCursor(ctx, request)
-}
-
-func (s *Service) supervisorClock() clockwork.Clock {
-	if s != nil {
-		if clock, ok := s.clock.(clockwork.Clock); ok && clock != nil {
-			return clock
-		}
-	}
-	return clockwork.NewRealClock()
 }
