@@ -19,6 +19,7 @@ import (
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
@@ -83,12 +84,19 @@ var servicesSet = wire.NewSet(
 	factoryvisualizationwire.NewRuntimeSinkOwner,
 	factorysessionwire.NewOpeningPresentationOwner,
 	provideWorkContentStagingService,
-	work.NewContentPreparation,
-	work.NewRequestPreparationService,
+	workwire.NewContentPolicy,
+	workwire.NewContentPreparation,
+	workwire.NewRequestContentBridge,
+	workwire.NewRequestPolicy,
+	workwire.NewRequestPreparationService,
 	work.NewSingleWorkTargetPreparation,
 	work.NewListRequestPreparation,
 	work.NewFactoryRequestBatchPreparation,
-	work.NewInvocationInputPreparation,
+	workwire.NewInvocationInputPolicy,
+	workwire.NewInvocationInputAdapter,
+	provideWorkSessionResolver,
+	workwire.NewStateAccess,
+	provideWorkSnapshotReader,
 	provideWorkersMockWorkersConfigFileSystem,
 	provideWorkersMockWorkersConfigDiagnosticsLoader,
 	provideRuntimeArtifactClock,

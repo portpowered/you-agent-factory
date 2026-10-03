@@ -291,9 +291,7 @@ func TestPrepareWorkRequestOwnsContentURLMediaAndMeaningfulnessPolicy(t *testing
 }
 
 func TestPrepareWorkRequestRejectsInvalidIdentityAndContext(t *testing.T) {
-	if service, err := NewRequestPreparationService(nil); err == nil || service != nil {
-		t.Fatalf("NewRequestPreparationService(nil) = (%T, %v), want required-dependency error", service, err)
-	}
+
 	service := mustRequestPreparationService(t)
 	_, err := service.PrepareWorkRequest(context.Background(), WorkRequestPreparation{
 		Request: Request{Works: []Work{{WorkTypeID: "task"}}},
@@ -323,10 +321,7 @@ func assertRequestPreparationErrorContains(t *testing.T, err error, message stri
 
 func mustRequestPreparationService(t *testing.T) RequestPreparationService {
 	t.Helper()
-	service, err := NewRequestPreparationService(NewContentPreparation())
-	if err != nil {
-		t.Fatalf("NewRequestPreparationService: %v", err)
-	}
+	service := NewRequestPreparationService(NewContentPreparation())
 	return service
 }
 

@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
+
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
@@ -337,14 +339,20 @@ func TestProvideWorkServiceConstructsThroughWorkWireBridge(t *testing.T) {
 	readFile := provideWorkSubmittedFileReader(serviceedges.Edges{})
 	inspectPath := provideWorkSubmittedFilePathInspector(serviceedges.Edges{})
 
-	service := provideWorkService(nil, readFile, inspectPath, staging, materializer, nil)
-	if service == nil {
-		t.Fatal("provideWorkService() returned nil service")
+	prep := fixtureWorkPreparation(func(ctx context.Context, input work.WorkRequestPreparation) (work.WorkRequest, error) {
+		if ctx != t.Context() || input.Request.RequestID != "caller" {
+			t.Fatal("provider changed request")
+		}
+		return work.WorkRequest{RequestID: "completed-preparation"}, nil
+	})
+	input := workwire.NewInvocationInputAdapter(workwire.NewInvocationInputPolicy(readFile, inspectPath))
+	state := workwire.NewStateAccess(workwire.NewRuntimeSessionResolver(nil), nil, fixtureWorkDurability{})
+	service := provideWorkService(nil, readFile, inspectPath, staging, materializer, state, prep, input)
+	prepared, err := service.PrepareWorkRequest(t.Context(), work.WorkRequestPreparation{Request: work.WorkRequest{RequestID: "caller"}})
+	if err != nil || prepared.RequestID != "completed-preparation" {
+		t.Fatalf("provided preparation=%#v,error=%v", prepared, err)
 	}
-	var root work.Service = service
-	if root == nil {
-		t.Fatal("constructed value is not assignable to work.Service")
-	}
+
 }
 
 func TestFactorySessionRuntimeIdentityUsesExplicitEdgeOrProcessDefault(t *testing.T) {
@@ -907,3 +915,43 @@ type watchWaitTimer struct {
 
 func (timer *watchWaitTimer) C() <-chan time.Time { return timer.ticks }
 func (timer *watchWaitTimer) Stop() bool          { timer.stopped = true; return true }
+
+type fixtureWorkDurability struct{}
+
+func (fixtureWorkDurability) CompletedFlushSequence(string) (int64, bool) { return 0, false }
+
+type workDurabilityRecording struct {
+	recordings.Service
+	read func(string) (recordings.CanonicalEventCursor, bool)
+}
+
+func (r workDurabilityRecording) CompletedFlushWatermark(generation string) (recordings.CanonicalEventCursor, bool) {
+	return r.read(generation)
+}
+func TestWorkDurabilityBridgeRequiresCapabilityAndPreservesWatermark(t *testing.T) {
+	t.Parallel()
+	if got, err := provideWorkDurabilityReader(struct{ recordings.Service }{}); got != nil || err == nil || !strings.Contains(err.Error(), "completed-flush watermark reader is required") {
+		t.Fatalf("missing capability = %v, %v", got, err)
+	}
+	reader, err := provideWorkDurabilityReader(workDurabilityRecording{read: func(generation string) (recordings.CanonicalEventCursor, bool) {
+		if generation != "recording" {
+			return recordings.CanonicalEventCursor{}, false
+		}
+		return recordings.CanonicalEventCursor{Sequence: 42}, true
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sequence, ok := reader.CompletedFlushSequence("recording"); sequence != 42 || !ok {
+		t.Fatalf("completed watermark = %d, %t", sequence, ok)
+	}
+	if sequence, ok := reader.CompletedFlushSequence("unavailable"); sequence != 0 || ok {
+		t.Fatalf("unavailable watermark = %d, %t", sequence, ok)
+	}
+}
+
+type fixtureWorkPreparation func(context.Context, work.WorkRequestPreparation) (work.WorkRequest, error)
+
+func (f fixtureWorkPreparation) PrepareWorkRequest(ctx context.Context, input work.WorkRequestPreparation) (work.WorkRequest, error) {
+	return f(ctx, input)
+}

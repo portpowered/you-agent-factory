@@ -62,11 +62,8 @@ type requestPreparationService struct {
 	content ContentPreparation
 }
 
-func NewRequestPreparationService(content ContentPreparation) (RequestPreparationService, error) {
-	if content == nil {
-		return nil, errors.New("Work content preparation is required")
-	}
-	return requestPreparationService{content: content}, nil
+func NewRequestPreparationService(content ContentPreparation) RequestPreparationService {
+	return requestPreparationService{content: content}
 }
 
 func (s requestPreparationService) PrepareWorkRequest(
