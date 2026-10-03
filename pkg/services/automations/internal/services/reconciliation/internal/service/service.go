@@ -17,7 +17,7 @@ type service struct {
 	effects reconciliation.Effects
 
 	recordsMu sync.RWMutex
-	records   map[identityKey]*sourceRecord
+	records   map[sourceKey]*sourceRecord
 }
 
 var _ reconciliation.Service = (*service)(nil)
@@ -26,7 +26,7 @@ var _ reconciliation.Service = (*service)(nil)
 func New(effects reconciliation.Effects) reconciliation.Service {
 	return &service{
 		effects: effects,
-		records: make(map[identityKey]*sourceRecord),
+		records: make(map[sourceKey]*sourceRecord),
 	}
 }
 
@@ -54,6 +54,12 @@ func (*service) Reconcile(
 		outcomes = append(outcomes, decide(spec, observation, exists))
 	}
 	return automations.ReconcileResult{Outcomes: outcomes}, nil
+}
+
+// sourceKey adds private runtime ownership without changing public identity.
+type sourceKey struct {
+	runtimeID string
+	identityKey
 }
 
 type identityKey struct {
