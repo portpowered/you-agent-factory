@@ -224,19 +224,21 @@ func NewWithCatalogPackagesValidationDistributionAndAuthoring(
 	authoringLayoutService authoringlayout.Service,
 	distributionService distributionservice.Service,
 	runtimeSnapshot runtimesnapshot.Service,
-	versionFileSystems ...factoryroot.VersionFileSystem,
+	compilation compilationservice.Service,
+	versionFileSystem factoryroot.VersionFileSystem,
 ) *Service {
-	service := NewWithCatalogPackagesValidationAndDistribution(
-		host,
-		activationGateway,
-		catalogService,
-		validationService,
-		distributionService,
-		versionFileSystems...,
-	)
-	service.authoringLayoutService = authoringLayoutService
-	service.runtimeSnapshot = runtimeSnapshot
-	return service
+	return &Service{
+		nonCatalogDefaults:     factoryroot.UnimplementedService{},
+		Service:                catalogService,
+		validationService:      validationService,
+		authoringLayoutService: authoringLayoutService,
+		compilationService:     compilation,
+		runtimeSnapshot:        runtimeSnapshot,
+		host:                   host,
+		activationGateway:      activationGateway,
+		versionFileSystem:      versionFileSystem,
+		distributionService:    distributionService,
+	}
 }
 
 // ComposeDistributionService constructs the private Distribution subservice from
