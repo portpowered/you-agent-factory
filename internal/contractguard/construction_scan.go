@@ -190,7 +190,7 @@ func resolveConstructionValue(expr ast.Expr, source *constructionSource, visited
 				return ConstructionSymbol{ImportPath: imported, Name: value.Sel.Name}, true
 			}
 		}
-		return resolveConstructionMethod(value, source)
+		return resolveConstructionMethod(value, source, visited)
 	case *ast.ParenExpr:
 		return resolveConstructionValue(value.X, source, visited)
 	case *ast.IndexExpr:
