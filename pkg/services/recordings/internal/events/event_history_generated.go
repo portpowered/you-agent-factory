@@ -208,7 +208,7 @@ func eventWorks(items []work.FactoryWorkItem) []work.WorkRequestEventWork {
 			PreviousChainingTraceIDs: append([]string(nil), item.PreviousChainingTraceIDs...),
 			TraceID:                  item.TraceID,
 			Content:                  work.CloneWorkContentParts(item.Content),
-			Payload:                  work.CloneEventPayload(item.Payload),
+			Payload:                  append(json.RawMessage(nil), item.Payload...),
 			StructuredResult:         jsonvalue.Clone(item.StructuredResult),
 			Tags:                     cloneStringMap(item.Tags),
 			StructuredResultPresent:  jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent),

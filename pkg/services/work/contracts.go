@@ -580,11 +580,10 @@ func CloneRelations(relations []Relation) []Relation {
 	return cloned
 }
 
-// ClonePayload returns detached Work payload bytes while preserving nil.
-// EventPayload encodes a raw submitted Work payload as the JSON value carried
+// eventPayload encodes a raw submitted Work payload as the JSON value carried
 // by WORK_REQUEST events and Work reads. Valid JSON is preserved verbatim;
 // plain text becomes a JSON string. An empty payload yields nil.
-func EventPayload(payload []byte) json.RawMessage {
+func eventPayload(payload []byte) json.RawMessage {
 	if len(payload) == 0 {
 		return nil
 	}
@@ -598,14 +597,7 @@ func EventPayload(payload []byte) json.RawMessage {
 	return encoded
 }
 
-// CloneEventPayload copies one event payload value.
-func CloneEventPayload(payload json.RawMessage) json.RawMessage {
-	if len(payload) == 0 {
-		return nil
-	}
-	return append(json.RawMessage(nil), payload...)
-}
-
+// ClonePayload returns detached Work payload bytes while preserving nil.
 func ClonePayload(payload []byte) []byte {
 	if payload == nil {
 		return nil

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -228,6 +229,19 @@ func annotatedReadModels(snapshot work.ReadSnapshot) []work.ReadModel {
 			Name:   admission.Name,
 			Order:  admission.Order,
 		})
+	}
+	payloads := make(map[string]string, len(snapshot.Admissions))
+	for _, admission := range snapshot.Admissions {
+		if len(admission.Payload) > 0 {
+			payloads[admission.WorkID] = admission.Payload
+		}
+	}
+	for index := range models {
+		// The submitted payload is authoritative on every read path, so live
+		// and replayed sessions expose the same value.
+		if payload, ok := payloads[models[index].WorkID]; ok {
+			models[index].Payload = json.RawMessage(payload)
+		}
 	}
 	annotatedItems := stateaccessquery.AnnotateSupersession(items, admissions)
 	for index, item := range annotatedItems {

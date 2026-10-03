@@ -568,7 +568,7 @@ func TestReplayWorkRequestWork_RestoresRecordedSubmittedPayload(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			recorded := work.WorkRequestEventWork{
 				Name: "idea", WorkID: "w-1", WorkTypeID: "idea",
-				Payload: work.EventPayload([]byte(tc.submitted)),
+				Payload: recordedJSON(tc.submitted),
 			}
 			// The recorded event round-trips through JSON before replay reads it.
 			encoded, err := json.Marshal(recorded)
@@ -586,4 +586,14 @@ func TestReplayWorkRequestWork_RestoresRecordedSubmittedPayload(t *testing.T) {
 			}
 		})
 	}
+}
+
+// recordedJSON mirrors how a submitted payload is recorded on a WORK_REQUEST
+// event: valid JSON verbatim, plain text as a JSON string.
+func recordedJSON(submitted string) json.RawMessage {
+	if json.Valid([]byte(submitted)) {
+		return json.RawMessage(submitted)
+	}
+	encoded, _ := json.Marshal(submitted)
+	return encoded
 }

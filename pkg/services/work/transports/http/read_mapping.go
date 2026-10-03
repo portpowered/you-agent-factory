@@ -100,7 +100,7 @@ func WorkReadModelToAPI(item work.ReadModel) factoryapi.Work {
 		StopSummary:              workStopSummaryToAPI(item.StopSummary),
 	}
 	if len(item.Payload) > 0 {
-		result.Payload = json.RawMessage(work.CloneEventPayload(item.Payload))
+		result.Payload = json.RawMessage(append(json.RawMessage(nil), item.Payload...))
 	}
 	if jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent) {
 		if item.StructuredResult == nil {
