@@ -128,6 +128,7 @@ func composeService(
 		versionFileSystem,
 		validator,
 		validationService,
+		runtimeSnapshot,
 		func(
 			factoryDir string,
 			workstationLoader factorydefinitions.WorkstationLoader,
@@ -166,7 +167,6 @@ func composeService(
 		listEffective,
 		snapshotsPortability,
 		compilation,
-		runtimeSnapshot,
 	)
 }
 
@@ -233,7 +233,6 @@ func attachFactoryDefinitionServices(
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
 	snapshotsPortability snapshotsportability.Service,
 	compilation compilationservice.Service,
-	runtimeSnapshot RuntimeSnapshot,
 ) (factorydefinitions.Service, error) {
 	attached, err := factorydefinitionsinternal.AttachEffectiveCatalog(definitions, listEffective)
 	if err != nil {
@@ -249,14 +248,7 @@ func attachFactoryDefinitionServices(
 	if withSnapshots == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: snapshots portability attachment rejected its dependencies")
 	}
-	withRuntimeSnapshot, err := factorydefinitionsinternal.AttachRuntimeSnapshot(withSnapshots, runtimeSnapshot.ResolveRuntimeSnapshot)
-	if err != nil {
-		return nil, err
-	}
-	if withRuntimeSnapshot == nil {
-		return nil, fmt.Errorf("construct Factory Definitions: runtime snapshot attachment rejected its dependencies")
-	}
-	return attachCompilation(withRuntimeSnapshot, compilation), nil
+	return attachCompilation(withSnapshots, compilation), nil
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption

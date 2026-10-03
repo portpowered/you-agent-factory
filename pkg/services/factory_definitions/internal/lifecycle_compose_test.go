@@ -6,7 +6,6 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	_ "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
 )
@@ -30,43 +29,30 @@ func TestComposedLifecycleHostExercisesVersionSurface(t *testing.T) {
 	}
 }
 
-func TestAttachRuntimeSnapshotDelegatesThroughDefinitionsRoot(t *testing.T) {
+func TestCompletedLifecycleDelegatesRuntimeSnapshot(t *testing.T) {
 	t.Parallel()
-
 	called := false
-	base := embeddedDefinitionsService{}
-	attached, err := factoryinternal.AttachRuntimeSnapshot(
-		base,
-		func(
-			_ context.Context,
-			request factorydefinitions.ResolveRuntimeSnapshotRequest,
-		) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+	service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
+		nil, lifecycle.StubActivationGateway(), nil, nil, nil, nil,
+		snapshotOperation(func(ctx context.Context, request factorydefinitions.ResolveRuntimeSnapshotRequest) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
 			called = true
-			return factorydefinitions.ResolveRuntimeSnapshotResult{
-				Snapshot: factorydefinitions.RuntimeSnapshot{
-					FactoryDir: request.FactoryDir,
-				},
-			}, nil
-		},
+			return factorydefinitions.ResolveRuntimeSnapshotResult{Snapshot: factorydefinitions.RuntimeSnapshot{FactoryDir: request.FactoryDir}}, nil
+		}),
 	)
-	if err != nil {
-		t.Fatalf("AttachRuntimeSnapshot() error = %v", err)
+	if called {
+		t.Fatal("construction queried snapshot owner")
 	}
-
-	result, err := attached.ResolveRuntimeSnapshot(
-		context.Background(),
-		factorydefinitions.ResolveRuntimeSnapshotRequest{FactoryDir: "/factories/alpha"},
-	)
+	result, err := service.ResolveRuntimeSnapshot(context.Background(), factorydefinitions.ResolveRuntimeSnapshotRequest{FactoryDir: "/factories/alpha"})
 	if err != nil {
-		t.Fatalf("ResolveRuntimeSnapshot() error = %v", err)
+		t.Fatalf("ResolveRuntimeSnapshot: %v", err)
 	}
 	if !called || result.Snapshot.FactoryDir != "/factories/alpha" {
-		t.Fatalf("delegation = called %t, result %#v; want attached operation", called, result)
+		t.Fatalf("delegation = called %t result %#v", called, result)
 	}
 }
 
-type embeddedDefinitionsService struct {
-	factorydefinitions.Service
-}
+type snapshotOperation factorydefinitions.RuntimeSnapshotOperation
 
-var _ factorydefinitions.Service = embeddedDefinitionsService{}
+func (operation snapshotOperation) ResolveRuntimeSnapshot(ctx context.Context, request factorydefinitions.ResolveRuntimeSnapshotRequest) (factorydefinitions.ResolveRuntimeSnapshotResult, error) {
+	return operation(ctx, request)
+}
