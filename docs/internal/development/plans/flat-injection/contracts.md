@@ -1705,29 +1705,232 @@ Update Sessions' structurally equivalent `FactoryRuntimeRoot` and Activate calle
 
 ## T16 — Worker Sessions keyed attempt supervision
 
-Authored source: `pkg/services/factory_runtime/composition_contracts.go`.
+This is the AM09 first-step documentation contract, not a production cutover or runtime PASS. Source basis: `5c800e49c959b01ae436efaa392d7b4f2cb869cf` (HEAD and origin/main at authoring). Current blocks are native declaration excerpts; imports and function bodies are omitted. The separately reviewed contract PR must merge before characterization and ANY structural T16 PR. T16 owns characterization and complete factory removal; T15 consumes the completed cutover; WSV construction additions wait for FI. No public API, configuration, persistence, event, CLI or identity policy changes are authorized here.
+
+### Native request, operation and construction pairs
+
+Authored destination: `pkg/services/worker_sessions/contracts.go / RuntimeAttemptRequest; destination docs/internal/development/plans/flat-injection/contracts.md §T16`.
 
 Current:
 
 ```go
-type WorkerSessionsFactory func(workers.Service, platformclock.Source) (workersessions.Service, error)
+type RuntimeAttemptRequest struct {
+	ID        string
+	AttemptID string
+	Execution workers.WorkstationDispatchRequest
+}
+
+type RuntimeAttempt func(context.Context, workers.WorkstationDispatchResult, error) error
 ```
 
 Proposed:
 
 ```go
-// Removed: WorkerSessionsFactory.
-type WorkerAttemptOpener interface {
+// RuntimeAttemptKey is a process-local lookup key, never a wire identifier.
+type RuntimeAttemptKey struct {
+	RuntimeID  string
+	DispatchID string
+}
+
+// ID is the existing stable Worker Session ID, not a derived key string.
+// AttemptID is physical; empty preserves the dispatch-ID default.
+// Execution retains the canonical Workers request, including FactorySessionID,
+// RuntimeID, RecordingID, GenerationID and Dispatch.DispatchID.
+// Key must agree with Execution.Execution.RuntimeID and its Dispatch.DispatchID.
+type RuntimeAttemptRequest struct {
+	Key       RuntimeAttemptKey
+	ID        string
+	AttemptID string
+	Execution workers.WorkstationDispatchRequest
+}
+
+// Unchanged: Complete is idempotent and retains the existing terminal contract.
+type RuntimeAttempt func(context.Context, workers.WorkstationDispatchResult, error) error
+```
+
+Documentation proposal only. Internal callers later supply an explicit key matching canonical execution correlation. Preserve stable Worker Session and physical attempt IDs, replay associations, empty AttemptID semantics, duplicate Worker Session rejection and canonical Topics. No serialized key, new identity policy or persisted migration.
+
+Authored destination: `pkg/services/factory_runtime/composition_contracts.go / WorkerSessionsFactory; pkg/services/worker_sessions/internal/service/invoke_session.go / structural BeginRuntimeAttempt capability; destination docs/internal/development/plans/flat-injection/contracts.md §T16`.
+
+Current:
+
+```go
+type WorkerSessionsFactory func(workers.Service, platformclock.Source) (workersessions.Service, error)
+
+var _ interface {
 	BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest) (workersessions.RuntimeAttempt, error)
+} = (*registry)(nil)
+```
+
+Proposed:
+
+```go
+// Removed in the later T16 structural PR: WorkerSessionsFactory.
+// Request data and behavioral inputs remain separate explicit arguments.
+// execution is the already-selected runtime handle carrying provider and
+// command-runner overrides, replay-runner precedence and runtime resolution.
+// clock supplies scoped fact timestamps; scheduler supplies safety deadlines.
+// cancel is the exact Runtime-owned attempt control handle, installed atomically.
+type WorkerAttemptOpener interface {
+	BeginRuntimeAttempt(
+		context.Context,
+		workersessions.RuntimeAttemptRequest,
+		workers.Service,
+		platformclock.Source,
+		platformclock.TimerSource,
+		func(context.Context) (workers.WorkstationDispatchCancelOutcome, error),
+	) (workersessions.RuntimeAttempt, error)
+
+	// Compatibility runtime invocation enters the same keyed supervision.
+	// It uses the supplied runtime handle, never the process default executor.
+	InvokeRuntimeSession(
+		context.Context,
+		workersessions.RuntimeAttemptRequest,
+		workersessions.RetryPolicy,
+		workers.Service,
+		platformclock.Source,
+		platformclock.TimerSource,
+	) (workersessions.InvokeSessionResult, error)
+
+	// Correlation.RuntimeID and DispatchID must match the explicit key.
+	// Commit exact provider association and Worker observations before forwarding.
+	PublishRuntimeProgress(
+		context.Context,
+		workersessions.RuntimeAttemptKey,
+		workers.ProgressFragment,
+		workers.ProgressPublisher,
+	) error
+
+	// Join only this runtime's live attempts and recording handles.
+	// Preserve terminal metadata, latest dispatch identity and Events retention.
+	CloseRuntimeAttempts(context.Context, string) error
 }
 ```
 
-Inject the process Worker Sessions service and its attempt-opening capability directly; remove `provideWorkerSessionsFactoryWithRecorder`. Retain existing attempt request, idempotent completion handle, association and Events contracts. Recorder/progress routing uses explicit session/attempt identities; it must not construct another service or overwrite shared mutable routing when sessions overlap. Observation retention remains owned by Worker Sessions and Events.
+The whole attempt-opening request is the operation input above: domain data plus explicit runtime execution, fact clock, deadline scheduler and cancellation resource arguments. No constructor bag, service getter, secondary graph or shared override setter. Keep direct Service.Start/InvokeSession and control/read contracts unchanged; runtime-only compatibility paths use InvokeRuntimeSession. Existing provider progress fallback/suppression and terminal classifications remain. No production deletion in this documentation PR.
 
+Authored destination: `pkg/services/worker_sessions/wire/wire.go / NewService; destination docs/internal/development/plans/flat-injection/contracts.md §T16`.
 
-> Validation review: the proposed `NewService` above has the same signature as the current one. The real change is per-attempt routing: today each runtime builds Worker Sessions with its own `workers.Service`. That service carries the session's provider and command-runner overrides, replay runner, session/runtime/recording IDs and clock (`factory_runtime/internal/runtime_build.go:477-505,621-631`). State is keyed by bare dispatch ID (`worker_sessions/.../invoke_session.go:294-310`). AM09: T16 removes WorkerSessionsFactory declaration, provider and all call sites after its separately merged keyed-attempt contract PR and characterization. T15 consumes shared supervision and depends on T16; it does not delete the factory.
+Current:
 
-**Pending — authored by T16 as its first required step, in its own PR (operator decision, 2026-10-02).** Add here the current/proposed Go pair for the attempt request. That request carries the runtime ID, the execution handle, the session overrides and the clock/scheduler, and Worker Sessions state is keyed by (runtime ID, dispatch ID). If keying is not feasible, T16 stops and returns a delta plan (plan §2 replanning trigger); no structural T16 work proceeds first.
+```go
+func NewService(
+	execution workers.Service,
+	eventsAppender EventsAppender,
+	logger logging.Logger,
+	clock platformclock.Source,
+	providerSessions providersessions.Service,
+	recording recordings.WorkerSessionRecordingService,
+) (workersessions.Service, error)
+```
+
+Proposed:
+
+```go
+func NewService(
+	execution workers.Service,
+	eventsAppender EventsAppender,
+	logger logging.Logger,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+	providerSessions providersessions.Service,
+	recording recordings.WorkerSessionRecordingService,
+) (workersessions.Service, error)
+```
+
+Construct one inert supervisor in canonical Wire. The executor and clock here are process defaults for direct Worker Sessions. Runtime operations receive their selected handles explicitly and never mutate these defaults. Scheduler is required and selected at composition; no newSupervisionDeadlineTimer host fallback. Current TimerSource has NewTimer; T01 owns its After addition, not this lane. Preserve explicit legacy clock precedence and scoped replay facts versus OS deadlines.
+
+The complete operation input is the request plus its separate behavior arguments, not a dependency bag. `WorkerAttemptOpener` is the Factory Runtime consuming capability in `pkg/services/factory_runtime/composition_contracts.go`; the shared Worker Sessions implementation satisfies it structurally. Request/key records belong to the Worker Sessions root. Canonical Wire constructs one inert supervisor with the fixed dependencies shown above. No attempt operation constructs a service, returns a service getter, substitutes constructor dependencies or mutates process defaults. The selected runtime handle is an existing execution capability; its eventual T09 replacement must preserve the same selected behavior without introducing another constructor path.
+
+### Identity and source-to-target trace
+
+`RuntimeAttemptKey` is process-local and comparable; neither it nor a concatenated representation is serialized. RuntimeID and logical DispatchID are required and must agree with `Execution.Execution.RuntimeID` and `Execution.Execution.Dispatch.DispatchID` before mutation. Keep the canonical request detached. Runtime callers first preserve the existing correlation fallback (`IW:337-367`) by normalizing the request RuntimeID to that already-resolved canonical value, then derive and validate the key; a blank legacy field is not a new public rejection policy. The stable Worker Session `ID` and physical `AttemptID` remain distinct: empty AttemptID retains the logical-dispatch default, retries retain their current physical allocation, and replay uses the recorded Worker Session association. The execution request's `FactorySessionID`, `RuntimeID`, `RecordingID` and `GenerationID` are all strings (`workers/execution_requests.go:181-198`); dispatch/request/work lineage remains the existing `work.WorkDispatch`. `workers.ExecutionCorrelation` retains string FactorySessionID, RuntimeID, GenerationID, DispatchID, AttemptID, RequestID and TraceID (`execution_requests.go:452-460`). RecordingID stays in the execution request, not a new correlation field.
+
+Paths below are repo-relative. Runtime implementation abbreviations: RB = `pkg/services/factory_runtime/internal/runtime_build.go`; DC = `pkg/services/factory_runtime/internal/services/orchestration/runtime/dispatch_worker_sessions_cutover.go`; IW = the adjacent `invoke_worker.go`; WS = `pkg/services/worker_sessions/internal/service/`. These anchors describe current source, not executed evidence.
+
+| Current input / source witness | Explicit preservation route | Later proof owner / gate |
+| --- | --- | --- |
+| Runtime-specific execution at `RB:34-45,477-529`; provider, command runner, replay runner, model/permission overrides, resolver, mock policy | Pass that selected `workers.Service` into Begin/InvokeRuntimeSession; retain replay runner precedence (`RB:52-97`) and invocation permission copy. Never fall back to the shared executor or change shared override state. Detached Runtime execution remains Runtime-owned. | T09/T16, U03-T16 selection, F05a-d |
+| Factory Session/runtime/recording IDs at `RB:503-517`; normalized request at `IW:337-367` | Key validates canonical runtime/dispatch; Execution carries all session, recording, generation, request and Work facts unchanged. Selected handle retains runtime resolution. | T16, U03-T16, F06 |
+| Selected clock passed into factory; late observer binding at `RB:621-631` | Each opening retains its explicit fact clock and scheduler; progress closure captures the runtime key and its downstream publisher. Replace Bind rather than rebinding a shared observer. | T01/T16, U03-T16 selection, U01/F15/F16 |
+| Current Begin and later cancellation binding at `DC:80-164`; `WS/invoke_session.go:89-130,240-310` | Begin installs the exact Runtime cancel closure atomically with keyed ownership before return. Closure still calls that runtime's attempts.cancel; no bare-dispatch process lookup. Opening remains a before-worker-effect barrier. | T16, U03-T16 lifecycle, F05d |
+| Compatibility `startThroughWorkerSessions` at `DC:25-77`; the compatibility branch of `factoryImpl.InvokeWorker` at `IW:599-660` | Both runtime paths enter InvokeRuntimeSession with key, selected handle, fact clock and scheduler. Direct Service.Start/InvokeSession retains process defaults and existing customer contracts. | T16, U03-T16, F05 |
+| `dispatchOwners`, runtime control handles and retained latest IDs at `WS/service.go:68-93`, `WS/invoke_session.go:290-310,435-450` | Runtime reverse owner lookup uses the pair key. Worker-ID registries remain Worker identity-owned; live physical-attempt guards prevent stale completion/control/progress from selecting a replacement. Preserve retained latest logical DispatchID for terminal NOOP responses. | T16, U03-T16 lifecycle, F06 |
+| Default Worker ID and replay association at `DC:35-44,177-197` | Preserve existing ID/retry/replay allocation here. Distinct supplied IDs make the synthetic trace feasible; production defaults remain an explicit hold below. | T16-CHAR-PRODUCTION-ID then T16-IDENTITY-DELTA |
+| Topic at `pkg/services/worker_sessions/topic.go:11-12`; recording request at `WS/service.go:218-229`; recorder validation at `pkg/services/recordings/internal/services/worker_capture/ports.go:30-51` | Keep `Topic(ID)` = `worker-session/<id>/events`. Start capture with the exact RecordingID, FactorySessionID, WorkerSessionID and Topic; own its returned handle per attempt. Never add runtime scope to topic bytes. | T16/Recordings, U03-T16, F07/F08 |
+| Now-only fallback and deadlines at `WS/service.go:928-966`; `pkg/platform/clock/clock.go:13-31` | Explicit TimerSource supplies NewTimer; use scheduler.Now for safety elapsed time and the fact clock for records. Stop the selected timer on attempt completion. Preserve existing durations; logical replay facts cannot implicitly select OS scheduling. T01 owns After addition. | T01/T16, U03-T16 selection, F05c/F16 |
+| Provider association before forwarding at `pkg/services/worker_sessions/publish.go:84-121,181-199`; windows at `WS/publish_record.go:587-603` and provider binding at `:650-710` | PublishRuntimeProgress validates key against Correlation.RuntimeID/DispatchID and fragment.DispatchID, plus the active physical attempt. Resolve the exact Worker owner, bind its Providers-owned reference, commit source-native observations, then forward to supplied next publisher under existing suppression/fallback. | T16, U03-T16 lifecycle, F06 |
+
+Public unkeyed operations remain unchanged. Runtime progress must not call their bare-dispatch lookups against a shared registry: the keyed operation resolves the immutable owner first, then applies the existing association/publication rules to that owner. Direct supervision keeps its existing dispatch route separate. The runtime-scoped progress closure uses its immutable admitted correlation for compatibility fragments with missing correlation; explicitly conflicting fields are rejected and never overwritten. It must carry the physical attempt at emission, not fill a stale fragment from whichever attempt is currently live. Existing canonical-draft payload and public dispatch bytes remain unchanged; U03-T16 selection/lifecycle must characterize both fully correlated and compatibility fragments. Provider identity, opaque continuation, first-reference acceptance, repeated-reference idempotency and conflicting-reference rejection remain Providers/Worker Sessions contracts. Worker Sessions does not fabricate Provider Session identity or take provider execution policy.
+
+### Opening, control, retention and failure rules
+
+Begin validates the request, matching key and required behavior inputs before any mutation or worker effect. Duplicate Worker identity reservation still returns `ErrSessionAlreadyExists` and leaves the original unchanged; existing reserved-identity invocation/startability rules remain. Claim key and physical attempt without allowing a peer owner to be overwritten. Commit and verify opening Events publication and establish the exact recording association before handing back the immutable completion function. An opening/capture error cannot imply successful admission or start a command; unwind only the owned reservation/route/capture under current failure classification, retaining joined causes where cleanup also fails. Runtime remains admission/execution authority for detached attempts; InvokeRuntimeSession preserves the same supervision/retry/classification state machine and synchronous wait contract as the existing compatibility path.
+
+Controls still address stable Worker Session ID. Resolve its exact retained key and live physical attempt, then invoke the installed cancellation handle. Failed cancellation returns the current failed disposition without fabricating application; unsupported pause/resume stays unsupported. Terminal state is absorbing; completion is idempotent, exactly one terminal classification wins, and Terminate joins the associated callback. Old handles cannot complete or cancel a newer physical attempt. Keep current public logical DispatchID responses and terminal NOOP semantics. Opening/control/completion races must be characterized before changing implementation.
+
+PublishRuntimeProgress commits the exact provider association before forwarding reference-bearing output. Preserve provider agreement checks, bookkeeping-fragment suppression and the existing unassociated-progress fallback selected by the runtime publisher. The key is never inferred from a bare dispatch string. Late or stale progress cannot reopen a terminal publication window or attach to a replacement attempt: retain `ErrPublicationNotOpen`, `ErrOutOfOrderPublication`, exact Events retry/idempotency behavior and safe error logging. Failure to commit an observation does not invent a successful record or a new provider execution.
+
+CloseRuntimeAttempts(ctx, runtimeID) selects only that runtime's live physical attempts, prevents new scoped admission during close, cancels/joins through their exact handles and joins their recording capture handles. Repeated close is idempotent; unsuccessful cleanup retains the owned handle for retry and returns the current cause. Stop owned timers and release live execution/cancel/publisher references after users join, without deleting terminal Worker metadata, immutable observations, latest dispatch identity, provider links or Events retention/cursors. A caller wait cancellation does not substitute for the explicit execution cancel boundary. Runtime owns retained/reused session-generation worktree lifetime; T09 releases attempt resources and nonretained checkouts under existing RetainWorktree policy. Close cannot unconditionally delete retained worktrees or claim P01 retention proof.
+
+Events owns process-local source-native order, retained reads, cursors, subscriptions, gaps and backpressure. Recordings owns durable Factory history and capture/replay. Closing an attempt or a runtime does not erase either history or make Worker Sessions the Factory ledger. Factory dispatch/Worker association remains recorded into the owning runtime ledger; replay resolves the recorded association before opening, rather than allocating a replacement identity. Final completion releases each exact capture handle once and retains its truthful health/classification on failure (`WS/classify.go:49-98`, `WS/publish_record.go:913-937`). The injected logger records opening/control/terminal/close intent and outcome with safe runtime, Factory Session, Worker and physical-attempt identifiers; publication failures retain current safe causes and suppression behavior, without raw provider payloads. High-frequency progress success may use the current sampled/aggregate policy; no new diagnostics or public outcome policy is introduced.
+
+### Equal-dispatch design rehearsal (static only)
+
+Let A carry `(runtime-a, dispatch-1)`, supplied Worker ID `worker-a`, physical attempt `attempt-a`, Factory Session `session-a`, recording `recording-a`, execution handle EA, fact clock CA, scheduler SA and cancel XA. B carries corresponding b values and the same logical dispatch-1. Supplied distinct Worker IDs are valid only for this synthetic witness; they are not a production allocation fix.
+
+| Operation | A route and observable contract | B isolation / remaining proof |
+| --- | --- | --- |
+| Open/start | Begin(key A, request A, EA, CA, SA, XA) commits worker-a opening/capture before handoff; compatibility InvokeRuntimeSession uses EA. | B uses key B/EB/CB/SB/XB and worker-b; U03-T16/F05a later executes this. |
+| Supervise/replay | Immutable A handle keeps physical attempt-a and selected overrides; replay runner wins and recorded Worker association is honored. | EB and recorded B identity remain selected independently; U03-T16 selection/F16. |
+| Progress/provider link | Key A plus matching runtime/dispatch/physical correlation selects worker-a; exact provider association precedes next-A output. | Key B selects worker-b and next-B; no shared Bind; U03-T16/F06. |
+| Cancel | Cancel(worker-a) resolves A and XA; failed control is truthful; terminal NOOP retains dispatch-1. | XB is untouched, B can complete; F05d and lifecycle races. |
+| Observe/retain | Reads by worker-a or exact Factory Session/Work scope retain A observations and provider links after terminal. | worker-b and scoped B reads stay attributable; Events cursor/retention rules unchanged; F06. |
+| Record/complete | Topic(worker-a) and recording-a/session-a capture exact source records; A completion normalizes once using current outcome mapping. | Topic(worker-b), recording-b/session-b and B completion are separate; F07/F08 later. |
+| Close | CloseRuntimeAttempts(runtime-a) joins only A resources and capture; retains terminal identity/history. | B remains usable and later closes independently; U03-T16 lifecycle, I01/P01. |
+
+D01 happy follows the table. D02 failed control leaves A truthful and B live. D03 duplicate supplied Worker ID rejects before any peer topic/owner mutation. D04 replay keeps the recorded ID, replay runner precedence and separately selected safety scheduler. D05 opening/capture failure produces no worker effect or false handoff and closes only its scope. D06 terminal A rejects late publication under current window rules while retaining readable identity and leaving B live. D07 production defaults yield the same Worker ID/topic as shown below, so this documentation cannot report runtime isolation PASS. Each case needs independent contract review, then its separately owned executable evidence.
+
+### Binding production identity boundary
+
+Verbatim operator response retained from the admitted packet (`docs/temp/operator-mailbox/responses/fi-t16-keyed-attempt-contract-am09-20261003.md`):
+
+```text
+# Response — fi-t16-keyed-attempt-contract-am09-20261003 (2026-10-03T10:47Z) — BINDING
+**Option A**, with one hard condition. For the synthetic collision witness, distinct Worker Session IDs, already supplied, are valid.
+Keep duplicate Worker Session identity rejection and the canonical topics (worker-session/<id>/events) unchanged.
+CONDITION: the later T16 characterization MUST prove what production actually allocates, and it is expected to FAIL today.
+runtimeWorkerSessionID defaults to the dispatch ID (dispatch_worker_sessions_cutover.go:185-197), and dispatch IDs repeat
+across Factory Sessions by contract (decided for the MCP correction at 10:28Z: dispatch-queued IDs = prefix+DispatchID;
+equal "dispatch-1" across Sessions observed). With shared process Events and recorder (pkg/wire/worker_sessions_providers.go:95-103),
+two runtimes that both dispatch "dispatch-1" would collide on worker-session/dispatch-1/events. Write that characterization
+as a red-first witness. When it is red, stop structural cutover work and file the smallest identity delta (e.g. scope the
+default Worker Session ID by runtime/Factory Session) to the flat-injection lead as a named prerequisite. Don't paper over it.
+Record this boundary verbatim in the plan.
+```
+
+A pair key does not fix canonical Worker identity collisions. `runtimeWorkerSessionID` currently defaults to logical DispatchID outside retry/replay; the compatibility path does likewise. With shared Events/recorder, equal default `dispatch-1` IDs address the same canonical topic even with separate runtime registries. The later T16 owner must write T16-CHAR-PRODUCTION-ID red-first through actual production allocation, retain the expected failure, stop structural cutover and request the smallest named T16-IDENTITY-DELTA prerequisite from the flat-injection Lead. No new allocation, topic encoding, duplicate-ID waiver or inferred authority is approved here.
+
+### Exact later removal and gates
+
+T16 removes the entire `WorkerSessionsFactory` declaration/provider/caller chain together after this contract merges and characterization succeeds (including disposition of the expected-red identity prerequisite). Current production identities:
+
+- Declaration: `pkg/services/factory_runtime/composition_contracts.go:84`.
+- Providers: `pkg/wire/worker_sessions_providers.go:61,95` (`provideWorkerSessionsFactory`, `provideWorkerSessionsFactoryWithRecorder`); registration `pkg/wire/wire.go:47`.
+- Construction call: `pkg/services/factory_runtime/internal/build.go:400`; threaded factory inputs in NewRuntime/newRuntimeFromBundle (`:140,362`).
+- Assembly storage and propagation: `pkg/services/factory_runtime/internal/assembly.go:28,40,164`; owner Wire NewAssembly at `pkg/services/factory_runtime/wire/assembly.go:76-80`.
+- Runtime bundle/replay propagation: RB `:258,334,370,385,435,456-475,545-552,605-631`; remove bindProviderSessionProgress and its late publisher.Bind coupling, not a peer's unrelated functionality.
+- Generated consumers: `pkg/wire/wire_gen.go:218,242,752`, regenerated only by later T16 via `make generate-wire`; affected factory fixtures/callers must be updated together. Remove the separate BindRuntimeAttemptCancellation structural call at DC `:111-151` when Begin installs cancellation atomically.
+
+The similarly named `workerSessionsFactorySessionScopeResolver` in `pkg/wire/runtime_inputs.go` resolves Factory Session observation scope; it is not a WorkerSessionsFactory constructor and is not authorized for deletion by a name match. Run a fresh symbol/caller inventory on the later structural head; these anchors are a current-source removal checklist, not an exhaustive future path allowlist. T15 waits for completed T16; AM16/T12 and other companion sections are unchanged.
+
+Later T16 owns U03-T16 component-isolated unit cases for distinct supplied IDs with equal dispatch, selected overrides/replay/clocks, opening/capture failures, failed controls, stale retries/late progress, idempotent completion and exact scoped close/retained observations. First characterize the current per-runtime factory; only port the witness after approved cutover. T16-CHAR-PRODUCTION-ID is functional through reusable `root.BuildProcess` + public `Process.Execute`/explicit Factory Sessions with supported external edges, actual default allocation and equal dispatch IDs; expected FAIL today. It cannot be replaced by supplied IDs, source scanning or internal-map assertions.
+
+T08/T09/T16 retain every selected F05a success, F05b denial/no unauthorized command, F05c selected-scheduler normalized timeout and F05d one-of-two cancellation witness; F06 overlaps four explicit sessions with attributable output/events/log correlation/cursors. Plan the complete customer matrix before adding tests. Functional cases share one safe root process per immutable edge shape, allocate explicit sessions before runtime construction, own profiles/routes/streams/files/fakes, run with bounded parallelism and synchronize on admission/opening/terminal signals rather than sleeps. Unit tests use isolated narrow owner fakes; later concurrent changes need focused normal/race evidence. Functional tests build no binary; I01 consumes the invoking build lane's prebuilt artifact, P01 stays in dedicated stress, inventories in lint/static checks.
+
+This author slice proves only T16-DOC-SOURCE and T16-DOC-REHEARSAL at local-real source fidelity, plus T16-DOC-LINT (`go run ./cmd/markdown-linter docs/internal/development/plans/flat-injection`, `git diff --check`). Independent review from a clean pushed-head checkout owns T16-CONTRACT-REVIEW/LOOPBACK using `factory/docs/standards/validation-loopback-template.md`: repeat D01-D07 and source/lint procedures, report criterion IDs PASS/FAIL/BLOCKED without silent repairs, and request the smallest delta on failure. Review owns terminal required CI, current-main rebase and immediately premerge `make lint pkg-file-count`; no stale-green merge. Implementation stops at final head pushed, PR open, CI started and blocking feedback addressed.
+
+U03-T16, F05a-d/F06/F07/F08, T16-CHAR-PRODUCTION-ID/T16-IDENTITY-DELTA, S01-T16/G01/T16-CUTOVER, U01/F15/F16, U02/F14, S01/G02, I01/P01 and independent integrated VAL01 remain unproven. FI-A1/FI-A4/FI-A8 remain Project obligations; documentation is no runtime, speed, resource-release or Project acceptance claim. Preserve the dedicated P01 baseline/final ten-sample median/p95 nonregression and lifecycle-cycle requirements unchanged.
 
 ## T17 — Sessions opening and removal of peer-service bags
 
