@@ -105,7 +105,7 @@ func TestProjectLeadWake_FailedChildWakesOnlyItsOwnLeadOnce(t *testing.T) {
 
 	reportIDs := assertProjectLeadWakes(t, wake, stream, childName)
 	assertReviewFailureWorkStates(t, wake.listWorks(t), map[string]string{
-		ideaID: "failed", taskID: "failed", reportIDs[0]: "delivered",
+		ideaID: "failed", taskID: "escalated", reportIDs[0]: "delivered",
 		wake.ownerID: "waiting", wake.peerID: "waiting",
 	})
 }

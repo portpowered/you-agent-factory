@@ -1203,6 +1203,11 @@
           "id": "failed",
           "name": "failed",
           "type": "FAILED"
+        },
+        {
+          "id": "escalated",
+          "name": "escalated",
+          "type": "FAILED"
         }
       ]
     },
@@ -1259,6 +1264,11 @@
         {
           "id": "failed",
           "name": "failed",
+          "type": "FAILED"
+        },
+        {
+          "id": "escalated",
+          "name": "escalated",
           "type": "FAILED"
         }
       ]
@@ -2131,7 +2141,7 @@
         },
         {
           "workType": "plan",
-          "state": "failed"
+          "state": "escalated"
         }
       ]
     },
@@ -2163,7 +2173,7 @@
         },
         {
           "workType": "task",
-          "state": "failed"
+          "state": "escalated"
         }
       ]
     },
