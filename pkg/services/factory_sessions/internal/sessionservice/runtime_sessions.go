@@ -107,9 +107,10 @@ func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, 
 		return stream, err
 	}
 	stream.FactorySessionID = strings.TrimSpace(session.ID)
+	placement := session.Placement()
 	identity, identityErr := fs.identity.Normalize(ctx, identityservice.NormalizeRequest{
 		BackendScopeID: strings.TrimSpace(session.Runtime.BackendScopeID),
-		FolderPath:     session.FolderPath, Target: session.Target,
+		FolderPath:     placement.FolderPath, Target: placement.Target,
 	})
 	if identityErr != nil {
 		return nil, identityErr

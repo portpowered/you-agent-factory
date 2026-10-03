@@ -228,7 +228,7 @@ func waitForRuntimeConfigAlignmentExecution(
 	waitForRuntimeConfigAlignmentTimeoutAndRequeue(t, server, scriptRunner)
 
 	close(scriptRunner.releaseSecondAttempt)
-	waitForRuntimeConfigAlignmentServerCompletion(t, server, runtimeConfigAlignmentCompletionTimeout)
+	waitForRuntimeConfigAlignmentServerCompletion(t, server, support.ScaledTimeout(runtimeConfigAlignmentCompletionTimeout))
 }
 
 func assertRuntimeConfigAlignmentFinalState(

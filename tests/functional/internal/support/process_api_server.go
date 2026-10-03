@@ -93,7 +93,7 @@ func (server *ProcessAPIServer) Start(
 	if gate := server.currentShutdownGate(); gate != nil {
 		select {
 		case <-gate:
-		case <-time.After(processAPIServerReadyTimeout):
+		case <-time.After(ScaledTimeout(processAPIServerReadyTimeout)):
 		}
 	}
 	httpServer.CloseClientConnections()
@@ -136,6 +136,7 @@ func (server *ProcessAPIServer) waitForURL(timeout time.Duration) (string, error
 		return "", fmt.Errorf("process API server is required")
 	}
 
+	timeout = ScaledTimeout(timeout)
 	readyTimer := time.NewTimer(timeout)
 	defer readyTimer.Stop()
 	startTimer := time.NewTimer(timeout)

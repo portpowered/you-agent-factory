@@ -31,6 +31,15 @@ const (
 var (
 	loadingFixtureMu     sync.Mutex
 	sharedLoadingFixture *loadingFixture
+
+	// loadingSessionGate serializes scenarios by how they use the shared
+	// process's live Factory Sessions. The HTTP invocation surface resolves a
+	// selector-less request against the hosted process's live sessions and
+	// answers "current Factory Session is ambiguous" when a sibling scenario
+	// has another session live. Selector-less HTTP scenarios therefore hold it
+	// exclusively; every other scenario holds it shared, so those still run in
+	// parallel with each other.
+	loadingSessionGate sync.RWMutex
 )
 
 // TestMain owns the one reusable process for this package. Individual tests
@@ -65,7 +74,7 @@ func TestInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T) {
 
 func TestInlineJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T) {
 	t.Parallel()
-	runInlineJavaScriptFactoryRunsThroughAPIInvocation(t, loadingFixtureForTest(t))
+	runInlineJavaScriptFactoryRunsThroughAPIInvocation(t, loadingExclusiveFixtureForTest(t))
 }
 
 func TestInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T) {
@@ -100,10 +109,29 @@ func TestNamedJavaScriptFactoryRunsThroughStandardCLI(t *testing.T) {
 
 func TestNamedJavaScriptFactoryRunsThroughAPIInvocation(t *testing.T) {
 	t.Parallel()
-	runNamedJavaScriptFactoryRunsThroughAPIInvocation(t, loadingFixtureForTest(t))
+	runNamedJavaScriptFactoryRunsThroughAPIInvocation(t, loadingExclusiveFixtureForTest(t))
 }
 
+// loadingFixtureForTest returns the shared fixture and holds the session gate
+// shared until the test ends.
 func loadingFixtureForTest(t *testing.T) *loadingFixture {
+	t.Helper()
+	loadingSessionGate.RLock()
+	t.Cleanup(loadingSessionGate.RUnlock)
+	return loadingSharedFixture(t)
+}
+
+// loadingExclusiveFixtureForTest returns the shared fixture and holds the
+// session gate exclusively until the test ends, for scenarios that issue
+// selector-less HTTP invocations or leave a live session behind.
+func loadingExclusiveFixtureForTest(t *testing.T) *loadingFixture {
+	t.Helper()
+	loadingSessionGate.Lock()
+	t.Cleanup(loadingSessionGate.Unlock)
+	return loadingSharedFixture(t)
+}
+
+func loadingSharedFixture(t *testing.T) *loadingFixture {
 	t.Helper()
 
 	loadingFixtureMu.Lock()
@@ -276,7 +304,7 @@ func (fixture *loadingFixture) startAPIServer(t *testing.T) {
 			close(fixture.processDone)
 		}()
 
-		fixture.baseURL, fixture.serverErr = fixture.api.WaitForBaseURL(loadingFixtureTimeout)
+		fixture.baseURL, fixture.serverErr = fixture.api.WaitForBaseURL(support.ScaledTimeout(loadingFixtureTimeout))
 		if fixture.serverErr != nil {
 			cancel()
 			<-fixture.processDone
@@ -579,7 +607,7 @@ func (fixture *loadingFixture) shutdown() error {
 		<-fixture.processDone
 	}
 
-	closeContext, cancel := context.WithTimeout(context.Background(), loadingFixtureTimeout)
+	closeContext, cancel := context.WithTimeout(context.Background(), support.ScaledTimeout(loadingFixtureTimeout))
 	defer cancel()
 	closeErr := fixture.process.Close(closeContext)
 

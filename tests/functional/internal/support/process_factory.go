@@ -451,7 +451,7 @@ func runFactoryToCompletionWithHome(
 			)
 		}
 	}
-	closeCtx, cancelClose := context.WithTimeout(context.Background(), processCommandStopTimeout)
+	closeCtx, cancelClose := context.WithTimeout(context.Background(), ScaledTimeout(processCommandStopTimeout))
 	defer cancelClose()
 	if closer, ok := process.(interface{ Close(context.Context) error }); ok {
 		if err := closer.Close(closeCtx); err != nil {

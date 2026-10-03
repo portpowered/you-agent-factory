@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -297,6 +298,11 @@ func assertBTRCHostedOutputState(t *testing.T, response factoryapi.DispatchRespo
 
 func assertBTRCHostedServiceProgress(t *testing.T, baseURL, terminalState string) {
 	t.Helper()
+	// The runtime status is derived after the dispatch-response event the caller
+	// already observed, so a single immediate read can still report ACTIVE under
+	// load. There is no stream event for the IDLE transition; wait for it, then
+	// assert the session projection exactly as before.
+	support.WaitForRuntimeIdle(t, baseURL, 10*time.Second)
 	session := support.GetDefaultSession(t, baseURL)
 	if session.Runtime.Status != factoryapi.FactorySessionStatusIDLE {
 		t.Fatalf("hosted service runtime status = %q, want IDLE", session.Runtime.Status)

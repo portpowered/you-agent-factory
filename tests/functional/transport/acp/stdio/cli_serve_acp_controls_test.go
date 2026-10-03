@@ -409,7 +409,7 @@ func (h *serveACPControlHarness) finish(t *testing.T) {
 		if err := h.command.Err(); err != nil {
 			t.Fatalf("Process.Execute(you server acp) error = %v; stderr=%s", err, h.stderr.String())
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(support.ScaledTimeout(5 * time.Second)):
 		t.Fatal("Process.Execute(you server acp) did not return after stdin EOF")
 	}
 	h.command.AcceptError()
@@ -531,7 +531,7 @@ func (r *controlProviderCommandRunner) waitForStart(t *testing.T, want int) {
 		if got != want {
 			t.Fatalf("blocked provider command call = %d, want %d", got, want)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(support.ScaledTimeout(5 * time.Second)):
 		t.Fatalf("provider command call %d did not start", want)
 	}
 }
@@ -543,7 +543,7 @@ func (r *controlProviderCommandRunner) waitForCancellation(t *testing.T, want in
 		if got != want {
 			t.Fatalf("cancelled provider command call = %d, want %d", got, want)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(support.ScaledTimeout(5 * time.Second)):
 		t.Fatalf("provider command call %d did not observe cancellation", want)
 	}
 }
