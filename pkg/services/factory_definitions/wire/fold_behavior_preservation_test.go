@@ -530,7 +530,7 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 	}
 
 	composition := newFoldPreservationComposition()
-	validator := factorydefinitionswire.NewValidationOperations(nil)
+	validator := factorydefinitionswire.NewValidationOperations(nil, composition.LoadCanonicalJSON)
 	mapInput := func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
 		return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
 	}

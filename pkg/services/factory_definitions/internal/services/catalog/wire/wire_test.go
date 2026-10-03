@@ -372,7 +372,9 @@ func TestNewPersistencePrepareAndCreateAndReplaceNamedFactoryLayout(t *testing.T
 	if err != nil {
 		t.Fatalf("NewPathResolver: %v", err)
 	}
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		return nil, nil
+	})
 	prepared := &factorydefinitions.PreparedFactoryLayoutPayload{}
 	persistence, err := catalogwire.NewPersistence(
 		validator,

@@ -1,6 +1,9 @@
 package impl
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -149,4 +152,90 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsHostedLinearWorkerMissingMappingWit
 		"workers[0](linear-poller).linear.mapping.state",
 		"mapping.state",
 	)
+}
+
+// The canonical loader belongs to the completed validation owner. Request data
+// must not select a different effect, including after cancellation or failure.
+func TestDefinitionValidationUsesInjectedCanonicalLoader(t *testing.T) {
+	t.Parallel()
+	payload := []byte(`{"name":"owned"}`)
+	cfg := testBaseConfig()
+	calls := 0
+	workstationLoader := &validationWorkstationLoader{}
+	validator := New(nil, func(got []byte, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		calls++
+		if !bytes.Equal(got, payload) || loader != workstationLoader {
+			t.Fatalf("canonical load = %q, %v; want supplied payload and workstation loader", got, loader)
+		}
+		return nil, nil
+	})
+	if calls != 0 {
+		t.Fatal("construction loaded canonical data")
+	}
+	request := factorydefinitions.DefinitionValidationRequest{
+		Profile: factorydefinitions.ValidationProfilePrePersist,
+		Config:  cfg, CanonicalPayload: payload, WorkstationLoader: workstationLoader,
+		CanonicalFactoryLoader: func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			t.Fatal("request substituted the injected loader")
+			return nil, nil
+		},
+	}
+	result, err := validator.ValidateDefinition(context.Background(), request)
+	if err != nil || result.HasTargets() || calls != 1 {
+		t.Fatalf("ValidateDefinition = %+v, %v; canonical calls = %d", result, err, calls)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err = validator.ValidateDefinition(ctx, request)
+	if !errors.Is(err, context.Canceled) || len(result.Targets) != 0 || calls != 1 {
+		t.Fatalf("canceled validation = %+v, %v; canonical calls = %d", result, err, calls)
+	}
+	request.CanonicalPayload = nil
+	result, err = validator.ValidateDefinition(context.Background(), request)
+	if err == nil || err.Error() != "canonical Factory payload is required for pre-persist validation" || len(result.Targets) != 0 || calls != 1 {
+		t.Fatalf("missing payload validation = %+v, %v; canonical calls = %d", result, err, calls)
+	}
+}
+
+func TestDefinitionValidationPreservesInjectedLoaderFailure(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("canonical read failed")
+	validator := New(nil, func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		return nil, cause
+	})
+	result, err := validator.ValidateDefinition(context.Background(), factorydefinitions.DefinitionValidationRequest{
+		Profile: factorydefinitions.ValidationProfilePrePersist,
+		Config:  testBaseConfig(), CanonicalPayload: []byte(`{}`),
+	})
+	if !errors.Is(err, cause) || len(result.Targets) != 0 {
+		t.Fatalf("loader failure = %+v, %v; want original cause and no partial findings", result, err)
+	}
+}
+
+func TestDefinitionValidationPreservesBlockingFindingsAfterInvalidLoad(t *testing.T) {
+	t.Parallel()
+	cfg := testBaseConfig()
+	cfg.Orchestrator = &factorydefinitions.FactoryOrchestratorConfig{Kind: "LEGACY"}
+	validator := New(nil, func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		return nil, factorydefinitions.ErrInvalidNamedFactory
+	})
+	result, err := validator.ValidateDefinition(context.Background(), factorydefinitions.DefinitionValidationRequest{
+		Profile: factorydefinitions.ValidationProfilePrePersist,
+		Config:  cfg, CanonicalPayload: []byte(`{}`),
+	})
+	if err != nil {
+		t.Fatalf("invalid load = %v, want typed blocking findings", err)
+	}
+	for _, target := range result.Targets {
+		if target.Code == CodeOrchestratorUnsupportedKind && target.Severity == factorydefinitions.ValidationSeverityError && target.Subject.Type == factorydefinitions.ValidationSubjectTypeFactory {
+			return
+		}
+	}
+	t.Fatalf("blocking findings = %+v; want typed unsupported orchestrator diagnostic", result)
+}
+
+type validationWorkstationLoader struct{}
+
+func (*validationWorkstationLoader) Load(string) (*factorydefinitions.FactoryWorkstationConfig, error) {
+	return nil, nil
 }

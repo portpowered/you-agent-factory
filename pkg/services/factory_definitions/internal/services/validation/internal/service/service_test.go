@@ -82,7 +82,7 @@ func newValidationServiceWithConfig(
 	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
 ) validationservice.Service {
 	t.Helper()
-	validator := factoryvalidation.New(orchestratorValidator)
+	validator := factoryvalidation.New(orchestratorValidator, stubLoadCanonicalForConfig(cfg))
 	svc := validationwire.NewService(validator, validator, stubLoadCanonicalForConfig(cfg), checker, orchestratorValidator)
 	return svc
 }
