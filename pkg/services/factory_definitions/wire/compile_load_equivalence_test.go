@@ -95,7 +95,7 @@ func newWireRootWithCompileLoader(t *testing.T) (factorydefinitions.Service, *fa
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
-		ports.namedFactoryCatalogFileSystem,
+		factorydefinitionswire.NewCatalogService(ports.namedPaths, ports.namedFactoryCatalogFileSystem),
 		ports.clock,
 		ports.versionFileSystem,
 		ports.listEffective,

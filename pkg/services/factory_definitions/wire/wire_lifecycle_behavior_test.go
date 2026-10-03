@@ -435,7 +435,7 @@ func newWireLifecycleBehaviorService(
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,
-		fileSystem,
+		factorydefinitionswire.NewCatalogService(namedPaths, fileSystem),
 		factorydefinitionswire.StaticClock(time.Unix(0, 0)),
 		fileSystem,
 		wireLifecycleListEffective(composition),

@@ -95,13 +95,7 @@ func newRootCatalogServiceForPeer(t *testing.T) factoryroot.Service {
 	if err != nil {
 		t.Fatalf("namedpaths.New: %v", err)
 	}
-	catalogService, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
-	if err != nil {
-		t.Fatalf("catalogwire.NewService: %v", err)
-	}
+	catalogService := catalogwire.NewService(paths, fileSystem)
 	return factorydefinition.NewWithCatalog(nil, factorydefinition.StubActivationGateway(), catalogService)
 }
 

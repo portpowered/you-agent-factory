@@ -10,6 +10,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	factorylifecycle "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
+	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 )
 
 func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.T) {
@@ -63,7 +64,7 @@ func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.
 			return nil, nil
 		},
 		rootSurfaceNamedPaths{},
-		platformfilesystem.Local{},
+		catalogwire.NewService(rootSurfaceNamedPaths{}, platformfilesystem.Local{}),
 		packagedCatalog,
 		factorydefinitions.PackagedFactoryInstallationOperations{
 			Install: func(context.Context, factorydefinitions.PackagedFactoryInstallParams) (factorydefinitions.PackagedFactoryInstallResult, error) {
