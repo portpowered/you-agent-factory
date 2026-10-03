@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"go.uber.org/zap"
 	"io"
 	"strings"
 	"testing"
@@ -48,6 +49,7 @@ func TestOpenInvocationRetainsInjectedOperationWithoutOpeningRuntime(t *testing.
 
 	factory := testRunnerOpeners{invocation: openTestInvocationRunner}
 	err := RunSelected(context.Background(), ensureTestRecordingsCLI(RunConfig{
+		Logger:                   zap.NewNop(),
 		Dir:                      t.TempDir(),
 		InvocationPositionalText: &text,
 		StdinIsTTY:               func() bool { return true },

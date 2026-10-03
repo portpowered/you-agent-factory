@@ -30,18 +30,6 @@ func (b *trackedBody) Close() error { b.closed = true; return nil }
 
 func (c *clockSequence) Now() time.Time { value := c.values[c.index]; c.index++; return value }
 
-func TestNewProtocolRequiresExactEdges(t *testing.T) {
-	t.Parallel()
-	clock := &clockSequence{values: []time.Time{time.Unix(1, 0)}}
-	doer := doerFunc(func(*http.Request) (*http.Response, error) { return nil, nil })
-	if _, err := NewProtocol(nil, clock); err == nil || err.Error() != "HTTP doer is required" {
-		t.Fatalf("nil doer error = %v", err)
-	}
-	if _, err := NewProtocol(doer, nil); err == nil || err.Error() != "HTTP clock is required" {
-		t.Fatalf("nil clock error = %v", err)
-	}
-}
-
 func TestProtocolGetJSONReturnsResponseMetadata(t *testing.T) {
 	start := time.Unix(10, 0)
 	clock := &clockSequence{values: []time.Time{start, start.Add(37 * time.Millisecond)}}

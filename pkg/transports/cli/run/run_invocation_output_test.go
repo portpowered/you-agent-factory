@@ -100,6 +100,7 @@ func TestRun_NamedFactoryGenerationFailureKeepsStdoutEmpty(t *testing.T) {
 	}
 
 	err := Run(context.Background(), RunConfig{
+		Logger:                   zap.NewNop(),
 		Dir:                      "/tmp/builtin-tts",
 		NamedFactoryName:         "@you/tts",
 		InvocationPositionalText: &text,
@@ -152,6 +153,7 @@ func TestRun_NamedFactoryStdinInvocationWritesMetadataPrimaryResult(t *testing.T
 	}
 
 	err := Run(context.Background(), RunConfig{
+		Logger:              zap.NewNop(),
 		Dir:                 "/tmp/builtin-tts",
 		NamedFactoryName:    "@you/tts",
 		InvocationStdinText: &stdinText,
@@ -212,6 +214,7 @@ func TestRun_FactoryInvocationWritesPrimaryTextOnly(t *testing.T) {
 	}
 
 	err := Run(context.Background(), RunConfig{
+		Logger:                   zap.NewNop(),
 		FactoryConfigPath:        "/tmp/factory.json",
 		InvocationPositionalText: &text,
 		StdinIsTTY:               func() bool { return true },
@@ -270,6 +273,7 @@ func TestRun_FactoryInvocationPreservesOrderedPrimaryContentParts(t *testing.T) 
 			}
 
 			err := Run(context.Background(), RunConfig{
+				Logger:                   zap.NewNop(),
 				FactoryConfigPath:        "/tmp/factory.json",
 				InvocationPositionalText: &text,
 				StdinIsTTY:               func() bool { return true },
@@ -325,6 +329,7 @@ func TestRun_FactoryInvocationFailureKeepsStdoutEmpty(t *testing.T) {
 	}
 
 	err := Run(context.Background(), RunConfig{
+		Logger:                   zap.NewNop(),
 		FactoryConfigPath:        "/tmp/factory.json",
 		InvocationPositionalText: &text,
 		StdinIsTTY:               func() bool { return true },
@@ -355,6 +360,7 @@ func TestRunRemoteInvocationUsesSelectedEndpointAndNormalizedRequest(t *testing.
 	text := "same normalized prompt"
 	var output bytes.Buffer
 	err = RunRemoteInvocation(context.Background(), RunConfig{
+		Logger:                  zap.NewNop(),
 		Dir:                     "factory",
 		NamedFactoryName:        "@you/research",
 		PreparedInvocationInput: preparedRemoteArguments(text),
@@ -427,7 +433,8 @@ func TestWriteRemoteInvocationResultPreservesTerminalOutputModes(t *testing.T) {
 
 	t.Run("JSON response stream writes one terminal record", func(t *testing.T) {
 		var output bytes.Buffer
-		cfg := RunConfig{Output: &output, JSONOutput: true, InvocationOutputMode: InvocationOutputResponseStream}
+		cfg := RunConfig{
+			Logger: zap.NewNop(), Output: &output, JSONOutput: true, InvocationOutputMode: InvocationOutputResponseStream}
 		if err := writeRemoteInvocationResult(cfg, completed); err != nil {
 			t.Fatalf("writeRemoteInvocationResult: %v", err)
 		}
@@ -442,7 +449,8 @@ func TestWriteRemoteInvocationResultPreservesTerminalOutputModes(t *testing.T) {
 
 	t.Run("human response stream writes primary result", func(t *testing.T) {
 		var output bytes.Buffer
-		cfg := RunConfig{Output: &output, InvocationOutputMode: InvocationOutputResponseStream}
+		cfg := RunConfig{
+			Logger: zap.NewNop(), Output: &output, InvocationOutputMode: InvocationOutputResponseStream}
 		if err := writeRemoteInvocationResult(cfg, completed); err != nil {
 			t.Fatalf("writeRemoteInvocationResult: %v", err)
 		}
@@ -453,7 +461,8 @@ func TestWriteRemoteInvocationResultPreservesTerminalOutputModes(t *testing.T) {
 
 	t.Run("human response stream failure keeps safe session context", func(t *testing.T) {
 		var output bytes.Buffer
-		cfg := RunConfig{Output: &output, InvocationOutputMode: InvocationOutputResponseStream}
+		cfg := RunConfig{
+			Logger: zap.NewNop(), Output: &output, InvocationOutputMode: InvocationOutputResponseStream}
 		failure := completed
 		failure.Status = interfaces.InvocationTerminalStatusFailed
 		failure.ErrorCode = "INVOCATION_RUNTIME_FAILURE"
@@ -469,7 +478,8 @@ func TestWriteRemoteInvocationResultPreservesTerminalOutputModes(t *testing.T) {
 	})
 
 	t.Run("nil output is rejected", func(t *testing.T) {
-		if err := writeRemoteInvocationResult(RunConfig{InvocationOutputMode: InvocationOutputResponseStream}, completed); err == nil {
+		if err := writeRemoteInvocationResult(RunConfig{
+			Logger: zap.NewNop(), InvocationOutputMode: InvocationOutputResponseStream}, completed); err == nil {
 			t.Fatal("writeRemoteInvocationResult accepted missing output")
 		}
 	})
@@ -575,6 +585,7 @@ func runRemoteDurableFailureCase(t *testing.T, test remoteDurableFailureCase) {
 	}
 	var output bytes.Buffer
 	err = RunRemoteInvocation(context.Background(), RunConfig{
+		Logger:                  zap.NewNop(),
 		Dir:                     "factory",
 		NamedFactoryName:        "@you/research",
 		PreparedInvocationInput: preparedRemoteArguments("failure input"),
@@ -643,6 +654,7 @@ func TestRunRemoteInvocationResultTransportAndMalformedFailuresStayDistinct(t *t
 			secret := "do not echo this remote input"
 			var output bytes.Buffer
 			err = RunRemoteInvocation(context.Background(), RunConfig{
+				Logger:                  zap.NewNop(),
 				Dir:                     "factory",
 				NamedFactoryName:        "@you/research",
 				PreparedInvocationInput: preparedRemoteArguments(secret),
@@ -679,6 +691,7 @@ func TestRunRemoteInvocationPassesPreparedArguments(t *testing.T) {
 	})
 	var output bytes.Buffer
 	err := RunRemoteInvocation(context.Background(), RunConfig{
+		Logger:                  zap.NewNop(),
 		Dir:                     "factory",
 		NamedFactoryName:        "@you/research",
 		PreparedInvocationInput: preparedRemoteArguments(text),
@@ -717,6 +730,7 @@ func TestRemoteDurableRequestMapsPolicyAndWait(t *testing.T) {
 	}
 	load := func(string) (*interfaces.FactoryConfig, error) { return definition, nil }
 	cfg := RunConfig{
+		Logger:                zap.NewNop(),
 		FactoryConfigPath:     "remote-factory.json",
 		LoadFactoryConfigFile: load,
 	}
@@ -748,6 +762,7 @@ func TestRemoteDurableRequestMapsPolicyAndWait(t *testing.T) {
 func TestRemoteDurableRequestDerivesStableIdentity(t *testing.T) {
 	args := map[string]any{"prompt": "ship it"}
 	cfg := RunConfig{
+		Logger:            zap.NewNop(),
 		FactoryConfigPath: "remote-factory.json",
 		LoadFactoryConfigFile: func(string) (*interfaces.FactoryConfig, error) {
 			return &interfaces.FactoryConfig{Name: "remote-inline"}, nil
@@ -779,6 +794,7 @@ func TestRemoteInvocationFailureDoesNotLeakRequestOrRetryLocally(t *testing.T) {
 	}
 	secret := "do not echo this payload"
 	err = RunRemoteInvocation(context.Background(), RunConfig{
+		Logger:                  zap.NewNop(),
 		Dir:                     "factory",
 		NamedFactoryName:        "@you/research",
 		PreparedInvocationInput: preparedRemoteArguments(secret),
@@ -933,14 +949,16 @@ func testRemoteInvocationRejectsEmptySuccessBody(t *testing.T) {
 
 func TestRunRemoteInvocationReportsDurableInputAndResponseErrors(t *testing.T) {
 	t.Run("nil operation is rejected", func(t *testing.T) {
-		err := RunRemoteInvocation(context.Background(), RunConfig{}, "", nil)
+		err := RunRemoteInvocation(context.Background(), RunConfig{
+			Logger: zap.NewNop()}, "", nil)
 		if err == nil || !strings.Contains(err.Error(), "operation is required") {
 			t.Fatalf("error = %v, want required-operation error", err)
 		}
 	})
 
 	t.Run("missing invocation input has stable code", func(t *testing.T) {
-		err := RunRemoteInvocation(context.Background(), RunConfig{Dir: "factory"}, "", remoteInvocationOperationFunc(func(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
+		err := RunRemoteInvocation(context.Background(), RunConfig{
+			Logger: zap.NewNop(), Dir: "factory"}, "", remoteInvocationOperationFunc(func(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 			t.Fatal("remote operation called without invocation input")
 			return factoryapi.FactorySessionExecutionResponse{}, nil
 		}))
@@ -954,7 +972,8 @@ func TestRunRemoteInvocationReportsDurableInputAndResponseErrors(t *testing.T) {
 	t.Run("compatibility content is rejected", func(t *testing.T) {
 		text := "remote compatibility content"
 		err := RunRemoteInvocation(context.Background(), RunConfig{
-			Dir: "factory", NamedFactoryName: "@you/research", InvocationPositionalText: &text,
+			Logger: zap.NewNop(),
+			Dir:    "factory", NamedFactoryName: "@you/research", InvocationPositionalText: &text,
 		}, "", remoteInvocationOperationFunc(func(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 			return factoryapi.FactorySessionExecutionResponse{}, nil
 		}))
@@ -967,7 +986,8 @@ func TestRunRemoteInvocationReportsDurableInputAndResponseErrors(t *testing.T) {
 	t.Run("missing durable identity is rejected", func(t *testing.T) {
 		text := "remote normalized input"
 		err := RunRemoteInvocation(context.Background(), RunConfig{
-			Dir: "factory", NamedFactoryName: "@you/research", PreparedInvocationInput: preparedRemoteArguments(text),
+			Logger: zap.NewNop(),
+			Dir:    "factory", NamedFactoryName: "@you/research", PreparedInvocationInput: preparedRemoteArguments(text),
 		}, "", remoteInvocationOperationFunc(func(context.Context, RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 			return factoryapi.FactorySessionExecutionResponse{}, nil
 		}))

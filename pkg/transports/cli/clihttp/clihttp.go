@@ -318,12 +318,6 @@ type protocol struct {
 
 // NewProtocol binds one HTTP effect and one clock to the CLI protocol.
 func NewProtocol(doer Doer, clock Clock) (Protocol, error) {
-	if doer == nil {
-		return nil, fmt.Errorf("HTTP doer is required")
-	}
-	if clock == nil {
-		return nil, fmt.Errorf("HTTP clock is required")
-	}
 	return &protocol{doer: doer, clock: clock}, nil
 }
 

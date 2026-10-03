@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.uber.org/zap"
 	"os"
 	"time"
 
@@ -473,6 +474,10 @@ func runWithTestRuntimeRunnerAndMockWorkersDiagnosticsLoader(
 	loadMockWorkers workers.MockWorkersConfigLoader,
 	loadMockWorkersWithDiagnostics workers.MockWorkersConfigDiagnosticsLoader,
 ) error {
+	// This fixture explicitly selects silent diagnostics for scenarios without log assertions.
+	if cfg.Logger == nil {
+		cfg.Logger = zap.NewNop()
+	}
 	cfg = ensureTestRecordingsCLI(cfg)
 	if cfg.WorkRequestFileLoader == nil && cfg.WorkFile != "" {
 		cfg.WorkRequestFileLoader = loadRunTestWorkRequestFile

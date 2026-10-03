@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -61,6 +62,7 @@ func TestRunFactoryInvocation_LiveAndReplayPreserveCanonicalJavaScriptOrder(t *t
 				}}, nil
 			}}
 			cfg := RunConfig{
+				Logger:               zap.NewNop(),
 				InvocationOutputMode: InvocationOutputResponseStream,
 				JSONOutput:           true, Output: &output, ReplayPath: source.replayPath,
 			}
@@ -89,6 +91,7 @@ func TestRunRemoteInvocationResponseStreamReconnectsFromCanonicalCursor(t *testi
 	}
 	var output bytes.Buffer
 	err := RunRemoteInvocation(context.Background(), RunConfig{
+		Logger:                  zap.NewNop(),
 		Dir:                     "factory",
 		NamedFactoryName:        "@you/research",
 		PreparedInvocationInput: preparedRemoteArguments("remote input"),
@@ -119,6 +122,7 @@ func TestRunRemoteInvocationResponseStreamJSONEmitsEventsBeforeTerminalFailure(t
 	}
 	var output bytes.Buffer
 	err := RunRemoteInvocation(context.Background(), RunConfig{
+		Logger:                  zap.NewNop(),
 		Dir:                     "factory",
 		NamedFactoryName:        "@you/research",
 		PreparedInvocationInput: preparedRemoteArguments("remote input"),
@@ -555,6 +559,7 @@ func TestRunFactoryInvocation_LiveEventIsWrittenBeforeOperationCompletes(t *test
 		}}, nil
 	}}
 	cfg := RunConfig{
+		Logger:               zap.NewNop(),
 		InvocationOutputMode: InvocationOutputResponseStream,
 		JSONOutput:           true, Output: &output,
 	}
@@ -659,6 +664,7 @@ func TestFactoryEventRenderers_RejectMissingPresentationEdges(t *testing.T) {
 			name: "human output",
 			open: func() error {
 				_, err := invocationFactoryEventRenderer(RunConfig{
+					Logger:               zap.NewNop(),
 					InvocationOutputMode: InvocationOutputResponseStream,
 					Output:               nil,
 				}, testResponsePresentation())
@@ -669,6 +675,7 @@ func TestFactoryEventRenderers_RejectMissingPresentationEdges(t *testing.T) {
 			name: "human presentation",
 			open: func() error {
 				_, err := invocationFactoryEventRenderer(RunConfig{
+					Logger:               zap.NewNop(),
 					InvocationOutputMode: InvocationOutputResponseStream,
 					Output:               &bytes.Buffer{},
 				}, nil)
@@ -679,6 +686,7 @@ func TestFactoryEventRenderers_RejectMissingPresentationEdges(t *testing.T) {
 			name: "json output",
 			open: func() error {
 				_, err := invocationFactoryEventRenderer(RunConfig{
+					Logger:               zap.NewNop(),
 					InvocationOutputMode: InvocationOutputResponseStream,
 					JSONOutput:           true,
 					Output:               nil,
@@ -828,6 +836,7 @@ func TestInvocationFactoryEventRenderer_ColorsOnlyTTYHumanOutput(t *testing.T) {
 	for _, outputIsTTY := range []bool{true, false} {
 		var output strings.Builder
 		renderer, err := invocationFactoryEventRenderer(RunConfig{
+			Logger:               zap.NewNop(),
 			InvocationOutputMode: InvocationOutputResponseStream,
 			OutputIsTTY:          outputIsTTY,
 			Output:               &output,

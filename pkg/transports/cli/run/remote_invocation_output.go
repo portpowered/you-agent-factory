@@ -212,7 +212,7 @@ func ObserveInvocationRejection(logger *zap.Logger, err error) {
 	}
 	recordCleanInvocationAttempt()
 	cleanInvocationMetrics.ambiguityRejected.Add(1)
-	cleanInvocationLogger(logger).Info(
+	logger.Info(
 		cleanInvocationLogMessageRejected,
 		zap.String("mode", cleanInvocationModeLabel),
 		zap.String("reason", cleanInvocationRejectReason),
@@ -221,7 +221,6 @@ func ObserveInvocationRejection(logger *zap.Logger, err error) {
 }
 
 func recordCleanInvocationCompletion(logger *zap.Logger, cfg RunConfig, input cleanInvocationCompletionLogInput) {
-	logger = cleanInvocationLogger(logger)
 	fields := []zap.Field{
 		zap.String("mode", cleanInvocationModeLabel),
 		zap.String("inputSource", invocationInputSourceLogLabel(cfg.CleanInvocationInputSource)),
@@ -297,13 +296,6 @@ func cleanInvocationFailureLogFieldsForCode(code, message string) (string, strin
 	}
 }
 
-func cleanInvocationLogger(logger *zap.Logger) *zap.Logger {
-	if logger == nil {
-		return zap.NewNop()
-	}
-	return logger
-}
-
 func invocationInputSourceLogLabels(sources []InvocationInputSource) []string {
 	labels := make([]string, 0, len(sources))
 	for _, source := range sources {
@@ -360,17 +352,11 @@ func resetCleanInvocationMetricsForTest() {
 
 func recordCLIInvocationResolved(cfg RunConfig, source work.InputSourceLabel) {
 	logger := cfg.Logger
-	if logger == nil {
-		logger = zap.NewNop()
-	}
 	logger.Info("factory invocation input resolved", zap.String("input_source", string(source)))
 }
 
 func recordCLIInvocationFailure(cfg RunConfig, err error) {
 	logger := cfg.Logger
-	if logger == nil {
-		logger = zap.NewNop()
-	}
 	inputErr, ok := err.(*work.InputError)
 	if !ok {
 		return

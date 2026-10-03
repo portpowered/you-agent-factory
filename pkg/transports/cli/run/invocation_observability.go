@@ -733,9 +733,6 @@ func logPackagedTTSInvocationStart(cfg RunConfig) {
 		return
 	}
 	logger := cfg.Logger
-	if logger == nil {
-		logger = zap.NewNop()
-	}
 	fields := []zap.Field{
 		zap.String("packaged_factory_name", interfaces.PackagedTTSFactoryName),
 		zap.String("tts_backend", interfaces.DefaultTTSModelName+"/"+interfaces.DefaultTTSBackendName),

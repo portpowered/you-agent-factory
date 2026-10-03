@@ -315,10 +315,12 @@ func TestResolveBootstrapInvokeConfigUsesWorkingDirectoryResolver(t *testing.T) 
 
 	operation := &workingDirectoryResolverInvocation{resolvedFactoryDir: "project/factory"}
 	defaults := operatorconfig.ResolvedDefaults{WorkerModelProvider: "codex"}
+	logger := zap.NewNop()
 	config, err := resolveBootstrapInvokeConfig(invokeOptions{
 		Invocation:       operation,
 		FactoryDir:       "",
 		WorkingDirectory: "project",
+		Logger:           logger,
 		HomeDir:          "home",
 		OperatorDefaults: defaults,
 		Verbose:          true,
@@ -329,8 +331,8 @@ func TestResolveBootstrapInvokeConfigUsesWorkingDirectoryResolver(t *testing.T) 
 	if config.FactoryDir != "project/factory" || operation.gotExplicit != "" || operation.gotWorkingDir != "project" {
 		t.Fatalf("resolved factory target = %#v, explicit=%q workingDirectory=%q", config, operation.gotExplicit, operation.gotWorkingDir)
 	}
-	if config.HomeDir != "home" || config.OperatorDefaults != defaults || !config.Verbose || config.Logger == nil {
-		t.Fatalf("resolved invoke config = %#v, want defaults and a no-op logger", config)
+	if config.HomeDir != "home" || config.OperatorDefaults != defaults || !config.Verbose || config.Logger != logger {
+		t.Fatalf("resolved invoke config = %#v, want defaults and the supplied logger", config)
 	}
 }
 

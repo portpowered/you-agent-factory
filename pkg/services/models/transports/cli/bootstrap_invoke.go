@@ -92,9 +92,6 @@ func resolveBootstrapInvokeConfig(cfg invokeOptions) (InvocationRequest, error) 
 		return InvocationRequest{}, err
 	}
 	logger := cfg.Logger
-	if logger == nil {
-		logger = zap.NewNop()
-	}
 	return InvocationRequest{
 		FactoryDir:       factoryDir,
 		HomeDir:          cfg.HomeDir,
