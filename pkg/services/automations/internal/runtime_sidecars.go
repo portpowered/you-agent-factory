@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"go.uber.org/zap"
@@ -25,7 +26,13 @@ func (s *Service) StartSchedulerSidecarsForRuntime(ctx context.Context, sidecars
 		return nil
 	}
 	identity := s.schedulerSourceIdentity(factoryDir)
-	configuration := s.schedulerConfiguration(identity, factoryDir, factoryConfig, runtimeConfig, submitter)
+	configuration := s.schedulerConfiguration(identity, factoryDir, factoryConfig, runtimeConfig, submitter, s.workflowID, s.cursorScope)
+	return s.startConfiguredSchedulerSource(ctx, sidecars, configuration)
+}
+
+func (s *Service) startConfiguredSchedulerSource(ctx context.Context, sidecars *sync.WaitGroup,
+	configuration sourcelifecycle.RuntimeSourceConfiguration) error {
+	identity := runtimeSchedulerIdentity(configuration.Snapshot.Invocation.WorkflowID, configuration.Snapshot.FactoryDir)
 	if err := s.lifecycle.ConfigureRuntimeSource(ctx, configuration); err != nil {
 		return err
 	}
@@ -49,7 +56,7 @@ func (s *Service) StartSchedulerSidecarsForRuntime(ctx context.Context, sidecars
 
 func (s *Service) schedulerConfiguration(identity automations.SourceIdentity, factoryDir string,
 	factoryConfig *interfaces.FactoryConfig, runtimeConfig interfaces.RuntimeConfigLookup,
-	submitter automations.WorkRequestSubmitter,
+	submitter automations.WorkRequestSubmitter, workflowID string, scope scriptpollers.CursorScope,
 ) sourcelifecycle.RuntimeSourceConfiguration {
 	snapshot := interfaces.RuntimeSnapshot{FactoryDir: factoryDir, RuntimeBaseDir: runtimeConfig.RuntimeBaseDir(), EffectiveFactory: *factoryConfig}
 	snapshot.Invocation.WorkflowID = identity.AutomationID
@@ -74,12 +81,19 @@ func (s *Service) schedulerConfiguration(identity automations.SourceIdentity, fa
 			snapshot.Workers = append(snapshot.Workers, interfaces.CloneWorkerConfig(*selected))
 		}
 	}
-	return sourcelifecycle.RuntimeSourceConfiguration{RuntimeID: s.cursorScope.RuntimeID, CursorBaseDir: s.cursorScope.BaseDir, WorkflowID: strings.TrimSpace(s.workflowID), Snapshot: snapshot,
+	return sourcelifecycle.RuntimeSourceConfiguration{RuntimeID: scope.RuntimeID, CursorBaseDir: scope.BaseDir, WorkflowID: strings.TrimSpace(workflowID), Snapshot: snapshot,
 		Inputs: automations.RuntimeActivationInputs{StartSchedulers: true, Submitter: submitter}}
 }
 func (s *Service) schedulerSourceIdentity(factoryDir string) automations.SourceIdentity {
+	return runtimeSchedulerIdentity(s.workflowIdentity(factoryDir), factoryDir)
+}
+
+func runtimeSchedulerIdentity(workflowID, factoryDir string) automations.SourceIdentity {
+	if strings.TrimSpace(workflowID) == "" {
+		workflowID = factoryDir
+	}
 	return automations.SourceIdentity{
-		AutomationID: strings.TrimSpace(s.workflowIdentity(factoryDir)),
+		AutomationID: strings.TrimSpace(workflowID),
 		SourceID:     runtimeSchedulerSourceID,
 	}
 }

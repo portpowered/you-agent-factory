@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -42,7 +43,7 @@ func TestNewServicePreservesNowOnlyClockCompatibilityAndInertness(t *testing.T) 
 	t.Parallel()
 	ports := validConstructionPorts(t)
 	commandCalls, startCalls, validateCalls := 0, 0, 0
-	service, err := automationswire.NewService(
+	service, err := newTestAutomationService(
 		ports.logger, nowOnlyAutomationClock{}, recordingCommandRunner{calls: &commandCalls},
 		"now-only", "", recordingHostedPollers{startCalls: &startCalls, validateCalls: &validateCalls},
 		ports.resolveTemplates, ports.executionPolicy,
@@ -109,7 +110,7 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 func (ports constructionPorts) newService(t *testing.T) runtimeAutomationService {
 	t.Helper()
 
-	service, err := automationswire.NewService(
+	service, err := newTestAutomationService(
 		ports.logger,
 		ports.clock,
 		ports.commandRunner,
@@ -286,74 +287,6 @@ func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 	}
 }
 
-func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
-	t.Parallel()
-
-	base := validConstructionPorts(t)
-	tests := []struct {
-		name   string
-		mutate func(*constructionPorts)
-		want   string
-	}{
-		{
-			name:   "logger",
-			mutate: func(ports *constructionPorts) { ports.logger = nil },
-			want:   "construct Automations: logger is required",
-		},
-		{
-			name:   "clock",
-			mutate: func(ports *constructionPorts) { ports.clock = nil },
-			want:   "construct Automations: clock is required",
-		},
-		{
-			name:   "command runner",
-			mutate: func(ports *constructionPorts) { ports.commandRunner = nil },
-			want:   "construct Automations: command runner is required",
-		},
-		{
-			name:   "hosted pollers",
-			mutate: func(ports *constructionPorts) { ports.hostedPollers = nil },
-			want:   "construct Automations: hosted pollers are required",
-		},
-		{
-			name:   "template field resolver",
-			mutate: func(ports *constructionPorts) { ports.resolveTemplates = nil },
-			want:   "construct Automations: template field resolver is required",
-		},
-		{
-			name:   "workstation execution policy",
-			mutate: func(ports *constructionPorts) { ports.executionPolicy = nil },
-			want:   "construct Automations: workstation execution policy is required",
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			ports := base
-			test.mutate(&ports)
-
-			service, err := automationswire.NewService(
-				ports.logger,
-				ports.clock,
-				ports.commandRunner,
-				"automations-wire",
-				"",
-				ports.hostedPollers,
-				ports.resolveTemplates,
-				ports.executionPolicy,
-			)
-			if err == nil {
-				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
-			}
-			if err.Error() != test.want {
-				t.Fatalf("NewService() error = %q, want %q", err.Error(), test.want)
-			}
-			if service != nil {
-				t.Fatalf("NewService() = %#v, want nil service", service)
-			}
-		})
-	}
-}
-
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
@@ -373,13 +306,13 @@ func TestNewRootComposesHostedEffectsAndPublishesRuntimeCapabilities(t *testing.
 	if err != nil {
 		t.Fatalf("NewHostedLinearCheckpointStore() error = %v", err)
 	}
-	root, err := automationswire.NewRoot(
+	root, err := newTestAutomationRoot(
 		ports.logger,
 		ports.clock,
 		ports.commandRunner,
 		"automations-root",
 		"",
-		automationswire.HostedSourceInputs{
+		testHostedSourceInputs{
 			Clock:            ports.clock,
 			SecretResolver:   func(context.Context, automations.HostedRuntimePaths, string) (string, error) { return "secret", nil },
 			LinearEndpoint:   "",
@@ -397,33 +330,6 @@ func TestNewRootComposesHostedEffectsAndPublishesRuntimeCapabilities(t *testing.
 	}
 }
 
-func TestNewRootRequiresCursorPersistenceEffect(t *testing.T) {
-	t.Parallel()
-
-	ports := validConstructionPorts(t)
-	store, err := automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
-	if err != nil {
-		t.Fatalf("NewHostedLinearCheckpointStore() error = %v", err)
-	}
-	_, err = automationswire.NewRoot(
-		ports.logger,
-		ports.clock,
-		ports.commandRunner,
-		"automations-root",
-		"",
-		automationswire.HostedSourceInputs{
-			Clock:           ports.clock,
-			SecretResolver:  func(context.Context, automations.HostedRuntimePaths, string) (string, error) { return "secret", nil },
-			CheckpointStore: store,
-		},
-		ports.resolveTemplates,
-		ports.executionPolicy,
-	)
-	if err == nil || err.Error() != "construct Automations: script poller cursor filesystem is required" {
-		t.Fatalf("NewRoot() error = %v, want missing cursor persistence effect", err)
-	}
-}
-
 func TestNewRootUsesDurableCursorRecorderAcrossReconstruction(t *testing.T) {
 	t.Parallel()
 
@@ -433,13 +339,13 @@ func TestNewRootUsesDurableCursorRecorderAcrossReconstruction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewHostedLinearCheckpointStore() error = %v", err)
 	}
-	inputs := automationswire.HostedSourceInputs{
+	inputs := testHostedSourceInputs{
 		Clock:            ports.clock,
 		SecretResolver:   func(context.Context, automations.HostedRuntimePaths, string) (string, error) { return "secret", nil },
 		CheckpointStore:  store,
 		CursorFileSystem: platformfilesystem.Local{},
 	}
-	first, err := automationswire.NewRoot(
+	first, err := newTestAutomationRoot(
 		ports.logger,
 		ports.clock,
 		cursorCommandRunner{stdout: durableCursorStdout},
@@ -486,7 +392,7 @@ func TestNewRootUsesDurableCursorRecorderAcrossReconstruction(t *testing.T) {
 		t.Fatal("RunScriptPoller() error = nil, want terminal poller exit after commit")
 	}
 
-	second, err := automationswire.NewRoot(
+	second, err := newTestAutomationRoot(
 		ports.logger,
 		ports.clock,
 		cursorCommandRunner{stdout: durableCursorStdout},
@@ -555,7 +461,7 @@ func TestNewRootRoutesActivatedRuntimeCursorToFactoryLocalRecorder(t *testing.T)
 }
 
 type runtimeCursorComposition struct {
-	inputs  automationswire.HostedSourceInputs
+	inputs  testHostedSourceInputs
 	request automations.RuntimeActivationRequest
 	poller  factorydefinitions.FactoryWorkstationConfig
 }
@@ -570,7 +476,7 @@ func newRuntimeCursorComposition(
 	if err != nil {
 		t.Fatalf("NewHostedLinearCheckpointStore() error = %v", err)
 	}
-	inputs := automationswire.HostedSourceInputs{
+	inputs := testHostedSourceInputs{
 		Clock:            clock,
 		SecretResolver:   func(context.Context, automations.HostedRuntimePaths, string) (string, error) { return "secret", nil },
 		CheckpointStore:  store,
@@ -618,10 +524,10 @@ func newRuntimeCursorRoot(
 	ports constructionPorts,
 	runner platformprocess.CommandRunner,
 	workflowID string,
-	inputs automationswire.HostedSourceInputs,
+	inputs testHostedSourceInputs,
 ) automations.Root {
 	t.Helper()
-	root, err := automationswire.NewRoot(
+	root, err := newTestAutomationRoot(
 		ports.logger,
 		ports.clock,
 		runner,
@@ -734,7 +640,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	baseline := runtime.NumGoroutine()
 
-	service, err := automationswire.NewService(
+	service, err := newTestAutomationService(
 		ports.logger, ports.clock, ports.commandRunner, "automations-wire-inert", "",
 		ports.hostedPollers,
 		ports.resolveTemplates, ports.executionPolicy,
@@ -827,4 +733,49 @@ func assertInertPublishedRoot(t *testing.T, service automations.Service) {
 	if !errors.Is(err, automations.ErrNotFound) {
 		t.Fatalf("SourceStatus() = %v, want ErrNotFound after inert construction", err)
 	}
+}
+
+// Test fixtures select effects before constructing each isolated component.
+type testHostedSourceInputs struct {
+	Clock            automations.HostedLinearClock
+	HTTPClient       automations.HostedLinearHTTPDoer
+	SecretResolver   automations.HostedLinearSecretResolver
+	LinearEndpoint   string
+	CheckpointStore  automations.HostedLinearCheckpointStore
+	CursorFileSystem automationswire.CursorPersistenceFileSystem
+}
+
+func newTestAutomationRoot(logger *zap.Logger, clock automations.Clock, runner platformprocess.CommandRunner,
+	workflowID, factoryDir string, hosted testHostedSourceInputs, resolver workers.TemplateFieldResolver,
+	policy factorydefinitions.WorkstationExecutionPolicyService) (automations.Root, error) {
+	pollers := automationswire.NewHostedPollers(logger, hosted.Clock, hosted.HTTPClient,
+		hosted.SecretResolver, hosted.LinearEndpoint, hosted.CheckpointStore)
+	return automationswire.NewRoot(newTestAutomationOwner(logger, clock, runner, workflowID,
+		factoryDir, pollers, resolver, policy, hosted.CursorFileSystem)), nil
+}
+func newTestAutomationService(logger *zap.Logger, clock automations.Clock, runner platformprocess.CommandRunner,
+	workflowID, factoryDir string, hosted automations.HostedPollers, resolver workers.TemplateFieldResolver,
+	policy factorydefinitions.WorkstationExecutionPolicyService) (automations.Service, error) {
+	return newTestAutomationOwner(logger, clock, runner, workflowID, factoryDir, hosted, resolver, policy, nil), nil
+}
+func newTestAutomationOwner(logger *zap.Logger, clock automations.Clock, runner platformprocess.CommandRunner,
+	workflowID, factoryDir string, hosted automations.HostedPollers, resolver workers.TemplateFieldResolver,
+	policy factorydefinitions.WorkstationExecutionPolicyService, files automationswire.CursorPersistenceFileSystem) *automationswire.Owner {
+	scheduler, ok := clock.(clockwork.Clock)
+	if !ok {
+		scheduler = clockwork.NewRealClock()
+	}
+	cursors := automationswire.NewCursorScopes(files)
+	scripts := automationswire.NewScriptPollers(logger, scheduler, runner, resolver, policy, cursors)
+	cron, watchers := automationswire.NewCron(), automationswire.NewFilesystemWatchers()
+	lifecycle := automationswire.NewSourceLifecycle(logger, scheduler, scripts, cron, watchers, hosted, cursors, policy)
+	return automationswire.NewService(logger, scheduler, lifecycle, automationswire.NewReconciliation(lifecycle),
+		scripts, cron, watchers, hosted, policy, cursors, files != nil, workflowID, factoryDir, testCursorBaseDir(files, factoryDir))
+}
+
+func testCursorBaseDir(files automationswire.CursorPersistenceFileSystem, dir string) string {
+	if files == nil {
+		return ""
+	}
+	return strings.TrimSpace(dir)
 }

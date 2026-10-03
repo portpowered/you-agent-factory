@@ -16,20 +16,27 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	cursorscopeswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes/wire"
+	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
+	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
+	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
+	sourcelifecyclewire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
 func TestExplicitServiceConstructionDoesNotExecuteCommandRunner(t *testing.T) {
 	t.Parallel()
 	runner := &internalScriptPollerRunner{outcomes: []internalScriptPollerOutcome{{}}}
-	service := New(zap.NewNop(), clockwork.NewFakeClock(), runner, "", "", nil, nil, factorydefinitioncomposition.WorkstationExecutionPolicy{}, cronwire.NewService(), fswire.NewService())
+	service := newTestService(zap.NewNop(), clockwork.NewFakeClock(), runner, "", "", nil, nil, factorydefinitioncomposition.WorkstationExecutionPolicy{}, cronwire.NewService(), fswire.NewService())
 	if service == nil || len(runner.outcomes) != 1 {
 		t.Fatal("construction executed the supplied command runner")
 	}
@@ -57,7 +64,7 @@ func TestSchedulerSidecarsReconcileLifecycleBeforeCanonicalWorkSubmission(t *tes
 		FactoryPath:  t.TempDir(),
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{},
 	}
-	service := New(
+	service := newTestService(
 		zap.NewNop(), clock, &internalScriptPollerRunner{}, workflowID, "", nil, nil, factorydefinitioncomposition.WorkstationExecutionPolicy{},
 		cronwire.NewService(),
 		fswire.NewService(),
@@ -123,7 +130,7 @@ func TestSchedulerSidecarsReconcileLifecycleBeforeCanonicalWorkSubmission(t *tes
 }
 
 func TestSchedulerSourceObservationAttachesBeforeStartEffectInitialization(t *testing.T) {
-	service := New(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil, factorydefinitioncomposition.WorkstationExecutionPolicy{}, cronwire.NewService(), fswire.NewService())
+	service := newTestService(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil, factorydefinitioncomposition.WorkstationExecutionPolicy{}, cronwire.NewService(), fswire.NewService())
 	identity := automations.SourceIdentity{
 		AutomationID: "workflow-start-barrier",
 		SourceID:     runtimeSchedulerSourceID,
@@ -176,7 +183,7 @@ func TestSchedulerSourceObservationAttachesBeforeStartEffectInitialization(t *te
 func TestProductionRootUsesScriptPollersOwner(t *testing.T) {
 	t.Parallel()
 
-	service := NewService(
+	service := newTestService(
 		zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "workflow-script-pollers", "", nil, nil, factorydefinitioncomposition.WorkstationExecutionPolicy{},
 		cronwire.NewService(),
 		fswire.NewService(),
@@ -202,7 +209,7 @@ func TestProductionRootScriptPollerCursorThroughCompositionPath(t *testing.T) {
 		outcomes: []internalScriptPollerOutcome{{result: platformprocess.CommandResult{Stdout: stdout}}},
 	}
 	submitted := &internalScriptPollerSubmitter{}
-	service := NewService(
+	service := newTestService(
 		zap.NewNop(),
 		clockwork.NewFakeClock(),
 		runner,
@@ -342,7 +349,7 @@ func startProductionRootScheduler(
 	workflowID string,
 ) (*Service, automations.SourceIdentity, *sync.WaitGroup, context.CancelFunc) {
 	t.Helper()
-	service := NewService(
+	service := newTestService(
 		zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, workflowID, "", nil, nil, factorydefinitioncomposition.WorkstationExecutionPolicy{},
 		cronwire.NewService(),
 		fswire.NewService(),
@@ -545,7 +552,7 @@ func startSchedulerConcurrently(
 }
 
 func TestSchedulerSidecarsReconcileDifferentRuntimeIdentitiesConcurrently(t *testing.T) {
-	service := New(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil, factorydefinitioncomposition.WorkstationExecutionPolicy{}, cronwire.NewService(), fswire.NewService())
+	service := newTestService(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil, factorydefinitioncomposition.WorkstationExecutionPolicy{}, cronwire.NewService(), fswire.NewService())
 	factoryConfig := &interfaces.FactoryConfig{}
 	directories := []string{t.TempDir(), t.TempDir()}
 	contexts := make([]context.Context, len(directories))
@@ -658,7 +665,7 @@ func TestGetCursorPreservesOpaqueFactsWithoutCommandOrAdmission(t *testing.T) {
 			runner := &internalScriptPollerRunner{outcomes: []internalScriptPollerOutcome{
 				{result: platformprocess.CommandResult{Stdout: output}}, {},
 			}}
-			service := New(zap.NewNop(), clockwork.NewFakeClock(), runner, "opaque-workflow", base, nil, nil,
+			service := newTestService(zap.NewNop(), clockwork.NewFakeClock(), runner, "opaque-workflow", base, nil, nil,
 				factorydefinitioncomposition.WorkstationExecutionPolicy{}, cronwire.NewService(), fswire.NewService())
 			poller, worker := internalCanonicalScriptPollerWorkstation(), internalCanonicalScriptPollerWorker()
 			admissions := 0
@@ -697,7 +704,7 @@ func TestGetCursorAfterFailedReplacementPreservesPriorOpaqueFacts(t *testing.T) 
 	dir := t.TempDir()
 	files := &cursorReplacementFaultFileSystem{}
 	runner := &internalScriptPollerRunner{}
-	service := NewWithCursorFileSystem(zap.NewNop(), clockwork.NewFakeClock(), runner, "opaque-replacement", dir, nil, nil,
+	service := newTestServiceWithCursorFileSystem(zap.NewNop(), clockwork.NewFakeClock(), runner, "opaque-replacement", dir, nil, nil,
 		factorydefinitioncomposition.WorkstationExecutionPolicy{}, files, cronwire.NewService(), fswire.NewService())
 	poller, worker := internalCanonicalScriptPollerWorkstation(), internalCanonicalScriptPollerWorker()
 	config := internalScriptPollerLoadedRuntimeConfig(t, dir, poller, worker)
@@ -764,4 +771,26 @@ func (f *cursorReplacementFaultFileSystem) Rename(from, to string) error {
 		return f.err
 	}
 	return f.Local.Rename(from, to)
+}
+
+func newTestService(logger *zap.Logger, clock Clock, runner platformprocess.CommandRunner,
+	workflowID, factoryDir string, hosted automations.HostedPollers,
+	resolveTemplates workers.TemplateFieldResolver, policy interfaces.WorkstationExecutionPolicyService,
+	cronService cron.Service, watchers filesystemwatchers.Service) *Service {
+	return newTestServiceWithCursorFileSystem(logger, clock, runner, workflowID, factoryDir,
+		hosted, resolveTemplates, policy, nil, cronService, watchers)
+}
+func newTestServiceWithCursorFileSystem(logger *zap.Logger, clock Clock, runner platformprocess.CommandRunner,
+	workflowID, factoryDir string, hosted automations.HostedPollers,
+	resolveTemplates workers.TemplateFieldResolver, policy interfaces.WorkstationExecutionPolicyService,
+	files cursorscopeswire.CursorPersistenceFileSystem, cronService cron.Service, watchers filesystemwatchers.Service) *Service {
+	cursors := cursorscopeswire.NewService(files)
+	pollers := scriptpollerswire.NewService(logger, clock, runner, resolveTemplates, policy, cursors)
+	lifecycle := sourcelifecyclewire.NewService(logger, clock, pollers, cronService, watchers, hosted, cursors, policy)
+	cursorBaseDir := ""
+	if files != nil {
+		cursorBaseDir = strings.TrimSpace(factoryDir)
+	}
+	return New(logger, clock, lifecycle, reconciliationwire.NewService(lifecycle), pollers,
+		cronService, watchers, hosted, policy, cursors, files != nil, workflowID, factoryDir, cursorBaseDir)
 }

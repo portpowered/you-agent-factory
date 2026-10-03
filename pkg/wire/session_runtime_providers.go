@@ -588,23 +588,8 @@ func provideInitialFactorySnapshotFactory(
 	}
 }
 
-func provideAutomationsRoot(
-	hostedSourceInputs automationswire.HostedSourceInputs,
-	logger *zap.Logger,
-	clock factoryruntime.Clock,
-	commandRunner platformprocess.CommandRunner,
-	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
-) (automations.Root, error) {
-	return automationswire.NewRoot(
-		logger,
-		clock,
-		commandRunner,
-		"",
-		"",
-		hostedSourceInputs,
-		workerswire.ResolveTemplateFields,
-		workstationExecution,
-	)
+func provideAutomationsRoot(service *automationswire.Owner) automations.Root {
+	return automationswire.NewRoot(service)
 }
 
 func provideFactorySessionResponseEventRetentionLimits(

@@ -11,8 +11,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
-	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
-	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
+	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -40,18 +39,13 @@ func newAutomationService(fixture automationFixture) *automationinternal.Service
 	if !ok || scheduler == nil {
 		scheduler = clockwork.NewRealClock()
 	}
-	return automationinternal.New(
-		fixture.Logger,
-		scheduler,
-		fixture.CommandRunner,
-		fixture.WorkflowID,
-		fixture.DefaultFactoryDir,
-		fixture.HostedPollers,
-		fixture.ResolveTemplates,
-		automationWorkstationExecutionPolicy(),
-		cronwire.NewService(),
-		fswire.NewService(),
-	)
+	policy := automationWorkstationExecutionPolicy()
+	cursors := automationswire.NewCursorScopes(nil)
+	scripts := automationswire.NewScriptPollers(fixture.Logger, scheduler, fixture.CommandRunner, fixture.ResolveTemplates, policy, cursors)
+	cron, watchers := automationswire.NewCron(), automationswire.NewFilesystemWatchers()
+	lifecycle := automationswire.NewSourceLifecycle(fixture.Logger, scheduler, scripts, cron, watchers, fixture.HostedPollers, cursors, policy)
+	return automationswire.NewService(fixture.Logger, scheduler, lifecycle, automationswire.NewReconciliation(lifecycle),
+		scripts, cron, watchers, fixture.HostedPollers, policy, cursors, false, fixture.WorkflowID, fixture.DefaultFactoryDir, "")
 }
 
 type programmableHostedPollers struct {

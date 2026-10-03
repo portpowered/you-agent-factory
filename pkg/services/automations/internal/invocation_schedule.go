@@ -58,15 +58,6 @@ func (s *Service) PrepareInvocationSchedules(
 	ctx context.Context,
 	request automations.InvocationScheduleRequest,
 ) (automations.PreparedInvocationSchedules, error) {
-	if runtimeID := strings.TrimSpace(request.RuntimeID); runtimeID != "" {
-		s.runtimeMu.Lock()
-		instance := s.runtimes[runtimeID]
-		s.runtimeMu.Unlock()
-		if instance != nil && instance.owner != nil && instance.owner != s {
-			request.RuntimeID = ""
-			return instance.owner.PrepareInvocationSchedules(ctx, request)
-		}
-	}
 	return s.prepareInvocationSchedules(ctx, request)
 }
 

@@ -20,7 +20,7 @@ import (
 func TestInvocationSchedule_FakeClockTriggersDistinctWorkAndSkipsOverlap(t *testing.T) {
 	start := time.Date(2026, time.July, 29, 18, 0, 0, 0, time.UTC)
 	clock := clockwork.NewFakeClockAt(start)
-	service := New(zap.NewNop(), clock, &internalScriptPollerRunner{}, "workflow-loop", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
+	service := newTestService(zap.NewNop(), clock, &internalScriptPollerRunner{}, "workflow-loop", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	config, runtimeConfig := invocationScheduleFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -78,7 +78,7 @@ func TestInvocationSchedule_FakeClockTriggersDistinctWorkAndSkipsOverlap(t *test
 func TestInvocationSchedule_ResumeContinuesSequenceWithoutRepeatingInitialTrigger(t *testing.T) {
 	start := time.Date(2026, time.July, 29, 18, 30, 0, 0, time.UTC)
 	clock := clockwork.NewFakeClockAt(start)
-	service := New(zap.NewNop(), clock, &internalScriptPollerRunner{}, "workflow-loop", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
+	service := newTestService(zap.NewNop(), clock, &internalScriptPollerRunner{}, "workflow-loop", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	config, runtimeConfig := invocationScheduleFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -113,7 +113,7 @@ func TestInvocationSchedule_ResumeContinuesSequenceWithoutRepeatingInitialTrigge
 }
 
 func TestInvocationSchedule_RejectsInvalidDurationBeforeCommit(t *testing.T) {
-	service := New(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "workflow-loop", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
+	service := newTestService(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "workflow-loop", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	config, runtimeConfig := invocationScheduleFixture(t)
 	submissions := 0
 	_, err := service.PrepareInvocationSchedules(context.Background(), automations.InvocationScheduleRequest{
@@ -132,7 +132,7 @@ func TestInvocationSchedule_RejectsInvalidDurationBeforeCommit(t *testing.T) {
 func TestInvocationSchedule_FailureCeilingDisablesLaterTriggers(t *testing.T) {
 	start := time.Date(2026, time.July, 29, 19, 0, 0, 0, time.UTC)
 	clock := clockwork.NewFakeClockAt(start)
-	service := New(zap.NewNop(), clock, &internalScriptPollerRunner{}, "workflow-loop", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
+	service := newTestService(zap.NewNop(), clock, &internalScriptPollerRunner{}, "workflow-loop", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	config, runtimeConfig := invocationScheduleFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
