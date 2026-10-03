@@ -15,6 +15,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -23,7 +24,7 @@ import (
 // The cells share the root-built host but own their command route, directory,
 // session and cleanup. The next command proves the previous cycle completed;
 // no internal cursor file or service pointer is used as a public observer.
-func TestScriptPollerSessionRecoveryAndEmptyCycle(t *testing.T) {
+func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 	t.Parallel()
 	recoveryDir, recovery := newScriptCycleFactory(t)
 	emptyDir, empty := newScriptCycleFactory(t)
@@ -40,6 +41,7 @@ func TestScriptPollerSessionRecoveryAndEmptyCycle(t *testing.T) {
 	failureDir, failure := newScriptCycleFactory(t)
 	failurePeerDir, failurePeer := newScriptCycleFactory(t)
 	files := &scriptReplacementFailure{directory: failureDir}
+	watcherDir := newWatcherIngressFactory(t)
 	router := scriptCycleRouter{routes: map[string]*scriptCycleRoute{
 		filepath.Clean(recoveryDir):    recovery,
 		filepath.Clean(emptyDir):       empty,
@@ -49,6 +51,10 @@ func TestScriptPollerSessionRecoveryAndEmptyCycle(t *testing.T) {
 		filepath.Clean(failurePeerDir): failurePeer,
 	}}
 	server := startScriptCycleHost(t, router, files)
+	t.Run("watcher_preseed_and_live_input_preserve_public_Work", func(t *testing.T) {
+		t.Parallel()
+		assertWatcherSessionIngress(t, server.URL(), watcherDir)
+	})
 	t.Run("failed_replacement_retains_Work_and_prior_resume_while_peer_progresses", func(t *testing.T) {
 		t.Parallel()
 		assertScriptReplacementRecovery(t, server.URL(), failureDir, failurePeerDir,
@@ -104,6 +110,7 @@ func newScriptCycleFactory(t *testing.T) (string, *scriptCycleRoute) {
 
 func startScriptCycleHost(t *testing.T, router scriptCycleRouter, files *scriptReplacementFailure) *support.FunctionalAPIServer {
 	t.Helper()
+	var admissions atomic.Int32
 	hostDir := support.ScaffoldFactory(t, map[string]any{
 		"name": "idle-automation-host", "workTypes": []map[string]any{{
 			"name": "idle", "states": []map[string]string{
@@ -114,8 +121,17 @@ func startScriptCycleHost(t *testing.T, router scriptCycleRouter, files *scriptR
 	support.ClearSeedInputs(t, hostDir)
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: hostDir,
-		Edges:      serviceedges.Edges{ScriptCommandRunner: router, AutomationsCursorFileSystem: files},
+		Edges: serviceedges.Edges{
+			ScriptCommandRunner: router, AutomationsCursorFileSystem: files,
+			SubmissionRecorder: func(work.FactorySubmissionRecord) { admissions.Add(1) },
+		},
 		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
+			// Construction has not activated any sessions, so there are no peer
+			// admissions in this observation window. Retain watcher inertness
+			// alongside source-command inertness without a second root build.
+			if count := admissions.Load(); count != 0 {
+				tb.Fatalf("BuildProcess admitted %d Work items before activation", count)
+			}
 			for dir, route := range router.routes {
 				select {
 				case <-route.entered:
@@ -273,6 +289,11 @@ func assertScriptResumeEnvironment(t *testing.T, request platformprocess.Command
 // Observe the retained public dispatch completion event before reading queued Work.
 func readScriptQueuedWork(t *testing.T, baseURL, sessionID string, workIDs ...string) factoryapi.ListWorkResponse {
 	t.Helper()
+	return readAutomationCompletedWork(t, baseURL, sessionID, scriptPollerOutputStateName, workIDs...)
+}
+
+func readAutomationCompletedWork(t *testing.T, baseURL, sessionID, state string, workIDs ...string) factoryapi.ListWorkResponse {
+	t.Helper()
 	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, sessionID))
 	defer stream.Close()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -294,11 +315,11 @@ func readScriptQueuedWork(t *testing.T, baseURL, sessionID string, workIDs ...st
 			t.Fatalf("dispatch event belongs to session %v, want %q", event.Context.SessionId, sessionID)
 		}
 		if payload.Outcome != factoryapi.WorkOutcomeAccepted {
-			t.Fatalf("script dispatch outcome=%q, want accepted", payload.Outcome)
+			t.Fatalf("automation dispatch outcome=%q, want accepted", payload.Outcome)
 		}
 		if payload.OutputWork != nil {
 			for _, output := range *payload.OutputWork {
-				if output.WorkId != nil && output.State != nil && output.State.Name == scriptPollerOutputStateName {
+				if output.WorkId != nil && output.State != nil && output.State.Name == state {
 					delete(pending, *output.WorkId)
 				}
 			}
