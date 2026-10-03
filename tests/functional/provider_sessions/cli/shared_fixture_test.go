@@ -170,6 +170,7 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 		APIServerStarter:                    api.start,
 		ProviderCommandRunner:               runner,
 		ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
+		ProviderSessionFileSystem:           providerSessionReadFiles{},
 	})
 	if err != nil {
 		t.Fatalf("build Provider Sessions CLI shared process: %v", err)
@@ -181,6 +182,7 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 	})
 	inputs.Input.Env = functionalEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = hostFactory
+	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, hostFactory)
 	hosted := startWorkerSessionsCLIHostedCommand(process, inputs.Input)
 	fixture := &workerSessionsCLISharedFixture{
 		rootDir:          rootDir,
@@ -217,6 +219,7 @@ func newWorkerSessionsCLISharedRouteRunner(
 	}
 	writeCodexRollout(t, homeDir, workerSessionsCodexSuccessID, successRollout)
 	writeCodexRollout(t, homeDir, workerSessionsCodexFailureID, failureRollout)
+	addProviderSessionReadRoutes(t, homeDir, routes, successStdout)
 
 	addSuccessRoute := func(workName, providerSessionID string) {
 		stdout := bytesReplaceAll(successStdout, workerSessionsCodexSuccessID, providerSessionID)
