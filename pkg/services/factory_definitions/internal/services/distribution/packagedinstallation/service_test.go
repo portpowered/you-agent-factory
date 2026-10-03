@@ -43,7 +43,7 @@ func packagedInstallationTestPersistence() factorydefinitions.PackagedFactoryPer
 	persistence, err := factorypersistence.New(
 		validator,
 		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload, factorydefinitioncomposition.LoadCanonicalJSON)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 		func(
 			ctx context.Context,

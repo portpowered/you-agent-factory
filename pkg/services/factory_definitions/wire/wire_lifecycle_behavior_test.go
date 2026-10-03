@@ -417,7 +417,7 @@ func newWireLifecycleBehaviorService(
 	composition := newWireLifecycleComposition()
 	validator := factoryvalidation.New(nil, composition.LoadCanonicalJSON)
 	mapInput := func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-		return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
+		return validationentry.MapFactoryJSONForPersistence(payload)
 	}
 	persistence := composition.Persistence(validator, mapInput)
 	loader := composition.Loader()
@@ -486,7 +486,7 @@ func newWireLifecycleComposition() factorydefinitiontestcomposition.Composition 
 		SafeLayoutSegment: authoredmapping.SafeFactoryLayoutSegment,
 		SafePromptPath:    authoredmapping.SafePromptFilePath,
 		MapPersistence: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 	}, fileSystem, directoryreplace.Local{}, factorydefinitiontestcomposition.Effects{
 		Loading:             fileSystem,
