@@ -362,6 +362,7 @@ func (s *Service) buildRuntimeInstance(
 			"ActivateRuntime", automations.ErrorCodeFailed, fmt.Errorf("runtime Automations owner is unavailable"),
 		)
 	}
+	owner.cursorScope.RuntimeID = request.RuntimeID
 	runtimeCtx, cancel := context.WithCancel(ctx)
 	instance := &runtimeInstance{
 		runtimeID:        request.RuntimeID,

@@ -238,7 +238,10 @@ func TestRunScriptPoller_FailedDurableReplacementResumesPriorCommit(t *testing.T
 	t.Parallel()
 	ctx := context.Background()
 	factoryDir := t.TempDir()
-	supervision := scriptpollers.ScriptPollerSupervision{AutomationID: "durable-workflow", InstanceID: "durable-instance"}
+	supervision := scriptpollers.ScriptPollerSupervision{
+		AutomationID: "durable-workflow", InstanceID: "durable-instance",
+		CursorScope: scriptpollers.CursorScope{RuntimeID: "runtime-durable", BaseDir: factoryDir},
+	}
 	recorder, err := scriptpollerswire.NewDurableCursorRecorder(factoryDir, platformfilesystem.Local{})
 	if err != nil {
 		t.Fatalf("construct durable recorder: %v", err)
@@ -250,15 +253,12 @@ func TestRunScriptPoller_FailedDurableReplacementResumesPriorCommit(t *testing.T
 		t.Fatalf("seed prior commit: %v", err)
 	}
 	persistErr := errors.New("cursor destination unavailable")
-	failing, err := scriptpollerswire.NewDurableCursorRecorder(factoryDir, cursorRenameFailure{err: persistErr})
-	if err != nil {
-		t.Fatalf("construct failing recorder: %v", err)
-	}
+	failing := scriptpollerswire.NewCursorScopes(cursorRenameFailure{err: persistErr})
 	runner := &sequenceCommandRunner{outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: []byte(
 		`{"requestId":"admitted-before-failure","type":"FACTORY_REQUEST_BATCH","works":[{"name":"retained","workTypeName":"task"}],"cursor":"cursor-next","checkpoint":"checkpoint-next"}`),
 	}}}}
 	submitted := &recordingSubmitter{}
-	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{runner: runner, cursorRecorder: failing})
+	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{runner: runner, cursors: failing})
 	poller, worker := newCanonicalScriptPollerWorkstation(), newCanonicalScriptPollerWorker()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
 	err = svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, supervision, submitted.submit)
@@ -269,7 +269,7 @@ func TestRunScriptPoller_FailedDurableReplacementResumesPriorCommit(t *testing.T
 	if submitted.calls != 1 || submitted.submissions[0].RequestID != "admitted-before-failure" {
 		t.Fatalf("admissions = %+v, want retained Work before failure", submitted)
 	}
-	got, err := svc.GetCursor(ctx, automations.GetCursorRequest{InstanceID: supervision.InstanceID})
+	got, err := svc.GetCursorForScope(ctx, supervision.CursorScope, automations.GetCursorRequest{InstanceID: supervision.InstanceID})
 	if err != nil || got.Cursor != "cursor-prior" || got.Checkpoint != "checkpoint-prior" {
 		t.Fatalf("cursor after failed poll = %+v, %v, want prior commit", got, err)
 	}
@@ -281,14 +281,10 @@ func assertDurablePollRecovery(t *testing.T, factoryDir string, supervision scri
 	ctx := context.Background()
 	poller, worker := newCanonicalScriptPollerWorkstation(), newCanonicalScriptPollerWorker()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
-	// A new recorder reads the durable result; no in-memory prior state can
-	// accidentally make this recovery proof pass.
-	recovered, err := scriptpollerswire.NewDurableCursorRecorder(factoryDir, platformfilesystem.Local{})
-	if err != nil {
-		t.Fatalf("reconstruct recorder: %v", err)
-	}
-	next := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{runner: runner, cursorRecorder: recovered})
-	err = next.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, supervision, submitted.submit)
+	// A new scoped owner reads durable facts without prior in-memory state.
+	recovered := scriptpollerswire.NewCursorScopes(platformfilesystem.Local{})
+	next := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{runner: runner, cursors: recovered})
+	err := next.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, supervision, submitted.submit)
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") || submitted.calls != 2 {
 		t.Fatalf("recovery poll = %v, admissions = %d, want successful submit and terminal exit", err, submitted.calls)
 	}
@@ -296,7 +292,7 @@ func assertDurablePollRecovery(t *testing.T, factoryDir string, supervision scri
 		!containsEnv(runner.reqs[1].Env, scriptpollers.ScriptPollerCheckpointEnvVar+"=checkpoint-prior") {
 		t.Fatalf("recovery command = %+v, want prior committed env facts", runner.reqs)
 	}
-	got, err := next.GetCursor(ctx, automations.GetCursorRequest{InstanceID: supervision.InstanceID})
+	got, err := next.GetCursorForScope(ctx, supervision.CursorScope, automations.GetCursorRequest{InstanceID: supervision.InstanceID})
 	if err != nil || got.Cursor != "cursor-next" || got.Checkpoint != "checkpoint-next" {
 		t.Fatalf("cursor after recovery = %+v, %v, want next commit", got, err)
 	}
@@ -334,5 +330,63 @@ func assertAutomationsConflict(t *testing.T, err error, op string) {
 	}
 	if !errors.Is(err, automations.ErrConflict) {
 		t.Fatalf("%s error = %v, want errors.Is ErrConflict", op, err)
+	}
+}
+
+func TestRunScriptPoller_SharedInstanceUsesItsOwnScope(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	cursors := scriptpollerswire.NewCursorScopes(nil)
+	runner := &sequenceCommandRunner{outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: []byte(
+		`{"requestId":"scoped-work","type":"FACTORY_REQUEST_BATCH","works":[{"name":"task","workTypeName":"task"}],"cursor":"advanced","checkpoint":"advanced-checkpoint"}`),
+	}}}}
+	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{runner: runner, cursors: cursors})
+	poller, worker := newCanonicalScriptPollerWorkstation(), newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, t.TempDir(), poller, worker)
+	for _, runtimeID := range []string{"", "runtime-a", "runtime-b"} {
+		scope := scriptpollers.CursorScope{RuntimeID: runtimeID}
+		if err := cursors.CommitCursor(ctx, scope, scriptpollers.CommitCursorRequest{
+			AutomationID: "workflow", InstanceID: "shared", Cursor: automations.Cursor("cursor-" + runtimeID), Checkpoint: "checkpoint-" + runtimeID,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	submitted := &recordingSubmitter{}
+	supervision := scriptpollers.ScriptPollerSupervision{
+		AutomationID: "workflow", InstanceID: "shared", ExpectedCursor: "cursor-runtime-a",
+		CursorScope: scriptpollers.CursorScope{RuntimeID: "runtime-a"},
+	}
+	err := svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, supervision, submitted.submit)
+	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") || submitted.calls != 1 {
+		t.Fatalf("scoped poll = %v, admissions = %d, want committed admission", err, submitted.calls)
+	}
+	if !containsEnv(runner.reqs[0].Env, scriptpollers.ScriptPollerCursorEnvVar+"=cursor-runtime-a") ||
+		!containsEnv(runner.reqs[0].Env, scriptpollers.ScriptPollerCheckpointEnvVar+"=checkpoint-runtime-a") {
+		t.Fatalf("command env = %v, want runtime A recovery facts", runner.reqs[0].Env)
+	}
+	assertIsolatedPollerRecovery(t, svc)
+	err = svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, supervision, submitted.submit)
+	assertAutomationsConflict(t, err, scriptpollers.GetCursorOperation)
+	if runner.callCount() != 1 || submitted.calls != 1 {
+		t.Fatalf("stale poll executed: commands=%d admissions=%d", runner.callCount(), submitted.calls)
+	}
+	got, err := svc.GetCursor(ctx, automations.GetCursorRequest{InstanceID: "shared"})
+	if err != nil || got.Cursor != "cursor-" {
+		t.Fatalf("detached cursor = %+v, %v, want unchanged empty scope", got, err)
+	}
+}
+
+func assertIsolatedPollerRecovery(t *testing.T, svc scriptpollers.Service) {
+	t.Helper()
+	ctx := context.Background()
+	for _, runtimeID := range []string{"", "runtime-a", "runtime-b"} {
+		wantCursor, wantCheckpoint := automations.Cursor("cursor-"+runtimeID), "checkpoint-"+runtimeID
+		if runtimeID == "runtime-a" {
+			wantCursor, wantCheckpoint = "advanced", "advanced-checkpoint"
+		}
+		got, readErr := svc.GetCursorForScope(ctx, scriptpollers.CursorScope{RuntimeID: runtimeID}, automations.GetCursorRequest{InstanceID: "shared"})
+		if readErr != nil || got.Cursor != wantCursor || got.Checkpoint != wantCheckpoint {
+			t.Fatalf("scope %q recovery = %+v, %v, want %s/%s", runtimeID, got, readErr, wantCursor, wantCheckpoint)
+		}
 	}
 }
