@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
@@ -360,5 +361,129 @@ func TestPinnedHostProtocolNegotiatorWrapperRejectsNilDialer(t *testing.T) {
 
 	if negotiator := NewPinnedGRPCHostProtocolNegotiator(nil); negotiator != nil {
 		t.Fatalf("NewPinnedGRPCHostProtocolNegotiator(nil) = %T, want nil", negotiator)
+	}
+}
+
+func TestModelsConstructionRejectsMissingFunctionEffects(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		remove func(*constructionEdges)
+	}{
+		{"asset make-directories effect", func(e *constructionEdges) { e.assetMkdirAll = nil }},
+		{"asset inspect-path effect", func(e *constructionEdges) { e.assetStat = nil }},
+		{"asset resolve-home effect", func(e *constructionEdges) { e.assetHome = nil }},
+		{"asset write-file effect", func(e *constructionEdges) { e.assetWriteFile = nil }},
+		{"asset rename-path effect", func(e *constructionEdges) { e.assetRename = nil }},
+		{"asset remove-path effect", func(e *constructionEdges) { e.assetRemove = nil }},
+		{"asset read-file effect", func(e *constructionEdges) { e.assetReadFile = nil }},
+		{"asset read-directory effect", func(e *constructionEdges) { e.assetReadDir = nil }},
+		{"asset create-file effect", func(e *constructionEdges) { e.assetCreate = nil }},
+		{"asset open-file effect", func(e *constructionEdges) { e.assetOpen = nil }},
+		{"model runtime file inspector", func(e *constructionEdges) { e.runtimeInspect = nil }},
+		{"model runtime temporary directory resolver", func(e *constructionEdges) { e.runtimeTempDir = nil }},
+		{"model runtime temporary file creator", func(e *constructionEdges) { e.runtimeTempFile = nil }},
+		{"process clock", func(e *constructionEdges) { e.now = nil }},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			edges := validConstructionEdges()
+			test.remove(&edges)
+			service, err := edges.newServiceWithInvocationProtocol(nil)
+			want := "construct Models: " + test.name + " is required"
+			if service != nil || err == nil || err.Error() != want {
+				t.Fatalf("construction = (%T, %v), want nil service and %q", service, err, want)
+			}
+		})
+	}
+}
+
+func TestModelsConstructionRejectsNilAndTypedNilRequiredEffects(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		remove func(*constructionEdges, bool)
+	}{
+		{"asset HTTP client", func(e *constructionEdges, typed bool) {
+			e.assetHTTP = nil
+			if typed {
+				e.assetHTTP = (*recordingHTTPDoer)(nil)
+			}
+		}},
+		{"model host HTTP client", func(e *constructionEdges, typed bool) {
+			e.hostHTTP = nil
+			if typed {
+				e.hostHTTP = (*recordingHTTPDoer)(nil)
+			}
+		}},
+		{"model runtime HTTP client", func(e *constructionEdges, typed bool) {
+			e.runtimeHTTP = nil
+			if typed {
+				e.runtimeHTTP = (*recordingHTTPDoer)(nil)
+			}
+		}},
+		{"model host process launcher", func(e *constructionEdges, typed bool) {
+			e.processLauncher = nil
+			if typed {
+				e.processLauncher = (*recordingProcessLauncher)(nil)
+			}
+		}},
+		{"model host clock", func(e *constructionEdges, typed bool) {
+			e.hostClock = nil
+			if typed {
+				e.hostClock = (*recordingHostClock)(nil)
+			}
+		}},
+		{"model runtime command runner", func(e *constructionEdges, typed bool) {
+			e.runtimeRunner = nil
+			if typed {
+				e.runtimeRunner = (*recordingCommandRunner)(nil)
+			}
+		}},
+	}
+	for _, test := range cases {
+		for _, typed := range []bool{false, true} {
+			name := "nil/"
+			if typed {
+				name = "typed-nil/"
+			}
+			t.Run(name+test.name, func(t *testing.T) {
+				t.Parallel()
+				edges := validConstructionEdges()
+				test.remove(&edges, typed)
+				service, err := edges.newServiceWithInvocationProtocol(nil)
+				want := "construct Models: " + test.name + " is required"
+				if service != nil || err == nil || err.Error() != want {
+					t.Fatalf("construction = (%T, %v), want nil service and %q", service, err, want)
+				}
+			})
+		}
+	}
+}
+
+func TestModelsConstructionAllowsAbsentProtocolOverride(t *testing.T) {
+	t.Parallel()
+	service, err := validConstructionEdges().newServiceWithInvocationProtocol(nil)
+	if err != nil || service == nil {
+		t.Fatalf("construction without optional protocol = (%T, %v), want inert service", service, err)
+	}
+}
+
+func TestModelsConstructionPreservesIssuerEntropyFailure(t *testing.T) {
+	t.Parallel()
+	wantErr := errors.New("controlled issuer entropy failure")
+	edges := validConstructionEdges()
+	edges.issuerEntropy = platformrandom.SourceFunc(func(bound int64) (int64, error) {
+		if bound != 256 {
+			t.Fatalf("issuer entropy bound = %d, want byte bound 256", bound)
+		}
+		return 0, wantErr
+	})
+	service, err := edges.newServiceWithInvocationProtocol(nil)
+	if service != nil || !errors.Is(err, wantErr) || !strings.Contains(err.Error(), "construct Models Runtime Scopes issuer identity") {
+		t.Fatalf("construction = (%T, %v), want nil service and preserved issuer failure", service, err)
 	}
 }
