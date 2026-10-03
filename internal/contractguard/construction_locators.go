@@ -23,7 +23,11 @@ func (index constructionIndex) constructionServiceGetters(registry ConstructionR
 			owner := ConstructionSymbol{ImportPath: symbol.ImportPath, Name: symbol.Receiver}
 			function := method.function
 			if symbol.Receiver == "" || fields[owner] == nil || function == nil || function.Body == nil ||
-				len(constructionParameterFields(function.Type.Params)) != 0 || !index.constructionCollaboratorResult(function, method.source, registry) {
+				len(constructionParameterFields(function.Type.Params)) != 0 {
+				continue
+			}
+			results := index.constructionCollaboratorResults(function, method.source, registry)
+			if len(results) == 0 {
 				continue
 			}
 			var receiver *ast.Object
@@ -36,8 +40,8 @@ func (index constructionIndex) constructionServiceGetters(registry ConstructionR
 				if _, nested := node.(*ast.FuncLit); nested {
 					return false
 				}
-				if returned, ok := node.(*ast.ReturnStmt); ok && len(returned.Results) == 1 {
-					origin := provenance.origin(returned.Results[0], map[*ast.Object]bool{})
+				if returned, ok := node.(*ast.ReturnStmt); ok {
+					origin := constructionGetterReturnOrigin(returned, results, provenance, function)
 					if origin != "" {
 						rule := "service-getter-locator"
 						if origin == "unresolved-required-dependency-guard" || getters[symbol].rule == "unresolved-service-getter-locator" {
@@ -53,12 +57,26 @@ func (index constructionIndex) constructionServiceGetters(registry ConstructionR
 	return getters
 }
 
-func (index constructionIndex) constructionCollaboratorResult(function *ast.FuncDecl, source *constructionSource, registry ConstructionRegistry) bool {
-	results := constructionParameterFields(function.Type.Results)
-	if len(results) != 1 {
-		return false
+func (index constructionIndex) constructionCollaboratorResults(function *ast.FuncDecl, source *constructionSource, registry ConstructionRegistry) map[int]*ast.Ident {
+	results := make(map[int]*ast.Ident)
+	position := 0
+	if function.Type.Results == nil {
+		return results
 	}
-	return index.constructionBagCollaborator(results[0].Type, source, registry, map[ConstructionSymbol]bool{})
+	for _, field := range function.Type.Results.List {
+		collaborator := index.constructionBagCollaborator(field.Type, source, registry, map[ConstructionSymbol]bool{})
+		for offset := range max(1, len(field.Names)) {
+			if collaborator {
+				var name *ast.Ident
+				if len(field.Names) != 0 {
+					name = field.Names[offset]
+				}
+				results[position] = name
+			}
+			position++
+		}
+	}
+	return results
 }
 
 func scanConstructionServiceGetters(source *constructionSource, caller ConstructionSymbol, body ast.Node, getters map[ConstructionSymbol]constructionServiceGetter, registry ConstructionRegistry) []ConstructionFinding {
