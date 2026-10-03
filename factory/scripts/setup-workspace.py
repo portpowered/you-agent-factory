@@ -56,6 +56,8 @@ WINDOWS_RESERVED_PATH_COMPONENT = re.compile(
 )
 _ROOT_SYNC_THREAD_LOCKS = {}
 _ROOT_SYNC_THREAD_LOCKS_GUARD = threading.Lock()
+_ROOT_SYNC_HELD = threading.local()
+MAX_REMOTE_MAIN_REFETCHES = 3
 _MISSING_PATH = object()
 _UNAVAILABLE_PATH = object()
 
@@ -659,6 +661,14 @@ def root_sync_thread_lock(lock_path):
 def root_sync_lock(repo_path):
     """Own root synchronization across threads and setup-workspace processes."""
     lock_path = root_sync_lock_path(repo_path)
+    held = getattr(_ROOT_SYNC_HELD, "paths", None)
+    if held is None:
+        held = _ROOT_SYNC_HELD.paths = set()
+    held_key = os.path.normcase(str(lock_path))
+    if held_key in held:
+        # Re-entrant: this thread already owns the root sync section.
+        yield
+        return
     thread_lock = root_sync_thread_lock(lock_path)
     with thread_lock:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -683,9 +693,11 @@ def root_sync_lock(repo_path):
 
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
 
+            held.add(held_key)
             try:
                 yield
             finally:
+                held.discard(held_key)
                 if os.name == "nt":
                     import msvcrt
 
@@ -1371,7 +1383,31 @@ def resolve_remote_main_sha(repo_root, fetch_succeeded):
     sha = remote_main_sha(repo_root)
     if sha is None or not immutable_object_id(sha):
         return None
-    return sha
+    # ls-remote reports the live remote, which can be ahead of the refs the
+    # fetch just wrote (another push or fetch landed in between). A SHA that is
+    # not present locally cannot be a worktree start point or fast-forward
+    # target, so re-fetch and re-resolve a bounded number of times.
+    for _ in range(MAX_REMOTE_MAIN_REFETCHES):
+        if commit_exists_locally(repo_root, sha):
+            return sha
+        print(
+            f"origin/main {sha[:8]} not present locally; re-fetching",
+            file=sys.stderr,
+        )
+        run_git("fetch", "origin", cwd=repo_root, check=False)
+        refreshed = remote_main_sha(repo_root)
+        if refreshed is None or not immutable_object_id(refreshed):
+            return None
+        sha = refreshed
+    return sha if commit_exists_locally(repo_root, sha) else None
+
+
+def commit_exists_locally(repo_root, sha):
+    """Return True when sha names a commit object present in the repository."""
+    result = run_git(
+        "cat-file", "-e", f"{sha}^{{commit}}", cwd=repo_root, check=False,
+    )
+    return result.returncode == 0
 
 
 def can_fast_forward_main(repo_root, local_sha, remote_sha):
@@ -2113,6 +2149,16 @@ def main():
     else:
         worktree_dir = selected_candidate["worktree_path"]
 
+    # One cross-process lock covers root sync, fast-forward and worktree
+    # creation so concurrent setups serialize instead of racing on refs. The
+    # inner root_sync_lock acquisitions are re-entrant for this thread.
+    section = contextlib.ExitStack()
+    try:
+        section.enter_context(root_sync_lock(repo_root))
+    except Exception as e:  # noqa: BLE001 - CLI boundary must classify all failures
+        print(format_stage_failure("Root sync failed", e), file=sys.stderr)
+        sys.exit(1)
+
     # Sync main and prune worktrees.
     try:
         sync_result = sync_main(repo_root)
@@ -2162,6 +2208,8 @@ def main():
             file=sys.stderr,
         )
         sys.exit(1)
+
+    section.close()
 
     # Output result.
     result = {

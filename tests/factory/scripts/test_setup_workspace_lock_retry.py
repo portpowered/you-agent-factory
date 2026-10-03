@@ -4,6 +4,7 @@
 import contextlib
 import importlib.util
 import io
+import tempfile
 import subprocess
 import unittest
 from pathlib import Path
@@ -91,6 +92,55 @@ class GitLockRetryTest(unittest.TestCase):
                 contextlib.redirect_stderr(io.StringIO()):
             result = module.run_git("status", check=False)
         self.assertEqual(result.returncode, 128)
+
+
+def git(args, cwd):
+    return subprocess.run(
+        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True,
+    ).stdout.strip()
+
+
+class RemoteAdvancesDuringSyncTest(unittest.TestCase):
+    def test_sha_missing_locally_is_refetched_before_fast_forward(self):
+        module = load_module()
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            remote, local, other = tmp / "remote.git", tmp / "local", tmp / "other"
+            git(["init", "--bare", "-b", "main", str(remote)], tmp)
+            git(["clone", str(remote), str(local)], tmp)
+            for repo in (local,):
+                git(["config", "user.email", "t@example.com"], repo)
+                git(["config", "user.name", "T"], repo)
+            (local / "a.txt").write_text("a\n", encoding="utf-8")
+            git(["add", "a.txt"], local)
+            git(["commit", "-m", "init"], local)
+            git(["push", "-u", "origin", "main"], local)
+            git(["clone", str(remote), str(other)], tmp)
+            git(["config", "user.email", "t@example.com"], other)
+            git(["config", "user.name", "T"], other)
+
+            real_run_git = module.run_git
+            advanced = []
+
+            def racing_run_git(*args, **kwargs):
+                result = real_run_git(*args, **kwargs)
+                if args[:2] == ("fetch", "origin") and not advanced:
+                    # A concurrent lane's push lands after our fetch finished.
+                    (other / "b.txt").write_text("b\n", encoding="utf-8")
+                    git(["add", "b.txt"], other)
+                    git(["commit", "-m", "advance"], other)
+                    git(["push", "origin", "main"], other)
+                    advanced.append(git(["rev-parse", "HEAD"], other))
+                return result
+
+            with mock.patch.object(module, "run_git", racing_run_git),                     contextlib.redirect_stderr(io.StringIO()):
+                outcome = module.sync_main(local)
+
+            self.assertTrue(advanced)
+            self.assertNotIn("not a fast-forward", str(outcome))
+            self.assertEqual(outcome.fresh_origin_main_sha, advanced[0])
+            self.assertEqual(git(["rev-parse", "main"], local), advanced[0])
+            git(["cat-file", "-e", advanced[0] + "^{commit}"], local)
 
 
 if __name__ == "__main__":
