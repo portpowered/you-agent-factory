@@ -9,4 +9,6 @@
 // cursor_details_test.go covers Cursor golden success, unavailable-blob inspection,
 // and missing-session not-found; http_test.go covers HTTP/API golden success,
 // raw filesystem path rejection, and unsupported-kind validation.
+// storage_unavailable_test.go covers redacted storage faults, failed SQL Ping
+// cleanup, and valid transcript retention alongside a truncated Codex record.
 package details
