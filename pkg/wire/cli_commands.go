@@ -207,7 +207,7 @@ func provideContinueWorkerSessionOperation(
 	local *localWorkerSessionsBoundary,
 	generateID workersessionscli.IDGenerator,
 ) cli.ContinueWorkerSessionOperation {
-	return workersessionscli.BindContinue(transport.Protocol, local, workersessionscli.Effects{GenerateID: generateID})
+	return workersessionscli.BindContinue(transport.Protocol, local, generateID)
 }
 
 func provideInterruptWorkerSessionOperation(
@@ -215,7 +215,7 @@ func provideInterruptWorkerSessionOperation(
 	local *localWorkerSessionsBoundary,
 	generateID workersessionscli.IDGenerator,
 ) cli.InterruptWorkerSessionOperation {
-	return workersessionscli.BindInterrupt(transport.Protocol, local, workersessionscli.Effects{GenerateID: generateID})
+	return workersessionscli.BindInterrupt(transport.Protocol, local, generateID)
 }
 
 func providePauseWorkerSessionOperation(
@@ -406,10 +406,7 @@ func provideInvokeWorkerSessionOperation(
 	generateID workersessionscli.IDGenerator,
 	readFile workersessionscli.ExecutionFileReader,
 ) cli.InvokeWorkerSessionOperation {
-	return workersessionscli.BindInvoke(transport.Protocol, local, workersessionscli.Effects{
-		GenerateID: generateID,
-		ReadFile:   readFile,
-	})
+	return workersessionscli.BindInvoke(transport.Protocol, local, generateID, readFile)
 }
 func provideSubmitBatchOperation(
 	transport extendedCLIHTTPProtocol,
@@ -896,8 +893,9 @@ func provideWatchCLIHTTPProtocol() (watchCLIHTTPProtocol, error) {
 
 func provideWatchWorkOperation(
 	transport watchCLIHTTPProtocol,
+	wait workcli.ReconnectWait,
 ) cli.WatchWorkOperation {
-	return workcli.NewWatch(transport.Protocol)
+	return workcli.NewWatch(transport.Protocol, wait)
 }
 
 func provideShowWorkOperation(transport standardCLIHTTPProtocol) cli.ShowWorkOperation {

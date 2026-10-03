@@ -362,6 +362,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideListWorkOperation,
 	provideListHumanApprovalsOperation,
 	provideShowHumanApprovalOperation,
+	provideWatchReconnectWait,
 	provideWatchWorkOperation,
 	provideShowWorkOperation,
 	provideMoveWorkOperation,

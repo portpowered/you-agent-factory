@@ -240,10 +240,9 @@ func TestWatchFiniteStreamIgnoresRefreshedModelRequestRetry(t *testing.T) {
 		WatchConfig{Context: context.Background(), SessionID: "session-finite-retry", Output: &output},
 		watchEventOpenFunc(func(context.Context, *watchEventCursor) (watchEventStream, error) {
 			return stream, nil
-		}),
-	)
+		}), unexpectedReconnectWait)
 	if err != nil {
-		t.Fatalf("watchWithSource() error = %v", err)
+		t.Fatalf("watchWithSource(, unexpectedReconnectWait) error = %v", err)
 	}
 	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
 	if len(lines) != 3 {
@@ -279,10 +278,9 @@ func TestWatchFiniteStreamIgnoresRefreshedModelResponseRetry(t *testing.T) {
 		WatchConfig{Context: context.Background(), SessionID: "session-finite-response-retry", Output: &output},
 		watchEventOpenFunc(func(context.Context, *watchEventCursor) (watchEventStream, error) {
 			return stream, nil
-		}),
-	)
+		}), unexpectedReconnectWait)
 	if err != nil {
-		t.Fatalf("watchWithSource() error = %v", err)
+		t.Fatalf("watchWithSource(, unexpectedReconnectWait) error = %v", err)
 	}
 	assertRetryStreamOutput(t, output.String(), "move-between-response", "move-terminal-response")
 }
@@ -309,7 +307,7 @@ func TestWatchFollowIgnoresRefreshedModelRequestRetry(t *testing.T) {
 			watchEventOpenFunc(func(context.Context, *watchEventCursor) (watchEventStream, error) {
 				return stream, nil
 			}),
-			watchRetryPolicy{maxAttempts: 0},
+			watchRetryPolicy{maxAttempts: 0, wait: unexpectedReconnectWait},
 		)
 	}()
 
@@ -340,7 +338,7 @@ func TestWatchFollowIgnoresRefreshedModelResponseRetry(t *testing.T) {
 			watchEventOpenFunc(func(context.Context, *watchEventCursor) (watchEventStream, error) {
 				return stream, nil
 			}),
-			watchRetryPolicy{maxAttempts: 0},
+			watchRetryPolicy{maxAttempts: 0, wait: unexpectedReconnectWait},
 		)
 	}()
 
@@ -877,5 +875,30 @@ func TestWatchReducerOmitsStructuredResultFromFailedDispatchTransition(t *testin
 	}
 	if transition.StructuredResultPresent {
 		t.Fatalf("failed transition structuredResult = %#v, want omitted", transition.StructuredResult)
+	}
+}
+
+func unexpectedReconnectWait(context.Context, time.Duration) error {
+	panic("unexpected reconnect wait")
+}
+
+func TestWatchSourceUsesSelectedReconnectWait(t *testing.T) {
+	t.Parallel()
+	ctx := context.WithValue(context.Background(), struct{}{}, "invocation")
+	waitErr := errors.New("controlled reconnect stopped")
+	calls := 0
+	err := watchWithSource(WatchConfig{Context: ctx, SessionID: "session-selected-wait", Output: &bytes.Buffer{}},
+		watchEventOpenFunc(func(context.Context, *watchEventCursor) (watchEventStream, error) {
+			return &finiteWatchEventStream{}, nil
+		}),
+		func(received context.Context, delay time.Duration) error {
+			calls++
+			if received != ctx || delay != 100*time.Millisecond {
+				t.Fatalf("wait context=%v delay=%v", received, delay)
+			}
+			return waitErr
+		})
+	if !errors.Is(err, waitErr) || calls != 1 {
+		t.Fatalf("error=%v wait calls=%d", err, calls)
 	}
 }

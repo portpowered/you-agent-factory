@@ -24,20 +24,6 @@ type IDGenerator func() string
 // pkg/wire; tests can replace it without touching the host filesystem.
 type ExecutionFileReader func(string) ([]byte, error)
 
-// Effects contains the external effects used while normalizing direct CLI
-// requests. Continue uses only GenerateID; invoke uses both fields.
-type Effects struct {
-	GenerateID IDGenerator
-	ReadFile   ExecutionFileReader
-}
-
-func selectEffects(effects []Effects) Effects {
-	if len(effects) == 0 {
-		return Effects{}
-	}
-	return effects[0]
-}
-
 func workerSessionConfirmationState(session factoryapi.WorkerSessionObservation) factoryapi.ConfirmationState {
 	if session.ConfirmationState == factoryapi.CONFIRMED {
 		return session.ConfirmationState
@@ -107,9 +93,6 @@ func readInvokeRequestWithDiagnostics(config InvokeConfig) (invokeRequestDecodeR
 		data = []byte(input)
 	} else {
 		var err error
-		if config.ReadFile == nil {
-			return invokeRequestDecodeResult{}, newCLIError("WORKER_SESSION_INPUT_FAILED", "direct Worker execution file reader is unavailable", nil)
-		}
 		data, err = config.ReadFile(input)
 		if err != nil {
 			return invokeRequestDecodeResult{}, newCLIError("WORKER_SESSION_INPUT_FAILED", "failed to read direct Worker execution file", err)

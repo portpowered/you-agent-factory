@@ -69,24 +69,13 @@ type InterruptOperation func(InterruptConfig) error
 // BindInterrupt binds the exact remote protocol and local Worker Sessions
 // boundary. A remote failure is returned to the caller and never falls back
 // to the local boundary.
-func BindInterrupt(transport clihttp.Protocol, local LocalInterruptBoundary, effects ...Effects) InterruptOperation {
-	selected := selectEffects(effects)
+func BindInterrupt(transport clihttp.Protocol, local LocalInterruptBoundary, generateID IDGenerator) InterruptOperation {
 	return func(config InterruptConfig) error {
 		config.HTTP = transport
-		if local != nil {
-			config.Local = local
-		}
-		if config.GenerateID == nil {
-			config.GenerateID = selected.GenerateID
-		}
+		config.Local = local
+		config.GenerateID = generateID
 		return interruptWorkerSession(config)
 	}
-}
-
-// NewInterrupt returns an interrupt operation with injected effects for
-// focused CLI and functional tests.
-func NewInterrupt(transport clihttp.Protocol, local LocalInterruptBoundary, effects ...Effects) InterruptOperation {
-	return BindInterrupt(transport, local, effects...)
 }
 
 type normalizedInterruptRequest struct {
@@ -162,16 +151,10 @@ func normalizeInterruptRequest(config InterruptConfig) (normalizedInterruptReque
 	}
 	requestID := strings.TrimSpace(config.RequestID)
 	if requestID == "" {
-		if config.GenerateID == nil {
-			return normalizedInterruptRequest{}, newInterruptCLIError("WORKER_SESSION_IDENTITY_UNAVAILABLE", "Worker Session interrupt identity generator is unavailable", string(workersessions.InterruptPhaseValidation), nil)
-		}
 		requestID = config.GenerateID()
 	}
 	successorID := strings.TrimSpace(config.SuccessorWorkerSessionID)
 	if successorID == "" {
-		if config.GenerateID == nil {
-			return normalizedInterruptRequest{}, newInterruptCLIError("WORKER_SESSION_IDENTITY_UNAVAILABLE", "Worker Session interrupt identity generator is unavailable", string(workersessions.InterruptPhaseValidation), nil)
-		}
 		successorID = config.GenerateID()
 	}
 	apiRequest := factoryapi.WorkerSessionInterruptRequest{

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,7 +21,7 @@ func TestContinueLocalAsyncReturnsLineageAfterAdmissionWithoutStreaming(t *testi
 		Session: workersessions.Session{ID: "successor-session", State: workersessions.StateRunning},
 	}}
 	var output bytes.Buffer
-	err := NewContinue(nil, boundary)(ContinueConfig{
+	err := BindContinue(nil, boundary, unexpectedWorkerID)(ContinueConfig{
 		Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "continue-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session",
 		FollowUpInput: "continue the work",
@@ -57,7 +58,7 @@ func TestContinueLocalWaitsForSuccessorTerminalOutput(t *testing.T) {
 		},
 	}
 	var output bytes.Buffer
-	err := NewContinue(nil, boundary)(ContinueConfig{
+	err := BindContinue(nil, boundary, unexpectedWorkerID)(ContinueConfig{
 		Context: context.Background(), Output: &output, OutputFormat: "json",
 		RequestID: "continue-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session", FollowUpInput: "finish the continuation",
 	})
@@ -84,7 +85,7 @@ func TestContinueRemoteUsesExactSourceRouteAndDoesNotFallback(t *testing.T) {
 
 	boundary := &invokeLocalFake{}
 	var output bytes.Buffer
-	err := NewContinue(testHTTPProtocol(t), boundary)(ContinueConfig{
+	err := BindContinue(testHTTPProtocol(t), boundary, unexpectedWorkerID)(ContinueConfig{
 		Context: context.Background(), Server: server.URL, Remote: true, Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "continue-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session", FollowUpInput: "remote follow up",
 	})
@@ -148,7 +149,7 @@ func TestContinueRemoteWaitsOnSuccessorEventRoute(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewContinue(testHTTPProtocol(t), nil)(ContinueConfig{
+	err := BindContinue(testHTTPProtocol(t), nil, unexpectedWorkerID)(ContinueConfig{
 		Context: context.Background(), Server: server.URL, Remote: true, Output: &output, OutputFormat: "json",
 		RequestID: "continue-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session", FollowUpInput: "remote wait",
 	})
@@ -177,7 +178,7 @@ func TestContinueRemoteFailureDoesNotFallbackToLocal(t *testing.T) {
 
 	boundary := &invokeLocalFake{}
 	var output bytes.Buffer
-	err := NewContinue(testHTTPProtocol(t), boundary)(ContinueConfig{
+	err := BindContinue(testHTTPProtocol(t), boundary, unexpectedWorkerID)(ContinueConfig{
 		Context: context.Background(), Server: server.URL, Remote: true, Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "continue-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session", FollowUpInput: "remote failure",
 	})
@@ -200,7 +201,7 @@ func TestInterruptLocalAsyncReturnsAdmissionSnapshotsWithoutStreaming(t *testing
 		Successor: workersessions.Session{ID: "successor-session", State: workersessions.StateRunning},
 	}}
 	var output bytes.Buffer
-	err := NewInterrupt(nil, boundary)(InterruptConfig{
+	err := BindInterrupt(nil, boundary, unexpectedWorkerID)(InterruptConfig{
 		Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "interrupt-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session",
 		ReplacementMessage: "take a different path",
@@ -243,7 +244,7 @@ func TestInterruptLocalWaitsForSuccessorTerminalOutput(t *testing.T) {
 		},
 	}
 	var output bytes.Buffer
-	err := NewInterrupt(nil, boundary)(InterruptConfig{
+	err := BindInterrupt(nil, boundary, unexpectedWorkerID)(InterruptConfig{
 		Context: context.Background(), Output: &output, OutputFormat: "json",
 		RequestID: "interrupt-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session",
 		ReplacementMessage: "replace the work",
@@ -293,7 +294,7 @@ func TestInterruptRemoteUsesExactSourceRouteAndDoesNotFallback(t *testing.T) {
 
 	boundary := &invokeLocalFake{}
 	var output bytes.Buffer
-	err := NewInterrupt(testHTTPProtocol(t), boundary)(InterruptConfig{
+	err := BindInterrupt(testHTTPProtocol(t), boundary, unexpectedWorkerID)(InterruptConfig{
 		Context: context.Background(), Server: server.URL, Remote: true, Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "interrupt-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session",
 		ReplacementMessage: "remote replacement",
@@ -326,7 +327,7 @@ func TestInterruptRemoteFailureIncludesPhaseAndDoesNotFallback(t *testing.T) {
 
 	boundary := &invokeLocalFake{}
 	var output bytes.Buffer
-	err := NewInterrupt(testHTTPProtocol(t), boundary)(InterruptConfig{
+	err := BindInterrupt(testHTTPProtocol(t), boundary, unexpectedWorkerID)(InterruptConfig{
 		Context: context.Background(), Server: server.URL, Remote: true, Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "interrupt-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session",
 		ReplacementMessage: "remote failure",
@@ -371,7 +372,7 @@ func TestInterruptRemoteRejectsMismatchedAdmissionWithoutFallback(t *testing.T) 
 
 	boundary := &invokeLocalFake{}
 	var output bytes.Buffer
-	err := NewInterrupt(testHTTPProtocol(t), boundary)(InterruptConfig{
+	err := BindInterrupt(testHTTPProtocol(t), boundary, unexpectedWorkerID)(InterruptConfig{
 		Context: context.Background(), Server: server.URL, Remote: true, Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "interrupt-request", SourceWorkerSessionID: "source-session", SuccessorWorkerSessionID: "successor-session",
 		ReplacementMessage: "remote replacement",
@@ -391,5 +392,91 @@ func TestInterruptRemoteRejectsMismatchedAdmissionWithoutFallback(t *testing.T) 
 	}
 	if payload.Code != "WORKER_SESSION_INTERRUPT_RESPONSE_INVALID" || payload.Phase != interruptPhaseResponse {
 		t.Fatalf("mismatched response payload = %#v, want response classification", payload)
+	}
+}
+
+func unexpectedWorkerID() string                     { panic("unexpected identity generation") }
+func unexpectedExecutionRead(string) ([]byte, error) { panic("unexpected execution file read") }
+
+func TestBoundInvokeUsesSelectedEffectsAndBoundary(t *testing.T) {
+	t.Parallel()
+	boundary := &invokeLocalFake{startResult: workersessions.StartResult{Session: workersessions.Session{ID: "generated-session", State: workersessions.StateRunning}}}
+	ids := []string{"generated-request", "generated-session", "generated-dispatch"}
+	index := 0
+	var path string
+	generate := func() string { id := ids[index]; index++; return id }
+	read := func(name string) ([]byte, error) {
+		path = name
+		return []byte(`{"execution":{"workstationName":"coding","dispatch":{"workstationName":"coding"},"userMessage":"file message"}}`), nil
+	}
+	operation := BindInvoke(nil, boundary, generate, read)
+	if index != 0 || path != "" {
+		t.Fatal("binding performed effects")
+	}
+	var output bytes.Buffer
+	err := operation(InvokeConfig{Context: context.Background(), Output: &output, Async: true, ExecutionJSON: "execution.json",
+		Local: &invokeLocalFake{}, GenerateID: unexpectedWorkerID, ReadFile: unexpectedExecutionRead})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "execution.json" || index != 3 || len(boundary.startRequests) != 1 {
+		t.Fatalf("path=%q IDs=%d admissions=%d", path, index, len(boundary.startRequests))
+	}
+	request := boundary.startRequests[0]
+	if request.RequestID != ids[0] || request.ID != ids[1] || request.Execution.Execution.Dispatch.DispatchID != ids[2] || request.Execution.Execution.UserMessage != "file message" {
+		t.Fatalf("selected effects request = %#v", request)
+	}
+	readErr := errors.New("file unavailable")
+	err = BindInvoke(nil, boundary, unexpectedWorkerID, func(string) ([]byte, error) { return nil, readErr })(InvokeConfig{
+		Context: context.Background(), Output: &output, ExecutionJSON: "missing.json"})
+	if !errors.Is(err, readErr) || len(boundary.startRequests) != 1 {
+		t.Fatalf("file failure=%v admissions=%d", err, len(boundary.startRequests))
+	}
+}
+
+func TestBoundContinueAndInterruptUseSelectedIdentities(t *testing.T) {
+	t.Parallel()
+	for _, command := range []string{"continue", "interrupt"} {
+		t.Run(command, func(t *testing.T) {
+			t.Parallel()
+			boundary := &invokeLocalFake{}
+			ids := []string{"selected-request", "selected-successor"}
+			index := 0
+			generate := func() string { id := ids[index]; index++; return id }
+			var output bytes.Buffer
+			var err error
+			if command == "continue" {
+				operation := BindContinue(nil, boundary, generate)
+				if index != 0 {
+					t.Fatal("binding generated identity")
+				}
+				err = operation(ContinueConfig{Context: context.Background(), Output: &output, Async: true,
+					SourceWorkerSessionID: "source", FollowUpInput: "follow up", GenerateID: unexpectedWorkerID, Local: &invokeLocalFake{}})
+				if len(boundary.continueRequests) != 1 {
+					t.Fatalf("admissions=%d", len(boundary.continueRequests))
+				}
+				request := boundary.continueRequests[0]
+				if request.RequestID != ids[0] || request.SuccessorWorkerSessionID != ids[1] {
+					t.Fatalf("lineage=%#v", request)
+				}
+			} else {
+				operation := BindInterrupt(nil, boundary, generate)
+				if index != 0 {
+					t.Fatal("binding generated identity")
+				}
+				err = operation(InterruptConfig{Context: context.Background(), Output: &output, Async: true,
+					SourceWorkerSessionID: "source", ReplacementMessage: "replacement", GenerateID: unexpectedWorkerID, Local: &invokeLocalFake{}})
+				if len(boundary.interruptRequests) != 1 {
+					t.Fatalf("admissions=%d", len(boundary.interruptRequests))
+				}
+				request := boundary.interruptRequests[0]
+				if request.RequestID != ids[0] || request.SuccessorWorkerSessionID != ids[1] {
+					t.Fatalf("lineage=%#v", request)
+				}
+			}
+			if err != nil || index != 2 {
+				t.Fatalf("error=%v generated=%d", err, index)
+			}
+		})
 	}
 }

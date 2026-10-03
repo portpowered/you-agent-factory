@@ -25,7 +25,7 @@ func TestInvokeLocalAsyncReturnsAfterAdmissionWithoutOpeningObservationStream(t 
 		}},
 	}
 	var output bytes.Buffer
-	err := NewInvoke(nil, boundary)(InvokeConfig{
+	err := BindInvoke(nil, boundary, unexpectedWorkerID, unexpectedExecutionRead)(InvokeConfig{
 		Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "local-request", WorkerSessionID: "local-session", DispatchID: "local-dispatch",
 		WorkstationName: "coding", UserMessage: "inspect the repository",
@@ -62,7 +62,7 @@ func TestInvokeNormalizesDocumentWithExplicitAndPositionalPrecedence(t *testing.
 		ID: "document-session", State: workersessions.StateRunning,
 	}}}
 	var output bytes.Buffer
-	err := NewInvoke(nil, boundary)(InvokeConfig{
+	err := BindInvoke(nil, boundary, unexpectedWorkerID, unexpectedExecutionRead)(InvokeConfig{
 		Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
 		ExecutionJSON: document, RequestID: "flag-request", WorkstationName: "flag-workstation",
 		Prompt: []string{"follow", "up"},
@@ -87,7 +87,7 @@ func TestInvokeUsesNonTTYStdinForMissingUserMessage(t *testing.T) {
 		ID: "stdin-session", State: workersessions.StateRunning,
 	}}}
 	var output bytes.Buffer
-	err := NewInvoke(nil, boundary)(InvokeConfig{
+	err := BindInvoke(nil, boundary, unexpectedWorkerID, unexpectedExecutionRead)(InvokeConfig{
 		Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "stdin-request", WorkerSessionID: "stdin-session", DispatchID: "stdin-dispatch",
 		WorkstationName: "coding", Stdin: strings.NewReader("piped message\n"),
@@ -111,7 +111,7 @@ func TestInvokeLocalWaitsOnAuthoritativeObservationAndRendersOnlyProviderOutput(
 		},
 	}
 	var output bytes.Buffer
-	err := NewInvoke(nil, boundary)(InvokeConfig{
+	err := BindInvoke(nil, boundary, unexpectedWorkerID, unexpectedExecutionRead)(InvokeConfig{
 		Context: context.Background(), Output: &output,
 		RequestID: "local-request", WorkerSessionID: "local-session", DispatchID: "local-dispatch",
 		WorkstationName: "coding", UserMessage: "finish the change",
@@ -156,7 +156,7 @@ func TestInvokeRemoteAsyncPostsExactlySelectedServerAndDoesNotStream(t *testing.
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewInvoke(testHTTPProtocol(t), nil)(InvokeConfig{
+	err := BindInvoke(testHTTPProtocol(t), nil, unexpectedWorkerID, unexpectedExecutionRead)(InvokeConfig{
 		Context: context.Background(), Server: server.URL, Remote: true, Output: &output,
 		OutputFormat: "json", Async: true, RequestID: "remote-request", WorkerSessionID: "remote-session",
 		DispatchID: "remote-dispatch", WorkstationName: "coding", UserMessage: "remote work",
@@ -199,7 +199,7 @@ func TestInvokeRemoteWaitConsumesOneTerminalSSEFrame(t *testing.T) {
 	defer server.Close()
 
 	var output bytes.Buffer
-	err := NewInvoke(testHTTPProtocol(t), nil)(InvokeConfig{
+	err := BindInvoke(testHTTPProtocol(t), nil, unexpectedWorkerID, unexpectedExecutionRead)(InvokeConfig{
 		Context: context.Background(), Server: server.URL, Remote: true, Output: &output,
 		RequestID: "remote-request", WorkerSessionID: "remote-session", DispatchID: "remote-dispatch",
 		WorkstationName: "coding", UserMessage: "remote wait",
@@ -215,7 +215,7 @@ func TestInvokeRemoteWaitConsumesOneTerminalSSEFrame(t *testing.T) {
 func TestInvokeRemoteConnectionFailureRedactsSelectedEndpoint(t *testing.T) {
 	protocol := &invokeProtocolStub{err: errors.New("dial failed")}
 	var output bytes.Buffer
-	err := NewInvoke(protocol, nil)(InvokeConfig{
+	err := BindInvoke(protocol, nil, unexpectedWorkerID, unexpectedExecutionRead)(InvokeConfig{
 		Context: context.Background(), Server: "https://example.test?token=secret", Remote: true,
 		Output: &output, RequestID: "request", WorkerSessionID: "session", DispatchID: "dispatch",
 		WorkstationName: "coding", UserMessage: "remote failure",
@@ -267,7 +267,6 @@ func TestReadInvokeRequestCoversInputFailures(t *testing.T) {
 		want   string
 	}{
 		{name: "stdin document missing", config: InvokeConfig{ExecutionJSON: "-"}, want: "WORKER_SESSION_INPUT_MISSING"},
-		{name: "file reader missing", config: InvokeConfig{ExecutionJSON: "request.json"}, want: "WORKER_SESSION_INPUT_FAILED"},
 		{name: "file read failure", config: InvokeConfig{ExecutionJSON: "request.json", ReadFile: func(string) ([]byte, error) { return nil, errors.New("read failed") }}, want: "WORKER_SESSION_INPUT_FAILED"},
 		{name: "malformed JSON", config: InvokeConfig{ExecutionJSON: "{"}, want: "WORKER_SESSION_INPUT_INVALID"},
 		{name: "known field type", config: InvokeConfig{ExecutionJSON: `{"requestId":17}`}, want: "WORKER_SESSION_INPUT_INVALID"},
@@ -342,7 +341,7 @@ func TestInvokeLocalFutureExecutionFieldsWarnOnStderrAfterSuccess(t *testing.T) 
 		ID: "future-session", State: workersessions.StateRunning,
 	}}}
 	var stdout, stderr bytes.Buffer
-	err := NewInvoke(nil, boundary)(InvokeConfig{
+	err := BindInvoke(nil, boundary, unexpectedWorkerID, unexpectedExecutionRead)(InvokeConfig{
 		Context: context.Background(), Output: &stdout, Diagnostics: &stderr, OutputFormat: "json", Async: true,
 		ExecutionJSON: `{
 			"requestId": "future-request",
@@ -444,13 +443,10 @@ func assertInvokeRetry(t *testing.T, request factoryapi.WorkerSessionStartReques
 func TestEnsureInvokeIdentitiesUsesInjectedGenerator(t *testing.T) {
 	request := factoryapi.WorkerSessionStartRequest{RequestId: "request", WorkerSessionId: "session"}
 	request.Execution.Dispatch.DispatchId = "dispatch"
-	if err := ensureInvokeIdentities(&request, nil); err != nil {
+	if err := ensureInvokeIdentities(&request, unexpectedWorkerID); err != nil {
 		t.Fatalf("ensureInvokeIdentities(populated) = %v, want nil", err)
 	}
 	missing := factoryapi.WorkerSessionStartRequest{}
-	if err := ensureInvokeIdentities(&missing, nil); err == nil || !strings.Contains(err.Error(), "WORKER_SESSION_IDENTITY_UNAVAILABLE") {
-		t.Fatalf("ensureInvokeIdentities(missing, nil) = %v, want identity error", err)
-	}
 	ids := []string{"generated-request", "generated-session", "generated-dispatch"}
 	index := 0
 	if err := ensureInvokeIdentities(&missing, func() string { value := ids[index]; index++; return value }); err != nil {
@@ -770,7 +766,7 @@ func TestWorkerSessionExecutionStdinOverflowFailsBeforeDispatch(t *testing.T) {
 	local := &invokeLocalFake{}
 	reader := workerSessionOverflowReader(maxWorkerSessionExecutionStdinBytes)
 	var output bytes.Buffer
-	err := NewInvoke(nil, local)(InvokeConfig{
+	err := BindInvoke(nil, local, unexpectedWorkerID, unexpectedExecutionRead)(InvokeConfig{
 		Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
 		ExecutionJSON: "-", Stdin: reader,
 	})
@@ -789,7 +785,7 @@ func TestWorkerSessionInvokeMessageOverflowFailsBeforeDispatch(t *testing.T) {
 	local := &invokeLocalFake{}
 	reader := workerSessionOverflowReader(maxWorkerSessionMessageStdinBytes)
 	var output bytes.Buffer
-	err := NewInvoke(nil, local)(InvokeConfig{
+	err := BindInvoke(nil, local, unexpectedWorkerID, unexpectedExecutionRead)(InvokeConfig{
 		Context: context.Background(), Output: &output, OutputFormat: "json", Async: true,
 		RequestID: "request", WorkerSessionID: "session", DispatchID: "dispatch",
 		WorkstationName: "coding", Stdin: reader,
@@ -814,7 +810,7 @@ func TestWorkerSessionContinueAndInterruptOverflowFailBeforeDispatch(t *testing.
 		{
 			name: "continue",
 			run: func(local *invokeLocalFake, reader io.Reader, output *bytes.Buffer) error {
-				return NewContinue(nil, local)(ContinueConfig{
+				return BindContinue(nil, local, unexpectedWorkerID)(ContinueConfig{
 					Context: context.Background(), Output: output, OutputFormat: "json", Async: true,
 					RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor",
 					Stdin: reader,
@@ -825,7 +821,7 @@ func TestWorkerSessionContinueAndInterruptOverflowFailBeforeDispatch(t *testing.
 		{
 			name: "interrupt",
 			run: func(local *invokeLocalFake, reader io.Reader, output *bytes.Buffer) error {
-				return NewInterrupt(nil, local)(InterruptConfig{
+				return BindInterrupt(nil, local, unexpectedWorkerID)(InterruptConfig{
 					Context: context.Background(), Output: output, OutputFormat: "json", Async: true,
 					RequestID: "request", SourceWorkerSessionID: "source", SuccessorWorkerSessionID: "successor",
 					Stdin: reader,
