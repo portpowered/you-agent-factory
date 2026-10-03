@@ -12,11 +12,13 @@ import (
 )
 
 type constructionSource struct {
-	path       string
-	importPath string
-	file       *ast.File
-	imports    map[string]string
-	set        *token.FileSet
+	path         string
+	importPath   string
+	file         *ast.File
+	imports      map[string]string
+	dotImports   []string
+	set          *token.FileSet
+	declarations map[ConstructionSymbol]constructionDeclaration
 }
 
 type constructionDeclaration struct {
@@ -73,9 +75,18 @@ func loadConstructionIndex(root string) (constructionIndex, error) {
 			return nil
 		}
 		source.imports = constructionImports(source.file)
+		for _, spec := range source.file.Imports {
+			if spec.Name != nil && spec.Name.Name == "." {
+				imported, _ := strconv.Unquote(spec.Path.Value)
+				source.dotImports = append(source.dotImports, imported)
+			}
+		}
 		index.sources = append(index.sources, source)
 		return index.addDeclarations(source)
 	})
+	for _, source := range index.sources {
+		source.declarations = index.declarations
+	}
 	return index, err
 }
 

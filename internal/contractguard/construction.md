@@ -6,6 +6,23 @@ runtime graph, or consults a mutable registry. The package-boundary, durable
 construction, and logging commands consume the same validated observations
 while retaining their existing rules and diagnostics.
 
+Required-dependency nil comparisons are reported in registered constructors
+and methods whose fields are initialized from those parameters through keyed
+result literals. Local declaration aliases and closures retain that provenance;
+shadowed variables and optional domain fields do not acquire requiredness.
+Reassignment of a traced parameter, alias, or method field makes a guard an
+`unresolved-required-dependency-guard` observation. This debt blocks an enforced
+set, just like a proved guard, and remains nonblocking in report mode.
+
+Direct calls resolve dot-imported authored functions and instantiated generic
+functions while preserving local shadowing. Constructor values passed or stored
+for later execution still produce unresolved-reference debt. This bounded scan
+does not yet establish helper summaries, imported type aliases, method-valued
+constructors, field storage through assignment, type-assertion fallbacks,
+dependency bags, service locators, or complete effect ancestry. Those remaining
+story-002 cases must be proved before a capability set can claim complete
+enforcement coverage.
+
 Symbols identify an import path, optional receiver type (without a pointer),
 and declaration name. Required parameter indices count individual parameters,
 including grouped declarations, and do not depend on parameter names. Named

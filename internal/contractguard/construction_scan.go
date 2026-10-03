@@ -41,7 +41,7 @@ func ScanConstruction(root string, registry ConstructionRegistry) ([]Constructio
 	if err := index.validate(registry); err != nil {
 		return nil, err
 	}
-	var findings []ConstructionFinding
+	findings := index.scanRequiredConstructionGuards(registry)
 	for _, source := range index.sources {
 		for _, decl := range source.file.Decls {
 			function, ok := decl.(*ast.FuncDecl)
@@ -82,7 +82,7 @@ func scanConstructionOperation(source *constructionSource, caller ConstructionSy
 		if !ok {
 			return true
 		}
-		callees[call.Fun] = true
+		markConstructionCallee(callees, call.Fun)
 		symbol, resolved := resolveConstructionCall(call.Fun, source)
 		if !resolved {
 			return true
@@ -158,7 +158,17 @@ func resolveConstructionCall(expr ast.Expr, source *constructionSource) (Constru
 		if value.Obj != nil && value.Obj.Kind != ast.Fun {
 			return ConstructionSymbol{}, false
 		}
-		return ConstructionSymbol{ImportPath: source.importPath, Name: value.Name}, true
+		local := ConstructionSymbol{ImportPath: source.importPath, Name: value.Name}
+		if value.Obj != nil || source.declarations[local].function != nil {
+			return local, true
+		}
+		for _, imported := range source.dotImports {
+			dotted := ConstructionSymbol{ImportPath: imported, Name: value.Name}
+			if source.declarations[dotted].function != nil {
+				return dotted, true
+			}
+		}
+		return local, true
 	case *ast.SelectorExpr:
 		if ident, ok := value.X.(*ast.Ident); ok && ident.Obj == nil {
 			if imported := source.imports[ident.Name]; imported != "" {
@@ -167,8 +177,24 @@ func resolveConstructionCall(expr ast.Expr, source *constructionSource) (Constru
 		}
 	case *ast.ParenExpr:
 		return resolveConstructionCall(value.X, source)
+	case *ast.IndexExpr:
+		return resolveConstructionCall(value.X, source)
+	case *ast.IndexListExpr:
+		return resolveConstructionCall(value.X, source)
 	}
 	return ConstructionSymbol{}, false
+}
+
+func markConstructionCallee(callees map[ast.Expr]bool, expr ast.Expr) {
+	callees[expr] = true
+	switch value := expr.(type) {
+	case *ast.ParenExpr:
+		markConstructionCallee(callees, value.X)
+	case *ast.IndexExpr:
+		markConstructionCallee(callees, value.X)
+	case *ast.IndexListExpr:
+		markConstructionCallee(callees, value.X)
+	}
 }
 
 func constructionCallAllowed(allowances []ConstructionAllowance, caller, callee ConstructionSymbol, file string) bool {
