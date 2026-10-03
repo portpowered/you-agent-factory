@@ -643,6 +643,45 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workers
 			Usage:                       dispatchUsageEventPayload(result, completed),
 		},
 	))
+	h.recordOutputParentLineage(tick, result.DispatchID, eventTime, completed)
+}
+
+// recordOutputParentLineage records the runtime parent lineage of Work a
+// workstation newly minted from consumed input Work (for example a
+// project-report minted from a failed idea) as a PARENT_CHILD relationship
+// change, so Work reads expose the exact origin Work ID. Outputs that reuse a
+// consumed Work ID keep their existing lineage and are not re-recorded.
+func (h *FactoryEventHistory) recordOutputParentLineage(
+	tick int,
+	dispatchID string,
+	eventTime time.Time,
+	completed interfaces.CompletedDispatch,
+) {
+	consumed := make(map[string]struct{}, len(completed.ConsumedTokens))
+	for _, token := range completed.ConsumedTokens {
+		consumed[token.Color.WorkID] = struct{}{}
+	}
+	index := 0
+	for _, mutation := range completed.OutputMutations {
+		if mutation.Token == nil || mutation.Token.Color.DataType == workers.DataTypeResource {
+			continue
+		}
+		color := mutation.Token.Color
+		if color.ParentID == "" || color.ParentID == color.WorkID {
+			continue
+		}
+		if _, reused := consumed[color.WorkID]; reused {
+			continue
+		}
+		h.RecordRelationshipChange(tick, dispatchID, color.TraceID, index, work.FactoryRelation{
+			Type:           string(work.RelationParentChild),
+			SourceWorkID:   color.WorkID,
+			SourceWorkName: color.Name,
+			TargetWorkID:   color.ParentID,
+			TraceID:        color.TraceID,
+		}, eventTime)
+		index++
+	}
 }
 
 // dispatchUsageEventPayload derives the usage facts that belong on the

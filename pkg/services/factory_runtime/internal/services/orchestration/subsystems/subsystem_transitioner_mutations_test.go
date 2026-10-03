@@ -166,8 +166,16 @@ func TestCalculateMutations_CustomerQuorumNamesDoNotGainPackagedRelations(t *tes
 			if len(mutations) != 1 || mutations[0].NewToken == nil {
 				t.Fatalf("mutations = %#v, want one output token", mutations)
 			}
-			if got := len(mutations[0].NewToken.Color.Relations); got != testCase.wantRelations {
-				t.Fatalf("relations = %#v, want %d relations", mutations[0].NewToken.Color.Relations, testCase.wantRelations)
+			// Runtime parent lineage (PARENT_CHILD to the first input) is not a
+			// packaged quorum relation; only DEPENDS_ON edges are counted.
+			got := 0
+			for _, relation := range mutations[0].NewToken.Color.Relations {
+				if relation.Type == work.RelationDependsOn {
+					got++
+				}
+			}
+			if got != testCase.wantRelations {
+				t.Fatalf("relations = %#v, want %d DEPENDS_ON relations", mutations[0].NewToken.Color.Relations, testCase.wantRelations)
 			}
 		})
 	}
