@@ -180,7 +180,7 @@ func TestServeACP_RootBuildProcessCompletesOneFactoryPrompt(t *testing.T) {
 		if err := command.Err(); err != nil {
 			t.Fatalf("Process.Execute(you server acp) error = %v after clean stdin EOF; stderr=%s", err, stderr.String())
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(support.ScaledTimeout(5 * time.Second)):
 		t.Fatal("Process.Execute(you server acp) did not return after stdin EOF")
 	}
 	command.AcceptError()

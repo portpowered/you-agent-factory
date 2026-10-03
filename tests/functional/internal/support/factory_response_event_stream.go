@@ -250,7 +250,7 @@ func readFactoryResponseEventSSEMessage(
 // diagnostic that identifies timeout, closure, cancellation, or read error.
 func (s *FactoryResponseEventStream) NextFrame(timeout time.Duration) FactoryResponseEventFrame {
 	s.t.Helper()
-	result := s.TryNextFrameResult(timeout)
+	result := s.TryNextFrameResult(ScaledTimeout(timeout))
 	if result.Outcome != FactoryResponseEventStreamOutcomeFrame {
 		s.t.Fatalf("%s", result.Diagnostic())
 	}
@@ -407,6 +407,7 @@ func (s *FactoryResponseEventStream) WaitClosed(timeout time.Duration) {
 	if timeout <= 0 {
 		timeout = functionalServerReadyTimeout
 	}
+	timeout = ScaledTimeout(timeout)
 	select {
 	case <-s.done:
 	case <-time.After(timeout):
