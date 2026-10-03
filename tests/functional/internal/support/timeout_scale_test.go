@@ -8,12 +8,12 @@ func TestResolveTimeoutScale(t *testing.T) {
 		env  map[string]string
 		want int
 	}{
-		"local default":     {nil, 1},
+		"local default":     {nil, localTimeoutScale()},
 		"github actions":    {map[string]string{"GITHUB_ACTIONS": "true"}, ciTimeoutScale},
 		"generic ci":        {map[string]string{"CI": "true"}, ciTimeoutScale},
 		"explicit override": {map[string]string{TimeoutScaleEnv: "7", "CI": "true"}, 7},
 		"explicit one":      {map[string]string{TimeoutScaleEnv: "1", "CI": "true"}, 1},
-		"invalid ignored":   {map[string]string{TimeoutScaleEnv: "0"}, 1},
+		"invalid ignored":   {map[string]string{TimeoutScaleEnv: "0"}, localTimeoutScale()},
 	} {
 		env := tc.env
 		if got := resolveTimeoutScale(func(key string) string { return env[key] }); got != tc.want {
