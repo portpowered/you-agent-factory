@@ -18,9 +18,9 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// Isolation: isolated-with-reason - persistent connection count; the packaged
-// workflow must use one real ACP stdio peer across all four agent sessions.
-func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *testing.T) {
+// Prove planner, independent children and merger outputs through request-owned peers.
+// Isolation: isolated-with-reason - packaged Factory and operator integration.
+func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughRequestOwnedACPStdio(t *testing.T) {
 	t.Parallel()
 	fixture := functionalACPFixture("spawn")
 	var starts atomic.Int32
@@ -102,12 +102,13 @@ func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *t
 	if part.Text != "merged travel answer" {
 		t.Fatalf("packaged spawn primary result = %q, want merged travel answer", part.Text)
 	}
-	if starts.Load() != 1 {
-		t.Fatalf("ACP process starts = %d, want one persistent stdio peer for four agents", starts.Load())
+	// One request-owned process per agent call: planner, two children, merger.
+	if starts.Load() != 4 {
+		t.Fatalf("ACP process starts = %d, want 4 request-owned stdio peers for four agents", starts.Load())
 	}
-	// Stop and close the daemon before TempDir cleanup so the persistent ACP
-	// peer releases its working-directory handle on Windows. The helper also
-	// proves Process.Execute joined and the listener is no longer reachable.
+	// Stop and close the daemon before TempDir cleanup so the ACP peers release
+	// their working-directory handles on Windows. The helper also proves
+	// Process.Execute joined and the listener is no longer reachable.
 	stopAndAssertACPServer(t, server)
 }
 
