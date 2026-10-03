@@ -28,6 +28,16 @@ func NewCursorScopes(files CursorPersistenceFileSystem) scriptpollers.CursorScop
 	return &cursorScopes{files: files, states: make(map[scriptpollers.CursorScope]*cursorScopeState)}
 }
 
+// ReleaseScope forgets the joined runtime's memory and path/lock resources,
+// without filesystem effects or changes to another runtime's recovery state.
+// The caller must exclude further scope operations until reactivation.
+func (s *cursorScopes) ReleaseScope(scope scriptpollers.CursorScope) {
+	scope.BaseDir = strings.TrimSpace(scope.BaseDir)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.states, scope)
+}
+
 func (s *cursorScopes) GetCursor(
 	ctx context.Context,
 	scope scriptpollers.CursorScope,
