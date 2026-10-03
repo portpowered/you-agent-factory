@@ -420,7 +420,17 @@ func newRootCatalog(t *testing.T) factorydefinitions.Service {
 		t.Fatalf("catalognamedpaths.New: %v", err)
 	}
 	catalogService := catalogwire.NewService(paths, fileSystem)
-	return lifecycle.NewWithCatalog(nil, lifecycle.StubActivationGateway(), catalogService)
+	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
+		nil,
+		lifecycle.StubActivationGateway(),
+		catalogService,
+		factorydefinitions.UnimplementedService{},
+		factorydefinitions.UnimplementedService{},
+		factorydefinitions.UnimplementedService{},
+		nil,
+		factorydefinitions.UnimplementedService{},
+		nil,
+	)
 }
 
 func writeNamedFactory(t *testing.T, rootDir, name string) string {
