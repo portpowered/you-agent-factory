@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"testing"
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
@@ -39,7 +40,8 @@ func TestResolveOperatorDefaultsDelegatesExactObservedLayers(t *testing.T) {
 			return want, nil
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	}
 	got, err := resolveOperatorDefaults(command, &cliOperatorDefaultsOptions{providerOverride: "codex"}, factory, "/home/customer")
 	if err != nil {
@@ -54,9 +56,10 @@ func TestRootGlobalResolutionIsAvailableToAttachedCommandFamilies(t *testing.T) 
 	factory := withTestInjectedPlatformRoles(CommandFactory{
 		ModelsCLI: rootModelsCLI,
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		startupcli.Functions{},
@@ -89,9 +92,10 @@ func TestRunParsingResolvesRunScopedProvider(t *testing.T) {
 	factory := withTestInjectedPlatformRoles(CommandFactory{
 		ModelsCLI: rootModelsCLI,
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		startupcli.Functions{},

@@ -119,7 +119,8 @@ func TestRunScopedServerIntentIncludesInvocationAndSiteDashboard(t *testing.T) {
 					return testRunSelection{}
 				},
 
-				sessionResolvedHandlers: testSessionHandlers(nil, nil),
+				factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+				sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 			}
 			if err := delegateRunInitialization(t.Context(), test.cfg, false, options); err != nil {
 				t.Fatalf("delegateRunInitialization: %v", err)
@@ -148,7 +149,8 @@ func TestDelegateRunInitializationCarriesInvocationCancellation(t *testing.T) {
 			return testRunSelection{}
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	}
 	if err := delegateRunInitialization(
 		t.Context(),
@@ -443,7 +445,8 @@ func executeRunStartupFailure(t *testing.T, startupFailure error, args []string)
 
 	selectionOpened := false
 	factory := withTestInjectedPlatformRoles(CommandFactory{
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	workDir := t.TempDir()
 

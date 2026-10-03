@@ -22,7 +22,8 @@ func TestProductionProvidersCommandWiresGeneratedHandlersAndHelp(t *testing.T) {
 	command, err := newProductionProvidersCommand(
 		&cliDiagnosticsOptions{},
 		CommandFactory{ProvidersCLI: providerService,
-			sessionResolvedHandlers: testSessionHandlers(nil, nil),
+			factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+			sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 		},
 	)
 	if err != nil {
@@ -83,9 +84,10 @@ func TestProductionWorkerSessionsUsesResolvedOwnerInputs(t *testing.T) {
 			return nil
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		startupcli.Functions{},
@@ -431,7 +433,8 @@ func cloneCLIInputValues(values map[string]any) map[string]any {
 
 func TestWorkersListCommandReportsUnavailableProviderService(t *testing.T) {
 	command := newWorkersListCommand(CommandFactory{homeDir: func() (string, error) { return t.TempDir(), nil },
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	command.SetOut(io.Discard)
 	command.SetErr(io.Discard)

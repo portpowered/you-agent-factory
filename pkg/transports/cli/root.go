@@ -195,6 +195,7 @@ type CommandOperations struct {
 // CommandFactory constructs a fresh Cobra tree for each invocation from
 // immutable Wire-supplied entrypoints and invocation-local process edges.
 type CommandFactory struct {
+	factoryConfigInitHandler          commandregistry.FactoryConfigInitHandler
 	sessionResolvedHandlers           commandregistry.SessionResolvedHandlers
 	observeCLI                        platformprocess.CLIObserver
 	homeDir                           func() (string, error)
@@ -274,9 +275,10 @@ type CommandFactory struct {
 }
 
 // NewCommandFactory copies the Wire-built graph without installing defaults.
-func NewCommandFactory(operations CommandOperations, sessionHandlers commandregistry.SessionResolvedHandlers) CommandFactory {
+func NewCommandFactory(operations CommandOperations, sessionHandlers commandregistry.SessionResolvedHandlers, factoryHandler commandregistry.FactoryConfigInitHandler) CommandFactory {
 	return CommandFactory{
 		sessionResolvedHandlers:           sessionHandlers,
+		factoryConfigInitHandler:          factoryHandler,
 		observeCLI:                        operations.ObserveCLI,
 		namedFactoryCatalog:               operations.NamedFactoryCatalog,
 		completeFactoryNames:              operations.CompleteFactoryNames,
@@ -353,21 +355,26 @@ func NewCommandFactory(operations CommandOperations, sessionHandlers commandregi
 // NewCommand constructs one fresh command tree from invocation-local process
 // boundaries and the factory's injected command collaborators.
 func (factory CommandFactory) NewCommand(
+	ctx context.Context,
 	homeDir func() (string, error),
 	lookupEnv func(string) (string, bool),
 	initializer startupcli.Initializer,
 ) *cobra.Command {
-	factory.homeDir = homeDir
+	home := resolveInvocationHome(homeDir)
+	factory.homeDir = resolvedHomeReader(homeDir, home)
 	factory.lookupEnv = lookupEnv
 	factory.initializer = initializer
-	return newRootCommandWithFactory(factory)
+	root := newRootCommandWithFactory(factory)
+	root.SetContext(commandregistry.WithInvocationHome(ctx, home))
+	return root
 }
 
 // ExecuteCommand constructs one private tree for the invocation. Observation
 // callers receive detached contracts and parser state; ordinary callers run
 // the selected command handler.
 func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation) error {
-	factory.homeDir = input.HomeDir
+	home := resolveInvocationHome(input.HomeDir)
+	factory.homeDir = resolvedHomeReader(input.HomeDir, home)
 	factory.lookupEnv = input.LookupEnv
 	factory.initializer = input.Initializer
 	factory.cancellation = input.Cancellation
@@ -382,7 +389,7 @@ func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation)
 	root.SetErr(diagnostics)
 	root.SilenceErrors = true
 	root.SilenceUsage = true
-	root.SetContext(clidiag.WithCentralDiagnostics(input.Context, true))
+	root.SetContext(commandregistry.WithInvocationHome(clidiag.WithCentralDiagnostics(input.Context, true), home))
 	state := &commandExecutionState{}
 	installCobraUsageBoundary(root, state)
 	if factory.observeCLI == nil {
@@ -766,4 +773,20 @@ func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocati
 			cfg.InvocationNormalizedArguments != nil ||
 			cfg.PreparedInvocationInput != nil)
 	return cleanInvocation, textInvocation
+}
+
+// resolveInvocationHome reads the invocation edge once without rejecting unrelated commands.
+func resolveInvocationHome(resolve func() (string, error)) commandregistry.InvocationHome {
+	if resolve == nil {
+		return commandregistry.InvocationHome{Err: fmt.Errorf("home-directory resolver is required")}
+	}
+	path, err := resolve()
+	return commandregistry.InvocationHome{Path: path, Err: err}
+}
+
+func resolvedHomeReader(resolve func() (string, error), home commandregistry.InvocationHome) func() (string, error) {
+	if resolve == nil {
+		return nil
+	}
+	return func() (string, error) { return home.Path, home.Err }
 }

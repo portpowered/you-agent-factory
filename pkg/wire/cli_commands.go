@@ -944,8 +944,8 @@ func provideCLIObserver(edges serviceedges.Edges) platformprocess.CLIObserver {
 	return edges.CLIObserver
 }
 
-func provideCLICommandFactory(operations cli.CommandOperations, handlers commandregistry.SessionResolvedHandlers) cli.CommandFactory {
-	return cli.NewCommandFactory(operations, handlers)
+func provideCLICommandFactory(operations cli.CommandOperations, handlers commandregistry.SessionResolvedHandlers, factoryHandler commandregistry.FactoryConfigInitHandler) cli.CommandFactory {
+	return cli.NewCommandFactory(operations, handlers, factoryHandler)
 }
 
 func provideSessionListPreparation(service factorysessions.Service) func(context.Context, *sessioncli.ListConfig) error {
@@ -972,4 +972,22 @@ func provideCommandDiagnostics() func(*cobra.Command) io.Writer { return cli.Com
 
 func provideSessionResolvedHandlers(local cli.LocalSessionsCLIService, remote sessioncli.Service, prepareList func(context.Context, *sessioncli.ListConfig) error, diagnostics func(*cobra.Command) io.Writer) commandregistry.SessionResolvedHandlers {
 	return commandregistry.BindSessionResolvedHandlers(local, remote, prepareList, diagnostics)
+}
+
+func provideFactoryConfigInitHandler(
+	query cli.QueryFactoryOperation,
+	list cli.ListFactoriesOperation,
+	create cli.CreateFactoryFromFileOperation,
+	update cli.UpdateFactoryFromFileOperation,
+	deleteFactory cli.DeleteFactoryOperation,
+	replace cli.ReplaceFactoryCurrentOperation,
+	validate cli.ValidateFactoryOperation,
+	flatten cli.FlattenFactoryConfigOperation,
+	expand cli.ExpandFactoryConfigOperation,
+	configure cli.ConfigureInitOperation,
+	install cli.InstallPackagedFactoryOperation,
+	roots cli.NamedFactoryRootsResolver,
+	diagnostics func(*cobra.Command) io.Writer,
+) commandregistry.FactoryConfigInitHandler {
+	return commandregistry.NewFactoryConfigInitCommandHandler(query, list, create, update, deleteFactory, replace, validate, flatten, expand, configure, install, commandregistry.ResolveInvocationHome, roots, diagnostics)
 }

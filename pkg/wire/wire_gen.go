@@ -687,7 +687,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	v84 := provideSessionListPreparation(factorysessionsService)
 	v85 := provideCommandDiagnostics()
 	sessionResolvedHandlers := provideSessionResolvedHandlers(localSessionsCLIService, sessionService, v84, v85)
-	commandFactory := provideCLICommandFactory(commandOperations, sessionResolvedHandlers)
+	factoryConfigInitHandler := provideFactoryConfigInitHandler(queryFactoryOperation, listFactoriesOperation, createFactoryFromFileOperation, updateFactoryFromFileOperation, deleteFactoryOperation, replaceFactoryCurrentOperation, validateFactoryOperation, flattenFactoryConfigOperation, expandFactoryConfigOperation, configureInitOperation, cliInstallPackagedFactoryOperation, namedFactoryRootsResolver, v85)
+	commandFactory := provideCLICommandFactory(commandOperations, sessionResolvedHandlers, factoryConfigInitHandler)
 	stdioOpener := stdio.NewOpener()
 	wireMcpServerBuilder := provideMCPServerBuilder(workingDirectory, operatorsettingsService, service, fileSystem, homeDirectoryResolver)
 	stdioHandler, err := provideStdioHandler(factorysessionsService, recordingsService, lifecycleRunnerBuilder, runnerFactory, stdioOpener, wireMcpServerBuilder, v67, workflowPreviewOperation)
@@ -999,6 +1000,7 @@ var cliCommandOperationsSet = wire5.NewSet(
 	provideSessionListPreparation,
 	provideCommandDiagnostics,
 	provideSessionResolvedHandlers,
+	provideFactoryConfigInitHandler,
 	provideLocalSessionsCLIService,
 	provideModelsCLIService,
 	provideProvidersCLIService,

@@ -224,6 +224,7 @@ func withTestInjectedPlatformRoles(factory CommandFactory) CommandFactory {
 			return errors.New("install packaged factory test operation is not configured")
 		}
 	}
+	factory.factoryConfigInitHandler = testFactoryConfigInitHandler(factory)
 	return factory
 }
 
@@ -362,7 +363,8 @@ func newLegacyTestRootCommandWithCatalogDefaultsAndInvocation(
 		ListWork:      listWork, ShowWork: showWork,
 		MoveWork: moveWork, VisualizeWork: visualizeWork,
 
-		sessionResolvedHandlers: testSessionHandlers(rootTestSessionsCLI(), rootTestSessionsCLI()),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(rootTestSessionsCLI(), rootTestSessionsCLI()),
 	})
 	if resolve != nil {
 		factory.resolveOperatorDefaults = resolve
@@ -370,13 +372,13 @@ func newLegacyTestRootCommandWithCatalogDefaultsAndInvocation(
 	if prepare.prepare != nil {
 		factory.prepareInvocationInput = prepare
 	}
-	root := factory.NewCommand(os.UserHomeDir, os.LookupEnv, startupcli.Functions{
+	root := factory.NewCommand(context.Background(), os.UserHomeDir, os.LookupEnv, startupcli.Functions{
 		RunFunc: func(ctx context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
 			return runCLI(ctx, testRunConfig(selection))
 		},
 	})
 	if workingDirectory, err := os.Getwd(); err == nil {
-		root.SetContext(startupcli.WithWorkingDirectory(context.Background(), workingDirectory))
+		root.SetContext(startupcli.WithWorkingDirectory(root.Context(), workingDirectory))
 	}
 	return root
 }
@@ -416,9 +418,10 @@ func assertDirectCommandCount(t *testing.T, parent *cobra.Command, name string, 
 func newComposedTestRootCommand(t *testing.T) *cobra.Command {
 	t.Helper()
 	factory := withTestInjectedPlatformRoles(CommandFactory{
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(os.UserHomeDir, os.LookupEnv, startupcli.Functions{
+	root := factory.NewCommand(context.Background(), os.UserHomeDir, os.LookupEnv, startupcli.Functions{
 		RunFunc: func(_ context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
 			err := interfaces.NewBlockingFactoryLoadError(
 				interfaces.ValidationResult{
@@ -456,7 +459,8 @@ func exerciseBatchColdStartCLICharacterization(t *testing.T) {
 				InitializeSystemFunc: func(context.Context, string) error { return nil },
 			},
 
-			sessionResolvedHandlers: testSessionHandlers(nil, nil),
+			factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+			sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 		}
 		allowed, err := prepareRunSystemInitialization(cmd, &test.cfg, options)
 		if err != nil {
@@ -483,7 +487,8 @@ func exerciseDeferredBatchSystemInitialization(t *testing.T) {
 	options := CommandFactory{initializer: startupcli.Functions{
 		InitializeSystemFunc: func(context.Context, string) error { calls++; return nil },
 	},
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	}
 	cfg := runcli.RunConfig{
 		WorkFile: "one-work.json", MockWorkersEnabled: true, DisableDefaultRecording: true,
@@ -505,9 +510,10 @@ func exerciseExactFiniteMockBatchCommand(t *testing.T) {
 	var got runcli.RunConfig
 	workingDirectory := t.TempDir()
 	factory := withTestInjectedPlatformRoles(CommandFactory{
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		startupcli.Functions{
@@ -518,7 +524,7 @@ func exerciseExactFiniteMockBatchCommand(t *testing.T) {
 			},
 		},
 	)
-	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), workingDirectory))
+	root.SetContext(startupcli.WithWorkingDirectory(root.Context(), workingDirectory))
 	root.SetArgs([]string{"run", "--work", "one-work.json", "--with-mock-workers=accept.json", "--no-record"})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute exact finite mock batch: %v", err)
@@ -544,7 +550,8 @@ func exerciseInvalidRecordingInputDoesNotActivate(t *testing.T) {
 	allowed, err := prepareRunSystemInitialization(cmd, &cfg, CommandFactory{initializer: startupcli.Functions{
 		InitializeSystemFunc: func(context.Context, string) error { calls++; return nil },
 	},
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	if err != nil {
 		t.Fatalf("invalid recording preflight error = %v, want deferred validation", err)
@@ -563,7 +570,8 @@ func exerciseDemandedBatchSystemInitialization(t *testing.T) {
 	options := CommandFactory{initializer: startupcli.Functions{
 		InitializeSystemFunc: func(context.Context, string) error { calls++; return wantErr },
 	},
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	}
 	cfg := runcli.RunConfig{
 		WorkFile: "one-work.json", MockWorkersEnabled: true,
@@ -605,7 +613,8 @@ func exerciseDemandedBatchSystemInitialization(t *testing.T) {
 			}
 		},
 	},
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	}
 	if err := prepareRunFactoryStartup(concurrentCmd, &concurrentCfg, concurrentOptions, false); err != nil {
 		t.Fatalf("prepare concurrent demanded startup: %v", err)
@@ -632,9 +641,10 @@ func exerciseDemandedBatchCommandDoesNotDispatch(t *testing.T) {
 	initialized, dispatched := 0, 0
 	workingDirectory := t.TempDir()
 	factory := withTestInjectedPlatformRoles(CommandFactory{
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		startupcli.Functions{
@@ -645,7 +655,7 @@ func exerciseDemandedBatchCommandDoesNotDispatch(t *testing.T) {
 			},
 		},
 	)
-	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), workingDirectory))
+	root.SetContext(startupcli.WithWorkingDirectory(root.Context(), workingDirectory))
 	root.SetArgs([]string{"run", "--work", "one-work.json", "--with-mock-workers=accept.json", "--with-server", "--no-record"})
 	err := root.Execute()
 	if !errors.Is(err, wantErr) {
@@ -687,7 +697,8 @@ func newBatchColdStartApplicationProcess(
 	lifecycle := &batchColdStartProcessLifecycle{}
 	process, err := initializerapplication.NewProcess(
 		withTestInjectedPlatformRoles(CommandFactory{
-			sessionResolvedHandlers: testSessionHandlers(nil, nil),
+			factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+			sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 		}), initializer,
 		batchColdStartProcessProviderRegistry{}, lifecycle, nil, nil, nil, nil,
 	)
@@ -898,5 +909,7 @@ func testSessionHandlers(local, remote sessioncli.Service) commandregistry.Sessi
 }
 
 func newTestCommandFactory(operations CommandOperations) CommandFactory {
-	return NewCommandFactory(operations, testSessionHandlers(operations.LocalSessionsCLI, operations.SessionsCLI))
+	factory := NewCommandFactory(operations, testSessionHandlers(operations.LocalSessionsCLI, operations.SessionsCLI), nil)
+	factory.factoryConfigInitHandler = testFactoryConfigInitHandler(factory)
+	return factory
 }

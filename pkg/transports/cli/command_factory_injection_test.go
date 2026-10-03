@@ -51,14 +51,14 @@ func TestPackagedInitCommandCompositionUsesDefinitionsOwnedAdapter(t *testing.T)
 		t.Fatal("InstallPackagedFactory operation is missing from composed factory")
 	}
 
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return "/home/operator", nil },
 		func(string) (string, bool) { return "", false },
 		nil,
 	)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), "/workspace/fleet"))
+	root.SetContext(startupcli.WithWorkingDirectory(root.Context(), "/workspace/fleet"))
 	root.SetArgs([]string{
 		"init", "--package", "@you/goal", "--dir", "alternate-factories",
 		"--format", "yaml", "--replace=true",
@@ -151,7 +151,7 @@ func executePackagedInitComposition(
 	if factory.InstallPackagedFactory == nil {
 		t.Fatal("InstallPackagedFactory operation is missing from production composition")
 	}
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return "/home/operator", nil },
 		func(string) (string, bool) { return "", false },
 		nil,
@@ -159,7 +159,7 @@ func executePackagedInitComposition(
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
-	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), "/workspace/fleet"))
+	root.SetContext(startupcli.WithWorkingDirectory(root.Context(), "/workspace/fleet"))
 	root.SetArgs(args)
 	err := root.Execute()
 	return stdout.String(), stderr.String(), err
@@ -184,7 +184,7 @@ func TestSessionCommandCompositionUsesTypedSessionsCLIAdapter(t *testing.T) {
 		t.Fatal("SessionsCLI adapter is missing from composed factory")
 	}
 
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"session", "show", "session-beta"})
@@ -207,7 +207,7 @@ func TestWorkCommandCompositionUsesResolvedOwnerAdapter(t *testing.T) {
 			return err
 		},
 	})
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
@@ -389,7 +389,7 @@ func executeSessionComposition(
 	if factory.SessionsCLI == nil {
 		t.Fatal("SessionsCLI adapter is missing from production composition")
 	}
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
@@ -422,9 +422,10 @@ func TestProductionMetricsCommandUsesInjectedRuntimeMetricsQuery(t *testing.T) {
 			}, nil
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		nil,
@@ -455,9 +456,10 @@ func TestProductionMetricsCommandResolvesGlobalJSONAndSessionScope(t *testing.T)
 			}, nil
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		nil,
@@ -624,7 +626,8 @@ func runProductionMetricsFailureCase(t *testing.T, test productionMetricsFailure
 			return factoryvisualization.RuntimeMetricsQueryResult{}, test.queryError
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	var stdout, stderr bytes.Buffer
 	err := factory.ExecuteCommand(startupcli.CommandInvocation{

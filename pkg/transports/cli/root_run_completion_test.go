@@ -38,7 +38,8 @@ func TestRunCanonicalNamedFlagRegistersFactoryNameCompletion(t *testing.T) {
 			return []cobra.Completion{"alpha", "alpine"}, cobra.ShellCompDirectiveNoFileComp
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	}
 
 	commands, err := buildRunServerProductionCommands(
@@ -104,7 +105,8 @@ func TestRunCanonicalNamedSelectionCompletesSignatureInputs(t *testing.T) {
 			}
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	}
 
 	commands, err := buildRunServerProductionCommands(
@@ -175,7 +177,8 @@ func TestRunCompletionPreservesPositionalInputAfterFlagTerminator(t *testing.T) 
 			}
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	}
 	tests := []struct {
 		name string

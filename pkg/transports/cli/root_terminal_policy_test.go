@@ -509,8 +509,9 @@ func TestProductionWorkResolvedHandlerExecutesWatch(t *testing.T) {
 			return err
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
-	}).NewCommand(nil, nil, nil)
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	}).NewCommand(context.Background(), nil, nil, nil)
 
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
@@ -537,9 +538,10 @@ func TestWorkerSessionsListCommandMapsManifestInputsToOperation(t *testing.T) {
 			return nil
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -570,9 +572,10 @@ func TestWorkerSessionsInvokeCommandMapsManifestInputsToOperation(t *testing.T) 
 			return nil
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -596,9 +599,10 @@ func TestWorkerSessionsContinueCommandMapsManifestInputsToOperation(t *testing.T
 			return nil
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -629,9 +633,10 @@ func TestWorkerSessionsInterruptCommandMapsManifestInputs(t *testing.T) {
 			return nil
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -659,7 +664,8 @@ func TestWorkerSessionsControlCommandsMapManifestInputs(t *testing.T) {
 		t.Run(strings.ToLower(string(action)), func(t *testing.T) {
 			var control workersessionscli.ControlConfig
 			operations := CommandFactory{
-				sessionResolvedHandlers: testSessionHandlers(nil, nil),
+				factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+				sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 			}
 			operation := func(config workersessionscli.ControlConfig) error {
 				control = config
@@ -675,7 +681,7 @@ func TestWorkerSessionsControlCommandsMapManifestInputs(t *testing.T) {
 			case workersessions.ControlActionTerminate:
 				operations.TerminateWorkerSession = operation
 			}
-			root := withTestInjectedPlatformRoles(operations).NewCommand(nil, nil, nil)
+			root := withTestInjectedPlatformRoles(operations).NewCommand(context.Background(), nil, nil, nil)
 			root.SetOut(io.Discard)
 			root.SetErr(io.Discard)
 			root.SetArgs([]string{
@@ -729,8 +735,9 @@ func TestWorkerSessionsInterruptAndControlCommandsRequireOperations(t *testing.T
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			root := withTestInjectedPlatformRoles(CommandFactory{
-				sessionResolvedHandlers: testSessionHandlers(nil, nil),
-			}).NewCommand(nil, nil, nil)
+				factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+				sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+			}).NewCommand(context.Background(), nil, nil, nil)
 			root.SetOut(io.Discard)
 			root.SetErr(io.Discard)
 			root.SetArgs(test.args)
@@ -817,9 +824,10 @@ func TestWorkerSessionsShowCommandMapsManifestInputsToOperation(t *testing.T) {
 			return nil
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -847,9 +855,10 @@ func TestWorkerSessionsStreamCommandMapsManifestInputsToOperation(t *testing.T) 
 			return nil
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -880,9 +889,10 @@ func TestWorkerSessionsStreamRejectsReplayOnlyFollowBeforeOperation(t *testing.T
 			return nil
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
@@ -913,9 +923,10 @@ func TestWorkerSessionsReadCommandMapsManifestInputsToOperation(t *testing.T) {
 			return nil
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{

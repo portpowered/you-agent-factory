@@ -1,6 +1,7 @@
 package commandregistry
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -62,33 +63,56 @@ type FactoryConfigInitHandler interface {
 	Init(*cobra.Command, resolvedinput.Inputs, resolvedinput.Inputs) error
 }
 
-// FactoryConfigInitServices carries the injected effects used by the family
-// adapter. Public spellings and Cobra storage deliberately stay out of it.
-type FactoryConfigInitServices struct {
-	QueryFactory           func(factorycli.QueryConfig) error
-	ListFactories          func(factorycli.ListConfig) error
-	CreateFactoryFromFile  func(factorycli.CreateFromFileConfig) error
-	UpdateFactoryFromFile  func(factorycli.UpdateFromFileConfig) error
-	DeleteFactory          func(factorycli.DeleteConfig) error
-	ReplaceFactoryCurrent  func(factorycli.ReplaceCurrentConfig) error
-	ValidateFactory        func(factorycli.ValidateConfig) error
-	FlattenFactoryConfig   func(configcli.FactoryConfigFlattenConfig) error
-	ExpandFactoryConfig    func(configcli.FactoryConfigExpandConfig) error
-	ConfigureInit          func(initsetup.Config) error
-	InstallPackagedFactory func(factorydefinitionscli.InstallPackagedFactoryConfig) error
-	HomeDir                func() (string, error)
-	ResolveFactoryRoots    func(string, string) (factorydefinitions.NamedFactoryRoots, error)
-	DiagnosticsWriter      func(*cobra.Command) io.Writer
-}
-
-// FactoryConfigInitCommandHandler translates resolved manifest inputs into the
-// existing transport request types at the CLI boundary.
+// FactoryConfigInitCommandHandler translates resolved inputs using prebound operations.
 type FactoryConfigInitCommandHandler struct {
-	services FactoryConfigInitServices
+	queryFactory           func(factorycli.QueryConfig) error
+	listFactories          func(factorycli.ListConfig) error
+	createFactoryFromFile  func(factorycli.CreateFromFileConfig) error
+	updateFactoryFromFile  func(factorycli.UpdateFromFileConfig) error
+	deleteFactory          func(factorycli.DeleteConfig) error
+	replaceFactoryCurrent  func(factorycli.ReplaceCurrentConfig) error
+	validateFactory        func(factorycli.ValidateConfig) error
+	flattenFactoryConfig   func(configcli.FactoryConfigFlattenConfig) error
+	expandFactoryConfig    func(configcli.FactoryConfigExpandConfig) error
+	configureInit          func(initsetup.Config) error
+	installPackagedFactory func(factorydefinitionscli.InstallPackagedFactoryConfig) error
+	homeDir                func(*cobra.Command) (string, error)
+	resolveFactoryRoots    func(string, string) (factorydefinitions.NamedFactoryRoots, error)
+	diagnosticsWriter      func(*cobra.Command) io.Writer
 }
 
-func NewFactoryConfigInitCommandHandler(services FactoryConfigInitServices) *FactoryConfigInitCommandHandler {
-	return &FactoryConfigInitCommandHandler{services: services}
+func NewFactoryConfigInitCommandHandler(
+	queryFactory func(factorycli.QueryConfig) error,
+	listFactories func(factorycli.ListConfig) error,
+	createFactoryFromFile func(factorycli.CreateFromFileConfig) error,
+	updateFactoryFromFile func(factorycli.UpdateFromFileConfig) error,
+	deleteFactory func(factorycli.DeleteConfig) error,
+	replaceFactoryCurrent func(factorycli.ReplaceCurrentConfig) error,
+	validateFactory func(factorycli.ValidateConfig) error,
+	flattenFactoryConfig func(configcli.FactoryConfigFlattenConfig) error,
+	expandFactoryConfig func(configcli.FactoryConfigExpandConfig) error,
+	configureInit func(initsetup.Config) error,
+	installPackagedFactory func(factorydefinitionscli.InstallPackagedFactoryConfig) error,
+	homeDir func(*cobra.Command) (string, error),
+	resolveFactoryRoots func(string, string) (factorydefinitions.NamedFactoryRoots, error),
+	diagnosticsWriter func(*cobra.Command) io.Writer,
+) *FactoryConfigInitCommandHandler {
+	return &FactoryConfigInitCommandHandler{
+		queryFactory:           queryFactory,
+		listFactories:          listFactories,
+		createFactoryFromFile:  createFactoryFromFile,
+		updateFactoryFromFile:  updateFactoryFromFile,
+		deleteFactory:          deleteFactory,
+		replaceFactoryCurrent:  replaceFactoryCurrent,
+		validateFactory:        validateFactory,
+		flattenFactoryConfig:   flattenFactoryConfig,
+		expandFactoryConfig:    expandFactoryConfig,
+		configureInit:          configureInit,
+		installPackagedFactory: installPackagedFactory,
+		homeDir:                homeDir,
+		resolveFactoryRoots:    resolveFactoryRoots,
+		diagnosticsWriter:      diagnosticsWriter,
+	}
 }
 
 type factoryConfigInitGlobals struct {
@@ -119,10 +143,7 @@ func readFactoryConfigInitGlobals(inputs resolvedinput.Inputs) (factoryConfigIni
 }
 
 func (h *FactoryConfigInitCommandHandler) diagnostics(cmd *cobra.Command) io.Writer {
-	if h == nil || h.services.DiagnosticsWriter == nil {
-		return nil
-	}
-	return h.services.DiagnosticsWriter(cmd)
+	return h.diagnosticsWriter(cmd)
 }
 
 func rejectResolvedDeprecatedPort(inputs resolvedinput.Inputs, inputID string) error {
@@ -138,9 +159,6 @@ func (h *FactoryConfigInitCommandHandler) FactoryQuery(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.QueryFactory == nil {
-		return fmt.Errorf("factory show service is required")
-	}
 	if err := rejectResolvedDeprecatedPort(inputs, factoryShowPortInputID); err != nil {
 		return err
 	}
@@ -152,7 +170,7 @@ func (h *FactoryConfigInitCommandHandler) FactoryQuery(
 	if err != nil {
 		return fmt.Errorf("resolve factory show inputs: %w", err)
 	}
-	return h.services.QueryFactory(factorycli.QueryConfig{
+	return h.queryFactory(factorycli.QueryConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID, JSON: globals.json,
 		Output: cmd.OutOrStdout(), Diagnostics: h.diagnostics(cmd),
 		Verbose: globals.verbose, Debug: globals.debug,
@@ -164,9 +182,6 @@ func (h *FactoryConfigInitCommandHandler) FactoryList(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.ListFactories == nil {
-		return fmt.Errorf("factory list service is required")
-	}
 	dir, err := inputs.String(factoryListDirInputID)
 	if err != nil {
 		return fmt.Errorf("resolve factory list inputs: %w", err)
@@ -175,10 +190,7 @@ func (h *FactoryConfigInitCommandHandler) FactoryList(
 	if err != nil {
 		return fmt.Errorf("resolve factory list inputs: %w", err)
 	}
-	if h.services.HomeDir == nil {
-		return fmt.Errorf("resolve factory list home: home-directory resolver is required")
-	}
-	home, err := h.services.HomeDir()
+	home, err := h.homeDir(cmd)
 	if err != nil {
 		return fmt.Errorf("resolve factory list home: %w", err)
 	}
@@ -186,10 +198,7 @@ func (h *FactoryConfigInitCommandHandler) FactoryList(
 	if strings.TrimSpace(workingDirectory) == "" {
 		return fmt.Errorf("resolve factory list roots: process working directory is required")
 	}
-	if h.services.ResolveFactoryRoots == nil {
-		return fmt.Errorf("resolve factory list roots: Factory Definitions root resolver is required")
-	}
-	roots, err := h.services.ResolveFactoryRoots(home, workingDirectory)
+	roots, err := h.resolveFactoryRoots(home, workingDirectory)
 	if err != nil {
 		return fmt.Errorf("resolve factory list roots: %w", err)
 	}
@@ -200,7 +209,7 @@ func (h *FactoryConfigInitCommandHandler) FactoryList(
 			roots.Project = filepath.Join(workingDirectory, dir)
 		}
 	}
-	return h.services.ListFactories(factorycli.ListConfig{
+	return h.listFactories(factorycli.ListConfig{
 		Context: cmd.Context(), ProjectRoot: roots.Project, GlobalRoot: roots.Global,
 		JSON: globals.json, Output: cmd.OutOrStdout(), Diagnostics: cmd.ErrOrStderr(),
 	})
@@ -211,9 +220,6 @@ func (h *FactoryConfigInitCommandHandler) FactoryCreate(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.CreateFactoryFromFile == nil {
-		return fmt.Errorf("factory create service is required")
-	}
 	name, err := inputs.String(factoryCreateNameInputID)
 	if err != nil {
 		return fmt.Errorf("resolve factory create inputs: %w", err)
@@ -234,7 +240,7 @@ func (h *FactoryConfigInitCommandHandler) FactoryCreate(
 	if err != nil {
 		return fmt.Errorf("resolve factory create inputs: %w", err)
 	}
-	return h.services.CreateFactoryFromFile(factorycli.CreateFromFileConfig{
+	return h.createFactoryFromFile(factorycli.CreateFromFileConfig{
 		Context: cmd.Context(), Name: name, Dir: dir, From: from,
 		SetCurrent: setCurrent, JSON: globals.json, Output: cmd.OutOrStdout(),
 	})
@@ -245,9 +251,6 @@ func (h *FactoryConfigInitCommandHandler) FactoryUpdate(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.UpdateFactoryFromFile == nil {
-		return fmt.Errorf("factory update service is required")
-	}
 	name, err := inputs.String(factoryUpdateNameInputID)
 	if err != nil {
 		return fmt.Errorf("resolve factory update inputs: %w", err)
@@ -264,7 +267,7 @@ func (h *FactoryConfigInitCommandHandler) FactoryUpdate(
 	if err != nil {
 		return fmt.Errorf("resolve factory update inputs: %w", err)
 	}
-	return h.services.UpdateFactoryFromFile(factorycli.UpdateFromFileConfig{
+	return h.updateFactoryFromFile(factorycli.UpdateFromFileConfig{
 		Context: cmd.Context(), Name: name, Dir: dir, From: from,
 		JSON: globals.json, Output: cmd.OutOrStdout(),
 	})
@@ -275,9 +278,6 @@ func (h *FactoryConfigInitCommandHandler) FactoryDelete(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.DeleteFactory == nil {
-		return fmt.Errorf("factory delete service is required")
-	}
 	name, err := inputs.String(factoryDeleteNameInputID)
 	if err != nil {
 		return fmt.Errorf("resolve factory delete inputs: %w", err)
@@ -290,7 +290,7 @@ func (h *FactoryConfigInitCommandHandler) FactoryDelete(
 	if err != nil {
 		return fmt.Errorf("resolve factory delete inputs: %w", err)
 	}
-	return h.services.DeleteFactory(factorycli.DeleteConfig{
+	return h.deleteFactory(factorycli.DeleteConfig{
 		Name: name, Dir: dir, JSON: globals.json, Output: cmd.OutOrStdout(),
 	})
 }
@@ -300,9 +300,6 @@ func (h *FactoryConfigInitCommandHandler) FactoryReplaceCurrent(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.ReplaceFactoryCurrent == nil {
-		return fmt.Errorf("factory replace-current service is required")
-	}
 	if err := rejectResolvedDeprecatedPort(inputs, factoryReplacePortInputID); err != nil {
 		return err
 	}
@@ -314,7 +311,7 @@ func (h *FactoryConfigInitCommandHandler) FactoryReplaceCurrent(
 	if err != nil {
 		return fmt.Errorf("resolve factory replace-current inputs: %w", err)
 	}
-	return h.services.ReplaceFactoryCurrent(factorycli.ReplaceCurrentConfig{
+	return h.replaceFactoryCurrent(factorycli.ReplaceCurrentConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		JSON: globals.json, Output: cmd.OutOrStdout(),
 		Diagnostics: h.diagnostics(cmd), Verbose: globals.verbose,
@@ -326,9 +323,6 @@ func (h *FactoryConfigInitCommandHandler) FactoryConfigValidate(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.ValidateFactory == nil {
-		return fmt.Errorf("factory validate service is required")
-	}
 	path, err := inputs.String(factoryValidatePathInputID)
 	if err != nil {
 		return fmt.Errorf("resolve factory validate inputs: %w", err)
@@ -337,7 +331,7 @@ func (h *FactoryConfigInitCommandHandler) FactoryConfigValidate(
 	if err != nil {
 		return fmt.Errorf("resolve factory validate inputs: %w", err)
 	}
-	return h.services.ValidateFactory(factorycli.ValidateConfig{
+	return h.validateFactory(factorycli.ValidateConfig{
 		Context: cmd.Context(), Path: path, JSON: globals.json, Output: cmd.OutOrStdout(),
 	})
 }
@@ -347,9 +341,6 @@ func (h *FactoryConfigInitCommandHandler) FactoryConfigFlatten(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.FlattenFactoryConfig == nil {
-		return fmt.Errorf("factory flatten service is required")
-	}
 	path, err := inputs.String(factoryFlattenPathInputID)
 	if err != nil {
 		return fmt.Errorf("resolve factory flatten inputs: %w", err)
@@ -358,7 +349,7 @@ func (h *FactoryConfigInitCommandHandler) FactoryConfigFlatten(
 	if err != nil {
 		return fmt.Errorf("resolve factory flatten inputs: %w", err)
 	}
-	return h.services.FlattenFactoryConfig(configcli.FactoryConfigFlattenConfig{
+	return h.flattenFactoryConfig(configcli.FactoryConfigFlattenConfig{
 		Path: path, Output: cmd.OutOrStdout(), Diagnostics: h.diagnostics(cmd),
 		Verbose: globals.verbose, Debug: globals.debug,
 	})
@@ -369,9 +360,6 @@ func (h *FactoryConfigInitCommandHandler) FactoryConfigExpand(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.ExpandFactoryConfig == nil {
-		return fmt.Errorf("factory expand service is required")
-	}
 	path, err := inputs.String(factoryExpandPathInputID)
 	if err != nil {
 		return fmt.Errorf("resolve factory expand inputs: %w", err)
@@ -380,7 +368,7 @@ func (h *FactoryConfigInitCommandHandler) FactoryConfigExpand(
 	if err != nil {
 		return fmt.Errorf("resolve factory expand inputs: %w", err)
 	}
-	return h.services.ExpandFactoryConfig(configcli.FactoryConfigExpandConfig{
+	return h.expandFactoryConfig(configcli.FactoryConfigExpandConfig{
 		Path: path, Output: cmd.OutOrStdout(), Diagnostics: h.diagnostics(cmd),
 		Verbose: globals.verbose, Debug: globals.debug,
 	})
@@ -391,9 +379,6 @@ func (h *FactoryConfigInitCommandHandler) Init(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil {
-		return fmt.Errorf("init handler is required")
-	}
 	globals, err := readFactoryConfigInitGlobals(inherited)
 	if err != nil {
 		return fmt.Errorf("resolve init inputs: %w", err)
@@ -403,12 +388,6 @@ func (h *FactoryConfigInitCommandHandler) Init(
 	}
 	if globals.json {
 		return fmt.Errorf("--json is not supported by you init")
-	}
-	if h.services.ConfigureInit == nil {
-		return fmt.Errorf("init provider/model configuration service is required")
-	}
-	if h.services.HomeDir == nil {
-		return fmt.Errorf("init home directory resolver is required")
 	}
 	provider, err := inputs.String(initProviderInputID)
 	if err != nil {
@@ -422,7 +401,7 @@ func (h *FactoryConfigInitCommandHandler) Init(
 	if state, ok := inputs.State(initModelInputID); ok && state.Changed {
 		model = &modelValue
 	}
-	homeDir, err := h.services.HomeDir()
+	homeDir, err := h.homeDir(cmd)
 	if err != nil {
 		return fmt.Errorf("resolve init home directory: %w", err)
 	}
@@ -430,7 +409,7 @@ func (h *FactoryConfigInitCommandHandler) Init(
 	interactive := ctx != nil &&
 		startupcli.StdinIsTTY(ctx) &&
 		startupcli.StdoutIsTTY(ctx)
-	return h.services.ConfigureInit(initsetup.Config{
+	return h.configureInit(initsetup.Config{
 		Context: ctx, HomeDir: homeDir, Provider: provider,
 		Model: model, Input: cmd.InOrStdin(), Output: cmd.OutOrStdout(),
 		Interactive: interactive,
@@ -451,12 +430,6 @@ func (h *FactoryConfigInitCommandHandler) initPackagedFactory(
 	inputs resolvedinput.Inputs,
 	globals factoryConfigInitGlobals,
 ) error {
-	if h.services.InstallPackagedFactory == nil {
-		return fmt.Errorf("packaged factory installation service is required")
-	}
-	if h.services.HomeDir == nil {
-		return fmt.Errorf("init home directory resolver is required")
-	}
 	packageName, err := inputs.String(initPackageInputID)
 	if err != nil {
 		return fmt.Errorf("resolve init inputs: %w", err)
@@ -473,7 +446,7 @@ func (h *FactoryConfigInitCommandHandler) initPackagedFactory(
 	if err != nil {
 		return fmt.Errorf("resolve init inputs: %w", err)
 	}
-	homeDir, err := h.services.HomeDir()
+	homeDir, err := h.homeDir(cmd)
 	if err != nil {
 		return fmt.Errorf("resolve init home directory: %w", err)
 	}
@@ -485,7 +458,7 @@ func (h *FactoryConfigInitCommandHandler) initPackagedFactory(
 	if state, ok := inputs.State(initFormatInputID); ok {
 		formatChanged = state.Changed
 	}
-	return h.services.InstallPackagedFactory(factorydefinitionscli.InstallPackagedFactoryConfig{
+	return h.installPackagedFactory(factorydefinitionscli.InstallPackagedFactoryConfig{
 		Context:       cmd.Context(),
 		HomeDir:       homeDir,
 		Package:       packageName,
@@ -499,4 +472,34 @@ func (h *FactoryConfigInitCommandHandler) initPackagedFactory(
 		Diagnostics:   h.diagnostics(cmd),
 		Verbose:       globals.verbose,
 	})
+}
+
+// InvocationHome is resolved profile metadata, including a deferred lookup error.
+// It contains no invocation collaborator.
+type InvocationHome struct {
+	Path string
+	Err  error
+}
+
+type invocationHomeContextKey struct{}
+
+func WithInvocationHome(ctx context.Context, home InvocationHome) context.Context {
+	return context.WithValue(ctx, invocationHomeContextKey{}, home)
+}
+
+func InvocationHomeFromContext(ctx context.Context) InvocationHome {
+	var home InvocationHome
+	var ok bool
+	if ctx != nil {
+		home, ok = ctx.Value(invocationHomeContextKey{}).(InvocationHome)
+	}
+	if !ok {
+		return InvocationHome{Err: fmt.Errorf("invocation home metadata is required")}
+	}
+	return home
+}
+
+func ResolveInvocationHome(cmd *cobra.Command) (string, error) {
+	home := InvocationHomeFromContext(cmd.Context())
+	return home.Path, home.Err
 }

@@ -51,8 +51,9 @@ func (f *fakeACPServer) Serve(ctx context.Context, in io.Reader, out io.Writer) 
 
 func TestServerFamily_VisibleInRootHelpAndDistinctFromWorkersAcpAndMCP(t *testing.T) {
 	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
-	}).NewCommand(nil, nil, nil)
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	}).NewCommand(context.Background(), nil, nil, nil)
 
 	requireRunnableCommand(t, root, "you server", "server")
 	acpCmd := requireRunnableCommand(t, root, "you server acp", "server", "acp")
@@ -126,8 +127,9 @@ func assertServerHelpListsChildren(t *testing.T, root *cobra.Command) {
 
 func TestServerHelpDocumentsContinuousNonResumableHosting(t *testing.T) {
 	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
-	}).NewCommand(nil, nil, nil)
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	}).NewCommand(context.Background(), nil, nil, nil)
 	server := requireCommand(t, root, "you server", "server")
 
 	var stdout bytes.Buffer
@@ -175,8 +177,9 @@ func TestServerHelpDocumentsContinuousNonResumableHosting(t *testing.T) {
 func TestServeACPCommand_HelpRendersManifestExamplesAndNoLocalFlags(t *testing.T) {
 	var stdout bytes.Buffer
 	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
-	}).NewCommand(nil, nil, nil)
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	}).NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"server", "acp", "--help"})
@@ -254,11 +257,12 @@ func TestServeACPCommand_RejectsUnrelatedGlobalFlags(t *testing.T) {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			fake := &fakeACPServer{}
 			factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
-				sessionResolvedHandlers: testSessionHandlers(nil, nil),
+				factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+				sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 			})
 			factory.acpServer = fake
 
-			root := factory.NewCommand(nil, nil, nil)
+			root := factory.NewCommand(context.Background(), nil, nil, nil)
 			var stdout, stderr bytes.Buffer
 			root.SetIn(strings.NewReader(""))
 			root.SetOut(&stdout)
@@ -280,8 +284,9 @@ func TestServeACPCommand_RejectsUnrelatedGlobalFlags(t *testing.T) {
 
 func TestServeMCPCommand_RejectsPprof(t *testing.T) {
 	root := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
-	}).NewCommand(
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	}).NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil }, nil, noOpServeSystemInitializer(),
 	)
 	root.SetIn(strings.NewReader(""))
@@ -298,11 +303,12 @@ func TestServeMCPCommand_RejectsPprof(t *testing.T) {
 func TestServeACPCommand_DispatchesToInjectedACPServerWithExactStreamsAndContext(t *testing.T) {
 	fake := &fakeACPServer{}
 	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	factory.acpServer = fake
 
-	root := factory.NewCommand(func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
+	root := factory.NewCommand(context.Background(), func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
 	stdin := strings.NewReader("acp protocol input")
 	var stdout bytes.Buffer
 	root.SetIn(stdin)
@@ -337,7 +343,8 @@ func TestServeACPCommandCapturesInvocationOwnedProfile(t *testing.T) {
 
 	fake := &fakeACPServer{}
 	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	factory.acpServer = fake
 	lookup := func(name string) (string, bool) {
@@ -348,7 +355,7 @@ func TestServeACPCommandCapturesInvocationOwnedProfile(t *testing.T) {
 		value, ok := values[name]
 		return value, ok
 	}
-	root := factory.NewCommand(func() (string, error) { return "isolated-home", nil }, lookup, noOpServeSystemInitializer())
+	root := factory.NewCommand(context.Background(), func() (string, error) { return "isolated-home", nil }, lookup, noOpServeSystemInitializer())
 	root.SetIn(strings.NewReader(""))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
@@ -367,7 +374,8 @@ func TestServeACPCommandCapturesInvocationOwnedProfile(t *testing.T) {
 func TestServeACPCommandInitializesSystemBeforeServing(t *testing.T) {
 	fake := &fakeACPServer{}
 	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	factory.acpServer = fake
 
@@ -376,7 +384,7 @@ func TestServeACPCommandInitializesSystemBeforeServing(t *testing.T) {
 		initializedHome = homeDir
 		return nil
 	}}
-	root := factory.NewCommand(func() (string, error) { return "operator-home", nil }, nil, initializer)
+	root := factory.NewCommand(context.Background(), func() (string, error) { return "operator-home", nil }, nil, initializer)
 	root.SetIn(strings.NewReader(""))
 	root.SetOut(io.Discard)
 	var stderr bytes.Buffer
@@ -400,11 +408,12 @@ func TestServeACPCommandInitializesSystemBeforeServing(t *testing.T) {
 func TestServeACPCommand_CleanEOFSucceeds(t *testing.T) {
 	fake := &fakeACPServer{serveErr: nil}
 	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	factory.acpServer = fake
 
-	root := factory.NewCommand(func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
+	root := factory.NewCommand(context.Background(), func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
 	root.SetIn(strings.NewReader(""))
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
@@ -426,11 +435,12 @@ func TestServeACPCommand_CancellationPropagatesFromProcessContext(t *testing.T) 
 		return ctx.Err()
 	}
 	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	factory.acpServer = fake
 
-	root := factory.NewCommand(func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
+	root := factory.NewCommand(context.Background(), func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
 	root.SetIn(strings.NewReader(""))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
@@ -530,7 +540,8 @@ func (r *readStartSignal) Close() error {
 func TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead(t *testing.T) {
 	server := acpwire.NewServer(nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	factory.acpServer = server
 
@@ -544,7 +555,7 @@ func TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead(t *te
 	})
 	signalingStdin := newReadStartSignal(stdinRead)
 
-	root := factory.NewCommand(func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
+	root := factory.NewCommand(context.Background(), func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
 	root.SetIn(signalingStdin)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
@@ -581,10 +592,11 @@ func TestServeACPCommand_CancellationClosesStdinToUnblockRealServerMidRead(t *te
 
 func TestServeACPCommand_MissingACPServerFailsWithoutPanicking(t *testing.T) {
 	factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	root.SetIn(strings.NewReader(""))
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
@@ -621,11 +633,12 @@ func TestServeACPCommand_ServeFailuresAreSanitizedOnStderr(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fake := &fakeACPServer{serveErr: errors.New(tc.sentinel)}
 			factory := withTestInjectedPlatformRoles(CommandFactory{ModelsCLI: rootModelsCLI,
-				sessionResolvedHandlers: testSessionHandlers(nil, nil),
+				factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+				sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 			})
 			factory.acpServer = fake
 
-			root := factory.NewCommand(func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
+			root := factory.NewCommand(context.Background(), func() (string, error) { return "operator-home", nil }, nil, noOpServeSystemInitializer())
 			root.SetIn(strings.NewReader(""))
 			var stdout, stderr bytes.Buffer
 			root.SetOut(&stdout)

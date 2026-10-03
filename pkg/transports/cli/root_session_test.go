@@ -805,7 +805,8 @@ func TestNewRepresentativeHandlerRegistryLeavesSessionShowToResolvedRegistry(t *
 	globals := &cliGlobalOptions{}
 	diagnostics := &cliDiagnosticsOptions{}
 	registry, err := newRepresentativeHandlerRegistry(globals, diagnostics, &cliOperatorDefaultsOptions{}, CommandFactory{
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	if err != nil {
 		t.Fatalf("newRepresentativeHandlerRegistry() error = %v", err)
@@ -858,6 +859,7 @@ func TestShowSessionUsesInjectedService(t *testing.T) {
 			},
 		}),
 
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
 		sessionResolvedHandlers: testSessionHandlers(session.Bind(session.Operations{
 			Show: func(cfg session.ShowConfig) error {
 				called = true
@@ -869,7 +871,7 @@ func TestShowSessionUsesInjectedService(t *testing.T) {
 				return nil
 			},
 		})),
-	}).NewCommand(nil, nil, nil)
+	}).NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"session", "show", "session-beta"})
@@ -936,8 +938,9 @@ func runSessionLifecycleAdapterCase(
 	local := session.Bind(session.Operations{Cancel: control("local", "cancel"), Terminate: control("local", "terminate")})
 	remote := session.Bind(session.Operations{Cancel: control("remote", "cancel"), Terminate: control("remote", "terminate")})
 	root := (CommandFactory{ModelsCLI: rootModelsCLI, SessionsCLI: remote, LocalSessionsCLI: local,
-		sessionResolvedHandlers: testSessionHandlers(local, remote),
-	}).NewCommand(nil, nil, nil)
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(local, remote),
+	}).NewCommand(context.Background(), nil, nil, nil)
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetErr(io.Discard)

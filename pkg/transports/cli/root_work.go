@@ -106,7 +106,7 @@ func newRootCommandWithGeneratedRepresentativeFamily(options CommandFactory) *co
 	if err != nil {
 		panic(fmt.Sprintf("build representative family command: %v", err))
 	}
-	factoryConfigInit := productionFactoryConfigInitCommands(diagnostics, options)
+	factoryConfigInit := productionFactoryConfigInitCommands(options)
 	docsCmd, err := newProductionDocsCommand(diagnostics)
 	if err != nil {
 		panic(fmt.Sprintf("build docs command: %v", err))

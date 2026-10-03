@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -127,7 +129,8 @@ func TestSessionListCommand_ConflictingFlagsFailBeforeHTTP(t *testing.T) {
 func TestSessionListCommand_ConflictingFlagsRenderTypedDiagnostic(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	err := withTestInjectedPlatformRoles(CommandFactory{
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	}).ExecuteCommand(startupcli.CommandInvocation{
 		Arguments: []string{
 			"--server", "http://127.0.0.1:1",
@@ -182,8 +185,9 @@ func TestMain(m *testing.M) {
 
 func TestProductionRunSubmitFamilyCutoverEnabled(t *testing.T) {
 	root := (CommandFactory{ModelsCLI: rootModelsCLI,
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
-	}).NewCommand(nil, nil, nil)
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	}).NewCommand(context.Background(), nil, nil, nil)
 	for _, path := range [][]string{{"run"}, {"submit"}, {"submit", "batch"}} {
 		cmd, remaining, err := root.Find(path)
 		if err != nil {
@@ -217,7 +221,8 @@ func TestProductionServerStopDispatchesOnlyInjectedOperation(t *testing.T) {
 			return nil
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	var stdout, stderr bytes.Buffer
 	err := factory.ExecuteCommand(startupcli.CommandInvocation{
@@ -266,7 +271,8 @@ func TestProductionMetricsCostsTimeoutDiagnosticPreservesEndpointAcrossModes(t *
 			return operation(ctx, config)
 		},
 
-		sessionResolvedHandlers: testSessionHandlers(nil, nil),
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 
 	wantMessage := fmt.Sprintf(
@@ -334,5 +340,65 @@ func waitForDelayedCostsRequest(t *testing.T, started <-chan struct{}, args []st
 	case <-started:
 	case <-time.After(time.Second):
 		t.Fatalf("delayed costs server did not receive %v", args)
+	}
+}
+
+func testFactoryConfigInitHandler(factory CommandFactory) commandregistry.FactoryConfigInitHandler {
+	return commandregistry.NewFactoryConfigInitCommandHandler(
+		configuredTestOperation(factory.QueryFactory), configuredTestOperation(factory.ListFactories), configuredTestOperation(factory.CreateFactoryFromFile), configuredTestOperation(factory.UpdateFactoryFromFile),
+		configuredTestOperation(factory.DeleteFactory), configuredTestOperation(factory.ReplaceFactoryCurrent), configuredTestOperation(factory.ValidateFactory), configuredTestOperation(factory.FlattenFactoryConfig),
+		configuredTestOperation(factory.ExpandFactoryConfig), configuredTestOperation(factory.ConfigureInit), configuredTestOperation(factory.InstallPackagedFactory),
+		commandregistry.ResolveInvocationHome, func(home, working string) (interfaces.NamedFactoryRoots, error) {
+			if factory.resolveNamedFactoryRoots == nil {
+				return interfaces.NamedFactoryRoots{}, errors.New("unexpected Factory roots effect")
+			}
+			return factory.resolveNamedFactoryRoots(home, working)
+		}, CommandDiagnostics,
+	)
+}
+
+func configuredTestOperation[T any](operation func(T) error) func(T) error {
+	if operation != nil {
+		return operation
+	}
+	return func(T) error { return errors.New("unexpected Factory/config/init test effect") }
+}
+
+func TestCommandFactoryDefersHomeErrorUntilSelectedCommandNeedsIt(t *testing.T) {
+	t.Parallel()
+	homeErr := errors.New("controlled home metadata unavailable")
+	factory := newTestCommandFactory(CommandOperations{})
+	for _, test := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"help", []string{"--help"}, ""},
+		{"list", []string{"factory", "list"}, "resolve factory list home: "},
+		{"init", []string{"init", "--provider", "codex"}, "resolve init home directory: "},
+		{"packaged init", []string{"init", "--package", "@you/goal"}, "resolve init home directory: "},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			var output, diagnostics bytes.Buffer
+			err := factory.ExecuteCommand(startupcli.CommandInvocation{
+				Context: t.Context(), Arguments: test.args,
+				HomeDir: func() (string, error) { calls++; return "", homeErr },
+				Stdout:  &output, Stderr: &diagnostics,
+			})
+			if calls != 1 {
+				t.Fatalf("home lookups=%d, want one invocation lookup", calls)
+			}
+			if test.want == "" {
+				if err != nil || !strings.Contains(output.String(), "Usage:") {
+					t.Fatalf("help error=%v output=%q", err, output.String())
+				}
+				return
+			}
+			if !errors.Is(err, homeErr) || !strings.Contains(err.Error(), test.want+homeErr.Error()) || output.Len() != 0 {
+				t.Fatalf("command error=%v output=%q, want deferred home error with prefix %q", err, output.String(), test.want)
+			}
+		})
 	}
 }
