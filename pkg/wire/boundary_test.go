@@ -976,3 +976,11 @@ type verifiedArchiveCompatibilityChecker struct{}
 func (verifiedArchiveCompatibilityChecker) Check(context.Context, serviceedges.ModelHostCompatibilityRequest) error {
 	return nil
 }
+
+// Direct provider fixtures supply the same selected pair required by Wire;
+// construction through root.BuildProcess performs this selection in production.
+func selectedTestTimeEdges(overrides serviceedges.Edges) serviceedges.Edges {
+	return serviceedges.Merge(serviceedges.Edges{
+		Clock: platformclock.Real{}, ProcessScheduler: platformclock.Real{},
+	}, overrides)
+}
