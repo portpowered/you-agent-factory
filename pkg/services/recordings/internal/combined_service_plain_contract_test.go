@@ -1299,8 +1299,7 @@ func hasReplayArtifactErrorKind(err error, want recordings.ReplayArtifactErrorKi
 func TestCombinedServiceReadHelpersPreserveOwnerFailures(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(&stubLedger{}, projectionquerywire.NewService()).(*combinedService)
-	svc.historicalQuery = unavailableHistoricalOwner{}
+	svc := NewCombinedService(nil, nil, nil, nil, nil, nil, unavailableHistoricalOwner{}, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
 	_, err := svc.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{})
 	var historicalErr *recordings.HistoricalRecordingQueryError
 	if !errors.As(err, &historicalErr) || historicalErr.Kind != recordings.HistoricalRecordingQueryErrorUnavailable {
@@ -1315,7 +1314,7 @@ func TestCombinedServiceReadHelpersPreserveOwnerFailures(t *testing.T) {
 func TestCombinedServiceReadHelpersRejectMalformedReplayCursor(t *testing.T) {
 	t.Parallel()
 
-	svc := NewService(&stubLedger{}, projectionquerywire.NewService()).(*combinedService)
+	svc := NewCombinedService(nil, nil, nil, nil, nil, nil, unavailableHistoricalOwner{}, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
 	if err := svc.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
 		Scope:  recordings.CanonicalEventScope{FactorySessionID: "session-1"},
 		Cursor: recordings.CanonicalEventCursor{Sequence: -1},
@@ -1359,25 +1358,13 @@ func TestCombinedServiceReadHelpersValidateEventScopeCursor(t *testing.T) {
 
 func TestCombinedServiceReadHelpersNormalizeRecordingClock(t *testing.T) {
 	t.Parallel()
-
 	want := time.Date(2026, 8, 26, 12, 0, 0, 0, time.FixedZone("test", 2*60*60))
-	if recordingClockNow(nil) != nil {
-		t.Fatal("recordingClockNow without a clock returned a callback")
-	}
-	clockNow := recordingClockNow(staticRecordingClock{at: want})
-	if clockNow == nil {
-		t.Fatal("recordingClockNow with a clock returned a nil callback")
-	}
-	if got := clockNow(); !got.Equal(want) {
-		t.Fatalf("recordingClockNow callback returned %v, want %v", got, want)
-	}
-	svc := NewService(&stubLedger{}, projectionquerywire.NewService()).(*combinedService)
-	svc.clock = staticRecordingClock{}
-	if got := svc.recordingFinishedAt(); !got.IsZero() {
+	zero := NewCombinedService(nil, nil, nil, nil, nil, nil, nil, staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	if got := zero.recordingFinishedAt(); !got.IsZero() {
 		t.Fatalf("finished time from zero clock = %v, want zero", got)
 	}
-	svc.clock = staticRecordingClock{at: want}
-	if got := svc.recordingFinishedAt(); !got.Equal(want.UTC()) || got.Location() != time.UTC {
+	explicit := NewCombinedService(nil, nil, nil, nil, nil, nil, nil, staticRecordingClock{at: want}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(*combinedService)
+	if got := explicit.recordingFinishedAt(); !got.Equal(want.UTC()) || got.Location() != time.UTC {
 		t.Fatalf("finished time = %v, want UTC %v", got, want.UTC())
 	}
 }
@@ -2068,7 +2055,7 @@ func TestCombinedServiceForwardsCompletedOwnerFailures(t *testing.T) {
 	lifecycleErr := errors.New("injected lifecycle selection failure")
 	artifactsErr := errors.New("injected portable artifact failure")
 	replayErr := errors.New("injected replay plan failure")
-	service := NewCombinedService(&stubLedger{}, projectionquerywire.NewService(), injectedLifecycleOwner{err: lifecycleErr}, injectedArtifactsOwner{err: artifactsErr},
+	service := NewCombinedService(nil, nil, injectedLifecycleOwner{err: lifecycleErr}, injectedArtifactsOwner{err: artifactsErr},
 		injectedReplayOwner{err: replayErr}, injectedCanonicalOwner{err: canonicalErr}, unavailableHistoricalOwner{},
 		staticRecordingClock{}, logging.NoopLogger{}, nil, nil, nil, nil, nil)
 	_, err := service.Append(recordings.AppendRecordedEventRequest{})
