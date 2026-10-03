@@ -42,6 +42,7 @@ func ScanConstruction(root string, registry ConstructionRegistry) ([]Constructio
 		return nil, err
 	}
 	findings := index.scanRequiredConstructionGuards(registry)
+	findings = append(findings, index.scanConstructionDependencyBags(registry)...)
 	for _, source := range index.sources {
 		for _, decl := range source.file.Decls {
 			function, ok := decl.(*ast.FuncDecl)
