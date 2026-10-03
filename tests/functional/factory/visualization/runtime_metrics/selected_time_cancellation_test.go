@@ -31,8 +31,15 @@ func TestSelectedTimeCancellationPreservesPeerSession(t *testing.T) {
 		cancelStarted: make(chan struct{}), peerStarted: make(chan struct{}),
 		cancelled: make(chan struct{}), releasePeer: make(chan struct{}),
 	}
-	host := startSelectedTimeRun(t, facts, nil, runner)
-	support.WaitForSessionTerminalStatus(t, host.url, host.session, 30*time.Second)
+	// The host has no seed: readiness cannot consume an unrelated provider
+	// outcome before the two customer sessions open.
+	idleDir := support.ScaffoldSingleStepFactory(t, "selected-time-idle-host")
+	support.WriteAgentConfig(t, idleDir, "processor", support.BuildModelWorkerConfig("codex", "gpt-5-codex"))
+	host := startSelectedTimeHost(t, idleDir, facts, nil, runner)
+	idleWork := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(host.url, host.session, "/work"))
+	if len(idleWork.Results) != 0 {
+		t.Fatal("unseeded host admitted Work before customer sessions opened")
+	}
 	cancelled := support.OpenFactorySessionAt(t, host.url, runner.cancelDir).Session.Id
 	peer := support.OpenFactorySessionAt(t, host.url, runner.peerDir).Session.Id
 	awaitSelectedTimeSignal(t, runner.cancelStarted)
@@ -91,7 +98,7 @@ func (runner *selectedCancellationRunner) Run(ctx context.Context, request platf
 		close(runner.peerStarted)
 		return support.NewGatedSuccessCommandRunner("surviving peer COMPLETE", runner.releasePeer).Run(ctx, request)
 	default:
-		return support.NewStaticSuccessCommandRunner("idle host COMPLETE").Run(ctx, request)
+		return platformprocess.CommandResult{}, fmt.Errorf("unexpected provider command outside customer sessions: %s", request.WorkDir)
 	}
 }
 
