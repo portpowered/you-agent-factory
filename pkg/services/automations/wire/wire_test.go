@@ -32,6 +32,35 @@ type constructionPorts struct {
 	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
 }
 
+type nowOnlyAutomationClock struct{}
+
+func (nowOnlyAutomationClock) Now() time.Time {
+	return time.Date(2001, time.January, 1, 0, 0, 0, 0, time.UTC)
+}
+
+func TestNewServicePreservesNowOnlyClockCompatibilityAndInertness(t *testing.T) {
+	t.Parallel()
+	ports := validConstructionPorts(t)
+	commandCalls, startCalls, validateCalls := 0, 0, 0
+	service, err := automationswire.NewService(
+		ports.logger, nowOnlyAutomationClock{}, recordingCommandRunner{calls: &commandCalls},
+		"now-only", "", recordingHostedPollers{startCalls: &startCalls, validateCalls: &validateCalls},
+		ports.resolveTemplates, ports.executionPolicy,
+	)
+	if err != nil || service == nil {
+		t.Fatalf("construct with supported Now-only clock = %v, %v", service, err)
+	}
+	_, err = service.SourceStatus(context.Background(), automations.SourceStatusRequest{
+		Identity: automations.SourceIdentity{AutomationID: "now-only", SourceID: "not-started"},
+	})
+	if !errors.Is(err, automations.ErrNotFound) {
+		t.Fatalf("unstarted source status = %v, want not-found", err)
+	}
+	if commandCalls != 0 || startCalls != 0 || validateCalls != 0 {
+		t.Fatalf("inert construction/read effects = command:%d start:%d validate:%d", commandCalls, startCalls, validateCalls)
+	}
+}
+
 type runtimeAutomationService interface {
 	automations.Service
 	StartSchedulerSidecarsForRuntime(

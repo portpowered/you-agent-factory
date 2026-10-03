@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
@@ -35,9 +36,13 @@ func newAutomationService(fixture automationFixture) *automationinternal.Service
 	if fixture.CommandRunner == nil {
 		fixture.CommandRunner = unusedAutomationCommandRunner{}
 	}
+	scheduler, ok := fixture.Clock.(clockwork.Clock)
+	if !ok || scheduler == nil {
+		scheduler = clockwork.NewRealClock()
+	}
 	return automationinternal.New(
 		fixture.Logger,
-		fixture.Clock,
+		scheduler,
 		fixture.CommandRunner,
 		fixture.WorkflowID,
 		fixture.DefaultFactoryDir,

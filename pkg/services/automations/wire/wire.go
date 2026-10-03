@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/jonboulle/clockwork"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
@@ -138,7 +139,7 @@ func newService(
 
 	service := automationinternal.NewWithCursorFileSystem(
 		logger,
-		clock,
+		selectLegacyScheduler(clock),
 		commandRunner,
 		workflowID,
 		defaultFactoryDir,
@@ -153,6 +154,16 @@ func newService(
 		return nil, fmt.Errorf("construct Automations: implementation rejected its dependencies")
 	}
 	return service, nil
+}
+
+// selectLegacyScheduler preserves the owner boundary's Now-only compatibility
+// until the canonical TimerSource/ClockView cutover. Internal operations and
+// runtime activation receive the same selected scheduler directly.
+func selectLegacyScheduler(clock automations.Clock) clockwork.Clock {
+	if scheduler, ok := clock.(clockwork.Clock); ok && scheduler != nil {
+		return scheduler
+	}
+	return clockwork.NewRealClock()
 }
 
 type hostedPollersRootAdapter struct {
