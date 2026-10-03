@@ -463,6 +463,7 @@ func provideFactoryDefinitionsRoot(
 	loader *factorydefinitionswire.Loader,
 	compilation factorydefinitionswire.Compilation,
 	validationService factorydefinitionswire.Validation,
+	runtimeSnapshot factorydefinitionswire.RuntimeSnapshot,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
@@ -488,6 +489,7 @@ func provideFactoryDefinitionsRoot(
 		loader,
 		compilation,
 		validationService,
+		runtimeSnapshot,
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,
@@ -530,4 +532,17 @@ func provideFactoryDefinitionValidationOwner(
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) factorydefinitionswire.Validation {
 	return factorydefinitionswire.NewValidationService(operations, operations, loader.LoadSourceFromCanonicalJSON, requiredToolChecker, orchestratorValidator)
+}
+
+// provideFactoryDefinitionRuntimeSnapshot binds the session query without executing it.
+func provideFactoryDefinitionRuntimeSnapshot(
+	loader *factorydefinitionswire.Loader,
+	router *factorysessions.DefinitionRuntimeRouter,
+) factorydefinitionswire.RuntimeSnapshot {
+	return factorydefinitionswire.NewRuntimeSnapshot(
+		loader.LoadSourceFromCanonicalJSON,
+		loader.LoadSourceFromFactoryDir,
+		router.Host().WorkstationLoader,
+		factorydefinitions.FileReader(loader.ReadFile),
+	)
 }

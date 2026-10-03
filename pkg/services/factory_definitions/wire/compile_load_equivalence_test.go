@@ -93,6 +93,7 @@ func newWireRootWithCompileLoader(t *testing.T) (factorydefinitions.Service, *fa
 		ports.loader,
 		compilationForLoader(ports.loader),
 		validationForLoader(ports.loader, ports.requiredToolChecker, ports.orchestratorValidator),
+		runtimeSnapshotForLoader(ports.loader, ports.sessionHost),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
@@ -424,4 +425,10 @@ func compilationForLoader(loader *compilationloading.Loader) factorydefinitionsw
 func validationForLoader(loader *compilationloading.Loader, checker factorydefinitions.RequiredToolChecker, orchestrator factorydefinitions.OrchestratorDefinitionValidator) factorydefinitionswire.Validation {
 	operations := factorydefinitionswire.NewValidationOperations(orchestrator, loader.LoadSourceFromCanonicalJSON)
 	return factorydefinitionswire.NewValidationService(operations, operations, loader.LoadSourceFromCanonicalJSON, checker, orchestrator)
+}
+
+// runtimeSnapshotForLoader preserves each fixture's session query and source effects.
+func runtimeSnapshotForLoader(loader *compilationloading.Loader, host factorydefinitions.SessionHost) factorydefinitionswire.RuntimeSnapshot {
+	return factorydefinitionswire.NewRuntimeSnapshot(loader.LoadSourceFromCanonicalJSON, loader.LoadSourceFromFactoryDir,
+		func() factorydefinitions.WorkstationLoader { return host.WorkstationLoader() }, factorydefinitions.FileReader(loader.ReadFile))
 }

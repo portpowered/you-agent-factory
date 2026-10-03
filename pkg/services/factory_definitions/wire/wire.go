@@ -18,7 +18,6 @@ import (
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
-	runtimesnapshotwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot/wire"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
@@ -28,7 +27,7 @@ import (
 )
 
 // NewService constructs an inert Factory Definitions root from completed catalog,
-// validation and compilation owners plus construction and process-edge ports. Private owner
+// validation, compilation and runtime snapshot owners plus construction and process-edge ports. Private owner
 // types remain behind the returned peer surface.
 func NewService(
 	sessionHost factorydefinitions.SessionHost,
@@ -38,6 +37,7 @@ func NewService(
 	loader *compilationloading.Loader,
 	compilation Compilation,
 	validationService Validation,
+	runtimeSnapshot RuntimeSnapshot,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
@@ -75,7 +75,7 @@ func NewService(
 		return nil, err
 	}
 	return composeService(
-		sessionHost, activationGateway, validator, persistence, loader, compilation, validationService,
+		sessionHost, activationGateway, validator, persistence, loader, compilation, validationService, runtimeSnapshot,
 		applySupportedFiles, applyStarterWork, namedPaths,
 		catalogService, clock, versionFileSystem, listEffective,
 		packagedCatalog, packagedInstaller, requiredToolChecker,
@@ -92,6 +92,7 @@ func composeService(
 	loader *compilationloading.Loader,
 	compilation Compilation,
 	validationService Validation,
+	runtimeSnapshot RuntimeSnapshot,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
@@ -165,8 +166,7 @@ func composeService(
 		listEffective,
 		snapshotsPortability,
 		compilation,
-		loader,
-		sessionHost,
+		runtimeSnapshot,
 	)
 }
 
@@ -233,8 +233,7 @@ func attachFactoryDefinitionServices(
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
 	snapshotsPortability snapshotsportability.Service,
 	compilation compilationservice.Service,
-	loader *compilationloading.Loader,
-	sessionHost factorydefinitions.SessionHost,
+	runtimeSnapshot RuntimeSnapshot,
 ) (factorydefinitions.Service, error) {
 	attached, err := factorydefinitionsinternal.AttachEffectiveCatalog(definitions, listEffective)
 	if err != nil {
@@ -249,15 +248,6 @@ func attachFactoryDefinitionServices(
 	}
 	if withSnapshots == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: snapshots portability attachment rejected its dependencies")
-	}
-	runtimeSnapshot, err := runtimesnapshotwire.NewService(
-		loader.LoadSourceFromCanonicalJSON,
-		loader.LoadSourceFromFactoryDir,
-		func() factorydefinitions.WorkstationLoader { return sessionHost.WorkstationLoader() },
-		factorydefinitions.FileReader(loader.ReadFile),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("construct Factory Definitions runtime snapshot resolver: %w", err)
 	}
 	withRuntimeSnapshot, err := factorydefinitionsinternal.AttachRuntimeSnapshot(withSnapshots, runtimeSnapshot.ResolveRuntimeSnapshot)
 	if err != nil {
