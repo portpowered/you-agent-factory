@@ -191,6 +191,13 @@
       ]
     },
     {
+      "test": "tests/functional/workers/transports/http/worker_sessions_list_terminate_characterization_test.go::TestWorkerSessionHTTPListTerminateCharacterization",
+      "stableIds": [
+        "rest/listWorkerSessions",
+        "rest/terminateWorkerSession"
+      ]
+    },
+    {
       "test": "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN",
       "stableIds": [
         "cli/you.docs"
