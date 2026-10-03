@@ -18,6 +18,8 @@ func TestConstructionRequiredAssertionGuards(t *testing.T) {
 		{"status reassignment", `_, ok := s.port.(Port); ok = false; if !ok {}`, "unresolved-required-dependency-guard"},
 		{"field reassignment", `s.port = nil; _, ok := s.port.(Port); if !ok {}`, "unresolved-required-dependency-guard"},
 		{"status observation", `_, ok := s.port.(Port); _ = ok`, ""},
+		{"status condition helper", `_, ok := s.port.(Port); observe := func(bool) bool { return true }; if observe(ok) {}`, "unresolved-required-dependency-guard"},
+		{"condition closure observation", `_, ok := s.port.(Port); if func() bool { _ = ok; return true }() {}`, ""},
 		{"optional assertion", `_, ok := s.payload.(Port); if !ok {}`, ""},
 		{"optional boolean", `ok := true; if !ok {}`, ""},
 		{"shadowed status", `_, ok := s.port.(Port); _ = ok; { ok := false; if !ok {} }`, ""},
