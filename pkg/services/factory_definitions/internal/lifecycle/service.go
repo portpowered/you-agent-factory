@@ -16,6 +16,7 @@ import (
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
 	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 	workstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution"
+	runtimesnapshot "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 )
 
@@ -37,6 +38,7 @@ type Service struct {
 	validationService      validationservice.Service
 	authoringLayoutService authoringlayout.Service
 	compilationService     compilationservice.Service
+	runtimeSnapshot        runtimesnapshot.Service
 	host                   Host
 	activationGateway      factoryroot.DefinitionActivationGateway
 	versionFileSystem      factoryroot.VersionFileSystem
@@ -51,7 +53,6 @@ type nonCatalogDefaults interface {
 	CreateNamedFactory(context.Context, factoryroot.CreateNamedFactoryRequest) (factoryroot.CreateNamedFactoryResult, error)
 	ReplaceNamedFactory(context.Context, factoryroot.ReplaceNamedFactoryRequest) (factoryroot.ReplaceNamedFactoryResult, error)
 	CompileEffectiveFactorySource(context.Context, factoryroot.CompileEffectiveFactorySourceRequest) (factoryroot.CompileEffectiveFactorySourceResult, error)
-	ResolveRuntimeSnapshot(context.Context, factoryroot.ResolveRuntimeSnapshotRequest) (factoryroot.ResolveRuntimeSnapshotResult, error)
 	ValidateStructuralFactoryDefinition(context.Context, factoryroot.ValidateStructuralFactoryDefinitionRequest) (factoryroot.ValidateStructuralFactoryDefinitionResult, error)
 	ValidateEffectiveFactoryDefinition(context.Context, factoryroot.ValidateEffectiveFactoryDefinitionRequest) (factoryroot.ValidateEffectiveFactoryDefinitionResult, error)
 	CaptureFactorySnapshot(context.Context, factoryroot.CaptureFactorySnapshotRequest) (factoryroot.CaptureFactorySnapshotResult, error)
@@ -222,6 +223,7 @@ func NewWithCatalogPackagesValidationDistributionAndAuthoring(
 	validationService validationservice.Service,
 	authoringLayoutService authoringlayout.Service,
 	distributionService distributionservice.Service,
+	runtimeSnapshot runtimesnapshot.Service,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
 	service := NewWithCatalogPackagesValidationAndDistribution(
@@ -233,6 +235,7 @@ func NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		versionFileSystems...,
 	)
 	service.authoringLayoutService = authoringLayoutService
+	service.runtimeSnapshot = runtimeSnapshot
 	return service
 }
 
@@ -551,4 +554,12 @@ func SessionFactoryPersistRoot(serviceRootDir string, session *factoryroot.Defin
 		return session.FolderPath
 	}
 	return sessionFactoryRootDir(serviceRootDir, session)
+}
+
+// ResolveRuntimeSnapshot delegates to the completed source resolution owner.
+func (s *Service) ResolveRuntimeSnapshot(
+	ctx context.Context,
+	request factoryroot.ResolveRuntimeSnapshotRequest,
+) (factoryroot.ResolveRuntimeSnapshotResult, error) {
+	return s.runtimeSnapshot.ResolveRuntimeSnapshot(ctx, request)
 }
