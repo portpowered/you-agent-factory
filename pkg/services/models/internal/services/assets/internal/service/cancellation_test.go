@@ -58,6 +58,89 @@ func TestPrepareModelAssetsRejectsPreCancelledRequestBeforeEffects(t *testing.T)
 	}
 }
 
+func TestGenericRevisionConstructionPreservesSelectionAndFailureMapping(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"absent", "nil", "selected", "failure", "invalid", "cancelled", "immutable"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			calls := 0
+			privateErr := errors.New("private resolver failure")
+			resolver := func(got context.Context, source string) (string, error) {
+				calls++
+				if got != ctx || source != "hf://owner/repo/weights.bin@main" {
+					t.Fatalf("revision effect received %v, %q, want selected context and source", got, source)
+				}
+				switch mode {
+				case "failure":
+					return "", privateErr
+				case "invalid":
+					return "main", nil
+				case "cancelled":
+					cancel()
+					return "", privateErr
+				}
+				return genericTestRevision, nil
+			}
+			resolvers := []func(context.Context, string) (string, error){resolver}
+			if mode == "absent" {
+				resolvers = nil
+			} else if mode == "nil" {
+				resolvers[0] = nil
+			}
+			service := newGenericService(t, nil, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+				t.Fatal("revision resolution unexpectedly contacted HTTP")
+				return nil, nil
+			}), nil, resolvers...)
+			if calls != 0 {
+				t.Fatal("construction executed the revision resolver")
+			}
+			source := "hf://owner/repo/weights.bin@main"
+			if mode == "immutable" {
+				source = "hf://owner/repo/weights.bin@" + genericTestRevision
+			}
+			result, err := service.resolveGenericSource(ctx, models.RuntimeScopeConfig{}, source)
+			assertRevisionConstructionOutcome(t, mode, result, err, privateErr, calls)
+		})
+	}
+}
+
+func assertRevisionConstructionOutcome(t *testing.T, mode string, result genericSource, err, privateErr error, calls int) {
+	t.Helper()
+	wantCalls := 1
+	if mode == "absent" || mode == "nil" || mode == "immutable" {
+		wantCalls = 0
+	}
+	if calls != wantCalls {
+		t.Fatalf("revision effect calls = %d, want %d", calls, wantCalls)
+	}
+	assertRevisionSelectionResult(t, mode, result, err, privateErr)
+}
+
+func assertRevisionSelectionResult(t *testing.T, mode string, result genericSource, err, privateErr error) {
+	t.Helper()
+	if mode == "selected" || mode == "immutable" {
+		if err != nil || result.revision != genericTestRevision || result.safe != "hf://owner/repo/weights.bin@"+genericTestRevision {
+			t.Fatalf("revision result = %#v, %v, want pinned selected source", result, err)
+		}
+		return
+	}
+	if mode == "cancelled" {
+		if !errors.Is(err, models.ErrAssetCancelled) || !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled resolver = %v, want pull cancellation and context cause", err)
+		}
+		return
+	}
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassRevisionResolution || !errors.Is(err, models.ErrModelRevisionUnresolved) {
+		t.Fatalf("revision failure = %v, want existing typed revision-resolution failure", err)
+	}
+	if errors.Is(err, privateErr) || strings.Contains(err.Error(), privateErr.Error()) {
+		t.Fatalf("revision failure exposed private resolver cause: %v", err)
+	}
+}
+
 func TestPrepareModelAssetsCancelsInFlightCleansUpAndRetries(t *testing.T) {
 	t.Parallel()
 
