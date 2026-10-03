@@ -574,6 +574,40 @@ func TestRuntimeLifecycle_ReactivationStopsPriorAdmissionAndResumesCursor(t *tes
 	stopCursorRuntime(t, ctx, service, b.RuntimeID)
 }
 
+func TestRuntimeLifecycle_MemoryRecoveryReleasedAfterStopWithoutAffectingPeerOrReplacement(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	service := New(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil,
+		factorydefinitioncomposition.WorkstationExecutionPolicy{}, cronwire.NewService(), fswire.NewService())
+	a := cursorRuntimeRequest(t, "memory-A", "workflow-A", make(chan work.WorkRequest, 1))
+	b := cursorRuntimeRequest(t, "memory-B", "workflow-B", make(chan work.WorkRequest, 1))
+	for _, request := range []automations.RuntimeActivationRequest{a, b} {
+		if _, err := service.ActivateRuntime(ctx, request); err != nil {
+			t.Fatalf("ActivateRuntime: %v", err)
+		}
+		t.Cleanup(func() { stopCursorRuntime(t, ctx, service, request.RuntimeID) })
+		seedLifecycleCursor(t, service.runtimes[request.RuntimeID].owner, request.Snapshot.FactoryDir, request.RuntimeID)
+	}
+	old := service.runtimes[a.RuntimeID]
+	stopCursorRuntime(t, ctx, service, a.RuntimeID)
+	assertLifecycleCursor(t, ctx, service, "workflow-B", b.RuntimeID)
+	if _, err := service.ActivateRuntime(ctx, a); err != nil {
+		t.Fatalf("reactivate A: %v", err)
+	}
+	instanceID := scriptpollers.SupervisionFor("workflow-A", internalCanonicalScriptPollerWorkstation().Name).InstanceID
+	_, err := service.Root().GetCursor(ctx, automations.GetCursorRequest{InstanceID: instanceID})
+	assertCursorReadError(t, err, automations.ErrorCodeNotFound, automations.ErrNotFound)
+	seedLifecycleCursor(t, service.runtimes[a.RuntimeID].owner, a.Snapshot.FactoryDir, "replacement")
+	if err := old.stop(ctx); err != nil {
+		t.Fatalf("repeat old stop: %v", err)
+	}
+	assertLifecycleCursor(t, ctx, service, "workflow-A", "replacement")
+	assertLifecycleCursor(t, ctx, service, "workflow-B", b.RuntimeID)
+	if _, err := old.getCursor(ctx, automations.GetCursorRequest{InstanceID: instanceID}); !errors.Is(err, automations.ErrNotFound) {
+		t.Fatalf("retained stopped instance read = %v, want not found", err)
+	}
+}
+
 type lifecycleCursorCall struct {
 	request  platformprocess.CommandRequest
 	complete chan []byte
