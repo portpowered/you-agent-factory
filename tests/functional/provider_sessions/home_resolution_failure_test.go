@@ -31,8 +31,8 @@ func TestProviderSessionsHomeResolutionFailureOutcome(t *testing.T) {
 	if !errors.Is(err, want) {
 		t.Fatalf("BuildProcess error = %v, want wrapped home lookup sentinel", err)
 	}
-	if !strings.Contains(err.Error(), "home directory:") {
-		t.Fatalf("BuildProcess error = %v, want home directory diagnostic", err)
+	if !strings.HasPrefix(err.Error(), "build application process: home directory:") {
+		t.Fatalf("BuildProcess error = %v, want public construction and home directory wrapping", err)
 	}
 	if got := recorder.homeCalls.Load(); got != 1 {
 		t.Fatalf("home lookup calls = %d, want one failed lookup", got)
