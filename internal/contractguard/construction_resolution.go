@@ -83,8 +83,21 @@ func constructionCanonicalType(symbol ConstructionSymbol, declarations map[Const
 	if !declaration.typeSpec.Assign.IsValid() {
 		return symbol, true
 	}
+	underlying := declaration.typeSpec.Type
+	for {
+		parenthesized, ok := underlying.(*ast.ParenExpr)
+		if !ok {
+			break
+		}
+		underlying = parenthesized.X
+	}
+	// An anonymous interface has no named target. Retain the alias declaration
+	// so selector lookup can inspect its method set in the declaring package.
+	if _, contract := underlying.(*ast.InterfaceType); contract {
+		return symbol, true
+	}
 	visited[symbol] = true
-	target, resolved := constructionResultSymbol(declaration.typeSpec.Type, declaration.source)
+	target, resolved := constructionResultSymbol(underlying, declaration.source)
 	if !resolved {
 		return ConstructionSymbol{}, false
 	}

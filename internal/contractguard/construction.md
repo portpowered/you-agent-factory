@@ -65,6 +65,12 @@ known method set, including aliases, defined interfaces and imported contracts.
 named `any` or `error` take precedence over the predeclared interfaces. This
 does not establish implementation identity or classify direct predeclared
 struct embeddings.
+Inline interface embeddings and parenthesized interface expressions retain
+their flattened method sets. Aliases to interface literals retain the authored
+declaration for selector lookup rather than requiring a named target. Imported
+inline methods preserve their declaring package's visibility; a private method
+cannot compete with a caller package's private getter. Opaque and cyclic inline
+embeddings remain unresolved, just like their named counterparts.
 An opaque deeper embedding cannot hide a proved shallower
 selector. Promotion establishes method identity, not requiredness of wrapper
 storage, interface implementation selection or generic/pointer method-set proof.
