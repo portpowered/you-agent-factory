@@ -5,12 +5,12 @@ package internal
 
 import (
 	"context"
-	"fmt"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	runtimesnapshot "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 )
 
@@ -24,6 +24,7 @@ func NewWithAuthoringLayout(
 	versionFileSystem factoryroot.VersionFileSystem,
 	validator factoryroot.Validator,
 	validationService validationservice.Service,
+	runtimeSnapshot runtimesnapshot.Service,
 	loadFactory factoryroot.LoadedFactoryLoader,
 	readCurrentFactoryPointer factoryroot.CurrentFactoryPointerReader,
 	prepareFactoryLayoutPayload factoryroot.FactoryLayoutPayloadPreparer,
@@ -93,33 +94,7 @@ func NewWithAuthoringLayout(
 		validationService,
 		authoringLayout,
 		distributionService,
+		runtimeSnapshot,
 		versionFileSystem,
 	)
-}
-
-type runtimeSnapshotService struct {
-	factoryroot.Service
-	resolve factoryroot.RuntimeSnapshotOperation
-}
-
-// AttachRuntimeSnapshot attaches the owner-composed runtime snapshot
-// operation while preserving the rest of the singular Definitions root.
-func AttachRuntimeSnapshot(
-	service factoryroot.Service,
-	resolve factoryroot.RuntimeSnapshotOperation,
-) (factoryroot.Service, error) {
-	if service == nil {
-		return nil, fmt.Errorf("Factory Definitions service is required")
-	}
-	if resolve == nil {
-		return nil, fmt.Errorf("runtime snapshot operation is required")
-	}
-	return runtimeSnapshotService{Service: service, resolve: resolve}, nil
-}
-
-func (s runtimeSnapshotService) ResolveRuntimeSnapshot(
-	ctx context.Context,
-	request factoryroot.ResolveRuntimeSnapshotRequest,
-) (factoryroot.ResolveRuntimeSnapshotResult, error) {
-	return s.resolve(ctx, request)
 }
