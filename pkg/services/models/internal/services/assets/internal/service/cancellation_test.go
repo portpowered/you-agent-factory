@@ -16,7 +16,94 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 )
+
+func TestPreparationUsesConstructionSelectedCoordination(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"success", "failure", "absent"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			cache := t.TempDir()
+			body := []byte("selected coordination cache")
+			writeGenericHFFixture(t, cache, body)
+			scopes := newScopes(t, "selected-coordination-"+mode)
+			scope := openScope(t, scopes, cache, models.RuntimeConfig{})
+			wantErr := errors.New("selected coordination denied")
+			calls, closes := 0, 0
+			var paths []string
+			var coordination modelseffects.AssetStagingCoordination = constructionStagingCoordination(func(got context.Context, path string) (io.Closer, error) {
+				calls++
+				paths = append(paths, path)
+				if got != ctx || !strings.HasPrefix(path, cache+string(os.PathSeparator)) {
+					t.Fatalf("coordination context/path = %v/%q, want selected context/cache", got, path)
+				}
+				if mode == "failure" {
+					return nil, wantErr
+				}
+				return constructionStagingCloser(func() error { closes++; return nil }), nil
+			})
+			if mode == "absent" {
+				coordination = nil
+			}
+			service := newGenericServiceWithOptions(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+				t.Fatal("fully described cached preparation contacted HTTP")
+				return nil, nil
+			}), assets.ConstructionOptions{Coordination: coordination})
+			if calls != 0 {
+				t.Fatal("construction acquired staging ownership")
+			}
+			request := models.PrepareModelAssetsRequest{
+				Scope:     scope,
+				Reference: models.ModelReference{NameOrURI: "hf://owner/repo/weights.bin@" + genericTestRevision},
+				Artifacts: []models.AssetRequirement{{Name: "weights.bin", Bytes: int64(len(body)), SHA256: sha256Hex(body)}},
+				Offline:   true,
+			}
+			result, err := service.PrepareModelAssets(ctx, request)
+			if mode != "success" {
+				assertConstructionCoordinationFailure(t, mode, err, wantErr, calls, closes)
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertGenericHFCachedResult(t, result, body, 0)
+			repeated, err := service.PrepareModelAssets(ctx, request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertGenericHFCachedResult(t, repeated, body, 0)
+			if calls != 2 || closes != 2 || paths[0] != paths[1] {
+				t.Fatalf("repeat coordination calls/closes/paths = %d/%d/%v, want two balanced acquisitions at the selected path", calls, closes, paths)
+			}
+		})
+	}
+}
+
+func assertConstructionCoordinationFailure(t *testing.T, mode string, err, wantErr error, calls, closes int) {
+	t.Helper()
+	var stageErr *models.PullStageError
+	if !errors.Is(err, models.ErrAssetPreparationInterrupted) || !errors.As(err, &stageErr) || stageErr.Stage != models.PullStageCacheInstallation {
+		t.Fatalf("coordination failure = %v, want cache-installation interruption", err)
+	}
+	if mode == "failure" && (!errors.Is(err, wantErr) || calls != 1) {
+		t.Fatalf("selected failure = %v, calls=%d, want preserved cause and one acquisition", err, calls)
+	}
+	if closes != 0 || (mode == "absent" && calls != 0) {
+		t.Fatalf("failed acquisition calls/closes = %d/%d, want no release or absent-effect call", calls, closes)
+	}
+}
+
+type constructionStagingCoordination func(context.Context, string) (io.Closer, error)
+
+func (coordination constructionStagingCoordination) Lock(ctx context.Context, path string) (io.Closer, error) {
+	return coordination(ctx, path)
+}
+
+type constructionStagingCloser func() error
+
+func (closer constructionStagingCloser) Close() error { return closer() }
 
 func TestPrepareModelAssetsRejectsPreCancelledRequestBeforeEffects(t *testing.T) {
 	t.Parallel()
