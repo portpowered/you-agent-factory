@@ -364,6 +364,7 @@ func TestQueryScopedSelectionAndDeterministicOutput(t *testing.T) {
 func TestQueryErrorsAreTypedAndLogsSafeTerminalOutcome(t *testing.T) {
 	t.Parallel()
 	assertSettingsReadFailureIsSafe(t)
+	assertOperatorSettingsFailureIsSafe(t)
 	assertMetricsFailureIsTyped(t)
 	assertInvalidRequestIsTyped(t)
 }
@@ -829,3 +830,37 @@ func assertUnpricedPairs(t *testing.T, got []costs.UnpricedPair, want []unpriced
 }
 
 var _ logging.Logger = (*captureLogger)(nil)
+
+func assertOperatorSettingsFailureIsSafe(t *testing.T) {
+	t.Helper()
+	want := errors.New("operator settings unavailable: secret-token private-path")
+	logger := &captureLogger{}
+	query, err := New(&priceReader{table: providers.PriceTable{Currency: providers.PriceTableCurrencyUSD}}, &operatorSettingsReaderStub{err: want}, metricsQueryStub(nil, nil), logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := validRequest()
+	request.FactorySessionID = "selected-session"
+	_, err = query.Query(context.Background(), request)
+	var typed *costs.QueryError
+	if !errors.As(err, &typed) || typed.Kind != costs.QueryErrorSettingsReadFailed || !errors.Is(err, want) {
+		t.Fatalf("error=%v, want typed cause-preserving settings failure", err)
+	}
+	if !logger.hasMessage("runtime costs query started") || !logger.hasMessage("runtime costs query failed") {
+		t.Fatalf("logs=%v", logger.messages)
+	}
+	if strings.Contains(err.Error(), "secret-token") || strings.Contains(logger.fieldsText(), "secret-token") || strings.Contains(logger.fieldsText(), "private-path") {
+		t.Fatalf("unsafe diagnostic: %v fields=%v", err, logger.fields)
+	}
+	for key, want := range map[string]any{"scope_kind": costs.ScopeFactorySession, "factory_session_id": "selected-session", "status": "PRICING_ERROR", "error_kind": string(costs.QueryErrorSettingsReadFailed)} {
+		found := false
+		for i := 0; i+1 < len(logger.fields); i += 2 {
+			if logger.fields[i] == key && logger.fields[i+1] == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("missing attributed field %s=%v in %v", key, want, logger.fields)
+		}
+	}
+}
