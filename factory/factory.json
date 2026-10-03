@@ -1231,13 +1231,13 @@
           "type": "TERMINAL"
         },
         {
-          "id": "failed",
-          "name": "failed",
+          "id": "reporting-failed",
+          "name": "reporting-failed",
           "type": "FAILED"
         },
         {
-          "id": "reporting-failed",
-          "name": "reporting-failed",
+          "id": "failed",
+          "name": "failed",
           "type": "FAILED"
         }
       ]
@@ -1309,13 +1309,13 @@
           "type": "TERMINAL"
         },
         {
-          "id": "failed",
-          "name": "failed",
+          "id": "reporting-failed",
+          "name": "reporting-failed",
           "type": "FAILED"
         },
         {
-          "id": "reporting-failed",
-          "name": "reporting-failed",
+          "id": "failed",
+          "name": "failed",
           "type": "FAILED"
         }
       ]

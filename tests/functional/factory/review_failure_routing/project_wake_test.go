@@ -24,11 +24,14 @@ type projectWakeScenario struct {
 
 func openProjectWakeScenario(t *testing.T) *projectWakeScenario {
 	t.Helper()
-	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{
-		provider: func(_ context.Context, _ platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
-			return reviewFailureAccepted("lead reconciled the finished child"), nil
-		},
+	return openProjectWakeScenarioWithProvider(t, func(_ context.Context, _ platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
+		return reviewFailureAccepted("lead reconciled the finished child"), nil
 	})
+}
+
+func openProjectWakeScenarioWithProvider(t *testing.T, provider reviewFailureCommandResponder) *projectWakeScenario {
+	t.Helper()
+	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{provider: provider})
 	wake := &projectWakeScenario{
 		reviewFailureScenario: scenario,
 		ownerName:             scenario.marker + "-zulu",
@@ -105,6 +108,59 @@ func TestProjectLeadWake_FailedChildWakesOnlyItsOwnLeadOnce(t *testing.T) {
 		ideaID: "failed", taskID: "failed", reportIDs[0]: "delivered",
 		wake.ownerID: "waiting", wake.peerID: "waiting",
 	})
+}
+
+// TestProjectLeadWake_AgentDecisionFailureWakesOnlyItsOwnLeadOnce proves a
+// tagged idea or validation whose agent returns a non-accepting decision
+// envelope (the provider command itself succeeds) passes through
+// reporting-failed and wakes its own lead exactly once. A FAILED decision is a
+// terminal Work failure, which the runtime routes to the work type's first
+// FAILED state rather than the authored onFailure route, so it must not land
+// directly in failed and skip the report.
+func TestProjectLeadWake_AgentDecisionFailureWakesOnlyItsOwnLeadOnce(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		slug     string
+		workType string
+		report   string
+		decision string
+	}{
+		{name: "plan failed decision", slug: "plan-failed", workType: "idea", report: "report-idea-failure", decision: `{"decision":"FAILED","feedback":"planner cannot plan this idea"}`},
+		{name: "plan rejected decision", slug: "plan-rejected", workType: "idea", report: "report-idea-failure", decision: `{"decision":"REJECTED","feedback":"planner rejected this idea"}`},
+		{name: "validate failed decision", slug: "validate-failed", workType: "validation", report: "report-validation-failure", decision: `{"decision":"FAILED","feedback":"validator cannot validate this"}`},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			wake := openProjectWakeScenarioWithProvider(t, func(_ context.Context, request platformprocess.CommandRequest, _ int) (platformprocess.CommandResult, error) {
+				if strings.Contains(providerCommandPrompt(request), "Project Lead wake") {
+					return reviewFailureAccepted("lead reconciled the finished child"), nil
+				}
+				return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(tc.decision)}, nil
+			})
+			wake.admitOwner(t)
+			stream := wake.eventStream(t)
+			name := wake.ownerName + "-" + tc.slug
+			childID := wake.marker + "-" + tc.slug + "-" + tc.workType
+			wake.submit(t, childID+"-request", reviewFailureSeed{
+				Name: name, WorkID: childID, WorkType: tc.workType, State: "init",
+				TraceID: wake.marker + "-" + tc.slug + "-trace", Payload: tc.slug + " " + tc.workType,
+				Tags: map[string]string{"project": wake.ownerName},
+			})
+
+			reportIDs := assertProjectLeadWakes(t, wake, stream, name)
+			assertReviewFailureWorkStates(t, wake.listWorks(t), map[string]string{
+				childID: "failed", reportIDs[0]: "delivered",
+				wake.ownerID: "waiting", wake.peerID: "waiting",
+			})
+			dispatches := reviewFailureDispatches(t, wake.reviewFailureScenario)
+			if reports := dispatchesWithTransition(dispatches, tc.report); len(reports) != 1 {
+				t.Fatalf("%s dispatches = %d, want exactly 1: %#v", tc.report, len(reports), reports)
+			}
+		})
+	}
 }
 
 // TestProjectLeadWake_ChildrenFinishingWhileLeadIsBusyQueueOneWakeEach proves
