@@ -131,6 +131,74 @@ type promptFlightRegistry struct {
 	byRequest map[string]*promptFlight
 	byTurn    map[string]*promptFlight
 	invoking  map[string]*promptFlight
+	unbound   map[string]*unboundTurn
+}
+
+// unboundTurn tracks an admitted first turn from admission until its Factory
+// Session start records an identity a control could address. A session/cancel
+// arriving in that window has nothing to control yet; it is parked here and
+// applied by the start path as soon as the identity exists.
+type unboundTurn struct {
+	registry *promptFlightRegistry
+	key      string
+	bound    bool
+	cancel   *chatsessions.RequestIdentity
+}
+
+type unboundTurnContextKey struct{}
+
+func unboundTurnFromContext(ctx context.Context) *unboundTurn {
+	turn, _ := ctx.Value(unboundTurnContextKey{}).(*unboundTurn)
+	return turn
+}
+
+func (r *promptFlightRegistry) openUnboundTurn(sessionID, turnID string) *unboundTurn {
+	turn := &unboundTurn{registry: r, key: cancelFlightKey(sessionID, turnID)}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.unbound == nil {
+		r.unbound = make(map[string]*unboundTurn)
+	}
+	r.unbound[turn.key] = turn
+	return turn
+}
+
+func (r *promptFlightRegistry) closeUnboundTurn(turn *unboundTurn) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.unbound[turn.key] == turn {
+		delete(r.unbound, turn.key)
+	}
+}
+
+// deferCancel parks requestID on the still-unbound turn. It reports false when
+// the turn is unknown or already bound, in which case the caller re-reads the
+// session and applies the cancel normally.
+func (r *promptFlightRegistry) deferCancel(sessionID, turnID string, requestID chatsessions.RequestIdentity) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	turn := r.unbound[cancelFlightKey(sessionID, turnID)]
+	if turn == nil || turn.bound {
+		return false
+	}
+	if turn.cancel == nil {
+		turn.cancel = &requestID
+	}
+	return true
+}
+
+// markBound closes the deferral window and returns any cancel parked in it.
+func (t *unboundTurn) markBound() (chatsessions.RequestIdentity, bool) {
+	if t == nil {
+		return chatsessions.RequestIdentity{}, false
+	}
+	t.registry.mu.Lock()
+	defer t.registry.mu.Unlock()
+	t.bound = true
+	if t.cancel == nil {
+		return chatsessions.RequestIdentity{}, false
+	}
+	return *t.cancel, true
 }
 
 type promptFlight struct {

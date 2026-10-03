@@ -255,7 +255,61 @@ func (s *Server) handleSessionCancel(ctx context.Context, env envelope.Envelope)
 	if err != nil {
 		return
 	}
+	if s.deferCancelUntilBound(ctx, string(params.SessionID), requestID) {
+		return
+	}
 	s.applySessionCancel(ctx, string(params.SessionID), requestID)
+}
+
+// openUnboundTurn marks a first turn (no pending or bound Factory Session
+// identity yet) as unbound for the window in which a session/cancel has
+// nothing to control. The returned close func ends the window with the turn.
+func (s *Server) openUnboundTurn(ctx context.Context, startResult chatsessions.StartTurnResult) (context.Context, func()) {
+	flights := cancelFlightsFromContext(ctx)
+	if flights == nil || targetFactorySessionID(startResult.Episode) != "" {
+		return ctx, func() {}
+	}
+	turn := flights.openUnboundTurn(startResult.Session.ID, startResult.Turn.ID)
+	return context.WithValue(ctx, unboundTurnContextKey{}, turn), func() { flights.closeUnboundTurn(turn) }
+}
+
+// carryUnboundTurn copies the unbound-turn marker, if any, from src onto dst.
+func carryUnboundTurn(dst, src context.Context) context.Context {
+	if turn := unboundTurnFromContext(src); turn != nil {
+		return context.WithValue(dst, unboundTurnContextKey{}, turn)
+	}
+	return dst
+}
+
+// deferCancelUntilBound parks a cancel that arrives after the active first
+// turn was admitted but before its Factory Session start recorded a pending
+// or bound identity. Such a cancel has nothing to control and would otherwise
+// be dropped while the prompt keeps running. It reports true when parked; the
+// start path applies it as soon as the identity exists.
+func (s *Server) deferCancelUntilBound(ctx context.Context, sessionID string, requestID chatsessions.RequestIdentity) bool {
+	flights := cancelFlightsFromContext(ctx)
+	if flights == nil {
+		return false
+	}
+	current, err := s.chatSessions.GetSession(ctx, chatsessions.GetSessionRequest{SessionID: sessionID})
+	if err != nil || current.Session.ActiveTurnID == "" || targetFactorySessionID(current.Episode) != "" {
+		return false
+	}
+	return flights.deferCancel(current.Session.ID, current.Session.ActiveTurnID, requestID)
+}
+
+// applyCancelDeferredBeforeBinding applies, inline, the cancel parked while
+// the turn's identity did not exist, now that the pending identity is
+// recorded. It runs on the prompt's own goroutine, so the cancel registry is
+// withheld from the context: waiting on this turn's own invocation would
+// deadlock. It reports whether a deferred cancel was applied.
+func (s *Server) applyCancelDeferredBeforeBinding(ctx context.Context, sessionID string) bool {
+	requestID, parked := unboundTurnFromContext(ctx).markBound()
+	if !parked {
+		return false
+	}
+	s.applySessionCancel(contextWithCancelFlights(ctx, nil), sessionID, requestID)
+	return true
 }
 
 // applySessionCancel commits one immutable captured CANCEL intent, controls
@@ -530,6 +584,9 @@ func (s *Server) admitPromptTurn(ctx context.Context, turn session.PromptTurn, r
 		return respondToRedeliveredTurn(startResult.Session.ID, startResult.Turn)
 	}
 
+	ctx, closeUnbound := s.openUnboundTurn(ctx, startResult)
+	defer closeUnbound()
+
 	if _, err := s.chatSessions.AdvanceTurn(ctx, chatsessions.AdvanceTurnRequest{
 		SessionID: startResult.Session.ID,
 		TurnID:    startResult.Turn.ID,
@@ -614,6 +671,7 @@ func (s *Server) dispatchFactoryTurn(
 ) (json.RawMessage, *acpsdk.RequestError) {
 	invokeCtx, stopInvocation := s.scopedInvocation(ctx)
 	defer stopInvocation()
+	invokeCtx = carryUnboundTurn(invokeCtx, ctx)
 	flights := cancelFlightsFromContext(ctx)
 	var invoking *promptFlight
 	if flights != nil {
@@ -880,16 +938,22 @@ func (s *Server) startFactorySessionForEpisode(
 	}
 
 	requestID := startResult.Turn.ID
-	outcome, liveDelivered, err := s.dispatchFactoryInvocation(ctx, connectionID, startResult.Session.ID, startResult.Session.Version, factorySessionID,
-		func(invokeCtx context.Context) (factorysessions.InvocationResult, error) {
-			return s.factorySessions.Invoke(invokeCtx, factorysessions.SessionInvokeRequest{
-				SessionID:       factorySessionID,
-				Correlation:     factorysessions.SessionOperationCorrelation{RequestID: requestID},
-				Content:         promptContentToWorkParts(turn.Content),
-				ContentProvided: true,
-			})
-		},
-	)
+	invoke := func(invokeCtx context.Context) (factorysessions.InvocationResult, error) {
+		return s.factorySessions.Invoke(invokeCtx, factorysessions.SessionInvokeRequest{
+			SessionID:       factorySessionID,
+			Correlation:     factorysessions.SessionOperationCorrelation{RequestID: requestID},
+			Content:         promptContentToWorkParts(turn.Content),
+			ContentProvided: true,
+		})
+	}
+	if s.applyCancelDeferredBeforeBinding(ctx, startResult.Session.ID) {
+		// The prompt was cancelled before its runtime existed: never submit
+		// its content to the runtime that cancel already controlled.
+		invoke = func(context.Context) (factorysessions.InvocationResult, error) {
+			return factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusCanceled}, nil
+		}
+	}
+	outcome, liveDelivered, err := s.dispatchFactoryInvocation(ctx, connectionID, startResult.Session.ID, startResult.Session.Version, factorySessionID, invoke)
 	if err != nil {
 		return dispatchOutcome{}, err
 	}

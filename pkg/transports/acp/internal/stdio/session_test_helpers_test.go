@@ -386,6 +386,8 @@ type fakeFactoryTargetService struct {
 	sessionStartCalls []factorysessions.SessionStartRequest
 	startResult       factorysessions.AsyncStartResult
 	startErr          error
+	startEnter        chan struct{}
+	startRelease      chan struct{}
 	invokeCalls       []invokeFactoryTargetCall
 	invokeResult      factorysessions.InvocationResult
 	invokeErr         error
@@ -431,6 +433,12 @@ func (f *fakeFactoryTargetService) Start(
 		Args:      request.Args,
 	})
 	f.sessionStartCalls = append(f.sessionStartCalls, request)
+	if enter, release := f.startEnter, f.startRelease; enter != nil && release != nil {
+		f.mu.Unlock()
+		close(enter)
+		<-release
+		f.mu.Lock()
+	}
 	if f.startErr != nil {
 		return factorysessions.SessionStartResult{}, f.startErr
 	}
