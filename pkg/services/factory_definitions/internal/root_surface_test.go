@@ -45,6 +45,7 @@ func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.
 				return nil, nil
 			}, nil, nil),
 		factorydefinitions.UnimplementedService{},
+		factorydefinitions.UnimplementedService{},
 		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return nil, nil
 		},

@@ -16,7 +16,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
-	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
@@ -129,6 +128,7 @@ func composeService(
 		validator,
 		validationService,
 		runtimeSnapshot,
+		compilation,
 		func(
 			factoryDir string,
 			workstationLoader factorydefinitions.WorkstationLoader,
@@ -166,7 +166,6 @@ func composeService(
 		definitions,
 		listEffective,
 		snapshotsPortability,
-		compilation,
 	)
 }
 
@@ -232,7 +231,6 @@ func attachFactoryDefinitionServices(
 	definitions factorydefinitions.Service,
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
 	snapshotsPortability snapshotsportability.Service,
-	compilation compilationservice.Service,
 ) (factorydefinitions.Service, error) {
 	attached, err := factorydefinitionsinternal.AttachEffectiveCatalog(definitions, listEffective)
 	if err != nil {
@@ -248,7 +246,7 @@ func attachFactoryDefinitionServices(
 	if withSnapshots == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: snapshots portability attachment rejected its dependencies")
 	}
-	return attachCompilation(withSnapshots, compilation), nil
+	return withSnapshots, nil
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
@@ -356,28 +354,6 @@ func StaticClock(instant time.Time) factorydefinitions.Clock {
 type staticClock struct{ instant time.Time }
 
 func (c staticClock) Now() time.Time { return c.instant }
-
-type compilationAttachedService struct {
-	factorydefinitions.Service
-	compilation compilationservice.Service
-}
-
-func attachCompilation(
-	service factorydefinitions.Service,
-	compilation compilationservice.Service,
-) factorydefinitions.Service {
-	return compilationAttachedService{
-		Service:     service,
-		compilation: compilation,
-	}
-}
-
-func (s compilationAttachedService) CompileEffectiveFactorySource(
-	ctx context.Context,
-	request factorydefinitions.CompileEffectiveFactorySourceRequest,
-) (factorydefinitions.CompileEffectiveFactorySourceResult, error) {
-	return s.compilation.CompileEffectiveFactorySource(ctx, request)
-}
 
 type authoringLayoutFilesystem interface {
 	portablefiles.FileSystem
