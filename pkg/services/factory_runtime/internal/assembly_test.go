@@ -478,15 +478,6 @@ func TestBoundControlsPreservePeerAfterSelectedDeactivation(t *testing.T) {
 			}
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			assertNotActive := func(runtimeID string, request factoryruntime.RuntimeDeactivationRequest) {
-				t.Helper()
-				_, err := root.Deactivate(ctx, request)
-				var activationErr *factoryruntime.RuntimeActivationError
-				if !errors.Is(err, factoryruntime.ErrRuntimeNotActive) || !errors.As(err, &activationErr) ||
-					activationErr.Kind != factoryruntime.RuntimeActivationErrorNotActive || activationErr.RuntimeID != runtimeID {
-					t.Fatalf("Deactivate(%s) error = %#v; want typed NOT_ACTIVE for requested identity", runtimeID, err)
-				}
-			}
 			assertControls := func(index int) {
 				t.Helper()
 				selected, peer := delegates[index], delegates[1-index]
@@ -505,7 +496,7 @@ func TestBoundControlsPreservePeerAfterSelectedDeactivation(t *testing.T) {
 					}
 				}
 			}
-			assertNotActive("unknown-runtime", factoryruntime.RuntimeDeactivationRequest{RuntimeID: "unknown-runtime"})
+			assertBoundRuntimeNotActive(t, root, ctx, "unknown-runtime", factoryruntime.RuntimeDeactivationRequest{RuntimeID: "unknown-runtime"})
 			for i, delegate := range delegates {
 				if len(delegate.calls) != 0 || delegate.closeCalls != 0 {
 					t.Fatal("unknown-ID teardown invoked a known activation effect")
@@ -532,7 +523,7 @@ func TestBoundControlsPreservePeerAfterSelectedDeactivation(t *testing.T) {
 					t.Fatalf("stale %s error = %v; want ErrNotRunning", control.method, err)
 				}
 			}
-			assertNotActive("runtime-"+selected.identity, factoryruntime.RuntimeDeactivationRequest{Binding: bindings[selectedIndex]})
+			assertBoundRuntimeNotActive(t, root, ctx, "runtime-"+selected.identity, factoryruntime.RuntimeDeactivationRequest{Binding: bindings[selectedIndex]})
 			if len(selected.calls) != selectedBefore || len(peer.calls) != peerBefore || selected.closeCalls != 1 || peer.closeCalls != 0 {
 				t.Fatal("stale controls or repeated teardown invoked an activation effect")
 			}
@@ -545,6 +536,16 @@ func TestBoundControlsPreservePeerAfterSelectedDeactivation(t *testing.T) {
 				t.Fatal("completed teardown changed control observations or repeated owned cleanup")
 			}
 		})
+	}
+}
+
+func assertBoundRuntimeNotActive(t *testing.T, root *Root, ctx context.Context, runtimeID string, request factoryruntime.RuntimeDeactivationRequest) {
+	t.Helper()
+	_, err := root.Deactivate(ctx, request)
+	var activationErr *factoryruntime.RuntimeActivationError
+	if !errors.Is(err, factoryruntime.ErrRuntimeNotActive) || !errors.As(err, &activationErr) ||
+		activationErr.Kind != factoryruntime.RuntimeActivationErrorNotActive || activationErr.RuntimeID != runtimeID {
+		t.Fatalf("Deactivate(%s) error = %#v; want typed NOT_ACTIVE for requested identity", runtimeID, err)
 	}
 }
 
