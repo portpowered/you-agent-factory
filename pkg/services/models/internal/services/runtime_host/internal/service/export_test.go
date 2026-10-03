@@ -269,25 +269,26 @@ func TestIdleCoordinatorIgnoresStaleTimerAndProtectsPeer(t *testing.T) {
 	t.Parallel()
 	state := NewSlotState()
 	coordinator := &slotCoordinator{SlotState: state}
-	selected := &supervisedRuntime{state: supervisedStateReady}
-	peer := &supervisedRuntime{state: supervisedStateReady}
+	selectedProcess, peerProcess := &idleTestProcess{}, &idleTestProcess{}
+	selected := &supervisedRuntime{state: supervisedStateReady, process: selectedProcess}
+	peer := &supervisedRuntime{state: supervisedStateReady, process: peerProcess}
 	state.runtimeSlots["selected"] = selected
 	state.runtimeSlots["peer"] = peer
 	stale, current := &idleUnload{}, &idleUnload{}
 	state.idleUnloadTimers["selected"] = current
 	coordinator.runIdleUnload(supervisedIdentity{}, "selected", stale)
-	if !selected.isReady() || !peer.isReady() {
+	if selectedProcess.stops != 0 || peerProcess.stops != 0 {
 		t.Fatal("stale timer stopped a runtime")
 	}
 	state.capacityHolders["selected"] = 1
 	coordinator.runIdleUnload(supervisedIdentity{}, "selected", current)
-	if !selected.isReady() || !peer.isReady() {
+	if selectedProcess.stops != 0 || peerProcess.stops != 0 {
 		t.Fatal("timer stopped active holder or peer")
 	}
 	delete(state.capacityHolders, "selected")
 	state.idleUnloadTimers["selected"] = current
 	coordinator.runIdleUnload(supervisedIdentity{}, "selected", current)
-	if selected.isReady() || !peer.isReady() {
+	if selectedProcess.stops != 1 || peerProcess.stops != 0 {
 		t.Fatal("eligible timer did not stop only its selected runtime")
 	}
 }
@@ -299,3 +300,10 @@ func (s *slotCoordinator) releaseSlotCapacity(
 ) {
 	s.releaseSlotCapacityWithOverlays(scope, modelName, runtimeCfg, nil)
 }
+
+// idleTestProcess observes only the selected process stop effect.
+type idleTestProcess struct{ stops int }
+
+func (*idleTestProcess) HealthEndpoint() string       { return "" }
+func (*idleTestProcess) Wait() error                  { return nil }
+func (p *idleTestProcess) Stop(context.Context) error { p.stops++; return nil }
