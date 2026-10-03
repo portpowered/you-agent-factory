@@ -8,9 +8,12 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,6 +21,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -40,6 +44,308 @@ func TestPortableReplayInspectionExecutesThroughRootProcess(t *testing.T) {
 
 	output := functionalExecutePortableReplay(t, process)
 	functionalAssertPortableReplayInspection(t, output, calls)
+}
+
+// The API owns explicit durable-session controls and artifact selection. Capture
+// its production handler at the host edge: this witness needs no listener. One
+// process hosts both sessions; provider gates prove they really overlap.
+func TestCancelActiveSessionPreservesPeerProviderAndArtifacts(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	dir := support.ScaffoldFactory(t, map[string]any{"name": "recording-peer-isolation"})
+	runner := &recordingPeerRunner{firstStarted: make(chan struct{}), peerStarted: make(chan struct{}),
+		firstCanceled: make(chan error, 1), peerRelease: make(chan struct{})}
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(runner.peerRelease) }) }
+	t.Cleanup(release)
+	bound := make(chan http.Handler, 1)
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner:              runner,
+		FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			bound <- request.Handler
+			if request.OnBound != nil {
+				request.OnBound(platformhttpserver.Binding{Port: request.Port})
+			}
+			<-ctx.Done()
+			return nil
+		},
+	})
+	inputs := recordingContinuationInputs(t, dir, home, []string{"--continuously", "--with-server", "--no-record"}, false)
+	ctx, cancel := context.WithCancel(inputs.Context)
+	inputs.Context = ctx
+	done := executeGatedRecordingCommand(t, process, inputs, func() { release(); cancel() })
+	var handler http.Handler
+	select {
+	case handler = <-bound:
+	case err := <-done:
+		t.Fatalf("host ended before handler binding: %v", err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("host handler did not bind")
+	}
+	firstRequest := recordingPeerWorkflowRequest("first")
+	peerRequest := recordingPeerWorkflowRequest("peer")
+	firstStarted := recordingPeerJSON[factoryapi.FactorySessionExecutionResponse](t, handler, "POST", "/factory-sessions/async", firstRequest)
+	waitRecordingPeerSignal(t, runner.firstStarted, "first provider admission")
+	first := firstStarted.SessionId
+	peerStarted := recordingPeerJSON[factoryapi.FactorySessionExecutionResponse](t, handler, "POST", "/factory-sessions/async", peerRequest)
+	waitRecordingPeerSignal(t, runner.peerStarted, "peer provider admission")
+	peer := peerStarted.SessionId
+	if first == "" || peer == "" || first == peer || first == "~default" || peer == "~default" {
+		t.Fatalf("session identities must be explicit and independent: first=%s peer=%s", first, peer)
+	}
+	firstArtifact := assertRecordingPeerArtifact(t, handler, first, "first")
+	peerArtifact := assertRecordingPeerArtifact(t, handler, peer, "peer")
+	// Artifact IDs are session-scoped. Equal local IDs still select different
+	// content through the owning session route; do not invent global uniqueness.
+	if *firstArtifact.ContentHash == *peerArtifact.ContentHash {
+		t.Fatal("independent sessions lost their distinct artifact content")
+	}
+	control := recordingPeerJSON[factoryapi.FactorySessionLifecycleControlResponse](t, handler, "POST", "/factory-sessions/"+first+"/cancel", map[string]any{})
+	if control.SessionId != first || control.Operation != "CANCEL" || (control.Outcome != "ACCEPTED" && control.Outcome != "APPLIED") {
+		t.Fatalf("selected cancellation control: %#v", control)
+	}
+	select {
+	case err := <-runner.firstCanceled:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("selected provider cancellation: %v", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("selected provider did not acknowledge cancellation")
+	}
+	firstTerminal := waitRecordingPeerStatus(t, handler, first, factoryapi.FactorySessionDurableLifecycleStatusCanceled)
+	if firstTerminal.SessionId != first || firstTerminal.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceled {
+		t.Fatalf("selected terminal result = %#v, want original canceled session", firstTerminal)
+	}
+	peerRead := recordingPeerJSON[factoryapi.FactorySessionDurableReadModel](t, handler, "GET", "/factory-sessions/"+peer, nil)
+	if peerRead.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("canceling first terminated peer: %#v", peerRead)
+	}
+	firstCursor := assertRecordingPeerHistory(t, handler, first, "first")
+	release()
+	peerTerminal := waitRecordingPeerStatus(t, handler, peer, factoryapi.FactorySessionDurableLifecycleStatusSucceeded)
+	if peerTerminal.SessionId != peer || peerTerminal.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded || runner.calls.Load() != 2 {
+		t.Fatalf("peer did not finish its original provider attempt: result=%#v calls=%d", peerTerminal, runner.calls.Load())
+	}
+	assertRecordingPeerArtifactRetained(t, firstArtifact, assertRecordingPeerArtifact(t, handler, first, "first"))
+	assertRecordingPeerArtifactRetained(t, peerArtifact, assertRecordingPeerArtifact(t, handler, peer, "peer"))
+	assertRecordingPeerArtifactDetail(t, handler, first, firstArtifact, "first")
+	assertRecordingPeerArtifactDetail(t, handler, peer, peerArtifact, "peer")
+	assertRecordingPeerHistory(t, handler, peer, "peer")
+	request := httptest.NewRequest("GET", "/factory-sessions/"+peer+"/events?after_event_id="+url.QueryEscape(firstCursor), nil).WithContext(t.Context())
+	request.Header.Set("Accept", "application/json")
+	foreign := httptest.NewRecorder()
+	handler.ServeHTTP(foreign, request)
+	if foreign.Code != http.StatusOK || !strings.Contains(foreign.Body.String(), `"outcome":"CURSOR_STALE"`) {
+		t.Fatalf("foreign session cursor = %d: %s", foreign.Code, foreign.Body.String())
+	}
+	if runner.calls.Load() != 2 {
+		t.Fatal("selected historical reads admitted new provider work")
+	}
+}
+
+// Drain the public retained prefix using its declared count, then cancel only
+// this snapshot request. No stream-quietness or optional-frame wait is used.
+func assertRecordingPeerHistory(t *testing.T, handler http.Handler, id, label string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	writer := &recordingPeerSnapshotWriter{ResponseRecorder: httptest.NewRecorder(), cancel: cancel}
+	request := httptest.NewRequest("GET", "/factory-sessions/"+id+"/events", nil).WithContext(ctx)
+	handler.ServeHTTP(writer, request)
+	if writer.Code != http.StatusOK || writer.count == 0 {
+		t.Fatalf("selected history = %d: %s", writer.Code, writer.Body.String())
+	}
+	var events []factoryapi.FactoryEvent
+	for _, line := range strings.Split(writer.Body.String(), "\n") {
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		var event factoryapi.FactoryEvent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
+			t.Fatal(err)
+		}
+		if event.Context.SessionId != nil && *event.Context.SessionId != id {
+			t.Fatalf("selected history leaked foreign session: %#v", event)
+		}
+		events = append(events, event)
+	}
+	if len(events) != writer.count {
+		t.Fatalf("retained history count=%d frames=%d", writer.count, len(events))
+	}
+	if !strings.Contains(writer.Body.String(), `"`+label+`"`) {
+		t.Fatalf("selected history lost owned artifact: %s", writer.Body.String())
+	}
+	for index := 1; index < len(events); index++ {
+		if events[index].Context.Sequence <= events[index-1].Context.Sequence {
+			t.Fatal("selected history lost event order")
+		}
+	}
+	reconnected := &recordingPeerSnapshotWriter{ResponseRecorder: httptest.NewRecorder(), cancel: cancel}
+	reconnectContext, reconnectCancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer reconnectCancel()
+	reconnected.cancel = reconnectCancel
+	reconnect := httptest.NewRequest("GET", "/factory-sessions/"+id+"/events?after_event_id="+url.QueryEscape(events[0].Id), nil).WithContext(reconnectContext)
+	handler.ServeHTTP(reconnected, reconnect)
+	if reconnected.Code != http.StatusOK || reconnected.count != len(events)-1 {
+		t.Fatalf("selected reconnect count=%d, want %d: %s", reconnected.count, len(events)-1, reconnected.Body.String())
+	}
+	return events[0].Id
+}
+
+type recordingPeerSnapshotWriter struct {
+	*httptest.ResponseRecorder
+	cancel context.CancelFunc
+	count  int
+}
+
+func (writer *recordingPeerSnapshotWriter) Write(data []byte) (int, error) {
+	n, err := writer.ResponseRecorder.Write(data)
+	writer.count += bytes.Count(data, []byte("data:"))
+	return n, err
+}
+
+func (writer *recordingPeerSnapshotWriter) Flush() {
+	writer.ResponseRecorder.Flush()
+	retained, err := strconv.Atoi(writer.Header().Get("X-Factory-Session-Retained-Event-Count"))
+	if err == nil && writer.count >= retained {
+		writer.cancel()
+	}
+}
+func assertRecordingPeerArtifactRetained(t *testing.T, before, after factoryapi.FactorySessionArtifactSummary) {
+	t.Helper()
+	// Active runtime and persisted artifact summaries currently derive CreatedAt
+	// differently. Preserve identity, content/hash, visibility and retrieval;
+	// this witness makes no artifact timestamp-provenance claim.
+	before.CreatedAt, after.CreatedAt = nil, nil
+	if !reflect.DeepEqual(before, after) {
+		t.Fatalf("terminal artifact changed retained facts: before=%+v after=%+v", before, after)
+	}
+}
+
+// Async session status is the API-owned completion observer. Provider channels
+// establish admission/cancellation; this bounded read waits for the guaranteed
+// terminal projection, never optional progress frames or stream quietness.
+func waitRecordingPeerStatus(t *testing.T, handler http.Handler, id string, want factoryapi.FactorySessionDurableLifecycleStatus) factoryapi.FactorySessionDurableReadModel {
+	t.Helper()
+	result, err := support.WaitForObservation(30*time.Second,
+		func() (factoryapi.FactorySessionDurableReadModel, error) {
+			return recordingPeerJSON[factoryapi.FactorySessionDurableReadModel](t, handler, "GET", "/factory-sessions/"+id, nil), nil
+		},
+		func(result factoryapi.FactorySessionDurableReadModel) bool { return result.Status == want },
+	)
+	if err != nil {
+		t.Fatalf("session %s terminal status: got=%#v want=%s error=%v", id, result, want, err)
+	}
+	return result
+}
+
+type recordingPeerRunner struct {
+	calls                     atomic.Int32
+	firstStarted, peerStarted chan struct{}
+	firstCanceled             chan error
+	peerRelease               chan struct{}
+}
+
+func (runner *recordingPeerRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.calls.Add(1)
+	if strings.Contains(strings.Join(request.Args, " ")+string(request.Stdin), "recording-isolation-first") {
+		close(runner.firstStarted)
+		<-ctx.Done()
+		runner.firstCanceled <- ctx.Err()
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	close(runner.peerStarted)
+	select {
+	case <-runner.peerRelease:
+		return support.NewStaticSuccessCommandRunner("recording peer COMPLETE").Run(ctx, request)
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+}
+
+func recordingPeerWorkflowRequest(label string) factoryapi.FactorySessionExecutionRequest {
+	return factoryapi.FactorySessionExecutionRequest{RequestId: "recording-isolation-" + label,
+		Source: factoryapi.FactorySessionExecutionSource{Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
+			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
+				InlineSource: factoryapi.FactoryOrchestratorJavaScriptInlineSource{
+					Encoding: factoryapi.FactoryOrchestratorJavaScriptInlineSourceEncodingUtf8,
+					Inline: `return (async function () {
+  const artifact = workflow.artifact({kind: "log", label: "` + label + `", content: {owner: "` + label + `"}});
+  const child = await agent.run({prompt: "recording-isolation-` + label + `", label: "` + label + `", modelProvider: "codex", model: "gpt-5-codex"});
+  return {artifact, child};
+})();`,
+				},
+			},
+		},
+	}
+}
+
+func waitRecordingPeerSignal[T any](t *testing.T, signal <-chan T, label string) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(30 * time.Second):
+		t.Fatalf("did not observe %s", label)
+	}
+}
+
+func recordingPeerResponse(ctx context.Context, handler http.Handler, method, path string, payload []byte) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(method, path, bytes.NewReader(payload)).WithContext(ctx)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	return response
+}
+
+func recordingPeerJSON[T any](t *testing.T, handler http.Handler, method, path string, body any) T {
+	t.Helper()
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	response := recordingPeerResponse(ctx, handler, method, path, payload)
+	if response.Code < 200 || response.Code >= 300 {
+		t.Fatalf("%s %s = %d: %s", method, path, response.Code, response.Body.String())
+	}
+	var result T
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func assertRecordingPeerArtifact(t *testing.T, handler http.Handler, sessionID, label string) factoryapi.FactorySessionArtifactSummary {
+	t.Helper()
+	listed := recordingPeerJSON[factoryapi.ListFactorySessionArtifactsResponse](t, handler, "GET", "/factory-sessions/"+sessionID+"/artifacts", nil)
+	var selected *factoryapi.FactorySessionArtifactSummary
+	for _, artifact := range listed.Artifacts {
+		if artifact.Label != nil && *artifact.Label == label && artifact.Kind == "log" {
+			copy := artifact
+			selected = &copy
+		}
+		if artifact.Label != nil && (*artifact.Label == "first" || *artifact.Label == "peer") && *artifact.Label != label {
+			t.Fatalf("session %s inherited foreign artifact: %#v", sessionID, artifact)
+		}
+	}
+	if selected == nil || selected.ContentHash == nil || *selected.ContentHash == "" {
+		t.Fatalf("session %s has no durable %s artifact: %#v", sessionID, label, listed)
+	}
+	return *selected
+}
+
+func assertRecordingPeerArtifactDetail(t *testing.T, handler http.Handler, sessionID string, summary factoryapi.FactorySessionArtifactSummary, label string) {
+	t.Helper()
+	path := "/factory-sessions/" + sessionID + "/artifacts/" + summary.Id
+	detail := recordingPeerJSON[factoryapi.FactorySessionArtifactDetail](t, handler, "GET", path, nil)
+	// WORKFLOW_RUNTIME visibility exposes a hash and safe reference, not raw
+	// bodies. Pin that public outcome and qualify equal local IDs by session.
+	if detail.SessionId != sessionID || detail.Id != summary.Id || detail.Label == nil || *detail.Label != label ||
+		detail.ContentHash == nil || *detail.ContentHash != *summary.ContentHash || detail.ContentRef == nil || detail.ContentRef.Href != path {
+		t.Fatalf("selected artifact detail = %#v, want owned identity/hash/reference", detail)
+	}
 }
 
 func functionalWriteResumableWorkflowFixture(t *testing.T, workflowName string) string {
