@@ -20,7 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const reviewFailureFixtureShutdownTimeout = 60 * time.Second
+var reviewFailureFixtureShutdownTimeout = support.ScaledTimeout(60 * time.Second)
 
 var (
 	reviewFailureFixtureOnce sync.Once

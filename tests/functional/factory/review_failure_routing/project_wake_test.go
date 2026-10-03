@@ -174,7 +174,7 @@ func TestProjectLeadWake_ChildrenFinishingWhileLeadIsBusyQueueOneWakeEach(t *tes
 	secondName, secondIdeaID, _ := wake.submitOwnedChild(t, "second", "failed")
 	awaitReviewFailureDispatchResponses(t, stream, "report-idea-complete", 1)
 	awaitReviewFailureDispatchResponses(t, stream, "report-idea-failure", 1)
-	assertReviewFailureWorkStates(t, wake.listWorks(t), map[string]string{
+	awaitReviewFailureWorkStates(t, wake.reviewFailureScenario, map[string]string{
 		firstIdeaID: "complete", secondIdeaID: "failed", wake.peerID: "waiting",
 	})
 
