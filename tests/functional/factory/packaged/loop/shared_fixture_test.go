@@ -23,38 +23,41 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const (
+// Budgets are failure ceilings scaled for loaded CI runners; observations
+// return as soon as their condition holds.
+var (
 	// Process startup includes production dependency construction and the first
 	// loopback bind. This ceiling is intentionally scoped to fixture readiness;
 	// it is not reused by scenario phase observations or cleanup.
-	loopFixtureReadyTimeout = 15 * time.Second
+	loopFixtureReadyTimeout = support.ScaledTimeout(15 * time.Second)
 
 	// These budgets preserve the old two-second public Work/dispatch bounds and
 	// give only the direct runner/scheduler readiness edges a measured margin
 	// over their former one-second scheduling opportunities.
-	loopProviderPhaseBudget  = 3 * time.Second
-	loopSchedulerPhaseBudget = 3 * time.Second
-	loopWorkPhaseBudget      = 2 * time.Second
-	loopDispatchPhaseBudget  = 2 * time.Second
+	loopProviderPhaseBudget  = support.ScaledTimeout(3 * time.Second)
+	loopSchedulerPhaseBudget = support.ScaledTimeout(3 * time.Second)
+	loopWorkPhaseBudget      = support.ScaledTimeout(2 * time.Second)
+	loopDispatchPhaseBudget  = support.ScaledTimeout(2 * time.Second)
 
 	// A session cleanup has one bounded total budget. The four operation budgets
 	// add to that total, so a stuck phase cannot multiply the old ceiling.
-	loopSessionCleanupBudget   = 5 * time.Second
-	loopSessionTerminateBudget = 1 * time.Second
-	loopSessionStoppedBudget   = 2 * time.Second
-	loopSessionDeleteBudget    = 1 * time.Second
-	loopSessionAbsentBudget    = 1 * time.Second
+	loopSessionCleanupBudget   = support.ScaledTimeout(5 * time.Second)
+	loopSessionTerminateBudget = support.ScaledTimeout(1 * time.Second)
+	loopSessionStoppedBudget   = support.ScaledTimeout(2 * time.Second)
+	loopSessionDeleteBudget    = support.ScaledTimeout(1 * time.Second)
+	loopSessionAbsentBudget    = support.ScaledTimeout(1 * time.Second)
 
 	// The HTTP request carries a 20 ms product timeout. This client ceiling only
 	// prevents a transport defect from hiding the requested terminal response.
-	loopInvocationRequestBudget = 2 * time.Second
+	loopInvocationRequestBudget = support.ScaledTimeout(2 * time.Second)
 	// This applies only while opening a stream. Once response headers arrive,
 	// the stream uses its test-context-derived cancellation instead of a client
 	// timeout so a successful SSE body can remain open for the scenario.
-	loopStreamOpenBudget     = 2 * time.Second
-	loopStreamErrorBodyLimit = 4 << 10
-	loopStreamCloseBudget    = 1 * time.Second
+	loopStreamOpenBudget  = support.ScaledTimeout(2 * time.Second)
+	loopStreamCloseBudget = support.ScaledTimeout(1 * time.Second)
 )
+
+const loopStreamErrorBodyLimit = 4 << 10
 
 const loopExpectedSessions = 8
 

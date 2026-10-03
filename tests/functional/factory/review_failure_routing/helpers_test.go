@@ -20,7 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const reviewFailureEventTimeout = 30 * time.Second
+var reviewFailureEventTimeout = support.ScaledTimeout(30 * time.Second)
 
 type reviewFailureScenario struct {
 	fixture    *reviewFailureProcessFixture
@@ -306,6 +306,43 @@ func reviewFailureStateType(state string) factoryapi.WorkStateType {
 	default:
 		return factoryapi.WorkStateTypePROCESSING
 	}
+}
+
+// awaitReviewFailureWorkStates polls the public Work list until every wanted
+// Work is in its wanted state, then asserts. A DISPATCH_RESPONSE event is
+// published before the output Work's state change is visible on the public
+// list, so asserting immediately after observing a response races under load.
+func awaitReviewFailureWorkStates(
+	t *testing.T,
+	scenario *reviewFailureScenario,
+	want map[string]string,
+) {
+	t.Helper()
+	deadline := time.Now().Add(reviewFailureEventTimeout)
+	for {
+		works := scenario.listWorks(t)
+		if reviewFailureWorkStatesMatch(works, want) || time.Now().After(deadline) {
+			assertReviewFailureWorkStates(t, works, want)
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+func reviewFailureWorkStatesMatch(works []factoryapi.Work, want map[string]string) bool {
+	byID := make(map[string]factoryapi.Work, len(works))
+	for _, work := range works {
+		if work.WorkId != nil {
+			byID[*work.WorkId] = work
+		}
+	}
+	for workID, wantState := range want {
+		work, ok := byID[workID]
+		if !ok || work.State == nil || work.State.Name != wantState {
+			return false
+		}
+	}
+	return true
 }
 
 func assertReviewFailureWorkStates(
