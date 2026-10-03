@@ -126,6 +126,11 @@ func startSelectedTimeRun(t *testing.T, facts platformclock.Source, scheduler pl
 	dir := support.ScaffoldSingleStepFactory(t, "selected-process-time")
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"selected time"}`))
 	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig("codex", "gpt-5-codex"))
+	return startSelectedTimeHost(t, dir, facts, scheduler, runner)
+}
+
+func startSelectedTimeHost(t *testing.T, dir string, facts platformclock.Source, scheduler platformclock.TimerSource, runner platformprocess.CommandRunner) selectedTimeFixture {
+	t.Helper()
 	api := support.NewProcessAPIServer()
 	process := support.BuildProcess(t, serviceedges.Edges{
 		Clock: facts, ProcessScheduler: scheduler, ProviderCommandRunner: runner, APIServerStarter: api.Start,
