@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -72,118 +71,74 @@ func (ledger *recordingLedger) AppendRecordedEvent(factorydefinitions.FactoryEve
 	panic("ledger append during inert construction")
 }
 
-func TestNewServiceConstructsInertRoot(t *testing.T) {
-	t.Parallel()
-
-	ledger := &recordingLedger{}
-	writeCalls := 0
-	writeFile := func(string, []byte) error {
-		writeCalls++
-		panic("snapshot write during inert construction")
-	}
-
-	runtime.GC()
-	time.Sleep(20 * time.Millisecond)
-	baseline := runtime.NumGoroutine()
-
-	makeDirectories, createTemporaryFile, removePath, renamePath, readFile := testPublicationEffects()
-	service, err := testNewService(
-		ledger,
-		nil,
-		writeFile,
-		makeDirectories,
-		createTemporaryFile,
-		removePath,
-		renamePath,
-		readFile,
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-	if service == nil {
-		t.Fatal("NewService() returned nil service")
-	}
-	if ledger.subscribeCalls != 0 {
-		t.Fatalf("construction started ledger subscriptions %d times, want inert construction", ledger.subscribeCalls)
-	}
-	if writeCalls != 0 {
-		t.Fatalf("construction wrote snapshots %d times, want inert construction", writeCalls)
-	}
-
-	runtime.GC()
-	time.Sleep(20 * time.Millisecond)
-	if leaked := runtime.NumGoroutine() - baseline; leaked > 4 {
-		t.Fatalf(
-			"goroutine leak after construction: baseline=%d current=%d delta=%d, want no flush ticker goroutines",
-			baseline, runtime.NumGoroutine(), leaked,
-		)
-	}
-
-	var root recordings.Service = service
-	if _, err := root.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: "missing-after-inert-construction",
-	}); !errors.Is(err, recordings.ErrReplayRecordingNotFound) {
-		t.Fatalf("LoadReplayRecording() = %v, want ErrReplayRecordingNotFound after inert construction", err)
-	}
-	_, err = root.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
-		Recording: recordings.HistoricalRecordingIdentity{RecordingID: "missing-after-inert-construction"},
-	})
-	var historicalErr *recordings.HistoricalRecordingQueryError
-	if !errors.As(err, &historicalErr) || historicalErr.Kind != recordings.HistoricalRecordingQueryErrorInvalidRequest {
-		t.Fatalf("QueryHistoricalRecording() = %v, want typed invalid-request failure", err)
-	}
+// Completed-owner doubles panic on any unconfigured operation. Construction
+// and adapter forwarding are the only behavior exercised by this root fixture.
+type constructorLifecycle struct {
+	recordingswire.RecordingLifecycleOwner
+}
+type constructorArtifacts struct {
+	recordingswire.ArtifactsExportOwner
+}
+type constructorCanonical struct {
+	recordingswire.CanonicalLedgerOwner
+}
+type constructorProjection struct{ recordings.ProjectionService }
+type constructorReplay struct {
+	recordingswire.ReplayOwner
+	request recordings.LoadReplayRecordingRequest
+	err     error
 }
 
-func TestNewServiceConstructsPublishedRoot(t *testing.T) {
-	t.Parallel()
+func (owner *constructorReplay) LoadReplayRecording(request recordings.LoadReplayRecordingRequest) (recordings.LoadReplayRecordingResult, error) {
+	owner.request = request
+	return recordings.LoadReplayRecordingResult{}, owner.err
+}
 
-	service, err := testNewService(
-		stubLedger{},
-		nil,
-		func(string, []byte) error { return nil },
-		func(string, os.FileMode) error { return nil },
-		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.Rename,
-		os.ReadFile,
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
+type constructorHistorical struct {
+	request recordings.HistoricalRecordingQueryRequest
+	err     error
+}
+
+func (owner *constructorHistorical) QueryHistoricalRecording(request recordings.HistoricalRecordingQueryRequest) (recordings.HistoricalRecordingQueryResult, error) {
+	owner.request = request
+	return recordings.HistoricalRecordingQueryResult{}, owner.err
+}
+
+func TestNewServiceConstructsInertRoot(t *testing.T) {
+	t.Parallel()
+	ledger := &recordingLedger{}
+	replay := &constructorReplay{err: recordings.ErrReplayRecordingNotFound}
+	historical := &constructorHistorical{err: &recordings.HistoricalRecordingQueryError{
+		Kind: recordings.HistoricalRecordingQueryErrorInvalidRequest,
+	}}
+	service := recordingswire.NewService(ledger, constructorProjection{},
+		constructorLifecycle{}, constructorArtifacts{}, replay, constructorCanonical{}, historical,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil, nil, nil)
+	if service == nil || ledger.subscribeCalls != 0 || replay.request.RecordingID != "" || historical.request.Recording.RecordingID != "" {
+		t.Fatal("construction activated a completed collaborator")
 	}
-	if service == nil {
-		t.Fatal("NewService() returned nil service")
+	request := recordings.LoadReplayRecordingRequest{RecordingID: "missing-after-inert-construction"}
+	if _, err := service.LoadReplayRecording(request); !errors.Is(err, replay.err) || replay.request != request {
+		t.Fatalf("LoadReplayRecording() = %v, request %#v; want injected failure and unchanged request", err, replay.request)
 	}
-	var root recordings.Service = service
-	if _, err := root.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: "missing-wire-root",
-	}); !errors.Is(err, recordings.ErrReplayRecordingNotFound) {
-		t.Fatalf("LoadReplayRecording() = %v, want ErrReplayRecordingNotFound", err)
+	query := recordings.HistoricalRecordingQueryRequest{
+		Recording: recordings.HistoricalRecordingIdentity{RecordingID: "missing-after-inert-construction"},
+	}
+	if _, err := service.QueryHistoricalRecording(query); err != historical.err || historical.request != query {
+		t.Fatalf("QueryHistoricalRecording() = %v, request %#v; want injected typed failure and unchanged request", err, historical.request)
+	}
+	var lifecycle recordings.RecordingLifecycle = service.(recordings.RecordingLifecycle)
+	var artifacts recordings.RecordingReplayArtifacts = service.(recordings.RecordingReplayArtifacts)
+	if lifecycle == nil || artifacts == nil {
+		t.Fatal("constructed root is missing its published capabilities")
 	}
 }
 
 func TestNewServiceRejectsMissingArtifactPublicationEffects(t *testing.T) {
 	t.Parallel()
-
-	service, err := testNewService(
-		stubLedger{},
-		nil,
-		func(string, []byte) error { return nil },
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-	)
-	if err == nil {
-		t.Fatal("NewService() error = nil, want missing artifact publication effects")
-	}
-	if err.Error() != "construct Recordings publication: portable artifact publication operations are required" {
-		t.Fatalf("NewService() error = %q, want missing publication effects", err.Error())
-	}
-	if service != nil {
-		t.Fatalf("NewService() = %#v, want nil service", service)
+	publication, err := recordingswire.NewPortableArtifactPublication(nil, nil, nil, nil, nil)
+	if err == nil || err.Error() != "portable artifact publication operations are required" || publication != nil {
+		t.Fatalf("NewPortableArtifactPublication() = %v, %v; want missing publication effects", publication, err)
 	}
 }
 
@@ -204,32 +159,34 @@ func testPublicationEffects() (
 }
 
 // TestRecordingsProjectionServiceReturnsDashboardAndWorkstationData keeps
-// detached projection results observable through the Recordings root.
+// detached projection results observable through the native projection owner.
 func TestRecordingsProjectionServiceReturnsDashboardAndWorkstationData(t *testing.T) {
 	t.Parallel()
 	scope, view := functionalRecordingsWorldStateView(t)
-	service := newFunctionalRecordingsRoot(t)
-	dashboard, err := service.QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest{WorldState: view})
-	if err != nil {
-		t.Fatalf("QuerySimpleDashboard: %v", err)
+	var state recordings.FactoryWorldState
+	if err := json.Unmarshal([]byte(view.Payload), &state); err != nil {
+		t.Fatal(err)
 	}
-	if dashboard.Data.InFlightDispatchCount != 1 || !dashboard.Data.Session.HasData {
-		t.Fatalf("dashboard data = %#v, want one active customer dispatch", dashboard.Data)
+	projection := recordingswire.NewProjectionService()
+	dashboard := projection.SimpleDashboardRenderData(state)
+	if dashboard.InFlightDispatchCount != 1 || !dashboard.Session.HasData {
+		t.Fatalf("dashboard data = %#v, want one active customer dispatch", dashboard)
 	}
-	workstation, err := service.QueryWorkstationRequests(recordings.WorkstationRequestsQueryRequest{WorldState: view})
-	if err != nil {
-		t.Fatalf("QueryWorkstationRequests: %v", err)
-	}
-	if workstation.Projection.WorkstationRequestsByDispatchId == nil {
+	workstation := projection.ProjectWorkstationRequests(state)
+	if workstation.WorkstationRequestsByDispatchId == nil {
 		t.Fatal("workstation projection is nil, want the active dispatch")
 	}
-	if _, ok := (*workstation.Projection.WorkstationRequestsByDispatchId)["dispatch-recordings-wire"]; !ok {
-		t.Fatalf("workstation projection = %#v, want dispatch-recordings-wire", workstation.Projection)
+	if _, ok := (*workstation.WorkstationRequestsByDispatchId)["dispatch-recordings-wire"]; !ok {
+		t.Fatalf("workstation projection = %#v, want dispatch-recordings-wire", workstation)
 	}
-	events := functionalRecordingsCanonicalEvents(scope)
-	if err := service.ValidateReconnectReplayFrom(recordings.ValidateReconnectReplayRequest{
-		Events: events, Cursor: events[0].Cursor, Scope: scope,
-	}); err != nil {
+	events := []factorydefinitions.FactoryEvent{
+		functionalRecordingsFactoryEvent("event-0", scope.FactorySessionID, 0),
+		functionalRecordingsFactoryEvent("event-1", scope.FactorySessionID, 1),
+	}
+	afterSequence := 0
+	if err := projection.ValidateReconnectReplay(events,
+		factorydefinitions.FactoryEventReconnectCursor{AfterSequence: &afterSequence},
+		factorydefinitions.FactoryEventReconnectScope{SessionID: scope.FactorySessionID}); err != nil {
 		t.Fatalf("ValidateReconnectReplayFrom: %v", err)
 	}
 }
@@ -328,55 +285,17 @@ func functionalRecordingsWorldStateView(t *testing.T) (recordings.CanonicalEvent
 		Payload:       string(statePayload),
 	}
 }
-func newFunctionalRecordingsRoot(t *testing.T) recordings.Service {
-	t.Helper()
-	ledger := recordingswire.NewRuntimeLedger(nil, time.Now, "functional-recordings-wire", nil)
-	if ledger == nil {
-		t.Fatal("NewRuntimeLedger returned nil")
-	}
-	service, err := testNewServiceWithProjectionAndEffects(
-		ledger,
-		recordingswire.NewProjectionService(),
-		nil,
-		func(string, []byte) error { return nil },
-		os.MkdirAll,
-		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.Rename,
-		os.ReadFile,
-	)
-	if err != nil {
-		t.Fatalf("NewServiceWithProjectionAndEffects: %v", err)
-	}
-	return service
-}
-func functionalRecordingsCanonicalEvents(scope recordings.CanonicalEventScope) []recordings.CanonicalEvent {
-	when := time.Date(2026, time.August, 23, 12, 0, 0, 0, time.UTC)
-	return []recordings.CanonicalEvent{
-		{
-			ID: "event-0", Sequence: 0, Scope: scope,
-			Cursor:     recordings.CanonicalEventCursor{StreamGenerationID: "functional-recordings-wire", Sequence: 0},
-			RecordedAt: when, Kind: recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeRunRequest),
-			Payload: `{"recordedAt":"2026-08-23T12:00:00Z","factory":{"name":"wire-factory","workTypes":[],"resources":[],"workers":[],"workstations":[]}}`,
-		},
-		{
-			ID: "event-1", Sequence: 1, Scope: scope,
-			Cursor:     recordings.CanonicalEventCursor{StreamGenerationID: "functional-recordings-wire", Sequence: 1},
-			RecordedAt: when.Add(time.Second), Kind: recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeRunResponse), Payload: "{}",
-		},
-	}
-}
 func functionalRecordingsFactoryEvent(id, sessionID string, sequence int) factorydefinitions.FactoryEvent {
 	payload := json.RawMessage(`{}`)
+	kind := factorydefinitions.FactoryEventTypeRunResponse
 	if sequence == 0 {
+		kind = factorydefinitions.FactoryEventTypeRunRequest
 		payload = json.RawMessage(`{"recordedAt":"2026-08-23T12:00:00Z","factory":{"name":"wire-factory","workTypes":[],"resources":[],"workers":[],"workstations":[]}}`)
 	}
 	return factorydefinitions.FactoryEvent{
 		Id:            id,
 		SchemaVersion: factorydefinitions.FactoryEventSchemaVersionV1,
-		Type:          factorydefinitions.FactoryEventTypeRunRequest,
+		Type:          kind,
 		Context: factorydefinitions.FactoryEventContext{
 			EventTime:       time.Date(2026, time.August, 23, 12, 0, 0, sequence, time.UTC),
 			Sequence:        sequence,
@@ -729,31 +648,55 @@ func (storage functionalReplayArtifactStorage) ReadFile(string) ([]byte, error) 
 func stringPointer(value string) *string { return &value }
 func intPointer(value int) *int          { return &value }
 
-// TestHistoricalReplayV2ArtifactRemainsReadableThroughRecordingsRoot proves
-// the published historical query path recognizes append-only replay artifacts
-// without rewriting them into the legacy whole-file representation.
-func TestHistoricalReplayV2ArtifactRemainsReadableThroughRecordingsRoot(t *testing.T) {
+// Historical compatibility enters through its own reader and a controlled
+// projection. The public composed historical journey lives in the functional lane.
+type historicalProjection struct {
+	recordings.ProjectionService
+	events    []factorydefinitions.FactoryEvent
+	tick      int
+	projected recordings.FactoryWorldState
+}
+
+func (projection *historicalProjection) ReconstructFactoryWorldState(events []factorydefinitions.FactoryEvent, tick int) (recordings.FactoryWorldState, error) {
+	projection.events = append([]factorydefinitions.FactoryEvent(nil), events...)
+	projection.tick = tick
+	return recordings.FactoryWorldState{Tick: tick}, nil
+}
+func (projection *historicalProjection) ProjectWorkstationRequests(state recordings.FactoryWorldState) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice {
+	projection.projected = state
+	return recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{}
+}
+func TestHistoricalReplayV2ArtifactRemainsReadableThroughRecordingOwner(t *testing.T) {
 	t.Parallel()
-	artifactPath := filepath.Join(t.TempDir(), "historical-recording.jsonl")
 	payload := v2RecordingFixture(t)
-	if err := os.WriteFile(artifactPath, payload, 0o600); err != nil {
-		t.Fatalf("write replay v2 fixture: %v", err)
+	original := append([]byte(nil), payload...)
+	projection := &historicalProjection{}
+	reads := 0
+	identity := recordings.HistoricalRecordingIdentity{
+		RecordingID: "functional-v2-recording", Artifact: "historical-recording.jsonl",
 	}
-	service := newFunctionalRecordingsRoot(t)
-	result, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
-		Recording: recordings.HistoricalRecordingIdentity{
-			RecordingID: "functional-v2-recording",
-			Artifact:    recordings.RecordingArtifactReference(artifactPath),
-		},
-	})
+	query := recordingswire.NewHistoricalQueryOwner(func(path string) ([]byte, error) {
+		reads++
+		if path != string(identity.Artifact) {
+			t.Fatalf("read path = %q, want %q", path, identity.Artifact)
+		}
+		return payload, nil
+	}, projection)
+	result, err := query.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{Recording: identity})
 	if err != nil {
 		t.Fatalf("QueryHistoricalRecording(v2): %v", err)
 	}
-	if result.Status.State != recordings.RecordingFinalized {
-		t.Fatalf("historical v2 status = %q, want %q", result.Status.State, recordings.RecordingFinalized)
+	if result.Status.State != recordings.RecordingFinalized || result.Recording != identity {
+		t.Fatalf("historical v2 result = %#v, want finalized selected recording", result)
 	}
-	if len(result.Events) == 0 || result.WorldState.Payload == "" {
-		t.Fatalf("historical v2 result = %#v, want events and reconstructed state", result)
+	if len(result.Events) != 1 || len(projection.events) != 1 || result.WorldState.Payload == "" {
+		t.Fatalf("historical v2 result = %#v, projection events %#v; want one admitted event and projected state", result, projection.events)
+	}
+	if result.Events[0].ID != recordings.CanonicalEventID(projection.events[0].Id) || projection.tick != result.WorldState.SelectedTick || projection.projected.Tick != projection.tick {
+		t.Fatalf("historical v2 projection = %#v at %d, projected %#v; want admitted identity and selected tick", projection.events, projection.tick, projection.projected)
+	}
+	if reads != 1 || !bytes.Equal(payload, original) {
+		t.Fatalf("historical read performed %d reads or mutated its source", reads)
 	}
 	if !bytes.Contains(payload, []byte(`"schemaVersion":"agent-factory.replay.v2"`)) {
 		t.Fatal("v2 fixture lost its framing schema")
@@ -831,29 +774,4 @@ func testClock(clocks []recordings.RecordingClock) recordings.RecordingClock {
 		return clocks[0]
 	}
 	return platformclock.Real{}
-}
-
-func testNewService(
-	ledger recordings.Ledger,
-	targets recordings.LiveRecordingTargetPlanner,
-	writeFile func(string, []byte) error,
-	makeDirectories recordings.RecordingMakeDirectories,
-	createTemporaryFile recordings.RecordingCreateTemporaryFile,
-	removePath recordings.RecordingRemovePath,
-	renamePath recordings.RecordingRenamePath,
-	readFile recordings.RecordingReadFile,
-	clocks ...recordings.RecordingClock,
-) (recordings.Service, error) {
-	return testNewServiceWithProjectionAndEffects(
-		ledger,
-		recordingswire.NewProjectionService(),
-		targets,
-		writeFile,
-		makeDirectories,
-		createTemporaryFile,
-		removePath,
-		renamePath,
-		readFile,
-		clocks...,
-	)
 }
