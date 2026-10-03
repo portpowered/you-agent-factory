@@ -93,6 +93,15 @@ a valid decision.
   verdict; if it does not improve, continue with the next bounded optimization.
   Actual behavior regressions caused by the diff remain blocking.
 - Commit frequently
+- Push early and keep pushing. Once a story's commits pass narrow checks (the
+  changed packages' tests plus lint), rebase on origin/main, push, and open the
+  PR (as a draft if stories remain); keep pushing as each further story lands.
+  Required CI is the arbiter: do not run `make verify-pr`, `make test-functional`
+  or `make test-full` locally as a push gate on the shared host. Never run
+  baselines or `go list ./...` in the repository ROOT checkout (untracked files
+  there break package discovery); run them in your worktree. A lane that must
+  stop on a contract conflict still pushes its verified commits and opens a
+  draft PR naming the blocker; never end FAILED holding unpushed verified work.
 - Keep CI green: fix failures your diff caused. If a required check fails on a
   test in a package your diff does not touch and it reproduces on the base
   SHA, record the run URL + test name in a PR COMMENT, rerun failed jobs ONCE,

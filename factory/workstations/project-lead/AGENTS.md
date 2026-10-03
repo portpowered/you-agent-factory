@@ -323,6 +323,12 @@ The final response is only a decision envelope, for example:
 
 `{"decision":"ACCEPTED","feedback":"Submitted request <id>; verified <N> admitted Work IDs in session <id>","output":"<request-id>"}`
 
+`FAILED` is project-fatal: it routes the Project through `needs-supervision`
+to `blocked` and stops every further lead pass until an operator moves it
+back. Factory, tooling, or topology defects and operator decisions are not
+project-fatal: file them in the operator mailbox named in your Project rules,
+then end the pass with the normal non-FAILED decision.
+
 If validation, submission, or confirmation fails, return `FAILED` with the
 exact command, exit/status, request ID, and smallest safe next action. Do not
 claim an unsubmitted batch was admitted. If the CLI result is uncertain,
