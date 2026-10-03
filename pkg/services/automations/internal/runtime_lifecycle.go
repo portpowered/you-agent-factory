@@ -354,7 +354,7 @@ func (s *Service) buildRuntimeInstance(
 		workflowID = s.workflowID
 	}
 	owner := NewWithCursorFileSystem(
-		s.logger(), s.clock, s.commandRunner(), workflowID, request.Snapshot.FactoryDir,
+		s.loggerValue, s.clock, s.commandRunnerEdge, workflowID, request.Snapshot.FactoryDir,
 		s.hostedPollers, s.resolveTemplates, s.executionPolicy, s.cursorFileSystem,
 	)
 	if owner == nil {
@@ -382,7 +382,7 @@ func (s *Service) buildRuntimeInstance(
 		watcherConfig := runtimeFilesystemConfig(
 			request.Snapshot.FactoryDir,
 			filesystemInputs,
-			s.logger(),
+			s.loggerValue,
 			request.Inputs.Submitter,
 		)
 		instance.watcherRoot = watcherConfig.Dir
@@ -492,7 +492,7 @@ func (instance *runtimeInstance) observeWatcherTermination(err error) {
 		zap.String("runtime_id", instance.runtimeID),
 		zap.String("watch_root", instance.watcherRoot),
 	}
-	logger := instance.owner.logger()
+	logger := instance.owner.loggerValue
 	if err != nil {
 		logger.Error("filesystem watcher stopped with error", append(fields, zap.Error(err))...)
 		return

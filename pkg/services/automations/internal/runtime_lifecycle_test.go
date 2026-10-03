@@ -26,7 +26,7 @@ import (
 )
 
 func TestRuntimeLifecycle_IsolatesOwnersAndClassifiesDuplicates(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil)
 	root := service.Root()
 	ctx := context.Background()
 
@@ -73,7 +73,7 @@ func TestRuntimeLifecycle_IsolatesOwnersAndClassifiesDuplicates(t *testing.T) {
 }
 
 func TestRuntimeLifecycle_RejectsMissingIdentityWithTypedError(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil)
 	_, err := service.Root().ActivateRuntime(context.Background(), automations.RuntimeActivationRequest{})
 	var typed *automations.Error
 	if !errors.As(err, &typed) || typed.Code != automations.ErrorCodeInvalid {
@@ -82,7 +82,7 @@ func TestRuntimeLifecycle_RejectsMissingIdentityWithTypedError(t *testing.T) {
 }
 
 func TestRuntimeLifecycle_RejectsBehavioralInputConflictsWithSameSnapshot(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil)
 	base := runtimeActivationRequestForTest("runtime-input-conflict", "same")
 	if _, err := service.ActivateRuntime(context.Background(), base); err != nil {
 		t.Fatalf("ActivateRuntime(base) error = %v", err)
@@ -106,7 +106,7 @@ func TestRuntimeLifecycle_RejectsBehavioralInputConflictsWithSameSnapshot(t *tes
 }
 
 func TestRuntimeLifecycle_TreatsEquivalentOpaqueEffectsAsIdempotent(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil)
 	base := runtimeActivationRequestForTest("runtime-opaque-effects", "same")
 	base.Inputs.Submitter = func(context.Context, work.WorkRequest) error { return nil }
 	if _, err := service.ActivateRuntime(context.Background(), base); err != nil {
@@ -125,7 +125,7 @@ func TestRuntimeLifecycle_TreatsEquivalentOpaqueEffectsAsIdempotent(t *testing.T
 }
 
 func TestRuntimeLifecycle_StartsAndStopsSchedulerOwnership(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil)
 	request := runtimeActivationRequestForTest("runtime-scheduler", "scheduler")
 	request.Inputs.StartSchedulers = true
 	request.Inputs.Submitter = func(context.Context, work.WorkRequest) error { return nil }
@@ -247,7 +247,7 @@ func runtimeInstanceForWatcherTest(
 	return &runtimeInstance{
 		runtimeID:   "runtime-watcher-diagnostic",
 		watcherRoot: "/factories/example/inputs",
-		owner:       New(logger, nil, nil, "", "", nil, nil, nil),
+		owner:       New(logger, nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil),
 		watcher:     runtimeLifecycleWatcher{watch: watch},
 		ctx:         ctx,
 		cancel:      cancel,
@@ -394,7 +394,7 @@ func TestRuntimeLifecycle_OpaqueIdentityUsesPresenceAndType(t *testing.T) {
 }
 
 func TestRuntimeLifecycle_CleansPendingAndMatchingRegistryEntries(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "", "", nil, nil, nil)
+	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil)
 	service.runtimeActivating["runtime-pending"] = struct{}{}
 	service.clearRuntimeActivation("runtime-pending")
 	if _, ok := service.runtimeActivating["runtime-pending"]; ok {
@@ -446,7 +446,7 @@ func TestRuntimeLifecycle_ClonesSnapshotConfigCollections(t *testing.T) {
 }
 
 func TestNewFilesystemWatcherUsesServiceOwnerAndHandlesNilOwner(t *testing.T) {
-	service := New(zap.NewNop(), nil, nil, "workflow", "", nil, nil, nil)
+	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "workflow", "", nil, nil, nil)
 	watcher := service.NewFilesystemWatcher(automations.FilesystemWatcherConfig{
 		Dir:            t.TempDir(),
 		Files:          watcherInputFilesystem{},
@@ -464,16 +464,10 @@ func TestNewFilesystemWatcherUsesServiceOwnerAndHandlesNilOwner(t *testing.T) {
 	}
 }
 
-func TestServiceDefaultEdgesRemainSafeForNilAndMissingCommandRunner(t *testing.T) {
+func TestNilServiceRootHasNoPublishedCapabilities(t *testing.T) {
 	var nilService *Service
 	if root := nilService.Root(); root.Operations != nil || root.Lifecycle != nil || root.Runtime != nil {
 		t.Fatalf("nil service Root() = %#v, want empty root", root)
-	}
-	if nilService.logger() == nil || nilService.commandRunner() == nil || nilService.supervisorClock() == nil {
-		t.Fatal("nil service default collaborators were not supplied")
-	}
-	if _, err := (unavailableCommandRunner{}).Run(context.Background(), platformprocess.CommandRequest{}); err == nil || err.Error() != "automation command runner is required" {
-		t.Fatalf("unavailable command runner error = %v", err)
 	}
 }
 
@@ -691,7 +685,7 @@ func TestGetCursorWithTwoRuntimesSharingPollerInstanceID(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	files := &cursorReadFaultFileSystem{faults: make(map[string]error)}
-	service := NewWithCursorFileSystem(zap.NewNop(), clockwork.NewFakeClock(), nil, "shared-workflow", "", nil, nil,
+	service := NewWithCursorFileSystem(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "shared-workflow", "", nil, nil,
 		factorydefinitioncomposition.WorkstationExecutionPolicy{}, files)
 	a := cursorRuntimeRequest(t, "shared-A", "shared-workflow", make(chan work.WorkRequest, 1))
 	b := cursorRuntimeRequest(t, "shared-B", "shared-workflow", make(chan work.WorkRequest, 1))
@@ -800,14 +794,14 @@ func seedLifecycleCursor(t *testing.T, service *Service, dir, id string) {
 func TestNewRootWithoutFactoryDirKeepsCursorInMemory(t *testing.T) {
 	t.Parallel()
 	files := &cursorReadFaultFileSystem{faults: map[string]error{".": errors.New("unexpected cursor filesystem use")}}
-	service := NewWithCursorFileSystem(zap.NewNop(), clockwork.NewFakeClock(), nil, "memory-workflow", "", nil, nil,
+	service := NewWithCursorFileSystem(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "memory-workflow", "", nil, nil,
 		factorydefinitioncomposition.WorkstationExecutionPolicy{}, files)
 	seedLifecycleCursor(t, service, t.TempDir(), "memory")
 	assertLifecycleCursor(t, context.Background(), service, "memory-workflow", "memory")
 	if files.reads != 0 {
 		t.Fatalf("blank-base cursor filesystem reads = %d, want memory only", files.reads)
 	}
-	second := NewWithCursorFileSystem(zap.NewNop(), clockwork.NewFakeClock(), nil, "memory-workflow", "", nil, nil,
+	second := NewWithCursorFileSystem(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "memory-workflow", "", nil, nil,
 		factorydefinitioncomposition.WorkstationExecutionPolicy{}, files)
 	instanceID := scriptpollers.SupervisionFor("memory-workflow", internalCanonicalScriptPollerWorkstation().Name).InstanceID
 	_, err := second.Root().GetCursor(context.Background(), automations.GetCursorRequest{InstanceID: instanceID})
