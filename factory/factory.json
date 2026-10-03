@@ -1185,6 +1185,11 @@
           "type": "PROCESSING"
         },
         {
+          "id": "awaiting-answer",
+          "name": "awaiting-answer",
+          "type": "PROCESSING"
+        },
+        {
           "id": "in-review",
           "name": "in-review",
           "type": "PROCESSING"
@@ -1219,6 +1224,11 @@
           "id": "init",
           "name": "init",
           "type": "INITIAL"
+        },
+        {
+          "id": "awaiting-answer",
+          "name": "awaiting-answer",
+          "type": "PROCESSING"
         },
         {
           "id": "to-complete",
@@ -1419,6 +1429,22 @@
       "command": "python",
       "id": "ci-waiter",
       "name": "ci-waiter",
+      "type": "SCRIPT_WORKER"
+    },
+    {
+      "args": [
+        "factory/scripts/mailbox-wait.py",
+        "{{ (index .Inputs 0).Name }}",
+        "{{ (index .Inputs 0).WorkTypeID }}",
+        "{{ printf \"%.512s\" (index (index .Inputs 0).Tags \"continue_feedback\") }}"
+      ],
+      "command": "python",
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "TEMPORARY (AM-T0 stopgap, removed by AM-T11): parks a lane on the operator mailbox without an executor-slot; see factory/scripts/mailbox-wait.py."
+      },
+      "id": "mailbox-waiter",
+      "name": "mailbox-waiter",
       "type": "SCRIPT_WORKER"
     },
     {
@@ -1786,9 +1812,13 @@
       "onContinue": [
         {
           "workType": "idea",
-          "state": "reporting-failed"
+          "state": "awaiting-answer"
         }
-      ]
+      ],
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "TEMPORARY (AM-T0 stopgap, removed by AM-T11): onContinue routes through idea:awaiting-answer (mailbox-wait-idea); restore onContinue to idea:reporting-failed when removing."
+      }
     },
     {
       "id": "consume",
@@ -1923,6 +1953,62 @@
       "worker": "ci-waiter"
     },
     {
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "TEMPORARY (AM-T0 stopgap, removed by AM-T11): no executor-slot park for a task whose process visit asked the operator mailbox; ordinary CONTINUE passes straight back to task:init."
+      },
+      "id": "mailbox-wait",
+      "name": "mailbox-wait",
+      "inputs": [
+        {
+          "state": "awaiting-answer",
+          "workType": "task"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "type": "SCRIPT_RUN",
+      "worker": "mailbox-waiter"
+    },
+    {
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "TEMPORARY (AM-T0 stopgap, removed by AM-T11): no executor-slot park for an idea whose plan visit asked the operator mailbox; an unmarked CONTINUE keeps the legacy route to idea:reporting-failed."
+      },
+      "id": "mailbox-wait-idea",
+      "name": "mailbox-wait-idea",
+      "inputs": [
+        {
+          "state": "awaiting-answer",
+          "workType": "idea"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "reporting-failed",
+          "workType": "idea"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "init",
+          "workType": "idea"
+        }
+      ],
+      "type": "SCRIPT_RUN",
+      "worker": "mailbox-waiter"
+    },
+    {
       "behavior": "REPEATER",
       "id": "process",
       "inputs": [
@@ -1934,7 +2020,7 @@
       "name": "process",
       "onContinue": [
         {
-          "state": "init",
+          "state": "awaiting-answer",
           "workType": "task"
         }
       ],
@@ -1969,7 +2055,11 @@
       "type": "AGENT_RUN",
       "worker": "processor",
       "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}",
-      "outcomeFormat": "decision-envelope"
+      "outcomeFormat": "decision-envelope",
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "TEMPORARY (AM-T0 stopgap, removed by AM-T11): onContinue routes through task:awaiting-answer (mailbox-wait); restore onContinue to task:init when removing."
+      }
     },
     {
       "behavior": "REPEATER",
