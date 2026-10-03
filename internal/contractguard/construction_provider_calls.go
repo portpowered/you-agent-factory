@@ -65,23 +65,27 @@ func constructionRecursiveProvider(source *constructionSource, caller Constructi
 
 func constructionProviderCallees(decl constructionDeclaration) []ConstructionSymbol {
 	var callees []ConstructionSymbol
-	pending := []ast.Node{decl.function.Body}
+	type bodySource struct {
+		body   ast.Node
+		source *constructionSource
+	}
+	pending := []bodySource{{decl.function.Body, decl.source}}
 	visited := make(map[*ast.FuncLit]bool)
 	for len(pending) > 0 {
 		body := pending[len(pending)-1]
 		pending = pending[:len(pending)-1]
-		ast.Inspect(body, func(node ast.Node) bool {
+		ast.Inspect(body.body, func(node ast.Node) bool {
 			if _, closure := node.(*ast.FuncLit); closure {
 				return false
 			}
 			if call, ok := node.(*ast.CallExpr); ok {
-				if symbol, resolved := resolveConstructionCall(call.Fun, decl.source); resolved {
+				if symbol, resolved := resolveConstructionCall(call.Fun, body.source); resolved {
 					callees = append(callees, symbol)
 				}
-				closure := constructionProviderClosure(call.Fun, decl.source, map[*ast.Object]bool{})
+				closure, closureSource := constructionProviderClosure(call.Fun, body.source, map[*ast.Object]bool{})
 				if closure != nil && !visited[closure] {
 					visited[closure] = true
-					pending = append(pending, closure.Body)
+					pending = append(pending, bodySource{closure.Body, closureSource})
 				}
 			}
 			return true
@@ -93,17 +97,18 @@ func constructionProviderCallees(decl constructionDeclaration) []ConstructionSym
 // Calling an immutable local function value establishes a closure edge. Merely
 // passing or storing the value does not; mutable and opaque values need further
 // classification rather than selecting their initializer as current behavior.
-func constructionProviderClosure(expr ast.Expr, source *constructionSource, visited map[*ast.Object]bool) *ast.FuncLit {
+func constructionProviderClosure(expr ast.Expr, source *constructionSource, visited map[*ast.Object]bool) (*ast.FuncLit, *constructionSource) {
 	switch value := expr.(type) {
 	case *ast.FuncLit:
-		return value
+		return value, source
 	case *ast.ParenExpr:
 		return constructionProviderClosure(value.X, source, visited)
 	case *ast.Ident:
-		if value.Obj != nil && !visited[value.Obj] && !source.mutations[value.Obj] {
-			visited[value.Obj] = true
-			return constructionProviderClosure(constructionValueInitializer(value.Obj), source, visited)
+		object, owner, safe := constructionProviderValue(value, source)
+		if safe && !visited[object] {
+			visited[object] = true
+			return constructionProviderClosure(constructionValueInitializer(object), owner, visited)
 		}
 	}
-	return nil
+	return nil, nil
 }

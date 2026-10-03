@@ -12,14 +12,15 @@ import (
 )
 
 type constructionSource struct {
-	path         string
-	importPath   string
-	file         *ast.File
-	imports      map[string]string
-	dotImports   []string
-	set          *token.FileSet
-	declarations map[ConstructionSymbol]constructionDeclaration
-	mutations    map[*ast.Object]bool
+	path           string
+	importPath     string
+	file           *ast.File
+	imports        map[string]string
+	dotImports     []string
+	set            *token.FileSet
+	declarations   map[ConstructionSymbol]constructionDeclaration
+	mutations      map[*ast.Object]bool
+	packageSources []*constructionSource
 }
 
 type constructionDeclaration struct {
@@ -85,7 +86,12 @@ func loadConstructionIndex(root string) (constructionIndex, error) {
 		index.sources = append(index.sources, source)
 		return index.addDeclarations(source)
 	})
+	packages := make(map[string][]*constructionSource)
 	for _, source := range index.sources {
+		packages[source.importPath] = append(packages[source.importPath], source)
+	}
+	for _, source := range index.sources {
+		source.packageSources = packages[source.importPath]
 		source.declarations = index.declarations
 		source.mutations = constructionValueMutations(source.file)
 	}
