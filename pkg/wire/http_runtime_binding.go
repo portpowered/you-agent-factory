@@ -283,13 +283,15 @@ func newHTTPWorkerSessionsHandler(
 func workerSessionObservationSources(
 	ctx context.Context,
 	root interface {
-		ListFactorySessions(context.Context) ([]factorysessions.ReadProjection, error)
+		ListLiveSessionIDs() []string
 	},
 	current workersessions.Service,
 ) ([]workersessions.Service, error) {
 	sources := make([]workersessions.Service, 0, 1)
-	projections, err := root.ListFactorySessions(ctx)
-	if err != nil {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	provider, ok := any(root).(interface {
@@ -301,12 +303,13 @@ func workerSessionObservationSources(
 		}
 		return sources, nil
 	}
-	ids := make([]string, 0, len(projections))
-	for _, projection := range projections {
-		id := strings.TrimSpace(projection.Context.FactorySessionID)
-		if id == "" && projection.Context.Session != nil {
-			id = strings.TrimSpace(projection.Context.Session.ID)
-		}
+	// Discovery needs only live identities, not session or Work projections.
+	// Building those projections here makes every fleet read wait on unrelated
+	// runtime snapshots before it can reach the Worker Session registries.
+	liveIDs := root.ListLiveSessionIDs()
+	ids := make([]string, 0, len(liveIDs))
+	for _, liveID := range liveIDs {
+		id := strings.TrimSpace(liveID)
 		if id == "" || containsString(ids, id) {
 			continue
 		}
@@ -314,11 +317,17 @@ func workerSessionObservationSources(
 	}
 	sort.Strings(ids)
 	for _, id := range ids {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if observation := provider.WorkerSessionsObservationForSession(id); observation != nil {
 			sources = append(sources, observation)
 		}
 	}
-	// Runtime-owned projections are authoritative for Factory Worker Sessions.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	// Runtime-owned registries are authoritative for Factory Worker Sessions.
 	// Keep the process-default registry last so duplicate restored identities do
 	// not hide the successor runtime's canonical session attribution.
 	if current != nil {
