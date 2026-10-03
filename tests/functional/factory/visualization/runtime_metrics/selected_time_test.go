@@ -173,6 +173,7 @@ func assertSelectedTimeWork(t *testing.T, fixture selectedTimeFixture) {
 		t.Fatalf("completed Work = %d, want 1: %#v", got, listed.Results)
 	}
 	events := support.GetFactoryEventsForSessionAt(t, fixture.url, fixture.session)
+	assertSelectedEventOrder(t, events)
 	for _, event := range events {
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
@@ -207,4 +208,19 @@ func assertSelectedMemorySamples(t *testing.T, root string, want int) {
 	if count != want {
 		t.Fatalf("runtime.memory.heap_alloc samples = %d, want %d", count, want)
 	}
+}
+
+func assertSelectedEventOrder(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	expected := []factoryapi.FactoryEventType{factoryapi.FactoryEventTypeWorkRequest, factoryapi.FactoryEventTypeDispatchRequest, factoryapi.FactoryEventTypeDispatchResponse}
+	next := 0
+	for _, event := range events {
+		if event.Type == expected[next] {
+			next++
+		}
+		if next == len(expected) {
+			return
+		}
+	}
+	t.Fatalf("Factory Event history lacks ordered admission/dispatch/completion: next %s", expected[next])
 }
