@@ -62,10 +62,19 @@ from traced required storage are service getters. Calling them reports
 imported type aliases, method expressions, immutable method values, deferred
 calls and closures. Same-package helper return summaries preserve this origin;
 ambiguous summaries or mutated fields report `unresolved-service-getter-locator`.
+Multiple explicit returns are checked by collaborator result position, so an
+error/domain result cannot confer lookup identity on an optional peer result.
+Named declarations with explicit required-field returns retain proved identity.
+Writes of required storage to a named result followed by a naked return or an
+explicit return of that result retain unresolved lookup debt; grouped results,
+parallel assignments and closure writes use exact result objects. Tuple-producing
+helper returns with required arguments also retain debt until per-result
+summaries exist. This does not prove control-flow values of named results or
+provenance through arbitrary aliases of named result variables.
 Escaped or unused getter values report `unresolved-service-getter-reference`.
 Parameterized views, optional fields, domain/state/resource results and returns
 inside nested closures do not become peer getters. This does not yet establish
-interface-dispatched getters, named/multiple result lookup, helper-returned
+interface-dispatched getters, complete named/tuple result provenance, helper-returned
 receivers or arbitrary implementation selection; those limits still require
 classification/debt before whole-set readiness.
 
