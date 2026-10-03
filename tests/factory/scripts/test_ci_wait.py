@@ -419,7 +419,7 @@ time.sleep = lambda _seconds: None
                 self.assertEqual(intent.identity.number, expected_number)
                 self.assertEqual(intent.identity.repository, expected_repository)
 
-    def test_process_output_classifier_rejects_ambiguous_malformed_and_oversized(self):
+    def test_process_output_classifier_rejects_ambiguous_and_malformed(self):
         cases = (
             "PR #42 and PR #43",
             "PR #42 and https://github.com/example/repo/pull/43",
@@ -428,7 +428,6 @@ time.sleep = lambda _seconds: None
             "https://github.com/example/repo/pull/not-a-number",
             "ftp://github.com/example/repo/pull/42",
             "github.com/example/repo/pull/42",
-            "PR #42 " + "x" * self.module.MAX_PROCESS_OUTPUT_BYTES,
         )
         for output in cases:
             with self.subTest(output=output[:80]):
@@ -499,13 +498,66 @@ time.sleep = lambda _seconds: None
                 self.assertEqual(calls[0][:2], ["pr", "list"])
                 self.assertFalse(any(call[:2] == ["repo", "view"] for call in calls))
 
+    def test_classifier_reads_tail_of_oversized_output(self):
+        cap = self.module.MAX_PROCESS_OUTPUT_BYTES
+        filler = "long implementation summary \u00e9\n" * (cap // 10)
+        url = f"{TEST_REPOSITORY_URL}/pull/321"
+        intent = self.module.classify_process_output(f"{filler}\nReview target: {url}\n")
+        self.assertEqual(intent.status, self.module.PRIntentStatus.IDENTIFIED)
+        self.assertEqual(intent.identity.number, 321)
+
+    def test_classifier_ignores_head_pr_and_absent_tail_of_oversized_output(self):
+        cap = self.module.MAX_PROCESS_OUTPUT_BYTES
+        intent = self.module.classify_process_output("PR #42 " + "x " * cap)
+        self.assertEqual(intent.status, self.module.PRIntentStatus.ABSENT)
+        intent = self.module.classify_process_output(1)
+        self.assertEqual(intent.status, self.module.PRIntentStatus.INVALID)
+
+    def test_actual_entrypoint_oversized_output_with_tail_pr_url_resolves_pr(self):
+        pr_number = 244
+        view = view_payload(number=pr_number)
+        fixture = actual_fixture(
+            pr_number,
+            [observation(view, [checks_row()]), observation(view, [checks_row()])],
+            direct_view=pr_identity_payload(pr_number),
+            repository=repository_payload(),
+        )
+        process_output = (
+            "summary line\n" * 2000
+            + f"Review target: {TEST_REPOSITORY_URL}/pull/{pr_number}\n"
+        )
+        self.assertGreater(len(process_output), self.module.MAX_PROCESS_OUTPUT_BYTES)
+        result, calls = self.invoke_actual_script_with_fake_gh(
+            fixture, process_output=process_output
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)["pr"], pr_number)
+        self.assertFalse(any(call[:2] == ["pr", "list"] for call in calls))
+
+    def test_actual_entrypoint_oversized_output_without_tail_pr_uses_branch_lookup(
+        self,
+    ):
+        pr_number = 245
+        view = view_payload(number=pr_number)
+        fixture = actual_fixture(
+            pr_number,
+            [observation(view, [checks_row()]), observation(view, [checks_row()])],
+        )
+        process_output = "PR #999 token=raw-process-output\n" + "summary line\n" * 2000
+        result, calls = self.invoke_actual_script_with_fake_gh(
+            fixture, process_output=process_output
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)["pr"], pr_number)
+        self.assertEqual(calls[0][:2], ["pr", "list"])
+        self.assertNotIn("raw-process-output", result.stderr)
+
     def test_actual_entrypoint_rejects_unsafe_identity_without_fallback_or_leaks(self):
         cases = (
             "PR #243 and PR #244 token=raw-process-output",
             "PR #243 and https://github.com/example/repo/pull/244",
             "PR #not-a-number token=raw-process-output",
             "ftp://github.com/example/repo/pull/243 token=raw-process-output",
-            "PR #243 " + "x" * self.module.MAX_PROCESS_OUTPUT_BYTES,
         )
         for process_output in cases:
             with self.subTest(process_output=process_output[:80]):
