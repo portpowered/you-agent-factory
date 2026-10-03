@@ -22,6 +22,10 @@ func TestConstructionRequiredGuardProvenance(t *testing.T) {
 		{"optional domain", `var payload *int; if payload == nil {}; return &Service{port: renamed}, nil`, `if s.payload == nil {}`, 0},
 		{"optional operation input", `return &Service{port: renamed}, nil`, `var err error; if err != nil {}; var resource *int; if resource == nil {}`, 0},
 		{"direct required use", `return &Service{port: renamed}, nil`, `s.port.Execute()`, 0},
+		{"asserted field", `return &Service{port: renamed}, nil`, `if s.port.(Port) == nil {}`, 1},
+		{"asserted alias", `return &Service{port: renamed}, nil`, `alias, ok := s.port.(Port); _ = ok; if alias == nil {}`, 1},
+		{"assertion status use", `return &Service{port: renamed}, nil`, `_, ok := s.port.(Port); _ = ok`, 0},
+		{"parallel assignment", `alias, payload := renamed, (*int)(nil); if payload == nil {}; return &Service{port: alias}, nil`, `if s.port == nil {}`, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

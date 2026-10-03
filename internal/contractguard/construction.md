@@ -10,6 +10,15 @@ Required-dependency nil comparisons are reported in registered constructors
 and methods whose fields are initialized from those parameters through keyed
 result literals. Local declaration aliases and closures retain that provenance;
 shadowed variables and optional domain fields do not acquire requiredness.
+Same-package authored helper calls propagate required arguments to helper
+parameters until the finite object graph reaches a fixed point, so guards in
+called helper bodies are observed at their own qualified operation. Single-result
+helper returns preserve provenance through aliases, chains, and type assertions.
+Nested closure returns do not become returns of their enclosing helper. Mixed
+origins, recursion in return summaries, named returns, and unavailable function
+values produce explicit debt when their result guards a required dependency.
+Parallel assignments retain the corresponding value's provenance; a comma-ok
+assertion's value retains provenance separately from its boolean status.
 Reassignment of a traced parameter, alias, or method field makes a guard an
 `unresolved-required-dependency-guard` observation. This debt blocks an enforced
 set, just like a proved guard, and remains nonblocking in report mode.
@@ -17,8 +26,8 @@ set, just like a proved guard, and remains nonblocking in report mode.
 Direct calls resolve dot-imported authored functions and instantiated generic
 functions while preserving local shadowing. Constructor values passed or stored
 for later execution still produce unresolved-reference debt. This bounded scan
-does not yet establish helper summaries, imported type aliases, method-valued
-constructors, field storage through assignment, type-assertion fallbacks,
+does not yet establish imported type aliases, method-valued constructors,
+field storage through assignment, failed-assertion boolean guards,
 dependency bags, service locators, or complete effect ancestry. Those remaining
 story-002 cases must be proved before a capability set can claim complete
 enforcement coverage.
@@ -54,11 +63,8 @@ metadata, and build output are excluded. Compiled helpers such as
 platform variants are indexed; multiple declarations of a registered identity
 are classification failures, rather than an arbitrary target selection.
 
-This first scan resolves direct local functions and named import selectors,
-retains enclosing operations across closures, and distinguishes lexically
-shadowed imports. Registered function references report
-`unresolved-construction-reference` debt. It does not yet prove dependency
-storage, helper summaries, dot imports, imported type aliases, generic wrappers,
-method-call receivers, guards, or effect ancestry. A clean report for the initial
-set is not whole-repository enforcement or runtime behavior evidence. Those
-limits must be closed before enabling a capability set.
+A clean report for the initial set is not whole-repository enforcement or
+runtime behavior evidence. Imported aliases, method receivers, assignment
+storage, boolean assertion guards, topology, and effect ancestry still require
+fixtures and analysis before enabling a capability set. Cross-package helper
+return equivalence is outside this bounded same-package summary.
