@@ -465,12 +465,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/recordings/internal/services/artifacts_export/root_integration_test.go#TestRecordingsRootPortableExportRoundTripOmitsPrivateStorage",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
       "target": "pkg/services/recordings/internal/services/artifacts_export/wire/wire_test.go#TestNewPublicationPropagatesInjectedOperationErrors",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
@@ -1557,12 +1551,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/internal/services/artifacts_export/root_integration_test.go#TestRecordingsRootPortableExportRoundTripOmitsPrivateStorage",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/services/recordings/internal/services/canonical_ledger/dispatch_worker_session_association_replay_test.go#assertReplayedDispatchWorkerSessionAssociation",
       "owner": "backend-maintainers",
       "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
@@ -2472,12 +2460,6 @@
       "target": "pkg/services/recordings/internal/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/recordings/internal/services/artifacts_export/root_integration_test.go#TestRecordingsRootPortableExportRoundTripOmitsPrivateStorage",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
