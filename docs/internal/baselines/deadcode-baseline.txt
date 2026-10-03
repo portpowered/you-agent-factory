@@ -1635,8 +1635,6 @@ pkg/services/models/transports/mcp/schemas.go: unreachable func: stringProperty
 pkg/services/models/transports/mcp/schemas.go: unreachable func: toolErrorEnvelopeSchema
 pkg/services/models/transports/mcp/schemas.go: unreachable func: toolResponseSchema
 pkg/services/models/transports/mcp/tool.go: unreachable func: ToolDefinition.MarshalJSON
-pkg/services/models/wire/wire.go: unreachable func: NewService
-pkg/services/models/wire/wire.go: unreachable func: NewServiceWithBackendArtifactResolver
 pkg/services/operator_settings/acp_integrations.go: unreachable func: ConfigDocumentService.AddACPIntegration
 pkg/services/operator_settings/acp_integrations.go: unreachable func: ConfigDocumentService.ConfigureACPIntegrationAdd
 pkg/services/operator_settings/acp_integrations.go: unreachable func: ConfigDocumentService.ConfigureACPIntegrationDelete

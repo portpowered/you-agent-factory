@@ -367,8 +367,8 @@ func TestNewServiceWithInvocationProtocolConstructsRoot(t *testing.T) {
 func TestPinnedHostProtocolNegotiatorWrapperRejectsNilDialer(t *testing.T) {
 	t.Parallel()
 
-	if negotiator := NewPinnedGRPCHostProtocolNegotiator(nil); negotiator != nil {
-		t.Fatalf("NewPinnedGRPCHostProtocolNegotiator(nil) = %T, want nil", negotiator)
+	if negotiator := NewPinnedGRPCHostProtocolNegotiator(nil, filepath.EvalSymlinks); negotiator != nil {
+		t.Fatalf("NewPinnedGRPCHostProtocolNegotiator(nil, filepath.EvalSymlinks) = %T, want nil", negotiator)
 	}
 }
 
@@ -438,14 +438,10 @@ func TestPinnedHostProtocolWrapperForwardsSelectedSymlinkResolver(t *testing.T) 
 				}
 				return path, nil
 			})
-			resolvers := []modelseffects.HostResolveSymlinks{resolver, func(string) (string, error) {
-				t.Fatal("negotiation used the second symlink override")
-				return "", nil
-			}}
-			if mode == "absent" {
-				resolvers = nil
-			} else if mode == "nil-first" {
-				resolvers[0] = nil
+			// The composition caller supplies the characterized default explicitly
+			// when there is no selected override. The leaf has one required effect.
+			if mode == "absent" || mode == "nil-first" {
+				resolver = filepath.EvalSymlinks
 			}
 			connection := &symlinkNegotiationConnection{t: t}
 			ctx := t.Context()
@@ -455,7 +451,7 @@ func TestPinnedHostProtocolWrapperForwardsSelectedSymlinkResolver(t *testing.T) 
 				}
 				return connection, nil
 			})
-			result, err := NewPinnedGRPCHostProtocolNegotiator(dialer, resolvers...).Negotiate(ctx, "selected:50051", modelseffects.HostProtocolNegotiationRequest{Configuration: configuration})
+			result, err := NewPinnedGRPCHostProtocolNegotiator(dialer, resolver).Negotiate(ctx, "selected:50051", modelseffects.HostProtocolNegotiationRequest{Configuration: configuration})
 			assertSymlinkNegotiationResult(t, mode, configuration, result, err, connection, calls)
 		})
 	}
@@ -646,7 +642,14 @@ func TestModelsConstructionRejectsNilAndTypedNilRequiredEffects(t *testing.T) {
 				t.Parallel()
 				edges := validConstructionEdges()
 				test.remove(&edges, typed)
-				service, err := edges.newServiceWithInvocationProtocol(nil)
+				var service any
+				var err error
+				if test.name == "model host clock" {
+					service, err = NewRuntimeHost(nil, nil, nil, nil, edges.processLauncher, edges.hostHTTP,
+						edges.hostClock, nil, nil, edges.assetPlatform, nil, nil, nil, nil, 0, 0)
+				} else {
+					service, err = edges.newServiceWithInvocationProtocol(nil)
+				}
 				want := "construct Models: " + test.name + " is required"
 				if service != nil || err == nil || err.Error() != want {
 					t.Fatalf("construction = (%T, %v), want nil service and %q", service, err, want)
@@ -661,6 +664,34 @@ func TestModelsConstructionAllowsAbsentProtocolOverride(t *testing.T) {
 	service, err := validConstructionEdges().newServiceWithInvocationProtocol(nil)
 	if err != nil || service == nil {
 		t.Fatalf("construction without optional protocol = (%T, %v), want inert service", service, err)
+	}
+}
+
+func TestCatalogConstructionRejectsMissingSelectedBoundaryEffects(t *testing.T) {
+	t.Parallel()
+	scopes, err := NewRuntimeScopes(platformrandom.CryptoSource{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	readiness := CatalogReadinessQuery(func(context.Context, models.RuntimeScopeRef, models.RuntimeScopeConfig, models.Detail) (models.Runtime, error) {
+		return models.Runtime{}, nil
+	})
+	for _, test := range []struct {
+		name      string
+		scopes    RuntimeScopes
+		readiness CatalogReadinessQuery
+		want      string
+	}{
+		{"scopes", nil, readiness, "Models Catalog runtime scopes service is required"},
+		{"readiness", scopes, nil, "Models Catalog readiness query is required"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			catalog, err := NewCatalog(test.scopes, test.readiness)
+			if catalog != nil || err == nil || err.Error() != test.want {
+				t.Fatalf("construction = (%T, %v), want nil and %q", catalog, err, test.want)
+			}
+		})
 	}
 }
 

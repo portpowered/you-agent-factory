@@ -20,7 +20,6 @@ import (
 	platformlocking "github.com/portpowered/infinite-you/pkg/platform/locking"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
@@ -768,11 +767,13 @@ func newGenericService(
 	if err != nil {
 		t.Fatalf("construct asset coordination: %v", err)
 	}
-	return newGenericServiceWithOptions(t, scopes, client, assets.ConstructionOptions{
-		ResolveEnvironment: environment,
-		ResolveRevision:    resolver,
-		Coordination:       coordination,
-	})
+	if environment == nil {
+		environment = func(string) string { return "" }
+	}
+	if resolver == nil {
+		resolver = func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }
+	}
+	return newGenericServiceWithEffects(t, scopes, client, environment, resolver, coordination)
 }
 
 func genericManifestClient(

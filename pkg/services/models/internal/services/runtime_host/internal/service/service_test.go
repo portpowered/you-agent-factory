@@ -395,7 +395,7 @@ func mustAssetsService(t *testing.T, scopes runtimescopes.Service) scopedassets.
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		scopedassets.ConstructionOptions{Coordination: coordination},
+		func(string) string { return "" }, func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, coordination,
 	)
 	if err != nil {
 		t.Fatalf("construct assets: %v", err)

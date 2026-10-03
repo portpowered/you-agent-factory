@@ -3,7 +3,6 @@ package wire
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -55,17 +54,11 @@ func preferPublishedLinuxCUDA(published, gallery modelswire.BackendArtifactResol
 // is consumed by the managed backend launcher without copying a mutable image
 // into the archive cache.
 func newLocalAIGalleryInstaller(runner platformprocess.CommandRunner, client localAIHTTPDoer) (modelswire.GalleryBackendInstaller, error) {
-	if runner == nil {
-		return nil, fmt.Errorf("LocalAI gallery command runner is required")
-	}
 	cache, err := os.UserCacheDir()
 	if err != nil {
 		return nil, fmt.Errorf("resolve LocalAI backend cache: %w", err)
 	}
 	root := filepath.Join(cache, "you", "localai-backends")
-	if client == nil {
-		client = http.DefaultClient
-	}
 	resolvedCommand := ""
 	return localAIGalleryInstallerAt(runner, root, func(ctx context.Context) (string, error) {
 		if resolvedCommand != "" {

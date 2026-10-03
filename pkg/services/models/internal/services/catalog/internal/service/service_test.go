@@ -21,7 +21,7 @@ func TestListCatalogClassifiesScopeBeforeProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Runtime Scopes: %v", err)
 	}
-	service, err := catalogwire.NewService(scopes)
+	service, err := catalogwire.NewService(scopes, detachedCatalogReadiness)
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestListCatalogRejectsUnavailableScopedConfiguration(t *testing.T) {
 		t.Fatalf("open unavailable scope: %v", err)
 	}
 	scope := publicScope(t, privateRef)
-	service, err := catalogwire.NewService(scopes)
+	service, err := catalogwire.NewService(scopes, detachedCatalogReadiness)
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestGetCatalogModelReturnsStableDetachedDetail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open scope: %v", err)
 	}
-	service, err := catalogwire.NewService(scopes)
+	service, err := catalogwire.NewService(scopes, detachedCatalogReadiness)
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
@@ -442,7 +442,7 @@ func TestGetCatalogModelClassifiesLookupAndOperationFailures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open scope: %v", err)
 	}
-	service, err := catalogwire.NewService(scopes)
+	service, err := catalogwire.NewService(scopes, detachedCatalogReadiness)
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
@@ -470,15 +470,6 @@ func TestGetCatalogModelClassifiesLookupAndOperationFailures(t *testing.T) {
 				t.Fatalf("GetCatalogModel error = %v, want %v", err, test.want)
 			}
 		})
-	}
-}
-
-func TestConstructionRejectsMissingRuntimeScopes(t *testing.T) {
-	t.Parallel()
-
-	service, err := catalogwire.NewService(nil)
-	if err == nil || service != nil {
-		t.Fatalf("NewService(nil) = (%#v, %v), want nil service and error", service, err)
 	}
 }
 
@@ -820,7 +811,7 @@ func newRuntimeScopes(t *testing.T, issuer string) runtimescopes.Service {
 
 func newCatalogService(t *testing.T, scopes runtimescopes.Service) catalog.Service {
 	t.Helper()
-	service, err := catalogwire.NewService(scopes)
+	service, err := catalogwire.NewService(scopes, detachedCatalogReadiness)
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
@@ -932,4 +923,11 @@ func publicScope(t *testing.T, ref runtimescopes.Reference) models.RuntimeScopeR
 		t.Fatalf("parse public scope: %v", err)
 	}
 	return scope
+}
+
+func detachedCatalogReadiness(ctx context.Context, _ models.RuntimeScopeRef, _ models.RuntimeScopeConfig, detail models.Detail) (models.Runtime, error) {
+	if err := ctx.Err(); err != nil {
+		return models.Runtime{}, err
+	}
+	return detail.ManagedRuntime.Clone(), nil
 }
