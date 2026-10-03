@@ -748,8 +748,13 @@ func newGenericService(
 	scopes runtimescopes.Service,
 	client modelseffects.AssetHTTPDoer,
 	environment modelseffects.AssetResolveEnvironment,
+	resolvers ...func(context.Context, string) (string, error),
 ) *service {
 	t.Helper()
+	var resolver func(context.Context, string) (string, error)
+	if len(resolvers) > 0 {
+		resolver = resolvers[0]
+	}
 	coordination, err := platformlocking.New(platformlocking.LocalFileSystem{})
 	if err != nil {
 		t.Fatalf("construct asset coordination: %v", err)
@@ -771,6 +776,7 @@ func newGenericService(
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
 		assets.ConstructionOptions{
 			ResolveEnvironment: environment,
+			ResolveRevision:    resolver,
 			Coordination:       coordination,
 		},
 	)
