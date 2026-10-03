@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -508,5 +509,57 @@ func TestPhysicalHandleSelectedControlsAndStopAreIsolated(t *testing.T) {
 				t.Fatal("peer shutdown repeated selected cleanup")
 			}
 		})
+	}
+}
+
+func TestPhysicalForeignLiveHandleCannotControlEqualIDRun(t *testing.T) {
+	t.Parallel()
+	for _, direction := range []string{"A_receives_B", "B_receives_A"} {
+		for _, operation := range []string{"H04_Pause", "H05_Resume", "H06_Stop"} {
+			t.Run(direction+"/"+operation, func(t *testing.T) {
+				t.Parallel()
+				a := startPhysicalHandle(t, newTestHost(t), "equal-runtime-ID")
+				b := startPhysicalHandle(t, newTestHost(t), "equal-runtime-ID")
+				receiver, foreign := a, b
+				if direction == "B_receives_A" {
+					receiver, foreign = b, a
+				}
+				a.assertLive(t, 0, 0, interfaces.FactoryStateRunning)
+				b.assertLive(t, 0, 0, interfaces.FactoryStateRunning)
+				var err error
+				switch operation {
+				case "H04_Pause":
+					var result factory.PauseResult
+					result, err = receiver.host.Pause(context.Background(), foreign.handle)
+					if !reflect.DeepEqual(result, factory.PauseResult{}) {
+						t.Fatalf("foreign Pause result = %#v, want zero result", result)
+					}
+				case "H05_Resume":
+					var result factory.ResumeResult
+					result, err = receiver.host.Resume(context.Background(), foreign.handle)
+					if !reflect.DeepEqual(result, factory.ResumeResult{}) {
+						t.Fatalf("foreign Resume result = %#v, want zero result", result)
+					}
+				case "H06_Stop":
+					err = receiver.host.Stop(foreign.handle)
+				}
+				if !errors.Is(err, factory.ErrNotRunning) {
+					t.Fatalf("foreign %s error = %v, want ErrNotRunning", operation, err)
+				}
+				a.assertLive(t, 0, 0, interfaces.FactoryStateRunning)
+				b.assertLive(t, 0, 0, interfaces.FactoryStateRunning)
+				a.assertAcceptedControls(t)
+				b.assertLive(t, 0, 0, interfaces.FactoryStateRunning)
+				b.assertAcceptedControls(t)
+				a.assertLive(t, 1, 1, interfaces.FactoryStateRunning)
+				a.stopAndJoin(t, func() {
+					b.assertLive(t, 1, 1, interfaces.FactoryStateRunning)
+				})
+				b.stopAndJoin(t, nil)
+				if a.engine.exits.Load() != 1 || a.recording.finalizations.Load() != 1 {
+					t.Fatal("host B shutdown repeated host A cleanup")
+				}
+			})
+		}
 	}
 }
