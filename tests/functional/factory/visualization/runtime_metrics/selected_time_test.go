@@ -28,6 +28,7 @@ func TestSelectedProcessTimeControlsRuntimeFacts(t *testing.T) {
 	runner := &selectedTimeRunner{started: make(chan struct{}), delegate: support.NewGatedSuccessCommandRunner("selected time COMPLETE", release)}
 	fixture := startSelectedTimeRun(t, facts, nil, runner)
 	awaitSelectedTimeSignal(t, runner.started)
+	assertSelectedRuntimeEventTime(t, fixture, factoryapi.FactoryEventTypeWorkRequest, base)
 	assertSelectedRuntimeEventTime(t, fixture, factoryapi.FactoryEventTypeDispatchRequest, base)
 	facts.clock.SetTick(1)
 	close(release)
@@ -40,9 +41,9 @@ func TestSelectedProcessTimeControlsRuntimeFacts(t *testing.T) {
 func TestSelectedSchedulerControlsRuntimeMemorySamples(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC)
-	facts := &selectedTimeSource{clock: platformclock.NewDeterministic(base, time.Hour)}
+	facts := &selectedTimeNowOnlySource{clock: platformclock.NewDeterministic(base, time.Hour)}
 	scheduler := &selectedTimeScheduler{
-		Deterministic: platformclock.NewDeterministic(base.Add(24*time.Hour), time.Second),
+		Deterministic: platformclock.NewDeterministic(base.Add(24*time.Hour), time.Millisecond),
 		registered:    make(chan struct{}, 16),
 	}
 	release := make(chan struct{})
@@ -54,15 +55,24 @@ func TestSelectedSchedulerControlsRuntimeMemorySamples(t *testing.T) {
 	// Advancing facts does not progress B's timer; the registered timer has not fired.
 	facts.clock.SetTick(1)
 	assertSelectedMemorySamples(t, fixture.metrics, 1)
+	// Before the registered 5ms poll deadline, no new poll is registered.
+	scheduler.SetTick(4)
+	select {
+	case <-scheduler.registered:
+		t.Fatal("metrics poll fired before its logical deadline")
+	default:
+	}
+	assertSelectedMemorySamples(t, fixture.metrics, 1)
 	// A completed poll before the 10s memory deadline still has one sample.
-	scheduler.SetTick(9)
+	scheduler.SetTick(9000)
 	awaitSelectedTimeSignal(t, scheduler.registered)
 	assertSelectedMemorySamples(t, fixture.metrics, 1)
-	scheduler.SetTick(10)
+	scheduler.SetTick(10000)
 	awaitSelectedTimeSignal(t, scheduler.registered)
 	assertSelectedMemorySamples(t, fixture.metrics, 2)
 	close(release)
 	support.WaitForSessionTerminalStatus(t, fixture.url, fixture.session, 30*time.Second)
+	assertSelectedRuntimeEventTime(t, fixture, factoryapi.FactoryEventTypeWorkRequest, base)
 	assertSelectedRuntimeEventTime(t, fixture, factoryapi.FactoryEventTypeDispatchRequest, base)
 	assertSelectedRuntimeEventTime(t, fixture, factoryapi.FactoryEventTypeDispatchResponse, base.Add(time.Hour))
 	assertSelectedTimeWork(t, fixture)
@@ -80,6 +90,10 @@ func (source *selectedTimeSource) NewTimer(d time.Duration) platformclock.Timer 
 func (source *selectedTimeSource) After(d time.Duration) <-chan time.Time {
 	return source.clock.After(d)
 }
+
+type selectedTimeNowOnlySource struct{ clock *platformclock.Deterministic }
+
+func (source *selectedTimeNowOnlySource) Now() time.Time { return source.clock.Now() }
 
 type selectedTimeScheduler struct {
 	*platformclock.Deterministic
@@ -164,7 +178,7 @@ func assertSelectedTimeWork(t *testing.T, fixture selectedTimeFixture) {
 			continue
 		}
 		payload, err := event.Payload.AsDispatchResponseEventPayload()
-		if err != nil || payload.Outcome != factoryapi.WorkOutcomeAccepted {
+		if err != nil || payload.Outcome != factoryapi.WorkOutcomeAccepted || payload.Output == nil || !strings.Contains(*payload.Output, "COMPLETE") {
 			t.Fatalf("terminal dispatch = %#v, error %v", payload, err)
 		}
 		return
