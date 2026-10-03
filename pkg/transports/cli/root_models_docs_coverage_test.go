@@ -101,7 +101,10 @@ func (service modelsCLIServiceFunctions) RemoveWithModelCache(cfg modelscli.Remo
 }
 
 func TestProductionModelsCommandWiresInjectedHandlers(t *testing.T) {
-	models, err := newProductionModelsCommand(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, &cliOperatorDefaultsOptions{}, CommandFactory{ModelsCLI: modelsCLIServiceFunctions{}})
+	models, err := newProductionModelsCommand(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, &cliOperatorDefaultsOptions{}, CommandFactory{ModelsCLI: modelsCLIServiceFunctions{},
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	})
 	if err != nil {
 		t.Fatalf("newProductionModelsCommand() error = %v", err)
 	}
@@ -119,14 +122,14 @@ func TestProductionModelsInvokeCarriesInvocationCacheEnvironment(t *testing.T) {
 	const selectedCache = "selected-model-cache"
 	var received modelscli.InvokeConfig
 	var receivedCache string
-	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
 		invokeWithModelCache: func(cfg modelscli.InvokeConfig, modelCacheDir string) error {
 			received = cfg
 			receivedCache = modelCacheDir
 			return nil
 		},
 	}}))
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(name string) (string, bool) {
 			if name == runcli.ModelCacheDirEnvironment {
@@ -158,13 +161,13 @@ func TestProductionModelsInvokeCacheEnvironmentLookupFailureShortCircuitsService
 	t.Parallel()
 
 	serviceCalls := 0
-	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
 		invoke: func(modelscli.InvokeConfig) error {
 			serviceCalls++
 			return nil
 		},
 	}}))
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		nil,
 		nil,
@@ -190,7 +193,7 @@ func TestProductionModelsCatalogCommandsCarrySelectedCacheEnvironment(t *testing
 
 	const selectedCache = "selected-model-cache"
 	received := map[string]string{}
-	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
 		listWithModelCache: func(_ modelscli.ListConfig, cache string) error {
 			received["list"] = cache
 			return nil
@@ -208,7 +211,7 @@ func TestProductionModelsCatalogCommandsCarrySelectedCacheEnvironment(t *testing
 			return nil
 		},
 	}}))
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(name string) (string, bool) {
 			if name == runcli.ModelCacheDirEnvironment {
@@ -235,29 +238,6 @@ func TestProductionModelsCatalogCommandsCarrySelectedCacheEnvironment(t *testing
 		if received[operation] != selectedCache {
 			t.Fatalf("%s selected cache = %q, want %q", operation, received[operation], selectedCache)
 		}
-	}
-}
-
-func TestProductionDocsAndModelsCommandsBuildIndependently(t *testing.T) {
-	globals := &cliGlobalOptions{}
-	diagnostics := &cliDiagnosticsOptions{}
-	operatorDefaults := &cliOperatorDefaultsOptions{}
-	docs, err := newProductionDocsCommand(diagnostics)
-	if err != nil {
-		t.Fatalf("newProductionDocsCommand() error = %v", err)
-	}
-	models, err := newProductionModelsCommand(globals, diagnostics, operatorDefaults, CommandFactory{ModelsCLI: modelsCLIServiceFunctions{}})
-	if err != nil {
-		t.Fatalf("newProductionModelsCommand() error = %v", err)
-	}
-	if docs == nil || docs.RunE == nil {
-		t.Fatal("generated docs command must attach handwritten RunE")
-	}
-	if models == nil || models.RunE != nil {
-		t.Fatal("generated models parent must remain non-runnable")
-	}
-	if len(models.Commands()) != 5 {
-		t.Fatalf("models child count = %d, want 5 generated leaves", len(models.Commands()))
 	}
 }
 
@@ -294,7 +274,10 @@ func TestProductionModelsInspectAndPullHonorJSONFlag(t *testing.T) {
 			pullJSON = cfg.JSON
 			return nil
 		},
-	}}).NewCommand(nil, nil, nil)
+	},
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	}).NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "models", "inspect", "OMNIVOICE_Q4_K_M"})
@@ -328,7 +311,10 @@ func TestProductionModelsPullRejectsInvalidInputsBeforeService(t *testing.T) {
 					called = true
 					return nil
 				},
-			}}).NewCommand(nil, nil, nil)
+			},
+				factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+				sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+			}).NewCommand(context.Background(), nil, nil, nil)
 			root.SetOut(io.Discard)
 			root.SetErr(io.Discard)
 			root.SetArgs(testCase.args)
@@ -362,7 +348,10 @@ func TestProductionModelsInvokeRejectsInvalidInputsBeforeService(t *testing.T) {
 					called = true
 					return nil
 				},
-			}}).NewCommand(nil, nil, nil)
+			},
+				factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+				sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+			}).NewCommand(context.Background(), nil, nil, nil)
 			root.SetOut(io.Discard)
 			root.SetErr(io.Discard)
 			root.SetArgs(testCase.args)
@@ -387,7 +376,10 @@ func TestProductionModelsPullPreservesCancellationAndOperationFailure(t *testing
 			}
 			return context.Canceled
 		},
-	}}).NewCommand(nil, nil, nil)
+	},
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	}).NewCommand(context.Background(), nil, nil, nil)
 	root.SetContext(ctx)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
@@ -398,7 +390,10 @@ func TestProductionModelsPullPreservesCancellationAndOperationFailure(t *testing
 }
 
 func TestProductionModelsCommandDefaultsNilOperatorDefaults(t *testing.T) {
-	models, err := newProductionModelsCommand(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, nil, CommandFactory{ModelsCLI: modelsCLIServiceFunctions{}})
+	models, err := newProductionModelsCommand(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, nil, CommandFactory{ModelsCLI: modelsCLIServiceFunctions{},
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	})
 	if err != nil {
 		t.Fatalf("newProductionModelsCommand(nil operator defaults) error = %v", err)
 	}
@@ -428,12 +423,12 @@ func TestProductionDocsExecutesTopicWithVerboseDiagnostics(t *testing.T) {
 
 func TestModelsListUsesInjectedService(t *testing.T) {
 	called := false
-	root := NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+	root := newTestCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
 		list: func(modelscli.ListConfig) error {
 			called = true
 			return nil
 		},
-	}}).NewCommand(nil, nil, nil)
+	}}).NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"models", "list"})
@@ -449,7 +444,7 @@ func TestInjectedModelServicesRouteGeneratedCutoverCommands(t *testing.T) {
 	var listed bool
 	var inspected, pulled string
 	var invocations []modelscli.InvokeConfig
-	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
 		list: func(modelscli.ListConfig) error { listed = true; return nil },
 		inspect: func(cfg modelscli.InspectConfig) error {
 			inspected = cfg.ModelName
@@ -464,7 +459,7 @@ func TestInjectedModelServicesRouteGeneratedCutoverCommands(t *testing.T) {
 			return nil
 		},
 	}}))
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		nil,
@@ -602,7 +597,7 @@ func executeModelsComposition(
 	args []string,
 ) (string, string, error) {
 	t.Helper()
-	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: service}))
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: service}))
 	factory.resolveOperatorDefaults = func(
 		_ string,
 		_ operatorconfig.Defaults,
@@ -613,7 +608,7 @@ func executeModelsComposition(
 		}
 		return defaults, nil
 	}
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		nil,
@@ -1159,6 +1154,9 @@ func TestWorkersACPCommandsValidateAndRouteRequests(t *testing.T) {
 	options := CommandFactory{
 		homeDir: func() (string, error) { return t.TempDir(), nil },
 		acp:     acpcli.Operations{},
+
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	}
 	tests := []struct {
 		name     string
@@ -1264,14 +1262,14 @@ func TestProductionModelsCLICharacterizationJSONBypassesOutputRequirement(t *tes
 // its success through the public command composition.
 func TestProductionModelsCLICharacterizationSuccessExit(t *testing.T) {
 	var got modelscli.InvokeConfig
-	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: modelsCLIServiceFunctions{
 		invoke: func(cfg modelscli.InvokeConfig) error {
 			got = cfg
 			_, err := io.WriteString(cfg.Output, "Wrote audio: speech.wav\n")
 			return err
 		},
 	}}))
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		nil,
@@ -1331,7 +1329,10 @@ func TestProductionModelsCLICharacterizationRejectsInvalidInputsBeforeService(t 
 					called = true
 					return nil
 				},
-			}}).NewCommand(nil, nil, nil)
+			},
+				factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+				sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+			}).NewCommand(context.Background(), nil, nil, nil)
 			root.SetOut(io.Discard)
 			root.SetErr(io.Discard)
 			root.SetArgs(testCase.args)
@@ -1354,7 +1355,10 @@ func TestProductionModelsCLICharacterizationRejectsChangedLegacyPort(t *testing.
 			called = true
 			return nil
 		},
-	}}).NewCommand(nil, nil, nil)
+	},
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	}).NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"models", "list", "--port", "7437"})
@@ -1402,8 +1406,8 @@ func newModelsCLICharacterizationRoot(
 ) (*cobra.Command, *bytes.Buffer) {
 	t.Helper()
 	service := modelscli.New(rootTestHTTPProtocol(), operation)
-	factory := withTestInjectedPlatformRoles(NewCommandFactory(CommandOperations{ModelsCLI: service}))
-	root := factory.NewCommand(
+	factory := withTestInjectedPlatformRoles(newTestCommandFactory(CommandOperations{ModelsCLI: service}))
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		nil,
@@ -1412,4 +1416,21 @@ func newModelsCLICharacterizationRoot(
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	return root, &stdout
+}
+
+func TestMissingCommandOperationFailsExecutionWithRequiredEdgeError(t *testing.T) {
+	t.Parallel()
+
+	root := newTestCommandFactory(CommandOperations{ModelsCLI: injectedModelsCLIService{}}).NewCommand(context.Background(),
+		func() (string, error) { return t.TempDir(), nil },
+		func(string) (string, bool) { return "", false },
+		nil,
+	)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"models", "list"})
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "models list service is required") {
+		t.Fatalf("error = %v, want explicit required-edge failure", err)
+	}
 }

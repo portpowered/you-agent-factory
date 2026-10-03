@@ -135,8 +135,11 @@ func TestRunCommand_LocalSessionSelectsIsolatedSession(t *testing.T) {
 func TestRunCommand_LocalBatchSessionSelectsIsolatedSession(t *testing.T) {
 	const sessionID = "session-batch-explicit"
 	var captured runcli.RunConfig
-	factory := withTestInjectedPlatformRoles(CommandFactory{})
-	root := factory.NewCommand(
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	})
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		startupcli.Functions{
@@ -576,12 +579,15 @@ func TestRemoteRunRejectsLocalHostingBeforeRunSideEffects(t *testing.T) {
 					remoteCalls++
 					return factoryapi.FactorySessionExecutionResponse{}, nil
 				}),
+
+				factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+				sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 			})
 			factory.browserOpener = func(context.Context, string) error {
 				browserCalls++
 				return nil
 			}
-			root := factory.NewCommand(os.UserHomeDir, os.LookupEnv, startupcli.Functions{
+			root := factory.NewCommand(context.Background(), os.UserHomeDir, os.LookupEnv, startupcli.Functions{
 				InitializeSystemFunc: func(context.Context, string) error {
 					t.Fatal("system initialization should not run for rejected hosting placement")
 					return nil
@@ -629,8 +635,11 @@ func TestRemoteRunRejectsLocalHostingBeforeRunSideEffects(t *testing.T) {
 }
 
 func TestRunHelpDocumentsRemotePlacementAndLocalHosting(t *testing.T) {
-	factory := withTestInjectedPlatformRoles(CommandFactory{})
-	root := factory.NewCommand(os.UserHomeDir, os.LookupEnv, startupcli.Functions{})
+	factory := withTestInjectedPlatformRoles(CommandFactory{
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	})
+	root := factory.NewCommand(context.Background(), os.UserHomeDir, os.LookupEnv, startupcli.Functions{})
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
@@ -659,11 +668,14 @@ func TestRemoteRunDispatchesExactNormalizedRequestWithoutOpeningLocalRun(t *test
 			SessionId: "dur-sess-root", Status: factoryapi.FactorySessionDurableLifecycleStatusQueued,
 		}, nil
 	})
-	factory := withTestInjectedPlatformRoles(CommandFactory{remoteInvocation: remote})
+	factory := withTestInjectedPlatformRoles(CommandFactory{remoteInvocation: remote,
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	})
 	factory.prepareInvocationInput = programmedRemoteArgumentsInput("same request")
 
 	localRunCalls := 0
-	root := factory.NewCommand(os.UserHomeDir, os.LookupEnv, startupcli.Functions{
+	root := factory.NewCommand(context.Background(), os.UserHomeDir, os.LookupEnv, startupcli.Functions{
 		RunFunc: func(context.Context, startupcli.RunIntent, startupcli.RunSelection) error {
 			localRunCalls++
 			return nil
@@ -703,7 +715,10 @@ func TestRemoteRunDispatchesExactNormalizedRequestWithoutOpeningLocalRun(t *test
 
 func TestRunServerPlacementRejectsRemoteLocalOnlyCommandBeforeRun(t *testing.T) {
 	globals := &cliGlobalOptions{remote: true}
-	options := withTestInjectedPlatformRoles(CommandFactory{})
+	options := withTestInjectedPlatformRoles(CommandFactory{
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	})
 	commands, err := buildRunServerProductionCommands(
 		globals, &cliDiagnosticsOptions{}, &cliOperatorDefaultsOptions{}, options,
 	)
@@ -729,10 +744,13 @@ func TestRemoteRunFailureDoesNotFallBackToLocalRun(t *testing.T) {
 	remote := rootRemoteInvocationFunc(func(context.Context, runcli.RemoteInvocationRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 		return factoryapi.FactorySessionExecutionResponse{}, errors.New("selected remote failed")
 	})
-	factory := withTestInjectedPlatformRoles(CommandFactory{remoteInvocation: remote})
+	factory := withTestInjectedPlatformRoles(CommandFactory{remoteInvocation: remote,
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	})
 	factory.prepareInvocationInput = programmedRemoteArgumentsInput("same request")
 	localRunCalls := 0
-	root := factory.NewCommand(os.UserHomeDir, os.LookupEnv, startupcli.Functions{
+	root := factory.NewCommand(context.Background(), os.UserHomeDir, os.LookupEnv, startupcli.Functions{
 		RunFunc: func(context.Context, startupcli.RunIntent, startupcli.RunSelection) error {
 			localRunCalls++
 			return nil

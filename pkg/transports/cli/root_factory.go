@@ -17,7 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -886,28 +885,9 @@ type factoryConfigInitProductionCommands struct {
 }
 
 func productionFactoryConfigInitCommands(
-	diagnostics *cliDiagnosticsOptions,
 	options CommandFactory,
 ) factoryConfigInitProductionCommands {
-	handler := commandregistry.NewFactoryConfigInitCommandHandler(
-		commandregistry.FactoryConfigInitServices{
-			QueryFactory:           options.QueryFactory,
-			ListFactories:          options.ListFactories,
-			CreateFactoryFromFile:  options.CreateFactoryFromFile,
-			UpdateFactoryFromFile:  options.UpdateFactoryFromFile,
-			DeleteFactory:          options.DeleteFactory,
-			ReplaceFactoryCurrent:  options.ReplaceFactoryCurrent,
-			ValidateFactory:        options.ValidateFactory,
-			FlattenFactoryConfig:   options.FlattenFactoryConfig,
-			ExpandFactoryConfig:    options.ExpandFactoryConfig,
-			ConfigureInit:          options.ConfigureInit,
-			InstallPackagedFactory: options.InstallPackagedFactory,
-			HomeDir:                options.homeDir,
-			ResolveFactoryRoots:    options.resolveNamedFactoryRoots,
-			DiagnosticsWriter:      diagnostics.writer,
-		},
-	)
-	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(handler)
+	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(options.factoryConfigInitHandler)
 	if err != nil {
 		panic(fmt.Sprintf("build factory/config/init family commands: %v", err))
 	}

@@ -45,16 +45,16 @@ func (open watchEventOpenFunc) Open(ctx context.Context, cursor *watchEventCurso
 // NewWatch binds the CLI HTTP protocol to the Work watch operation. The
 // protocol is injected by Wire so the stream still uses the process-owned
 // external-effect boundary.
-func NewWatch(transport clihttp.Protocol) func(WatchConfig) error {
+func NewWatch(transport clihttp.Protocol, wait ReconnectWait) func(WatchConfig) error {
 	return func(cfg WatchConfig) error {
 		cfg.HTTP = transport
-		return Watch(cfg)
+		return Watch(cfg, wait)
 	}
 }
 
 // Watch consumes the selected session's canonical Factory Event SSE stream.
 // It does not query Work snapshots or schedule a polling interval.
-func Watch(cfg WatchConfig) error {
+func Watch(cfg WatchConfig, wait ReconnectWait) error {
 	if err := ValidateWatchConfig(cfg); err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func Watch(cfg WatchConfig) error {
 	sessionID := watchSessionID(cfg)
 	return watchWithSource(cfg, watchEventOpenFunc(func(ctx context.Context, cursor *watchEventCursor) (watchEventStream, error) {
 		return openHTTPWatchEventStream(ctx, cfg.HTTP, cfg.Server, sessionID, cursor, cfg.Diagnostics, cfg.Verbose)
-	}))
+	}), wait)
 }
 
 func watchSessionID(cfg WatchConfig) string {
@@ -74,8 +74,8 @@ func watchSessionID(cfg WatchConfig) string {
 	return cfg.SessionID
 }
 
-func watchWithSource(cfg WatchConfig, opener watchEventOpener) error {
-	return watchWithRetry(cfg, opener, defaultWatchRetryPolicy())
+func watchWithSource(cfg WatchConfig, opener watchEventOpener, wait ReconnectWait) error {
+	return watchWithRetry(cfg, opener, defaultWatchRetryPolicy(wait))
 }
 
 func watchWithRetry(cfg WatchConfig, opener watchEventOpener, retry watchRetryPolicy) error {
@@ -418,19 +418,22 @@ type watchEventCursor struct {
 	Sequence int
 }
 
+// ReconnectWait supplies the caller-owned cancellable reconnect delay.
+type ReconnectWait func(context.Context, time.Duration) error
+
 type watchRetryPolicy struct {
 	maxAttempts  int
 	initialDelay time.Duration
 	maximumDelay time.Duration
-	wait         func(context.Context, time.Duration) error
+	wait         ReconnectWait
 }
 
-func defaultWatchRetryPolicy() watchRetryPolicy {
+func defaultWatchRetryPolicy(wait ReconnectWait) watchRetryPolicy {
 	return watchRetryPolicy{
 		maxAttempts:  watchMaxReconnectAttempts,
 		initialDelay: watchInitialBackoff,
 		maximumDelay: watchMaximumBackoff,
-		wait:         waitWatchReconnect,
+		wait:         wait,
 	}
 }
 
@@ -446,9 +449,6 @@ func (policy watchRetryPolicy) normalized() watchRetryPolicy {
 	}
 	if policy.maximumDelay > 0 && policy.maximumDelay < policy.initialDelay {
 		policy.maximumDelay = policy.initialDelay
-	}
-	if policy.wait == nil {
-		policy.wait = waitWatchReconnect
 	}
 	return policy
 }
@@ -469,23 +469,6 @@ func (policy watchRetryPolicy) delay(attempt int) time.Duration {
 		}
 	}
 	return delay
-}
-
-func waitWatchReconnect(ctx context.Context, delay time.Duration) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if delay <= 0 {
-		return nil
-	}
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
 }
 
 func retryWatchReconnect(

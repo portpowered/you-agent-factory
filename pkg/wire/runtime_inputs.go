@@ -30,6 +30,7 @@ import (
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workcli "github.com/portpowered/infinite-you/pkg/services/work/transports/cli/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	workersessionshttp "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/http"
@@ -611,4 +612,29 @@ func (resolver workerSessionsFactorySessionScopeResolver) WorkerSessionsObservat
 		return nil
 	}
 	return provider.WorkerSessionsObservationForSession(factorySessionID)
+}
+
+// provideWatchReconnectWait selects the scheduler once without starting timers.
+// T21 adopts the normalized process scheduler at this composition boundary.
+func provideWatchReconnectWait() workcli.ReconnectWait {
+	return bindWatchReconnectWait(platformclock.Real{})
+}
+
+func bindWatchReconnectWait(scheduler platformclock.TimerSource) workcli.ReconnectWait {
+	return func(ctx context.Context, delay time.Duration) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if delay <= 0 {
+			return nil
+		}
+		timer := scheduler.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C():
+			return nil
+		}
+	}
 }

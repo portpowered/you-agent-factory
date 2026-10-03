@@ -83,28 +83,14 @@ type InvokeOperation func(InvokeConfig) error
 // BindInvoke binds remote HTTP and an explicit local Worker Sessions boundary.
 // A nil local boundary remains a hard failure for local placement; it is never
 // replaced with a request to the configured server.
-func BindInvoke(transport clihttp.Protocol, local LocalInvokeBoundary, effects ...Effects) InvokeOperation {
-	selected := selectEffects(effects)
+func BindInvoke(transport clihttp.Protocol, local LocalInvokeBoundary, generateID IDGenerator, readFile ExecutionFileReader) InvokeOperation {
 	return func(config InvokeConfig) error {
 		config.HTTP = transport
-		if local != nil {
-			config.Local = local
-		}
-		if config.GenerateID == nil {
-			config.GenerateID = selected.GenerateID
-		}
-		if config.ReadFile == nil {
-			config.ReadFile = selected.ReadFile
-		}
+		config.Local = local
+		config.GenerateID = generateID
+		config.ReadFile = readFile
 		return invoke(config)
 	}
-}
-
-// NewInvoke returns an invoke operation with its effects supplied by the
-// caller. It is useful to focused CLI and functional tests that need to prove
-// local and remote placement separately.
-func NewInvoke(transport clihttp.Protocol, local LocalInvokeBoundary, effects ...Effects) InvokeOperation {
-	return BindInvoke(transport, local, effects...)
 }
 
 type normalizedInvokeRequest struct {
@@ -294,11 +280,6 @@ func applyInvokeRetryOverride(request *factoryapi.WorkerSessionStartRequest, con
 }
 
 func ensureInvokeIdentities(request *factoryapi.WorkerSessionStartRequest, generateID IDGenerator) error {
-	if (strings.TrimSpace(request.RequestId) == "" ||
-		strings.TrimSpace(request.WorkerSessionId) == "" ||
-		strings.TrimSpace(request.Execution.Dispatch.DispatchId) == "") && generateID == nil {
-		return newCLIError("WORKER_SESSION_IDENTITY_UNAVAILABLE", "direct Worker execution identity generator is unavailable", nil)
-	}
 	if strings.TrimSpace(request.RequestId) == "" {
 		request.RequestId = generateID()
 	}

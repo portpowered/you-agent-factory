@@ -141,11 +141,14 @@ func newGoalFailureNamedRunEnvironmentWithInvocation(
 	}
 	factory := withTestInjectedPlatformRoles(CommandFactory{
 		namedFactoryCatalog: goalFailureNamedFactoryCatalog{factoryDir: factoryDir},
+
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	if prepare.prepare != nil {
 		factory.prepareInvocationInput = prepare
 	}
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return homeDir, nil },
 		os.LookupEnv,
 		startupcli.Functions{

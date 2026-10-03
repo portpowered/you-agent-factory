@@ -2318,10 +2318,7 @@ pkg/services/worker_sessions/internal/service/lifecycle_control.go: unreachable 
 pkg/services/worker_sessions/internal/service/lifecycle_control.go: unreachable func: registry.registerSupervision
 pkg/services/worker_sessions/internal/service/lifecycle_control.go: unreachable func: supervision.installCancelFailure
 pkg/services/worker_sessions/publish.go: unreachable func: ProviderSessionObservationPublisher.WithLogger
-pkg/services/worker_sessions/transports/cli/continue.go: unreachable func: NewContinue
 pkg/services/worker_sessions/transports/cli/continue.go: unreachable func: NewControl
-pkg/services/worker_sessions/transports/cli/interrupt.go: unreachable func: NewInterrupt
-pkg/services/worker_sessions/transports/cli/invoke.go: unreachable func: NewInvoke
 pkg/services/worker_sessions/transports/cli/service.go: unreachable func: readInvokeRequest
 pkg/services/worker_sessions/transports/http/adapter.go: unreachable func: NewAdapter
 pkg/services/worker_sessions/transports/http/adapter.go: unreachable func: NewAdapterWithStart
@@ -2498,7 +2495,6 @@ pkg/transports/cli/commandidentity/encode.go: unreachable func: MarshalInventory
 pkg/transports/cli/commandregistry/registry.go: unreachable func: Registry.Lookup
 pkg/transports/cli/commandregistry/representative_handlers.go: unreachable func: Registry.VerifyRepresentativeRunnableCoverage
 pkg/transports/cli/commandregistry/representative_handlers.go: unreachable func: RunnableRepresentativeCommandIDs
-pkg/transports/cli/commandregistry/representative_handlers.go: unreachable func: SessionResolvedServicesFromOps
 pkg/transports/cli/dashboard/dashboard.go: unreachable func: FormatSimpleDashboard
 pkg/transports/cli/dashboard/dashboard.go: unreachable func: formatSimpleDashboard
 pkg/transports/cli/factory/create.go: unreachable func: CreateFromFile

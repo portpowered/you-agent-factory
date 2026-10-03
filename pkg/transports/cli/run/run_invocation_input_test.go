@@ -22,6 +22,7 @@ func TestResolveFactoryInvocationRequest_NamedFactoryDirPositionalText(t *testin
 	text := "hi there"
 
 	request, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
+		Logger:                   zap.NewNop(),
 		Dir:                      "/tmp/builtin-tts",
 		NamedFactoryName:         "@you/tts",
 		InvocationPositionalText: &text,
@@ -42,6 +43,7 @@ func TestResolveFactoryInvocationRequest_PositionalText(t *testing.T) {
 	text := "Fix the lint issues"
 
 	request, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
+		Logger:                   zap.NewNop(),
 		FactoryConfigPath:        "/tmp/factory.json",
 		InvocationPositionalText: &text,
 		StdinIsTTY:               func() bool { return true },
@@ -60,6 +62,7 @@ func TestResolveFactoryInvocationRequest_PositionalText(t *testing.T) {
 func TestResolveFactoryInvocationRequest_StdinText(t *testing.T) {
 	prepared := preparedTextInvocationInput(work.InputSourceStdinText, "from stdin")
 	request, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
+		Logger:                  zap.NewNop(),
 		FactoryConfigPath:       "/tmp/factory.json",
 		PreparedInvocationInput: &prepared,
 	})
@@ -78,6 +81,7 @@ func TestResolveFactoryInvocationRequest_NamedFactoryStdinText(t *testing.T) {
 	stdinText := "hi from stdin"
 
 	request, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
+		Logger:              zap.NewNop(),
 		Dir:                 "/tmp/builtin-tts",
 		NamedFactoryName:    "@you/tts",
 		InvocationStdinText: &stdinText,
@@ -96,7 +100,8 @@ func TestResolveFactoryInvocationRequest_NamedFactoryStdinText(t *testing.T) {
 
 func TestResolveFactoryInvocationRequest_UsesNormalizedSignatureArgs(t *testing.T) {
 	request, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
-		Dir: "/tmp/signature-factory",
+		Logger: zap.NewNop(),
+		Dir:    "/tmp/signature-factory",
 		InvocationNormalizedArguments: &work.NormalizedArguments{
 			Arguments: map[string]work.NormalizedArgument{
 				"input": {Values: []string{"draft"}},
@@ -149,6 +154,7 @@ func TestResolveFactoryInvocationRequestForRun_WorkFileProjectsOrderedContent(t 
 	}
 
 	request, invocationMode, err := resolveFactoryInvocationRequestForRun(RunConfig{
+		Logger:          zap.NewNop(),
 		CleanInvocation: true,
 		WorkFile:        "work.json",
 		WorkRequestFileLoader: func(path string) (work.WorkRequest, error) {
@@ -196,6 +202,7 @@ func assertWorkFileInvocationContent(t *testing.T, content factoryapi.WorkConten
 func TestResolveFactoryInvocationRequestForRun_WorkFileStaysBatchInputOutsideCleanMode(t *testing.T) {
 	loaderCalled := false
 	request, invocationMode, err := resolveFactoryInvocationRequestForRun(RunConfig{
+		Logger:   zap.NewNop(),
 		WorkFile: "work.json",
 		WorkRequestFileLoader: func(string) (work.WorkRequest, error) {
 			loaderCalled = true
@@ -238,7 +245,8 @@ func TestRunFactoryInvocationCarriesPreparedCanonicalInputWithoutPlainArgs(t *te
 	var output bytes.Buffer
 	err := runFactoryInvocation(
 		context.Background(),
-		RunConfig{PreparedInvocationInput: &prepared, Output: &output},
+		RunConfig{
+			Logger: zap.NewNop(), PreparedInvocationInput: &prepared, Output: &output},
 		factorysessions.InvocationTarget{},
 		*apiRequest,
 		operation,
@@ -285,7 +293,8 @@ func TestRunFactoryInvocationCarriesPreparedCompatibilityInputWithoutAPIContent(
 	var output bytes.Buffer
 	err := runFactoryInvocation(
 		context.Background(),
-		RunConfig{PreparedInvocationInput: &prepared, Output: &output},
+		RunConfig{
+			Logger: zap.NewNop(), PreparedInvocationInput: &prepared, Output: &output},
 		factorysessions.InvocationTarget{},
 		*apiRequest,
 		operation,
@@ -333,6 +342,7 @@ func TestRunFactoryInvocationWritesTerminalRecordAndPreservesCleanupErrorAfterRe
 		}}, cleanupErr
 	}}
 	cfg := RunConfig{
+		Logger:               zap.NewNop(),
 		InvocationOutputMode: InvocationOutputResponseStream,
 		JSONOutput:           true, Output: &output,
 	}
@@ -371,6 +381,7 @@ func TestRunFactoryInvocationPrefersCanonicalOutcomeOverContextCancellation(t *t
 		}}, context.Canceled
 	}}
 	cfg := RunConfig{
+		Logger:               zap.NewNop(),
 		InvocationOutputMode: InvocationOutputResponseStream,
 		JSONOutput:           true, Output: &output,
 	}
@@ -400,6 +411,7 @@ func TestRunFactoryInvocationUsesRunCancellationWhenOutcomeIsUndetermined(t *tes
 		return factorysessions.FactoryInvocationOutcome{}, context.Canceled
 	}}
 	cfg := RunConfig{
+		Logger:               zap.NewNop(),
 		InvocationOutputMode: InvocationOutputResponseStream,
 		JSONOutput:           true, Output: &output,
 	}
@@ -435,6 +447,7 @@ func TestRunFactoryInvocationRejectsUndeterminedResultWithNilError(t *testing.T)
 		return factorysessions.FactoryInvocationOutcome{}, nil
 	}}
 	cfg := RunConfig{
+		Logger:               zap.NewNop(),
 		InvocationOutputMode: InvocationOutputResponseStream,
 		JSONOutput:           true, Output: &output,
 	}
@@ -607,25 +620,29 @@ func TestRemoteDurableReasonClassificationCoversControlReasons(t *testing.T) {
 
 func TestRemoteDurableSourceVariants(t *testing.T) {
 	workflow := "review-workflow"
-	got, _, err := remoteDurableSourceFromRunConfig(RunConfig{Workflow: workflow})
+	got, _, err := remoteDurableSourceFromRunConfig(RunConfig{
+		Logger: zap.NewNop(), Workflow: workflow})
 	if err != nil || got.Kind != factoryapi.FactorySessionExecutionSourceKindWorkflowName || got.WorkflowName == nil || *got.WorkflowName != workflow {
 		t.Fatalf("workflow source = %#v/%v, want workflow name", got, err)
 	}
 
 	workflowFile := "workflow.mjs"
-	got, _, err = remoteDurableSourceFromRunConfig(RunConfig{FactoryConfigPath: workflowFile})
+	got, _, err = remoteDurableSourceFromRunConfig(RunConfig{
+		Logger: zap.NewNop(), FactoryConfigPath: workflowFile})
 	if err != nil || got.Kind != factoryapi.FactorySessionExecutionSourceKindWorkflowFile || got.WorkflowFile == nil || *got.WorkflowFile != workflowFile {
 		t.Fatalf("workflow file source = %#v/%v, want workflow file", got, err)
 	}
 }
 
 func TestRemoteDurableSourceRejectsUnrepresentableTargets(t *testing.T) {
-	_, _, err := remoteDurableSourceFromRunConfig(RunConfig{})
+	_, _, err := remoteDurableSourceFromRunConfig(RunConfig{
+		Logger: zap.NewNop()})
 	if err == nil || !strings.Contains(err.Error(), RemoteDurableRequestInvalidCode) {
 		t.Fatalf("missing target error = %v, want %s", err, RemoteDurableRequestInvalidCode)
 	}
 
 	_, _, err = remoteDurableSourceFromRunConfig(RunConfig{
+		Logger:           zap.NewNop(),
 		NamedFactoryName: "@you/research",
 		Dir:              "factory",
 		LoadFactoryConfigFile: func(string) (*interfaces.FactoryConfig, error) {
@@ -636,7 +653,8 @@ func TestRemoteDurableSourceRejectsUnrepresentableTargets(t *testing.T) {
 		t.Fatalf("named policy load error = %v, want stable remote request error", err)
 	}
 
-	_, _, err = remoteDurableSourceFromRunConfig(RunConfig{FactoryConfigPath: "factory.json"})
+	_, _, err = remoteDurableSourceFromRunConfig(RunConfig{
+		Logger: zap.NewNop(), FactoryConfigPath: "factory.json"})
 	if err == nil || !strings.Contains(err.Error(), "config loader") {
 		t.Fatalf("missing inline loader error = %v, want config loader diagnostic", err)
 	}
@@ -650,6 +668,7 @@ func TestRemoteInvocationWaitAndOutputModesPreserveTerminalBoundary(t *testing.T
 	}
 	baseConfig := func(output io.Writer) RunConfig {
 		return RunConfig{
+			Logger:                  zap.NewNop(),
 			Dir:                     "factory",
 			NamedFactoryName:        "@you/research",
 			PreparedInvocationInput: preparedRemoteArguments("boundary input"),
@@ -728,6 +747,7 @@ func TestRemoteInvocationWaitCancellationIsClassified(t *testing.T) {
 		}, nil
 	}}
 	output, err := runRemoteInvocationWithContext(t, ctx, RunConfig{
+		Logger:                  zap.NewNop(),
 		Dir:                     "factory",
 		NamedFactoryName:        "@you/research",
 		PreparedInvocationInput: preparedRemoteArguments("cancel wait"),

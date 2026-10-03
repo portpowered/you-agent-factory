@@ -358,9 +358,6 @@ func RunSelected(
 	cfg.WorkerReasoningEffort = canonicalReasoningEffort
 	cfg = normalizeRunInvocationMode(cfg)
 	logger := cfg.Logger
-	if logger == nil {
-		logger = zap.NewNop()
-	}
 	cfg, invocationRequest, invocationMode, recordPath, err := prepareRunConfig(cfg, prepareWorkTarget)
 	if err != nil {
 		return err
@@ -466,7 +463,7 @@ func runInvocation(ctx context.Context, cfg RunConfig, logger *zap.Logger, reque
 		if result.Status != "" {
 			resultPtr = &result
 		}
-		recordCleanInvocationCompletion(cleanInvocationLogger(logger), cfg, cleanInvocationCompletionLogInput{
+		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
 			Duration: duration,
 			Result:   resultPtr,
 			Err:      err,

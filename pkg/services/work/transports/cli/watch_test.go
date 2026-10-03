@@ -304,9 +304,9 @@ func TestWatchFiniteStreamWritesFinalTransitionBeforeReturning(t *testing.T) {
 	var output bytes.Buffer
 	err := watchWithSource(WatchConfig{Context: context.Background(), SessionID: "session-1", Output: &output}, watchEventOpenFunc(func(context.Context, *watchEventCursor) (watchEventStream, error) {
 		return stream, nil
-	}))
+	}), unexpectedReconnectWait)
 	if err != nil {
-		t.Fatalf("watchWithSource() error = %v", err)
+		t.Fatalf("watchWithSource(, unexpectedReconnectWait) error = %v", err)
 	}
 	if stream.nextCalls != 3 || !stream.closed {
 		t.Fatalf("stream calls=%d closed=%t, want three events and close", stream.nextCalls, stream.closed)
@@ -371,9 +371,9 @@ func TestWatchConsumesCanonicalSSEStreamUsingDefaultSession(t *testing.T) {
 		Server:  server.URL,
 		Output:  &output,
 		HTTP:    transport,
-	})
+	}, unexpectedReconnectWait)
 	if err != nil {
-		t.Fatalf("Watch() error = %v", err)
+		t.Fatalf("Watch(, unexpectedReconnectWait) error = %v", err)
 	}
 	var got watchLine
 	if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &got); err != nil {
@@ -423,9 +423,9 @@ func TestWatchFiniteConsumesEntireHTTPRetainedPrefixBeforeCompleting(t *testing.
 		Server:  server.URL,
 		Output:  &output,
 		HTTP:    transport,
-	})
+	}, unexpectedReconnectWait)
 	if err != nil {
-		t.Fatalf("Watch() error = %v", err)
+		t.Fatalf("Watch(, unexpectedReconnectWait) error = %v", err)
 	}
 	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
 	if len(lines) != 2 {
@@ -448,7 +448,7 @@ func TestWatchRejectsNegativeRetainedEventCount(t *testing.T) {
 	stream := &finiteWatchEventStream{retainedEventCount: -1}
 	err := watchWithSource(WatchConfig{Context: context.Background(), Output: io.Discard}, watchEventOpenFunc(func(context.Context, *watchEventCursor) (watchEventStream, error) {
 		return stream, nil
-	}))
+	}), unexpectedReconnectWait)
 	if err == nil || !strings.Contains(err.Error(), "negative retained event count") {
 		t.Fatalf("watch error = %v, want retained-count validation failure", err)
 	}
@@ -562,7 +562,7 @@ func TestWatchFollowContinuesAfterTerminalUntilCancellation(t *testing.T) {
 			watchEventOpenFunc(func(context.Context, *watchEventCursor) (watchEventStream, error) {
 				return stream, nil
 			}),
-			watchRetryPolicy{maxAttempts: 0},
+			watchRetryPolicy{maxAttempts: 0, wait: unexpectedReconnectWait},
 		)
 	}()
 

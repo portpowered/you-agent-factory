@@ -44,21 +44,21 @@ func TestPackagedInitCommandCompositionUsesDefinitionsOwnedAdapter(t *testing.T)
 			Format:  interfaces.PackagedFactoryFormatJSON,
 		}, nil
 	}
-	factory := NewCommandFactory(CommandOperations{
+	factory := newTestCommandFactory(CommandOperations{
 		InstallPackagedFactory: factorydefinitionscli.BindInstallPackagedFactory(install),
 	})
 	if factory.InstallPackagedFactory == nil {
 		t.Fatal("InstallPackagedFactory operation is missing from composed factory")
 	}
 
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return "/home/operator", nil },
 		func(string) (string, bool) { return "", false },
 		nil,
 	)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), "/workspace/fleet"))
+	root.SetContext(startupcli.WithWorkingDirectory(root.Context(), "/workspace/fleet"))
 	root.SetArgs([]string{
 		"init", "--package", "@you/goal", "--dir", "alternate-factories",
 		"--format", "yaml", "--replace=true",
@@ -147,11 +147,11 @@ func executePackagedInitComposition(
 	args []string,
 ) (string, string, error) {
 	t.Helper()
-	factory := NewCommandFactory(operations)
+	factory := newTestCommandFactory(operations)
 	if factory.InstallPackagedFactory == nil {
 		t.Fatal("InstallPackagedFactory operation is missing from production composition")
 	}
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return "/home/operator", nil },
 		func(string) (string, bool) { return "", false },
 		nil,
@@ -159,7 +159,7 @@ func executePackagedInitComposition(
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
-	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), "/workspace/fleet"))
+	root.SetContext(startupcli.WithWorkingDirectory(root.Context(), "/workspace/fleet"))
 	root.SetArgs(args)
 	err := root.Execute()
 	return stdout.String(), stderr.String(), err
@@ -169,7 +169,7 @@ func TestSessionCommandCompositionUsesTypedSessionsCLIAdapter(t *testing.T) {
 	t.Parallel()
 
 	called := false
-	factory := NewCommandFactory(CommandOperations{
+	factory := newTestCommandFactory(CommandOperations{
 		SessionsCLI: session.Bind(session.Operations{
 			Show: func(cfg session.ShowConfig) error {
 				called = true
@@ -184,7 +184,7 @@ func TestSessionCommandCompositionUsesTypedSessionsCLIAdapter(t *testing.T) {
 		t.Fatal("SessionsCLI adapter is missing from composed factory")
 	}
 
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"session", "show", "session-beta"})
@@ -200,14 +200,14 @@ func TestWorkCommandCompositionUsesResolvedOwnerAdapter(t *testing.T) {
 	t.Parallel()
 
 	var got workcmd.ListConfig
-	factory := NewCommandFactory(CommandOperations{
+	factory := newTestCommandFactory(CommandOperations{
 		ListWork: func(cfg workcmd.ListConfig) error {
 			got = cfg
 			_, err := fmt.Fprintln(cfg.Output, "owner-list")
 			return err
 		},
 	})
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
@@ -385,11 +385,11 @@ func executeSessionComposition(
 	if operations.LocalSessionsCLI == nil {
 		operations.LocalSessionsCLI = operations.SessionsCLI
 	}
-	factory := NewCommandFactory(operations)
+	factory := newTestCommandFactory(operations)
 	if factory.SessionsCLI == nil {
 		t.Fatal("SessionsCLI adapter is missing from production composition")
 	}
-	root := factory.NewCommand(nil, nil, nil)
+	root := factory.NewCommand(context.Background(), nil, nil, nil)
 	var stdout, stderr bytes.Buffer
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
@@ -421,8 +421,11 @@ func TestProductionMetricsCommandUsesInjectedRuntimeMetricsQuery(t *testing.T) {
 				Providers: []factoryvisualization.RuntimeMetricsBreakdown{{Key: "provider-a"}},
 			}, nil
 		},
+
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		nil,
@@ -452,8 +455,11 @@ func TestProductionMetricsCommandResolvesGlobalJSONAndSessionScope(t *testing.T)
 				Providers: []factoryvisualization.RuntimeMetricsBreakdown{{Key: "provider-a"}},
 			}, nil
 		},
+
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
-	root := factory.NewCommand(
+	root := factory.NewCommand(context.Background(),
 		func() (string, error) { return t.TempDir(), nil },
 		func(string) (string, bool) { return "", false },
 		nil,
@@ -568,7 +574,7 @@ func TestProductionMetricsCommandExecuteCommandPreservesCodedFailures(t *testing
 func TestExecuteCommandUsageFailuresUseCentralCobraRenderer(t *testing.T) {
 	t.Parallel()
 
-	factory := NewCommandFactory(CommandOperations{})
+	factory := newTestCommandFactory(CommandOperations{})
 	for _, test := range []struct {
 		name         string
 		args         []string
@@ -619,6 +625,9 @@ func runProductionMetricsFailureCase(t *testing.T, test productionMetricsFailure
 			queryCalls++
 			return factoryvisualization.RuntimeMetricsQueryResult{}, test.queryError
 		},
+
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
 	})
 	var stdout, stderr bytes.Buffer
 	err := factory.ExecuteCommand(startupcli.CommandInvocation{
@@ -693,7 +702,7 @@ func (injectedModelsCLIService) Remove(modelscli.RemoveConfig) error   { return 
 func TestNewCommandFactoryDoesNotInstallTransportDefaults(t *testing.T) {
 	t.Parallel()
 
-	factory := NewCommandFactory(CommandOperations{})
+	factory := newTestCommandFactory(CommandOperations{})
 	if factory.SubmitWork != nil ||
 		factory.SessionsCLI != nil ||
 		factory.ModelsCLI != nil ||
@@ -725,7 +734,7 @@ func TestNewCommandFactoryPreservesInjectedModelsCLIAdapter(t *testing.T) {
 	adapter := modelscli.BindService(modelscli.Config{
 		Models: compositionModelsRootForFactoryTest{},
 	})
-	factory := NewCommandFactory(CommandOperations{ModelsCLI: adapter})
+	factory := newTestCommandFactory(CommandOperations{ModelsCLI: adapter})
 	if factory.ModelsCLI == nil {
 		t.Fatal("injected Models CLI adapter is missing from composed factory")
 	}
@@ -875,7 +884,7 @@ func TestNewCommandFactoryPreservesInjectedOperations(t *testing.T) {
 	batchFiles := batchInputFileSystemFakeForFactoryTest{}
 	directories := runDirectoryCreatorFakeForFactoryTest{}
 	browser := func(context.Context, string) error { return nil }
-	factory := NewCommandFactory(CommandOperations{
+	factory := newTestCommandFactory(CommandOperations{
 		ResolveNamedFactoryRoots:          namedRoots,
 		ResolveNamedFactoryCandidatePaths: namedCandidates,
 		ResolveCurrentFactoryDir:          resolver,
@@ -975,21 +984,4 @@ func (batchInputFileSystemFakeForFactoryTest) Stat(string) (fs.FileInfo, error) 
 
 func (batchInputFileSystemFakeForFactoryTest) ReadFile(string) ([]byte, error) {
 	return nil, fs.ErrNotExist
-}
-
-func TestMissingCommandOperationFailsExecutionWithRequiredEdgeError(t *testing.T) {
-	t.Parallel()
-
-	root := NewCommandFactory(CommandOperations{ModelsCLI: injectedModelsCLIService{}}).NewCommand(
-		func() (string, error) { return t.TempDir(), nil },
-		func(string) (string, bool) { return "", false },
-		nil,
-	)
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"models", "list"})
-	err := root.Execute()
-	if err == nil || !strings.Contains(err.Error(), "models list service is required") {
-		t.Fatalf("error = %v, want explicit required-edge failure", err)
-	}
 }

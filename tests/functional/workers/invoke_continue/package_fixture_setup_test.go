@@ -129,6 +129,12 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "future-fields", futureRunner, futureRunner, nil, nil, nil, nil); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
+	generatedRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: directCodexSessionOutput("generated-file-thread", "generated-file output COMPLETE"),
+	})
+	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "t19-generated-file", generatedRunner, generatedRunner, nil, nil, nil, nil); err != nil {
+		return invokeContinueScenarioSetup{}, err
+	}
 	streamingRunner := newWSRFT015StreamingProviderRunner()
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "recorded-provider-session", streamingRunner, nil, streamingRunner, nil, nil, nil); err != nil {
 		return invokeContinueScenarioSetup{}, err
@@ -169,7 +175,7 @@ func newInvokeContinueDirectScenarioSetup(t *testing.T, rootDir string) (invokeC
 	if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, "unsupported-provider", unsupportedRunner, unsupportedRunner, nil, nil, nil, nil); err != nil {
 		return invokeContinueScenarioSetup{}, err
 	}
-	for _, name := range []string{"unknown-source", "empty-input", "remote-interrupt", "remote-interrupt-failure", "remote-controls", "remote-continue-failures", "remote-stream-failure", "remote-cancellation"} {
+	for _, name := range []string{"unknown-source", "empty-input", "remote-interrupt", "remote-interrupt-failure", "remote-controls", "remote-continue-failures", "remote-stream-failure", "remote-cancellation", "t19-async", "t19-stream-cancel", "t19-stream-peer", "t19-reject-invoke", "t19-reject-continue", "t19-reject-interrupt"} {
 		runner := testutil.NewProviderCommandRunner()
 		if err := appendInvokeContinueScenario(rootDir, &setup.scenarios, &setup.routes, name, runner, runner, nil, nil, nil, nil); err != nil {
 			return invokeContinueScenarioSetup{}, err

@@ -841,3 +841,69 @@ func TestRuntimeObservabilityOwnerRejectsUnwritableDestination(t *testing.T) {
 		t.Fatalf("unwritable log destination error = %v, want actionable runtime artifact error", err)
 	}
 }
+
+func TestWatchReconnectWaitOwnsTimerAndCancellation(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"elapsed", "canceled", "already canceled", "zero"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			timer := &watchWaitTimer{ticks: make(chan time.Time, 1)}
+			scheduler := &watchWaitScheduler{timer: timer}
+			delay := time.Second
+			var want error
+			switch mode {
+			case "elapsed":
+				timer.ticks <- time.Unix(0, 0)
+			case "canceled":
+				scheduler.onCreate = cancel
+				want = context.Canceled
+			case "already canceled":
+				cancel()
+				want = context.Canceled
+			case "zero":
+				delay = 0
+			}
+			wait := bindWatchReconnectWait(scheduler)
+			if scheduler.calls != 0 {
+				t.Fatal("construction started timer")
+			}
+			if err := wait(ctx, delay); !errors.Is(err, want) {
+				t.Fatalf("wait error=%v want=%v", err, want)
+			}
+			if mode == "zero" || mode == "already canceled" {
+				if scheduler.calls != 0 || timer.stopped {
+					t.Fatal("wait created an unnecessary timer")
+				}
+			} else if scheduler.calls != 1 || scheduler.delay != delay || !timer.stopped {
+				t.Fatalf("timer calls=%d delay=%v stopped=%v", scheduler.calls, scheduler.delay, timer.stopped)
+			}
+		})
+	}
+}
+
+type watchWaitScheduler struct {
+	timer    *watchWaitTimer
+	calls    int
+	delay    time.Duration
+	onCreate func()
+}
+
+func (*watchWaitScheduler) Now() time.Time { return time.Unix(0, 0) }
+func (scheduler *watchWaitScheduler) NewTimer(delay time.Duration) platformclock.Timer {
+	scheduler.calls++
+	scheduler.delay = delay
+	if scheduler.onCreate != nil {
+		scheduler.onCreate()
+	}
+	return scheduler.timer
+}
+
+type watchWaitTimer struct {
+	ticks   chan time.Time
+	stopped bool
+}
+
+func (timer *watchWaitTimer) C() <-chan time.Time { return timer.ticks }
+func (timer *watchWaitTimer) Stop() bool          { timer.stopped = true; return true }

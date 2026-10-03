@@ -196,9 +196,12 @@ func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *te
 		wantFlags operatorconfig.FlagOverrides,
 		result operatorconfig.ResolvedDefaults,
 	) *cobra.Command {
-		factory := withTestInjectedPlatformRoles(CommandFactory{})
+		factory := withTestInjectedPlatformRoles(CommandFactory{
+			factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+			sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+		})
 		factory.resolveOperatorDefaults = expectOperatorDefaultsResolution(t, wantEnvironment, wantFlags, result, nil)
-		command := factory.NewCommand(
+		command := factory.NewCommand(context.Background(),
 			func() (string, error) { return homeDir, nil },
 			func(name string) (string, bool) {
 				value, ok := environment[name]

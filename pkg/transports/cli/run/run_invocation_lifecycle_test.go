@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"go.uber.org/zap"
 )
 
 func TestOpenInvocationRetainsInjectedOperationWithoutOpeningRuntime(t *testing.T) {
@@ -48,6 +49,7 @@ func TestOpenInvocationRetainsInjectedOperationWithoutOpeningRuntime(t *testing.
 
 	factory := testRunnerOpeners{invocation: openTestInvocationRunner}
 	err := RunSelected(context.Background(), ensureTestRecordingsCLI(RunConfig{
+		Logger:                   zap.NewNop(),
 		Dir:                      t.TempDir(),
 		InvocationPositionalText: &text,
 		StdinIsTTY:               func() bool { return true },

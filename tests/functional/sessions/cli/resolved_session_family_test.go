@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -15,15 +17,52 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 var resolvedSessionCLIProcess support.ApplicationProcess
+
+// A remote rejection must retain its public classification and never become a
+// successful local control, even when the shared process has local capabilities.
+func TestRemotePauseRejectionRetainsSelectedTargetAndError(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.Method != http.MethodPost || r.URL.Path != "/factory-sessions/rejected-session/pause" {
+			t.Errorf("request = %s %s, want selected pause target", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, `{"code":"SERVICE_UNAVAILABLE","family":"INTERNAL_SERVER_ERROR","message":"factory session service is unavailable"}`)
+	}))
+	t.Cleanup(server.Close)
+	var stdout, stderr bytes.Buffer
+	err := resolvedSessionCLIProcess.Execute(root.Input{
+		Args: []string{"you", "--remote", "--server", server.URL, "--json", "session", "pause", "rejected-session"},
+		Env:  testHomeEnvironment(t.TempDir()), Context: t.Context(),
+		WorkingDirectory: t.TempDir(), Stdout: &stdout, Stderr: &stderr,
+	})
+	var apiErr *clihttp.APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusServiceUnavailable ||
+		apiErr.CLIErrorCode() != "SERVICE_UNAVAILABLE" || string(apiErr.CLIErrorFamily()) != "INTERNAL_SERVER_ERROR" {
+		t.Fatalf("pause error = %v, want typed remote unavailable error", err)
+	}
+	if calls.Load() != 1 || stdout.Len() != 0 {
+		t.Fatalf("requests=%d stdout=%q, want one rejection and no success output", calls.Load(), stdout.String())
+	}
+	var diagnostic map[string]any
+	if err := json.Unmarshal(stderr.Bytes(), &diagnostic); err != nil || diagnostic["code"] != "SERVICE_UNAVAILABLE" {
+		t.Fatalf("stderr=%q error=%v, want one public rejection envelope", stderr.String(), err)
+	}
+}
 
 func TestMain(m *testing.M) {
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{})
@@ -75,6 +114,9 @@ func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(
 		}
 		if stdout.Len() == 0 {
 			t.Fatalf("Process.Execute(%v) stdout is empty", args)
+		}
+		if !json.Valid(stdout.Bytes()) {
+			t.Fatalf("Process.Execute(%v) stdout is not a single JSON value: %q", args, stdout.String())
 		}
 	}
 

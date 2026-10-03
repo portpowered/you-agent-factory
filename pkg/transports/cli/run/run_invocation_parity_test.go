@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"go.uber.org/zap"
 	"reflect"
 	"strings"
 	"testing"
@@ -30,6 +31,7 @@ func TestResolveFactoryInvocationRequest_NamedGoalInputSourcesMatchSharedResolve
 		{
 			name: "positional text",
 			cfg: RunConfig{
+				Logger:                   zap.NewNop(),
 				Dir:                      "/tmp/builtin-goal",
 				NamedFactoryName:         goal.PackagedFactoryName,
 				InvocationPositionalText: &planSprint,
@@ -41,6 +43,7 @@ func TestResolveFactoryInvocationRequest_NamedGoalInputSourcesMatchSharedResolve
 		{
 			name: "explicit stdin text",
 			cfg: RunConfig{
+				Logger:              zap.NewNop(),
 				Dir:                 "/tmp/builtin-goal",
 				NamedFactoryName:    goal.PackagedFactoryName,
 				InvocationStdinText: &stdinText,
@@ -52,6 +55,7 @@ func TestResolveFactoryInvocationRequest_NamedGoalInputSourcesMatchSharedResolve
 		{
 			name: "piped non-tty stdin",
 			cfg: RunConfig{
+				Logger:                  zap.NewNop(),
 				Dir:                     "/tmp/builtin-goal",
 				NamedFactoryName:        goal.PackagedFactoryName,
 				PreparedInvocationInput: preparedTextInvocationInputPtr(work.InputSourceStdinText, "Ship from pipe\n"),
@@ -86,6 +90,7 @@ func TestRun_NamedGoalInvocationWritesPrimaryResult(t *testing.T) {
 		{
 			name: "positional",
 			cfg: RunConfig{
+				Logger:                   zap.NewNop(),
 				Dir:                      "/tmp/builtin-goal",
 				NamedFactoryName:         goal.PackagedFactoryName,
 				InvocationPositionalText: stringPtr("Plan the sprint"),
@@ -98,6 +103,7 @@ func TestRun_NamedGoalInvocationWritesPrimaryResult(t *testing.T) {
 		{
 			name: "explicit stdin",
 			cfg: RunConfig{
+				Logger:              zap.NewNop(),
 				Dir:                 "/tmp/builtin-goal",
 				NamedFactoryName:    goal.PackagedFactoryName,
 				InvocationStdinText: stringPtr("Ship the feature from explicit stdin"),
@@ -110,6 +116,7 @@ func TestRun_NamedGoalInvocationWritesPrimaryResult(t *testing.T) {
 		{
 			name: "piped stdin",
 			cfg: RunConfig{
+				Logger:                  zap.NewNop(),
 				Dir:                     "/tmp/builtin-goal",
 				NamedFactoryName:        goal.PackagedFactoryName,
 				PreparedInvocationInput: preparedTextInvocationInputPtr(work.InputSourceStdinText, "Ship from pipe\n"),
@@ -200,6 +207,7 @@ func TestNamedGoalCLIAndAPIInvocationRequestsMatchForSameLogicalText(t *testing.
 		{
 			name: "positional cli",
 			cfg: RunConfig{
+				Logger:                   zap.NewNop(),
 				Dir:                      "/tmp/builtin-goal",
 				NamedFactoryName:         goal.PackagedFactoryName,
 				InvocationPositionalText: stringPtr(namedGoalParityText),
@@ -209,6 +217,7 @@ func TestNamedGoalCLIAndAPIInvocationRequestsMatchForSameLogicalText(t *testing.
 		{
 			name: "explicit stdin cli",
 			cfg: RunConfig{
+				Logger:              zap.NewNop(),
 				Dir:                 "/tmp/builtin-goal",
 				NamedFactoryName:    goal.PackagedFactoryName,
 				InvocationStdinText: stringPtr(namedGoalParityText),
@@ -218,6 +227,7 @@ func TestNamedGoalCLIAndAPIInvocationRequestsMatchForSameLogicalText(t *testing.
 		{
 			name: "piped stdin cli",
 			cfg: RunConfig{
+				Logger:                  zap.NewNop(),
 				Dir:                     "/tmp/builtin-goal",
 				NamedFactoryName:        goal.PackagedFactoryName,
 				PreparedInvocationInput: preparedTextInvocationInputPtr(work.InputSourceStdinText, stdinText),
@@ -277,6 +287,7 @@ func TestRun_NamedGoalInvocationSuccessParityAcrossCLIAndAPIEnvelope(t *testing.
 	}
 
 	baseCfg := RunConfig{
+		Logger:                   zap.NewNop(),
 		Dir:                      "/tmp/builtin-goal",
 		NamedFactoryName:         goal.PackagedFactoryName,
 		InvocationPositionalText: stringPtr(namedGoalParityText),
@@ -333,6 +344,7 @@ func TestRun_NamedGoalInvocationBlockedFailureParityAcrossCLIAndAPIEnvelope(t *t
 	}
 
 	err := Run(context.Background(), withRunOutput(RunConfig{
+		Logger:                   zap.NewNop(),
 		Dir:                      "/tmp/builtin-goal",
 		NamedFactoryName:         goal.PackagedFactoryName,
 		InvocationPositionalText: stringPtr(namedGoalParityText),
@@ -357,7 +369,8 @@ func TestRun_NamedGoalInvocationBlockedFailureParityAcrossCLIAndAPIEnvelope(t *t
 func TestFactoryInvocationCLIAndAPIEquivalenceMatrix(t *testing.T) {
 	t.Run("structured arguments", func(t *testing.T) {
 		cliRequest, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
-			Dir: "/tmp/signature-factory",
+			Logger: zap.NewNop(),
+			Dir:    "/tmp/signature-factory",
 			InvocationNormalizedArguments: &work.NormalizedArguments{Arguments: map[string]work.NormalizedArgument{
 				"input": {Values: []string{"draft"}},
 				"tag":   {Values: []string{"alpha", "beta"}},
@@ -400,7 +413,8 @@ func TestFactoryInvocationCLIAndAPIEquivalenceMatrix(t *testing.T) {
 	for _, tt := range outcomes {
 		t.Run(tt.name, func(t *testing.T) {
 			var cliOutput bytes.Buffer
-			if err := writeInvocationJSON(RunConfig{Output: &cliOutput}, tt.result); err != nil {
+			if err := writeInvocationJSON(RunConfig{
+				Logger: zap.NewNop(), Output: &cliOutput}, tt.result); err != nil {
 				t.Fatalf("write CLI invocation JSON: %v", err)
 			}
 			var cliResponse factoryapi.InvocationResponse
@@ -471,6 +485,7 @@ func TestRun_FactoryInvocationPausedFailureIncludesCLIContext(t *testing.T) {
 	}
 
 	err := Run(context.Background(), RunConfig{
+		Logger:                   zap.NewNop(),
 		FactoryConfigPath:        "/tmp/factory.json",
 		InvocationPositionalText: &text,
 		StdinIsTTY:               func() bool { return true },

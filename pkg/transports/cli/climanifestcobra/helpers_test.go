@@ -68,12 +68,7 @@ func TestSessionResolvedLifecyclePreservesTargetingOutputAndDiagnostics(t *testi
 				Pause:  sessioncli.NewPause(protocol),
 				Resume: sessioncli.NewResume(protocol),
 			}
-			services := commandregistry.SessionResolvedServicesFromOps(
-				lifecycleOps,
-				nil,
-				func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() },
-				lifecycleOps,
-			)
+			services := commandregistry.BindSessionResolvedHandlers(sessioncli.Bind(lifecycleOps), sessioncli.Bind(lifecycleOps), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 			stdout, stderr, err := executeResolvedSessionWithOutput(t, services, test.args...)
 			if err != nil {
 				t.Fatalf("Execute(%v) error = %v", test.args, err)
@@ -129,10 +124,7 @@ func TestSessionResolvedLifecycleSelectsExactlyOnePlacementAdapter(t *testing.T)
 				local := sessioncli.Bind(localOps)
 				remote := sessioncli.Bind(remoteOps)
 
-				services := commandregistry.SessionResolvedServices{
-					LocalSessions:  local,
-					RemoteSessions: remote,
-				}
+				services := commandregistry.BindSessionResolvedHandlers(local, remote, func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 				_, _, err := executeResolvedSessionWithOutput(t, services, placement.args(operation)...)
 				if err != nil {
 					t.Fatalf("Execute(%v) error = %v", placement.args(operation), err)
@@ -174,7 +166,7 @@ func lifecycleOperationForTest(operation string, calls *int, server *string) ses
 
 func TestSessionResolvedLifecycleRejectsCardinalityAndPreservesFailures(t *testing.T) {
 	calls := 0
-	services := commandregistry.SessionResolvedServicesFromOps(sessioncli.Operations{
+	services := commandregistry.BindSessionResolvedHandlers(disabledSessionTestService("local"), sessioncli.Bind(sessioncli.Operations{
 		Pause: func(sessioncli.LifecycleControlConfig) error {
 			calls++
 			return nil
@@ -183,7 +175,7 @@ func TestSessionResolvedLifecycleRejectsCardinalityAndPreservesFailures(t *testi
 			calls++
 			return nil
 		},
-	}, nil, nil)
+	}), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() })
 	for _, operation := range []string{"pause", "resume"} {
 		stdout, _, err := executeResolvedSessionWithOutput(
 			t, services, "session", operation, "session-alpha", "session-beta",
@@ -209,17 +201,17 @@ func TestSessionResolvedLifecycleRejectsCardinalityAndPreservesFailures(t *testi
 	for _, test := range []struct {
 		name     string
 		args     []string
-		services commandregistry.SessionResolvedServices
+		services commandregistry.SessionResolvedHandlers
 		want     error
 	}{
 		{
 			name: "pause failure", args: []string{"session", "pause", "session-alpha"},
-			services: commandregistry.SessionResolvedServicesFromOps(pauseFailureOps, nil, nil, pauseFailureOps),
+			services: commandregistry.BindSessionResolvedHandlers(sessioncli.Bind(pauseFailureOps), sessioncli.Bind(pauseFailureOps), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }),
 			want:     operationFailure,
 		},
 		{
 			name: "resume cancellation", args: []string{"session", "resume", "dur-sess-review-001"},
-			services: commandregistry.SessionResolvedServicesFromOps(resumeCancellationOps, nil, nil, resumeCancellationOps),
+			services: commandregistry.BindSessionResolvedHandlers(sessioncli.Bind(resumeCancellationOps), sessioncli.Bind(resumeCancellationOps), func(context.Context, *sessioncli.ListConfig) error { return nil }, func(cmd *cobra.Command) io.Writer { return cmd.ErrOrStderr() }),
 			want:     context.Canceled,
 		},
 	} {
@@ -820,4 +812,22 @@ func assertResolvedDelete(t *testing.T, configs []sessioncli.DeleteConfig) {
 		configs[0].Server != "http://localhost:7437" || !configs[0].JSON {
 		t.Fatalf("delete configs = %#v", configs)
 	}
+}
+
+func disabledSessionTestService(placement string) sessioncli.Service {
+	control := func(operation string) func(sessioncli.LifecycleControlConfig) error {
+		return func(sessioncli.LifecycleControlConfig) error {
+			return fmt.Errorf("session %s service is required for %s placement", operation, placement)
+		}
+	}
+	return sessioncli.Bind(sessioncli.Operations{
+		Create: func(sessioncli.CreateConfig) error { return fmt.Errorf("session create service is required") },
+		Delete: func(sessioncli.DeleteConfig) error { return fmt.Errorf("session delete service is required") },
+		List:   func(sessioncli.ListConfig) error { return fmt.Errorf("session list service is required") },
+		Show:   func(sessioncli.ShowConfig) error { return fmt.Errorf("session show service is required") },
+		SetResourceCapacity: func(sessioncli.ResourceCapacityConfig) error {
+			return fmt.Errorf("session resource capacity service is required")
+		},
+		Pause: control("pause"), Resume: control("resume"), Cancel: control("cancel"), Terminate: control("terminate"),
+	})
 }

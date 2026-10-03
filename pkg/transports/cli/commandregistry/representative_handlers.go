@@ -179,58 +179,13 @@ const (
 	sessionResourceSetReasonInputID           = "you.session.resource.set.flag.reason"
 )
 
-// SessionResolvedServices are the explicit local and remote Factory Session
-// CLI adapters and invocation-local collaborators consumed by stable-input
-// transport adapters. A placement never falls back to the other adapter.
-type SessionResolvedServices struct {
-	LocalSessions  sessioncli.Service
-	RemoteSessions sessioncli.Service
-	PrepareList    func(context.Context, *sessioncli.ListConfig) error
-	Diagnostics    func(*cobra.Command) io.Writer
-}
-
-// SessionResolvedServicesFromOps binds accepted remote and, when supplied,
-// local session operations into registry services. Omitted local operations
-// remain absent so local lifecycle placement fails explicitly instead of using
-// remote behavior.
-func SessionResolvedServicesFromOps(
-	remoteOps sessioncli.Operations,
-	prepareList func(context.Context, *sessioncli.ListConfig) error,
-	diagnostics func(*cobra.Command) io.Writer,
-	localOps ...sessioncli.Operations,
-) SessionResolvedServices {
-	remote := sessioncli.Bind(remoteOps)
-	var local sessioncli.Service
-	if len(localOps) > 0 {
-		local = sessioncli.Bind(localOps[0])
-	}
-	return SessionResolvedServices{
-		LocalSessions:  local,
-		RemoteSessions: remote,
-		PrepareList:    prepareList,
-		Diagnostics:    diagnostics,
-	}
-}
-
-func (services SessionResolvedServices) remote() sessioncli.Service {
-	return services.RemoteSessions
-}
-
-func (services SessionResolvedServices) local() sessioncli.Service {
-	return services.LocalSessions
-}
-
-func (services SessionResolvedServices) forPlacement(remote bool) sessioncli.Service {
-	if remote {
-		return services.remote()
-	}
-	return services.local()
-}
-
 // SessionResolvedHandler translates stable resolved inputs into the existing
 // injected Factory Session operation configs.
 type SessionResolvedHandler struct {
-	services SessionResolvedServices
+	local       sessioncli.Service
+	remote      sessioncli.Service
+	prepareList func(context.Context, *sessioncli.ListConfig) error
+	diagnostics func(*cobra.Command) io.Writer
 }
 
 // SessionResolvedHandlers supplies typed handlers for every runnable Session
@@ -249,8 +204,13 @@ type SessionResolvedHandlers struct {
 
 // BindSessionResolvedHandlers adapts the injected Factory Session operations
 // into invocation-local stable-input handlers.
-func BindSessionResolvedHandlers(services SessionResolvedServices) SessionResolvedHandlers {
-	handler := &SessionResolvedHandler{services: services}
+func BindSessionResolvedHandlers(
+	local sessioncli.Service,
+	remote sessioncli.Service,
+	prepareList func(context.Context, *sessioncli.ListConfig) error,
+	diagnostics func(*cobra.Command) io.Writer,
+) SessionResolvedHandlers {
+	handler := &SessionResolvedHandler{local: local, remote: remote, prepareList: prepareList, diagnostics: diagnostics}
 	return SessionResolvedHandlers{
 		Create: handler.Create, Delete: handler.Delete, List: handler.List,
 		Show:  handler.Show,
@@ -263,9 +223,8 @@ func BindSessionResolvedHandlers(services SessionResolvedServices) SessionResolv
 // NewSessionResolvedRegistry binds all session leaves by manifest handler ID.
 func NewSessionResolvedRegistry(
 	manifest climanifest.Manifest,
-	services SessionResolvedServices,
+	handlers SessionResolvedHandlers,
 ) (*Registry, error) {
-	handlers := BindSessionResolvedHandlers(services)
 	bindings := map[string]ResolvedRunE{
 		"you.session.create":       handlers.Create,
 		"you.session.delete":       handlers.Delete,
@@ -343,11 +302,7 @@ func (h *SessionResolvedHandler) base(
 	if err != nil {
 		return sessionResolvedGlobals{}, nil, err
 	}
-	var diagnostics io.Writer
-	if h != nil && h.services.Diagnostics != nil {
-		diagnostics = h.services.Diagnostics(cmd)
-	}
-	return globals, diagnostics, nil
+	return globals, h.diagnostics(cmd), nil
 }
 
 func optionalSessionID(inputs resolvedinput.Inputs, inputID string) (string, error) {
@@ -370,9 +325,6 @@ func (h *SessionResolvedHandler) Create(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.remote() == nil {
-		return fmt.Errorf("session create service is required")
-	}
 	dir, err := inputs.String(sessionCreateDirInputID)
 	if err != nil {
 		return fmt.Errorf("resolve session create inputs: %w", err)
@@ -402,7 +354,7 @@ func (h *SessionResolvedHandler) Create(
 		return fmt.Errorf("resolve session create inputs: %w", err)
 	}
 	portState, _ := inputs.State(sessionCreatePortInputID)
-	return h.services.remote().Create(sessioncli.CreateConfig{
+	return h.remote.Create(sessioncli.CreateConfig{
 		Server: globals.server, Port: port, PortExplicit: portState.Changed,
 		Dir: dir, InitNewFactory: initNew, ValidateOnly: validateOnly,
 		TargetKind: targetKind, TargetName: targetName, JSON: globals.json,
@@ -416,9 +368,6 @@ func (h *SessionResolvedHandler) Delete(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.remote() == nil {
-		return fmt.Errorf("session delete service is required")
-	}
 	if err := rejectDeprecatedSessionPort(inputs, sessionDeletePortInputID); err != nil {
 		return err
 	}
@@ -430,7 +379,7 @@ func (h *SessionResolvedHandler) Delete(
 	if err != nil {
 		return fmt.Errorf("resolve session delete inputs: %w", err)
 	}
-	return h.services.remote().Delete(sessioncli.DeleteConfig{
+	return h.remote.Delete(sessioncli.DeleteConfig{
 		Server: globals.server, SessionID: sessionID, JSON: globals.json,
 		Verbose: globals.verbose, Debug: globals.debug,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics,
@@ -442,9 +391,6 @@ func (h *SessionResolvedHandler) List(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.remote() == nil {
-		return fmt.Errorf("session list service is required")
-	}
 	port, err := inputs.Int(sessionListPortInputID)
 	if err != nil {
 		return fmt.Errorf("resolve session list inputs: %w", err)
@@ -473,12 +419,10 @@ func (h *SessionResolvedHandler) List(
 	if serverState, ok := inherited.State(sessionServerInputID); ok && serverState.Changed {
 		cfg.Server = globals.server
 	}
-	if h.services.PrepareList != nil {
-		if err := h.services.PrepareList(cmd.Context(), &cfg); err != nil {
-			return err
-		}
+	if err := h.prepareList(cmd.Context(), &cfg); err != nil {
+		return err
 	}
-	return h.services.remote().List(cfg)
+	return h.remote.List(cfg)
 }
 
 func (h *SessionResolvedHandler) Show(
@@ -486,9 +430,6 @@ func (h *SessionResolvedHandler) Show(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.remote() == nil {
-		return fmt.Errorf("session show service is required")
-	}
 	if err := rejectDeprecatedSessionPort(inputs, sessionShowPortInputID); err != nil {
 		return err
 	}
@@ -500,7 +441,7 @@ func (h *SessionResolvedHandler) Show(
 	if err != nil {
 		return fmt.Errorf("resolve session show inputs: %w", err)
 	}
-	return h.services.remote().Show(sessioncli.ShowConfig{
+	return h.remote.Show(sessioncli.ShowConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		JSON: globals.json, Verbose: globals.verbose, Debug: globals.debug,
 		Output: cmd.OutOrStdout(), Diagnostics: diagnostics,
@@ -530,9 +471,9 @@ func (h *SessionResolvedHandler) lifecycle(
 	if serverState, present := inherited.State(sessionServerInputID); present && serverState.Changed {
 		remote = true
 	}
-	service := h.services.forPlacement(remote)
-	if service == nil {
-		return fmt.Errorf("session %s service is required for %s placement", operation, map[bool]string{true: "remote", false: "local"}[remote])
+	service := h.local
+	if remote {
+		service = h.remote
 	}
 	var control func(sessioncli.LifecycleControlConfig) error
 	switch operation {
@@ -547,9 +488,6 @@ func (h *SessionResolvedHandler) lifecycle(
 	default:
 		return fmt.Errorf("unsupported session lifecycle operation %q", operation)
 	}
-	if control == nil {
-		return fmt.Errorf("session %s service is required for %s placement", operation, map[bool]string{true: "remote", false: "local"}[remote])
-	}
 	return control(sessioncli.LifecycleControlConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		JSON: globals.json, Verbose: globals.verbose, Debug: globals.debug,
@@ -562,9 +500,6 @@ func (h *SessionResolvedHandler) Pause(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil {
-		return fmt.Errorf("session pause handler is required")
-	}
 	return h.lifecycle(
 		cmd, inputs, inherited,
 		sessionPauseIDInputID, sessionPausePortInputID,
@@ -577,9 +512,6 @@ func (h *SessionResolvedHandler) Resume(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil {
-		return fmt.Errorf("session resume handler is required")
-	}
 	return h.lifecycle(
 		cmd, inputs, inherited,
 		sessionResumeIDInputID, sessionResumePortInputID,
@@ -592,9 +524,6 @@ func (h *SessionResolvedHandler) Cancel(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil {
-		return fmt.Errorf("session cancel handler is required")
-	}
 	return h.lifecycle(
 		cmd, inputs, inherited,
 		sessionCancelIDInputID, sessionCancelPortInputID,
@@ -607,9 +536,6 @@ func (h *SessionResolvedHandler) Terminate(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil {
-		return fmt.Errorf("session terminate handler is required")
-	}
 	return h.lifecycle(
 		cmd, inputs, inherited,
 		sessionTerminateIDInputID, sessionTerminatePortInputID,
@@ -622,9 +548,6 @@ func (h *SessionResolvedHandler) ResourceSet(
 	inputs resolvedinput.Inputs,
 	inherited resolvedinput.Inputs,
 ) error {
-	if h == nil || h.services.remote() == nil {
-		return fmt.Errorf("session resource capacity service is required")
-	}
 	resourceID, err := inputs.String(sessionResourceSetResourceIDInputID)
 	if err != nil {
 		return fmt.Errorf("resolve session resource capacity inputs: %w", err)
@@ -653,7 +576,7 @@ func (h *SessionResolvedHandler) ResourceSet(
 	if err != nil {
 		return fmt.Errorf("resolve session resource capacity inputs: %w", err)
 	}
-	return h.services.remote().SetResourceCapacity(sessioncli.ResourceCapacityConfig{
+	return h.remote.SetResourceCapacity(sessioncli.ResourceCapacityConfig{
 		Context: cmd.Context(), Server: globals.server, SessionID: sessionID,
 		ResourceID: resourceID, Capacity: capacity, ExpectedRevision: expectedRevision,
 		RequestID: requestID, Reason: reason, JSON: globals.json,

@@ -24,22 +24,33 @@ func TestFactoryConfigInitCommandHandlerMapsEffectiveListRootsAndOutputs(t *test
 	home := t.TempDir()
 	var got factorycli.ListConfig
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
-		commandregistry.FactoryConfigInitServices{
-			ListFactories: func(cfg factorycli.ListConfig) error {
-				got = cfg
-				return nil
-			},
-			HomeDir: func() (string, error) { return home, nil },
-			ResolveFactoryRoots: func(gotHome, gotWorking string) (factorydefinitions.NamedFactoryRoots, error) {
-				if gotHome != home || gotWorking != workingDirectory {
-					t.Fatalf("root inputs = (%q, %q)", gotHome, gotWorking)
-				}
-				return factorydefinitions.NamedFactoryRoots{
-					Project: filepath.Join(workingDirectory, "factory"),
-					Global:  filepath.Join(home, "factories"),
-				}, nil
-			},
+		func(factorycli.QueryConfig) error { panic("unexpected QueryFactory effect") },
+		func(cfg factorycli.ListConfig) error {
+			got = cfg
+			return nil
 		},
+		func(factorycli.CreateFromFileConfig) error { panic("unexpected CreateFactoryFromFile effect") },
+		func(factorycli.UpdateFromFileConfig) error { panic("unexpected UpdateFactoryFromFile effect") },
+		func(factorycli.DeleteConfig) error { panic("unexpected DeleteFactory effect") },
+		func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+		func(factorycli.ValidateConfig) error { panic("unexpected ValidateFactory effect") },
+		func(configcli.FactoryConfigFlattenConfig) error { panic("unexpected FlattenFactoryConfig effect") },
+		func(configcli.FactoryConfigExpandConfig) error { panic("unexpected ExpandFactoryConfig effect") },
+		func(initsetup.Config) error { panic("unexpected ConfigureInit effect") },
+		func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			panic("unexpected InstallPackagedFactory effect")
+		},
+		func(*cobra.Command) (string, error) { return home, nil },
+		func(gotHome, gotWorking string) (factorydefinitions.NamedFactoryRoots, error) {
+			if gotHome != home || gotWorking != workingDirectory {
+				t.Fatalf("root inputs = (%q, %q)", gotHome, gotWorking)
+			}
+			return factorydefinitions.NamedFactoryRoots{
+				Project: filepath.Join(workingDirectory, "factory"),
+				Global:  filepath.Join(home, "factories"),
+			}, nil
+		},
+		func(*cobra.Command) io.Writer { return nil },
 	)
 	inputs := resolvedTestInputs(t,
 		resolvedTestValue{
@@ -69,91 +80,45 @@ func TestFactoryConfigInitCommandHandlerReportsEffectiveListBoundaryFailures(t *
 	workingDirectory := t.TempDir()
 	homeErr := errors.New("home unavailable")
 	rootsErr := errors.New("roots unavailable")
-	validInputs := resolvedTestInputs(t, resolvedTestValue{
-		id: "you.factory.list.flag.dir", source: resolvedinput.SourceManifestDefault,
-		value: resolvedinput.StringValue("factory"),
-	})
-	validGlobals := resolvedFactoryGlobals(t, false, false, false)
-	cases := []struct {
+	validInputs := resolvedTestInputs(t, resolvedTestValue{id: "you.factory.list.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factory")})
+	for _, test := range []struct {
 		name     string
-		services commandregistry.FactoryConfigInitServices
-		context  context.Context
+		homeErr  error
+		working  string
 		inputs   resolvedinput.Inputs
+		rootsErr error
 		want     string
 	}{
-		{
-			name: "missing list service", context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
-			want: "factory list service is required",
-		},
-		{
-			name: "missing dir input",
-			services: commandregistry.FactoryConfigInitServices{
-				ListFactories: func(factorycli.ListConfig) error { return nil },
-			},
-			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
-			inputs:  resolvedinput.Inputs{},
-			want:    "you.factory.list.flag.dir",
-		},
-		{
-			name: "missing home resolver",
-			services: commandregistry.FactoryConfigInitServices{
-				ListFactories: func(factorycli.ListConfig) error { return nil },
-			},
-			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
-			inputs:  validInputs,
-			want:    "home-directory resolver is required",
-		},
-		{
-			name: "home failure",
-			services: commandregistry.FactoryConfigInitServices{
-				ListFactories: func(factorycli.ListConfig) error { return nil },
-				HomeDir:       func() (string, error) { return "", homeErr },
-			},
-			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
-			inputs:  validInputs,
-			want:    homeErr.Error(),
-		},
-		{
-			name: "missing working directory",
-			services: commandregistry.FactoryConfigInitServices{
-				ListFactories: func(factorycli.ListConfig) error { return nil },
-				HomeDir:       func() (string, error) { return "home", nil },
-			},
-			context: t.Context(), inputs: validInputs,
-			want: "process working directory is required",
-		},
-		{
-			name: "missing roots resolver",
-			services: commandregistry.FactoryConfigInitServices{
-				ListFactories: func(factorycli.ListConfig) error { return nil },
-				HomeDir:       func() (string, error) { return "home", nil },
-			},
-			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
-			inputs:  validInputs,
-			want:    "Factory Definitions root resolver is required",
-		},
-		{
-			name: "roots failure",
-			services: commandregistry.FactoryConfigInitServices{
-				ListFactories: func(factorycli.ListConfig) error { return nil },
-				HomeDir:       func() (string, error) { return "home", nil },
-				ResolveFactoryRoots: func(string, string) (factorydefinitions.NamedFactoryRoots, error) {
-					return factorydefinitions.NamedFactoryRoots{}, rootsErr
-				},
-			},
-			context: startupcli.WithWorkingDirectory(t.Context(), workingDirectory),
-			inputs:  validInputs,
-			want:    rootsErr.Error(),
-		},
-	}
-	for _, test := range cases {
+		{name: "missing dir input", working: workingDirectory, want: "you.factory.list.flag.dir"},
+		{name: "home failure", working: workingDirectory, inputs: validInputs, homeErr: homeErr, want: "resolve factory list home: home unavailable"},
+		{name: "missing working directory", inputs: validInputs, want: "resolve factory list roots: process working directory is required"},
+		{name: "roots failure", working: workingDirectory, inputs: validInputs, rootsErr: rootsErr, want: "resolve factory list roots: roots unavailable"},
+	} {
 		t.Run(test.name, func(t *testing.T) {
-			handler := commandregistry.NewFactoryConfigInitCommandHandler(test.services)
+			called := false
+			handler := commandregistry.NewFactoryConfigInitCommandHandler(func(factorycli.QueryConfig) error { panic("unexpected QueryFactory effect") },
+				func(factorycli.ListConfig) error { called = true; return nil },
+				func(factorycli.CreateFromFileConfig) error { panic("unexpected CreateFactoryFromFile effect") },
+				func(factorycli.UpdateFromFileConfig) error { panic("unexpected UpdateFactoryFromFile effect") },
+				func(factorycli.DeleteConfig) error { panic("unexpected DeleteFactory effect") },
+				func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+				func(factorycli.ValidateConfig) error { panic("unexpected ValidateFactory effect") },
+				func(configcli.FactoryConfigFlattenConfig) error { panic("unexpected FlattenFactoryConfig effect") },
+				func(configcli.FactoryConfigExpandConfig) error { panic("unexpected ExpandFactoryConfig effect") },
+				func(initsetup.Config) error { panic("unexpected ConfigureInit effect") },
+				func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+					panic("unexpected InstallPackagedFactory effect")
+				},
+				func(*cobra.Command) (string, error) { return "home", test.homeErr },
+				func(string, string) (factorydefinitions.NamedFactoryRoots, error) {
+					return factorydefinitions.NamedFactoryRoots{}, test.rootsErr
+				},
+				func(*cobra.Command) io.Writer { return nil })
 			cmd := &cobra.Command{}
-			cmd.SetContext(test.context)
-			err := handler.FactoryList(cmd, test.inputs, validGlobals)
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("FactoryList() error = %v, want %q", err, test.want)
+			cmd.SetContext(startupcli.WithWorkingDirectory(t.Context(), test.working))
+			err := handler.FactoryList(cmd, test.inputs, resolvedFactoryGlobals(t, false, false, false))
+			if err == nil || !strings.Contains(err.Error(), test.want) || called {
+				t.Fatalf("FactoryList error=%v called=%v, want %q without list effect", err, called, test.want)
 			}
 		})
 	}
@@ -197,12 +162,25 @@ func resolvedFactoryGlobals(t *testing.T, jsonOutput, verbose, debug bool) resol
 func TestFactoryConfigInitCommandHandlerMapsCreateStableInputs(t *testing.T) {
 	var got factorycli.CreateFromFileConfig
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
-		commandregistry.FactoryConfigInitServices{
-			CreateFactoryFromFile: func(cfg factorycli.CreateFromFileConfig) error {
-				got = cfg
-				return nil
-			},
+		func(factorycli.QueryConfig) error { panic("unexpected QueryFactory effect") },
+		func(factorycli.ListConfig) error { panic("unexpected ListFactories effect") },
+		func(cfg factorycli.CreateFromFileConfig) error {
+			got = cfg
+			return nil
 		},
+		func(factorycli.UpdateFromFileConfig) error { panic("unexpected UpdateFactoryFromFile effect") },
+		func(factorycli.DeleteConfig) error { panic("unexpected DeleteFactory effect") },
+		func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+		func(factorycli.ValidateConfig) error { panic("unexpected ValidateFactory effect") },
+		func(configcli.FactoryConfigFlattenConfig) error { panic("unexpected FlattenFactoryConfig effect") },
+		func(configcli.FactoryConfigExpandConfig) error { panic("unexpected ExpandFactoryConfig effect") },
+		func(initsetup.Config) error { panic("unexpected ConfigureInit effect") },
+		func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			panic("unexpected InstallPackagedFactory effect")
+		},
+		func(*cobra.Command) (string, error) { panic("unexpected home effect") },
+		func(string, string) (factorydefinitions.NamedFactoryRoots, error) { panic("unexpected roots effect") },
+		func(*cobra.Command) io.Writer { return nil },
 	)
 	inputs := resolvedTestInputs(t,
 		resolvedTestValue{id: "you.factory.create.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")},
@@ -222,9 +200,22 @@ func TestFactoryConfigInitCommandHandlerMapsCreateStableInputs(t *testing.T) {
 
 func TestFactoryConfigInitCommandHandlerReportsEachMissingCreateInput(t *testing.T) {
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
-		commandregistry.FactoryConfigInitServices{
-			CreateFactoryFromFile: func(factorycli.CreateFromFileConfig) error { return nil },
+		func(factorycli.QueryConfig) error { panic("unexpected QueryFactory effect") },
+		func(factorycli.ListConfig) error { panic("unexpected ListFactories effect") },
+		func(factorycli.CreateFromFileConfig) error { return nil },
+		func(factorycli.UpdateFromFileConfig) error { panic("unexpected UpdateFactoryFromFile effect") },
+		func(factorycli.DeleteConfig) error { panic("unexpected DeleteFactory effect") },
+		func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+		func(factorycli.ValidateConfig) error { panic("unexpected ValidateFactory effect") },
+		func(configcli.FactoryConfigFlattenConfig) error { panic("unexpected FlattenFactoryConfig effect") },
+		func(configcli.FactoryConfigExpandConfig) error { panic("unexpected ExpandFactoryConfig effect") },
+		func(initsetup.Config) error { panic("unexpected ConfigureInit effect") },
+		func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			panic("unexpected InstallPackagedFactory effect")
 		},
+		func(*cobra.Command) (string, error) { panic("unexpected home effect") },
+		func(string, string) (factorydefinitions.NamedFactoryRoots, error) { panic("unexpected roots effect") },
+		func(*cobra.Command) io.Writer { return nil },
 	)
 	name := resolvedTestValue{id: "you.factory.create.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")}
 	dir := resolvedTestValue{id: "you.factory.create.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factories")}
@@ -255,12 +246,25 @@ func TestFactoryConfigInitCommandHandlerReportsEachMissingCreateInput(t *testing
 func TestFactoryConfigInitCommandHandlerMapsUpdateStableInputs(t *testing.T) {
 	var got factorycli.UpdateFromFileConfig
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
-		commandregistry.FactoryConfigInitServices{
-			UpdateFactoryFromFile: func(cfg factorycli.UpdateFromFileConfig) error {
-				got = cfg
-				return nil
-			},
+		func(factorycli.QueryConfig) error { panic("unexpected QueryFactory effect") },
+		func(factorycli.ListConfig) error { panic("unexpected ListFactories effect") },
+		func(factorycli.CreateFromFileConfig) error { panic("unexpected CreateFactoryFromFile effect") },
+		func(cfg factorycli.UpdateFromFileConfig) error {
+			got = cfg
+			return nil
 		},
+		func(factorycli.DeleteConfig) error { panic("unexpected DeleteFactory effect") },
+		func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+		func(factorycli.ValidateConfig) error { panic("unexpected ValidateFactory effect") },
+		func(configcli.FactoryConfigFlattenConfig) error { panic("unexpected FlattenFactoryConfig effect") },
+		func(configcli.FactoryConfigExpandConfig) error { panic("unexpected ExpandFactoryConfig effect") },
+		func(initsetup.Config) error { panic("unexpected ConfigureInit effect") },
+		func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			panic("unexpected InstallPackagedFactory effect")
+		},
+		func(*cobra.Command) (string, error) { panic("unexpected home effect") },
+		func(string, string) (factorydefinitions.NamedFactoryRoots, error) { panic("unexpected roots effect") },
+		func(*cobra.Command) io.Writer { return nil },
 	)
 	inputs := resolvedTestInputs(t,
 		resolvedTestValue{id: "you.factory.update.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")},
@@ -279,9 +283,22 @@ func TestFactoryConfigInitCommandHandlerMapsUpdateStableInputs(t *testing.T) {
 
 func TestFactoryConfigInitCommandHandlerReportsEachMissingUpdateInput(t *testing.T) {
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
-		commandregistry.FactoryConfigInitServices{
-			UpdateFactoryFromFile: func(factorycli.UpdateFromFileConfig) error { return nil },
+		func(factorycli.QueryConfig) error { panic("unexpected QueryFactory effect") },
+		func(factorycli.ListConfig) error { panic("unexpected ListFactories effect") },
+		func(factorycli.CreateFromFileConfig) error { panic("unexpected CreateFactoryFromFile effect") },
+		func(factorycli.UpdateFromFileConfig) error { return nil },
+		func(factorycli.DeleteConfig) error { panic("unexpected DeleteFactory effect") },
+		func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+		func(factorycli.ValidateConfig) error { panic("unexpected ValidateFactory effect") },
+		func(configcli.FactoryConfigFlattenConfig) error { panic("unexpected FlattenFactoryConfig effect") },
+		func(configcli.FactoryConfigExpandConfig) error { panic("unexpected ExpandFactoryConfig effect") },
+		func(initsetup.Config) error { panic("unexpected ConfigureInit effect") },
+		func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			panic("unexpected InstallPackagedFactory effect")
 		},
+		func(*cobra.Command) (string, error) { panic("unexpected home effect") },
+		func(string, string) (factorydefinitions.NamedFactoryRoots, error) { panic("unexpected roots effect") },
+		func(*cobra.Command) io.Writer { return nil },
 	)
 	name := resolvedTestValue{id: "you.factory.update.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")}
 	dir := resolvedTestValue{id: "you.factory.update.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factories")}
@@ -308,12 +325,22 @@ func TestFactoryConfigInitCommandHandlerReportsEachMissingUpdateInput(t *testing
 }
 
 func TestFactoryConfigInitCommandHandlerReportsMissingTrailingInputs(t *testing.T) {
-	handler := commandregistry.NewFactoryConfigInitCommandHandler(commandregistry.FactoryConfigInitServices{
-		DeleteFactory:        func(factorycli.DeleteConfig) error { return nil },
-		ValidateFactory:      func(factorycli.ValidateConfig) error { return nil },
-		FlattenFactoryConfig: func(configcli.FactoryConfigFlattenConfig) error { return nil },
-		ExpandFactoryConfig:  func(configcli.FactoryConfigExpandConfig) error { return nil },
-	})
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(func(factorycli.QueryConfig) error { panic("unexpected QueryFactory effect") },
+		func(factorycli.ListConfig) error { panic("unexpected ListFactories effect") },
+		func(factorycli.CreateFromFileConfig) error { panic("unexpected CreateFactoryFromFile effect") },
+		func(factorycli.UpdateFromFileConfig) error { panic("unexpected UpdateFactoryFromFile effect") },
+		func(factorycli.DeleteConfig) error { return nil },
+		func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+		func(factorycli.ValidateConfig) error { return nil },
+		func(configcli.FactoryConfigFlattenConfig) error { return nil },
+		func(configcli.FactoryConfigExpandConfig) error { return nil },
+		func(initsetup.Config) error { panic("unexpected ConfigureInit effect") },
+		func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			panic("unexpected InstallPackagedFactory effect")
+		},
+		func(*cobra.Command) (string, error) { panic("unexpected home effect") },
+		func(string, string) (factorydefinitions.NamedFactoryRoots, error) { panic("unexpected roots effect") },
+		func(*cobra.Command) io.Writer { return nil })
 	deleteName := resolvedTestValue{id: "you.factory.delete.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("staging")}
 	deleteDir := resolvedTestValue{id: "you.factory.delete.flag.dir", source: resolvedinput.SourceManifestDefault, value: resolvedinput.StringValue("factories")}
 	validatePath := resolvedTestValue{id: "you.factory.config.validate.arg.0", source: resolvedinput.SourcePositionalArgument, value: resolvedinput.StringValue("factory.json")}
@@ -350,48 +377,23 @@ func TestFactoryConfigInitCommandHandlerReportsMissingTrailingInputs(t *testing.
 	}
 }
 
-func TestFactoryConfigInitCommandHandlerReportsMissingServices(t *testing.T) {
-	handler := commandregistry.NewFactoryConfigInitCommandHandler(commandregistry.FactoryConfigInitServices{})
-	cmd := &cobra.Command{}
-	globals := resolvedFactoryGlobals(t, false, false, false)
-	cases := []struct {
-		name string
-		run  func() error
-	}{
-		{name: "show", run: func() error { return handler.FactoryQuery(cmd, resolvedinput.Inputs{}, globals) }},
-		{name: "list", run: func() error { return handler.FactoryList(cmd, resolvedinput.Inputs{}, globals) }},
-		{name: "create", run: func() error { return handler.FactoryCreate(cmd, resolvedinput.Inputs{}, globals) }},
-		{name: "update", run: func() error { return handler.FactoryUpdate(cmd, resolvedinput.Inputs{}, globals) }},
-		{name: "delete", run: func() error { return handler.FactoryDelete(cmd, resolvedinput.Inputs{}, globals) }},
-		{name: "replace", run: func() error { return handler.FactoryReplaceCurrent(cmd, resolvedinput.Inputs{}, globals) }},
-		{name: "validate", run: func() error { return handler.FactoryConfigValidate(cmd, resolvedinput.Inputs{}, globals) }},
-		{name: "flatten", run: func() error { return handler.FactoryConfigFlatten(cmd, resolvedinput.Inputs{}, globals) }},
-		{name: "expand", run: func() error { return handler.FactoryConfigExpand(cmd, resolvedinput.Inputs{}, globals) }},
-		{name: "init", run: func() error { return handler.Init(cmd, resolvedinput.Inputs{}, globals) }},
-	}
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			if err := test.run(); err == nil || !strings.Contains(err.Error(), "service is required") {
-				t.Fatalf("missing service error = %v", err)
-			}
-		})
-	}
-}
-
 func TestFactoryConfigInitCommandHandlerReportsMissingRequiredInputs(t *testing.T) {
-	handler := commandregistry.NewFactoryConfigInitCommandHandler(commandregistry.FactoryConfigInitServices{
-		QueryFactory:          func(factorycli.QueryConfig) error { return nil },
-		ListFactories:         func(factorycli.ListConfig) error { return nil },
-		CreateFactoryFromFile: func(factorycli.CreateFromFileConfig) error { return nil },
-		UpdateFactoryFromFile: func(factorycli.UpdateFromFileConfig) error { return nil },
-		DeleteFactory:         func(factorycli.DeleteConfig) error { return nil },
-		ReplaceFactoryCurrent: func(factorycli.ReplaceCurrentConfig) error { return nil },
-		ValidateFactory:       func(factorycli.ValidateConfig) error { return nil },
-		FlattenFactoryConfig:  func(configcli.FactoryConfigFlattenConfig) error { return nil },
-		ExpandFactoryConfig:   func(configcli.FactoryConfigExpandConfig) error { return nil },
-		ConfigureInit:         func(initsetup.Config) error { return nil },
-		HomeDir:               func() (string, error) { return "operator-home", nil },
-	})
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(func(factorycli.QueryConfig) error { return nil },
+		func(factorycli.ListConfig) error { return nil },
+		func(factorycli.CreateFromFileConfig) error { return nil },
+		func(factorycli.UpdateFromFileConfig) error { return nil },
+		func(factorycli.DeleteConfig) error { return nil },
+		func(factorycli.ReplaceCurrentConfig) error { return nil },
+		func(factorycli.ValidateConfig) error { return nil },
+		func(configcli.FactoryConfigFlattenConfig) error { return nil },
+		func(configcli.FactoryConfigExpandConfig) error { return nil },
+		func(initsetup.Config) error { return nil },
+		func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			panic("unexpected InstallPackagedFactory effect")
+		},
+		func(*cobra.Command) (string, error) { return "operator-home", nil },
+		func(string, string) (factorydefinitions.NamedFactoryRoots, error) { panic("unexpected roots effect") },
+		func(*cobra.Command) io.Writer { return nil })
 	cmd := &cobra.Command{}
 	globals := resolvedFactoryGlobals(t, false, false, false)
 	cases := []struct {
@@ -421,13 +423,25 @@ func TestFactoryConfigInitCommandHandlerReportsMissingRequiredInputs(t *testing.
 func TestFactoryConfigInitCommandHandlerMapsSuppliedSetupInputs(t *testing.T) {
 	var got initsetup.Config
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
-		commandregistry.FactoryConfigInitServices{
-			ConfigureInit: func(cfg initsetup.Config) error {
-				got = cfg
-				return nil
-			},
-			HomeDir: func() (string, error) { return "operator-home", nil },
+		func(factorycli.QueryConfig) error { panic("unexpected QueryFactory effect") },
+		func(factorycli.ListConfig) error { panic("unexpected ListFactories effect") },
+		func(factorycli.CreateFromFileConfig) error { panic("unexpected CreateFactoryFromFile effect") },
+		func(factorycli.UpdateFromFileConfig) error { panic("unexpected UpdateFactoryFromFile effect") },
+		func(factorycli.DeleteConfig) error { panic("unexpected DeleteFactory effect") },
+		func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+		func(factorycli.ValidateConfig) error { panic("unexpected ValidateFactory effect") },
+		func(configcli.FactoryConfigFlattenConfig) error { panic("unexpected FlattenFactoryConfig effect") },
+		func(configcli.FactoryConfigExpandConfig) error { panic("unexpected ExpandFactoryConfig effect") },
+		func(cfg initsetup.Config) error {
+			got = cfg
+			return nil
 		},
+		func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			panic("unexpected InstallPackagedFactory effect")
+		},
+		func(*cobra.Command) (string, error) { return "operator-home", nil },
+		func(string, string) (factorydefinitions.NamedFactoryRoots, error) { panic("unexpected roots effect") },
+		func(*cobra.Command) io.Writer { return nil },
 	)
 	inputs := resolvedTestInputs(t,
 		resolvedTestValue{id: "you.init.flag.provider", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("codex")},
@@ -451,13 +465,23 @@ func TestFactoryConfigInitCommandHandlerMapsSuppliedSetupInputs(t *testing.T) {
 func TestFactoryConfigInitCommandHandlerMapsPackagedInstallStableInputs(t *testing.T) {
 	var got factorydefinitionscli.InstallPackagedFactoryConfig
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
-		commandregistry.FactoryConfigInitServices{
-			InstallPackagedFactory: func(cfg factorydefinitionscli.InstallPackagedFactoryConfig) error {
-				got = cfg
-				return nil
-			},
-			HomeDir: func() (string, error) { return "operator-home", nil },
+		func(factorycli.QueryConfig) error { panic("unexpected QueryFactory effect") },
+		func(factorycli.ListConfig) error { panic("unexpected ListFactories effect") },
+		func(factorycli.CreateFromFileConfig) error { panic("unexpected CreateFactoryFromFile effect") },
+		func(factorycli.UpdateFromFileConfig) error { panic("unexpected UpdateFactoryFromFile effect") },
+		func(factorycli.DeleteConfig) error { panic("unexpected DeleteFactory effect") },
+		func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+		func(factorycli.ValidateConfig) error { panic("unexpected ValidateFactory effect") },
+		func(configcli.FactoryConfigFlattenConfig) error { panic("unexpected FlattenFactoryConfig effect") },
+		func(configcli.FactoryConfigExpandConfig) error { panic("unexpected ExpandFactoryConfig effect") },
+		func(initsetup.Config) error { panic("unexpected ConfigureInit effect") },
+		func(cfg factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			got = cfg
+			return nil
 		},
+		func(*cobra.Command) (string, error) { return "operator-home", nil },
+		func(string, string) (factorydefinitions.NamedFactoryRoots, error) { panic("unexpected roots effect") },
+		func(*cobra.Command) io.Writer { return nil },
 	)
 	inputs := resolvedTestInputs(t,
 		resolvedTestValue{id: "you.init.flag.package", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("@you/goal")},
@@ -479,12 +503,25 @@ func TestFactoryConfigInitCommandHandlerMapsPackagedInstallStableInputs(t *testi
 func TestFactoryConfigInitCommandHandlerRejectsJSONForProviderSetup(t *testing.T) {
 	called := false
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
-		commandregistry.FactoryConfigInitServices{
-			ConfigureInit: func(initsetup.Config) error {
-				called = true
-				return nil
-			},
+		func(factorycli.QueryConfig) error { panic("unexpected QueryFactory effect") },
+		func(factorycli.ListConfig) error { panic("unexpected ListFactories effect") },
+		func(factorycli.CreateFromFileConfig) error { panic("unexpected CreateFactoryFromFile effect") },
+		func(factorycli.UpdateFromFileConfig) error { panic("unexpected UpdateFactoryFromFile effect") },
+		func(factorycli.DeleteConfig) error { panic("unexpected DeleteFactory effect") },
+		func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+		func(factorycli.ValidateConfig) error { panic("unexpected ValidateFactory effect") },
+		func(configcli.FactoryConfigFlattenConfig) error { panic("unexpected FlattenFactoryConfig effect") },
+		func(configcli.FactoryConfigExpandConfig) error { panic("unexpected ExpandFactoryConfig effect") },
+		func(initsetup.Config) error {
+			called = true
+			return nil
 		},
+		func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			panic("unexpected InstallPackagedFactory effect")
+		},
+		func(*cobra.Command) (string, error) { panic("unexpected home effect") },
+		func(string, string) (factorydefinitions.NamedFactoryRoots, error) { panic("unexpected roots effect") },
+		func(*cobra.Command) io.Writer { return nil },
 	)
 	inputs := resolvedTestInputs(t,
 		resolvedTestValue{id: "you.init.flag.provider", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("codex")},
@@ -507,12 +544,25 @@ func TestFactoryConfigInitCommandHandlerRejectsJSONForProviderSetup(t *testing.T
 func TestFactoryConfigInitCommandHandlerRejectsChangedDeprecatedPort(t *testing.T) {
 	called := false
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
-		commandregistry.FactoryConfigInitServices{
-			QueryFactory: func(factorycli.QueryConfig) error {
-				called = true
-				return nil
-			},
+		func(factorycli.QueryConfig) error {
+			called = true
+			return nil
 		},
+		func(factorycli.ListConfig) error { panic("unexpected ListFactories effect") },
+		func(factorycli.CreateFromFileConfig) error { panic("unexpected CreateFactoryFromFile effect") },
+		func(factorycli.UpdateFromFileConfig) error { panic("unexpected UpdateFactoryFromFile effect") },
+		func(factorycli.DeleteConfig) error { panic("unexpected DeleteFactory effect") },
+		func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+		func(factorycli.ValidateConfig) error { panic("unexpected ValidateFactory effect") },
+		func(configcli.FactoryConfigFlattenConfig) error { panic("unexpected FlattenFactoryConfig effect") },
+		func(configcli.FactoryConfigExpandConfig) error { panic("unexpected ExpandFactoryConfig effect") },
+		func(initsetup.Config) error { panic("unexpected ConfigureInit effect") },
+		func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			panic("unexpected InstallPackagedFactory effect")
+		},
+		func(*cobra.Command) (string, error) { panic("unexpected home effect") },
+		func(string, string) (factorydefinitions.NamedFactoryRoots, error) { panic("unexpected roots effect") },
+		func(*cobra.Command) io.Writer { return nil },
 	)
 	inputs := resolvedTestInputs(t,
 		resolvedTestValue{id: "you.factory.show.flag.port", source: resolvedinput.SourceCLIFlag, value: resolvedinput.IntValue(9090)},
@@ -530,12 +580,25 @@ func TestFactoryConfigInitCommandHandlerMapsExplicitShowSession(t *testing.T) {
 	const sessionID = "session-alpha"
 	var got factorycli.QueryConfig
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
-		commandregistry.FactoryConfigInitServices{
-			QueryFactory: func(cfg factorycli.QueryConfig) error {
-				got = cfg
-				return nil
-			},
+		func(cfg factorycli.QueryConfig) error {
+			got = cfg
+			return nil
 		},
+		func(factorycli.ListConfig) error { panic("unexpected ListFactories effect") },
+		func(factorycli.CreateFromFileConfig) error { panic("unexpected CreateFactoryFromFile effect") },
+		func(factorycli.UpdateFromFileConfig) error { panic("unexpected UpdateFactoryFromFile effect") },
+		func(factorycli.DeleteConfig) error { panic("unexpected DeleteFactory effect") },
+		func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+		func(factorycli.ValidateConfig) error { panic("unexpected ValidateFactory effect") },
+		func(configcli.FactoryConfigFlattenConfig) error { panic("unexpected FlattenFactoryConfig effect") },
+		func(configcli.FactoryConfigExpandConfig) error { panic("unexpected ExpandFactoryConfig effect") },
+		func(initsetup.Config) error { panic("unexpected ConfigureInit effect") },
+		func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			panic("unexpected InstallPackagedFactory effect")
+		},
+		func(*cobra.Command) (string, error) { panic("unexpected home effect") },
+		func(string, string) (factorydefinitions.NamedFactoryRoots, error) { panic("unexpected roots effect") },
+		func(*cobra.Command) io.Writer { return nil },
 	)
 	inputs := resolvedTestInputs(t,
 		resolvedTestValue{id: "you.factory.show.flag.session", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue(sessionID)},
@@ -552,13 +615,83 @@ func TestFactoryConfigInitCommandHandlerMapsExplicitShowSession(t *testing.T) {
 
 func TestFactoryConfigInitCommandHandlerReportsMissingStableInput(t *testing.T) {
 	handler := commandregistry.NewFactoryConfigInitCommandHandler(
-		commandregistry.FactoryConfigInitServices{
-			ListFactories: func(factorycli.ListConfig) error { return nil },
+		func(factorycli.QueryConfig) error { panic("unexpected QueryFactory effect") },
+		func(factorycli.ListConfig) error { return nil },
+		func(factorycli.CreateFromFileConfig) error { panic("unexpected CreateFactoryFromFile effect") },
+		func(factorycli.UpdateFromFileConfig) error { panic("unexpected UpdateFactoryFromFile effect") },
+		func(factorycli.DeleteConfig) error { panic("unexpected DeleteFactory effect") },
+		func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+		func(factorycli.ValidateConfig) error { panic("unexpected ValidateFactory effect") },
+		func(configcli.FactoryConfigFlattenConfig) error { panic("unexpected FlattenFactoryConfig effect") },
+		func(configcli.FactoryConfigExpandConfig) error { panic("unexpected ExpandFactoryConfig effect") },
+		func(initsetup.Config) error { panic("unexpected ConfigureInit effect") },
+		func(factorydefinitionscli.InstallPackagedFactoryConfig) error {
+			panic("unexpected InstallPackagedFactory effect")
 		},
+		func(*cobra.Command) (string, error) { panic("unexpected home effect") },
+		func(string, string) (factorydefinitions.NamedFactoryRoots, error) { panic("unexpected roots effect") },
+		func(*cobra.Command) io.Writer { return nil },
 	)
 	err := handler.FactoryList(&cobra.Command{}, resolvedinput.Inputs{}, resolvedFactoryGlobals(t, false, false, false))
 	var accessErr *resolvedinput.AccessError
 	if !errors.As(err, &accessErr) || accessErr.InputID != "you.factory.list.flag.dir" {
 		t.Fatalf("FactoryList() error = %v, want missing stable dir input", err)
+	}
+}
+
+func TestFactoryListAndPackagedInitPreserveHomeErrorBeforeEffects(t *testing.T) {
+	t.Parallel()
+	homeErr := errors.New("home metadata unavailable")
+	called := false
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(func(factorycli.QueryConfig) error { panic("unexpected QueryFactory effect") },
+		func(factorycli.ListConfig) error { called = true; return nil },
+		func(factorycli.CreateFromFileConfig) error { panic("unexpected CreateFactoryFromFile effect") },
+		func(factorycli.UpdateFromFileConfig) error { panic("unexpected UpdateFactoryFromFile effect") },
+		func(factorycli.DeleteConfig) error { panic("unexpected DeleteFactory effect") },
+		func(factorycli.ReplaceCurrentConfig) error { panic("unexpected ReplaceFactoryCurrent effect") },
+		func(factorycli.ValidateConfig) error { panic("unexpected ValidateFactory effect") },
+		func(configcli.FactoryConfigFlattenConfig) error { panic("unexpected FlattenFactoryConfig effect") },
+		func(configcli.FactoryConfigExpandConfig) error { panic("unexpected ExpandFactoryConfig effect") },
+		func(initsetup.Config) error { panic("unexpected ConfigureInit effect") },
+		func(factorydefinitionscli.InstallPackagedFactoryConfig) error { called = true; return nil },
+		func(*cobra.Command) (string, error) { return "", homeErr },
+		func(string, string) (factorydefinitions.NamedFactoryRoots, error) {
+			called = true
+			return factorydefinitions.NamedFactoryRoots{}, nil
+		},
+		func(*cobra.Command) io.Writer { return nil })
+	globals := resolvedFactoryGlobals(t, false, false, false)
+	listInputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.factory.list.flag.dir", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("factory")},
+	)
+	initInputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.init.flag.package", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("@you/goal")},
+		resolvedTestValue{id: "you.init.flag.dir", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("factories")},
+		resolvedTestValue{id: "you.init.flag.format", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("json")},
+		resolvedTestValue{id: "you.init.flag.replace", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)},
+	)
+	for _, test := range []struct {
+		name   string
+		run    func() error
+		prefix string
+	}{
+		{"list", func() error { return handler.FactoryList(&cobra.Command{}, listInputs, globals) }, "resolve factory list home: "},
+		{"packaged init", func() error { return handler.Init(&cobra.Command{}, initInputs, globals) }, "resolve init home directory: "},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.run()
+			if !errors.Is(err, homeErr) || err.Error() != test.prefix+homeErr.Error() {
+				t.Fatalf("error=%v, want wrapped home error with prefix %q", err, test.prefix)
+			}
+			if called {
+				t.Fatal("root resolution or mutation ran after home failure")
+			}
+		})
+	}
+	// Stable-input validation still precedes home metadata resolution.
+	err := handler.FactoryList(&cobra.Command{}, resolvedinput.Inputs{}, globals)
+	var accessErr *resolvedinput.AccessError
+	if !errors.As(err, &accessErr) || errors.Is(err, homeErr) {
+		t.Fatalf("missing list input error=%v, want input error before home error", err)
 	}
 }

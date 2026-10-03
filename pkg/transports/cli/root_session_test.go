@@ -21,38 +21,6 @@ import (
 
 type rootTestHTTPClock struct{}
 
-type canonicalSessionListStub struct {
-	fse.Service
-	request fse.SessionListRequest
-	result  fse.SessionListResult
-}
-
-func (stub *canonicalSessionListStub) List(_ context.Context, request fse.SessionListRequest) (fse.SessionListResult, error) {
-	stub.request = request
-	return stub.result, nil
-}
-
-func TestSessionListPrepareUsesCanonicalDurableInventory(t *testing.T) {
-	stub := &canonicalSessionListStub{result: fse.SessionListResult{
-		DurableSessions: []fse.DurableSessionListSummary{{SessionID: "durable-1", Phase: "COMPLETE", ArtifactCount: 3}},
-	}}
-	cfg := &session.ListConfig{Scope: string(fse.SessionListScopePersisted)}
-	if err := sessionListPrepare(CommandFactory{FactorySessions: stub})(context.Background(), cfg); err != nil {
-		t.Fatalf("prepare session list: %v", err)
-	}
-	filters := fse.SessionListFilters{SourceRef: "workflow.js"}
-	listed, err := cfg.DurableLister(context.Background(), fse.ListSessionsRequest{Scope: fse.SessionListScopePersisted, Filters: filters})
-	if err != nil {
-		t.Fatalf("list durable sessions: %v", err)
-	}
-	if stub.request.Mode != fse.SessionOperationModeDurable || stub.request.Filters.SourceRef != filters.SourceRef {
-		t.Fatalf("canonical list request = %#v, want durable mode and filters", stub.request)
-	}
-	if len(listed.DurableSessions) != 1 || listed.DurableSessions[0].Phase != "COMPLETE" || listed.DurableSessions[0].ArtifactCount != 3 {
-		t.Fatalf("durable rows = %#v, want rich canonical row", listed.DurableSessions)
-	}
-}
-
 func (rootTestHTTPClock) Now() time.Time { return time.Unix(1, 0) }
 
 func rootTestHTTPProtocol() clihttp.Protocol {
@@ -836,7 +804,10 @@ func (sessionListRequestPreparation) PrepareEventReconnect(
 func TestNewRepresentativeHandlerRegistryLeavesSessionShowToResolvedRegistry(t *testing.T) {
 	globals := &cliGlobalOptions{}
 	diagnostics := &cliDiagnosticsOptions{}
-	registry, err := newRepresentativeHandlerRegistry(globals, diagnostics, &cliOperatorDefaultsOptions{}, CommandFactory{})
+	registry, err := newRepresentativeHandlerRegistry(globals, diagnostics, &cliOperatorDefaultsOptions{}, CommandFactory{
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
+	})
 	if err != nil {
 		t.Fatalf("newRepresentativeHandlerRegistry() error = %v", err)
 	}
@@ -887,7 +858,20 @@ func TestShowSessionUsesInjectedService(t *testing.T) {
 				return nil
 			},
 		}),
-	}).NewCommand(nil, nil, nil)
+
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers: testSessionHandlers(session.Bind(session.Operations{
+			Show: func(cfg session.ShowConfig) error {
+				called = true
+				return nil
+			},
+		}), session.Bind(session.Operations{
+			Show: func(cfg session.ShowConfig) error {
+				called = true
+				return nil
+			},
+		})),
+	}).NewCommand(context.Background(), nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"session", "show", "session-beta"})
@@ -953,7 +937,10 @@ func runSessionLifecycleAdapterCase(
 	}
 	local := session.Bind(session.Operations{Cancel: control("local", "cancel"), Terminate: control("local", "terminate")})
 	remote := session.Bind(session.Operations{Cancel: control("remote", "cancel"), Terminate: control("remote", "terminate")})
-	root := (CommandFactory{ModelsCLI: rootModelsCLI, SessionsCLI: remote, LocalSessionsCLI: local}).NewCommand(nil, nil, nil)
+	root := (CommandFactory{ModelsCLI: rootModelsCLI, SessionsCLI: remote, LocalSessionsCLI: local,
+		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
+		sessionResolvedHandlers:  testSessionHandlers(local, remote),
+	}).NewCommand(context.Background(), nil, nil, nil)
 	var output bytes.Buffer
 	root.SetOut(&output)
 	root.SetErr(io.Discard)

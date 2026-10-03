@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -18,6 +19,91 @@ const (
 	namedLifecycleUpdatedType = "updated-task"
 	listMembershipWorkType    = "membership-task"
 )
+
+// Parallel invocations share the production graph but own homes, catalogs,
+// settings and writers. Rebinding a handler to one profile must not affect peers.
+func TestFactoryListAndInitKeepConcurrentProfilesSeparate(t *testing.T) {
+	for _, name := range []string{"profile-alpha", "profile-beta"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			home, working := t.TempDir(), t.TempDir()
+			roots, err := factorydefinitions.ResolveNamedFactoryRoots(home, working)
+			if err != nil {
+				t.Fatal(err)
+			}
+			source := support.ScaffoldFactory(t, namedLifecycleFactoryConfig("profile-task"))
+			execute := func(args ...string) *support.CapturedInputs {
+				t.Helper()
+				inputs := support.FakeInputs(t.Context(), args)
+				inputs.Input.Env = []string{"USERPROFILE=" + home, "HOME=" + home}
+				inputs.Input.WorkingDirectory = working
+				if err := namedLifecycleProcess.Execute(inputs.Input); err != nil {
+					t.Fatalf("Execute(%v): %v; stderr=%s", args, err, inputs.Stderr())
+				}
+				return inputs
+			}
+			execute("you", "factory", "create", name, "--from", filepath.Join(source, "factory.json"), "--dir", roots.Global)
+			execute("you", "init", "--provider", "codex", "--model", name)
+			listed := execute("you", "--json", "factory", "list")
+			var entries []struct {
+				Name      string `json:"name"`
+				Directory string `json:"factoryDirectory"`
+			}
+			if err := json.Unmarshal([]byte(listed.Stdout()), &entries); err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, entry := range entries {
+				if strings.HasPrefix(entry.Name, "profile-") {
+					if entry.Name != name || entry.Directory != filepath.Join(roots.Global, name) {
+						t.Fatalf("profile catalog leaked: %#v", entry)
+					}
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("list omitted own factory: %s", listed.Stdout())
+			}
+			// Omitting the model retains and reports the previously persisted
+			// default through the public command, rather than reading its store.
+			reloaded := execute("you", "init", "--provider", "codex")
+			if !strings.Contains(reloaded.Stdout(), "Configured default provider codex and model "+name) {
+				t.Fatalf("profile defaults did not survive a new invocation: %q", reloaded.Stdout())
+			}
+		})
+	}
+}
+
+func TestMissingHomeRejectsFactoryEffectsButKeepsHelpAvailable(t *testing.T) {
+	t.Parallel()
+	working := t.TempDir()
+	for _, test := range []struct {
+		args   []string
+		prefix string
+	}{
+		{[]string{"you", "factory", "list"}, "resolve factory list home: "},
+		{[]string{"you", "init", "--package", "@you/goal", "--dir", filepath.Join(working, "installed")}, "resolve init home directory: "},
+	} {
+		inputs := support.FakeInputs(t.Context(), test.args)
+		inputs.Input.Env = []string{}
+		inputs.Input.WorkingDirectory = working
+		err := namedLifecycleProcess.Execute(inputs.Input)
+		want := "CLI_COMMAND_FAILED: command failed: " + test.prefix + "home directory is not defined in the supplied environment"
+		if err == nil || err.Error() != want || inputs.Stdout() != "" {
+			t.Fatalf("Execute(%v): error=%v stdout=%q, want %q and no success", test.args, err, inputs.Stdout(), want)
+		}
+		inputs = support.FakeInputs(t.Context(), append(append([]string{}, test.args...), "--help"))
+		inputs.Input.Env = []string{}
+		inputs.Input.WorkingDirectory = working
+		if err := namedLifecycleProcess.Execute(inputs.Input); err != nil || !strings.Contains(inputs.Stdout(), "Usage:") {
+			t.Fatalf("help error=%v stdout=%q", err, inputs.Stdout())
+		}
+	}
+	entries, err := os.ReadDir(working)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("failed commands wrote working directory: %v error=%v", entries, err)
+	}
+}
 
 // TestCLIFactoryNamedCreateListUpdateDelete proves the public you factory
 // create, list, update, and delete commands succeed as one named Factory
