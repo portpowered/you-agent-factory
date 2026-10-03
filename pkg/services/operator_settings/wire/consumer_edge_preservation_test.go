@@ -112,19 +112,16 @@ func TestNewServicePreservesDocumentPersistAndEffectiveResolution(t *testing.T) 
 func newPreservationWireService(t *testing.T) operatorsettings.Service {
 	t.Helper()
 
-	providersRoot := internaltestproviders.StandardCatalog()
-	service, err := settingswire.NewServiceFromConfigDocument(
-		operatorsettings.ConfigDocumentService{
-			Files:      platformfilesystem.Local{},
-			CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) },
-			Decoder:    globalconfigmapping.Decode,
-			Encoder:    globalconfigmapping.Encode,
-			Providers:  preservationProviderCatalog,
-		},
-		providersRoot,
-		testIDGenerator(),
-		logging.NoopLogger{},
-	)
+	files := platformfilesystem.Local{}
+	createTemp := func(dir, pattern string) (operatorsettings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) }
+	document := settingswire.NewDocumentService(files, createTemp, globalconfigmapping.Decode,
+		globalconfigmapping.Encode, preservationProviderCatalog, nil, nil)
+	resolution, err := settingswire.NewResolutionService(internaltestproviders.StandardCatalog())
+	if err != nil {
+		t.Fatalf("NewResolutionService() = %v", err)
+	}
+	service, err := settingswire.NewService(document, resolution, files, createTemp,
+		globalconfigmapping.Decode, globalconfigmapping.Encode, testIDGenerator(), logging.NoopLogger{}, nil)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}

@@ -7,12 +7,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 const identityInventoryFixturesRelativeDir = "pkg/services/operator_settings/internal/services/document/identityinventory/testdata/fixtures"
@@ -27,15 +22,7 @@ func TestWireLegacyPackagesFoldPreservesExistingBackendScopeIdentity(t *testing.
 	const scopeID = "local-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 	configPath := writeIdentityInventoryFixtureToTemp(t, "valid/existing-scope.json")
 
-	root, err := settingswire.NewServiceFromConfigDocument(
-		testConfigDocumentService(),
-		internaltestproviders.StandardCatalog(),
-		testIDGenerator(),
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
-	}
+	root := newPreservationWireService(t)
 	var service operatorsettings.Service = root
 
 	loaded, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{
@@ -97,22 +84,7 @@ func TestWireLegacyPackagesFoldPreservesRootBehaviorWithRelocatedTestHelpers(t *
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	providersRoot := internaltestproviders.StandardCatalog()
-	service, err := settingswire.NewServiceFromConfigDocument(
-		operatorsettings.ConfigDocumentService{
-			Files:      platformfilesystem.Local{},
-			CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) },
-			Decoder:    globalconfigmapping.Decode,
-			Encoder:    globalconfigmapping.Encode,
-			Providers:  preservationProviderCatalog,
-		},
-		providersRoot,
-		testIDGenerator(),
-		logging.NoopLogger{},
-	)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
+	service := newPreservationWireService(t)
 	var root operatorsettings.Service = service
 
 	loaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: configPath})
