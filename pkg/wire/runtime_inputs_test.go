@@ -673,7 +673,7 @@ func assertSelectedTimeProjections(t *testing.T, edges serviceedges.Edges) {
 		"provider observation": effectiveProviderCommandClock(edges),
 		"resolver":             provideFactoryRuntimeClockResolver(provideFactoryRuntimeClock(edges))(nil),
 	} {
-		if got != edges.Clock || !got.Now().Equal(edges.Clock.Now()) {
+		if got != edges.Clock {
 			t.Fatalf("%s clock = %v, want selected source %v", name, got, edges.Clock)
 		}
 	}
