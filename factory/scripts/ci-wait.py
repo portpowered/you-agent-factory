@@ -331,14 +331,29 @@ def _labelled_pr_number(suffix, url_identities):
     return number, True, number is None
 
 
+def _bounded_tail(process_output):
+    """Return the output, or only its last MAX_PROCESS_OUTPUT_BYTES when larger.
+
+    The PR reference normally sits in the closing summary, so an oversized
+    output is classified by its tail instead of failing the lane. The cut is
+    advanced to the next whitespace so a truncated token can never be read as a
+    PR identity, and undecodable bytes at the cut are dropped.
+    """
+    raw = process_output.encode("utf-8", errors="replace")
+    if len(raw) <= MAX_PROCESS_OUTPUT_BYTES:
+        return process_output
+    tail = raw[-MAX_PROCESS_OUTPUT_BYTES:].decode("utf-8", errors="ignore")
+    first_space = re.search(r"\s", tail)
+    return tail[first_space.end():] if first_space else ""
+
+
 def classify_process_output(process_output):
     """Classify bounded previous output without querying gh or logging input."""
     if process_output is None:
         return PRIntent(PRIntentStatus.ABSENT)
     if not isinstance(process_output, str):
         return PRIntent(PRIntentStatus.INVALID, reason="invalid-process-output")
-    if len(process_output.encode("utf-8", errors="replace")) > MAX_PROCESS_OUTPUT_BYTES:
-        return PRIntent(PRIntentStatus.INVALID, reason="process-output-too-large")
+    process_output = _bounded_tail(process_output)
 
     text = process_output.strip()
     if not text:
