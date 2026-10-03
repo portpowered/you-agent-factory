@@ -52,7 +52,7 @@ func (s *service) StartSourceForRuntime(
 	if err != nil || effect == nil {
 		return result, err
 	}
-	if err := s.effects.Start(ctx, *effect); err != nil {
+	if err := s.lifecycle.Start(ctx, *effect); err != nil {
 		record.mu.Lock()
 		outcome, terminalErr := commitStartFailure(record, *effect, prior, err)
 		record.mu.Unlock()
@@ -93,10 +93,6 @@ func (s *service) planStartLocked(
 	}
 	if result, done := existingStartResult(record); done {
 		return result, nil, lifecycleSnapshot{}, record.terminalErr
-	}
-	if s.effects.Start == nil {
-		return automations.StartSourceResult{}, nil, lifecycleSnapshot{},
-			unavailableEffectsError("StartSource")
 	}
 
 	prior := lifecycleSnapshot{
@@ -216,7 +212,7 @@ func (s *service) StopSourceForRuntime(
 	if err != nil || effect == nil {
 		return result, err
 	}
-	if err := s.effects.Stop(ctx, *effect); err != nil {
+	if err := s.lifecycle.Stop(ctx, *effect); err != nil {
 		record.mu.Lock()
 		outcome, terminalErr := commitStopFailure(record, *effect, prior, err)
 		record.mu.Unlock()
@@ -267,11 +263,6 @@ func (s *service) planStopLocked(
 				),
 			}, nil, lifecycleSnapshot{}, record.terminalErr
 		}
-	}
-
-	if s.effects.Stop == nil {
-		return automations.StopSourceResult{}, nil, lifecycleSnapshot{},
-			unavailableEffectsError("StopSource")
 	}
 
 	prior := lifecycleSnapshot{
@@ -362,7 +353,7 @@ func (s *service) WaitSourceForRuntime(
 		return result, err
 	}
 
-	observation, effectErr := s.effects.Wait(ctx, *effect)
+	observation, effectErr := s.lifecycle.Wait(ctx, *effect)
 	record.mu.Lock()
 	result, err = commitWaitLocked(request.Desired, *effect, observation, effectErr, record)
 	record.mu.Unlock()
@@ -397,9 +388,6 @@ func (s *service) planWaitLocked(
 				request.Desired, record.observation, true,
 			),
 		}, nil, record.terminalErr
-	}
-	if s.effects.Wait == nil {
-		return automations.WaitSourceResult{}, nil, unavailableEffectsError("WaitSource")
 	}
 
 	effect := reconciliation.WaitEffect{

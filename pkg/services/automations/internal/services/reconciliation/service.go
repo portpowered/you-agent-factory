@@ -31,14 +31,13 @@ type RuntimeSourceControl interface {
 	WaitSourceForRuntime(context.Context, string, automations.WaitSourceRequest) (automations.WaitSourceResult, error)
 }
 
-// Effects applies source-specific lifecycle effects without owning
-// reconciliation policy. Start is invoked only after the reconciler commits
-// the authoritative starting observation. Wait observes one already-started
-// transition; it must not activate or stop a source.
-type Effects struct {
-	Start func(context.Context, StartEffect) error
-	Stop  func(context.Context, StopEffect) error
-	Wait  func(context.Context, WaitEffect) (automations.SourceObservation, error)
+// SourceLifecycle applies source-specific lifecycle effects without owning
+// reconciliation policy. Start runs after the authoritative starting observation
+// is committed. Wait observes a transition without activating or stopping it.
+type SourceLifecycle interface {
+	Start(context.Context, StartEffect) error
+	Stop(context.Context, StopEffect) error
+	Wait(context.Context, WaitEffect) (automations.SourceObservation, error)
 }
 
 // StartEffect identifies the one logical source activation to apply.

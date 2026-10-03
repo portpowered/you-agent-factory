@@ -14,7 +14,7 @@ import (
 )
 
 type service struct {
-	effects reconciliation.Effects
+	lifecycle reconciliation.SourceLifecycle
 
 	recordsMu sync.RWMutex
 	records   map[sourceKey]*sourceRecord
@@ -23,10 +23,10 @@ type service struct {
 var _ reconciliation.Service = (*service)(nil)
 
 // New constructs an inert deterministic reconciliation service.
-func New(effects reconciliation.Effects) reconciliation.Service {
+func New(lifecycle reconciliation.SourceLifecycle) reconciliation.Service {
 	return &service{
-		effects: effects,
-		records: make(map[sourceKey]*sourceRecord),
+		lifecycle: lifecycle,
+		records:   make(map[sourceKey]*sourceRecord),
 	}
 }
 
