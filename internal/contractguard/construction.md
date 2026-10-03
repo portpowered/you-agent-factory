@@ -44,13 +44,15 @@ method expressions. Imported and local type aliases follow authored alias chains
 defined types do not inherit the original type's method identity. Method values
 use the same local-value rules.
 
-Concrete single-result helper signatures also establish a method receiver's
+Concrete helper result signatures also establish a method receiver's
 declared type, including imported helpers, authored result aliases, named results,
-immutable helper values and method chains. Generic helpers are covered only when
+immutable helper values and method chains. Tuple assignments and grouped local
+declarations select the exact declared result position, including grouped/named
+results and aliases of the selected receiver. Generic helpers are covered only when
 their result is a concrete indexed type. This establishes qualified method
 identity, not helper-return equivalence or required storage provenance; constructor
-field tracing still uses its separate allocation/alias rules. Tuple results,
-interface implementation selection and opaque function values remain uncovered.
+field tracing still uses its separate allocation/alias rules. Interface
+implementation selection and opaque function values remain uncovered.
 
 Required constructor records containing registered behavior/effect collaborators
 are reported as `required-dependency-bag`. Authored nested and embedded fields,
@@ -86,7 +88,7 @@ Escaped or unused getter values report `unresolved-service-getter-reference`.
 Parameterized views, optional fields, domain/state/resource results and returns
 inside nested closures do not become peer getters. This does not yet establish
 interface-dispatched getters, complete named/tuple result provenance, opaque or
-tuple-returned receivers or arbitrary implementation selection; those limits still require
+mutated tuple receiver bindings or arbitrary implementation selection; those limits still require
 classification/debt before whole-set readiness.
 
 This bounded scan does not yet establish promoted
