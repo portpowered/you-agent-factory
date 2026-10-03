@@ -156,17 +156,14 @@ func composeService(
 		requiredToolChecker,
 		orchestratorValidator,
 		authoringLayout,
+		listEffective,
 		options...,
 	)
 	if definitions == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: implementation rejected its dependencies")
 	}
 
-	return attachFactoryDefinitionServices(
-		definitions,
-		listEffective,
-		snapshotsPortability,
-	)
+	return factorydefinitionsinternal.AttachSnapshotsPortability(definitions, snapshotsPortability)
 }
 
 func composeFactoryDefinitionSupport(
@@ -225,28 +222,6 @@ func composeFactoryDefinitionSupport(
 		return nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
 	}
 	return preparePortableFactoryConfig, captureFactorySnapshot, snapshotsPortability, authoringLayout, nil
-}
-
-func attachFactoryDefinitionServices(
-	definitions factorydefinitions.Service,
-	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
-	snapshotsPortability snapshotsportability.Service,
-) (factorydefinitions.Service, error) {
-	attached, err := factorydefinitionsinternal.AttachEffectiveCatalog(definitions, listEffective)
-	if err != nil {
-		return nil, err
-	}
-	if attached == nil {
-		return nil, fmt.Errorf("construct Factory Definitions: effective catalog attachment rejected its dependencies")
-	}
-	withSnapshots, err := factorydefinitionsinternal.AttachSnapshotsPortability(attached, snapshotsPortability)
-	if err != nil {
-		return nil, err
-	}
-	if withSnapshots == nil {
-		return nil, fmt.Errorf("construct Factory Definitions: snapshots portability attachment rejected its dependencies")
-	}
-	return withSnapshots, nil
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption

@@ -3,6 +3,7 @@ package internal_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -41,6 +42,7 @@ func TestCompletedLifecycleDelegatesRuntimeSnapshot(t *testing.T) {
 			return factorydefinitions.ResolveRuntimeSnapshotResult{Snapshot: factorydefinitions.RuntimeSnapshot{FactoryDir: request.FactoryDir}}, nil
 		}),
 		factorydefinitions.UnimplementedService{}, nil,
+		factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
 	)
 	if called {
 		t.Fatal("construction queried snapshot owner")
@@ -92,6 +94,7 @@ func TestCompletedLifecycleDelegatesCompilation(t *testing.T) {
 			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 				nil, lifecycle.StubActivationGateway(), nil, nil, nil, nil,
 				factorydefinitions.UnimplementedService{}, owner, nil,
+				factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
 			)
 			if calls != 0 {
 				t.Fatal("construction invoked compilation")
@@ -108,4 +111,43 @@ type compilationOperation func(context.Context, factorydefinitions.CompileEffect
 
 func (operation compilationOperation) CompileEffectiveFactorySource(ctx context.Context, request factorydefinitions.CompileEffectiveFactorySourceRequest) (factorydefinitions.CompileEffectiveFactorySourceResult, error) {
 	return operation(ctx, request)
+}
+
+func TestCompletedLifecycleDelegatesEffectiveCatalog(t *testing.T) {
+	t.Parallel()
+	for _, operationError := range []error{nil, errors.New("catalog unavailable"), context.Canceled} {
+		t.Run(fmt.Sprint(operationError), func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if errors.Is(operationError, context.Canceled) {
+				cancel()
+			}
+			request := factorydefinitions.ListEffectiveFactoriesRequest{ProjectRoot: "/project", GlobalRoot: "/global"}
+			expected := factorydefinitions.ListEffectiveFactoriesResult{}
+			if operationError == nil {
+				expected.Entries = []factorydefinitions.EffectiveFactoryCatalogEntry{{Name: "alpha"}}
+			}
+			calls := 0
+			listEffective := func(gotContext context.Context, gotRequest factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+				calls++
+				if gotContext != ctx || gotRequest != request {
+					t.Fatal("catalog request or context changed")
+				}
+				return expected, operationError
+			}
+			disabled := factorydefinitions.UnimplementedService{}
+			service := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
+				nil, lifecycle.StubActivationGateway(), disabled, disabled, disabled, disabled,
+				disabled, disabled, nil, listEffective,
+			)
+			if calls != 0 {
+				t.Fatal("construction queried effective catalog")
+			}
+			result, err := service.ListEffectiveFactories(ctx, request)
+			if calls != 1 || !reflect.DeepEqual(result, expected) || err != operationError {
+				t.Fatalf("catalog calls=%d result=%#v error=%v; want %#v, %v", calls, result, err, expected, operationError)
+			}
+		})
+	}
 }

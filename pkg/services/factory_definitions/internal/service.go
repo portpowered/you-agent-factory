@@ -42,6 +42,7 @@ func NewWithAuthoringLayout(
 	requiredToolChecker factoryroot.RequiredToolChecker,
 	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
 	authoringLayout authoringlayout.Service,
+	listEffective factoryroot.EffectiveFactoryCatalogOperation,
 	options ...CompositionOption,
 ) factoryroot.Service {
 	if sessionHost == nil || activationGateway == nil || clock == nil || versionFileSystem == nil ||
@@ -99,5 +100,6 @@ func NewWithAuthoringLayout(
 		runtimeSnapshot,
 		compilation,
 		versionFileSystem,
+		listEffective,
 	)
 }
