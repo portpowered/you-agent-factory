@@ -1452,6 +1452,13 @@ func (service cancelAfterRecordingStart) StartRecording(request recordings.Start
 	return result, err
 }
 
+func assertSuccessfulRecordingStart(t *testing.T, ctx context.Context, result recordings.StartRecordingResult) {
+	t.Helper()
+	if ctx.Err() != nil || !result.Enabled || result.Status.RecordingID == "" {
+		t.Fatalf("StartRecording = %#v, context = %v, want success before cancellation", result, ctx.Err())
+	}
+}
+
 func characterizeAbandonedRecording(t *testing.T, clocks ...recordings.RecordingClock) (recordings.RecordingSnapshot, recordings.RecordingStatusFacts, error) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1479,9 +1486,7 @@ func characterizeAbandonedRecording(t *testing.T, clocks ...recordings.Recording
 	).(*combinedService)
 	owner := root.Service
 	root.Service = cancelAfterRecordingStart{Service: owner, afterStart: func(result recordings.StartRecordingResult) {
-		if ctx.Err() != nil || !result.Enabled || result.Status.RecordingID == "" {
-			t.Fatalf("StartRecording = %#v, context = %v, want success before cancellation", result, ctx.Err())
-		}
+		assertSuccessfulRecordingStart(t, ctx, result)
 		observationsMu.Lock()
 		started = result
 		observationsMu.Unlock()
@@ -1499,8 +1504,8 @@ func characterizeAbandonedRecording(t *testing.T, clocks ...recordings.Recording
 	})
 	result, err := root.BeginRecordingScope(ctx, recordings.BeginRecordingScopeRequest{
 		Enabled:       true,
-		Scope:         recordings.CanonicalEventScope{FactorySessionID: "abandoned-recording"},
-		Target:        recordings.RecordingTargetRequest{Artifact: "artifact:abandoned-recording"},
+		Scope:         recordings.CanonicalEventScope{FactorySessionID: t.Name()},
+		Target:        recordings.RecordingTargetRequest{Artifact: recordings.RecordingArtifactReference("artifact:" + t.Name())},
 		FlushInterval: time.Hour,
 	})
 	if !errors.Is(err, context.Canceled) || !errors.Is(err, writeErr) {
