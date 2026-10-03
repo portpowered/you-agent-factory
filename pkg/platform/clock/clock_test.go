@@ -1,11 +1,127 @@
 package clock_test
 
 import (
+	"sync"
 	"testing"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 )
+
+func TestDeterministicAfterDeliversOnceAtLogicalDeadline(t *testing.T) {
+	t.Parallel()
+	base := time.Unix(42, 0).UTC()
+	clock := platformclock.NewDeterministic(base, time.Second)
+	after := clock.After(3 * time.Second)
+	clock.SetTick(2)
+	assertNoDelivery(t, after)
+	clock.SetTick(3)
+	assertDelivery(t, after, base.Add(3*time.Second))
+	clock.SetTick(3)
+	clock.SetTick(4)
+	assertNoDelivery(t, after)
+}
+
+func TestDeterministicAfterImmediateDurations(t *testing.T) {
+	t.Parallel()
+	for _, duration := range []time.Duration{0, -time.Second} {
+		t.Run(duration.String(), func(t *testing.T) {
+			t.Parallel()
+			clock := platformclock.NewDeterministic(time.Unix(42, 0), time.Second)
+			clock.SetTick(2)
+			want := clock.Now()
+			after, timer := clock.After(duration), clock.NewTimer(duration)
+			assertDelivery(t, after, want)
+			assertDelivery(t, timer.C(), want)
+			if timer.Stop() {
+				t.Fatal("Stop succeeded after immediate delivery")
+			}
+			clock.SetTick(4)
+			assertNoDelivery(t, after)
+			assertNoDelivery(t, timer.C())
+		})
+	}
+}
+
+func TestRecordedDeterministicAfterUsesInterpolatedAndRecordedTime(t *testing.T) {
+	t.Parallel()
+	base := time.Unix(42, 0).UTC()
+	clock := platformclock.NewRecordedDeterministic(base, time.Second, map[int]time.Time{
+		0: base, 4: base.Add(8 * time.Second),
+	})
+	after := clock.After(3 * time.Second)
+	clock.SetTick(1)
+	assertNoDelivery(t, after)
+	clock.SetTick(2)
+	assertDelivery(t, after, base.Add(4*time.Second))
+	recorded := clock.After(4 * time.Second)
+	clock.SetTick(3)
+	assertNoDelivery(t, recorded)
+	clock.SetTick(4)
+	assertDelivery(t, recorded, base.Add(8*time.Second))
+	clock.SetTick(5)
+	assertNoDelivery(t, after)
+	assertNoDelivery(t, recorded)
+}
+
+func TestDeterministicConcurrentStopAdvanceAndAfter(t *testing.T) {
+	t.Parallel()
+	base := time.Unix(42, 0).UTC()
+	clock := platformclock.NewDeterministic(base, time.Second)
+	timer := clock.NewTimer(time.Second)
+	start := make(chan struct{})
+	var joined sync.WaitGroup
+	joined.Add(3)
+	var stopped bool
+	var after <-chan time.Time
+	go func() { defer joined.Done(); <-start; stopped = timer.Stop() }()
+	go func() { defer joined.Done(); <-start; clock.SetTick(1) }()
+	go func() { defer joined.Done(); <-start; after = clock.After(time.Second) }()
+	close(start)
+	joined.Wait()
+	if stopped {
+		assertNoDelivery(t, timer.C())
+	} else {
+		assertDelivery(t, timer.C(), base.Add(time.Second))
+	}
+	if timer.Stop() {
+		t.Fatal("second Stop succeeded after stop or delivery")
+	}
+	// After may register before or after tick 1; tick 2 reaches either deadline.
+	clock.SetTick(2)
+	select {
+	case got := <-after:
+		if !got.Equal(base.Add(time.Second)) && !got.Equal(base.Add(2*time.Second)) {
+			t.Fatalf("After delivered unexpected logical time %s", got)
+		}
+	default:
+		t.Fatal("After did not fire by tick 2")
+	}
+	clock.SetTick(3)
+	assertNoDelivery(t, timer.C())
+	assertNoDelivery(t, after)
+}
+
+func assertDelivery(t *testing.T, channel <-chan time.Time, want time.Time) {
+	t.Helper()
+	select {
+	case got := <-channel:
+		if !got.Equal(want) {
+			t.Fatalf("delivery = %s, want %s", got, want)
+		}
+	default:
+		t.Fatal("logical timer did not deliver synchronously at its deadline")
+	}
+}
+
+func assertNoDelivery(t *testing.T, channel <-chan time.Time) {
+	t.Helper()
+	select {
+	case got := <-channel:
+		t.Fatalf("unexpected timer delivery %s", got)
+	default:
+	}
+}
 
 func TestRealReadsCurrentWallClock(t *testing.T) {
 	before := time.Now()
