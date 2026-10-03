@@ -65,13 +65,28 @@ func (inventory *Service) ListRecordedSessions(
 	}
 
 	summaries := make([]recordings.RecordedSessionSummary, 0, len(paths))
+	skipped := 0
 	for _, path := range paths {
 		summary, err := inventory.summaryForPath(root, path)
 		if err != nil {
-			inventory.logOutcome("failure", len(summaries))
-			return recordings.RecordedSessionInventoryResult{}, err
+			// One unreadable or corrupt recording must never make the whole
+			// history unlistable; it is skipped and reported for diagnosis.
+			skipped++
+			inventory.logger.Warn(
+				"recordings session inventory skipped unreadable recording",
+				"operation", "list_recorded_sessions",
+				"error", err.Error(),
+			)
+			continue
 		}
 		summaries = append(summaries, summary)
+	}
+	if skipped > 0 {
+		inventory.logger.Warn(
+			"recordings session inventory skipped recordings",
+			"operation", "list_recorded_sessions",
+			"skipped_recording_count", skipped,
+		)
 	}
 	sort.Slice(summaries, func(left, right int) bool {
 		if summaries[left].FactorySessionID != summaries[right].FactorySessionID {

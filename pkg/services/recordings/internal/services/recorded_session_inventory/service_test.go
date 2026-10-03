@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -102,21 +101,38 @@ func TestListRecordedSessionsReturnsEmptyForAbsentOrEmptyRoot(t *testing.T) {
 	}
 }
 
-func TestListRecordedSessionsPropagatesMalformedCandidateFromReplayInputLoader(t *testing.T) {
+func TestListRecordedSessionsSkipsMalformedCandidateAndReportsIt(t *testing.T) {
 	root := t.TempDir()
-	path := writeRecordingFile(t, root, filepath.Join("2026", "08", "24", "bad.json"), "unchanged")
-	wantErr := errors.New("unsupported replay compatibility version")
+	bad := writeRecordingFile(t, root, filepath.Join("2026", "08", "24", "bad.json"), "unchanged")
+	good := writeRecordingFile(t, root, filepath.Join("2026", "08", "24", "good.json"), "good")
 	loader := &recordedInputLoader{
-		inputs: map[string]recordings.LoadReplayInputResult{path: {}},
-		errors: map[string]error{path: wantErr},
+		inputs: map[string]recordings.LoadReplayInputResult{
+			bad:  {},
+			good: {Portable: portableInput("good-session")},
+		},
+		errors: map[string]error{bad: errors.New("unsupported replay compatibility version")},
 	}
-	inventory := recordingswire.NewRecordedSessionInventory(os.ReadDir, loader, logging.NoopLogger{})
+	logger := &warnSpy{}
+	inventory := recordingswire.NewRecordedSessionInventory(os.ReadDir, loader, logger)
 
-	_, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("error = %v, want wrapped %v", err, wantErr)
+	result, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
+	if err != nil {
+		t.Fatalf("ListRecordedSessions() error = %v, want the bad recording skipped", err)
+	}
+	if len(result.Sessions) != 1 || result.Sessions[0].FactorySessionID != "good-session" {
+		t.Fatalf("sessions = %#v, want only the readable recording", result.Sessions)
+	}
+	if logger.warns == 0 {
+		t.Fatal("skipped recording was not reported through a warning diagnostic")
 	}
 }
+
+type warnSpy struct {
+	logging.NoopLogger
+	warns int
+}
+
+func (spy *warnSpy) Warn(string, ...any) { spy.warns++ }
 
 func TestListRecordedSessionsDoesNotMutateArtifactsAndUsesLoaderBoundary(t *testing.T) {
 	root := t.TempDir()
@@ -167,7 +183,7 @@ func TestListRecordedSessionsIgnoresNonDatedAndUnsupportedFiles(t *testing.T) {
 	}
 }
 
-func TestListRecordedSessionsRejectsConflictingLegacySessionIdentities(t *testing.T) {
+func TestListRecordedSessionsSkipsConflictingLegacySessionIdentities(t *testing.T) {
 	root := t.TempDir()
 	path := writeRecordingFile(t, root, filepath.Join("2026", "08", "24", "conflicting.json"), "conflicting")
 	first, second := "session-first", "session-second"
@@ -179,9 +195,9 @@ func TestListRecordedSessionsRejectsConflictingLegacySessionIdentities(t *testin
 	}}
 	inventory := recordingswire.NewRecordedSessionInventory(os.ReadDir, loader, logging.NoopLogger{})
 
-	_, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
-	if err == nil || !strings.Contains(err.Error(), "multiple Factory Session UUIDs") {
-		t.Fatalf("error = %v, want conflicting identity error", err)
+	result, err := inventory.ListRecordedSessions(recordings.RecordedSessionInventoryRequest{RecordingRoot: root})
+	if err != nil || len(result.Sessions) != 0 {
+		t.Fatalf("sessions = %#v, error = %v, want the conflicting recording skipped", result.Sessions, err)
 	}
 }
 
