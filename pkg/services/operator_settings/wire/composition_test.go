@@ -99,9 +99,13 @@ func TestNewConfigDocumentServiceUsesCompletedDocumentForRoundTrip(t *testing.T)
 	if err != nil {
 		t.Fatalf("ConfigureProviderModel() = %v", err)
 	}
+	want := operatorsettings.Defaults{WorkerModelProvider: "CODEX", WorkerModel: "completed-model"}
+	if updated.FileConfig().Defaults != want {
+		t.Fatalf("configured defaults = %#v, want %#v", updated.FileConfig().Defaults, want)
+	}
 	reloaded, err := service.Load(path)
-	if err != nil || reloaded.FileConfig().Defaults != updated.FileConfig().Defaults {
-		t.Fatalf("Load() = %#v, %v, want persisted defaults %#v", reloaded.FileConfig(), err, updated.FileConfig().Defaults)
+	if err != nil || reloaded.FileConfig().Defaults != want {
+		t.Fatalf("Load() = %#v, %v, want persisted defaults %#v", reloaded.FileConfig(), err, want)
 	}
 }
 
