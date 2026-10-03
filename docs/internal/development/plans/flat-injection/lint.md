@@ -1,6 +1,6 @@
 # Flat injection: static enforcement design
 
-This appendix implements the enforcement policy of [the governing plan](plan.md), especially its architecture, rollout, verification, and [task packets](tasks.md). T20 owns checker infrastructure and construction placement; T23 owns strict injected-dependency policy and migrated constructor callers; T24 owns platform helper and compatibility retirement. T20 owns final enforcement, T22 owns integrated performance/release evidence, and VAL01 owns independent read-only loopback. The task IDs are the handoff references; this document does not authorize implementation. Source evidence was inspected on 2026-10-02; line numbers identify the audited checkout and may move.
+This appendix implements the enforcement policy of [the governing plan](plan.md), especially its architecture, rollout, verification, and [task packets](tasks.md). T20 owns checker infrastructure and construction placement; T23 owns strict injected-dependency policy and migrated constructor callers; T24 owns platform helper and compatibility retirement. T29 owns final enforcement, T22 owns integrated performance/release evidence, and VAL01 owns independent read-only loopback. The task IDs are the handoff references; this document does not authorize implementation. Source evidence was inspected on 2026-10-02; line numbers identify the audited checkout and may move.
 
 ## 1. Outcome and policy
 
@@ -175,3 +175,28 @@ The rows below expand coverage beyond the initial seed. They establish the prese
 The policy must preserve `worker.Auth == nil`/`worker.Linear == nil` checks as source configuration validation, nil error causes in CLI HTTP error helpers, optional HTTP response objects, `KnownWorkTypes` maps, restored Work maps, optional replay cursor, and result-buffer ownership state. Providers registration identity/availability/duplicate checks validate published route data and remain required. Missing Continue capability must become an explicit injected unsupported-continuation policy, not a universal requirement that every provider support continuation. Canonical quiet logger selection and `Real.Now` implementation are allowed; arbitrary nil logger fallback is not.
 
 Compiled `pkg/transports/http/servertests/...` support files appear in a `pkg` path scan even though they are harness support. Classify their authority explicitly before enforcement; filename location alone is not proof of production execution. Conversely, compatibility constructors in normal compiled files must receive exact caller evidence before they are claimed dead. The broad inventory does not change the task scope silently: a newly discovered behavior/owner that exceeds T23's construction-policy outcome requires a named delta task, T23 supplies boundary policy only. T25 and T26 own Costs and Webhooks behavior respectively; owner lanes remove their own constructor fallbacks.
+
+## 9. v1.1 enforcement classifications and gate ownership
+
+Follow AM01–AM16 in the [plan amendment table](plan.md#authorized-amendment-flat-injection-v11), with task/native pairs and inventory dispositions; this appendix does not release production or shared quality holds.
+
+| Amendment | Static classification and required behavior evidence |
+| --- | --- |
+| AM01 | Default logger is terminal-muted; legitimate invocation quiet policy is explicit. Separate quiet/JSON/NDJSON/normal/verbose concurrency; quiet+JSON remains INVOCATION_OUTPUT_CONFLICT, model failure is not a success JSON witness. |
+| AM02 | Completed request/content and invocation-input preparation are direct roles. Reject per-operation construction of private policy/public mapping; owner Wire retains legal private access. |
+| AM03 | Dormant Settings adapters remain component compatibility only; no invented canonical HTTP/MCP load/update route. CLI F12 proves public behavior. |
+| AM04 | Canonical command selection and inert absent overrides are preserved; legacy PTY unit behavior is not canonical PTY activation evidence. |
+| AM05 | Attempt resources and retained/reused Runtime checkouts are separate legitimate lifetimes. Never make unconditional deletion a structural gate; policy delta needs operator. |
+| AM06 | Exact T10 ProcessDependencies compatibility allowance names T11 deletion after T10/T30; T29 final S01 admits no leftover aggregate. T30 host/lease/coordinator remains exclusive. |
+| AM07 | Independent authority/control/durable/invocation/gateway graph has no final-Root back edge. T13 removes BindProcessDurable/AttachSessionGateway/history/root binders; T17 removes Complete/legacy opening; T15 removes interim RuntimeRecord service/logger getters. Temporary scope bridge is not final S01 proof. |
+| AM08 | Replay Clock timestamps and process TimerSource readiness are intentionally distinct. Allow owned cancellable timers from injected scheduler; reject hidden wall fallback or replay-clock OS readiness. |
+| AM09 | T16 allowance/removal owns factory declaration/provider/call sites after first-step keyed-attempt PR; T15 consumes shared supervision. Pending design is not approved here. |
+| AM10 | Private map/holder observations are stress evidence only after read-only observer proof at exact pin; static absence of constructors/public session counts cannot prove retention/P01. |
+| AM11 | Zero candidate time is not successful finalization. Keep ErrInvalidRecordingTerminalMetadata/unset FinalizedAt characterization and joined post-start cancel/final-flush causes. |
+| AM12 | Mock server or completion-only result cannot substitute for returned durable-session ordered read_events; FI-PREREQ-MCP-DISCOVERY remains held for integrated M01/F13. |
+| AM13 | Characterization/source topology does not prove replacement webhook readiness; operator authorization and FI-PREREQ-WEBHOOK-READINESS merge precede F18a-f cutover. |
+| AM14 | Author stops at pushed head/open PR/CI start/feedback; independent validator/review owns exact-head artifact/Linux/terminal quality and merge. |
+| AM15 | FI-SHARED-QUALITY belongs to Factory Reliability; required lane-audit/primary-lane/fixture-isolation proof is not waived by retained work or this amendment. |
+| AM16 | deferred: needs operator decision. Retain T12 draft #2683/head `62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7`; T12 owns private layout/obsolete-helper removal and T20 owns root-interface enforcement, script_pollers baseline and deadcode measurement. Root-interface findings, stale baseline, unmeasured pkg-structure and hosted deadcode 3154 against zero allowance are failures, not waived properties. Operator disposition/reviewed corrected packet precede successor admission; exact-head quality and full F10/S01 remain mandatory. No checker allowance/baseline debt or policy change. |
+
+Narrow changed-package tests and applicable lint precede early push/open PR. Required CI runs broad verify-pr/test-functional/test-full gates; do not run those locally as push gates on the shared host. Review immediately before merge rebases current origin/main and reruns make lint pkg-file-count (plus generate-wire/clean diff only when Wire changed). Evidence belongs in PR comments, never a new CI-results commit. DOC-LINT for this amendment runs `go run ./cmd/markdown-linter docs/internal/development/plans/flat-injection`; no new source-shape tests or production checker/baseline changes are authorized.
