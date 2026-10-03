@@ -37,6 +37,7 @@ type reviewFailureSeed struct {
 	State     string
 	TraceID   string
 	Payload   string
+	Tags      map[string]string
 	StateType factoryapi.WorkStateType
 }
 
@@ -110,6 +111,11 @@ func (scenario *reviewFailureScenario) submit(t *testing.T, requestID string, se
 		workID := seed.WorkID
 		traceID := seed.TraceID
 		workType := seed.WorkType
+		var tags *factoryapi.StringMap
+		if len(seed.Tags) > 0 {
+			seedTags := factoryapi.StringMap(seed.Tags)
+			tags = &seedTags
+		}
 		works = append(works, factoryapi.Work{
 			Name:                   seed.Name,
 			WorkId:                 &workID,
@@ -118,6 +124,7 @@ func (scenario *reviewFailureScenario) submit(t *testing.T, requestID string, se
 			CurrentChainingTraceId: &traceID,
 			TraceId:                &traceID,
 			Payload:                seed.Payload,
+			Tags:                   tags,
 		})
 	}
 	request := factoryapi.WorkRequest{

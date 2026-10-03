@@ -86,8 +86,8 @@ The supervisor may report or repair Factory-level state and a clearly stranded
 Work when the runtime exposes that safe route. It
 must not rewrite a Project contract, weaken an acceptance criterion, manually
 mark unfinished Work complete, or take ownership of a healthy Project's child
-Work. A failed child route must be visible to its Project Lead through the
-Project cycle and event evidence; if the route is missing, classify it as a
+Work. A failed child route must be visible to its Project Lead through its
+project-lead-wake and event evidence; if the route is missing, classify it as a
 Factory stability defect and prioritize the route correction.
 
 ## Project admission and supervision
@@ -137,7 +137,7 @@ Use these decisions:
 - for a stranded transition, repair the state with a stable request identity
   and verify the route;
 - for a child plan, workspace, executor, review, or validation failure, let the
-  Project Lead receive the failure through its Project cycle and issue a smaller
+  Project Lead receive the failure through its child wake and issue a smaller
   correction; fix a missing feedback route at Factory level;
 - for a contract or scope failure, hold the Project and request an operator
   amendment rather than changing the goal;
