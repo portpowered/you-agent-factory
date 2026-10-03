@@ -15,7 +15,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
-	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -32,13 +31,7 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 	recoveryDir, recovery := newScriptCycleFactory(t)
 	emptyDir, empty := newScriptCycleFactory(t)
 	cursor, checkpoint := "cursor-雪-\\opaque", "checkpoint-λ-\"quoted\""
-	output, err := json.Marshal(map[string]any{
-		"request": json.RawMessage(scriptPollerExternalWorkRequestJSON(t)),
-		"cursor":  cursor, "checkpoint": checkpoint,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	output := scriptCycleOutput(t, cursor, checkpoint)
 	restartDir, restart := newScriptCycleFactory(t)
 	peerDir, peer := newScriptCycleFactory(t)
 	failureDir, failure := newScriptCycleFactory(t)
@@ -49,28 +42,8 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 	duplicateWatcherDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
 	stoppedWatcherDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
 	watcherPeerDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
-	hostedDir, hosted := newHostedCycleFactory(t, "owned-hosted-success")
-	hostedEmptyDir, hostedEmpty := newHostedCycleFactory(t, "owned-hosted-empty")
-	hostedStopDir, hostedStop := newHostedCycleFactory(t, "owned-hosted-stop")
-	hostedPeerDir, hostedPeer := newHostedCycleFactory(t, "owned-hosted-peer")
-	hostedRetryDir, hostedRetry := newHostedCycleFactory(t, "owned-hosted-retry-secret")
-	hostedRetryPeerDir, hostedRetryPeer := newHostedCycleFactory(t, "owned-hosted-retry-peer")
-	hostedFailureDir, hostedFailure := newHostedCycleFactory(t, "owned-hosted-failure-secret")
-	hostedFailurePeerDir, hostedFailurePeer := newHostedCycleFactory(t, "owned-hosted-failure-peer")
-	checkpointFiles := &hostedCheckpointFailure{directory: hostedFailureDir, secret: "owned-hosted-failure-secret"}
-	checkpoints, err := automationswire.NewHostedLinearCheckpointStore(checkpointFiles)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	hostedRouter := hostedCycleRouter{routes: map[string]*hostedCycleRoute{
-		"owned-hosted-success": hosted, "owned-hosted-empty": hostedEmpty,
-		"owned-hosted-stop": hostedStop, "owned-hosted-peer": hostedPeer,
-		"owned-hosted-retry-secret": hostedRetry, "owned-hosted-retry-peer": hostedRetryPeer,
-		"owned-hosted-failure-secret": hostedFailure, "owned-hosted-failure-peer": hostedFailurePeer,
-	}}
+	hosted := newHostedIngressScenarios(t)
 	var stoppedWatcherAdmissions atomic.Int32
-	var stoppedHostedAdmissions atomic.Int32
 	router := scriptCycleRouter{routes: map[string]*scriptCycleRoute{
 		filepath.Clean(recoveryDir):    recovery,
 		filepath.Clean(emptyDir):       empty,
@@ -79,35 +52,15 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 		filepath.Clean(failureDir):     failure,
 		filepath.Clean(failurePeerDir): failurePeer,
 	}}
-	server := startScriptCycleHost(t, router, hostedRouter, files, checkpoints, func(record work.FactorySubmissionRecord) {
+	server := startScriptCycleHost(t, router, hosted.router, files, hosted.checkpoints, func(record work.FactorySubmissionRecord) {
 		if record.Request.RequestID == "watcher-stopped-only" {
 			stoppedWatcherAdmissions.Add(1)
 		}
 		if record.Request.WorkID == "linear:issue-stopped-only" {
-			stoppedHostedAdmissions.Add(1)
+			hosted.stoppedAdmissions.Add(1)
 		}
 	})
-	t.Run("hosted_request_retry_preserves_Work_identity_while_peer_progresses", func(t *testing.T) {
-		t.Parallel()
-		assertHostedRequestRetry(t, server.URL(), hostedRetryDir, hostedRetryPeerDir, hostedRetry, hostedRetryPeer)
-	})
-	t.Run("hosted_failed_checkpoint_save_retains_Work_and_prior_resume_while_peer_progresses", func(t *testing.T) {
-		t.Parallel()
-		assertHostedCheckpointRecovery(t, server.URL(), hostedFailureDir, hostedFailurePeerDir, hostedFailure, hostedFailurePeer)
-	})
-	t.Run("hosted_stop_joins_while_peer_progresses_and_restart_admits_eligible_item", func(t *testing.T) {
-		t.Parallel()
-		assertHostedIndependentStop(t, server.URL(), hostedStopDir, hostedPeerDir,
-			hostedStop, hostedPeer, &stoppedHostedAdmissions)
-	})
-	t.Run("hosted_success_normalizes_Work_in_explicit_session", func(t *testing.T) {
-		t.Parallel()
-		assertHostedSessionIngress(t, server.URL(), hostedDir, hosted, false)
-	})
-	t.Run("hosted_completed_empty_cycle_admits_no_Work", func(t *testing.T) {
-		t.Parallel()
-		assertHostedSessionIngress(t, server.URL(), hostedEmptyDir, hostedEmpty, true)
-	})
+	hosted.run(t, server.URL())
 	t.Run("watcher_stop_joins_while_peer_progresses_and_restart_admits_eligible_input", func(t *testing.T) {
 		t.Parallel()
 		assertWatcherIndependentStop(t, server.URL(), stoppedWatcherDir, watcherPeerDir, &stoppedWatcherAdmissions)
@@ -170,6 +123,18 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 			assertScriptIngressWork(t, readScriptQueuedWork(t, server.URL(), sessionID, scriptPollerExternalWorkID))
 		})
 	}
+}
+
+func scriptCycleOutput(t *testing.T, cursor, checkpoint string) []byte {
+	t.Helper()
+	output, err := json.Marshal(map[string]any{
+		"request": json.RawMessage(scriptPollerExternalWorkRequestJSON(t)),
+		"cursor":  cursor, "checkpoint": checkpoint,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return output
 }
 
 func newScriptCycleFactory(t *testing.T) (string, *scriptCycleRoute) {
@@ -382,7 +347,7 @@ func readAutomationCompletedWork(t *testing.T, baseURL, sessionID, state string,
 	t.Helper()
 	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, sessionID))
 	defer stream.Close()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), support.ScaledTimeout(10*time.Second))
 	defer cancel()
 	pending := make(map[string]bool, len(workIDs))
 	for _, id := range workIDs {

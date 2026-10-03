@@ -13,6 +13,8 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
+	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -28,6 +30,68 @@ type hostedCycleRequest struct {
 	done    chan struct{}
 }
 type hostedCycleRouter struct{ routes map[string]*hostedCycleRoute }
+
+type hostedSessionScenario struct {
+	directory string
+	route     *hostedCycleRoute
+}
+
+type hostedIngressScenarios struct {
+	scenarios         map[string]hostedSessionScenario
+	router            hostedCycleRouter
+	checkpoints       automations.HostedLinearCheckpointStore
+	stoppedAdmissions atomic.Int32
+}
+
+func newHostedIngressScenarios(t *testing.T) *hostedIngressScenarios {
+	t.Helper()
+	h := &hostedIngressScenarios{
+		scenarios: map[string]hostedSessionScenario{},
+		router:    hostedCycleRouter{routes: map[string]*hostedCycleRoute{}},
+	}
+	for _, key := range []string{"owned-hosted-success", "owned-hosted-empty", "owned-hosted-stop", "owned-hosted-peer",
+		"owned-hosted-retry-secret", "owned-hosted-retry-peer", "owned-hosted-failure-secret", "owned-hosted-failure-peer"} {
+		dir, route := newHostedCycleFactory(t, key)
+		h.scenarios[key] = hostedSessionScenario{directory: dir, route: route}
+		h.router.routes[key] = route
+	}
+	files := &hostedCheckpointFailure{directory: h.scenarios["owned-hosted-failure-secret"].directory, secret: "owned-hosted-failure-secret"}
+	checkpoints, err := automationswire.NewHostedLinearCheckpointStore(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.checkpoints = checkpoints
+	return h
+}
+
+func (h *hostedIngressScenarios) run(t *testing.T, baseURL string) {
+	t.Helper()
+	t.Run("hosted_request_retry_preserves_Work_identity_while_peer_progresses", func(t *testing.T) {
+		t.Parallel()
+		source, peer := h.scenarios["owned-hosted-retry-secret"], h.scenarios["owned-hosted-retry-peer"]
+		assertHostedRequestRetry(t, baseURL, source.directory, peer.directory, source.route, peer.route)
+	})
+	t.Run("hosted_failed_checkpoint_save_retains_Work_and_prior_resume_while_peer_progresses", func(t *testing.T) {
+		t.Parallel()
+		source, peer := h.scenarios["owned-hosted-failure-secret"], h.scenarios["owned-hosted-failure-peer"]
+		assertHostedCheckpointRecovery(t, baseURL, source.directory, peer.directory, source.route, peer.route)
+	})
+	t.Run("hosted_stop_joins_while_peer_progresses_and_restart_admits_eligible_item", func(t *testing.T) {
+		t.Parallel()
+		source, peer := h.scenarios["owned-hosted-stop"], h.scenarios["owned-hosted-peer"]
+		assertHostedIndependentStop(t, baseURL, source.directory, peer.directory, source.route, peer.route, &h.stoppedAdmissions)
+	})
+	t.Run("hosted_success_normalizes_Work_in_explicit_session", func(t *testing.T) {
+		t.Parallel()
+		source := h.scenarios["owned-hosted-success"]
+		assertHostedSessionIngress(t, baseURL, source.directory, source.route, false)
+	})
+	t.Run("hosted_completed_empty_cycle_admits_no_Work", func(t *testing.T) {
+		t.Parallel()
+		source := h.scenarios["owned-hosted-empty"]
+		assertHostedSessionIngress(t, baseURL, source.directory, source.route, true)
+	})
+}
 
 func (r hostedCycleRouter) Do(request *http.Request) (*http.Response, error) {
 	route := r.routes[request.Header.Get("Authorization")]
