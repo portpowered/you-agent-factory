@@ -100,6 +100,12 @@ func sameNameParentHasMissingCurrentChild(
 			// flows whose relation projection has not been populated yet.
 			continue
 		}
+		if petri.ParentChildRegistrationRetired(registration, parentWorkID, &snapshot.Marking, snapshot.Dispatches) {
+			// Every registered child has been consumed, so the registration no
+			// longer describes a current population; apply the same fallback
+			// as an unregistered parent.
+			continue
+		}
 		if !registration.Complete || len(registration.Children) == 0 ||
 			!sameNameRegistrationIsConsistent(registration.Children, parentWorkID) {
 			// Once the candidate pair proves the authored parent-child join, an

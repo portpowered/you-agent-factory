@@ -11,7 +11,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -380,5 +383,126 @@ func assertChildRemainsInInitAfterPausedTick(t *testing.T, f factoryhost.Engine,
 	}
 	if !markingContainsWorkAtPlace(&afterTick.Marking, "child-work", "task:init") {
 		t.Fatalf("post-tick marking = %#v, want child-work still in task:init (no cascade)", afterTick.Marking.Tokens)
+	}
+}
+
+// A review child created by transition output (not by a recorded Work
+// request) must not become a registered parent-child fact on restore. If it
+// did, the first REJECTED -> process cycle after resume would replace it with
+// an unregistered child and the SAME_NAME join would fail closed forever.
+func TestNew_RestoredTransitionCreatedChildDoesNotStrandSameNameJoinAfterRework(t *testing.T) {
+	base := time.Date(2026, time.October, 3, 12, 0, 0, 0, time.UTC)
+	net := restoredSameNameReviewNet()
+	f, err := newTestFactory(
+		withNet(net),
+		withClock(platformclock.NewDeterministic(base, time.Second)),
+		withRestoredWorldState(restoredSameNameReviewWorldState(base)),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if registration, registered := snapshot.Marking.ParentChildRegistrations["work-task"]; registered {
+		t.Fatalf("restored transition-created review child registered under its task: %#v", registration)
+	}
+	submitted, registered := snapshot.Marking.ParentChildRegistrations["work-project"]
+	if !registered || !submitted.Complete || len(submitted.Children) != 1 || submitted.Children[0].Color.WorkID != "work-task" {
+		t.Fatalf("restored submitted child registration = %#v (registered=%t), want complete [work-task]", submitted, registered)
+	}
+
+	// Review REJECTED consumes work-review-2; process emits work-review-64.
+	rejected, ok := snapshot.Marking.Tokens["work-review-2"]
+	if !ok {
+		t.Fatalf("restored marking is missing work-review-2: %#v", snapshot.Marking.Tokens)
+	}
+	reworked := *rejected
+	reworked.ID = "work-review-64"
+	reworked.Color.WorkID = "work-review-64"
+	delete(snapshot.Marking.Tokens, rejected.ID)
+	snapshot.Marking.Tokens[reworked.ID] = &reworked
+	snapshot.Marking.PlaceTokens["review:init"] = []string{reworked.ID}
+
+	eval := scheduler.NewEnablementEvaluator(logging.NoopLogger{}, func() time.Time { return base }, nil)
+	enabled := eval.FindEnabledTransitionsWithSnapshot(context.Background(), net, snapshot)
+	if len(enabled) != 1 || enabled[0].TransitionID != "review" {
+		t.Fatalf("enabled transitions after rework = %#v, want review", enabled)
+	}
+	if got := enabled[0].Bindings["review"]; len(got) != 1 || got[0].Color.WorkID != "work-review-64" {
+		t.Fatalf("review binding = %#v, want the re-emitted work-review-64", got)
+	}
+}
+
+func restoredSameNameReviewNet() *state.Net {
+	taskType := &state.WorkType{ID: "task", Name: "Task", States: []state.StateDefinition{
+		{Value: "init", Category: state.StateCategoryInitial},
+		{Value: "in-review", Category: state.StateCategoryProcessing},
+		{Value: "done", Category: state.StateCategoryTerminal},
+		{Value: "failed", Category: state.StateCategoryFailed},
+	}}
+	reviewType := &state.WorkType{ID: "review", Name: "Review", States: []state.StateDefinition{
+		{Value: "init", Category: state.StateCategoryInitial},
+		{Value: "done", Category: state.StateCategoryTerminal},
+		{Value: "failed", Category: state.StateCategoryFailed},
+	}}
+	places := make(map[string]*petri.Place)
+	for _, workType := range []*state.WorkType{taskType, reviewType} {
+		for _, place := range workType.GeneratePlaces() {
+			places[place.ID] = place
+		}
+	}
+	review := &petri.Transition{
+		ID: "review", Name: "review", Type: petri.TransitionNormal, WorkerType: "mock",
+		InputArcs: []petri.Arc{
+			{
+				ID: "task-in", Name: "task", PlaceID: "task:in-review", Direction: petri.ArcInput,
+				Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+				Guard:       &petri.SameNameGuard{MatchBinding: "review"},
+			},
+			{
+				ID: "review-in", Name: "review", PlaceID: "review:init", Direction: petri.ArcInput,
+				Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+			},
+		},
+		OutputArcs: []petri.Arc{{
+			ID: "task-out", Name: "task", PlaceID: "task:done", Direction: petri.ArcOutput,
+			Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+		}},
+	}
+	return &state.Net{
+		ID:          "restored-same-name-review",
+		Places:      places,
+		Transitions: map[string]*petri.Transition{review.ID: review},
+		WorkTypes:   map[string]*state.WorkType{taskType.ID: taskType, reviewType.ID: reviewType},
+		Resources:   make(map[string]*state.ResourceDef),
+	}
+}
+
+func restoredSameNameReviewWorldState(base time.Time) *interfaces.FactoryWorldState {
+	task := work.FactoryWorkItem{
+		ID: "work-task", WorkTypeID: "task", State: "in-review", DisplayName: "t20",
+		TraceID: "trace-t20", ParentID: "work-project",
+	}
+	// Transition output inherits the parent's request and trace but is not a
+	// member of any recorded Work request.
+	reviewChild := work.FactoryWorkItem{
+		ID: "work-review-2", WorkTypeID: "review", State: "init", DisplayName: "t20",
+		TraceID: "trace-t20", ParentID: "work-task",
+	}
+	return &interfaces.FactoryWorldState{
+		EventTime: base.Add(-time.Minute),
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			task.ID:        task,
+			reviewChild.ID: reviewChild,
+		},
+		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
+			"request-t20": {RequestID: "request-t20", WorkItems: []work.FactoryWorkItem{{ID: task.ID}}},
+		},
+		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
+			"task:in-review": {PlaceID: "task:in-review", WorkItemIDs: []string{task.ID}},
+			"review:init":    {PlaceID: "review:init", WorkItemIDs: []string{reviewChild.ID}},
+		},
 	}
 }
