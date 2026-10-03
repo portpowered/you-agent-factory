@@ -2740,6 +2740,9 @@ tests/functional/internal/support/conformance/matrix.go: unreachable func: opera
 tests/functional/internal/support/conformance/matrix.go: unreachable func: slotRequired
 tests/functional/internal/support/conformance/matrix.go: unreachable func: uniqueLabel
 tests/functional/internal/support/conformance/matrix.go: unreachable func: validateKnownOutputs
+tests/functional/internal/support/costs_settings_files.go: unreachable func: CostsSettingsFiles.ReadFile
+tests/functional/internal/support/costs_settings_files.go: unreachable func: CostsSettingsFiles.SetReadFailure
+tests/functional/internal/support/costs_settings_files.go: unreachable func: NewCostsSettingsFiles
 tests/functional/internal/support/dispatch_observation.go: unreachable func: DispatchObservationIncludesWork
 tests/functional/internal/support/dispatch_observation.go: unreachable func: ObserveDispatchEvents
 tests/functional/internal/support/events.go: unreachable func: AssertSingleWorkRequestEvent
