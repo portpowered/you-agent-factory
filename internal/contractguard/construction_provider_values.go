@@ -13,6 +13,11 @@ func constructionProviderCallableDebt(expr ast.Expr, source *constructionSource)
 	if parenthesized, ok := expr.(*ast.ParenExpr); ok {
 		return constructionProviderCallableDebt(parenthesized.X, source)
 	}
+	if _, returned := expr.(*ast.CallExpr); returned {
+		// Invoking a returned function requires a return-value summary. The
+		// helper's declaration alone cannot identify the selected callable.
+		return true
+	}
 	ident, ok := expr.(*ast.Ident)
 	if !ok {
 		return false

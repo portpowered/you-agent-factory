@@ -187,7 +187,12 @@ mode, and blocks an enforced set without claiming a concrete recursive path.
 Uncalled callbacks, uninvoked closure bodies, shadowed bindings, builtins and
 type conversions do not acquire dispatch debt. A proved recursive path still
 reports `registered-construction` even if another path is unresolved.
-Field, returned-function, cross-package and arbitrary callback dispatch still
+Invoking a helper-returned function directly, through parentheses, defer/go,
+or a called helper/closure also retains dispatch debt. Merely evaluating or
+storing the helper result does not establish invocation. Even an authored
+acyclic return remains debt until a callable return summary proves identity;
+the helper declaration alone cannot select the returned implementation.
+Field, cross-package and arbitrary callback dispatch still
 need classification/debt before whole-set readiness; this does not prove
 callback argument equivalence or control-flow execution.
 
