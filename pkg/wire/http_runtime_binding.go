@@ -156,8 +156,11 @@ func newHTTPRuntimeHandlerWithMetrics(
 		return nil, err
 	}
 	workHandler := workhttpAdapter(root, definitionsAPI, invocationWorkType)
-	factoryDefinitionsHandler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root.FactoryDefinitionsService()}, presentation.Logger,
+	definitions := root.FactoryDefinitionsService()
+	factoryDefinitionsHandler := factorydefinitionshttp.NewHandler(
+		definitions,
+		factorydefinitionshttp.NewTopologyValidation(definitions),
+		presentation.Logger,
 	)
 	return newHTTPRuntimeServer(
 		recordingsAdapter, sessionsHandler, workHandler, modelsHandler,

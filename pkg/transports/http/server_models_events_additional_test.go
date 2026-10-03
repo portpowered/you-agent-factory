@@ -57,8 +57,8 @@ func TestListPackagedFactoriesRoutesThroughDefinitionsHandler(t *testing.T) {
 			},
 		},
 	}
-	factoryDefinitionsHandler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root},
+	factoryDefinitionsHandler := factorydefinitionshttp.NewHandler(
+		root, factorydefinitionshttp.NewTopologyValidation(root),
 		zap.NewNop(),
 	)
 	srv := NewServer(nil, nil, nil, nil, factoryDefinitionsHandler, zap.NewNop())
