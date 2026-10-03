@@ -42,13 +42,13 @@ const minimalValidationFactoryBody = `{
   }]
 }`
 
-func TestHandlerFromRoot_ValidateFactoryInvokesSubmittedDefinitionValidationOperation(t *testing.T) {
+func TestHandler_ValidateFactoryInvokesSubmittedDefinitionValidationOperation(t *testing.T) {
 	t.Parallel()
 
 	validation := &httpDefinitionsValidationFake{}
 	root := &httpDefinitionsRootFake{}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root, Validation: validation},
+	handler := factorydefinitionshttp.NewHandler(
+		root, validation,
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -75,12 +75,12 @@ func TestHandlerFromRoot_ValidateFactoryInvokesSubmittedDefinitionValidationOper
 	}
 }
 
-func TestHandlerFromRoot_ValidateFactoryInvokesDefinitionsRootValidateStructural(t *testing.T) {
+func TestHandler_ValidateFactoryInvokesDefinitionsRootValidateStructural(t *testing.T) {
 	t.Parallel()
 
 	root := &httpDefinitionsRootFake{}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root},
+	handler := factorydefinitionshttp.NewHandler(
+		root, factorydefinitionshttp.NewTopologyValidation(root),
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -107,7 +107,7 @@ func TestHandlerFromRoot_ValidateFactoryInvokesDefinitionsRootValidateStructural
 		t.Fatalf("canonical factory = %#v, want alpha", canonical)
 	}
 	explicit := &capturingValidationFake{}
-	explicitHandler := factorydefinitionshttp.NewHandlerFromRoot(factorydefinitionshttp.RootBinding{Definitions: &httpDefinitionsRootFake{}, Validation: explicit}, zap.NewNop())
+	explicitHandler := factorydefinitionshttp.NewHandler(&httpDefinitionsRootFake{}, explicit, zap.NewNop())
 	explicitHandler.ValidateFactory(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/factory-validations", strings.NewReader(minimalValidationFactoryBody)))
 	wantCanonical, err := json.Marshal(explicit.request.Config)
 	if err != nil || !bytes.Equal(root.structuralRequest.Canonical, wantCanonical) {

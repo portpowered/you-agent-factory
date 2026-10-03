@@ -34,8 +34,8 @@ func TestValidateFactory_CanceledDuringRootCallCompletesWithoutHang(t *testing.T
 		close(entered)
 		return waitForValidationContext(ctx, request)
 	}}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Validation: validation},
+	handler := factorydefinitionshttp.NewHandler(
+		&httpDefinitionsRootFake{}, validation,
 		zap.NewNop(),
 	)
 
@@ -81,8 +81,8 @@ func TestValidateFactory_CanceledBeforeRootCallCompletesWithoutBody(t *testing.T
 	t.Parallel()
 
 	validation := &blockingValidationFake{}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Validation: validation},
+	handler := factorydefinitionshttp.NewHandler(
+		&httpDefinitionsRootFake{}, validation,
 		zap.NewNop(),
 	)
 
@@ -116,8 +116,8 @@ func TestValidateFactory_DeadlineExceededReturnsGatewayTimeout(t *testing.T) {
 			return factorydefinitions.ValidationResult{}, context.DeadlineExceeded
 		},
 	}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Validation: validation},
+	handler := factorydefinitionshttp.NewHandler(
+		&httpDefinitionsRootFake{}, validation,
 		zap.NewNop(),
 	)
 
@@ -170,8 +170,8 @@ func TestGetCurrentFactoryBySessionId_CanceledDuringRootCallCompletesWithoutHang
 			return factorydefinitions.EditableFactory{}, ctx.Err()
 		},
 	}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root},
+	handler := factorydefinitionshttp.NewHandler(
+		root, factorydefinitionshttp.NewTopologyValidation(root),
 		zap.NewNop(),
 	)
 
@@ -217,8 +217,8 @@ func TestGetCurrentFactoryBySessionId_DeadlineExceededReturnsGatewayTimeout(t *t
 			return factorydefinitions.EditableFactory{}, context.DeadlineExceeded
 		},
 	}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root},
+	handler := factorydefinitionshttp.NewHandler(
+		root, factorydefinitionshttp.NewTopologyValidation(root),
 		zap.NewNop(),
 	)
 

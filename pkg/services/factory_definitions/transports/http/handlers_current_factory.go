@@ -21,10 +21,7 @@ func (s *Server) GetCurrentFactoryBySessionId(
 	r *http.Request,
 	sessionID factoryapi.SessionID,
 ) {
-	root, ok := s.requireDefinitionsRoot(w)
-	if !ok {
-		return
-	}
+	root := s.definitionsRoot
 	if s.guardDefinitionsRequestContext(w, r) {
 		return
 	}
@@ -44,10 +41,7 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 	r *http.Request,
 	sessionID factoryapi.SessionID,
 ) {
-	root, ok := s.requireDefinitionsRoot(w)
-	if !ok {
-		return
-	}
+	root := s.definitionsRoot
 
 	decoded, err := decodeJSONWithDiagnostics[factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody](r.Body)
 	if err != nil {
@@ -97,8 +91,8 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 // the dashboard. The adapter consumes detached catalog results from the
 // Factory Definitions root and never reads publication-package files itself.
 func (s *Server) ListPackagedFactories(w http.ResponseWriter, r *http.Request) {
-	root, ok := s.requireDefinitionsRoot(w)
-	if !ok || s.guardDefinitionsRequestContext(w, r) {
+	root := s.definitionsRoot
+	if s.guardDefinitionsRequestContext(w, r) {
 		return
 	}
 

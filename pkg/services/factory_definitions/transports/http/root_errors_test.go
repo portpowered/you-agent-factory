@@ -25,7 +25,7 @@ func TestCurrentFactoryFailuresKeepSelectedLoggerCorrelation(t *testing.T) {
 		t.Run(id, func(t *testing.T) {
 			t.Parallel()
 			root := &capturingCurrentFactoryRootFake{getErr: factorydefinitions.ErrAtomicFactoryWriteFailed}
-			handler := factorydefinitionshttp.NewHandlerFromRoot(factorydefinitionshttp.RootBinding{Definitions: root}, logger.With(zap.String("request_id", id+"-request")))
+			handler := factorydefinitionshttp.NewHandler(root, factorydefinitionshttp.NewTopologyValidation(root), logger.With(zap.String("request_id", id+"-request")))
 			recorder := httptest.NewRecorder()
 			handler.GetCurrentFactoryBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/"+id+"/factory", nil), factoryapi.SessionID(id))
 			if recorder.Code != http.StatusInternalServerError {
@@ -58,7 +58,7 @@ func TestPackagedCatalogFailureKeepsSelectedLoggerAndRedactsError(t *testing.T) 
 	core, logs := observer.New(zap.ErrorLevel)
 	logger := zap.New(core).With(zap.String("request_id", "catalog-request"))
 	root := &packagedFactoryCatalogRootFake{listErr: errors.New("secret artifact payload")}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(factorydefinitionshttp.RootBinding{Definitions: root}, logger)
+	handler := factorydefinitionshttp.NewHandler(root, factorydefinitionshttp.NewTopologyValidation(root), logger)
 	recorder := httptest.NewRecorder()
 	handler.ListPackagedFactories(recorder, httptest.NewRequest(http.MethodGet, "/packaged-factories", nil))
 	assertPackagedFactoryCatalogInternalError(t, recorder, "secret artifact payload")
@@ -79,8 +79,8 @@ func TestValidateFactory_InvalidFactoryDefinitionPayloadReturnsTypedErrorRespons
 	t.Parallel()
 
 	validation := &validationErrorFake{err: factorydefinitions.ErrInvalidFactoryDefinitionPayload}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Validation: validation},
+	handler := factorydefinitionshttp.NewHandler(
+		&httpDefinitionsRootFake{}, validation,
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -122,8 +122,8 @@ func TestValidateFactory_ValidationFailedReturnsInvalidFactoryWithTargets(t *tes
 			},
 		},
 	}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Validation: validation},
+	handler := factorydefinitionshttp.NewHandler(
+		&httpDefinitionsRootFake{}, validation,
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -169,8 +169,8 @@ func TestValidateFactory_OpaqueRootFailureDoesNotLeakInternalDetails(t *testing.
 	validation := &validationErrorFake{
 		err: fmt.Errorf("load catalog: %s", leakedPath),
 	}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Validation: validation},
+	handler := factorydefinitionshttp.NewHandler(
+		&httpDefinitionsRootFake{}, validation,
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -200,8 +200,8 @@ func TestGetCurrentFactoryBySessionId_NotFoundReturnsTypedErrorResponse(t *testi
 	root := &capturingCurrentFactoryRootFake{
 		getErr: factorydefinitions.ErrCurrentFactoryNotFound,
 	}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root},
+	handler := factorydefinitionshttp.NewHandler(
+		root, factorydefinitionshttp.NewTopologyValidation(root),
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -231,8 +231,8 @@ func TestSaveCurrentFactoryBySessionId_AtomicWriteFailedReturnsInternalErrorWith
 			Cause: fmt.Errorf("persist failed at %s", leakedPath),
 		},
 	}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root},
+	handler := factorydefinitionshttp.NewHandler(
+		root, factorydefinitionshttp.NewTopologyValidation(root),
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()

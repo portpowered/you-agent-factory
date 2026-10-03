@@ -65,8 +65,8 @@ func TestValidateFactory_RejectsInvalidPayloadBeforeValidationInvoked(t *testing
 			t.Parallel()
 
 			validation := &httpDefinitionsValidationFake{}
-			handler := factorydefinitionshttp.NewHandlerFromRoot(
-				factorydefinitionshttp.RootBinding{Validation: validation},
+			handler := factorydefinitionshttp.NewHandler(
+				&httpDefinitionsRootFake{}, validation,
 				zap.NewNop(),
 			)
 			recorder := httptest.NewRecorder()
@@ -98,8 +98,8 @@ func TestValidateFactory_AcceptsUnknownFieldsWithWarning(t *testing.T) {
 
 	core, logs := observer.New(zap.WarnLevel)
 	validation := &capturingValidationFake{}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Validation: validation},
+	handler := factorydefinitionshttp.NewHandler(
+		&httpDefinitionsRootFake{}, validation,
 		zap.New(core),
 	)
 	body := strings.Replace(
@@ -168,8 +168,8 @@ func TestValidateFactory_EncodesValidationTargetsFromFakeRoot(t *testing.T) {
 			}},
 		},
 	}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Validation: validation},
+	handler := factorydefinitionshttp.NewHandler(
+		&httpDefinitionsRootFake{}, validation,
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -212,8 +212,8 @@ func TestValidateFactory_DecodesFactoryIntoSubmittedDefinitionValidationRequest(
 
 	validation := &capturingValidationFake{}
 	root := &httpDefinitionsRootFake{}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root, Validation: validation},
+	handler := factorydefinitionshttp.NewHandler(
+		root, validation,
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
