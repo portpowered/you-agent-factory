@@ -34,6 +34,15 @@ func New(
 	}
 }
 
+// LoadCanonicalFactorySource preserves the injected canonical loader's arguments,
+// result and error for existing validation consumers.
+func (s *Service) LoadCanonicalFactorySource(
+	payload []byte,
+	workstationLoader factoryroot.WorkstationLoader,
+) (factoryroot.MutableLoadedFactorySource, error) {
+	return s.loadCanonical(payload, workstationLoader)
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
 func (s *Service) CompileEffectiveFactorySource(
 	ctx context.Context,

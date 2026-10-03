@@ -1,9 +1,11 @@
 package service_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -264,4 +266,43 @@ func TestCompileEffectiveFactorySource_DoesNotStartFactorySessionOrRuntime(t *te
 	if err != nil {
 		t.Fatalf("CompileEffectiveFactorySource: %v", err)
 	}
+}
+
+func TestCanonicalLoadingPreservesArgumentsAndOutcome(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("canonical loader failure")
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "success"},
+		{name: "failure", err: fmt.Errorf("read canonical source: %w", cause)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			payload := []byte("  {canonical source}\n")
+			workstationLoader := &canonicalWorkstationLoader{}
+			expected := &stubLoadedSource{factoryDir: "/factories/alpha"}
+			loadCanonical := func(got []byte, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+				if !bytes.Equal(got, payload) || &got[0] != &payload[0] || loader != workstationLoader {
+					t.Fatalf("canonical arguments = %q, %v; want original payload and workstation loader", got, loader)
+				}
+				return expected, tc.err
+			}
+			svc := compilationwire.NewService(loadCanonical, nil, nil)
+			result, err := svc.LoadCanonicalFactorySource(payload, workstationLoader)
+			if result != expected || err != tc.err {
+				t.Fatalf("canonical outcome = %v, %v; want original source and error %v", result, err, tc.err)
+			}
+			if tc.err != nil && !errors.Is(err, cause) {
+				t.Fatalf("canonical failure lost cause: %v", err)
+			}
+		})
+	}
+}
+
+type canonicalWorkstationLoader struct{}
+
+func (*canonicalWorkstationLoader) Load(string) (*factorydefinitions.FactoryWorkstationConfig, error) {
+	panic("canonical delegation must pass the workstation loader without invoking it")
 }

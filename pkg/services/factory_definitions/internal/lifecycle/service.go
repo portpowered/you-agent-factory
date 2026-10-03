@@ -12,7 +12,6 @@ import (
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
-	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
 	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 	workstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution"
@@ -37,13 +36,19 @@ type Service struct {
 	catalog.Service
 	validationService      validationservice.Service
 	authoringLayoutService authoringlayout.Service
-	compilationService     compilationservice.Service
+	compilationService     CompilationOperations
 	runtimeSnapshot        runtimesnapshot.Service
 	host                   Host
 	activationGateway      factoryroot.DefinitionActivationGateway
 	versionFileSystem      factoryroot.VersionFileSystem
 	distributionService    distributionservice.Service
 	listEffective          factoryroot.EffectiveFactoryCatalogOperation
+}
+
+// CompilationOperations is the lifecycle's exact effective-source compilation dependency.
+// Canonical loading remains private to the compilation owner's validation consumers.
+type CompilationOperations interface {
+	CompileEffectiveFactorySource(context.Context, factoryroot.CompileEffectiveFactorySourceRequest) (factoryroot.CompileEffectiveFactorySourceResult, error)
 }
 
 type nonCatalogDefaults interface {
@@ -156,7 +161,7 @@ func NewWithCatalogPackagesAndInstallation(
 // compilation ownership for the CTR-DEF compile slice.
 func NewWithCompilation(
 	host Host,
-	compilationService compilationservice.Service,
+	compilationService CompilationOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
 	var versionFileSystem factoryroot.VersionFileSystem
@@ -215,7 +220,7 @@ func NewWithCatalogPackagesValidationDistributionAndAuthoring(
 	authoringLayoutService authoringlayout.Service,
 	distributionService distributionservice.Service,
 	runtimeSnapshot runtimesnapshot.Service,
-	compilation compilationservice.Service,
+	compilation CompilationOperations,
 	versionFileSystem factoryroot.VersionFileSystem,
 	listEffective factoryroot.EffectiveFactoryCatalogOperation,
 ) *Service {

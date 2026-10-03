@@ -456,13 +456,13 @@ func provideOrchestratorDefinitionValidator(
 
 func provideFactoryDefinitionValidationService(
 	workflows factoryruntime.JavaScriptWorkflows,
-	loader *factorydefinitionswire.Loader,
+	compilation factorydefinitionswire.Compilation,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) factorydefinitions.ValidationOperations {
 	_ = workflows
 	return factorydefinitionswire.NewValidationOperations(
 		orchestratorValidator,
-		loader.LoadSourceFromCanonicalJSON,
+		compilation.LoadCanonicalFactorySource,
 	)
 }
 
