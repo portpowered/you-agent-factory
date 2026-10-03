@@ -571,11 +571,34 @@ function createLocalGitCommandEdge({
 	return { calls, run };
 }
 
-function captureLocalRepositoryState(cwd) {
+// Snapshots repository state for before/after isolation assertions. Pass
+// { sharedRefStore: true } for the developer repository, whose ref store is shared
+// with sibling worktrees and concurrent fetch/push/branch activity: only the refs the
+// workflow under test could plausibly touch (the shared-baseline bot branch under any
+// remote, and the current branch) are compared, so unrelated concurrent ref churn
+// cannot fail the test. Fixture repositories are private, so all refs are compared.
+function captureLocalRepositoryState(cwd, { sharedRefStore = false } = {}) {
+	const allRefs = requireLocalGit(cwd, ["for-each-ref", "--format=%(refname)=%(objectname)", "refs/heads", "refs/remotes"]);
+	let refs = allRefs;
+	if (sharedRefStore) {
+		const current = runLocalGit(cwd, ["symbolic-ref", "--quiet", "HEAD"]);
+		const currentRef = current.status === 0 ? current.stdout.trim() : "";
+		refs = allRefs
+			.split(/\r?\n/)
+			.filter((line) => {
+				const name = line.slice(0, line.indexOf("="));
+				return (
+					name === currentRef ||
+					name === `refs/heads/${SHARED_BASELINE_BOT_BRANCH}` ||
+					(name.startsWith("refs/remotes/") && name.endsWith(`/${SHARED_BASELINE_BOT_BRANCH}`))
+				);
+			})
+			.join("\n");
+	}
 	return {
 		head: requireLocalGit(cwd, ["rev-parse", "HEAD"]),
 		status: requireLocalGit(cwd, ["status", "--porcelain=v1", "--untracked-files=all"]),
-		refs: requireLocalGit(cwd, ["for-each-ref", "--format=%(refname)=%(objectname)", "refs/heads", "refs/remotes"]),
+		refs,
 	};
 }
 
@@ -836,7 +859,7 @@ test("AUTH-03 local-real Git keeps authentication independent from commit metada
 });
 
 test("F-19 credential witness setup and command failures clean fixtures without changing developer state", async () => {
-	const developerState = captureLocalRepositoryState(repositoryRoot);
+	const developerState = captureLocalRepositoryState(repositoryRoot, { sharedRefStore: true });
 	let failedSetupDirectory = "";
 	await assert.rejects(
 		() =>
@@ -868,11 +891,11 @@ test("F-19 credential witness setup and command failures clean fixtures without 
 		await fixture.cleanup();
 		assert.equal(existsSync(temporaryDirectory), false);
 	}
-	assert.deepEqual(captureLocalRepositoryState(repositoryRoot), developerState);
+	assert.deepEqual(captureLocalRepositoryState(repositoryRoot, { sharedRefStore: true }), developerState);
 });
 
 test("TASK-001 local-real Git characterizes stale bot ancestry without treating newer main paths as branch changes", () => {
-	const developerState = captureLocalRepositoryState(repositoryRoot);
+	const developerState = captureLocalRepositoryState(repositoryRoot, { sharedRefStore: true });
 	const fixture = createLocalGitFixture({ botBase: "stale" });
 	try {
 		assert.equal(
@@ -893,11 +916,11 @@ test("TASK-001 local-real Git characterizes stale bot ancestry without treating 
 		fixture.cleanup();
 	}
 	assert.equal(existsSync(fixture.temporaryDirectory), false);
-	assert.deepEqual(captureLocalRepositoryState(repositoryRoot), developerState);
+	assert.deepEqual(captureLocalRepositoryState(repositoryRoot, { sharedRefStore: true }), developerState);
 });
 
 test("TASK-002 local-real Git reconstructs a stale bot branch from exact main and reuses its PR", () => {
-	const developerState = captureLocalRepositoryState(repositoryRoot);
+	const developerState = captureLocalRepositoryState(repositoryRoot, { sharedRefStore: true });
 	const fixture = createLocalGitFixture({ botBase: "stale" });
 	try {
 		const edge = createLocalGitCommandEdge({
@@ -955,7 +978,7 @@ test("TASK-002 local-real Git reconstructs a stale bot branch from exact main an
 		fixture.cleanup();
 	}
 	assert.equal(existsSync(fixture.temporaryDirectory), false);
-	assert.deepEqual(captureLocalRepositoryState(repositoryRoot), developerState);
+	assert.deepEqual(captureLocalRepositoryState(repositoryRoot, { sharedRefStore: true }), developerState);
 });
 
 test("TASK-002 local-real Git force-with-lease preserves a concurrent bot update", () => {
@@ -1008,7 +1031,7 @@ test("TASK-002 local-real Git force-with-lease preserves a concurrent bot update
 });
 
 test("TASK-001 local-real Git preserves the current-main exact-candidate characterization", () => {
-	const developerState = captureLocalRepositoryState(repositoryRoot);
+	const developerState = captureLocalRepositoryState(repositoryRoot, { sharedRefStore: true });
 	const fixture = createLocalGitFixture({ botBase: "current" });
 	try {
 		assert.equal(
@@ -1051,11 +1074,11 @@ test("TASK-001 local-real Git preserves the current-main exact-candidate charact
 		fixture.cleanup();
 	}
 	assert.equal(existsSync(fixture.temporaryDirectory), false);
-	assert.deepEqual(captureLocalRepositoryState(repositoryRoot), developerState);
+	assert.deepEqual(captureLocalRepositoryState(repositoryRoot, { sharedRefStore: true }), developerState);
 });
 
 test("TASK-001 cleans fixture setup and command failures without changing repository refs", () => {
-	const developerState = captureLocalRepositoryState(repositoryRoot);
+	const developerState = captureLocalRepositoryState(repositoryRoot, { sharedRefStore: true });
 	let failedSetupDirectory = "";
 	assert.throws(
 		() =>
@@ -1095,7 +1118,7 @@ test("TASK-001 cleans fixture setup and command failures without changing reposi
 		fixture.cleanup();
 	}
 	assert.equal(existsSync(fixture.temporaryDirectory), false);
-	assert.deepEqual(captureLocalRepositoryState(repositoryRoot), developerState);
+	assert.deepEqual(captureLocalRepositoryState(repositoryRoot, { sharedRefStore: true }), developerState);
 });
 
 function commandText(call) {
