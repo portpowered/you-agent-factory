@@ -205,8 +205,10 @@ func TestHistoryTransitionerPipeline_ThrottledFailureRequeuesConsumedWorkToOrigi
 	if got := result.Mutations[0].NewToken.History.TotalVisits["t1"]; got != 1 {
 		t.Fatalf("TotalVisits[t1] = %d, want 1", got)
 	}
-	if got := result.Mutations[0].NewToken.History.ConsecutiveFailures["t1"]; got != 1 {
-		t.Fatalf("ConsecutiveFailures[t1] = %d, want 1", got)
+	// Provider capacity is infrastructure, not a fault of the work: the requeue
+	// must not spend the workstation retry budget (circuit breaker).
+	if got := result.Mutations[0].NewToken.History.ConsecutiveFailures["t1"]; got != 0 {
+		t.Fatalf("ConsecutiveFailures[t1] = %d, want 0 for a throttled requeue", got)
 	}
 	if result.Mutations[0].NewToken.History.LastError != "provider error: claude rate limit exceeded" {
 		t.Fatalf("LastError = %q", result.Mutations[0].NewToken.History.LastError)

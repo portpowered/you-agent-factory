@@ -15,9 +15,8 @@ import (
 )
 
 const (
-	codexAuthFailureStderr     = `ERROR: unexpected status 401 Unauthorized {"type":"authentication_error","message":"invalid api key"}`
-	codexThrottleFailureStderr = "ERROR: selected model is at capacity"
-	codexTimeoutFailureStderr  = "request timed out after waiting for provider response"
+	codexAuthFailureStderr    = `ERROR: unexpected status 401 Unauthorized {"type":"authentication_error","message":"invalid api key"}`
+	codexTimeoutFailureStderr = "request timed out after waiting for provider response"
 )
 
 const providerExitNormalizationSessionID = "provider-exit-normalization-session"
@@ -209,13 +208,14 @@ func TestProviderTaskCompletePartialOutputDoesNotAdvanceWork(t *testing.T) {
 	}
 }
 
-// TestProviderAuthRateLimitAndTimeoutRemainDistinct proves authentication,
-// rate-limit, and timeout provider failures normalize to publicly distinct
-// failure classes through the customer process boundary, including throttle
-// exhaustion after default retry limits.
+// TestProviderAuthRateLimitAndTimeoutRemainDistinct proves authentication and
+// timeout provider failures normalize to publicly distinct failure classes
+// through the customer process boundary. Throttled (capacity) failures are
+// deliberately absent: they are waited out with a 30 minute backoff window and
+// never fail the Work, so they have no terminal class to observe here; that
+// policy is covered by the Workers provider-retry unit tests.
 func TestProviderAuthRateLimitAndTimeoutRemainDistinct(t *testing.T) {
 	t.Parallel()
-	const defaultThrottleRetryCalls = 3 * 3
 
 	tests := []struct {
 		name       string
@@ -231,12 +231,6 @@ func TestProviderAuthRateLimitAndTimeoutRemainDistinct(t *testing.T) {
 			}},
 			wantReason: factoryapi.WorkFailureTypeAuthFailure,
 			wantCalls:  1,
-		},
-		{
-			name:       "rate-limit exhaustion",
-			results:    repeatedCodexThrottleCommandResults(12),
-			wantReason: factoryapi.WorkFailureTypeThrottled,
-			wantCalls:  defaultThrottleRetryCalls,
 		},
 		{
 			name:       "timeout failure",
@@ -391,17 +385,6 @@ Test workstation with private prompt `+failureRedactionPromptNeedle+`.
 	)
 }
 
-func repeatedCodexThrottleCommandResults(count int) []platformprocess.CommandResult {
-	results := make([]platformprocess.CommandResult, count)
-	for i := range results {
-		results[i] = platformprocess.CommandResult{
-			ExitCode: 1,
-			Stderr:   []byte(codexThrottleFailureStderr),
-		}
-	}
-	return results
-}
-
 func repeatedCodexTimeoutCommandResults(count int) []platformprocess.CommandResult {
 	results := make([]platformprocess.CommandResult, count)
 	for i := range results {
@@ -517,45 +500,5 @@ func assertPublicProviderFailureSurfacesRedactSensitiveMaterial(
 		failureObservation,
 	); err != nil {
 		t.Fatalf("public provider failure surfaces failed sanitization: %v", err)
-	}
-}
-
-// TestProviderCodexServerOverloadedTaskCompleteIsRetriedAsThrottle proves a
-// Codex model-capacity overload reported only through a task_complete record
-// (null final message, codex_error_info server_overloaded) re-dispatches
-// through the throttle retry path, bounded by the default retry limits, rather
-// than failing the dispatch terminally on the first attempt.
-func TestProviderCodexServerOverloadedTaskCompleteIsRetriedAsThrottle(t *testing.T) {
-	t.Parallel()
-	const defaultThrottleRetryCalls = 3 * 3
-
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", sharedInferenceWithExecutorProvider(
-		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
-		"CODEX",
-	))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"codex capacity overload"}`))
-
-	results := make([]platformprocess.CommandResult, 12)
-	for i := range results {
-		results[i] = platformprocess.CommandResult{
-			ExitCode: 1,
-			Stdout: []byte(`{"type":"thread.started","thread_id":"t1"}` + "\n" +
-				`{"type":"task_complete","last_agent_message":null,"error":{"message":"overloaded","codex_error_info":"server_overloaded"}}` + "\n"),
-		}
-	}
-	runner := testutil.NewProviderCommandRunner(results...)
-	_, listed, events := runSharedInferenceFactoryToCompletion(t, dir, sharedInferenceScenario{
-		commandRunner: runner,
-	}, 20*time.Second)
-
-	if runner.CallCount() != defaultThrottleRetryCalls {
-		t.Fatalf("provider command runner calls = %d, want %d bounded throttle retries", runner.CallCount(), defaultThrottleRetryCalls)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
-		t.Fatalf("failed place tokens = %d, want 1 after bounded retries exhausted", got)
-	}
-	if reason := terminalInferenceFailureReason(t, events); reason != factoryapi.WorkFailureTypeThrottled {
-		t.Fatalf("terminal failure reason = %q, want throttled", reason)
 	}
 }

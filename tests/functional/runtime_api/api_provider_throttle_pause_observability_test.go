@@ -25,9 +25,10 @@ func TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession
 		fixture.server,
 		10*time.Second,
 		func(session factoryapi.FactorySession) bool {
-			listed := fixture.server.ListWork(t)
-			return fixture.runner.CallCount() >= 3 &&
-				support.HasWorkAtCustomerState(listed, fixture.throttledWork.WorkID, fixture.throttledWork.WorkTypeID+":init")
+			// The throttled dispatch is now waiting out provider capacity
+			// (30s+ backoff) after its first rejected attempt instead of
+			// failing, so it stays in flight.
+			return fixture.runner.CallCount() >= 1 && session.Runtime.Progress.InFlightCount == 1
 		},
 	)
 	fixture.unaffectedWork.WorkID = submitThrottlePauseWork(t, fixture.server, fixture.unaffectedWork)
@@ -38,8 +39,7 @@ func TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession
 		5*time.Second,
 		func(session factoryapi.FactorySession) bool {
 			listed := fixture.server.ListWork(t)
-			return support.HasWorkAtCustomerState(listed, fixture.throttledWork.WorkID, fixture.throttledWork.WorkTypeID+":init") &&
-				support.HasWorkAtCustomerState(listed, fixture.unaffectedWork.WorkID, fixture.unaffectedWork.WorkTypeID+":complete")
+			return support.HasWorkAtCustomerState(listed, fixture.unaffectedWork.WorkID, fixture.unaffectedWork.WorkTypeID+":complete")
 		},
 	)
 	// The predicate reads Work through the canonical event projection. Refresh
@@ -47,7 +47,9 @@ func TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession
 	// compares public progress and Work state from the same observation window.
 	isolatedSession = fixture.server.Session(t)
 
-	if isolatedSession.Runtime.Progress.InFlightCount != 0 {
+	// Only the throttled lane's dispatch remains in flight, waiting out
+	// provider capacity; the healthy lane has completed.
+	if isolatedSession.Runtime.Progress.InFlightCount != 1 {
 		listed := fixture.server.ListWork(t)
 		events := fixture.server.GetFactoryEvents(t)
 		dispatches := support.ObserveDispatchEvents(t, events)
@@ -70,18 +72,14 @@ func TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession
 	dispatches := support.ObserveDispatchEvents(t, fixture.server.GetFactoryEvents(t))
 	throttledDispatches := dispatchesForProviderSmokeWork(dispatches, fixture.throttledWork)
 	unaffectedDispatches := dispatchesForProviderSmokeWork(dispatches, fixture.unaffectedWork)
-	if len(throttledDispatches) == 0 {
-		t.Fatal("throttled lane dispatch count = 0, want at least one failed dispatch")
+	if len(throttledDispatches) != 1 {
+		t.Fatalf("throttled lane dispatch count = %d, want 1 still-waiting dispatch", len(throttledDispatches))
+	}
+	if throttledDispatches[0].Response != nil {
+		t.Fatalf("throttled dispatch = %#v, want no terminal response while capacity is awaited (a capacity event must delay, not fail, the lane)", throttledDispatches[0])
 	}
 	if len(unaffectedDispatches) != 1 {
 		t.Fatalf("unaffected lane dispatch count = %d, want 1", len(unaffectedDispatches))
-	}
-	if throttledDispatches[0].Response == nil || throttledDispatches[0].Response.Outcome != factoryapi.WorkOutcomeFailed {
-		t.Fatalf("first throttled dispatch = %#v, want FAILED response", throttledDispatches[0])
-	}
-	if len(throttledDispatches) > 1 &&
-		(throttledDispatches[1].Response == nil || throttledDispatches[1].Response.Outcome != factoryapi.WorkOutcomeAccepted) {
-		t.Fatalf("second throttled dispatch = %#v, want ACCEPTED response", throttledDispatches[1])
 	}
 	if unaffectedDispatches[0].Response == nil || unaffectedDispatches[0].Response.Outcome != factoryapi.WorkOutcomeAccepted {
 		t.Fatalf("unaffected dispatch = %#v, want ACCEPTED response", unaffectedDispatches[0])
@@ -120,7 +118,7 @@ func newThrottlePauseObservabilityFixture(t *testing.T) throttlePauseObservabili
 	)
 	runner := pauseHarness.ProviderRunner()
 	pauseHarness.QueueProviderResults(
-		support.RepeatedProviderErrorCommandResults(t, "claude_rate_limit_error", 3)...,
+		support.RepeatedProviderErrorCommandResults(t, "claude_rate_limit_error", 1)...,
 	)
 	pauseHarness.QueueProviderResults(
 		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("codex lane completed while claude was paused. COMPLETE")},
@@ -188,16 +186,14 @@ func submitThrottlePauseWork(
 func assertThrottlePauseRequestSequence(t *testing.T, requests []platformprocess.CommandRequest) {
 	t.Helper()
 
-	if len(requests) < 4 {
-		t.Fatalf("provider command count = %d, want at least 4", len(requests))
+	if len(requests) != 2 {
+		t.Fatalf("provider command count = %d, want 2 (one throttled Claude attempt, one Codex run)", len(requests))
 	}
-	for i := 0; i < 3; i++ {
-		if requests[i].Command != string(modelprovider.ProviderClaude) {
-			t.Fatalf("request %d command = %q, want %q", i, requests[i].Command, modelprovider.ProviderClaude)
-		}
+	if requests[0].Command != string(modelprovider.ProviderClaude) {
+		t.Fatalf("request 0 command = %q, want %q", requests[0].Command, modelprovider.ProviderClaude)
 	}
-	if requests[3].Command != string(modelprovider.ProviderCodex) {
-		t.Fatalf("request 3 command = %q, want %q", requests[3].Command, modelprovider.ProviderCodex)
+	if requests[1].Command != string(modelprovider.ProviderCodex) {
+		t.Fatalf("request 1 command = %q, want %q", requests[1].Command, modelprovider.ProviderCodex)
 	}
 }
 

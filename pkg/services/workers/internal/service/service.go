@@ -23,10 +23,12 @@ type Service struct {
 	observe          workers.ObservationSink
 	logger           logging.Logger
 	clock            func() time.Time
-	worktree         workers.FactoryWorktreePreparer
-	worktreeRelease  func(context.Context, workers.FactoryWorktreePreparation) error
-	temporaryFiles   workers.TemporaryFileSystem
-	factoryDocs      workers.FactoryDocsLoader
+	// retrySleep waits between provider attempts. Nil means a real timer.
+	retrySleep      func(context.Context, time.Duration) error
+	worktree        workers.FactoryWorktreePreparer
+	worktreeRelease func(context.Context, workers.FactoryWorktreePreparation) error
+	temporaryFiles  workers.TemporaryFileSystem
+	factoryDocs     workers.FactoryDocsLoader
 	// agentRunHarness runs the agent/tool loop for an attempt whose target
 	// declares Tools.AgentLoop. It is immutable process configuration; the loop
 	// itself keeps no state between Execute calls.
