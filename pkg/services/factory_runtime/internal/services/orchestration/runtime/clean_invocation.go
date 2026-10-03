@@ -867,12 +867,19 @@ func restoredWorkRelations(relations []work.FactoryRelation) []work.Relation {
 	return converted
 }
 
+// registerRestoredWorkParent mirrors the live admission path: only children
+// admitted through a recorded Work request (a submission) are registered under
+// their parent. Children created by transition output inherit the parent's
+// request ID but are never members of a recorded Work request, and the live
+// engine never registers them; registering them on restore would pin a SAME_NAME
+// join to a child that a later rework cycle consumes and replaces.
 func registerRestoredWorkParent(
 	marking *petri.Marking,
 	token *factorytoken.Token,
+	admittedByWorkRequest bool,
 	parentIDs map[string]struct{},
 ) {
-	if token.Color.ParentID == "" {
+	if token.Color.ParentID == "" || !admittedByWorkRequest {
 		return
 	}
 	marking.RecordParentChildRegistration(token)

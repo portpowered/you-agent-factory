@@ -912,7 +912,7 @@ func seedRestoredWork(
 		}
 		marking.AddToken(token)
 		seededWorkIDs[token.Color.WorkID] = struct{}{}
-		registerRestoredWorkParent(marking, token, parentIDs)
+		registerRestoredWorkParent(marking, token, requestIDs[workID] != "", parentIDs)
 	}
 
 	for _, parentID := range sortedStringKeys(parentIDs) {

@@ -119,7 +119,8 @@ func (g *SameNameGuard) EvaluateRuntime(ctx RuntimeGuardContext, candidates []fa
 		// historical equality behavior and do not depend on runtime history.
 		return matched, true
 	}
-	if _, registered := ctx.ParentChildRegistrations[parentWorkID]; !registered {
+	registration, registered := ctx.ParentChildRegistrations[parentWorkID]
+	if !registered || ParentChildRegistrationRetired(registration, parentWorkID, marking, ctx.ActiveDispatches) {
 		if len(parentBoundMatches) == 1 {
 			return parentBoundMatches, true
 		}
@@ -176,6 +177,30 @@ func completeRegisteredParentChildren(ctx RuntimeGuardContext, parentWorkID stri
 		return ParentChildRegistrationSet{}, nil, false
 	}
 	return registration, registered, true
+}
+
+// ParentChildRegistrationRetired reports whether every registered child of
+// parentWorkID has been consumed: none is still in the marking or held by an
+// active dispatch. A retired registration no longer describes a live
+// population, so it must not pin a SAME_NAME join to a consumed child when a
+// later transition (for example a rework cycle) emits an unregistered
+// replacement. Registrations with any visible child stay authoritative.
+func ParentChildRegistrationRetired(
+	registration ParentChildRegistrationSet,
+	parentWorkID string,
+	marking *MarkingSnapshot,
+	activeDispatches map[string]*interfaces.DispatchEntry,
+) bool {
+	if len(registration.Children) == 0 {
+		return false
+	}
+	visible := parentChildTokens(marking, activeDispatches, parentWorkID, "")
+	for _, child := range registration.Children {
+		if _, live := visible[tokenIdentity(child)]; live {
+			return false
+		}
+	}
+	return true
 }
 
 func registeredChildrenBelongToParent(children []factorytoken.Token, parentWorkID string) bool {
