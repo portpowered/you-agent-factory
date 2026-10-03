@@ -713,9 +713,6 @@ func provideCostsQuery(
 func provideCostsQueryCapability(
 	query costs.CostsQuery,
 ) (processcontract.RuntimeCostsQueryCapability, error) {
-	if query == nil {
-		return nil, errors.New("construct runtime costs query capability: query is required")
-	}
 	return runtimeCostsQueryCapability{query: query}, nil
 }
 

@@ -448,9 +448,6 @@ func newHTTPCostsHandler(
 		metricsScopeResolver,
 	)
 	costsHandler := costshttp.NewHandler(costsAdapter, presentation.Logger)
-	if costsHandler == nil {
-		return nil, errors.New("bind HTTP runtime: Costs query and runtime paths are required")
-	}
 	return costsHandler, nil
 }
 
