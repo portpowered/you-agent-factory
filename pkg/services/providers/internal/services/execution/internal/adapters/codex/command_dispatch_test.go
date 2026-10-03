@@ -128,6 +128,50 @@ func TestCommandEffectRendersResumeSessionBeforeFreshSessionFlags(t *testing.T) 
 	}
 }
 
+func TestCommandEffectForwardsWorkerArgsBeforeResumeAndPrompt(t *testing.T) {
+	t.Parallel()
+
+	platformRunner := testutil.NewProviderCommandRunner()
+	effect := codex.NewCommandEffect(platformRunner, platformclock.Real{})
+	if effect == nil {
+		t.Fatal("NewCommandEffect() returned nil")
+	}
+
+	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{
+		ExecuteRequest: providers.ExecuteRequest{
+			Provider:        providers.IDCodex,
+			AttemptID:       "worker-args-dispatch",
+			Model:           "gpt-5.6-luna",
+			ReasoningEffort: "high",
+			SkipPermissions: true,
+			Args:            []string{"--config", "mcp_servers.playwright.enabled=false", " ", "--disable", "plugins"},
+			UserMessage:     "continue the prior turn",
+		},
+		ResumeSession: &providers.SessionRef{
+			Provider: providers.IDCodex,
+			Kind:     providers.SessionIDKind,
+			ID:       "thread-previous",
+		},
+	}, func([]byte) error { return nil })
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	want := []string{
+		"exec",
+		"--json",
+		"--dangerously-bypass-approvals-and-sandbox",
+		"--model", "gpt-5.6-luna",
+		"--config", `model_reasoning_effort="high"`,
+		"--config", "mcp_servers.playwright.enabled=false",
+		"--disable", "plugins",
+		"resume", "thread-previous",
+		"-",
+	}
+	if got := platformRunner.LastRequest().Args; !reflect.DeepEqual(got, want) {
+		t.Fatalf("command args = %#v, want %#v - worker-authored args must reach codex exec before the resume subcommand", got, want)
+	}
+}
+
 func TestCommandEffectRendersLunaXHighReasoningEffort(t *testing.T) {
 	t.Parallel()
 

@@ -219,6 +219,41 @@ allowed only through an explicit runtime-supported route with a stable request
 identity and recorded evidence; otherwise the supervisor reports the Factory
 defect and lets the Project Lead or operator handle the next decision.
 
+## Worker browser tooling
+
+The host's codex config loads browser and computer-use tooling into every
+session: the Playwright MCP, Chrome DevTools MCP, the `node_repl` runtime, and
+plugin servers such as the computer-use `cua_repl`. Each session that loads them
+starts about 6 extra `node.exe` processes and about 0.8 GB of private memory,
+even when it never opens a browser. At 16 workers that load adds up and causes
+contention failures in timing-sensitive tests.
+
+The `project-lead`, `planner`, `ideafier`, `processor`, and `reviewer` workers
+in `factory/factory.json` start codex without that tooling. Each of those
+workers sets these `args`, which the codex adapter adds as extra `codex exec`
+options:
+
+- `--config mcp_servers.<name>={command="none",enabled=false}` for
+  `playwright`, `chrome-devtools`, and `node_repl`. Use the inline-table form.
+  A bare `mcp_servers.<name>.enabled=false` makes codex fail at startup with
+  `invalid transport` on a host whose config does not define that server.
+- `--disable plugins`. This removes the plugin-supplied `cua_repl` server,
+  which `-c plugins."<id>".enabled=false` does not remove.
+
+This covers these workstations: `project-lead`, `project-lead-wake`,
+`project-lead-checkin`, `plan`, `ideafy`, `process`, and `review`. The
+`validator` worker, used by `validate`, keeps the full tooling.
+
+When a lane needs browser verification, it opts in for that step only.
+UI verification is still required by the repository standards. The worker runs
+a nested `codex exec --dangerously-bypass-approvals-and-sandbox` from its shell
+and gives it the verification instructions. The nested session reads the
+unmodified user config, so it has the Playwright and Chrome DevTools MCP
+servers. The browser processes then exist only while that step runs. A PRD or
+payload that needs live browser evidence names this step. Repository browser
+scripts such as `ui/` `storybook:*-check` and Playwright-backed `vitest` runs
+need no opt-in. To give a whole worker the tooling back, delete its `args`.
+
 ## Failure classification and escalation
 
 Every non-terminal, failed, blocked, or apparently stranded item receives one

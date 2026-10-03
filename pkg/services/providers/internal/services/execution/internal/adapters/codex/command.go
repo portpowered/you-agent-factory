@@ -70,6 +70,11 @@ func buildCommand(request execution.ContinuationRequest) (providerservice.Comman
 	if effort != "" {
 		args = append(args, "--config", `model_reasoning_effort="`+effort+`"`)
 	}
+	// Worker-authored args are extra `codex exec` options (for example
+	// `--config mcp_servers.<name>.enabled=false` or `--disable plugins`). They
+	// sit before the optional `resume` subcommand so codex applies them to both
+	// fresh and resumed sessions.
+	args = append(args, nonBlankArgs(request.Args)...)
 	if request.ResumeSession != nil {
 		if sessionID := strings.TrimSpace(request.ResumeSession.ID); sessionID != "" {
 			args = append(args, "resume", sessionID)
@@ -86,6 +91,16 @@ func buildCommand(request execution.ContinuationRequest) (providerservice.Comman
 		),
 		WorkDir: request.WorkingDirectory,
 	}), nil
+}
+
+func nonBlankArgs(values []string) []string {
+	args := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			args = append(args, value)
+		}
+	}
+	return args
 }
 
 func validateCodexOptionalCapabilities(request providers.ExecuteRequest) error {
