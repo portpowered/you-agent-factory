@@ -1,6 +1,7 @@
 package provider_sessions
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -42,18 +44,22 @@ func TestProviderSessionsRemainInertThroughRootBuildProcessConstruction(t *testi
 	if got := recorder.fileOpenCalls(); got != 0 {
 		t.Fatalf("provider session filesystem open calls = %d during BuildProcess, want 0", got)
 	}
+	if got := recorder.providerCommandCount.Load(); got != 0 {
+		t.Fatalf("provider command calls = %d during BuildProcess, want 0", got)
+	}
 }
 
 type providerSessionEffectRecorder struct {
-	t                   testing.TB
-	homeCalls           atomic.Int32
-	fileStatCalls       atomic.Int32
-	fileOpenCount       atomic.Int32
-	codexWalkCount      atomic.Int32
-	codexSymlinkCount   atomic.Int32
-	cursorWalkCount     atomic.Int32
-	cursorSymlinkCount  atomic.Int32
-	cursorDatabaseCount atomic.Int32
+	t                    testing.TB
+	homeCalls            atomic.Int32
+	fileStatCalls        atomic.Int32
+	fileOpenCount        atomic.Int32
+	codexWalkCount       atomic.Int32
+	codexSymlinkCount    atomic.Int32
+	cursorWalkCount      atomic.Int32
+	cursorSymlinkCount   atomic.Int32
+	cursorDatabaseCount  atomic.Int32
+	providerCommandCount atomic.Int32
 }
 
 func newProviderSessionEffectRecorder(t testing.TB) *providerSessionEffectRecorder {
@@ -70,7 +76,13 @@ func (recorder *providerSessionEffectRecorder) edges() serviceedges.Edges {
 		ProviderSessionCursorWalkDirectory:   recorder.recordCursorWalk,
 		ProviderSessionCursorResolveSymlinks: recorder.recordCursorSymlink,
 		ProviderSessionCursorOpenDatabase:    recorder.recordCursorDatabase,
+		ProviderCommandRunner:                recorder,
 	}
+}
+
+func (recorder *providerSessionEffectRecorder) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	recorder.providerCommandCount.Add(1)
+	return platformprocess.CommandResult{}, errRecordingProviderSessionEffect
 }
 
 func (recorder *providerSessionEffectRecorder) recordHome() (string, error) {

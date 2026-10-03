@@ -38,13 +38,14 @@ func TestProviderSessionsHomeResolutionFailureOutcome(t *testing.T) {
 		t.Fatalf("home lookup calls = %d, want one failed lookup", got)
 	}
 	for name, calls := range map[string]int32{
-		"candidate stat":  recorder.fileStatCalls.Load(),
-		"file open":       recorder.fileOpenCalls(),
-		"Codex walk":      recorder.codexWalkCalls(),
-		"Codex symlink":   recorder.codexSymlinkCalls(),
-		"Cursor walk":     recorder.cursorWalkCalls(),
-		"Cursor symlink":  recorder.cursorSymlinkCalls(),
-		"Cursor database": recorder.cursorDatabaseCalls(),
+		"candidate stat":   recorder.fileStatCalls.Load(),
+		"file open":        recorder.fileOpenCalls(),
+		"Codex walk":       recorder.codexWalkCalls(),
+		"Codex symlink":    recorder.codexSymlinkCalls(),
+		"Cursor walk":      recorder.cursorWalkCalls(),
+		"Cursor symlink":   recorder.cursorSymlinkCalls(),
+		"Cursor database":  recorder.cursorDatabaseCalls(),
+		"provider command": recorder.providerCommandCount.Load(),
 	} {
 		if calls != 0 {
 			t.Errorf("%s calls = %d after failed home lookup, want 0", name, calls)
