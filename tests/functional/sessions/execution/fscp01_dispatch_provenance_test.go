@@ -97,109 +97,113 @@ const fscp01FixtureLLMSource = "hf://fixture/sessions-execution/gemma-4-E4B-it-Q
 // including an explicit typed result when that event is not emitted.
 func TestFSCP01DispatchReadFieldProvenanceMatrix(t *testing.T) {
 	t.Parallel()
-	t.Run("active", func(t *testing.T) {
-		t.Parallel()
-		acquireExecutionFixtureSlot(t)
-		gate := make(chan struct{})
-		var release sync.Once
-		releaseGate := func() { release.Do(func() { close(gate) }) }
-		runner := support.NewGatedSuccessCommandRunner("fscp01 active provider output", gate)
-		locations := newFSCP01RunLocations(t)
-		writeFSCP01OperatorModelSourceOverride(t, locations.Home)
-		dir := support.ScaffoldFactory(t, map[string]any{"name": "fscp01-dispatch-active"})
-		logFSCP01RunDeclaration(t, locations, dir, "", "single root; provider-gated active observation")
-		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-			FactoryDir:                dir,
-			WaitForServiceModeRuntime: true,
-			Env:                       locations.Env,
-			BeforeStart: func(tb testing.TB, process support.Process, inputs root.Input) {
-				support.InitializeCustomerHomeWithProcess(tb, process, inputs.Env, inputs.WorkingDirectory)
-			},
-			Edges: serviceedges.Edges{
-				ProviderCommandRunner: runner,
-			},
-		})
-		logFSCP01BoundPort(t, server.URL())
-		t.Cleanup(func() { server.Stop(t) })
-		t.Cleanup(releaseGate)
+	t.Run("active", testFSCP01ActiveDispatchRead)
+	t.Run("terminal", testFSCP01TerminalDispatchRead)
+}
 
-		started := startFSCP01DispatchWorkflowAsync(t, server.URL(), fscp01LiveDispatchCorrelationWorkflow)
-		if strings.TrimSpace(started.SessionId) == "" {
-			t.Fatal("active session id is empty")
-		}
-		waitForDurableSessionStatus(t, server.URL(), started.SessionId, factoryapi.FactorySessionDurableLifecycleStatusRunning, 5*time.Second)
-		listed := waitForFSCP01DispatchWithLabelStatus(t, server.URL(), started.SessionId, dispatchCorrelationChildLabel, factoryapi.FactoryDispatchStatusRUNNING)
-		if listed.SessionId != started.SessionId {
-			t.Fatalf("active dispatch list sessionId = %q, want %q", listed.SessionId, started.SessionId)
-		}
-		summary := requireFSCP01DispatchSummaryByLabel(t, listed, dispatchCorrelationChildLabel)
-		if summary.Status != factoryapi.FactoryDispatchStatusRUNNING {
-			t.Fatalf("active dispatch summary status = %q, want RUNNING", summary.Status)
-		}
-		detail := getFactorySessionDispatch(t, server.URL(), started.SessionId, summary.Id)
-		assertFSCP01DispatchListDetail(t, started.SessionId, summary, detail)
-		facts := observeFSCP01CanonicalDispatch(t, server.URL(), started.SessionId, summary.Id)
-		assertFSCP01DispatchAttemptAndWorkerIdentity(t, detail, facts)
-		recordFSCP01DispatchFieldSources(t, "active", summary, detail)
-		releaseGate()
-		waitForDurableSessionStatus(t, server.URL(), started.SessionId, factoryapi.FactorySessionDurableLifecycleStatusSucceeded, 5*time.Second)
+func testFSCP01ActiveDispatchRead(t *testing.T) {
+	t.Parallel()
+	acquireExecutionFixtureSlot(t)
+	gate := make(chan struct{})
+	var release sync.Once
+	releaseGate := func() { release.Do(func() { close(gate) }) }
+	runner := support.NewGatedSuccessCommandRunner("fscp01 active provider output", gate)
+	locations := newFSCP01RunLocations(t)
+	writeFSCP01OperatorModelSourceOverride(t, locations.Home)
+	dir := support.ScaffoldFactory(t, map[string]any{"name": "fscp01-dispatch-active"})
+	logFSCP01RunDeclaration(t, locations, dir, "", "single root; provider-gated active observation")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Env:                       locations.Env,
+		BeforeStart:               initializeFSCP01DispatchHome,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
 	})
+	logFSCP01BoundPort(t, server.URL())
+	t.Cleanup(func() { server.Stop(t) })
+	t.Cleanup(releaseGate)
 
-	t.Run("terminal", func(t *testing.T) {
-		t.Parallel()
-		acquireExecutionFixtureSlot(t)
-		locations := newFSCP01RunLocations(t)
-		writeFSCP01OperatorModelSourceOverride(t, locations.Home)
-		dir := support.ScaffoldFactory(t, map[string]any{"name": "fscp01-dispatch-terminal"})
-		logFSCP01RunDeclaration(t, locations, dir, "", "single root; terminal provider observation")
-		runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-			Stdout: []byte("fscp01 terminal provider output"),
-		})
-		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-			FactoryDir:                dir,
-			WaitForServiceModeRuntime: true,
-			Env:                       locations.Env,
-			BeforeStart: func(tb testing.TB, process support.Process, inputs root.Input) {
-				support.InitializeCustomerHomeWithProcess(tb, process, inputs.Env, inputs.WorkingDirectory)
-			},
-			Edges: serviceedges.Edges{
-				ProviderCommandRunner: runner,
-			},
-		})
-		logFSCP01BoundPort(t, server.URL())
-		t.Cleanup(func() { server.Stop(t) })
+	started := startFSCP01DispatchWorkflowAsync(t, server.URL(), fscp01LiveDispatchCorrelationWorkflow)
+	if strings.TrimSpace(started.SessionId) == "" {
+		t.Fatal("active session id is empty")
+	}
+	waitForDurableSessionStatus(t, server.URL(), started.SessionId, factoryapi.FactorySessionDurableLifecycleStatusRunning, 5*time.Second)
+	listed := waitForFSCP01DispatchWithLabelStatus(t, server.URL(), started.SessionId, dispatchCorrelationChildLabel, factoryapi.FactoryDispatchStatusRUNNING)
+	if listed.SessionId != started.SessionId {
+		t.Fatalf("active dispatch list sessionId = %q, want %q", listed.SessionId, started.SessionId)
+	}
+	summary := requireFSCP01DispatchSummaryByLabel(t, listed, dispatchCorrelationChildLabel)
+	if summary.Status != factoryapi.FactoryDispatchStatusRUNNING {
+		t.Fatalf("active dispatch summary status = %q, want RUNNING", summary.Status)
+	}
+	detail := getFactorySessionDispatch(t, server.URL(), started.SessionId, summary.Id)
+	assertFSCP01DispatchListDetail(t, started.SessionId, summary, detail)
+	facts := observeFSCP01CanonicalDispatch(t, server.URL(), started.SessionId, summary.Id)
+	assertFSCP01DispatchAttemptAndWorkerIdentity(t, detail, facts)
+	recordFSCP01DispatchFieldSources(t, "active", summary, detail)
+	releaseGate()
+	waitForDurableSessionStatus(t, server.URL(), started.SessionId, factoryapi.FactorySessionDurableLifecycleStatusSucceeded, 5*time.Second)
+}
 
-		started := startFSCP01DispatchWorkflowSync(t, server.URL(), fscp01LiveDispatchCorrelationWorkflow)
-		if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-			t.Fatalf("terminal session status = %q, want SUCCEEDED", started.Status)
-		}
-		listed := listFactorySessionDispatches(t, server.URL(), started.SessionId)
-		if listed.SessionId != started.SessionId || len(listed.Dispatches) == 0 {
-			t.Fatalf("terminal dispatch list = %#v, want rows scoped to %q", listed, started.SessionId)
-		}
-		summary := requireFSCP01DispatchSummaryByLabel(t, listed, dispatchCorrelationChildLabel)
-		if summary.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
-			t.Fatalf("terminal dispatch summary status = %q, want COMPLETED", summary.Status)
-		}
-		if runner.CallCount() != 1 {
-			t.Fatalf("terminal provider command calls = %d, want 1", runner.CallCount())
-		}
-		if request := runner.LastRequest(); strings.ToLower(strings.TrimSpace(request.Command)) != "codex" {
-			t.Fatalf("terminal provider command = %q, want codex", request.Command)
-		}
-		detail := getFactorySessionDispatch(t, server.URL(), started.SessionId, summary.Id)
-		assertFSCP01DispatchListDetail(t, started.SessionId, summary, detail)
-		facts := observeFSCP01CanonicalDispatch(t, server.URL(), started.SessionId, summary.Id)
-		assertFSCP01DispatchAttemptAndWorkerIdentity(t, detail, facts)
-		recordFSCP01DispatchFieldSources(t, "terminal", summary, detail)
-		// A second terminal list/detail read is the public stability check for the
-		// fields with explicit dispositions in the current matrix.
-		secondSummary := requireFSCP01DispatchSummary(t, listFactorySessionDispatches(t, server.URL(), started.SessionId), summary.Id)
-		secondDetail := getFactorySessionDispatch(t, server.URL(), started.SessionId, summary.Id)
-		assertFSCP01DispatchListDetail(t, started.SessionId, secondSummary, secondDetail)
-
-		assertFSCP01DispatchNegativeReads(t, server.URL(), started.SessionId, summary.Id)
+func testFSCP01TerminalDispatchRead(t *testing.T) {
+	t.Parallel()
+	acquireExecutionFixtureSlot(t)
+	locations := newFSCP01RunLocations(t)
+	writeFSCP01OperatorModelSourceOverride(t, locations.Home)
+	dir := support.ScaffoldFactory(t, map[string]any{"name": "fscp01-dispatch-terminal"})
+	logFSCP01RunDeclaration(t, locations, dir, "", "single root; terminal provider observation")
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("fscp01 terminal provider output"),
 	})
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Env:                       locations.Env,
+		BeforeStart:               initializeFSCP01DispatchHome,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
+	})
+	logFSCP01BoundPort(t, server.URL())
+	t.Cleanup(func() { server.Stop(t) })
+
+	started := startFSCP01DispatchWorkflowSync(t, server.URL(), fscp01LiveDispatchCorrelationWorkflow)
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("terminal session status = %q, want SUCCEEDED", started.Status)
+	}
+	listed := listFactorySessionDispatches(t, server.URL(), started.SessionId)
+	if listed.SessionId != started.SessionId || len(listed.Dispatches) == 0 {
+		t.Fatalf("terminal dispatch list = %#v, want rows scoped to %q", listed, started.SessionId)
+	}
+	summary := requireFSCP01DispatchSummaryByLabel(t, listed, dispatchCorrelationChildLabel)
+	if summary.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+		t.Fatalf("terminal dispatch summary status = %q, want COMPLETED", summary.Status)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("terminal provider command calls = %d, want 1", runner.CallCount())
+	}
+	if request := runner.LastRequest(); strings.ToLower(strings.TrimSpace(request.Command)) != "codex" {
+		t.Fatalf("terminal provider command = %q, want codex", request.Command)
+	}
+	detail := getFactorySessionDispatch(t, server.URL(), started.SessionId, summary.Id)
+	assertFSCP01DispatchListDetail(t, started.SessionId, summary, detail)
+	facts := observeFSCP01CanonicalDispatch(t, server.URL(), started.SessionId, summary.Id)
+	assertFSCP01DispatchAttemptAndWorkerIdentity(t, detail, facts)
+	recordFSCP01DispatchFieldSources(t, "terminal", summary, detail)
+	// A second terminal list/detail read is the public stability check for the
+	// fields with explicit dispositions in the current matrix.
+	secondSummary := requireFSCP01DispatchSummary(t, listFactorySessionDispatches(t, server.URL(), started.SessionId), summary.Id)
+	secondDetail := getFactorySessionDispatch(t, server.URL(), started.SessionId, summary.Id)
+	assertFSCP01DispatchListDetail(t, started.SessionId, secondSummary, secondDetail)
+
+	assertFSCP01DispatchNegativeReads(t, server.URL(), started.SessionId, summary.Id)
+}
+
+func initializeFSCP01DispatchHome(tb testing.TB, process support.Process, inputs root.Input) {
+	tb.Helper()
+	support.InitializeCustomerHomeWithProcess(tb, process, inputs.Env, inputs.WorkingDirectory)
 }
 
 func assertFSCP01DispatchNegativeReads(t *testing.T, serverURL, sessionID, dispatchID string) {
