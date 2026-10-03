@@ -14,6 +14,7 @@ import (
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -111,6 +112,9 @@ func TestFSCP01DispatchReadFieldProvenanceMatrix(t *testing.T) {
 			FactoryDir:                dir,
 			WaitForServiceModeRuntime: true,
 			Env:                       locations.Env,
+			BeforeStart: func(tb testing.TB, process support.Process, inputs root.Input) {
+				support.InitializeCustomerHomeWithProcess(tb, process, inputs.Env, inputs.WorkingDirectory)
+			},
 			Edges: serviceedges.Edges{
 				ProviderCommandRunner: runner,
 			},
@@ -155,6 +159,9 @@ func TestFSCP01DispatchReadFieldProvenanceMatrix(t *testing.T) {
 			FactoryDir:                dir,
 			WaitForServiceModeRuntime: true,
 			Env:                       locations.Env,
+			BeforeStart: func(tb testing.TB, process support.Process, inputs root.Input) {
+				support.InitializeCustomerHomeWithProcess(tb, process, inputs.Env, inputs.WorkingDirectory)
+			},
 			Edges: serviceedges.Edges{
 				ProviderCommandRunner: runner,
 			},
@@ -314,6 +321,31 @@ func observeFSCP01CanonicalDispatch(
 	serverURL, sessionID, dispatchID string,
 ) fscp01CanonicalDispatchFacts {
 	t.Helper()
+	facts := readFSCP01CanonicalDispatch(t, serverURL, sessionID, dispatchID)
+	if !facts.HasAssociation {
+		// RUNNING and canonical history are separate public projections. Capture
+		// eventual publication while the provider remains gated, but retain the
+		// first-snapshot failure until that ordering has actually been witnessed.
+		// The retained histories expose no single publication readiness signal.
+		last, err := support.WaitForObservation(5*time.Second,
+			func() (fscp01CanonicalDispatchFacts, error) {
+				return readFSCP01CanonicalDispatch(t, serverURL, sessionID, dispatchID), nil
+			},
+			func(observed fscp01CanonicalDispatchFacts) bool { return observed.HasAssociation },
+		)
+		t.Fatalf("public canonical history for dispatch %q has no Worker Session association in first snapshot; bounded follow-up association=%t workerSessionId=%q dispatchStart=%t error=%v", dispatchID, last.HasAssociation, last.WorkerSessionID, last.HasDispatchStart, err)
+	}
+	if !facts.HasDispatchStart {
+		t.Fatalf("canonical history for dispatch %q has no DISPATCH_QUEUED or DISPATCH_REQUEST", dispatchID)
+	}
+	return facts
+}
+
+func readFSCP01CanonicalDispatch(
+	t *testing.T,
+	serverURL, sessionID, dispatchID string,
+) fscp01CanonicalDispatchFacts {
+	t.Helper()
 	events := support.GetFactoryEventsForSessionAt(t, serverURL, sessionID)
 	facts := fscp01CanonicalDispatchFacts{Attempts: make(map[int]struct{})}
 	observeFSCP01CanonicalDispatchEvents(t, sessionID, dispatchID, events, &facts)
@@ -323,12 +355,6 @@ func observeFSCP01CanonicalDispatch(
 	defaultEvents := support.GetFactoryEventsAt(t, serverURL)
 	observeFSCP01CanonicalDispatchEvents(t, sessionID, dispatchID, defaultEvents, &facts)
 
-	if !facts.HasAssociation {
-		t.Fatalf("public canonical history for dispatch %q has no Worker Session association", dispatchID)
-	}
-	if !facts.HasDispatchStart {
-		t.Fatalf("canonical history for dispatch %q has no DISPATCH_QUEUED or DISPATCH_REQUEST", dispatchID)
-	}
 	return facts
 }
 
