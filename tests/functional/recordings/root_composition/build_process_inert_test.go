@@ -1,6 +1,7 @@
 package root_composition_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -13,11 +14,166 @@ import (
 	"testing"
 	"time"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// The local run command owns ~default. Its isolated profile is intentional;
+// explicit concurrent runtime scopes are characterized separately.
+func TestExecuteFlushesTerminalRecordingBeforeReturning(t *testing.T) {
+	t.Parallel()
+	dir := support.ScaffoldSingleStepFactory(t, "flush-terminal-history")
+	support.WriteAgentConfig(t, dir, "processor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	workPath := filepath.Join(t.TempDir(), "work.json")
+	request, err := json.Marshal(work.WorkRequest{Type: work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{Name: "terminal-work", WorkTypeID: "task", Payload: map[string]string{"title": "flush terminal history"}}}})
+	if err != nil {
+		t.Fatalf("encode Work Request: %v", err)
+	}
+	if err := os.WriteFile(workPath, request, 0o600); err != nil {
+		t.Fatalf("write Work Request: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "terminal.json")
+	started, completed, releaseWrite := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var releaseOnce, startOnce, completeOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseWrite) }) }
+	defer release()
+	var service recordings.Service
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner:  support.NewStaticSuccessCommandRunner("recording worker COMPLETE"),
+		RecordingsRootObserver: func(root recordings.Service) { service = root },
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			if request.OnBound != nil {
+				request.OnBound(platformhttpserver.Binding{Port: request.Port})
+			}
+			<-ctx.Done()
+			return nil
+		},
+		RecordingReadFile: os.ReadFile,
+		RecordingWriteFile: func(destination string, data []byte) error {
+			// Inspect only the external write to signal the terminal snapshot;
+			// persisted customer facts are asserted through the public query below.
+			terminal := recordingWriteHasTerminalEvent(data)
+			if terminal {
+				startOnce.Do(func() { close(started) })
+				<-releaseWrite
+			}
+			err := os.WriteFile(destination, data, 0o600)
+			if terminal {
+				completeOnce.Do(func() { close(completed) })
+			}
+			return err
+		},
+	})
+	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir,
+		"--work", workPath, "--quiet", "--record", path})
+	home := t.TempDir()
+	inputs.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home,
+		"HOMEDRIVE="+filepath.VolumeName(home), "HOMEPATH="+strings.TrimPrefix(home, filepath.VolumeName(home)))
+	done := executeGatedRecordingCommand(t, process, inputs, release)
+	assertExecuteJoinsTerminalWrite(t, started, completed, done, release)
+	assertPublicExecuteTerminalHistory(t, service, path)
+}
+
+func executeGatedRecordingCommand(t *testing.T, process support.Process, inputs *support.CapturedInputs, release func()) <-chan error {
+	t.Helper()
+	ctx, cancel := context.WithCancel(inputs.Context)
+	inputs.Context = ctx
+	done, joined := make(chan error, 1), make(chan struct{})
+	go func() {
+		defer close(joined)
+		done <- process.Execute(inputs.Input)
+	}()
+	t.Cleanup(func() {
+		release()
+		cancel()
+		select {
+		case <-joined:
+		case <-time.After(30 * time.Second):
+			t.Error("recording command cleanup did not join Execute")
+		}
+	})
+	return done
+}
+
+func assertExecuteJoinsTerminalWrite(t *testing.T, started, completed <-chan struct{}, done <-chan error, release func()) {
+	t.Helper()
+	select {
+	case <-started:
+	case err := <-done:
+		t.Fatalf("Execute returned before terminal writer: %v", err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("terminal writer did not start")
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("Execute returned with terminal writer blocked: %v", err)
+	default:
+	}
+	release()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Execute: %v", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("Execute did not join terminal writer")
+	}
+	select {
+	case <-completed:
+	default:
+		t.Fatal("Execute completed before terminal write completion")
+	}
+}
+
+func recordingWriteHasTerminalEvent(data []byte) bool {
+	var snapshot struct {
+		Events []struct {
+			Type string `json:"type"`
+		} `json:"events"`
+	}
+	if json.Unmarshal(data, &snapshot) != nil {
+		return false
+	}
+	for _, event := range snapshot.Events {
+		if event.Type == "RUN_RESPONSE" {
+			return true
+		}
+	}
+	return false
+}
+
+func assertPublicExecuteTerminalHistory(t *testing.T, service recordings.Service, path string) {
+	t.Helper()
+	history, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
+		Recording: recordings.HistoricalRecordingIdentity{
+			RecordingID: "execute-terminal", Artifact: recordings.RecordingArtifactReference(path),
+			Scope: recordings.CanonicalEventScope{FactorySessionID: "~default"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("public terminal historical read: %v", err)
+	}
+	seen := make(map[recordings.CanonicalEventKind]bool)
+	for index, event := range history.Events {
+		if index > 0 && event.Sequence <= history.Events[index-1].Sequence {
+			t.Fatalf("historical events out of admitted order: %#v", history.Events)
+		}
+		seen[event.Kind] = true
+	}
+	for _, kind := range []recordings.CanonicalEventKind{"RUN_REQUEST", "WORK_REQUEST", "DISPATCH_REQUEST", "DISPATCH_RESPONSE", "RUN_RESPONSE"} {
+		if !seen[kind] {
+			t.Fatalf("public terminal history missing %s: %#v", kind, history.Events)
+		}
+	}
+	if len(history.Dispatches) != 1 || history.Dispatches[0].Status != recordings.FactoryDispatchStatusCompleted {
+		t.Fatalf("public terminal dispatches = %#v, want one completed dispatch", history.Dispatches)
+	}
+}
 
 var errRecordingRecordingsEffect = errors.New("recording Recordings effect invoked during BuildProcess")
 
