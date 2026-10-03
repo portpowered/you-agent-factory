@@ -370,15 +370,34 @@ func (loader *replayInputLoader) classifyPortableReplayInputMetadata(path string
 	return isPortableReplayInputReader(file), nil
 }
 
+// isPortableReplayInputReader classifies a recording from its leading members
+// only. It stops at recordingKind, or at the legacy "events" array, so a
+// classification never reads the event history of a large recording.
 func isPortableReplayInputReader(reader io.Reader) bool {
 	decoder := json.NewDecoder(reader)
-	var identity struct {
-		RecordingKind string `json:"recordingKind"`
-	}
-	if err := decoder.Decode(&identity); err != nil {
+	if token, err := decoder.Token(); err != nil {
+		return false
+	} else if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
 		return false
 	}
-	return identity.RecordingKind == recordings.KindJavaScriptFactorySession
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return false
+		}
+		switch token {
+		case "recordingKind":
+			var kind string
+			return decoder.Decode(&kind) == nil && kind == recordings.KindJavaScriptFactorySession
+		case "events":
+			return false
+		}
+		var skipped json.RawMessage
+		if err := decoder.Decode(&skipped); err != nil {
+			return false
+		}
+	}
+	return false
 }
 
 func (loader *replayInputLoader) replayInputDependencyFailure(

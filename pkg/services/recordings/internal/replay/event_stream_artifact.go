@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -505,9 +506,20 @@ func rewriteArtifactFactoryEvents(artifact *interfaces.ReplayArtifact, snapshot 
 	return nil
 }
 
+// replayMetadataHeaderLimit bounds the bytes inspected for a v2 header line.
+const replayMetadataHeaderLimit = 256 << 10
+
+// replaySessionIDFound short-circuits the legacy metadata scan: the first
+// non-empty event session identity is the recording identity, so the rest of
+// the event history is never read.
+type replaySessionIDFound struct{ id string }
+
+func (replaySessionIDFound) Error() string { return "replay session identity found" }
+
 // LoadMetadata reads only the identity-bearing metadata of either replay
 // artifact version. V2 returns after validating its header; legacy JSON scans
-// event contexts one at a time so the event history is never retained.
+// event contexts until the first session identity and then stops, so neither
+// the event history nor the rest of the file is read.
 func LoadMetadata(
 	openFile func(string) (io.ReadCloser, error),
 	path string,
@@ -519,7 +531,9 @@ func LoadMetadata(
 	if err != nil {
 		return recordingcontracts.ReplayInputMetadata{}, fmt.Errorf("open replay artifact %q: %w", path, err)
 	}
-	reader := bufio.NewReader(file)
+	// A v2 header is one short line. Bound the read so a legacy single-line
+	// JSON recording is never pulled into memory looking for a newline.
+	reader := bufio.NewReader(io.LimitReader(file, replayMetadataHeaderLimit))
 	firstLine, readErr := reader.ReadBytes('\n')
 	_ = file.Close()
 	if readErr != nil && readErr != io.EOF {
@@ -569,6 +583,10 @@ func decodeReplayV1Metadata(reader io.Reader) (string, error) {
 		return "", err
 	}
 	sessionID, err := replayV1ObjectSessionID(decoder)
+	var found replaySessionIDFound
+	if errors.As(err, &found) {
+		return found.id, nil
+	}
 	if err != nil {
 		return "", err
 	}
@@ -705,7 +723,10 @@ func replayV1ContextFieldSessionID(decoder *json.Decoder, key string) (string, e
 	case nil:
 		return "", nil
 	case string:
-		return strings.TrimSpace(value), nil
+		if id := strings.TrimSpace(value); id != "" {
+			return "", replaySessionIDFound{id: id}
+		}
+		return "", nil
 	default:
 		return "", fmt.Errorf("event context sessionId must be a string")
 	}
