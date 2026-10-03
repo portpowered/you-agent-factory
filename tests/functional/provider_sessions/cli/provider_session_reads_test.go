@@ -80,8 +80,14 @@ func assertTerminalProviderSessionRead(t *testing.T, ctx context.Context, fixtur
 			t.Fatalf("mixed rollout parse = %#v, want one truncated diagnostic", shown.Parse)
 		}
 		inputs := executeCLI(t, ctx, fixture.process, env, caseFixture.factoryDir, args...)
-		var transcript transcriptJSON
+		var transcript struct {
+			transcriptJSON
+			FactorySessionID *string `json:"factorySessionId"`
+		}
 		decodeCLIJSON(t, inputs, &transcript)
+		if transcript.FactorySessionID == nil || *transcript.FactorySessionID != sessionID {
+			t.Fatalf("read Factory Session = %#v, want %s", transcript.FactorySessionID, sessionID)
+		}
 		if transcript.WorkerSessionID != terminal.WorkerSessionID || transcript.ProviderSession != *terminal.ProviderSession || transcript.State != "COMPLETED" || len(transcript.WorkIDs) != 1 || transcript.WorkIDs[0] != workID {
 			t.Fatalf("read changed terminal association: %#v", transcript)
 		}
