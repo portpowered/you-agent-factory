@@ -3,6 +3,7 @@ package wire_test
 import (
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
 )
@@ -15,7 +16,7 @@ func TestNewServiceConstructsLifecycleOwner(t *testing.T) {
 			return recordings.LiveRecordingTarget{}, nil
 		},
 	)
-	if service := recordinglifecyclewire.NewService(planner, nil, nil); service == nil {
+	if service := recordinglifecyclewire.NewService(planner, nil, nil, platformclock.Real{}); service == nil {
 		t.Fatal("NewService returned nil")
 	}
 }

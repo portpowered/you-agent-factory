@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
@@ -41,7 +44,7 @@ func (replayArtifactTestLedger) AppendRecordedEvent(factorydefinitions.FactoryEv
 // prior Bind/Finish calls) never touches those effects.
 func newTestRecordingReplayArtifacts(t *testing.T) (recordings.Service, recordings.RecordingReplayArtifacts) {
 	t.Helper()
-	service, err := recordingswire.NewServiceWithProjectionAndEffects(
+	service, err := testNewServiceWithProjectionAndEffects(
 		replayArtifactTestLedger{},
 		recordingswire.NewProjectionService(),
 		nil,
@@ -70,7 +73,7 @@ func newTestRecordingReplayArtifacts(t *testing.T) (recordings.Service, recordin
 func TestRecordingReplayArtifacts_ConstructionIsInert(t *testing.T) {
 	t.Parallel()
 	panicEffect := func(string, ...any) { panic("construction must not perform I/O") }
-	service, err := recordingswire.NewServiceWithProjectionAndEffects(
+	service, err := testNewServiceWithProjectionAndEffects(
 		replayArtifactTestLedger{},
 		recordingswire.NewProjectionService(),
 		nil,
@@ -670,4 +673,99 @@ func TestRecordingReplayArtifacts_NarrowFakeConsumption(t *testing.T) {
 	if !reflect.DeepEqual(exported.Artifact.Summary, built.Artifact.Summary) {
 		t.Fatalf("ExportArtifact() Summary = %#v, want %#v", exported.Artifact.Summary, built.Artifact.Summary)
 	}
+}
+
+// testNewServiceWithProjectionAndEffects assembles explicit owner fixtures.
+func testNewServiceWithProjectionAndEffects(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	publication, err := recordingswire.NewPortableArtifactPublication(
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct Recordings publication: %w", err)
+	}
+	historicalQuery := recordingswire.NewHistoricalQueryOwner(readFile, projection)
+	return newServiceWithProjection(
+		ledger,
+		projection,
+		targets,
+		writeFile,
+		publication,
+		historicalQuery,
+		clocks...,
+	)
+}
+
+type portableArtifactPublication interface {
+	Publish(context.Context, string, []byte) error
+	Read(context.Context, string) ([]byte, error)
+}
+
+func newServiceWithProjection(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	publication portableArtifactPublication,
+	historicalQuery recordingswire.HistoricalQueryOwner,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	var writer recordings.RecordingSnapshotWriter
+	var tickers recordings.RecordingFlushTickerFactory
+	if writeFile != nil {
+		writer = recordingswire.NewReplayRecordingSnapshotWriter(writeFile, nil, nil)
+		tickers = recordingswire.NewRecordingFlushTickerFactory()
+	}
+	lifecycle := recordingswire.NewRecordingLifecycleOwner(targets, writer, tickers, testClock(clocks))
+	service := recordingswire.NewService(ledger, projection,
+		lifecycle, recordingswire.NewArtifactsExportOwner(lifecycle, publication),
+		recordingswire.NewReplayOwner(lifecycle, projection, nil, nil), recordingswire.NewCanonicalLedgerOwner(ledger), historicalQuery,
+		testClock(clocks), logging.NoopLogger{}, nil, nil, nil, nil, nil)
+	return service, nil
+}
+
+func testClock(clocks []recordings.RecordingClock) recordings.RecordingClock {
+	if len(clocks) > 0 && clocks[0] != nil {
+		return clocks[0]
+	}
+	return platformclock.Real{}
+}
+
+func testNewService(
+	ledger recordings.Ledger,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	return testNewServiceWithProjectionAndEffects(
+		ledger,
+		recordingswire.NewProjectionService(),
+		targets,
+		writeFile,
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+		clocks...,
+	)
 }

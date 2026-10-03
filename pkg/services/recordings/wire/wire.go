@@ -1,50 +1,29 @@
-// Package wire is the Recordings service composition boundary.
-//
-// Wire performs construction only, returns the singular recordings.Service
-// root interface, and starts no lifecycle components. Parent-private
-// ledger/projection/lifecycle/replay/artifacts owner wiring stays inside the
-// owner service assembly path; peers depend on Service rather than owner
-// internals or construction ports.
+// Package wire exposes focused Recordings construction providers to canonical Wire.
 package wire
 
 import (
-	"fmt"
-
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 )
 
-// NewService constructs an inert Recordings root from the runtime ledger seam
-// and process-edge ports selected by the application graph. It composes the
-// accepted root through parent-private ledger/projection/lifecycle/replay/
-// artifacts owners without publishing owner types on the returned peer surface.
+// NewService stores the completed owners and runtime dependencies without activating effects.
 func NewService(
 	ledger recordings.Ledger,
-	targets recordings.LiveRecordingTargetPlanner,
-	writeFile func(string, []byte) error,
-	makeDirectories recordings.RecordingMakeDirectories,
-	createTemporaryFile recordings.RecordingCreateTemporaryFile,
-	removePath recordings.RecordingRemovePath,
-	renamePath recordings.RecordingRenamePath,
-	readFile recordings.RecordingReadFile,
-	clocks ...recordings.RecordingClock,
-) (recordings.Service, error) {
-	if ledger == nil {
-		return nil, fmt.Errorf("construct Recordings: ledger is required")
-	}
-	if writeFile == nil {
-		return nil, fmt.Errorf("construct Recordings: snapshot write function is required")
-	}
-	return NewServiceWithProjection(
-		ledger,
-		recordingsinternal.NewProjectionService(),
-		targets,
-		writeFile,
-		makeDirectories,
-		createTemporaryFile,
-		removePath,
-		renamePath,
-		readFile,
-		clocks...,
-	)
+	projection recordings.ProjectionService,
+	lifecycle RecordingLifecycleOwner,
+	artifacts ArtifactsExportOwner,
+	replay ReplayOwner,
+	canonical CanonicalLedgerOwner,
+	historical HistoricalQueryOwner,
+	clock recordings.RecordingClock,
+	logger logging.Logger,
+	router *RuntimeLedgerRouter,
+	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	replayInputs recordings.ReplayInputLoader,
+) recordings.Service {
+	return recordingsinternal.NewCombinedService(ledger, projection, lifecycle, artifacts, replay, canonical, historical, clock, logger, router, captureSnapshot, decodeSnapshot, decodeRuntimeConfig, replayInputs)
 }

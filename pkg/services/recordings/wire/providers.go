@@ -2,7 +2,6 @@ package wire
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -14,8 +13,16 @@ import (
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 	artifactsimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts"
 	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
+	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
+	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
+	canonicalledger "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger"
+	canonicalledgerwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
 	historicalquery "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query"
 	historicalquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/historical_query/wire"
+	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	recordinglifecyclewire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/wire"
+	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
+	replaywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire"
 )
 
 // NewPortableRecordingWriter constructs the portable recording writer selected
@@ -69,146 +76,6 @@ func NewReplayInputLoader(
 	return recordingsinternal.NewReplayInputLoader(
 		readFile, openFile, loadLegacy, loadLegacyMetadata, logger,
 	)
-}
-
-// NewRuntimeRoot constructs the singular process-scoped Recordings authority.
-// Runtime ledgers, projection use, replay collaborators, and recording
-// lifecycle state are acquired through the returned root's RuntimeScopeService
-// capability rather than through opening-local constructors.
-func NewRuntimeRoot(
-	targets recordings.LiveRecordingTargetPlanner,
-	writeFile func(string, []byte) error,
-	makeDirectories recordings.RecordingMakeDirectories,
-	createTemporaryFile recordings.RecordingCreateTemporaryFile,
-	removePath recordings.RecordingRemovePath,
-	renamePath recordings.RecordingRenamePath,
-	readFile recordings.RecordingReadFile,
-	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
-	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	replayInputs recordings.ReplayInputLoader,
-	logger logging.Logger,
-	clocks ...recordings.RecordingClock,
-) (recordings.Service, error) {
-	return newRuntimeRoot(
-		targets,
-		writeFile,
-		nil,
-		makeDirectories,
-		createTemporaryFile,
-		removePath,
-		renamePath,
-		readFile,
-		captureSnapshot,
-		decodeSnapshot,
-		decodeRuntimeConfig,
-		replayInputs,
-		logger,
-		clocks...,
-	)
-}
-
-// NewRuntimeRootWithAppend constructs the process-scoped Recordings authority
-// with the separate append effect required by new v2 JSONL recordings.
-func NewRuntimeRootWithAppend(
-	targets recordings.LiveRecordingTargetPlanner,
-	writeFile func(string, []byte) error,
-	appendFile func(string, []byte) error,
-	makeDirectories recordings.RecordingMakeDirectories,
-	createTemporaryFile recordings.RecordingCreateTemporaryFile,
-	removePath recordings.RecordingRemovePath,
-	renamePath recordings.RecordingRenamePath,
-	readFile recordings.RecordingReadFile,
-	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
-	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	replayInputs recordings.ReplayInputLoader,
-	logger logging.Logger,
-	clocks ...recordings.RecordingClock,
-) (recordings.Service, error) {
-	if appendFile == nil {
-		return NewRuntimeRoot(
-			targets,
-			writeFile,
-			makeDirectories,
-			createTemporaryFile,
-			removePath,
-			renamePath,
-			readFile,
-			captureSnapshot,
-			decodeSnapshot,
-			decodeRuntimeConfig,
-			replayInputs,
-			logger,
-			clocks...,
-		)
-	}
-	return newRuntimeRoot(
-		targets,
-		writeFile,
-		appendFile,
-		makeDirectories,
-		createTemporaryFile,
-		removePath,
-		renamePath,
-		readFile,
-		captureSnapshot,
-		decodeSnapshot,
-		decodeRuntimeConfig,
-		replayInputs,
-		logger,
-		clocks...,
-	)
-}
-
-func newRuntimeRoot(
-	targets recordings.LiveRecordingTargetPlanner,
-	writeFile func(string, []byte) error,
-	appendFile func(string, []byte) error,
-	makeDirectories recordings.RecordingMakeDirectories,
-	createTemporaryFile recordings.RecordingCreateTemporaryFile,
-	removePath recordings.RecordingRemovePath,
-	renamePath recordings.RecordingRenamePath,
-	readFile recordings.RecordingReadFile,
-	captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
-	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
-	replayInputs recordings.ReplayInputLoader,
-	logger logging.Logger,
-	clocks ...recordings.RecordingClock,
-) (recordings.Service, error) {
-	publication, err := recordingsinternal.NewPortableArtifactPublication(
-		makeDirectories,
-		createTemporaryFile,
-		removePath,
-		renamePath,
-		readFile,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("construct Recordings publication: %w", err)
-	}
-	historicalQuery := historicalquerywire.NewService(
-		readFile,
-		NewProjectionService(),
-	)
-	root := recordingsinternal.NewRuntimeRootWithHistoricalQueryAndAppender(
-		targets,
-		writeFile,
-		appendFile,
-		readFile,
-		publication,
-		captureSnapshot,
-		decodeSnapshot,
-		decodeRuntimeConfig,
-		replayInputs,
-		logger,
-		historicalQuery,
-		clocks...,
-	)
-	if root == nil {
-		return nil, fmt.Errorf("construct Recordings: runtime root rejected its dependencies")
-	}
-	return root, nil
 }
 
 // NewProjectionService constructs the Recordings projection capability for
@@ -273,131 +140,72 @@ func NewReplayExecution(
 	)
 }
 
-// NewServiceWithProjection constructs the Recordings root from a caller-owned
-// ledger and projection. Process composition uses this when runtime opening
-// shares one projection instance across reconnect validation and root assembly.
-func NewServiceWithProjection(
-	ledger recordings.Ledger,
-	projection recordings.ProjectionService,
-	targets recordings.LiveRecordingTargetPlanner,
-	writeFile func(string, []byte) error,
-	makeDirectories recordings.RecordingMakeDirectories,
-	createTemporaryFile recordings.RecordingCreateTemporaryFile,
-	removePath recordings.RecordingRemovePath,
-	renamePath recordings.RecordingRenamePath,
-	readFile recordings.RecordingReadFile,
-	clocks ...recordings.RecordingClock,
-) (recordings.Service, error) {
-	if ledger == nil {
-		return nil, fmt.Errorf("construct Recordings: ledger is required")
-	}
-	if projection == nil {
-		return nil, fmt.Errorf("construct Recordings: projection is required")
-	}
-	if writeFile == nil {
-		return nil, fmt.Errorf("construct Recordings: snapshot write function is required")
-	}
-	return NewServiceWithProjectionAndEffects(
-		ledger,
-		projection,
-		targets,
-		writeFile,
-		makeDirectories,
-		createTemporaryFile,
-		removePath,
-		renamePath,
-		readFile,
-		clocks...,
-	)
-}
+type RecordingLifecycleOwner = recordinglifecycle.Service
+type ArtifactsExportOwner = artifactsexport.Service
+type ReplayOwner = recordingsreplay.Service
+type CanonicalLedgerOwner = canonicalledger.Service
+type HistoricalQueryOwner = historicalquery.Service
+type RuntimeLedgerRouter = recordingsinternal.RuntimeLedgerRouter
 
-// NewServiceWithProjectionAndEffects constructs the Recordings root with the
-// exact portable-artifact filesystem effects selected by the application
-// graph. This owner wire adapts those effects into the private artifact
-// publication capability and selects no host defaults.
-func NewServiceWithProjectionAndEffects(
-	ledger recordings.Ledger,
-	projection recordings.ProjectionService,
-	targets recordings.LiveRecordingTargetPlanner,
-	writeFile func(string, []byte) error,
-	makeDirectories recordings.RecordingMakeDirectories,
-	createTemporaryFile recordings.RecordingCreateTemporaryFile,
-	removePath recordings.RecordingRemovePath,
-	renamePath recordings.RecordingRenamePath,
-	readFile recordings.RecordingReadFile,
-	clocks ...recordings.RecordingClock,
-) (recordings.Service, error) {
-	if ledger == nil {
-		return nil, fmt.Errorf("construct Recordings: ledger is required")
-	}
-	if projection == nil {
-		return nil, fmt.Errorf("construct Recordings: projection is required")
-	}
-	publication, err := recordingsinternal.NewPortableArtifactPublication(
-		makeDirectories,
-		createTemporaryFile,
-		removePath,
-		renamePath,
-		readFile,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("construct Recordings publication: %w", err)
-	}
-	historicalQuery := historicalquerywire.NewService(readFile, projection)
-	return newServiceWithProjection(
-		ledger,
-		projection,
-		targets,
-		writeFile,
-		publication,
-		historicalQuery,
-		false,
-		clocks...,
-	)
-}
-
-type portableArtifactPublication interface {
+type PortableArtifactPublication interface {
 	Publish(context.Context, string, []byte) error
 	Read(context.Context, string) ([]byte, error)
 }
 
-func newServiceWithProjection(
-	ledger recordings.Ledger,
-	projection recordings.ProjectionService,
+func NewRuntimeLedgerRouter(clock recordings.RecordingClock) *RuntimeLedgerRouter {
+	return recordingsinternal.NewRuntimeLedgerRouter(clock)
+}
+
+func RuntimeLedger(router *RuntimeLedgerRouter) recordings.Ledger { return router }
+
+func NewRecordingLifecycleOwner(
 	targets recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+	clock recordings.RecordingClock,
+) RecordingLifecycleOwner {
+	return recordinglifecyclewire.NewService(targets, writer, tickers, clock)
+}
+
+func NewCanonicalLedgerOwner(ledger recordings.Ledger) CanonicalLedgerOwner {
+	return canonicalledgerwire.NewService(ledger)
+}
+
+func NewArtifactsExportOwner(lifecycle RecordingLifecycleOwner, publication PortableArtifactPublication) ArtifactsExportOwner {
+	return artifactsexportwire.NewService(lifecycle, publication)
+}
+
+func NewReplayOwner(
+	lifecycle RecordingLifecycleOwner,
+	projection recordings.ProjectionService,
+	readFile recordings.RecordingReadFile,
+	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+) ReplayOwner {
+	return replaywire.NewService(lifecycle, projection, readFile, decodeFactorySnapshot)
+}
+
+func NewHistoricalQueryOwner(readFile recordings.RecordingReadFile, projection recordings.ProjectionService) HistoricalQueryOwner {
+	return historicalquerywire.NewService(readFile, projection)
+}
+
+func NewPortableArtifactPublication(
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+) (PortableArtifactPublication, error) {
+	return recordingsinternal.NewPortableArtifactPublication(makeDirectories, createTemporaryFile, removePath, renamePath, readFile)
+}
+
+func NewReplayRecordingSnapshotWriter(
 	writeFile func(string, []byte) error,
-	publication portableArtifactPublication,
-	historicalQuery historicalquery.Service,
-	requireWriter bool,
-	clocks ...recordings.RecordingClock,
-) (recordings.Service, error) {
-	if ledger == nil {
-		return nil, fmt.Errorf("construct Recordings: ledger is required")
-	}
-	if projection == nil {
-		return nil, fmt.Errorf("construct Recordings: projection is required")
-	}
-	if requireWriter && writeFile == nil {
-		return nil, fmt.Errorf("construct Recordings: snapshot write function is required")
-	}
-	var writer recordings.RecordingSnapshotWriter
-	var tickers recordings.RecordingFlushTickerFactory
-	if writeFile != nil {
-		writer = recordingsinternal.NewReplayRecordingSnapshotWriter(writeFile)
-		tickers = recordingsinternal.NewRecordingFlushTickerFactory()
-	}
-	service := recordingsinternal.NewServiceWithLifecycleEffectsAndHistoricalQuery(
-		ledger,
-		projection,
-		targets,
-		writer,
-		tickers,
-		publication,
-		historicalQuery,
-		clocks...,
-	)
-	if service == nil {
-		return nil, fmt.Errorf("construct Recordings: implementation rejected its dependencies")
-	}
-	return service, nil
+	appendFile func(string, []byte) error,
+	readFile recordings.RecordingReadFile,
+) recordings.RecordingSnapshotWriter {
+	return recordingsinternal.NewReplayRecordingSnapshotWriterWithReader(writeFile, appendFile, readFile)
+}
+
+func NewRecordingFlushTickerFactory() recordings.RecordingFlushTickerFactory {
+	return recordingsinternal.NewRecordingFlushTickerFactory()
 }

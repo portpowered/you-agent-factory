@@ -5,8 +5,11 @@ import (
 	"reflect"
 	"testing"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
 type unusedLedger struct {
@@ -16,7 +19,7 @@ type unusedLedger struct {
 func TestAcceptedRecordingsRootUsesPrivateProjectionQuery(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsinternal.NewService(
+	root := testRecordingRoot(
 		&unusedLedger{},
 		recordingsinternal.NewProjectionService(),
 	)
@@ -84,4 +87,13 @@ func TestAcceptedRecordingsRootUsesPrivateProjectionQuery(t *testing.T) {
 			err,
 		)
 	}
+}
+
+func testRecordingRoot(ledger recordings.Ledger, projection recordings.ProjectionService) recordings.Service {
+	clock := platformclock.Real{}
+	lifecycle := recordingswire.NewRecordingLifecycleOwner(nil, nil, nil, clock)
+	return recordingswire.NewService(ledger, projection, lifecycle,
+		recordingswire.NewArtifactsExportOwner(lifecycle, nil),
+		recordingswire.NewReplayOwner(lifecycle, projection, nil, nil),
+		recordingswire.NewCanonicalLedgerOwner(ledger), recordingswire.NewHistoricalQueryOwner(nil, projection), clock, logging.NoopLogger{}, nil, nil, nil, nil, nil)
 }

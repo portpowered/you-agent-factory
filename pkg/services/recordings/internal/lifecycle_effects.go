@@ -55,6 +55,14 @@ func NewReplayRecordingSnapshotWriter(
 	return newReplayRecordingSnapshotWriter(write, appendFile, nil)
 }
 
+func NewReplayRecordingSnapshotWriterWithReader(
+	writeFile func(string, []byte) error,
+	appendFile func(string, []byte) error,
+	readFile recordings.RecordingReadFile,
+) recordings.RecordingSnapshotWriter {
+	return newReplayRecordingSnapshotWriter(writeFile, appendFile, replayV2TargetPreparation(readFile))
+}
+
 func newReplayRecordingSnapshotWriter(
 	write func(string, []byte) error,
 	appendFile func(string, []byte) error,
