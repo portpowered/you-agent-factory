@@ -156,7 +156,7 @@ func Shadow(selected struct { New func() }) { selected.New() }
 	}
 }
 
-func TestConstructionAliasesReportAnalysisDebt(t *testing.T) {
+func TestConstructionAliasesResolveDirectCalls(t *testing.T) {
 	t.Parallel()
 	root, registry := constructionFixture(t)
 	writeConstructionFixture(t, root, "pkg/wire/alias.go", `package wire
@@ -167,8 +167,8 @@ func Later(p selected.Port) { alias := selected.New; alias(p) }
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(findings) != 2 || findings[1].Rule != "unresolved-construction-reference" || findings[1].Callee != registry.Constructors[0].Symbol {
-		t.Fatalf("constructor alias debt = %+v", findings)
+	if len(findings) != 2 || findings[1].Rule != "registered-construction" || findings[1].Callee != registry.Constructors[0].Symbol {
+		t.Fatalf("constructor alias call = %+v", findings)
 	}
 }
 

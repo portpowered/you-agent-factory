@@ -34,9 +34,16 @@ Reassignment of a traced parameter, alias, or method field makes a guard an
 set, just like a proved guard, and remains nonblocking in report mode.
 
 Direct calls resolve dot-imported authored functions and instantiated generic
-functions while preserving local shadowing. Constructor values passed or stored
-for later execution still produce unresolved-reference debt. This bounded scan
-does not yet establish imported type aliases, method-valued constructors,
+functions while preserving local shadowing. Immutable local constructor values,
+alias chains, deferred calls and calls inside closures resolve to their exact
+declarations. All uses must be direct calls or transfers to other covered local
+aliases; escaped, unused, reassigned and package-stored values retain reference
+debt. Same-package helper values also retain their return/argument provenance.
+Methods resolve explicit receiver types, allocations, local receiver aliases and
+method expressions. Imported and local type aliases follow authored alias chains;
+defined types do not inherit the original type's method identity. Method values
+use the same local-value rules. This bounded scan does not yet establish promoted
+methods, generic receiver instantiations, package-variable execution provenance,
 storage through arbitrary returned owner objects, assertion-status helper returns,
 dependency bags, service locators, or complete effect ancestry. Those remaining
 story-002 cases must be proved before a capability set can claim complete
@@ -74,7 +81,7 @@ platform variants are indexed; multiple declarations of a registered identity
 are classification failures, rather than an arbitrary target selection.
 
 A clean report for the initial set is not whole-repository enforcement or
-runtime behavior evidence. Imported aliases, method-valued constructors,
+runtime behavior evidence. Promoted/generic methods, package-stored values,
 unresolved storage/status summaries, topology, and effect ancestry still require
 fixtures and analysis before enabling a capability set. Cross-package helper
 return equivalence is outside this bounded same-package summary.
