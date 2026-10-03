@@ -14,7 +14,66 @@ import (
 	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestCurrentFactoryFailuresKeepSelectedLoggerCorrelation(t *testing.T) {
+	t.Parallel()
+	core, logs := observer.New(zap.ErrorLevel)
+	logger := zap.New(core)
+	for _, id := range []string{"session-alpha", "session-beta"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			root := &capturingCurrentFactoryRootFake{getErr: factorydefinitions.ErrAtomicFactoryWriteFailed}
+			handler := factorydefinitionshttp.NewHandlerFromRoot(factorydefinitionshttp.RootBinding{Definitions: root}, logger.With(zap.String("request_id", id+"-request")))
+			recorder := httptest.NewRecorder()
+			handler.GetCurrentFactoryBySessionId(recorder, httptest.NewRequest(http.MethodGet, "/factory-sessions/"+id+"/factory", nil), factoryapi.SessionID(id))
+			if recorder.Code != http.StatusInternalServerError {
+				t.Fatalf("failure status = %d", recorder.Code)
+			}
+		})
+	}
+	t.Cleanup(func() {
+		entries := logs.All()
+		if len(entries) != 2 {
+			t.Fatalf("failure logs = %d, want 2", len(entries))
+		}
+		seen := map[string]bool{}
+		for _, entry := range entries {
+			fields := entry.ContextMap()
+			if fields["request_id"] != fields["session_id"].(string)+"-request" || fields["action"] != "get" {
+				t.Fatalf("lost inherited correlation: %#v", fields)
+			}
+			id, _ := fields["session_id"].(string)
+			seen[id] = true
+		}
+		if !seen["session-alpha"] || !seen["session-beta"] {
+			t.Fatalf("session attribution = %#v", seen)
+		}
+	})
+}
+
+func TestPackagedCatalogFailureKeepsSelectedLoggerAndRedactsError(t *testing.T) {
+	t.Parallel()
+	core, logs := observer.New(zap.ErrorLevel)
+	logger := zap.New(core).With(zap.String("request_id", "catalog-request"))
+	root := &packagedFactoryCatalogRootFake{listErr: errors.New("secret artifact payload")}
+	handler := factorydefinitionshttp.NewHandlerFromRoot(factorydefinitionshttp.RootBinding{Definitions: root}, logger)
+	recorder := httptest.NewRecorder()
+	handler.ListPackagedFactories(recorder, httptest.NewRequest(http.MethodGet, "/packaged-factories", nil))
+	assertPackagedFactoryCatalogInternalError(t, recorder, "secret artifact payload")
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("catalog failure logs = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["request_id"] != "catalog-request" || fields["operation"] != "list" || fields["error_type"] == nil || fields["next_action"] == nil {
+		t.Fatalf("catalog diagnostic lost correlation/action: %#v", fields)
+	}
+	if strings.Contains(fmt.Sprint(entries), "secret artifact payload") {
+		t.Fatal("catalog diagnostic exposed underlying error text")
+	}
+}
 
 func TestValidateFactory_InvalidFactoryDefinitionPayloadReturnsTypedErrorResponse(t *testing.T) {
 	t.Parallel()
