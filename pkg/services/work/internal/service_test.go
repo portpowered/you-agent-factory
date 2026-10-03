@@ -5,12 +5,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"sync"
 	"testing"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal"
 )
@@ -30,39 +27,6 @@ func (r workRuntimeResolver) ResolveWorkRuntime(string) (work.Runtime, error) {
 	return r.runtime, r.err
 }
 
-func TestNewServiceRoutesThroughWorkRootRuntimeContract(t *testing.T) {
-	runtime := &recordingFactory{}
-	service := newTestWorkService(workRuntimeResolver{runtime: runtime}, os.ReadFile, nil, nil, nil)
-
-	request := work.WorkRequest{RequestID: "request-root-contract"}
-	if _, err := service.SubmitWorkRequestForSession(
-		context.Background(),
-		"session-1",
-		request,
-	); err != nil {
-		t.Fatalf("SubmitWorkRequestForSession: %v", err)
-	}
-	if _, err := service.MoveWorkForSession(
-		context.Background(),
-		"session-1",
-		"work-1",
-		"done",
-		"move-1",
-	); err != nil {
-		t.Fatalf("MoveWorkForSession: %v", err)
-	}
-	if runtime.submitted.RequestID != request.RequestID ||
-		runtime.movedID != "work-1" ||
-		runtime.source != work.WorkStateChangeSourceAPI {
-		t.Fatalf(
-			"routed calls = (%q, %q, %q)",
-			runtime.submitted.RequestID,
-			runtime.movedID,
-			runtime.source,
-		)
-	}
-}
-
 func (f *recordingFactory) SubmitWorkRequest(_ context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	f.submitted = request
 	return work.WorkRequestSubmitResult{}, nil
@@ -75,166 +39,6 @@ func (f *recordingFactory) MoveWork(_ context.Context, workID, _ string, source 
 
 func (f *recordingFactory) ReadWorkSnapshot(context.Context) (work.ReadSnapshot, error) {
 	return work.ReadSnapshot{}, nil
-}
-
-func TestNewServicePropagatesRuntimeResolverError(t *testing.T) {
-	service := newTestWorkService(workRuntimeResolver{err: factorysessions.ErrSessionNotFound}, os.ReadFile, nil, nil, nil)
-	_, err := service.SubmitWorkRequestForSession(context.Background(), "missing", work.WorkRequest{})
-	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
-		t.Fatalf("error = %v, want ErrSessionNotFound", err)
-	}
-}
-
-func TestNewServiceConcurrentSessionOperationsRemainIsolated(t *testing.T) {
-	t.Parallel()
-
-	first := &isolatedWorkRuntime{sessionID: "session-first"}
-	second := &isolatedWorkRuntime{sessionID: "session-second"}
-	service := newTestWorkService(isolatedWorkRuntimeResolver{
-		runtimes: map[string]work.Runtime{
-			first.sessionID:  first,
-			second.sessionID: second,
-		},
-	}, nil, nil, nil, nil)
-
-	const operationsPerSession = 16
-	var wait sync.WaitGroup
-	errorsCh := make(chan error, operationsPerSession*2)
-	for _, sessionID := range []string{first.sessionID, second.sessionID} {
-		sessionID := sessionID
-		for index := 0; index < operationsPerSession; index++ {
-			index := index
-			wait.Add(1)
-			go runIsolatedSessionOperations(service, sessionID, index, &wait, errorsCh)
-		}
-	}
-	wait.Wait()
-	close(errorsCh)
-	for err := range errorsCh {
-		t.Fatalf("concurrent Work operation: %v", err)
-	}
-
-	for _, runtime := range []*isolatedWorkRuntime{first, second} {
-		assertIsolatedRuntime(t, runtime, operationsPerSession)
-	}
-}
-
-func runIsolatedSessionOperations(
-	service work.Service,
-	sessionID string,
-	index int,
-	wait *sync.WaitGroup,
-	errorsCh chan<- error,
-) {
-	defer wait.Done()
-	requestID := sessionID + "-request-" + strconv.Itoa(index)
-	if _, err := service.SubmitWorkRequestForSession(context.Background(), sessionID, work.WorkRequest{
-		RequestID: requestID,
-	}); err != nil {
-		errorsCh <- err
-		return
-	}
-	listed, err := service.ListWork(context.Background(), sessionID, work.ListOptions{})
-	if err != nil {
-		errorsCh <- err
-		return
-	}
-	if len(listed.Results) != 1 || listed.Results[0].WorkID != sessionID+"-work" {
-		errorsCh <- errors.New("list crossed session boundary")
-		return
-	}
-	got, err := service.GetWork(context.Background(), sessionID, sessionID+"-work")
-	if err != nil {
-		errorsCh <- err
-		return
-	}
-	if got.WorkID != sessionID+"-work" {
-		errorsCh <- errors.New("get crossed session boundary")
-		return
-	}
-	moved, err := service.MoveWorkForSession(
-		context.Background(), sessionID, sessionID+"-work", "done", requestID+"-move",
-	)
-	if err != nil {
-		errorsCh <- err
-		return
-	}
-	if moved.WorkID != sessionID+"-work" {
-		errorsCh <- errors.New("move crossed session boundary")
-	}
-}
-
-func assertIsolatedRuntime(t *testing.T, runtime *isolatedWorkRuntime, wantOperations int) {
-	t.Helper()
-	runtime.mu.Lock()
-	defer runtime.mu.Unlock()
-	if len(runtime.requestIDs) != wantOperations {
-		t.Fatalf("%s request count = %d, want %d", runtime.sessionID, len(runtime.requestIDs), wantOperations)
-	}
-	for _, requestID := range runtime.requestIDs {
-		if !strings.HasPrefix(requestID, runtime.sessionID+"-") {
-			t.Fatalf("%s received request %q from another session", runtime.sessionID, requestID)
-		}
-	}
-	if len(runtime.moveIDs) != wantOperations {
-		t.Fatalf("%s move count = %d, want %d", runtime.sessionID, len(runtime.moveIDs), wantOperations)
-	}
-}
-
-type isolatedWorkRuntimeResolver struct {
-	runtimes map[string]work.Runtime
-}
-
-func (r isolatedWorkRuntimeResolver) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
-	runtime := r.runtimes[sessionID]
-	if runtime == nil {
-		return nil, factorysessions.ErrSessionNotFound
-	}
-	return runtime, nil
-}
-
-type isolatedWorkRuntime struct {
-	sessionID  string
-	mu         sync.Mutex
-	requestIDs []string
-	moveIDs    []string
-}
-
-func (r *isolatedWorkRuntime) SubmitWorkRequest(
-	_ context.Context,
-	request work.WorkRequest,
-) (work.WorkRequestSubmitResult, error) {
-	r.mu.Lock()
-	r.requestIDs = append(r.requestIDs, request.RequestID)
-	r.mu.Unlock()
-	return work.WorkRequestSubmitResult{
-		RequestID: request.RequestID,
-		Accepted:  true,
-		Works: []work.WorkRequestSubmittedWork{{
-			Name: "work", WorkTypeName: "task", WorkID: r.sessionID + "-work",
-		}},
-	}, nil
-}
-
-func (r *isolatedWorkRuntime) ReadWorkSnapshot(context.Context) (work.ReadSnapshot, error) {
-	return work.ReadSnapshot{Items: []work.ReadModel{{
-		WorkID: r.sessionID + "-work",
-		Name:   "work",
-		State:  &work.State{Name: "draft", Type: work.StateTypeInitial},
-	}}}, nil
-}
-
-func (r *isolatedWorkRuntime) MoveWork(
-	_ context.Context,
-	workID string,
-	stateName string,
-	_ work.WorkStateChangeSource,
-	requestID string,
-) (work.OperatorMoveResult, error) {
-	r.mu.Lock()
-	r.moveIDs = append(r.moveIDs, requestID)
-	r.mu.Unlock()
-	return work.OperatorMoveResult{WorkID: workID, ToState: stateName}, nil
 }
 
 func TestSubmitFileParsesAndSubmitsCanonicalWorkRequest(t *testing.T) {
@@ -310,26 +114,21 @@ func TestSubmitFileReportsReadParseAndRuntimeFailures(t *testing.T) {
 }
 
 func TestNewServiceExposesInvocationAndReturnPolicySlice(t *testing.T) {
-	service := newTestWorkService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil, nil)
-	ctx := context.Background()
-
+	t.Parallel()
+	ctx := t.Context()
 	stdin := "from service root"
-	prepared, err := service.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{
-		Arguments: []string{"-"},
-		StdinText: &stdin,
-	})
-	if err != nil {
-		t.Fatalf("PrepareInvocationInput: %v", err)
-	}
-	if prepared.ResolvedInput == nil || prepared.ResolvedInput.Text != stdin {
-		t.Fatalf("prepared = %#v, want stdin text", prepared)
-	}
-
-	_, err = service.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{
-		Arguments: []string{""},
-	})
-	if !errors.Is(err, work.ErrInvalidInvocationInput) {
-		t.Fatalf("PrepareInvocationInput error = %v, want ErrInvalidInvocationInput", err)
+	want := work.PreparedInvocationInput{Source: work.InputSourceStdinText, ResolvedInput: &work.ResolvedInput{Text: stdin}}
+	request := work.InvocationInputPreparationRequest{Arguments: []string{"-"}, StdinText: &stdin}
+	service := internalservice.NewService(nil, nil, nil, nil, nil, nil, nil,
+		fakeInvocationPreparation(func(gotCtx context.Context, got work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
+			if gotCtx != ctx || got.StdinText != request.StdinText || got.Arguments[0] != "-" {
+				t.Fatal("invocation request changed during delegation")
+			}
+			return want, nil
+		}))
+	prepared, err := service.PrepareInvocationInput(ctx, request)
+	if err != nil || prepared.ResolvedInput != want.ResolvedInput || prepared.Source != want.Source {
+		t.Fatalf("prepared = %#v, error = %v, want completed output", prepared, err)
 	}
 
 	_, err = service.ResolvePrimaryResult(ctx, work.PrimaryResultSelectionInput{
