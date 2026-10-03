@@ -37,6 +37,13 @@ func TestValidateFactory_RejectsInvalidPayloadBeforeValidationInvoked(t *testing
 			wantMessage: "invalid request payload",
 		},
 		{
+			name:        "typed_field",
+			body:        `{"name":42}`,
+			wantStatus:  http.StatusBadRequest,
+			wantCode:    "BAD_REQUEST",
+			wantMessage: "invalid request payload",
+		},
+		{
 			name:        "empty",
 			body:        "",
 			wantStatus:  http.StatusBadRequest,
@@ -151,6 +158,13 @@ func TestValidateFactory_EncodesValidationTargetsFromFakeRoot(t *testing.T) {
 					ID:       "planner",
 					Location: factorydefinitions.ValidationSubjectLocationDefinition,
 				},
+			}, {
+				Code: "factory.validation.warning", Severity: factorydefinitions.ValidationSeverityWarning,
+				Message: "stub warning finding", Path: "workers[0].model",
+				Subject: factorydefinitions.ValidationSubject{
+					Type: factorydefinitions.ValidationSubjectTypeWorker, ID: "planner",
+					Location: factorydefinitions.ValidationSubjectLocationDefinition,
+				},
 			}},
 		},
 	}
@@ -176,8 +190,11 @@ func TestValidateFactory_EncodesValidationTargetsFromFakeRoot(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(result.Targets) != 1 {
-		t.Fatalf("targets = %#v, want one encoded finding", result.Targets)
+	if len(result.Targets) != 2 {
+		t.Fatalf("targets = %#v, want error and warning findings", result.Targets)
+	}
+	if warning := result.Targets[1]; warning.Code != "factory.validation.warning" || warning.Severity != factoryapi.FactoryValidationSeverityWarning || warning.Subject.Id != "planner" || warning.Path == nil || *warning.Path != "workers[0].model" {
+		t.Fatalf("warning representation changed: %#v", warning)
 	}
 	target := result.Targets[0]
 	if target.Code != "factory.validation.stub" {
@@ -204,8 +221,9 @@ func TestValidateFactory_DecodesFactoryIntoSubmittedDefinitionValidationRequest(
 	t.Parallel()
 
 	validation := &capturingValidationFake{}
+	root := &httpDefinitionsRootFake{}
 	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Validation: validation},
+		factorydefinitionshttp.RootBinding{Definitions: root, Validation: validation},
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -221,6 +239,9 @@ func TestValidateFactory_DecodesFactoryIntoSubmittedDefinitionValidationRequest(
 	if !validation.invoked {
 		t.Fatal("ValidateSubmittedDefinition was not invoked")
 	}
+	if root.validateStructuralInvoked || validation.ctx != request.Context() {
+		t.Fatal("override precedence or request context propagation changed")
+	}
 	if validation.request.Config == nil {
 		t.Fatal("decoded Config is nil")
 	}
@@ -230,6 +251,15 @@ func TestValidateFactory_DecodesFactoryIntoSubmittedDefinitionValidationRequest(
 	if len(validation.request.Config.WorkTypes) != 1 || validation.request.Config.WorkTypes[0].Name != "task" {
 		t.Fatalf("decoded work types = %#v, want task work type", validation.request.Config.WorkTypes)
 	}
+	wantTaxonomy := factorydefinitions.SubmittedDefinitionTaxonomy{
+		Workers: []factorydefinitions.SubmittedWorkerTaxonomy{{Name: "planner", Type: "MODEL_WORKER"}},
+		Workstations: []factorydefinitions.SubmittedWorkstationTaxonomy{{
+			Name: "plan-task", Type: "MODEL_WORKSTATION", Behavior: "STANDARD", Worker: "planner", Index: 0,
+		}},
+	}
+	if !reflect.DeepEqual(validation.request.Taxonomy, wantTaxonomy) {
+		t.Fatalf("mapped taxonomy = %#v, want %#v", validation.request.Taxonomy, wantTaxonomy)
+	}
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("response = %d %s, want 200", recorder.Code, recorder.Body.String())
 	}
@@ -237,14 +267,16 @@ func TestValidateFactory_DecodesFactoryIntoSubmittedDefinitionValidationRequest(
 
 type capturingValidationFake struct {
 	invoked bool
+	ctx     context.Context
 	request factorydefinitions.SubmittedDefinitionValidationRequest
 }
 
 func (fake *capturingValidationFake) ValidateSubmittedDefinition(
-	_ context.Context,
+	ctx context.Context,
 	request factorydefinitions.SubmittedDefinitionValidationRequest,
 ) (factorydefinitions.ValidationResult, error) {
 	fake.invoked = true
+	fake.ctx = ctx
 	fake.request = request
 	return factorydefinitions.ValidationResult{}, nil
 }

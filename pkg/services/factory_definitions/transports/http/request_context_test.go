@@ -26,13 +26,21 @@ func waitForValidationContext(
 func TestValidateFactory_CanceledDuringRootCallCompletesWithoutHang(t *testing.T) {
 	t.Parallel()
 
-	validation := &blockingValidationFake{validate: waitForValidationContext}
+	entered := make(chan struct{})
+	validation := &blockingValidationFake{validate: func(ctx context.Context, request factorydefinitions.SubmittedDefinitionValidationRequest) (factorydefinitions.ValidationResult, error) {
+		if request.Config.Name == "peer" {
+			return factorydefinitions.ValidationResult{}, ctx.Err()
+		}
+		close(entered)
+		return waitForValidationContext(ctx, request)
+	}}
 	handler := factorydefinitionshttp.NewHandlerFromRoot(
 		factorydefinitionshttp.RootBinding{Validation: validation},
 		zap.NewNop(),
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/factory-validations",
@@ -47,7 +55,16 @@ func TestValidateFactory_CanceledDuringRootCallCompletesWithoutHang(t *testing.T
 		close(done)
 	}()
 
-	time.Sleep(20 * time.Millisecond)
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("validation owner was not entered")
+	}
+	peer := httptest.NewRecorder()
+	handler.ValidateFactory(peer, httptest.NewRequest(http.MethodPost, "/factory-validations", strings.NewReader(strings.Replace(minimalValidationFactoryBody, `"alpha"`, `"peer"`, 1))))
+	if peer.Code != http.StatusOK {
+		t.Fatalf("peer validation while canceled request is active = %d %s", peer.Code, peer.Body.String())
+	}
 	cancel()
 
 	select {
@@ -93,9 +110,10 @@ func TestValidateFactory_DeadlineExceededReturnsGatewayTimeout(t *testing.T) {
 	t.Parallel()
 
 	validation := &blockingValidationFake{
-		validate: func(ctx context.Context, _ factorydefinitions.SubmittedDefinitionValidationRequest) (factorydefinitions.ValidationResult, error) {
-			<-ctx.Done()
-			return factorydefinitions.ValidationResult{}, ctx.Err()
+		validate: func(_ context.Context, _ factorydefinitions.SubmittedDefinitionValidationRequest) (factorydefinitions.ValidationResult, error) {
+			// The owner's terminal error determines the HTTP representation;
+			// returning it directly avoids racing a short host-clock deadline.
+			return factorydefinitions.ValidationResult{}, context.DeadlineExceeded
 		},
 	}
 	handler := factorydefinitionshttp.NewHandlerFromRoot(
@@ -103,8 +121,7 @@ func TestValidateFactory_DeadlineExceededReturnsGatewayTimeout(t *testing.T) {
 		zap.NewNop(),
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
-	defer cancel()
+	ctx := context.Background()
 
 	recorder := httptest.NewRecorder()
 	done := make(chan struct{})
@@ -139,8 +156,16 @@ func TestValidateFactory_DeadlineExceededReturnsGatewayTimeout(t *testing.T) {
 func TestGetCurrentFactoryBySessionId_CanceledDuringRootCallCompletesWithoutHang(t *testing.T) {
 	t.Parallel()
 
+	entered := make(chan struct{})
+	peerFactory := factorydefinitions.EditableFactory{
+		Name: "alpha", Snapshot: mustEditableFactorySnapshot(t, mustFactoryFromJSON(t, minimalValidationFactoryBody)),
+	}
 	root := &blockingCurrentFactoryRootFake{
-		get: func(ctx context.Context, _ string) (factorydefinitions.EditableFactory, error) {
+		get: func(ctx context.Context, id string) (factorydefinitions.EditableFactory, error) {
+			if id == "session-beta" {
+				return peerFactory, ctx.Err()
+			}
+			close(entered)
 			<-ctx.Done()
 			return factorydefinitions.EditableFactory{}, ctx.Err()
 		},
@@ -151,6 +176,7 @@ func TestGetCurrentFactoryBySessionId_CanceledDuringRootCallCompletesWithoutHang
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-alpha/factory", nil).WithContext(ctx)
 	recorder := httptest.NewRecorder()
 
@@ -160,7 +186,11 @@ func TestGetCurrentFactoryBySessionId_CanceledDuringRootCallCompletesWithoutHang
 		close(done)
 	}()
 
-	time.Sleep(20 * time.Millisecond)
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("current Factory owner was not entered")
+	}
 	cancel()
 
 	select {
@@ -171,15 +201,20 @@ func TestGetCurrentFactoryBySessionId_CanceledDuringRootCallCompletesWithoutHang
 	if body := recorder.Body.String(); body != "" {
 		t.Fatalf("response body = %q, want empty cancel-oriented outcome", body)
 	}
+	peer := httptest.NewRecorder()
+	handler.GetCurrentFactoryBySessionId(peer, httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/factory", nil), "session-beta")
+	var got factoryapi.Factory
+	if err := json.Unmarshal(peer.Body.Bytes(), &got); err != nil || peer.Code != http.StatusOK || got.Name != "alpha" {
+		t.Fatalf("peer read after cancellation = %d %s (%v)", peer.Code, peer.Body.String(), err)
+	}
 }
 
 func TestGetCurrentFactoryBySessionId_DeadlineExceededReturnsGatewayTimeout(t *testing.T) {
 	t.Parallel()
 
 	root := &blockingCurrentFactoryRootFake{
-		get: func(ctx context.Context, _ string) (factorydefinitions.EditableFactory, error) {
-			<-ctx.Done()
-			return factorydefinitions.EditableFactory{}, ctx.Err()
+		get: func(_ context.Context, _ string) (factorydefinitions.EditableFactory, error) {
+			return factorydefinitions.EditableFactory{}, context.DeadlineExceeded
 		},
 	}
 	handler := factorydefinitionshttp.NewHandlerFromRoot(
@@ -187,8 +222,7 @@ func TestGetCurrentFactoryBySessionId_DeadlineExceededReturnsGatewayTimeout(t *t
 		zap.NewNop(),
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
-	defer cancel()
+	ctx := context.Background()
 
 	recorder := httptest.NewRecorder()
 	done := make(chan struct{})
