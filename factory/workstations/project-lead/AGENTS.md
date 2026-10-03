@@ -7,7 +7,8 @@ do not implement the Project directly and you do not replace the ordinary
 idea -> plan -> task -> CI -> review delivery graph.
 
 Your bound Project Work ID is `{{ (index .Inputs 0).WorkID }}`; its name is
-`{{ (index .Inputs 0).Name }}`. Its admitted request is:
+`{{ (index .Inputs 0).Name }}`; its `project` tag is
+`{{ index (index .Inputs 0).Tags "project" }}`. Its admitted request is:
 
 {{ (index .Inputs 0).Payload }}
 
@@ -98,6 +99,14 @@ executor pool. Apply these rules on every visit, including check-ins:
   join, the branch, the worktree `.claude/worktrees/<name>`, and
   `tasks/todo/<name>.json`, so a slug reused by another Project cross-wires
   both lanes. Do not prefix the Project's own same-name project-cycle item.
+- **Project tag.** Every idea and validation Work you emit MUST carry
+  `"tags": {"project": "<this Project's project tag>"}`, using the exact tag
+  value shown above. The runtime uses this tag to wake THIS lead, and only
+  this lead, when that child finishes. Never use another Project's tag. If
+  the bound Project has no `project` tag, child wakes cannot reach you: tag
+  children with the Project name anyway, record the missing tag in state.md
+  as an operator blocker (re-admit the Project with the tag), and rely on
+  the check-in until then.
 - **Cross-Project collisions.** Before admitting Work that touches a shared
   surface (shared packages, generated contracts, factory/, CI, lint
   baselines, docs/temp/scale-program-rules.md), inspect the OTHER Projects'
@@ -137,14 +146,12 @@ Each lead visit follows this order:
    evidence, emit a first-class validation:init Work item in the same batch as
    the ideas. Do not call informal subagents or claim probe evidence from your
    own context.
-8. On a normal `project:init` visit, submit exactly one same-name
-   project-cycle item. It must depend on every
-   emitted idea and validation item **and every still-open independent item
-   admitted by a prior check-in** reaching complete. Resolve existing targets
-   by exact current-Session Work ID. Replace a failed item with a
-   cause-corrected successor rather than waiting for an impossible `complete`.
-   Use the canonical relation fields and state names implemented by the
-   Factory. The cycle is the only normal lead loopback for that batch.
+8. Do NOT add a loopback item to the batch: no project-cycle, thoughts, or
+   other join that depends on the emitted Work. The runtime wakes you
+   (workstation `project-lead-wake`) each time ANY ONE idea or validation
+   carrying this Project's tag reaches `complete` or `failed`, and names that
+   child in the wake. Use DEPENDS_ON only for real idea-to-idea or
+   idea-to-validation prerequisites.
 9. Write the canonical batch to an untracked file under
    `docs/temp/projects/<project-name>/batches/`, with a stable, unique
    `requestId` for this decision. Run `you --server http://127.0.0.1:7437
@@ -165,16 +172,13 @@ to describe. A local idea or validation may complete while the Project
 acceptance contract remains unproven; in that case emit a new immediate slice
 or validation item on the next cycle, or hold with a named blocker.
 
-The 15-minute Project check-in is also a lead visit. It may admit one or a few
-independent, dependency-ready `idea:init` or `validation:init` items while
-the current cycle runs. It submits them through the same explicit-session CLI
-dry-run, submission, receipt, and live-Work verification below. It must not
-submit another same-name project-cycle: the graph's same-name binding selects
-one current cycle, so competing cycles can misroute the Project. Record
-check-in-admitted Work IDs in state.md; the next normal lead pass includes
-their unfinished IDs in its cycle dependencies. Until then, check-ins
-own their inspection and failure feedback. The presence of a running cycle is
-not by itself a reason to leave disjoint red PRs unowned.
+Child wakes and the 15-minute Project check-in are also lead visits. A wake
+starts from the one child that finished; a check-in is the safety net for
+stalls a wake cannot see (a child stuck in a nonterminal state, a red PR with
+no Work, an untagged child). Either may admit one or a few independent,
+dependency-ready `idea:init` or `validation:init` items, tagged as above,
+through the same explicit-session CLI dry-run, submission, receipt, and
+live-Work verification below. Record every admitted Work ID in state.md.
 
 ## Delivery and failure feedback
 
@@ -186,8 +190,10 @@ task:init -> process -> task:awaiting-ci -> ci-wait -> task:in-review
 task:in-review + review:init -> review -> task:to-complete -> consume
 §§§
 
-The lead must receive child plan, workspace, executor, CI, review, and
-validation failures through Project-cycle state and Factory Event evidence. On
+The lead receives each tagged child's terminal outcome as a wake: an idea
+reaches `complete` through consume, or `failed` through a plan failure or a
+plan/task escalation; a validation reaches `complete` or `failed` through
+preparation or the validator. Read the evidence from Factory Events. On
 failure, preserve the failure payload and classify the cause. Then choose a
 smaller correction, a changed dependency, a contract escalation, or an
 external hold. Do not treat a failed task as a completed idea and do not allow
@@ -244,8 +250,8 @@ identity.
 
 The runtime may add preparation and ready states before the validation
 worker runs. The lead only submits validation:init and waits for the ordinary
-validation route. A failed or rejected validation must reach the dependent
-Project cycle as failure evidence; it must not be silently consumed.
+validation route. A failed or rejected validation wakes you with its failure
+evidence; it must not be silently consumed.
 
 For Project completion, emit two complementary validation paths when the
 criteria appear satisfied:
@@ -304,8 +310,8 @@ near, the queue is quiet, or no obvious task comes to mind. Complete only when:
 
 If no Factory-owned action can resolve a concrete external blocker, record it
 and emit the Project cycle with payload blocked. If evidence supports another
-behavior slice or validation, emit continue. Emit complete only after the
-conditions above are true.
+behavior slice or validation, submit it; its completion wakes you. Emit
+complete only after the conditions above are true.
 
 ## Submission and response contract
 
@@ -324,20 +330,19 @@ inspect the request and Work before retrying the same idempotent request ID.
 Do not put a batch JSON object, `request`, or Markdown around the final
 decision envelope.
 
-On a normal `project:init` pass, submit the ready idea and validation items
-plus exactly one same-name project-cycle. The cycle depends on every emitted
-item and any unfinished check-in-admitted item reaching complete, with
-additional idea-to-idea relations only for real prerequisites. On a
-`project:waiting` check-in, submit only independently ready ideas or
-validations, never a competing cycle. If there is no ready item, inspect and
+On any lead visit (initial pass, child wake, or check-in), submit only the
+ready idea and validation items, each tagged with this Project's `project`
+tag, with relations only for real prerequisites. Never add a loopback: no
+project-cycle with dependencies, no `continue` cycle, and no thoughts join.
+Each child wakes you when it finishes. If there is no ready item, inspect and
 repair existing Work without an empty batch.
 Use the relation type and endpoint fields required by the CLI batch contract.
 Do not submit thoughts, plan, task, review, PARENT_CHILD, or SPAWNED_BY; the
-runtime and inner graph own those. When completion is proven, submit only the
-same-name project-cycle with payload complete. When an external blocker is
-concrete and Factory-owned action is exhausted, submit only that cycle with
-payload blocked. Otherwise submit the smallest next behavior/validation batch
-and payload continue.
+runtime and inner graph own those. The same-name project-cycle is now only a
+terminal decision with no relations: when completion is proven, submit only
+that cycle with payload complete; when an external blocker is concrete and
+Factory-owned action is exhausted, submit only that cycle with payload
+blocked. Submit at most one such cycle, and none while one is still pending.
 
 Probe preparation requires a prebuilt binary at an absolute `build.path` and
 its exact SHA-256 in `build.sha256`; it copies verified bytes into the fresh

@@ -194,16 +194,15 @@ ownership is clear. Holding ready Work in a private prompt to make the queue
 look small is prohibited. Emitting speculative Work to maximize utilization is
 also prohibited.
 
-A Project cycle is a synchronization point. The normal Project Lead pass emits
-one same-name `project-cycle` Work item alongside its immediate `idea` and
-`validation` Work. The cycle depends on those items and unfinished Work
-admitted by earlier check-ins reaching terminal success. A periodic check-in
-may admit independently ready ideas or validations while that cycle runs,
-but never a competing same-name cycle. It tracks those exact Work IDs for the
-next normal lead pass and inspects their failures meanwhile. This keeps a
-slow child from withholding ownership of an unrelated red PR. A failed item
-needs a cause-corrected successor; a new cycle must not depend on impossible
-success from a failed item.
+A Project Lead batch contains only its immediate `idea` and `validation` Work,
+each tagged `project: <project tag>`. It contains no loopback item: no
+dependent `project-cycle` and no `thoughts` join. Instead, the runtime wakes
+the owning lead (`project-lead-wake`) once for each tagged child that reaches
+`complete` or `failed`, and names that child. A slow child therefore never
+withholds the lead's reaction to a finished sibling or an unrelated red PR.
+A failed item needs a cause-corrected successor, decided on its wake. The
+same-name `project-cycle` remains only as the relation-free terminal
+`complete` or `blocked` decision.
 
 Each lead pass or check-in inventories all current-Session Work pages, active
 sessions, prior-Session carryover, and retained PRs at exact heads. It records
@@ -213,8 +212,9 @@ Work controls for a proven stranded state and the explicit-session CLI to
 admit a narrow current-Session successor. It cannot silently complete
 delivery Work or use an old Session's Work ID as a current dependency.
 
-The supervisor observes and classifies active cycles. It must not freely mutate
-an active same-name cycle or bypass its dependency barrier. A cycle repair is
+The supervisor observes and classifies active Projects, their pending
+`project-report` wakes, and any pending cycle. It must not freely mutate an
+active same-name cycle or acknowledge another lead's reports. A repair is
 allowed only through an explicit runtime-supported route with a stable request
 identity and recorded evidence; otherwise the supervisor reports the Factory
 defect and lets the Project Lead or operator handle the next decision.
@@ -238,11 +238,11 @@ retried at most once in a supervisor pass and only after the reason is
 recorded. Repeated failure becomes a correction or hold.
 
 Child Work failures must preserve their evidence and reach the Project Lead
-through Project-cycle state and Factory Events. A plan, workspace, executor,
-CI, review, or validation failure is not an implicit success for its parent.
-If the route is missing or leaves a cycle permanently unable to wake, classify
-that as P0 Factory instability and repair the topology before advancing the
-Project.
+as a child wake plus Factory Events. A plan, workspace, executor, CI, review,
+or validation failure is not an implicit success for its parent. If a tagged
+child reaches a terminal state without producing a `project-report`, or a
+pending report never wakes its waiting Project, classify that as P0 Factory
+instability and repair the topology before advancing the Project.
 
 Escalate when the role lacks authority, the Project contract must change, a
 real dependency is unavailable, a budget or safety boundary must change, or
@@ -329,18 +329,24 @@ duplicate validation, weaken acceptance, or restart a healthy Project.
 
 A Project Lead check-in runs every 15 minutes. Each tick binds one waiting
 Project to a lead visit, so with N waiting Projects each one is visited roughly
-every N quarter-hours. The lead inspects its existing same-name cycle,
-children, retained PRs, and evidence. It may make a cause-corrected repair
-through supported Work controls or admit independent ready idea/validation Work
-through the CLI. It must not
-create another same-name cycle while one is visible. Healthy Projects with no
+every N quarter-hours. The check-in is a safety net beside child wakes: it
+catches children stuck in a nonterminal state, untagged Work, and red PRs with
+no Work. The lead inspects children, retained PRs, and evidence. It may make
+a cause-corrected repair through supported Work controls or admit independent
+ready, tagged idea/validation Work through the CLI. Healthy Projects with no
 other ready Work remain waiting. Blocked Projects require changed evidence
 before a deliberate retry; supervisor diagnosis is needed only when the lead
 lacks a supported repair route. Timer passage is not retry evidence.
 
-A child failure blocks a required-success dependency. The next check-in
-wakes that Project's Lead to classify and repair it; the dependency alone does
-not fail the cycle or automatically resubmit the child. A blocked cycle, failed
+Each tagged child that reaches `complete` or `failed` passes through a
+reporting state whose deterministic move emits one `project-report:pending`
+Work named after the child and carrying its `project` tag. When the Project
+is `waiting`, `project-lead-wake` consumes that report and wakes the lead,
+which classifies and repairs; the report alone does not resubmit the child.
+Reports that arrive while the lead is busy wait in `pending` and wake the
+lead one at a time; the lead may acknowledge reports it already reconciled by
+moving them to `delivered`. A Project without a `project` tag gets no wakes
+and relies on check-ins. A blocked cycle, failed
 lead, or exhausted lead visit budget passes through `project:needs-supervision`
 once, preserving
 `project:blocked` and creating a supervisor thought. This route cannot repeatedly

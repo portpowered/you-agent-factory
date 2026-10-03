@@ -48,6 +48,7 @@ Example admission payload:
   "name": "example-project",
   "workTypeName": "project",
   "state": "init",
+  "tags": {"project": "example-project"},
   "payload": {
     "projectRoot": "docs/temp/projects/example-project",
     "sourcePlan": "docs/internal/development/plans/backlog/example.md",
@@ -63,7 +64,9 @@ Example admission payload:
 The supervisor must reject or block admission when the outcome, ownership,
 source plan, acceptance criteria, contract revision, or required capacity is
 ambiguous. Separate Projects have no relation unless a real semantic
-dependency requires one.
+dependency requires one. Every Project MUST be admitted with a unique
+`project` tag (normally its name). Child wakes match on that tag; a Project
+without it never receives child wakes and relies only on the check-in.
 
 ## Durable Project state
 
@@ -91,21 +94,31 @@ local files preserve the contract, reasoning, and evidence needed to make the
 next decision. They must not be used to mark Work complete or to hide failed
 transitions.
 
-## Project cycle
+## Project batches and child wakes
 
-A Project Lead batch contains the immediate ready Work plus exactly one
-same-name `project-cycle` Work item. The batch may contain:
+A Project Lead batch contains only the immediate ready Work:
 
 - one or more `idea:init` items for behavior slices or justified bounded
-  enablers;
-- zero or more `validation:init` items for independent proof; and
-- exactly one same-name `project-cycle:init` item.
+  enablers; and
+- zero or more `validation:init` items for independent proof.
 
-The cycle has one required-success dependency for every idea and validation
-item in that same batch. The relation's precise type and endpoint fields are
-owned by the executable Factory definition and the canonical batch-input
-contract. The invariant is stable: the cycle cannot decide until every current
-predecessor reaches `complete`.
+Every item carries `"tags": {"project": "<the Project's project tag>"}`. The
+batch contains no loopback item: no dependent `project-cycle` and no
+`thoughts` join. Instead, each tagged child that reaches `complete` or
+`failed` passes through a reporting state whose deterministic move emits one
+`project-report:pending` Work named after the child, parented to it, and
+carrying its `project` tag. `project-lead-wake` binds that report to the
+`project:waiting` Work with the same `project` tag and runs a full lead pass
+that starts from the named child. A peer Project is never woken. Reports that
+arrive while the lead is busy stay pending and wake it one at a time; the
+lead may acknowledge reports it already reconciled by moving them to
+`delivered`. DEPENDS_ON relations remain only for real prerequisites between
+ideas and validations.
+
+The same-name `project-cycle` is now only the relation-free terminal
+decision: payload `complete` or `blocked`. The 15-minute check-in remains as
+the safety net for stalled nonterminal Work, untagged Work, and untagged
+Projects.
 
 A lead must emit only the immediate behavior and proof Work justified by
 current evidence. It must not prewrite an entire speculative graph or issue
@@ -114,7 +127,7 @@ ownership to assign shared surfaces, then slice by independently verifiable
 behavior. Package-first is an ownership boundary, not a package inventory.
 
 A local idea or validation can complete while the Project contract remains
-open. The Project cycle then returns the lead to choose another behavior slice,
+open. Its wake then returns the lead to choose another behavior slice,
 increase dependency fidelity, or issue the missing proof. Empty local work is
 not evidence of Project completion.
 
@@ -124,8 +137,9 @@ The conceptual outer flow is:
 project:init
   -> project-lead
   -> project:waiting
-  -> project-cycle decision
-  -> project:init | project:complete | project:blocked
+  -> project-lead-wake (once per finished tagged child) -> project:waiting
+  -> project-cycle terminal decision
+  -> project:complete | project:blocked
 ```
 
 The lead's ordinary delivery flow remains:
@@ -156,9 +170,8 @@ validation:init
 ```
 
 A failed or rejected plan, workspace, executor, CI, review, or validation
-outcome must preserve its failure evidence. The required-success dependency
-blocks the cycle until corrected; the next lead check-in inspects that
-evidence. The lead then diagnoses and emits a smaller correction, changes a real
+outcome must preserve its failure evidence. The child's `failed` state wakes
+its lead, which inspects that evidence. The lead then diagnoses and emits a smaller correction, changes a real
 dependency, escalates a contract issue, or records an external hold. A failed
 child must never be treated as a completed idea.
 

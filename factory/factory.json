@@ -1145,6 +1145,32 @@
       ]
     },
     {
+      "id": "project-report",
+      "name": "project-report",
+      "states": [
+        {
+          "id": "init",
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "id": "pending",
+          "name": "pending",
+          "type": "TERMINAL"
+        },
+        {
+          "id": "delivered",
+          "name": "delivered",
+          "type": "TERMINAL"
+        },
+        {
+          "id": "failed",
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
       "id": "task",
       "name": "task",
       "states": [
@@ -1195,6 +1221,11 @@
           "type": "PROCESSING"
         },
         {
+          "id": "reporting-complete",
+          "name": "reporting-complete",
+          "type": "PROCESSING"
+        },
+        {
           "id": "complete",
           "name": "complete",
           "type": "TERMINAL"
@@ -1202,6 +1233,11 @@
         {
           "id": "failed",
           "name": "failed",
+          "type": "FAILED"
+        },
+        {
+          "id": "reporting-failed",
+          "name": "reporting-failed",
           "type": "FAILED"
         }
       ]
@@ -1263,6 +1299,11 @@
           "type": "PROCESSING"
         },
         {
+          "id": "reporting-complete",
+          "name": "reporting-complete",
+          "type": "PROCESSING"
+        },
+        {
           "id": "complete",
           "name": "complete",
           "type": "TERMINAL"
@@ -1270,6 +1311,11 @@
         {
           "id": "failed",
           "name": "failed",
+          "type": "FAILED"
+        },
+        {
+          "id": "reporting-failed",
+          "name": "reporting-failed",
           "type": "FAILED"
         }
       ]
@@ -1642,14 +1688,14 @@
       "name": "plan",
       "onFailure": [
         {
-          "state": "failed",
+          "state": "reporting-failed",
           "workType": "idea"
         }
       ],
       "onRejection": [
         {
           "workType": "idea",
-          "state": "failed"
+          "state": "reporting-failed"
         }
       ],
       "outputs": [
@@ -1674,7 +1720,7 @@
       "onContinue": [
         {
           "workType": "idea",
-          "state": "failed"
+          "state": "reporting-failed"
         }
       ]
     },
@@ -1699,7 +1745,7 @@
       "name": "consume",
       "outputs": [
         {
-          "state": "complete",
+          "state": "reporting-complete",
           "workType": "idea"
         },
         {
@@ -2031,7 +2077,7 @@
       "outputs": [
         {
           "workType": "idea",
-          "state": "failed"
+          "state": "reporting-failed"
         },
         {
           "workType": "plan",
@@ -2063,7 +2109,7 @@
       "outputs": [
         {
           "workType": "idea",
-          "state": "failed"
+          "state": "reporting-failed"
         },
         {
           "workType": "task",
@@ -2091,7 +2137,7 @@
       "onFailure": [
         {
           "workType": "validation",
-          "state": "failed"
+          "state": "reporting-failed"
         }
       ],
       "workPropagation": {
@@ -2113,25 +2159,25 @@
       "outputs": [
         {
           "workType": "validation",
-          "state": "complete"
+          "state": "reporting-complete"
         }
       ],
       "onFailure": [
         {
           "workType": "validation",
-          "state": "failed"
+          "state": "reporting-failed"
         }
       ],
       "onRejection": [
         {
           "workType": "validation",
-          "state": "failed"
+          "state": "reporting-failed"
         }
       ],
       "onContinue": [
         {
           "workType": "validation",
-          "state": "failed"
+          "state": "reporting-failed"
         }
       ],
       "resources": [
@@ -2162,6 +2208,160 @@
           "state": "init"
         }
       ]
+    },
+    {
+      "id": "report-idea-complete",
+      "name": "report-idea-complete",
+      "type": "LOGICAL_MOVE",
+      "worker": "",
+      "inputs": [
+        {
+          "workType": "idea",
+          "state": "reporting-complete"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "idea",
+          "state": "complete"
+        },
+        {
+          "workType": "project-report",
+          "state": "pending"
+        }
+      ],
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
+    },
+    {
+      "id": "report-idea-failure",
+      "name": "report-idea-failure",
+      "type": "LOGICAL_MOVE",
+      "worker": "",
+      "inputs": [
+        {
+          "workType": "idea",
+          "state": "reporting-failed"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "idea",
+          "state": "failed"
+        },
+        {
+          "workType": "project-report",
+          "state": "pending"
+        }
+      ],
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
+    },
+    {
+      "id": "report-validation-complete",
+      "name": "report-validation-complete",
+      "type": "LOGICAL_MOVE",
+      "worker": "",
+      "inputs": [
+        {
+          "workType": "validation",
+          "state": "reporting-complete"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "validation",
+          "state": "complete"
+        },
+        {
+          "workType": "project-report",
+          "state": "pending"
+        }
+      ],
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
+    },
+    {
+      "id": "report-validation-failure",
+      "name": "report-validation-failure",
+      "type": "LOGICAL_MOVE",
+      "worker": "",
+      "inputs": [
+        {
+          "workType": "validation",
+          "state": "reporting-failed"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "validation",
+          "state": "failed"
+        },
+        {
+          "workType": "project-report",
+          "state": "pending"
+        }
+      ],
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
+    },
+    {
+      "id": "project-lead-wake",
+      "name": "project-lead-wake",
+      "type": "AGENT_RUN",
+      "outcomeFormat": "decision-envelope",
+      "worker": "project-lead",
+      "inputs": [
+        {
+          "workType": "project",
+          "state": "waiting"
+        },
+        {
+          "workType": "project-report",
+          "state": "pending"
+        }
+      ],
+      "guards": [
+        {
+          "type": "MATCHES_FIELDS",
+          "matchConfig": {
+            "inputKey": ".Tags[\"project\"]"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "project",
+          "state": "waiting"
+        },
+        {
+          "workType": "project-report",
+          "state": "delivered"
+        }
+      ],
+      "onFailure": [
+        {
+          "workType": "project",
+          "state": "needs-supervision"
+        },
+        {
+          "workType": "project-report",
+          "state": "failed"
+        }
+      ],
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "executor-slot"
+        }
+      ],
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      }
     },
     {
       "id": "project-lead-checkin",

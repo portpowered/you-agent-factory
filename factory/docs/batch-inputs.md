@@ -27,8 +27,11 @@ The example JSON uses the canonical `FACTORY_REQUEST_BATCH` shape from
   workstation; their final response does not submit Work
 
 * submit 3-5 `idea` work items per batch
-* submit one loopback `thoughts` work item
-* make the loopback depend on the ideas through `DEPENDS_ON` relations
+* for non-Project (ideafy/supervisor) batches, submit one loopback `thoughts`
+  work item and make it depend on the ideas through `DEPENDS_ON` relations
+* Project Lead batches contain no loopback item; instead every idea and
+  validation carries `"tags": {"project": "<project tag>"}` and each one wakes
+  its lead when it reaches `complete` or `failed`
 * use `workTypeName`, not `workType`
 * use `works[]`, not `items[]`
 * prefer `you submit batch <path> --session <session_id>` for autonomous
