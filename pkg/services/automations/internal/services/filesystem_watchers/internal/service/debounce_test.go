@@ -186,6 +186,46 @@ func TestFileWatcher_DebounceCancelDuringWindowSkipsSubmit(t *testing.T) {
 	}
 }
 
+func TestFileWatcher_StoppingOneWatcherPreservesPeerPendingAdmission(t *testing.T) {
+	clock := clockwork.NewFakeClock()
+	dirA, dirB := setupWatchDir(t), setupWatchDir(t)
+	pathA := filepath.Join(dirA, "request", "default", "a.md")
+	pathB := filepath.Join(dirB, "request", "default", "b.md")
+	for path, content := range map[string]string{pathA: "stopped", pathB: "peer"} {
+		if err := writeLocalFile(path, []byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	submitA := &recordingSubmitter{}
+	submitB := &recordingSubmitter{submitted: make(chan struct{}, 1)}
+	eventsA, eventsB := newScriptedEventWatcher(), newScriptedEventWatcher()
+	watchA := newDebouncedTestWatcher(dirA, submitA, clock, eventsA)
+	watchB := newDebouncedTestWatcher(dirB, submitB, clock, eventsB)
+	cancelA, doneA := startDebouncedWatch(t, watchA, eventsA)
+	t.Cleanup(cancelA)
+	cancelB, doneB := startDebouncedWatch(t, watchB, eventsB)
+	t.Cleanup(func() {
+		cancelB()
+		waitForWatchDone(t, doneB)
+	})
+	eventsA.events <- fsnotify.Event{Name: pathA, Op: fsnotify.Create}
+	waitForFakeClockWaiters(t, clock, 1)
+	eventsB.events <- fsnotify.Event{Name: pathB, Op: fsnotify.Create}
+	waitForFakeClockWaiters(t, clock, 2)
+
+	cancelA()
+	waitForWatchDone(t, doneA)
+	clock.Advance(testDebounceWindow)
+	waitForSubmitCount(t, submitB, 1)
+	if got := submitA.submitCallCount(); got != 0 {
+		t.Fatalf("stopped watcher admitted %d Work Requests, want 0", got)
+	}
+	requests := submitB.getWorkRequests()
+	if len(requests) != 1 || string(requests[0].Works[0].Payload.([]byte)) != "peer" {
+		t.Fatalf("peer Work Requests = %#v, want one with peer payload", requests)
+	}
+}
+
 func TestFileWatcher_DebounceEquivalentSequencesProduceSameSubmitCount(t *testing.T) {
 	dir := setupWatchDir(t)
 	path := filepath.Join(dir, "request", "default", "repeat.md")
