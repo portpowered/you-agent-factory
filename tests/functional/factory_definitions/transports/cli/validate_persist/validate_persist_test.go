@@ -429,11 +429,17 @@ func assertValidateRejectedActionably(
 	t.Helper()
 
 	runner := support.NewRecordingCommandRunner("runtime must not execute")
+	before, readErr := os.ReadFile(factorySource)
+	if readErr != nil {
+		t.Fatalf("read validation candidate: %v", readErr)
+	}
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "factory", "config", "validate", factorySource,
 	})
 	if options.env != nil {
 		inputs.Input.Env = options.env
+	} else {
+		inputs.Input.Env = customerHomeEnvironment(t.TempDir())
 	}
 	if options.workingDirectory != "" {
 		inputs.Input.WorkingDirectory = options.workingDirectory
@@ -456,6 +462,13 @@ func assertValidateRejectedActionably(
 	}
 	if runner.CallCount() != 0 {
 		t.Fatalf("provider command runner call count = %d, want 0 before validate completes", runner.CallCount())
+	}
+	after, readErr := os.ReadFile(factorySource)
+	if readErr != nil {
+		t.Fatalf("read rejected validation candidate: %v", readErr)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("failed validation mutated the authored candidate")
 	}
 }
 
