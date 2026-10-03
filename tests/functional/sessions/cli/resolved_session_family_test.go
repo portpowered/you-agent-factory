@@ -115,6 +115,9 @@ func TestBuildProcessRoutesEverySessionLeafThroughResolvedProductionComposition(
 		if stdout.Len() == 0 {
 			t.Fatalf("Process.Execute(%v) stdout is empty", args)
 		}
+		if !json.Valid(stdout.Bytes()) {
+			t.Fatalf("Process.Execute(%v) stdout is not a single JSON value: %q", args, stdout.String())
+		}
 	}
 
 	var failedShowOutput bytes.Buffer
