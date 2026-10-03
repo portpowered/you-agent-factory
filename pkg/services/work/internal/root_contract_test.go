@@ -5,45 +5,25 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal"
 )
-
-type internalAdmissionRuntime struct {
-	submitted work.WorkRequest
-}
-
-func (r *internalAdmissionRuntime) SubmitWorkRequest(_ context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-	r.submitted = request
-	return work.WorkRequestSubmitResult{RequestID: request.RequestID}, nil
-}
-
-func (r *internalAdmissionRuntime) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
-	return work.OperatorMoveResult{}, nil
-}
-
-func (r *internalAdmissionRuntime) ReadWorkSnapshot(context.Context) (work.ReadSnapshot, error) {
-	return work.ReadSnapshot{}, nil
-}
-
-type internalRuntimeResolver struct {
-	runtime work.Runtime
-}
-
-func (r *internalRuntimeResolver) ResolveWorkRuntime(string) (work.Runtime, error) {
-	return r.runtime, nil
-}
 
 func TestNewServiceSatisfiesPublishedWorkRoot(t *testing.T) {
 	t.Parallel()
 
-	runtime := &internalAdmissionRuntime{}
-	service := newTestWorkService(&internalRuntimeResolver{runtime: runtime}, nil, nil, nil, nil)
-	var root work.Service = service
-
 	request := work.WorkRequest{RequestID: "internal-root-admission"}
-	if _, err := root.SubmitWorkRequestForSession(context.Background(), "session-1", request); err != nil {
-		t.Fatalf("SubmitWorkRequestForSession() error = %v", err)
-	}
-	if runtime.submitted.RequestID != request.RequestID {
-		t.Fatalf("submitted request = %q, want %q", runtime.submitted.RequestID, request.RequestID)
+	called := false
+	service := internalservice.NewService(nil, nil, nil, nil, nil,
+		completedStateAccess{submit: func(ctx context.Context, session string, got work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+			if ctx != t.Context() || session != "session-1" || got.RequestID != request.RequestID {
+				t.Fatal("root changed admission inputs")
+			}
+			called = true
+			return work.WorkRequestSubmitResult{Accepted: true}, nil
+		}}, nil, nil)
+	var root work.Service = service
+	result, err := root.SubmitWorkRequestForSession(t.Context(), "session-1", request)
+	if err != nil || !result.Accepted || !called {
+		t.Fatalf("root admission = %#v, %v, called=%t", result, err, called)
 	}
 }

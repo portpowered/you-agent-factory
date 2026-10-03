@@ -58,3 +58,19 @@ func TestInvocationMappingPreservesErrorIdentity(t *testing.T) {
 		t.Fatalf("typed error = %v", err)
 	}
 }
+
+func TestInvocationMappingPreservesExactFileText(t *testing.T) {
+	t.Parallel()
+	path := "long prompt.txt"
+	want := "  line one\r\nline two — 東京\r\n"
+	adapter := InvocationInputPreparationAdapter{Inner: fakeInvocation(func(ctx context.Context, request invocationreturnpolicy.InvocationInputPreparationRequest) (invocationreturnpolicy.PreparedInvocationInput, error) {
+		if ctx != t.Context() || request.FilePath == nil || *request.FilePath != path {
+			t.Fatalf("mapped file request = %#v", request)
+		}
+		return invocationreturnpolicy.PreparedInvocationInput{Source: invocationreturnpolicy.InputSourceFileText, ResolvedInput: &invocationreturnpolicy.ResolvedInput{Text: want}}, nil
+	})}
+	got, err := adapter.PrepareInvocationInput(t.Context(), work.InvocationInputPreparationRequest{FilePath: &path})
+	if err != nil || got.Source != work.InputSourceFileText || got.ResolvedInput == nil || got.ResolvedInput.Text != want {
+		t.Fatalf("mapped output = %#v, error = %v, want exact file text", got, err)
+	}
+}

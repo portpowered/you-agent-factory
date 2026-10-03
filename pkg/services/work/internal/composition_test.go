@@ -6,7 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal"
-	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
+	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
 )
 
 func newTestWorkService(runtimes work.RuntimeResolver, readFile work.SubmittedFileReader, inspectPath work.SubmittedFilePathInspector, staging work.ContentStagingService, materializer work.ContentMaterializer) work.FileSubmissionService {
@@ -16,16 +16,17 @@ func newTestWorkService(runtimes work.RuntimeResolver, readFile work.SubmittedFi
 	if materializer == nil {
 		materializer = admissionOnlyContentMaterializer{}
 	}
-	state := workwire.NewStateAccess(workwire.NewRuntimeSessionResolver(runtimes), nil, testDurability{})
-	content := workwire.NewContentPreparation(workwire.NewContentPolicy())
-	prep := workwire.NewRequestPreparationService(workwire.NewRequestPolicy(workwire.NewRequestContentBridge(content)))
-	invocation := workwire.NewInvocationInputAdapter(workwire.NewInvocationInputPolicy(readFile, inspectPath))
-	return internalservice.NewService(runtimes, readFile, inspectPath, staging, materializer, state, prep, invocation)
+	return internalservice.NewService(runtimes, readFile, inspectPath, staging, materializer,
+		completedStateAccess{},
+		fakeRequestPreparation(func(context.Context, work.WorkRequestPreparation) (work.WorkRequest, error) {
+			panic("unexpected request preparation")
+		}),
+		fakeInvocationPreparation(func(context.Context, work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
+			panic("unexpected invocation preparation")
+		}))
 }
 
-type testDurability struct{}
-
-func (testDurability) CompletedFlushSequence(string) (int64, bool) { return 0, false }
+var _ stateaccess.Service = completedStateAccess{}
 
 // admissionOnlyContentStaging keeps unsupported content operations explicit.
 type admissionOnlyContentStaging struct{}
