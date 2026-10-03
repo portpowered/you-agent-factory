@@ -224,7 +224,13 @@ type Edges struct {
 	RecordingsWorkSnapshotReaderObserver func(interface {
 		ReadWorkSnapshot(context.Context, string) (work.ReadSnapshot, error)
 	})
-	Clock                            platformclock.Source
+	// Clock controls default process timestamps. BuildProcess selects Real when
+	// omitted and rejects typed-nil overrides.
+	Clock platformclock.Source
+	// ProcessScheduler controls default process deadlines. An explicit scheduler
+	// wins; otherwise BuildProcess uses Clock's TimerSource capability, or Real
+	// for a legacy Now-only Clock. Specialized owner clock overrides still win.
+	ProcessScheduler                 platformclock.TimerSource
 	ACPWireRecorder                  wiretranscript.WireRecorder
 	SubmissionRecorder               recordings.SubmissionRecorder
 	DispatchRecorder                 recordings.DispatchRecorder
@@ -634,6 +640,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.Clock != nil {
 		defaults.Clock = replacements.Clock
+	}
+	if replacements.ProcessScheduler != nil {
+		defaults.ProcessScheduler = replacements.ProcessScheduler
 	}
 	if replacements.ACPWireRecorder != nil {
 		defaults.ACPWireRecorder = replacements.ACPWireRecorder
