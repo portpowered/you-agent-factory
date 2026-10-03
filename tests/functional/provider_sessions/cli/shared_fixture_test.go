@@ -64,8 +64,8 @@ type workerSessionsCLISharedFixture struct {
 	closedSessionIDs map[string]struct{}
 }
 
-// FI's reader fixture can become the delegate when the two lanes integrate.
 // Exact-path fault ownership prevents a scenario from changing peer reads.
+// The delegate retains the immutable Provider Session reader fault cases.
 type workerSessionProviderFiles struct {
 	delegate interface {
 		Open(string) (io.ReadCloser, error)
@@ -75,11 +75,6 @@ type workerSessionProviderFiles struct {
 	blockedPath  string
 	blockedCalls int
 }
-
-type workerSessionRealFiles struct{}
-
-func (workerSessionRealFiles) Open(path string) (io.ReadCloser, error) { return os.Open(path) }
-func (workerSessionRealFiles) Stat(path string) (fs.FileInfo, error)   { return os.Stat(path) }
 
 func (files *workerSessionProviderFiles) blocked(path string) bool {
 	files.mu.Lock()
@@ -231,7 +226,7 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 
 	runner, fleetGate := newWorkerSessionsCLISharedRouteRunner(t, homeDir)
 	api := newWorkerSessionsCLIAPIServer()
-	providerFiles := &workerSessionProviderFiles{delegate: workerSessionRealFiles{}}
+	providerFiles := &workerSessionProviderFiles{delegate: providerSessionReadFiles{}}
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		APIServerStarter:                    api.start,
 		ProviderCommandRunner:               runner,
@@ -248,6 +243,7 @@ func newWorkerSessionsCLISharedFixture(t *testing.T) *workerSessionsCLISharedFix
 	})
 	inputs.Input.Env = functionalEnvironment(homeDir)
 	inputs.Input.WorkingDirectory = hostFactory
+	support.InitializeCustomerHomeWithProcess(t, process, inputs.Input.Env, hostFactory)
 	hosted := startWorkerSessionsCLIHostedCommand(process, inputs.Input)
 	fixture := &workerSessionsCLISharedFixture{
 		rootDir:          rootDir,
@@ -285,6 +281,7 @@ func newWorkerSessionsCLISharedRouteRunner(
 	}
 	writeCodexRollout(t, homeDir, workerSessionsCodexSuccessID, successRollout)
 	writeCodexRollout(t, homeDir, workerSessionsCodexFailureID, failureRollout)
+	addProviderSessionReadRoutes(t, homeDir, routes, successStdout)
 
 	addSuccessRoute := func(workName, providerSessionID string) {
 		stdout := bytesReplaceAll(successStdout, workerSessionsCodexSuccessID, providerSessionID)
