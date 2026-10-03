@@ -11,6 +11,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
+	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
@@ -407,4 +408,13 @@ Implement {{ .WorkID }}.
 	if err := os.WriteFile(filepath.Join(workstationDir, "prompt.md"), []byte("Implement {{ .WorkID }}."), 0o644); err != nil {
 		t.Fatalf("write prompt.md: %v", err)
 	}
+}
+
+// compilationForLoader supplies a completed owner without loading a Factory.
+func compilationForLoader(loader *compilationloading.Loader) factorydefinitionswire.Compilation {
+	return factorydefinitionswire.NewCompilationService(
+		loader.LoadSourceFromCanonicalJSON,
+		loader.LoadSourceFromFactoryDir,
+		factorydefinitionswire.FactoryConfigJSONEncoder(),
+	)
 }
