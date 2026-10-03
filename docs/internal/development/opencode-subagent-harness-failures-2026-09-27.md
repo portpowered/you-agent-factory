@@ -1345,3 +1345,114 @@ MCP server 96320 exited 0. No source, plan, or baseline file changed, no GPU
 inference ran, nothing was staged or committed, and no binary was replaced.
 Exact result:
 `C:/t/dub-multilingual-validation/mcp-cue45-terminal-log-proof/result.json`.
+
+### 2026-10-02 request-owned ACP author timeout, `bb15` continuation CI repair, and single-hum recovery
+
+The 20-minute SpaceBunny request-owned ACP author, dispatched through the
+actual `you.subagent` MCP tool against the isolated versioned `ad128` binary
+(SHA-256 `e0c32a11c4595a043af676b33635a85b9e117c4936ec2fa59a69453f51019580`,
+owned MCP server PID 80332), returned `TIMED_OUT` at 1201.343s against the
+requested 1200000 ms. Session `af059731-a9dc-4473-a908-66f5071b424a`, request
+`fff43a9c-aba4-448c-901c-db93fa005f4a`, model `opencode/space-bunny-free`. The
+human-readable content was `subagent timed out before producing a result;
+workspace edits may have occurred; you.subagent cleanup closed the live Factory
+Session`, with typed code `factory_session.subagent.timed_out`, `isError:
+true`, `sessionClosed: true`, and `partialEffectsPossible: true`. Progress
+still reported one in-flight dispatch with provider `REASONING` activity
+observed at `2026-10-03T00:47:23Z`, and the owned server exited 0. No primary
+result was produced, so this is a failed author with partial effects, not a
+completion.
+
+Those partial effects are saved, not merged: tracked partial patch SHA-256
+`85efa64e63409c243a5e71ad61db68db13a6f9a946aa2ec8b35b143619e4a3b9` across ACP
+service files, plus untracked
+`pkg/services/providers/internal/services/acp/internal/service/attempt_concurrency_test.go`
+at SHA-256 `d8c460856ad809d6ce10bc7de17b43bf23a8103018f7d793a9a75d91fc6124e2`.
+A post-terminal process check confirmed owned server 80332, OpenCode 62900 and
+93828, and Go 97536 and 93288 were all absent, so this call establishes no
+process leak.
+
+Cause discipline is unchanged. That author ran the ACP tests with a 900 s test
+timeout that outlived the remaining MCP allowance, and an independent review of
+the still-unaccepted draft separately found a registration/retirement race,
+startup-publication and early-cleanup deadlock risks, and faulty barrier
+tests. Those are draft defects plus a self-inflicted overrun; they are not
+evidence for the historical timeouts recorded above, which remain unknown. The
+critical repair (a new author with a 20-minute allowance and 30-60 s Go test
+deadlines) is still running and is not accepted. Exact evidence:
+`C:/t/dub-multilingual-validation/mcp-acp-request-attempt-author-proof`.
+
+Separately, `bb15` CI run `37083980489` failed Backend Unit Coverage job
+`111090439901` on exactly
+`TestContinue_IdempotencyAndLineageConflictsAvoidDuplicateAdmission`:
+`boundary publish count = 1, want source plus one successor`. Coverage floors
+were never evaluated on that run because the test failed first, so this is a
+single-test failure and not a coverage result. The cause is a contract
+mismatch rather than a production defect: `Continue` returns at the Worker
+Sessions admission barrier, which is signalled before the driver goroutine
+enters the Workers handoff, so a publish count read immediately after return is
+not yet guaranteed to include the successor dispatch. `Continue` promises that
+Worker Sessions starts the successor under server-owned supervision, not that
+the Workers `Execute` call has already been entered.
+
+The test-only repair ran through an actual `you.subagent` MCP call and
+returned `COMPLETED` with a primary result in 308.734s, session
+`31ef5943-df78-4c37-a996-48952dc0fe5f`, owned MCP server 55088 exit 0. It
+observes the single successor handoff through the fixture's existing bounded
+`requestFor` channel wait before counting, with no sleeps, polling, count
+weakening, or production change. An earlier, longer form of the same fix
+pushed `fakes_test.go` to 1010 lines and failed `backendsizecheck` against the
+1000-line limit; the accepted form stays inside that limit with no baseline and
+no ignore directive. Honest negative result: the pre-fix file did not reproduce
+locally at `-count=3000` or `-count=300 -cpu=8`, so CI remains the only
+environment that has actually shown the race. Root independently verified 100
+race repetitions passing in 1.149s, and the fix was committed and pushed as
+`9369e75900`. Final-head CI for that commit is still required, and no green CI
+or merge is claimed. Exact evidence:
+`C:/t/dub-multilingual-validation/mcp-bb15-continuation-ci-repair-proof`.
+
+The normal immutable `bb15` install used module
+`v0.0.8-0.20261003005406-bb15c76cd302` with checksum
+`h1:SPkW85ns5bu+28gm37657l+DesGZXtBbsWY6ycsRtXc=` and compiled binary SHA-256
+`f3c47ea2f6533143317c5cdaddec6875a002ba4424778cda4ab1c918672d0edd`. The
+actual compiled public `run --dir <materialized @you/dub-video> --work
+<translated-state original hum cue45 batch> --record <recording>` invocation
+passed with exit code 0 in 2.109s. Root verified a complete manifest, a single
+original cue, a nonverbal hum source (U+55EF U+3002), zero TTS attempts, speech
+identical to the original reference, an unchanged reference hash, fitted PCM
+equal to the reference decode, full source duration, only the expected
+transitions, all dispatches accepted, the shipped hum script matching, no model
+host observed, and the sampled owned process absent. The output
+`hum45-recovered.mp4` is a valid 240.067-second H.264/AAC/`mov_text` video.
+
+That is one hum cue only. It is not full 59-cue success and not
+recording-resume acceptance, and the loaded Codex connector and the active
+`C:\Users\andre\bin\you.exe` CLI were unchanged throughout. The error
+classification is narrow: the first attempt passed the authored `factory.yaml`
+as `--dir` and failed with the generic `CLI_COMMAND_FAILED`; `--debug` showed
+the layout was not found, and using the valid normal named materialized layout
+fixed the invocation. No acceptance beyond this single cue is claimed yet. The
+first external verifier also read the source with the Windows default cp1252
+encoding and reported a false source mismatch; an explicit UTF-8 read matches
+the original Chinese source, and that diagnostic is preserved separately rather
+than erased. Exact evidence:
+`C:/t/dub-hum-recovery-bb15-proof/acceptance-summary.json`.
+
+The remaining 45 cues were additionally reconstructed on CPU: an explicit
+reconstruction re-checked every original reference SHA-256 for cues 0 through
+44 and confirmed byte-exact fit replay against the recorded public
+`you models invoke qwen3-tts-base --operation TTS` witnesses. This is an
+explicit external reconstruction, not a prior automatic checkpoint resume; the
+earlier run directory stayed immutable and automatic resume is not claimed. The
+checkpoint work is still author-active, and the full 59-cue video and the merge
+remain unproven. Exact evidence:
+`C:/t/dub-schema-english-recovery/cpu-reconstruction-evidence.json`.
+
+This section was itself authored through an actual `you.subagent` MCP
+dispatch, so the dispatch exists rather than being asserted. Its elapsed
+duration and session identifiers are not yet known to this note and are
+deliberately left unrecorded instead of guessed. No GPU inference ran, no
+source, plan, or baseline file changed, nothing was staged or committed, and no
+install was replaced. Unrelated live ACP, dub Python, and CLI edits already
+present in the tree were preserved untouched. The prior user priority stands:
+a valid mostly working dub plus a merge, with imperfect wording acceptable.
