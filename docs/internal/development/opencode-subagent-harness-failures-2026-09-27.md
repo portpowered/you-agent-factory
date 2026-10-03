@@ -1278,3 +1278,70 @@ timeouts stay recorded failures with partial effects and are not retroactive
 completions; the larger task allowance is what allowed this task to finish and
 does not establish historical root causes or a controlled performance comparison,
 and no new CI, merge, or final-video success is claimed.
+
+### 2026-10-02 full-video dub failure, PID-only teardown correction, and unaccepted concurrency draft
+
+The normal versioned installed `b050` CLI ran the original 240.066667-second
+Chinese video to `en-US` with the supplied `customqwen` model and the default Qwen
+ASR plus reference-audio Qwen TTS. The saved run record shows
+`backendOverride: false`, `thinkingDisable: false`, `tokenCaps: false`, and
+`publicArtifactDiscovery: true`, so no backend override, thinking disable, or
+token cap was used. ASR produced 59 cues, the audited 59-cue translation
+completed, and the saved manifest records 59 segments at stage `translated`.
+
+Cue 35 required the bounded fit repair. Revision 1 failed with `speech-too-long`
+at 2240 ms generated against 960 ms available for source bounds 134240-134560 ms.
+Revision 2 was audited and accepted the four-word `quite a few friends.` while
+reusing the identical original reference. That retained fit generated 1520 ms
+into the 960 ms playback window at 1.583x, inside the unchanged two-times fit
+guard. Cues 0 through 44 then produced 45 fitted PCM outputs.
+
+Cue 45 is the stopping point. Its source is U+55EF followed by U+3002, a hum or
+acknowledgment, translated as `Mm.`, with source bounds 178000-179520 ms. All
+three normal TTS attempts returned typed `MODEL_BACKEND_FAILURE` with reason
+`generation-exhausted-without-eos` and the safe message `TTS generation limit
+reached without EOS`. No truncated or non-EOS WAV was accepted, and cue 45
+produced no fitted audio. The full original run's process 39968 terminated with
+exit code 1 after 4753.828 seconds; the saved stderr records
+`INVOCATION_RUNTIME_FAILURE` for `video-dub:failed` before a primary result, and
+the output video does not exist. This stays a failure result: the 45 validated
+segments, their fitted PCM, and the accepted 59-cue translation are retained
+evidence, not a completed dub, and no final video or full acceptance is claimed.
+Exact evidence: `C:/t/dub-schema-english-end-to-end`, artifact directory
+`chinese-english-dub-l01i4t49`, with `segment-45.tts-attempt-1-failure.json`,
+`segment-45.tts-attempt-2-failure.json`, and
+`segment-45.tts-attempt-3-failure.json`.
+
+The smallest repair under investigation is conservative whole-cue nonverbal
+source-audio preservation, which would keep a nonverbal cue's original source
+audio instead of synthesizing `Mm.`. No such repair is implemented, accepted, or
+restarted, and no rerun result is claimed.
+
+The external teardown proof also corrects a PID-only reading of this run.
+`result.json` lists exactly one `ownedProcessesAlive` entry, 93828, originally
+the `qwen3-tts-cpp.exe` backend host observed at 2471.765 seconds. The teardown
+record classifies 93828 as a reused PID owned by an unrelated OpenCode process
+created at 23:38:42Z and left it untouched, with no matching owned process still
+alive. Never kill a process by PID alone, and no process leak is established from
+that list.
+
+Root's independent source review of the currently unaccepted ACP concurrency
+draft separately found registration/retirement and startup publication risks.
+Those are risks in an unaccepted draft. They are not evidence for the causes of
+the historical timeouts recorded above, which remain unknown.
+
+Committed `ad128` CI run `37081425137` completed `SUCCESS`. Any repair requires
+its own final-head verification, and no merge is claimed. The user priority
+remains a valid mostly working dub plus merge, with imperfect wording acceptable;
+the broader MCP, GPU, and public Index goals remain incomplete.
+
+This section was authored through an actual `you.subagent` MCP call using
+the normal isolated versioned `ad128` artifact, SHA-256
+`e0c32a11c4595a043af676b33635a85b9e117c4936ec2fa59a69453f51019580`, with
+provider `opencode` and model `opencode/space-bunny-free` at a 1200000 ms
+allowance. The invocation returned `COMPLETED` with a primary result in 188.5
+seconds, session `3f906937-4d97-4acc-835e-4439ad19c119`, and its owned stdio
+MCP server 96320 exited 0. No source, plan, or baseline file changed, no GPU
+inference ran, nothing was staged or committed, and no binary was replaced.
+Exact result:
+`C:/t/dub-multilingual-validation/mcp-cue45-terminal-log-proof/result.json`.
