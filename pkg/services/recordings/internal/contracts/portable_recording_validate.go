@@ -135,42 +135,110 @@ func (codec PortableRecordingCodec) DecodeMetadata(reader io.Reader) (string, er
 			PortableRecordingCodeMalformedContract, "document", "", "decode recording: reader is required",
 		)
 	}
-	var value struct {
-		RecordingKind              string `json:"recordingKind"`
-		SchemaVersion              string `json:"schemaVersion"`
-		ReplayCompatibilityVersion string `json:"replayCompatibilityVersion"`
-		Session                    struct {
-			ID string `json:"id"`
-		} `json:"session"`
-	}
-	decoder := json.NewDecoder(reader)
-	if err := decoder.Decode(&value); err != nil {
-		return "", portableRecordingDiagnostic(
+	malformed := func(err error) error {
+		return portableRecordingDiagnostic(
 			PortableRecordingCodeMalformedContract, "document", "", "decode recording metadata: "+err.Error(),
 		)
 	}
-	trailing, err := decoder.Token()
-	if err != io.EOF {
-		if err == nil {
-			return "", portableRecordingDiagnostic(
-				PortableRecordingCodeMalformedContract, "document", "", fmt.Sprintf("recording must contain exactly one JSON document; found trailing token %v", trailing),
-			)
+	var scan portableMetadataScan
+	decoder := json.NewDecoder(reader)
+	if token, err := decoder.Token(); err != nil {
+		return "", malformed(err)
+	} else if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
+		return "", malformed(fmt.Errorf("recording must be a JSON object"))
+	}
+	// Return as soon as the identity members have been read: a summary costs
+	// the size of the header, not of the recording. Members that precede the
+	// identity fields are skipped token by token without being retained.
+	for decoder.More() && !scan.complete() {
+		token, err := decoder.Token()
+		if err != nil {
+			return "", malformed(err)
 		}
-		return "", portableRecordingDiagnostic(
-			PortableRecordingCodeMalformedContract, "document", "", "decode trailing recording metadata: "+err.Error(),
-		)
+		key, _ := token.(string)
+		if err := scan.read(decoder, key); err != nil {
+			return "", malformed(err)
+		}
 	}
 	if err := validatePortableRecordingCompatibilityWithPolicy(
-		codec.effectivePolicy(), value.RecordingKind, value.SchemaVersion, value.ReplayCompatibilityVersion,
+		codec.effectivePolicy(), scan.kind, scan.schemaVersion, scan.compatibilityVersion,
 	); err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(value.Session.ID) == "" {
+	if strings.TrimSpace(scan.sessionID) == "" {
 		return "", portableRecordingDiagnostic(
 			PortableRecordingCodeInvalidIdentity, "session", "session.id", "is required",
 		)
 	}
-	return strings.TrimSpace(value.Session.ID), nil
+	return strings.TrimSpace(scan.sessionID), nil
+}
+
+// portableMetadataScan accumulates the identity members of a portable
+// recording as its top-level members are streamed.
+type portableMetadataScan struct {
+	kind, schemaVersion, compatibilityVersion, sessionID string
+	seen                                                 map[string]bool
+}
+
+func (scan *portableMetadataScan) complete() bool {
+	return len(scan.seen) == 4
+}
+
+// read consumes the value of one top-level member, retaining only identity
+// members.
+func (scan *portableMetadataScan) read(decoder *json.Decoder, key string) error {
+	var target any
+	var session struct {
+		ID string `json:"id"`
+	}
+	switch key {
+	case "recordingKind":
+		target = &scan.kind
+	case "schemaVersion":
+		target = &scan.schemaVersion
+	case "replayCompatibilityVersion":
+		target = &scan.compatibilityVersion
+	case "session":
+		target = &session
+	default:
+		return skipPortableJSONValue(decoder)
+	}
+	if scan.seen == nil {
+		scan.seen = map[string]bool{}
+	}
+	scan.seen[key] = true
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if key == "session" {
+		scan.sessionID = session.ID
+	}
+	return nil
+}
+
+// skipPortableJSONValue consumes one JSON value token by token without
+// retaining it.
+func skipPortableJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delimiter, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	for decoder.More() {
+		if delimiter == '{' {
+			if _, err := decoder.Token(); err != nil {
+				return err
+			}
+		}
+		if err := skipPortableJSONValue(decoder); err != nil {
+			return err
+		}
+	}
+	_, err = decoder.Token()
+	return err
 }
 
 // Validate validates one detached recording against the codec's pinned policy.
