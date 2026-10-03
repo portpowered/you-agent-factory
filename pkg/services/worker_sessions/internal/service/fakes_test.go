@@ -632,11 +632,14 @@ func TestContinue_IdempotencyAndLineageConflictsAvoidDuplicateAdmission(t *testi
 		t.Fatalf("competing continuation error = %v, want ErrContinuationSourceConflict", err)
 	}
 
+	// Continue returns at the Workers admission barrier, before the driver
+	// goroutine enters the handoff, so observe that one handoff first.
+	successorDispatchID := first.Session.ProviderSessionAssociation.DispatchID
+	boundary.requestFor(t, successorDispatchID)
 	if boundary.publishCount() != 2 {
 		t.Fatalf("boundary publish count = %d, want source plus one successor", boundary.publishCount())
 	}
-	handoff := boundary.currentRequest()
-	boundary.complete(completedDispatchWithProviderSession(handoff.Execution.Dispatch.DispatchID, reference), nil)
+	boundary.complete(completedDispatchWithProviderSession(successorDispatchID, reference), nil)
 }
 
 func TestContinue_ConcurrentIdenticalRequestsShareOneAdmission(t *testing.T) {
