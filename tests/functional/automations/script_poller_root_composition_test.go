@@ -47,7 +47,16 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 	duplicateWatcherDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
 	stoppedWatcherDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
 	watcherPeerDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
+	hostedDir, hosted := newHostedCycleFactory(t, "owned-hosted-success")
+	hostedEmptyDir, hostedEmpty := newHostedCycleFactory(t, "owned-hosted-empty")
+	hostedStopDir, hostedStop := newHostedCycleFactory(t, "owned-hosted-stop")
+	hostedPeerDir, hostedPeer := newHostedCycleFactory(t, "owned-hosted-peer")
+	hostedRouter := hostedCycleRouter{routes: map[string]*hostedCycleRoute{
+		"owned-hosted-success": hosted, "owned-hosted-empty": hostedEmpty,
+		"owned-hosted-stop": hostedStop, "owned-hosted-peer": hostedPeer,
+	}}
 	var stoppedWatcherAdmissions atomic.Int32
+	var stoppedHostedAdmissions atomic.Int32
 	router := scriptCycleRouter{routes: map[string]*scriptCycleRoute{
 		filepath.Clean(recoveryDir):    recovery,
 		filepath.Clean(emptyDir):       empty,
@@ -56,10 +65,26 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 		filepath.Clean(failureDir):     failure,
 		filepath.Clean(failurePeerDir): failurePeer,
 	}}
-	server := startScriptCycleHost(t, router, files, func(record work.FactorySubmissionRecord) {
+	server := startScriptCycleHost(t, router, hostedRouter, files, func(record work.FactorySubmissionRecord) {
 		if record.Request.RequestID == "watcher-stopped-only" {
 			stoppedWatcherAdmissions.Add(1)
 		}
+		if record.Request.WorkID == "linear:issue-stopped-only" {
+			stoppedHostedAdmissions.Add(1)
+		}
+	})
+	t.Run("hosted_stop_joins_while_peer_progresses_and_restart_admits_eligible_item", func(t *testing.T) {
+		t.Parallel()
+		assertHostedIndependentStop(t, server.URL(), hostedStopDir, hostedPeerDir,
+			hostedStop, hostedPeer, &stoppedHostedAdmissions)
+	})
+	t.Run("hosted_success_normalizes_Work_in_explicit_session", func(t *testing.T) {
+		t.Parallel()
+		assertHostedSessionIngress(t, server.URL(), hostedDir, hosted, false)
+	})
+	t.Run("hosted_completed_empty_cycle_admits_no_Work", func(t *testing.T) {
+		t.Parallel()
+		assertHostedSessionIngress(t, server.URL(), hostedEmptyDir, hostedEmpty, true)
 	})
 	t.Run("watcher_stop_joins_while_peer_progresses_and_restart_admits_eligible_input", func(t *testing.T) {
 		t.Parallel()
@@ -132,7 +157,7 @@ func newScriptCycleFactory(t *testing.T) (string, *scriptCycleRoute) {
 	return dir, newScriptCycleRoute()
 }
 
-func startScriptCycleHost(t *testing.T, router scriptCycleRouter, files *scriptReplacementFailure,
+func startScriptCycleHost(t *testing.T, router scriptCycleRouter, hosted hostedCycleRouter, files *scriptReplacementFailure,
 	observeSubmission func(work.FactorySubmissionRecord),
 ) *support.FunctionalAPIServer {
 	t.Helper()
@@ -149,6 +174,7 @@ func startScriptCycleHost(t *testing.T, router scriptCycleRouter, files *scriptR
 		FactoryDir: hostDir,
 		Edges: serviceedges.Edges{
 			ScriptCommandRunner: router, AutomationsCursorFileSystem: files,
+			HostedHTTPClient: hosted, HostedLinearEndpoint: "https://owned-hosted.invalid/graphql",
 			SubmissionRecorder: func(record work.FactorySubmissionRecord) {
 				admissions.Add(1)
 				observeSubmission(record)
@@ -165,6 +191,13 @@ func startScriptCycleHost(t *testing.T, router scriptCycleRouter, files *scriptR
 				select {
 				case <-route.entered:
 					tb.Fatalf("BuildProcess invoked a script source at %q before activation", dir)
+				default:
+				}
+			}
+			for _, route := range hosted.routes {
+				select {
+				case <-route.entered:
+					tb.Fatal("BuildProcess invoked hosted HTTP before activation")
 				default:
 				}
 			}
