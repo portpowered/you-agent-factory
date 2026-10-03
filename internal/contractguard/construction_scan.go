@@ -81,6 +81,7 @@ func scanConstructionOperation(source *constructionSource, caller ConstructionSy
 		return findings
 	}
 	callees := make(map[ast.Expr]bool)
+	indirectCalls := constructionIndirectProviderCalls(body)
 	ast.Inspect(body, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
 		if !ok {
@@ -92,7 +93,7 @@ func scanConstructionOperation(source *constructionSource, caller ConstructionSy
 			return true
 		}
 		for _, constructor := range registry.Constructors {
-			if constructor.Symbol != symbol || !constructionProhibitedKind(constructor, registry.Types) || constructionCallAllowed(registry.Allowances, caller, symbol, source.path) {
+			if constructor.Symbol != symbol || !constructionProhibitedKind(constructor, registry.Types) || constructionCallAllowed(registry.Allowances, caller, symbol, source.path, indirectCalls[call]) {
 				continue
 			}
 			mode := ConstructionReport
@@ -213,9 +214,9 @@ func markConstructionCallee(callees map[ast.Expr]bool, expr ast.Expr) {
 	}
 }
 
-func constructionCallAllowed(allowances []ConstructionAllowance, caller, callee ConstructionSymbol, file string) bool {
+func constructionCallAllowed(allowances []ConstructionAllowance, caller, callee ConstructionSymbol, file string, indirect bool) bool {
 	return slices.ContainsFunc(allowances, func(a ConstructionAllowance) bool {
-		return a.Caller == caller && a.Callee == callee && a.FilePath == file
+		return a.Caller == caller && a.Callee == callee && a.FilePath == file && !(indirect && a.Kind == "focused-provider")
 	})
 }
 

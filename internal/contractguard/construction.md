@@ -148,6 +148,13 @@ permanent focused-provider allowance covers the Chat Sessions catalog provider,
 whose body directly constructs its implementation. Migration allowances need a
 removal owner. Wildcards, directories, stale declarations, duplicate entries,
 conflicting classifications, and ambiguous platform declarations are rejected.
+Focused-provider allowances cover synchronous calls in the provider body,
+including immutable constructor aliases and conditional calls. Calls inside
+closures, or constructors invoked by `defer` or `go`, remain prohibited even
+inside an approved provider. Constructor calls evaluating arguments to a
+deferred/asynchronous operation run synchronously and retain the allowance.
+This does not establish provider-wrapper call graphs or recursive service-tree
+classification; those remain required before whole-set readiness.
 
 The initial repository set is report-only. Its metadata comes from the Chat
 Sessions catalog implementation and its authored owner Wire provider. Report
