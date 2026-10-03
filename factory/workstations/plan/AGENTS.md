@@ -226,15 +226,25 @@ continue.
    `## What I already verified`, `## Why I cannot decide this myself`,
    `## Options` (A recommended, then B...), `## What I will do with each answer`,
    `## What I will do if there is no answer`. Take the time from `date -u`.
-3. Poll `<main checkout>/docs/temp/operator-mailbox/responses/<lane-name>.md`
-   about every 30 seconds for up to 12 minutes, within the same visit. A
-   response is BINDING; follow it and note it in your feedback.
-4. With no response, take the no-answer path you stated in the request.
-   Never commit anything under `docs/temp`.
-5. An operator-owned question is NOT a reason to return `FAILED`. Ask, poll,
-   then finish the plan with the stated no-answer assumption recorded in it, or
-   plan the unblocked stories and mark the blocked one. Return `FAILED` only for
-   a truly project-fatal outcome.
+3. Temporary (AM-T0 stopgap, removed by AM-T11): do not poll in the visit.
+   End the visit with `CONTINUE` whose `feedback` STARTS with
+   `AWAITING_OPERATOR_ANSWER`, followed by the request path and your stated
+   no-answer path. That parks the idea in `awaiting-answer`, where the
+   `mailbox-wait-idea` script waits up to 60 minutes (from the request file's
+   last write) without an executor slot, then returns the idea to `init` for a
+   new planning visit. A `CONTINUE` without that prefix keeps its old meaning
+   and fails the idea.
+4. At the start of every visit, if your request file exists, read
+   `<main checkout>/docs/temp/operator-mailbox/responses/<lane-name>.md`
+   FIRST. A response is BINDING; follow it, note it in your feedback, and
+   delete your request file. If there is still no response, the wait already
+   ran out: take the no-answer path you stated in the request and do not park
+   again on the same request (a second park on an unchanged request fails the
+   idea to its lead). Never commit anything under `docs/temp`.
+5. An operator-owned question is NOT a reason to return `FAILED`. Ask, park,
+   then finish the plan with the answer or with the stated no-answer
+   assumption recorded in it, or plan the unblocked stories and mark the
+   blocked one. Return `FAILED` only for a truly project-fatal outcome.
 
 ## Structured result and escalation (canonical response contract)
 
@@ -246,7 +256,9 @@ Use the standard decision envelope without classificationRoutes. ACCEPTED means
 this workstation's own delivery gate is satisfied, never that all Project
 criteria are satisfied. This planner does not use `CONTINUE` as a local retry:
 its authored route is the owning idea's `failed` state, so incomplete planning
-must use `FAILED` with the gap details. `REJECTED` is reserved for an explicit
+must use `FAILED` with the gap details. The one exception is the temporary
+mailbox park above (`CONTINUE` with `AWAITING_OPERATOR_ANSWER` feedback;
+temporary: removed by AM-T11). `REJECTED` is reserved for an explicit
 rejection condition. FAILED means execution could not complete or a review
 discovered a plan/authority contradiction. Put the failure category (transient,
 implementation_defect, plan_defect, missing_prerequisite, contract_conflict, or

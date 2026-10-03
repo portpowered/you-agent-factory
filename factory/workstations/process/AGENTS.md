@@ -206,15 +206,24 @@ continue.
    `## What I already verified`, `## Why I cannot decide this myself`,
    `## Options` (A recommended, then B...), `## What I will do with each answer`,
    `## What I will do if there is no answer`. Take the time from `date -u`.
-3. Poll `<main checkout>/docs/temp/operator-mailbox/responses/<lane-name>.md`
-   about every 30 seconds for up to 12 minutes, within the same visit. A
-   response is BINDING; follow it and note it in your feedback.
-4. With no response, take the no-answer path you stated in the request.
-   Never commit anything under `docs/temp`.
+3. Temporary (AM-T0 stopgap, removed by AM-T11): do not poll in the visit.
+   Commit and push the unblocked work first, then end the visit with
+   `CONTINUE` whose `feedback` STARTS with `AWAITING_OPERATOR_ANSWER`, followed
+   by the request path and your stated no-answer path. That parks the task in
+   `awaiting-answer`, where the `mailbox-wait` script waits up to 60 minutes
+   (from the request file's last write) without an executor slot or a
+   process/review visit, then returns the task to `init`. A `CONTINUE` without
+   that prefix is an ordinary continue and does not wait.
+4. At the start of every visit, if your request file exists, read
+   `<main checkout>/docs/temp/operator-mailbox/responses/<lane-name>.md`
+   FIRST. A response is BINDING; follow it, note it in `progress.txt` and your
+   feedback, and delete your request file. If there is still no response, the
+   wait already ran out: take the no-answer path you stated in the request
+   and do not park again on the same request (a second park on an unchanged
+   request returns at once). Never commit anything under `docs/temp`.
 5. An operator-owned question on one story is NOT a reason to return `FAILED`.
-   Ask, poll, then continue the other stories, or return `CONTINUE` with the
-   blocker and the request path recorded in `progress.txt`. Return `FAILED`
-   only for a truly project-fatal outcome.
+   Ask, park, then continue with the answer or the stated no-answer path.
+   Return `FAILED` only for a truly project-fatal outcome.
 
 ## Structured result and escalation (canonical response contract)
 
