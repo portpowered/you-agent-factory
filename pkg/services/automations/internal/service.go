@@ -152,14 +152,14 @@ func (s *Service) newScriptPollers() scriptpollers.Service {
 			cursorRecorder = durable
 		}
 	}
-	return scriptpollerswire.NewService(scriptpollers.Dependencies{
-		Logger:           s.pollerLogger,
-		Clock:            s.supervisorClock,
-		CommandRunner:    s.commandRunner,
-		ResolveTemplates: s.resolveTemplates,
-		ExecutionPolicy:  s.executionPolicy,
-		CursorRecorder:   cursorRecorder,
-	})
+	return scriptpollerswire.NewService(
+		s.logger(),
+		s.supervisorClock(),
+		s.commandRunner(),
+		s.resolveTemplates,
+		s.executionPolicy,
+		cursorRecorder,
+	)
 }
 
 // NewService constructs the Automations root contract for composition.
@@ -276,11 +276,4 @@ func (s *Service) supervisorClock() clockwork.Clock {
 		}
 	}
 	return clockwork.NewRealClock()
-}
-
-func (s *Service) pollerLogger(workstationName, workerName string) *zap.Logger {
-	return s.logger().With(
-		zap.String("workstation", workstationName),
-		zap.String("worker", workerName),
-	)
 }
