@@ -81,6 +81,47 @@ func assertFixedLeafCanceledWork(t *testing.T, baseURL, session string) {
 	}
 }
 
+// Hold the peer at its accepted external effect until the selected failure and
+// retry complete. This ordering proves survival across the fault rather than
+// relying on the test runner to overlap two otherwise independent invocations.
+func runFixedLeafSessionFaultWithHeldPeer(t *testing.T, baseURL string, routes *fixedLeafRoutes) {
+	t.Helper()
+	selected, peer := openFixedLeafSession(t, baseURL), openFixedLeafSession(t, baseURL)
+	peerRoute := routes.registerBlocked("fault-held-peer")
+	t.Cleanup(func() { close(peerRoute.release) })
+	submitFixedLeafWork(t, baseURL, peer, "fault-held-peer")
+	peerScope := waitFixedLeafAccepted(t, peerRoute)
+	routes.recordScope(t, "fault-held-peer", peerScope)
+	fault := routes.register("fault-selected", true)
+	failed := invokeFixedLeafSession(t, baseURL, selected, "fixed-leaf-held-peer-fault", "fault-selected")
+	if failed.Status != factoryapi.InvocationTerminalStatusFailed || failed.PrimaryResult != nil {
+		t.Fatalf("selected fault = %#v, want FAILED without success output", failed)
+	}
+	routes.recordScope(t, "fault-selected", waitFixedLeafAccepted(t, fault))
+	assertFixedLeafModelEvent(t, baseURL, selected, failed.RequestId, true)
+	retry := routes.register("fault-selected-retry", false)
+	retried := invokeFixedLeafSession(t, baseURL, selected, "fixed-leaf-held-peer-retry", "fault-selected-retry")
+	assertFixedLeafSuccess(t, retried, retry.output)
+	routes.recordScope(t, "fault-selected", waitFixedLeafAccepted(t, retry))
+	assertFixedLeafModelEvent(t, baseURL, selected, retried.RequestId, false)
+	select {
+	case <-peerRoute.canceled:
+		t.Fatal("selected fault or retry canceled the accepted peer effect")
+	default:
+	}
+	peerRoute.release <- struct{}{}
+	status := support.WaitForSessionTerminalStatus(t, baseURL, peer, 5*time.Second)
+	if status.Categories.Terminal != 1 || status.Categories.Failed != 0 {
+		t.Fatalf("peer terminal state after selected fault/retry = %#v", status)
+	}
+	works := support.GetJSON[factoryapi.ListWorkResponse](t, baseURL+"/factory-sessions/"+peer+"/work")
+	if len(works.Results) != 1 {
+		t.Fatalf("peer work = %#v, want one completed result", works)
+	}
+	assertFixedLeafSuccess(t, factoryapi.InvocationResponse{Status: factoryapi.InvocationTerminalStatusCompleted,
+		PrimaryResult: works.Results[0].Content}, peerRoute.output)
+}
+
 func (routes *fixedLeafRoutes) registerBlocked(text string) *fixedLeafRoute {
 	routes.mu.Lock()
 	defer routes.mu.Unlock()
