@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/root"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -33,7 +34,7 @@ func TestModelsFixedLeavesKeepExplicitSessionResultsAndRecoveryIsolated(t *testi
 	edges.ModelInvocationBackend = routes.invoke
 	server := functionalStartAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: functionalScaffoldFactory(t, builtInOnlyModelFactoryConfig()),
-		Env:        functionalHomeEnvironment(home), Edges: edges,
+		Env:        functionalHomeEnvironment(home), Edges: edges, BeforeStart: bootstrapFixedLeafProfile,
 	})
 	for _, name := range []string{"selected", "peer"} {
 		t.Run(name, func(t *testing.T) {
@@ -45,6 +46,18 @@ func TestModelsFixedLeavesKeepExplicitSessionResultsAndRecoveryIsolated(t *testi
 		t.Parallel()
 		runFixedLeafSessionCancellation(t, server.URL(), routes)
 	})
+}
+
+// Complete mutable profile initialization through this same public process
+// before the transport's readiness budget and parallel child sessions begin.
+func bootstrapFixedLeafProfile(t testing.TB, process support.Process, input root.Input) {
+	t.Helper()
+	bootstrap := support.FakeInputs(t.Context(), []string{"you", "--json", "models", "list"})
+	bootstrap.Input.Env = input.Env
+	bootstrap.Input.WorkingDirectory = input.WorkingDirectory
+	if err := process.Execute(bootstrap.Input); err != nil {
+		t.Fatalf("initialize fixed-leaf profile: %v", err)
+	}
 }
 
 func fixedLeafFactoryConfig() map[string]any {
