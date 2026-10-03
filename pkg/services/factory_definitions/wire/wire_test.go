@@ -142,6 +142,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
 				ports.persistence,
 				ports.loader,
+				compilationForLoader(ports.loader),
 				ports.applySupportedFiles,
 				ports.applyStarterWork,
 				ports.namedPaths,
@@ -191,6 +192,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	service, err := factorydefinitionswire.NewService(sessionHost, wireStubActivationGateway{}, stubValidator{},
 		stubPersistence{},
 		&compilationloading.Loader{},
+		compilationForLoader(&compilationloading.Loader{}),
 		func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
 		func(string, *factorydefinitions.FactoryConfig) error { return nil },
 		namedPaths,
@@ -287,6 +289,7 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 	service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
 		ports.persistence,
 		ports.loader,
+		compilationForLoader(ports.loader),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
@@ -348,6 +351,7 @@ func TestNewServiceServesPublishedCompilePeerBehavior(t *testing.T) {
 		ports.validator,
 		ports.persistence,
 		ports.loader,
+		compilationForLoader(ports.loader),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
@@ -427,6 +431,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
 		ports.persistence,
 		ports.loader,
+		compilationForLoader(ports.loader),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
@@ -463,6 +468,7 @@ func TestNewServiceDelegatesSnapshotPortabilityThroughRoot(t *testing.T) {
 		ports.validator,
 		ports.persistence,
 		ports.loader,
+		compilationForLoader(ports.loader),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
@@ -934,6 +940,7 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 		ports.validator,
 		ports.persistence,
 		ports.loader,
+		compilationForLoader(ports.loader),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
@@ -988,4 +995,13 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 			scaffolded.Definition,
 		)
 	}
+}
+
+// compilationForLoader supplies a completed owner without loading a Factory.
+func compilationForLoader(loader *compilationloading.Loader) factorydefinitionswire.Compilation {
+	return factorydefinitionswire.NewCompilationService(
+		loader.LoadSourceFromCanonicalJSON,
+		loader.LoadSourceFromFactoryDir,
+		factorydefinitionswire.FactoryConfigJSONEncoder(),
+	)
 }

@@ -446,11 +446,22 @@ func provideFactoryDefinitionsRuntimeRouter() *factorysessions.DefinitionRuntime
 	return factorysessionwire.NewDefinitionRuntimeRouter()
 }
 
+func provideFactoryDefinitionCompilation(
+	loader *factorydefinitionswire.Loader,
+) factorydefinitionswire.Compilation {
+	return factorydefinitionswire.NewCompilationService(
+		loader.LoadSourceFromCanonicalJSON,
+		loader.LoadSourceFromFactoryDir,
+		factorydefinitionswire.FactoryConfigJSONEncoder(),
+	)
+}
+
 func provideFactoryDefinitionsRoot(
 	router *factorysessions.DefinitionRuntimeRouter,
 	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
 	loader *factorydefinitionswire.Loader,
+	compilation factorydefinitionswire.Compilation,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
@@ -474,6 +485,7 @@ func provideFactoryDefinitionsRoot(
 		validator,
 		persistence,
 		loader,
+		compilation,
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,

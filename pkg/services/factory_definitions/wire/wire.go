@@ -17,9 +17,7 @@ import (
 	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
-	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
-	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 	runtimesnapshotwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot/wire"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
@@ -39,6 +37,7 @@ func NewService(
 	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
 	loader *compilationloading.Loader,
+	compilation Compilation,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
@@ -77,7 +76,7 @@ func NewService(
 		return nil, err
 	}
 	return composeService(
-		sessionHost, activationGateway, validator, persistence, loader,
+		sessionHost, activationGateway, validator, persistence, loader, compilation,
 		applySupportedFiles, applyStarterWork, namedPaths,
 		namedFactoryCatalogFileSystem, clock, versionFileSystem, listEffective,
 		packagedCatalog, packagedInstaller, requiredToolChecker,
@@ -92,6 +91,7 @@ func composeService(
 	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
 	loader *compilationloading.Loader,
+	compilation Compilation,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
@@ -107,7 +107,7 @@ func composeService(
 	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
 	options ...CompositionOption,
 ) (factorydefinitions.Service, error) {
-	preparePortableFactoryConfig, captureFactorySnapshot, snapshotsPortability, compilation, authoringLayout, err := composeFactoryDefinitionSupport(
+	preparePortableFactoryConfig, captureFactorySnapshot, snapshotsPortability, authoringLayout, err := composeFactoryDefinitionSupport(
 		loader,
 		applySupportedFiles,
 		applyStarterWork,
@@ -182,7 +182,6 @@ func composeFactoryDefinitionSupport(
 	factorydefinitions.PortableFactoryConfigPreparer,
 	factorydefinitions.FactorySnapshotCapturer,
 	snapshotsportability.Service,
-	compilationservice.Service,
 	authoringlayout.Service,
 	error,
 ) {
@@ -197,26 +196,15 @@ func composeFactoryDefinitionSupport(
 		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(portableFileSystem),
 	})
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-	compilation, err := compilationwire.NewService(compilationservice.Dependencies{
-		LoadCanonical:      loader.LoadSourceFromCanonicalJSON,
-		LoadFromFactoryDir: loader.LoadSourceFromFactoryDir,
-		EncodeFactory:      compilationcanonical.EncodeFactoryPort(),
-	})
-	if err != nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions compilation: %w", err)
-	}
-	if compilation == nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions: compilation subservice rejected its dependencies")
+		return nil, nil, nil, nil, err
 	}
 	authoringFS, err := resolveAuthoringLayoutFilesystem(portableFileSystem)
 	if err != nil {
-		return nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	pruneRemovedDocs, err := internalportableconfig.NewPortableBundledDocsPruner(portableFileSystem)
 	if err != nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
 	}
 	authoringLayout, err := NewAuthoringLayoutService(AuthoringLayoutDependencies{
 		Validator: validator,
@@ -235,9 +223,9 @@ func composeFactoryDefinitionSupport(
 		Directories:        directoryReplacementStore,
 	})
 	if err != nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
 	}
-	return preparePortableFactoryConfig, captureFactorySnapshot, snapshotsPortability, compilation, authoringLayout, nil
+	return preparePortableFactoryConfig, captureFactorySnapshot, snapshotsPortability, authoringLayout, nil
 }
 
 func attachFactoryDefinitionServices(
@@ -400,9 +388,6 @@ func attachCompilation(
 	service factorydefinitions.Service,
 	compilation compilationservice.Service,
 ) factorydefinitions.Service {
-	if service == nil || compilation == nil {
-		return service
-	}
 	return compilationAttachedService{
 		Service:     service,
 		compilation: compilation,
