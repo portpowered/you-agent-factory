@@ -24,6 +24,9 @@ func constructionAssertionGuards(condition ast.Expr, p constructionGuardProvenan
 		}
 		rule := p.assertionStatusOrigin(expression, map[*ast.Object]bool{})
 		if rule == "" {
+			if _, call := expression.(*ast.CallExpr); call {
+				return false
+			}
 			return true
 		}
 		mode := ConstructionReport
@@ -47,6 +50,12 @@ func (p constructionGuardProvenance) assertionStatusOrigin(expression ast.Expr, 
 	case *ast.UnaryExpr:
 		if value.Op == token.NOT {
 			return p.assertionStatusOrigin(value.X, visited)
+		}
+	case *ast.CallExpr:
+		for _, argument := range value.Args {
+			if p.assertionStatusOrigin(argument, map[*ast.Object]bool{}) != "" {
+				return "unresolved-required-dependency-guard"
+			}
 		}
 	case *ast.BinaryExpr:
 		if value.Op == token.EQL || value.Op == token.NEQ {
