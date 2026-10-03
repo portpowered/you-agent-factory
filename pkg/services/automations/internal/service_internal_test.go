@@ -13,6 +13,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -23,7 +25,7 @@ import (
 func TestExplicitServiceConstructionDoesNotExecuteCommandRunner(t *testing.T) {
 	t.Parallel()
 	runner := &internalScriptPollerRunner{outcomes: []internalScriptPollerOutcome{{}}}
-	service := New(zap.NewNop(), clockwork.NewFakeClock(), runner, "", "", nil, nil, nil)
+	service := New(zap.NewNop(), clockwork.NewFakeClock(), runner, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	if service == nil || len(runner.outcomes) != 1 {
 		t.Fatal("construction executed the supplied command runner")
 	}
@@ -53,6 +55,8 @@ func TestSchedulerSidecarsReconcileLifecycleBeforeCanonicalWorkSubmission(t *tes
 	}
 	service := New(
 		zap.NewNop(), clock, &internalScriptPollerRunner{}, workflowID, "", nil, nil, nil,
+		cronwire.NewService(),
+		fswire.NewService(),
 	)
 	identity := automations.SourceIdentity{
 		AutomationID: workflowID,
@@ -115,7 +119,7 @@ func TestSchedulerSidecarsReconcileLifecycleBeforeCanonicalWorkSubmission(t *tes
 }
 
 func TestSchedulerSourceObservationAttachesBeforeStartEffectInitialization(t *testing.T) {
-	service := New(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil)
+	service := New(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	identity := automations.SourceIdentity{
 		AutomationID: "workflow-start-barrier",
 		SourceID:     runtimeSchedulerSourceID,
@@ -170,6 +174,8 @@ func TestProductionRootUsesScriptPollersOwner(t *testing.T) {
 
 	service := NewService(
 		zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "workflow-script-pollers", "", nil, nil, nil,
+		cronwire.NewService(),
+		fswire.NewService(),
 	)
 	if service.scriptPollers == nil {
 		t.Fatal("expected script pollers owner on production Automations root")
@@ -201,6 +207,8 @@ func TestProductionRootScriptPollerCursorThroughCompositionPath(t *testing.T) {
 		nil,
 		nil,
 		factorydefinitioncomposition.WorkstationExecutionPolicy{},
+		cronwire.NewService(),
+		fswire.NewService(),
 	)
 	poller := internalCanonicalScriptPollerWorkstation()
 	worker := internalCanonicalScriptPollerWorker()
@@ -332,6 +340,8 @@ func startProductionRootScheduler(
 	t.Helper()
 	service := NewService(
 		zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, workflowID, "", nil, nil, nil,
+		cronwire.NewService(),
+		fswire.NewService(),
 	)
 	identity := automations.SourceIdentity{
 		AutomationID: workflowID,
@@ -531,7 +541,7 @@ func startSchedulerConcurrently(
 }
 
 func TestSchedulerSidecarsReconcileDifferentRuntimeIdentitiesConcurrently(t *testing.T) {
-	service := New(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil)
+	service := New(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	factoryConfig := &interfaces.FactoryConfig{}
 	directories := []string{t.TempDir(), t.TempDir()}
 	contexts := make([]context.Context, len(directories))
