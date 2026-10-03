@@ -9,6 +9,7 @@ import (
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
+	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
 )
 
 func TestSourceLifecycleStartsOnceAndConvergesThroughWait(t *testing.T) {
@@ -902,3 +903,13 @@ func equalStrings(left, right []string) bool {
 	}
 	return true
 }
+
+func (*recordingEffects) ConfigureRuntimeSource(context.Context, sourcelifecycle.RuntimeSourceConfiguration) error {
+	return nil
+}
+func (*recordingEffects) ReleaseRuntimeSource(context.Context, string) error { return nil }
+
+func (*blockingStopEffects) ConfigureRuntimeSource(context.Context, sourcelifecycle.RuntimeSourceConfiguration) error {
+	return nil
+}
+func (*blockingStopEffects) ReleaseRuntimeSource(context.Context, string) error { return nil }

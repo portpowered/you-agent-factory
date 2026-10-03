@@ -544,6 +544,7 @@ func (instance *runtimeInstance) releaseCursorScope() {
 	instance.cursorMu.Lock()
 	defer instance.cursorMu.Unlock()
 	if !instance.released {
+		_ = instance.owner.lifecycle.ReleaseRuntimeSource(context.Background(), instance.runtimeID)
 		instance.owner.cursors.ReleaseScope(instance.owner.cursorScope)
 		instance.released = true
 	}

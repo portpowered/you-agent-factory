@@ -8,6 +8,7 @@ import (
 	"context"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
 )
 
 // Service owns detached reconciliation decisions and explicit source
@@ -27,31 +28,7 @@ type Service interface {
 	GetCursor(context.Context, automations.GetCursorRequest) (automations.GetCursorResult, error)
 }
 
-// SourceLifecycle applies source-specific lifecycle effects without owning
-// reconciliation policy. Start runs after the authoritative starting observation
-// is committed. Wait observes a transition without activating or stopping it.
-type SourceLifecycle interface {
-	Start(context.Context, StartEffect) error
-	Stop(context.Context, StopEffect) error
-	Wait(context.Context, WaitEffect) (automations.SourceObservation, error)
-}
-
-// StartEffect identifies the one logical source activation to apply.
-type StartEffect struct {
-	RuntimeID   string
-	Kind        string
-	Observation automations.SourceObservation
-}
-
-// StopEffect identifies the one logical source deactivation to apply.
-type StopEffect struct {
-	RuntimeID   string
-	Observation automations.SourceObservation
-}
-
-// WaitEffect identifies the transition whose latest observation is requested.
-type WaitEffect struct {
-	RuntimeID   string
-	Desired     automations.DesiredLifecycleState
-	Observation automations.SourceObservation
-}
+// Value aliases preserve lifecycle effect identity.
+type StartEffect = sourcelifecycle.StartEffect
+type StopEffect = sourcelifecycle.StopEffect
+type WaitEffect = sourcelifecycle.WaitEffect

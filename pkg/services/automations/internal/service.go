@@ -20,8 +20,11 @@ import (
 	cursorscopeswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes/wire"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
+	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
+	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
+	sourcelifecyclewire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -53,8 +56,7 @@ type Service struct {
 	cursorScope        scriptpollers.CursorScope
 	cron               cron.Service
 	filesystemWatchers filesystemwatchers.Service
-	schedulerMu        sync.Mutex
-	schedulerSources   map[automations.SourceIdentity]*schedulerSource
+	lifecycle          sourcelifecycle.SourceLifecycle
 	runtimeMu          sync.Mutex
 	runtimes           map[string]*runtimeInstance
 	runtimeActivating  map[string]struct{}
@@ -153,11 +155,11 @@ func newService(
 		filesystemWatchers: filesystemWatchers,
 		scriptPollers:      pollers,
 		cursors:            cursors,
-		schedulerSources:   make(map[automations.SourceIdentity]*schedulerSource),
 		runtimes:           make(map[string]*runtimeInstance),
 		runtimeActivating:  make(map[string]struct{}),
 	}
-	service.reconciler = service.newSchedulerReconciler()
+	service.lifecycle = sourcelifecyclewire.NewService(logger, clock, pollers, cronService, filesystemWatchers, hostedPollers, cursors, executionPolicy)
+	service.reconciler = reconciliationwire.NewService(service.lifecycle)
 	// Preserve the memory-only owner fixture when no persistence edge is supplied.
 	// A blank process-root directory also remains memory-backed, never CWD-relative.
 	if cursorFileSystem != nil {

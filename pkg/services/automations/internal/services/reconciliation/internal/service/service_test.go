@@ -9,6 +9,7 @@ import (
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
+	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
 )
 
 func TestReconcileDecisionTable(t *testing.T) {
@@ -277,3 +278,8 @@ func (f lifecycleFixture) Wait(ctx context.Context, effect reconciliation.WaitEf
 func unavailableLifecycle(op string) error {
 	return &automations.Error{Op: op, Code: automations.ErrorCodeNotReady, Err: automations.ErrNotReady}
 }
+
+func (lifecycleFixture) ConfigureRuntimeSource(context.Context, sourcelifecycle.RuntimeSourceConfiguration) error {
+	return nil
+}
+func (lifecycleFixture) ReleaseRuntimeSource(context.Context, string) error { return nil }

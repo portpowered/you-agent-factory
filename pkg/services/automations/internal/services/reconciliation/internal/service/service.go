@@ -11,10 +11,11 @@ import (
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
+	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
 )
 
 type service struct {
-	lifecycle reconciliation.SourceLifecycle
+	lifecycle sourcelifecycle.SourceLifecycle
 
 	recordsMu sync.RWMutex
 	records   map[sourceKey]*sourceRecord
@@ -23,7 +24,7 @@ type service struct {
 var _ reconciliation.Service = (*service)(nil)
 
 // New constructs an inert deterministic reconciliation service.
-func New(lifecycle reconciliation.SourceLifecycle) reconciliation.Service {
+func New(lifecycle sourcelifecycle.SourceLifecycle) reconciliation.Service {
 	return &service{
 		lifecycle: lifecycle,
 		records:   make(map[sourceKey]*sourceRecord),

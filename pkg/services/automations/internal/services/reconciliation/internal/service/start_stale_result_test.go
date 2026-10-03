@@ -9,6 +9,7 @@ import (
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
+	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
 )
 
 func TestStartSourceSuccessDoesNotReportStartingAfterSupersedingStop(t *testing.T) {
@@ -434,3 +435,8 @@ func staleStopLifecycle(entered, release chan struct{}, lateErr error) lifecycle
 		wait: convergedWait,
 	}
 }
+
+func (*blockingStartEffects) ConfigureRuntimeSource(context.Context, sourcelifecycle.RuntimeSourceConfiguration) error {
+	return nil
+}
+func (*blockingStartEffects) ReleaseRuntimeSource(context.Context, string) error { return nil }

@@ -16,12 +16,19 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
+	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
 	cursorscopes "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes"
 	cursorscopeswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes/wire"
+	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
+	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
+	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
+	sourcelifecycle "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle"
+	sourcelifecyclewire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/sourcelifecycle/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
@@ -29,6 +36,27 @@ import (
 
 // CursorScopes exposes the private recovery owner to canonical composition.
 type CursorScopes = cursorscopes.CursorScopes
+
+type SourceLifecycle = sourcelifecycle.SourceLifecycle
+type Reconciliation = reconciliation.Service
+type ScriptPollers = scriptpollers.Service
+type Cron = cron.Service
+type FilesystemWatchers = filesystemwatchers.Service
+type Clock = clockwork.Clock
+
+// NewSourceLifecycle constructs one independent owner from completed behaviors.
+// C08 includes the operator-authorized canonical cron execution-policy input.
+func NewSourceLifecycle(logger *zap.Logger, clock Clock, scriptPollers ScriptPollers,
+	cronService Cron, filesystemWatchers FilesystemWatchers, hostedPollers automations.HostedPollers,
+	cursors CursorScopes, executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+) SourceLifecycle {
+	return sourcelifecyclewire.NewService(logger, clock, scriptPollers, cronService,
+		filesystemWatchers, hostedPollers, cursors, executionPolicy)
+}
+
+func NewReconciliation(lifecycle SourceLifecycle) Reconciliation {
+	return reconciliationwire.NewService(lifecycle)
+}
 
 // CursorPersistenceFileSystem is the cursor owner's exact external effect.
 type CursorPersistenceFileSystem = cursorscopeswire.CursorPersistenceFileSystem
