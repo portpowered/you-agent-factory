@@ -632,6 +632,70 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         ).stdout.strip()
         self.assertNotEqual(remote_tip, local_tip)
 
+    def _detached_lane_worktree(self, prd_name):
+        init_local_repo(self.repo_path)
+        write_prd(self.repo_path, prd_name)
+        lane_dir = self.repo_path / ".claude" / "worktrees" / prd_name
+        git(["worktree", "add", "--detach", str(lane_dir), "main"], self.repo_path)
+        return lane_dir
+
+    def test_adopts_clean_detached_ancestor_worktree_preserving_untracked(self):
+        prd_name = "adopt-detached-prd"
+        lane_dir = self._detached_lane_worktree(prd_name)
+        evidence = lane_dir / ".planning-evidence" / "cov.txt"
+        evidence.parent.mkdir()
+        evidence.write_text("evidence\n", encoding="utf-8")
+
+        result = run_setup_workspace(self.repo_path, prd_name)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["adopted_detached"])
+        self.assertTrue(payload["reused"])
+        self.assertTrue(evidence.exists())
+        self.assertTrue((lane_dir / "prd.json").exists())
+        self.assertEqual(
+            git(["branch", "--show-current"], lane_dir).stdout.strip(), prd_name,
+        )
+        self.assertEqual(
+            git(["rev-parse", "HEAD"], lane_dir).stdout,
+            git(["rev-parse", "main"], self.repo_path).stdout,
+        )
+
+    def test_detached_worktree_with_tracked_changes_still_fails(self):
+        prd_name = "detached-dirty-prd"
+        lane_dir = self._detached_lane_worktree(prd_name)
+        (lane_dir / "README.md").write_text("modified\n", encoding="utf-8")
+
+        result = run_setup_workspace(self.repo_path, prd_name)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('has branch "detached"', result.stderr)
+
+    def test_detached_worktree_not_ancestor_of_main_still_fails(self):
+        prd_name = "detached-diverged-prd"
+        lane_dir = self._detached_lane_worktree(prd_name)
+        (lane_dir / "other.txt").write_text("x\n", encoding="utf-8")
+        git(["add", "other.txt"], lane_dir)
+        git(["commit", "-m", "diverge"], lane_dir)
+
+        result = run_setup_workspace(self.repo_path, prd_name)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('has branch "detached"', result.stderr)
+
+    def test_worktree_on_different_branch_still_fails(self):
+        prd_name = "wrong-branch-prd"
+        init_local_repo(self.repo_path)
+        write_prd(self.repo_path, prd_name)
+        lane_dir = self.repo_path / ".claude" / "worktrees" / prd_name
+        git(
+            ["worktree", "add", "-b", "other-branch", str(lane_dir), "main"],
+            self.repo_path,
+        )
+
+        result = run_setup_workspace(self.repo_path, prd_name)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("refs/heads/other-branch", result.stderr)
+        self.assertIn(f"refs/heads/{prd_name}", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

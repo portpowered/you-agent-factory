@@ -1863,14 +1863,71 @@ def adopt_main_worktree_for_lane(
     return True
 
 
+def adopt_detached_worktree_for_lane(
+    repo_root, worktree_path, branch, fresh_origin_main_sha=None,
+):
+    """Attach a clean detached checkout at the lane path to the lane branch.
+
+    A lane (for example a planner collecting evidence) may have run
+    ``git worktree add --detach`` at its own destination. Adopt it only when
+    HEAD is an ancestor of the base this script would use and there are no
+    tracked changes; untracked files are preserved. Returns False for any other
+    shape so the caller's strict validation reports the mismatch.
+    """
+    record = registered_worktree_record(repo_root, worktree_path)
+    if record["locked"] or record["prunable"] or not record["detached"]:
+        return False
+    if worktree_path.name != normalize_branch(branch):
+        return False
+    if any(
+        entry["status"] != "??"
+        for entry in repository_status_entries(worktree_path)
+    ):
+        return False
+
+    start_point = resolve_worktree_start_point(fresh_origin_main_sha)
+    ancestor = run_git(
+        "merge-base", "--is-ancestor", "HEAD", start_point,
+        cwd=worktree_path, check=False,
+    )
+    if ancestor.returncode != 0:
+        return False
+
+    # Use the same base the normal flow would use for this branch.
+    if branch_exists_locally(repo_root, branch):
+        base = f"refs/heads/{branch}"
+    elif branch_exists_on_remote(repo_root, branch):
+        base = f"refs/remotes/origin/{branch}"
+    else:
+        base = start_point
+    expected_head = resolve_revision_head(
+        repo_root, base, "detached adoption base",
+    )
+    run_git("checkout", "-B", branch, base, cwd=worktree_path)
+    validate_registered_worktree(
+        repo_root, worktree_path, branch, expected_head=expected_head,
+    )
+    print(
+        "Worktree preparation: adopted clean detached worktree at lane path",
+        file=sys.stderr,
+    )
+    return True
+
+
 def create_or_reuse_worktree(
-    repo_root, branch, worktree_path, fresh_origin_main_sha=None,
+    repo_root, branch, worktree_path, fresh_origin_main_sha=None, outcome=None,
 ):
     """Create a new worktree or reuse an existing one. Returns reused flag."""
     if worktree_path.exists() and worktree_is_valid(worktree_path):
         if adopt_main_worktree_for_lane(
             repo_root, worktree_path, branch, fresh_origin_main_sha,
         ):
+            return True
+        if adopt_detached_worktree_for_lane(
+            repo_root, worktree_path, branch, fresh_origin_main_sha,
+        ):
+            if outcome is not None:
+                outcome["adopted_detached"] = True
             return True
         validate_registered_worktree(repo_root, worktree_path, branch)
         sync_outcome = sync_reused_worktree_branch(repo_root, worktree_path, branch)
@@ -2041,11 +2098,13 @@ def main():
     failure_stage = "Worktree preparation failed"
     try:
         with root_sync_lock(repo_root):
+            outcome = {}
             reused = create_or_reuse_worktree(
                 repo_root,
                 branch,
                 worktree_dir,
                 fresh_origin_main_sha,
+                outcome,
             )
             validate_registered_worktree(repo_root, worktree_dir, branch)
 
@@ -2071,6 +2130,8 @@ def main():
         "standing_rules_path": str(dest_rules) if dest_rules else None,
         "reused": reused,
     }
+    if outcome.get("adopted_detached"):
+        result["adopted_detached"] = True
     print(json.dumps(result, indent=2))
 
 
