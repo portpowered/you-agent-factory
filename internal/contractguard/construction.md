@@ -42,10 +42,24 @@ debt. Same-package helper values also retain their return/argument provenance.
 Methods resolve explicit receiver types, allocations, local receiver aliases and
 method expressions. Imported and local type aliases follow authored alias chains;
 defined types do not inherit the original type's method identity. Method values
-use the same local-value rules. This bounded scan does not yet establish promoted
+use the same local-value rules.
+
+Required constructor records containing registered behavior/effect collaborators
+are reported as `required-dependency-bag`. Authored nested and embedded fields,
+pointer/container fields (including map keys), and local/imported aliases and
+defined records retain that classification. Recursive domain records terminate
+without acquiring collaborator identity. Direct collaborators and records with
+explicit domain, state or resource classifications remain accepted. Optional
+unregistered parameters do not acquire requiredness from their names or fields.
+Diagnostics identify the registered constructor and parameter declaration line,
+without exposing parameter names or source text; report mode stays nonblocking.
+Generic record instantiations and declarations outside the indexed module still
+need bounded classification/debt before whole-set readiness can be claimed.
+
+This bounded scan does not yet establish promoted
 methods, generic receiver instantiations, package-variable execution provenance,
 storage through arbitrary returned owner objects, assertion-status helper returns,
-dependency bags, service locators, or complete effect ancestry. Those remaining
+service locators, or complete effect ancestry. Those remaining
 story-002 cases must be proved before a capability set can claim complete
 enforcement coverage.
 
