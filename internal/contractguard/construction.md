@@ -69,8 +69,11 @@ Writes of required storage to a named result followed by a naked return or an
 explicit return of that result retain unresolved lookup debt; grouped results,
 parallel assignments and closure writes use exact result objects. Tuple-producing
 helper returns with required arguments also retain debt until per-result
-summaries exist. This does not prove control-flow values of named results or
-provenance through arbitrary aliases of named result variables.
+summaries exist. A finite monotonic write analysis preserves named-result debt
+through local aliases, grouped declarations, later assignments, same-package
+helpers and cycles. It follows exact AST objects, so shadows and optional/domain
+result paths stay separate. Possible required writes remain debt even across
+conflicting assignments; this does not prove control-flow values of named results.
 Escaped or unused getter values report `unresolved-service-getter-reference`.
 Parameterized views, optional fields, domain/state/resource results and returns
 inside nested closures do not become peer getters. This does not yet establish

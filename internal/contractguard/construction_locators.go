@@ -36,6 +36,7 @@ func (index constructionIndex) constructionServiceGetters(registry ConstructionR
 			}
 			provenance := constructionGuardProvenance{source: method.source, receiver: receiver, fields: fields[owner],
 				mutations: constructionGuardMutations(function.Body), fieldMutations: constructionGuardFieldMutations(function.Body, receiver)}
+			provenance.required = constructionGetterAssignedOrigins(function, results, provenance)
 			ast.Inspect(function.Body, func(node ast.Node) bool {
 				if _, nested := node.(*ast.FuncLit); nested {
 					return false
