@@ -106,6 +106,7 @@ func TestCLIFactoryYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence(t 
 // rejected by the public CLI before provider/runtime execution and retain
 // actionable source context in public diagnostics.
 func TestCLIFactoryRejectedAuthoredSourcesFailBeforeRuntimeExecution(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name    string
 		prepare func(*testing.T) []string
@@ -163,10 +164,14 @@ func TestCLIFactoryRejectedAuthoredSourcesFailBeforeRuntimeExecution(t *testing.
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			args := append([]string{"you", "run"}, test.prepare(t)...)
+			t.Parallel()
+			sourceArgs := test.prepare(t)
+			before := captureAuthoredSource(t, sourceArgs[1])
+			args := append([]string{"you", "run"}, sourceArgs...)
 			args = append(args, "runtime must not start")
 			inputs := support.FakeInputs(t.Context(), args)
 			inputs.Input.WorkingDirectory = t.TempDir()
+			inputs.Input.Env = customerEnvironment(t.TempDir())
 			err := yamlParityCLIProcess.Execute(inputs.Input)
 			if err == nil {
 				t.Fatal("Process.Execute() error = nil")
@@ -177,8 +182,38 @@ func TestCLIFactoryRejectedAuthoredSourcesFailBeforeRuntimeExecution(t *testing.
 					t.Fatalf("diagnostic %q does not contain %q", diagnostic, want)
 				}
 			}
+			if got := yamlParityCommands.callCount(inputs.Input.WorkingDirectory); got != 0 {
+				t.Fatalf("rejected source dispatched %d provider commands, want zero", got)
+			}
+			after := captureAuthoredSource(t, sourceArgs[1])
+			if !reflect.DeepEqual(before, after) {
+				t.Fatalf("rejected authored source changed: before=%q after=%q", before, after)
+			}
 		})
 	}
+}
+
+func captureAuthoredSource(t *testing.T, path string) map[string]string {
+	t.Helper()
+	files := make(map[string]string)
+	err := filepath.WalkDir(path, func(name string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		data, err := os.ReadFile(name)
+		if err != nil {
+			return err
+		}
+		files[name] = string(data)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("read authored source %s: %v", path, err)
+	}
+	return files
 }
 
 func materializePackagedGoal(t *testing.T, rootName string) string {
