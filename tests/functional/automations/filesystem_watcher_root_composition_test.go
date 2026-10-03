@@ -14,15 +14,15 @@ import (
 // The shared root-built host opens this scenario's explicit Factory Session.
 // Real test-owned filesystem input crosses watcher admission and normal worker
 // execution; only the script command effect is controlled through Edges.
-func newWatcherIngressFactory(t *testing.T) string {
+func newWatcherIngressFactory(t *testing.T, channel string) string {
 	t.Helper()
 	dir := support.ScaffoldFactory(t, filesystemWatcherFactoryConfig())
 	support.ClearSeedInputs(t, dir)
-	writeWatcherIngressFile(t, dir, "preseed", "preseed item")
+	writeWatcherIngressFile(t, dir, channel, "preseed", "preseed item")
 	return dir
 }
 
-func assertWatcherSessionIngress(t *testing.T, baseURL, dir string) {
+func assertWatcherSessionIngress(t *testing.T, baseURL, dir, preseedChannel, liveChannel string) {
 	t.Helper()
 	sessionID := support.OpenFactorySessionAt(t, baseURL, dir).Session.Id
 	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, sessionID) })
@@ -31,15 +31,43 @@ func assertWatcherSessionIngress(t *testing.T, baseURL, dir string) {
 	}
 	seeded := readAutomationCompletedWork(t, baseURL, sessionID, "complete", "preseed")
 	assertWatcherIngressWork(t, seeded, map[string]string{"preseed": "preseed item"})
+	assertWatcherIngressCorrelation(t, seeded, map[string]string{"preseed": preseedChannel})
 
 	// Public completion acknowledges the preseed before introducing live input.
 	// Event completion is the synchronization signal, with no fixed delay or
 	// inspection of the private handled-file ledger.
-	writeWatcherIngressFile(t, dir, "live", "live item")
+	writeWatcherIngressFile(t, dir, liveChannel, "live", "live item")
 	completed := readAutomationCompletedWork(t, baseURL, sessionID, "complete", "live")
 	assertWatcherIngressWork(t, completed, map[string]string{
 		"preseed": "preseed item", "live": "live item",
 	})
+	assertWatcherIngressCorrelation(t, completed, map[string]string{
+		"preseed": preseedChannel, "live": liveChannel,
+	})
+}
+
+func assertWatcherIngressCorrelation(t *testing.T, listed factoryapi.ListWorkResponse, channels map[string]string) {
+	t.Helper()
+	for _, item := range listed.Results {
+		id := support.StringPointerValue(item.WorkId)
+		if item.RequestId == nil || *item.RequestId != "watcher-"+id {
+			t.Fatalf("watcher Work %q request = %v, want original watcher request", id, item.RequestId)
+		}
+		// Work's public tags retain the execution-directory correlation. The
+		// default channel has no execution ID; a named channel keeps its exact ID
+		// through admission and normal worker completion.
+		var executionID string
+		if item.Tags != nil {
+			executionID = (*item.Tags)["_execution_id"]
+		}
+		want := channels[id]
+		if want == interfaces.DefaultChannelName {
+			want = ""
+		}
+		if executionID != want {
+			t.Fatalf("watcher Work %q execution tag = %q, want %q", id, executionID, want)
+		}
+	}
 }
 
 func assertWatcherIngressWork(t *testing.T, listed factoryapi.ListWorkResponse, expected map[string]string) {
@@ -68,9 +96,50 @@ func assertWatcherIngressWork(t *testing.T, listed factoryapi.ListWorkResponse, 
 	}
 }
 
-func writeWatcherIngressFile(t *testing.T, dir, id, title string) {
+func assertWatcherDuplicateRestart(t *testing.T, baseURL, dir string) {
 	t.Helper()
-	inputDir := filepath.Join(dir, interfaces.InputsDir, "task", interfaces.DefaultChannelName)
+	opened := support.OpenFactorySessionAt(t, baseURL, dir)
+	sessionID := opened.Session.Id
+	t.Cleanup(func() {
+		if sessionID != "" {
+			support.CloseFactorySessionAt(t, baseURL, sessionID)
+		}
+	})
+	assertWatcherIngressWork(t, readAutomationCompletedWork(t, baseURL, sessionID, "complete", "preseed"),
+		map[string]string{"preseed": "preseed item"})
+	// Recreate the same retained input, preserving its file, request and logical
+	// Work identities. The observable contract is one logical Work per session.
+	path := filepath.Join(dir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "preseed.json")
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	writeWatcherIngressFile(t, dir, interfaces.DefaultChannelName, "preseed", "preseed item")
+	writeWatcherIngressFile(t, dir, interfaces.DefaultChannelName, "live", "live item")
+	// The next owned file's public completion provides a positive observation
+	// barrier for the watcher, rather than a sleep waiting for absent Work.
+	assertWatcherIngressWork(t, readAutomationCompletedWork(t, baseURL, sessionID, "complete", "live"),
+		map[string]string{"preseed": "preseed item", "live": "live item"})
+
+	support.CloseFactorySessionAt(t, baseURL, sessionID)
+	priorSessionID := sessionID
+	sessionID = ""
+	reopened := support.OpenFactorySessionAt(t, baseURL, dir)
+	sessionID = reopened.Session.Id
+	if sessionID == priorSessionID || sessionID == "~default" ||
+		reopened.Session.FactoryDir != opened.Session.FactoryDir || reopened.Session.FolderPath != opened.Session.FolderPath {
+		t.Fatalf("reopened watcher session = %#v, want same logical target and new live identity", reopened.Session)
+	}
+	writeWatcherIngressFile(t, dir, interfaces.DefaultChannelName, "restart", "restart item")
+	// Both files remain on disk across supported close / reopen. Startup admits
+	// retained inputs into the new live session; each original logical identity
+	// must occur exactly once alongside the fresh Work proving live activation.
+	assertWatcherIngressWork(t, readAutomationCompletedWork(t, baseURL, sessionID, "complete", "preseed", "live", "restart"),
+		map[string]string{"preseed": "preseed item", "live": "live item", "restart": "restart item"})
+}
+
+func writeWatcherIngressFile(t *testing.T, dir, channel, id, title string) {
+	t.Helper()
+	inputDir := filepath.Join(dir, interfaces.InputsDir, "task", channel)
 	if err := os.MkdirAll(inputDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -15,6 +15,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -41,7 +42,9 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 	failureDir, failure := newScriptCycleFactory(t)
 	failurePeerDir, failurePeer := newScriptCycleFactory(t)
 	files := &scriptReplacementFailure{directory: failureDir}
-	watcherDir := newWatcherIngressFactory(t)
+	watcherDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
+	executionWatcherDir := newWatcherIngressFactory(t, "owned-exec-preseed")
+	duplicateWatcherDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
 	router := scriptCycleRouter{routes: map[string]*scriptCycleRoute{
 		filepath.Clean(recoveryDir):    recovery,
 		filepath.Clean(emptyDir):       empty,
@@ -51,9 +54,19 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 		filepath.Clean(failurePeerDir): failurePeer,
 	}}
 	server := startScriptCycleHost(t, router, files)
+	t.Run("watcher_retained_file_identity_does_not_duplicate_after_restart", func(t *testing.T) {
+		t.Parallel()
+		assertWatcherDuplicateRestart(t, server.URL(), duplicateWatcherDir)
+	})
 	t.Run("watcher_preseed_and_live_input_preserve_public_Work", func(t *testing.T) {
 		t.Parallel()
-		assertWatcherSessionIngress(t, server.URL(), watcherDir)
+		assertWatcherSessionIngress(t, server.URL(), watcherDir, interfaces.DefaultChannelName, interfaces.DefaultChannelName)
+	})
+	t.Run("watcher_preseed_and_new_execution_directory_preserve_correlation", func(t *testing.T) {
+		t.Parallel()
+		// The live channel directory is created only after preseed completion,
+		// exercising supported dynamic channel discovery as well as startup.
+		assertWatcherSessionIngress(t, server.URL(), executionWatcherDir, "owned-exec-preseed", "owned-exec-live")
 	})
 	t.Run("failed_replacement_retains_Work_and_prior_resume_while_peer_progresses", func(t *testing.T) {
 		t.Parallel()
