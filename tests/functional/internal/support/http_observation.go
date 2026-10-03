@@ -420,7 +420,7 @@ func waitForStatusAt(
 	timeout time.Duration,
 	accept func(factoryapi.StatusResponse) bool,
 ) (factoryapi.StatusResponse, error) {
-	deadline := time.NewTimer(timeout)
+	deadline := time.NewTimer(ScaledTimeout(timeout))
 	defer deadline.Stop()
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
