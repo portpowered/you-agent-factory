@@ -2,6 +2,8 @@ package internal
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -415,6 +417,187 @@ func TestBoundRuntimeServiceUsesPublishedEngineForLegacyWorkSnapshot(t *testing.
 	}
 	if got != snapshot {
 		t.Fatalf("GetEngineStateSnapshot() = %p, want concrete delegate snapshot %p", got, snapshot)
+	}
+}
+
+func TestBoundControlsAttributeResultsAndErrorsToActivatedRuntime(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []bool{false, true} {
+		name := "success"
+		if failure {
+			name = "controlled errors"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := newBoundControlRoot(t)
+			delegates := [2]*boundControlRuntimeFake{}
+			bindings := [2]factoryruntime.RuntimeBinding{}
+			for i, identity := range []string{"first", "second"} {
+				delegates[i] = newBoundControlRuntimeFake(identity, failure)
+				bindings[i] = activateBoundControlRuntime(t, root, identity, delegates[i])
+			}
+			for i, binding := range bindings {
+				selected, peer := delegates[i], delegates[1-i]
+				for _, control := range selected.controlCases() {
+					ctx, cancel := context.WithCancel(t.Context())
+					before, peerBefore := len(selected.calls), len(peer.calls)
+					got, err := control.invoke(ctx, binding.Service())
+					cancel()
+					if !reflect.DeepEqual(got, control.result) || err != control.err {
+						t.Fatalf("binding %d %s = %#v, %v; want %#v, %v", i, control.method, got, err, control.result, control.err)
+					}
+					if len(selected.calls) != before+1 || len(peer.calls) != peerBefore {
+						t.Fatalf("binding %d %s call counts = %d/%d; want %d/%d", i, control.method, len(selected.calls), len(peer.calls), before+1, peerBefore)
+					}
+					want := boundControlCall{method: control.method, ctx: ctx, request: control.request}
+					call := selected.calls[before]
+					if call.method != want.method || call.ctx != ctx || !reflect.DeepEqual(call.request, want.request) {
+						t.Fatalf("binding %d forwarded call = %#v; want %#v with identical context", i, call, want)
+					}
+					if selected.closeCalls != 0 || peer.closeCalls != 0 {
+						t.Fatal("control delegation invoked activation cleanup")
+					}
+				}
+			}
+		})
+	}
+}
+
+func newBoundControlRoot(t *testing.T) *Root {
+	t.Helper()
+	root, err := NewRoot(
+		func() string { return "bound-control-id" }, nil, nil,
+		clockwork.NewFakeClockAt(time.Date(2026, time.October, 3, 0, 0, 0, 0, time.UTC)),
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		func(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error) {
+			return workers.WorkstationDispatchCancelResult{}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewRoot: %v", err)
+	}
+	return root
+}
+
+func activateBoundControlRuntime(t *testing.T, root *Root, identity string, delegate *boundControlRuntimeFake) factoryruntime.RuntimeBinding {
+	t.Helper()
+	request := factoryruntime.RuntimeActivationRequest{
+		RuntimeID: "runtime-" + identity, FactorySessionID: "session-" + identity,
+		Snapshot: interfaces.RuntimeSnapshot{
+			FactoryDir: "/factories/" + identity, RuntimeBaseDir: "/runtime/" + identity,
+			DefinitionVersion: &interfaces.FactoryVersion{Logical: 1},
+			EffectiveFactory:  interfaces.FactoryConfig{Name: identity},
+		},
+	}
+	want, err := request.Normalize()
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	starts := 0
+	result, err := root.Activate(ctx, request, func(gotCtx context.Context, got factoryruntime.RuntimeActivationRequest) (*factoryruntime.RuntimeActivation, error) {
+		starts++
+		if gotCtx != ctx || !reflect.DeepEqual(got, want) {
+			t.Fatalf("start received %v, %#v; want identical context and %#v", gotCtx, got, want)
+		}
+		return &factoryruntime.RuntimeActivation{Service: delegate, Close: func(context.Context) error {
+			delegate.closeCalls++
+			return nil
+		}}, nil
+	})
+	if err != nil || starts != 1 || result.RuntimeID != request.RuntimeID ||
+		result.Runtime.FactorySessionID != request.FactorySessionID || result.State != factoryruntime.RuntimeLifecycleStateActive || result.Binding.IsZero() {
+		t.Fatalf("Activate(%s) = %#v, %v; starts %d; want matching ACTIVE binding and one start", identity, result, err, starts)
+	}
+	return result.Binding
+}
+
+type boundControlCall struct {
+	method  string
+	ctx     context.Context
+	request any
+}
+
+type boundControlRuntimeFake struct {
+	factoryruntime.Service
+	identity                          string
+	calls                             []boundControlCall
+	closeCalls                        int
+	pause                             factoryruntime.PauseResult
+	resume                            factoryruntime.ResumeResult
+	terminate                         factoryruntime.TerminateResult
+	pauseErr, resumeErr, terminateErr error
+}
+
+func newBoundControlRuntimeFake(identity string, failure bool) *boundControlRuntimeFake {
+	outcome := factoryruntime.ControlOutcomeAccepted
+	if identity == "second" {
+		outcome = factoryruntime.ControlOutcomeNoOp
+	}
+	evidence := func(action factoryruntime.WorkerSessionControlAction) factoryruntime.WorkerSessionControlResult {
+		return factoryruntime.WorkerSessionControlResult{
+			TurnID: "turn-" + identity, Action: action,
+			Outcome: factoryruntime.WorkerSessionControlAggregateOutcomePartial,
+			Children: []factoryruntime.WorkerSessionControlChildResult{{
+				WorkerSessionID: "worker-" + identity, DispatchID: "dispatch-" + identity,
+				Outcome: factoryruntime.WorkerSessionControlChildOutcomeUnsupported,
+			}},
+		}
+	}
+	fake := &boundControlRuntimeFake{
+		identity:  identity,
+		pause:     factoryruntime.PauseResult{Outcome: outcome, WorkerSessionControl: evidence(factoryruntime.WorkerSessionControlActionPause)},
+		resume:    factoryruntime.ResumeResult{Outcome: outcome, WorkerSessionControl: evidence(factoryruntime.WorkerSessionControlActionResume)},
+		terminate: factoryruntime.TerminateResult{Outcome: outcome, WorkerSessionControl: evidence(factoryruntime.WorkerSessionControlActionCancel)},
+	}
+	if failure {
+		fake.pauseErr = errors.New(identity + " pause failure")
+		fake.resumeErr = errors.New(identity + " resume failure")
+		fake.terminateErr = errors.New(identity + " terminate failure")
+	}
+	return fake
+}
+
+func (f *boundControlRuntimeFake) ControlPause(ctx context.Context, request factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
+	f.calls = append(f.calls, boundControlCall{"pause", ctx, request})
+	return f.pause, f.pauseErr
+}
+
+func (f *boundControlRuntimeFake) ControlResume(ctx context.Context, request factoryruntime.ResumeRequest) (factoryruntime.ResumeResult, error) {
+	f.calls = append(f.calls, boundControlCall{"resume", ctx, request})
+	return f.resume, f.resumeErr
+}
+
+func (f *boundControlRuntimeFake) ControlTerminate(ctx context.Context, request factoryruntime.TerminateRequest) (factoryruntime.TerminateResult, error) {
+	f.calls = append(f.calls, boundControlCall{"terminate", ctx, request})
+	return f.terminate, f.terminateErr
+}
+
+type boundControlCase struct {
+	method          string
+	request, result any
+	err             error
+	invoke          func(context.Context, factoryruntime.Service) (any, error)
+}
+
+func (f *boundControlRuntimeFake) controlCases() []boundControlCase {
+	pause := factoryruntime.PauseRequest{TurnID: "turn-" + f.identity, ControlID: "pause-" + f.identity}
+	resume := factoryruntime.ResumeRequest{TurnID: "turn-" + f.identity, ControlID: "resume-" + f.identity}
+	terminate := factoryruntime.TerminateRequest{
+		Reason: "stop " + f.identity, TurnID: "turn-" + f.identity, ControlID: "terminate-" + f.identity,
+		WorkerSessionAction: factoryruntime.WorkerSessionControlActionCancel,
+	}
+	return []boundControlCase{
+		{"pause", pause, f.pause, f.pauseErr, func(ctx context.Context, service factoryruntime.Service) (any, error) {
+			return service.ControlPause(ctx, pause)
+		}},
+		{"resume", resume, f.resume, f.resumeErr, func(ctx context.Context, service factoryruntime.Service) (any, error) {
+			return service.ControlResume(ctx, resume)
+		}},
+		{"terminate", terminate, f.terminate, f.terminateErr, func(ctx context.Context, service factoryruntime.Service) (any, error) {
+			return service.ControlTerminate(ctx, terminate)
+		}},
 	}
 }
 
