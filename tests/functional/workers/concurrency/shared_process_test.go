@@ -327,6 +327,30 @@ func assertAdmittedWorkCanceled(t *testing.T, session *concurrencySession, respo
 	t.Logf("AWC selected-session mapping: session=%s SUCCEEDED after CANCEL; work=%s state=%s; no accepted Work success/output", session.id, stringPointerValue(response.WorkId), work.State.Name)
 }
 
+func awaitAdmittedWorkTerminalPublication(t *testing.T, stream *support.FactoryResponseEventStream) {
+	t.Helper()
+	// The public response stream completes only after canonical SESSION_COMPLETED
+	// publication. Command return and the CANCEL acknowledgement do not join it;
+	// the Factory Event live stream can stop earlier. Drain buffered response
+	// frames before requiring natural EOF, then inspect the retained ledger.
+	deadline := time.Now().Add(concurrencySharedProcessTimeout)
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			t.Fatal("AWC timed out waiting for terminal publication")
+		}
+		result := stream.TryNextFrameResult(remaining)
+		switch result.Outcome {
+		case support.FactoryResponseEventStreamOutcomeFrame:
+			continue
+		case support.FactoryResponseEventStreamOutcomeEOF:
+			return
+		default:
+			t.Fatalf("AWC terminal publication: %s", result.Diagnostic())
+		}
+	}
+}
+
 func admittedWorkCancellationEvent(t *testing.T, session *concurrencySession) factoryapi.FactoryEvent {
 	t.Helper()
 	// Selected-session cancellation currently maps to a SUCCEEDED session

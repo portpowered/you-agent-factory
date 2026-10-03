@@ -186,6 +186,11 @@ func (fixture *concurrencySharedProcessFixture) runAdmittedWorkCancellation(t *t
 	t.Helper()
 	canceled := fixture.openCase(t, "AWC-A", 1, concurrencyRunnerHold, "cc09-canceled", "", 0)
 	ownAdmittedWorkSession(t, canceled, false)
+	canceledResponses := support.OpenFactoryResponseEventStreamAt(t, support.SessionResponseEventsURL(fixture.baseURL, canceled.id))
+	t.Cleanup(func() {
+		canceledResponses.Close()
+		canceledResponses.WaitClosed(concurrencySharedProcessTimeout)
+	})
 	survivor := fixture.openCase(t, "AWC-B", 1, concurrencyRunnerHold, "cc09-survivor", "", 0)
 	survivorEvents := ownAdmittedWorkSession(t, survivor, true)
 	first := submitConcurrencyWork(t, canceled, canceled.marker)
@@ -210,6 +215,7 @@ func (fixture *concurrencySharedProcessFixture) runAdmittedWorkCancellation(t *t
 		t.Fatalf("AWC canceled call = %d, want original %d", observedCancel.index, canceledCall.index)
 	}
 	canceled.runner.joinCalls(t)
+	awaitAdmittedWorkTerminalPublication(t, canceledResponses)
 	terminal := admittedWorkCancellationEvent(t, canceled)
 	t.Logf("AWC public control operation=%s outcome=%s status=%s", control.Operation, control.Outcome, control.Status)
 	assertAdmittedWorkCanceled(t, canceled, first, firstDispatch)
