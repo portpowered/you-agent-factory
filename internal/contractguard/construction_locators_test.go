@@ -6,13 +6,14 @@ import (
 	"testing"
 )
 
-func TestConstructionServiceGetterLocators(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name, getter, operation, extra string
-		kind                           ConstructionKind
-		want                           string
-	}{
+type constructionGetterCase struct {
+	name, getter, operation, extra string
+	kind                           ConstructionKind
+	want                           string
+}
+
+func constructionGetterCases() []constructionGetterCase {
+	return []constructionGetterCase{
 		{"direct", `func (s *Service) Lookup() Port { return s.port }`, `s.Lookup().Execute()`, "", ConstructionBehavior, "service-getter-locator"},
 		{"peer and error", `func (s *Service) Lookup() (Port, error) { return s.port, nil }`, `_, _ = s.Lookup()`, "", ConstructionBehavior, "service-getter-locator"},
 		{"peer after error", `func (s *Service) Lookup() (error, Port) { return nil, s.port }`, `_, _ = s.Lookup()`, "", ConstructionBehavior, "service-getter-locator"},
@@ -89,7 +90,12 @@ func TestConstructionServiceGetterLocators(t *testing.T) {
 		{"shadowed method value", `func (s *Service) Lookup() Port { return s.port }`, `lookup := func() Port { return nil }; lookup()`, "", ConstructionBehavior, ""},
 		{"unregistered result", `type Payload struct{}; func (s *Service) Lookup() *Payload { return nil }`, `_ = s.Lookup()`, "", ConstructionBehavior, ""},
 	}
-	for _, tc := range cases {
+}
+
+func TestConstructionServiceGetterLocators(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range constructionGetterCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			root, registry := constructionFixture(t)
