@@ -9,11 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 )
 
 type stubLedger struct {
@@ -1409,6 +1411,121 @@ func TestCombinedServiceReadHelpersNormalizeRecordingClock(t *testing.T) {
 	}
 }
 
+func TestCombinedServiceAbandonedScopeFinishesAtInjectedClock(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 10, 3, 5, 34, 56, 789, time.FixedZone("recording", -7*60*60))
+	snapshot, status, err := characterizeAbandonedRecording(t, staticRecordingClock{at: at})
+	for _, facts := range []recordings.RecordingStatusFacts{snapshot.Status, status} {
+		if facts.FinalizedAt == nil || !facts.FinalizedAt.Equal(at.UTC()) ||
+			facts.FinalizedAt.Location() != time.UTC {
+			t.Fatalf("abandoned final timestamp = %v, want UTC %v", facts.FinalizedAt, at.UTC())
+		}
+	}
+	if errors.Is(err, recordings.ErrInvalidRecordingTerminalMetadata) {
+		t.Fatalf("explicit clock produced invalid terminal metadata: %v", err)
+	}
+}
+
+func TestCombinedServiceAbandonedScopeWithoutClockRejectsZeroTimestamp(t *testing.T) {
+	t.Parallel()
+	snapshot, status, err := characterizeAbandonedRecording(t)
+	if !errors.Is(err, recordings.ErrInvalidRecordingTerminalMetadata) {
+		t.Fatalf("abandonment without clock = %v, want ErrInvalidRecordingTerminalMetadata", err)
+	}
+	if snapshot.Status.FinalizedAt != nil || status.FinalizedAt != nil {
+		t.Fatalf("abandoned final timestamps without clock = (%v, %v), want unset", snapshot.Status.FinalizedAt, status.FinalizedAt)
+	}
+}
+
+// The decorator delegates to the real lifecycle owner before arming the writer
+// fault and canceling. The idle ticker cannot flush before abandonment.
+type cancelAfterRecordingStart struct {
+	recordinglifecycle.Service
+	afterStart func(recordings.StartRecordingResult)
+}
+
+func (service cancelAfterRecordingStart) StartRecording(request recordings.StartRecordingRequest) (recordings.StartRecordingResult, error) {
+	result, err := service.Service.StartRecording(request)
+	if err == nil {
+		service.afterStart(result)
+	}
+	return result, err
+}
+
+func assertSuccessfulRecordingStart(t *testing.T, ctx context.Context, result recordings.StartRecordingResult) {
+	t.Helper()
+	if ctx.Err() != nil || !result.Enabled || result.Status.RecordingID == "" {
+		t.Fatalf("StartRecording = %#v, context = %v, want success before cancellation", result, ctx.Err())
+	}
+}
+
+func characterizeAbandonedRecording(t *testing.T, clocks ...recordings.RecordingClock) (recordings.RecordingSnapshot, recordings.RecordingStatusFacts, error) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	writeErr := errors.New("abandoned recording flush failed")
+	var observationsMu sync.Mutex
+	var started recordings.StartRecordingResult
+	var snapshot recordings.RecordingSnapshot
+	writes := 0
+	root := NewServiceWithLifecycleEffects(
+		&stubLedger{}, NewProjectionService(), nil,
+		func(_ string, value recordings.RecordingSnapshot) error {
+			observationsMu.Lock()
+			defer observationsMu.Unlock()
+			if !started.Enabled || started.Status.RecordingID == "" || value.Status.RecordingID != started.Status.RecordingID {
+				t.Errorf("final writer observed %#v after start %#v, want successfully started identity", value.Status, started)
+				return nil
+			}
+			writes++
+			snapshot = value
+			return writeErr
+		}, func(time.Duration) recordings.RecordingFlushTicker {
+			return recordings.RecordingFlushTicker{Ticks: make(chan time.Time), Stop: func() {}}
+		}, nil, clocks...,
+	).(*combinedService)
+	owner := root.Service
+	root.Service = cancelAfterRecordingStart{Service: owner, afterStart: func(result recordings.StartRecordingResult) {
+		assertSuccessfulRecordingStart(t, ctx, result)
+		observationsMu.Lock()
+		started = result
+		observationsMu.Unlock()
+		cancel()
+	}}
+	t.Cleanup(func() {
+		observationsMu.Lock()
+		id := started.Status.RecordingID
+		observationsMu.Unlock()
+		if id != "" {
+			if _, err := owner.StopRecording(recordings.StopRecordingRequest{RecordingID: id}); err != nil {
+				t.Errorf("StopRecording cleanup: %v", err)
+			}
+		}
+	})
+	result, err := root.BeginRecordingScope(ctx, recordings.BeginRecordingScopeRequest{
+		Enabled:       true,
+		Scope:         recordings.CanonicalEventScope{FactorySessionID: t.Name()},
+		Target:        recordings.RecordingTargetRequest{Artifact: recordings.RecordingArtifactReference("artifact:" + t.Name())},
+		FlushInterval: time.Hour,
+	})
+	if !errors.Is(err, context.Canceled) || !errors.Is(err, writeErr) {
+		t.Fatalf("BeginRecordingScope = %v, want cancellation and final writer cause", err)
+	}
+	observationsMu.Lock()
+	defer observationsMu.Unlock()
+	if !started.Enabled || started.Status.RecordingID == "" {
+		t.Fatalf("abandoned begin did not observe successful start: %#v", started)
+	}
+	if !result.Scope.IsZero() || writes != 1 {
+		t.Fatalf("abandoned begin = %#v, writes = %d, want zero scope and one final write", result, writes)
+	}
+	status, statusErr := root.QueryRecordingStatus(recordings.RecordingStatusRequest{RecordingID: started.Status.RecordingID})
+	if statusErr != nil || status.Status.State != recordings.RecordingFailed || status.Status.FlushedThrough != nil {
+		t.Fatalf("abandoned status = %#v, %v, want failed with no durable cursor", status, statusErr)
+	}
+	return snapshot, status.Status, err
+}
+
 func TestRecordingLifecycleAdapterRejectsDetachedInputs(t *testing.T) {
 	t.Parallel()
 
@@ -1431,7 +1548,13 @@ func TestRecordingLifecycleAdapterRejectsDetachedInputs(t *testing.T) {
 func TestRecordingLifecycleAdapterCompletesBeginStopFinish(t *testing.T) {
 	t.Parallel()
 
-	service := NewService(&stubLedger{}, NewProjectionService()).(*combinedService)
+	var persisted recordings.RecordingSnapshot
+	service := NewServiceWithLifecycleEffects(&stubLedger{}, NewProjectionService(), nil,
+		func(_ string, snapshot recordings.RecordingSnapshot) error {
+			persisted = snapshot
+			return nil
+		}, nil, nil,
+	).(*combinedService)
 	lifecycle := recordings.RecordingLifecycle(service)
 	begin, err := lifecycle.Begin(recordings.BeginRecordingRequest{
 		Enabled:     true,
@@ -1445,11 +1568,18 @@ func TestRecordingLifecycleAdapterCompletesBeginStopFinish(t *testing.T) {
 	if err := lifecycle.Stop(recordings.StopLifecycleRequest{RecordingID: begin.Status.RecordingID}); err != nil {
 		t.Fatalf("lifecycle Stop after Begin: %v", err)
 	}
-	if finished, err := lifecycle.Finish(recordings.FinishLifecycleRequest{
+	at := time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
+	finished, err := lifecycle.Finish(recordings.FinishLifecycleRequest{
 		RecordingID: begin.Status.RecordingID,
-		FinishedAt:  time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC),
-	}); err != nil || finished.Status.State != recordings.LifecycleStateFinalized {
+		FinishedAt:  at,
+	})
+	if err != nil || finished.Status.State != recordings.LifecycleStateFinalized {
 		t.Fatalf("lifecycle Finish after Begin = (%#v, %v), want finalized", finished, err)
+	}
+	if finished.Status.FinalizedAt == nil || !finished.Status.FinalizedAt.Equal(at) ||
+		persisted.Status.FinalizedAt == nil || !persisted.Status.FinalizedAt.Equal(at) ||
+		string(persisted.Status.RecordingID) != string(begin.Status.RecordingID) {
+		t.Fatalf("lifecycle terminal metadata = %#v, persisted = %#v, want %v", finished.Status, persisted.Status, at)
 	}
 }
 
