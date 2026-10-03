@@ -1222,3 +1222,59 @@ A subsequent plan author returned `COMPLETED` in 46.469s, session
 `b1cbd733-8e70-49c6-994f-494083b937e9`, with an independently verified
 append-only 48-line edit and no other file changed. Raw result:
 `C:/t/dub-multilingual-validation/b050-current-delivery-plan-proof/result.json`.
+
+### 2026-10-02 failure-correlation diagnostics, broad-author timeout, and green CI
+
+An installed-`b050` OpenCode Space Bunny bounded diagnostics review completed in
+42.500s, session `d06715cf-d272-417f-abd9-f178fe1285e2`, with a primary result
+and server exit 0 against the same actual server SHA256
+`fe20cf4fb9a2b38cdb421b1ab758c45854d27e8c0501b3adfe699c7b261b9384`; it made no
+source edits. It independently found that ordinary `FAILED` results drop the
+runtime RequestID/TraceID/WorkID because those fields are attached only in the
+timeout branch. A broad author for that correlation work was already dispatched
+with snapshot expansion when root narrowed final acceptance to IDs-only; it
+reached `TIMED_OUT` at 301.125s against the requested 300000ms, session
+`257eeb51-2839-47c6-871d-4e5d6a799b48`, request
+`ced92381-1f26-4249-8e24-749dafea954e`, last `FILE_CHANGE` `UPDATED`
+`23:58:28.9122711Z`, with cleanup closed and `partialEffectsPossible`. It left
+two-file partial changes and no primary result, so it is not a completed author.
+The exact broad patch, protocol, and result are retained at
+`C:/t/dub-multilingual-validation/mcp-failure-correlation-edit-proof`, patch
+SHA256
+`de8f824b0b73720681bb1e33172c42290773c4fe910b84fd2372b8e3f804475d`. A separate
+narrow author is now active after the broad call reached its true terminal, with
+no overlapping writer. Final acceptance is IDs-only, with no extra snapshot calls
+or helpers and private-payload protection preserved; it is not yet verified or
+committed. A caller-selected five-minute budget exhaustion is not evidence of a
+harness root defect, and the underlying long-task cause remains unproven.
+Separately, CI run `37078759573` completed `SUCCESS` on
+`8e1daf1b861f8341c83512a22c1d1d0d5ac611bc`, superseding the earlier in-progress
+record above; raw artifact `C:/t/dub-ci-8e-green-proof/run.json`. The newer
+pending diagnostics are not CI-proven, and no merge is claimed.
+
+The separate narrow author that followed the broad call also failed: it reached
+`TIMED_OUT` in 181.422s against the requested 180000 ms with no primary result,
+session `274185d3-73d7-45dd-8ead-fc4b6e08036d`, request
+`9a7536eb-edd7-4b82-b28c-f3354d6c80f5`, last `FILE_CHANGE` `UPDATED`
+`00:01:51.9520886Z`, cleanup closed with `partialEffectsPossible`, exact evidence
+`C:/t/dub-multilingual-validation/mcp-failure-correlation-narrow-proof`. Its
+partial IDs-only patch passed the tests independently, but the new test
+scaffolding breached the file budget at 1051 > 1000 lines and the helper budget
+at CC 16 > 15, so it was not accepted at that time and no baseline was increased.
+A subsequent installed-`b050` OpenCode Space Bunny test-maintenance author with a
+1200000 ms allowance `COMPLETED` in 324.297s with a primary result and server exit
+0, session `dfa5953e-0dec-40b5-9030-9f56b8ec1029`, exact evidence
+`C:/t/dub-multilingual-validation/mcp-failure-correlation-maint-proof`. The final
+scoped source keeps the original timeout and snapshot behavior and only hoists
+the guarded runtime IDs before terminal classification, and the tests enhance
+the existing seven-row classification/private-secret/cleanup table without
+production helpers, state, or service reads. Independent verification passed the
+full MCP race in 18.217s and package maintainability at 997 test lines and helper
+CC 15, and the scoped diff check passed; the exact final reviewed patch is
+SHA256 `7b5d4b3ee0b95481937f9e84fc94acddba6413b43a0d75ead502b6d083049af8`.
+Root independently reviewed the source, while commit, push, and new-artifact
+concurrency or failure proof remain pending. The earlier broad and narrow
+timeouts stay recorded failures with partial effects and are not retroactive
+completions; the larger task allowance is what allowed this task to finish and
+does not establish historical root causes or a controlled performance comparison,
+and no new CI, merge, or final-video success is claimed.
