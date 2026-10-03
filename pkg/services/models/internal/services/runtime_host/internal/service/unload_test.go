@@ -654,23 +654,25 @@ func TestIdleUnloadStopsRuntimeAfterLeaseRelease(t *testing.T) {
 		t.Fatalf("supplied scheduler duration/deadline = %s/%s, want %s/%s", timer.duration, timer.due, idleDuration, releasedAt.Add(idleDuration))
 	}
 	clock.advanceTo(timer.due.Add(-time.Nanosecond))
-	before, err := host.InspectModelHost(ctx, models.InspectModelHostRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"})
-	if err != nil || before.Host.ReadinessState != models.ReadinessStateReady || before.Host.LifecycleState != models.LifecycleStateLoaded || process.stopCalls.Load() != 0 {
-		t.Fatalf("before deadline %s: host=%#v err=%v stops=%d", timer.due, before, err, process.stopCalls.Load())
-	}
+	assertIdleHostState(t, host, ref, process, models.LifecycleStateLoaded, 0)
 	clock.advanceTo(timer.due)
 	awaitSignal(t, process.stopCompleted, "selected deadline did not complete process Stop")
 	awaitSignal(t, process.waited, "selected deadline did not complete process Wait")
-	after, err := host.InspectModelHost(ctx, models.InspectModelHostRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"})
-	if err != nil || after.Host.LifecycleState != models.LifecycleStateInstalled || after.Host.ReadinessState != models.ReadinessStateReady || process.stopCalls.Load() != 1 {
-		t.Fatalf("at deadline %s: host=%#v err=%v stops=%d", timer.due, after, err, process.stopCalls.Load())
-	}
+	assertIdleHostState(t, host, ref, process, models.LifecycleStateInstalled, 1)
 	clock.advanceTo(timer.due.Add(idleDuration))
 	stopped, err := host.StopModelHost(ctx, models.StopModelHostRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"})
 	if err != nil || stopped.Outcome != models.HostStopAlreadyStopped || stopped.Host.LifecycleState != models.LifecycleStateInstalled || process.stopCalls.Load() != 1 {
 		t.Fatalf("already unloaded: result=%#v err=%v stops=%d", stopped, err, process.stopCalls.Load())
 	}
 	t.Logf("C02/C03: supplied scheduler release=%s duration=%s due=%s; pre-deadline READY/LOADED, deadline INSTALLED (asset readiness remains READY), ALREADY_STOPPED, actual Stop calls=1", releasedAt, timer.duration, timer.due)
+}
+
+func assertIdleHostState(t *testing.T, host runtimehost.Service, ref models.RuntimeScopeRef, process *observedIdleProcess, lifecycle models.LifecycleState, stops int32) {
+	t.Helper()
+	inspected, err := host.InspectModelHost(context.Background(), models.InspectModelHostRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"})
+	if err != nil || inspected.Host.LifecycleState != lifecycle || inspected.Host.ReadinessState != models.ReadinessStateReady || process.stopCalls.Load() != stops {
+		t.Fatalf("scope %s: host=%#v err=%v stops=%d, want %s/READY stops=%d", ref, inspected, err, process.stopCalls.Load(), lifecycle, stops)
+	}
 }
 
 // All clock and timer state uses one lock; delivery is buffered and happens once.
