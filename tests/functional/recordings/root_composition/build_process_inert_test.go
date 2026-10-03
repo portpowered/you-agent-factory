@@ -16,11 +16,112 @@ import (
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// The public scoped stream is the observer here. Recording is disabled so this
+// witness makes no artifact or durable-flush claim.
+func TestRuntimeScopeCleanupPreservesPeerReconnect(t *testing.T) {
+	t.Parallel()
+	var service recordings.Service
+	support.BuildProcess(t, serviceedges.Edges{
+		RecordingsRootObserver: func(root recordings.Service) { service = root },
+	})
+	opening, ok := service.(recordings.RuntimeScopeService)
+	if !ok {
+		t.Fatal("Recordings root does not expose runtime opening")
+	}
+	at := time.Date(2026, 10, 3, 12, 34, 56, 123456789, time.UTC)
+	firstID := "019a07c0-0000-7000-8000-000000000011"
+	peerID := "019a07c0-0000-7000-8000-000000000012"
+	first := openPublicRuntimeScope(t, opening, firstID, at)
+	peer := openPublicRuntimeScope(t, opening, peerID, at)
+	firstEvent := appendPublicRuntimeFact(t, service, firstID, "first-runtime-fact", at)
+	peerEvent := appendPublicRuntimeFact(t, service, peerID, "peer-runtime-first", at)
+	firstEvent = assertPublicRuntimeDelivery(t, service, firstID, nil, firstEvent)
+	peerEvent = assertPublicRuntimeDelivery(t, service, peerID, nil, peerEvent)
+	if _, err := service.SubscribeFrom(t.Context(), recordings.SubscribeRequest{
+		Scope: recordings.CanonicalEventScope{FactorySessionID: peerID}, Cursor: &firstEvent.Cursor,
+	}); !errors.Is(err, recordings.ErrReconnectCursorUnavailable) {
+		t.Fatalf("foreign runtime cursor = %v, want ErrReconnectCursorUnavailable", err)
+	}
+	if err := first.Recorder.Finalize(at); err != nil {
+		t.Fatalf("Finalize first runtime: %v", err)
+	}
+	if _, err := service.SubscribeFrom(t.Context(), recordings.SubscribeRequest{
+		Scope: recordings.CanonicalEventScope{FactorySessionID: firstID},
+	}); !errors.Is(err, recordings.ErrReconnectCursorUnavailable) {
+		t.Fatalf("closed runtime reconnect = %v, want ErrReconnectCursorUnavailable", err)
+	}
+	second := appendPublicRuntimeFact(t, service, peerID, "peer-runtime-second", at.Add(time.Second))
+	second = assertPublicRuntimeDelivery(t, service, peerID, &peerEvent.Cursor, second)
+	if second.Cursor.StreamGenerationID != peerEvent.Cursor.StreamGenerationID || second.Sequence != peerEvent.Sequence+1 {
+		t.Fatalf("peer continuation lost ordered cursor: first=%#v second=%#v", peerEvent, second)
+	}
+	if err := peer.Recorder.Finalize(at.Add(time.Second)); err != nil {
+		t.Fatalf("Finalize peer runtime: %v", err)
+	}
+}
+
+type publicRuntimeTopology struct{}
+
+func (publicRuntimeTopology) RecordingInitialStructure(...factorydefinitions.RuntimeDefinitionLookup) recordings.InitialStructurePayload {
+	return recordings.InitialStructurePayload{}
+}
+
+func openPublicRuntimeScope(t *testing.T, opening recordings.RuntimeScopeService, sessionID string, at time.Time) recordings.RuntimeScopeResult {
+	t.Helper()
+	opened, err := opening.OpenRuntime(t.Context(), recordings.RuntimeScopeRequest{
+		Topology: publicRuntimeTopology{}, Now: func() time.Time { return at },
+		RecordingID: sessionID, FactorySessionID: sessionID,
+	})
+	if err != nil {
+		t.Fatalf("OpenRuntime(%s): %v", sessionID, err)
+	}
+	t.Cleanup(func() {
+		if err := opened.Recorder.Finalize(at); err != nil {
+			t.Errorf("runtime scope cleanup: %v", err)
+		}
+	})
+	return opened
+}
+
+func appendPublicRuntimeFact(t *testing.T, service recordings.Service, sessionID, id string, at time.Time) recordings.CanonicalEvent {
+	t.Helper()
+	result, err := service.Append(recordings.AppendRecordedEventRequest{Event: recordings.CanonicalEvent{
+		ID: recordings.CanonicalEventID(id), Scope: recordings.CanonicalEventScope{FactorySessionID: sessionID},
+		RecordedAt: at, Kind: "WORK_REQUEST", Payload: `{"type":"FACTORY_REQUEST_BATCH","works":[]}`,
+	}})
+	if err != nil {
+		t.Fatalf("Append(%s): %v", sessionID, err)
+	}
+	return result.Event
+}
+
+func assertPublicRuntimeDelivery(t *testing.T, service recordings.Service, sessionID string, cursor *recordings.CanonicalEventCursor, want recordings.CanonicalEvent) recordings.CanonicalEvent {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	result, err := service.SubscribeFrom(ctx, recordings.SubscribeRequest{
+		Scope: recordings.CanonicalEventScope{FactorySessionID: sessionID}, Cursor: cursor,
+	})
+	if err != nil {
+		t.Fatalf("SubscribeFrom(%s): %v", sessionID, err)
+	}
+	if result.RetainedEventCount != 1 {
+		t.Fatalf("selected retained events = %d, want one", result.RetainedEventCount)
+	}
+	outcome := result.Subscription.Next(ctx)
+	if outcome.Kind != recordings.SubscriptionEvent || (cursor != nil && outcome.Event.Cursor.StreamGenerationID != cursor.StreamGenerationID) {
+		t.Fatalf("selected runtime delivery = %#v, want %#v", outcome, want)
+	}
+	assertPublicHistoricalFact(t, outcome.Event, want)
+	return outcome.Event
+}
 
 // The local run command owns ~default. Its isolated profile is intentional;
 // explicit concurrent runtime scopes are characterized separately.
@@ -338,7 +439,27 @@ func TestFailedRecordingFinalFlushPreservesPeerHistory(t *testing.T) {
 	}
 	assertPublicHistoricalFact(t, history.Events[0], first)
 	assertPublicHistoricalFact(t, history.Events[1], second)
+	assertRecordingBindingReusePreservesHistory(t, service, peer)
 	assertReadOnlyPeerReplay(t, process, peerPath, &providerRuns)
+}
+
+func assertRecordingBindingReusePreservesHistory(t *testing.T, service recordings.Service, peer recordings.RecordingStatusFacts) {
+	t.Helper()
+	before, err := os.ReadFile(string(peer.Artifact))
+	if err != nil {
+		t.Fatalf("read selected artifact before conflicting reuse: %v", err)
+	}
+	_, err = service.BindRecording(recordings.BindRecordingRequest{
+		RecordingID: peer.RecordingID, Scope: peer.Scope,
+		Artifact: recordings.RecordingArtifactReference(filepath.Join(t.TempDir(), "conflicting.json")),
+	})
+	if !errors.Is(err, recordings.ErrRecordingBindingConflict) {
+		t.Fatalf("conflicting recording identity reuse = %v, want ErrRecordingBindingConflict", err)
+	}
+	after, err := os.ReadFile(string(peer.Artifact))
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatalf("conflicting reuse changed the selected artifact: %v", err)
+	}
 }
 
 func assertReadOnlyPeerReplay(t *testing.T, process support.Process, peerPath string, providerRuns *atomic.Int32) {
