@@ -1206,7 +1206,7 @@ No test runs `InvokeLocal` or `PullModelForScope` against two scopes in one Root
 
 **Actor and trigger:** CLI operator/API client; given controlled source scheduler and cursor store, trigger cron/script/hosted/watch event; stop/restart; fault cursor write.
 
-**Dependencies:** None.
+**Dependencies:** AM16 docs lane complete (independent review/current-main merge); continue from retained #2683/head `62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7`. No T20/WSV wait.
 
 **Parallel and shared-surface ownership:** All unrelated lanes run concurrently. This lane owns named provider functions and owner code. Composition steward integrates/regenerates this lane delta in its PR. T01 owns additive time fields; T02 coordinates logger fields with T01; T20 owns checker rules. Dependent lanes develop against proposed contracts before cutover.
 
@@ -1217,56 +1217,86 @@ No test runs `InvokeLocal` or `PullModelForScope` against two scopes in one Root
 
 **Implementation constraints:** Preserve event-first ownership, Go internal access, root peer contracts and isolated scoped state. Owner wire exposes focused aliases/providers; no new service locator or broad bag. Internal constructors take real required dependencies and neither validate nil repeatedly nor substitute defaults; retain domain validation/resource failure handling.
 
-**AM16 / T12 — deferred: needs operator decision.** The 2026-10-03T09:05Z operator amendment records the late private-contract conflict witnessed in `docs/temp/projects/flat-injection/reconciliation/wake-report68-20261003/t12-correction-evidence.md:5-15`. Retain draft [#2683](https://github.com/portpowered/you-agent-factory/pull/2683) at `62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7`; stories 002/003 and full F10/S01 remain incomplete. T12 owns source behavior, private contract placement and obsolete-helper removal; T20 owns service-root interface-count enforcement, the script_pollers baseline and deadcode measurement. A corrected private layout/packet needs operator disposition and consistent T12/T20 ownership before successor admission. No checker allowance, baseline debt, acceptance/API/persistence-policy change or implementation repair is authorized by this docs amendment. Release requires that decision and reviewed corrected packet, then the retained implementation successor's exact-head quality, full F10/S01 and independent review/merge. This hold does not block the amendment PR.
+**AM16 / T12 — approved private behavior-owner decomposition (binding 2026-10-03T10:20Z).** Authority: `C:/Users/andre/work/portos/infinite-you/docs/temp/operator-mailbox/responses/flat-injection.md`, Decision 2026-10-03T10:20Z; this supersedes the 09:05Z deferral only. Retain draft [#2683](https://github.com/portpowered/you-agent-factory/pull/2683) at `62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7`; its stories 002/003 and full F10/S01 remain incomplete. The separately authorized `fi-plan-amendment-am16-t12-20261003` docs lane depends on merged v1.1 #2685 and owns only this six-companion packet. The retained T12 successor depends on this docs lane complete; it does not wait for T20 or WSV. T12 owns implementation, same-PR stale script_pollers baseline deletion and obsolete-helper removal. T20 owns unchanged one-interface enforcement and measurement; deadcode allowance remains 0. No public API, configuration, event, persistence-policy or acceptance change is authorized. Native capability/provider/caller/removal pairs C01–C16 are canonical in [contracts.md](contracts.md#t12--automations-runtimesource-isolation). The docs author handoff requires final head pushed, open PR, CI started and blocking feedback addressed; independent AM16-DOC-VAL/REVIEW owns clean-room loopback, terminal CI and current-main merge. The successor still requires exact-head T12-F10 (F10a–m), T12-S01 and T12-G01/G02, independent review and merge. Historical partial evidence never substitutes for those gates.
 
-**Concrete decomposition:** Inject reconciler/source driver/cron/script/watch/hosted/cursor behavior independently. Extract source lifecycle driver before root/reconciler; retain keyed source/runtime cancellation/cursor state. Preserve durable-cursor-error-to-memory behavior; flattening alone preserves it. An explicit-failure policy is a separate follow-up outside this program (operator decision, 2026-10-02).
+**Concrete decomposition:** Follow C01–C16: recovery → script; cron/watch/hosted → lifecycle → reconciliation → owner → Root. SourceLifecycle and CursorScopes each have one private service root/interface and focused provider; runtime controls/scoped reads inline on existing Services. Lifecycle owns schedulerSources and runtime registration, never a parent-Service pointer. Retain keyed source/runtime cancellation/cursor state. Preserve durable-cursor-error-to-memory behavior; flattening alone preserves it. An explicit-failure policy is a separate follow-up outside this program (operator decision, 2026-10-02).
 
 **Contract and configuration excerpts:**
 
-Authored source: `pkg/services/automations/internal/service.go` / `Service`. Primary native delta below; core operation/activation/scope pairs are in contracts.md. Public config/REST/CLI/events remain unchanged.
+Authored source: `pkg/services/automations/internal/service.go; pkg/services/automations/wire/wire.go`. Source basis: retained #2683/62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7. Owner: T12. Primary C09 pair follows; contracts.md C01–C16 binds all capability/provider/caller/removal shapes. Public config/REST/CLI/events remain unchanged.
 
 Current:
 
 ```go
-type Service struct {
-	loggerValue        *zap.Logger
-	clock              Clock
-	commandRunnerEdge  platformprocess.CommandRunner
-	workflowID         string
-	defaultFactoryDir  string
-	hostedPollers      automations.HostedPollers
-	resolveTemplates   workers.TemplateFieldResolver
-	executionPolicy    factorydefinitions.WorkstationExecutionPolicyService
-	cursorFileSystem   scriptpollerswire.CursorPersistenceFileSystem
-	reconciler         reconciliation.Service
-	scriptPollers      scriptpollers.Service
-	cron               cron.Service
-	filesystemWatchers filesystemwatchers.Service
-	schedulerMu        sync.Mutex
-	schedulerSources   map[automations.SourceIdentity]*schedulerSource
-	runtimeMu          sync.Mutex
-	runtimes           map[string]*runtimeInstance
-	runtimeActivating  map[string]struct{}
-}
+func newService(
+	logger *zap.Logger,
+	clock Clock,
+	commandRunner platformprocess.CommandRunner,
+	workflowID string,
+	defaultFactoryDir string,
+	hostedPollers automations.HostedPollers,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
+	cronService cron.Service,
+	filesystemWatchers filesystemwatchers.Service,
+	pollers scriptpollers.Service,
+	cursors scriptpollers.CursorScopes,
+) *Service
+
+func NewRoot(
+	logger *zap.Logger,
+	clock automations.Clock,
+	commandRunner platformprocess.CommandRunner,
+	workflowID string,
+	defaultFactoryDir string,
+	hosted HostedSourceInputs,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+) (automations.Root, error)
+
+func NewService(
+	logger *zap.Logger,
+	clock automations.Clock,
+	commandRunner platformprocess.CommandRunner,
+	workflowID string,
+	defaultFactoryDir string,
+	hostedPollers automations.HostedPollers,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+) (automations.Service, error)
 ```
 
 Proposed:
 
 ```go
-// Retain Automations root type and keyed runtime/source state.
-// Its construction no longer creates these behavior owners.
-func newService(
- logger *zap.Logger,
- clock Clock,
- reconciler reconciliation.Service,
- scriptPollers scriptpollers.Service,
- cronService cron.Service,
- filesystemWatchers filesystemwatchers.Service,
- hostedPollers automations.HostedPollers,
-) *Service
+// automations/internal/service.go
+func newService(logger *zap.Logger, clock Clock,
+	lifecycle sourcelifecycle.SourceLifecycle,
+	reconciler reconciliation.Service, scriptPollers scriptpollers.Service,
+	cronService cron.Service, filesystemWatchers filesystemwatchers.Service,
+	hostedPollers automations.HostedPollers) *Service
+func New(logger *zap.Logger, clock Clock,
+	lifecycle sourcelifecycle.SourceLifecycle,
+	reconciler reconciliation.Service, scriptPollers scriptpollers.Service,
+	cronService cron.Service, filesystemWatchers filesystemwatchers.Service,
+	hostedPollers automations.HostedPollers) *Service
+
+// automations/wire/wire.go
+type Owner = automationinternal.Service
+type Reconciliation = reconciliation.Service
+type ScriptPollers = scriptpollers.Service
+type Cron = cron.Service
+type FilesystemWatchers = filesystemwatchers.Service
+type Clock = automationinternal.Clock
+func NewService(logger *zap.Logger, clock Clock, lifecycle SourceLifecycle,
+	reconciler Reconciliation, scriptPollers ScriptPollers, cronService Cron,
+	filesystemWatchers FilesystemWatchers,
+	hostedPollers automations.HostedPollers) *Owner
+func NewRoot(service *Owner) automations.Root
 ```
 
-Generated outputs and consumers: owning fixtures/provider aliases and canonical `pkg/wire/wire_gen.go` via `make generate-wire`. No public clients change.
+Generated outputs and consumers: focused owner providers/fixtures and canonical `pkg/wire/wire_gen.go` via `make generate-wire`; no public clients/migration. Root configures lifecycle facts before runtime-keyed Start/Wait; Stop/Wait joins before release with old-instance guards (C15). T12 deletes obsolete constructors/helpers C10 and stale baseline C11 in the same PR.
 
 **Validation-review coverage and scope (2026-10-02):**
 
@@ -1290,7 +1320,27 @@ Generated outputs and consumers: owning fixtures/provider aliases and canonical 
 
 **Durable-cursor fallback (`service.go:147-153`):** `NewDurableCursorRecorder` fails only on a nil filesystem or an empty directory, and both are already guarded. The memory fallback is unreachable today. Record that instead of writing a test, and preserve current behavior. Making durable-cursor failure explicit is a separate follow-up outside this program (operator decision, 2026-10-02); it is not a task here and this lane must not change it.
 
-**Shared-row ownership:** this lane owns the Automations rows that inventory assigns to T21 (`supervisorClock`) and T23 (cursor selection, logger fallback, script-poller getters, watcher/debounce clock fallbacks). It also owns the host-timer additions `cron_watcher.go:286` and `watcher.go:620`. Where Automations needs `AfterFunc` or clockwork behavior beyond the shared `TimerSource` (`Now`/`NewTimer`/`After`, added by T01), this lane declares the smallest owner-local interface over that seam; T01 publishes no per-owner adapters.
+**Shared-row ownership:** this lane owns the Automations rows that inventory assigns to T21 (`supervisorClock`) and T23 (cursor selection, logger fallback, script-poller getters, watcher/debounce clock fallbacks). It also owns the host-timer additions `cron_watcher.go:286` and `watcher.go:620`. Where Automations needs `AfterFunc` or clockwork behavior beyond the shared `TimerSource` (`Now`/`NewTimer`/`After`, added by T01), this lane uses the existing selected clockwork.Clock view through owner Wire (C06), without adding Scheduler as a second interface in script_pollers; T01 publishes no per-owner adapters.
+
+**Retained full T12-F10 matrix (required on successor head):**
+
+Use reusable inert `root.BuildProcess` and public `Process.Execute`, explicit scenario-owned Factory Sessions, isolated profiles/directories/routes/events, and command-runner effects through `edges.Edges`. Independent hosted/session scenarios run in parallel; the Current Factory watcher cohort retains only its required local serialization. Observe public Work/events/status/cursor and controlled effects, never owner pointers. No built CLI in functional cells; VCS/OS proof belongs to a separate prebuilt integration witness.
+
+| ID | Given | When | Then |
+| --- | --- | --- | --- |
+| F10a | Valid inert process and configured cron source with controlled scheduler | Activate an explicit session and advance one due tick | Exactly the characterized scheduled Work identity/payload/state appears; no execution/admission before activation |
+| F10b | Script source with controlled command output containing Work and advancing cursor/checkpoint | Start the explicit session, complete one command and read cursor through public API | Work is admitted and the exact committed opaque facts are returned; resume command receives matching env facts |
+| F10c | Hosted source with controlled HTTP success/secret/checkpoint edges | Activate and return one representative external item | Normalized Work/result belongs to that session and configured source; no real remote request occurs |
+| F10d | Owned watcher root with one valid input | Preseed/start watch then deliver a new valid input event | Work reaches the authored customer state with preserved channel/execution correlation |
+| F10e | A and B live with independently gated triggers, repeated for cron/script/hosted/watch because each has a distinct shutdown edge | Stop A, observe acknowledgement and joined terminal state, send stopped A and live B triggers; reactivate A and trigger again | No A admission after stop/join; B completes its next Work; reactivated A admits its next eligible Work under existing identity/cursor semantics; cancellation is attributable to A only |
+| F10f | A/B active and script A has a committed cursor/checkpoint | Deactivate A, advance time, reactivate the same runtime ID and Factory directory | A resumes exact last committed facts with no stopped-interval admission; B continues |
+| F10g | A script Work has been admitted and a prior cursor is committed | Fault A cursor replacement, observe failure, then allow the next controlled attempt | Work remains admitted; existing error/diagnostic is visible; public cursor still reads prior commit and next command resumes it; peer progresses |
+| F10h | Active script/hosted sources return representative empty output | Complete a poll cycle | No new Work appears and no cursor is advanced without the existing advancement preconditions |
+| F10i | Hosted source fails one request then succeeds and peer is live | Advance selected retry schedule and release the successful response | Existing redacted failure/retry observation, one logical admitted Work under existing identity policy, peer progresses |
+| F10j | A committed cursor is available | Read through source/cursor API with a stale ExpectedCursor | Existing typed conflict is returned; committed facts remain unchanged and no extra command/admission is caused by the read |
+| F10k | A watcher already admitted a file identity | Deliver its repeated observation; stop/restart only as supported by characterized watcher facts | No duplicate logical Work for the retained identity, existing watcher cursor/handled-state recovery holds |
+| F10l | A local watcher and customer-selected Current Factory | Switch Current Factory using the existing public journey | Subsequent file Work executes in the new Current Factory; prior generation stops; retain TestWatcherExecutionFollowsCurrentFactorySwitch with -short=false |
+| F10m | Hosted source has a prior checkpoint and newly admitted external Work; peer source remains live | Fault checkpoint Save after admission, observe its existing error/restart, then release the next controlled poll | Admitted Work remains; no checkpoint success is claimed; next hosted query resumes prior checkpoint under existing identity/retry policy; redacted error and peer progress remain observable |
 
 **Focused commands:**
 - `go test ./pkg/services/automations/... ./pkg/wire`
@@ -1310,8 +1360,8 @@ Generated outputs and consumers: owning fixtures/provider aliases and canonical 
 - Behavioral witness: F10, observed public result/events/replay or supported effect calls. For S01 this is static evidence, not functional behavior.
 - Executable-spine effect: preserve; shared effect/checker enablers extend fidelity.
 - Required evidence: unit, controlled; `go test ./pkg/services/automations/...`. Proves owned transitions/validation/cleanup or checker fixtures; does not prove whole composition.
-- Required evidence: functional, controlled; the focused `go run ./cmd/functionallane -root <dir>/...` runs named under "Validation-review coverage and scope" (the lane accepts `-root`, `-short`, `-count`, `-jobs`, `-timeout`; there is no `-run`), then `make test-functional` before opening the PR. Cases guarded by `SkipLongFunctional` need `-short=false`; `functionallong`-tagged cases need `make test-functional-long`. Proves named public behavior; does not prove OS signals or remote availability. T20 instead uses checker/static evidence; T22 instead runs dedicated P01/I01 procedures from plan section 7.
-- Static/generation: `make pkg-boundary logging-boundary-check durable-runtime-construction-check service-cycle-check pkg-maint pkg-file-count`. `pkg-file-count` is exact and deletion-only: `pkg/wire` is pinned at 50 files in `docs/internal/baselines/backend-package-file-count.json`, and owner packages are limited to 15 files. Add providers to existing files or to owner `wire` packages; a deleted file lowers its baseline entry in the same PR, and the lane must rebase and re-run immediately before merge because concurrent lanes edit the same JSON; changed graph also `make wire-smoke`; PR `make lint` and appropriate `make verify-fast`/`make verify-pr`. Proves actual source/generation properties only.
+- Required evidence: functional, controlled; the focused `go run ./cmd/functionallane -root <dir>/...` runs named under "Validation-review coverage and scope" (the lane accepts `-root`, `-short`, `-count`, `-jobs`, `-timeout`; there is no `-run`), publish after narrow owner checks; required CI owns broad verification, with no local `make verify-pr`, `make test-functional` or `make test-full` push gate on the shared host. Cases guarded by `SkipLongFunctional` need `-short=false`; `functionallong`-tagged cases need `make test-functional-long`. Proves named public behavior; does not prove OS signals or remote availability. T20 instead uses checker/static evidence; T22 instead runs dedicated P01/I01 procedures from plan section 7.
+- Static/generation: `make pkg-boundary logging-boundary-check durable-runtime-construction-check service-cycle-check pkg-maint pkg-file-count`. `pkg-file-count` is exact and deletion-only: `pkg/wire` is pinned at 50 files in `docs/internal/baselines/backend-package-file-count.json`, and owner packages are limited to 15 files. Add providers to existing files or to owner `wire` packages; a deleted file lowers its baseline entry in the same PR, and the lane must rebase and re-run immediately before merge because concurrent lanes edit the same JSON; changed graph also `make wire-smoke`; narrow local lint and required own-head CI; broad PR verification belongs to CI. Proves actual source/generation properties only.
 - Highest feasible: controlled composed-process functional for service lanes; AST fixture/repository scan for T20; local real prebuilt integration and dedicated stress for T22.
 - Unproven edges: integrated journey/ordering -> VAL01; OS signal/pipe/flush -> I01; performance/retention -> P01; paid availability outside scope.
 - Test-layer design: results/events/effects as observers, shared inert BuildProcess where safe, explicit owned sessions before opening, isolated directories/routes/streams/fakes, Process.Execute by default. No built binary in functional tests, sleeps/global invocation locks or constructor counts. Unit input permutations stay local; I01 uses artifact supplied by build owner.
