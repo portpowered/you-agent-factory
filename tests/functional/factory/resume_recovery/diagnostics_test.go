@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	definitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -26,9 +29,20 @@ import (
 // This is the scoped TEST-SAFETY-001 exception; both execution edges also deny
 // fallback. All cases reuse one process and own their profile and session.
 func TestResumeRecovery(t *testing.T) {
+	var routes sync.Map
 	process := support.BuildProcess(t, serviceedges.Edges{
 		ProviderCommandRunner: deniedRunner{}, ScriptCommandRunner: deniedRunner{},
 		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			if route, ok := routes.Load(request.Port); ok {
+				server := httptest.NewServer(request.Handler)
+				defer server.Close()
+				if request.OnBound != nil {
+					request.OnBound(platformhttpserver.Binding{Port: server.Listener.Addr().(*net.TCPAddr).Port})
+				}
+				route.(chan string) <- server.URL
+				<-ctx.Done()
+				return nil
+			}
 			// Transport binding precedes Runtime readiness. Keep that independent
 			// edge alive until startup cancels it so it cannot mask restore errors.
 			if request.OnBound != nil {
@@ -37,6 +51,22 @@ func TestResumeRecovery(t *testing.T) {
 			<-ctx.Done()
 			return nil
 		},
+	})
+	t.Run("F01/consumed-accepted-cron", func(t *testing.T) {
+		t.Parallel()
+		assertAcceptedCronBoard(t, process, &routes)
+	})
+	t.Run("F06/missing-cron-identity", func(t *testing.T) {
+		t.Parallel()
+		assertRejectedResume(t, process, false, missingCronIdentityPayload, []string{"historical-cron", "no current place occupancy"})
+	})
+	t.Run("F02/consumed-failed-cron", func(t *testing.T) {
+		t.Parallel()
+		assertFailedCronBoard(t, process, &routes)
+	})
+	t.Run("F07/successor", func(t *testing.T) {
+		t.Parallel()
+		assertFailedCronSuccessor(t, process, &routes)
 	})
 	for _, debug := range []bool{false, true} {
 		t.Run(fmt.Sprintf("F05/debug=%t", debug), func(t *testing.T) {
@@ -47,11 +77,33 @@ func TestResumeRecovery(t *testing.T) {
 }
 
 func assertCorruptResumeDiagnostic(t *testing.T, process support.Process, debug bool) {
+	assertRejectedResume(t, process, debug, corruptResumePayload, []string{"work-corrupt", "task:missing", "not present in the current Factory topology"})
+}
+
+func missingCronIdentityPayload(t *testing.T, session string) []byte {
+	var artifact definitions.ReplayArtifact
+	if err := json.Unmarshal(cronPayload(t, session, workers.OutcomeFailed), &artifact); err != nil {
+		t.Fatal(err)
+	}
+	var admission work.WorkRequestEventPayload
+	if err := json.Unmarshal(artifact.Events[1].Payload, &admission); err != nil {
+		t.Fatal(err)
+	}
+	admission.Works[0].Tags = nil
+	artifact.Events[1].Payload, _ = json.Marshal(admission)
+	data, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func assertRejectedResume(t *testing.T, process support.Process, debug bool, fixture func(*testing.T, string) []byte, wants []string) {
 	t.Helper()
 	dir, home := support.ScaffoldFactory(t, corruptResumeFactory()), t.TempDir()
 	inputPath, successor := filepath.Join(dir, "corrupt.json"), filepath.Join(dir, "successor.jsonl")
 	sessionID := uuid.NewString()
-	payload := corruptResumePayload(t, sessionID)
+	payload := fixture(t, sessionID)
 	if err := os.WriteFile(inputPath, payload, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +135,7 @@ func assertCorruptResumeDiagnostic(t *testing.T, process support.Process, debug 
 	if string(response.Code) != "SERVER_START_FAILED" || response.Family != factoryapi.ErrorFamilyInternalServerError {
 		t.Fatalf("response = %#v, want SERVER_START_FAILED/internal", response)
 	}
-	for _, want := range []string{"work-corrupt", "task:missing", "not present in the current Factory topology"} {
+	for _, want := range wants {
 		if !strings.Contains(response.Message, want) {
 			t.Fatalf("resume diagnostic %q missing %q", response.Message, want)
 		}

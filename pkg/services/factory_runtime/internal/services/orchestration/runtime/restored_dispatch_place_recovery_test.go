@@ -798,7 +798,11 @@ func syntheticFailedCronRestoreState() *interfaces.FactoryWorldState {
 		InputWorkItems: []work.FactoryWorkItem{cron}, OutputWorkItems: []work.FactoryWorkItem{output},
 		Result: interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed), Error: "synthetic failure"},
 	}
+	lineage := work.WorkPayloadLineageProjection{}
+	lineage.RecordWorkRequestSnapshot(1, "synthetic-request", cron)
+	lineage.RecordConsumedInputSnapshot(completion.DispatchID, cron)
 	return &interfaces.FactoryWorldState{
+		PayloadLineage:      lineage,
 		WorkItemsByID:       map[string]work.FactoryWorkItem{cron.ID: cron, output.ID: output},
 		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{cron.ID: cron},
 		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
@@ -809,15 +813,25 @@ func syntheticFailedCronRestoreState() *interfaces.FactoryWorldState {
 	}
 }
 
-func TestNew_CharacterizesConsumedFailedCronMissingPlacement(t *testing.T) {
+func TestNew_RestoresConsumedFailedCronWithoutReseeding(t *testing.T) {
 	t.Parallel()
 	restored := syntheticFailedCronRestoreState()
 	beforeInput := restored.WorkItemsByID["synthetic-cron-input"]
 	beforeOutput := restored.PlaceOccupancyByID["task:failed"]
-	_, err := newTestFactory(withNet(buildCronRestoreNet()), withRestoredWorldState(restored))
-	want := `restore Factory Runtime Work board: restore Work board: Work "synthetic-cron-input" has no current place occupancy`
-	if err == nil || err.Error() != want {
-		t.Fatalf("New error = %v, want %q", err, want)
+	logger := &recordingLogger{}
+	f, err := newTestFactory(withNet(buildCronRestoreNet()), withLogger(logger), withRestoredWorldState(restored))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if markingContainsWorkAtPlace(&snapshot.Marking, beforeInput.ID, interfaces.SystemTimePendingPlaceID) {
+		t.Fatal("historical cron input was reseeded")
+	}
+	if !markingContainsWorkAtPlace(&snapshot.Marking, "synthetic-downstream-task", "task:failed") {
+		t.Fatal("restore lost downstream failed Work")
 	}
 	if !reflect.DeepEqual(restored.WorkItemsByID[beforeInput.ID], beforeInput) ||
 		!reflect.DeepEqual(restored.PlaceOccupancyByID["task:failed"], beforeOutput) {
@@ -825,6 +839,88 @@ func TestNew_CharacterizesConsumedFailedCronMissingPlacement(t *testing.T) {
 	}
 	if len(restored.CompletedDispatches) != 1 || len(restored.FailedDispatches) != 1 || len(restored.ActiveDispatches) != 0 {
 		t.Fatal("failed restore changed completed, failed, or active dispatch history")
+	}
+	warnings := 0
+	for _, entry := range logger.entries {
+		if entry.fields["event"] == "run.restore.disposition" {
+			warnings++
+			if entry.level != "warn" || entry.fields["work_id"] != beforeInput.ID ||
+				entry.fields["dispatch_id"] != "synthetic-failed-dispatch" || entry.fields["outcome"] != "FAILED" {
+				t.Fatalf("recovery warning = %#v", entry)
+			}
+		}
+	}
+	if warnings != 1 {
+		t.Fatalf("disposition warnings = %d, want one", warnings)
+	}
+}
+
+func TestRestoreConsumedFailedCronRejectsAmbiguousHistory(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		mutate func(*interfaces.FactoryWorldState)
+	}{
+		{"missing dispatch identity", func(s *interfaces.FactoryWorldState) { s.CompletedDispatches[0].DispatchID = "" }},
+		{"missing input token", func(s *interfaces.FactoryWorldState) { s.CompletedDispatches[0].ConsumedInputs[0].TokenID = "" }},
+		{"mismatched outcome", func(s *interfaces.FactoryWorldState) { s.CompletedDispatches[0].Result.Outcome = "ACCEPTED" }},
+		{"missing cron identity", func(s *interfaces.FactoryWorldState) {
+			item := s.WorkItemsByID["synthetic-cron-input"]
+			item.Tags = nil
+			s.WorkItemsByID[item.ID] = item
+			s.ActiveWorkItemsByID[item.ID] = item
+		}},
+		{"wrong cron workstation", func(s *interfaces.FactoryWorldState) {
+			item := s.WorkItemsByID["synthetic-cron-input"]
+			item.Tags[interfaces.TimeWorkTagKeyCronWorkstation] = "other-workstation"
+		}},
+		{"duplicate consumed input", func(s *interfaces.FactoryWorldState) {
+			s.CompletedDispatches[0].ConsumedInputs = append(s.CompletedDispatches[0].ConsumedInputs, s.CompletedDispatches[0].ConsumedInputs[0])
+		}},
+		{"missing matched input", func(s *interfaces.FactoryWorldState) { s.CompletedDispatches[0].ConsumedInputs = nil }},
+		{"wrong input place", func(s *interfaces.FactoryWorldState) {
+			s.CompletedDispatches[0].ConsumedInputs[0].PlaceID = "task:init"
+		}},
+		{"no downstream output", func(s *interfaces.FactoryWorldState) { s.CompletedDispatches[0].OutputWorkItems = nil }},
+		{"multiple completions", func(s *interfaces.FactoryWorldState) {
+			s.CompletedDispatches = append(s.CompletedDispatches, s.CompletedDispatches[0])
+		}},
+		{"contradictory failure", func(s *interfaces.FactoryWorldState) { s.FailedDispatches[0].DispatchID = "other-dispatch" }},
+		{"incomplete lineage", func(s *interfaces.FactoryWorldState) { s.PayloadLineage = work.WorkPayloadLineageProjection{} }},
+		{"later admission", func(s *interfaces.FactoryWorldState) {
+			s.PayloadLineage.RecordWorkRequestSnapshot(9, "later-request", s.WorkItemsByID["synthetic-cron-input"])
+		}},
+		{"later move", func(s *interfaces.FactoryWorldState) {
+			s.WorkStateChangesByWorkID = map[string][]interfaces.FactoryWorldWorkStateChangeRecord{"synthetic-cron-input": {{WorkID: "synthetic-cron-input", Tick: 9}}}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := syntheticFailedCronRestoreState()
+			tc.mutate(s)
+			_, err := newTestFactory(withNet(buildCronRestoreNet()), withRestoredWorldState(s))
+			if err == nil {
+				t.Fatal("ambiguous failed cron history was silently recovered")
+			}
+		})
+	}
+}
+
+func TestRestoreFailedCronSameWorkOutputRemainsLive(t *testing.T) {
+	t.Parallel()
+	s := syntheticFailedCronRestoreState()
+	item := s.WorkItemsByID["synthetic-cron-input"]
+	s.CompletedDispatches[0].OutputWorkItems = []work.FactoryWorkItem{item}
+	f, err := newTestFactory(withNet(buildCronRestoreNet()), withRestoredWorldState(s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !markingContainsWorkAtPlace(&snapshot.Marking, item.ID, interfaces.SystemTimePendingPlaceID) {
+		t.Fatal("same-Work retry output lost its live placement")
 	}
 }
 

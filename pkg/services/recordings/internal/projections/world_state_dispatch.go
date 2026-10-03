@@ -7,7 +7,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -20,7 +19,7 @@ func (r *factoryWorldReducer) applyDispatchCreated(event interfaces.FactoryEvent
 	inputWorkIDs := dispatchInputWorkIDs(payload, event.Context.WorkIDs)
 	workIDs := make([]string, 0, len(inputWorkIDs))
 	traceIDs := make([]string, 0, len(inputWorkIDs))
-	inputWorkItems := make([]workdomain.FactoryWorkItem, 0, len(inputWorkIDs))
+	inputWorkItems := make([]work.FactoryWorkItem, 0, len(inputWorkIDs))
 	inputs := make([]interfaces.WorkstationInput, 0, len(inputWorkIDs))
 	for _, workID := range inputWorkIDs {
 		if workID == "" {
@@ -28,7 +27,7 @@ func (r *factoryWorldReducer) applyDispatchCreated(event interfaces.FactoryEvent
 		}
 		item, ok := r.stateValue.WorkItemsByID[workID]
 		if !ok {
-			item = workdomain.FactoryWorkItem{ID: workID}
+			item = work.FactoryWorkItem{ID: workID}
 		}
 		if item.TraceID == "" {
 			item.TraceID = firstString(event.Context.TraceIDs)
@@ -334,8 +333,8 @@ func (r *factoryWorldReducer) applyDispatchOutputWork(
 	payload workerexecution.DispatchResponseEventPayload,
 	workIDs []string,
 	traceIDs []string,
-) ([]workdomain.FactoryWorkItem, []string, []string) {
-	outputWorkItems := make([]workdomain.FactoryWorkItem, 0, len(sliceValue(payload.OutputWork)))
+) ([]work.FactoryWorkItem, []string, []string) {
+	outputWorkItems := make([]work.FactoryWorkItem, 0, len(sliceValue(payload.OutputWork)))
 	inputWorkItems := dispatchInputWorkItems(dispatch)
 	for index, eventWork := range sliceValue(payload.OutputWork) {
 		item := r.dispatchOutputWorkItem(dispatch, payload, factoryWorkItemFromEventWork(eventWork))
@@ -362,10 +361,10 @@ func (r *factoryWorldReducer) applyDispatchOutputWork(
 func (r *factoryWorldReducer) dispatchOutputWorkItem(
 	dispatch interfaces.FactoryWorldDispatch,
 	payload workerexecution.DispatchResponseEventPayload,
-	item workdomain.FactoryWorkItem,
-) workdomain.FactoryWorkItem {
+	item work.FactoryWorkItem,
+) work.FactoryWorkItem {
 	if item.ID == "" {
-		return workdomain.FactoryWorkItem{}
+		return work.FactoryWorkItem{}
 	}
 	explicitState := item.State != ""
 	previousPlaceID := r.workPlaces[item.ID]
@@ -389,7 +388,7 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 	dispatch interfaces.FactoryWorldDispatch,
 	workIDs []string,
 	traceIDs []string,
-	outputWorkItems []workdomain.FactoryWorkItem,
+	outputWorkItems []work.FactoryWorkItem,
 ) interfaces.FactoryWorldDispatchCompletion {
 	inputWorkItems := dispatchInputWorkItems(dispatch)
 	latestAttempt := r.latestInferenceAttemptForDispatch(dispatchID)
@@ -454,6 +453,7 @@ func (r *factoryWorldReducer) recordDispatchCompletionState(
 	if payload.Outcome == workerexecution.OutcomeFailed {
 		r.stateValue.FailedDispatches = append(r.stateValue.FailedDispatches, completion)
 		r.recordFailedCompletion(completion)
+		r.recordConsumedFailedCronInputs(completion)
 	}
 	for _, traceID := range completion.TraceIDs {
 		r.addTraceDispatch(traceID, dispatchID)
@@ -488,7 +488,7 @@ func (r *factoryWorldReducer) appendProviderSessionRecord(
 func dispatchCurrentChainingTraceID(
 	contextCurrent *string,
 	payloadCurrent *string,
-	inputWorkItems []workdomain.FactoryWorkItem,
+	inputWorkItems []work.FactoryWorkItem,
 ) string {
 	if current := stringValue(contextCurrent); current != "" {
 		return current
@@ -502,7 +502,7 @@ func dispatchCurrentChainingTraceID(
 func dispatchPreviousChainingTraceIDs(
 	contextPrevious *[]string,
 	payloadPrevious *[]string,
-	inputWorkItems []workdomain.FactoryWorkItem,
+	inputWorkItems []work.FactoryWorkItem,
 ) []string {
 	if previous := cloneStringSlice(sliceValue(contextPrevious)); len(previous) > 0 {
 		return work.CanonicalChainingTraceIDs(previous)
@@ -517,7 +517,7 @@ func completedDispatchCurrentChainingTraceID(
 	contextCurrent *string,
 	payloadCurrent *string,
 	dispatch interfaces.FactoryWorldDispatch,
-	inputWorkItems []workdomain.FactoryWorkItem,
+	inputWorkItems []work.FactoryWorkItem,
 ) string {
 	if current := stringValue(contextCurrent); current != "" {
 		return current
@@ -535,7 +535,7 @@ func completedDispatchPreviousChainingTraceIDs(
 	contextPrevious *[]string,
 	payloadPrevious *[]string,
 	dispatch interfaces.FactoryWorldDispatch,
-	inputWorkItems []workdomain.FactoryWorkItem,
+	inputWorkItems []work.FactoryWorkItem,
 ) []string {
 	if previous := cloneStringSlice(sliceValue(contextPrevious)); len(previous) > 0 {
 		return work.CanonicalChainingTraceIDs(previous)
@@ -571,8 +571,8 @@ func (r *factoryWorldReducer) recordFailedCompletion(completion interfaces.Facto
 
 func dispatchInputWorkItems(
 	dispatch interfaces.FactoryWorldDispatch,
-) []workdomain.FactoryWorkItem {
-	items := make([]workdomain.FactoryWorkItem, 0, len(dispatch.Inputs))
+) []work.FactoryWorkItem {
+	items := make([]work.FactoryWorkItem, 0, len(dispatch.Inputs))
 	for _, input := range dispatch.Inputs {
 		if input.WorkItem == nil || input.WorkItem.ID == "" {
 			continue
@@ -675,7 +675,7 @@ func (r *factoryWorldReducer) applyWorkStateChange(payload interfaces.WorkStateC
 
 	item, ok := r.stateValue.WorkItemsByID[workID]
 	if !ok {
-		item = workdomain.FactoryWorkItem{ID: workID}
+		item = work.FactoryWorkItem{ID: workID}
 	}
 	if payload.WorkTypeName != "" {
 		item.WorkTypeID = firstNonEmpty(item.WorkTypeID, payload.WorkTypeName)
@@ -706,7 +706,7 @@ func (r *factoryWorldReducer) applyWorkStateChange(payload interfaces.WorkStateC
 	}
 }
 
-func (r *factoryWorldReducer) recordFailedWorkDetail(completion interfaces.FactoryWorldDispatchCompletion, item workdomain.FactoryWorkItem) {
+func (r *factoryWorldReducer) recordFailedWorkDetail(completion interfaces.FactoryWorldDispatchCompletion, item work.FactoryWorkItem) {
 	if item.ID == "" {
 		return
 	}
@@ -717,7 +717,7 @@ func (r *factoryWorldReducer) recordFailedWorkDetail(completion interfaces.Facto
 	r.recordWorkFailureDetail(completion, item)
 }
 
-func (r *factoryWorldReducer) recordWorkFailureDetail(completion interfaces.FactoryWorldDispatchCompletion, item workdomain.FactoryWorkItem) {
+func (r *factoryWorldReducer) recordWorkFailureDetail(completion interfaces.FactoryWorldDispatchCompletion, item work.FactoryWorkItem) {
 	r.stateValue.FailureDetailsByWorkID[item.ID] = interfaces.FactoryWorldFailureDetail{
 		DispatchID:              completion.DispatchID,
 		TransitionID:            completion.TransitionID,

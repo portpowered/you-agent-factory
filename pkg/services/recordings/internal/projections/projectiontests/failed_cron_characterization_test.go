@@ -9,7 +9,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-func TestReconstructFactoryWorldState_CharacterizesConsumedFailedCronStillActive(t *testing.T) {
+func TestReconstructFactoryWorldState_ConsumedFailedCronRetainsHistoryWithoutLiveOwnership(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	cron := work.FactoryWorkItem{
@@ -44,8 +44,8 @@ func TestReconstructFactoryWorldState_CharacterizesConsumedFailedCronStillActive
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
-	if _, exists := state.ActiveWorkItemsByID[cron.ID]; !exists {
-		t.Fatal("pre-fix projection no longer retains consumed failed cron input as active")
+	if _, exists := state.ActiveWorkItemsByID[cron.ID]; exists {
+		t.Fatal("consumed failed cron input remains falsely active")
 	}
 	if _, exists := state.WorkItemsByID[cron.ID]; !exists || len(state.ActiveDispatches) != 0 {
 		t.Fatal("projection lost historical input or retained completed dispatch ownership")
