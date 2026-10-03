@@ -32,8 +32,8 @@ func TestGetCurrentFactoryBySessionId_EncodesFakeRootResult(t *testing.T) {
 			Snapshot: mustEditableFactorySnapshot(t, factory),
 		},
 	}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root},
+	handler := factorydefinitionshttp.NewHandler(
+		root, factorydefinitionshttp.NewTopologyValidation(root),
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -100,8 +100,8 @@ func TestSaveCurrentFactoryBySessionId_RejectsInvalidPayloadBeforeRootInvoked(t 
 			t.Parallel()
 
 			root := &capturingCurrentFactoryRootFake{}
-			handler := factorydefinitionshttp.NewHandlerFromRoot(
-				factorydefinitionshttp.RootBinding{Definitions: root},
+			handler := factorydefinitionshttp.NewHandler(
+				root, factorydefinitionshttp.NewTopologyValidation(root),
 				zap.NewNop(),
 			)
 			recorder := httptest.NewRecorder()
@@ -131,8 +131,8 @@ func TestSaveCurrentFactoryBySessionId_DecodesFactoryAndInvokesFakeRoot(t *testi
 			Snapshot: mustEditableFactorySnapshot(t, mustFactoryFromJSON(t, `{"name":"beta","workTypes":[],"workstations":[],"workers":[]}`)),
 		},
 	}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root},
+	handler := factorydefinitionshttp.NewHandler(
+		root, factorydefinitionshttp.NewTopologyValidation(root),
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -185,8 +185,8 @@ func TestListPackagedFactories_MapsStableCatalogAndArtifacts(t *testing.T) {
 			"@you/alpha": packagedFactoryDefinition("@you/alpha", "builtin-alpha", "name: alpha\n"),
 		},
 	}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root},
+	handler := factorydefinitionshttp.NewHandler(
+		root, factorydefinitionshttp.NewTopologyValidation(root),
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -234,8 +234,8 @@ func TestListPackagedFactories_EmitsEmptyCollection(t *testing.T) {
 			Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{},
 		},
 	}
-	handler := factorydefinitionshttp.NewHandlerFromRoot(
-		factorydefinitionshttp.RootBinding{Definitions: root},
+	handler := factorydefinitionshttp.NewHandler(
+		root, factorydefinitionshttp.NewTopologyValidation(root),
 		zap.NewNop(),
 	)
 	recorder := httptest.NewRecorder()
@@ -264,8 +264,8 @@ func TestListPackagedFactories_HidesCatalogLoadAndDecodeFailures(t *testing.T) {
 			listErr: errors.New("secret factory payload: do not expose"),
 		}
 		recorder := httptest.NewRecorder()
-		factorydefinitionshttp.NewHandlerFromRoot(
-			factorydefinitionshttp.RootBinding{Definitions: root},
+		factorydefinitionshttp.NewHandler(
+			root, factorydefinitionshttp.NewTopologyValidation(root),
 			zap.NewNop(),
 		).ListPackagedFactories(
 			recorder,
@@ -289,8 +289,8 @@ func TestListPackagedFactories_HidesCatalogLoadAndDecodeFailures(t *testing.T) {
 			},
 		}
 		recorder := httptest.NewRecorder()
-		factorydefinitionshttp.NewHandlerFromRoot(
-			factorydefinitionshttp.RootBinding{Definitions: root},
+		factorydefinitionshttp.NewHandler(
+			root, factorydefinitionshttp.NewTopologyValidation(root),
 			zap.NewNop(),
 		).ListPackagedFactories(
 			recorder,
@@ -300,13 +300,11 @@ func TestListPackagedFactories_HidesCatalogLoadAndDecodeFailures(t *testing.T) {
 	})
 }
 
-func TestListPackagedFactories_RejectsMissingDefinitionsRoot(t *testing.T) {
+func TestListPackagedFactories_MapsCatalogUnavailable(t *testing.T) {
 	t.Parallel()
 
-	recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{})
-	if recorder.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", recorder.Code)
-	}
+	recorder := listPackagedFactoriesResponse(t, &packagedFactoryCatalogRootFake{listErr: errors.New("catalog unavailable")})
+	assertPackagedFactoryCatalogInternalError(t, recorder, "catalog unavailable")
 }
 
 func TestListPackagedFactories_RejectsResolveFailure(t *testing.T) {
@@ -319,7 +317,7 @@ func TestListPackagedFactories_RejectsResolveFailure(t *testing.T) {
 			}},
 		},
 	}
-	recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{Definitions: root})
+	recorder := listPackagedFactoriesResponse(t, root)
 	assertPackagedFactoryCatalogInternalError(t, recorder, "missing")
 }
 
@@ -336,7 +334,7 @@ func TestListPackagedFactories_RejectsIdentityMismatch(t *testing.T) {
 			"@you/mismatch": packagedFactoryDefinition("@you/mismatch", "resolved-project", "name: mismatch\n"),
 		},
 	}
-	recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{Definitions: root})
+	recorder := listPackagedFactoriesResponse(t, root)
 	assertPackagedFactoryCatalogInternalError(t, recorder, "identity mismatch")
 }
 
@@ -379,7 +377,7 @@ func TestListPackagedFactories_RejectsIncompleteDefinitions(t *testing.T) {
 					testCase.definition.Name: testCase.definition,
 				},
 			}
-			recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{Definitions: root})
+			recorder := listPackagedFactoriesResponse(t, root)
 			assertPackagedFactoryCatalogInternalError(t, recorder, testCase.name)
 		})
 	}
@@ -391,7 +389,7 @@ func TestListPackagedFactories_MapsTypedRootFailure(t *testing.T) {
 	root := &packagedFactoryCatalogRootFake{
 		listErr: factorydefinitions.ErrInvalidFactoryDefinitionPayload,
 	}
-	recorder := listPackagedFactoriesResponse(t, factorydefinitionshttp.RootBinding{Definitions: root})
+	recorder := listPackagedFactoriesResponse(t, root)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400: %s", recorder.Code, recorder.Body.String())
 	}
@@ -399,11 +397,11 @@ func TestListPackagedFactories_MapsTypedRootFailure(t *testing.T) {
 
 func listPackagedFactoriesResponse(
 	t *testing.T,
-	binding factorydefinitionshttp.RootBinding,
+	root factorydefinitions.Service,
 ) *httptest.ResponseRecorder {
 	t.Helper()
 	recorder := httptest.NewRecorder()
-	factorydefinitionshttp.NewHandlerFromRoot(binding, zap.NewNop()).ListPackagedFactories(
+	factorydefinitionshttp.NewHandler(root, factorydefinitionshttp.NewTopologyValidation(root), zap.NewNop()).ListPackagedFactories(
 		recorder,
 		httpTestRequest("/packaged-factories"),
 	)
