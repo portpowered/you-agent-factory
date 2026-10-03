@@ -136,7 +136,7 @@ func (s *FactoryEventStream) read(response *http.Response) {
 // NextEvent waits for the next live Factory Event or fails the test on timeout.
 func (s *FactoryEventStream) NextEvent(timeout time.Duration) factoryapi.FactoryEvent {
 	s.t.Helper()
-	event, ok := s.TryNextEvent(timeout)
+	event, ok := s.TryNextEvent(ScaledTimeout(timeout))
 	if !ok {
 		s.t.Fatalf("timed out waiting for factory event stream payload within %s", timeout)
 	}
@@ -189,6 +189,7 @@ func (s *FactoryEventStream) WaitClosed(timeout time.Duration) {
 	if timeout <= 0 {
 		timeout = functionalServerReadyTimeout
 	}
+	timeout = ScaledTimeout(timeout)
 	select {
 	case <-s.done:
 	case <-time.After(timeout):

@@ -27,7 +27,7 @@ func GetFactoryResponseEventStreamHTTPErrorAt(
 ) FactoryResponseEventStreamHTTPError {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), functionalServerReadyTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), ScaledTimeout(functionalServerReadyTimeout))
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {

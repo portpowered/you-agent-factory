@@ -160,7 +160,7 @@ func CleanupProcess(t testing.TB, process Process) {
 		return
 	}
 	t.Cleanup(func() {
-		closeCtx, cancel := context.WithTimeout(context.Background(), processCommandStopTimeout)
+		closeCtx, cancel := context.WithTimeout(context.Background(), ScaledTimeout(processCommandStopTimeout))
 		defer cancel()
 		if err := closer.Close(closeCtx); err != nil {
 			t.Errorf("close reusable application process: %v", err)
@@ -571,7 +571,7 @@ func (command *ProcessCommand) Stop(t testing.TB) {
 		if err != nil && !errors.Is(err, context.Canceled) && !command.errorWasAccepted() {
 			t.Errorf("Process.Execute() after shutdown error = %v", err)
 		}
-	case <-time.After(processCommandStopTimeout):
+	case <-time.After(ScaledTimeout(processCommandStopTimeout)):
 		t.Errorf("timed out waiting for Process.Execute() shutdown")
 	}
 }
