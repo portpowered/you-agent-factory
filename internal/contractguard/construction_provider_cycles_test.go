@@ -2,12 +2,13 @@ package contractguard
 
 import "testing"
 
-func TestConstructionRecursiveFocusedProvider(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name, body, helpers string
-		want                int
-	}{
+type constructionProviderCycleCase struct {
+	name, body, helpers string
+	want                int
+}
+
+func constructionProviderCycleCases() []constructionProviderCycleCase {
+	return []constructionProviderCycleCase{
 		{"direct recursion", `Provide(p); selected.New(p)`, "", 1},
 		{"conditional recursion", `if flag { Provide(p) }; selected.New(p)`, "", 1},
 		{"provider alias", `again := Provide; again(p); selected.New(p)`, "", 1},
@@ -18,6 +19,20 @@ func TestConstructionRecursiveFocusedProvider(t *testing.T) {
 		{"asynchronous recursion", `go Provide(p); selected.New(p)`, "", 1},
 		{"generic helper recursion", `step[int](p); selected.New(p)`, `func step[T any](p selected.Port) { Provide(p) }`, 1},
 		{"method helper recursion", `helper{}.step(p); selected.New(p)`, `type helper struct{}; func (helper) step(p selected.Port) { Provide(p) }`, 1},
+		{"invoked literal", `func() { Provide(p) }(); selected.New(p)`, "", 1},
+		{"parenthesized literal", `(func() { Provide(p) })(); selected.New(p)`, "", 1},
+		{"invoked local closure", `again := func() { Provide(p) }; again(); selected.New(p)`, "", 1},
+		{"closure alias", `again := func() { Provide(p) }; next := again; next(); selected.New(p)`, "", 1},
+		{"declared closure", `var again = func() { Provide(p) }; again(); selected.New(p)`, "", 1},
+		{"nested invoked closure", `func() { func() { Provide(p) }() }(); selected.New(p)`, "", 1},
+		{"helper invokes closure", `step(p); selected.New(p)`, `func step(p selected.Port) { again := func() { Provide(p) }; again() }`, 1},
+		{"closure calls helper", `func() { step(p) }(); selected.New(p)`, `func step(p selected.Port) { Provide(p) }`, 1},
+		{"deferred closure", `defer func() { Provide(p) }(); selected.New(p)`, "", 1},
+		{"asynchronous closure alias", `again := func() { Provide(p) }; go again(); selected.New(p)`, "", 1},
+		{"uncalled nested closure", `func() { _ = func() { Provide(p) } }(); selected.New(p)`, "", 0},
+		{"acyclic invoked closure", `func() { consume(p) }(); selected.New(p)`, `func consume(selected.Port) {}`, 0},
+		{"shadowed closure binding", `again := func() { Provide(p) }; _ = again; { again := func() {}; again() }; selected.New(p)`, "", 0},
+		{"closure argument without invocation", `consume(func() { Provide(p) }); selected.New(p)`, `func consume(func()) {}`, 0},
 		{"acyclic helper", `step(p); selected.New(p)`, `func step(p selected.Port) { consume(p) }; func consume(selected.Port) {}`, 0},
 		{"unrelated helper cycle", `step(p); selected.New(p)`, `func step(p selected.Port) { step(p) }`, 0},
 		{"shadowed provider", `Provide := func(selected.Port) {}; Provide(p); selected.New(p)`, "", 0},
@@ -25,7 +40,11 @@ func TestConstructionRecursiveFocusedProvider(t *testing.T) {
 		{"uninvoked closure", `_ = func() { Provide(p) }; selected.New(p)`, "", 0},
 		{"shadowed helper", `step := func(selected.Port) {}; step(p); selected.New(p)`, `func step(p selected.Port) { Provide(p) }`, 0},
 	}
-	for _, tc := range cases {
+}
+
+func TestConstructionRecursiveFocusedProvider(t *testing.T) {
+	t.Parallel()
+	for _, tc := range constructionProviderCycleCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			root, registry := constructionFixture(t)

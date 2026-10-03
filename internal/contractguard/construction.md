@@ -160,10 +160,14 @@ deferred/asynchronous operation run synchronously and retain the allowance.
 Focused-provider allowances also stop applying when resolved authored calls in
 the provider package lead back to that provider. The finite call walk follows
 cross-file helpers, immutable aliases, generic function instantiation and
-concrete methods, including calls scheduled by defer/go. The resulting finding
+concrete methods, including calls scheduled by defer/go. Invoked function
+literals and immutable local closure aliases add edges through a finite body
+walk; nested invoked closures and helper-owned closures retain the same qualified
+provider identity. Uncalled closure bodies, passed callback values and shadowed
+bindings do not establish an invocation edge. The resulting finding
 identifies the registered constructor and its provider operation. Uncalled
 helpers, shadowed declarations and cycles that do not return to the provider do
-not establish that construction path. Closure execution, unresolved callable
+not establish that construction path. Mutable/opaque closure execution, unresolved callable
 values, cross-package paths and noncyclic secondary graphs still need bounded
 classification/debt before whole-set readiness. This is syntactic reachability,
 not proof that a conditional path executes or that a recursive call terminates.
