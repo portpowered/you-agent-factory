@@ -72,36 +72,6 @@ func newService(
 	}
 }
 
-// RebindDocumentOwner returns a new owner over the current compatibility
-// adapter ports. ConfigDocumentService exposes those ports for legacy callers;
-// rebinding keeps mutations to that adapter view from bypassing the nested
-// owner while preserving custom owners that do not implement this hook.
-func (service *Service) RebindDocumentOwner(
-	files operatorsettings.FileSystem,
-	createTemp operatorsettings.CreateTemporaryFile,
-	decoder operatorsettings.ConfigDecoder,
-	encoder operatorsettings.ConfigEncoder,
-	providers operatorsettings.ProviderCatalog,
-	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
-) operatorsettings.DocumentOwner {
-	return New(files, createTemp, decoder, encoder, providers, firstDiagnosticDecoder(diagnosticDecoders))
-}
-
-// RebindDocumentOwnerWithPreserver returns a new owner over compatibility
-// adapter ports while retaining the production unknown-field preservation
-// policy.
-func (service *Service) RebindDocumentOwnerWithPreserver(
-	files operatorsettings.FileSystem,
-	createTemp operatorsettings.CreateTemporaryFile,
-	decoder operatorsettings.ConfigDecoder,
-	encoder operatorsettings.ConfigEncoder,
-	providers operatorsettings.ProviderCatalog,
-	preserveUnknown operatorsettings.ConfigDocumentPreserver,
-	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
-) operatorsettings.DocumentOwner {
-	return NewWithPreserver(files, createTemp, decoder, encoder, providers, preserveUnknown, firstDiagnosticDecoder(diagnosticDecoders))
-}
-
 func (service *Service) LoadDocument(
 	request operatorsettings.LoadDocumentRequest,
 ) (operatorsettings.LoadDocumentResult, error) {
@@ -147,11 +117,4 @@ func (service *Service) PersistDocument(
 		return err
 	}
 	return service.persistDocument(ctx, request)
-}
-
-func firstDiagnosticDecoder(decoders []operatorsettings.ConfigDiagnosticsDecoder) operatorsettings.ConfigDiagnosticsDecoder {
-	if len(decoders) == 0 {
-		return nil
-	}
-	return decoders[0]
 }

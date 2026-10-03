@@ -94,10 +94,10 @@ func TestConfigDocumentServicePersist_PreCommitFailuresPreserveDestination(t *te
 func TestConfigDocumentServiceConfigureProviderModel_SerializationFailurePreservesDestination(t *testing.T) {
 	t.Parallel()
 	path, original, _ := persistedConfigFixture(t)
-	service := persistedConfigService(testFiles, testCreateTemp)
-	service.Encoder = func(operatorsettings.Config) ([]byte, error) {
+	encoder := func(operatorsettings.Config) ([]byte, error) {
 		return nil, errors.New("injected serialization failure")
 	}
+	service := persistedConfigServiceWithEncoder(testFiles, testCreateTemp, encoder)
 	model := "replacement"
 	_, err := service.ConfigureProviderModel(
 		context.Background(),
@@ -322,15 +322,15 @@ func TestConfigDocumentServiceConfigureProviderModel_SerializesReadMergeReplaceT
 	encoderEntered := make(chan struct{})
 	releaseEncoder := make(chan struct{})
 	var encodeCalls atomic.Int32
-	service := persistedConfigService(files, testCreateTemp)
-	service.PersistenceLock = lock
-	service.Encoder = func(config operatorsettings.Config) ([]byte, error) {
+	encoder := func(config operatorsettings.Config) ([]byte, error) {
 		if encodeCalls.Add(1) == 1 {
 			close(encoderEntered)
 			<-releaseEncoder
 		}
 		return encodeTestConfig(config)
 	}
+	service := persistedConfigServiceWithEncoder(files, testCreateTemp, encoder)
+	service.PersistenceLock = lock
 
 	provider := "claude"
 	providerResult := make(chan error, 1)
@@ -641,19 +641,28 @@ func faultTemporaryFileCreator(failPhase string, shortWrite bool) operatorsettin
 }
 
 func persistedConfigService(files operatorsettings.FileSystem, create operatorsettings.CreateTemporaryFile) operatorsettings.ConfigDocumentService {
+	return persistedConfigServiceWithEncoder(files, create, encodeTestConfig)
+}
+
+func persistedConfigServiceWithEncoder(
+	files operatorsettings.FileSystem,
+	create operatorsettings.CreateTemporaryFile,
+	encoder operatorsettings.ConfigEncoder,
+) operatorsettings.ConfigDocumentService {
 	return operatorsettings.ConfigDocumentService{
 		Files:           files,
 		CreateTemp:      create,
 		Providers:       controlledProviderCatalog,
 		Decoder:         decodeTestConfig,
-		Encoder:         encodeTestConfig,
+		Encoder:         encoder,
 		PersistenceLock: &sync.Mutex{},
-		DocumentOwner: settingswire.NewDocumentOwner(
+		DocumentOwner: settingswire.NewDocumentService(
 			files,
 			create,
 			decodeTestConfig,
-			encodeTestConfig,
+			encoder,
 			controlledProviderCatalog,
+			nil,
 			nil,
 		),
 	}
