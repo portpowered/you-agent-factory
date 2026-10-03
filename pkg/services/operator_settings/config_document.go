@@ -58,11 +58,7 @@ func (service ConfigDocumentService) Load(path string) (ConfigDocument, error) {
 		service.PersistenceLock.Lock()
 		defer service.PersistenceLock.Unlock()
 	}
-	owner, err := service.owner()
-	if err != nil {
-		return ConfigDocument{}, err
-	}
-	result, err := owner.LoadDocument(LoadDocumentRequest{Path: path})
+	result, err := service.DocumentOwner.LoadDocument(LoadDocumentRequest{Path: path})
 	if err != nil {
 		return ConfigDocument{}, err
 	}
@@ -250,11 +246,7 @@ func (service ConfigDocumentService) Persist(ctx context.Context, path string, d
 	}
 	service.PersistenceLock.Lock()
 	defer service.PersistenceLock.Unlock()
-	owner, err := service.owner()
-	if err != nil {
-		return err
-	}
-	return owner.PersistDocument(ctx, PersistDocumentRequest{
+	return service.DocumentOwner.PersistDocument(ctx, PersistDocumentRequest{
 		Path:     path,
 		Document: documentFromConfigDocument(document),
 	})

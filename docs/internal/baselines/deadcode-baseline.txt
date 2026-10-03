@@ -1700,7 +1700,6 @@ pkg/services/operator_settings/internal/testproviders/catalog_fake.go: unreachab
 pkg/services/operator_settings/internal/testproviders/catalog_fake.go: unreachable func: selectable
 pkg/services/operator_settings/transports/cli/composition.go: unreachable func: BindConfigure
 pkg/services/operator_settings/transports/cli/composition.go: unreachable func: BindResolveOperatorDefaults
-pkg/services/operator_settings/transports/cli/defaults_resolution.go: unreachable func: ResolveOperatorDefaults
 pkg/services/operator_settings/transports/http/adapter.go: unreachable func: Adapter.Root
 pkg/services/operator_settings/transports/http/adapter.go: unreachable func: Adapter.invokeApplyDocumentUpdate
 pkg/services/operator_settings/transports/http/adapter.go: unreachable func: Adapter.invokeLoadDocument
