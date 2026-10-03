@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -719,6 +720,62 @@ func assertLifecycleCursor(t *testing.T, ctx context.Context, service *Service, 
 	got, err := service.Root().GetCursor(ctx, automations.GetCursorRequest{InstanceID: instanceID})
 	if err != nil || got.AutomationID != workflowID || got.Cursor != automations.Cursor("cursor-"+id) || got.Checkpoint != "checkpoint-"+id {
 		t.Fatalf("GetCursor(%s) = %+v, %v", id, got, err)
+	}
+}
+
+// F10b/j service-contract evidence: reads preserve the committed opaque facts
+// and never execute the next command or admit another Work request.
+func TestGetCursorPreservesOpaqueFactsWithoutCommandOrAdmission(t *testing.T) {
+	t.Parallel()
+	for _, durable := range []bool{false, true} {
+		t.Run(fmt.Sprintf("durable=%t", durable), func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			dir := t.TempDir()
+			base := ""
+			if durable {
+				base = dir
+			}
+			const cursor = "opaque:/雪\nembedded  spaces\t\"quoted\""
+			const checkpoint = "checkpoint:{\"key\":\"é\"}\nopaque=value"
+			output, err := json.Marshal(map[string]any{
+				"requestId": "opaque-request", "type": "FACTORY_REQUEST_BATCH",
+				"works":  []map[string]string{{"name": "opaque-work", "workTypeName": "task"}},
+				"cursor": cursor, "checkpoint": checkpoint,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			runner := &internalScriptPollerRunner{outcomes: []internalScriptPollerOutcome{
+				{result: platformprocess.CommandResult{Stdout: output}}, {},
+			}}
+			service := New(zap.NewNop(), clockwork.NewFakeClock(), runner, "opaque-workflow", base, nil, nil,
+				factorydefinitioncomposition.WorkstationExecutionPolicy{}, cronwire.NewService(), fswire.NewService())
+			poller, worker := internalCanonicalScriptPollerWorkstation(), internalCanonicalScriptPollerWorker()
+			admissions := 0
+			err = service.RunScriptPoller(ctx, runner, internalScriptPollerLoadedRuntimeConfig(t, dir, poller, worker), poller, worker,
+				func(context.Context, work.WorkRequest) error { admissions++; return nil })
+			if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
+				t.Fatalf("poll cycle = %v, want terminal exit after commit", err)
+			}
+			request := automations.GetCursorRequest{InstanceID: scriptpollers.SupervisionFor("opaque-workflow", poller.Name).InstanceID}
+			before, err := service.Root().GetCursor(ctx, request)
+			if err != nil || before.AutomationID != "opaque-workflow" || before.InstanceID != request.InstanceID ||
+				before.Cursor != cursor || before.Checkpoint != checkpoint {
+				t.Fatalf("GetCursor = %+v, %v, want exact committed facts", before, err)
+			}
+			request.ExpectedCursor = "stale"
+			_, err = service.Root().GetCursor(ctx, request)
+			assertCursorReadError(t, err, automations.ErrorCodeConflict, automations.ErrConflict)
+			request.ExpectedCursor = cursor
+			after, err := service.Root().GetCursor(ctx, request)
+			if err != nil || after != before {
+				t.Fatalf("read after conflict = %+v, %v, want %+v", after, err, before)
+			}
+			if len(runner.outcomes) != 1 || admissions != 1 {
+				t.Fatalf("reads caused effects: remaining commands=%d admissions=%d", len(runner.outcomes), admissions)
+			}
+		})
 	}
 }
 
