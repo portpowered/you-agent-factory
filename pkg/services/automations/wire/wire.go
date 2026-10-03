@@ -17,25 +17,25 @@ import (
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	cursorscopes "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes"
+	cursorscopeswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes/wire"
 	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
-	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
-	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
 // CursorScopes exposes the private recovery owner to canonical composition.
-type CursorScopes = scriptpollers.CursorScopes
+type CursorScopes = cursorscopes.CursorScopes
 
 // CursorPersistenceFileSystem is the cursor owner's exact external effect.
-type CursorPersistenceFileSystem = scriptpollerswire.CursorPersistenceFileSystem
+type CursorPersistenceFileSystem = cursorscopeswire.CursorPersistenceFileSystem
 
 // NewCursorScopes constructs the scoped recovery owner without filesystem IO.
 func NewCursorScopes(files CursorPersistenceFileSystem) CursorScopes {
-	return scriptpollerswire.NewCursorScopes(files)
+	return cursorscopeswire.NewService(files)
 }
 
 // HostedSourceInputs is the cohesive set of external effects needed to
@@ -48,7 +48,7 @@ type HostedSourceInputs struct {
 	SecretResolver   automations.HostedLinearSecretResolver
 	LinearEndpoint   string
 	CheckpointStore  automations.HostedLinearCheckpointStore
-	CursorFileSystem scriptpollerswire.CursorPersistenceFileSystem
+	CursorFileSystem cursorscopeswire.CursorPersistenceFileSystem
 }
 
 // NewRoot constructs the singular Automations root. Hosted-source mechanics
@@ -124,7 +124,7 @@ func newService(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
+	cursorFileSystem cursorscopeswire.CursorPersistenceFileSystem,
 ) (*automationinternal.Service, error) {
 	if err := validateDirectDependencies(
 		logger,

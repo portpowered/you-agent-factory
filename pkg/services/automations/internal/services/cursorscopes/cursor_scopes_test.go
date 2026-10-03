@@ -1,4 +1,4 @@
-package script_pollers_test
+package cursorscopes_test
 
 import (
 	"context"
@@ -9,20 +9,20 @@ import (
 	"time"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
-	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
-	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
+	cursorscopes "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes"
+	cursorscopeswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes/wire"
 )
 
 func TestCursorScopes_BlankBaseUsesIsolatedMemoryWithoutIO(t *testing.T) {
 	t.Parallel()
-	owner := scriptpollerswire.NewCursorScopes(unexpectedCursorIO{})
+	owner := cursorscopeswire.NewService(unexpectedCursorIO{})
 	ctx := context.Background()
 	for _, runtimeID := range []string{"", "runtime-a", "runtime-b"} {
-		scope := scriptpollers.CursorScope{RuntimeID: runtimeID, BaseDir: " "}
+		scope := cursorscopes.CursorScope{RuntimeID: runtimeID, BaseDir: " "}
 		commitScopedCursor(t, owner, scope, "", automations.Cursor("cursor-"+runtimeID))
 	}
 	for _, runtimeID := range []string{"", "runtime-a", "runtime-b"} {
-		scope := scriptpollers.CursorScope{RuntimeID: runtimeID}
+		scope := cursorscopes.CursorScope{RuntimeID: runtimeID}
 		got, err := owner.GetCursor(ctx, scope, automations.GetCursorRequest{InstanceID: "shared-instance"})
 		if err != nil || got.Cursor != automations.Cursor("cursor-"+runtimeID) || got.Checkpoint != "checkpoint-cursor-"+runtimeID {
 			t.Fatalf("memory scope %q: cursor=%+v error=%v", runtimeID, got, err)
@@ -32,10 +32,10 @@ func TestCursorScopes_BlankBaseUsesIsolatedMemoryWithoutIO(t *testing.T) {
 
 func TestCursorScopes_ReleasedMemoryRestartsEmptyAndRetainsPeers(t *testing.T) {
 	t.Parallel()
-	owner := scriptpollerswire.NewCursorScopes(unexpectedCursorIO{})
-	scope := scriptpollers.CursorScope{RuntimeID: "runtime-a", BaseDir: " "}
-	peer := scriptpollers.CursorScope{RuntimeID: "runtime-b"}
-	detached := scriptpollers.CursorScope{}
+	owner := cursorscopeswire.NewService(unexpectedCursorIO{})
+	scope := cursorscopes.CursorScope{RuntimeID: "runtime-a", BaseDir: " "}
+	peer := cursorscopes.CursorScope{RuntimeID: "runtime-b"}
+	detached := cursorscopes.CursorScope{}
 	commitScopedCursor(t, owner, scope, "", "old-a")
 	commitScopedCursor(t, owner, peer, "", "peer")
 	commitScopedCursor(t, owner, detached, "", "detached")
@@ -55,9 +55,9 @@ func TestCursorScopes_ReleasedMemoryRestartsEmptyAndRetainsPeers(t *testing.T) {
 
 func TestCursorScopes_ReleasePreservesDurableRecoveryAndPeer(t *testing.T) {
 	t.Parallel()
-	owner := scriptpollerswire.NewCursorScopes(osFileSystem{})
-	scope := scriptpollers.CursorScope{RuntimeID: "runtime-a", BaseDir: t.TempDir()}
-	peer := scriptpollers.CursorScope{RuntimeID: "runtime-b", BaseDir: t.TempDir()}
+	owner := cursorscopeswire.NewService(osFileSystem{})
+	scope := cursorscopes.CursorScope{RuntimeID: "runtime-a", BaseDir: t.TempDir()}
+	peer := cursorscopes.CursorScope{RuntimeID: "runtime-b", BaseDir: t.TempDir()}
 	commitScopedCursor(t, owner, scope, "", "committed-a")
 	commitScopedCursor(t, owner, peer, "", "committed-b")
 
@@ -67,28 +67,20 @@ func TestCursorScopes_ReleasePreservesDurableRecoveryAndPeer(t *testing.T) {
 	commitScopedCursor(t, owner, scope, "committed-a", "resumed-a")
 	assertScopedCursor(t, owner, scope, "resumed-a")
 	assertScopedCursor(t, owner, peer, "committed-b")
-	fresh := scriptpollerswire.NewCursorScopes(osFileSystem{})
+	fresh := cursorscopeswire.NewService(osFileSystem{})
 	assertScopedCursor(t, fresh, scope, "resumed-a")
 }
 
 func TestCursorScopes_DurableRecoveryRetainsAuthoredDestination(t *testing.T) {
 	t.Parallel()
-	owner := scriptpollerswire.NewCursorScopes(osFileSystem{})
-	scope := scriptpollers.CursorScope{RuntimeID: "runtime-a", BaseDir: t.TempDir()}
+	owner := cursorscopeswire.NewService(osFileSystem{})
+	scope := cursorscopes.CursorScope{RuntimeID: "runtime-a", BaseDir: t.TempDir()}
 	commitScopedCursor(t, owner, scope, "", "opaque / page=7")
 	// Runtime identity must not change existing customer-selected durable paths.
-	restarted := scriptpollerswire.NewCursorScopes(osFileSystem{})
+	restarted := cursorscopeswire.NewService(osFileSystem{})
 	scope.RuntimeID = "runtime-replacement"
 	assertScopedCursor(t, restarted, scope, "opaque / page=7")
-	legacy, err := scriptpollerswire.NewDurableCursorRecorder(scope.BaseDir, osFileSystem{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := legacy.GetCursor(context.Background(), automations.GetCursorRequest{InstanceID: "shared-instance"})
-	if err != nil || got.Cursor != "opaque / page=7" {
-		t.Fatalf("legacy recovery=%+v error=%v", got, err)
-	}
-	peer := scriptpollers.CursorScope{RuntimeID: "runtime-b", BaseDir: t.TempDir()}
+	peer := cursorscopes.CursorScope{RuntimeID: "runtime-b", BaseDir: t.TempDir()}
 	commitScopedCursor(t, owner, peer, "", "peer-cursor")
 	assertScopedCursor(t, owner, scope, "opaque / page=7")
 	assertScopedCursor(t, owner, peer, "peer-cursor")
@@ -96,18 +88,30 @@ func TestCursorScopes_DurableRecoveryRetainsAuthoredDestination(t *testing.T) {
 
 func TestCursorScopes_FailedReplacementLeavesCommittedRecovery(t *testing.T) {
 	t.Parallel()
-	scope := scriptpollers.CursorScope{RuntimeID: "runtime-a", BaseDir: t.TempDir()}
-	owner := scriptpollerswire.NewCursorScopes(osFileSystem{})
-	commitScopedCursor(t, owner, scope, "", "committed")
 	fault := errors.New("replacement unavailable")
-	failing := scriptpollerswire.NewCursorScopes(osFileSystem{renameErr: fault})
-	err := failing.CommitCursor(context.Background(), scope, scriptpollers.CommitCursorRequest{
-		InstanceID: "shared-instance", ExpectedCursor: "committed", Cursor: "uncommitted",
-	})
-	if !errors.Is(err, fault) {
-		t.Fatalf("replacement error=%v, want injected fault", err)
+	for _, test := range []struct {
+		name  string
+		files osFileSystem
+	}{
+		{name: "write", files: osFileSystem{writeErr: fault}},
+		{name: "rename", files: osFileSystem{renameErr: fault}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			scope := cursorscopes.CursorScope{RuntimeID: "runtime-a", BaseDir: t.TempDir()}
+			owner := cursorscopeswire.NewService(osFileSystem{})
+			commitScopedCursor(t, owner, scope, "", "committed")
+			failing := cursorscopeswire.NewService(test.files)
+			err := failing.CommitCursor(context.Background(), scope, cursorscopes.CommitCursorRequest{
+				InstanceID: "shared-instance", ExpectedCursor: "committed", Cursor: "uncommitted",
+			})
+			if !errors.Is(err, fault) {
+				t.Fatalf("replacement error=%v, want injected fault", err)
+			}
+			assertScopedCursor(t, failing, scope, "committed")
+			assertScopedCursor(t, cursorscopeswire.NewService(osFileSystem{}), scope, "committed")
+		})
 	}
-	assertScopedCursor(t, failing, scope, "committed")
 }
 
 func TestCursorScopes_ConcurrentExpectedCursorHasOneWinner(t *testing.T) {
@@ -117,8 +121,8 @@ func TestCursorScopes_ConcurrentExpectedCursorHasOneWinner(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			owner := scriptpollerswire.NewCursorScopes(osFileSystem{})
-			scope := scriptpollers.CursorScope{RuntimeID: "runtime", BaseDir: test.baseDir}
+			owner := cursorscopeswire.NewService(osFileSystem{})
+			scope := cursorscopes.CursorScope{RuntimeID: "runtime", BaseDir: test.baseDir}
 			commitScopedCursor(t, owner, scope, "", "initial")
 			results := make(chan error, 2)
 			var writers sync.WaitGroup
@@ -126,7 +130,7 @@ func TestCursorScopes_ConcurrentExpectedCursorHasOneWinner(t *testing.T) {
 				writers.Add(1)
 				go func(next automations.Cursor) {
 					defer writers.Done()
-					results <- owner.CommitCursor(context.Background(), scope, scriptpollers.CommitCursorRequest{
+					results <- owner.CommitCursor(context.Background(), scope, cursorscopes.CommitCursorRequest{
 						InstanceID: "shared-instance", ExpectedCursor: "initial", Cursor: next,
 					})
 				}(next)
@@ -146,9 +150,9 @@ func TestCursorScopes_ConcurrentExpectedCursorHasOneWinner(t *testing.T) {
 func TestCursorScopes_BlockedDurableReadDoesNotBlockPeer(t *testing.T) {
 	t.Parallel()
 	files := blockingCursorRead{entered: make(chan struct{}), release: make(chan struct{})}
-	owner := scriptpollerswire.NewCursorScopes(files)
-	blocked := scriptpollers.CursorScope{RuntimeID: "blocked", BaseDir: t.TempDir()}
-	peer := scriptpollers.CursorScope{RuntimeID: "peer"}
+	owner := cursorscopeswire.NewService(files)
+	blocked := cursorscopes.CursorScope{RuntimeID: "blocked", BaseDir: t.TempDir()}
+	peer := cursorscopes.CursorScope{RuntimeID: "peer"}
 	commitScopedCursor(t, owner, peer, "", "prior-peer-cursor")
 	finished := make(chan error, 1)
 	go func() {
@@ -170,7 +174,7 @@ func TestCursorScopes_BlockedDurableReadDoesNotBlockPeer(t *testing.T) {
 	go func() {
 		// Release concerns the joined peer only; blocked still owns its read.
 		owner.ReleaseScope(peer)
-		progress <- owner.CommitCursor(context.Background(), peer, scriptpollers.CommitCursorRequest{
+		progress <- owner.CommitCursor(context.Background(), peer, cursorscopes.CommitCursorRequest{
 			InstanceID: "shared-instance", Cursor: "peer-cursor", Checkpoint: "checkpoint-peer-cursor",
 		})
 	}()
@@ -197,9 +201,9 @@ func (f blockingCursorRead) ReadFile(string) ([]byte, error) {
 	return nil, fs.ErrNotExist
 }
 
-func commitScopedCursor(t *testing.T, owner scriptpollers.CursorScopes, scope scriptpollers.CursorScope, expected, cursor automations.Cursor) {
+func commitScopedCursor(t *testing.T, owner cursorscopes.CursorScopes, scope cursorscopes.CursorScope, expected, cursor automations.Cursor) {
 	t.Helper()
-	if err := owner.CommitCursor(context.Background(), scope, scriptpollers.CommitCursorRequest{
+	if err := owner.CommitCursor(context.Background(), scope, cursorscopes.CommitCursorRequest{
 		AutomationID: "automation", InstanceID: "shared-instance", ExpectedCursor: expected,
 		Cursor: cursor, Checkpoint: "checkpoint-" + string(cursor),
 	}); err != nil {
@@ -207,7 +211,7 @@ func commitScopedCursor(t *testing.T, owner scriptpollers.CursorScopes, scope sc
 	}
 }
 
-func assertScopedCursor(t *testing.T, owner scriptpollers.CursorScopes, scope scriptpollers.CursorScope, cursor automations.Cursor) {
+func assertScopedCursor(t *testing.T, owner cursorscopes.CursorScopes, scope cursorscopes.CursorScope, cursor automations.Cursor) {
 	t.Helper()
 	got, err := owner.GetCursor(context.Background(), scope, automations.GetCursorRequest{InstanceID: "shared-instance"})
 	if err != nil || got.Cursor != cursor || got.Checkpoint != "checkpoint-"+string(cursor) {

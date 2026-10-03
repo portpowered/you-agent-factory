@@ -8,24 +8,25 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
-
+	"github.com/jonboulle/clockwork"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	cursorscopes "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/zap"
 )
 
 const scriptPollerRestartBackoffMax = 250 * time.Millisecond
 
 type service struct {
 	logger           *zap.Logger
-	scheduler        scriptpollers.Scheduler
+	scheduler        clockwork.Clock
 	runner           platformprocess.CommandRunner
 	resolveTemplates workers.TemplateFieldResolver
 	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
-	cursors          scriptpollers.CursorScopes
+	cursors          cursorscopes.CursorScopes
 }
 
 var _ scriptpollers.Service = (*service)(nil)
@@ -33,11 +34,11 @@ var _ scriptpollers.Service = (*service)(nil)
 // New stores explicit collaborators without executing any external effect.
 func New(
 	logger *zap.Logger,
-	scheduler scriptpollers.Scheduler,
+	scheduler clockwork.Clock,
 	commandRunner platformprocess.CommandRunner,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	cursors scriptpollers.CursorScopes,
+	cursors cursorscopes.CursorScopes,
 ) scriptpollers.Service {
 	return &service{
 		logger:           logger,

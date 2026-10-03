@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	cursorscopeswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes/wire"
 	"strings"
 	"testing"
 
@@ -10,7 +11,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
-	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -29,10 +29,10 @@ func TestRunScriptPoller_CommitsCursorAfterSuccessfulAdvance(t *testing.T) {
 		outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: stdout}}},
 	}
 	submitted := &recordingSubmitter{}
-	recorder := scriptpollers.NewMemoryCursorRecorder()
+	recorder := cursorscopeswire.NewService(nil)
 	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
-		runner:         runner,
-		cursorRecorder: recorder,
+		runner:  runner,
+		cursors: recorder,
 	})
 	poller := newCanonicalScriptPollerWorkstation()
 	worker := newCanonicalScriptPollerWorker()
@@ -77,10 +77,10 @@ func TestRunScriptPoller_ResumesWithCompatibleCursorInCommandEnv(t *testing.T) {
 	t.Parallel()
 
 	factoryDir := t.TempDir()
-	recorder := scriptpollers.NewMemoryCursorRecorder()
+	recorder := cursorscopeswire.NewService(nil)
 	ctx := context.Background()
 	const instanceID = "instance-resume"
-	if err := recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+	if err := recorder.CommitCursor(ctx, scriptpollers.CursorScope{}, scriptpollers.CommitCursorRequest{
 		AutomationID: "workflow-resume",
 		InstanceID:   instanceID,
 		Cursor:       "opaque-cursor-resume",
@@ -93,8 +93,8 @@ func TestRunScriptPoller_ResumesWithCompatibleCursorInCommandEnv(t *testing.T) {
 		outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: []byte(`{"requestId":"noop","type":"FACTORY_REQUEST_BATCH","works":[{"name":"noop","workTypeName":"task"}]}`)}}},
 	}
 	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
-		runner:         runner,
-		cursorRecorder: recorder,
+		runner:  runner,
+		cursors: recorder,
 	})
 	poller := newCanonicalScriptPollerWorkstation()
 	worker := newCanonicalScriptPollerWorker()
@@ -133,10 +133,10 @@ func TestRunScriptPoller_ResumesWithCompatibleCursorInCommandEnv(t *testing.T) {
 func TestRunScriptPoller_RejectsStaleCursorWithoutSubmit(t *testing.T) {
 	t.Parallel()
 
-	recorder := scriptpollers.NewMemoryCursorRecorder()
+	recorder := cursorscopeswire.NewService(nil)
 	ctx := context.Background()
 	const instanceID = "instance-stale-run"
-	if err := recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+	if err := recorder.CommitCursor(ctx, scriptpollers.CursorScope{}, scriptpollers.CommitCursorRequest{
 		AutomationID: "workflow-stale-run",
 		InstanceID:   instanceID,
 		Cursor:       "cursor-current",
@@ -149,8 +149,8 @@ func TestRunScriptPoller_RejectsStaleCursorWithoutSubmit(t *testing.T) {
 	}
 	submitted := &recordingSubmitter{}
 	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
-		runner:         runner,
-		cursorRecorder: recorder,
+		runner:  runner,
+		cursors: recorder,
 	})
 	poller := newCanonicalScriptPollerWorkstation()
 	worker := newCanonicalScriptPollerWorker()
@@ -201,7 +201,7 @@ func TestRunScriptPoller_CursorPersistFailureDoesNotReportSuccess(t *testing.T) 
 	submitted := &recordingSubmitter{}
 	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
 		runner: runner,
-		cursorRecorder: failingCursorRecorder{
+		cursors: failingCursorRecorder{
 			commitErr: errors.New("disk unavailable"),
 		},
 	})
@@ -242,18 +242,15 @@ func TestRunScriptPoller_FailedDurableReplacementResumesPriorCommit(t *testing.T
 		AutomationID: "durable-workflow", InstanceID: "durable-instance",
 		CursorScope: scriptpollers.CursorScope{RuntimeID: "runtime-durable", BaseDir: factoryDir},
 	}
-	recorder, err := scriptpollerswire.NewDurableCursorRecorder(factoryDir, platformfilesystem.Local{})
-	if err != nil {
-		t.Fatalf("construct durable recorder: %v", err)
-	}
-	if err := recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+	recorder := cursorscopeswire.NewService(platformfilesystem.Local{})
+	if err := recorder.CommitCursor(ctx, supervision.CursorScope, scriptpollers.CommitCursorRequest{
 		AutomationID: supervision.AutomationID, InstanceID: supervision.InstanceID,
 		Cursor: "cursor-prior", Checkpoint: "checkpoint-prior",
 	}); err != nil {
 		t.Fatalf("seed prior commit: %v", err)
 	}
 	persistErr := errors.New("cursor destination unavailable")
-	failing := scriptpollerswire.NewCursorScopes(cursorRenameFailure{err: persistErr})
+	failing := cursorscopeswire.NewService(cursorRenameFailure{err: persistErr})
 	runner := &sequenceCommandRunner{outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: []byte(
 		`{"requestId":"admitted-before-failure","type":"FACTORY_REQUEST_BATCH","works":[{"name":"retained","workTypeName":"task"}],"cursor":"cursor-next","checkpoint":"checkpoint-next"}`),
 	}}}}
@@ -261,7 +258,7 @@ func TestRunScriptPoller_FailedDurableReplacementResumesPriorCommit(t *testing.T
 	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{runner: runner, cursors: failing})
 	poller, worker := newCanonicalScriptPollerWorkstation(), newCanonicalScriptPollerWorker()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
-	err = svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, supervision, submitted.submit)
+	err := svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, supervision, submitted.submit)
 	var typed *automations.Error
 	if !errors.As(err, &typed) || typed.Op != scriptpollers.CommitCursorOperation || typed.Code != automations.ErrorCodeFailed || !errors.Is(err, persistErr) {
 		t.Fatalf("poll error = %v, want classified durable replacement failure", err)
@@ -282,7 +279,7 @@ func assertDurablePollRecovery(t *testing.T, factoryDir string, supervision scri
 	poller, worker := newCanonicalScriptPollerWorkstation(), newCanonicalScriptPollerWorker()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
 	// A new scoped owner reads durable facts without prior in-memory state.
-	recovered := scriptpollerswire.NewCursorScopes(platformfilesystem.Local{})
+	recovered := cursorscopeswire.NewService(platformfilesystem.Local{})
 	next := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{runner: runner, cursors: recovered})
 	err := next.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, supervision, submitted.submit)
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") || submitted.calls != 2 {
@@ -307,12 +304,13 @@ func (f cursorRenameFailure) Rename(string, string) error { return f.err }
 
 func (f failingCursorRecorder) GetCursor(
 	_ context.Context,
+	_ scriptpollers.CursorScope,
 	request automations.GetCursorRequest,
 ) (automations.GetCursorResult, error) {
-	return scriptpollers.NewMemoryCursorRecorder().GetCursor(context.Background(), request)
+	return automations.GetCursorResult{}, &automations.Error{Op: scriptpollers.GetCursorOperation, Code: automations.ErrorCodeNotFound, Err: automations.ErrNotFound}
 }
 
-func (f failingCursorRecorder) CommitCursor(context.Context, scriptpollers.CommitCursorRequest) error {
+func (f failingCursorRecorder) CommitCursor(context.Context, scriptpollers.CursorScope, scriptpollers.CommitCursorRequest) error {
 	return f.commitErr
 }
 
@@ -336,7 +334,7 @@ func assertAutomationsConflict(t *testing.T, err error, op string) {
 func TestRunScriptPoller_SharedInstanceUsesItsOwnScope(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	cursors := scriptpollerswire.NewCursorScopes(nil)
+	cursors := cursorscopeswire.NewService(nil)
 	runner := &sequenceCommandRunner{outcomes: []runOutcome{{result: platformprocess.CommandResult{Stdout: []byte(
 		`{"requestId":"scoped-work","type":"FACTORY_REQUEST_BATCH","works":[{"name":"task","workTypeName":"task"}],"cursor":"advanced","checkpoint":"advanced-checkpoint"}`),
 	}}}}
@@ -389,4 +387,8 @@ func assertIsolatedPollerRecovery(t *testing.T, svc scriptpollers.Service) {
 			t.Fatalf("scope %q recovery = %+v, %v, want %s/%s", runtimeID, got, readErr, wantCursor, wantCheckpoint)
 		}
 	}
+}
+
+func (failingCursorRecorder) ReleaseScope(scriptpollers.CursorScope) {
+	panic("unexpected scope release")
 }

@@ -1059,11 +1059,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/internal/services/script_pollers/cursor.go",
-      "target": "NewMemoryCursorRecorder"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/automations/internal/services/script_pollers/errors.go",
       "target": "SubmitFailedError"
     },
@@ -2086,11 +2081,6 @@
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/automations/internal/services/filesystem_watchers",
       "target": "pkg/services/automations/internal/services/filesystem_watchers/service.go:HandledIdentities,pkg/services/automations/internal/services/filesystem_watchers/service.go:InputFileSystem,pkg/services/automations/internal/services/filesystem_watchers/service.go:Service,pkg/services/automations/internal/services/filesystem_watchers/service.go:Watcher"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/automations/internal/services/script_pollers",
-      "target": "pkg/services/automations/internal/services/script_pollers/cursor.go:CursorRecorder,pkg/services/automations/internal/services/script_pollers/service.go:Service"
     },
     {
       "rule": "service-root-interface-count",

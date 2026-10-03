@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
-	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
+	cursorscopes "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes"
 )
 
 type cursorScopeState struct {
@@ -18,20 +18,20 @@ type cursorScopeState struct {
 type cursorScopes struct {
 	files  CursorPersistenceFileSystem
 	mu     sync.Mutex
-	states map[scriptpollers.CursorScope]*cursorScopeState
+	states map[cursorscopes.CursorScope]*cursorScopeState
 }
 
-var _ scriptpollers.CursorScopes = (*cursorScopes)(nil)
+var _ cursorscopes.CursorScopes = (*cursorScopes)(nil)
 
-// NewCursorScopes stores the required filesystem without performing IO.
-func NewCursorScopes(files CursorPersistenceFileSystem) scriptpollers.CursorScopes {
-	return &cursorScopes{files: files, states: make(map[scriptpollers.CursorScope]*cursorScopeState)}
+// New stores the required filesystem without performing IO.
+func New(files CursorPersistenceFileSystem) cursorscopes.CursorScopes {
+	return &cursorScopes{files: files, states: make(map[cursorscopes.CursorScope]*cursorScopeState)}
 }
 
 // ReleaseScope forgets the joined runtime's memory and path/lock resources,
 // without filesystem effects or changes to another runtime's recovery state.
 // The caller must exclude further scope operations until reactivation.
-func (s *cursorScopes) ReleaseScope(scope scriptpollers.CursorScope) {
+func (s *cursorScopes) ReleaseScope(scope cursorscopes.CursorScope) {
 	scope.BaseDir = strings.TrimSpace(scope.BaseDir)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -40,7 +40,7 @@ func (s *cursorScopes) ReleaseScope(scope scriptpollers.CursorScope) {
 
 func (s *cursorScopes) GetCursor(
 	ctx context.Context,
-	scope scriptpollers.CursorScope,
+	scope cursorscopes.CursorScope,
 	request automations.GetCursorRequest,
 ) (automations.GetCursorResult, error) {
 	state := s.state(scope)
@@ -50,16 +50,16 @@ func (s *cursorScopes) GetCursor(
 	state.mu.RLock()
 	defer state.mu.RUnlock()
 	if strings.TrimSpace(request.InstanceID) == "" || strings.TrimSpace(request.InstanceID) != request.InstanceID {
-		return automations.GetCursorResult{}, invalidCursorOperationError(scriptpollers.GetCursorOperation, "malformed instance identity")
+		return automations.GetCursorResult{}, invalidCursorOperationError(getCursorOperation, "malformed instance identity")
 	}
 	current, exists := state.memory[request.InstanceID]
 	if !exists {
 		return automations.GetCursorResult{}, &automations.Error{
-			Op: scriptpollers.GetCursorOperation, Code: automations.ErrorCodeNotFound, Err: automations.ErrNotFound,
+			Op: getCursorOperation, Code: automations.ErrorCodeNotFound, Err: automations.ErrNotFound,
 		}
 	}
 	if request.ExpectedCursor != "" && request.ExpectedCursor != current.Cursor {
-		return automations.GetCursorResult{}, scriptpollers.CursorConflictError(scriptpollers.GetCursorOperation)
+		return automations.GetCursorResult{}, cursorConflictError(getCursorOperation)
 	}
 	return automations.GetCursorResult{
 		AutomationID: current.AutomationID, InstanceID: current.InstanceID,
@@ -69,8 +69,8 @@ func (s *cursorScopes) GetCursor(
 
 func (s *cursorScopes) CommitCursor(
 	ctx context.Context,
-	scope scriptpollers.CursorScope,
-	request scriptpollers.CommitCursorRequest,
+	scope cursorscopes.CursorScope,
+	request cursorscopes.CommitCursorRequest,
 ) error {
 	state := s.state(scope)
 	if strings.TrimSpace(scope.BaseDir) != "" {
@@ -95,7 +95,7 @@ func (s *cursorScopes) CommitCursor(
 
 // state allocates only runtime-keyed records and a path/lock resource. All
 // scopes retain the same injected behavior owner and filesystem effect.
-func (s *cursorScopes) state(scope scriptpollers.CursorScope) *cursorScopeState {
+func (s *cursorScopes) state(scope cursorscopes.CursorScope) *cursorScopeState {
 	scope.BaseDir = strings.TrimSpace(scope.BaseDir)
 	s.mu.Lock()
 	defer s.mu.Unlock()

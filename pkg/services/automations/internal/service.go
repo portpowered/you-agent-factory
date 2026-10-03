@@ -16,6 +16,8 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
+	cursorscopes "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes"
+	cursorscopeswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes/wire"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
@@ -44,10 +46,10 @@ type Service struct {
 	hostedPollers      automations.HostedPollers
 	resolveTemplates   workers.TemplateFieldResolver
 	executionPolicy    factorydefinitions.WorkstationExecutionPolicyService
-	cursorFileSystem   scriptpollerswire.CursorPersistenceFileSystem
+	cursorFileSystem   cursorscopeswire.CursorPersistenceFileSystem
 	reconciler         reconciliation.Service
 	scriptPollers      scriptpollers.Service
-	cursors            scriptpollers.CursorScopes
+	cursors            cursorscopes.CursorScopes
 	cursorScope        scriptpollers.CursorScope
 	cron               cron.Service
 	filesystemWatchers filesystemwatchers.Service
@@ -99,11 +101,11 @@ func NewWithCursorFileSystem(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
+	cursorFileSystem cursorscopeswire.CursorPersistenceFileSystem,
 	cronService cron.Service,
 	filesystemWatchers filesystemwatchers.Service,
 ) *Service {
-	cursors := scriptpollerswire.NewCursorScopes(cursorFileSystem)
+	cursors := cursorscopeswire.NewService(cursorFileSystem)
 	pollers := scriptpollerswire.NewService(logger, clock, commandRunner, resolveTemplates, executionPolicy, cursors)
 	return newService(
 		logger,
@@ -131,11 +133,11 @@ func newService(
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
-	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
+	cursorFileSystem cursorscopeswire.CursorPersistenceFileSystem,
 	cronService cron.Service,
 	filesystemWatchers filesystemwatchers.Service,
 	pollers scriptpollers.Service,
-	cursors scriptpollers.CursorScopes,
+	cursors cursorscopes.CursorScopes,
 ) *Service {
 	service := &Service{
 		loggerValue:        logger,

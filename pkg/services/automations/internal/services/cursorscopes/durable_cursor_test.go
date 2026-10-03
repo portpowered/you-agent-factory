@@ -1,4 +1,4 @@
-package script_pollers_test
+package cursorscopes_test
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
-	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
-	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
+	cursorscopes "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes"
+	cursorscopeswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cursorscopes/wire"
 )
 
 func TestDurableCursorRecorder_RestartRecoversExactOpaqueFacts(t *testing.T) {
@@ -25,11 +25,8 @@ func TestDurableCursorRecorder_RestartRecoversExactOpaqueFacts(t *testing.T) {
 		checkpoint   = `{"last":"issue-7","updated":"2026-08-21T12:34:56Z"}`
 	)
 
-	first, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{})
-	if err != nil {
-		t.Fatalf("NewDurableCursorRecorder(first): %v", err)
-	}
-	if err := first.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+	first := cursorscopeswire.NewService(osFileSystem{})
+	if err := first.CommitCursor(ctx, cursorscopes.CursorScope{BaseDir: baseDir}, cursorscopes.CommitCursorRequest{
 		AutomationID: automationID,
 		InstanceID:   instanceID,
 		Cursor:       cursor,
@@ -38,11 +35,8 @@ func TestDurableCursorRecorder_RestartRecoversExactOpaqueFacts(t *testing.T) {
 		t.Fatalf("first CommitCursor(): %v", err)
 	}
 
-	second, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{})
-	if err != nil {
-		t.Fatalf("NewDurableCursorRecorder(second): %v", err)
-	}
-	got, err := second.GetCursor(ctx, automations.GetCursorRequest{
+	second := cursorscopeswire.NewService(osFileSystem{})
+	got, err := second.GetCursor(ctx, cursorscopes.CursorScope{BaseDir: baseDir}, automations.GetCursorRequest{
 		InstanceID:     instanceID,
 		ExpectedCursor: cursor,
 	})
@@ -55,26 +49,14 @@ func TestDurableCursorRecorder_RestartRecoversExactOpaqueFacts(t *testing.T) {
 	}
 }
 
-func TestDurableCursorRecorder_RequiresFactoryLocalBaseDirectory(t *testing.T) {
-	t.Parallel()
-
-	_, err := scriptpollerswire.NewDurableCursorRecorder(" ", osFileSystem{})
-	if err == nil || err.Error() != "script poller cursor base directory is required" {
-		t.Fatalf("NewDurableCursorRecorder(blank base) error = %v, want explicit base-directory failure", err)
-	}
-}
-
 func TestDurableCursorRecorder_PreservesOptimisticSemantics(t *testing.T) {
 	t.Parallel()
 
 	baseDir := t.TempDir()
-	recorder, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{})
-	if err != nil {
-		t.Fatalf("NewDurableCursorRecorder(): %v", err)
-	}
+	recorder := cursorscopeswire.NewService(osFileSystem{})
 	ctx := context.Background()
 	const instanceID = "script-poller-instance:durable-conflict"
-	if err := recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+	if err := recorder.CommitCursor(ctx, cursorscopes.CursorScope{BaseDir: baseDir}, cursorscopes.CommitCursorRequest{
 		AutomationID: "automation-conflict",
 		InstanceID:   instanceID,
 		Cursor:       "cursor-current",
@@ -82,21 +64,21 @@ func TestDurableCursorRecorder_PreservesOptimisticSemantics(t *testing.T) {
 		t.Fatalf("initial CommitCursor(): %v", err)
 	}
 
-	_, err = recorder.GetCursor(ctx, automations.GetCursorRequest{
+	_, err := recorder.GetCursor(ctx, cursorscopes.CursorScope{BaseDir: baseDir}, automations.GetCursorRequest{
 		InstanceID:     instanceID,
 		ExpectedCursor: "cursor-stale",
 	})
-	assertAutomationsError(t, err, scriptpollers.GetCursorOperation, automations.ErrorCodeConflict, automations.ErrConflict)
+	assertAutomationsError(t, err, "script_poller.get_cursor", automations.ErrorCodeConflict, automations.ErrConflict)
 
-	err = recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+	err = recorder.CommitCursor(ctx, cursorscopes.CursorScope{BaseDir: baseDir}, cursorscopes.CommitCursorRequest{
 		AutomationID:   "automation-conflict",
 		InstanceID:     instanceID,
 		ExpectedCursor: "cursor-stale",
 		Cursor:         "cursor-replacement",
 	})
-	assertAutomationsError(t, err, scriptpollers.CommitCursorOperation, automations.ErrorCodeConflict, automations.ErrConflict)
+	assertAutomationsError(t, err, "script_poller.commit_cursor", automations.ErrorCodeConflict, automations.ErrConflict)
 
-	got, err := recorder.GetCursor(ctx, automations.GetCursorRequest{InstanceID: instanceID})
+	got, err := recorder.GetCursor(ctx, cursorscopes.CursorScope{BaseDir: baseDir}, automations.GetCursorRequest{InstanceID: instanceID})
 	if err != nil {
 		t.Fatalf("GetCursor() after stale replacement: %v", err)
 	}
@@ -111,11 +93,8 @@ func TestDurableCursorRecorder_FailedReplacementLeavesLastCommitReadable(t *test
 	baseDir := t.TempDir()
 	ctx := context.Background()
 	const instanceID = "script-poller-instance:durable-failure"
-	first, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{})
-	if err != nil {
-		t.Fatalf("NewDurableCursorRecorder(first): %v", err)
-	}
-	if err := first.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+	first := cursorscopeswire.NewService(osFileSystem{})
+	if err := first.CommitCursor(ctx, cursorscopes.CursorScope{BaseDir: baseDir}, cursorscopes.CommitCursorRequest{
 		AutomationID: "automation-failure",
 		InstanceID:   instanceID,
 		Cursor:       "cursor-committed",
@@ -125,11 +104,8 @@ func TestDurableCursorRecorder_FailedReplacementLeavesLastCommitReadable(t *test
 	}
 
 	persistErr := errors.New("rename destination is unavailable")
-	failing, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{renameErr: persistErr})
-	if err != nil {
-		t.Fatalf("NewDurableCursorRecorder(failing): %v", err)
-	}
-	err = failing.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+	failing := cursorscopeswire.NewService(osFileSystem{renameErr: persistErr})
+	err := failing.CommitCursor(ctx, cursorscopes.CursorScope{BaseDir: baseDir}, cursorscopes.CommitCursorRequest{
 		AutomationID:   "automation-failure",
 		InstanceID:     instanceID,
 		ExpectedCursor: "cursor-committed",
@@ -140,11 +116,8 @@ func TestDurableCursorRecorder_FailedReplacementLeavesLastCommitReadable(t *test
 		t.Fatalf("failed CommitCursor() error = %v, want actionable persistence failure", err)
 	}
 
-	second, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{})
-	if err != nil {
-		t.Fatalf("NewDurableCursorRecorder(second): %v", err)
-	}
-	got, err := second.GetCursor(ctx, automations.GetCursorRequest{InstanceID: instanceID})
+	second := cursorscopeswire.NewService(osFileSystem{})
+	got, err := second.GetCursor(ctx, cursorscopes.CursorScope{BaseDir: baseDir}, automations.GetCursorRequest{InstanceID: instanceID})
 	if err != nil {
 		t.Fatalf("GetCursor() after failed replacement: %v", err)
 	}
@@ -157,12 +130,9 @@ func TestDurableCursorRecorder_ClassifiesCorruptState(t *testing.T) {
 	t.Parallel()
 
 	baseDir := t.TempDir()
-	recorder, err := scriptpollerswire.NewDurableCursorRecorder(baseDir, osFileSystem{})
-	if err != nil {
-		t.Fatalf("NewDurableCursorRecorder(): %v", err)
-	}
+	recorder := cursorscopeswire.NewService(osFileSystem{})
 	const instanceID = "script-poller-instance:durable-corrupt"
-	if err := recorder.CommitCursor(context.Background(), scriptpollers.CommitCursorRequest{
+	if err := recorder.CommitCursor(context.Background(), cursorscopes.CursorScope{BaseDir: baseDir}, cursorscopes.CommitCursorRequest{
 		AutomationID: "automation-corrupt",
 		InstanceID:   instanceID,
 		Cursor:       "cursor-valid",
@@ -177,12 +147,12 @@ func TestDurableCursorRecorder_ClassifiesCorruptState(t *testing.T) {
 		t.Fatalf("corrupt cursor state: %v", err)
 	}
 
-	_, err = recorder.GetCursor(context.Background(), automations.GetCursorRequest{InstanceID: instanceID})
+	_, err = recorder.GetCursor(context.Background(), cursorscopes.CursorScope{BaseDir: baseDir}, automations.GetCursorRequest{InstanceID: instanceID})
 	if err == nil {
 		t.Fatal("GetCursor() on corrupt state = nil, want classified failure")
 	}
 	typed, ok := err.(*automations.Error)
-	if !ok || typed.Op != scriptpollers.GetCursorOperation || typed.Code != automations.ErrorCodeFailed {
+	if !ok || typed.Op != "script_poller.get_cursor" || typed.Code != automations.ErrorCodeFailed {
 		t.Fatalf("corrupt state error = %#v, want typed failed cursor read error", err)
 	}
 	if !strings.Contains(err.Error(), "decode script poller cursor") {
@@ -192,6 +162,7 @@ func TestDurableCursorRecorder_ClassifiesCorruptState(t *testing.T) {
 
 type osFileSystem struct {
 	renameErr error
+	writeErr  error
 }
 
 func (osFileSystem) ReadFile(path string) ([]byte, error) { return os.ReadFile(path) }
@@ -200,7 +171,10 @@ func (osFileSystem) MkdirAll(path string, mode os.FileMode) error {
 	return os.MkdirAll(path, mode)
 }
 
-func (osFileSystem) WriteFile(path string, payload []byte, mode os.FileMode) error {
+func (f osFileSystem) WriteFile(path string, payload []byte, mode os.FileMode) error {
+	if f.writeErr != nil {
+		return f.writeErr
+	}
 	return os.WriteFile(path, payload, mode)
 }
 
