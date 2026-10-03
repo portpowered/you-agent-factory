@@ -82,6 +82,7 @@ func scanConstructionOperation(source *constructionSource, caller ConstructionSy
 	}
 	callees := make(map[ast.Expr]bool)
 	indirectCalls := constructionIndirectProviderCalls(body)
+	recursiveProvider := constructionRecursiveProvider(source, caller, registry.Allowances)
 	ast.Inspect(body, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
 		if !ok {
@@ -93,7 +94,7 @@ func scanConstructionOperation(source *constructionSource, caller ConstructionSy
 			return true
 		}
 		for _, constructor := range registry.Constructors {
-			if constructor.Symbol != symbol || !constructionProhibitedKind(constructor, registry.Types) || constructionCallAllowed(registry.Allowances, caller, symbol, source.path, indirectCalls[call]) {
+			if constructor.Symbol != symbol || !constructionProhibitedKind(constructor, registry.Types) || constructionCallAllowed(registry.Allowances, caller, symbol, source.path, indirectCalls[call] || recursiveProvider) {
 				continue
 			}
 			mode := ConstructionReport

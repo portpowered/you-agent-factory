@@ -157,8 +157,16 @@ including immutable constructor aliases and conditional calls. Calls inside
 closures, or constructors invoked by `defer` or `go`, remain prohibited even
 inside an approved provider. Constructor calls evaluating arguments to a
 deferred/asynchronous operation run synchronously and retain the allowance.
-This does not establish provider-wrapper call graphs or recursive service-tree
-classification; those remain required before whole-set readiness.
+Focused-provider allowances also stop applying when resolved authored calls in
+the provider package lead back to that provider. The finite call walk follows
+cross-file helpers, immutable aliases, generic function instantiation and
+concrete methods, including calls scheduled by defer/go. The resulting finding
+identifies the registered constructor and its provider operation. Uncalled
+helpers, shadowed declarations and cycles that do not return to the provider do
+not establish that construction path. Closure execution, unresolved callable
+values, cross-package paths and noncyclic secondary graphs still need bounded
+classification/debt before whole-set readiness. This is syntactic reachability,
+not proof that a conditional path executes or that a recursive call terminates.
 
 The initial repository set is report-only. Its metadata comes from the Chat
 Sessions catalog implementation and its authored owner Wire provider. Report
