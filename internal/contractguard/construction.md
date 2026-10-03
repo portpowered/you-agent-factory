@@ -53,7 +53,13 @@ ambiguous. Path multiplicity saturates at two, and previously searched depths
 are discarded, so recursive and diamond embeddings terminate without selecting
 an arbitrary path. Imported private methods are not callable through promotion.
 Opaque, generic and interface embeddings still require classification/debt
-before readiness; an opaque deeper embedding cannot hide a proved shallower
+before readiness for implementation selection. Authored named interface method
+sets, including local/imported aliases, defined interfaces and nested interface
+embeddings, establish whether a selector competes at the struct embedding's
+depth. An empty or unrelated interface does not hide a concrete getter;
+a matching interface method blocks selection of a competing or deeper concrete
+method. Cyclic or opaque interface embeddings remain unresolved.
+An opaque deeper embedding cannot hide a proved shallower
 selector. Promotion establishes method identity, not requiredness of wrapper
 storage, interface implementation selection or generic/pointer method-set proof.
 
