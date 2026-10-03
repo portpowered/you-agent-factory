@@ -15,7 +15,7 @@ import (
 func TestComposedLifecycleHostExercisesVersionSurface(t *testing.T) {
 	t.Parallel()
 
-	service := lifecycle.New(nil, lifecycle.StubActivationGateway())
+	service := &lifecycle.Service{}
 	next := service.NextEditableFactoryVersion(nil, time.Unix(42, 0).UTC())
 	if next.Logical != 1 {
 		t.Fatalf("NextEditableFactoryVersion logical = %d, want 1", next.Logical)

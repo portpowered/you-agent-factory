@@ -64,25 +64,6 @@ type nonCatalogDefaults interface {
 	CreateFactoryScaffold(context.Context, factoryroot.CreateFactoryScaffoldRequest) (factoryroot.CreateFactoryScaffoldResult, error)
 }
 
-// New constructs a factory-definition read collaborator with explicit dependencies.
-func New(
-	host Host,
-	activationGateway factoryroot.DefinitionActivationGateway,
-	versionFileSystems ...factoryroot.VersionFileSystem,
-) *Service {
-	var versionFileSystem factoryroot.VersionFileSystem
-	if len(versionFileSystems) > 0 {
-		versionFileSystem = versionFileSystems[0]
-	}
-	return &Service{
-		nonCatalogDefaults: factoryroot.UnimplementedService{},
-		Service:            factoryroot.UnimplementedService{},
-		host:               host,
-		activationGateway:  activationGateway,
-		versionFileSystem:  versionFileSystem,
-	}
-}
-
 // ResolveExecutionCatalog keeps execution-policy resolution at the
 // Definitions boundary. The operation is pure and does not construct or query
 // Workers, Providers, Models, or process effects.
@@ -91,19 +72,6 @@ func (s *Service) ResolveExecutionCatalog(
 	request factoryroot.ResolveExecutionCatalogRequest,
 ) (factoryroot.ResolveExecutionCatalogResult, error) {
 	return workstationexecution.ResolveExecutionCatalog(ctx, request)
-}
-
-// NewWithCatalog constructs the Definitions root collaborator with private
-// catalog ownership for the CTR-DEF catalog slice.
-func NewWithCatalog(
-	host Host,
-	activationGateway factoryroot.DefinitionActivationGateway,
-	catalogService catalog.Service,
-	versionFileSystems ...factoryroot.VersionFileSystem,
-) *Service {
-	service := New(host, activationGateway, versionFileSystems...)
-	service.Service = catalogService
-	return service
 }
 
 // NewWithCatalogAndPackages constructs the Definitions root collaborator with
@@ -115,7 +83,21 @@ func NewWithCatalogAndPackages(
 	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	service := NewWithCatalog(host, activationGateway, catalogService, versionFileSystems...)
+	var versionFileSystem factoryroot.VersionFileSystem
+	if len(versionFileSystems) > 0 {
+		versionFileSystem = versionFileSystems[0]
+	}
+	service := NewWithCatalogPackagesValidationDistributionAndAuthoring(
+		host,
+		activationGateway,
+		catalogService,
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		nil,
+		factoryroot.UnimplementedService{},
+		versionFileSystem,
+	)
 	service.distributionService = ComposeDistributionService(
 		packagedCatalog,
 		factoryroot.PackagedFactoryInstallationOperations{},
@@ -135,7 +117,21 @@ func NewWithCatalogPackagesAndInstallation(
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	service := NewWithCatalog(host, activationGateway, catalogService, versionFileSystems...)
+	var versionFileSystem factoryroot.VersionFileSystem
+	if len(versionFileSystems) > 0 {
+		versionFileSystem = versionFileSystems[0]
+	}
+	service := NewWithCatalogPackagesValidationDistributionAndAuthoring(
+		host,
+		activationGateway,
+		catalogService,
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		nil,
+		factoryroot.UnimplementedService{},
+		versionFileSystem,
+	)
 	service.distributionService = ComposeDistributionService(
 		packagedCatalog,
 		packagedInstaller,
@@ -152,22 +148,21 @@ func NewWithCompilation(
 	compilationService compilationservice.Service,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	service := New(host, StubActivationGateway(), versionFileSystems...)
-	service.compilationService = compilationService
-	return service
-}
-
-// NewWithValidation constructs the Definitions root collaborator with private
-// validation ownership for the CTR-DEF validate slice.
-func NewWithValidation(
-	host Host,
-	activationGateway factoryroot.DefinitionActivationGateway,
-	catalogService catalog.Service,
-	validationService validationservice.Service,
-	versionFileSystems ...factoryroot.VersionFileSystem,
-) *Service {
-	service := NewWithCatalog(host, activationGateway, catalogService, versionFileSystems...)
-	service.validationService = validationService
+	var versionFileSystem factoryroot.VersionFileSystem
+	if len(versionFileSystems) > 0 {
+		versionFileSystem = versionFileSystems[0]
+	}
+	service := NewWithCatalogPackagesValidationDistributionAndAuthoring(
+		host,
+		StubActivationGateway(),
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		nil,
+		compilationService,
+		versionFileSystem,
+	)
 	return service
 }
 
@@ -194,22 +189,6 @@ func NewWithCatalogPackagesValidationInstallationAndAuthoring(
 	)
 	service.validationService = validationService
 	service.authoringLayoutService = authoringLayoutService
-	return service
-}
-
-// NewWithCatalogPackagesValidationAndDistribution constructs the complete
-// Definitions root collaborator with catalog, validation, and private
-// Distribution ownership for the CTR-DEF distribute slice.
-func NewWithCatalogPackagesValidationAndDistribution(
-	host Host,
-	activationGateway factoryroot.DefinitionActivationGateway,
-	catalogService catalog.Service,
-	validationService validationservice.Service,
-	distributionService distributionservice.Service,
-	versionFileSystems ...factoryroot.VersionFileSystem,
-) *Service {
-	service := NewWithValidation(host, activationGateway, catalogService, validationService, versionFileSystems...)
-	service.distributionService = distributionService
 	return service
 }
 
