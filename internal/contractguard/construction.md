@@ -44,6 +44,19 @@ method expressions. Imported and local type aliases follow authored alias chains
 defined types do not inherit the original type's method identity. Method values
 use the same local-value rules.
 
+Promoted methods follow authored struct embeddings in breadth-first selector
+order. The finding names the original method declaration, including local and
+imported aliases, embedded pointers/values, nested wrappers, and defined struct
+types that retain embedded fields. Own methods and fields hide deeper methods;
+same-depth field/method collisions and multiple paths to the same method remain
+ambiguous. Path multiplicity saturates at two, and previously searched depths
+are discarded, so recursive and diamond embeddings terminate without selecting
+an arbitrary path. Imported private methods are not callable through promotion.
+Opaque, generic and interface embeddings still require classification/debt
+before readiness; an opaque deeper embedding cannot hide a proved shallower
+selector. Promotion establishes method identity, not requiredness of wrapper
+storage, interface implementation selection or generic/pointer method-set proof.
+
 Concrete helper result signatures also establish a method receiver's
 declared type, including imported helpers, authored result aliases, named results,
 immutable helper values and method chains. Tuple assignments and grouped local
@@ -94,7 +107,7 @@ interface-dispatched getters, complete named/tuple result provenance, opaque or
 arbitrary implementation selection; those limits still require
 classification/debt before whole-set readiness.
 
-This bounded scan does not yet establish promoted
+This bounded scan does not yet establish interface-promoted
 methods, generic receiver instantiations, package-variable execution provenance,
 storage through arbitrary returned owner objects, assertion-status helper returns,
 the remaining service-locator forms, recursive providers or complete effect ancestry. Those remaining
@@ -133,7 +146,7 @@ platform variants are indexed; multiple declarations of a registered identity
 are classification failures, rather than an arbitrary target selection.
 
 A clean report for the initial set is not whole-repository enforcement or
-runtime behavior evidence. Promoted/generic methods, package-stored values,
+runtime behavior evidence. Interface-promoted/generic methods, package-stored values,
 unresolved storage/status summaries, topology, and effect ancestry still require
 fixtures and analysis before enabling a capability set. Cross-package helper
 return equivalence is outside this bounded same-package summary.
