@@ -13,7 +13,9 @@ func constructionMethodReceiverType(expr ast.Expr, source *constructionSource, v
 	case *ast.ParenExpr:
 		return constructionMethodReceiverType(value.X, source, visited)
 	case *ast.Ident:
-		if value.Obj != nil && !visited[value.Obj] && !source.mutations[value.Obj] {
+		if value.Obj != nil && !visited[value.Obj] {
+			// Assignment changes the instance, not the binding's declared Go type.
+			// Function-value resolution still requires an immutable callee.
 			visited[value.Obj] = true
 			if initializer := constructionValueInitializer(value.Obj); initializer != nil {
 				return constructionMethodReceiverType(initializer, source, visited)
