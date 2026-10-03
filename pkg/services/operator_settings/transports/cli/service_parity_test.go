@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -398,29 +397,23 @@ func TestConstructedService_ConfigureHonorsContextCancellationOnSuppliedProvider
 
 func paritySettingsRoot(t *testing.T) operatorsettings.Service {
 	t.Helper()
-	root, err := settingswire.NewServiceFromConfigDocument(
-		parityTestConfigService(),
-		internaltestproviders.StandardCatalog(),
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
-	)
+	files := platformfilesystem.Local{}
+	createTemp := func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
+		return os.CreateTemp(dir, pattern)
+	}
+	document := settingswire.NewDocumentService(files, createTemp, globalconfigmapping.Decode,
+		globalconfigmapping.Encode, parityTestProviderCatalog, nil, nil)
+	resolution, err := settingswire.NewResolutionService(internaltestproviders.StandardCatalog())
 	if err != nil {
-		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
+		t.Fatalf("NewResolutionService() error = %v", err)
+	}
+	root, err := settingswire.NewService(document, resolution, files, createTemp,
+		globalconfigmapping.Decode, globalconfigmapping.Encode,
+		func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{}, nil)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
 	}
 	return root
-}
-
-func parityTestConfigService() operatorsettings.ConfigDocumentService {
-	return settingswire.NewConfigDocumentService(
-		platformfilesystem.Local{},
-		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		globalconfigmapping.Decode,
-		globalconfigmapping.Encode,
-		parityTestProviderCatalog,
-		&sync.Mutex{},
-	)
 }
 
 func parityTestProviderCatalog(value string) (string, bool) {
