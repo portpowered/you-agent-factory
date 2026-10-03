@@ -35,7 +35,7 @@ import (
 // its listener, profile, factory and fault route; no global command lock is held.
 func TestCostsScopedReportsAndQueryRecovery(t *testing.T) {
 	t.Parallel()
-	group := &costsProcessGroup{listeners: make(map[int]net.Listener), ready: make(map[int]chan struct{}), files: &costsSettingsFiles{failures: make(map[string]bool)}}
+	group := &costsProcessGroup{listeners: make(map[int]net.Listener), ready: make(map[int]chan struct{}), files: support.NewCostsSettingsFiles(platformfilesystem.Local{})}
 	group.process = support.BuildProcess(t, serviceedges.Edges{
 		APIServerStarter: group.serve, ProviderCommandRunner: costsProviderRunner{}, OperatorSettingsFileSystem: group.files,
 	})
@@ -112,10 +112,10 @@ func (group *costsProcessGroup) checkSettingsRecovery(t *testing.T) {
 	fixture.completeWork(t)
 	fixture.parity(t)
 	path := filepath.Join(fixture.home, ".you-agent-factory", "config.json")
-	group.files.setFailure(path, true)
-	t.Cleanup(func() { group.files.setFailure(path, false) })
+	group.files.SetReadFailure(path, errors.New("controlled settings failure secret-token private-path"))
+	t.Cleanup(func() { group.files.SetReadFailure(path, nil) })
 	fixture.assertFailure(t, fixture.id, http.StatusInternalServerError, "COSTS_QUERY_FAILED")
-	group.files.setFailure(path, false)
+	group.files.SetReadFailure(path, nil)
 	fixture.parity(t)
 }
 func (group *costsProcessGroup) checkMetricsRecovery(t *testing.T) {
@@ -162,37 +162,12 @@ func (costsProviderRunner) Run(context.Context, platformprocess.CommandRequest) 
 	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdoutWithUsage("COMPLETE", 1_000_000, 2_000_000)}, nil
 }
 
-type costsSettingsFiles struct {
-	platformfilesystem.Local
-	mu       sync.RWMutex
-	failures map[string]bool
-}
-
-func (files *costsSettingsFiles) setFailure(path string, fail bool) {
-	files.mu.Lock()
-	defer files.mu.Unlock()
-	if fail {
-		files.failures[filepath.Clean(path)] = true
-	} else {
-		delete(files.failures, filepath.Clean(path))
-	}
-}
-func (files *costsSettingsFiles) ReadFile(path string) ([]byte, error) {
-	files.mu.RLock()
-	fail := files.failures[filepath.Clean(path)]
-	files.mu.RUnlock()
-	if fail {
-		return nil, errors.New("controlled settings failure secret-token private-path")
-	}
-	return files.Local.ReadFile(path)
-}
-
 type costsProcessGroup struct {
 	process   support.Process
 	mu        sync.Mutex
 	listeners map[int]net.Listener
 	ready     map[int]chan struct{}
-	files     *costsSettingsFiles
+	files     *support.CostsSettingsFiles
 }
 
 func (group *costsProcessGroup) serve(ctx context.Context, request platformhttpserver.StartRequest) error {
