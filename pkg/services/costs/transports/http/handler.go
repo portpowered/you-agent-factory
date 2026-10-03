@@ -73,12 +73,6 @@ func NewHandler(adapter *Adapter, logger *zap.Logger) *Handler {
 // explicit server-side completion bound. Tests and isolated hosts can choose a
 // shorter bound; production uses DefaultQueryTimeout through NewHandler.
 func NewHandlerWithQueryTimeout(adapter *Adapter, logger *zap.Logger, queryTimeout time.Duration) *Handler {
-	if adapter == nil {
-		return nil
-	}
-	if logger == nil {
-		logger = zap.NewNop()
-	}
 	if queryTimeout <= 0 {
 		queryTimeout = DefaultQueryTimeout
 	}
@@ -91,15 +85,6 @@ func (h *Handler) GetMetricsCosts(
 	r *http.Request,
 	params factoryapi.GetMetricsCostsParams,
 ) {
-	if h == nil || h.adapter == nil {
-		response := factoryapi.ErrorResponse{
-			Message: "Costs handler is unavailable",
-			Family:  factoryapi.ErrorFamilyInternalServerError,
-			Code:    factoryapi.ErrorResponseCode("INTERNAL_ERROR"),
-		}
-		writeResponseJSON(w, http.StatusInternalServerError, response, zap.NewNop())
-		return
-	}
 	if err := r.Context().Err(); err != nil {
 		h.writeQueryError(w, err)
 		return
@@ -174,9 +159,7 @@ func writeResponseJSON(w http.ResponseWriter, status int, value any, logger *zap
 	if err := json.NewEncoder(w).Encode(value); err != nil {
 		// The response has already been committed, so only the structured log can
 		// report an encoding failure without corrupting a partial success body.
-		if logger != nil {
-			logger.Error("encode Costs response failed", zap.Error(err))
-		}
+		logger.Error("encode Costs response failed", zap.Error(err))
 	}
 }
 
