@@ -10,7 +10,7 @@ import (
 var ErrInvalidNamedFactory = errors.New("invalid named factory")
 var ErrNamedFactoryAlreadyExists = errors.New("named factory already exists")
 var ErrInvalidNamedFactoryName = catalognamedpaths.ErrInvalidName
-var ErrFactoryLayoutNotFound = errors.New("factory layout not found")
+var ErrFactoryLayoutNotFound = catalognamedpaths.ErrLayoutNotFound
 var ErrNamedFactoryNotFound = catalognamedpaths.ErrNotFound
 var ErrNamedFactoryIsCurrent = errors.New("cannot delete current factory")
 var ErrFactoryInstallationContention = errors.New("packaged factory installation contention")
