@@ -21,6 +21,40 @@ type namedTargetReserver struct {
 	calls int
 }
 
+func TestLifecycleSnapshotReportsPublicReferenceWhileWriterUsesPrivateTarget(t *testing.T) {
+	t.Parallel()
+	const privatePath = "/private/ledger/storage/recording-internal.json"
+	const publicReference = "artifact:reported-export"
+	planner := recordings.LiveRecordingTargetPlannerFunc(func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+		return recordings.LiveRecordingTarget{ServicePath: privatePath, ReportedPath: publicReference}, nil
+	})
+	var writtenPath string
+	owner := lifecycleservice.New(planner, func(path string, _ recordings.RecordingSnapshot) error {
+		writtenPath = path
+		return nil
+	}, nil, fixedRecordingClock{})
+	started, err := owner.StartRecording(recordings.StartRecordingRequest{
+		Enabled: true, RecordingID: "recording-private-target",
+		Scope:  recordings.CanonicalEventScope{FactorySessionID: "session-private-target"},
+		Target: recordings.RecordingTargetRequest{HomeDir: "home/operator", ReportedSessionID: "session-private-target"},
+	})
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if _, err := owner.FinishRecording(recordings.FinishRecordingRequest{
+		RecordingID: started.Status.RecordingID, FinishedAt: time.Unix(1_700_000_001, 0).UTC(),
+	}); err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+	snapshot, err := owner.Snapshot(started.Status.RecordingID)
+	if err != nil || snapshot.Status.Artifact != publicReference || snapshot.Status.State != recordings.RecordingFinalized {
+		t.Fatalf("export snapshot = %#v, %v; want finalized public reference", snapshot, err)
+	}
+	if writtenPath != privatePath {
+		t.Fatalf("writer target = %q, want private storage target", writtenPath)
+	}
+}
+
 func (reserver *namedTargetReserver) ReserveNamed(string, time.Time, string, string) (string, error) {
 	reserver.calls++
 	return reserver.path, nil
