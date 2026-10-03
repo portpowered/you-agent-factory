@@ -995,6 +995,14 @@ func (a *attempt) start(ctx context.Context, cwd string, environment []string) (
 		ClientCapabilities: acpClientCapabilities(),
 	})
 	if err != nil {
+		// An agent's final diagnostic reaches this attempt's stderr as it fails
+		// the handshake, and os/exec finishes copying that stream only when the
+		// process is reaped. Completing this attempt's own arbitrated teardown -
+		// the stop the caller's release performs anyway - first lets that copy
+		// finish, so the redacted stderr detail is captured instead of racing
+		// it. Retirement is deliberately not performed here: this failure keeps
+		// its original RPC cause, context and typed classification.
+		_ = a.stop(context.Background())
 		return acpsdk.InitializeResponse{}, rpcFailure(ctx, "initialize", id, err, a.stderr.String(), request)
 	}
 	if version := classifyNegotiatedVersion(id, initialized); version != nil {
