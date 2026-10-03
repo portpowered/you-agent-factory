@@ -8,6 +8,7 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 
 	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	recordingsreplay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay"
 	replaywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire"
 )
 
@@ -66,15 +67,20 @@ func TestReplayLoadsFinalizedFactsAndObservesOrderedProgress(t *testing.T) {
 	if progress.Observation.ProcessedEvents != 1 || len(projection.events) != 1 || projection.events[0].Id != string(recording.Events[0].ID) {
 		t.Fatalf("first replay observation = %#v, projection prefix = %#v", progress, projection.events)
 	}
-	completed, err := root.ObserveReplay(recordings.ObserveReplayRequest{Plan: planned.Plan.Handle})
+	assertReplayCompletion(t, root, planned.Plan.Handle, projection, recording.Events[1])
+	if lifecycle.selected != recording.RecordingID {
+		t.Fatalf("lifecycle selection = %q, want %q", lifecycle.selected, recording.RecordingID)
+	}
+}
+
+func assertReplayCompletion(t *testing.T, replay recordingsreplay.Service, plan recordings.ReplayPlanHandle, projection *replayProjection, last recordings.CanonicalEvent) {
+	t.Helper()
+	completed, err := replay.ObserveReplay(recordings.ObserveReplayRequest{Plan: plan})
 	if err != nil || completed.Observation.Kind != recordings.ReplayCompleted || completed.Observation.ProcessedEvents != 2 || len(projection.events) != 2 {
 		t.Fatalf("completed replay = (%#v, %v), projection prefix = %#v", completed, err, projection.events)
 	}
-	if projection.events[1].Id != string(recording.Events[1].ID) || completed.Observation.Through == nil || *completed.Observation.Through != recording.Events[1].Cursor {
+	if projection.events[1].Id != string(last.ID) || completed.Observation.Through == nil || *completed.Observation.Through != last.Cursor {
 		t.Fatalf("replay lost final event identity or cursor: events=%#v observation=%#v", projection.events, completed.Observation)
-	}
-	if lifecycle.selected != recording.RecordingID {
-		t.Fatalf("lifecycle selection = %q, want %q", lifecycle.selected, recording.RecordingID)
 	}
 }
 
