@@ -28,6 +28,7 @@ type flushCase struct {
 	entered, release, completed            chan struct{}
 	entryOnce, releaseOnce, completionOnce sync.Once
 	hold                                   atomic.Bool
+	dispatches                             atomic.Int32
 }
 
 func newFlushCases(t *testing.T) []*flushCase {
