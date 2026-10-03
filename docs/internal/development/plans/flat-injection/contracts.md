@@ -33,6 +33,99 @@ type TimerSource interface {
 
 Operator decision (2026-10-02): `After` joins the one shared `TimerSource` seam; no per-owner `After` adapters over `NewTimer`. Consumers that need `AfterFunc` or a full clockwork clock (Automations, the watcher `debounceClock`) declare the smallest owner-local interface over `TimerSource` in their owning lane; they do not fake missing methods.
 
+
+## T05 — Completed Work preparation roles
+
+Authored source: `pkg/services/work/internal/service.go:33-50`.
+
+Current:
+
+```go
+func NewService(
+ runtimes work.RuntimeResolver,
+ readSubmittedFile work.SubmittedFileReader,
+ inspectSubmittedFile work.SubmittedFilePathInspector,
+ contentStaging work.ContentStagingService,
+ contentMaterializer work.ContentMaterializer,
+ durability ...work.CompletedFlushSequenceReader,
+) work.FileSubmissionService
+```
+
+Proposed:
+
+```go
+func NewService(
+ runtimes work.RuntimeResolver,
+ readSubmittedFile work.SubmittedFileReader,
+ inspectSubmittedFile work.SubmittedFilePathInspector,
+ contentStaging work.ContentStagingService,
+ contentMaterializer work.ContentMaterializer,
+ stateAccess stateaccess.Service,
+ preparation work.RequestPreparationService,
+ invocationPreparation work.InvocationInputPreparation,
+) work.FileSubmissionService
+```
+
+Existing public methods/results remain unchanged. CompletedFlushSequenceReader is a required direct dependency of stateaccess owner, not discarded. Explicit admission-only content implementations preserve current configuration errors. T05 generates Wire only in its later implementation PR.
+
+Authored source: `pkg/services/work/invocation_return_policy_contract.go:337-353`.
+
+Current:
+
+```go
+type invocationInputPreparationAdapter struct {
+	readFile    SubmittedFileReader
+	inspectPath SubmittedFilePathInspector
+}
+
+func (adapter invocationInputPreparationAdapter) PrepareInvocationInput(
+	ctx context.Context,
+	request InvocationInputPreparationRequest,
+) (PreparedInvocationInput, error) {
+	prepared, err := invocationreturnpolicy.NewInvocationInputPreparation(
+		invocationreturnpolicy.InvocationInputFileReader(adapter.readFile),
+		invocationreturnpolicy.InvocationInputPathInspector(adapter.inspectPath),
+	).PrepareInvocationInput(
+		ctx,
+		invocationInputPreparationRequestToInternal(request),
+	)
+	if err != nil {
+		return PreparedInvocationInput{}, mapInvocationReturnPolicyError(err)
+	}
+	return preparedInvocationInputFromInternal(prepared), nil
+}
+```
+
+Proposed:
+
+```go
+type invocationInputPreparationAdapter struct {
+ inner invocationreturnpolicy.InvocationInputPreparation
+}
+func (adapter invocationInputPreparationAdapter) PrepareInvocationInput(
+ ctx context.Context,
+ request work.InvocationInputPreparationRequest,
+) (work.PreparedInvocationInput, error) {
+ prepared, err := adapter.inner.PrepareInvocationInput(ctx, invocationInputPreparationRequestToInternal(request))
+ if err != nil { return work.PreparedInvocationInput{}, mapInvocationReturnPolicyError(err) }
+ return preparedInvocationInputFromInternal(prepared), nil
+}
+// Focused provider destinations: work/internal/invocationreturnpolicy/wire and
+// work/internal/services/invocation_preparation/wire; public mapping and
+// its conversion helpers move inside this owner. work/wire composes them.
+func NewInvocationInputPolicy(
+ readFile invocationreturnpolicy.InvocationInputFileReader,
+ inspectPath invocationreturnpolicy.InvocationInputPathInspector,
+) invocationreturnpolicy.InvocationInputPreparation
+func NewInvocationInputAdapter(
+ inner invocationreturnpolicy.InvocationInputPreparation,
+) work.InvocationInputPreparation
+```
+
+Private policy and public mapping adapter are constructed once. RequestPreparationService separately receives completed ContentPreparation; no operation-time constructor. Preserve original conversion and errors.Is cancellation/deadline semantics at applicationService. No new public protocol. Mapping implementation/converters move into the parent-private invocation_preparation owner; only its public Work interface is returned to peers. No exported Work-root constructor accepts an owner-private policy type.
+
+RequestPreparationService receives completed ContentPreparation separately. Generate Wire only in the later T05 implementation PR; no public generated clients change in this docs amendment.
+
 ## T10 — Models fixed collaborators
 
 Authored source: `pkg/services/models/wire/wire.go`, component container.
@@ -73,7 +166,7 @@ type RuntimeHost = runtimehost.Service
 type Inference = inference.Service
 ```
 
-Expose focused providers corresponding to the existing owner-private `runtime_scopes/wire.NewService`, `assets/wire.NewService`, `catalog/wire.NewService`, `runtime_host/wire.NewService`, and `inference/wire.NewService`. Forward each constructor's complete existing effects individually; do not return a components bag. Keep the old Models Root construction path only until T11's scoped execution operations are available. T10 establishes the independent leaf graph; T11 owns final root cutover.
+Expose focused providers corresponding to the existing owner-private `runtime_scopes/wire.NewService`, `assets/wire.NewService`, `catalog/wire.NewService`, `runtime_host/wire.NewService`, and `inference/wire.NewService`. Forward each constructor's complete existing effects individually; do not return a components bag. T10 retains ProcessDependencies declaration/forwarding/consumption as temporary compatibility, removal owner T11; this is not final S01 proof. Keep the old Models Root construction path only until T11's scoped execution operations are available after T10/T30 merge. T10 establishes the independent leaf graph; T11 owns final root cutover.
 
 Authored source: `pkg/services/models/internal/service/runtime_factory.go`, root constructor.
 
@@ -160,7 +253,7 @@ type ScopedExecution interface {
 
 This owner receives the existing asset/host/runtime execution effects directly. Its operations resolve binding facts using `request.Scope` and initialize only owned state/resources. Delete `Root.runtimeByScope map[models.RuntimeScopeRef]models.Service`, `scopedRuntime`, and `scopedRuntimeWithBuilder` after migrating both callers (`PullModelForScope` and `InvokeLocal`). Do not implement ScopedExecution by invoking those legacy constructors. Existing public request/result types and scope validation remain unchanged.
 
-The slot-facts/leases cycle in `runtime_host/internal/service/slot_facts.go:NewWired` must become two consumers of one keyed state owner. Remove `adapter.host = host`; leases cannot be constructed against a partially bound host. Runtime Host retains supervision; leases retain admission. The state owner stores supervised readiness and capacity facts, not other services. T11 must render any further changed leaf constructor as a current/proposed pair before implementation; aliases cannot conceal unplanned construction changes.
+T30 exclusively owns the slot-facts/leases cycle in `runtime_host/internal/service/slot_facts.go:NewWired` must become two consumers of one keyed state owner. Remove `adapter.host = host`; leases cannot be constructed against a partially bound host. Runtime Host retains supervision; leases retain admission. The state owner stores supervised readiness and capacity facts, not other services. T11 consumes the independently merged T30 host/leases/coordinator outputs and must render any further changed scoped-execution leaf constructor as a current/proposed pair before implementation; aliases cannot conceal unplanned construction changes.
 
 ### T10 slot state and lease coordination cycle cut
 
@@ -369,6 +462,9 @@ func NewAssembly(
 	registry sessionregistry.Service,
 	state *sessionruntime.Service,
 	streams StreamManager,
+	clock factoryruntime.Clock,
+	invoker roles.SessionInvoker,
+	activation SessionScopeActivation,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -410,10 +506,189 @@ type StreamManager interface {
 
 Expose `SessionGateway`, `SessionRegistry`, `SessionState`, `StreamManager`, `Identity` and `ResponseStreams` aliases through `factory_sessions/wire`. Registry/state/response constructors receive the exact same selected collaborators; Assembly stops invoking them. Preserve registry entries, admission locks, response sequence/cursors and startup singleflight.
 
-Remove `NewRootFromAssembly` late binding. Construct the durable owner against directly injected session-state/resolver roles, then supply both completed assembly and durable owner to Root. Persistence-routing and resume-scope queries belong to that resolver, which must not depend on the final Sessions Root. Keep durable error/recovery behavior and raw event histories.
+T13 removes `BindProcessDurable` gateway replacement and makes the minimal `NewRootFromAssembly` bridge caller adjustment to pass completed durable/gateway roles. T17 owns final removal of `NewRootFromAssembly`, legacy Complete/opening products and factories. Construct the durable owner against directly injected session-state/resolver roles, then supply both completed assembly and durable owner to Root. Persistence-routing and resume-scope queries belong to that resolver, which must not depend on the final Sessions Root. Keep durable error/recovery behavior and raw event histories.
 
 
-> Validation review: the proposed `NewAssembly` above omits the current `clock` parameter, and no other pair says where it moves. Keep `clock` unless a delta pair names its new owner. `NewRootFromAssembly`/`BindProcessDurable`, `RuntimeModelInvokerConfig` and the durable/conductor factories belong to T17 (see the T17 pair and inventory.md).
+AM07 supersedes the earlier dropped-clock and binding-owner notes. Keep Assembly clock; construct independent authority first. The graph is authority -> scope control/activation -> durable -> invocation -> gateway -> Assembly. Host delegates state/control to authority and durable operations to completed durable; it never depends on invocation/gateway/Root. Failed initialization is unpublished and rolled back. Complete becomes scope registration using completed gateway/invoker in T13; T17 removes that bridge.
+
+### Independent session authority construction
+
+Authored source: `pkg/services/factory_sessions/internal/runtime/service.go:210-229`. Existing direct constructor is retained, moved out of Assembly's nested construction to one focused owner Wire provider.
+
+Current:
+
+```go
+func NewWithResponseService(
+ registry sessionregistry.Service,
+ responses *responsestream.Registry,
+ closeSession func(*livesession.LiveSession),
+ clock factoryruntime.Clock,
+ eventIDs factorysessions.ResponseEventIDGenerator,
+ sessionIDs factorysessions.SessionIDGenerator,
+ responseEvents responsestreamservice.Service,
+) *Service
+```
+
+Proposed:
+
+```go
+func NewWithResponseService(
+ registry sessionregistry.Service,
+ responses *responsestream.Registry,
+ closeSession func(*livesession.LiveSession),
+ clock factoryruntime.Clock,
+ eventIDs factorysessions.ResponseEventIDGenerator,
+ sessionIDs factorysessions.SessionIDGenerator,
+ responseEvents responsestreamservice.Service,
+) *Service
+```
+
+The authority has no Root/gateway/invoker dependency. closeSession is completed lifecycle cleanup over keyed state/handles, never a closure capturing final Root or re-entering invocation. Existing Register/Resolve, activation lock and canonical identities remain. Scope activation/control and invocation query adapters consume this authority and directly injected Runtime lifecycle/Work/projection roles; peer lookup through final Root is prohibited. Construct durable against its independent resolver before invocation/gateway. Export only focused legal owner Wire aliases, not private stores or a public registry.
+
+### T13 independent scope activation
+
+Authored source: `pkg/services/factory_sessions/internal/roles/contracts.go RuntimeAssembly.Complete`. Current excerpts describe the existing edges; proposed types belong inside the Sessions private owner.
+
+Current:
+
+```go
+// Current lifecycle factory edge inside Assembly.Complete:
+gateway := NewWithLiveChangeCoordinator(
+ SessionServiceHost(runtime), a.state,
+ sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle),
+ a.state.ResponseStreams(), runtime.ReconnectCursorValidator(),
+ a.sessionResultProjection, a.responseStreams, a.liveChangeCoordinator,
+)
+gateway = runtime.AttachSessionGateway(gateway)
+gateway.bindRecordedSessionHistory(a.ListSessions)
+invoker, err := NewInvocationOwner(runtime, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)
+bound.Invoker = invoker
+a.registry.Upsert(session, true)
+gateway.bindRootCapabilities(invoker, runtime.ActivateNamedFactory, runtime.DefinitionActivationGateway())
+```
+
+Proposed:
+
+```go
+// New private contracts in factory_sessions/internal/sessionservice.
+// Authority is independently constructed sessionruntime.Service; it never
+// depends on final Root, gateway or invoker. Existing Register/Resolve and
+// response/activation locks retain canonical identity and sequencing.
+type SessionScope struct {
+ SessionID string
+ RuntimeID string
+ GenerationID string
+ ModelsScope models.RuntimeScopeRef
+ Target factorysessions.TargetRef
+ Record factoryruntime.RuntimeRecord
+ Run factoryruntime.RuntimeRun
+}
+type SessionScopeActivation interface {
+ Activate(context.Context, SessionScope) error
+ Retire(context.Context, string, string) error // session ID, generation ID
+}
+type SessionScopeControl interface {
+ CancelLiveFactorySession(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+ StopLiveSession(string) error
+}
+func NewScopeActivation(authority *sessionruntime.Service) SessionScopeActivation
+// Interim T13 bridge only: RuntimeRecord still exposes service/logger
+// getters today (runtime_session_contract.go:19-36). T15 owns their
+// replacement by an opaque RuntimeBinding plus keyed lifecycle state;
+// T17 removes legacy opening consumption. This is not final S01 proof.
+// T13 bridge: Complete registers scope and uses preconstructed gateway and
+// invoker; T17 removes Complete and legacy NewSessionRuntime construction.
+```
+
+Activation mutates keyed state under existing locks; failed initialization is unpublished and rolled back. Retire uses session+generation identity to avoid retiring a peer/current replacement. Scope introduces no new process clock/logger default. Existing RuntimeRecord service/logger getters are explicitly temporary compatibility: T15 owns opaque RuntimeBinding/keyed-lifecycle replacement; T17 owns legacy opening removal. The T13 bridge is not final S01 proof.
+
+### T13 gateway receives complete durable owner
+
+Authored source: `pkg/services/factory_sessions/internal/sessionservice/service.go:84-109`. Current excerpts describe the existing edges; proposed types belong inside the Sessions private owner.
+
+Current:
+
+```go
+func NewWithLiveChangeCoordinator(
+ host Host,
+ sessions stream.SessionResolver,
+ observer stream.Observer,
+ responseStreams *responsestream.Registry,
+ reconnects factorysessions.ReconnectCursorValidator,
+ results factoryruntime.SessionResultProjectionOperation,
+ responseEvents responsestreamservice.Service,
+ liveChange factorysessioncontracts.LiveChangeCoordinator,
+) *Service
+func (a *Assembly) BindProcessDurable(execution durableexecution.Service) error
+```
+
+Proposed:
+
+```go
+func NewGateway(
+ host Host,
+ streams *stream.Manager,
+ reconnects factorysessions.ReconnectCursorValidator,
+ results factoryruntime.SessionResultProjectionOperation,
+ responseEvents responsestreamservice.Service,
+ liveChange factorysessioncontracts.LiveChangeCoordinator,
+ durable durableexecution.Service,
+ recordedHistory func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error),
+ invoker roles.SessionInvoker,
+ activate func(context.Context, string) error,
+ activationGateway factorydefinitions.DefinitionActivationGateway,
+) *Service
+// Removed in T13: BindProcessDurable, AttachSessionGateway,
+// bindRecordedSessionHistory and bindRootCapabilities.
+// T17 final root already receives completed assembly/durable/start operation:
+func NewRoot(
+ assembly roles.RuntimeAssembly,
+ durable durableexecution.Service,
+ start func(context.Context, factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error),
+ liveChangeCoordinator factorysessioncontracts.LiveChangeCoordinator,
+) (*Root, error)
+```
+
+Construct stream.Manager separately with existing explicit resolver/observer/registry. Host delegates live state/control to independent authority, durable methods to already constructed durable owner; Host never depends on invoker/gateway/Root. Durable constructor retains persistence and resume errors. T13 bridge passes completed durable owner, never replacing a gateway slot. No public durable semantics change.
+
+### T13 invocation authority breaks cancellation cycle
+
+Authored source: `pkg/services/factory_sessions/internal/sessionservice/runtime_invocation.go:21-74`. Current excerpts describe the existing edges; proposed types belong inside the Sessions private owner.
+
+Current:
+
+```go
+func NewInvocationOwner(
+ fs *SessionRuntime,
+ interpolation factorydefinitions.InvocationInterpolationService,
+ invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
+ ttsObservability factorydefinitions.TTSObservabilityService,
+ inputFiles fileeffects.InvocationInputReader,
+) (invocationservice.Service, error)
+```
+
+Proposed:
+
+```go
+type InvocationAuthority interface {
+ FactoryConfig(string) (*factorydefinitions.FactoryConfig, error)
+ SubmitWork(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
+ Observe(context.Context, string, sessioninvocation.SessionInvocationWaitInput) (sessioninvocation.SessionInvocationObservation, error)
+ WaitSession(context.Context, string) (sessioninvocation.SessionInvocationWaiter, sessioninvocation.ReleaseSessionInvocationWaiter)
+}
+func NewInvocationOwner(
+ authority InvocationAuthority,
+ controls SessionScopeControl,
+ telemetry sessioninvocation.SessionInvocationTelemetry,
+ specialCase sessioninvocation.SessionInvocationSpecialCase,
+ interpolation factorydefinitions.InvocationInterpolationService,
+ invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
+ inputFiles fileeffects.InvocationInputReader,
+ workPolicy work.Service,
+) (invocationservice.Service, error)
+```
+
+Authority resolves named session and generation using existing state, Work and projection owners; it never captures final Root/gateway. ScopeControl directly consumes Runtime lifecycle and session state; timeout cancellation does not re-enter invocation. Telemetry/special-case/Work policy are constructed once, required callback bag is removed with this direct signature. Existing wait/event/result errors and durable history survive.
 
 ## T14 — Runtime control and one handle authority
 
@@ -471,10 +746,24 @@ func New(dependencies instancehost.Dependencies) (instancehost.Service, error)
 Proposed:
 
 ```go
-func New(clock factoryruntime.Clock) (instancehost.Service, error)
+// Removed: instancehost.Dependencies.
+func New(
+ clock factoryruntime.Clock,
+ scheduler platformclock.TimerSource,
+ lifecycle *factoryhost.LifecycleService,
+) (instancehost.Service, error)
+func NewLifecycleService(
+ clock factoryruntime.Clock,
+ scheduler platformclock.TimerSource,
+) (*LifecycleService, error)
+func WaitForStart(
+ ctx context.Context,
+ handle *Handle,
+ scheduler platformclock.TimerSource,
+) error
 ```
 
-Delete the one-field `instancehost.Dependencies` record and update its private implementation constructor correspondingly. Host handles remain scoped state keyed by runtime identity.
+AM08: delete the one-field instancehost.Dependencies wrapper. LifecycleService stores both Clock and TimerSource; forward scheduler to WaitForStart and all readiness callers (including legacy Assembly host injection). Current lifecycle signature is `NewLifecycleService(clock factoryruntime.Clock) (*LifecycleService, error)` and current readiness helper is `WaitForStart(ctx context.Context, handle *Handle) error` (`host/service.go:16`; `host/lifecycle.go:164`). Proposed signatures above separate replay-sensitive timestamps from OS scheduling. Preserve the one-second ceiling and 10ms poll using cancellable NewTimer loops; never fall back to real time or use replay ticks for readiness. Host handles remain keyed by runtime identity. T15/T31 build redesign is not part of this minimal propagation.
 
 ## T15 — Runtime activation, replacement and replay
 
@@ -547,7 +836,7 @@ type WorkerAttemptOpener interface {
 Inject the process Worker Sessions service and its attempt-opening capability directly; remove `provideWorkerSessionsFactoryWithRecorder`. Retain existing attempt request, idempotent completion handle, association and Events contracts. Recorder/progress routing uses explicit session/attempt identities; it must not construct another service or overwrite shared mutable routing when sessions overlap. Observation retention remains owned by Worker Sessions and Events.
 
 
-> Validation review: the proposed `NewService` above has the same signature as the current one. The real change is per-attempt routing: today each runtime builds Worker Sessions with its own `workers.Service`. That service carries the session's provider and command-runner overrides, replay runner, session/runtime/recording IDs and clock (`factory_runtime/internal/runtime_build.go:477-505,621-631`). State is keyed by bare dispatch ID (`worker_sessions/.../invoke_session.go:294-310`). T15 deletes `WorkerSessionsFactory`; T16 does not.
+> Validation review: the proposed `NewService` above has the same signature as the current one. The real change is per-attempt routing: today each runtime builds Worker Sessions with its own `workers.Service`. That service carries the session's provider and command-runner overrides, replay runner, session/runtime/recording IDs and clock (`factory_runtime/internal/runtime_build.go:477-505,621-631`). State is keyed by bare dispatch ID (`worker_sessions/.../invoke_session.go:294-310`). AM09: T16 removes WorkerSessionsFactory declaration, provider and all call sites after its separately merged keyed-attempt contract PR and characterization. T15 consumes shared supervision and depends on T16; it does not delete the factory.
 
 **Pending — authored by T16 as its first required step, in its own PR (operator decision, 2026-10-02).** Add here the current/proposed Go pair for the attempt request. That request carries the runtime ID, the execution handle, the session overrides and the clock/scheduler, and Worker Sessions state is keyed by (runtime ID, dispatch ID). If keying is not feasible, T16 stops and returns a delta plan (plan §2 replanning trigger); no structural T16 work proceeds first.
 
@@ -735,3 +1024,21 @@ Boundary unit evidence covers nil pointer/function/interface, typed nil, explici
 Authored sources: `pkg/services/factory_runtime/internal/services/instance_host/build/service.go` (`BundleBuilder` / `Service`), `orchestration/runtime/worker_session_control_targets.go` (`WorkstationRequestExecutorConfig`).
 
 **Pending — authored by T31 as its first required step, before any structural change (operator decision, 2026-10-02).** Add the current/proposed Go pair for both types here: injected collaborators separated from a request-resolution value type, with the deferred graph-construction closure removed. If the pair cannot be written within T31's outcome, T31 stops and returns a delta plan.
+
+## v1.1 unchanged public contracts and held proof
+
+AM01: CLI quiet+JSON/explicit-output remains INVOCATION_OUTPUT_CONFLICT; use separate quiet/JSON/response-stream NDJSON/verbose witnesses. Default logging is terminal-muted; typed model failure remains empty stdout and existing stderr, no success artifact and capacity recovery. No public output or logging policy change.
+
+AM03/AM04: no HTTP/MCP Settings load/update routes are created. Existing canonical CLI unknown-field/precedence/failure behavior is F12; dormant adapters are unit compatibility. Canonical AGY selection stays command execution with supplied runner and zero PTY effects; absent-override default composition stays inert and legacy PTY behavior is separate owner-unit compatibility.
+
+AM05: RetainWorktree/reused checkout semantics remain unchanged. T09 releases attempt resources and nonretained checkout; T15 owns retained session/generation checkout disposition. Deleting retained checkouts requires an operator policy decision, not constructor cleanup.
+
+AM10: no public observation API or baseline instrumentation is introduced. FI-PREREQ-BASELINE-OBS must independently prove read-only private handles/leases/capacityHolders observation at original pin; T27/T22 P01 stays blocked if infeasible.
+
+AM11: post-start cancellation plus failing final-flush writer and injected UTC clock preserve terminal causes/metadata; absent clock returns ErrInvalidRecordingTerminalMetadata and leaves FinalizedAt unset. Keep retained T03 head and F07/F08; no successful zero-time finalization claim.
+
+AM12: MCP start_sync completion and ordered read_events for its returned durable session remain M01/F13. FI Sessions/Recordings/MCP owns FI-PREREQ-MCP-DISCOVERY for FI and WSV; diagnose same identity/recording lookup. Public-contract/policy correction needs operator authority; no completion-only/mock substitute.
+
+AM13: no replacement-webhook behavior/policy contract is authorized here. FI Sessions/Runtime/Webhooks owns FI-PREREQ-WEBHOOK-READINESS, authority pending operator; explicit authorization and prerequisite merge precede T26 cutover. Characterization preserves both retained heads and archived reproduction, with F18a-f unchanged.
+
+AM14/AM15: constructor and public contracts gain no quality/acceptance exemption. Authors own evidence and implementation handoff; independent VAL25/VAL01/review owns artifact/Linux/terminal CI/merge, and Factory Reliability owns FI-SHARED-QUALITY release. Retained T01/T06/T25 work is preserved without inventing terminal status.
