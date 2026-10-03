@@ -280,10 +280,12 @@ func (s *Service) submitCronTickForRuntime(
 		}
 
 		s.logger().Warn("cron watcher trigger retrying", fields...)
+		timer := s.supervisorClock().NewTimer(cronRetryBackoff)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
-		case <-time.After(cronRetryBackoff):
+		case <-timer.Chan():
 		}
 	}
 	return nil
