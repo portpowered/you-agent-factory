@@ -47,6 +47,7 @@ func runFixedLeafSessionCancellation(t *testing.T, baseURL string, routes *fixed
 		t.Fatal("accepted selected model effect did not observe cancellation")
 	}
 	support.WaitForSessionStopped(t, baseURL, selected, 5*time.Second)
+	assertFixedLeafCanceledWork(t, baseURL, selected)
 	select {
 	case <-peerRoute.canceled:
 		t.Fatal("selected cancellation canceled the accepted peer effect")
@@ -66,6 +67,18 @@ func runFixedLeafSessionCancellation(t *testing.T, baseURL string, routes *fixed
 		PrimaryResult: works.Results[0].Content}, peerRoute.output)
 	retry := routes.register("cancel-retry", false)
 	assertFixedLeafSuccess(t, invokeFixedLeafSession(t, baseURL, peer, "fixed-leaf-cancel-retry", "cancel-retry"), retry.output)
+}
+
+func assertFixedLeafCanceledWork(t *testing.T, baseURL, session string) {
+	t.Helper()
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, baseURL+"/factory-sessions/"+session+"/work")
+	if len(listed.Results) != 1 || listed.Results[0].Content == nil || len(*listed.Results[0].Content) != 1 {
+		t.Fatalf("canceled Work = %#v, want only the original text input", listed)
+	}
+	part, err := (*listed.Results[0].Content)[0].AsWorkTextContentPart()
+	if err != nil || part.Text != "cancel-selected" || part.Type != factoryapi.WorkContentPartTypeText {
+		t.Fatalf("canceled Work content = %#v, %v, want preserved input without model output", part, err)
+	}
 }
 
 func (routes *fixedLeafRoutes) registerBlocked(text string) *fixedLeafRoute {
