@@ -33,7 +33,7 @@ func exitFailureFromCommandResult(result providerservice.CommandResult, workingD
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: declaredFailureMessage(providers.ExecuteFailureKindAuthentication)}
 	case containsAny(normalized, "invalid argument", "bad request", "invalid request"):
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindInvalidRequest, Message: declaredFailureMessage(providers.ExecuteFailureKindInvalidRequest)}
-	case containsAny(normalized, "rate limit", "too many requests", "resource exhausted", "at capacity", "429"):
+	case containsAny(normalized, "rate limit", "too many requests", "resource exhausted", "at capacity", "server_overloaded", "429"):
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindThrottled, Message: declaredFailureMessage(providers.ExecuteFailureKindThrottled)}
 	case containsAny(normalized, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: declaredFailureMessage(providers.ExecuteFailureKindDependency)}
@@ -115,6 +115,9 @@ func declaredFailureFromCommandOutput(stdout, stderr []byte) (providers.ExecuteF
 			failure := classifyDeclaredFailure(errorRecord{Message: envelope.Message})
 			markUnrecognizedProviderRefusal(&failure)
 			return failure, true
+		}
+		if envelope.Type == "task_complete" && envelope.Error == nil {
+			continue
 		}
 		var direct errorRecord
 		if json.Unmarshal([]byte(line), &direct) == nil && strings.TrimSpace(direct.Message) != "" {

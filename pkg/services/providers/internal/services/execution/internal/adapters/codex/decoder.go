@@ -43,12 +43,17 @@ type recordEnvelope struct {
 	Usage    *usageRecord    `json:"usage"`
 	Error    *errorRecord    `json:"error"`
 	Message  string          `json:"message"`
+	// CodexErrorInfo is the native error category Codex attaches to error and
+	// completion records, for example "server_overloaded".
+	CodexErrorInfo string `json:"codex_error_info"`
 }
 
 type errorRecord struct {
 	Type    string `json:"type"`
 	Status  int    `json:"status"`
 	Message string `json:"message"`
+	// CodexErrorInfo is the native error category, for example "server_overloaded".
+	CodexErrorInfo string `json:"codex_error_info"`
 }
 
 type usageRecord struct {
@@ -312,22 +317,37 @@ func (decoder *decoder) decodeRecord(raw []byte) {
 		detail, _ := json.Marshal(record.Usage)
 		decoder.addProgress("usage.updated", string(detail), nil)
 		decoder.addProgress("turn.completed", "completed", nil)
+	case "task_complete", "turn.failed", "error":
+		decoder.decodeFailureRecord(record)
+	case "item.started", "item.updated", "item.completed":
+		decoder.decodeItem(record.Type, record.Item)
+	default:
+		decoder.addDiagnostic("unsupported_event")
+	}
+}
+
+// decodeFailureRecord records the failure a task_complete, turn.failed, or
+// error record declares. A task_complete that carries an error (for example a
+// model-capacity overload with no final agent message) is a declared failure;
+// a task_complete without one carries no failure signal.
+func (decoder *decoder) decodeFailureRecord(record recordEnvelope) {
+	switch record.Type {
+	case "task_complete":
+		if record.Error != nil && strings.TrimSpace(record.Error.Message) != "" {
+			decoder.declareFailure(*record.Error)
+		}
 	case "turn.failed":
 		if record.Error == nil || strings.TrimSpace(record.Error.Message) == "" {
 			decoder.markDecodeFailure("malformed_turn_failure")
 			return
 		}
 		decoder.declareFailure(*record.Error)
-	case "error":
+	default:
 		if strings.TrimSpace(record.Message) == "" {
 			decoder.markDecodeFailure("malformed_error")
 			return
 		}
-		decoder.declareFailure(errorRecord{Message: record.Message})
-	case "item.started", "item.updated", "item.completed":
-		decoder.decodeItem(record.Type, record.Item)
-	default:
-		decoder.addDiagnostic("unsupported_event")
+		decoder.declareFailure(errorRecord{Message: record.Message, CodexErrorInfo: record.CodexErrorInfo})
 	}
 }
 
@@ -546,6 +566,7 @@ func (decoder *decoder) declareFailure(record errorRecord) {
 func classifyDeclaredFailure(record errorRecord) providers.ExecuteFailure {
 	message := strings.ToLower(strings.TrimSpace(record.Message))
 	nativeType := strings.ToLower(strings.TrimSpace(record.Type))
+	nativeInfo := strings.ToLower(strings.TrimSpace(record.CodexErrorInfo))
 	kind := providers.ExecuteFailureKindUnknown
 	switch {
 	case nativeType == "authentication_error",
@@ -563,7 +584,7 @@ func classifyDeclaredFailure(record errorRecord) providers.ExecuteFailure {
 		record.Status == 429,
 		strings.HasPrefix(message, "unexpected status 429"),
 		strings.HasPrefix(message, "you've hit your usage limit"),
-		strings.HasPrefix(message, "selected model is at capacity"):
+		isCapacityOverload(nativeInfo, message):
 		kind = providers.ExecuteFailureKindThrottled
 	case record.Status == 408,
 		strings.HasPrefix(message, "context deadline exceeded"),
@@ -580,6 +601,15 @@ func classifyDeclaredFailure(record errorRecord) providers.ExecuteFailure {
 		Kind:    kind,
 		Message: declaredFailureMessage(kind),
 	}
+}
+
+// isCapacityOverload reports whether Codex declared a provider-side model
+// capacity overload. Overload is transient and belongs to the throttled family
+// so the runtime retries it instead of failing the dispatch terminally.
+func isCapacityOverload(nativeInfo, message string) bool {
+	return nativeInfo == "server_overloaded" ||
+		strings.Contains(message, "server_overloaded") ||
+		strings.Contains(message, "is at capacity")
 }
 
 func declaredFailureMessage(kind providers.ExecuteFailureKind) string {
