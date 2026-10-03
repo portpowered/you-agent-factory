@@ -65,9 +65,18 @@ func TestConstructionReportIsNotAdmittedToRecordedBaseline(t *testing.T) {
 
 func TestFocusedProviderDispatchDebtControlsCommandStatus(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []contractguard.ConstructionMode{contractguard.ConstructionReport, contractguard.ConstructionEnforce} {
-		t.Run(string(mode), func(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		mode       contractguard.ConstructionMode
+	}{
+		{"callback-report", "callback();", contractguard.ConstructionReport},
+		{"callback-enforce", "callback();", contractguard.ConstructionEnforce},
+		{"returned-report", "factory()();", contractguard.ConstructionReport},
+		{"returned-enforce", "factory()();", contractguard.ConstructionEnforce},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			mode := tc.mode
 			root := t.TempDir()
 			writeGoSourceFile(t, root, "go.mod", "module example.test/factory\n\ngo 1.25.0\n")
 			writeGoSourceFile(t, root, "pkg/services/example/service.go", `package example
@@ -76,7 +85,8 @@ func New() *Service { return &Service{} }
 `)
 			writeGoSourceFile(t, root, "pkg/wire/provider.go", `package wire
 import "example.test/factory/pkg/services/example"
-func Provide(callback func()) { callback(); example.New() }
+func Provide(callback func()) { `+tc.body+` example.New() }
+func factory() func() { return func() {} }
 `)
 			const owner = "example.test/factory/pkg/services/example"
 			constructor := contractguard.ConstructionSymbol{ImportPath: owner, Name: "New"}
@@ -100,7 +110,7 @@ func Provide(callback func()) { callback(); example.New() }
 					t.Fatalf("output %q missing %q", output, want)
 				}
 			}
-			if strings.Contains(output, "callback();") {
+			if strings.Contains(output, tc.body) {
 				t.Fatalf("diagnostic exposed source text: %q", output)
 			}
 		})
