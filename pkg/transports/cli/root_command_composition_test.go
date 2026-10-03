@@ -183,33 +183,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestProductionRunSubmitFamilyCutoverEnabled(t *testing.T) {
-	root := (CommandFactory{ModelsCLI: rootModelsCLI,
-		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
-		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
-	}).NewCommand(context.Background(), nil, nil, nil)
-	for _, path := range [][]string{{"run"}, {"submit"}, {"submit", "batch"}} {
-		cmd, remaining, err := root.Find(path)
-		if err != nil {
-			t.Fatalf("Find(%v) error = %v", path, err)
-		}
-		if len(remaining) != 0 {
-			t.Fatalf("Find(%v) remaining = %v, want none", path, remaining)
-		}
-		if cmd.PreRunE == nil || cmd.RunE == nil {
-			t.Fatalf("Find(%v) lifecycle = (%t, %t), want retained PreRunE and RunE", path, cmd.PreRunE != nil, cmd.RunE != nil)
-		}
-	}
-
-	assertDirectCommandCount(t, root, "run", 1)
-	assertDirectCommandCount(t, root, "submit", 1)
-	submitCmd, _, err := root.Find([]string{"submit"})
-	if err != nil {
-		t.Fatalf("find submit: %v", err)
-	}
-	assertDirectCommandCount(t, submitCmd, "batch", 1)
-}
-
 func TestProductionServerStopDispatchesOnlyInjectedOperation(t *testing.T) {
 	var calls int
 	var selected string

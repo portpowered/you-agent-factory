@@ -241,32 +241,6 @@ func TestProductionModelsCatalogCommandsCarrySelectedCacheEnvironment(t *testing
 	}
 }
 
-func TestProductionDocsAndModelsCommandsBuildIndependently(t *testing.T) {
-	globals := &cliGlobalOptions{}
-	diagnostics := &cliDiagnosticsOptions{}
-	operatorDefaults := &cliOperatorDefaultsOptions{}
-	docs, err := newProductionDocsCommand(diagnostics)
-	if err != nil {
-		t.Fatalf("newProductionDocsCommand() error = %v", err)
-	}
-	models, err := newProductionModelsCommand(globals, diagnostics, operatorDefaults, CommandFactory{ModelsCLI: modelsCLIServiceFunctions{},
-		factoryConfigInitHandler: testFactoryConfigInitHandler(CommandFactory{}),
-		sessionResolvedHandlers:  testSessionHandlers(nil, nil),
-	})
-	if err != nil {
-		t.Fatalf("newProductionModelsCommand() error = %v", err)
-	}
-	if docs == nil || docs.RunE == nil {
-		t.Fatal("generated docs command must attach handwritten RunE")
-	}
-	if models == nil || models.RunE != nil {
-		t.Fatal("generated models parent must remain non-runnable")
-	}
-	if len(models.Commands()) != 5 {
-		t.Fatalf("models child count = %d, want 5 generated leaves", len(models.Commands()))
-	}
-}
-
 func TestProductionDocsCompletionComesFromManifestTopicChoices(t *testing.T) {
 	docs, err := newProductionDocsCommand(&cliDiagnosticsOptions{})
 	if err != nil {

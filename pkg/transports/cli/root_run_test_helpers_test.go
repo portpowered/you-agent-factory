@@ -402,19 +402,6 @@ func programmedTextInvocationInput(source work.InputSourceLabel, text string) ro
 	return programmedInvocationInput(work.PreparedInvocationInput{Source: source, ResolvedInput: resolved}, nil)
 }
 
-func assertDirectCommandCount(t *testing.T, parent *cobra.Command, name string, want int) {
-	t.Helper()
-	count := 0
-	for _, command := range parent.Commands() {
-		if command.Name() == name {
-			count++
-		}
-	}
-	if count != want {
-		t.Fatalf("%s direct %q command count = %d, want %d", parent.CommandPath(), name, count, want)
-	}
-}
-
 func newComposedTestRootCommand(t *testing.T) *cobra.Command {
 	t.Helper()
 	factory := withTestInjectedPlatformRoles(CommandFactory{
