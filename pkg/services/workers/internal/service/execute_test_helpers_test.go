@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"reflect"
 	"strconv"
 	"sync"
 	"testing"
@@ -174,5 +175,125 @@ func validExecuteRequest(dispatchID, attemptID string) workers.ExecuteRequest {
 			WorkstationName: "review",
 			RunnerID:        runners.ScriptIdentity,
 		},
+	}
+}
+
+func TestExecuteCheckoutLifetimeSuccess(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		retain bool
+		reused bool
+	}{
+		{"S-N_given_new_nonretained_when_success_then_release_once", false, false},
+		{"S-R_given_new_retained_when_success_then_preserve_checkout", true, false},
+		{"S-U_given_reused_nonretained_when_success_then_preserve_checkout", false, true},
+		{"S-RU_given_retained_reused_when_success_then_preserve_checkout", true, true},
+	}
+	for _, scenario := range cases {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			assertCheckoutLifetimeSuccess(t, scenario.retain, scenario.reused)
+		})
+	}
+}
+
+func assertCheckoutLifetimeSuccess(t *testing.T, retain, reused bool) {
+	t.Helper()
+	preparation := workers.FactoryWorktreePreparation{CheckoutPath: "C:/fixture/checkout", Reused: reused}
+	var mu sync.Mutex
+	var events []string
+	var released []workers.FactoryWorktreePreparation
+	var releaseContextErrors []error
+	var observations []workers.ExecutionObservation
+	appendEvent := func(event string) {
+		mu.Lock()
+		defer mu.Unlock()
+		events = append(events, event)
+	}
+	temporaryFiles := &recordingTemporaryFiles{remove: func(path string) error {
+		appendEvent("removed-" + path)
+		return nil
+	}}
+	release := func(ctx context.Context, got workers.FactoryWorktreePreparation) error {
+		mu.Lock()
+		defer mu.Unlock()
+		released = append(released, got)
+		releaseContextErrors = append(releaseContextErrors, ctx.Err())
+		events = append(events, "released-checkout")
+		return nil
+	}
+	service := mustExecuteServiceWithEdges(t, &stubRunner{
+		execute: func(_ context.Context, request workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+			file, err := request.TemporaryFiles.CreateTemp("", "attempt-*")
+			if err != nil {
+				return workers.RunnerExecutionResult{}, err
+			}
+			if err := file.Close(); err != nil {
+				return workers.RunnerExecutionResult{}, err
+			}
+			return workers.RunnerExecutionResult{Content: "checkout-output"}, nil
+		},
+	}, func(_ context.Context, observation workers.ExecutionObservation) error {
+		mu.Lock()
+		defer mu.Unlock()
+		observations = append(observations, observation.Clone())
+		events = append(events, string(observation.Kind))
+		return nil
+	}, &recordingWorktree{preparation: preparation}, release, temporaryFiles)
+	request := validExecuteRequest("dispatch-"+t.Name(), "attempt-"+t.Name())
+	request.Target.Environment.SkipProcessInheritance = true
+	request.Target.Workspace = workers.WorkspacePolicy{
+		PrepareWorktree: true, FactoryDirectory: "C:/fixture",
+		CheckoutIdentifier: request.Correlation.AttemptID, RetainWorktree: retain,
+	}
+	result, err := service.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	assertAcceptedResult(t, result, request.Correlation.DispatchID, request.Correlation.AttemptID, "checkout-output")
+	if result.Failure != nil {
+		t.Fatalf("accepted result failure = %#v, want nil", result.Failure)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(observations) != 2 {
+		t.Fatalf("observations = %#v, want one STARTED and one COMPLETED", observations)
+	}
+	assertCompletedObservationShape(t, observations)
+	assertSuccessfulCheckoutEffects(t, preparation, retain, events, released, releaseContextErrors)
+	if got := temporaryFiles.Removed(); !reflect.DeepEqual(got, []string{"attempt-temp-1"}) {
+		t.Fatalf("removed paths = %v, want exactly the attempt-created file once", got)
+	}
+}
+
+func assertSuccessfulCheckoutEffects(
+	t *testing.T,
+	preparation workers.FactoryWorktreePreparation,
+	retain bool,
+	events []string,
+	released []workers.FactoryWorktreePreparation,
+	releaseContextErrors []error,
+) {
+	t.Helper()
+	wantEvents := []string{"STARTED"}
+	wantReleases := 0
+	if !retain && !preparation.Reused {
+		wantReleases = 1
+		wantEvents = append(wantEvents, "released-checkout")
+	}
+	wantEvents = append(wantEvents, "removed-attempt-temp-1", "COMPLETED")
+	// The ordered effect ledger proves cleanup finished before terminal delivery,
+	// and its final length also catches releases or removals after that callback.
+	if !reflect.DeepEqual(events, wantEvents) {
+		t.Fatalf("effects = %v, want %v", events, wantEvents)
+	}
+	if len(released) != wantReleases {
+		t.Fatalf("release count = %d, want %d", len(released), wantReleases)
+	}
+	for index, got := range released {
+		if got != preparation || releaseContextErrors[index] != nil {
+			t.Fatalf("release = %#v, context error = %v; want %#v and usable context", got, releaseContextErrors[index], preparation)
+		}
 	}
 }
