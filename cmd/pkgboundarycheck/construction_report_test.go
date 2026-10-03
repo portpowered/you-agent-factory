@@ -73,6 +73,8 @@ func TestFocusedProviderDispatchDebtControlsCommandStatus(t *testing.T) {
 		{"callback-enforce", "callback();", contractguard.ConstructionEnforce},
 		{"returned-report", "factory()();", contractguard.ConstructionReport},
 		{"returned-enforce", "factory()();", contractguard.ConstructionEnforce},
+		{"field-report", "h := Hook{}; h.Run();", contractguard.ConstructionReport},
+		{"field-enforce", "h := Hook{}; h.Run();", contractguard.ConstructionEnforce},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -87,6 +89,7 @@ func New() *Service { return &Service{} }
 import "example.test/factory/pkg/services/example"
 func Provide(callback func()) { `+tc.body+` example.New() }
 func factory() func() { return func() {} }
+type Hook struct { Run func() }
 `)
 			const owner = "example.test/factory/pkg/services/example"
 			constructor := contractguard.ConstructionSymbol{ImportPath: owner, Name: "New"}

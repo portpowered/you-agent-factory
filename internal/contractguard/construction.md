@@ -192,7 +192,12 @@ or a called helper/closure also retains dispatch debt. Merely evaluating or
 storing the helper result does not establish invocation. Even an authored
 acyclic return remains debt until a callable return summary proves identity;
 the helper declaration alone cannot select the returned implementation.
-Field, cross-package and arbitrary callback dispatch still
+Invoked function fields and unresolved interface/opaque method selectors retain
+the same dispatch debt, including promoted/nested fields, returned owners,
+parentheses, defer/go and called helper/closure bodies. Concrete authored methods
+and method expressions retain their resolved identity; uncalled field values
+and uninvoked closures do not establish dispatch. This does not select a field's
+current function value or an interface implementation. Cross-package and arbitrary callback dispatch still
 need classification/debt before whole-set readiness; this does not prove
 callback argument equivalence or control-flow execution.
 

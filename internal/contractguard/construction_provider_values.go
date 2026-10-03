@@ -18,6 +18,13 @@ func constructionProviderCallableDebt(expr ast.Expr, source *constructionSource)
 		// helper's declaration alone cannot identify the selected callable.
 		return true
 	}
+	if _, selector := expr.(*ast.SelectorExpr); selector {
+		// A concrete method or package declaration has qualified identity.
+		// Function fields and interface/opaque method dispatch require storage
+		// or implementation provenance before they can establish a safe path.
+		_, resolved := resolveConstructionCall(expr, source)
+		return !resolved
+	}
 	ident, ok := expr.(*ast.Ident)
 	if !ok {
 		return false
