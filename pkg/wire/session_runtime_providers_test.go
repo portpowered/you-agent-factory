@@ -335,25 +335,37 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 	}
 }
 
-func TestOperatorSettingsHomePortCompositionUsesProcessProviderRoot(t *testing.T) {
+func TestOperatorSettingsCompletedOwnersUseProcessProviderCatalog(t *testing.T) {
 	t.Parallel()
 
 	providersRoot, err := provideProvidersService(serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	service, err := settingswire.NewServiceFromHomePorts(
-		platformfilesystem.Local{},
-		globalconfigmapping.Decode,
-		providersRoot,
-		func() string { return "00000000-0000-4000-8000-000000000001" },
-		logging.NoopLogger{},
-	)
+	files := platformfilesystem.Local{}
+	document := settingswire.NewDocumentService(files, nil, globalconfigmapping.Decode, nil, nil, nil, nil)
+	resolution, err := settingswire.NewResolutionService(providersRoot)
 	if err != nil {
-		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
+		t.Fatalf("NewResolutionService() error = %v", err)
 	}
-	if service == nil {
-		t.Fatal("NewServiceFromHomePorts() = nil, want Operator Settings root")
+	service, err := settingswire.NewService(document, resolution, files, nil, globalconfigmapping.Decode,
+		nil, func() string { return "00000000-0000-4000-8000-000000000001" }, logging.NoopLogger{}, nil)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	resolved, err := service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "openai", WorkerModel: "selected-model",
+		},
+	})
+	if err != nil || resolved.Selection.WorkerModelProvider != "CODEX" || resolved.Selection.WorkerModel != "selected-model" {
+		t.Fatalf("ResolveEffective() = %#v, %v, want CODEX/selected-model", resolved.Selection, err)
+	}
+	_, err = service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{WorkerModelProvider: "unsupported-provider"},
+	})
+	if !errors.Is(err, operatorsettings.ErrResolutionUnsupportedOverride) {
+		t.Fatalf("unsupported provider error = %v, want ErrResolutionUnsupportedOverride", err)
 	}
 }
 
