@@ -103,8 +103,13 @@ func TestFleetActiveListSeventyWorkProfile(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
+	assertFleetProfileReads(t, ctx, server.URL, dir, execute, runner.entered)
+}
+
+func assertFleetProfileReads(t *testing.T, ctx context.Context, baseURL, dir string, execute func(...string) ([]byte, error), admitted <-chan struct{}) {
+	t.Helper()
 	// Explicit session owns the board and all admitted workers.
-	openedBody := fleetProfileHTTP(t, ctx, http.MethodPost, server.URL+"/factory-sessions", map[string]any{"folderPath": dir})
+	openedBody := fleetProfileHTTP(t, ctx, http.MethodPost, baseURL+"/factory-sessions", map[string]any{"folderPath": dir})
 	var opened factoryapi.OpenFactorySessionResponse
 	if err := json.Unmarshal(openedBody, &opened); err != nil || opened.Session == nil {
 		t.Fatalf("open explicit session: %v %s", err, openedBody)
@@ -120,20 +125,20 @@ func TestFleetActiveListSeventyWorkProfile(t *testing.T) {
 		}
 	}
 	request := map[string]any{"requestId": "fleet-seventy-profile", "type": "FACTORY_REQUEST_BATCH", "works": works}
-	fleetProfileHTTP(t, ctx, http.MethodPut, server.URL+"/factory-sessions/"+sessionID+"/work-requests/fleet-seventy-profile", request)
+	fleetProfileHTTP(t, ctx, http.MethodPut, baseURL+"/factory-sessions/"+sessionID+"/work-requests/fleet-seventy-profile", request)
 	select {
-	case <-runner.entered:
+	case <-admitted:
 	case <-ctx.Done():
 		t.Fatal("no controlled worker admission")
 	}
-	boardBody := fleetProfileHTTP(t, ctx, http.MethodGet, server.URL+"/factory-sessions/"+sessionID+"/work?maxResults=100&counts=true", nil)
+	boardBody := fleetProfileHTTP(t, ctx, http.MethodGet, baseURL+"/factory-sessions/"+sessionID+"/work?maxResults=100&counts=true", nil)
 	var board factoryapi.ListWorkResponse
 	if err := json.Unmarshal(boardBody, &board); err != nil || len(board.Results) != 70 {
 		t.Fatalf("board count=%d, want 70: err=%v body=%s", len(board.Results), err, boardBody)
 	}
 	for _, scope := range []string{"all", "factory"} {
 		started := time.Now()
-		body, err := execute("--server", server.URL, "worker-sessions", "list", "--scope", scope,
+		body, err := execute("--server", baseURL, "worker-sessions", "list", "--scope", scope,
 			"--state", "RUNNING", "--state", "STARTING", "--max-results", "25", "--output", "json")
 		elapsed := time.Since(started)
 		t.Logf("board=70 scope=%s elapsed=%s bytes=%d hostOS=%s hostArch=%s go=%s CPUs=%d error=%v", scope, elapsed, len(body), runtime.GOOS, runtime.GOARCH, runtime.Version(), runtime.NumCPU(), err)
@@ -148,7 +153,7 @@ func TestFleetActiveListSeventyWorkProfile(t *testing.T) {
 			if row.WorkId == nil || row.FactorySessionId == nil || *row.FactorySessionId != sessionID {
 				t.Fatalf("active attribution=%#v", row)
 			}
-			fleetProfileHTTP(t, ctx, http.MethodGet, server.URL+"/factory-sessions/"+sessionID+"/worker-sessions?workId="+*row.WorkId, nil)
+			fleetProfileHTTP(t, ctx, http.MethodGet, baseURL+"/factory-sessions/"+sessionID+"/worker-sessions?workId="+*row.WorkId, nil)
 		}
 	}
 }
