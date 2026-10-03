@@ -156,6 +156,10 @@ func (fixture *concurrencySharedProcessFixture) start(t *testing.T) {
 	if fixture.command != nil {
 		t.Fatal("shared concurrency process started more than once")
 	}
+	env := append(os.Environ(), "HOME="+fixture.homeDir, "USERPROFILE="+fixture.homeDir)
+	// First-run profile installation is fixture setup, not server readiness.
+	// Complete it through the same public process before starting the host.
+	support.InitializeCustomerHomeWithProcess(t, fixture.process, env, fixture.hostDir)
 	inputs := support.FakeInputs(context.Background(), []string{
 		"you", "run",
 		"--dir", fixture.hostDir,
@@ -165,9 +169,15 @@ func (fixture *concurrencySharedProcessFixture) start(t *testing.T) {
 		"--quiet",
 		"--no-record",
 	})
-	inputs.Input.Env = append(os.Environ(), "HOME="+fixture.homeDir, "USERPROFILE="+fixture.homeDir)
+	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = fixture.hostDir
 	fixture.command = support.StartProcessCommand(t, fixture.process, inputs.Input)
+	t.Cleanup(func() {
+		fixture.command.Stop(t)
+		if fixture.apiStarts.Load() == 0 {
+			t.Logf("concurrency host returned without API startup: error=%v stdout=%q stderr=%q", fixture.command.Err(), inputs.Stdout(), inputs.Stderr())
+		}
+	})
 	fixture.baseURL = fixture.api.WaitForURL(t)
 	defaultSession := support.GetDefaultSession(t, fixture.baseURL)
 	if !defaultSession.IsDefault || strings.TrimSpace(defaultSession.Id) == "" {
