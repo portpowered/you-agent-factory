@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -26,6 +27,39 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
+
+type fleetCatalogSessionSource struct{ workersessions.Service }
+
+type fleetCatalogReady struct {
+	source workersessions.ObservationService
+}
+
+func (g fleetCatalogReady) ListFactorySessions(context.Context) ([]factorysessions.ReadProjection, error) {
+	return []factorysessions.ReadProjection{{Context: factorysessions.ProjectionContext{
+		FactorySessionID: "00000000-0000-4000-8000-000000000001",
+	}}}, nil
+}
+
+func (g fleetCatalogReady) ListLiveSessionIDs() []string {
+	return []string{"00000000-0000-4000-8000-000000000001"}
+}
+
+func (g fleetCatalogReady) WorkerSessionsObservationForSession(string) workersessions.ObservationService {
+	return g.source
+}
+
+func TestWorkerSessionFleetCatalogPreservesFactoryRegistry(t *testing.T) {
+	t.Parallel()
+	factorySource := &fleetCatalogSessionSource{}
+	directSource := &fleetCatalogSessionSource{}
+	got, err := workerSessionObservationSources(t.Context(), fleetCatalogReady{source: factorySource}, directSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != factorySource || got[1] != directSource {
+		t.Fatalf("catalog sources = %#v, want Factory registry followed by process registry", got)
+	}
+}
 
 func TestProvideAPIServerStarterHonorsRootEdgeOverride(t *testing.T) {
 	t.Parallel()

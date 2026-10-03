@@ -282,7 +282,9 @@ func newHTTPWorkerSessionsHandler(
 
 func workerSessionObservationSources(
 	ctx context.Context,
-	root *factorysessionwire.Root,
+	root interface {
+		ListFactorySessions(context.Context) ([]factorysessions.ReadProjection, error)
+	},
 	current workersessions.Service,
 ) ([]workersessions.Service, error) {
 	sources := make([]workersessions.Service, 0, 1)
