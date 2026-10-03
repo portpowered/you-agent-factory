@@ -29,12 +29,12 @@ The roles are deliberately separated:
 
 | Role | Worker profile | Authority |
 | --- | --- | --- |
-| Portfolio Supervisor | GPT-6 Sol, medium reasoning with high autonomy | Whole-repository health, Project admission, cross-Project priority, exception handling, and Factory-level improvement |
-| Project Lead | Sol, medium reasoning | One Project's immutable contract, immediate behavior slices, local dependency map, and Project completion decision |
-| Planning workers | Sol, medium reasoning | One bounded plan and its admission evidence |
-| Implementation workers | Luna, xhigh reasoning | One local implementation item and its declared delivery evidence |
-| Review workers | Luna, maximum reasoning | One independent review of a current implementation head |
-| Validation workers | Luna, maximum reasoning | One read-only validation mission against one immutable build and fixture identity |
+| Portfolio Supervisor | GPT-6.1 Sol, medium reasoning with high autonomy | Whole-repository health, Project admission, cross-Project priority, exception handling, and Factory-level improvement |
+| Project Lead | GPT-6.1 Sol, high reasoning | One Project's immutable contract, immediate behavior slices, local dependency map, and Project completion decision |
+| Planning workers | GPT-6.1 Sol, high reasoning | One bounded plan and its admission evidence |
+| Implementation workers | GPT-6.1 Sol, medium reasoning | One local implementation item and its declared delivery evidence |
+| Review workers | GPT-6.1 Sol, medium reasoning | One independent review of a current implementation head |
+| Validation workers | GPT-6.1 Sol, medium reasoning | One read-only validation mission against one immutable build and fixture identity |
 
 The Portfolio Supervisor is normally triggered every eight hours. The runtime may
 also trigger it for a significant exception. Project cycle completion and
@@ -273,8 +273,8 @@ mission, rubric, and immutable build/fixture identity. They must not receive the
 source plan, implementation plan, claimed fixes, or another validation report.
 Engineering missions independently inspect failure behavior, regression,
 persistence/recovery, performance, LocalAI/model fidelity, or other declared
-quality properties. Both missions use a fresh Luna context at maximum
-reasoning or xhigh and are read-only.
+quality properties. Both missions use a fresh validator context and are
+read-only.
 
 A Project Lead schedules two complementary evidence paths when completion is
 near. Both must pass for Project completion. A FAIL or BLOCKED result remains
@@ -327,16 +327,18 @@ duplicate validation, weaken acceptance, or restart a healthy Project.
 
 ## Executable recovery boundaries
 
-An hourly Project Lead check-in binds each waiting Project to its own Sol lead.
-The lead inspects its existing same-name cycle, children, retained PRs, and
-evidence. It may make a cause-corrected repair through supported Work controls
-or admit independent ready idea/validation Work through the CLI. It must not
+A Project Lead check-in runs every 15 minutes. Each tick binds one waiting
+Project to a lead visit, so with N waiting Projects each one is visited roughly
+every N quarter-hours. The lead inspects its existing same-name cycle,
+children, retained PRs, and evidence. It may make a cause-corrected repair
+through supported Work controls or admit independent ready idea/validation Work
+through the CLI. It must not
 create another same-name cycle while one is visible. Healthy Projects with no
 other ready Work remain waiting. Blocked Projects require changed evidence
 before a deliberate retry; supervisor diagnosis is needed only when the lead
 lacks a supported repair route. Timer passage is not retry evidence.
 
-A child failure blocks a required-success dependency. The hourly check-in
+A child failure blocks a required-success dependency. The next check-in
 wakes that Project's Lead to classify and repair it; the dependency alone does
 not fail the cycle or automatically resubmit the child. A blocked cycle, failed
 lead, or exhausted lead visit budget passes through `project:needs-supervision`

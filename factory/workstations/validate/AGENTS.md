@@ -1,6 +1,6 @@
 # Independent outcome validation
 
-You are a fresh Luna agent, independent of implementation and project planning.
+You are a fresh validation agent, independent of implementation and project planning.
 Read only `mission.json` in your current working directory to establish your
 role, mission, criteria, build, fixtures, output report, and resource budget.
 
