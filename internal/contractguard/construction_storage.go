@@ -84,13 +84,28 @@ func (index constructionIndex) constructionStructFieldNames(typ ConstructionSymb
 	var names []string
 	for _, field := range structure.Fields.List {
 		if len(field.Names) == 0 {
-			names = append(names, constructionReceiver(field.Type))
+			names = append(names, constructionEmbeddedFieldName(field.Type))
 		}
 		for _, name := range field.Names {
 			names = append(names, name.Name)
 		}
 	}
 	return names
+}
+
+func constructionEmbeddedFieldName(expr ast.Expr) string {
+	switch value := expr.(type) {
+	case *ast.SelectorExpr:
+		return value.Sel.Name
+	case *ast.StarExpr:
+		return constructionEmbeddedFieldName(value.X)
+	case *ast.IndexExpr:
+		return constructionEmbeddedFieldName(value.X)
+	case *ast.IndexListExpr:
+		return constructionEmbeddedFieldName(value.X)
+	default:
+		return constructionReceiver(expr)
+	}
 }
 
 // Resolve only explicit declared types, allocations and local aliases. A

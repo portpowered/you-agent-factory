@@ -71,3 +71,25 @@ func (s *Service) Run() { if s.port == nil {}; if s.Domain == nil {}; if s.other
 		t.Fatalf("grouped/embedded positional storage = %+v, want one required guard", findings)
 	}
 }
+
+func TestConstructionPositionalImportedEmbeddedField(t *testing.T) {
+	t.Parallel()
+	root, registry := constructionFixture(t)
+	writeConstructionFixture(t, root, "pkg/contracts/port.go", `package contracts
+type Port interface { Execute() }
+`)
+	writeConstructionFixture(t, root, "pkg/owner/service.go", `package owner
+import contracts "example.test/factory/pkg/contracts"
+type Port = contracts.Port
+type Service struct { contracts.Port }
+func New(renamed Port) (*Service, error) { return &Service{renamed}, nil }
+func (s *Service) Run() { if s.Port == nil {} }
+`)
+	findings, err := ScanConstruction(root, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 || findings[0].Rule != "required-dependency-guard" || findings[0].Caller.Name != "Run" {
+		t.Fatalf("imported embedded field storage = %+v, want one required guard", findings)
+	}
+}
