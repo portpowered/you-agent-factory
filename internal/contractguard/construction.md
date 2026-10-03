@@ -59,6 +59,12 @@ embeddings, establish whether a selector competes at the struct embedding's
 depth. An empty or unrelated interface does not hide a concrete getter;
 a matching interface method blocks selection of a competing or deeper concrete
 method. Cyclic or opaque interface embeddings remain unresolved.
+Embedding predeclared `any` or `error` in an authored interface preserves its
+known method set, including aliases, defined interfaces and imported contracts.
+`error` contributes only `Error`; `any` contributes no selectors. Authored types
+named `any` or `error` take precedence over the predeclared interfaces. This
+does not establish implementation identity or classify direct predeclared
+struct embeddings.
 An opaque deeper embedding cannot hide a proved shallower
 selector. Promotion establishes method identity, not requiredness of wrapper
 storage, interface implementation selection or generic/pointer method-set proof.
