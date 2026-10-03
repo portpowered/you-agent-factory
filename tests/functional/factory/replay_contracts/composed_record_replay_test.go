@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -291,8 +292,10 @@ func characterizeComposedReplayClock(t *testing.T, explicit bool) {
 	effects := newComposedRecordingEffects()
 	edges := effects.edges(api, runner)
 	processTime := time.Date(2040, time.January, 1, 0, 0, 0, 0, time.UTC)
+	scheduler := platformclock.NewDeterministic(processTime.Add(24*time.Hour), time.Second)
 	if explicit {
 		edges.Clock = replayOriginClock{at: processTime}
+		edges.ProcessScheduler = scheduler
 	}
 	process, err := root.BuildProcess(t.Context(), edges)
 	if err != nil {
@@ -330,6 +333,16 @@ func characterizeComposedReplayClock(t *testing.T, explicit bool) {
 	}
 	if !seenRun || !seenWork {
 		t.Fatalf("public replay facts missing Run Request or Work Request: run=%t work=%t", seenRun, seenWork)
+	}
+	if explicit {
+		// C04: independent scheduling cannot rewrite historical public facts.
+		scheduler.SetTick(60)
+		if got := support.GetFactoryEventsAt(t, url); !reflect.DeepEqual(got, events) {
+			t.Fatal("scheduler advancement changed terminal replay history")
+		}
+		if got := support.ListDefaultSessionWork(t, url); !reflect.DeepEqual(got, listed) {
+			t.Fatal("scheduler advancement changed terminal replay Work")
+		}
 	}
 	command.Stop(t)
 	if runner.calls.Load() != 0 {
