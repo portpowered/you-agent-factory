@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go.uber.org/zap"
 	"os"
 	"time"
 
@@ -29,6 +28,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	contentmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
+	"go.uber.org/zap"
 )
 
 type testRuntimeRunnerOpener func(
