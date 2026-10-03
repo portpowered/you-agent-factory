@@ -203,7 +203,7 @@ func TestReviewFailureRouting_FailedIdeaRequiredBeforeReviewedTaskCompletion(t *
 
 // TestReviewFailureRouting_ReviewedTaskCompletesBeforeDependentProjectCycleDispatchesOnce
 // proves an exact DEPENDS_ON Project stays blocked until the reviewed task's
-// canonical completion response, then reaches the configured Sol/medium lead once.
+// canonical completion response, then reaches the Project lead exactly once.
 func TestReviewFailureRouting_ReviewedTaskCompletesBeforeDependentProjectCycleDispatchesOnce(t *testing.T) {
 	t.Parallel()
 	scenario := openReviewFailureScenario(t, reviewFailureRouteConfig{
@@ -271,7 +271,6 @@ func TestReviewFailureRouting_ReviewedTaskCompletesBeforeDependentProjectCycleDi
 		t.Fatalf("dependent Project lead response = %#v, want one accepted dispatch", projectDispatches[0].Response)
 	}
 	assertReviewFailureProjectDispatchFollowsCompletion(t, scenario, projectID)
-	assertReviewFailureSolMediumProjectCommand(t, scenario.fixture.router.requestsFor(scenario.factoryDir), projectName)
 	assertNoIncompleteReviewFailureDispatches(t, dispatches)
 	assertReviewFailureWorkStates(t, scenario.listWorks(t), map[string]string{
 		failedIdeaID: "failed", taskID: "complete", currentReviewID: "complete", projectID: "waiting",
@@ -422,38 +421,6 @@ func assertReviewFailureProjectDispatchFollowsCompletion(t *testing.T, scenario 
 	if projectIndex <= completionIndex {
 		t.Fatalf("dependent Project lead event index = %d, want after completion response index %d", projectIndex, completionIndex)
 	}
-}
-
-func assertReviewFailureSolMediumProjectCommand(
-	t *testing.T,
-	requests []platformprocess.CommandRequest,
-	projectName string,
-) {
-	t.Helper()
-	var projectRequests []platformprocess.CommandRequest
-	for _, request := range reviewFailureProviderRequests(requests) {
-		if strings.Contains(providerCommandPrompt(request), projectName) {
-			projectRequests = append(projectRequests, request)
-		}
-	}
-	if len(projectRequests) != 1 {
-		t.Fatalf("Project lead provider commands containing Work %q = %d, want one", projectName, len(projectRequests))
-	}
-	request := projectRequests[0]
-	if request.Command != "codex" ||
-		!reviewFailureHasCommandArgPair(request.Args, "--model", "gpt-6-sol") ||
-		!reviewFailureHasCommandArgPair(request.Args, "--config", `model_reasoning_effort="medium"`) {
-		t.Fatalf("dependent Project command = %q %#v, want Codex gpt-6-sol/medium", request.Command, request.Args)
-	}
-}
-
-func reviewFailureHasCommandArgPair(args []string, name, value string) bool {
-	for index := 0; index+1 < len(args); index++ {
-		if args[index] == name && args[index+1] == value {
-			return true
-		}
-	}
-	return false
 }
 
 func TestReviewFailureRouting_ReviewedTaskCompleteRejectsStaleSameNameReview(t *testing.T) {

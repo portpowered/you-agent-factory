@@ -8,7 +8,7 @@ the runtime.
 
 ## Ownership
 
-The GPT-6 Sol Portfolio Supervisor owns whole-repository health, Project admission,
+The GPT-6.1 Sol Portfolio Supervisor owns whole-repository health, Project admission,
 cross-Project priority, Factory capacity decisions, significant-exception
 response, and promotion of evidence-backed Factory improvements. It normally
 runs every eight hours and may be triggered sooner by a significant exception.
@@ -19,9 +19,9 @@ semantic dependencies and shared-surface ownership, emits immediate idea and
 validation Work, reconciles child outcomes, and decides whether the Project
 continues, completes, or is blocked.
 
-Luna delivery and review workers own one local delivery Work item at
-maximum reasoning. Luna validation workers own one read-only validation
-mission at maximum reasoning. No lower-level worker inherits Project or
+GPT-6.1 Sol delivery and review workers own one local delivery Work item at
+medium reasoning. GPT-6.1 Sol validation workers own one read-only validation
+mission at medium reasoning. No lower-level worker inherits Project or
 Portfolio authority because an upstream role is delayed.
 
 ## Admission contract
@@ -157,7 +157,7 @@ validation:init
 
 A failed or rejected plan, workspace, executor, CI, review, or validation
 outcome must preserve its failure evidence. The required-success dependency
-blocks the cycle until corrected; the hourly lead check-in inspects that
+blocks the cycle until corrected; the next lead check-in inspects that
 evidence. The lead then diagnoses and emits a smaller correction, changes a real
 dependency, escalates a contract issue, or records an external hold. A failed
 child must never be treated as a completed idea.
@@ -231,7 +231,7 @@ report. Engineering missions receive the contract, mission, rubrics, and
 immutable artifact identity needed for the named quality property; they must
 still be independent of implementation claims.
 
-Validation workers run in fresh Luna contexts at maximum reasoning. They are
+Validation workers run in fresh contexts at medium reasoning. They are
 read-only and may inspect or exercise only the declared artifact and fixture.
 They may not edit files, fix defects, advance Work, or weaken a rubric. The
 report records the artifact identity, procedure, observed result, dependency

@@ -139,13 +139,6 @@
         }
       },
       {
-        "id": "resource:concurrent-planners",
-        "position": {
-          "x": 2440,
-          "y": 755
-        }
-      },
-      {
         "id": "work-state:task:init",
         "position": {
           "x": 40,
@@ -349,24 +342,10 @@
         }
       },
       {
-        "id": "resource:validation-slot",
-        "position": {
-          "x": 2440,
-          "y": 2265
-        }
-      },
-      {
         "id": "work-type:thoughts",
         "position": {
           "x": 895,
           "y": 375
-        }
-      },
-      {
-        "id": "work-type:cron-triggers",
-        "position": {
-          "x": 40,
-          "y": 565
         }
       },
       {
@@ -622,13 +601,6 @@
         }
       },
       {
-        "id": "resource:concurrent-project-leads",
-        "position": {
-          "x": 1810,
-          "y": 945
-        }
-      },
-      {
         "id": "work-type:project",
         "position": {
           "x": 2095,
@@ -726,8 +698,7 @@
           "workstation:ideafy",
           "workstation:though-retrigger",
           "resource:supervisor-slot",
-          "work-type:thoughts",
-          "work-type:cron-triggers"
+          "work-type:thoughts"
         ]
       },
       {
@@ -759,7 +730,6 @@
           "workstation:retry-project-after-cycle-failure",
           "workstation:block-project",
           "workstation:project-loop-breaker",
-          "resource:concurrent-project-leads",
           "work-type:project",
           "work-type:project-cycle",
           "work-state:project:needs-supervision",
@@ -790,7 +760,6 @@
           "workstation:plan",
           "workstation:setup-workspace",
           "workstation:escalate-plan-failure",
-          "resource:concurrent-planners",
           "work-type:idea",
           "work-type:plan"
         ]
@@ -850,7 +819,6 @@
           "worker:validator",
           "workstation:prepare-validation",
           "workstation:validate",
-          "resource:validation-slot",
           "work-type:validation"
         ]
       },
@@ -925,21 +893,6 @@
       "capacity": 16,
       "id": "executor-slot",
       "name": "executor-slot"
-    },
-    {
-      "capacity": 2,
-      "id": "concurrent-planners",
-      "name": "concurrent-planners"
-    },
-    {
-      "capacity": 2,
-      "id": "concurrent-project-leads",
-      "name": "concurrent-project-leads"
-    },
-    {
-      "id": "validation-slot",
-      "name": "validation-slot",
-      "capacity": 2
     },
     {
       "id": "supervisor-slot",
@@ -1275,11 +1228,6 @@
       ]
     },
     {
-      "id": "cron-triggers",
-      "name": "cron-triggers",
-      "states": []
-    },
-    {
       "id": "review",
       "name": "review",
       "states": [
@@ -1331,8 +1279,8 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "modelProvider": "codex",
-      "model": "gpt-6-sol",
-      "reasoningEffort": "medium",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "high",
       "id": "project-lead",
       "name": "project-lead",
       "skipPermissions": true,
@@ -1351,8 +1299,8 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "modelProvider": "codex",
-      "model": "gpt-6-luna",
-      "reasoningEffort": "xhigh",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "medium",
       "name": "processor",
       "skipPermissions": true,
       "type": "AGENT_WORKER"
@@ -1360,8 +1308,8 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "modelProvider": "codex",
-      "model": "gpt-6-luna",
-      "reasoningEffort": "max",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "medium",
       "name": "reviewer",
       "skipPermissions": true,
       "type": "AGENT_WORKER"
@@ -1390,8 +1338,8 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "modelProvider": "codex",
-      "model": "gpt-6-sol",
-      "reasoningEffort": "medium",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "high",
       "id": "planner",
       "name": "planner",
       "skipPermissions": true,
@@ -1400,7 +1348,7 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "modelProvider": "codex",
-      "model": "gpt-6-sol",
+      "model": "gpt-6.1-sol",
       "reasoningEffort": "medium",
       "id": "ideafier",
       "name": "ideafier",
@@ -1424,8 +1372,8 @@
       "type": "AGENT_WORKER",
       "executorProvider": "SCRIPT_WRAP",
       "modelProvider": "codex",
-      "model": "gpt-6-luna",
-      "reasoningEffort": "max",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "medium",
       "skipPermissions": true
     }
   ],
@@ -1454,7 +1402,7 @@
       "resources": [
         {
           "capacity": 1,
-          "name": "concurrent-project-leads"
+          "name": "executor-slot"
         }
       ],
       "type": "AGENT_RUN",
@@ -1671,6 +1619,10 @@
       ],
       "resources": [
         {
+          "capacity": 1,
+          "name": "executor-slot"
+        },
+        {
           "name": "supervisor-slot",
           "capacity": 1
         }
@@ -1712,8 +1664,8 @@
       ],
       "resources": [
         {
-          "name": "concurrent-planners",
-          "capacity": 1
+          "capacity": 1,
+          "name": "executor-slot"
         }
       ],
       "type": "AGENT_RUN",
@@ -2184,8 +2136,8 @@
       ],
       "resources": [
         {
-          "name": "validation-slot",
-          "capacity": 1
+          "capacity": 1,
+          "name": "executor-slot"
         }
       ],
       "workingDirectory": "docs/temp/probes/{{ (index .Inputs 0).Name }}"
@@ -2218,7 +2170,8 @@
       "behavior": "CRON",
       "outcomeFormat": "decision-envelope",
       "cron": {
-        "schedule": "0 * * * *"
+        "schedule": "*/15 * * * *",
+        "expiryWindow": "15m"
       },
       "worker": "project-lead",
       "inputs": [
@@ -2241,8 +2194,8 @@
       ],
       "resources": [
         {
-          "name": "concurrent-project-leads",
-          "capacity": 1
+          "capacity": 1,
+          "name": "executor-slot"
         }
       ],
       "workPropagation": {

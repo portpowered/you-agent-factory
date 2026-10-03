@@ -182,6 +182,9 @@ models:
   - id: gpt-6-sol
     efforts: *codexEfforts
     modalities: *codexModalities
+  - id: gpt-6.1-sol
+    efforts: *codexEfforts
+    modalities: *codexModalities
 tools:
   - name: filesystem
     support: supported
