@@ -211,6 +211,20 @@ customer entry point and produces both provider and customer-visible evidence.
 Evidence **MUST NOT** claim a property beyond its tested scope or dependency
 fidelity.
 
+## 6a. Packets prescribe behavior, not artifacts
+
+- Packets and criteria **MUST** prescribe observable behavior. They name files
+  or exports only as "preferred" hints, never as requirements, and **MUST NOT**
+  prescribe new files in ratchet-counted packages or new production exports
+  that only tests call.
+- Ratchet gates (`pkg-file-count`, the deadcode baseline, boundary and
+  inventory baselines) always win over a named artifact: place tests in
+  existing files, delete dead exports rather than baselining them, and never
+  raise a baseline.
+- Characterization criteria assert the CURRENT documented behavior. When the
+  literal text contradicts the docs, tests or contracts, characterize what
+  exists and record the gap for the lead without blocking.
+
 ## 7. Acceptance criteria
 
 Acceptance criteria **MUST** use concrete observable conditions. Given/when/then

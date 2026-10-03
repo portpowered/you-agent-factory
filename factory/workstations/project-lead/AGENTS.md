@@ -180,6 +180,12 @@ dependency-ready `idea:init` or `validation:init` items, tagged as above,
 through the same explicit-session CLI dry-run, submission, receipt, and
 live-Work verification below. Record every admitted Work ID in state.md.
 
+Write behavior-first packets: state the observable behavior and evidence, and
+name files or exports only as "preferred" hints. Never prescribe new files in
+ratchet-counted packages or new production exports that only tests call, and
+never write a criterion whose literal text contradicts documented behavior.
+Ratchet gates win over any named artifact (see planning standards).
+
 ## Delivery and failure feedback
 
 The existing delivery graph remains the execution boundary:

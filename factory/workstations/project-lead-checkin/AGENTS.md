@@ -38,7 +38,10 @@ small `idea:init` or `validation:init` items through the explicit-session CLI:
 write a raw batch in the Project root, dry-run, submit with a stable unique
 request ID, verify the receipt and live Work IDs, and record them in state.md.
 Tag every emitted item with this Project's `project` tag so it wakes the lead
-when it finishes. Never add a loopback item.
+when it finishes. Never add a loopback item. Write behavior-first packets: name
+files or exports only as "preferred" hints, never prescribe new files in
+ratchet-counted packages or test-only production exports, and ratchet gates win
+over any named artifact.
 Reference retained PR branch/head and the failure witness for a PR repair.
 Follow the Parallel Projects rules in the lead prompt: prefix every emitted
 Work name with this Project's declared prefix, check other Projects' live

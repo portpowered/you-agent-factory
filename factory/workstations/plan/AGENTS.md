@@ -195,6 +195,22 @@ verification evidence.
 
 ## Operator questions (mailbox)
 
+Before asking: if the packet contradicts repository reality and a
+conservative reading exists that weakens no acceptance criterion, raises no
+baseline and widens no scope, take it, record it (in the plan), and
+continue. Ask the mailbox only when no such reading exists. Examples:
+
+- A packet names a new file or export that a ratchet gate forbids (a new test
+  file in a deletion-only `pkg-file-count` package, a production constructor
+  only tests call under the deadcode baseline): put the test in an existing
+  file or delete the dead export, and never raise the baseline.
+- A literal criterion contradicts documented current behavior (for example
+  "quiet emits no output" when the docs say quiet emits the raw result, or
+  "every event has sessionId" when startup frames have none): characterize
+  what exists and record the gap.
+- A criterion assumes an ID is globally unique when the contract makes it
+  session-scoped: assert uniqueness within the session.
+
 Some questions are owned by the operator, not by you: an ambiguous or
 contradictory acceptance contract, a scope or authority decision, a policy
 choice. Never settle one with your own guess, and never treat a guess as
