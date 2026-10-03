@@ -47,103 +47,113 @@ func TestCostsScopedReportsAndQueryRecovery(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			home := t.TempDir()
-			if tc.name == "operator-zero" {
-				writeReplayOperatorPriceTable(t, home, operatorsettings.PriceTableModel{Provider: "CODEX", Model: tc.model, InputPerMillionTokens: "0", OutputPerMillionTokens: "0"})
-			}
-			selected := group.start(t, home, tc.model, platformmetrics.RuntimeMetricsRoot(home))
-			foreign := group.start(t, t.TempDir(), endToEndPricedModel, platformmetrics.RuntimeMetricsRoot(home))
-			selected.completeWork(t)
-			foreign.completeWork(t)
-			foreign.parity(t)
-			report := selected.parity(t)
-			if repeated := selected.parity(t); !reflect.DeepEqual(report, repeated) {
-				t.Fatalf("non-deterministic selected report")
-			}
-			all := support.GetJSON[generatedclient.CostsReport](t, selected.url+"/metrics/costs")
-			if all.Coverage.EncounteredRows != 2 {
-				t.Fatalf("all-session report = %#v, want both rows", all)
-			}
-			if string(report.Status) != tc.status || report.Coverage.EncounteredRows != 1 || len(report.LineItems) != 1 {
-				t.Fatalf("selected report = %#v", report)
-			}
-			if report.Scope.FactorySessionId == nil || *report.Scope.FactorySessionId != selected.id || report.LineItems[0].FactorySessionId == nil || *report.LineItems[0].FactorySessionId != selected.id {
-				t.Fatalf("foreign session leaked into selected scope: %#v", report)
-			}
-			if report.TokenTotals.TotalTokens == nil || *report.TokenTotals.TotalTokens != 3_000_000 {
-				t.Fatalf("selected token totals = %#v", report.TokenTotals)
-			}
-			if report.TokenTotals.InputTokens == nil || *report.TokenTotals.InputTokens != 1_000_000 || report.TokenTotals.OutputTokens == nil || *report.TokenTotals.OutputTokens != 2_000_000 {
-				t.Fatalf("token classes=%#v", report.TokenTotals)
-			}
-			if tc.name == "built-in" && (report.LineItems[0].PriceSource == nil || string(*report.LineItems[0].PriceSource) != "BUILT_IN") {
-				t.Fatalf("built-in source=%#v", report.LineItems[0])
-			}
-			if tc.amount == "" {
-				if report.KnownCost != nil {
-					t.Fatalf("unpriced cost = %v", report.KnownCost)
-				}
-			} else if report.KnownCost == nil || *report.KnownCost != tc.amount {
-				t.Fatalf("exact cost = %v, want %s", report.KnownCost, tc.amount)
-			}
-			if tc.name == "operator-zero" && (report.LineItems[0].PriceSource == nil || string(*report.LineItems[0].PriceSource) != "OPERATOR_SUPPLIED") {
-				t.Fatalf("explicit zero source = %#v", report.LineItems[0])
-			}
-			selected.assertFailure(t, "missing-session", http.StatusNotFound, "METRICS_SESSION_NOT_FOUND")
-			selected.parity(t)
+			group.checkPricing(t, tc.name, tc.model, tc.status, tc.amount)
 		})
 	}
 	t.Run("settings failure and recovery", func(t *testing.T) {
 		t.Parallel()
-		home := t.TempDir()
-		fixture := group.start(t, home, endToEndPricedModel, platformmetrics.RuntimeMetricsRoot(home))
-		fixture.completeWork(t)
-		fixture.parity(t)
-		path := filepath.Join(fixture.home, ".you-agent-factory", "config.json")
-		group.files.setFailure(path, true)
-		t.Cleanup(func() { group.files.setFailure(path, false) })
-		fixture.assertFailure(t, fixture.id, http.StatusInternalServerError, "COSTS_QUERY_FAILED")
-		group.files.setFailure(path, false)
-		fixture.parity(t)
+		group.checkSettingsRecovery(t)
 	})
 	t.Run("metrics root failure and recovery", func(t *testing.T) {
 		t.Parallel()
-		home := t.TempDir()
-		fixture := group.start(t, home, endToEndPricedModel, platformmetrics.RuntimeMetricsRoot(home))
-		empty := fixture.parity(t) // This host owns no Work and no active provider writer.
-		if string(empty.Status) != "NO_USAGE" || empty.KnownCost != nil || empty.Coverage.EncounteredRows != 0 {
-			t.Fatalf("empty report=%#v", empty)
+		group.checkMetricsRecovery(t)
+	})
+}
+
+func (group *costsProcessGroup) checkPricing(t *testing.T, name, model, status, amount string) {
+	home := t.TempDir()
+	if name == "operator-zero" {
+		writeReplayOperatorPriceTable(t, home, operatorsettings.PriceTableModel{Provider: "CODEX", Model: model, InputPerMillionTokens: "0", OutputPerMillionTokens: "0"})
+	}
+	selected := group.start(t, home, model, platformmetrics.RuntimeMetricsRoot(home))
+	foreign := group.start(t, t.TempDir(), endToEndPricedModel, platformmetrics.RuntimeMetricsRoot(home))
+	selected.completeWork(t)
+	foreign.completeWork(t)
+	foreign.parity(t)
+	report := selected.parity(t)
+	if repeated := selected.parity(t); !reflect.DeepEqual(report, repeated) {
+		t.Fatalf("non-deterministic selected report")
+	}
+	all := support.GetJSON[generatedclient.CostsReport](t, selected.url+"/metrics/costs")
+	if all.Coverage.EncounteredRows != 2 {
+		t.Fatalf("all-session report = %#v, want both rows", all)
+	}
+	if string(report.Status) != status || report.Coverage.EncounteredRows != 1 || len(report.LineItems) != 1 {
+		t.Fatalf("selected report = %#v", report)
+	}
+	if report.Scope.FactorySessionId == nil || *report.Scope.FactorySessionId != selected.id || report.LineItems[0].FactorySessionId == nil || *report.LineItems[0].FactorySessionId != selected.id {
+		t.Fatalf("foreign session leaked into selected scope: %#v", report)
+	}
+	if report.TokenTotals.TotalTokens == nil || *report.TokenTotals.TotalTokens != 3_000_000 {
+		t.Fatalf("selected token totals = %#v", report.TokenTotals)
+	}
+	if report.TokenTotals.InputTokens == nil || *report.TokenTotals.InputTokens != 1_000_000 || report.TokenTotals.OutputTokens == nil || *report.TokenTotals.OutputTokens != 2_000_000 {
+		t.Fatalf("token classes=%#v", report.TokenTotals)
+	}
+	if name == "built-in" && (report.LineItems[0].PriceSource == nil || string(*report.LineItems[0].PriceSource) != "BUILT_IN") {
+		t.Fatalf("built-in source=%#v", report.LineItems[0])
+	}
+	if amount == "" {
+		if report.KnownCost != nil {
+			t.Fatalf("unpriced cost = %v", report.KnownCost)
 		}
-		root := platformmetrics.RuntimeMetricsRoot(fixture.home)
-		backup := root + ".saved"
-		if err := os.Rename(root, backup); err != nil {
-			if runtime.GOOS == "windows" && errors.Is(err, os.ErrPermission) {
-				t.Skipf("M08 unavailable: Windows denies renaming the active no-work metrics root: %v", err)
-			}
-			t.Fatal(err)
+	} else if report.KnownCost == nil || *report.KnownCost != amount {
+		t.Fatalf("exact cost = %v, want %s", report.KnownCost, amount)
+	}
+	if name == "operator-zero" && (report.LineItems[0].PriceSource == nil || string(*report.LineItems[0].PriceSource) != "OPERATOR_SUPPLIED") {
+		t.Fatalf("explicit zero source = %#v", report.LineItems[0])
+	}
+	selected.assertFailure(t, "missing-session", http.StatusNotFound, "METRICS_SESSION_NOT_FOUND")
+	selected.parity(t)
+}
+func (group *costsProcessGroup) checkSettingsRecovery(t *testing.T) {
+	home := t.TempDir()
+	fixture := group.start(t, home, endToEndPricedModel, platformmetrics.RuntimeMetricsRoot(home))
+	fixture.completeWork(t)
+	fixture.parity(t)
+	path := filepath.Join(fixture.home, ".you-agent-factory", "config.json")
+	group.files.setFailure(path, true)
+	t.Cleanup(func() { group.files.setFailure(path, false) })
+	fixture.assertFailure(t, fixture.id, http.StatusInternalServerError, "COSTS_QUERY_FAILED")
+	group.files.setFailure(path, false)
+	fixture.parity(t)
+}
+func (group *costsProcessGroup) checkMetricsRecovery(t *testing.T) {
+	home := t.TempDir()
+	fixture := group.start(t, home, endToEndPricedModel, platformmetrics.RuntimeMetricsRoot(home))
+	empty := fixture.parity(t) // This host owns no Work and no active provider writer.
+	if string(empty.Status) != "NO_USAGE" || empty.KnownCost != nil || empty.Coverage.EncounteredRows != 0 {
+		t.Fatalf("empty report=%#v", empty)
+	}
+	root := platformmetrics.RuntimeMetricsRoot(fixture.home)
+	backup := root + ".saved"
+	if err := os.Rename(root, backup); err != nil {
+		if runtime.GOOS == "windows" && errors.Is(err, os.ErrPermission) {
+			t.Skipf("M08 unavailable: Windows denies renaming the active no-work metrics root: %v", err)
 		}
-		restored := false
-		t.Cleanup(func() {
-			if !restored {
-				_ = os.Remove(root)
-				_ = os.Rename(backup, root)
-			}
-		})
-		if err := os.WriteFile(root, []byte("unavailable directory"), 0600); err != nil {
-			t.Fatal(err)
-		}
-		fixture.assertFailure(t, fixture.id, http.StatusInternalServerError, "COSTS_QUERY_FAILED")
-		if err := os.Remove(root); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Rename(backup, root); err != nil {
-			t.Fatal(err)
-		}
-		restored = true
-		if recovered := fixture.parity(t); !reflect.DeepEqual(empty, recovered) {
-			t.Fatalf("root recovery changed empty report: %#v", recovered)
+		t.Fatal(err)
+	}
+	restored := false
+	t.Cleanup(func() {
+		if !restored {
+			_ = os.Remove(root)
+			_ = os.Rename(backup, root)
 		}
 	})
+	if err := os.WriteFile(root, []byte("unavailable directory"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	fixture.assertFailure(t, fixture.id, http.StatusInternalServerError, "COSTS_QUERY_FAILED")
+	if err := os.Remove(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(backup, root); err != nil {
+		t.Fatal(err)
+	}
+	restored = true
+	if recovered := fixture.parity(t); !reflect.DeepEqual(empty, recovered) {
+		t.Fatalf("root recovery changed empty report: %#v", recovered)
+	}
 }
 
 type costsProviderRunner struct{}
@@ -161,7 +171,11 @@ type costsSettingsFiles struct {
 func (files *costsSettingsFiles) setFailure(path string, fail bool) {
 	files.mu.Lock()
 	defer files.mu.Unlock()
-	files.failures[filepath.Clean(path)] = fail
+	if fail {
+		files.failures[filepath.Clean(path)] = true
+	} else {
+		delete(files.failures, filepath.Clean(path))
+	}
 }
 func (files *costsSettingsFiles) ReadFile(path string) ([]byte, error) {
 	files.mu.RLock()
@@ -198,7 +212,7 @@ func (group *costsProcessGroup) serve(ctx context.Context, request platformhttps
 type costsSessionFixture struct {
 	group              *costsProcessGroup
 	id, home, dir, url string
-	env                []string
+	clientEnv          []string
 }
 
 func (group *costsProcessGroup) start(t *testing.T, home, model, metricsRoot string) costsSessionFixture {
@@ -223,25 +237,19 @@ func (group *costsProcessGroup) start(t *testing.T, home, model, metricsRoot str
 		group.mu.Unlock()
 	})
 	id := uuid.NewString()
-	env := []string{}
-	for _, entry := range os.Environ() {
-		key := strings.SplitN(entry, "=", 2)[0]
-		if !strings.EqualFold(key, "HOME") && !strings.EqualFold(key, "USERPROFILE") && !strings.EqualFold(key, "HOMEDRIVE") && !strings.EqualFold(key, "HOMEPATH") {
-			env = append(env, entry)
-		}
-	}
-	drive := filepath.VolumeName(home)
-	env = append(env, "HOME="+home, "USERPROFILE="+home, "HOMEDRIVE="+drive, "HOMEPATH="+strings.TrimPrefix(home, drive))
+	env := costsHomeEnvironment(home)
 	inputs := support.FakeInputs(t.Context(), []string{"you", "run", "--dir", dir, "--session", id, "--continuously", "--with-server", "--listen", fmt.Sprintf("127.0.0.1:%d", port), "--quiet", "--no-record", "--runtime-metrics-dir", metricsRoot})
 	inputs.Env = env
 	inputs.WorkingDirectory = dir
+	support.InitializeCustomerHomeWithProcess(t, group.process, env, dir)
 	support.StartProcessCommand(t, group.process, inputs.Input)
 	select {
 	case <-ready:
 	case <-time.After(30 * time.Second):
 		t.Fatalf("host did not bind: %s", inputs.Stderr())
 	}
-	fixture := costsSessionFixture{group: group, id: id, home: home, dir: dir, url: fmt.Sprintf("http://127.0.0.1:%d", port), env: env}
+	fixture := costsSessionFixture{group: group, id: id, home: home, dir: dir, url: fmt.Sprintf("http://127.0.0.1:%d", port), clientEnv: costsHomeEnvironment(t.TempDir())}
+	support.InitializeCustomerHomeWithProcess(t, runtimeMetricsCLIProcess, fixture.clientEnv, dir)
 	// A successful scoped status read establishes the public runtime boundary.
 	support.GetJSON[factoryapi.StatusResponse](t, fixture.url+"/factory-sessions/"+id+"/status")
 	return fixture
@@ -291,8 +299,7 @@ func (fixture costsSessionFixture) cli(t *testing.T, id string) (string, error) 
 	t.Helper()
 	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "--server", fixture.url, "metrics", "costs", "--session", id})
 	// Client setup uses its own readable profile; faults target only server data.
-	home := t.TempDir()
-	inputs.Env = []string{"HOME=" + home, "USERPROFILE=" + home, "HOMEDRIVE=" + filepath.VolumeName(home), "HOMEPATH=" + strings.TrimPrefix(home, filepath.VolumeName(home))}
+	inputs.Env = fixture.clientEnv
 	inputs.WorkingDirectory = fixture.dir
 	err := runtimeMetricsCLIProcess.Execute(inputs.Input)
 	return inputs.Stdout(), err
@@ -339,4 +346,17 @@ func (fixture costsSessionFixture) assertFailure(t *testing.T, id string, status
 	if !errors.As(err, &typed) || typed.Code != code || strings.TrimSpace(output) != "" {
 		t.Fatalf("CLI failure=%v output=%q", err, output)
 	}
+}
+
+func costsHomeEnvironment(home string) []string {
+	env := []string{}
+	for _, entry := range os.Environ() {
+		key := strings.SplitN(entry, "=", 2)[0]
+		if !strings.EqualFold(key, "HOME") && !strings.EqualFold(key, "USERPROFILE") && !strings.EqualFold(key, "HOMEDRIVE") && !strings.EqualFold(key, "HOMEPATH") {
+			env = append(env, entry)
+		}
+	}
+	drive := filepath.VolumeName(home)
+	env = append(env, "HOME="+home, "USERPROFILE="+home, "HOMEDRIVE="+drive, "HOMEPATH="+strings.TrimPrefix(home, drive))
+	return env
 }
