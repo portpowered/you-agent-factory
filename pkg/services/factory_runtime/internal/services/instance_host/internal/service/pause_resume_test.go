@@ -563,3 +563,51 @@ func TestPhysicalForeignLiveHandleCannotControlEqualIDRun(t *testing.T) {
 		}
 	}
 }
+
+func TestPhysicalStoppedHandleCannotControlSameIDSuccessor(t *testing.T) {
+	t.Parallel()
+	for _, operation := range []string{"H07_Pause", "H08_Resume", "H09_Stop"} {
+		t.Run(operation, func(t *testing.T) {
+			t.Parallel()
+			host := newTestHost(t)
+			old := startPhysicalHandle(t, host, "restarted-runtime-ID")
+			old.stopAndJoin(t, nil)
+			current := startPhysicalHandle(t, host, "restarted-runtime-ID")
+			if current.handle == old.handle {
+				t.Fatal("Start reused the stopped handle")
+			}
+			current.assertLive(t, 0, 0, interfaces.FactoryStateRunning)
+			var err error
+			wantErr := factory.ErrNotRunning
+			switch operation {
+			case "H07_Pause":
+				var result factory.PauseResult
+				result, err = host.Pause(context.Background(), old.handle)
+				if !reflect.DeepEqual(result, factory.PauseResult{}) {
+					t.Fatalf("stale Pause result = %#v, want zero result", result)
+				}
+			case "H08_Resume":
+				var result factory.ResumeResult
+				result, err = host.Resume(context.Background(), old.handle)
+				if !reflect.DeepEqual(result, factory.ResumeResult{}) {
+					t.Fatalf("stale Resume result = %#v, want zero result", result)
+				}
+			case "H09_Stop":
+				err = host.Stop(old.handle)
+				wantErr = factory.ErrAlreadyStopped
+			}
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("stale %s error = %v, want %v", operation, err, wantErr)
+			}
+			current.assertLive(t, 0, 0, interfaces.FactoryStateRunning)
+			current.assertAcceptedControls(t)
+			current.stopAndJoin(t, nil)
+			if old.engine.pauses.Load() != 0 || old.engine.resumes.Load() != 0 ||
+				old.engine.exits.Load() != 1 || old.recording.finalizations.Load() != 1 ||
+				!old.handle.Completed() || !errors.Is(old.handle.Wait(), context.Canceled) ||
+				!errors.Is(old.handle.Result(), context.Canceled) {
+				t.Fatal("stale control or successor cleanup changed the stopped run")
+			}
+		})
+	}
+}
