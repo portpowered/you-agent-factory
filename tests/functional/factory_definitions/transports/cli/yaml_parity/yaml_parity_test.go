@@ -58,6 +58,10 @@ func TestCLIFactoryJSONAndYAMLValidateFlattenAndRunParity(t *testing.T) {
 		t.Parallel()
 		runYAMLCreateAndUpdate(t, baseURL)
 	})
+	t.Run("TestCLIFactoryRejectedAuthoredSourcesFailBeforeRuntimeExecution", func(t *testing.T) {
+		t.Parallel()
+		runRejectedAuthoredSources(t, baseURL)
+	})
 }
 
 // TestCLIFactoryYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence proves
@@ -113,8 +117,8 @@ func runYAMLCreateAndUpdate(t *testing.T, baseURL string) {
 // mismatched, unsupported, missing, and ambiguous authored Factory sources are
 // rejected by the public CLI before provider/runtime execution and retain
 // actionable source context in public diagnostics.
-func TestCLIFactoryRejectedAuthoredSourcesFailBeforeRuntimeExecution(t *testing.T) {
-	t.Parallel()
+func runRejectedAuthoredSources(t *testing.T, baseURL string) {
+	t.Helper()
 	for _, test := range []struct {
 		name    string
 		prepare func(*testing.T) []string
@@ -193,11 +197,48 @@ func TestCLIFactoryRejectedAuthoredSourcesFailBeforeRuntimeExecution(t *testing.
 			if got := yamlParityCommands.callCount(inputs.Input.WorkingDirectory); got != 0 {
 				t.Fatalf("rejected source dispatched %d provider commands, want zero", got)
 			}
+			assertRemoteSourceRejectedWithoutWork(t, baseURL, sourceArgs, test.wants)
 			after := captureAuthoredSource(t, sourceArgs[1])
 			if !reflect.DeepEqual(before, after) {
 				t.Fatalf("rejected authored source changed: before=%q after=%q", before, after)
 			}
 		})
+	}
+}
+
+func assertRemoteSourceRejectedWithoutWork(t *testing.T, baseURL string, sourceArgs, wants []string) {
+	t.Helper()
+	validDir := materializePackagedGoal(t, "factory.json")
+	opened := support.OpenFactorySessionAt(t, baseURL, validDir)
+	sessionID := opened.Session.Id
+	runner := testutil.NewProviderCommandRunner()
+	yamlParityCommands.registerSession(t, sessionID, runner)
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, sessionID) })
+	workURL := baseURL + "/factory-sessions/" + sessionID + "/work"
+	if work := support.GetJSON[factoryapi.ListWorkResponse](t, workURL); len(work.Results) != 0 {
+		t.Fatalf("new session has Work before rejected input: %#v", work.Results)
+	}
+	args := []string{"you", "--remote", "--server", baseURL, "run", "--session", sessionID}
+	args = append(args, sourceArgs...)
+	args = append(args, "runtime must not start")
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = customerEnvironment(t.TempDir())
+	inputs.Input.WorkingDirectory = t.TempDir()
+	err := yamlParityCLIProcess.Execute(inputs.Input)
+	if err == nil {
+		t.Fatal("remote source rejection returned no error")
+	}
+	diagnostic := err.Error() + "\n" + inputs.Stderr()
+	for _, want := range wants {
+		if !strings.Contains(diagnostic, want) {
+			t.Fatalf("remote diagnostic %q does not contain %q", diagnostic, want)
+		}
+	}
+	if work := support.GetJSON[factoryapi.ListWorkResponse](t, workURL); len(work.Results) != 0 {
+		t.Fatalf("rejected input admitted Work: %#v", work.Results)
+	}
+	if calls := runner.CallCount(); calls != 0 {
+		t.Fatalf("rejected input dispatched %d session provider commands", calls)
 	}
 }
 
