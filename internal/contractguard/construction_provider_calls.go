@@ -65,16 +65,45 @@ func constructionRecursiveProvider(source *constructionSource, caller Constructi
 
 func constructionProviderCallees(decl constructionDeclaration) []ConstructionSymbol {
 	var callees []ConstructionSymbol
-	ast.Inspect(decl.function.Body, func(node ast.Node) bool {
-		if _, closure := node.(*ast.FuncLit); closure {
-			return false
-		}
-		if call, ok := node.(*ast.CallExpr); ok {
-			if symbol, resolved := resolveConstructionCall(call.Fun, decl.source); resolved {
-				callees = append(callees, symbol)
+	pending := []ast.Node{decl.function.Body}
+	visited := make(map[*ast.FuncLit]bool)
+	for len(pending) > 0 {
+		body := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		ast.Inspect(body, func(node ast.Node) bool {
+			if _, closure := node.(*ast.FuncLit); closure {
+				return false
 			}
-		}
-		return true
-	})
+			if call, ok := node.(*ast.CallExpr); ok {
+				if symbol, resolved := resolveConstructionCall(call.Fun, decl.source); resolved {
+					callees = append(callees, symbol)
+				}
+				closure := constructionProviderClosure(call.Fun, decl.source, map[*ast.Object]bool{})
+				if closure != nil && !visited[closure] {
+					visited[closure] = true
+					pending = append(pending, closure.Body)
+				}
+			}
+			return true
+		})
+	}
 	return callees
+}
+
+// Calling an immutable local function value establishes a closure edge. Merely
+// passing or storing the value does not; mutable and opaque values need further
+// classification rather than selecting their initializer as current behavior.
+func constructionProviderClosure(expr ast.Expr, source *constructionSource, visited map[*ast.Object]bool) *ast.FuncLit {
+	switch value := expr.(type) {
+	case *ast.FuncLit:
+		return value
+	case *ast.ParenExpr:
+		return constructionProviderClosure(value.X, source, visited)
+	case *ast.Ident:
+		if value.Obj != nil && !visited[value.Obj] && !source.mutations[value.Obj] {
+			visited[value.Obj] = true
+			return constructionProviderClosure(constructionValueInitializer(value.Obj), source, visited)
+		}
+	}
+	return nil
 }
