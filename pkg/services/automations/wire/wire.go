@@ -17,11 +17,23 @@ import (
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
+
+// CursorScopes exposes the private recovery owner to canonical composition.
+type CursorScopes = scriptpollers.CursorScopes
+
+// CursorPersistenceFileSystem is the cursor owner's exact external effect.
+type CursorPersistenceFileSystem = scriptpollerswire.CursorPersistenceFileSystem
+
+// NewCursorScopes constructs the scoped recovery owner without filesystem IO.
+func NewCursorScopes(files CursorPersistenceFileSystem) CursorScopes {
+	return scriptpollerswire.NewCursorScopes(files)
+}
 
 // HostedSourceInputs is the cohesive set of external effects needed to
 // compose Automations-owned hosted-source and cursor-persistence

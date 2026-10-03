@@ -37,6 +37,19 @@ type CursorRecorder interface {
 	CommitCursor(context.Context, CommitCursorRequest) error
 }
 
+// CursorScope selects runtime-owned recovery state. BaseDir retains the
+// authored durable destination; a blank BaseDir selects runtime-local memory.
+type CursorScope struct {
+	RuntimeID string
+	BaseDir   string
+}
+
+// CursorScopes owns recovery behavior without constructing a service per runtime.
+type CursorScopes interface {
+	GetCursor(context.Context, CursorScope, automations.GetCursorRequest) (automations.GetCursorResult, error)
+	CommitCursor(context.Context, CursorScope, CommitCursorRequest) error
+}
+
 // CommitCursorRequest records one advanced opaque cursor/checkpoint fact.
 type CommitCursorRequest struct {
 	AutomationID   string
