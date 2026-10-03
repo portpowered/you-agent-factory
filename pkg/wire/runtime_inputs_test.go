@@ -978,6 +978,9 @@ type watchWaitScheduler struct {
 }
 
 func (*watchWaitScheduler) Now() time.Time { return time.Unix(0, 0) }
+func (scheduler *watchWaitScheduler) After(delay time.Duration) <-chan time.Time {
+	return scheduler.NewTimer(delay).C()
+}
 func (scheduler *watchWaitScheduler) NewTimer(delay time.Duration) platformclock.Timer {
 	scheduler.calls++
 	scheduler.delay = delay
@@ -994,11 +997,3 @@ type watchWaitTimer struct {
 
 func (timer *watchWaitTimer) C() <-chan time.Time { return timer.ticks }
 func (timer *watchWaitTimer) Stop() bool          { timer.stopped = true; return true }
-
-// Direct provider fixtures supply the same selected pair required by Wire;
-// construction through root.BuildProcess performs this selection in production.
-func selectedTestTimeEdges(overrides serviceedges.Edges) serviceedges.Edges {
-	return serviceedges.Merge(serviceedges.Edges{
-		Clock: platformclock.Real{}, ProcessScheduler: platformclock.Real{},
-	}, overrides)
-}
