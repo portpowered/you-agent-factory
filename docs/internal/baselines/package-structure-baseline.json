@@ -94,16 +94,6 @@
     },
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_work_service_application_slices_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/dashboard_engine_state_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -296,36 +286,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_unified_event_log_smoke_test.go",
       "target": "TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
-      "target": "TestWorkRootPolicyServicePrepareInvocationInputAcceptsDirectArgs"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
-      "target": "TestWorkRootPolicyServicePrepareInvocationInputRejectsWhitespaceOnlyText"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
-      "target": "TestWorkRootPolicyServiceResolvePrimaryResultHonorsCanceledContext"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
-      "target": "TestWorkRootPolicyServiceResolvePrimaryResultSubmittedTerminalSuccess"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
-      "target": "TestWorkRootPolicySlicesRejectUnsupportedOperations"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_work_service_application_slices_test.go",
-      "target": "TestWorkServiceApplicationSlicesExerciseFunctionalLane"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -1495,11 +1455,6 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/admission_contract.go",
-      "target": "NewContentPreparation"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/admission_contract.go",
       "target": "NewFactoryRequestBatchPreparation"
     },
     {
@@ -1511,11 +1466,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/admission_contract.go",
       "target": "NewRequestFileLoader"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/admission_contract.go",
-      "target": "NewRequestPreparationService"
     },
     {
       "rule": "service-root-exported-function",
@@ -1716,11 +1666,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/invocation_return_policy_contract.go",
       "target": "NamedArgumentInputsFromAnyMap"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
-      "target": "NewInvocationInputPreparation"
     },
     {
       "rule": "service-root-exported-function",

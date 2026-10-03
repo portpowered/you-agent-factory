@@ -83,136 +83,6 @@ func TestNewContentMaterializationServiceConstructsPublishedRole(t *testing.T) {
 	}
 }
 
-func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
-	t.Parallel()
-
-	valid := validNewServiceInputs(t)
-	tests := []struct {
-		name    string
-		mutate  func(*newServiceInputs)
-		wantErr string
-	}{
-		{
-			name:    "runtime resolver",
-			mutate:  func(in *newServiceInputs) { in.runtimes = nil },
-			wantErr: "construct Work: runtime resolver is required",
-		},
-		{
-			name:    "content staging filesystem",
-			mutate:  func(in *newServiceInputs) { in.filesystem = nil },
-			wantErr: "construct Work: content staging filesystem is required",
-		},
-		{
-			name:    "content staging random",
-			mutate:  func(in *newServiceInputs) { in.random = nil },
-			wantErr: "construct Work: content staging random is required",
-		},
-		{
-			name:    "content staging clock",
-			mutate:  func(in *newServiceInputs) { in.clock = nil },
-			wantErr: "construct Work: content staging clock is required",
-		},
-		{
-			name:    "content host platform",
-			mutate:  func(in *newServiceInputs) { in.hostPlatform = "" },
-			wantErr: "construct Work: content host platform is required",
-		},
-		{
-			name:    "HTTP doer",
-			mutate:  func(in *newServiceInputs) { in.httpDoer = nil },
-			wantErr: "construct Work: HTTP doer is required",
-		},
-		{
-			name:    "inspect path",
-			mutate:  func(in *newServiceInputs) { in.inspectPath = nil },
-			wantErr: "construct Work: inspect path is required",
-		},
-		{
-			name:    "create temporary file",
-			mutate:  func(in *newServiceInputs) { in.createTempFile = nil },
-			wantErr: "construct Work: create temporary file is required",
-		},
-		{
-			name:    "remove path",
-			mutate:  func(in *newServiceInputs) { in.removePath = nil },
-			wantErr: "construct Work: remove path is required",
-		},
-		{
-			name:    "write file",
-			mutate:  func(in *newServiceInputs) { in.writeFile = nil },
-			wantErr: "construct Work: write file is required",
-		},
-		{
-			name:    "open file",
-			mutate:  func(in *newServiceInputs) { in.openFile = nil },
-			wantErr: "construct Work: open file is required",
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			inputs := valid
-			test.mutate(&inputs)
-			service, err := inputs.callNewService()
-			if err == nil {
-				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
-			}
-			if err.Error() != test.wantErr {
-				t.Fatalf("NewService() error = %q, want %q", err.Error(), test.wantErr)
-			}
-			if service != nil {
-				t.Fatalf("NewService() = %#v, want nil service", service)
-			}
-		})
-	}
-}
-
-func TestNewServicePropagatesContentStagingConstructionErrors(t *testing.T) {
-	t.Parallel()
-
-	inputs := validNewServiceInputs(t)
-	inputs.random = failingStagingRandom{}
-	service, err := inputs.callNewService()
-	if err == nil {
-		t.Fatal("NewService() error = nil, want content staging construction failure")
-	}
-	if service != nil {
-		t.Fatalf("NewService() = %#v, want nil service", service)
-	}
-}
-
-func TestNewServicePropagatesContentMaterializationConstructionErrors(t *testing.T) {
-	t.Parallel()
-
-	inputs := validNewServiceInputs(t)
-	inputs.hostPlatform = "   "
-	service, err := inputs.callNewService()
-	if err == nil {
-		t.Fatal("NewService() error = nil, want content host platform rejection")
-	}
-	if err.Error() != "construct Work: content host platform is required" {
-		t.Fatalf("NewService() error = %q, want wire-level host platform rejection", err.Error())
-	}
-	if service != nil {
-		t.Fatalf("NewService() = %#v, want nil service", service)
-	}
-}
-
-func TestNewServiceConstructsPublishedRoot(t *testing.T) {
-	t.Parallel()
-
-	service, err := validNewServiceInputs(t).callNewService()
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-	if service == nil {
-		t.Fatal("NewService() returned nil service")
-	}
-	var root work.Service = service
-	if root == nil {
-		t.Fatal("constructed value is not assignable to work.Service")
-	}
-}
-
 func TestNewRuntimeServiceConstructsPublishedRootFromWiredCollaborators(t *testing.T) {
 	t.Parallel()
 
@@ -239,7 +109,7 @@ func TestNewRuntimeServiceConstructsPublishedRootFromWiredCollaborators(t *testi
 		t.Fatalf("NewContentMaterializationService() error = %v", err)
 	}
 
-	service := workwire.NewRuntimeService(
+	service := testRuntimeService(
 		inputs.runtimes,
 		os.ReadFile,
 		nil,
@@ -454,20 +324,15 @@ func validNewServiceInputs(t *testing.T) newServiceInputs {
 }
 
 func (in newServiceInputs) callNewService() (work.Service, error) {
-	return workwire.NewService(
-		in.runtimes,
-		in.filesystem,
-		in.random,
-		in.clock,
-		in.stagingTTL,
-		in.hostPlatform,
-		in.httpDoer,
-		in.inspectPath,
-		in.createTempFile,
-		in.removePath,
-		in.writeFile,
-		in.openFile,
-	)
+	staging, err := workwire.NewContentStagingService(in.filesystem, in.random, in.clock, in.stagingTTL)
+	if err != nil {
+		return nil, err
+	}
+	materializer, err := workwire.NewContentMaterializationService(in.hostPlatform, in.httpDoer, in.inspectPath, in.createTempFile, in.removePath, in.writeFile, in.openFile)
+	if err != nil {
+		return nil, err
+	}
+	return testRuntimeService(in.runtimes, os.ReadFile, os.Stat, staging, materializer), nil
 }
 
 type stubRuntimeResolver struct{}
@@ -618,4 +483,45 @@ func (d inertHTTPDoer) Do(*http.Request) (*http.Response, error) {
 		d.onDo()
 	}
 	return nil, nil
+}
+
+func testRuntimeService(runtimes work.RuntimeResolver, readFile work.SubmittedFileReader, inspectPath work.SubmittedFilePathInspector, staging work.ContentStagingService, materializer work.ContentMaterializer) work.Service {
+	if staging == nil {
+		staging = admissionOnlyContentStaging{}
+	}
+	if materializer == nil {
+		materializer = admissionOnlyContentMaterializer{}
+	}
+	content := workwire.NewContentPreparation(workwire.NewContentPolicy())
+	prep := workwire.NewRequestPreparationService(workwire.NewRequestPolicy(workwire.NewRequestContentBridge(content)))
+	input := workwire.NewInvocationInputAdapter(workwire.NewInvocationInputPolicy(readFile, inspectPath))
+	state := workwire.NewStateAccess(workwire.NewRuntimeSessionResolver(runtimes), nil, fixtureDurability{})
+	return workwire.NewRuntimeService(runtimes, readFile, inspectPath, staging, materializer, state, prep, input)
+}
+
+type fixtureDurability struct{}
+
+func (fixtureDurability) CompletedFlushSequence(string) (int64, bool) { return 0, false }
+
+// admissionOnlyContentStaging keeps unsupported content operations explicit.
+type admissionOnlyContentStaging struct{}
+
+func (admissionOnlyContentStaging) StageContent(context.Context, work.StageContentRequest) (work.StageContentResult, error) {
+	return work.StageContentResult{}, errors.New("Work content staging is required")
+}
+func (admissionOnlyContentStaging) PrepareContent(context.Context, []work.StagedSubmissionItem) ([]work.WorkContentPart, error) {
+	return nil, errors.New("Work content staging is required")
+}
+func (admissionOnlyContentStaging) ResolveContent(context.Context, string) (work.ResolvedStagedContent, error) {
+	return work.ResolvedStagedContent{}, errors.New("Work content staging is required")
+}
+func (admissionOnlyContentStaging) CleanupContent(context.Context, string) error {
+	return errors.New("Work content staging is required")
+}
+
+// admissionOnlyContentMaterializer keeps unsupported materialization explicit.
+type admissionOnlyContentMaterializer struct{}
+
+func (admissionOnlyContentMaterializer) MaterializeContentURL(context.Context, string) (string, work.ContentCleanup, error) {
+	return "", nil, errors.New("Work content materializer is required")
 }
