@@ -6,20 +6,17 @@ import (
 	"testing"
 	"time"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 
-	projectionquerywire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
+	canonicalledgerwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/wire"
 )
 
-func TestAcceptedRecordingsRootUsesPrivateCanonicalLedger(t *testing.T) {
+func TestCanonicalLedgerAdmitsEventsAndValidatesSubscriptions(t *testing.T) {
 	t.Parallel()
 
 	ledger := &stubLedger{}
-	root := testRecordingRoot(ledger, projectionquerywire.NewService())
+	root := canonicalledgerwire.NewService(ledger)
 	if root == nil {
 		t.Fatal("NewService returned nil")
 	}
@@ -118,13 +115,4 @@ func scopedLegacyEvent(
 			SessionSequence: &sessionSequence,
 		},
 	}
-}
-
-func testRecordingRoot(ledger recordings.Ledger, projection recordings.ProjectionService) recordings.Service {
-	clock := platformclock.Real{}
-	lifecycle := recordingswire.NewRecordingLifecycleOwner(nil, nil, nil, clock)
-	return recordingswire.NewService(ledger, projection, lifecycle,
-		recordingswire.NewArtifactsExportOwner(lifecycle, nil),
-		recordingswire.NewReplayOwner(lifecycle, projection, nil, nil),
-		recordingswire.NewCanonicalLedgerOwner(ledger), recordingswire.NewHistoricalQueryOwner(nil, projection), clock, logging.NoopLogger{}, nil, nil, nil, nil, nil)
 }

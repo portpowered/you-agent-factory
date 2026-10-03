@@ -797,7 +797,10 @@ func assertContinuationExport(t *testing.T, service recordings.Service, history 
 	}
 }
 
-func TestHistoricalReadKeepsTypedCorruptionAndMissingCauses(t *testing.T) {
+// These read-only scenarios share immutable production edges. Each parallel cell
+// owns its source, profile, inputs and synchronous Execute completion; parent
+// cleanup joins all cells before checking that no live effect was admitted.
+func TestReadOnlyHistoricalInspection(t *testing.T) {
 	t.Parallel()
 	var service recordings.Service
 	var providerRuns, writes atomic.Int32
@@ -807,6 +810,23 @@ func TestHistoricalReadKeepsTypedCorruptionAndMissingCauses(t *testing.T) {
 		RecordingWriteFile:     func(string, []byte) error { writes.Add(1); return errors.New("unexpected historical write") },
 		ProviderCommandRunner:  functionalReplayCommandRunner{calls: &providerRuns},
 	})
+	t.Cleanup(func() {
+		if writes.Load() != 0 || providerRuns.Load() != 0 {
+			t.Errorf("read-only scenarios admitted live effects: writes=%d provider=%d", writes.Load(), providerRuns.Load())
+		}
+	})
+	t.Run("TestHistoricalReadKeepsTypedCorruptionAndMissingCauses", func(t *testing.T) {
+		t.Parallel()
+		assertHistoricalReadKeepsTypedCauses(t, process, service)
+	})
+	t.Run("TestEmptyRecordingKeepsInspectionAndUnavailableProjection", func(t *testing.T) {
+		t.Parallel()
+		assertEmptyRecordingInspection(t, process, service)
+	})
+}
+
+func assertHistoricalReadKeepsTypedCauses(t *testing.T, process support.Process, service recordings.Service) {
+	t.Helper()
 	corruptPath := filepath.Join(t.TempDir(), "corrupt.json")
 	corruptBytes := []byte(`{"schemaVersion":"agent-factory.replay.v1","recordedAt":"2026-10-03T12:34:56Z","events":[{"schemaVersion":"agent-factory.event.v1","id":"broken","type":"WORK_REQUEST","context":{"sequence":0,"eventTime":"2026-10-03T12:34:56Z"},"payload":[]}]}`)
 	if err := os.WriteFile(corruptPath, corruptBytes, 0o600); err != nil {
@@ -821,6 +841,7 @@ func TestHistoricalReadKeepsTypedCorruptionAndMissingCauses(t *testing.T) {
 		{"missing", filepath.Join(t.TempDir(), "missing.json"), recordings.HistoricalRecordingQueryErrorMissingHistory},
 	} {
 		t.Run(cell.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
 				Recording: recordings.HistoricalRecordingIdentity{RecordingID: "selected-history", Artifact: recordings.RecordingArtifactReference(cell.path)},
 			})
@@ -840,14 +861,16 @@ func TestHistoricalReadKeepsTypedCorruptionAndMissingCauses(t *testing.T) {
 			}
 		})
 	}
-	after, err := os.ReadFile(corruptPath)
-	if err != nil || !reflect.DeepEqual(corruptBytes, after) || writes.Load() != 0 || providerRuns.Load() != 0 {
-		t.Fatalf("failed historical read changed source or executed effects: read=%v writes=%d provider=%d", err, writes.Load(), providerRuns.Load())
-	}
+	t.Cleanup(func() {
+		after, err := os.ReadFile(corruptPath)
+		if err != nil || !reflect.DeepEqual(corruptBytes, after) {
+			t.Errorf("failed historical read changed source: %v", err)
+		}
+	})
 }
 
-func TestEmptyRecordingKeepsInspectionAndUnavailableProjection(t *testing.T) {
-	t.Parallel()
+func assertEmptyRecordingInspection(t *testing.T, process support.Process, service recordings.Service) {
+	t.Helper()
 	artifact, err := recordings.BuildPortableRecording(recordings.PortableRecordingCanonicalFacts{
 		SessionID: "session-empty-history", Status: "SUCCEEDED", OrchestratorKind: "JAVASCRIPT",
 		SourceRef: "workflow/empty.js", SourceHash: functionalReplayDigest('a'), PolicyHash: functionalReplayDigest('b'),
@@ -865,14 +888,6 @@ func TestEmptyRecordingKeepsInspectionAndUnavailableProjection(t *testing.T) {
 	if err := os.WriteFile(path, payload, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	var service recordings.Service
-	var providerRuns, writes atomic.Int32
-	process := support.BuildProcess(t, serviceedges.Edges{
-		RecordingsRootObserver: func(root recordings.Service) { service = root },
-		RecordingReadFile:      os.ReadFile,
-		RecordingWriteFile:     func(string, []byte) error { writes.Add(1); return errors.New("empty replay must remain read-only") },
-		ProviderCommandRunner:  functionalReplayCommandRunner{calls: &providerRuns},
-	})
 	history, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
 		Recording: recordings.HistoricalRecordingIdentity{RecordingID: "empty-history", Artifact: recordings.RecordingArtifactReference(path)},
 	})
@@ -889,7 +904,7 @@ func TestEmptyRecordingKeepsInspectionAndUnavailableProjection(t *testing.T) {
 		t.Fatalf("empty replay inspection = %s", inputs.Stdout())
 	}
 	unchanged, err := os.ReadFile(path)
-	if err != nil || !bytes.Equal(payload, unchanged) || writes.Load() != 0 || providerRuns.Load() != 0 {
-		t.Fatalf("empty replay created live effects: read=%v writes=%d provider=%d", err, writes.Load(), providerRuns.Load())
+	if err != nil || !bytes.Equal(payload, unchanged) {
+		t.Fatalf("empty replay changed source: %v", err)
 	}
 }
