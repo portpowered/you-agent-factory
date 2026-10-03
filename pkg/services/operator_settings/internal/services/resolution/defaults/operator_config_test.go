@@ -80,9 +80,6 @@ func testConfigDocumentService() operatorsettings.ConfigDocumentService {
 
 func testConfigDocumentServiceWithCatalog(catalog operatorsettings.ProviderCatalog) operatorsettings.ConfigDocumentService {
 	return operatorsettings.ConfigDocumentService{
-		Files:           testFiles,
-		CreateTemp:      testCreateTemp,
-		Providers:       catalog,
 		Decoder:         decodeTestConfig,
 		Encoder:         encodeTestConfig,
 		PersistenceLock: &sync.Mutex{},

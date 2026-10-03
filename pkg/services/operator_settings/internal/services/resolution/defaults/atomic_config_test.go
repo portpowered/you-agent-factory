@@ -650,9 +650,6 @@ func persistedConfigServiceWithEncoder(
 	encoder operatorsettings.ConfigEncoder,
 ) operatorsettings.ConfigDocumentService {
 	return operatorsettings.ConfigDocumentService{
-		Files:           files,
-		CreateTemp:      create,
-		Providers:       controlledProviderCatalog,
 		Decoder:         decodeTestConfig,
 		Encoder:         encoder,
 		PersistenceLock: &sync.Mutex{},
