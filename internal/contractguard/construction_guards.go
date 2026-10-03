@@ -6,15 +6,19 @@ import (
 )
 
 // Guard provenance is deliberately bounded to declared required parameters,
-// local aliases, and keyed storage on the registered result. It does not infer
+// local aliases, and storage on the registered result. It does not infer
 // requiredness from pointer/interface types or dependency-looking names.
 func (index constructionIndex) scanRequiredConstructionGuards(registry ConstructionRegistry) []ConstructionFinding {
 	var findings []ConstructionFinding
 	for _, constructor := range registry.Constructors {
 		decl := index.declarations[constructor.Symbol]
 		required := constructionRequiredObjects(decl.function, constructor.RequiredParameters)
-		fields := constructionRequiredFields(decl, constructor, required)
-		helperRequired := index.constructionHelperRequired(decl, required, fields)
+		fields := index.constructionRequiredFields(decl, constructor, required)
+		var requiredReceivers []ConstructionSymbol
+		if constructionProhibitedKind(constructor, registry.Types) {
+			requiredReceivers = constructor.Results
+		}
+		helperRequired := index.constructionHelperRequired(decl, required, fields, requiredReceivers)
 		for _, source := range index.sources {
 			for _, declaration := range source.file.Decls {
 				function, ok := declaration.(*ast.FuncDecl)
@@ -34,7 +38,17 @@ func (index constructionIndex) scanRequiredConstructionGuards(registry Construct
 				stored := fields[ConstructionSymbol{ImportPath: caller.ImportPath, Name: caller.Receiver}]
 				provenance := constructionGuardProvenance{source: source, required: origins, receiver: receiver, fields: stored,
 					mutations: constructionGuardMutations(function.Body), fieldMutations: constructionGuardFieldMutations(function.Body, receiver)}
+				provenance.requiredReceiver = constructionProhibitedKind(constructor, registry.Types) &&
+					constructionHasResult(constructor, ConstructionSymbol{ImportPath: caller.ImportPath, Name: caller.Receiver})
 				ast.Inspect(function.Body, func(node ast.Node) bool {
+					var condition ast.Expr
+					switch statement := node.(type) {
+					case *ast.IfStmt:
+						condition = statement.Cond
+					case *ast.ForStmt:
+						condition = statement.Cond
+					}
+					findings = append(findings, constructionAssertionGuards(condition, provenance, caller, constructor, registry)...)
 					comparison, ok := node.(*ast.BinaryExpr)
 					if !ok || (comparison.Op != token.EQL && comparison.Op != token.NEQ) {
 						return true
@@ -78,46 +92,6 @@ func constructionRequiredObjects(function *ast.FuncDecl, parameters []Constructi
 	return required
 }
 
-func constructionRequiredFields(decl constructionDeclaration, constructor ConstructionConstructor, required map[*ast.Object]string) map[ConstructionSymbol]map[string]string {
-	fields := make(map[ConstructionSymbol]map[string]string)
-	if decl.function.Body == nil {
-		return fields
-	}
-	provenance := constructionGuardProvenance{source: decl.source, required: required, mutations: constructionGuardMutations(decl.function.Body)}
-	ast.Inspect(decl.function.Body, func(node ast.Node) bool {
-		literal, ok := node.(*ast.CompositeLit)
-		if !ok {
-			return true
-		}
-		typ, resolved := constructionResultSymbol(literal.Type, decl.source)
-		if !resolved {
-			return true
-		}
-		for _, result := range constructor.Results {
-			if typ != result {
-				continue
-			}
-			for _, element := range literal.Elts {
-				entry, ok := element.(*ast.KeyValueExpr)
-				if !ok {
-					continue
-				}
-				name, ok := entry.Key.(*ast.Ident)
-				rule := provenance.origin(entry.Value, map[*ast.Object]bool{})
-				if !ok || rule == "" {
-					continue
-				}
-				if fields[typ] == nil {
-					fields[typ] = make(map[string]string)
-				}
-				fields[typ][name.Name] = rule
-			}
-		}
-		return true
-	})
-	return fields
-}
-
 func constructionNilOperand(comparison *ast.BinaryExpr) ast.Expr {
 	for _, pair := range [][2]ast.Expr{{comparison.X, comparison.Y}, {comparison.Y, comparison.X}} {
 		if ident, ok := pair[0].(*ast.Ident); ok && ident.Name == "nil" && ident.Obj == nil {
@@ -128,13 +102,14 @@ func constructionNilOperand(comparison *ast.BinaryExpr) ast.Expr {
 }
 
 type constructionGuardProvenance struct {
-	source         *constructionSource
-	helpers        map[*ast.FuncDecl]bool
-	required       map[*ast.Object]string
-	receiver       *ast.Object
-	fields         map[string]string
-	mutations      map[*ast.Object]bool
-	fieldMutations map[string]bool
+	source           *constructionSource
+	helpers          map[*ast.FuncDecl]bool
+	required         map[*ast.Object]string
+	receiver         *ast.Object
+	requiredReceiver bool
+	fields           map[string]string
+	mutations        map[*ast.Object]bool
+	fieldMutations   map[string]bool
 }
 
 func (p constructionGuardProvenance) origin(expr ast.Expr, visited map[*ast.Object]bool) string {
@@ -146,9 +121,8 @@ func (p constructionGuardProvenance) origin(expr ast.Expr, visited map[*ast.Obje
 	case *ast.CallExpr:
 		return p.helperOrigin(value)
 	case *ast.SelectorExpr:
-		ident, ok := value.X.(*ast.Ident)
-		if ok && p.receiver != nil && ident.Obj == p.receiver {
-			if p.fields[value.Sel.Name] != "" && p.fieldMutations[value.Sel.Name] {
+		if constructionReceiverAlias(value.X, p.receiver, map[*ast.Object]bool{}) {
+			if p.fields[value.Sel.Name] != "" && (p.fieldMutations[value.Sel.Name] || constructionStorageMutated(value.X, p.mutations, map[*ast.Object]bool{})) {
 				return "unresolved-required-dependency-guard"
 			}
 			return p.fields[value.Sel.Name]
@@ -156,6 +130,12 @@ func (p constructionGuardProvenance) origin(expr ast.Expr, visited map[*ast.Obje
 	case *ast.Ident:
 		if value.Obj == nil || visited[value.Obj] {
 			return ""
+		}
+		if p.requiredReceiver && value.Obj == p.receiver {
+			if p.mutations[value.Obj] {
+				return "unresolved-required-dependency-guard"
+			}
+			return "required-receiver-guard"
 		}
 		visited[value.Obj] = true
 		rule := ""
@@ -188,7 +168,7 @@ func constructionGuardFieldMutations(body ast.Node, receiver *ast.Object) map[st
 		}
 		for _, left := range assignment.Lhs {
 			if selector, ok := left.(*ast.SelectorExpr); ok {
-				if ident, ok := selector.X.(*ast.Ident); ok && receiver != nil && ident.Obj == receiver {
+				if constructionReceiverAlias(selector.X, receiver, map[*ast.Object]bool{}) {
 					mutations[selector.Sel.Name] = true
 				}
 			}

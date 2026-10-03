@@ -1,6 +1,9 @@
 package contractguard
 
-import "go/ast"
+import (
+	"go/ast"
+	"slices"
+)
 
 // Only the asserted value inherits collaborator provenance. The comma-ok
 // boolean is domain information, even when both names share one declaration.
@@ -120,7 +123,7 @@ func (p constructionGuardProvenance) returnOrigin(function *ast.FuncDecl) string
 // Requiredness flows only from registered parameters or their stored fields,
 // not from a helper's names or parameter types. The finite object graph reaches
 // a fixed point; recursion cannot create new origins or unbounded traversal.
-func (index constructionIndex) constructionHelperRequired(decl constructionDeclaration, required map[*ast.Object]string, fields map[ConstructionSymbol]map[string]string) map[*ast.FuncDecl]map[*ast.Object]string {
+func (index constructionIndex) constructionHelperRequired(decl constructionDeclaration, required map[*ast.Object]string, fields map[ConstructionSymbol]map[string]string, requiredReceivers []ConstructionSymbol) map[*ast.FuncDecl]map[*ast.Object]string {
 	origins := map[*ast.FuncDecl]map[*ast.Object]string{decl.function: required}
 	for changed := true; changed; {
 		changed = false
@@ -136,7 +139,9 @@ func (index constructionIndex) constructionHelperRequired(decl constructionDecla
 				if len(field.Names) == 1 {
 					provenance.receiver = field.Names[0].Obj
 				}
-				provenance.fields = fields[ConstructionSymbol{ImportPath: candidate.source.importPath, Name: constructionReceiver(field.Type)}]
+				receiverType := ConstructionSymbol{ImportPath: candidate.source.importPath, Name: constructionReceiver(field.Type)}
+				provenance.fields = fields[receiverType]
+				provenance.requiredReceiver = slices.Contains(requiredReceivers, receiverType)
 				provenance.fieldMutations = constructionGuardFieldMutations(function.Body, provenance.receiver)
 			}
 			ast.Inspect(function.Body, func(node ast.Node) bool {
