@@ -67,11 +67,11 @@ def prepare(args):
         if path == LEASES:
             imports += '\n "sync"'
         add(path + "/" + existing, original.replace("import (", "import (" + imports, 1) + (templates / template).read_text())
-    for template, virtual in [("collector-tests.go.txt", "pkg/platform/baselineobservation/hook_test.go"), ("q0-tests.go.txt", "tests/stress/observer/observer_test.go"), ("report.go.txt", "tests/stress/observer/report_test.go"), ("report-tests.go.txt", "tests/stress/observer/report_validation_test.go")]:
+    for template, virtual in [("collector-tests.go.txt", "pkg/platform/baselineobservation/hook_test.go"), ("q0-tests.go.txt", "tests/stress/observer/observer_test.go"), ("lifecycle-tests.go.txt", "tests/stress/observer/lifecycle_test.go"), ("report.go.txt", "tests/stress/observer/report_test.go"), ("report-tests.go.txt", "tests/stress/observer/report_validation_test.go")]:
         add(virtual, (templates / template).read_text())
     overlay = output / "overlay.json"
     overlay.write_text(json.dumps({"Replace": replacements}, indent=2) + "\n")
-    manifest = {"sourceCommit": head, "sourceStatus": git(source, "status", "--porcelain"), "toolSourceCommit": git(tool, "rev-parse", "HEAD"), "mode": args.mode, "files": files, "overlaySHA256": hashlib.sha256(overlay.read_bytes()).hexdigest(), "goVersion": subprocess.check_output(["go", "version"], text=True).strip(), "protocol": "owner-unit-and-Q0; Q1/Q2 not yet implemented", "buildCommand": f'go test -overlay "{overlay}" -p 1 -count=1 -run TestInProcessObserver ./{HOST} ./{LEASES}', "fixture": "controlled component effects; inert BuildProcess Q0; no model or remote calls"}
+    manifest = {"sourceCommit": head, "sourceStatus": git(source, "status", "--porcelain"), "toolSourceCommit": git(tool, "rev-parse", "HEAD"), "mode": args.mode, "files": files, "overlaySHA256": hashlib.sha256(overlay.read_bytes()).hexdigest(), "goVersion": subprocess.check_output(["go", "version"], text=True).strip(), "protocol": "owner-unit-and-Q0/Q1/Q2; terminal-session replacement", "buildCommand": f'go test -c -overlay "{overlay}" -p 1 -o "{output / "observer.test.exe"}" ./tests/stress/observer', "fixture": "one root process; controlled Codex command edge; idle bootstrap; explicit session Work/terminal replacement/close; no model or remote calls"}
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(overlay)
 
