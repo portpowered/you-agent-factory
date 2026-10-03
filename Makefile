@@ -663,7 +663,7 @@ test-integration-models-asr-live-correlation:
 endif
 
 test-contract:
-	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/internal/contracts/contracttests ./pkg/transports/http/contracttests ./pkg/transports/cli/baseline ./pkg/transports/cli/clicontract ./pkg/transports/cli/cliinputs ./pkg/transports/cli/climanifestgen ./pkg/transports/cli/commandidentity -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/internal/contracts/contracttests ./pkg/transports/http/contracttests ./pkg/transports/cli/baseline ./pkg/transports/cli/clicontract ./pkg/transports/cli/cliinputs ./pkg/transports/cli/climanifestgen ./pkg/transports/cli/commandidentity ./tests/contract/... -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 # Cache-aware developer feedback; use test-functional-fresh for an
 # unconditional rerun.

@@ -52,6 +52,12 @@ func ForImportPath(importPath string) (lane Lane, ok bool) {
 		return LaneMaintenance, true
 	case importPath == ModulePath+"/ui" || strings.HasPrefix(importPath, ModulePath+"/ui/"):
 		return LaneMaintenance, true
+	case importPath == ModulePath+"/tests/contract" || strings.HasPrefix(importPath, ModulePath+"/tests/contract/"):
+		return LaneContract, true
+	case importPath == ModulePath+"/tests/internal" || strings.HasPrefix(importPath, ModulePath+"/tests/internal/"):
+		return LaneMaintenance, true
+	case importPath == ModulePath+"/third_party/acp-go-sdk" || strings.HasPrefix(importPath, ModulePath+"/third_party/acp-go-sdk/"):
+		return LaneMaintenance, true
 	case importPath == ModulePath+"/tests/functional/internal" || strings.HasPrefix(importPath, ModulePath+"/tests/functional/internal/"):
 		return LaneMaintenance, true
 	case importPath == ModulePath+"/tests/functional" || strings.HasPrefix(importPath, ModulePath+"/tests/functional/"):

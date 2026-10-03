@@ -34,6 +34,9 @@ func TestForImportPathAssignsPrimaryLanes(t *testing.T) {
 		{name: "stress", importPath: ModulePath + "/tests/stress/runtime", want: LaneStress, wantOK: true},
 		{name: "release", importPath: ModulePath + "/tests/release", want: LaneRelease, wantOK: true},
 		{name: "ui", importPath: ModulePath + "/ui", want: LaneMaintenance, wantOK: true},
+		{name: "repository contract", importPath: ModulePath + "/tests/contract/models/omni_media_probe", want: LaneContract, wantOK: true},
+		{name: "repository test support", importPath: ModulePath + "/tests/internal/localai/corpusv2/runner", want: LaneMaintenance, wantOK: true},
+		{name: "vendored ACP SDK", importPath: ModulePath + "/third_party/acp-go-sdk", want: LaneMaintenance, wantOK: true},
 		{name: "docs", importPath: ModulePath + "/docs/reference", wantOK: false},
 	}
 
