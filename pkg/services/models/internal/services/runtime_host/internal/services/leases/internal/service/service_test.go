@@ -10,7 +10,6 @@ import (
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service"
-	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
 
@@ -18,7 +17,7 @@ func TestConstructionAllocatesLeaseStateWithoutStartingLifecycle(t *testing.T) {
 	t.Parallel()
 
 	clock := &recordingHostClock{}
-	service := internalservice.New(clock, readySlotFacts{capacity: 1})
+	service := internalservice.New(clock, readySlotFacts{capacity: 1}, noopCoordinator{})
 	if service == nil {
 		t.Fatal("New returned nil service")
 	}
@@ -32,10 +31,7 @@ func TestAcquireModelLeaseReturnsDetachedActiveLeaseFacts(t *testing.T) {
 
 	now := time.Date(2026, time.July, 27, 12, 0, 0, 0, time.UTC)
 	scope := mustRuntimeScopeRef(t, "leases-acquire-ready")
-	service := internalservice.New(
-		fixedHostClock{now: now},
-		readySlotFacts{capacity: 2},
-	)
+	service := internalservice.New(fixedHostClock{now: now}, readySlotFacts{capacity: 2}, noopCoordinator{})
 
 	acquired, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
 		Scope:  scope,
@@ -61,7 +57,7 @@ func TestAcquireModelLeaseRejectsBlankHolderWithoutConsumingCapacity(t *testing.
 
 	scope := mustRuntimeScopeRef(t, "leases-acquire-holder")
 	facts := readySlotFacts{capacity: 1}
-	service := internalservice.New(fixedHostClock{}, facts)
+	service := internalservice.New(fixedHostClock{}, facts, noopCoordinator{})
 
 	_, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
 		Scope:  scope,
@@ -89,7 +85,7 @@ func TestAcquireModelLeaseIssuesUniqueLeaseIdentities(t *testing.T) {
 	t.Parallel()
 
 	scope := mustRuntimeScopeRef(t, "leases-acquire-unique")
-	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 2})
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 2}, noopCoordinator{})
 	request := models.AcquireModelLeaseRequest{
 		Scope: scope,
 		Name:  "local-model",
@@ -120,7 +116,7 @@ func TestAcquireModelLeaseRejectsCapacityExhaustion(t *testing.T) {
 	t.Parallel()
 
 	scope := mustRuntimeScopeRef(t, "leases-acquire-exhausted")
-	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1})
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1}, noopCoordinator{})
 	request := models.AcquireModelLeaseRequest{
 		Scope:  scope,
 		Name:   "local-model",
@@ -149,10 +145,7 @@ func TestAcquireModelLeaseRejectsRuntimeNotReady(t *testing.T) {
 	t.Parallel()
 
 	scope := mustRuntimeScopeRef(t, "leases-acquire-not-ready")
-	service := internalservice.New(
-		fixedHostClock{},
-		readySlotFacts{readiness: models.ReadinessStateLoading, capacity: 1},
-	)
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{readiness: models.ReadinessStateLoading, capacity: 1}, noopCoordinator{})
 
 	_, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
 		Scope:  scope,
@@ -170,7 +163,8 @@ func TestGetModelLeaseReportsExpiredLeaseAndFreesCapacity(t *testing.T) {
 	start := time.Date(2026, time.July, 27, 12, 0, 0, 0, time.UTC)
 	clock := &advanceableHostClock{now: start}
 	scope := mustRuntimeScopeRef(t, "leases-get-expired")
-	service := internalservice.New(clock, readySlotFacts{capacity: 1})
+	coordinator := &recordingSlotCapacityCoordinator{}
+	service := internalservice.New(clock, readySlotFacts{capacity: 1}, coordinator)
 	request := models.AcquireModelLeaseRequest{
 		Scope:  scope,
 		Name:   "local-model",
@@ -213,6 +207,10 @@ func TestGetModelLeaseReportsExpiredLeaseAndFreesCapacity(t *testing.T) {
 	if afterExpiry.Lease.Lease.IsZero() {
 		t.Fatal("expected lease after expiry freed capacity")
 	}
+	if coordinator.acquired != 2 || coordinator.released != 1 {
+		t.Fatalf("expiry notifications = %d/%d, want 2 acquired / 1 released", coordinator.acquired, coordinator.released)
+	}
+
 }
 
 func TestReleaseModelLeaseRejectsExpiredWithoutDoubleFree(t *testing.T) {
@@ -221,7 +219,8 @@ func TestReleaseModelLeaseRejectsExpiredWithoutDoubleFree(t *testing.T) {
 	start := time.Date(2026, time.July, 27, 12, 0, 0, 0, time.UTC)
 	clock := &advanceableHostClock{now: start}
 	scope := mustRuntimeScopeRef(t, "leases-release-expired")
-	service := internalservice.New(clock, readySlotFacts{capacity: 1})
+	coordinator := &recordingSlotCapacityCoordinator{}
+	service := internalservice.New(clock, readySlotFacts{capacity: 1}, coordinator)
 
 	acquired, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
 		Scope:  scope,
@@ -260,16 +259,17 @@ func TestReleaseModelLeaseRejectsExpiredWithoutDoubleFree(t *testing.T) {
 	if reacquired.Lease.Lease.IsZero() {
 		t.Fatal("capacity should remain available exactly once after expiry")
 	}
+	if coordinator.acquired != 2 || coordinator.released != 1 {
+		t.Fatalf("expiry notifications = %d/%d, want 2 acquired / 1 released", coordinator.acquired, coordinator.released)
+	}
+
 }
 
 func TestAcquireModelLeaseRejectsContendedCapacity(t *testing.T) {
 	t.Parallel()
 
 	scope := mustRuntimeScopeRef(t, "leases-acquire-contended")
-	service := internalservice.New(
-		fixedHostClock{},
-		readySlotFacts{capacity: 2, contendedHolder: "worker-a"},
-	)
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 2, contendedHolder: "worker-a"}, noopCoordinator{})
 
 	_, err := service.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
 		Scope:  scope,
@@ -299,7 +299,7 @@ func TestHostLeaseFailureClassificationsRemainDistinct(t *testing.T) {
 	scope := mustRuntimeScopeRef(t, "leases-failure-distinct")
 	start := time.Date(2026, time.July, 27, 12, 0, 0, 0, time.UTC)
 	clock := &advanceableHostClock{now: start}
-	service := internalservice.New(clock, readySlotFacts{capacity: 1})
+	service := internalservice.New(clock, readySlotFacts{capacity: 1}, noopCoordinator{})
 
 	assertHostLeaseFailureIsOnly(t, "invalid holder", mustAcquireErr(service, models.AcquireModelLeaseRequest{
 		Scope: scope, Name: "local-model", Holder: "",
@@ -308,10 +308,7 @@ func TestHostLeaseFailureClassificationsRemainDistinct(t *testing.T) {
 		Scope: scope, Name: "not-ready", Holder: "worker",
 	}), models.ErrHostRuntimeNotReady)
 
-	exhaustedService := internalservice.New(
-		fixedHostClock{},
-		readySlotFacts{capacity: 1},
-	)
+	exhaustedService := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1}, noopCoordinator{})
 	_, err := exhaustedService.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
 		Scope: scope, Name: "local-model", Holder: "worker-a",
 	})
@@ -322,10 +319,7 @@ func TestHostLeaseFailureClassificationsRemainDistinct(t *testing.T) {
 		Scope: scope, Name: "local-model", Holder: "worker-b",
 	}), models.ErrHostCapacityExhausted)
 
-	contendedService := internalservice.New(
-		fixedHostClock{},
-		readySlotFacts{capacity: 2, contendedHolder: "holder-a"},
-	)
+	contendedService := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 2, contendedHolder: "holder-a"}, noopCoordinator{})
 	assertHostLeaseFailureIsOnly(t, "capacity contended", mustAcquireErr(contendedService, models.AcquireModelLeaseRequest{
 		Scope: scope, Name: "local-model", Holder: "holder-b",
 	}), models.ErrHostCapacityContended)
@@ -391,7 +385,7 @@ func TestReleaseModelLeaseFreesCapacityForSubsequentAcquire(t *testing.T) {
 	t.Parallel()
 
 	scope := mustRuntimeScopeRef(t, "leases-release-free")
-	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1})
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1}, noopCoordinator{})
 	request := models.AcquireModelLeaseRequest{
 		Scope:  scope,
 		Name:   "local-model",
@@ -440,7 +434,7 @@ func TestReleaseModelLeaseRejectsUnknownAndAlreadyReleased(t *testing.T) {
 	t.Parallel()
 
 	scope := mustRuntimeScopeRef(t, "leases-release-not-found")
-	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 2})
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 2}, noopCoordinator{})
 	unknown, err := (models.ModelLeaseRef{}).Parse("model-lease-unknown")
 	if err != nil {
 		t.Fatalf("parse lease ref: %v", err)
@@ -481,7 +475,7 @@ func TestAcquireModelLeaseHonoursCancelledContextWithoutConsumingCapacity(t *tes
 	t.Parallel()
 
 	scope := mustRuntimeScopeRef(t, "leases-acquire-cancel")
-	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1})
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1}, noopCoordinator{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -512,8 +506,7 @@ func TestReleaseModelLeaseNotifiesCapacityCoordinator(t *testing.T) {
 
 	scope := mustRuntimeScopeRef(t, "leases-coordinator")
 	coordinator := &recordingSlotCapacityCoordinator{}
-	leasesSvc := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1})
-	leaseswire.BindCoordinator(leasesSvc, coordinator)
+	leasesSvc := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1}, coordinator)
 
 	acquired, err := leasesSvc.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
 		Scope:  scope,
@@ -539,6 +532,16 @@ func TestReleaseModelLeaseNotifiesCapacityCoordinator(t *testing.T) {
 		t.Fatalf("coordinator after release = (%d, %d), want (1, 1)",
 			coordinator.acquired, coordinator.released)
 	}
+	if _, err := leasesSvc.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{Scope: scope, Lease: acquired.Lease.Lease}); !errors.Is(err, models.ErrHostLeaseNotFound) {
+		t.Fatalf("duplicate release = %v", err)
+	}
+	if coordinator.released != 1 {
+		t.Fatalf("duplicate release notified %d times", coordinator.released)
+	}
+	if _, err := leasesSvc.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{Scope: scope, Name: "local-model", Holder: "worker-b"}); err != nil {
+		t.Fatalf("acquire after release: %v", err)
+	}
+
 }
 
 type recordingSlotCapacityCoordinator struct {
@@ -564,7 +567,7 @@ func TestOpenRuntimeScopeDoesNotConstructAnotherLeasesOwner(t *testing.T) {
 	t.Parallel()
 
 	clock := &recordingHostClock{}
-	service := internalservice.New(clock, readySlotFacts{capacity: 1})
+	service := internalservice.New(clock, readySlotFacts{capacity: 1}, noopCoordinator{})
 	scopes, err := runtimescopeswire.NewService(func() string { return "leases-scope-binding" })
 	if err != nil {
 		t.Fatalf("construct runtime scopes: %v", err)
@@ -662,3 +665,8 @@ func mustRuntimeScopeRef(t *testing.T, value string) models.RuntimeScopeRef {
 	}
 	return ref
 }
+
+type noopCoordinator struct{}
+
+func (noopCoordinator) OnLeaseCapacityAcquired(models.RuntimeScopeRef, string) {}
+func (noopCoordinator) OnLeaseCapacityReleased(models.RuntimeScopeRef, string) {}

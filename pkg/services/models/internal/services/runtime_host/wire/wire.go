@@ -4,12 +4,15 @@ package wire
 import (
 	"fmt"
 	"reflect"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
+	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
+	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
@@ -19,12 +22,20 @@ import (
 func NewService(
 	scopes runtimescopes.Service,
 	assets scopedassets.Service,
+	leases HostLeases,
+	state *SlotState,
 	processLauncher modelseffects.HostProcessLauncher,
 	hostHTTP modelseffects.HostHTTPDoer,
 	hostClock modelseffects.HostClock,
 	hostLogger modelseffects.HostDiagnosticLogger,
 	hostMetrics modelseffects.HostMetricsRecorder,
-	options ...runtimehost.Options,
+	platform models.AssetHostPlatform,
+	protocol modelseffects.HostProtocolNegotiator,
+	compatibility modelseffects.HostCompatibilityChecker,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+	evidence modelseffects.RuntimeEvidenceRecorder,
+	idleUnloadAfter time.Duration,
+	maxLoadedRuntimes int,
 ) (runtimehost.Service, error) {
 	if scopes == nil {
 		return nil, fmt.Errorf("%w: Models Runtime Scopes service is required", models.ErrInvalidHostDependencies)
@@ -41,16 +52,16 @@ func NewService(
 	if isNilDependency(hostClock) {
 		return nil, fmt.Errorf("%w: model host clock is required", models.ErrInvalidHostDependencies)
 	}
-	return internalservice.NewWired(
+	return internalservice.New(
 		scopes,
-		assets,
+		assets, leases, state,
 		processLauncher,
 		hostHTTP,
 		hostClock,
 		hostLogger,
 		hostMetrics,
-		options...,
-	)
+		platform, protocol, compatibility, resolveSymlinks, evidence, idleUnloadAfter, maxLoadedRuntimes,
+	), nil
 }
 
 func isNilDependency(value any) bool {
@@ -64,4 +75,19 @@ func isNilDependency(value any) bool {
 	default:
 		return false
 	}
+}
+
+// SlotState and HostLeases expose construction types through the enclosing owner.
+type SlotState = internalservice.SlotState
+type HostLeases = hostleases.Service
+
+func NewSlotState() *SlotState { return internalservice.NewSlotState() }
+func NewSlotFacts(scopes runtimescopes.Service, assets scopedassets.Service, state *SlotState) modelseffects.SlotFactsProvider {
+	return internalservice.NewSlotFacts(scopes, assets, state)
+}
+func NewSlotCoordinator(state *SlotState, scopes runtimescopes.Service, clock modelseffects.HostClock, logger modelseffects.HostDiagnosticLogger, metrics modelseffects.HostMetricsRecorder, idleUnloadAfter time.Duration) modelseffects.SlotCapacityCoordinator {
+	return internalservice.NewSlotCoordinator(state, scopes, clock, logger, metrics, idleUnloadAfter)
+}
+func NewLeases(clock modelseffects.HostClock, facts modelseffects.SlotFactsProvider, coordinator modelseffects.SlotCapacityCoordinator) (HostLeases, error) {
+	return leaseswire.NewService(clock, facts, coordinator)
 }

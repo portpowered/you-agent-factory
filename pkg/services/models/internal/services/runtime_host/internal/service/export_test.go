@@ -65,19 +65,13 @@ func NewWithHostTestConfig(
 	hostMetrics modelseffects.HostMetricsRecorder,
 	supervisorCfg SupervisorTestConfig,
 	policyCfg HostPolicyTestConfig,
-	options ...runtimehost.Options,
+	options ...HostOptions,
 ) runtimehost.Service {
-	s := New(
-		scopes,
-		assets,
-		mustLeasesService(hostClock),
-		processLauncher,
-		hostHTTP,
-		hostClock,
-		hostLogger,
-		hostMetrics,
-		options...,
-	).(*service)
+	host, err := newHostFixture(scopes, assets, processLauncher, hostHTTP, hostClock, hostLogger, hostMetrics, modelseffects.UnconfiguredSlotFacts{}, policyCfg, options...)
+	if err != nil {
+		panic(err)
+	}
+	s := hostFixture(host)
 	if supervisorCfg.ReadinessTimeout > 0 {
 		s.supervisor.ReadinessTimeout = supervisorCfg.ReadinessTimeout
 	}
@@ -89,20 +83,16 @@ func NewWithHostTestConfig(
 	}
 	s.supervisor.afterLoadStateObservation = supervisorCfg.AfterLoadStateObservation
 	s.supervisor.onProcessFailure = supervisorCfg.OnProcessFailure
-	s.idleUnloadAfter, s.maxLoadedRuntimes = normalizeHostPolicy(
-		policyCfg.IdleUnloadAfter,
-		policyCfg.MaxLoadedRuntimes,
-	)
-	return s
+	return host
 }
 
 // LeasesService returns the nested leases owner for focused integration tests.
 func LeasesService(s runtimehost.Service) hostleases.Service {
-	return s.(*service).leases
+	return hostFixture(s).leases
 }
 
 // NewWithLeasesFacts constructs a Runtime Host whose nested leases owner uses
-// the supplied slot facts and binds holder-aware cleanup to the host.
+// the supplied slot facts and independently constructed holder-aware cleanup.
 func NewWithLeasesFacts(
 	scopes runtimescopes.Service,
 	assets scopedassets.Service,
@@ -114,28 +104,14 @@ func NewWithLeasesFacts(
 	slotFacts modelseffects.SlotFactsProvider,
 	policyCfg HostPolicyTestConfig,
 ) runtimehost.Service {
-	leases, err := leaseswire.NewService(hostClock, slotFacts)
+	s, err := newHostFixture(scopes, assets, processLauncher, hostHTTP, hostClock, hostLogger, hostMetrics, slotFacts, policyCfg)
 	if err != nil {
 		panic(err)
 	}
-	s := New(
-		scopes,
-		assets,
-		leases,
-		processLauncher,
-		hostHTTP,
-		hostClock,
-		hostLogger,
-		hostMetrics,
-	).(*service)
-	s.idleUnloadAfter, s.maxLoadedRuntimes = normalizeHostPolicy(
-		policyCfg.IdleUnloadAfter,
-		policyCfg.MaxLoadedRuntimes,
-	)
 	return s
 }
 
-// NewWiredWithSupervisorConfig constructs the host-backed lease adapter with
+// NewWiredWithSupervisorConfig constructs shared slot facts and coordinator with
 // deterministic supervisor overrides for focused integration tests.
 func NewWiredWithSupervisorConfig(
 	scopes runtimescopes.Service,
@@ -147,9 +123,9 @@ func NewWiredWithSupervisorConfig(
 	hostMetrics modelseffects.HostMetricsRecorder,
 	supervisorCfg SupervisorTestConfig,
 	policyCfg HostPolicyTestConfig,
-	options ...runtimehost.Options,
+	options ...HostOptions,
 ) (runtimehost.Service, error) {
-	host, err := NewWired(
+	host, err := newHostFixture(
 		scopes,
 		assets,
 		processLauncher,
@@ -157,12 +133,12 @@ func NewWiredWithSupervisorConfig(
 		hostClock,
 		hostLogger,
 		hostMetrics,
-		options...,
+		nil, policyCfg, options...,
 	)
 	if err != nil {
 		return nil, err
 	}
-	s := host.(*service)
+	s := hostFixture(host)
 	if supervisorCfg.ReadinessTimeout > 0 {
 		s.supervisor.ReadinessTimeout = supervisorCfg.ReadinessTimeout
 	}
@@ -174,16 +150,12 @@ func NewWiredWithSupervisorConfig(
 	}
 	s.supervisor.afterLoadStateObservation = supervisorCfg.AfterLoadStateObservation
 	s.supervisor.onProcessFailure = supervisorCfg.OnProcessFailure
-	s.idleUnloadAfter, s.maxLoadedRuntimes = normalizeHostPolicy(
-		policyCfg.IdleUnloadAfter,
-		policyCfg.MaxLoadedRuntimes,
-	)
 	return host, nil
 }
 
 // AcquireSlotCapacity simulates one active capacity holder for idle-unload tests.
 func AcquireSlotCapacity(s runtimehost.Service, scope models.RuntimeScopeRef, modelName string) {
-	host := s.(*service)
+	host := hostFixture(s)
 	slotKey := runtimeSlotKey(scope, modelName)
 	host.mu.Lock()
 	host.acquireSlotCapacityLocked(slotKey)
@@ -197,21 +169,12 @@ func ReleaseSlotCapacity(
 	modelName string,
 	runtimeCfg *models.RuntimeConfig,
 ) {
-	host := s.(*service)
-	host.releaseSlotCapacity(scope, modelName, runtimeCfg)
+	s.(*hostTestFixture).coordinator.releaseSlotCapacity(scope, modelName, runtimeCfg)
 }
 
 // ShutdownHost stops all supervised runtimes owned by the host.
 func ShutdownHost(ctx context.Context, s runtimehost.Service) error {
-	return s.(*service).Shutdown(ctx)
-}
-
-func mustLeasesService(hostClock modelseffects.HostClock) hostleases.Service {
-	leases, err := leaseswire.NewService(hostClock, modelseffects.UnconfiguredSlotFacts{})
-	if err != nil {
-		panic(err)
-	}
-	return leases
+	return hostFixture(s).Shutdown(ctx)
 }
 
 func TestInvocationEndpointExposesOnlyReadyRuntimeEndpoints(t *testing.T) {
@@ -221,12 +184,12 @@ func TestInvocationEndpointExposesOnlyReadyRuntimeEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scope.Parse: %v", err)
 	}
-	host := &service{runtimeSlots: map[string]*supervisedRuntime{
+	host := &service{SlotState: &SlotState{runtimeSlots: map[string]*supervisedRuntime{
 		runtimeSlotKey(scope, "llm"): {
 			state:    supervisedStateReady,
 			endpoint: "  grpc://127.0.0.1:45731  ",
 		},
-	}}
+	}}}
 
 	endpoint, err := host.InvocationEndpoint(context.Background(), scope, "llm")
 	if err != nil {
@@ -260,3 +223,87 @@ func TestInvocationEndpointExposesOnlyReadyRuntimeEndpoints(t *testing.T) {
 		t.Fatalf("cancelled endpoint error = %v, want ErrHostCancelled", err)
 	}
 }
+
+// HostOptions configures only test fixtures; production constructors use direct arguments.
+type HostOptions struct {
+	Platform             models.AssetHostPlatform
+	ProtocolNegotiator   modelseffects.HostProtocolNegotiator
+	CompatibilityChecker modelseffects.HostCompatibilityChecker
+	ResolveSymlinks      modelseffects.HostResolveSymlinks
+	RuntimeEvidence      modelseffects.RuntimeEvidenceRecorder
+	IdleUnloadAfter      time.Duration
+	MaxLoadedRuntimes    int
+}
+
+func newHostFixture(scopes runtimescopes.Service, assets scopedassets.Service, processLauncher modelseffects.HostProcessLauncher, hostHTTP modelseffects.HostHTTPDoer, clock modelseffects.HostClock, logger modelseffects.HostDiagnosticLogger, metrics modelseffects.HostMetricsRecorder, facts modelseffects.SlotFactsProvider, policy HostPolicyTestConfig, options ...HostOptions) (runtimehost.Service, error) {
+	opt := HostOptions{}
+	if len(options) > 0 {
+		opt = options[0]
+	}
+	state := NewSlotState()
+	if facts == nil {
+		facts = NewSlotFacts(scopes, assets, state)
+	}
+	coordinator := NewSlotCoordinator(state, scopes, clock, logger, metrics, policy.IdleUnloadAfter)
+	leases, err := leaseswire.NewService(clock, facts, coordinator)
+	if err != nil {
+		return nil, err
+	}
+	host := New(scopes, assets, leases, state, processLauncher, hostHTTP, clock, logger, metrics, opt.Platform, opt.ProtocolNegotiator, opt.CompatibilityChecker, opt.ResolveSymlinks, opt.RuntimeEvidence, policy.IdleUnloadAfter, policy.MaxLoadedRuntimes).(*service)
+	return &hostTestFixture{service: host, coordinator: coordinator.(*slotCoordinator)}, nil
+}
+
+type hostTestFixture struct {
+	*service
+	coordinator *slotCoordinator
+}
+
+func hostFixture(host runtimehost.Service) *service {
+	if fixture, ok := host.(*hostTestFixture); ok {
+		return fixture.service
+	}
+	return host.(*service)
+}
+
+func TestIdleCoordinatorIgnoresStaleTimerAndProtectsPeer(t *testing.T) {
+	t.Parallel()
+	state := NewSlotState()
+	coordinator := &slotCoordinator{SlotState: state}
+	selectedProcess, peerProcess := &idleTestProcess{}, &idleTestProcess{}
+	selected := &supervisedRuntime{state: supervisedStateReady, process: selectedProcess}
+	peer := &supervisedRuntime{state: supervisedStateReady, process: peerProcess}
+	state.runtimeSlots["selected"] = selected
+	state.runtimeSlots["peer"] = peer
+	stale, current := &idleUnload{}, &idleUnload{}
+	state.idleUnloadTimers["selected"] = current
+	coordinator.runIdleUnload(supervisedIdentity{}, "selected", stale)
+	if selectedProcess.stops != 0 || peerProcess.stops != 0 {
+		t.Fatal("stale timer stopped a runtime")
+	}
+	state.capacityHolders["selected"] = 1
+	coordinator.runIdleUnload(supervisedIdentity{}, "selected", current)
+	if selectedProcess.stops != 0 || peerProcess.stops != 0 {
+		t.Fatal("timer stopped active holder or peer")
+	}
+	delete(state.capacityHolders, "selected")
+	state.idleUnloadTimers["selected"] = current
+	coordinator.runIdleUnload(supervisedIdentity{}, "selected", current)
+	if selectedProcess.stops != 1 || peerProcess.stops != 0 {
+		t.Fatal("eligible timer did not stop only its selected runtime")
+	}
+}
+
+func (s *slotCoordinator) releaseSlotCapacity(
+	scope models.RuntimeScopeRef,
+	modelName string,
+	runtimeCfg *models.RuntimeConfig,
+) {
+	s.releaseSlotCapacityWithOverlays(scope, modelName, runtimeCfg, nil)
+}
+
+// idleTestProcess observes only the selected process stop effect.
+type idleTestProcess struct{ stops int }
+
+func (*idleTestProcess) HealthEndpoint() string       { return "" }
+func (*idleTestProcess) Wait() error                  { return nil }
+func (p *idleTestProcess) Stop(context.Context) error { p.stops++; return nil }

@@ -2,12 +2,12 @@ package service
 
 import (
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	"path/filepath"
 )
 
 func TestBuiltInLLMResolvesPackagedGRPCHostStartSpec(t *testing.T) {
@@ -271,7 +271,7 @@ func TestRequiresSupervisedBackend_CharacterizesCurrentMembership(t *testing.T) 
 func TestNewInertRuntimeHostAppliesDefaultReadinessTimeout(t *testing.T) {
 	t.Parallel()
 
-	hostService, ok := New(nil, nil, nil, nil, nil, nil, nil, nil).(*service)
+	hostService, ok := New(nil, nil, nil, NewSlotState(), nil, nil, nil, nil, nil, models.AssetHostPlatform{}, nil, nil, nil, nil, 0, 0).(*service)
 	if !ok {
 		t.Fatal("New did not return the internal runtime host service implementation")
 	}

@@ -36,7 +36,7 @@ func TestNewServiceRequiresLeaseDependencies(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service, err := leaseswire.NewService(test.clock, test.slotFacts)
+			service, err := leaseswire.NewService(test.clock, test.slotFacts, noopCoordinator{})
 			if test.wantInvalidDeps {
 				if service != nil || err == nil {
 					t.Fatalf("NewService = (%#v, %v), want dependency error", service, err)
@@ -62,3 +62,8 @@ func (testHostClock) Now() time.Time { return time.Unix(0, 0) }
 func (testHostClock) NewTimer(time.Duration) modelseffects.HostTimer {
 	panic("host timer created during inert leases construction")
 }
+
+type noopCoordinator struct{}
+
+func (noopCoordinator) OnLeaseCapacityAcquired(models.RuntimeScopeRef, string) {}
+func (noopCoordinator) OnLeaseCapacityReleased(models.RuntimeScopeRef, string) {}
