@@ -25,6 +25,15 @@ func constructionMethodReceiverType(expr ast.Expr, source *constructionSource, v
 		}
 		results := constructionParameterFields(decl.function.Type.Results)
 		if len(results) == 1 {
+			result := results[0].Type
+			for pointer, ok := result.(*ast.StarExpr); ok; pointer, ok = result.(*ast.StarExpr) {
+				result = pointer.X
+			}
+			if name, ok := result.(*ast.Ident); ok && name.Obj != nil {
+				if _, parameter := name.Obj.Decl.(*ast.Field); parameter {
+					return ConstructionSymbol{}, false
+				}
+			}
 			return constructionResultSymbol(results[0].Type, decl.source)
 		}
 	}
