@@ -5,22 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
+	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// Fold-behavior preservation tests construct Recordings exclusively through
-// recordings/wire and exercise append, subscription order, replay, projection
-// queries, and portable artifact export through the published Service root after
-// the internal composed-root relocation.
+// These preservation witnesses exercise native owners with controlled collaborators.
+// Composed stop/export/replay journeys live in the public functional lane.
 
 type behavioralLedger struct {
 	events []factorydefinitions.FactoryEvent
@@ -43,7 +39,7 @@ func (ledger *behavioralLedger) Subscribe(
 	}, nil
 }
 
-func (ledger *behavioralLedger) StreamGenerationID() string { return "wire-fold-gen" }
+func (ledger *behavioralLedger) StreamGenerationID() string { return "wire-fold-sub-gen" }
 
 func (ledger *behavioralLedger) AddEventRecorder(func(factorydefinitions.FactoryEvent)) {}
 
@@ -54,31 +50,33 @@ func (ledger *behavioralLedger) AppendRecordedEvent(event factorydefinitions.Fac
 	ledger.events = append(ledger.events, event)
 }
 
-func newWireFoldService(t *testing.T, ledger recordings.Ledger) recordings.Service {
+type foldSnapshotSource struct {
+	recordingswire.RecordingLifecycleOwner
+	snapshot recordinglifecycle.Snapshot
+}
+
+func (source foldSnapshotSource) Snapshot(id recordings.RecordingID) (recordinglifecycle.Snapshot, error) {
+	if id != source.snapshot.Status.RecordingID {
+		return recordinglifecycle.Snapshot{}, recordings.ErrMissingRecordingTarget
+	}
+	return source.snapshot, nil
+}
+func foldFinalizedSnapshot(t *testing.T, id recordings.RecordingID, count int) foldSnapshotSource {
 	t.Helper()
-	service, err := testNewServiceWithProjectionAndEffects(
-		ledger,
-		recordingswire.NewProjectionService(),
-		nil,
-		func(path string, data []byte) error {
-			return os.WriteFile(path, data, 0o644)
-		},
-		os.MkdirAll,
-		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.Rename,
-		os.ReadFile,
-	)
+	scope := recordings.CanonicalEventScope{FactorySessionID: "wire-fold-session"}
+	now := time.Unix(1_700_000_000, 0).UTC()
+	first, err := wireFoldRunRequestEvent("wire-fold-run", 0, scope, now, "wire-fold-gen")
 	if err != nil {
-		t.Fatalf("NewService() = %v", err)
+		t.Fatal(err)
 	}
-	var root recordings.Service = service
-	if root == nil {
-		t.Fatal("constructed service is not assignable to recordings.Service")
+	events := []recordings.CanonicalEvent{first}
+	for i := 1; i < count; i++ {
+		events = append(events, wireFoldWorkRequestEvent(fmt.Sprintf("wire-fold-%d", i), recordings.CanonicalEventSequence(i), scope, now.Add(time.Duration(i)*time.Second), "wire-fold-gen"))
 	}
-	return root
+	finished := now.Add(300 * time.Second)
+	return foldSnapshotSource{snapshot: recordinglifecycle.Snapshot{
+		Status: recordings.RecordingStatusFacts{RecordingID: id, Scope: scope, Artifact: "artifact://wire-fold", State: recordings.RecordingFinalized, FinalizedAt: &finished}, Events: events,
+	}}
 }
 
 func wireFoldRunRequestEvent(
@@ -146,11 +144,11 @@ func wireFoldWorkRequestEvent(
 	}
 }
 
-func TestWireFoldPreservesAppendAndProjectionQueryThroughPublishedRoot(t *testing.T) {
+func TestCanonicalAppendPreservesEventIdentity(t *testing.T) {
 	t.Parallel()
 
 	ledger := &behavioralLedger{}
-	root := newWireFoldService(t, ledger)
+	root := recordingswire.NewCanonicalLedgerOwner(ledger)
 
 	scope := recordings.CanonicalEventScope{FactorySessionID: "wire-fold-session"}
 	event := recordings.CanonicalEvent{
@@ -175,39 +173,42 @@ func TestWireFoldPreservesAppendAndProjectionQueryThroughPublishedRoot(t *testin
 		t.Fatalf("Append() event ID = %q, want %q", accepted.Event.ID, event.ID)
 	}
 
-	reconstructed, err := root.ReconstructWorldState(recordings.ReconstructWorldStateRequest{
-		Scope:        scope,
-		Events:       []recordings.CanonicalEvent{accepted.Event},
-		SelectedTick: 4,
-	})
-	if err != nil {
-		t.Fatalf("ReconstructWorldState() = %v", err)
-	}
+}
 
-	dashboard, err := root.QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest{
-		WorldState: reconstructed.WorldState,
+func TestProjectionOwnerPreservesWorldScopeAndDashboard(t *testing.T) {
+	t.Parallel()
+	scope := recordings.CanonicalEventScope{FactorySessionID: "wire-fold-session"}
+	projection := recordingswire.NewProjectionService()
+	event := recordings.CanonicalEvent{ID: "wire-fold-event", Sequence: 0, FactoryTick: 1, Scope: scope,
+		Cursor:  recordings.CanonicalEventCursor{StreamGenerationID: "wire-fold-gen", Sequence: 0},
+		Kind:    recordings.CanonicalEventKind(factorydefinitions.FactoryEventTypeRunResponse),
+		Payload: `{}`, RecordedAt: time.Unix(1_700_000_000, 0).UTC()}
+	reconstructed, err := canonical.ReconstructWorldState(projection, recordings.ReconstructWorldStateRequest{
+		Scope: scope, Events: []recordings.CanonicalEvent{event}, SelectedTick: 4,
 	})
 	if err != nil {
-		t.Fatalf("QuerySimpleDashboard() = %v", err)
+		t.Fatal(err)
 	}
-	if reconstructed.WorldState.SchemaVersion == "" {
-		t.Fatalf("ReconstructWorldState() returned empty schema version: %#v", reconstructed.WorldState)
+	if reconstructed.WorldState.SchemaVersion == "" || reconstructed.WorldState.Scope != scope {
+		t.Fatalf("reconstructed world = %#v, want schema and selected scope", reconstructed.WorldState)
 	}
-	if reconstructed.WorldState.Scope != scope {
-		t.Fatalf("ReconstructWorldState() scope = %#v, want %#v", reconstructed.WorldState.Scope, scope)
+	var state recordings.FactoryWorldState
+	if err := json.Unmarshal([]byte(reconstructed.WorldState.Payload), &state); err != nil {
+		t.Fatal(err)
 	}
-	if dashboard.Data.ActiveExecutionsByDispatchID == nil {
-		t.Fatalf("QuerySimpleDashboard() returned nil active executions map: %#v", dashboard.Data)
+	dashboard := projection.SimpleDashboardRenderData(state)
+	if dashboard.ActiveExecutionsByDispatchID == nil {
+		t.Fatal("dashboard has nil active executions map")
 	}
 }
 
-func TestWireFoldPreservesSubscriptionCursorOrderThroughPublishedRoot(t *testing.T) {
+func TestCanonicalSubscriptionPreservesCursorOrder(t *testing.T) {
 	t.Parallel()
 
 	const generationID = "wire-fold-sub-gen"
 	now := time.Unix(1_700_000_000, 0).UTC()
-	ledger := recordingswire.NewRuntimeLedger(nil, func() time.Time { return now }, generationID, nil)
-	root := newWireFoldService(t, ledger)
+	ledger := &behavioralLedger{}
+	root := recordingswire.NewCanonicalLedgerOwner(ledger)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "wire-fold-sub-session"}
 
 	const eventCount = 3
@@ -257,81 +258,24 @@ func TestWireFoldPreservesSubscriptionCursorOrderThroughPublishedRoot(t *testing
 func TestWireFoldReconstructsCanonicalDispatchReplayWithWorkLineage(t *testing.T) {
 	t.Parallel()
 
-	const (
-		generationID = "wire-fold-dispatch-replay-gen"
-		workID       = "wire-fold-dispatch-work"
-		dispatchID   = "wire-fold-dispatch"
-	)
+	const workID = "wire-fold-dispatch-work"
+	const dispatchID = "wire-fold-dispatch"
 	now := time.Unix(1_700_000_100, 0).UTC()
-	ledger := recordingswire.NewRuntimeLedger(nil, func() time.Time { return now }, generationID, nil)
-	workItem := work.FactoryWorkItem{
-		ID:          workID,
-		WorkTypeID:  "task",
-		State:       "ready",
-		DisplayName: "replay work",
-		TraceID:     "wire-fold-trace",
+	workIDs := []string{workID}
+	events := []factorydefinitions.FactoryEvent{
+		{Id: "work-request", Type: factorydefinitions.FactoryEventTypeWorkRequest,
+			Context: factorydefinitions.FactoryEventContext{Sequence: 0, Tick: 1, EventTime: now, WorkIDs: &workIDs},
+			Payload: json.RawMessage(`{"type":"FACTORY_REQUEST_BATCH","works":[{"workId":"wire-fold-dispatch-work","workTypeName":"task","state":{"name":"ready"},"name":"replay work"}]}`)},
+		{Id: "dispatch-request", Type: factorydefinitions.FactoryEventTypeDispatchRequest,
+			Context: factorydefinitions.FactoryEventContext{Sequence: 1, Tick: 2, EventTime: now.Add(time.Second), DispatchID: stringPointer(dispatchID), WorkIDs: &workIDs},
+			Payload: json.RawMessage(`{"transitionId":"t-process","inputs":[{"workId":"wire-fold-dispatch-work","workTypeId":"task","state":"ready"}]}`)},
+		{Id: "dispatch-response", Type: factorydefinitions.FactoryEventTypeDispatchResponse,
+			Context: factorydefinitions.FactoryEventContext{Sequence: 2, Tick: 3, EventTime: now.Add(2 * time.Second), DispatchID: stringPointer(dispatchID), WorkIDs: &workIDs},
+			Payload: json.RawMessage(`{"transitionId":"t-process","outcome":"ACCEPTED","output":"completed through canonical replay","durationMillis":1000}`)},
 	}
-	ledger.RecordWorkRequest(1, work.WorkRequestRecord{
-		RequestID: "wire-fold-work-request",
-		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		TraceID:   workItem.TraceID,
-		WorkItems: []work.FactoryWorkItem{workItem},
-	}, now)
-	token := workers.Token{
-		ID:    "wire-fold-token",
-		State: workItem.State,
-		Color: workers.Color{
-			DataType:   workers.DataTypeWork,
-			Name:       workItem.DisplayName,
-			RequestID:  "wire-fold-work-request",
-			WorkID:     workID,
-			WorkTypeID: workItem.WorkTypeID,
-			TraceID:    workItem.TraceID,
-		},
-		CreatedAt: now,
-		EnteredAt: now,
-	}
-	dispatch := work.WorkDispatch{
-		DispatchID:      dispatchID,
-		TransitionID:    "t-process",
-		WorkstationName: "Process",
-		InputTokens:     workers.InputTokens(token),
-		Execution: work.ExecutionMetadata{
-			RequestID: "wire-fold-dispatch-request",
-			ReplayKey: "t-process/wire-fold-trace/wire-fold-dispatch-work",
-			WorkIDs:   []string{workID},
-		},
-	}
-	ledger.RecordWorkstationRequest(2, factorydefinitions.FactoryDispatchRecord{
-		DispatchID: dispatchID,
-		Dispatch:   dispatch,
-	}, now.Add(time.Second))
-	ledger.RecordDispatchWorkerSessionAssociation(
-		2,
-		dispatchID,
-		"wire-fold-worker-session",
-		"wire-fold-dispatch-request",
-		now.Add(time.Second),
-	)
-	result := workers.WorkResult{
-		DispatchID:   dispatchID,
-		TransitionID: dispatch.TransitionID,
-		Outcome:      workers.OutcomeAccepted,
-		Output:       "completed through canonical replay",
-	}
-	ledger.RecordWorkstationResponse(3, result, factorydefinitions.CompletedDispatch{
-		DispatchID:      dispatchID,
-		TransitionID:    dispatch.TransitionID,
-		WorkstationName: dispatch.WorkstationName,
-		Outcome:         workers.OutcomeAccepted,
-		StartTime:       now.Add(time.Second),
-		EndTime:         now.Add(2 * time.Second),
-		Duration:        time.Second,
-		ConsumedTokens:  []workers.Token{token},
-	})
 
 	projection := recordingswire.NewProjectionService()
-	state, err := projection.ReconstructFactoryWorldState(ledger.CanonicalEvents(), 3)
+	state, err := projection.ReconstructFactoryWorldState(events, 3)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState() = %v", err)
 	}
@@ -347,57 +291,24 @@ func TestWireFoldReconstructsCanonicalDispatchReplayWithWorkLineage(t *testing.T
 	}
 }
 
-func TestWireFoldPreservesReplayLoadValidationAndProjectionThroughPublishedRoot(t *testing.T) {
+func TestReplayOwnerPreservesLoadValidationAndProjection(t *testing.T) {
 	t.Parallel()
 
-	root := newWireFoldService(t, &behavioralLedger{})
-	recording := finalizedWireFoldReplayRecording(t, root)
+	source := foldFinalizedSnapshot(t, "wire-fold-replay", 3)
+	projection := &foldReplayProjection{}
+	root := recordingswire.NewReplayOwner(source, projection, nil, nil)
+	recording := finalizedWireFoldReplayRecording(t, root, projection)
 	assertWireFoldReplayLoadFailures(t, root, recording)
 }
 
-func TestWireFoldPreservesPortableArtifactExportThroughPublishedRoot(t *testing.T) {
+func TestArtifactsOwnerPreservesPortableRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	root := newWireFoldService(t, &behavioralLedger{})
-	scope := recordings.CanonicalEventScope{FactorySessionID: "wire-fold-export-session"}
-	artifactPath := filepath.Join(t.TempDir(), "wire-fold-export.json")
-	bound, err := root.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: "recording-wire-fold-export",
-		Artifact:    recordings.RecordingArtifactReference(artifactPath),
-		Scope:       scope,
-	})
-	if err != nil {
-		t.Fatalf("BindRecording() = %v", err)
-	}
-	runRequest, err := wireFoldRunRequestEvent(
-		"wire-fold-export-run-request",
-		0,
-		scope,
-		time.Unix(1_700_000_000, 0).UTC(),
-		"wire-fold-export-gen",
-	)
-	if err != nil {
-		t.Fatalf("wireFoldRunRequestEvent() = %v", err)
-	}
-	for index, event := range []recordings.CanonicalEvent{
-		runRequest,
-		wireFoldWorkRequestEvent("wire-fold-export-event", 1, scope, time.Unix(1_700_000_001, 0).UTC(), "wire-fold-export-gen"),
-	} {
-		if _, err := root.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-			RecordingID: bound.Status.RecordingID,
-			Event:       event,
-		}); err != nil {
-			t.Fatalf("RecordRecordingEvent[%d]() = %v", index, err)
-		}
-	}
-	if _, err := root.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_002, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording() = %v", err)
-	}
+	source := foldFinalizedSnapshot(t, "recording-wire-fold-export", 2)
+	root := recordingswire.NewArtifactsExportOwner(source, nil)
+
 	built, err := root.BuildPortableArtifact(recordings.BuildPortableArtifactRequest{
-		RecordingID: bound.Status.RecordingID,
+		RecordingID: source.snapshot.Status.RecordingID,
 	})
 	if err != nil {
 		t.Fatalf("BuildPortableArtifact() = %v", err)
@@ -422,7 +333,7 @@ func TestWireFoldPreservesPortableArtifactExportThroughPublishedRoot(t *testing.
 	summarized, err := root.SummarizePortableArtifact(recordings.SummarizePortableArtifactRequest{
 		Artifact: decoded.Artifact,
 	})
-	if err != nil || summarized.Summary.RecordingID != bound.Status.RecordingID {
+	if err != nil || summarized.Summary.RecordingID != source.snapshot.Status.RecordingID {
 		t.Fatalf("SummarizePortableArtifact() = (%#v, %v)", summarized, err)
 	}
 	if _, err := root.DecodePortableArtifact(recordings.DecodePortableArtifactRequest{
@@ -434,7 +345,7 @@ func TestWireFoldPreservesPortableArtifactExportThroughPublishedRoot(t *testing.
 
 func appendWireFoldEvent(
 	t *testing.T,
-	root recordings.Service,
+	root recordingswire.CanonicalLedgerOwner,
 	scope recordings.CanonicalEventScope,
 	sequence int,
 	recordedAt time.Time,
@@ -458,48 +369,22 @@ func appendWireFoldEvent(
 	}
 }
 
-func finalizedWireFoldReplayRecording(t *testing.T, root recordings.Service) recordings.ReplayRecordingFacts {
+type foldReplayProjection struct {
+	recordings.ProjectionService
+	events []factorydefinitions.FactoryEvent
+	tick   int
+}
+
+func (projection *foldReplayProjection) ReconstructFactoryWorldState(events []factorydefinitions.FactoryEvent, tick int) (recordings.FactoryWorldState, error) {
+	projection.events = append([]factorydefinitions.FactoryEvent(nil), events...)
+	projection.tick = tick
+	return recordings.FactoryWorldState{Tick: tick}, nil
+}
+func finalizedWireFoldReplayRecording(t *testing.T, root recordingswire.ReplayOwner, projection *foldReplayProjection) recordings.ReplayRecordingFacts {
 	t.Helper()
 
-	scope := recordings.CanonicalEventScope{FactorySessionID: "wire-fold-replay-session"}
-	artifactPath := filepath.Join(t.TempDir(), "wire-fold-replay.json")
-	bound, err := root.BindRecording(recordings.BindRecordingRequest{
-		Artifact: recordings.RecordingArtifactReference(artifactPath),
-		Scope:    scope,
-	})
-	if err != nil {
-		t.Fatalf("BindRecording() = %v", err)
-	}
-	runRequest, err := wireFoldRunRequestEvent(
-		"wire-fold-replay-run-request",
-		0,
-		scope,
-		time.Unix(1_700_000_000, 0).UTC(),
-		"wire-fold-replay-gen",
-	)
-	if err != nil {
-		t.Fatalf("wireFoldRunRequestEvent() = %v", err)
-	}
-	for index, event := range []recordings.CanonicalEvent{
-		runRequest,
-		wireFoldWorkRequestEvent("wire-fold-replay-1", 1, scope, time.Unix(1_700_000_001, 0).UTC(), "wire-fold-replay-gen"),
-		wireFoldWorkRequestEvent("wire-fold-replay-2", 2, scope, time.Unix(1_700_000_002, 0).UTC(), "wire-fold-replay-gen"),
-	} {
-		if _, err := root.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-			RecordingID: bound.Status.RecordingID,
-			Event:       event,
-		}); err != nil {
-			t.Fatalf("RecordRecordingEvent[%d]() = %v", index, err)
-		}
-	}
-	if _, err := root.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_300, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording() = %v", err)
-	}
 	loaded, err := root.LoadReplayRecording(recordings.LoadReplayRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
+		RecordingID: "wire-fold-replay",
 	})
 	if err != nil {
 		t.Fatalf("LoadReplayRecording() = %v", err)
@@ -527,7 +412,7 @@ func finalizedWireFoldReplayRecording(t *testing.T, root recordings.Service) rec
 	if observed.Observation.Kind != recordings.ReplayCompleted {
 		t.Fatalf("ObserveReplay() completion = %#v, want COMPLETED", observed.Observation)
 	}
-	live, err := root.ReconstructWorldState(recordings.ReconstructWorldStateRequest{
+	live, err := canonical.ReconstructWorldState(projection, recordings.ReconstructWorldStateRequest{
 		Scope:        loaded.Recording.Scope,
 		Events:       loaded.Recording.Events,
 		SelectedTick: 7,
@@ -538,21 +423,16 @@ func finalizedWireFoldReplayRecording(t *testing.T, root recordings.Service) rec
 	if observed.Observation.WorldState != live.WorldState {
 		t.Fatalf("replay world = %#v, live world = %#v", observed.Observation.WorldState, live.WorldState)
 	}
-	dashboard, err := root.QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest{
-		WorldState: live.WorldState,
-	})
-	if err != nil {
-		t.Fatalf("QuerySimpleDashboard() = %v", err)
+	if len(projection.events) != len(loaded.Recording.Events) || projection.tick != 7 {
+		t.Fatalf("projection received %d events at tick %d", len(projection.events), projection.tick)
 	}
-	if dashboard.Data.ActiveExecutionsByDispatchID == nil {
-		t.Fatalf("QuerySimpleDashboard() returned nil active executions map: %#v", dashboard.Data)
-	}
+
 	return loaded.Recording
 }
 
 func assertWireFoldReplayLoadFailures(
 	t *testing.T,
-	root recordings.Service,
+	root recordingswire.ReplayOwner,
 	recording recordings.ReplayRecordingFacts,
 ) {
 	t.Helper()
