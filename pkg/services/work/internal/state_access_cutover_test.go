@@ -3,6 +3,7 @@ package internal_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -46,7 +47,7 @@ func TestNewServiceDelegatesToCompletedStateAccess(t *testing.T) {
 			t.Fatalf("submission=%#v,error=%v", submitted, err)
 		}
 		moved, err := service.MoveWorkForSession(t.Context(), "session", "work", "done", "move")
-		if err != wantErr || moved.WorkID != "completed-work" || moved.TokenID != "opaque" {
+		if err != wantErr || !reflect.DeepEqual(moved, work.OperatorMoveResult{WorkID: "completed-work", TokenID: "opaque"}) {
 			t.Fatalf("move=%#v,error=%v", moved, err)
 		}
 	}
