@@ -149,6 +149,86 @@ func TestLocalAIGalleryInstallerOfflineUsesOnlyInstalledBackend(t *testing.T) {
 	}
 }
 
+func TestLocalAIGalleryInstallerPreservesSelectedCommandFailures(t *testing.T) {
+	t.Parallel()
+	selectedError := errors.New("selected gallery command failure")
+	for _, scenario := range []struct {
+		name        string
+		resolveErr  error
+		runErr      error
+		exitCode    int
+		wantMessage string
+	}{
+		{name: "resolution", resolveErr: selectedError, wantMessage: "find local-ai"},
+		{name: "execution", runErr: selectedError, wantMessage: "install LocalAI gallery backend"},
+		{name: "exit status", exitCode: 17, wantMessage: "exit code 17"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			root := filepath.Join(t.TempDir(), "backends")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			resolved, executed := 0, 0
+			runner := galleryContextRunner{run: func(gotContext context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+				executed++
+				if gotContext != ctx || request.Command != "selected-local-ai" ||
+					!reflect.DeepEqual(request.Args, []string{"backends", "install", "--backends-path=" + root, "cuda12-whisper"}) {
+					t.Fatalf("selected command = %#v, context preserved = %t", request, gotContext == ctx)
+				}
+				return platformprocess.CommandResult{ExitCode: scenario.exitCode}, scenario.runErr
+			}}
+			installer := localAIGalleryInstallerAt(runner, root, func(gotContext context.Context) (string, error) {
+				resolved++
+				if gotContext != ctx {
+					t.Fatal("resolver lost selected context")
+				}
+				return "selected-local-ai", scenario.resolveErr
+			})
+			path, err := installer(ctx, "cuda12-whisper", false)
+			if path != "" || err == nil || !strings.Contains(err.Error(), scenario.wantMessage) {
+				t.Fatalf("failed installation = %q, %v", path, err)
+			}
+			if scenario.exitCode == 0 && !errors.Is(err, selectedError) {
+				t.Fatalf("selected error identity lost: %v", err)
+			}
+			wantExecutions := 1
+			if scenario.resolveErr != nil {
+				wantExecutions = 0
+			}
+			if resolved != 1 || executed != wantExecutions {
+				t.Fatalf("resolution/execution = %d/%d, want 1/%d", resolved, executed, wantExecutions)
+			}
+		})
+	}
+}
+
+type galleryContextRunner struct {
+	run func(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error)
+}
+
+func (runner galleryContextRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return runner.run(ctx, request)
+}
+
+func TestLocalAIGalleryInstallerCancellationAndOfflineMissDoNotExecute(t *testing.T) {
+	t.Parallel()
+	installer := localAIGalleryInstallerAt(galleryContextRunner{run: func(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+		t.Fatal("cancelled or offline missing backend executed command")
+		return platformprocess.CommandResult{}, nil
+	}}, t.TempDir(), func(context.Context) (string, error) {
+		t.Fatal("cancelled or offline missing backend resolved command")
+		return "", nil
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if path, err := installer(ctx, "cuda12-whisper", false); path != "" || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled installation = %q, %v", path, err)
+	}
+	if path, err := installer(t.Context(), "cuda12-whisper", true); path != "" || !errors.Is(err, models.ErrAssetOffline) {
+		t.Fatalf("offline missing installation = %q, %v", path, err)
+	}
+}
+
 func TestModelsProcessLauncherRemovesInheritedLlamaCPPLauncherSwitch(t *testing.T) {
 	t.Setenv("LLAMACPP_GRPC_SERVERS", "1")
 	var childEnvironment []string

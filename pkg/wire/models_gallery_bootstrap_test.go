@@ -5,11 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -103,5 +106,79 @@ func TestResolveLocalAIBinaryUsesOverride(t *testing.T) {
 	command, err := resolveLocalAIBinary(context.Background(), nil, "")
 	if err != nil || command != "/custom/local-ai" {
 		t.Fatalf("override = %q, %v", command, err)
+	}
+}
+
+type localAISelectedHTTPClient struct {
+	do func(*http.Request) (*http.Response, error)
+}
+
+func (client localAISelectedHTTPClient) Do(request *http.Request) (*http.Response, error) {
+	return client.do(request)
+}
+
+func TestDownloadLocalAIBinaryPreservesSelectedHTTPFailure(t *testing.T) {
+	t.Parallel()
+	for _, failedPath := range []string{"/latest", "/checksums", "/binary"} {
+		t.Run(failedPath, func(t *testing.T) {
+			t.Parallel()
+			selectedError := errors.New("selected HTTP failure")
+			var paths []string
+			client := localAISelectedHTTPClient{do: func(request *http.Request) (*http.Response, error) {
+				paths = append(paths, request.URL.Path)
+				if request.Method != http.MethodGet || request.URL.Host != "selected.invalid" || request.Context().Err() != nil {
+					t.Fatalf("selected HTTP request = %#v", request)
+				}
+				if _, ok := request.Context().Deadline(); !ok {
+					t.Fatal("download request has no bounded deadline")
+				}
+				if request.URL.Path == failedPath {
+					return nil, selectedError
+				}
+				return localAISelectedReleaseResponse(request.URL.Path), nil
+			}}
+			cache := t.TempDir()
+			path, err := downloadLocalAIBinary(t.Context(), client, cache, "https://selected.invalid/latest")
+			if path != "" || !errors.Is(err, selectedError) {
+				t.Fatalf("failed download = %q, %v, want original selected error", path, err)
+			}
+			want := []string{"/latest"}
+			if failedPath != "/latest" {
+				want = append(want, "/checksums")
+			}
+			if failedPath == "/binary" {
+				want = append(want, "/binary")
+			}
+			if !reflect.DeepEqual(paths, want) {
+				t.Fatalf("HTTP requests = %v, want %v", paths, want)
+			}
+			if _, statErr := os.Stat(filepath.Join(cache, "v1", "local-ai-v1-linux-amd64")); !os.IsNotExist(statErr) {
+				t.Fatalf("failed download published binary: %v", statErr)
+			}
+		})
+	}
+}
+
+func localAISelectedReleaseResponse(path string) *http.Response {
+	metadata := `{"tag_name":"v1","assets":[{"name":"local-ai-v1-linux-amd64","browser_download_url":"https://selected.invalid/binary","size":4},{"name":"LocalAI-v1-checksums.txt","browser_download_url":"https://selected.invalid/checksums"}]}`
+	body := metadata
+	if path == "/checksums" {
+		digest := sha256.Sum256([]byte("test"))
+		body = fmt.Sprintf("%x  local-ai-v1-linux-amd64\n", digest)
+	}
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}
+}
+
+func TestDownloadLocalAIBinaryCancellationDoesNotUseSelectedClient(t *testing.T) {
+	t.Parallel()
+	client := localAISelectedHTTPClient{do: func(*http.Request) (*http.Response, error) {
+		t.Fatal("cancelled download used HTTP client")
+		return nil, nil
+	}}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	path, err := downloadLocalAIBinary(ctx, client, t.TempDir(), "https://selected.invalid/latest")
+	if path != "" || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled download = %q, %v", path, err)
 	}
 }
