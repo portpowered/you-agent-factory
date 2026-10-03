@@ -1,12 +1,48 @@
 package factory
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
+
+func TestWorkRestoreErrorBoundsEscapesAndPreservesCause(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("PRIVATE-PROMPT")
+	err := &WorkRestoreError{Reason: WorkRestoreConflictingPlacement,
+		WorkID:   "work\n\x1b\u202e" + strings.Repeat("x", 1000),
+		PlaceIDs: []string{"task:ready", "task:done"}, Cause: cause}
+	message := err.Error()
+	for _, want := range []string{`\n`, `\x1b`, `\u202e`, "task:ready", "task:done", "..."} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("message %q missing escaped context %q", message, want)
+		}
+	}
+	if len(message) > 400 || strings.ContainsAny(message, "\n\x1b\u202e") || strings.Contains(message, "PRIVATE") {
+		t.Fatalf("restore message is unbounded or unsafe: %q", message)
+	}
+	if !errors.Is(err, cause) {
+		t.Fatal("cause identity lost")
+	}
+	err.PlaceIDs = make([]string, 1000)
+	for i := range err.PlaceIDs {
+		err.PlaceIDs[i] = strings.Repeat("p", 1000)
+	}
+	if len(err.Error()) > 1500 {
+		t.Fatal("place list is unbounded")
+	}
+	err.Reason = "PRIVATE-REASON"
+	if strings.Contains(err.Error(), "PRIVATE") {
+		t.Fatal("unknown reason leaked")
+	}
+	var absent *WorkRestoreError
+	if absent.Error() != "" || absent.Unwrap() != nil {
+		t.Fatal("nil restore error is not safe")
+	}
+}
 
 func TestObservationScopeRequestPublishesRuntimeRootVocabulary(t *testing.T) {
 	t.Parallel()

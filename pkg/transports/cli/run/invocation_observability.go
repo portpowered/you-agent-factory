@@ -322,6 +322,13 @@ func MapServerFailureForInvocation(err error, resumeInput bool) error {
 	if startupErr == nil {
 		return mapped
 	}
+	if resumeInput && mappedInvocationErr != nil && mappedInvocationErr.Code == ServerStartFailedCode {
+		return &InvocationError{
+			Code:    ServerStartFailedCode,
+			Message: fmt.Sprintf("requested server did not start: %s (failure_class=runtime_startup_failed)", mappedInvocationErr.Message),
+			Cause:   err,
+		}
+	}
 
 	if coded, ok := safeCLIError(cause); ok {
 		return &InvocationError{
