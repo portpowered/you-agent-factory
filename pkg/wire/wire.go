@@ -18,6 +18,7 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	providersessionshttp "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessionsrootcli "github.com/portpowered/infinite-you/pkg/services/worker_sessions/transports/cli/worker_sessions"
 	acp "github.com/portpowered/infinite-you/pkg/transports/acp"
@@ -163,6 +164,20 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionExecutionFactory,
 	provideConductorInvocationWithProgressFactory,
 	provideFactorySessionReplayInputs,
+	provideRecordingClock,
+	provideRecordingSnapshotWriter,
+	provideRecordingPublication,
+	provideRecordingReadFile,
+	recordingswire.NewRuntimeLedgerRouter,
+	recordingswire.RuntimeLedger,
+	recordingswire.NewProjectionService,
+	recordingswire.NewRecordingLifecycleOwner,
+	recordingswire.NewCanonicalLedgerOwner,
+	recordingswire.NewArtifactsExportOwner,
+	recordingswire.NewReplayOwner,
+	recordingswire.NewHistoricalQueryOwner,
+	recordingswire.NewRecordingFlushTickerFactory,
+	factorydefinitionswire.FactorySnapshotJSONDecoder,
 	provideRecordingsRoot,
 	provideRecordingsRuntimeScopeService,
 	provideReplayArtifactStorage,

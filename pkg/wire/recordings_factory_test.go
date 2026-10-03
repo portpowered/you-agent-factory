@@ -3,22 +3,26 @@ package wire
 import (
 	"encoding/json"
 	"fmt"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"strings"
 	"testing"
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
 func TestProvideRecordingsRootConstructsThroughRecordingsWire(t *testing.T) {
 	t.Parallel()
 
-	root, err := provideRecordingsRoot(
+	root, err := testRecordingsRoot(
 		serviceedges.Edges{},
 		recordings.LiveRecordingTargetPlannerFunc(
 			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
@@ -47,7 +51,7 @@ func TestProvideRecordingsRootConstructsThroughRecordingsWire(t *testing.T) {
 func TestWireUsesPrecomposedRecordingsRuntimeAndMCPRoles(t *testing.T) {
 	t.Parallel()
 
-	root, err := provideRecordingsRoot(
+	root, err := testRecordingsRoot(
 		serviceedges.Edges{},
 		recordings.LiveRecordingTargetPlannerFunc(
 			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
@@ -154,3 +158,51 @@ func wireCompositionRunRequestEvent(
 		Payload:    string(payload),
 	}, nil
 }
+
+func testRecordingsRoot(edges serviceedges.Edges, targets recordings.LiveRecordingTargetPlanner, storage platformreplay.Storage, captureSnapshot factorydefinitions.LoadedFactorySnapshotCapturer, replayInputs recordings.ReplayInputLoader, logger logging.Logger) (recordings.Service, error) {
+	clock, err := provideRecordingClock(provideFactoryRuntimeClock(edges))
+	if err != nil {
+		return nil, err
+	}
+	router := recordingswire.NewRuntimeLedgerRouter(clock)
+	ledger := recordingswire.RuntimeLedger(router)
+	projection := recordingswire.NewProjectionService()
+	publication, err := provideRecordingPublication(edges)
+	if err != nil {
+		return nil, err
+	}
+	readFile := provideRecordingReadFile(edges)
+	lifecycle := recordingswire.NewRecordingLifecycleOwner(targets, provideRecordingSnapshotWriter(edges, storage, readFile), recordingswire.NewRecordingFlushTickerFactory(), clock)
+	if logger == nil {
+		logger = logging.NoopLogger{}
+	}
+	decodeSnapshot := factorydefinitionswire.FactorySnapshotJSONDecoder()
+	return provideRecordingsRoot(edges, ledger, projection, lifecycle,
+		recordingswire.NewArtifactsExportOwner(lifecycle, publication),
+		recordingswire.NewReplayOwner(lifecycle, projection, readFile, decodeSnapshot),
+		recordingswire.NewCanonicalLedgerOwner(ledger),
+		recordingswire.NewHistoricalQueryOwner(readFile, projection), clock, logger,
+		router, captureSnapshot, decodeSnapshot, provideReplayRuntimeConfigDecoder(), replayInputs), nil
+}
+
+func TestRecordingClockPreservesSelectedSourceAndRejectsTypedNil(t *testing.T) {
+	t.Parallel()
+	selected := platformclock.NewDeterministic(time.Unix(123, 456), time.Second)
+	clock, err := provideRecordingClock(provideFactoryRuntimeClock(serviceedges.Edges{Clock: selected}))
+	if err != nil || clock != selected {
+		t.Fatalf("recording clock = %v, %v; want selected process source", clock, err)
+	}
+	if clock, err := provideRecordingClock(provideFactoryRuntimeClock(serviceedges.Edges{})); err != nil || clock == nil {
+		t.Fatalf("default recording clock = %v, %v; want explicit process source", clock, err)
+	}
+	var absent *nilRecordingClock
+	for _, source := range []recordings.RecordingClock{nil, absent} {
+		if clock, err := provideRecordingClock(source); err == nil || clock != nil {
+			t.Fatalf("absent clock = %v, %v; want construction failure", clock, err)
+		}
+	}
+}
+
+type nilRecordingClock struct{}
+
+func (*nilRecordingClock) Now() time.Time { panic("absent recording clock activated") }

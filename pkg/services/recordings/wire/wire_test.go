@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
@@ -84,7 +87,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	baseline := runtime.NumGoroutine()
 
 	makeDirectories, createTemporaryFile, removePath, renamePath, readFile := testPublicationEffects()
-	service, err := recordingswire.NewService(
+	service, err := testNewService(
 		ledger,
 		nil,
 		writeFile,
@@ -131,60 +134,10 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	}
 }
 
-func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
-	t.Parallel()
-
-	validLedger := stubLedger{}
-	validWriteFile := func(string, []byte) error { return nil }
-	tests := []struct {
-		name      string
-		ledger    recordings.Ledger
-		writeFile func(string, []byte) error
-		wantErr   string
-	}{
-		{
-			name:      "ledger",
-			ledger:    nil,
-			writeFile: validWriteFile,
-			wantErr:   "construct Recordings: ledger is required",
-		},
-		{
-			name:      "snapshot write function",
-			ledger:    validLedger,
-			writeFile: nil,
-			wantErr:   "construct Recordings: snapshot write function is required",
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			makeDirectories, createTemporaryFile, removePath, renamePath, readFile := testPublicationEffects()
-			service, err := recordingswire.NewService(
-				test.ledger,
-				nil,
-				test.writeFile,
-				makeDirectories,
-				createTemporaryFile,
-				removePath,
-				renamePath,
-				readFile,
-			)
-			if err == nil {
-				t.Fatalf("NewService() error = nil, want missing %s dependency", test.name)
-			}
-			if err.Error() != test.wantErr {
-				t.Fatalf("NewService() error = %q, want %q", err.Error(), test.wantErr)
-			}
-			if service != nil {
-				t.Fatalf("NewService() = %#v, want nil service", service)
-			}
-		})
-	}
-}
-
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
-	service, err := recordingswire.NewService(
+	service, err := testNewService(
 		stubLedger{},
 		nil,
 		func(string, []byte) error { return nil },
@@ -213,7 +166,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 func TestNewServiceRejectsMissingArtifactPublicationEffects(t *testing.T) {
 	t.Parallel()
 
-	service, err := recordingswire.NewService(
+	service, err := testNewService(
 		stubLedger{},
 		nil,
 		func(string, []byte) error { return nil },
@@ -381,7 +334,7 @@ func newFunctionalRecordingsRoot(t *testing.T) recordings.Service {
 	if ledger == nil {
 		t.Fatal("NewRuntimeLedger returned nil")
 	}
-	service, err := recordingswire.NewServiceWithProjectionAndEffects(
+	service, err := testNewServiceWithProjectionAndEffects(
 		ledger,
 		recordingswire.NewProjectionService(),
 		nil,
@@ -808,4 +761,99 @@ func TestHistoricalReplayV2ArtifactRemainsReadableThroughRecordingsRoot(t *testi
 }
 func decodeFunctionalFactorySnapshot(payload []byte) (*factorydefinitions.FactorySnapshot, error) {
 	return factorydefinitions.NewFactorySnapshot(json.RawMessage(payload))
+}
+
+// testNewServiceWithProjectionAndEffects assembles explicit owner fixtures.
+func testNewServiceWithProjectionAndEffects(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	publication, err := recordingswire.NewPortableArtifactPublication(
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct Recordings publication: %w", err)
+	}
+	historicalQuery := recordingswire.NewHistoricalQueryOwner(readFile, projection)
+	return newServiceWithProjection(
+		ledger,
+		projection,
+		targets,
+		writeFile,
+		publication,
+		historicalQuery,
+		clocks...,
+	)
+}
+
+type portableArtifactPublication interface {
+	Publish(context.Context, string, []byte) error
+	Read(context.Context, string) ([]byte, error)
+}
+
+func newServiceWithProjection(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	publication portableArtifactPublication,
+	historicalQuery recordingswire.HistoricalQueryOwner,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	var writer recordings.RecordingSnapshotWriter
+	var tickers recordings.RecordingFlushTickerFactory
+	if writeFile != nil {
+		writer = recordingswire.NewReplayRecordingSnapshotWriter(writeFile, nil, nil)
+		tickers = recordingswire.NewRecordingFlushTickerFactory()
+	}
+	lifecycle := recordingswire.NewRecordingLifecycleOwner(targets, writer, tickers, testClock(clocks))
+	service := recordingswire.NewService(ledger, projection,
+		lifecycle, recordingswire.NewArtifactsExportOwner(lifecycle, publication),
+		recordingswire.NewReplayOwner(lifecycle, projection, nil, nil), recordingswire.NewCanonicalLedgerOwner(ledger), historicalQuery,
+		testClock(clocks), logging.NoopLogger{}, nil, nil, nil, nil, nil)
+	return service, nil
+}
+
+func testClock(clocks []recordings.RecordingClock) recordings.RecordingClock {
+	if len(clocks) > 0 && clocks[0] != nil {
+		return clocks[0]
+	}
+	return platformclock.Real{}
+}
+
+func testNewService(
+	ledger recordings.Ledger,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	return testNewServiceWithProjectionAndEffects(
+		ledger,
+		recordingswire.NewProjectionService(),
+		targets,
+		writeFile,
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+		clocks...,
+	)
 }

@@ -5,8 +5,11 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
 type unusedLedger struct {
@@ -16,7 +19,7 @@ type unusedLedger struct {
 func TestAcceptedRecordingsRootUsesPrivateReplay(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsinternal.NewService(
+	root := testRecordingRoot(
 		&unusedLedger{},
 		recordingsinternal.NewProjectionService(),
 	)
@@ -88,7 +91,7 @@ func TestAcceptedRecordingsRootUsesPrivateReplay(t *testing.T) {
 func TestAcceptedRecordingsRootLoadsUnfinalizedRecordingForResume(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsinternal.NewService(
+	root := testRecordingRoot(
 		&unusedLedger{},
 		recordingsinternal.NewProjectionService(),
 	)
@@ -140,4 +143,13 @@ func rootReplayEvent(id string, sequence recordings.CanonicalEventSequence) reco
 		RecordedAt:  time.Unix(1_700_000_000, 0).UTC(),
 		Payload:     `{"type":"WORK_REQUEST"}`,
 	}
+}
+
+func testRecordingRoot(ledger recordings.Ledger, projection recordings.ProjectionService) recordings.Service {
+	clock := platformclock.Real{}
+	lifecycle := recordingswire.NewRecordingLifecycleOwner(nil, nil, nil, clock)
+	return recordingswire.NewService(ledger, projection, lifecycle,
+		recordingswire.NewArtifactsExportOwner(lifecycle, nil),
+		recordingswire.NewReplayOwner(lifecycle, projection, nil, nil),
+		recordingswire.NewCanonicalLedgerOwner(ledger), recordingswire.NewHistoricalQueryOwner(nil, projection), clock, logging.NoopLogger{}, nil, nil, nil, nil, nil)
 }

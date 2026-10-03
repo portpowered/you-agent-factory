@@ -3,6 +3,7 @@ package artifactsexport_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
@@ -24,7 +27,7 @@ func newRecordingsRoot(
 	planner recordings.LiveRecordingTargetPlanner,
 ) recordings.Service {
 	t.Helper()
-	root, err := recordingswire.NewServiceWithProjectionAndEffects(
+	root, err := testNewServiceWithProjectionAndEffects(
 		&unusedLedger{},
 		recordingswire.NewProjectionService(),
 		planner,
@@ -391,4 +394,74 @@ func TestRecordingsRootReadPortableArtifactRejectsCancelledContext(t *testing.T)
 		!errors.Is(err, cancelCause) {
 		t.Fatalf("pre-cancelled root read = %v, want typed cancellation", err)
 	}
+}
+
+// testNewServiceWithProjectionAndEffects assembles explicit owner fixtures.
+func testNewServiceWithProjectionAndEffects(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	publication, err := recordingswire.NewPortableArtifactPublication(
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct Recordings publication: %w", err)
+	}
+	historicalQuery := recordingswire.NewHistoricalQueryOwner(readFile, projection)
+	return newServiceWithProjection(
+		ledger,
+		projection,
+		targets,
+		writeFile,
+		publication,
+		historicalQuery,
+		clocks...,
+	)
+}
+
+type portableArtifactPublication interface {
+	Publish(context.Context, string, []byte) error
+	Read(context.Context, string) ([]byte, error)
+}
+
+func newServiceWithProjection(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	publication portableArtifactPublication,
+	historicalQuery recordingswire.HistoricalQueryOwner,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	var writer recordings.RecordingSnapshotWriter
+	var tickers recordings.RecordingFlushTickerFactory
+	if writeFile != nil {
+		writer = recordingswire.NewReplayRecordingSnapshotWriter(writeFile, nil, nil)
+		tickers = recordingswire.NewRecordingFlushTickerFactory()
+	}
+	lifecycle := recordingswire.NewRecordingLifecycleOwner(targets, writer, tickers, testClock(clocks))
+	service := recordingswire.NewService(ledger, projection,
+		lifecycle, recordingswire.NewArtifactsExportOwner(lifecycle, publication),
+		recordingswire.NewReplayOwner(lifecycle, projection, nil, nil), recordingswire.NewCanonicalLedgerOwner(ledger), historicalQuery,
+		testClock(clocks), logging.NoopLogger{}, nil, nil, nil, nil, nil)
+	return service, nil
+}
+
+func testClock(clocks []recordings.RecordingClock) recordings.RecordingClock {
+	if len(clocks) > 0 && clocks[0] != nil {
+		return clocks[0]
+	}
+	return platformclock.Real{}
 }

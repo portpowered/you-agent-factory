@@ -15,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	mcprecording "github.com/portpowered/infinite-you/pkg/services/recordings/transports/mcp"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -160,25 +159,11 @@ func recordingsTransportActivationService(
 ) recordings.Service {
 	t.Helper()
 
+	var service recordings.Service
+	edges.RecordingsRootObserver = func(root recordings.Service) { service = root }
 	_ = support.BuildProcess(t, edges)
-	service, err := recordingswire.NewService(
-		&recordingsTransportActivationLedger{},
-		recordings.LiveRecordingTargetPlannerFunc(
-			func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
-				return recordings.LiveRecordingTarget{}, nil
-			},
-		),
-		func(path string, payload []byte) error {
-			return os.WriteFile(path, payload, 0o600)
-		},
-		edges.RecordingMakeDirectories,
-		edges.RecordingCreateTempFile,
-		edges.RecordingRemovePath,
-		edges.RecordingRenamePath,
-		edges.RecordingReadFile,
-	)
-	if err != nil {
-		t.Fatalf("compose Recordings service for transport activation: %v", err)
+	if service == nil {
+		t.Fatal("canonical Recordings root was not observed")
 	}
 	return service
 }

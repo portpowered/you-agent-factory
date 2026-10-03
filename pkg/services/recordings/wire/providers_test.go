@@ -53,33 +53,6 @@ func TestProviderBridgesConstructPublishedSurfaces(t *testing.T) {
 	_ = recordingswire.NewReplayArtifactLoader(nil, nil)
 }
 
-func TestNewServiceWithProjectionRejectsMissingProjection(t *testing.T) {
-	t.Parallel()
-
-	service, err := recordingswire.NewServiceWithProjection(
-		stubLedger{},
-		nil,
-		nil,
-		func(string, []byte) error { return nil },
-		os.MkdirAll,
-		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.Rename,
-		os.ReadFile,
-	)
-	if err == nil {
-		t.Fatal("NewServiceWithProjection() error = nil, want missing projection dependency")
-	}
-	if err.Error() != "construct Recordings: projection is required" {
-		t.Fatalf("NewServiceWithProjection() error = %q, want projection required", err.Error())
-	}
-	if service != nil {
-		t.Fatalf("NewServiceWithProjection() = %#v, want nil service", service)
-	}
-}
-
 func TestRecordingsOwnerConstructionDoesNotSelectHostOSPublication(t *testing.T) {
 	t.Parallel()
 
