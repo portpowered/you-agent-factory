@@ -198,7 +198,12 @@ func (s *service) executeWithTerminalPublication(
 		}
 		return response, nil
 	}
-	if resultErr != nil {
+	// A provider attempt that already failed owns the failure route. Partial
+	// output streamed before the failure (for example a long turn that dies
+	// at turn end on model capacity) is not a candidate envelope, so a
+	// malformed-envelope verdict on it must not replace the provider's typed
+	// failure, which would hide throttled/transient classification.
+	if resultErr != nil && attemptErr == nil {
 		attemptErr = resultErr
 	}
 	return s.publishAttemptFailure(
