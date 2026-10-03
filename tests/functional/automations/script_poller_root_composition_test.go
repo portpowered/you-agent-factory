@@ -14,6 +14,8 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
+	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -51,9 +53,21 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 	hostedEmptyDir, hostedEmpty := newHostedCycleFactory(t, "owned-hosted-empty")
 	hostedStopDir, hostedStop := newHostedCycleFactory(t, "owned-hosted-stop")
 	hostedPeerDir, hostedPeer := newHostedCycleFactory(t, "owned-hosted-peer")
+	hostedRetryDir, hostedRetry := newHostedCycleFactory(t, "owned-hosted-retry-secret")
+	hostedRetryPeerDir, hostedRetryPeer := newHostedCycleFactory(t, "owned-hosted-retry-peer")
+	hostedFailureDir, hostedFailure := newHostedCycleFactory(t, "owned-hosted-failure-secret")
+	hostedFailurePeerDir, hostedFailurePeer := newHostedCycleFactory(t, "owned-hosted-failure-peer")
+	checkpointFiles := &hostedCheckpointFailure{directory: hostedFailureDir, secret: "owned-hosted-failure-secret"}
+	checkpoints, err := automationswire.NewHostedLinearCheckpointStore(checkpointFiles)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	hostedRouter := hostedCycleRouter{routes: map[string]*hostedCycleRoute{
 		"owned-hosted-success": hosted, "owned-hosted-empty": hostedEmpty,
 		"owned-hosted-stop": hostedStop, "owned-hosted-peer": hostedPeer,
+		"owned-hosted-retry-secret": hostedRetry, "owned-hosted-retry-peer": hostedRetryPeer,
+		"owned-hosted-failure-secret": hostedFailure, "owned-hosted-failure-peer": hostedFailurePeer,
 	}}
 	var stoppedWatcherAdmissions atomic.Int32
 	var stoppedHostedAdmissions atomic.Int32
@@ -65,13 +79,21 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 		filepath.Clean(failureDir):     failure,
 		filepath.Clean(failurePeerDir): failurePeer,
 	}}
-	server := startScriptCycleHost(t, router, hostedRouter, files, func(record work.FactorySubmissionRecord) {
+	server := startScriptCycleHost(t, router, hostedRouter, files, checkpoints, func(record work.FactorySubmissionRecord) {
 		if record.Request.RequestID == "watcher-stopped-only" {
 			stoppedWatcherAdmissions.Add(1)
 		}
 		if record.Request.WorkID == "linear:issue-stopped-only" {
 			stoppedHostedAdmissions.Add(1)
 		}
+	})
+	t.Run("hosted_request_retry_preserves_Work_identity_while_peer_progresses", func(t *testing.T) {
+		t.Parallel()
+		assertHostedRequestRetry(t, server.URL(), hostedRetryDir, hostedRetryPeerDir, hostedRetry, hostedRetryPeer)
+	})
+	t.Run("hosted_failed_checkpoint_save_retains_Work_and_prior_resume_while_peer_progresses", func(t *testing.T) {
+		t.Parallel()
+		assertHostedCheckpointRecovery(t, server.URL(), hostedFailureDir, hostedFailurePeerDir, hostedFailure, hostedFailurePeer)
 	})
 	t.Run("hosted_stop_joins_while_peer_progresses_and_restart_admits_eligible_item", func(t *testing.T) {
 		t.Parallel()
@@ -158,6 +180,7 @@ func newScriptCycleFactory(t *testing.T) (string, *scriptCycleRoute) {
 }
 
 func startScriptCycleHost(t *testing.T, router scriptCycleRouter, hosted hostedCycleRouter, files *scriptReplacementFailure,
+	checkpoints automations.HostedLinearCheckpointStore,
 	observeSubmission func(work.FactorySubmissionRecord),
 ) *support.FunctionalAPIServer {
 	t.Helper()
@@ -175,6 +198,7 @@ func startScriptCycleHost(t *testing.T, router scriptCycleRouter, hosted hostedC
 		Edges: serviceedges.Edges{
 			ScriptCommandRunner: router, AutomationsCursorFileSystem: files,
 			HostedHTTPClient: hosted, HostedLinearEndpoint: "https://owned-hosted.invalid/graphql",
+			HostedLinearCheckpointStore: checkpoints,
 			SubmissionRecorder: func(record work.FactorySubmissionRecord) {
 				admissions.Add(1)
 				observeSubmission(record)

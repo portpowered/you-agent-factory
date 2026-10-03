@@ -1,6 +1,7 @@
 package automations
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -22,6 +24,7 @@ type hostedCycleRoute struct{ entered chan hostedCycleRequest }
 type hostedCycleRequest struct {
 	request *http.Request
 	output  chan string
+	failure chan error
 	done    chan struct{}
 }
 type hostedCycleRouter struct{ routes map[string]*hostedCycleRoute }
@@ -31,7 +34,7 @@ func (r hostedCycleRouter) Do(request *http.Request) (*http.Response, error) {
 	if route == nil {
 		return nil, fmt.Errorf("unowned hosted HTTP route")
 	}
-	call := hostedCycleRequest{request: request, output: make(chan string, 1), done: make(chan struct{})}
+	call := hostedCycleRequest{request: request, output: make(chan string, 1), failure: make(chan error, 1), done: make(chan struct{})}
 	defer close(call.done)
 	select {
 	case route.entered <- call:
@@ -41,9 +44,118 @@ func (r hostedCycleRouter) Do(request *http.Request) (*http.Response, error) {
 	select {
 	case body := <-call.output:
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: request}, nil
+	case err := <-call.failure:
+		return nil, err
 	case <-request.Context().Done():
 		return nil, request.Context().Err()
 	}
+}
+
+// Observe retry and admission at HTTP/Work boundaries. These observations do
+// not establish an externally visible diagnostic or credential redaction.
+func assertHostedRequestRetry(t *testing.T, baseURL, sourceDir, peerDir string, source, peer *hostedCycleRoute) {
+	t.Helper()
+	sourceID := support.OpenFactorySessionAt(t, baseURL, sourceDir).Session.Id
+	peerID := support.OpenFactorySessionAt(t, baseURL, peerDir).Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, sourceID) })
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, peerID) })
+	first := awaitHostedCycleRequest(t, source)
+	peerCall := awaitHostedCycleRequest(t, peer)
+	secret := first.request.Header.Get("Authorization")
+	first.failure <- fmt.Errorf("owned-hosted-request-unavailable: %s", secret)
+	retried := awaitHostedCycleRequest(t, source)
+	if retried.request.Header.Get("Authorization") != secret || retried.request.URL.String() != first.request.URL.String() {
+		t.Fatal("hosted retry changed its logical source route")
+	}
+	if listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, sourceID, "/work")); len(listed.Results) != 0 {
+		t.Fatalf("failed hosted request admitted Work: %#v", listed.Results)
+	}
+	// Keep A's retry outstanding while B completes, proving the retry does not
+	// hold a shared admission or HTTP lock.
+	peerCall.output <- hostedCycleResponse(false)
+	_ = awaitHostedCycleRequest(t, peer)
+	assertHostedNormalizedWork(t, support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, peerID, "/work")))
+	retried.output <- hostedCycleResponse(false)
+	_ = awaitHostedCycleRequest(t, source)
+	assertHostedNormalizedWork(t, support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, sourceID, "/work")))
+}
+
+// The production checkpoint adapter still performs real atomic file IO. Only
+// the second commit in this scenario's directory fails, after a prior commit.
+type hostedCheckpointFailure struct {
+	platformfilesystem.Local
+	directory string
+	secret    string
+	commits   atomic.Int32
+}
+
+func (f *hostedCheckpointFailure) Rename(from, to string) error {
+	if strings.HasPrefix(filepath.Clean(to), filepath.Clean(f.directory)+string(filepath.Separator)) && f.commits.Add(1) == 2 {
+		return fmt.Errorf("owned-hosted-checkpoint-unavailable: %s", f.secret)
+	}
+	return f.Local.Rename(from, to)
+}
+
+func assertHostedCheckpointRecovery(t *testing.T, baseURL, sourceDir, peerDir string, source, peer *hostedCycleRoute) {
+	t.Helper()
+	sourceID := support.OpenFactorySessionAt(t, baseURL, sourceDir).Session.Id
+	peerID := support.OpenFactorySessionAt(t, baseURL, peerDir).Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, sourceID) })
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, peerID) })
+	first := awaitHostedCycleRequest(t, source)
+	peerCall := awaitHostedCycleRequest(t, peer)
+	first.output <- hostedCycleResponse(false)
+	next := awaitHostedCycleRequest(t, source)
+	assertHostedNormalizedWork(t, support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, sourceID, "/work")))
+	newer := strings.ReplaceAll(hostedCycleResponse(false), "issue-owned", "issue-before-save-failure")
+	newer = strings.ReplaceAll(newer, "08:10:00Z", "08:11:00Z")
+	next.output <- newer
+	resumed := awaitHostedCycleRequest(t, source)
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, sourceID, "/work"))
+	location := support.WorkCustomerLocation("story", "queued")
+	if len(listed.Results) != 2 || !support.HasWorkAtCustomerState(listed, "linear:issue-owned", location) ||
+		!support.HasWorkAtCustomerState(listed, "linear:issue-before-save-failure", location) {
+		t.Fatalf("failed checkpoint save lost admitted Work: %#v", listed.Results)
+	}
+	// A response containing the exact prior issue ID and timestamp is a resume
+	// boundary. With the failed newer checkpoint, this page would instead admit
+	// the older item and follow its pagination cursor. Observe HTTP and Work,
+	// never decode a private checkpoint file as composed recovery evidence.
+	var page map[string]any
+	if err := json.Unmarshal([]byte(hostedCycleResponse(false)), &page); err != nil {
+		t.Fatal(err)
+	}
+	issues := page["data"].(map[string]any)["issues"].(map[string]any)
+	nodes := issues["nodes"].([]any)
+	older := map[string]any{}
+	for key, value := range nodes[0].(map[string]any) {
+		older[key] = value
+	}
+	older["id"], older["updatedAt"] = "issue-older-than-prior", "2026-05-22T08:09:00Z"
+	issues["nodes"] = append(nodes, older)
+	issues["pageInfo"] = map[string]any{"hasNextPage": true, "endCursor": "must-not-page-past-prior"}
+	body, err := json.Marshal(page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resumed.output <- string(body)
+	following := awaitHostedCycleRequest(t, source)
+	var query struct {
+		Variables map[string]any `json:"variables"`
+	}
+	if err := json.NewDecoder(following.request.Body).Decode(&query); err != nil {
+		t.Fatal(err)
+	}
+	if after := query.Variables["after"]; after != nil && after != "" {
+		t.Fatalf("resume paged past the exact prior checkpoint: after=%#v", after)
+	}
+	listed = support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, sourceID, "/work"))
+	if len(listed.Results) != 2 || support.HasWorkAtCustomerState(listed, "linear:issue-older-than-prior", location) {
+		t.Fatalf("resume did not retain the prior checkpoint boundary: %#v", listed.Results)
+	}
+	peerCall.output <- hostedCycleResponse(false)
+	_ = awaitHostedCycleRequest(t, peer)
+	assertHostedNormalizedWork(t, support.GetJSON[factoryapi.ListWorkResponse](t, support.SessionWorkURL(baseURL, peerID, "/work")))
 }
 
 func newHostedCycleFactory(t *testing.T, key string) (string, *hostedCycleRoute) {
@@ -65,7 +177,7 @@ func awaitHostedCycleRequest(t *testing.T, route *hostedCycleRoute) hostedCycleR
 	select {
 	case call := <-route.entered:
 		return call
-	case <-time.After(10 * time.Second):
+	case <-time.After(support.ScaledTimeout(10 * time.Second)):
 		t.Fatal("hosted request did not reach owned HTTP edge")
 		return hostedCycleRequest{}
 	}
@@ -113,7 +225,7 @@ func assertHostedIndependentStop(t *testing.T, baseURL, sourceDir, peerDir strin
 		if blocked.request.Context().Err() == nil {
 			t.Fatal("stopped hosted HTTP request was not canceled")
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(support.ScaledTimeout(10 * time.Second)):
 		t.Fatal("stopped hosted HTTP request did not join")
 	}
 	// A late response is owned by the canceled call and cannot enter another
