@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
-	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -85,27 +85,51 @@ func startCanonicalAgyScenario(
 	workDir, sessionID string,
 	runner *testutil.ProviderCommandRunner,
 	host *canonicalAgyPTYObserver,
-) (*support.FunctionalAPIServer, *support.ProcessCommand) {
+) (*canonicalAgyScenario, *support.ProcessCommand) {
 	t.Helper()
 	idleDir := filepath.Join(t.TempDir(), "idle")
 	copyAgyDirectory(t, support.LegacyFixtureDir(t, "executor_success"), idleDir)
 	commandEnv := agySharedEnvironment(t.TempDir())
-	var process support.Process
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: idleDir, Env: agySharedEnvironment(t.TempDir()),
-		Args:  []string{"--session", uuid.NewString()},
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner, AgyPTYHost: host},
-		BeforeStart: func(t testing.TB, built support.Process, input root.Input) {
-			process = built
-			host.assertUnused(t)
-			if runner.CallCount() != 0 {
-				t.Fatal("process construction executed provider command")
-			}
-			// Bootstrap both private profiles before the host readiness clock.
-			support.InitializeCustomerHomeWithProcess(t, built, input.Env, idleDir)
-			support.InitializeCustomerHomeWithProcess(t, built, commandEnv, workDir)
-		},
+	hostEnv := agySharedEnvironment(t.TempDir())
+	hostSessionID := uuid.NewString()
+	if hostSessionID == sessionID {
+		t.Fatal("host and command sessions must be distinct")
+	}
+	// Register before support cleanup so this observer runs after all owned
+	// commands and the process have joined, including on partial setup failure.
+	t.Cleanup(func() {
+		host.assertUnused(t)
+		if runner.CallCount() != 1 {
+			t.Errorf("command calls after owned cleanup = %d, want one", runner.CallCount())
+		}
 	})
+	api := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner, AgyPTYHost: host, APIServerStarter: api.Start,
+	})
+	host.assertUnused(t)
+	if runner.CallCount() != 0 {
+		t.Fatal("process construction executed provider command")
+	}
+	// Bootstrap both private profiles before the host readiness clock.
+	for _, profile := range []struct {
+		env []string
+		dir string
+	}{{hostEnv, idleDir}, {commandEnv, workDir}} {
+		support.InitializeCustomerHomeWithProcess(t, process, profile.env, profile.dir)
+		host.assertUnused(t)
+		if runner.CallCount() != 0 {
+			t.Fatal("profile bootstrap executed provider command")
+		}
+	}
+	hostInputs := support.FakeInputs(context.Background(), []string{
+		"you", "run", "--dir", idleDir, "--session", hostSessionID,
+		"--continuously", "--with-server", "--quiet", "--no-record",
+	})
+	hostInputs.Input.Env = hostEnv
+	hostInputs.Input.WorkingDirectory = idleDir
+	hostCommand := support.StartProcessCommand(t, process, hostInputs.Input)
+	server := &canonicalAgyScenario{process: process, host: hostCommand, url: api.WaitForURL(t)}
 	if runner.CallCount() != 0 {
 		t.Fatal("idle host consumed scenario command effect")
 	}
@@ -117,6 +141,24 @@ func startCanonicalAgyScenario(
 	inputs.Input.Env = commandEnv
 	inputs.Input.WorkingDirectory = workDir
 	return server, support.StartProcessCommand(t, process, inputs.Input)
+}
+
+type canonicalAgyScenario struct {
+	process support.ApplicationProcess
+	host    *support.ProcessCommand
+	url     string
+}
+
+func (scenario *canonicalAgyScenario) URL() string { return scenario.url }
+
+func (scenario *canonicalAgyScenario) Close(t testing.TB) {
+	t.Helper()
+	scenario.host.Stop(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := scenario.process.Close(ctx); err != nil {
+		t.Errorf("close canonical AGY process: %v", err)
+	}
 }
 
 func assertAgyCanonicalCommandScope(
