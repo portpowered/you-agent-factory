@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	appwire "github.com/portpowered/infinite-you/pkg/wire"
@@ -288,7 +289,7 @@ func newProductionManagedHostHarness(t *testing.T, helper, caseName string) *pro
 	}
 	t.Setenv(modelRuntimeEvidenceEnvironment, harness.evidencePath)
 
-	service, err := appwire.NewModelsServiceForManagedProcessIntegration(serviceedges.Edges{})
+	service, err := appwire.NewModelsServiceForManagedProcessIntegration(serviceedges.Edges{Clock: platformclock.Real{}})
 	if err != nil {
 		t.Fatalf("provideModelsService: %v", err)
 	}
