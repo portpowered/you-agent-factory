@@ -18,15 +18,18 @@ import (
 )
 
 type recordingPathResolver struct {
-	requireDefinitionDirCalls int
-	readCurrentPointerCalls   int
-	writeCurrentPointerCalls  int
-	resolveExistingDirCalls   int
-	currentName               string
-	existing                  map[string]string
+	resolveCandidatePathsCalls int
+	resolveCurrentDirCalls     int
+	requireDefinitionDirCalls  int
+	readCurrentPointerCalls    int
+	writeCurrentPointerCalls   int
+	resolveExistingDirCalls    int
+	currentName                string
+	existing                   map[string]string
 }
 
 func (r *recordingPathResolver) ResolveCandidatePaths(_, _, _ string) (factorydefinitions.NamedFactoryCandidatePaths, error) {
+	r.resolveCandidatePathsCalls++
 	return factorydefinitions.NamedFactoryCandidatePaths{}, nil
 }
 
@@ -49,6 +52,7 @@ func (r *recordingPathResolver) RequireDefinitionDir(factoryDir string) error {
 }
 
 func (r *recordingPathResolver) ResolveCurrentDir(rootDir string) (string, error) {
+	r.resolveCurrentDirCalls++
 	if r.currentName == "" {
 		return "", os.ErrNotExist
 	}
@@ -146,7 +150,8 @@ func TestNewServiceConstructsInertCatalog(t *testing.T) {
 	if svc == nil {
 		t.Fatal("NewService returned nil service")
 	}
-	if paths.requireDefinitionDirCalls != 0 || paths.readCurrentPointerCalls != 0 ||
+	if paths.resolveCandidatePathsCalls != 0 || paths.resolveCurrentDirCalls != 0 ||
+		paths.requireDefinitionDirCalls != 0 || paths.readCurrentPointerCalls != 0 ||
 		paths.writeCurrentPointerCalls != 0 || paths.resolveExistingDirCalls != 0 ||
 		fileSystem.statCalls != 0 || fileSystem.readDirCalls != 0 || fileSystem.removeAllCalls != 0 {
 		t.Fatal("catalog construction performed a host effect")
