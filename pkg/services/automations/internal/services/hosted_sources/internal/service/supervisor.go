@@ -150,7 +150,7 @@ func redactResolvedSecret(err error, secret string) error {
 }
 
 func pollerLogger(logger *zap.Logger, workstation interfaces.FactoryWorkstationConfig, workerDef *interfaces.FactoryWorkerConfig) *zap.Logger {
-	return defaultLogger(logger).With(
+	return logger.With(
 		zap.String("workstation", workstation.Name),
 		zap.String("worker", workerDef.Name),
 	)

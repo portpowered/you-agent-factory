@@ -29,14 +29,10 @@ func New(
 	secretResolver hostedlinear.SecretResolver,
 	linearEndpoint string,
 	random RetryRandomSource,
-	checkpointStores ...hostedlinear.CheckpointStore,
+	checkpoints hostedlinear.CheckpointStore,
 ) *Service {
-	var checkpoints hostedlinear.CheckpointStore
-	if len(checkpointStores) > 0 {
-		checkpoints = checkpointStores[0]
-	}
 	return &Service{
-		logger: defaultLogger(logger), clock: clock, httpClient: httpClient,
+		logger: logger, clock: clock, httpClient: httpClient,
 		secretResolver: secretResolver, checkpoints: checkpoints, linearEndpoint: defaultLinearEndpoint(linearEndpoint),
 		jitter: retryJitterFromRandomSource(random),
 	}
