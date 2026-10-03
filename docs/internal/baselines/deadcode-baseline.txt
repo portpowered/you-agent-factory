@@ -1559,7 +1559,6 @@ pkg/services/models/internal/local/managed_runtime.go: unreachable func: buildMa
 pkg/services/models/internal/service/runtime_factory.go: unreachable func: joinedAssetPreparationRequest
 pkg/services/models/internal/services/assets/internal/service/generic.go: unreachable func: service.discoverSnapshotRequirements
 pkg/services/models/internal/services/assets/internal/service/generic.go: unreachable func: service.walkSnapshotRequirements
-pkg/services/models/internal/services/runtime_host/internal/service/service.go: unreachable func: service.releaseSlotCapacity
 pkg/services/models/transports/cli/composition.go: unreachable func: BindService
 pkg/services/models/transports/cli/composition_bridge.go: unreachable func: presentationOperatorDefaultsFromResolved
 pkg/services/models/transports/cli/composition_bridge.go: unreachable func: presentationScopeRequestFromInvoke
