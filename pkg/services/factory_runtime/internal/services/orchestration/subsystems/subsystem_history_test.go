@@ -231,6 +231,39 @@ func TestBuildHistory_IncompleteOutputRemainsConsecutiveFailure(t *testing.T) {
 	}
 }
 
+func TestBuildHistory_ThrottleFailureDoesNotSpendRetryBudget(t *testing.T) {
+	consumed := []factorytoken.Token{{
+		Color: factorytoken.Color{WorkID: "task-1", WorkTypeID: "task"},
+		History: factorytoken.History{
+			ConsecutiveFailures: map[string]int{"review": 1},
+		},
+	}}
+
+	throttled := buildHistory(consumed, &workerexecution.WorkResult{
+		TransitionID: "review",
+		Outcome:      workerexecution.OutcomeFailed,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyThrottle,
+			Type:   workerexecution.WorkFailureTypeThrottled,
+		},
+	}, "task-1")
+	if got := throttled.ConsecutiveFailures["review"]; got != 1 {
+		t.Fatalf("ConsecutiveFailures[review] after throttle = %d, want unchanged 1 so capacity never trips the circuit breaker", got)
+	}
+
+	internal := buildHistory(consumed, &workerexecution.WorkResult{
+		TransitionID: "review",
+		Outcome:      workerexecution.OutcomeFailed,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
+			Type:   workerexecution.WorkFailureTypeInternalServerError,
+		},
+	}, "task-1")
+	if got := internal.ConsecutiveFailures["review"]; got != 2 {
+		t.Fatalf("ConsecutiveFailures[review] after internal error = %d, want 2", got)
+	}
+}
+
 func TestBuildHistory_ExcludesDifferentWorkOnSharedTrace(t *testing.T) {
 	const sharedTrace = "batch-trace"
 	consumed := []factorytoken.Token{

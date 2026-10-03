@@ -1,12 +1,43 @@
 package workerexecution
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
+
+func TestThrottleRetryJitterIsSeededAndBounded(t *testing.T) {
+	t.Parallel()
+	firstWait := func(seed string) time.Duration {
+		policy := DefaultThrottleRetryPolicy(func() time.Time { return time.Unix(0, 0) })
+		policy.JitterSeed = seed
+		var got time.Duration
+		_, err := NewThrottleRetry(policy).Wait(context.Background(), func(_ context.Context, d time.Duration) error {
+			got = d
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("Wait() error = %v", err)
+		}
+		return got
+	}
+	a, b := firstWait("dispatch-a"), firstWait("dispatch-b")
+	if a == b {
+		t.Fatalf("waits for different dispatches = %s and %s, want decorrelated", a, b)
+	}
+	if again := firstWait("dispatch-a"); again != a {
+		t.Fatalf("wait for the same dispatch = %s then %s, want stable", a, again)
+	}
+	for _, d := range []time.Duration{a, b} {
+		if d < 24*time.Second || d > 36*time.Second {
+			t.Fatalf("first wait = %s, want within +/-20%% of 30s", d)
+		}
+	}
+}
 
 func TestExecutionContractsPreserveJSONAndCloneIsolation(t *testing.T) {
 	t.Parallel()

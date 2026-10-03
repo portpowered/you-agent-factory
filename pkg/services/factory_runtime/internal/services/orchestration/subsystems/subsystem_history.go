@@ -106,8 +106,14 @@ func buildHistory(consumedTokens []factorytoken.Token, result *workerexecution.W
 		// Reset consecutive failures — the worker didn't fail.
 		history.ConsecutiveFailures[result.TransitionID] = 0
 	case workerexecution.OutcomeFailed:
-		// Increment consecutive failures.
-		history.ConsecutiveFailures[result.TransitionID]++
+		// Provider capacity exhaustion is an infrastructure condition, not a
+		// fault of the work: the token is requeued to its input place (see
+		// shouldRequeueIntermittentFailureResult) without spending the
+		// workstation retry budget, so it can never trip the circuit breaker
+		// into the failed state. Any other failure is counted.
+		if !isThrottleFailureResult(result) {
+			history.ConsecutiveFailures[result.TransitionID]++
+		}
 	}
 
 	return history
@@ -326,4 +332,12 @@ func mergeTransitionerAdmissionWork(byID map[string]work.ExistingWork, candidate
 		current.WorkTypeID = candidate.WorkTypeID
 	}
 	byID[candidate.WorkID] = current
+}
+
+// isThrottleFailureResult reports whether the failed result carries throttle
+// (provider capacity or rate-limit) failure metadata.
+func isThrottleFailureResult(result *workerexecution.WorkResult) bool {
+	return result != nil &&
+		result.FailureMetadata != nil &&
+		workerexecution.FailureDecisionFromMetadata(result.FailureMetadata).TriggersThrottlePause
 }

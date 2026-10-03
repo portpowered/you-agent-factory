@@ -6,6 +6,7 @@ import (
 	"time"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal/execution"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 )
@@ -14,6 +15,9 @@ type runnerInferencer struct {
 	runner     runnerContract
 	baseReq    workerexecution.ProviderInferenceRequest
 	retrySleep func(context.Context, time.Duration) error
+	// throttlePolicy governs waiting out provider capacity failures. Its zero
+	// Now reads the host clock.
+	throttlePolicy workerinternal.ThrottleRetryPolicy
 }
 
 const (
@@ -26,7 +30,8 @@ type runnerContract interface {
 }
 
 func newRunnerInferencer(runner runnerContract, baseReq workerexecution.ProviderInferenceRequest) messages.Inferencer {
-	return &runnerInferencer{runner: runner, baseReq: baseReq, retrySleep: sleepForProviderRetry}
+	return &runnerInferencer{runner: runner, baseReq: baseReq, retrySleep: sleepForProviderRetry,
+		throttlePolicy: workerinternal.DefaultThrottleRetryPolicy(nil)}
 }
 
 func (i *runnerInferencer) Infer(ctx context.Context, req messages.InferenceRequest) (messages.InferenceResult, error) {
@@ -35,7 +40,11 @@ func (i *runnerInferencer) Infer(ctx context.Context, req messages.InferenceRequ
 	runnerReq.SystemPrompt = systemPrompt
 	runnerReq.UserMessage = userMessage
 
-	for retryCount := 0; ; retryCount++ {
+	throttlePolicy := i.throttlePolicy
+	throttlePolicy.JitterSeed = i.baseReq.Dispatch.DispatchID
+	throttle := workerinternal.NewThrottleRetry(throttlePolicy)
+	retryCount := 0
+	for {
 		resp, err := i.runner.Execute(ctx, runnerReq)
 		if err == nil {
 			return messages.InferenceResult{
@@ -44,12 +53,28 @@ func (i *runnerInferencer) Infer(ctx context.Context, req messages.InferenceRequ
 		}
 		providerErr := workerexecution.NormalizeProviderExecutionError(err)
 		decision := workerexecution.WorkFailureDecisionFromProviderError(providerErr)
-		if !decision.Retryable || retryCount >= agentRunProviderMaxRetries {
+		if !decision.Retryable {
+			return messages.InferenceResult{}, err
+		}
+		// Provider capacity is waited out with backoff inside the throttle
+		// window rather than the short attempt budget.
+		if workerinternal.IsThrottleFailure(providerErr) {
+			retry, waitErr := throttle.Wait(ctx, i.retrySleep)
+			if waitErr != nil {
+				return messages.InferenceResult{}, waitErr
+			}
+			if !retry {
+				return messages.InferenceResult{}, err
+			}
+			continue
+		}
+		if retryCount >= agentRunProviderMaxRetries {
 			return messages.InferenceResult{}, err
 		}
 		if err := i.retrySleep(ctx, agentRunProviderInitialBackoff<<retryCount); err != nil {
 			return messages.InferenceResult{}, err
 		}
+		retryCount++
 	}
 }
 
