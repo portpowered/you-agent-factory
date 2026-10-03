@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -269,7 +270,7 @@ func (runner LoggingCommandRunner) Run(ctx context.Context, request CommandReque
 	status := commandResultStatus(ctx, loggedResult, err)
 	completionFields := commandCompletionLogFields(request, loggedResult, duration, status, err)
 	if commandStatusIsFailure(status) {
-		logger.Error("command runner: request failed", completionFields...)
+		logger.Error("command runner: request failed", commandFailureLogFields(completionFields, loggedResult)...)
 	} else {
 		logger.Info("command runner: request completed", completionFields...)
 	}
@@ -305,7 +306,7 @@ func (runner LoggingCommandRunner) RunStreaming(
 	status := commandResultStatus(ctx, loggedResult, err)
 	completionFields := commandCompletionLogFields(request, loggedResult, duration, status, err)
 	if commandStatusIsFailure(status) {
-		logger.Error("command runner: request failed", completionFields...)
+		logger.Error("command runner: request failed", commandFailureLogFields(completionFields, loggedResult)...)
 	} else {
 		logger.Info("command runner: request completed", completionFields...)
 	}
@@ -515,6 +516,29 @@ func commandCompletionLogFields(
 		fields = append(fields, "has_error", true)
 	}
 	return fields
+}
+
+// commandFailureStderrTailBytes bounds the stderr tail attached to failed
+// command log entries so a script's own error message is visible in the log.
+const commandFailureStderrTailBytes = 2048
+
+func commandFailureLogFields(fields []any, result CommandResult) []any {
+	tail := commandStderrTail(result.Stderr, commandFailureStderrTailBytes)
+	if tail == "" {
+		return fields
+	}
+	return append(fields, "stderr_tail", tail)
+}
+
+func commandStderrTail(stderr []byte, limit int) string {
+	if len(stderr) > limit {
+		stderr = stderr[len(stderr)-limit:]
+		// Drop a leading partial UTF-8 sequence created by the cut.
+		for len(stderr) > 0 && !utf8.RuneStart(stderr[0]) {
+			stderr = stderr[1:]
+		}
+	}
+	return strings.TrimSpace(string(stderr))
 }
 
 func primaryWorkID(ids []string) string {
