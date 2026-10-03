@@ -64,6 +64,7 @@ func readModelFromWorkItem(
 		PreviousChainingTraceIDs: append([]string(nil), item.PreviousChainingTraceIDs...),
 		TraceID:                  item.TraceID,
 		Content:                  work.CloneWorkContentParts(item.Content),
+		Payload:                  work.CloneEventPayload(item.Payload),
 		StructuredResult:         jsonvalue.Clone(item.StructuredResult),
 		StructuredResultPresent:  jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent),
 		Tags:                     work.CloneTags(item.Tags),

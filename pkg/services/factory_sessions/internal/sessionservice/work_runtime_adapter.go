@@ -576,7 +576,7 @@ func runtimeWorkItem(
 	}
 	name := runtimeFirstNonEmpty(token.Color.Name, token.Color.WorkID, token.ID)
 	state := runtimeWorkState(token, net, inFlight)
-	item := work.ReadModel{CursorID: token.ID, Name: name, WorkID: token.Color.WorkID, RequestID: token.Color.RequestID, WorkTypeName: token.Color.WorkTypeID, State: state, FailureDetail: runtimeWorkFailureDetail(token.Color.WorkID, state, readFacts.dispatchHistory, readFacts.results), ChainingTraceDepth: token.Color.ChainingTraceDepth, CurrentChainingTraceID: runtimeFirstNonEmpty(token.Color.CurrentChainingTraceID, token.Color.TraceID), PreviousChainingTraceIDs: runtimeWorkPreviousChainingTraceIDs(token.Color.WorkID, token.Color, readFacts.dispatchHistory), TraceID: token.Color.TraceID, Content: work.CloneWorkContentParts(token.Color.Content), StructuredResult: jsonvalue.Clone(token.Color.StructuredResult), StructuredResultPresent: jsonvalue.Present(token.Color.StructuredResult, token.Color.StructuredResultPresent), Tags: work.CloneTags(token.Color.Tags), ExpectedArtifacts: (factoryruntime.WorkArtifactProjection{}).Project(factoryruntime.WorkArtifactProjectionInput{Token: token, Topology: net, Dispatches: readFacts.dispatches, DispatchHistory: readFacts.dispatchHistory, Results: readFacts.results})}
+	item := work.ReadModel{CursorID: token.ID, Name: name, WorkID: token.Color.WorkID, RequestID: token.Color.RequestID, WorkTypeName: token.Color.WorkTypeID, State: state, FailureDetail: runtimeWorkFailureDetail(token.Color.WorkID, state, readFacts.dispatchHistory, readFacts.results), ChainingTraceDepth: token.Color.ChainingTraceDepth, CurrentChainingTraceID: runtimeFirstNonEmpty(token.Color.CurrentChainingTraceID, token.Color.TraceID), PreviousChainingTraceIDs: runtimeWorkPreviousChainingTraceIDs(token.Color.WorkID, token.Color, readFacts.dispatchHistory), TraceID: token.Color.TraceID, Content: work.CloneWorkContentParts(token.Color.Content), Payload: runtimeReadPayload(token.Color.Payload), StructuredResult: jsonvalue.Clone(token.Color.StructuredResult), StructuredResultPresent: jsonvalue.Present(token.Color.StructuredResult, token.Color.StructuredResultPresent), Tags: work.CloneTags(token.Color.Tags), ExpectedArtifacts: (factoryruntime.WorkArtifactProjection{}).Project(factoryruntime.WorkArtifactProjectionInput{Token: token, Topology: net, Dispatches: readFacts.dispatches, DispatchHistory: readFacts.dispatchHistory, Results: readFacts.results})}
 	for _, relation := range token.Color.Relations {
 		item.Relations = append(item.Relations, work.ReadRelation{Type: relation.Type, SourceWorkName: name, TargetWorkName: runtimeFirstNonEmpty(names[relation.TargetWorkID], relation.TargetWorkID), TargetWorkID: relation.TargetWorkID, RequiredState: relation.RequiredState})
 	}
@@ -807,4 +807,14 @@ func runtimeWorkStopSummary(summary *factorysessions.StopSummary) *work.StopSumm
 		}
 	}
 	return result
+}
+
+// runtimeReadPayload exposes a live token's payload on Work reads. Worker
+// output can replace the submitted payload and is not bound by the admission
+// limit, so a payload above the 64 KiB admission limit is omitted from reads.
+func runtimeReadPayload(payload []byte) json.RawMessage {
+	if len(payload) > work.MaxWorkPayloadBytes {
+		return nil
+	}
+	return work.EventPayload(payload)
 }

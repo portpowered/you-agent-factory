@@ -453,7 +453,10 @@ type FactoryWorkItem struct {
 	PreviousChainingTraceIDs []string          `json:"previousChainingTraceIds,omitempty"`
 	TraceID                  string            `json:"traceId,omitempty"`
 	Content                  []WorkContentPart `json:"content,omitempty"`
-	ParentID                 string            `json:"parentId,omitempty"`
+	// Payload is the submitted Work payload as a JSON value (EventPayload).
+	// It is populated from admission and WORK_REQUEST events only.
+	Payload  json.RawMessage `json:"payload,omitempty"`
+	ParentID string          `json:"parentId,omitempty"`
 	StructuredResult         any               `json:"structuredResult,omitempty"`
 	Tags                     map[string]string `json:"tags,omitempty"`
 	// StructuredResultPresent preserves an explicitly stored JSON null without
@@ -578,6 +581,31 @@ func CloneRelations(relations []Relation) []Relation {
 }
 
 // ClonePayload returns detached Work payload bytes while preserving nil.
+// EventPayload encodes a raw submitted Work payload as the JSON value carried
+// by WORK_REQUEST events and Work reads. Valid JSON is preserved verbatim;
+// plain text becomes a JSON string. An empty payload yields nil.
+func EventPayload(payload []byte) json.RawMessage {
+	if len(payload) == 0 {
+		return nil
+	}
+	if json.Valid(payload) {
+		return append(json.RawMessage(nil), payload...)
+	}
+	encoded, err := json.Marshal(string(payload))
+	if err != nil {
+		return nil
+	}
+	return encoded
+}
+
+// CloneEventPayload copies one event payload value.
+func CloneEventPayload(payload json.RawMessage) json.RawMessage {
+	if len(payload) == 0 {
+		return nil
+	}
+	return append(json.RawMessage(nil), payload...)
+}
+
 func ClonePayload(payload []byte) []byte {
 	if payload == nil {
 		return nil

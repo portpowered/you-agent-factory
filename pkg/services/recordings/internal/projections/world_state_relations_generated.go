@@ -72,6 +72,7 @@ func factoryWorkItemFromEventWork(eventWork work.WorkRequestEventWork) work.Fact
 		PreviousChainingTraceIDs: cloneStringSlice(eventWork.PreviousChainingTraceIDs),
 		TraceID:                  eventWork.TraceID,
 		Content:                  content,
+		Payload:                  work.CloneEventPayload(eventWork.Payload),
 		StructuredResult:         jsonvalue.Clone(eventWork.StructuredResult),
 		Tags:                     cloneStringMap(eventWork.Tags),
 		StructuredResultPresent:  jsonvalue.Present(eventWork.StructuredResult, eventWork.StructuredResultPresent),

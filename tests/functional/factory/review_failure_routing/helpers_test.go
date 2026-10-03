@@ -37,7 +37,13 @@ type reviewFailureSeed struct {
 	State     string
 	TraceID   string
 	Payload   string
-	Tags      map[string]string
+	// PayloadValue, when set, is submitted as the Work payload instead of
+	// Payload so scenarios can send a structured JSON object.
+	PayloadValue any
+	// DependsOn names a Work this item waits on in state DependsOnState.
+	DependsOn      string
+	DependsOnState string
+	Tags           map[string]string
 	StateType factoryapi.WorkStateType
 }
 
@@ -103,11 +109,28 @@ func (scenario *reviewFailureScenario) close(t testing.TB) {
 func (scenario *reviewFailureScenario) submit(t *testing.T, requestID string, seeds ...reviewFailureSeed) {
 	t.Helper()
 	works := make([]factoryapi.Work, 0, len(seeds))
+	var relations []factoryapi.WorkRequestRelation
 	for _, seed := range seeds {
 		if seed.StateType == "" {
 			seed.StateType = reviewFailureStateType(seed.State)
 		}
-		state := &factoryapi.WorkState{Name: seed.State, Type: seed.StateType}
+		var state *factoryapi.WorkState
+		if seed.State != "" {
+			state = &factoryapi.WorkState{Name: seed.State, Type: seed.StateType}
+		}
+		var payload any = seed.Payload
+		if seed.PayloadValue != nil {
+			payload = seed.PayloadValue
+		}
+		if seed.DependsOn != "" {
+			required := seed.DependsOnState
+			relations = append(relations, factoryapi.WorkRequestRelation{
+				Type:           factoryapi.RelationTypeDependsOn,
+				SourceWorkName: seed.Name,
+				TargetWorkName: &seed.DependsOn,
+				RequiredState:  &required,
+			})
+		}
 		workID := seed.WorkID
 		traceID := seed.TraceID
 		workType := seed.WorkType
@@ -123,7 +146,7 @@ func (scenario *reviewFailureScenario) submit(t *testing.T, requestID string, se
 			State:                  state,
 			CurrentChainingTraceId: &traceID,
 			TraceId:                &traceID,
-			Payload:                seed.Payload,
+			Payload:                payload,
 			Tags:                   tags,
 		})
 	}
@@ -131,6 +154,9 @@ func (scenario *reviewFailureScenario) submit(t *testing.T, requestID string, se
 		RequestId: requestID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
 		Works:     &works,
+	}
+	if len(relations) > 0 {
+		request.Relations = &relations
 	}
 	payload, err := json.Marshal(request)
 	if err != nil {
