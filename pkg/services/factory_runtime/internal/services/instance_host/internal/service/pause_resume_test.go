@@ -564,6 +564,16 @@ func TestPhysicalForeignLiveHandleCannotControlEqualIDRun(t *testing.T) {
 	}
 }
 
+func (f *physicalHandleFixture) assertStoppedWithoutControls(t *testing.T) {
+	t.Helper()
+	if f.engine.pauses.Load() != 0 || f.engine.resumes.Load() != 0 ||
+		f.engine.exits.Load() != 1 || f.recording.finalizations.Load() != 1 ||
+		!f.handle.Completed() || !errors.Is(f.handle.Wait(), context.Canceled) ||
+		!errors.Is(f.handle.Result(), context.Canceled) {
+		t.Fatal("stale control or successor cleanup changed the stopped run")
+	}
+}
+
 func TestPhysicalStoppedHandleCannotControlSameIDSuccessor(t *testing.T) {
 	t.Parallel()
 	for _, operation := range []string{"H07_Pause", "H08_Resume", "H09_Stop"} {
@@ -600,14 +610,10 @@ func TestPhysicalStoppedHandleCannotControlSameIDSuccessor(t *testing.T) {
 				t.Fatalf("stale %s error = %v, want %v", operation, err, wantErr)
 			}
 			current.assertLive(t, 0, 0, interfaces.FactoryStateRunning)
+			old.assertStoppedWithoutControls(t)
 			current.assertAcceptedControls(t)
 			current.stopAndJoin(t, nil)
-			if old.engine.pauses.Load() != 0 || old.engine.resumes.Load() != 0 ||
-				old.engine.exits.Load() != 1 || old.recording.finalizations.Load() != 1 ||
-				!old.handle.Completed() || !errors.Is(old.handle.Wait(), context.Canceled) ||
-				!errors.Is(old.handle.Result(), context.Canceled) {
-				t.Fatal("stale control or successor cleanup changed the stopped run")
-			}
+			old.assertStoppedWithoutControls(t)
 		})
 	}
 }
