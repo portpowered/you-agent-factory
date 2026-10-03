@@ -226,12 +226,13 @@ func newDocumentPersistService(
 ) *internalservice.Service {
 	t.Helper()
 
-	return internalservice.New(
+	return internalservice.NewWithPreserver(
 		files,
 		create,
 		globalconfigmapping.Decode,
 		globalconfigmapping.Encode,
 		controlledProviderCatalog,
+		nil,
 		nil,
 	)
 }

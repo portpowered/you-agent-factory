@@ -24,20 +24,6 @@ type Service struct {
 
 var _ settingsdocument.Service = (*Service)(nil)
 
-// New constructs the private document owner from injected filesystem, codec, and
-// provider-catalog ports. Construction performs no filesystem, temp-file, or
-// codec work.
-func New(
-	files operatorsettings.FileSystem,
-	createTemp operatorsettings.CreateTemporaryFile,
-	decoder operatorsettings.ConfigDecoder,
-	encoder operatorsettings.ConfigEncoder,
-	providers operatorsettings.ProviderCatalog,
-	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder,
-) *Service {
-	return newService(files, createTemp, decoder, encoder, providers, nil, diagnosticDecoder)
-}
-
 // NewWithPreserver constructs the private document owner with the optional
 // compatibility-preservation port used by production Operator Settings.
 func NewWithPreserver(
