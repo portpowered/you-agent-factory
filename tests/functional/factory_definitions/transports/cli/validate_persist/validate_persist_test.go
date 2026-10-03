@@ -2,7 +2,6 @@ package validate_persist
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -133,24 +131,17 @@ const supportedTwoInputJoinFactory = `{
 // CLI validate command rejects the regression topology before it can start a
 // runtime, invoke a provider, or persist the invalid definition.
 func TestFactoryValidateRejectsUnsupportedJoinArity(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	sourcePath := writeFactoryFile(t, unsupportedThreeInputJoinFactory)
-	runner := support.NewRecordingCommandRunner("runtime must not execute")
-	apiStarts := 0
-	inputs := support.FakeInputs(t.Context(), []string{
+	observation := &validationObservation{}
+	inputs := support.FakeInputs(validationContext(t, observation), []string{
 		"you", "factory", "config", "validate", sourcePath,
 	})
 	inputs.Input.Env = customerHomeEnvironment(home)
 	inputs.Input.WorkingDirectory = filepath.Dir(sourcePath)
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-		APIServerStarter: func(context.Context, platformhttpserver.StartRequest) error {
-			apiStarts++
-			return nil
-		},
-	})
 
-	err := process.Execute(inputs.Input)
+	err := validatePersistCLIProcess.Execute(inputs.Input)
 	if err == nil {
 		t.Fatal("Process.Execute(factory config validate) error = nil, want rejection")
 	}
@@ -169,11 +160,11 @@ func TestFactoryValidateRejectsUnsupportedJoinArity(t *testing.T) {
 			t.Fatalf("validate diagnostic missing %q:\n%s", want, diagnostic)
 		}
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0", runner.CallCount())
+	if observation.providerCalls.Load() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0", observation.providerCalls.Load())
 	}
-	if apiStarts != 0 {
-		t.Fatalf("API/runtime host starts = %d, want 0", apiStarts)
+	if observation.apiStarts.Load() != 0 {
+		t.Fatalf("API/runtime host starts = %d, want 0", observation.apiStarts.Load())
 	}
 	if _, err := os.Stat(filepath.Join(home, ".you-agent-factory", "factories", "unsupported-three-input-join")); !os.IsNotExist(err) {
 		t.Fatalf("invalid Factory persistence check error = %v, want not-exist", err)
@@ -183,10 +174,12 @@ func TestFactoryValidateRejectsUnsupportedJoinArity(t *testing.T) {
 // TestFactoryValidateAcceptsSupportedTwoInputJoinArity proves the new
 // rejection rule does not change the existing supported two-input behavior.
 func TestFactoryValidateAcceptsSupportedTwoInputJoinArity(t *testing.T) {
+	t.Parallel()
 	sourcePath := writeFactoryFile(t, supportedTwoInputJoinFactory)
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "factory", "config", "validate", sourcePath,
 	})
+	inputs.Input.Env = customerHomeEnvironment(t.TempDir())
 	inputs.Input.WorkingDirectory = filepath.Dir(sourcePath)
 	if err := validatePersistCLIProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
@@ -205,6 +198,7 @@ func TestFactoryValidateAcceptsSupportedTwoInputJoinArity(t *testing.T) {
 // validation path uses the generated run manifest composition and gives a
 // Factory author a concrete correction before runtime startup.
 func TestFactoryValidateRejectsReservedInvocationFlag(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		external   string
@@ -232,6 +226,7 @@ func TestFactoryValidateRejectsReservedInvocationFlag(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			source := strings.Replace(
 				reservedInvocationFlagFactory,
 				`"externalName": "model"`,
@@ -242,6 +237,7 @@ func TestFactoryValidateRejectsReservedInvocationFlag(t *testing.T) {
 			inputs := support.FakeInputs(t.Context(), []string{
 				"you", "factory", "config", "validate", sourcePath,
 			})
+			inputs.Input.Env = customerHomeEnvironment(t.TempDir())
 			inputs.Input.WorkingDirectory = filepath.Dir(sourcePath)
 			err := validatePersistCLIProcess.Execute(inputs.Input)
 			if test.wantErr && err == nil {
@@ -272,6 +268,7 @@ func TestFactoryValidateRejectsReservedInvocationFlag(t *testing.T) {
 // Factory CLI validate command rejects an invalid authored definition with
 // actionable diagnostics before runtime execution or persistence side effects.
 func TestCLIFactoryValidateRejectsInvalidDefinitionActionably(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name  string
 		body  string
@@ -298,6 +295,7 @@ func TestCLIFactoryValidateRejectsInvalidDefinitionActionably(t *testing.T) {
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			sourcePath := writeFactoryFile(t, test.body)
 			assertValidateRejectedActionably(t, sourcePath, test.wants, validateOptions{})
 		})
@@ -307,12 +305,16 @@ func TestCLIFactoryValidateRejectsInvalidDefinitionActionably(t *testing.T) {
 // TestCLIFactoryValidateDoesNotMutateOnFailure proves a failed public Factory
 // CLI validate of an invalid candidate leaves an existing durable Factory
 // definition unchanged on disk and in the public factory list.
+// These two local persistence/runtime cases stay serial: the public named run
+// owns the process Current Factory and implicit ~default runtime. Independent
+// pre-runtime validation above needs neither owner and runs in parallel.
 func TestCLIFactoryValidateDoesNotMutateOnFailure(t *testing.T) {
 	home := t.TempDir()
 	workingDirectory := t.TempDir()
 	sourceDir := support.ScaffoldSingleStepFactory(t, durableBaselineFactoryName)
-	factoryDir := support.CreateNamedFactory(
+	factoryDir := support.CreateNamedFactoryWithProcess(
 		t,
+		validatePersistCLIProcess,
 		home,
 		workingDirectory,
 		durableBaselineFactoryName,
@@ -367,8 +369,9 @@ func TestCLIFactoryPersistFromFileThenRunSucceeds(t *testing.T) {
 	)
 	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
 
-	factoryDir := support.CreateNamedFactory(
+	factoryDir := support.CreateNamedFactoryWithProcess(
 		t,
+		validatePersistCLIProcess,
 		home,
 		workingDirectory,
 		persistThenRunFactoryName,
@@ -382,6 +385,8 @@ func TestCLIFactoryPersistFromFileThenRunSucceeds(t *testing.T) {
 	api := support.NewProcessAPIServer()
 	edges := serviceedges.Edges{APIServerStarter: api.Start}
 	support.ConfigureWorkerCommands(t, &edges, providerRunner, nil)
+	// This runtime requires a live API host and successful provider output, an
+	// incompatible immutable edge shape with the shared rejection process.
 	process := support.BuildProcess(t, edges)
 
 	inputs := support.FakeInputs(t.Context(), []string{
@@ -428,12 +433,12 @@ func assertValidateRejectedActionably(
 ) {
 	t.Helper()
 
-	runner := support.NewRecordingCommandRunner("runtime must not execute")
+	observation := &validationObservation{}
 	before, readErr := os.ReadFile(factorySource)
 	if readErr != nil {
 		t.Fatalf("read validation candidate: %v", readErr)
 	}
-	inputs := support.FakeInputs(t.Context(), []string{
+	inputs := support.FakeInputs(validationContext(t, observation), []string{
 		"you", "--json", "factory", "config", "validate", factorySource,
 	})
 	if options.env != nil {
@@ -446,10 +451,7 @@ func assertValidateRejectedActionably(
 	} else {
 		inputs.Input.WorkingDirectory = filepath.Dir(factorySource)
 	}
-	err := support.BuildProcess(
-		t,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-	).Execute(inputs.Input)
+	err := validatePersistCLIProcess.Execute(inputs.Input)
 	if err == nil {
 		t.Fatal("Process.Execute(factory config validate) error = nil, want rejection")
 	}
@@ -460,8 +462,11 @@ func assertValidateRejectedActionably(
 			t.Fatalf("validate diagnostic missing %q:\n%s", want, diagnostic)
 		}
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner call count = %d, want 0 before validate completes", runner.CallCount())
+	if observation.providerCalls.Load() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0 before validate completes", observation.providerCalls.Load())
+	}
+	if observation.apiStarts.Load() != 0 {
+		t.Fatalf("API/runtime host starts = %d, want 0", observation.apiStarts.Load())
 	}
 	after, readErr := os.ReadFile(factorySource)
 	if readErr != nil {
@@ -497,7 +502,7 @@ func captureDurableBaseline(
 	if err != nil {
 		t.Fatalf("read durable factory.json: %v", err)
 	}
-	factory, err := support.LoadedFactory(t, factoryDir)
+	factory, err := support.LoadedFactoryWithProcessAndEnv(t, validatePersistCLIProcess, customerHomeEnvironment(home), factoryDir)
 	if err != nil {
 		t.Fatalf("LoadedFactory(%s): %v", factoryDir, err)
 	}
@@ -558,7 +563,7 @@ func executeFactoryList(t *testing.T, home, workingDirectory string) []factoryLi
 	t.Helper()
 
 	inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list"})
-	inputs.Input.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
+	inputs.Input.Env = customerHomeEnvironment(home)
 	inputs.Input.WorkingDirectory = workingDirectory
 	if err := validatePersistCLIProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
