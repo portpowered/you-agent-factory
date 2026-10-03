@@ -12,7 +12,6 @@ import (
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
-	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 )
 
 // NewWithAuthoringLayout constructs the public Factory Definitions service
@@ -24,7 +23,7 @@ func NewWithAuthoringLayout(
 	clock factoryroot.Clock,
 	versionFileSystem factoryroot.VersionFileSystem,
 	validator factoryroot.Validator,
-	loadCanonical factoryroot.CanonicalFactoryJSONLoader,
+	validationService validationservice.Service,
 	loadFactory factoryroot.LoadedFactoryLoader,
 	readCurrentFactoryPointer factoryroot.CurrentFactoryPointerReader,
 	prepareFactoryLayoutPayload factoryroot.FactoryLayoutPayloadPreparer,
@@ -77,15 +76,6 @@ func NewWithAuthoringLayout(
 	if err != nil {
 		return nil
 	}
-	operations, _ := validator.(factoryroot.DefinitionValidationOperation)
-	effective, _ := validator.(factoryroot.EffectiveDefinitionValidationOperation)
-	validationService, _ := validationwire.NewService(validationservice.Dependencies{
-		Operations:            operations,
-		Effective:             effective,
-		LoadCanonical:         loadCanonical,
-		RequiredToolChecker:   requiredToolChecker,
-		OrchestratorValidator: orchestratorValidator,
-	})
 	composition := applyCompositionOptions(options)
 	distributionService := lifecycle.ComposeDistributionService(
 		packagedCatalog,

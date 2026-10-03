@@ -432,6 +432,7 @@ func newWireLifecycleBehaviorService(
 		persistence,
 		loader,
 		compilationForLoader(loader),
+		validationForLoader(loader, stubRequiredToolChecker{}, stubOrchestratorValidator{}),
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,
