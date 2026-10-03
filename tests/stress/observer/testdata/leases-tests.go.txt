@@ -1,0 +1,122 @@
+
+func TestInProcessObserverLeaseCountsAndNonmutation(t *testing.T) {
+	t.Parallel()
+	clock := &advanceableHostClock{now: time.Date(2026, 10, 3, 0, 0, 0, 0, time.UTC)}
+	coordinator := &recordingSlotCapacityCoordinator{}
+	owner := internalservice.New(clock, readySlotFacts{capacity: 2}, coordinator)
+	identity := fmt.Sprintf("models_leases:%p", owner)
+	t.Cleanup(func() { baselineobservation.Unregister(identity) })
+	scope := mustRuntimeScopeRef(t, "observer-leases")
+	acquire := func(name, holder string) models.ModelLease {
+		t.Helper()
+		result, err := owner.AcquireModelLease(t.Context(), models.AcquireModelLeaseRequest{Scope: scope, Name: name, Holder: holder})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result.Lease
+	}
+	first := acquire("first", "one")
+	second := acquire("first", "two")
+	third := acquire("second", "three")
+	snapshot, err := baselineobservation.CaptureOwner(identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leases := snapshot.Leases
+	if leases.LeaseRecordCount != 3 || leases.CapacityHoldersTotal != 3 || leases.CapacityHolders[scope.String()+"|FIRST"] != 2 || leases.CapacityHolders[scope.String()+"|SECOND"] != 1 {
+		t.Fatalf("actual integers: %#v", leases)
+	}
+	leases.CapacityHolders[scope.String()+"|FIRST"] = 99
+	leases.LeaseRecords[0].Status = "mutated-copy"
+	clock.now = clock.now.Add(2 * hostleases.DefaultLeaseTTL)
+	for i := 0; i < 3; i++ {
+		snapshot, err = baselineobservation.CaptureOwner(identity)
+		if err != nil || snapshot.Leases.CapacityHoldersTotal != 3 {
+			t.Fatalf("read mutated holders: %#v, %v", snapshot, err)
+		}
+		for _, record := range snapshot.Leases.LeaseRecords {
+			if record.Status != string(models.ModelLeaseStatusActive) {
+				t.Fatalf("read expired overdue lease: %#v", record)
+			}
+		}
+	}
+	if coordinator.released != 0 {
+		t.Fatal("snapshot invoked coordinator")
+	}
+	// Restore the clock before explicit release, then let a real owner operation expire others.
+	clock.now = clock.now.Add(-2 * hostleases.DefaultLeaseTTL)
+	if _, err := owner.ReleaseModelLease(t.Context(), models.ReleaseModelLeaseRequest{Scope: scope, Lease: first.Lease}); err != nil {
+		t.Fatal(err)
+	}
+	clock.now = clock.now.Add(2 * hostleases.DefaultLeaseTTL)
+	if _, err := owner.GetModelLease(t.Context(), models.GetModelLeaseRequest{Scope: scope, Lease: second.Lease}); !errors.Is(err, models.ErrHostLeaseExpired) {
+		t.Fatal(err)
+	}
+	owner.(interface {
+		RevokeModelLeases(models.RuntimeScopeRef, string)
+	}).RevokeModelLeases(scope, third.ModelName)
+	snapshot, err = baselineobservation.CaptureOwner(identity)
+	if err != nil || snapshot.Leases.LeaseRecordCount != 3 || snapshot.Leases.CapacityHoldersTotal != 0 {
+		t.Fatalf("retained state: %#v, %v", snapshot, err)
+	}
+	statuses := map[string]string{}
+	for _, record := range snapshot.Leases.LeaseRecords {
+		statuses[record.Key] = record.Status
+	}
+	if statuses[first.Lease.String()] != string(models.ModelLeaseStatusReleased) || statuses[second.Lease.String()] != string(models.ModelLeaseStatusExpired) || statuses[third.Lease.String()] != string(models.ModelLeaseStatusExpired) {
+		t.Fatalf("retained statuses: %v", statuses)
+	}
+}
+
+func TestInProcessObserverLeaseConcurrentReads(t *testing.T) {
+	t.Parallel()
+	owner := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 2}, noopCoordinator{})
+	identity := fmt.Sprintf("models_leases:%p", owner)
+	t.Cleanup(func() { baselineobservation.Unregister(identity) })
+	scope := mustRuntimeScopeRef(t, "observer-concurrent")
+	done := make(chan struct{})
+	var readers sync.WaitGroup
+	readers.Add(1)
+	go func() {
+		defer readers.Done()
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			snapshot, err := baselineobservation.CaptureOwner(identity)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			active := 0
+			total := 0
+			for _, record := range snapshot.Leases.LeaseRecords {
+				if record.Status == string(models.ModelLeaseStatusActive) {
+					active++
+				}
+			}
+			for _, count := range snapshot.Leases.CapacityHolders {
+				total += count
+			}
+			if active != total || total != snapshot.Leases.CapacityHoldersTotal || len(snapshot.Leases.LeaseRecords) != snapshot.Leases.LeaseRecordCount {
+				t.Errorf("inconsistent owner state: %#v", snapshot)
+				return
+			}
+		}
+	}()
+	for i := 0; i < 12; i++ {
+		result, err := owner.AcquireModelLease(t.Context(), models.AcquireModelLeaseRequest{Scope: scope, Name: "model", Holder: "reader"})
+		if err != nil {
+			t.Error(err)
+			break
+		}
+		if _, err := owner.ReleaseModelLease(t.Context(), models.ReleaseModelLeaseRequest{Scope: scope, Lease: result.Lease.Lease}); err != nil {
+			t.Error(err)
+			break
+		}
+	}
+	close(done)
+	readers.Wait()
+}

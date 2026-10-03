@@ -1,0 +1,317 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InProcessOwnerCheckpoint",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "checkpoint",
+    "timestamp",
+    "fixtureScope",
+    "factorySessionID",
+    "runtimeGenerationIDs",
+    "artifact",
+    "owners",
+    "ownerInventoryComplete",
+    "liveGoroutines",
+    "barriers",
+    "findings",
+    "ownerDiscovery",
+    "totals",
+    "bootstrapSessionIDs"
+  ],
+  "properties": {
+    "checkpoint": {
+      "enum": [
+        "Q0",
+        "Q1",
+        "Q2"
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "fixtureScope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "factorySessionID": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "runtimeGenerationIDs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "required": [
+        "sourceCommit",
+        "overlayManifestSHA256",
+        "toolSourceCommit",
+        "testArtifactSHA256",
+        "goVersion",
+        "buildCommand",
+        "race"
+      ],
+      "properties": {
+        "sourceCommit": {
+          "type": "string"
+        },
+        "overlayManifestSHA256": {
+          "type": "string"
+        },
+        "toolSourceCommit": {
+          "type": "string"
+        },
+        "testArtifactSHA256": {
+          "type": "string"
+        },
+        "goVersion": {
+          "type": "string"
+        },
+        "buildCommand": {
+          "type": "string"
+        },
+        "race": {
+          "type": "boolean"
+        }
+      }
+    },
+    "owners": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "ownerIdentity",
+          "source"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "instance_host",
+              "models_leases"
+            ]
+          },
+          "ownerIdentity": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "host": {
+            "type": "object",
+            "required": [
+              "handles",
+              "handleCount"
+            ],
+            "properties": {
+              "handles": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "key",
+                    "handleIdentity"
+                  ],
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "handleIdentity": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "handleCount": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "leases": {
+            "type": "object",
+            "required": [
+              "leaseRecords",
+              "leaseRecordCount",
+              "capacityHolders",
+              "capacityHoldersTotal"
+            ],
+            "properties": {
+              "leaseRecords": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "key",
+                    "scope",
+                    "modelName",
+                    "status",
+                    "claimed"
+                  ],
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string"
+                    },
+                    "modelName": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "enum": [
+                        "ACTIVE",
+                        "RELEASED",
+                        "EXPIRED"
+                      ]
+                    },
+                    "claimed": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              },
+              "leaseRecordCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "capacityHolders": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "capacityHoldersTotal": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "kind": {
+                "const": "instance_host"
+              }
+            },
+            "required": [
+              "host"
+            ],
+            "not": {
+              "required": [
+                "leases"
+              ]
+            }
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "models_leases"
+              }
+            },
+            "required": [
+              "leases"
+            ],
+            "not": {
+              "required": [
+                "host"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ownerInventoryComplete": {
+      "type": "boolean"
+    },
+    "liveGoroutines": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "barriers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "bootstrapSessionIDs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ownerDiscovery": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "status",
+          "ownerIdentities",
+          "provenance"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "instance_host",
+              "models_leases"
+            ]
+          },
+          "status": {
+            "enum": [
+              "registered",
+              "not_created",
+              "unavailable"
+            ]
+          },
+          "ownerIdentities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "provenance": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": [
+        "handleCount",
+        "leaseRecordCount",
+        "capacityHoldersTotal"
+      ],
+      "properties": {
+        "handleCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "leaseRecordCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "capacityHoldersTotal": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

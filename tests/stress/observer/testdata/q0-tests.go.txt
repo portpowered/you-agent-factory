@@ -1,0 +1,39 @@
+package observer_test
+
+import (
+	"github.com/portpowered/infinite-you/pkg/platform/baselineobservation"
+	"github.com/portpowered/infinite-you/pkg/root"
+	"github.com/portpowered/infinite-you/pkg/services/edges"
+	"testing"
+)
+
+// Q0 only constructs the inert public process. Lifecycle checkpoints belong to
+// the next story; this probe does not certify admitted runtime provenance.
+func TestInProcessObserverQ0(t *testing.T) {
+	if testing.Short() {
+		t.Skip("explicit owner diagnostics only")
+	}
+	baselineobservation.Close()
+	t.Cleanup(baselineobservation.Close)
+	process, err := root.BuildProcess(t.Context(), edges.Edges{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := process.Close(t.Context()); err != nil {
+			t.Error(err)
+		}
+	})
+	snapshots, err := baselineobservation.Capture()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, snapshot := range snapshots {
+		found[snapshot.Kind] = true
+		t.Logf("Q0 actual constructor callback: %#v", snapshot)
+	}
+	if !found["instance_host"] || !found["models_leases"] {
+		t.Fatalf("incomplete constructor inventory: %v", found)
+	}
+}

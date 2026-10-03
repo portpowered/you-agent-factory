@@ -1,0 +1,44 @@
+package observer_test
+
+import (
+	"github.com/portpowered/infinite-you/pkg/platform/baselineobservation"
+	"testing"
+)
+
+func validObserverReport() checkpointReport {
+	return checkpointReport{
+		Checkpoint: "Q0", Timestamp: "2026-10-03T22:45:00Z", FixtureScope: "unit", OwnerInventoryComplete: true, LiveGoroutines: 1, Barriers: []string{"construction joined"},
+		Artifact:       artifactIdentity{SourceCommit: "source", ToolSourceCommit: "tool", OverlayManifestSHA256: "overlay", TestArtifactSHA256: "artifact", GoVersion: "go1.25", BuildCommand: "go test -c"},
+		Owners:         []baselineobservation.OwnerSnapshot{{Kind: "models_leases", OwnerIdentity: "leases", Source: "leases.New", Leases: &baselineobservation.LeaseSnapshot{LeaseRecords: []baselineobservation.LeaseRecord{{Key: "lease", Scope: "scope", ModelName: "model", Status: "RELEASED"}}, LeaseRecordCount: 1, CapacityHolders: map[string]int{"slot": 2}, CapacityHoldersTotal: 2}}},
+		OwnerDiscovery: []ownerDiscovery{{Kind: "models_leases", Status: "registered", OwnerIdentities: []string{"leases"}, Provenance: "constructor callback"}, {Kind: "instance_host", Status: "not_created", OwnerIdentities: []string{}, Provenance: "inert construction"}},
+		Totals:         resourceTotals{LeaseRecordCount: 1, CapacityHoldersTotal: 2},
+	}
+}
+
+func TestObserverReportValidation(t *testing.T) {
+	t.Parallel()
+	if err := validateReport(validObserverReport()); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]func(*checkpointReport){
+		"missing inventory":    func(r *checkpointReport) { r.OwnerInventoryComplete = false },
+		"wrong sum":            func(r *checkpointReport) { r.Owners[0].Leases.CapacityHoldersTotal = 1 },
+		"wrong record count":   func(r *checkpointReport) { r.Owners[0].Leases.LeaseRecordCount = 0 },
+		"missing artifact":     func(r *checkpointReport) { r.Artifact.TestArtifactSHA256 = "" },
+		"missing barrier":      func(r *checkpointReport) { r.Barriers = nil },
+		"read unavailable":     func(r *checkpointReport) { r.OwnerDiscovery[0].Status = "unavailable" },
+		"unattributed owner":   func(r *checkpointReport) { r.OwnerDiscovery[0].OwnerIdentities = []string{"other"} },
+		"wrong totals":         func(r *checkpointReport) { r.Totals.CapacityHoldersTotal = 1 },
+		"missing detached map": func(r *checkpointReport) { r.Owners[0].Leases.CapacityHolders = nil },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			report := validObserverReport()
+			mutate(&report)
+			if err := validateReport(report); err == nil {
+				t.Fatal("invalid observation accepted")
+			}
+		})
+	}
+}

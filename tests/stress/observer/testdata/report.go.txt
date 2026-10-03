@@ -1,0 +1,150 @@
+package observer_test
+
+import (
+	"fmt"
+	"github.com/portpowered/infinite-you/pkg/platform/baselineobservation"
+	"time"
+)
+
+type artifactIdentity struct {
+	SourceCommit          string `json:"sourceCommit"`
+	OverlayManifestSHA256 string `json:"overlayManifestSHA256"`
+	ToolSourceCommit      string `json:"toolSourceCommit"`
+	TestArtifactSHA256    string `json:"testArtifactSHA256"`
+	GoVersion             string `json:"goVersion"`
+	BuildCommand          string `json:"buildCommand"`
+	Race                  bool   `json:"race"`
+}
+
+type ownerDiscovery struct {
+	Kind            string   `json:"kind"`
+	Status          string   `json:"status"`
+	OwnerIdentities []string `json:"ownerIdentities"`
+	Provenance      string   `json:"provenance"`
+}
+type resourceTotals struct {
+	HandleCount          int `json:"handleCount"`
+	LeaseRecordCount     int `json:"leaseRecordCount"`
+	CapacityHoldersTotal int `json:"capacityHoldersTotal"`
+}
+type checkpointReport struct {
+	Checkpoint             string                              `json:"checkpoint"`
+	Timestamp              string                              `json:"timestamp"`
+	FixtureScope           string                              `json:"fixtureScope"`
+	FactorySessionID       *string                             `json:"factorySessionID"`
+	RuntimeGenerationIDs   []string                            `json:"runtimeGenerationIDs"`
+	Artifact               artifactIdentity                    `json:"artifact"`
+	Owners                 []baselineobservation.OwnerSnapshot `json:"owners"`
+	OwnerInventoryComplete bool                                `json:"ownerInventoryComplete"`
+	LiveGoroutines         int                                 `json:"liveGoroutines"`
+	Barriers               []string                            `json:"barriers"`
+	Findings               []string                            `json:"findings"`
+	OwnerDiscovery         []ownerDiscovery                    `json:"ownerDiscovery"`
+	Totals                 resourceTotals                      `json:"totals"`
+	BootstrapSessionIDs    []string                            `json:"bootstrapSessionIDs"`
+}
+
+func validateOwner(owner baselineobservation.OwnerSnapshot) (resourceTotals, error) {
+	totals := resourceTotals{}
+	if owner.OwnerIdentity == "" || owner.Source == "" {
+		return totals, fmt.Errorf("missing owner attribution")
+	}
+	switch owner.Kind {
+	case "instance_host":
+		if owner.Host == nil || owner.Leases != nil || owner.Host.HandleCount != len(owner.Host.Handles) {
+			return totals, fmt.Errorf("incomplete handle snapshot")
+		}
+		for _, entry := range owner.Host.Handles {
+			if entry.Key == "" || entry.HandleIdentity == "" {
+				return totals, fmt.Errorf("missing physical handle identity")
+			}
+		}
+		totals.HandleCount = owner.Host.HandleCount
+	case "models_leases":
+		if owner.Leases == nil || owner.Host != nil || owner.Leases.CapacityHolders == nil || owner.Leases.LeaseRecordCount != len(owner.Leases.LeaseRecords) {
+			return totals, fmt.Errorf("incomplete lease snapshot")
+		}
+		for key, count := range owner.Leases.CapacityHolders {
+			if key == "" || count < 0 {
+				return totals, fmt.Errorf("invalid holder count")
+			}
+			totals.CapacityHoldersTotal += count
+		}
+		if totals.CapacityHoldersTotal != owner.Leases.CapacityHoldersTotal {
+			return totals, fmt.Errorf("incorrect holder sum")
+		}
+		for _, record := range owner.Leases.LeaseRecords {
+			if record.Key == "" || record.Scope == "" || record.ModelName == "" || (record.Status != "ACTIVE" && record.Status != "RELEASED" && record.Status != "EXPIRED") {
+				return totals, fmt.Errorf("invalid retained lease record")
+			}
+		}
+		totals.LeaseRecordCount = owner.Leases.LeaseRecordCount
+	default:
+		return totals, fmt.Errorf("unknown owner kind")
+	}
+	return totals, nil
+}
+
+func validateReport(report checkpointReport) error {
+	if report.Checkpoint != "Q0" && report.Checkpoint != "Q1" && report.Checkpoint != "Q2" {
+		return fmt.Errorf("unknown checkpoint")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, report.Timestamp); err != nil {
+		return err
+	}
+	if report.FixtureScope == "" || report.LiveGoroutines < 1 || len(report.Barriers) == 0 || !report.OwnerInventoryComplete {
+		return fmt.Errorf("incomplete checkpoint barriers or inventory")
+	}
+	artifact := report.Artifact
+	if artifact.SourceCommit == "" || artifact.ToolSourceCommit == "" || artifact.OverlayManifestSHA256 == "" || artifact.TestArtifactSHA256 == "" || artifact.GoVersion == "" || artifact.BuildCommand == "" {
+		return fmt.Errorf("missing artifact identity")
+	}
+	owners := map[string]string{}
+	totals := resourceTotals{}
+	for _, owner := range report.Owners {
+		if _, exists := owners[owner.OwnerIdentity]; exists {
+			return fmt.Errorf("duplicate owner")
+		}
+		value, err := validateOwner(owner)
+		if err != nil {
+			return err
+		}
+		owners[owner.OwnerIdentity] = owner.Kind
+		totals.HandleCount += value.HandleCount
+		totals.LeaseRecordCount += value.LeaseRecordCount
+		totals.CapacityHoldersTotal += value.CapacityHoldersTotal
+	}
+	if totals != report.Totals {
+		return fmt.Errorf("incorrect report totals")
+	}
+	kinds := map[string]bool{}
+	attributed := map[string]bool{}
+	for _, discovery := range report.OwnerDiscovery {
+		if kinds[discovery.Kind] || discovery.Provenance == "" || (discovery.Kind != "instance_host" && discovery.Kind != "models_leases") {
+			return fmt.Errorf("invalid owner discovery")
+		}
+		kinds[discovery.Kind] = true
+		switch discovery.Status {
+		case "registered":
+			if len(discovery.OwnerIdentities) == 0 {
+				return fmt.Errorf("missing registered owner")
+			}
+			for _, identity := range discovery.OwnerIdentities {
+				if owners[identity] != discovery.Kind || attributed[identity] {
+					return fmt.Errorf("unattributed owner")
+				}
+				attributed[identity] = true
+			}
+		case "not_created":
+			if len(discovery.OwnerIdentities) != 0 {
+				return fmt.Errorf("not-created owner has identities")
+			}
+		default:
+			return fmt.Errorf("owner unavailable")
+		}
+	}
+	if len(kinds) != 2 || len(attributed) != len(owners) {
+		return fmt.Errorf("incomplete owner discovery")
+	}
+	return nil
+}
