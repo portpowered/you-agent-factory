@@ -33,9 +33,11 @@ func TestProviderSessionStorageFailuresReturnSafeAPIErrors(t *testing.T) {
 	writeCursorGoldenSuccessStorageFixture(t, home, openID)
 	writeCursorGoldenSuccessStorageFixture(t, home, pingID)
 	mixedID := "session_fixture_codex_mixed_corrupt"
+	// A truncated record ends at EOF; a newline-terminated malformed record
+	// intentionally receives the distinct invalid-JSON diagnostic.
 	writeCodexGoldenRolloutFixture(t, codexSessionsRoot(home), mixedID,
 		"{\"type\":\"event_msg\",\"payload\":{\"type\":\"agent_message\",\"message\":\"retained fixture answer\"}}\n"+
-			"{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"content\":[{\"text\":\"partial\n")
+			"{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"content\":[{\"text\":\"partial")
 	ping := &unavailableSessionConnector{}
 	var openCalls atomic.Int32
 	edges := serviceedges.Edges{
