@@ -457,7 +457,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	factoryScaffoldInitializer := provideFactoryScaffoldInitializer(v105)
 	v106 := provideDefinitionValidationOperation(validationOperations)
-	editableFactoryValidator := provideEditableFactoryValidator(v106, v84)
+	editableFactoryValidator := provideEditableFactoryValidator(v106)
 	commandLineReader := providePprofCommandLineReader()
 	starter, err := provideAPIServerStarter(edges2, commandLineReader)
 	if err != nil {

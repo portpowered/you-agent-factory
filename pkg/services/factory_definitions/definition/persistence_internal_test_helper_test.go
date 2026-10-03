@@ -58,18 +58,7 @@ func definitionPersistenceForTest(
 	persistence, err := factorypersistence.New(
 		validator,
 		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(
-				payload,
-				func(
-					payload []byte,
-					loader factorydefinitions.WorkstationLoader,
-				) (factorydefinitions.MutableLoadedFactorySource, error) {
-					return factorydefinitioncomposition.LoadCanonicalJSON(
-						payload,
-						loader)
-
-				},
-			)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 		prepareFactoryLayoutForDefinitionTest,
 		writePreparedLayoutForDefinitionTest,

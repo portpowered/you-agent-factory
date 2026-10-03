@@ -532,7 +532,7 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 	composition := newFoldPreservationComposition()
 	validator := factorydefinitionswire.NewValidationOperations(nil, composition.LoadCanonicalJSON)
 	mapInput := func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-		return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
+		return validationentry.MapFactoryJSONForPersistence(payload)
 	}
 	persistence := composition.Persistence(validator, mapInput)
 	loader := composition.Loader()
@@ -649,7 +649,7 @@ func newFoldPreservationComposition() factorydefinitiontestcomposition.Compositi
 		SafeLayoutSegment: authoredmapping.SafeFactoryLayoutSegment,
 		SafePromptPath:    authoredmapping.SafePromptFilePath,
 		MapPersistence: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 	}, fileSystem, directoryreplace.Local{}, factorydefinitiontestcomposition.Effects{
 		Loading:             fileSystem,
