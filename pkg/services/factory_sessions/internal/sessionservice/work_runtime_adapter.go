@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,8 +29,11 @@ import (
 // engine into Work's consumer-owned runtime port. Engine identities end here.
 type workRuntimeAdapter struct {
 	sessionID string
-	clock     factoryruntime.Clock
-	runtime   factoryruntime.Service
+	// sessionAliases are the other identities (~default alias, exact runtime
+	// ID) the session's events may carry.
+	sessionAliases []string
+	clock          factoryruntime.Clock
+	runtime        factoryruntime.Service
 	// ingress is the Work-submission boundary declared when Factory Sessions
 	// bound the runtime. It retires with factoryruntime.APIFactory.
 	ingress factoryruntime.APIFactory
@@ -213,7 +217,9 @@ func workRuntimeSnapshot(
 // or mapping Work rows.
 type workAdmissionProjection struct {
 	sessionID string
-	clock     factoryruntime.Clock
+	// sessionAliases are the other identities the session's events may carry.
+	sessionAliases []string
+	clock          factoryruntime.Clock
 
 	mu                sync.RWMutex
 	admissions        []work.WorkAdmission
@@ -412,7 +418,7 @@ func (p *workAdmissionProjection) applyEvent(
 	if event.Type != factorydefinitions.FactoryEventTypeWorkRequest {
 		return
 	}
-	admissions := workAdmissionsFromFactoryEvents(p.sessionID, []factorydefinitions.FactoryEvent{event})
+	admissions := workAdmissionsFromFactoryEvents(p.sessionID, p.sessionAliases, []factorydefinitions.FactoryEvent{event})
 	if len(admissions) == 0 {
 		return
 	}
@@ -478,11 +484,23 @@ func (a workRuntimeAdapter) readWorkAdmissionsWithStats(ctx context.Context) ([]
 		return nil, stats, errors.New("subscribe Work admission history: stream is unavailable")
 	}
 	stats.eventRecordsVisited = len(stream.History)
-	return workAdmissionsFromFactoryEvents(a.sessionID, stream.History), stats, nil
+	return workAdmissionsFromFactoryEvents(a.sessionID, a.sessionAliases, stream.History), stats, nil
+}
+
+// workEventBelongsToSession reports whether a recorded event's session scope
+// names the requested session. A session is addressable by its selector (the
+// ~default alias or its exact runtime ID) and its event stream may be stamped
+// with either form, so every identity the live session owns is accepted.
+func workEventBelongsToSession(sessionID string, aliases []string, eventSessionID *string) bool {
+	if sessionID == "" || eventSessionID == nil || *eventSessionID == sessionID {
+		return true
+	}
+	return slices.Contains(aliases, *eventSessionID)
 }
 
 func workAdmissionsFromFactoryEvents(
 	sessionID string,
+	sessionAliases []string,
 	events []factorydefinitions.FactoryEvent,
 ) []work.WorkAdmission {
 	admissions := make([]work.WorkAdmission, 0)
@@ -490,7 +508,7 @@ func workAdmissionsFromFactoryEvents(
 		if event.Type != factorydefinitions.FactoryEventTypeWorkRequest {
 			continue
 		}
-		if sessionID != "" && event.Context.SessionID != nil && *event.Context.SessionID != sessionID {
+		if !workEventBelongsToSession(sessionID, sessionAliases, event.Context.SessionID) {
 			continue
 		}
 		var payload work.WorkRequestEventPayload
