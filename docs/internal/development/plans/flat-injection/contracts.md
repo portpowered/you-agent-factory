@@ -2171,9 +2171,655 @@ Boundary unit evidence covers nil pointer/function/interface, typed nil, explici
 
 ## T31 — Runtime instance-host build leaves
 
-Authored sources: `pkg/services/factory_runtime/internal/services/instance_host/build/service.go` (`BundleBuilder` / `Service`), `orchestration/runtime/worker_session_control_targets.go` (`WorkstationRequestExecutorConfig`).
+This pair is the documentation prerequisite required by the operator decision
+of 2026-10-02. It proposes internal contracts only: no production export or
+runtime behavior changes in this PR. The native Current blocks below are
+verbatim excerpts at source pin `46c26ae6314ad4ca4220fd886feae481fe82cfc5`; Go import aliases retain their source
+meaning. Proposed operation declarations specify signatures, not compiling
+implementations or execution evidence.
 
-**Pending — authored by T31 as its first required step, before any structural change (operator decision, 2026-10-02).** Add the current/proposed Go pair for both types here: injected collaborators separated from a request-resolution value type, with the deferred graph-construction closure removed. If the pair cannot be written within T31's outcome, T31 stops and returns a delta plan.
+### Build preparation
+
+Authored source: `pkg/services/factory_runtime/internal/services/instance_host/build/service.go:21–218`.
+Current includes the complete builder, stored fields, constructor and operations.
+
+Current:
+
+```go
+// BundleBuilder constructs a runnable runtime bundle from an immutable session
+// build spec.
+type BundleBuilder func(ctx context.Context, spec SessionBuildSpec) (*factoryhost.Bundle, error)
+
+// Service owns the single runtime build path for session open and post-save activation.
+type Service struct {
+	defaultWorkerModelProvider string
+	defaultWorkerModel         string
+	applyOperatorDefaults      bool
+	recordPath                 string
+	workflowID                 string
+	workstationLoader          factorydefinitions.WorkstationLoader
+	loadFactory                factory.LoadedFactoryLoader
+	providerOverride           providers.Service
+	providerCommandRunner      platformprocess.CommandRunner
+	scriptCommandRunner        platformprocess.CommandRunner
+	mockWorkersConfig          *workers.MockWorkersConfig
+	newMockCommandRunner       MockCommandRunnerFactory
+	clock                      factory.Clock
+	newID                      factory.IDGenerator
+	baseLogger                 *zap.Logger
+	build                      BundleBuilder
+	petriMutationRecorder      factory.PetriMutationRecorder
+}
+
+// New constructs a runtime-build collaborator with explicit dependencies.
+// Construction validates process-owned dependencies before any runtime bundle
+// or lifecycle can be started.
+func New(
+	defaultWorkerModelProvider string,
+	defaultWorkerModel string,
+	applyOperatorDefaults bool,
+	recordPath string,
+	workflowID string,
+	workstationLoader factorydefinitions.WorkstationLoader,
+	loadFactory factory.LoadedFactoryLoader,
+	providerOverride providers.Service,
+	providerCommandRunner platformprocess.CommandRunner,
+	scriptCommandRunner platformprocess.CommandRunner,
+	mockWorkersConfig *workers.MockWorkersConfig,
+	newMockCommandRunner MockCommandRunnerFactory,
+	clock factory.Clock,
+	newID factory.IDGenerator,
+	baseLogger *zap.Logger,
+	build BundleBuilder,
+	petriMutationRecorder factory.PetriMutationRecorder,
+) (*Service, error) {
+	switch {
+	case clock == nil:
+		return nil, fmt.Errorf("construct runtime build service: clock is required")
+	case newID == nil:
+		return nil, fmt.Errorf("construct runtime build service: ID generator is required")
+	case baseLogger == nil:
+		return nil, fmt.Errorf("construct runtime build service: logger is required")
+	case build == nil:
+		return nil, fmt.Errorf("construct runtime build service: runtime builder is required")
+	case loadFactory == nil:
+		return nil, fmt.Errorf("construct runtime build service: Factory Definition loader is required")
+	}
+	return &Service{
+		defaultWorkerModelProvider: defaultWorkerModelProvider,
+		defaultWorkerModel:         defaultWorkerModel,
+		applyOperatorDefaults:      applyOperatorDefaults,
+		recordPath:                 recordPath,
+		workflowID:                 workflowID,
+		workstationLoader:          workstationLoader,
+		loadFactory:                loadFactory,
+		providerOverride:           providerOverride,
+		providerCommandRunner:      providerCommandRunner,
+		scriptCommandRunner:        scriptCommandRunner,
+		mockWorkersConfig:          mockWorkersConfig,
+		newMockCommandRunner:       newMockCommandRunner,
+		clock:                      clock,
+		newID:                      newID,
+		baseLogger:                 baseLogger,
+		build:                      build,
+		petriMutationRecorder:      petriMutationRecorder,
+	}, nil
+}
+
+// Build builds a runtime bundle from an immutable session build spec.
+func (s *Service) Build(ctx context.Context, spec SessionBuildSpec) (*factoryhost.Bundle, error) {
+	if s == nil || s.build == nil {
+		return nil, fmt.Errorf("runtime build service is required")
+	}
+	spec.PetriMutationRecorder = s.petriMutationRecorder
+	return s.build(ctx, spec)
+}
+
+// BuildSpec derives an immutable session build spec for startup, session open,
+// named activation, and post-save activation.
+func (s *Service) BuildSpec(
+	ctx context.Context,
+	dir string,
+	folderPath string,
+	sessionID string,
+	executionBaseDir string,
+	loadedFactoryCfg factorydefinitions.MutableLoadedFactorySource,
+	runtimeInstanceID string,
+	replayProvider providers.Service,
+	replayCommandRunner platformprocess.CommandRunner,
+	submissionHooks []factory.SubmissionHook,
+	completionPlanner factory.CompletionDeliveryPlanner,
+	preserveCompatibilityDefaultRecordPath bool,
+) (SessionBuildSpec, error) {
+	if s == nil || s.build == nil {
+		return SessionBuildSpec{}, fmt.Errorf("runtime build service is required")
+	}
+	baseLogger := s.baseLogger
+	if baseLogger == nil {
+		baseLogger = zap.NewNop()
+	}
+	if loadedFactoryCfg == nil {
+		var err error
+		loadedFactoryCfg, err = s.loadFactory(dir, s.workstationLoader)
+		if err != nil {
+			return SessionBuildSpec{}, fmt.Errorf("load factory config: %w", err)
+		}
+	}
+	logger := NewSessionLogger(baseLogger, sessionID, folderPath, loadedFactoryCfg.FactoryDir())
+	WarnPortableBundledReplacementReport(
+		logger,
+		"named factory activation replaced portable bundled files",
+		loadedFactoryCfg.PortableBundledFileReplacements(),
+	)
+	loadedFactoryCfg.SetRuntimeBaseDir(executionBaseDir)
+	if s.applyOperatorDefaults {
+		if err := applyOperatorDefaultsToLoadedConfig(
+			s.defaultWorkerModelProvider,
+			s.defaultWorkerModel,
+			loadedFactoryCfg,
+		); err != nil {
+			return SessionBuildSpec{}, err
+		}
+	}
+	recordSessionID := sessionID
+	if preserveCompatibilityDefaultRecordPath {
+		recordSessionID = "~default"
+	}
+	recordPath := SessionScopedRecordPath(s.recordPath, recordSessionID)
+	runtimeInstanceID = strings.TrimSpace(runtimeInstanceID)
+	if runtimeInstanceID == "" {
+		runtimeInstanceID = s.newID()
+	}
+	return SessionBuildSpec{
+		Dir:                   dir,
+		FolderPath:            folderPath,
+		SessionID:             sessionID,
+		ExecutionBaseDir:      executionBaseDir,
+		LoadedFactoryCfg:      loadedFactoryCfg,
+		BaseLogger:            baseLogger,
+		RuntimeInstanceID:     runtimeInstanceID,
+		Clock:                 s.clock,
+		RecordPath:            recordPath,
+		WorkflowID:            s.workflowID,
+		ProviderOverride:      providerOverrideForMode(s.providerOverride, replayProvider),
+		ProviderCommandRunner: providerCommandRunnerForMode(s.mockWorkersConfig, s.providerCommandRunner, loadedFactoryCfg, s.newMockCommandRunner),
+		CommandRunnerOverride: commandRunnerOverrideForMode(s.mockWorkersConfig, s.scriptCommandRunner, loadedFactoryCfg, replayCommandRunner, s.newMockCommandRunner),
+		ReplayCommandRunner:   replayCommandRunner,
+		SubmissionHooks:       append([]factory.SubmissionHook(nil), submissionHooks...),
+		CompletionPlanner:     completionPlanner,
+		PetriMutationRecorder: s.petriMutationRecorder,
+	}, nil
+}
+
+// BuildReplacementSpec loads runtime config from factoryDir and derives a build
+// spec for session open, named activation, and post-save activation.
+func (s *Service) BuildReplacementSpec(
+	ctx context.Context,
+	folderPath string,
+	factoryDir string,
+	sessionID string,
+	executionBaseDir string,
+) (SessionBuildSpec, error) {
+	return s.BuildSpec(
+		ctx, factoryDir, folderPath, sessionID, executionBaseDir,
+		nil, "", nil, nil, nil, nil, false,
+	)
+}
+
+// BuildReplacement derives a build spec and constructs the replacement bundle.
+func (s *Service) BuildReplacement(
+	ctx context.Context,
+	folderPath string,
+	factoryDir string,
+	sessionID string,
+	executionBaseDir string,
+) (factory.RuntimeRecord, error) {
+	spec, err := s.BuildReplacementSpec(ctx, folderPath, factoryDir, sessionID, executionBaseDir)
+	if err != nil {
+		return nil, err
+	}
+	return s.Build(ctx, spec)
+}
+
+// SessionScopedRecordPath preserves the selected default path and scopes
+// non-default explicit paths by session identity.
+func SessionScopedRecordPath(basePath string, sessionID string) string {
+	return factory.RecordingPath(basePath).ForSession(sessionID)
+}
+```
+
+Proposed:
+
+```go
+// Removed: BundleBuilder, Service.build, Build and BuildReplacement.
+// Additive T31-local configuration and values; no production export in this PR.
+type BuildDefaults struct {
+    WorkerModelProvider string
+    WorkerModel string
+    ApplyOperatorDefaults bool
+    RecordPath string
+    WorkflowID string
+}
+type SessionBuildValues struct {
+    Dir string
+    FolderPath string
+    SessionID string
+    ExecutionBaseDir string
+    RuntimeInstanceID string
+    LoadedFactoryCfg factorydefinitions.MutableLoadedFactorySource
+    PreserveCompatibilityDefaultRecordPath bool
+}
+type PreparedSessionValues struct {
+    Dir string
+    FolderPath string
+    SessionID string
+    ExecutionBaseDir string
+    RuntimeInstanceID string
+    LoadedFactoryCfg factory.LoadedConfig
+    RecordPath string
+    WorkflowID string
+}
+// Reusable preparation; effective definitions are session-owned domain data.
+type Service struct {
+    workstationLoader factorydefinitions.WorkstationLoader
+    loadFactory factory.LoadedFactoryLoader
+    newID factory.IDGenerator
+    baseLogger *zap.Logger
+}
+// Focused owner wire provider supplies each fixed collaborator directly.
+func New(
+    workstationLoader factorydefinitions.WorkstationLoader,
+    loadFactory factory.LoadedFactoryLoader,
+    newID factory.IDGenerator,
+    baseLogger *zap.Logger,
+) *Service {
+    return &Service{
+        workstationLoader: workstationLoader,
+        loadFactory: loadFactory,
+        newID: newID,
+        baseLogger: baseLogger,
+    }
+}
+// Signature contract; retains load/default/path/ID semantics, starts nothing.
+func (s *Service) Prepare(
+    ctx context.Context,
+    defaults BuildDefaults,
+    values SessionBuildValues,
+) (PreparedSessionValues, error)
+// Replacement uses Prepare with no supplied definition, an empty runtime ID,
+// and PreserveCompatibilityDefaultRecordPath=false; it cannot start/commit.
+// T15's fixed activation operation consumes the prepared values later.
+// Existing provider/runner/replay/mock/clock/hook/completion/recorder behavior
+// remains directly injected at activation, never hidden in these values.
+```
+
+`Prepare` loads only when no definition was supplied, sets the execution base,
+applies the existing operator-default rules and warning, selects the same
+recording path, and trims or generates runtime identity. It returns no engine,
+bundle, lifecycle handle or service graph. Its supplied definition must be a
+fresh, exclusively session-owned effective definition; `LoadedConfig` is a
+read view, not a deep-immutability guarantee. A failed mutation can leave that
+fresh candidate partly changed, so discard it; never mutate the active prior
+generation. The selected definition identity remains the same within a
+successful preparation. No new definition-cloning API is implied.
+
+Provider/runner/replay/mock selection, clock, submission hooks, completion
+planning and mutation recording leave the preparation values. T15 must preserve
+their current semantics through directly injected activation owners. This
+section neither designs those owners nor changes T15's contracts. Removing
+`BundleBuilder` cannot be implemented by wrapping it in a graph-building
+interface. `Build` and `BuildReplacement` disappear only with the separately
+reviewed T15 caller/activation migration; leaving a bridge is not S01 completion.
+
+### Direct workstation request resolution
+
+Authored source: `pkg/services/factory_runtime/internal/services/orchestration/runtime/worker_session_control_targets.go:183–206,321–359`.
+Current includes the complete configuration, constructor and stored adapter.
+The unrelated process observer between the excerpts is omitted.
+
+Current:
+
+```go
+// WorkstationRequestExecutorConfig supplies the immutable Runtime facts needed
+// to resolve a direct Worker Session request before handing it to the shared
+// Workers Execute boundary. It is deliberately separate from the Runtime's
+// active attempt lifecycle: direct Worker Sessions own their own supervision.
+type WorkstationRequestExecutorConfig struct {
+	Service                    workers.Service
+	RuntimeDefinitions         interfaces.RuntimeDefinitionLookup
+	InvocationInterpolation    interfaces.InvocationInterpolationService
+	InvocationFileReader       interfaces.FileReader
+	WorkflowContext            *workers.Context
+	FactorySessionID           string
+	RuntimeID                  string
+	RecordingID                string
+	EventHistory               recordings.RuntimeLedger
+	NewID                      factory.IDGenerator
+	PromptRenderer             runtimePromptRenderer
+	TemplateFieldResolver      runtimeTemplateFieldResolver
+	PromptSourceReader         interfaces.FileReader
+	MockWorkers                *workers.MockWorkersConfig
+	ProgressPublisher          workers.ProgressPublisher
+	Net                        *state.Net
+	ExpectedArtifactFileSystem any
+}
+
+// NewWorkstationRequestExecutor creates the Runtime-owned compatibility
+// adapter used by top-level Worker Session routes. It resolves minimal legacy
+// direct requests from the immutable Factory definition and then invokes the
+// process-scoped Workers service with a complete detached ExecuteRequest.
+func NewWorkstationRequestExecutor(
+	config WorkstationRequestExecutorConfig,
+) workers.WorkstationRequestExecutor {
+	if config.Service == nil {
+		return nil
+	}
+	return &workstationRequestExecutor{
+		service: config.Service,
+		cfg: &runtimeConfig{
+			executeService:             config.Service,
+			runtimeConfig:              config.RuntimeDefinitions,
+			invocationInterpolation:    config.InvocationInterpolation,
+			invocationFileReader:       config.InvocationFileReader,
+			workflowContext:            config.WorkflowContext.Clone(),
+			recordingID:                strings.TrimSpace(config.RecordingID),
+			runtimeID:                  strings.TrimSpace(config.RuntimeID),
+			eventHistory:               config.EventHistory,
+			newID:                      config.NewID,
+			promptRenderer:             config.PromptRenderer,
+			templateFieldResolver:      config.TemplateFieldResolver,
+			promptSourceReader:         config.PromptSourceReader,
+			mockWorkersConfig:          config.MockWorkers.Clone(),
+			progressPublisher:          config.ProgressPublisher,
+			net:                        config.Net,
+			expectedArtifactFileSystem: expectedArtifactFileSystemFrom(config.ExpectedArtifactFileSystem),
+		},
+		sessionID: strings.TrimSpace(config.FactorySessionID),
+	}
+}
+
+type workstationRequestExecutor struct {
+	service   executeCapability
+	cfg       *runtimeConfig
+	sessionID string
+}
+```
+
+Proposed:
+
+```go
+// Removed: WorkstationRequestExecutorConfig and any filesystem locator.
+// Additive T31-local values and scoped binding; no production export here.
+type WorkstationRequestValues struct {
+    RuntimeDefinitions interfaces.RuntimeDefinitionLookup
+    WorkflowContext *workers.Context
+    FactorySessionID string
+    RuntimeID string
+    RecordingID string
+    GenerationID string
+    FactoryDirectory string
+    RuntimeBaseDir string
+    MockWorkers *workers.MockWorkersConfig
+    Net *state.Net
+}
+// All interfaces below already exist in the cited source.
+type workstationRequestExecutor struct {
+    service workers.Service
+    invocationInterpolation interfaces.InvocationInterpolationService
+    invocationFileReader interfaces.FileReader
+    newID factory.IDGenerator
+    promptRenderer runtimePromptRenderer
+    templateFieldResolver runtimeTemplateFieldResolver
+    promptSourceReader interfaces.FileReader
+    progressPublisher workers.ProgressPublisher
+    expectedArtifacts expectedArtifactFileSystem
+    logger factory.Logger
+}
+func NewWorkstationRequestExecutor(
+    service workers.Service,
+    interpolation interfaces.InvocationInterpolationService,
+    invocationFiles interfaces.FileReader,
+    newID factory.IDGenerator,
+    prompts runtimePromptRenderer,
+    templateFields runtimeTemplateFieldResolver,
+    promptSources interfaces.FileReader,
+    progress workers.ProgressPublisher,
+    expectedArtifacts expectedArtifactFileSystem,
+    logger factory.Logger,
+) *workstationRequestExecutor {
+    return &workstationRequestExecutor{
+        service: service,
+        invocationInterpolation: interpolation,
+        invocationFileReader: invocationFiles,
+        newID: newID,
+        promptRenderer: prompts,
+        templateFieldResolver: templateFields,
+        promptSourceReader: promptSources,
+        progressPublisher: progress,
+        expectedArtifacts: expectedArtifacts,
+        logger: logger,
+    }
+}
+// Signature contracts: resolution cannot execute or publish progress.
+func (executor *workstationRequestExecutor) ResolveExecutionRequest(
+    values WorkstationRequestValues,
+    request workers.WorkstationExecutionRequest,
+) (workers.ExecuteRequest, error)
+func (executor *workstationRequestExecutor) Execute(
+    ctx context.Context,
+    values WorkstationRequestValues,
+    request workers.WorkstationExecutionRequest,
+) (workers.WorkResult, error)
+// State allocation over one already-injected resolver; never another injector.
+// Definitions/Net/context/mock values must be detached before this allocation.
+type workstationRequestBinding struct {
+    executor *workstationRequestExecutor
+    values WorkstationRequestValues
+}
+func (binding workstationRequestBinding) ResolveExecutionRequest(
+    request workers.WorkstationExecutionRequest,
+) (workers.ExecuteRequest, error) {
+    return binding.executor.ResolveExecutionRequest(binding.values, request)
+}
+func (binding workstationRequestBinding) Execute(
+    ctx context.Context,
+    request workers.WorkstationExecutionRequest,
+) (workers.WorkResult, error) {
+    return binding.executor.Execute(ctx, binding.values, request)
+}
+var _ WorkstationExecutionResolver = workstationRequestBinding{}
+var _ workers.WorkstationRequestExecutor = workstationRequestBinding{}
+
+```
+
+The binding preserves the existing `WorkstationExecutionResolver` and
+`workers.WorkstationRequestExecutor` signatures. It delegates resolution with
+its values, then execution to the already injected Workers service; it does
+not construct behavior, expose getters, or store `runtimeConfig`. The reusable
+resolver never stores session values. Resolution alone neither executes nor
+publishes progress. Before resolving, clone the incoming request, workflow
+context, mock settings, token/dispatch data and any mutable Net snapshot;
+definition lookup must address only the selected detached definition, never a
+process service locator or a mutable active definition shared across sessions.
+`FactoryDirectory`/`RuntimeBaseDir` retain optional path-aware facts. These
+interfaces and pointers are domain views, not permission to capture a service
+container inside a value implementation.
+
+Caller correlation remains authoritative. Blank fields default from the
+selected binding only: Factory Session, runtime, recording and generation have
+different meanings. `GenerationID` replaces the current
+`EventHistory.StreamGenerationID()` lookup (`worker_session_control_targets.go:703–705,854–856`)
+with a captured fact for the bound generation; no ledger dependency remains in
+the value. Preserve default recording identity and existing path/source/prompt
+failure mapping, timeout/permission/provider policy, cancellation classification
+and result correlation. The injected logger is reusable process logging behavior and cannot close over
+one session. T15 owns scoped sinks and must preserve the existing per-attempt
+logging contract using the selected request correlation and separately owned
+sink resources, without installing behavior through `SetRuntimeLogger`.
+
+### Roles, callers and ownership
+
+| Role/value | Existing source or additive proposal | Authority and lifetime |
+| --- | --- | --- |
+| LoadedFactoryLoader/LoadedConfig | factory_runtime/session_build_spec.go:12–22; Definitions internal/contracts/application.go:183–189,271–275 | Fixed loading capability; fresh session-owned definition. No process service lookup. |
+| WorkstationLoader/InvocationInterpolationService/FileReader | Definitions root contracts, invocation_interpolation_contract.go:8 | Existing loading/interpolation/IO roles, directly injected. |
+| IDGenerator/Logger | factory_runtime/clock.go:22; logger.go:6 | Existing effects; selected origin and per-request correlation. |
+| Workers Service/ProgressPublisher | workers/workstation_contracts.go:194; progress_observations.go:57 | Existing execution/progress roles; complete correlation routes observation, no captured mutable session. |
+| runtimePromptRenderer | orchestration/runtime/factory.go:77 | RenderPrompt(string, []workers.Token, *workers.Context) (string,error). |
+| runtimeTemplateFieldResolver | workstation_routes.go:108 | ResolveTemplateFields(string,map[string]string,[]workers.Token,*workers.Context,string) (*workers.ResolvedTemplateFields,error). |
+| expectedArtifactFileSystem | workstation_routes.go:18 | Existing Glob/Stat/EvalSymlinks interface, shown below. |
+| BuildDefaults/SessionBuildValues/PreparedSessionValues/WorkstationRequestValues/binding | Explicit T31-local additive proposals | Config/state, never collaborators/getters. Binding retains injected resolver plus detached values. |
+| instancehost.Service/LifecycleService | instance_host/service.go:34; host/service.go:12; contracts.md T14/AM08 | Existing/proposed keyed host/readiness authority; full T14 remains required. |
+
+The existing filesystem role remains unchanged and is injected directly; the
+`any` argument and `expectedArtifactFileSystemFrom` discovery are removed from
+this path, without changing path/symlink policy:
+
+```go
+type expectedArtifactFileSystem interface {
+    Glob(string) ([]string, error)
+    Stat(string) (fs.FileInfo, error)
+    EvalSymlinks(string) (string, error)
+}
+```
+
+The first proposed service and its value types stay in the existing build owner;
+the executor and binding stay in the existing orchestration runtime owner.
+Focused owner `wire` providers expose existing private roles through aliases
+when canonical Wire needs access. No new product service or public endpoint is
+proposed. T23 owns boundary requiredness, including typed nil and explicit
+disabled roles; internal constructors store valid collaborators directly.
+
+`factory_runtime/internal/runtime_build.go:221–345` constructs the current
+mixed service and closes over graph dependencies at `:310–342`; `buildBundle`
+at `:347–460` calls `RuntimeFactory.Build`. The direct-request caller is
+`newRuntimeWorkersService` at `:508–529`: it supplies definitions, scoped context,
+identity, interpolation, file IO, prompt roles, mock settings and progress.
+These callers are read-only in this PR and migrate under T15. T31 owns these
+two leaf shapes and their assertion ports, T14 owns keyed handle/readiness and
+cleanup authority, T16 owns Worker Session identity/attempt supervision, and
+T15 owns the activation fold and Sessions caller migration. Request preparation
+cannot acquire any of those owners through a getter.
+
+### Assertion-preserving evidence obligations
+
+All eleven tests in `instance_host/build/service_test.go` and
+`service_behavior_test.go`, including their assertion helpers, are accounted
+for below. Paths in this table are relative to that build package. These are
+future port obligations, never execution PASS; production tests are unchanged.
+
+| ID / source test | Assertions retained | Future owner / evidence layer |
+| --- | --- | --- |
+| B01 — service_test.go:48 TestService_BuildReplacementAndBuildShareBuilder | One startup Build operation is forwarded. The test name says replacement but never invokes BuildReplacement. | T31-U03 preparation; T15-U03 canonical activation path; keep operation count in component evidence. |
+| B02 — service_test.go:73 TestService_WithPetriMutationRecorderInstallsRecorderOnEveryBuild | Recorder installed on both empty/explicit-session builds; selected sentinel error preserved; two calls. | T15-U03 injected activation/mutation effect observer. |
+| B03 — service_test.go:105 TestNewRejectsMissingConstructionDependencies | Five cases: clock, ID, logger, builder, definition loader. Each returns nil service and named required diagnostic. | T23-U03 boundary rejection; removed builder maps to required activation capability. Retain failure semantics, explicitly document any diagnostic port, never silently delete an assertion. |
+| B04 — service_test.go:154 TestSessionScopedRecordPath_PreservesDefaultAndSuffixesNonDefaultSessions | ~default keeps /tmp/recording.json; session-b selects /tmp/recording.session-b.json. | T31-U03 path preparation; public artifact attribution at T15/T17-F06/F07. |
+| B05 — service_behavior_test.go:23 TestService_BuildSpecCarriesSessionInputsAndAppliesOperatorDefaults | Dir/folder/session/base/runtime generated from blank ID/workflow/supplied source identity; compatibility ~default path; SetRuntimeBaseDir; configured provider beats replay; provider runner absent without mock mode; script/replay runner retained; one copied hook, selected planner/recorder. CODEX/gpt-5 normalized defaults; placeholders retain fallback; explicit model and nonmodel script fields unchanged. Includes all assertion helpers. | T31-U03 definition/default/path/data; T15-U03 provider/runner/replay/hook/planner/recorder selection. |
+| B06 — service_behavior_test.go:176 TestService_BuildPropagatesBuilderOutcomeAndKeepsCallerSpecUnchanged | errors.Is selected error; caller session preserved; caller recorder stays nil; canceled context propagates context.Canceled; two calls including cancellation. | T31-U03 detached caller input; T15-U03 activation error/context and call behavior. |
+| B07 — service_behavior_test.go:229 TestService_BuildReplacementLoadsDefinitionAndScopesRecording | Factory directory/nil workstation loader passed to loader; result selected bundle identity; folder/session/base/generated runtime ID/workflow/definition retained; session record path; source RuntimeBaseDir updated. | T31-U03 preparation; T15-U03 resource/handoff identity; F04 separately owns response sequence. |
+| B08 — service_behavior_test.go:292 TestService_BuildSpecReportsLoaderFailure | Loader sentinel preserved with load factory config context; downstream builder cannot run. | T31-U03 error; T15-U03 no activation after preparation failure. |
+| B09 — service_behavior_test.go:306 TestService_BuildSpecRejectsUnsupportedOperatorDefault | Unsupported provider diagnostic before downstream build. | T31-U03 default validation; no functional validation permutations. |
+| B10 — service_behavior_test.go:332 TestService_BuildSpecReportsOperatorDefaultMutationFailure | Mutation sentinel preserved with apply operator defaults context; downstream builder cannot run. | T31-U03 mutation/error; T15-U03 no activation after failed preparation. |
+| B11 — service_behavior_test.go:423 TestNewRejectsMissingFactoryLoader | Nil service and Factory Definition loader is required diagnostic for missing loader. | T23-U03 composition requiredness port. |
+
+B05 includes `assertSelectedBuildSpec`, `assertSelectedBuildIdentity`,
+`assertSelectedBuildCollaborators` and `assertSelectedWorkerDefaults`: retain
+all their assertions, not just the top-level call. `newSelectedBuildFixture`,
+`mustNewBehaviorService`, the failure fixtures, `unusedFactoryLoader`,
+`failIfBuildCalled`, `runtimeBuildLoadedSource`, hook/planner and command-runner
+fakes supply controlled unit evidence. In particular the failure fixtures
+observe that no downstream build occurs; split that into preparation error and
+activation-not-called assertions rather than dropping it.
+
+Additional `helpers_test.go` obligations remain: unmatched passthrough/default
+accept retain their selected mock configuration and next runner, replay replaces
+only the production edge (not an injected script edge), configured provider wins
+over replay, and mock-provider decoration retains its next runner (T15-U03).
+Session logger fields and ordered portable replacement warning targets remain
+(T31-U03 preparation diagnostics/T15 logging). Nil-definition default application
+is still harmless domain data. Nil-service Build/BuildSpec rejection ports to
+T23 boundary/disabled-role evidence rather than an internal nil fallback;
+existing tests remain until that authorized migration. The fusion interpolation
+and construction-contract tests are also unchanged; this map is not a claim
+that eleven tests exhaust package coverage.
+
+### Lifecycle and session isolation rehearsal
+
+Preparation owns no live resource. Activation failure must publish no partial
+active binding, unwind acquired resources in reverse startup order, and retain
+failed cleanup ownership. A pending failed Close makes a conflicting activation
+fail until explicit Deactivate succeeds; a cleanup error cannot be converted to
+success or lose its retry handle. T14's full single keyed host remains required:
+the existing Root unit witnesses do not prove that consolidation.
+
+Replacement prepares a distinct candidate without changing the active prior
+generation. `instance_host/internal/service/replace.go:14–77` uses
+`host.ReplacementAttempt`, starts and readies the candidate, attaches sidecars,
+and publishes Factory change before `commitActiveHandle` swaps authority under
+the lock (`:90–114`). Readiness, sidecar or publication failure closes the
+candidate and restores prior sidecars without committing; prior generation
+remains usable. A concurrent termination can reject commit. Preserve this
+ordering and its errors; this contract does not correct policy. Retryable
+cleanup of a failed candidate remains an obligation of the full T14/T15 owner,
+not something proved by the current ignored Stop error on failure.
+
+Distinct explicit sessions own independent effective definitions, contexts,
+request/dispatch/attempt correlation, runtime/generation state, recording and
+artifact destinations, response topics/cursors and cancellation. No global ID
+uniqueness rule is added. Sessions owns response ordering and logical identity;
+Recordings owns canonical Factory Events/replay; Events owns source-native
+observations. Prepared values and scoped bindings cannot unify these authorities
+or share mutable definition/Net/request state.
+
+| Witness | Layer/boundary/dependencies | Guarantee and limit | Owning gate |
+| --- | --- | --- | --- |
+| TestRuntimeRootActivationUnwindsFailedStartAndCanRetry, factory_runtime/wire/runtime_activation_test.go:256 | Unit, direct Root, controlled activation/cleanup, parallel test-owned state | Activation failure, one unwind, Observe ErrNotRunning, retry. Not real startup/full authority. | T14-U03; T15-F03 |
+| TestRuntimeRootFailedCleanupRemainsExplicitlyRetryable, same:294 | Unit, controlled Close failure | No live state, conflict while pending, failed/successful Deactivate, STOPPED and three Close calls. | T14-U03; T15-F03 |
+| TestRootProcessStartFailureThenRetrySucceedsWithoutLiveSession, T13 #2724/process_start_retry_test.go:30 | Functional, root.BuildProcess/Process.Execute, public live-list/detail, controlled APIServerStarter | Listener unwind/no ghost, same-process retry/linked session/shutdown. Retained head a367ac26bb3abb39e5ca89da3a5c9e375145e282 outside this pin/main; no T31 execution PASS. | T13/T15/T17-F03 |
+| TestFactoryResponseEventSequenceSurvivesSessionRuntimeReplacement, tests/functional/events/response_events/session_runtime_replace_test.go:54 | Functional, public open/invoke/replace/read, controlled command edge | Explicit session post-replacement sequences exceed previous max, no duplicates. Not failed replacement/artifact isolation. | T15/T17-F04 |
+
+Source rehearsal proves the proposal's obligations and source correspondence,
+not their execution after migration. T31/T15-U03 owns preparation/resolution
+unit ports; T23-U03 owns requiredness. T13/T15/T17-F03 owns failed start/no ghost/
+retry and failed cleanup/conflict/recovery, T15/T17-F04 owns replacement cursor
+ordering and failed-precommit prior-generation usability, and T15/T16/T17-F06
+owns concurrent definition/request/artifact/response attribution. Future
+functional scenarios use public CLI/API boundaries, isolated sessions and
+profiles/routes/streams/directories, controlled external effects, a reusable
+root process where safe, and parallel independent scenarios. Ordering remains
+inside the individual failure/retry or replacement scenario. I01 consumes a
+prebuilt artifact and P01 remains a dedicated load/stress gate.
+
+### Compatibility, migration and release
+
+No public API, CLI, event/persistence format, policy, export, generated file,
+production test, baseline or other task section changes here. Production
+`SessionBuildSpec` and all callers remain compatible until their owning
+migration. Preserve replay time versus process deadlines, configured overrides,
+retained/reused checkout disposition, permissions, redaction and artifact paths.
+
+Future graph registration belongs in focused Factory Runtime owner providers
+and canonical `pkg/wire`; regenerate Wire only in that authorized implementation
+and validate generated cleanliness/`wire-smoke`. No OpenAPI or client generation
+is needed for this documentation pair. Do not introduce counted package files
+or raise a ratchet baseline to make the proposal implementable.
+
+Contract merge releases only the next T31 design decision. Structural T31 needs
+both the merged pair and full T14 authority; T15 additionally needs completed
+T16/structural T31, and later Sessions cutover belongs to T17. FI-A1..A8 and
+F03/F04 remain unchanged. No execution, full T31 or project acceptance is marked
+passed by this map. If concrete implementation needs authority/types outside
+T31, preserve the coherent pushed draft and request the smallest cited operator
+delta rather than widening this design.
+
+Revert this focused documentation PR to roll back; runtime and stored data are
+unchanged. Author checks source correspondence, role/value lifetimes,
+`git diff --check` and `make lint pkg-file-count`, then pushes one PR and stops
+when CI starts with blocking feedback addressed. Independent review owns
+terminal required own-head CI and ordinary merge. Immediately before merge,
+review rebases onto current `origin/main`, refreshes the pin/excerpts if source
+changed and runs `make lint pkg-file-count`; no Wire regeneration is required
+unless separately authorized Wire work changes it.
 
 ## v1.1 unchanged public contracts and held proof
 
