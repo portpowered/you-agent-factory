@@ -2,64 +2,41 @@ package service
 
 import (
 	"context"
+	"sync"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
-	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
-	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
-// NewWired constructs Runtime Host with a host-backed SlotFactsProvider bound to
-// the nested leases owner. Construction remains inert and does not launch
-// subprocesses or start application lifecycle.
-func NewWired(
-	scopes runtimescopes.Service,
-	assets scopedassets.Service,
-	processLauncher modelseffects.HostProcessLauncher,
-	hostHTTP modelseffects.HostHTTPDoer,
-	hostClock modelseffects.HostClock,
-	hostLogger modelseffects.HostDiagnosticLogger,
-	hostMetrics modelseffects.HostMetricsRecorder,
-	options ...runtimehost.Options,
-) (runtimehost.Service, error) {
-	adapter := &slotFactsAdapter{}
-	leases, err := leaseswire.NewService(hostClock, adapter)
-	if err != nil {
-		return nil, err
+// SlotState owns keyed host handles, holder counts and idle timers.
+type SlotState struct {
+	mu               sync.Mutex
+	runtimeSlots     map[string]*supervisedRuntime
+	capacityHolders  map[string]int
+	idleUnloadTimers map[string]*idleUnload
+}
+
+func NewSlotState() *SlotState {
+	return &SlotState{
+		runtimeSlots:     make(map[string]*supervisedRuntime),
+		capacityHolders:  make(map[string]int),
+		idleUnloadTimers: make(map[string]*idleUnload),
 	}
-	host := New(
-		scopes,
-		assets,
-		leases,
-		processLauncher,
-		hostHTTP,
-		hostClock,
-		hostLogger,
-		hostMetrics,
-		options...,
-	).(*service)
-	adapter.host = host
-	return host, nil
 }
 
-type slotFactsAdapter struct {
-	host *service
+type slotFactsProvider struct {
+	*SlotState
+	scopes runtimescopes.Service
+	assets scopedassets.Service
 }
 
-func (adapter *slotFactsAdapter) SlotFacts(
-	ctx context.Context,
-	scope models.RuntimeScopeRef,
-	modelName string,
-) (modelseffects.SlotFacts, error) {
-	if adapter == nil || adapter.host == nil {
-		return modelseffects.SlotFacts{}, models.ErrHostRuntimeNotReady
-	}
-	return adapter.host.slotFacts(ctx, scope, modelName)
+func NewSlotFacts(scopes runtimescopes.Service, assets scopedassets.Service, state *SlotState) modelseffects.SlotFactsProvider {
+	return &slotFactsProvider{SlotState: state, scopes: scopes, assets: assets}
 }
 
-func (s *service) slotFacts(
+func (s *slotFactsProvider) SlotFacts(
 	ctx context.Context,
 	scope models.RuntimeScopeRef,
 	modelName string,

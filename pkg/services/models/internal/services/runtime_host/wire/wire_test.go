@@ -3,6 +3,7 @@ package wire_test
 import (
 	"context"
 	"errors"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	"net/http"
 	"strings"
 	"testing"
@@ -64,15 +65,7 @@ func TestNewServiceRequiresRuntimeHostDependencies(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service, err := runtimehostwire.NewService(
-				test.scopes,
-				test.assets,
-				test.launcher,
-				test.hostHTTP,
-				test.clock,
-				nil,
-				nil,
-			)
+			service, err := newRuntimeHostFixture(test.scopes, test.assets, test.launcher, test.hostHTTP, test.clock, nil, nil, models.AssetHostPlatform{}, nil, nil, nil, nil, 0, 0)
 			if test.wantInvalidDeps {
 				if service != nil || err == nil {
 					t.Fatalf("NewService = (%#v, %v), want dependency error", service, err)
@@ -163,4 +156,15 @@ func (recordingAssetsService) InspectRuntimeCache(
 	models.InspectModelAssetsRequest,
 ) (scopedassets.RuntimeCacheInspection, error) {
 	return scopedassets.RuntimeCacheInspection{}, models.ErrUnsupportedOperation
+}
+
+func newRuntimeHostFixture(scopes runtimescopes.Service, assets scopedassets.Service, launcher modelseffects.HostProcessLauncher, httpDoer modelseffects.HostHTTPDoer, clock modelseffects.HostClock, logger modelseffects.HostDiagnosticLogger, metrics modelseffects.HostMetricsRecorder, platform models.AssetHostPlatform, protocol modelseffects.HostProtocolNegotiator, compatibility modelseffects.HostCompatibilityChecker, resolve modelseffects.HostResolveSymlinks, evidence modelseffects.RuntimeEvidenceRecorder, idle time.Duration, maximum int) (runtimehost.Service, error) {
+	state := runtimehostwire.NewSlotState()
+	facts := runtimehostwire.NewSlotFacts(scopes, assets, state)
+	coordinator := runtimehostwire.NewSlotCoordinator(state, scopes, clock, logger, metrics, idle)
+	leases, err := runtimehostwire.NewLeases(clock, facts, coordinator)
+	if err != nil {
+		return nil, err
+	}
+	return runtimehostwire.NewService(scopes, assets, leases, state, launcher, httpDoer, clock, logger, metrics, platform, protocol, compatibility, resolve, evidence, idle, maximum)
 }

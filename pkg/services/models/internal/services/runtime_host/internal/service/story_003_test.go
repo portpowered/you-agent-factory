@@ -12,7 +12,6 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
-	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
@@ -22,13 +21,13 @@ func TestManagedLocalAIPreflightRejectsUnsupportedHostBeforeProcessStart(t *test
 
 	cases := []struct {
 		name      string
-		options   runtimehost.Options
+		options   internalservice.HostOptions
 		wantErr   error
 		wantClass models.HostFailureClass
 	}{
 		{
 			name: "missing platform",
-			options: runtimehost.Options{
+			options: internalservice.HostOptions{
 				CompatibilityChecker: &testCompatibilityChecker{},
 				ProtocolNegotiator:   &testProtocolNegotiator{},
 			},
@@ -37,7 +36,7 @@ func TestManagedLocalAIPreflightRejectsUnsupportedHostBeforeProcessStart(t *test
 		},
 		{
 			name: "unsupported accelerator policy",
-			options: runtimehost.Options{
+			options: internalservice.HostOptions{
 				Platform:             managedHostPlatform(),
 				CompatibilityChecker: &testCompatibilityChecker{err: errors.New("accelerator unavailable")},
 				ProtocolNegotiator:   &testProtocolNegotiator{},
@@ -47,7 +46,7 @@ func TestManagedLocalAIPreflightRejectsUnsupportedHostBeforeProcessStart(t *test
 		},
 		{
 			name: "missing pinned protocol effect",
-			options: runtimehost.Options{
+			options: internalservice.HostOptions{
 				Platform:             managedHostPlatform(),
 				CompatibilityChecker: &testCompatibilityChecker{},
 			},
@@ -157,7 +156,7 @@ func TestManagedLocalAIUsesPinnedProtocolAndKeepsPrivateRuntimeDetailsPrivate(t 
 		nil,
 		internalservice.SupervisorTestConfig{},
 		internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
+		internalservice.HostOptions{
 			Platform:             managedHostPlatform(),
 			CompatibilityChecker: &testCompatibilityChecker{},
 			ProtocolNegotiator:   protocol,
@@ -201,7 +200,7 @@ func TestManagedLocalAIProtocolMismatchStopsProcessAndRecordsTypedFailure(t *tes
 		nil,
 		internalservice.SupervisorTestConfig{},
 		internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
+		internalservice.HostOptions{
 			Platform:             managedHostPlatform(),
 			CompatibilityChecker: &testCompatibilityChecker{},
 			ProtocolNegotiator:   protocol,
@@ -255,7 +254,7 @@ func TestManagedLocalAIPassesPinnedBackendCachePathToProcess(t *testing.T) {
 	host := internalservice.NewWithHostTestConfig(
 		scopes, assets, launcher, http.DefaultClient, realHostClock{}, nil, nil,
 		internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
+		internalservice.HostOptions{
 			Platform:             managedHostPlatform(),
 			CompatibilityChecker: &testCompatibilityChecker{},
 			ProtocolNegotiator:   &testProtocolNegotiator{},
@@ -339,7 +338,7 @@ func TestManagedLocalAICrashRevokesCapacityAndRecoversWithFreshProcess(t *testin
 			},
 		},
 		internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
+		internalservice.HostOptions{
 			Platform:             managedHostPlatform(),
 			CompatibilityChecker: &testCompatibilityChecker{},
 			ProtocolNegotiator:   protocol,
@@ -423,7 +422,7 @@ func TestManagedLocalAIRetentionUsesResolvedLoadPolicyAndInjectedClock(t *testin
 				nil,
 				internalservice.SupervisorTestConfig{},
 				internalservice.HostPolicyTestConfig{IdleUnloadAfter: time.Hour},
-				runtimehost.Options{
+				internalservice.HostOptions{
 					Platform:             managedHostPlatform(),
 					CompatibilityChecker: &testCompatibilityChecker{},
 					ProtocolNegotiator:   &testProtocolNegotiator{},
@@ -499,7 +498,7 @@ func TestManagedLocalAIUsesOperatorOverlayForPinnedIdentity(t *testing.T) {
 		nil,
 		internalservice.SupervisorTestConfig{},
 		internalservice.HostPolicyTestConfig{IdleUnloadAfter: time.Hour},
-		runtimehost.Options{
+		internalservice.HostOptions{
 			Platform:             managedHostPlatform(),
 			CompatibilityChecker: &testCompatibilityChecker{},
 			ProtocolNegotiator:   protocol,
@@ -851,7 +850,7 @@ func TestEnsureModelHostBoundsBlockedLoadModelNegotiation(t *testing.T) {
 		nil,
 		internalservice.SupervisorTestConfig{ReadinessTimeout: 50 * time.Millisecond},
 		internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
+		internalservice.HostOptions{
 			Platform:             managedHostPlatform(),
 			CompatibilityChecker: &testCompatibilityChecker{},
 			ProtocolNegotiator:   negotiator,

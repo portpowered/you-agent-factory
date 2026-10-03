@@ -230,106 +230,75 @@ func TestStopModelHostRejectsActiveCapacityHolder(t *testing.T) {
 
 func TestIdleUnloadStopsRuntimeAfterLastCapacityReleased(t *testing.T) {
 	t.Parallel()
-
-	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(healthServer.Close)
-
-	var stopCount atomic.Int32
-	cacheDirectory := t.TempDir()
-	writeCacheFixture(t, cacheDirectory, true)
-	scopes := newScopes(t, "idle-unload")
-	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
-	service := newRuntimeHostWithPolicy(
-		t,
-		scopes,
-		&fakeProcessLauncher{
-			newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
-				process := newFakeManagedProcess(healthServer.URL, nil)
-				process.stopFn = func() error {
-					stopCount.Add(1)
-					return process.defaultStop()
-				}
-				return process
-			},
-		},
-		internalservice.HostPolicyTestConfig{IdleUnloadAfter: 40 * time.Millisecond},
-	)
-
-	_, err := service.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
-		Scope: ref,
-		Name:  "OMNIVOICE_Q4_K_M",
-	})
+	host, clock, process, ref := newControlledIdleHost(t)
+	acquired, err := host.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M", Holder: "worker-a"})
 	if err != nil {
-		t.Fatalf("EnsureModelHost: %v", err)
+		t.Fatalf("acquire: %v", err)
 	}
-	internalservice.AcquireSlotCapacity(service, ref, "OMNIVOICE_Q4_K_M")
-	cfg := supervisedRuntimeConfig()
-	internalservice.ReleaseSlotCapacity(service, ref, "OMNIVOICE_Q4_K_M", &cfg)
-
-	deadline := time.Now().Add(2 * time.Second)
-	for stopCount.Load() == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for idle unload")
-		}
-		time.Sleep(10 * time.Millisecond)
+	if _, err := host.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{Scope: ref, Lease: acquired.Lease.Lease}); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	if clock.timerCount() != 1 {
+		t.Fatalf("idle timers = %d, want 1", clock.timerCount())
+	}
+	clock.fireAll()
+	awaitSignal(t, process.stopped, "idle timer did not stop selected process")
+	inspected, err := host.InspectModelHost(context.Background(), models.InspectModelHostRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"})
+	if err != nil || inspected.Host.LifecycleState != models.LifecycleStateInstalled {
+		t.Fatalf("after idle unload = %#v, %v", inspected, err)
 	}
 }
 
 func TestIdleUnloadDoesNotStopActiveCapacityHolder(t *testing.T) {
 	t.Parallel()
-
-	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(healthServer.Close)
-
-	var stopCount atomic.Int32
-	cacheDirectory := t.TempDir()
-	writeCacheFixture(t, cacheDirectory, true)
-	scopes := newScopes(t, "idle-active-holder")
-	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
-	service := newRuntimeHostWithPolicy(
-		t,
-		scopes,
-		&fakeProcessLauncher{
-			newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
-				process := newFakeManagedProcess(healthServer.URL, nil)
-				process.stopFn = func() error {
-					stopCount.Add(1)
-					return process.defaultStop()
-				}
-				return process
-			},
-		},
-		internalservice.HostPolicyTestConfig{IdleUnloadAfter: 40 * time.Millisecond},
-	)
-
-	_, err := service.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
-		Scope: ref,
-		Name:  "OMNIVOICE_Q4_K_M",
-	})
+	host, clock, process, ref := newControlledIdleHost(t)
+	acquire := models.AcquireModelLeaseRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M", Holder: "worker-a"}
+	acquired, err := host.AcquireModelLease(context.Background(), acquire)
 	if err != nil {
-		t.Fatalf("EnsureModelHost: %v", err)
+		t.Fatalf("acquire: %v", err)
 	}
-	internalservice.AcquireSlotCapacity(service, ref, "OMNIVOICE_Q4_K_M")
-
-	time.Sleep(120 * time.Millisecond)
-	if stopCount.Load() != 0 {
-		t.Fatalf("stop count = %d, want 0 while holder active", stopCount.Load())
+	if _, err := host.ReleaseModelLease(context.Background(), models.ReleaseModelLeaseRequest{Scope: ref, Lease: acquired.Lease.Lease}); err != nil {
+		t.Fatalf("release: %v", err)
 	}
+	if clock.timerCount() != 1 {
+		t.Fatalf("idle timers = %d, want 1", clock.timerCount())
+	}
+	if _, err := host.AcquireModelLease(context.Background(), acquire); err != nil {
+		t.Fatalf("reacquire: %v", err)
+	}
+	if clock.timerCount() != 0 {
+		t.Fatalf("reacquire did not cancel idle timer")
+	}
+	clock.fireAll()
+	select {
+	case <-process.stopped:
+		t.Fatal("active process stopped")
+	default:
+	}
+	inspected, err := host.InspectModelHost(context.Background(), models.InspectModelHostRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"})
+	if err != nil || inspected.Host.ReadinessState != models.ReadinessStateReady {
+		t.Fatalf("active host = %#v, %v", inspected, err)
+	}
+}
 
-	inspected, err := service.InspectModelHost(context.Background(), models.InspectModelHostRequest{
-		Scope: ref,
-		Name:  "OMNIVOICE_Q4_K_M",
-	})
+func newControlledIdleHost(t *testing.T) (runtimehost.Service, *deterministicHostClock, *controlledManagedProcess, models.RuntimeScopeRef) {
+	t.Helper()
+	clock := newDeterministicHostClock()
+	cache := t.TempDir()
+	writeCacheFixture(t, cache, true)
+	scopes := newScopes(t, t.Name())
+	ref := openScope(t, scopes, cache, supervisedRuntimeConfig())
+	launcher := &controlledProcessLauncher{}
+	host, err := internalservice.NewWiredWithSupervisorConfig(scopes, mustAssetsService(t, scopes), launcher, http.DefaultClient, clock, nil, nil,
+		internalservice.SupervisorTestConfig{HealthChecker: alwaysHealthyChecker{}}, internalservice.HostPolicyTestConfig{IdleUnloadAfter: time.Hour})
 	if err != nil {
-		t.Fatalf("InspectModelHost: %v", err)
+		t.Fatalf("construct host: %v", err)
 	}
-	if inspected.Host.ReadinessState != models.ReadinessStateReady {
-		t.Fatalf("readiness = %s, want READY", inspected.Host.ReadinessState)
+	t.Cleanup(func() { _ = internalservice.ShutdownHost(context.Background(), host) })
+	if _, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{Scope: ref, Name: "OMNIVOICE_Q4_K_M"}); err != nil {
+		t.Fatalf("ensure: %v", err)
 	}
+	return host, clock, launcher.process(0), ref
 }
 
 func TestResourcePressureEvictsIdleRuntime(t *testing.T) {

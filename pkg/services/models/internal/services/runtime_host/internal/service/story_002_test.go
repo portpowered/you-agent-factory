@@ -13,7 +13,6 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
-	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 )
 
@@ -45,7 +44,7 @@ func TestManagedBuiltinLLMPropagatesVerifiedProjectorPath(t *testing.T) {
 	host := internalservice.NewWithHostTestConfig(
 		scopes, assets, launcher, http.DefaultClient, realHostClock{}, nil, nil,
 		internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
+		internalservice.HostOptions{
 			Platform:             managedHostPlatform(),
 			CompatibilityChecker: compatibility,
 			ProtocolNegotiator:   protocol,
@@ -92,7 +91,7 @@ func TestResolvedHostConfigurationHandoffReachesHostAndProtocolExactly(t *testin
 	host := internalservice.NewWithHostTestConfig(
 		scopes, assets, launcher, http.DefaultClient, realHostClock{}, nil, nil,
 		internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
+		internalservice.HostOptions{
 			Platform:             managedHostPlatform(),
 			CompatibilityChecker: compatibility,
 			ProtocolNegotiator:   protocol,
@@ -180,7 +179,7 @@ func TestResolvedHostConfigurationHandoffRejectsEscapingModelSymlinkBeforeEffect
 	host := internalservice.NewWithHostTestConfig(
 		scopes, assets, launcher, http.DefaultClient, realHostClock{}, nil, nil,
 		internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
+		internalservice.HostOptions{
 			Platform:             managedHostPlatform(),
 			CompatibilityChecker: compatibility,
 			ProtocolNegotiator:   protocol,
@@ -280,7 +279,7 @@ func TestManagedBuiltinLLMRejectsInvalidProjectorBeforeHostEffects(t *testing.T)
 			host := internalservice.NewWithHostTestConfig(
 				scopes, assets, launcher, http.DefaultClient, realHostClock{}, nil, nil,
 				internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{},
-				runtimehost.Options{
+				internalservice.HostOptions{
 					Platform:             managedHostPlatform(),
 					CompatibilityChecker: &testCompatibilityChecker{},
 					ProtocolNegotiator:   protocol,
@@ -335,7 +334,7 @@ func TestOperatorLLMSourceOverrideUsesGenericVerifiedModelPath(t *testing.T) {
 	host := internalservice.NewWithHostTestConfig(
 		scopes, assets, launcher, http.DefaultClient, realHostClock{}, nil, nil,
 		internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
+		internalservice.HostOptions{
 			Platform:             managedHostPlatform(),
 			CompatibilityChecker: &testCompatibilityChecker{},
 			ProtocolNegotiator:   protocol,

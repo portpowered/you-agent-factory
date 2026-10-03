@@ -21,7 +21,7 @@ func TestConcurrentAcquireBarrierRespectsConfiguredCapacity(t *testing.T) {
 	const capacity = 4
 
 	scope := mustRuntimeScopeRef(t, "leases-race-barrier")
-	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: capacity})
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: capacity}, noopCoordinator{})
 	request := models.AcquireModelLeaseRequest{
 		Scope: scope,
 		Name:  "local-model",
@@ -79,7 +79,7 @@ func TestConcurrentAcquireReleasePreservesCapacityAndUniqueIdentities(t *testing
 	)
 
 	scope := mustRuntimeScopeRef(t, "leases-race-acquire-release")
-	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: capacity})
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: capacity}, noopCoordinator{})
 	request := models.AcquireModelLeaseRequest{
 		Scope: scope,
 		Name:  "local-model",
@@ -160,7 +160,7 @@ func TestConcurrentAcquireReleaseDoesNotStrandCapacity(t *testing.T) {
 	)
 
 	scope := mustRuntimeScopeRef(t, "leases-race-no-strand")
-	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: capacity})
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: capacity}, noopCoordinator{})
 	request := models.AcquireModelLeaseRequest{
 		Scope: scope,
 		Name:  "local-model",
@@ -225,7 +225,7 @@ func TestConcurrentCancelDuringAcquireDoesNotConsumeCapacity(t *testing.T) {
 	)
 
 	scope := mustRuntimeScopeRef(t, "leases-race-cancel")
-	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: capacity})
+	service := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: capacity}, noopCoordinator{})
 	request := models.AcquireModelLeaseRequest{
 		Scope: scope,
 		Name:  "local-model",
@@ -310,7 +310,7 @@ func TestConcurrentExpiryGetAndAcquireReclaimsCapacity(t *testing.T) {
 	start := time.Date(2026, time.July, 27, 14, 0, 0, 0, time.UTC)
 	clock := &mutexAdvanceableHostClock{now: start}
 	scope := mustRuntimeScopeRef(t, "leases-race-expiry")
-	service := internalservice.New(clock, readySlotFacts{capacity: capacity})
+	service := internalservice.New(clock, readySlotFacts{capacity: capacity}, noopCoordinator{})
 	request := models.AcquireModelLeaseRequest{
 		Scope: scope,
 		Name:  "local-model",
@@ -372,7 +372,7 @@ func TestConcurrentAcquireDuringLazyExpiryHonoursCapacity(t *testing.T) {
 	start := time.Date(2026, time.July, 27, 15, 0, 0, 0, time.UTC)
 	clock := &mutexAdvanceableHostClock{now: start}
 	scope := mustRuntimeScopeRef(t, "leases-race-lazy-expiry")
-	service := internalservice.New(clock, readySlotFacts{capacity: capacity})
+	service := internalservice.New(clock, readySlotFacts{capacity: capacity}, noopCoordinator{})
 	request := models.AcquireModelLeaseRequest{
 		Scope: scope,
 		Name:  "local-model",

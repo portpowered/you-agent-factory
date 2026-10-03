@@ -108,14 +108,7 @@ type SlotCapacityCoordinator interface {
 	OnLeaseCapacityReleased(models.RuntimeScopeRef, string)
 }
 
-// CoordinatorBindable accepts a Runtime Host capacity coordinator after
-// construction so wire can bind holder-aware cleanup without a cycle.
-type CoordinatorBindable interface {
-	BindSlotCapacityCoordinator(SlotCapacityCoordinator)
-}
-
-// UnconfiguredSlotFacts reports runtime-not-ready until Runtime Host wires a
-// live facts adapter during construction.
+// UnconfiguredSlotFacts reports runtime-not-ready for controlled fixtures.
 type UnconfiguredSlotFacts struct{}
 
 func (UnconfiguredSlotFacts) SlotFacts(

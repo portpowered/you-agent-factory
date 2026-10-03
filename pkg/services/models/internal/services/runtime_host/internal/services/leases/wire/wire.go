@@ -17,6 +17,7 @@ import (
 func NewService(
 	hostClock modelseffects.HostClock,
 	slotFacts modelseffects.SlotFactsProvider,
+	coordinator modelseffects.SlotCapacityCoordinator,
 ) (hostleases.Service, error) {
 	if isNilDependency(hostClock) {
 		return nil, fmt.Errorf("%w: model host clock is required", models.ErrInvalidHostDependencies)
@@ -24,15 +25,7 @@ func NewService(
 	if isNilDependency(slotFacts) {
 		return nil, fmt.Errorf("%w: model host slot facts provider is required", models.ErrInvalidHostDependencies)
 	}
-	return internalservice.New(hostClock, slotFacts), nil
-}
-
-// BindCoordinator attaches holder-aware Runtime Host cleanup after both
-// private services have been constructed.
-func BindCoordinator(leases hostleases.Service, coordinator modelseffects.SlotCapacityCoordinator) {
-	if bindable, ok := leases.(modelseffects.CoordinatorBindable); ok {
-		bindable.BindSlotCapacityCoordinator(coordinator)
-	}
+	return internalservice.New(hostClock, slotFacts, coordinator), nil
 }
 
 func isNilDependency(value any) bool {

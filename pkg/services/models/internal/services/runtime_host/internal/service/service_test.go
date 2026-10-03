@@ -21,8 +21,6 @@ import (
 	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
-	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
-	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
@@ -371,25 +369,7 @@ func newTestRuntimeHostWithScopesAndClock(
 	clock modelseffects.HostClock,
 ) runtimehost.Service {
 	t.Helper()
-	return internalservice.New(
-		scopes,
-		mustAssetsService(t, scopes),
-		mustLeasesService(t, clock),
-		launcher,
-		http.DefaultClient,
-		clock,
-		nil,
-		nil,
-	)
-}
-
-func mustLeasesService(t *testing.T, clock modelseffects.HostClock) hostleases.Service {
-	t.Helper()
-	leases, err := leaseswire.NewService(clock, modelseffects.UnconfiguredSlotFacts{})
-	if err != nil {
-		t.Fatalf("construct leases: %v", err)
-	}
-	return leases
+	return internalservice.NewWithHostTestConfig(scopes, mustAssetsService(t, scopes), launcher, http.DefaultClient, clock, nil, nil, internalservice.SupervisorTestConfig{}, internalservice.HostPolicyTestConfig{})
 }
 
 func mustAssetsService(t *testing.T, scopes runtimescopes.Service) scopedassets.Service {
@@ -660,7 +640,7 @@ func TestRuntimeHostPropagatesCrashSnapshotAndCanRestartTheSlot(t *testing.T) {
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
 	host := newManagedDiagnosticHost(t, scopes, launcher, logger,
 		internalservice.SupervisorTestConfig{HealthChecker: alwaysHealthyChecker{}},
-		runtimehost.Options{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
+		internalservice.HostOptions{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
 
 	ctx := modelseffects.WithRuntimeCorrelation(context.Background(), "managed-crash-42")
 	if _, err := host.EnsureModelHost(ctx, models.EnsureModelHostRequest{
@@ -715,7 +695,7 @@ func TestRuntimeHostProtocolFailureRetainsProcessSnapshotAndStableFailure(t *tes
 	scopes := newScopes(t, "managed-diagnostic-protocol")
 	ref := openScope(t, scopes, cacheDirectory, managedLocalAIConfig(models.LoadPolicyOnDemand))
 	host := newManagedDiagnosticHost(t, scopes, launcher, logger,
-		internalservice.SupervisorTestConfig{}, runtimehost.Options{
+		internalservice.SupervisorTestConfig{}, internalservice.HostOptions{
 			Platform:             managedHostPlatform(),
 			CompatibilityChecker: &testCompatibilityChecker{},
 			ProtocolNegotiator: &testProtocolNegotiator{result: modelseffects.HostProtocolNegotiationResult{
@@ -760,7 +740,7 @@ func TestRuntimeHostTimeoutProjectsSnapshotWithoutChangingFailureOrOutput(t *tes
 		internalservice.SupervisorTestConfig{
 			ReadinessTimeout: 40 * time.Millisecond, HealthCheckInterval: 5 * time.Millisecond,
 			HealthChecker: neverReadyHostChecker{},
-		}, runtimehost.Options{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
+		}, internalservice.HostOptions{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
 
 	_, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
 		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
@@ -797,7 +777,7 @@ func TestRuntimeHostForcedStopEmitsOneStopDiagnosticWithoutCrashDuplicate(t *tes
 	scopes := newScopes(t, "managed-diagnostic-stop")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
 	host := newManagedDiagnosticHost(t, scopes, launcher, logger,
-		internalservice.SupervisorTestConfig{HealthChecker: alwaysHealthyChecker{}}, runtimehost.Options{})
+		internalservice.SupervisorTestConfig{HealthChecker: alwaysHealthyChecker{}}, internalservice.HostOptions{})
 
 	if _, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
 		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
@@ -842,7 +822,7 @@ func TestRuntimeHostIgnoresDefectiveOptionalDiagnosticSource(t *testing.T) {
 		internalservice.SupervisorTestConfig{
 			ReadinessTimeout: 40 * time.Millisecond, HealthCheckInterval: 5 * time.Millisecond,
 			HealthChecker: neverReadyHostChecker{},
-		}, runtimehost.Options{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
+		}, internalservice.HostOptions{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
 
 	_, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
 		Scope: ref, Name: "OMNIVOICE_Q4_K_M",
@@ -880,7 +860,7 @@ func TestRuntimeHostCancellationProjectsSnapshotAndReleasesProcessOnce(t *testin
 		internalservice.SupervisorTestConfig{
 			ReadinessTimeout: time.Second, HealthCheckInterval: 25 * time.Millisecond,
 			HealthChecker: neverReadyHostChecker{},
-		}, runtimehost.Options{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
+		}, internalservice.HostOptions{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
@@ -934,7 +914,7 @@ func TestRuntimeHostIgnoresNotReadyOptionalDiagnosticSource(t *testing.T) {
 		internalservice.SupervisorTestConfig{
 			ReadinessTimeout: 40 * time.Millisecond, HealthCheckInterval: 5 * time.Millisecond,
 			HealthChecker: neverReadyHostChecker{},
-		}, runtimehost.Options{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
+		}, internalservice.HostOptions{RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink)})
 
 	_, err := host.EnsureModelHost(context.Background(), models.EnsureModelHostRequest{
 		Scope: ref, Name: "OMNIVOICE_Q4_K_M",

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
@@ -14,25 +13,20 @@ import (
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
-	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
 type service struct {
-	scopes            runtimescopes.Service
-	assets            scopedassets.Service
-	leases            hostleases.Service
-	processLauncher   modelseffects.HostProcessLauncher
-	hostHTTP          modelseffects.HostHTTPDoer
-	hostClock         modelseffects.HostClock
-	hostLogger        modelseffects.HostDiagnosticLogger
-	hostMetrics       modelseffects.HostMetricsRecorder
-	supervisor        supervisorSettings
-	mu                sync.Mutex
-	runtimeSlots      map[string]*supervisedRuntime
-	capacityHolders   map[string]int
-	idleUnloadTimers  map[string]*idleUnload
-	idleUnloadAfter   time.Duration
+	scopes          runtimescopes.Service
+	assets          scopedassets.Service
+	leases          hostleases.Service
+	processLauncher modelseffects.HostProcessLauncher
+	hostHTTP        modelseffects.HostHTTPDoer
+	hostClock       modelseffects.HostClock
+	hostLogger      modelseffects.HostDiagnosticLogger
+	hostMetrics     modelseffects.HostMetricsRecorder
+	supervisor      supervisorSettings
+	*SlotState
 	maxLoadedRuntimes int
 }
 
@@ -42,28 +36,30 @@ type idleUnload struct {
 }
 
 var _ runtimehost.Service = (*service)(nil)
-var _ modelseffects.SlotCapacityCoordinator = (*service)(nil)
 
-// New constructs an inert Runtime Host that validates and retains injected
+// New constructs an inert Runtime Host that retains injected
 // supervision effects without launching subprocesses or starting lifecycle.
 func New(
 	scopes runtimescopes.Service,
 	assets scopedassets.Service,
 	leases hostleases.Service,
+	state *SlotState,
 	processLauncher modelseffects.HostProcessLauncher,
 	hostHTTP modelseffects.HostHTTPDoer,
 	hostClock modelseffects.HostClock,
 	hostLogger modelseffects.HostDiagnosticLogger,
 	hostMetrics modelseffects.HostMetricsRecorder,
-	options ...runtimehost.Options,
+	platform models.AssetHostPlatform,
+	protocol modelseffects.HostProtocolNegotiator,
+	compatibility modelseffects.HostCompatibilityChecker,
+	resolveSymlinks modelseffects.HostResolveSymlinks,
+	evidence modelseffects.RuntimeEvidenceRecorder,
+	idleUnloadAfter time.Duration,
+	maxLoadedRuntimes int,
 ) runtimehost.Service {
-	hostOptions := runtimehost.Options{}
-	if len(options) > 0 {
-		hostOptions = options[0]
-	}
 	diagnostics := hostDiagnostics{
 		logger: hostLogger, metrics: hostMetrics,
-		evidence: hostOptions.RuntimeEvidence,
+		evidence: evidence,
 	}
 	supervisor := supervisorSettings{
 		ReadinessTimeout:     DefaultReadinessTimeout,
@@ -71,10 +67,10 @@ func New(
 		HealthCheckPath:      DefaultHealthCheckPath,
 		ProcessLauncher:      processLauncher,
 		HealthChecker:        HTTPHealthChecker{Client: hostHTTP, Path: DefaultHealthCheckPath},
-		ProtocolNegotiator:   hostOptions.ProtocolNegotiator,
-		CompatibilityChecker: hostOptions.CompatibilityChecker,
-		ResolveSymlinks:      hostOptions.ResolveSymlinks,
-		Platform:             hostOptions.Platform,
+		ProtocolNegotiator:   protocol,
+		CompatibilityChecker: compatibility,
+		ResolveSymlinks:      resolveSymlinks,
+		Platform:             platform,
 		Clock:                hostClock,
 		ServerStartBuilder:   defaultServerStartBuilder,
 		Diagnostics:          diagnostics,
@@ -89,17 +85,10 @@ func New(
 		hostLogger:        hostLogger,
 		hostMetrics:       hostMetrics,
 		supervisor:        supervisor,
-		runtimeSlots:      make(map[string]*supervisedRuntime),
-		capacityHolders:   make(map[string]int),
-		idleUnloadTimers:  make(map[string]*idleUnload),
-		idleUnloadAfter:   0,
-		maxLoadedRuntimes: 0,
+		SlotState:         state,
+		maxLoadedRuntimes: maxLoadedRuntimes,
 	}
-	s.idleUnloadAfter, s.maxLoadedRuntimes = normalizeHostPolicy(
-		hostOptions.IdleUnloadAfter,
-		hostOptions.MaxLoadedRuntimes,
-	)
-	leaseswire.BindCoordinator(leases, s)
+	_, s.maxLoadedRuntimes = normalizeHostPolicy(idleUnloadAfter, maxLoadedRuntimes)
 	return s
 }
 
@@ -496,59 +485,13 @@ func (s *service) unloadRuntime(
 	return nil
 }
 
-func (s *service) cancelIdleUnload(slotKey string) {
+func (s *SlotState) cancelIdleUnload(slotKey string) {
 	s.mu.Lock()
 	s.cancelIdleUnloadLocked(slotKey)
 	s.mu.Unlock()
 }
 
-// OnLeaseCapacityAcquired records one active holder for idle-unload policy.
-func (s *service) OnLeaseCapacityAcquired(
-	scope models.RuntimeScopeRef,
-	modelName string,
-) {
-	slotKey := runtimeSlotKey(scope, modelName)
-	s.mu.Lock()
-	s.acquireSlotCapacityLocked(slotKey)
-	s.mu.Unlock()
-}
-
-// OnLeaseCapacityReleased frees one holder and may schedule idle unload.
-func (s *service) OnLeaseCapacityReleased(
-	scope models.RuntimeScopeRef,
-	modelName string,
-) {
-	binding, err := s.scopes.Resolve(runtimescopes.Reference(scope.String()))
-	if err != nil {
-		return
-	}
-	s.releaseSlotCapacityWithOverlays(scope, modelName, binding.RuntimeConfig(), binding.OperatorModels)
-}
-
-func (s *service) releaseSlotCapacity(
-	scope models.RuntimeScopeRef,
-	modelName string,
-	runtimeCfg *models.RuntimeConfig,
-) {
-	s.releaseSlotCapacityWithOverlays(scope, modelName, runtimeCfg, nil)
-}
-
-func (s *service) releaseSlotCapacityWithOverlays(
-	scope models.RuntimeScopeRef,
-	modelName string,
-	runtimeCfg *models.RuntimeConfig,
-	overlays map[string]models.ModelOverlay,
-) {
-	slotKey := runtimeSlotKey(scope, modelName)
-	identity := supervisedIdentityForModel(runtimeCfg, overlays, modelName)
-
-	s.mu.Lock()
-	s.releaseSlotCapacityLocked(slotKey)
-	s.scheduleIdleUnloadIfIdle(slotKey, identity)
-	s.mu.Unlock()
-}
-
-func (s *service) overlaySupervisedReadiness(
+func (s *SlotState) overlaySupervisedReadiness(
 	binding models.RuntimeBinding,
 	scope models.RuntimeScopeRef,
 	modelName string,
@@ -567,7 +510,7 @@ func (s *service) overlaySupervisedReadiness(
 	return slot.hostSnapshotOverlay(scope, modelName, snapshot)
 }
 
-func (s *service) peekRuntimeSlot(slotKey string) *supervisedRuntime {
+func (s *SlotState) peekRuntimeSlot(slotKey string) *supervisedRuntime {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.runtimeSlots[slotKey]

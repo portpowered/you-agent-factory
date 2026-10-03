@@ -15,7 +15,7 @@ func TestClaimedInvocationRetainsCapacityPastDetachedExpiry(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	clock := &mutexAdvanceableHostClock{now: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC)}
-	svc := internalservice.New(clock, readySlotFacts{capacity: 1})
+	svc := internalservice.New(clock, readySlotFacts{capacity: 1}, noopCoordinator{})
 	scope := mustRuntimeScopeRef(t, "claimed-invocation")
 	acquired, err := svc.AcquireModelLease(ctx, models.AcquireModelLeaseRequest{Scope: scope, Name: "model", Holder: "worker"})
 	if err != nil {

@@ -369,7 +369,7 @@ func TestEnsureAndStopModelHostEmitCorrelatedBoundedLifecycleEvidence(t *testing
 		nil,
 		internalservice.SupervisorTestConfig{},
 		internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
+		internalservice.HostOptions{
 			RuntimeEvidence: modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
 		},
 	)
@@ -561,7 +561,7 @@ func TestManagedLocalAIPreflightRecordsProtocolStageEvidence(t *testing.T) {
 		nil,
 		internalservice.SupervisorTestConfig{},
 		internalservice.HostPolicyTestConfig{},
-		runtimehost.Options{
+		internalservice.HostOptions{
 			Platform:             managedHostPlatform(),
 			CompatibilityChecker: &testCompatibilityChecker{},
 			RuntimeEvidence:      modelseffects.NewOrderedRuntimeEvidenceRecorder(sink),
@@ -720,7 +720,7 @@ func newManagedDiagnosticHost(
 	launcher *runtimeDiagnosticLauncher,
 	logger *signalingDiagnosticsLogger,
 	supervisorConfig internalservice.SupervisorTestConfig,
-	options runtimehost.Options,
+	options internalservice.HostOptions,
 ) runtimehost.Service {
 	t.Helper()
 	host := internalservice.NewWithHostTestConfig(

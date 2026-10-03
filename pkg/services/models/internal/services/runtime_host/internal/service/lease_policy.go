@@ -7,7 +7,65 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
+
+type slotCoordinator struct {
+	*SlotState
+	scopes          runtimescopes.Service
+	hostClock       modelseffects.HostClock
+	diagnostics     hostDiagnostics
+	idleUnloadAfter time.Duration
+}
+
+var _ modelseffects.SlotCapacityCoordinator = (*slotCoordinator)(nil)
+
+func NewSlotCoordinator(state *SlotState, scopes runtimescopes.Service, clock modelseffects.HostClock, logger modelseffects.HostDiagnosticLogger, metrics modelseffects.HostMetricsRecorder, idleUnloadAfter time.Duration) modelseffects.SlotCapacityCoordinator {
+	idleUnloadAfter, _ = normalizeHostPolicy(idleUnloadAfter, 0)
+	return &slotCoordinator{
+		SlotState: state, scopes: scopes, hostClock: clock,
+		diagnostics:     hostDiagnostics{logger: logger, metrics: metrics},
+		idleUnloadAfter: idleUnloadAfter,
+	}
+}
+
+// OnLeaseCapacityAcquired records one active holder for idle-unload policy.
+func (s *slotCoordinator) OnLeaseCapacityAcquired(
+	scope models.RuntimeScopeRef,
+	modelName string,
+) {
+	slotKey := runtimeSlotKey(scope, modelName)
+	s.mu.Lock()
+	s.acquireSlotCapacityLocked(slotKey)
+	s.mu.Unlock()
+}
+
+// OnLeaseCapacityReleased frees one holder and may schedule idle unload.
+func (s *slotCoordinator) OnLeaseCapacityReleased(
+	scope models.RuntimeScopeRef,
+	modelName string,
+) {
+	binding, err := s.scopes.Resolve(runtimescopes.Reference(scope.String()))
+	if err != nil {
+		return
+	}
+	s.releaseSlotCapacityWithOverlays(scope, modelName, binding.RuntimeConfig(), binding.OperatorModels)
+}
+
+func (s *slotCoordinator) releaseSlotCapacityWithOverlays(
+	scope models.RuntimeScopeRef,
+	modelName string,
+	runtimeCfg *models.RuntimeConfig,
+	overlays map[string]models.ModelOverlay,
+) {
+	slotKey := runtimeSlotKey(scope, modelName)
+	identity := supervisedIdentityForModel(runtimeCfg, overlays, modelName)
+
+	s.mu.Lock()
+	s.releaseSlotCapacityLocked(slotKey)
+	s.scheduleIdleUnloadIfIdle(slotKey, identity)
+	s.mu.Unlock()
+}
 
 func normalizeHostPolicy(idleUnloadAfter time.Duration, maxLoadedRuntimes int) (time.Duration, int) {
 	if idleUnloadAfter < 0 {
@@ -19,16 +77,16 @@ func normalizeHostPolicy(idleUnloadAfter time.Duration, maxLoadedRuntimes int) (
 	return idleUnloadAfter, maxLoadedRuntimes
 }
 
-func (s *service) slotHasActiveHoldersLocked(slotKey string) bool {
+func (s *SlotState) slotHasActiveHoldersLocked(slotKey string) bool {
 	return s.capacityHolders[slotKey] > 0
 }
 
-func (s *service) acquireSlotCapacityLocked(slotKey string) {
+func (s *SlotState) acquireSlotCapacityLocked(slotKey string) {
 	s.capacityHolders[slotKey]++
 	s.cancelIdleUnloadLocked(slotKey)
 }
 
-func (s *service) releaseSlotCapacityLocked(slotKey string) {
+func (s *SlotState) releaseSlotCapacityLocked(slotKey string) {
 	count := s.capacityHolders[slotKey]
 	if count <= 1 {
 		delete(s.capacityHolders, slotKey)
@@ -37,7 +95,7 @@ func (s *service) releaseSlotCapacityLocked(slotKey string) {
 	s.capacityHolders[slotKey] = count - 1
 }
 
-func (s *service) cancelIdleUnloadLocked(slotKey string) {
+func (s *SlotState) cancelIdleUnloadLocked(slotKey string) {
 	if timer, ok := s.idleUnloadTimers[slotKey]; ok {
 		if timer != nil && timer.timer != nil {
 			timer.timer.Stop()
@@ -49,7 +107,7 @@ func (s *service) cancelIdleUnloadLocked(slotKey string) {
 	}
 }
 
-func (s *service) scheduleIdleUnloadIfIdle(
+func (s *slotCoordinator) scheduleIdleUnloadIfIdle(
 	slotKey string,
 	identity supervisedIdentity,
 ) {
@@ -60,9 +118,6 @@ func (s *service) scheduleIdleUnloadIfIdle(
 		return
 	}
 	if s.slotHasActiveHoldersLocked(slotKey) {
-		return
-	}
-	if s.hostClock == nil {
 		return
 	}
 	s.cancelIdleUnloadLocked(slotKey)
@@ -76,7 +131,7 @@ func (s *service) scheduleIdleUnloadIfIdle(
 	go s.awaitIdleUnload(identityCopy, slotKey, entry)
 }
 
-func (s *service) awaitIdleUnload(
+func (s *slotCoordinator) awaitIdleUnload(
 	identity supervisedIdentity,
 	slotKey string,
 	entry *idleUnload,
@@ -88,7 +143,7 @@ func (s *service) awaitIdleUnload(
 	}
 }
 
-func (s *service) runIdleUnload(
+func (s *slotCoordinator) runIdleUnload(
 	identity supervisedIdentity,
 	slotKey string,
 	entry *idleUnload,
@@ -104,11 +159,14 @@ func (s *service) runIdleUnload(
 		return
 	}
 	delete(s.idleUnloadTimers, slotKey)
+	slot := s.runtimeSlots[slotKey]
+	delete(s.runtimeSlots, slotKey)
 	s.mu.Unlock()
 
-	diagnostics := s.supervisor.Diagnostics
-	diagnostics.logUnload(identity, modelseffects.RuntimeCorrelation(ctxWithoutCancel()), "idle")
-	_ = s.unloadRuntime(ctxWithoutCancel(), identity, slotKey)
+	s.diagnostics.logUnload(identity, modelseffects.RuntimeCorrelation(ctxWithoutCancel()), "idle")
+	if slot != nil {
+		_ = slot.stop(ctxWithoutCancel())
+	}
 }
 
 func ctxWithoutCancel() context.Context {

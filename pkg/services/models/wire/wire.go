@@ -524,14 +524,16 @@ func buildModelsServiceComponents(
 	if err != nil {
 		return modelsServiceComponents{}, err
 	}
+	state := NewSlotState()
+	facts := NewSlotFacts(runtimeScopes, assetService, state)
+	coordinator := NewSlotCoordinator(state, runtimeScopes, hostClock, hostLogger, hostMetrics, 0)
+	leases, err := NewHostLeases(hostClock, facts, coordinator)
+	if err != nil {
+		return modelsServiceComponents{}, err
+	}
 	runtimeHost, err := runtimehostwire.NewService(
-		runtimeScopes, assetService, processLauncher, hostHTTP, hostClock, hostLogger, hostMetrics,
-		runtimehost.Options{
-			Platform: assetPlatform, ProtocolNegotiator: protocolNegotiator,
-			CompatibilityChecker: compatibilityChecker,
-			ResolveSymlinks:      resolveSymlinks,
-			RuntimeEvidence:      runtimeEvidence,
-		},
+		runtimeScopes, assetService, leases, state, processLauncher, hostHTTP, hostClock, hostLogger, hostMetrics,
+		assetPlatform, protocolNegotiator, compatibilityChecker, resolveSymlinks, runtimeEvidence, 0, 0,
 	)
 	if err != nil {
 		return modelsServiceComponents{}, err
@@ -759,4 +761,20 @@ type runtimeTempFileAdapter struct {
 
 func (a runtimeTempFileAdapter) create(dir, pattern string) (localmodels.TempFile, error) {
 	return a.next(dir, pattern)
+}
+
+type SlotState = runtimehostwire.SlotState
+type HostLeases = runtimehostwire.HostLeases
+type SlotFactsProvider = modelseffects.SlotFactsProvider
+type SlotCapacityCoordinator = modelseffects.SlotCapacityCoordinator
+
+func NewSlotState() *SlotState { return runtimehostwire.NewSlotState() }
+func NewSlotFacts(scopes runtimescopes.Service, assets scopedassets.Service, state *SlotState) SlotFactsProvider {
+	return runtimehostwire.NewSlotFacts(scopes, assets, state)
+}
+func NewSlotCoordinator(state *SlotState, scopes runtimescopes.Service, clock HostClock, logger HostDiagnosticLogger, metrics HostMetricsRecorder, idleUnloadAfter time.Duration) SlotCapacityCoordinator {
+	return runtimehostwire.NewSlotCoordinator(state, scopes, clock, logger, metrics, idleUnloadAfter)
+}
+func NewHostLeases(clock HostClock, facts SlotFactsProvider, coordinator SlotCapacityCoordinator) (HostLeases, error) {
+	return runtimehostwire.NewLeases(clock, facts, coordinator)
 }

@@ -161,14 +161,7 @@ func newControlledASRHost(
 	recorder modelseffects.RuntimeEvidenceRecorder,
 ) runtimehost.Service {
 	t.Helper()
-	host, err := runtimehostwire.NewService(
-		scopes, assets, launcher, httpDoer, clock, nil, nil,
-		runtimehost.Options{
-			Platform:           models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64"},
-			ProtocolNegotiator: protocol, CompatibilityChecker: compatibility,
-			RuntimeEvidence: recorder, IdleUnloadAfter: time.Hour,
-		},
-	)
+	host, err := newRuntimeHostFixture(scopes, assets, launcher, httpDoer, clock, nil, nil, models.AssetHostPlatform{OperatingSystem: "windows", Architecture: "amd64"}, protocol, compatibility, nil, recorder, time.Hour, 0)
 	if err != nil {
 		t.Fatalf("construct Runtime Host: %v", err)
 	}
@@ -196,4 +189,15 @@ func newTestASRInvocationRuntime(
 		t.Fatalf("construct Models invocation runtime: %v", err)
 	}
 	return runtime
+}
+
+func newRuntimeHostFixture(scopes runtimescopes.Service, assets scopedassets.Service, launcher modelseffects.HostProcessLauncher, httpDoer modelseffects.HostHTTPDoer, clock modelseffects.HostClock, logger modelseffects.HostDiagnosticLogger, metrics modelseffects.HostMetricsRecorder, platform models.AssetHostPlatform, protocol modelseffects.HostProtocolNegotiator, compatibility modelseffects.HostCompatibilityChecker, resolve modelseffects.HostResolveSymlinks, evidence modelseffects.RuntimeEvidenceRecorder, idle time.Duration, maximum int) (runtimehost.Service, error) {
+	state := runtimehostwire.NewSlotState()
+	facts := runtimehostwire.NewSlotFacts(scopes, assets, state)
+	coordinator := runtimehostwire.NewSlotCoordinator(state, scopes, clock, logger, metrics, idle)
+	leases, err := runtimehostwire.NewLeases(clock, facts, coordinator)
+	if err != nil {
+		return nil, err
+	}
+	return runtimehostwire.NewService(scopes, assets, leases, state, launcher, httpDoer, clock, logger, metrics, platform, protocol, compatibility, resolve, evidence, idle, maximum)
 }

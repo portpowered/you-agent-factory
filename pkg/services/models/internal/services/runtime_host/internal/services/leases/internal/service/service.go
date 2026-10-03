@@ -29,26 +29,21 @@ type leaseRecord struct {
 }
 
 var _ hostleases.Service = (*service)(nil)
-var _ modelseffects.CoordinatorBindable = (*service)(nil)
 
 // New constructs an inert leases owner that retains injected effects and
 // allocates lease/capacity state without launching subprocesses or timers.
 func New(
 	hostClock modelseffects.HostClock,
 	slotFacts modelseffects.SlotFactsProvider,
+	coordinator modelseffects.SlotCapacityCoordinator,
 ) hostleases.Service {
 	return &service{
 		hostClock:       hostClock,
 		slotFacts:       slotFacts,
+		coordinator:     coordinator,
 		leases:          make(map[string]leaseRecord),
 		capacityHolders: make(map[string]int),
 	}
-}
-
-func (s *service) BindSlotCapacityCoordinator(
-	coordinator modelseffects.SlotCapacityCoordinator,
-) {
-	s.coordinator = coordinator
 }
 
 func (s *service) AcquireModelLease(
