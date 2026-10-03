@@ -162,6 +162,13 @@ func (scenario *reviewFailureScenario) submit(t *testing.T, requestID string, se
 	if err != nil {
 		t.Fatalf("marshal review-failure Work request: %v", err)
 	}
+	scenario.putWorkRequest(t, requestID, payload, len(seeds))
+}
+
+// putWorkRequest PUTs an already-encoded Work request body, so tests control
+// the exact bytes (for example unicode escapes) the server receives.
+func (scenario *reviewFailureScenario) putWorkRequest(t *testing.T, requestID string, payload []byte, wantWorks int) {
+	t.Helper()
 	endpoint := support.SessionWorkURL(
 		scenario.fixture.baseURL,
 		scenario.sessionID,
@@ -185,8 +192,8 @@ func (scenario *reviewFailureScenario) submit(t *testing.T, requestID string, se
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
 		t.Fatalf("decode review-failure Work request response: %v", err)
 	}
-	if result.RequestId != requestID || len(result.Works) != len(seeds) {
-		t.Fatalf("review-failure Work request result = %#v, want request %q and %d works", result, requestID, len(seeds))
+	if result.RequestId != requestID || len(result.Works) != wantWorks {
+		t.Fatalf("review-failure Work request result = %#v, want request %q and %d works", result, requestID, wantWorks)
 	}
 }
 
