@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -28,10 +29,35 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
+// fleetCatalogProjectionGate isolates the catalog dependency. Its full
+// projection cannot finish until canceled; registry enumeration is immediately
+// available, independently of that expensive phase.
+type fleetCatalogProjectionGate struct {
+	projectionEntered chan struct{}
+	workersessions.ObservationService
+}
+
+func (g *fleetCatalogProjectionGate) ListFactorySessions(ctx context.Context) ([]factorysessions.ReadProjection, error) {
+	close(g.projectionEntered)
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (g *fleetCatalogProjectionGate) ListLiveSessionIDs() []string {
+	return []string{"00000000-0000-4000-8000-000000000001"}
+}
+
+func (g *fleetCatalogProjectionGate) WorkerSessionsObservationForSession(string) workersessions.ObservationService {
+	return g.ObservationService
+}
+
 type fleetCatalogSessionSource struct{ workersessions.Service }
 
 type fleetCatalogReady struct {
-	source workersessions.ObservationService
+	source   workersessions.ObservationService
+	ids      []string
+	selected []string
+	cancel   context.CancelFunc
 }
 
 func (g fleetCatalogReady) ListFactorySessions(context.Context) ([]factorysessions.ReadProjection, error) {
@@ -41,10 +67,17 @@ func (g fleetCatalogReady) ListFactorySessions(context.Context) ([]factorysessio
 }
 
 func (g fleetCatalogReady) ListLiveSessionIDs() []string {
+	if g.ids != nil {
+		return g.ids
+	}
 	return []string{"00000000-0000-4000-8000-000000000001"}
 }
 
-func (g fleetCatalogReady) WorkerSessionsObservationForSession(string) workersessions.ObservationService {
+func (g *fleetCatalogReady) WorkerSessionsObservationForSession(id string) workersessions.ObservationService {
+	g.selected = append(g.selected, id)
+	if g.cancel != nil {
+		g.cancel()
+	}
 	return g.source
 }
 
@@ -52,12 +85,71 @@ func TestWorkerSessionFleetCatalogPreservesFactoryRegistry(t *testing.T) {
 	t.Parallel()
 	factorySource := &fleetCatalogSessionSource{}
 	directSource := &fleetCatalogSessionSource{}
-	got, err := workerSessionObservationSources(t.Context(), fleetCatalogReady{source: factorySource}, directSource)
+	got, err := workerSessionObservationSources(t.Context(), &fleetCatalogReady{source: factorySource}, directSource)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 2 || got[0] != factorySource || got[1] != directSource {
 		t.Fatalf("catalog sources = %#v, want Factory registry followed by process registry", got)
+	}
+}
+
+func TestWorkerSessionFleetCatalogOrdersUniqueSourcesAndHonorsCancellation(t *testing.T) {
+	t.Parallel()
+	for _, canceled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cancel-during-selection-%t", canceled), func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			catalog := &fleetCatalogReady{ids: []string{" b ", "", "a", "b", " a "}, source: &fleetCatalogSessionSource{}}
+			if canceled {
+				catalog.cancel = cancel
+			}
+			got, err := workerSessionObservationSources(ctx, catalog, nil)
+			if canceled {
+				if !errors.Is(err, context.Canceled) || got != nil || len(catalog.selected) != 1 {
+					t.Fatalf("canceled selection=(%#v, %v), calls=%v", got, err, catalog.selected)
+				}
+				return
+			}
+			if err != nil || len(got) != 2 || len(catalog.selected) != 2 || catalog.selected[0] != "a" || catalog.selected[1] != "b" {
+				t.Fatalf("selection=(%#v, %v), ordered IDs=%v", got, err, catalog.selected)
+			}
+			cancel()
+			got, err = workerSessionObservationSources(ctx, catalog, nil)
+			if !errors.Is(err, context.Canceled) || got != nil || len(catalog.selected) != 2 {
+				t.Fatalf("pre-canceled selection=(%#v, %v), calls=%v", got, err, catalog.selected)
+			}
+		})
+	}
+}
+
+func TestWorkerSessionFleetActiveReadCausalRegression(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	gate := &fleetCatalogProjectionGate{projectionEntered: make(chan struct{})}
+	result := make(chan error, 1)
+	go func() {
+		_, err := workerSessionObservationSources(ctx, gate, nil)
+		result <- err
+	}()
+	select {
+	case <-gate.projectionEntered:
+		cancel()
+		err := <-result
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("catalog cancellation = %v, want context.Canceled", err)
+		}
+		t.Fatal("fleet catalog entered full Factory Session projection before selecting available registry identities; Work-scoped reads bypass this catalog")
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("catalog enumeration = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		cancel()
+		<-result
+		t.Fatal("catalog did not enter either controlled phase")
 	}
 }
 
