@@ -5,7 +5,9 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -318,5 +320,193 @@ func TestPauseResumeDoesNotStartNewHandle(t *testing.T) {
 	}
 	if len(host.handles) != 1 {
 		t.Fatalf("handles after pause/resume = %d, want single active handle", len(host.handles))
+	}
+}
+
+// physicalHandleEngine observes only this run and holds exit until its owner
+// releases it, making cancellation acknowledgement distinct from joined exit.
+type physicalHandleEngine struct {
+	*lifecycleControlFactory
+	entered, canceled, release, exited chan struct{}
+	releaseOnce                        sync.Once
+	pauses, resumes, exits             atomic.Int32
+}
+
+func (f *physicalHandleEngine) Run(ctx context.Context) error {
+	close(f.entered)
+	<-ctx.Done()
+	close(f.canceled)
+	<-f.release
+	f.exits.Add(1)
+	close(f.exited)
+	return ctx.Err()
+}
+
+func (f *physicalHandleEngine) ControlPause(ctx context.Context, req factory.PauseRequest) (factory.PauseResult, error) {
+	f.pauses.Add(1)
+	return f.lifecycleControlFactory.ControlPause(ctx, req)
+}
+
+func (f *physicalHandleEngine) ControlResume(ctx context.Context, req factory.ResumeRequest) (factory.ResumeResult, error) {
+	f.resumes.Add(1)
+	return f.lifecycleControlFactory.ControlResume(ctx, req)
+}
+
+func (f *physicalHandleEngine) releaseExit() {
+	f.releaseOnce.Do(func() { close(f.release) })
+}
+
+type physicalHandleRecording struct {
+	terminalRecording
+	finalizations atomic.Int32
+}
+
+func (r *physicalHandleRecording) Finalize(_ time.Time) error {
+	r.finalizations.Add(1)
+	return nil
+}
+
+type physicalHandleFixture struct {
+	host      *Host
+	handle    factory.RuntimeRun
+	engine    *physicalHandleEngine
+	recording *physicalHandleRecording
+	stopDone  chan error
+}
+
+func startPhysicalHandle(t *testing.T, host *Host, id string) *physicalHandleFixture {
+	t.Helper()
+	engine := &physicalHandleEngine{
+		lifecycleControlFactory: newLifecycleControlFactory(interfaces.FactoryStateRunning),
+		entered:                 make(chan struct{}), canceled: make(chan struct{}),
+		release: make(chan struct{}), exited: make(chan struct{}),
+	}
+	recording := &physicalHandleRecording{}
+	bundle := testBundle(engine, id)
+	bundle.Recording = recording
+	handle, err := host.Start(context.Background(), bundle)
+	if err != nil || handle == nil {
+		t.Fatalf("Start(%s) = (%v, %v), want live handle", id, handle, err)
+	}
+	f := &physicalHandleFixture{host: host, handle: handle, engine: engine, recording: recording}
+	t.Cleanup(func() {
+		engine.releaseExit()
+		// A test may fail while its Stop goroutine owns the removed registration.
+		// Cancel/join the run first, then join that Stop before observing cleanup.
+		handle.CancelRun()
+		if f.stopDone != nil {
+			if err := <-f.stopDone; err != nil {
+				t.Errorf("pending Stop cleanup: %v", err)
+			}
+		} else if err := host.Stop(handle); err != nil && !errors.Is(err, factory.ErrAlreadyStopped) {
+			t.Errorf("Stop cleanup: %v", err)
+		}
+		if err := handle.Wait(); !errors.Is(err, context.Canceled) {
+			t.Errorf("run cleanup result = %v, want context.Canceled", err)
+		}
+	})
+	<-engine.entered
+	return f
+}
+
+func (f *physicalHandleFixture) assertLive(t *testing.T, pauses, resumes int32, wantState interfaces.FactoryState) {
+	t.Helper()
+	snapshot, err := f.engine.GetEngineStateSnapshot(context.Background())
+	if err != nil || snapshot.FactoryState != string(wantState) ||
+		f.engine.pauses.Load() != pauses || f.engine.resumes.Load() != resumes {
+		t.Fatalf("live engine = (%v, %v, pauses=%d, resumes=%d), want (%s, %d, %d)",
+			snapshot, err, f.engine.pauses.Load(), f.engine.resumes.Load(), wantState, pauses, resumes)
+	}
+	for _, ch := range []<-chan struct{}{f.engine.canceled, f.engine.exited, f.handle.RunDoneCh()} {
+		select {
+		case <-ch:
+			t.Fatal("live run cancellation/exit/completion signal closed")
+		default:
+		}
+	}
+	if f.handle.Completed() || f.handle.Result() != nil || f.engine.exits.Load() != 0 || f.recording.finalizations.Load() != 0 {
+		t.Fatal("live run has terminal result, exit or finalization")
+	}
+}
+
+func (f *physicalHandleFixture) assertAcceptedControls(t *testing.T) {
+	t.Helper()
+	result, err := f.host.Pause(context.Background(), f.handle)
+	if err != nil || result.Outcome != factory.ControlOutcomeAccepted {
+		t.Fatalf("Pause = (%v, %v), want ACCEPTED", result, err)
+	}
+	f.assertLive(t, 1, 0, interfaces.FactoryStatePaused)
+	resumed, err := f.host.Resume(context.Background(), f.handle)
+	if err != nil || resumed.Outcome != factory.ControlOutcomeAccepted {
+		t.Fatalf("Resume = (%v, %v), want ACCEPTED", resumed, err)
+	}
+	f.assertLive(t, 1, 1, interfaces.FactoryStateRunning)
+}
+
+func (f *physicalHandleFixture) stopAndJoin(t *testing.T, beforeRelease func()) {
+	t.Helper()
+	f.stopDone = make(chan error, 1)
+	go func() { f.stopDone <- f.host.Stop(f.handle) }()
+	<-f.engine.canceled
+	select {
+	case err := <-f.stopDone:
+		f.stopDone = nil
+		t.Fatalf("Stop returned before exit release: %v", err)
+	default:
+	}
+	if f.handle.Completed() || f.recording.finalizations.Load() != 0 {
+		t.Fatal("run completed or finalized before exit release")
+	}
+	if beforeRelease != nil {
+		beforeRelease()
+	}
+	f.engine.releaseExit()
+	err := <-f.stopDone
+	f.stopDone = nil
+	if err != nil {
+		t.Fatalf("Stop = %v, want normalized cancellation", err)
+	}
+	<-f.engine.exited
+	<-f.handle.RunDoneCh()
+	if !f.handle.Completed() || !errors.Is(f.handle.Wait(), context.Canceled) ||
+		!errors.Is(f.handle.Result(), context.Canceled) || f.engine.exits.Load() != 1 || f.recording.finalizations.Load() != 1 {
+		t.Fatal("Stop did not join one canceled run and finalize once")
+	}
+}
+
+func TestPhysicalHandleSelectedControlsAndStopAreIsolated(t *testing.T) {
+	t.Parallel()
+	for _, selectedID := range []string{"A", "B"} {
+		t.Run("selected_"+selectedID, func(t *testing.T) {
+			t.Parallel()
+			host := newTestHost(t)
+			a := startPhysicalHandle(t, host, "runtime-A")
+			b := startPhysicalHandle(t, host, "runtime-B")
+			selected, peer := a, b
+			if selectedID == "B" {
+				selected, peer = b, a
+			}
+			result, err := host.Pause(context.Background(), selected.handle)
+			if err != nil || result.Outcome != factory.ControlOutcomeAccepted {
+				t.Fatalf("H01 Pause = (%v, %v), want ACCEPTED", result, err)
+			}
+			selected.assertLive(t, 1, 0, interfaces.FactoryStatePaused)
+			peer.assertLive(t, 0, 0, interfaces.FactoryStateRunning)
+			resumed, err := host.Resume(context.Background(), selected.handle)
+			if err != nil || resumed.Outcome != factory.ControlOutcomeAccepted {
+				t.Fatalf("H02 Resume = (%v, %v), want ACCEPTED", resumed, err)
+			}
+			selected.assertLive(t, 1, 1, interfaces.FactoryStateRunning)
+			peer.assertLive(t, 0, 0, interfaces.FactoryStateRunning)
+			selected.stopAndJoin(t, func() {
+				peer.assertLive(t, 0, 0, interfaces.FactoryStateRunning)
+			})
+			peer.assertLive(t, 0, 0, interfaces.FactoryStateRunning)
+			peer.assertAcceptedControls(t)
+			peer.stopAndJoin(t, nil)
+			if selected.recording.finalizations.Load() != 1 || selected.engine.exits.Load() != 1 {
+				t.Fatal("peer shutdown repeated selected cleanup")
+			}
+		})
 	}
 }
