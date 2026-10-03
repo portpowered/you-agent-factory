@@ -45,6 +45,9 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 	watcherDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
 	executionWatcherDir := newWatcherIngressFactory(t, "owned-exec-preseed")
 	duplicateWatcherDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
+	stoppedWatcherDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
+	watcherPeerDir := newWatcherIngressFactory(t, interfaces.DefaultChannelName)
+	var stoppedWatcherAdmissions atomic.Int32
 	router := scriptCycleRouter{routes: map[string]*scriptCycleRoute{
 		filepath.Clean(recoveryDir):    recovery,
 		filepath.Clean(emptyDir):       empty,
@@ -53,7 +56,15 @@ func TestAutomationsSessionRecoveryAndIngress(t *testing.T) {
 		filepath.Clean(failureDir):     failure,
 		filepath.Clean(failurePeerDir): failurePeer,
 	}}
-	server := startScriptCycleHost(t, router, files)
+	server := startScriptCycleHost(t, router, files, func(record work.FactorySubmissionRecord) {
+		if record.Request.RequestID == "watcher-stopped-only" {
+			stoppedWatcherAdmissions.Add(1)
+		}
+	})
+	t.Run("watcher_stop_joins_while_peer_progresses_and_restart_admits_eligible_input", func(t *testing.T) {
+		t.Parallel()
+		assertWatcherIndependentStop(t, server.URL(), stoppedWatcherDir, watcherPeerDir, &stoppedWatcherAdmissions)
+	})
 	t.Run("watcher_retained_file_identity_does_not_duplicate_after_restart", func(t *testing.T) {
 		t.Parallel()
 		assertWatcherDuplicateRestart(t, server.URL(), duplicateWatcherDir)
@@ -121,7 +132,9 @@ func newScriptCycleFactory(t *testing.T) (string, *scriptCycleRoute) {
 	return dir, newScriptCycleRoute()
 }
 
-func startScriptCycleHost(t *testing.T, router scriptCycleRouter, files *scriptReplacementFailure) *support.FunctionalAPIServer {
+func startScriptCycleHost(t *testing.T, router scriptCycleRouter, files *scriptReplacementFailure,
+	observeSubmission func(work.FactorySubmissionRecord),
+) *support.FunctionalAPIServer {
 	t.Helper()
 	var admissions atomic.Int32
 	hostDir := support.ScaffoldFactory(t, map[string]any{
@@ -136,7 +149,10 @@ func startScriptCycleHost(t *testing.T, router scriptCycleRouter, files *scriptR
 		FactoryDir: hostDir,
 		Edges: serviceedges.Edges{
 			ScriptCommandRunner: router, AutomationsCursorFileSystem: files,
-			SubmissionRecorder: func(work.FactorySubmissionRecord) { admissions.Add(1) },
+			SubmissionRecorder: func(record work.FactorySubmissionRecord) {
+				admissions.Add(1)
+				observeSubmission(record)
+			},
 		},
 		BeforeStart: func(tb testing.TB, process support.Process, input root.Input) {
 			// Construction has not activated any sessions, so there are no peer

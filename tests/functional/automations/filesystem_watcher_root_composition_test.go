@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -135,6 +136,52 @@ func assertWatcherDuplicateRestart(t *testing.T, baseURL, dir string) {
 	// must occur exactly once alongside the fresh Work proving live activation.
 	assertWatcherIngressWork(t, readAutomationCompletedWork(t, baseURL, sessionID, "complete", "preseed", "live", "restart"),
 		map[string]string{"preseed": "preseed item", "live": "live item", "restart": "restart item"})
+}
+
+func assertWatcherIndependentStop(t *testing.T, baseURL, sourceDir, peerDir string, stoppedAdmissions *atomic.Int32) {
+	t.Helper()
+	opened := support.OpenFactorySessionAt(t, baseURL, sourceDir)
+	sessionID := opened.Session.Id
+	t.Cleanup(func() {
+		if sessionID != "" {
+			support.CloseFactorySessionAt(t, baseURL, sessionID)
+		}
+	})
+	peerID := support.OpenFactorySessionAt(t, baseURL, peerDir).Session.Id
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, peerID) })
+	if sessionID == peerID || sessionID == "~default" || peerID == "~default" {
+		t.Fatalf("watcher sessions = %q/%q, want distinct explicit identities", sessionID, peerID)
+	}
+	for _, id := range []string{sessionID, peerID} {
+		assertWatcherIngressWork(t, readAutomationCompletedWork(t, baseURL, id, "complete", "preseed"),
+			map[string]string{"preseed": "preseed item"})
+	}
+	// Public close waits for stopped status and DELETE acknowledges deactivation
+	// and join. Publish source input only after that full control completes.
+	support.CloseFactorySessionAt(t, baseURL, sessionID)
+	priorSessionID := sessionID
+	sessionID = ""
+	writeWatcherIngressFile(t, sourceDir, interfaces.DefaultChannelName, "stopped-only", "retained while stopped")
+	writeWatcherIngressFile(t, peerDir, interfaces.DefaultChannelName, "peer-live", "independent peer item")
+	assertWatcherIngressWork(t, readAutomationCompletedWork(t, baseURL, peerID, "complete", "peer-live"),
+		map[string]string{"preseed": "preseed item", "peer-live": "independent peer item"})
+	// The declared submission effect observes admission even after the old live
+	// session is deleted. Peer completion is a positive barrier, not a sleep.
+	if count := stoppedAdmissions.Load(); count != 0 {
+		t.Fatalf("stopped watcher admitted retained input %d times before restart", count)
+	}
+	reopened := support.OpenFactorySessionAt(t, baseURL, sourceDir)
+	sessionID = reopened.Session.Id
+	if sessionID == priorSessionID || reopened.Session.FactoryDir != opened.Session.FactoryDir ||
+		reopened.Session.FolderPath != opened.Session.FolderPath {
+		t.Fatalf("reopened watcher = %#v, want same target and new live identity", reopened.Session)
+	}
+	writeWatcherIngressFile(t, sourceDir, interfaces.DefaultChannelName, "reactivated", "eligible live item")
+	assertWatcherIngressWork(t, readAutomationCompletedWork(t, baseURL, sessionID, "complete", "preseed", "stopped-only", "reactivated"),
+		map[string]string{"preseed": "preseed item", "stopped-only": "retained while stopped", "reactivated": "eligible live item"})
+	if count := stoppedAdmissions.Load(); count != 1 {
+		t.Fatalf("reactivated watcher admissions = %d, want one eligible retained input", count)
+	}
 }
 
 func writeWatcherIngressFile(t *testing.T, dir, channel, id, title string) {
