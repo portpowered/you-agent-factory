@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -463,6 +464,90 @@ func TestBoundControlsAttributeResultsAndErrorsToActivatedRuntime(t *testing.T) 
 	}
 }
 
+func TestBoundControlsPreservePeerAfterSelectedDeactivation(t *testing.T) {
+	t.Parallel()
+	for _, selectedIndex := range []int{0, 1} {
+		t.Run(fmt.Sprintf("selected %d", selectedIndex), func(t *testing.T) {
+			t.Parallel()
+			root := newBoundControlRoot(t)
+			delegates := [2]*boundControlRuntimeFake{}
+			bindings := [2]factoryruntime.RuntimeBinding{}
+			for i, identity := range []string{"first", "second"} {
+				delegates[i] = newBoundControlRuntimeFake(identity, false)
+				bindings[i] = activateBoundControlRuntime(t, root, identity, delegates[i])
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			assertNotActive := func(runtimeID string, request factoryruntime.RuntimeDeactivationRequest) {
+				t.Helper()
+				_, err := root.Deactivate(ctx, request)
+				var activationErr *factoryruntime.RuntimeActivationError
+				if !errors.Is(err, factoryruntime.ErrRuntimeNotActive) || !errors.As(err, &activationErr) ||
+					activationErr.Kind != factoryruntime.RuntimeActivationErrorNotActive || activationErr.RuntimeID != runtimeID {
+					t.Fatalf("Deactivate(%s) error = %#v; want typed NOT_ACTIVE for requested identity", runtimeID, err)
+				}
+			}
+			assertControls := func(index int) {
+				t.Helper()
+				selected, peer := delegates[index], delegates[1-index]
+				for _, control := range selected.controlCases() {
+					before, peerBefore := len(selected.calls), len(peer.calls)
+					got, err := control.invoke(ctx, bindings[index].Service())
+					if !reflect.DeepEqual(got, control.result) || err != control.err {
+						t.Fatalf("binding %d %s = %#v, %v; want %#v, %v", index, control.method, got, err, control.result, control.err)
+					}
+					if len(selected.calls) != before+1 || len(peer.calls) != peerBefore {
+						t.Fatalf("binding %d %s did not call only its selected delegate", index, control.method)
+					}
+					call := selected.calls[before]
+					if call.method != control.method || call.ctx != ctx || !reflect.DeepEqual(call.request, control.request) {
+						t.Fatalf("binding %d %s forwarded call = %#v; want identical context and %#v", index, control.method, call, control.request)
+					}
+				}
+			}
+			assertNotActive("unknown-runtime", factoryruntime.RuntimeDeactivationRequest{RuntimeID: "unknown-runtime"})
+			for i, delegate := range delegates {
+				if len(delegate.calls) != 0 || delegate.closeCalls != 0 {
+					t.Fatal("unknown-ID teardown invoked a known activation effect")
+				}
+				assertControls(i)
+			}
+			selected, peer := delegates[selectedIndex], delegates[1-selectedIndex]
+			deactivate := func(index int) {
+				t.Helper()
+				got, err := root.Deactivate(ctx, factoryruntime.RuntimeDeactivationRequest{Binding: bindings[index]})
+				want := factoryruntime.RuntimeDeactivationResult{RuntimeID: "runtime-" + delegates[index].identity, State: factoryruntime.RuntimeLifecycleStateStopped}
+				if err != nil || got != want || delegates[index].closeCalls != 1 || delegates[index].closeContext != ctx {
+					t.Fatalf("binding %d Deactivate = %#v, %v; cleanup %d, context %v; want %#v and one Close with identical context", index, got, err, delegates[index].closeCalls, delegates[index].closeContext, want)
+				}
+			}
+			selectedBefore, peerBefore := len(selected.calls), len(peer.calls)
+			deactivate(selectedIndex)
+			if peer.closeCalls != 0 || len(selected.calls) != selectedBefore || len(peer.calls) != peerBefore {
+				t.Fatal("selected teardown invoked a control or peer cleanup effect")
+			}
+			for _, control := range selected.controlCases() {
+				_, err := control.invoke(ctx, bindings[selectedIndex].Service())
+				if !errors.Is(err, factoryruntime.ErrNotRunning) {
+					t.Fatalf("stale %s error = %v; want ErrNotRunning", control.method, err)
+				}
+			}
+			assertNotActive("runtime-"+selected.identity, factoryruntime.RuntimeDeactivationRequest{Binding: bindings[selectedIndex]})
+			if len(selected.calls) != selectedBefore || len(peer.calls) != peerBefore || selected.closeCalls != 1 || peer.closeCalls != 0 {
+				t.Fatal("stale controls or repeated teardown invoked an activation effect")
+			}
+			assertControls(1 - selectedIndex)
+			if selected.closeCalls != 1 || peer.closeCalls != 0 {
+				t.Fatal("peer controls invoked cleanup")
+			}
+			deactivate(1 - selectedIndex)
+			if selected.closeCalls != 1 || peer.closeCalls != 1 || len(selected.calls) != selectedBefore || len(peer.calls) != peerBefore+3 {
+				t.Fatal("completed teardown changed control observations or repeated owned cleanup")
+			}
+		})
+	}
+}
+
 func newBoundControlRoot(t *testing.T) *Root {
 	t.Helper()
 	root, err := NewRoot(
@@ -501,8 +586,9 @@ func activateBoundControlRuntime(t *testing.T, root *Root, identity string, dele
 		if gotCtx != ctx || !reflect.DeepEqual(got, want) {
 			t.Fatalf("start received %v, %#v; want identical context and %#v", gotCtx, got, want)
 		}
-		return &factoryruntime.RuntimeActivation{Service: delegate, Close: func(context.Context) error {
+		return &factoryruntime.RuntimeActivation{Service: delegate, Close: func(closeCtx context.Context) error {
 			delegate.closeCalls++
+			delegate.closeContext = closeCtx
 			return nil
 		}}, nil
 	})
@@ -524,6 +610,7 @@ type boundControlRuntimeFake struct {
 	identity                          string
 	calls                             []boundControlCall
 	closeCalls                        int
+	closeContext                      context.Context
 	pause                             factoryruntime.PauseResult
 	resume                            factoryruntime.ResumeResult
 	terminate                         factoryruntime.TerminateResult
