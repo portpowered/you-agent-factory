@@ -47,6 +47,7 @@ type Service struct {
 	cursorFileSystem   scriptpollerswire.CursorPersistenceFileSystem
 	reconciler         reconciliation.Service
 	scriptPollers      scriptpollers.Service
+	cursors            scriptpollers.CursorScopes
 	cursorScope        scriptpollers.CursorScope
 	cron               cron.Service
 	filesystemWatchers filesystemwatchers.Service
@@ -71,7 +72,7 @@ func New(
 	cronService cron.Service,
 	filesystemWatchers filesystemwatchers.Service,
 ) *Service {
-	return newService(
+	return NewWithCursorFileSystem(
 		logger,
 		clock,
 		commandRunner,
@@ -102,6 +103,8 @@ func NewWithCursorFileSystem(
 	cronService cron.Service,
 	filesystemWatchers filesystemwatchers.Service,
 ) *Service {
+	cursors := scriptpollerswire.NewCursorScopes(cursorFileSystem)
+	pollers := scriptpollerswire.NewService(logger, clock, commandRunner, resolveTemplates, executionPolicy, cursors)
 	return newService(
 		logger,
 		clock,
@@ -114,6 +117,8 @@ func NewWithCursorFileSystem(
 		cursorFileSystem,
 		cronService,
 		filesystemWatchers,
+		pollers,
+		cursors,
 	)
 }
 
@@ -129,6 +134,8 @@ func newService(
 	cursorFileSystem scriptpollerswire.CursorPersistenceFileSystem,
 	cronService cron.Service,
 	filesystemWatchers filesystemwatchers.Service,
+	pollers scriptpollers.Service,
+	cursors scriptpollers.CursorScopes,
 ) *Service {
 	service := &Service{
 		loggerValue:        logger,
@@ -142,30 +149,19 @@ func newService(
 		cursorFileSystem:   cursorFileSystem,
 		cron:               cronService,
 		filesystemWatchers: filesystemWatchers,
+		scriptPollers:      pollers,
+		cursors:            cursors,
 		schedulerSources:   make(map[automations.SourceIdentity]*schedulerSource),
 		runtimes:           make(map[string]*runtimeInstance),
 		runtimeActivating:  make(map[string]struct{}),
 	}
 	service.reconciler = service.newSchedulerReconciler()
-	service.scriptPollers = service.newScriptPollers()
-	return service
-}
-
-func (s *Service) newScriptPollers() scriptpollers.Service {
 	// Preserve the memory-only owner fixture when no persistence edge is supplied.
 	// A blank process-root directory also remains memory-backed, never CWD-relative.
-	if s.cursorFileSystem != nil {
-		s.cursorScope.BaseDir = strings.TrimSpace(s.defaultFactoryDir)
+	if cursorFileSystem != nil {
+		service.cursorScope.BaseDir = strings.TrimSpace(defaultFactoryDir)
 	}
-	cursors := scriptpollerswire.NewCursorScopes(s.cursorFileSystem)
-	return scriptpollerswire.NewService(
-		s.loggerValue,
-		s.clock,
-		s.commandRunnerEdge,
-		s.resolveTemplates,
-		s.executionPolicy,
-		cursors,
-	)
+	return service
 }
 
 // NewService constructs the Automations root contract for composition.

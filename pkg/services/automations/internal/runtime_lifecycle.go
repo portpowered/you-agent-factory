@@ -34,6 +34,8 @@ type runtimeInstance struct {
 	mu       sync.Mutex
 	starting bool
 	started  bool
+	cursorMu sync.Mutex
+	released bool
 }
 
 type runtimeSnapshotConfig struct {
@@ -184,7 +186,7 @@ func (s *Service) getCursorFromActiveRuntime(
 		if instance == nil || instance.owner == nil || instance.owner == s {
 			continue
 		}
-		result, err := instance.owner.GetCursor(ctx, request)
+		result, err := instance.getCursor(ctx, request)
 		if err == nil {
 			return result, true, nil
 		}
@@ -353,10 +355,11 @@ func (s *Service) buildRuntimeInstance(
 	if strings.TrimSpace(workflowID) == "" {
 		workflowID = s.workflowID
 	}
-	owner := NewWithCursorFileSystem(
+	owner := newService(
 		s.loggerValue, s.clock, s.commandRunnerEdge, workflowID, request.Snapshot.FactoryDir,
 		s.hostedPollers, s.resolveTemplates, s.executionPolicy, s.cursorFileSystem,
 		s.cron, s.filesystemWatchers,
+		s.scriptPollers, s.cursors,
 	)
 	if owner == nil {
 		return nil, runtimeLifecycleError(
@@ -519,9 +522,30 @@ func (instance *runtimeInstance) stop(ctx context.Context) error {
 	}
 	select {
 	case <-done:
+		instance.releaseCursorScope()
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+// Cursor reads and release exclude each other after supervision has joined.
+// A retained old instance cannot recreate or release a replacement's scope.
+func (instance *runtimeInstance) getCursor(ctx context.Context, request automations.GetCursorRequest) (automations.GetCursorResult, error) {
+	instance.cursorMu.Lock()
+	defer instance.cursorMu.Unlock()
+	if instance.released {
+		return automations.GetCursorResult{}, automations.ErrNotFound
+	}
+	return instance.owner.GetCursor(ctx, request)
+}
+
+func (instance *runtimeInstance) releaseCursorScope() {
+	instance.cursorMu.Lock()
+	defer instance.cursorMu.Unlock()
+	if !instance.released {
+		instance.owner.cursors.ReleaseScope(instance.owner.cursorScope)
+		instance.released = true
 	}
 }
 
