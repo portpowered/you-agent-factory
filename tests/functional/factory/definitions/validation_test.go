@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,185 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// These API-owned cases protect decoding, warning headers and session selectors
+// through the unchanged canonical host, rather than duplicating CLI validation.
+func TestDefinitionsHTTPValidationIsolation(t *testing.T) {
+	for _, name := range []string{"definitions-alpha", "definitions-beta"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			host := sharedDefinitionsValidationServer(t)
+			cfg := validAPIValidationFactoryConfig()
+			cfg["name"] = name
+			dir := support.ScaffoldFactory(t, cfg)
+			rootDir := t.TempDir()
+			support.CreateAndActivateNamedFactoryAtRootWithProcess(t, buildDefinitionsProcess(t), host.env, dir, rootDir, name, filepath.Join(dir, "factory.json"))
+			id := openDefinitionsNamedSession(t, host.URL(), rootDir, name)
+			t.Cleanup(func() { closeDefinitionsFactorySession(t, host.URL(), id) })
+			endpoint := host.URL() + "/factory-sessions/" + id + "/factory"
+			before := support.GetJSON[factoryapi.Factory](t, endpoint)
+			if before.Name != name || before.Version == nil || before.WorkTypes == nil || len(*before.WorkTypes) != 1 {
+				t.Fatalf("selected session factory = %#v, want %s with topology/version", before, name)
+			}
+			valid, status := postValidateFactory(t, host.URL(), before)
+			if status != http.StatusOK || len(valid.Targets) != 0 {
+				t.Fatalf("valid input result = %#v status=%d", valid, status)
+			}
+			assertDefinitionsHTTPValidationFailures(t, host, before)
+			if got := support.GetJSON[factoryapi.Factory](t, endpoint); !reflect.DeepEqual(got, before) {
+				t.Fatalf("validation changed selected Current Factory: %#v", got)
+			}
+			assertDefinitionsHTTPSaveReadback(t, host, id, before)
+			assertDefinitionsHTTPNamedActivation(t, host, id)
+		})
+	}
+}
+
+func assertDefinitionsHTTPValidationFailures(t *testing.T, host *sharedDefinitionsServiceHost, valid factoryapi.Factory) {
+	t.Helper()
+	invalidCfg := multipleActionableDefectsFactoryConfig()
+	invalidCfg["name"] = valid.Name
+	invalidCfg["workers"] = []map[string]string{{"name": valid.Name + "-worker"}, {"name": valid.Name + "-worker"}}
+	invalid, err := factoryDefinitionFromConfig(invalidCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, status := postValidateFactory(t, host.URL(), invalid)
+	if status != http.StatusOK {
+		t.Fatalf("semantic validation status = %d, want 200", status)
+	}
+	for _, code := range []string{validationCodeDuplicateIdentifier, validationCodeDanglingWorkerReference, validationCodeDanglingPlaceReference} {
+		if !hasValidationTargetCode(result.Targets, code) {
+			t.Fatalf("missing %s: %#v", code, result.Targets)
+		}
+	}
+	for _, target := range result.Targets {
+		if target.Code == validationCodeDuplicateIdentifier && target.Subject.Id != valid.Name+"-worker" {
+			t.Fatalf("validation result belongs to a peer: %#v", target)
+		}
+	}
+	body, _, status := definitionsHTTPRequest(t, http.MethodPost, host.URL()+"/factory-validations", []byte(`{"name":`))
+	assertDefinitionsHTTPError(t, body, status, http.StatusBadRequest, "BAD_REQUEST")
+	payload, err := json.Marshal(valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		t.Fatal(err)
+	}
+	fields["futureRoot"] = "ignored-secret-root"
+	fields["workTypes"].([]any)[0].(map[string]any)["futureNested"] = "ignored-secret-nested"
+	payload, err = json.Marshal(fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, header, status := definitionsHTTPRequest(t, http.MethodPost, host.URL()+"/factory-validations", payload)
+	if status != http.StatusOK || !strings.Contains(header.Get("Warning"), "299") || !strings.Contains(header.Get("Warning"), "$.futureRoot, $.workTypes[0].futureNested") || strings.Contains(string(body), "ignored-secret") {
+		t.Fatalf("compatibility response: status=%d header=%v body=%s", status, header, body)
+	}
+	var warned factoryapi.FactoryValidationResult
+	if err := json.Unmarshal(body, &warned); err != nil {
+		t.Fatal(err)
+	}
+	if len(warned.Targets) != 0 {
+		t.Fatalf("unknown fields changed findings: %#v", warned)
+	}
+	assertDefinitionsHTTPCancellation(t, host, valid, payload)
+}
+
+func assertDefinitionsHTTPSaveReadback(t *testing.T, host *sharedDefinitionsServiceHost, id string, before factoryapi.Factory) {
+	t.Helper()
+	endpoint := host.URL() + "/factory-sessions/" + id + "/factory"
+	// Saves accept an advanced authored version, as the existing public
+	// transformation tests demonstrate; echoing the read version is stale.
+	submitted := before
+	version := *before.Version
+	version.Logical++
+	version.Physical = version.Physical.Add(time.Nanosecond)
+	submitted.Version = &version
+	payload, err := json.Marshal(factoryapi.SaveFactoryForSessionRequest{Factory: submitted})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _, status := definitionsHTTPRequest(t, http.MethodPut, endpoint, payload)
+	if status != http.StatusOK {
+		t.Fatalf("save = %d %s", status, body)
+	}
+	var saved factoryapi.Factory
+	if err := json.Unmarshal(body, &saved); err != nil {
+		t.Fatal(err)
+	}
+	after := support.GetJSON[factoryapi.Factory](t, endpoint)
+	if !reflect.DeepEqual(saved, after) || after.Version == nil || reflect.DeepEqual(before.Version, after.Version) {
+		t.Fatalf("save/readback version did not advance: before=%#v saved=%#v after=%#v", before.Version, saved.Version, after.Version)
+	}
+	body, _, status = definitionsHTTPRequest(t, http.MethodPut, endpoint, payload)
+	assertDefinitionsHTTPError(t, body, status, http.StatusConflict, "STALE_FACTORY_VERSION")
+	assertDefinitionsHTTPErrorTarget(t, body, "factory.version.stale")
+	body, _, status = definitionsHTTPRequest(t, http.MethodPut, endpoint, []byte(`{"factory":`))
+	assertDefinitionsHTTPError(t, body, status, http.StatusBadRequest, "BAD_REQUEST")
+	assertDefinitionsHTTPErrorTarget(t, body, "factory.payload.invalid")
+	if got := support.GetJSON[factoryapi.Factory](t, endpoint); !reflect.DeepEqual(got, after) {
+		t.Fatalf("failed save changed selected session: %#v", got)
+	}
+	invalid := after
+	stations := append([]factoryapi.Workstation(nil), (*after.Workstations)...)
+	missingWorker := "missing-worker"
+	stations[0].Worker = &missingWorker
+	invalid.Workstations = &stations
+	invalidVersion := *after.Version
+	invalidVersion.Logical++
+	invalidVersion.Physical = invalidVersion.Physical.Add(time.Nanosecond)
+	invalid.Version = &invalidVersion
+	payload, err = json.Marshal(factoryapi.SaveFactoryForSessionRequest{Factory: invalid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _, status = definitionsHTTPRequest(t, http.MethodPut, endpoint, payload)
+	assertDefinitionsHTTPError(t, body, status, http.StatusBadRequest, "INVALID_FACTORY")
+	var failure factoryapi.ErrorResponse
+	if err := json.Unmarshal(body, &failure); err != nil || failure.Targets == nil || !hasValidationTargetCode(*failure.Targets, validationCodeDanglingWorkerReference) {
+		t.Fatalf("invalid save lost worker target: %s (%v)", body, err)
+	}
+	if got := support.GetJSON[factoryapi.Factory](t, endpoint); !reflect.DeepEqual(got, after) {
+		t.Fatalf("invalid save changed selected session: %#v", got)
+	}
+}
+
+func TestDefinitionsHTTPUnknownSession(t *testing.T) {
+	t.Parallel()
+	host := sharedDefinitionsValidationServer(t)
+	endpoint := host.URL() + "/factory-sessions/00000000-0000-4000-8000-000000000018/factory"
+	factory, err := factoryDefinitionFromConfig(validAPIValidationFactoryConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(factoryapi.SaveFactoryForSessionRequest{Factory: factory})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodPut} {
+		body, _, status := definitionsHTTPRequest(t, method, endpoint, payload)
+		assertDefinitionsHTTPError(t, body, status, http.StatusNotFound, "NOT_FOUND")
+	}
+}
+
+func TestDefinitionsHTTPPackagedCatalog(t *testing.T) {
+	t.Parallel()
+	host := sharedDefinitionsValidationServer(t)
+	catalog := support.GetJSON[factoryapi.PackagedFactoryCatalogResponse](t, host.URL()+"/packaged-factories")
+	if len(catalog.Factories) == 0 {
+		t.Fatal("built-in catalog is empty")
+	}
+	previous := ""
+	for _, entry := range catalog.Factories {
+		if entry.Name <= previous || entry.Project == "" || entry.Slug == "" || len(entry.Json) == 0 || entry.Yaml == "" || len(entry.Examples) == 0 {
+			t.Fatalf("catalog entry missing sorted artifact/discovery data: %#v", entry)
+		}
+		previous = entry.Name
+	}
+}
 
 const (
 	validationCodeDuplicateIdentifier        = "factory.duplicateIdentifier"

@@ -193,27 +193,17 @@ func TestValidateFactory_EncodesValidationTargetsFromFakeRoot(t *testing.T) {
 	if len(result.Targets) != 2 {
 		t.Fatalf("targets = %#v, want error and warning findings", result.Targets)
 	}
-	if warning := result.Targets[1]; warning.Code != "factory.validation.warning" || warning.Severity != factoryapi.FactoryValidationSeverityWarning || warning.Subject.Id != "planner" || warning.Path == nil || *warning.Path != "workers[0].model" {
-		t.Fatalf("warning representation changed: %#v", warning)
+	path := "workers[0].model"
+	subject := factoryapi.FactoryValidationSubject{
+		Type: factoryapi.FactoryValidationSubjectTypeWorker, Id: "planner",
+		Location: factoryapi.FactoryValidationSubjectLocationDefinition,
 	}
-	target := result.Targets[0]
-	if target.Code != "factory.validation.stub" {
-		t.Fatalf("target code = %q, want factory.validation.stub", target.Code)
+	want := []factoryapi.FactoryValidationTarget{
+		{Code: "factory.validation.stub", Severity: factoryapi.FactoryValidationSeverityError, Message: "stub validation finding", Path: &path, Subject: subject},
+		{Code: "factory.validation.warning", Severity: factoryapi.FactoryValidationSeverityWarning, Message: "stub warning finding", Path: &path, Subject: subject},
 	}
-	if target.Message != "stub validation finding" {
-		t.Fatalf("target message = %q, want stub validation finding", target.Message)
-	}
-	if target.Severity != factoryapi.FactoryValidationSeverityError {
-		t.Fatalf("target severity = %q, want error", target.Severity)
-	}
-	if target.Path == nil || *target.Path != "workers[0].model" {
-		t.Fatalf("target path = %#v, want workers[0].model", target.Path)
-	}
-	if target.Subject.Type != factoryapi.FactoryValidationSubjectTypeWorker {
-		t.Fatalf("subject type = %q, want WORKER", target.Subject.Type)
-	}
-	if target.Subject.Id != "planner" {
-		t.Fatalf("subject id = %q, want planner", target.Subject.Id)
+	if !reflect.DeepEqual(result.Targets, want) {
+		t.Fatalf("target representations = %#v, want %#v", result.Targets, want)
 	}
 }
 

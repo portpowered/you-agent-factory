@@ -1,12 +1,17 @@
 package definitions
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -28,6 +33,7 @@ const sharedDefinitionsServiceHostShutdownTimeout = 60 * time.Second
 type sharedDefinitionsServiceHost struct {
 	process      support.ApplicationProcess
 	baseURL      string
+	handler      http.Handler
 	factoryDir   string
 	homeDir      string
 	env          []string
@@ -138,7 +144,9 @@ func startSharedDefinitionsServiceHost(
 	provider := support.NewRecordingCommandRunner(providerError)
 	api := support.NewProcessAPIServer()
 	listenerDone := make(chan struct{})
+	var handler http.Handler
 	apiStarter := func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		handler = request.Handler
 		// ProcessAPIServer.Start returns only after its httptest listener has
 		// been closed, so the completed starter is a deterministic observation.
 		defer close(listenerDone)
@@ -178,6 +186,7 @@ func startSharedDefinitionsServiceHost(
 	return &sharedDefinitionsServiceHost{
 		process:      process,
 		baseURL:      baseURL,
+		handler:      handler,
 		factoryDir:   factoryDir,
 		homeDir:      homeDir,
 		env:          append([]string(nil), inputs.Input.Env...),
@@ -306,4 +315,121 @@ func stopSharedDefinitionsServiceHost(host *sharedDefinitionsServiceHost) error 
 		return errors.New(strings.Join(failures, "; "))
 	}
 	return nil
+}
+
+func openDefinitionsNamedSession(t *testing.T, baseURL, folder, name string) string {
+	t.Helper()
+	payload, err := json.Marshal(factoryapi.OpenFactorySessionRequest{
+		FolderPath: folder,
+		Target:     &factoryapi.FactorySessionTargetRef{Kind: factoryapi.FactorySessionTargetRefKindNamed, Name: &name},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _, status := definitionsHTTPRequest(t, http.MethodPost, baseURL+"/factory-sessions", payload)
+	if status != http.StatusOK {
+		t.Fatalf("open named session = %d %s", status, body)
+	}
+	var opened factoryapi.OpenFactorySessionResponse
+	if err := json.Unmarshal(body, &opened); err != nil {
+		t.Fatal(err)
+	}
+	if opened.Session == nil || opened.Session.Id == "" {
+		t.Fatalf("missing opened session: %#v", opened)
+	}
+	return opened.Session.Id
+}
+
+func assertDefinitionsHTTPCancellation(t *testing.T, host *sharedDefinitionsServiceHost, valid factoryapi.Factory, payload []byte) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	probe := httptest.NewRecorder()
+	host.handler.ServeHTTP(probe, httptest.NewRequest(http.MethodPost, "/factory-validations", bytes.NewReader(payload)))
+	if probe.Code != http.StatusOK {
+		t.Fatalf("uncanceled captured route = %d %s", probe.Code, probe.Body.String())
+	}
+	cancel()
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/factory-validations", bytes.NewReader(payload)).WithContext(ctx)
+	request.Header.Set("Content-Type", "application/json")
+	done := make(chan struct{})
+	go func() {
+		host.handler.ServeHTTP(recorder, request)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("composed validation did not complete after cancellation")
+	}
+	// The composed route currently promotes Sessions.ValidateFactory, which
+	// reports a canceled validation owner as BAD_REQUEST. Definitions' own
+	// adapter writes no body; route promotion needs a separate scope decision.
+	assertDefinitionsHTTPError(t, recorder.Body.Bytes(), recorder.Code, http.StatusBadRequest, "BAD_REQUEST")
+	peer, status := postValidateFactory(t, host.URL(), valid)
+	if status != http.StatusOK || len(peer.Targets) != 0 {
+		t.Fatalf("peer validation after cancellation = %#v status=%d", peer, status)
+	}
+}
+
+func definitionsHTTPRequest(t *testing.T, method, endpoint string, payload []byte) ([]byte, http.Header, int) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), method, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, endpoint, err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body, response.Header, response.StatusCode
+}
+
+func assertDefinitionsHTTPError(t *testing.T, body []byte, status, wantStatus int, code string) {
+	t.Helper()
+	var failure factoryapi.ErrorResponse
+	if err := json.Unmarshal(body, &failure); err != nil {
+		t.Fatalf("decode failure %s: %v", body, err)
+	}
+	if status != wantStatus || string(failure.Code) != code {
+		t.Fatalf("status=%d failure=%#v, want %d %s", status, failure, wantStatus, code)
+	}
+}
+
+func assertDefinitionsHTTPErrorTarget(t *testing.T, body []byte, code string) {
+	t.Helper()
+	var failure factoryapi.ErrorResponse
+	if err := json.Unmarshal(body, &failure); err != nil || failure.Targets == nil || !hasValidationTargetCode(*failure.Targets, code) {
+		t.Fatalf("failure lost %s target: %s (%v)", code, body, err)
+	}
+}
+
+func assertDefinitionsHTTPNamedActivation(t *testing.T, host *sharedDefinitionsServiceHost, id string) {
+	t.Helper()
+	endpoint := host.URL() + "/factory-sessions/" + id + "/factory"
+	before := support.GetJSON[factoryapi.Factory](t, endpoint)
+	selected := before
+	selected.Name += "-activated"
+	mode := factoryapi.FactorySaveModeUpsertNamedAndActivate
+	payload, err := json.Marshal(factoryapi.SaveFactoryForSessionRequest{Factory: selected, Mode: &mode})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _, status := definitionsHTTPRequest(t, http.MethodPut, endpoint, payload)
+	if status != http.StatusOK {
+		t.Fatalf("named activation = %d %s", status, body)
+	}
+	var saved factoryapi.Factory
+	if err := json.Unmarshal(body, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if got := support.GetJSON[factoryapi.Factory](t, endpoint); got.Name != selected.Name || !reflect.DeepEqual(got, saved) {
+		t.Fatalf("named activation readback = %#v, want %#v", got, saved)
+	}
 }
