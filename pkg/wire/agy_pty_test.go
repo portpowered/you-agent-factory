@@ -18,7 +18,7 @@ import (
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
-type recordingAgyPTYHost struct{ allocated, started bool }
+type recordingAgyPTYHost struct{ allocated bool }
 type recordingAgyPTY struct{}
 
 func (*recordingAgyPTY) Close() error           { return nil }
@@ -27,9 +27,18 @@ func (h *recordingAgyPTYHost) Allocate(context.Context) (platformpty.Allocation,
 	h.allocated = true
 	return &recordingAgyPTY{}, nil
 }
-func (h *recordingAgyPTYHost) Start(platformpty.ProcessLaunch, platformpty.Allocation) (platformpty.Process, io.ReadCloser, error) {
-	h.started = true
+func (*recordingAgyPTYHost) Start(platformpty.ProcessLaunch, platformpty.Allocation) (platformpty.Process, io.ReadCloser, error) {
 	return nil, nil, nil
+}
+
+type defaultAgyPTYObserver struct {
+	recordingAgyPTYHost
+	started bool
+}
+
+func (h *defaultAgyPTYObserver) Start(platformpty.ProcessLaunch, platformpty.Allocation) (platformpty.Process, io.ReadCloser, error) {
+	h.started = true
+	return nil, nil, errors.New("unexpected legacy PTY start")
 }
 
 func TestEdgesDoNotExposeComposedAgyPTYAllocator(t *testing.T) {
@@ -137,7 +146,7 @@ func TestProvideProvidersServicePrefersAgyCommandRunnerWithInjectedPTYHost(t *te
 // remains the responsibility of the separately authorized live smoke gate.
 func TestProvideProvidersServiceDefaultsToAgyCommandAdapterWithoutOverride(t *testing.T) {
 	t.Parallel()
-	host := &recordingAgyPTYHost{}
+	host := &defaultAgyPTYObserver{}
 	var commands []string
 	var arguments [][]string
 	service, err := provideProvidersService(serviceedges.Edges{
