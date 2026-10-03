@@ -8,16 +8,6 @@ import (
 	"strings"
 )
 
-// ValidateConstructionRegistry rejects metadata that cannot be established
-// from authored declarations. No runtime service or effect is instantiated.
-func ValidateConstructionRegistry(root string, registry ConstructionRegistry) error {
-	index, err := loadConstructionIndex(root)
-	if err != nil {
-		return err
-	}
-	return index.validate(registry)
-}
-
 func (index constructionIndex) validate(registry ConstructionRegistry) error {
 	sets := make(map[string]ConstructionCapabilitySet)
 	for _, set := range registry.CapabilitySets {
