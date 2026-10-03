@@ -2,577 +2,213 @@ package recordings_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
-type replayArtifactTestLedger struct{}
-
-func (replayArtifactTestLedger) CanonicalEvents() []factorydefinitions.FactoryEvent { return nil }
-
-func (replayArtifactTestLedger) Subscribe(
-	context.Context,
-	*factorydefinitions.FactoryEventReconnectCursor,
-	factorydefinitions.FactoryEventReconnectScope,
-) (factorydefinitions.FactoryEventStream, error) {
-	return factorydefinitions.FactoryEventStream{}, nil
+// Construct only the root adapter; nil embedded interfaces reject unexpected
+// calls. Owner policy and public composed journeys have separate witnesses.
+func replayArtifactAdapter(artifacts recordingswire.ArtifactsExportOwner, replay recordingswire.ReplayOwner) recordings.RecordingReplayArtifacts {
+	return recordingswire.NewService(nil, nil, nil, artifacts, replay, nil, nil, platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil, nil, nil).(recordings.RecordingReplayArtifacts)
 }
 
-func (replayArtifactTestLedger) StreamGenerationID() string { return "replay-artifact-capability-test" }
-
-func (replayArtifactTestLedger) AddEventRecorder(func(factorydefinitions.FactoryEvent)) {}
-
-func (replayArtifactTestLedger) AddEventTypeRecorder(func(factorydefinitions.FactoryEventType)) {}
-
-func (replayArtifactTestLedger) AppendRecordedEvent(factorydefinitions.FactoryEvent) {}
-
-// newTestRecordingReplayArtifacts constructs the real composed Recordings
-// root from ordinary os filesystem effects and narrows it down to the
-// RecordingReplayArtifacts capability, proving construction alone (with no
-// prior Bind/Finish calls) never touches those effects.
-func newTestRecordingReplayArtifacts(t *testing.T) (recordings.Service, recordings.RecordingReplayArtifacts) {
-	t.Helper()
-	service, err := testNewServiceWithProjectionAndEffects(
-		replayArtifactTestLedger{},
-		recordingswire.NewProjectionService(),
-		nil,
-		func(string, []byte) error { return nil },
-		os.MkdirAll,
-		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
-		os.Remove,
-		os.Rename,
-		os.ReadFile,
-	)
-	if err != nil {
-		t.Fatalf("NewServiceWithProjectionAndEffects() error = %v", err)
-	}
-	replayArtifacts, ok := service.(recordings.RecordingReplayArtifacts)
-	if !ok {
-		t.Fatal("recordings.Service does not implement recordings.RecordingReplayArtifacts")
-	}
-	return service, replayArtifacts
+type artifactAdapterOwner struct {
+	recordingswire.ArtifactsExportOwner
+	request any
+	result  any
+	err     error
+	ctx     context.Context
+}
+type replayAdapterOwner struct {
+	recordingswire.ReplayOwner
+	request recordings.LoadReplayRecordingRequest
+	result  recordings.LoadReplayRecordingResult
+	err     error
 }
 
-// TestRecordingReplayArtifacts_ConstructionIsInert proves constructing the
-// capability performs no I/O: every injected filesystem effect panics if
-// invoked, yet construction alone succeeds.
-func TestRecordingReplayArtifacts_ConstructionIsInert(t *testing.T) {
+func (owner *replayAdapterOwner) LoadReplayRecording(request recordings.LoadReplayRecordingRequest) (recordings.LoadReplayRecordingResult, error) {
+	owner.request = request
+	return owner.result, owner.err
+}
+
+func (owner *artifactAdapterOwner) BuildPortableArtifact(request recordings.BuildPortableArtifactRequest) (recordings.BuildPortableArtifactResult, error) {
+	owner.request = request
+	if owner.result == nil {
+		return recordings.BuildPortableArtifactResult{}, owner.err
+	}
+	return owner.result.(recordings.BuildPortableArtifactResult), owner.err
+}
+
+func (owner *artifactAdapterOwner) ValidatePortableArtifact(request recordings.ValidatePortableArtifactRequest) (recordings.ValidatePortableArtifactResult, error) {
+	owner.request = request
+	if owner.result == nil {
+		return recordings.ValidatePortableArtifactResult{}, owner.err
+	}
+	return owner.result.(recordings.ValidatePortableArtifactResult), owner.err
+}
+
+func (owner *artifactAdapterOwner) EncodePortableArtifact(request recordings.EncodePortableArtifactRequest) (recordings.EncodePortableArtifactResult, error) {
+	owner.request = request
+	if owner.result == nil {
+		return recordings.EncodePortableArtifactResult{}, owner.err
+	}
+	return owner.result.(recordings.EncodePortableArtifactResult), owner.err
+}
+
+func (owner *artifactAdapterOwner) DecodePortableArtifact(request recordings.DecodePortableArtifactRequest) (recordings.DecodePortableArtifactResult, error) {
+	owner.request = request
+	if owner.result == nil {
+		return recordings.DecodePortableArtifactResult{}, owner.err
+	}
+	return owner.result.(recordings.DecodePortableArtifactResult), owner.err
+}
+
+func (owner *artifactAdapterOwner) SummarizePortableArtifact(request recordings.SummarizePortableArtifactRequest) (recordings.SummarizePortableArtifactResult, error) {
+	owner.request = request
+	if owner.result == nil {
+		return recordings.SummarizePortableArtifactResult{}, owner.err
+	}
+	return owner.result.(recordings.SummarizePortableArtifactResult), owner.err
+}
+
+func (owner *artifactAdapterOwner) ExportPortableArtifact(ctx context.Context, request recordings.ExportPortableArtifactRequest) (recordings.ExportPortableArtifactResult, error) {
+	owner.request = request
+	owner.ctx = ctx
+	if owner.result == nil {
+		return recordings.ExportPortableArtifactResult{}, owner.err
+	}
+	return owner.result.(recordings.ExportPortableArtifactResult), owner.err
+}
+
+func (owner *artifactAdapterOwner) ReadPortableArtifact(ctx context.Context, request recordings.ReadPortableArtifactRequest) (recordings.ReadPortableArtifactResult, error) {
+	owner.request = request
+	owner.ctx = ctx
+	if owner.result == nil {
+		return recordings.ReadPortableArtifactResult{}, owner.err
+	}
+	return owner.result.(recordings.ReadPortableArtifactResult), owner.err
+}
+
+func adapterArtifactFacts() (recordings.PortableArtifact, recordings.ArtifactEnvelope) {
+	at := time.Unix(1700000000, 0).UTC()
+	native := recordings.PortableArtifact{
+		SchemaVersion: recordings.PortableArtifactSchemaV1,
+		Summary:       recordings.PortableArtifactSummary{RecordingID: "recording", Reference: "artifact", Scope: recordings.CanonicalEventScope{FactorySessionID: "session"}, State: recordings.RecordingFinalized, EventCount: 1, Available: true, Failures: []recordings.RecordingFailure{{Code: "failed", Message: "detail", RecordedAt: at}}},
+		Events:        []recordings.CanonicalEvent{{ID: "event", Sequence: 7, FactoryTick: 9, Scope: recordings.CanonicalEventScope{FactorySessionID: "session"}, Cursor: recordings.CanonicalEventCursor{StreamGenerationID: "generation", Sequence: 7}, RecordedAt: at, Kind: "WORK_REQUEST", Payload: "{}", SourceContext: "source"}},
+		Integrity:     recordings.PortableArtifactIntegrity{Algorithm: "sha256", Digest: "digest"},
+	}
+	public := recordings.ArtifactEnvelope{
+		SchemaVersion: recordings.ArtifactSchemaV1,
+		Summary:       recordings.ArtifactSummary{RecordingID: "recording", Reference: "artifact", Scope: recordings.ReplayScope{FactorySessionID: "session"}, State: recordings.ArtifactStateFinalized, EventCount: 1, Available: true, Failures: []recordings.ArtifactFailure{{Code: "failed", Message: "detail", RecordedAt: at}}},
+		Events:        []recordings.ReplayEvent{{ID: "event", Sequence: 7, FactoryTick: 9, Scope: recordings.ReplayScope{FactorySessionID: "session"}, Cursor: recordings.ReplayEventCursor{StreamGenerationID: "generation", Sequence: 7}, RecordedAt: at, Kind: "WORK_REQUEST", Payload: "{}", SourceContext: "source"}},
+		Integrity:     recordings.ArtifactIntegrity{Algorithm: "sha256", Digest: "digest"},
+	}
+	return native, public
+}
+func TestRecordingReplayArtifactsMapsRequestsAndResults(t *testing.T) {
 	t.Parallel()
-	panicEffect := func(string, ...any) { panic("construction must not perform I/O") }
-	service, err := testNewServiceWithProjectionAndEffects(
-		replayArtifactTestLedger{},
-		recordingswire.NewProjectionService(),
-		nil,
-		func(string, []byte) error { panicEffect("writeFile"); return nil },
-		func(string, os.FileMode) error { panicEffect("makeDirectories"); return nil },
-		func(string, string) (recordings.RecordingTemporaryFile, error) {
-			panicEffect("createTemporaryFile")
-			return nil, nil
-		},
-		func(string) error { panicEffect("removePath"); return nil },
-		func(string, string) error { panicEffect("renamePath"); return nil },
-		func(string) ([]byte, error) { panicEffect("readFile"); return nil, nil },
-	)
-	if err != nil {
-		t.Fatalf("NewServiceWithProjectionAndEffects() error = %v", err)
+	native, public := adapterArtifactFacts()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	cases := []struct {
+		name                  string
+		request, result, want any
+		call                  func(recordings.RecordingReplayArtifacts) (any, error)
+	}{
+		{"Build", recordings.BuildPortableArtifactRequest{RecordingID: "recording"}, recordings.BuildPortableArtifactResult{Artifact: native}, recordings.BuildArtifactResult{Artifact: public}, func(cap recordings.RecordingReplayArtifacts) (any, error) {
+			return cap.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: "recording"})
+		}},
+		{"Validate", recordings.ValidatePortableArtifactRequest{Artifact: native}, recordings.ValidatePortableArtifactResult{Summary: native.Summary}, recordings.ValidateArtifactResult{Summary: public.Summary}, func(cap recordings.RecordingReplayArtifacts) (any, error) {
+			return cap.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: public})
+		}},
+		{"Encode", recordings.EncodePortableArtifactRequest{Artifact: native}, recordings.EncodePortableArtifactResult{Payload: []byte("encoded")}, recordings.EncodeArtifactResult{Payload: []byte("encoded")}, func(cap recordings.RecordingReplayArtifacts) (any, error) {
+			return cap.EncodeArtifact(recordings.EncodeArtifactRequest{Artifact: public})
+		}},
+		{"Decode", recordings.DecodePortableArtifactRequest{Payload: []byte("encoded")}, recordings.DecodePortableArtifactResult{Artifact: native, IgnoredJSONPaths: []string{"$.future"}}, recordings.DecodeArtifactResult{Artifact: public, IgnoredJSONPaths: []string{"$.future"}}, func(cap recordings.RecordingReplayArtifacts) (any, error) {
+			return cap.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: []byte("encoded")})
+		}},
+		{"Summarize", recordings.SummarizePortableArtifactRequest{Artifact: native}, recordings.SummarizePortableArtifactResult{Summary: native.Summary}, recordings.SummarizeArtifactResult{Summary: public.Summary}, func(cap recordings.RecordingReplayArtifacts) (any, error) {
+			return cap.SummarizeArtifact(recordings.SummarizeArtifactRequest{Artifact: public})
+		}},
+		{"Export", recordings.ExportPortableArtifactRequest{RecordingID: "recording"}, recordings.ExportPortableArtifactResult{Reference: "artifact", Artifact: native}, recordings.ExportArtifactResult{Reference: "artifact", Artifact: public}, func(cap recordings.RecordingReplayArtifacts) (any, error) {
+			return cap.ExportArtifact(ctx, recordings.ExportArtifactRequest{RecordingID: "recording"})
+		}},
+		{"Read", recordings.ReadPortableArtifactRequest{RecordingID: "recording", Reference: "artifact"}, recordings.ReadPortableArtifactResult{Artifact: native, IgnoredJSONPaths: []string{"$.future"}}, recordings.ReadArtifactResult{Artifact: public, IgnoredJSONPaths: []string{"$.future"}}, func(cap recordings.RecordingReplayArtifacts) (any, error) {
+			return cap.ReadArtifact(ctx, recordings.ReadArtifactRequest{RecordingID: "recording", Reference: "artifact"})
+		}},
 	}
-	if _, ok := service.(recordings.RecordingReplayArtifacts); !ok {
-		t.Fatal("recordings.Service does not implement recordings.RecordingReplayArtifacts")
-	}
-}
-
-func finalizedReplayArtifactRecording(
-	t *testing.T, service recordings.Service, recordingID string,
-) recordings.ReplayRecordingID {
-	return finalizedReplayArtifactRecordingAt(t, service, recordingID, filepath.Join(t.TempDir(), recordingID+".json"))
-}
-
-func finalizedReplayArtifactRecordingAt(
-	t *testing.T, service recordings.Service, recordingID string, reference string,
-) recordings.ReplayRecordingID {
-	t.Helper()
-	scope := recordings.CanonicalEventScope{FactorySessionID: "session-" + recordingID}
-	bound, err := service.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: recordings.RecordingID(recordingID),
-		Artifact:    recordings.RecordingArtifactReference(reference),
-		Scope:       scope,
-	})
-	if err != nil {
-		t.Fatalf("BindRecording: %v", err)
-	}
-	recordedAt := time.Unix(1_700_000_000, 0).UTC()
-	// The durable JSONL replay-artifact writer exercised by FinishRecording's
-	// final flush requires the first recorded event to carry decodable
-	// Factory snapshot config.
-	payload := `{"factory":{"id":"` + recordingID + `"},"recordedAt":"` + recordedAt.Format(time.RFC3339Nano) + `"}`
-	event := recordings.CanonicalEvent{
-		ID:         recordings.CanonicalEventID(recordingID + "-event"),
-		Kind:       recordings.CanonicalEventKind(recordings.FactoryEventTypeRunRequest),
-		Scope:      scope,
-		RecordedAt: recordedAt,
-		Payload:    payload,
-		Cursor: recordings.CanonicalEventCursor{
-			StreamGenerationID: "generation-" + recordingID,
-		},
-	}
-	if _, err := service.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-		RecordingID: bound.Status.RecordingID,
-		Event:       event,
-	}); err != nil {
-		t.Fatalf("RecordRecordingEvent: %v", err)
-	}
-	if _, err := service.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording: %v", err)
-	}
-	return recordings.ReplayRecordingID(bound.Status.RecordingID)
-}
-
-// TestRecordingReplayArtifacts_UnchangedBehaviorThroughComposedImplementation
-// proves the narrow capability's LoadReplay and full artifact build/
-// validate/encode/decode/summarize/export/read chain preserve identity,
-// scope, canonical order, and summary through the real composed
-// implementation, unchanged from the broader Service surface it adapts.
-// pkgmaintcheck:ignore-cyclomatic-complexity pre-existing baseline debt recorded 2026-08-08; refactor this code below the maintainability threshold and remove this exemption
-func TestRecordingReplayArtifacts_UnchangedBehaviorThroughComposedImplementation(t *testing.T) {
-	t.Parallel()
-	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
-	recordingID := finalizedReplayArtifactRecording(t, service, "unchanged-behavior")
-
-	loaded, err := replayArtifacts.LoadReplay(recordings.LoadReplayRequest{RecordingID: recordingID})
-	if err != nil {
-		t.Fatalf("LoadReplay: %v", err)
-	}
-	if loaded.Replay.RecordingID != recordingID || len(loaded.Replay.Events) != 1 {
-		t.Fatalf("LoadReplay() = %#v, want one event for %q", loaded.Replay, recordingID)
-	}
-	if loaded.Replay.Events[0].ID != "unchanged-behavior-event" {
-		t.Fatalf("LoadReplay() Events[0].ID = %q, want unchanged-behavior-event", loaded.Replay.Events[0].ID)
-	}
-
-	built, err := replayArtifacts.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: recordingID})
-	if err != nil {
-		t.Fatalf("BuildArtifact: %v", err)
-	}
-	if built.Artifact.SchemaVersion != recordings.ArtifactSchemaV1 ||
-		built.Artifact.Summary.RecordingID != recordingID ||
-		built.Artifact.Summary.EventCount != 1 ||
-		!built.Artifact.Summary.Available {
-		t.Fatalf("BuildArtifact() Artifact = %#v", built.Artifact)
-	}
-
-	validated, err := replayArtifacts.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: built.Artifact})
-	if err != nil {
-		t.Fatalf("ValidateArtifact: %v", err)
-	}
-	if !reflect.DeepEqual(validated.Summary, built.Artifact.Summary) {
-		t.Fatalf("ValidateArtifact() Summary = %#v, want %#v", validated.Summary, built.Artifact.Summary)
-	}
-
-	encoded, err := replayArtifacts.EncodeArtifact(recordings.EncodeArtifactRequest{Artifact: built.Artifact})
-	if err != nil || len(encoded.Payload) == 0 {
-		t.Fatalf("EncodeArtifact = (%d bytes, %v)", len(encoded.Payload), err)
-	}
-	decoded, err := replayArtifacts.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: encoded.Payload})
-	if err != nil {
-		t.Fatalf("DecodeArtifact: %v", err)
-	}
-	if decoded.Artifact.Integrity != built.Artifact.Integrity {
-		t.Fatalf("DecodeArtifact() Integrity = %#v, want %#v", decoded.Artifact.Integrity, built.Artifact.Integrity)
-	}
-	summarized, err := replayArtifacts.SummarizeArtifact(recordings.SummarizeArtifactRequest{Artifact: decoded.Artifact})
-	if err != nil {
-		t.Fatalf("SummarizeArtifact: %v", err)
-	}
-	if !reflect.DeepEqual(summarized.Summary, built.Artifact.Summary) {
-		t.Fatalf("SummarizeArtifact() Summary = %#v, want %#v", summarized.Summary, built.Artifact.Summary)
-	}
-
-	exported, err := replayArtifacts.ExportArtifact(context.Background(), recordings.ExportArtifactRequest{
-		RecordingID: recordingID,
-	})
-	if err != nil {
-		t.Fatalf("ExportArtifact: %v", err)
-	}
-	read, err := replayArtifacts.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
-		RecordingID: recordingID,
-		Reference:   exported.Reference,
-	})
-	if err != nil {
-		t.Fatalf("ReadArtifact: %v", err)
-	}
-	if read.Artifact.Integrity != exported.Artifact.Integrity ||
-		read.Artifact.Summary.EventCount != exported.Artifact.Summary.EventCount {
-		t.Fatalf("ReadArtifact() = %#v, want %#v", read.Artifact, exported.Artifact)
-	}
-}
-
-// TestRecordingReplayArtifacts_TypedFailures proves missing, not-yet-
-// finalized, malformed, and foreign-handle inputs return the capability's own
-// matchable ReplayArtifactError kinds while still unwrapping to the
-// underlying Recordings sentinel errors.
-func TestRecordingReplayArtifacts_TypedFailures(t *testing.T) {
-	t.Parallel()
-	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
-
-	_, err := replayArtifacts.LoadReplay(recordings.LoadReplayRequest{RecordingID: "missing"})
-	assertReplayArtifactErrorKind(t, err, recordings.ReplayArtifactErrorNotFound, recordings.ErrReplayRecordingNotFound)
-
-	active, err := service.BindRecording(recordings.BindRecordingRequest{Artifact: "artifact:active"})
-	if err != nil {
-		t.Fatalf("BindRecording active: %v", err)
-	}
-	_, err = replayArtifacts.LoadReplay(recordings.LoadReplayRequest{
-		RecordingID: recordings.ReplayRecordingID(active.Status.RecordingID),
-	})
-	assertReplayArtifactErrorKind(
-		t, err, recordings.ReplayArtifactErrorNotFinalized, recordings.ErrReplayRecordingNotFinalized,
-	)
-
-	_, err = replayArtifacts.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: []byte("{")})
-	assertReplayArtifactErrorKind(t, err, recordings.ReplayArtifactErrorInvalid, recordings.ErrInvalidPortableArtifact)
-
-	missingReference := filepath.Join(t.TempDir(), "missing-reference.json")
-	missingReferenceID := finalizedReplayArtifactRecordingAt(
-		t, service, "typed-failures-missing-reference", missingReference,
-	)
-	_, err = replayArtifacts.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
-		RecordingID: missingReferenceID,
-		Reference:   recordings.ArtifactReference(missingReference),
-	})
-	assertReplayArtifactErrorKind(
-		t, err, recordings.ReplayArtifactErrorUnavailable, recordings.ErrPortableArtifactUnavailable,
-	)
-
-	owner := finalizedReplayArtifactRecording(t, service, "typed-failures-owner")
-	other := finalizedReplayArtifactRecording(t, service, "typed-failures-other")
-	ownerExport, err := replayArtifacts.ExportArtifact(context.Background(), recordings.ExportArtifactRequest{
-		RecordingID: owner,
-	})
-	if err != nil {
-		t.Fatalf("ExportArtifact owner: %v", err)
-	}
-	_, err = replayArtifacts.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
-		RecordingID: other,
-		Reference:   ownerExport.Reference,
-	})
-	assertReplayArtifactErrorKind(t, err, recordings.ReplayArtifactErrorForeign, recordings.ErrForeignPortableArtifact)
-
-	cancelCause := errors.New("operator stopped export")
-	ctx, cancel := context.WithCancelCause(context.Background())
-	cancel(cancelCause)
-	unexported := finalizedReplayArtifactRecording(t, service, "typed-failures-cancelled")
-	_, err = replayArtifacts.ExportArtifact(ctx, recordings.ExportArtifactRequest{RecordingID: unexported})
-	assertReplayArtifactErrorKind(t, err, recordings.ReplayArtifactErrorCancelled, recordings.ErrPortableArtifactCancelled)
-	if !errors.Is(err, context.Canceled) || !errors.Is(err, cancelCause) {
-		t.Fatalf("ExportArtifact(cancelled) error = %v, want to unwrap context.Canceled and cause", err)
-	}
-}
-
-// TestRecordingReplayArtifacts_UnsupportedSchemaVersion proves an artifact
-// carrying a schema version other than the one this capability publishes
-// returns the distinct unsupported-schema classification rather than a
-// generic invalid classification.
-func TestRecordingReplayArtifacts_UnsupportedSchemaVersion(t *testing.T) {
-	t.Parallel()
-	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
-	recordingID := finalizedReplayArtifactRecording(t, service, "unsupported-schema")
-	built, err := replayArtifacts.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: recordingID})
-	if err != nil {
-		t.Fatalf("BuildArtifact: %v", err)
-	}
-	built.Artifact.SchemaVersion = "recordings.portable-artifact.v999"
-
-	_, err = replayArtifacts.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: built.Artifact})
-	assertReplayArtifactErrorKind(
-		t, err, recordings.ReplayArtifactErrorUnsupportedSchema, recordings.ErrUnsupportedPortableArtifactSchema,
-	)
-	var first *recordings.ReplayArtifactError
-	if !errors.As(err, &first) {
-		t.Fatalf("ValidateArtifact() error = %v, want ReplayArtifactError", err)
-	}
-	first.Diagnostic.SupportedVersions[0] = "mutated"
-	_, err = replayArtifacts.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: built.Artifact})
-	var second *recordings.ReplayArtifactError
-	if !errors.As(err, &second) || second.Diagnostic.SupportedVersions[0] == "mutated" {
-		t.Fatalf("later unsupported-schema diagnostic observed caller mutation: %#v", second)
-	}
-}
-
-// TestRecordingReplayArtifacts_InvalidOrder proves an artifact whose summary
-// cursors no longer match its canonical event order returns the distinct
-// invalid-order classification.
-func TestRecordingReplayArtifacts_InvalidOrder(t *testing.T) {
-	t.Parallel()
-	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
-	recordingID := finalizedReplayArtifactRecording(t, service, "invalid-order")
-	built, err := replayArtifacts.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: recordingID})
-	if err != nil {
-		t.Fatalf("BuildArtifact: %v", err)
-	}
-	if built.Artifact.Summary.FirstCursor == nil {
-		t.Fatal("BuildArtifact() Summary.FirstCursor = nil, want a cursor to corrupt")
-	}
-	built.Artifact.Summary.FirstCursor.Sequence++
-
-	_, err = replayArtifacts.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: built.Artifact})
-	assertReplayArtifactErrorKind(
-		t, err, recordings.ReplayArtifactErrorInvalidOrder, recordings.ErrInvalidPortableArtifactOrder,
-	)
-}
-
-// TestRecordingReplayArtifacts_InvalidIntegrity proves an artifact whose
-// digest no longer matches its own content returns the distinct
-// invalid-integrity classification.
-func TestRecordingReplayArtifacts_InvalidIntegrity(t *testing.T) {
-	t.Parallel()
-	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
-	recordingID := finalizedReplayArtifactRecording(t, service, "invalid-integrity")
-	built, err := replayArtifacts.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: recordingID})
-	if err != nil {
-		t.Fatalf("BuildArtifact: %v", err)
-	}
-	built.Artifact.Integrity.Digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-
-	_, err = replayArtifacts.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: built.Artifact})
-	assertReplayArtifactErrorKind(
-		t, err, recordings.ReplayArtifactErrorInvalidIntegrity, recordings.ErrInvalidPortableArtifactIntegrity,
-	)
-}
-
-// TestRecordingReplayArtifacts_MalformedDecode proves empty and malformed
-// documents still return the capability's invalid classification with no
-// partial artifact result, while additive fields remain readable.
-func TestRecordingReplayArtifacts_MalformedDecode(t *testing.T) {
-	t.Parallel()
-	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
-	recordingID := finalizedReplayArtifactRecording(t, service, "malformed-decode")
-	built, err := replayArtifacts.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: recordingID})
-	if err != nil {
-		t.Fatalf("BuildArtifact: %v", err)
-	}
-	encoded, err := replayArtifacts.EncodeArtifact(recordings.EncodeArtifactRequest{Artifact: built.Artifact})
-	if err != nil {
-		t.Fatalf("EncodeArtifact: %v", err)
-	}
-
-	cases := map[string][]byte{
-		"empty":             nil,
-		"truncated":         []byte(`{"schemaVersion":"recordings.portable-artifact.v1"`),
-		"trailing document": append(append([]byte{}, encoded.Payload...), []byte(`{}`)...),
-	}
-	for name, payload := range cases {
-		t.Run(name, func(t *testing.T) {
-			result, err := replayArtifacts.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: payload})
-			assertReplayArtifactErrorKind(t, err, recordings.ReplayArtifactErrorInvalid, recordings.ErrInvalidPortableArtifact)
-			if result.Artifact.SchemaVersion != "" || len(result.Artifact.Events) != 0 {
-				t.Fatalf("DecodeArtifact(%s) result = %#v, want zero value on failure", name, result.Artifact)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			owner := &artifactAdapterOwner{result: tc.result}
+			cap := replayArtifactAdapter(owner, nil)
+			got, err := tc.call(cap)
+			if err != nil || !reflect.DeepEqual(got, tc.want) || !reflect.DeepEqual(owner.request, tc.request) {
+				t.Fatalf("result/request = (%#v,%v)/%#v, want %#v/%#v", got, err, owner.request, tc.want, tc.request)
+			}
+			if (tc.name == "Export" || tc.name == "Read") && owner.ctx != ctx {
+				t.Fatal("context replaced")
+			}
+			cause := errors.New("owner failed")
+			owner.err = cause
+			_, err = tc.call(cap)
+			var typed *recordings.ReplayArtifactError
+			if !errors.Is(err, cause) || !errors.As(err, &typed) {
+				t.Fatalf("typed cause lost: %v", err)
 			}
 		})
 	}
-	var document map[string]json.RawMessage
-	if err := json.Unmarshal(encoded.Payload, &document); err != nil {
-		t.Fatal(err)
-	}
-	document["futureTopLevel"] = json.RawMessage(`true`)
-	futurePayload, err := json.Marshal(document)
-	if err != nil {
-		t.Fatal(err)
-	}
-	decoded, err := replayArtifacts.DecodeArtifact(recordings.DecodeArtifactRequest{Payload: futurePayload})
-	if err != nil {
-		t.Fatalf("DecodeArtifact(additive field): %v", err)
-	}
-	if !reflect.DeepEqual(decoded.IgnoredJSONPaths, []string{"$.futureTopLevel"}) {
-		t.Fatalf("DecodeArtifact(additive field) paths = %#v", decoded.IgnoredJSONPaths)
-	}
 }
-
-// TestRecordingReplayArtifacts_ExportFailureLeavesNoPartialArtifactAndRetries
-// proves a failed atomic publication (writing to a destination that is itself
-// a directory) reports the export-failed classification, leaves no partially
-// readable public artifact behind, and permits a valid retry for the same
-// recording identity.
-func TestRecordingReplayArtifacts_ExportFailureLeavesNoPartialArtifactAndRetries(t *testing.T) {
+func TestRecordingReplayArtifactsLoadMapsDetachedFacts(t *testing.T) {
 	t.Parallel()
-	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
-	destination := filepath.Join(t.TempDir(), "destination-is-directory")
-	if err := os.Mkdir(destination, 0o700); err != nil {
-		t.Fatalf("Mkdir: %v", err)
+	native, public := adapterArtifactFacts()
+	owner := &replayAdapterOwner{result: recordings.LoadReplayRecordingResult{Recording: recordings.ReplayRecordingFacts{RecordingID: "recording", Scope: native.Summary.Scope, Events: native.Events}}}
+	cap := replayArtifactAdapter(nil, owner)
+	got, err := cap.LoadReplay(recordings.LoadReplayRequest{RecordingID: "recording"})
+	want := recordings.LoadReplayResult{Replay: recordings.ReplayFacts{RecordingID: "recording", Scope: public.Summary.Scope, Events: public.Events}}
+	if err != nil || !reflect.DeepEqual(got, want) || owner.request.RecordingID != "recording" {
+		t.Fatalf("LoadReplay = %#v, %v; request %#v", got, err, owner.request)
 	}
-	scope := recordings.CanonicalEventScope{FactorySessionID: "session-export-failure"}
-	bound, err := service.BindRecording(recordings.BindRecordingRequest{
-		RecordingID: "recording-export-failure",
-		Artifact:    recordings.RecordingArtifactReference(destination),
-		Scope:       scope,
-	})
-	if err != nil {
-		t.Fatalf("BindRecording: %v", err)
-	}
-	recordedAt := time.Unix(1_700_000_000, 0).UTC()
-	// The durable JSONL replay-artifact writer exercised by FinishRecording's
-	// final flush requires the first recorded event to carry decodable
-	// Factory snapshot config.
-	event := recordings.CanonicalEvent{
-		ID:         "recording-export-failure-event",
-		Kind:       recordings.CanonicalEventKind(recordings.FactoryEventTypeRunRequest),
-		Scope:      scope,
-		RecordedAt: recordedAt,
-		Payload:    `{"factory":{"id":"recording-export-failure"},"recordedAt":"` + recordedAt.Format(time.RFC3339Nano) + `"}`,
-		Cursor:     recordings.CanonicalEventCursor{StreamGenerationID: "generation-export-failure"},
-	}
-	if _, err := service.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
-		RecordingID: bound.Status.RecordingID,
-		Event:       event,
-	}); err != nil {
-		t.Fatalf("RecordRecordingEvent: %v", err)
-	}
-	if _, err := service.FinishRecording(recordings.FinishRecordingRequest{
-		RecordingID: bound.Status.RecordingID,
-		FinishedAt:  time.Unix(1_700_000_001, 0).UTC(),
-	}); err != nil {
-		t.Fatalf("FinishRecording: %v", err)
-	}
-	recordingID := recordings.ReplayRecordingID(bound.Status.RecordingID)
-
-	_, err = replayArtifacts.ExportArtifact(context.Background(), recordings.ExportArtifactRequest{RecordingID: recordingID})
-	assertReplayArtifactErrorKind(
-		t, err, recordings.ReplayArtifactErrorExportFailed, recordings.ErrPortableArtifactExportFailed,
-	)
-
-	_, err = replayArtifacts.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
-		RecordingID: recordingID,
-		Reference:   recordings.ArtifactReference(destination),
-	})
-	var replayArtifactErr *recordings.ReplayArtifactError
-	if !errors.As(err, &replayArtifactErr) ||
-		(replayArtifactErr.Kind != recordings.ReplayArtifactErrorUnavailable &&
-			replayArtifactErr.Kind != recordings.ReplayArtifactErrorInvalid) {
-		t.Fatalf(
-			"ReadArtifact() after failed export error = %v, want ReplayArtifactError with kind %q or %q",
-			err, recordings.ReplayArtifactErrorUnavailable, recordings.ReplayArtifactErrorInvalid,
-		)
-	}
-	if err := os.Remove(destination); err != nil {
-		t.Fatalf("remove failed destination: %v", err)
-	}
-	retried, err := replayArtifacts.ExportArtifact(context.Background(), recordings.ExportArtifactRequest{
-		RecordingID: recordingID,
-	})
-	if err != nil {
-		t.Fatalf("ExportArtifact retry: %v", err)
-	}
-	if retried.Reference != recordings.ArtifactReference(destination) {
-		t.Fatalf("ExportArtifact retry reference = %q, want %q", retried.Reference, destination)
-	}
-	if _, err := replayArtifacts.ReadArtifact(context.Background(), recordings.ReadArtifactRequest{
-		RecordingID: recordingID,
-		Reference:   retried.Reference,
-	}); err != nil {
-		t.Fatalf("ReadArtifact after successful retry: %v", err)
+	got.Replay.Events[0].ID = "mutated"
+	if native.Events[0].ID != "event" {
+		t.Fatal("returned event aliases owner facts")
 	}
 }
-
-func assertReplayArtifactErrorKind(
-	t *testing.T, err error, wantKind recordings.ReplayArtifactErrorKind, wantSentinel error,
-) {
-	t.Helper()
-	var replayArtifactErr *recordings.ReplayArtifactError
-	if !errors.As(err, &replayArtifactErr) || replayArtifactErr.Kind != wantKind {
-		t.Fatalf("error = %v, want ReplayArtifactError with kind %q", err, wantKind)
-	}
-	if !errors.Is(err, wantSentinel) {
-		t.Fatalf("error does not unwrap to %v: %v", wantSentinel, err)
-	}
-	if replayArtifactErr.Diagnostic.Code != replayArtifactDiagnosticCodeForKind(wantKind) ||
-		replayArtifactErr.Diagnostic.Area == "" ||
-		replayArtifactErr.Diagnostic.Message == "" {
-		t.Fatalf("diagnostic = %#v, want safe diagnostic for kind %q", replayArtifactErr.Diagnostic, wantKind)
-	}
-	if wantKind == recordings.ReplayArtifactErrorUnsupportedSchema &&
-		!reflect.DeepEqual(replayArtifactErr.Diagnostic.SupportedVersions, []string{string(recordings.ArtifactSchemaV1)}) {
-		t.Fatalf("unsupported-schema diagnostic = %#v, want supported artifact schema", replayArtifactErr.Diagnostic)
-	}
-}
-
-func replayArtifactDiagnosticCodeForKind(kind recordings.ReplayArtifactErrorKind) recordings.ReplayArtifactDiagnosticCode {
-	switch kind {
-	case recordings.ReplayArtifactErrorNotFound:
-		return recordings.ReplayArtifactDiagnosticRecordingNotFound
-	case recordings.ReplayArtifactErrorNotFinalized:
-		return recordings.ReplayArtifactDiagnosticRecordingNotFinalized
-	case recordings.ReplayArtifactErrorCorruptInput:
-		return recordings.ReplayArtifactDiagnosticInvalidSummary
-	case recordings.ReplayArtifactErrorUnavailable:
-		return recordings.ReplayArtifactDiagnosticMissingReference
-	case recordings.ReplayArtifactErrorUnsupportedSchema:
-		return recordings.ReplayArtifactDiagnosticUnsupportedVersion
-	case recordings.ReplayArtifactErrorInvalidIntegrity:
-		return recordings.ReplayArtifactDiagnosticInvalidIntegrity
-	case recordings.ReplayArtifactErrorInvalidOrder:
-		return recordings.ReplayArtifactDiagnosticInvalidOrder
-	case recordings.ReplayArtifactErrorForeign:
-		return recordings.ReplayArtifactDiagnosticForeignReference
-	case recordings.ReplayArtifactErrorCancelled:
-		return recordings.ReplayArtifactDiagnosticCancelled
-	case recordings.ReplayArtifactErrorExportFailed:
-		return recordings.ReplayArtifactDiagnosticDependencyFailure
-	default:
-		return recordings.ReplayArtifactDiagnosticMalformed
-	}
-}
-
-// TestRecordingReplayArtifacts_DetachedResults proves mutating a returned
-// replay-fact or artifact-summary slice cannot mutate a later read.
-func TestRecordingReplayArtifacts_DetachedResults(t *testing.T) {
+func TestRecordingReplayArtifactsTranslatesOwnerClassifications(t *testing.T) {
 	t.Parallel()
-	service, replayArtifacts := newTestRecordingReplayArtifacts(t)
-	recordingID := finalizedReplayArtifactRecording(t, service, "detached-results")
-
-	first, err := replayArtifacts.LoadReplay(recordings.LoadReplayRequest{RecordingID: recordingID})
-	if err != nil {
-		t.Fatalf("LoadReplay: %v", err)
+	cases := []struct {
+		cause error
+		kind  recordings.ReplayArtifactErrorKind
+	}{
+		{recordings.ErrReplayRecordingNotFound, recordings.ReplayArtifactErrorNotFound},
+		{recordings.ErrReplayRecordingNotFinalized, recordings.ReplayArtifactErrorNotFinalized},
+		{recordings.ErrCorruptReplayInput, recordings.ReplayArtifactErrorCorruptInput},
+		{recordings.ErrPortableArtifactUnavailable, recordings.ReplayArtifactErrorUnavailable},
+		{recordings.ErrUnsupportedPortableArtifactSchema, recordings.ReplayArtifactErrorUnsupportedSchema},
+		{recordings.ErrInvalidPortableArtifactIntegrity, recordings.ReplayArtifactErrorInvalidIntegrity},
+		{recordings.ErrInvalidPortableArtifactOrder, recordings.ReplayArtifactErrorInvalidOrder},
+		{recordings.ErrPortableArtifactExportFailed, recordings.ReplayArtifactErrorExportFailed},
+		{recordings.ErrForeignPortableArtifact, recordings.ReplayArtifactErrorForeign},
+		{recordings.ErrPortableArtifactCancelled, recordings.ReplayArtifactErrorCancelled},
+		{recordings.ErrInvalidPortableArtifact, recordings.ReplayArtifactErrorInvalid},
 	}
-	first.Replay.Events[0].Payload = "mutated"
-	first.Replay.Events[0].ID = "mutated-id"
-
-	second, err := replayArtifacts.LoadReplay(recordings.LoadReplayRequest{RecordingID: recordingID})
-	if err != nil {
-		t.Fatalf("LoadReplay: %v", err)
-	}
-	if second.Replay.Events[0].Payload == "mutated" || second.Replay.Events[0].ID == "mutated-id" {
-		t.Fatalf("LoadReplay() second call observed mutation from first result: %#v", second.Replay.Events[0])
-	}
-
-	built, err := replayArtifacts.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: recordingID})
-	if err != nil {
-		t.Fatalf("BuildArtifact: %v", err)
-	}
-	built.Artifact.Events[0].Payload = "mutated"
-	built.Artifact.Summary.Failures = append(built.Artifact.Summary.Failures, recordings.ArtifactFailure{Code: "injected"})
-
-	rebuilt, err := replayArtifacts.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: recordingID})
-	if err != nil {
-		t.Fatalf("BuildArtifact (rebuild): %v", err)
-	}
-	if rebuilt.Artifact.Events[0].Payload == "mutated" || len(rebuilt.Artifact.Summary.Failures) != 0 {
-		t.Fatalf("BuildArtifact() rebuild observed mutation from earlier result: %#v", rebuilt.Artifact)
+	for _, tc := range cases {
+		t.Run(string(tc.kind), func(t *testing.T) {
+			t.Parallel()
+			owner := &replayAdapterOwner{err: tc.cause}
+			_, err := replayArtifactAdapter(nil, owner).LoadReplay(recordings.LoadReplayRequest{RecordingID: "recording"})
+			var typed *recordings.ReplayArtifactError
+			if !errors.Is(err, tc.cause) || !errors.As(err, &typed) || typed.Kind != tc.kind || typed.Diagnostic.Code == "" || typed.Diagnostic.Area == "" || typed.Diagnostic.Message == "" {
+				t.Fatalf("classification/cause lost: %v", err)
+			}
+		})
 	}
 }
 
@@ -675,97 +311,39 @@ func TestRecordingReplayArtifacts_NarrowFakeConsumption(t *testing.T) {
 	}
 }
 
-// testNewServiceWithProjectionAndEffects assembles explicit owner fixtures.
-func testNewServiceWithProjectionAndEffects(
-	ledger recordings.Ledger,
-	projection recordings.ProjectionService,
-	targets recordings.LiveRecordingTargetPlanner,
-	writeFile func(string, []byte) error,
-	makeDirectories recordings.RecordingMakeDirectories,
-	createTemporaryFile recordings.RecordingCreateTemporaryFile,
-	removePath recordings.RecordingRemovePath,
-	renamePath recordings.RecordingRenamePath,
-	readFile recordings.RecordingReadFile,
-	clocks ...recordings.RecordingClock,
-) (recordings.Service, error) {
-	publication, err := recordingswire.NewPortableArtifactPublication(
-		makeDirectories,
-		createTemporaryFile,
-		removePath,
-		renamePath,
-		readFile,
-	)
+func TestRecordingReplayArtifactsDetachArtifactResultsAndRequests(t *testing.T) {
+	t.Parallel()
+	native, public := adapterArtifactFacts()
+	owner := &artifactAdapterOwner{result: recordings.BuildPortableArtifactResult{Artifact: native}}
+	cap := replayArtifactAdapter(owner, nil)
+	built, err := cap.BuildArtifact(recordings.BuildArtifactRequest{RecordingID: "recording"})
 	if err != nil {
-		return nil, fmt.Errorf("construct Recordings publication: %w", err)
+		t.Fatal(err)
 	}
-	historicalQuery := recordingswire.NewHistoricalQueryOwner(readFile, projection)
-	return newServiceWithProjection(
-		ledger,
-		projection,
-		targets,
-		writeFile,
-		publication,
-		historicalQuery,
-		clocks...,
-	)
-}
-
-type portableArtifactPublication interface {
-	Publish(context.Context, string, []byte) error
-	Read(context.Context, string) ([]byte, error)
-}
-
-func newServiceWithProjection(
-	ledger recordings.Ledger,
-	projection recordings.ProjectionService,
-	targets recordings.LiveRecordingTargetPlanner,
-	writeFile func(string, []byte) error,
-	publication portableArtifactPublication,
-	historicalQuery recordingswire.HistoricalQueryOwner,
-	clocks ...recordings.RecordingClock,
-) (recordings.Service, error) {
-	var writer recordings.RecordingSnapshotWriter
-	var tickers recordings.RecordingFlushTickerFactory
-	if writeFile != nil {
-		writer = recordingswire.NewReplayRecordingSnapshotWriter(writeFile, nil, nil)
-		tickers = recordingswire.NewRecordingFlushTickerFactory()
+	built.Artifact.Events[0].Payload = "mutated"
+	built.Artifact.Summary.Failures[0].Code = "mutated"
+	if native.Events[0].Payload != "{}" || native.Summary.Failures[0].Code != "failed" {
+		t.Fatal("artifact result aliases owner facts")
 	}
-	lifecycle := recordingswire.NewRecordingLifecycleOwner(targets, writer, tickers, testClock(clocks))
-	service := recordingswire.NewService(ledger, projection,
-		lifecycle, recordingswire.NewArtifactsExportOwner(lifecycle, publication),
-		recordingswire.NewReplayOwner(lifecycle, projection, nil, nil), recordingswire.NewCanonicalLedgerOwner(ledger), historicalQuery,
-		testClock(clocks), logging.NoopLogger{}, nil, nil, nil, nil, nil)
-	return service, nil
-}
-
-func testClock(clocks []recordings.RecordingClock) recordings.RecordingClock {
-	if len(clocks) > 0 && clocks[0] != nil {
-		return clocks[0]
+	owner.result = recordings.ValidatePortableArtifactResult{Summary: native.Summary}
+	if _, err := cap.ValidateArtifact(recordings.ValidateArtifactRequest{Artifact: public}); err != nil {
+		t.Fatal(err)
 	}
-	return platformclock.Real{}
+	request := owner.request.(recordings.ValidatePortableArtifactRequest)
+	request.Artifact.Events[0].Payload = "changed by owner"
+	request.Artifact.Summary.Failures[0].Code = "changed by owner"
+	if public.Events[0].Payload != "{}" || public.Summary.Failures[0].Code != "failed" {
+		t.Fatal("artifact request aliases caller facts")
+	}
 }
 
-func testNewService(
-	ledger recordings.Ledger,
-	targets recordings.LiveRecordingTargetPlanner,
-	writeFile func(string, []byte) error,
-	makeDirectories recordings.RecordingMakeDirectories,
-	createTemporaryFile recordings.RecordingCreateTemporaryFile,
-	removePath recordings.RecordingRemovePath,
-	renamePath recordings.RecordingRenamePath,
-	readFile recordings.RecordingReadFile,
-	clocks ...recordings.RecordingClock,
-) (recordings.Service, error) {
-	return testNewServiceWithProjectionAndEffects(
-		ledger,
-		recordingswire.NewProjectionService(),
-		targets,
-		writeFile,
-		makeDirectories,
-		createTemporaryFile,
-		removePath,
-		renamePath,
-		readFile,
-		clocks...,
-	)
+func TestRecordingReplayArtifactsKeepsJoinedCancellationCause(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("operator stopped export")
+	owner := &artifactAdapterOwner{err: errors.Join(recordings.ErrPortableArtifactCancelled, context.Canceled, cause)}
+	_, err := replayArtifactAdapter(owner, nil).ExportArtifact(context.Background(), recordings.ExportArtifactRequest{RecordingID: "recording"})
+	var typed *recordings.ReplayArtifactError
+	if !errors.As(err, &typed) || typed.Kind != recordings.ReplayArtifactErrorCancelled || !errors.Is(err, context.Canceled) || !errors.Is(err, cause) {
+		t.Fatalf("joined cancellation cause lost: %v", err)
+	}
 }
