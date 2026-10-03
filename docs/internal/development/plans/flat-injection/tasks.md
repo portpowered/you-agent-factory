@@ -192,7 +192,8 @@ Generated outputs and consumers: owning fixtures/provider aliases and canonical 
 1. `TestConcurrentQuietAndVerboseInvocationsKeepOwnFraming`. Layer: functional. Path: `tests/functional/transport/cli/output/`.
    - Given one shared process with separate quiet, JSON, response-stream NDJSON, normal and verbose/debug invocations running concurrently with scenario-owned profiles/sessions.
    - When both complete.
-   - Then each successful invocation preserves its selected framing: quiet emits no response output, JSON remains parseable, response-stream NDJSON has ordered frames, and verbose/debug diagnostics remain local. Separately assert quiet+JSON or quiet+explicit-output returns `INVOCATION_OUTPUT_CONFLICT`, with no dispatch.
+   - Then each successful invocation preserves its selected framing: successful quiet emits ONLY its raw primary result on stdout: no lifecycle/response-stream frames, JSON wrapper, provider chunks or diagnostics, and empty stderr. JSON remains parseable, response-stream NDJSON has ordered frames, and verbose/debug diagnostics remain local. Separately assert quiet+JSON or quiet+explicit-output returns `INVOCATION_OUTPUT_CONFLICT`, with no dispatch.
+   - Quiet wording corrected by binding operator decision 2026-10-03T10:16Z, Option A, preserving `docs/reference/run.md` and the retained quiet test; no public policy or immutable Project acceptance change.
 2. `TestProcessModelsInvokeQuietKeepsHostDiagnosticsOffStdout`. Layer: functional. Path: `tests/functional/models/model_invoke/`.
    - Given a controlled host failure in separate quiet and JSON invocations (never the rejected quiet+JSON combination).
    - When the model is invoked.
