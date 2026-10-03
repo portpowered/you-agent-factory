@@ -56,10 +56,23 @@ without exposing parameter names or source text; report mode stays nonblocking.
 Generic record instantiations and declarations outside the indexed module still
 need bounded classification/debt before whole-set readiness can be claimed.
 
+Zero-argument methods that return a registered behavior/effect collaborator
+from traced required storage are service getters. Calling them reports
+`service-getter-locator` with the exact getter and enclosing operation, including
+imported type aliases, method expressions, immutable method values, deferred
+calls and closures. Same-package helper return summaries preserve this origin;
+ambiguous summaries or mutated fields report `unresolved-service-getter-locator`.
+Escaped or unused getter values report `unresolved-service-getter-reference`.
+Parameterized views, optional fields, domain/state/resource results and returns
+inside nested closures do not become peer getters. This does not yet establish
+interface-dispatched getters, named/multiple result lookup, helper-returned
+receivers or arbitrary implementation selection; those limits still require
+classification/debt before whole-set readiness.
+
 This bounded scan does not yet establish promoted
 methods, generic receiver instantiations, package-variable execution provenance,
 storage through arbitrary returned owner objects, assertion-status helper returns,
-service locators, or complete effect ancestry. Those remaining
+the remaining service-locator forms, recursive providers or complete effect ancestry. Those remaining
 story-002 cases must be proved before a capability set can claim complete
 enforcement coverage.
 

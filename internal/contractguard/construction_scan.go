@@ -43,12 +43,14 @@ func ScanConstruction(root string, registry ConstructionRegistry) ([]Constructio
 	}
 	findings := index.scanRequiredConstructionGuards(registry)
 	findings = append(findings, index.scanConstructionDependencyBags(registry)...)
+	getters := index.constructionServiceGetters(registry)
 	for _, source := range index.sources {
 		for _, decl := range source.file.Decls {
 			function, ok := decl.(*ast.FuncDecl)
 			if !ok {
 				caller := ConstructionSymbol{ImportPath: source.importPath, Name: "<package>"}
 				findings = append(findings, scanConstructionOperation(source, caller, decl, registry)...)
+				findings = append(findings, scanConstructionServiceGetters(source, caller, decl, getters, registry)...)
 				continue
 			}
 			caller := ConstructionSymbol{ImportPath: source.importPath, Name: function.Name.Name}
@@ -57,6 +59,7 @@ func ScanConstruction(root string, registry ConstructionRegistry) ([]Constructio
 			}
 			if function.Body != nil {
 				findings = append(findings, scanConstructionOperation(source, caller, function.Body, registry)...)
+				findings = append(findings, scanConstructionServiceGetters(source, caller, function.Body, getters, registry)...)
 			}
 		}
 	}
