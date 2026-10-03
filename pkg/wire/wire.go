@@ -257,6 +257,7 @@ var factorySessionsServicesSet = wire.NewSet(
 )
 
 var factoryDefinitionsServicesSet = wire.NewSet(
+	provideFactoryDefinitionCompilation,
 	provideOrchestratorDefinitionValidator,
 	provideFactoryDefinitionValidationService,
 	provideFactoryDefinitionValidator,

@@ -52,14 +52,11 @@ func newCompilationService(
 			return nil, factoryroot.ErrInvalidNamedFactory
 		}
 	}
-	svc, err := compilationwire.NewService(compilationservice.Dependencies{
-		LoadCanonical:      loadCanonical,
-		LoadFromFactoryDir: loadFromFactoryDir,
-		EncodeFactory:      stubEncodeFactory,
-	})
-	if err != nil {
-		t.Fatalf("compilationwire.NewService: %v", err)
-	}
+	svc := compilationwire.NewService(
+		loadCanonical,
+		loadFromFactoryDir,
+		stubEncodeFactory,
+	)
 	return svc
 }
 
@@ -68,6 +65,55 @@ func stubEncodeFactory(cfg *factorydefinitions.FactoryConfig) ([]byte, error) {
 		return nil, errors.New("factory config is required")
 	}
 	return json.Marshal(cfg)
+}
+
+func TestCompileEffectiveFactorySource_CancellationPrecedesLoading(t *testing.T) {
+	t.Parallel()
+	loadCanonical := func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		t.Fatal("canceled compilation reached the canonical loader")
+		return nil, nil
+	}
+	loadDirectory := func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		t.Fatal("canceled compilation reached the directory loader")
+		return nil, nil
+	}
+	svc := compilationwire.NewService(loadCanonical, loadDirectory, stubEncodeFactory)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err := svc.CompileEffectiveFactorySource(ctx, factoryroot.CompileEffectiveFactorySourceRequest{
+		Canonical: []byte(`{"name":"alpha"}`),
+	})
+	if !errors.Is(err, context.Canceled) || result != (factoryroot.CompileEffectiveFactorySourceResult{}) {
+		t.Fatalf("canceled compilation = %#v, %v; want empty result and context.Canceled", result, err)
+	}
+}
+
+func TestCompileEffectiveFactorySource_LoaderFailureRetainsCause(t *testing.T) {
+	t.Parallel()
+	for _, source := range []string{"canonical", "directory"} {
+		t.Run(source, func(t *testing.T) {
+			t.Parallel()
+			cause := errors.New("source read failed")
+			loadCanonical := func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+				return nil, cause
+			}
+			loadDirectory := func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+				return nil, cause
+			}
+			svc := compilationwire.NewService(loadCanonical, loadDirectory, stubEncodeFactory)
+			request := factoryroot.CompileEffectiveFactorySourceRequest{FactoryDir: "/factories/alpha"}
+			if source == "canonical" {
+				request.Canonical = []byte(`{"name":"alpha"}`)
+			}
+			result, err := svc.CompileEffectiveFactorySource(context.Background(), request)
+			if !errors.Is(err, cause) || !errors.Is(err, factoryroot.ErrInvalidAuthoredFactorySource) {
+				t.Fatalf("compile failure = %v; want typed invalid source and loader cause", err)
+			}
+			if result != (factoryroot.CompileEffectiveFactorySourceResult{}) {
+				t.Fatalf("failed compilation returned partial result: %#v", result)
+			}
+		})
+	}
 }
 
 func stubLoadCanonical(payload []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
