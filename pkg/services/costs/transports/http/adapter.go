@@ -20,20 +20,12 @@ type Adapter struct {
 }
 
 // NewAdapter constructs the Costs HTTP adapter for one opened runtime.
-// The optional resolver keeps direct package callers compatible while the
-// opened-runtime Wire path supplies the Factory Sessions-owned operation.
+// The resolver is supplied by Factory Sessions to preserve retained scopes.
 func NewAdapter(
 	query costs.CostsQuery,
 	metricsRoot, operatorSettingsPath string,
-	resolvers ...factorysessions.RuntimeMetricsScopeResolver,
+	resolver factorysessions.RuntimeMetricsScopeResolver,
 ) *Adapter {
-	if query == nil {
-		return nil
-	}
-	var resolver factorysessions.RuntimeMetricsScopeResolver
-	if len(resolvers) > 0 {
-		resolver = resolvers[0]
-	}
 	return &Adapter{
 		query:    query,
 		resolver: resolver,
@@ -47,14 +39,11 @@ func NewAdapter(
 // GetMetricsCosts invokes the stateless Costs operation for the requested
 // optional Factory Session scope and maps its exact result to the API model.
 func (a *Adapter) GetMetricsCosts(ctx context.Context, sessionID string) (factoryapi.CostsReport, error) {
-	if a == nil || a.query == nil {
-		return factoryapi.CostsReport{}, errors.New("Costs query is required")
-	}
 	request := a.request
 	requestedID := strings.TrimSpace(sessionID)
 	request.FactorySessionID = requestedID
 	request.RetainedFactorySessionIDs = nil
-	if requestedID != "" && a.resolver != nil {
+	if requestedID != "" {
 		scope, err := a.resolver.ResolveRuntimeMetricsScope(ctx, requestedID)
 		if err != nil {
 			if errors.Is(err, factorysessions.ErrSessionNotFound) || errors.Is(err, factorysessions.ErrNotFound) {
