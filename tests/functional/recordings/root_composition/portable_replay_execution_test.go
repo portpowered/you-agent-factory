@@ -845,3 +845,51 @@ func TestHistoricalReadKeepsTypedCorruptionAndMissingCauses(t *testing.T) {
 		t.Fatalf("failed historical read changed source or executed effects: read=%v writes=%d provider=%d", err, writes.Load(), providerRuns.Load())
 	}
 }
+
+func TestEmptyRecordingKeepsInspectionAndUnavailableProjection(t *testing.T) {
+	t.Parallel()
+	artifact, err := recordings.BuildPortableRecording(recordings.PortableRecordingCanonicalFacts{
+		SessionID: "session-empty-history", Status: "SUCCEEDED", OrchestratorKind: "JAVASCRIPT",
+		SourceRef: "workflow/empty.js", SourceHash: functionalReplayDigest('a'), PolicyHash: functionalReplayDigest('b'),
+		Events: []json.RawMessage{},
+		Result: &recordings.PortableRecordingCanonicalResult{Status: "FINAL", Mode: "final"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "empty.json")
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var service recordings.Service
+	var providerRuns, writes atomic.Int32
+	process := support.BuildProcess(t, serviceedges.Edges{
+		RecordingsRootObserver: func(root recordings.Service) { service = root },
+		RecordingReadFile:      os.ReadFile,
+		RecordingWriteFile:     func(string, []byte) error { writes.Add(1); return errors.New("empty replay must remain read-only") },
+		ProviderCommandRunner:  functionalReplayCommandRunner{calls: &providerRuns},
+	})
+	history, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
+		Recording: recordings.HistoricalRecordingIdentity{RecordingID: "empty-history", Artifact: recordings.RecordingArtifactReference(path)},
+	})
+	var unavailable *recordings.HistoricalRecordingQueryError
+	if !errors.As(err, &unavailable) || unavailable.Kind != recordings.HistoricalRecordingQueryErrorCorruptHistory || len(history.Events) != 0 || len(history.Dispatches) != 0 {
+		t.Fatalf("empty public projection = %#v, %v, want characterized CORRUPT_HISTORY without invented facts", history, err)
+	}
+	inputs := recordingContinuationInputs(t, t.TempDir(), t.TempDir(), []string{"--replay", path, "--no-record"}, false)
+	inputs.Args = []string{"you", "run", "--dir", t.TempDir(), "--replay", path, "--no-record"}
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("empty Execute replay: %v\n%s", err, inputs.Stderr())
+	}
+	if !strings.Contains(inputs.Stdout(), "Events: 0") || !strings.Contains(inputs.Stdout(), "Status: SUCCEEDED") {
+		t.Fatalf("empty replay inspection = %s", inputs.Stdout())
+	}
+	unchanged, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(payload, unchanged) || writes.Load() != 0 || providerRuns.Load() != 0 {
+		t.Fatalf("empty replay created live effects: read=%v writes=%d provider=%d", err, writes.Load(), providerRuns.Load())
+	}
+}
