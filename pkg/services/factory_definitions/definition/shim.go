@@ -44,6 +44,7 @@ func New(
 		nil,
 		factoryroot.UnimplementedService{},
 		versionFileSystem,
+		factoryroot.UnimplementedService{}.ListEffectiveFactories,
 	)
 }
 
@@ -67,6 +68,7 @@ func NewWithCatalog(
 		nil,
 		factoryroot.UnimplementedService{},
 		versionFileSystem,
+		factoryroot.UnimplementedService{}.ListEffectiveFactories,
 	)
 }
 
@@ -133,6 +135,7 @@ func NewWithValidation(
 		nil,
 		factoryroot.UnimplementedService{},
 		versionFileSystem,
+		factoryroot.UnimplementedService{}.ListEffectiveFactories,
 	)
 }
 

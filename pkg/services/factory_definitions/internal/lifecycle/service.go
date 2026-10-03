@@ -43,6 +43,7 @@ type Service struct {
 	activationGateway      factoryroot.DefinitionActivationGateway
 	versionFileSystem      factoryroot.VersionFileSystem
 	distributionService    distributionservice.Service
+	listEffective          factoryroot.EffectiveFactoryCatalogOperation
 }
 
 type nonCatalogDefaults interface {
@@ -62,6 +63,14 @@ type nonCatalogDefaults interface {
 	ResolveBuiltInPackagedFactory(context.Context, factoryroot.ResolveBuiltInPackagedFactoryRequest) (factoryroot.ResolveBuiltInPackagedFactoryResult, error)
 	InstallPackagedFactory(context.Context, factoryroot.InstallPackagedFactoryRequest) (factoryroot.InstallPackagedFactoryResult, error)
 	CreateFactoryScaffold(context.Context, factoryroot.CreateFactoryScaffoldRequest) (factoryroot.CreateFactoryScaffoldResult, error)
+}
+
+// ListEffectiveFactories delegates catalog reads to the fixed construction collaborator.
+func (s *Service) ListEffectiveFactories(
+	ctx context.Context,
+	request factoryroot.ListEffectiveFactoriesRequest,
+) (factoryroot.ListEffectiveFactoriesResult, error) {
+	return s.listEffective(ctx, request)
 }
 
 // ResolveExecutionCatalog keeps execution-policy resolution at the
@@ -97,6 +106,7 @@ func NewWithCatalogAndPackages(
 		nil,
 		factoryroot.UnimplementedService{},
 		versionFileSystem,
+		factoryroot.UnimplementedService{}.ListEffectiveFactories,
 	)
 	service.distributionService = ComposeDistributionService(
 		packagedCatalog,
@@ -131,6 +141,7 @@ func NewWithCatalogPackagesAndInstallation(
 		nil,
 		factoryroot.UnimplementedService{},
 		versionFileSystem,
+		factoryroot.UnimplementedService{}.ListEffectiveFactories,
 	)
 	service.distributionService = ComposeDistributionService(
 		packagedCatalog,
@@ -162,6 +173,7 @@ func NewWithCompilation(
 		nil,
 		compilationService,
 		versionFileSystem,
+		factoryroot.UnimplementedService{}.ListEffectiveFactories,
 	)
 	return service
 }
@@ -205,6 +217,7 @@ func NewWithCatalogPackagesValidationDistributionAndAuthoring(
 	runtimeSnapshot runtimesnapshot.Service,
 	compilation compilationservice.Service,
 	versionFileSystem factoryroot.VersionFileSystem,
+	listEffective factoryroot.EffectiveFactoryCatalogOperation,
 ) *Service {
 	return &Service{
 		nonCatalogDefaults:     factoryroot.UnimplementedService{},
@@ -217,6 +230,7 @@ func NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		activationGateway:      activationGateway,
 		versionFileSystem:      versionFileSystem,
 		distributionService:    distributionService,
+		listEffective:          listEffective,
 	}
 }
 
