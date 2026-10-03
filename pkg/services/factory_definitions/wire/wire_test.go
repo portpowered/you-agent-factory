@@ -511,24 +511,6 @@ func TestNewServiceDelegatesSnapshotPortabilityThroughRoot(t *testing.T) {
 	}
 }
 
-type stubRequiredToolChecker struct{}
-
-func (stubRequiredToolChecker) Check(
-	factorydefinitions.RequiredToolConfig,
-) factorydefinitions.RequiredToolCheckResult {
-	return factorydefinitions.RequiredToolCheckResult{}
-}
-
-type stubOrchestratorValidator struct{}
-
-func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
-	context.Context,
-	*factorydefinitions.FactoryOrchestratorJavaScriptConfig,
-	factorydefinitions.WorkflowSourceReader,
-) []factorydefinitions.ValidationTarget {
-	return nil
-}
-
 type constructionPorts struct {
 	sessionHost                   factorydefinitions.SessionHost
 	activationGateway             factorydefinitions.DefinitionActivationGateway
