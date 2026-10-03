@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/platform/process/managedchild"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -154,6 +155,7 @@ func newBlockedReadinessHarness(t *testing.T) *blockedReadinessHarness {
 		readyPath: fixture.readyPath,
 	}
 	service, err := appwire.NewModelsServiceForManagedProcessIntegration(serviceedges.Edges{
+		Clock:                     platformclock.Real{},
 		ModelInvocationGRPCDialer: platformgrpc.NetworkDialer{},
 		ModelHostProcessLauncher:  launcher,
 	})
