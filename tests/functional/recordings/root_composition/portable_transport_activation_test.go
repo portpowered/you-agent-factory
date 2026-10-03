@@ -124,7 +124,10 @@ func assertRecordingsCLITransportRecordPathActivates(t *testing.T, factoryDir, a
 		"--quiet",
 		"--record", artifactPath,
 	}
-	inputs := support.FakeInputs(context.Background(), args)
+	inputs := support.FakeInputs(t.Context(), args)
+	home := t.TempDir()
+	inputs.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home,
+		"HOMEDRIVE="+filepath.VolumeName(home), "HOMEPATH="+strings.TrimPrefix(home, filepath.VolumeName(home)))
 	inputs.WorkingDirectory = factoryDir
 	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
