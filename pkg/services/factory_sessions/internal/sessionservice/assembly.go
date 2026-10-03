@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -155,16 +156,18 @@ func (a *Assembly) ResolveWorkRuntime(sessionID string) (work.Runtime, error) {
 		if a.beforeWorkAdmissionProjectionRegistration != nil {
 			a.beforeWorkAdmissionProjectionRegistration()
 		}
-		projection := a.workAdmissionProjection(sessionID, runtime, ledger)
+		aliases := workSessionAliases(session)
+		projection := a.workAdmissionProjection(sessionID, aliases, runtime, ledger)
 		if a.workRuntimeGenerationIsCurrent(sessionID, runtime, ledger) {
 			return workRuntimeAdapter{
-				sessionID:   sessionID,
-				clock:       runtime.Clock,
-				runtime:     runtimebinding.ServiceForSession(session),
-				ingress:     ingress,
-				admissions:  projection,
-				ledger:      ledger,
-				readMetrics: session.InvocationMetricsRecorder,
+				sessionID:      sessionID,
+				sessionAliases: aliases,
+				clock:          runtime.Clock,
+				runtime:        runtimebinding.ServiceForSession(session),
+				ingress:        ingress,
+				admissions:     projection,
+				ledger:         ledger,
+				readMetrics:    session.InvocationMetricsRecorder,
 			}, nil
 		}
 		a.discardWorkAdmissionProjection(sessionID, projection)
@@ -221,6 +224,7 @@ func (a *Assembly) discardWorkAdmissionProjection(
 
 func (a *Assembly) workAdmissionProjection(
 	sessionID string,
+	aliases []string,
 	runtime *factorysessions.LiveRuntime,
 	ledger recordings.Ledger,
 ) *workAdmissionProjection {
@@ -240,6 +244,7 @@ func (a *Assembly) workAdmissionProjection(
 	}
 	if projection == nil {
 		projection = newWorkAdmissionProjectionForGeneration(sessionID, runtime, ledger, runtime.Clock)
+		projection.sessionAliases = aliases
 		a.workAdmissions[sessionID] = append(a.workAdmissions[sessionID], projection)
 	}
 	a.workAdmissionsMu.Unlock()
@@ -714,4 +719,27 @@ func (a *Assembly) SubscribeFactoryResponseEvents(ctx context.Context, request f
 		return nil, fmt.Errorf("%w: %s", factorysessions.ErrSessionNotFound, request.SessionID)
 	}
 	return subscribeLiveResponses(ctx, a.responseStreams, session, request)
+}
+
+// workSessionAliases lists every identity a live session's recorded events may
+// carry: the registry key, the canonical runtime ID, and the event-scope ID.
+// A Work read by exact session ID must match events stamped with the ~default
+// alias and vice versa, so both selector forms see the same admissions.
+func workSessionAliases(session *livesession.LiveSession) []string {
+	if session == nil {
+		return nil
+	}
+	var aliases []string
+	for _, candidate := range []string{
+		session.ID,
+		livesession.CanonicalID(session),
+		livesession.EventScopeID(session),
+		session.RuntimeFactorySessionID,
+	} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate != "" && !slices.Contains(aliases, candidate) {
+			aliases = append(aliases, candidate)
+		}
+	}
+	return aliases
 }
