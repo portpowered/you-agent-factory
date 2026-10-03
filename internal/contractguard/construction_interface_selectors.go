@@ -14,11 +14,7 @@ func constructionInterfaceSelector(owner ConstructionSymbol, name string, source
 	defer delete(visited, owner)
 	contract, ok := declaration.typeSpec.Type.(*ast.InterfaceType)
 	if !ok {
-		underlying, resolved := constructionResultSymbol(declaration.typeSpec.Type, declaration.source)
-		if !resolved {
-			return false, false
-		}
-		return constructionInterfaceSelector(underlying, name, source, visited)
+		return constructionInterfaceExpressionSelector(declaration.typeSpec.Type, name, declaration.source, source, visited)
 	}
 	known := true
 	for _, field := range contract.Methods.List {
@@ -30,16 +26,33 @@ func constructionInterfaceSelector(owner ConstructionSymbol, name string, source
 			}
 			continue
 		}
-		embedded, resolved := constructionResultSymbol(field.Type, declaration.source)
-		if !resolved {
-			known = false
-			continue
-		}
-		matched, complete := constructionInterfaceSelector(embedded, name, source, visited)
+		matched, complete := constructionInterfaceExpressionSelector(field.Type, name, declaration.source, source, visited)
 		if matched {
 			return true, true
 		}
 		known = known && complete
 	}
 	return false, known
+}
+
+// Predeclared interfaces have known method sets. Authored declarations with
+// the same name take precedence, including declarations in another source file.
+func constructionInterfaceExpressionSelector(expr ast.Expr, name string, declaringSource, source *constructionSource, visited map[ConstructionSymbol]bool) (bool, bool) {
+	if ident, ok := expr.(*ast.Ident); ok {
+		symbol := ConstructionSymbol{ImportPath: declaringSource.importPath, Name: ident.Name}
+		if source.declarations[symbol].typeSpec != nil {
+			return constructionInterfaceSelector(symbol, name, source, visited)
+		}
+		switch ident.Name {
+		case "any":
+			return false, true
+		case "error":
+			return name == "Error", true
+		}
+	}
+	symbol, resolved := constructionResultSymbol(expr, declaringSource)
+	if !resolved {
+		return false, false
+	}
+	return constructionInterfaceSelector(symbol, name, source, visited)
 }

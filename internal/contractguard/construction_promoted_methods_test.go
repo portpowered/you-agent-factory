@@ -96,6 +96,10 @@ func TestConstructionImportedPromotedGetter(t *testing.T) {
 		{"imported interface alias", `type Alias = selected.Observer; type View struct { *selected.Service; Alias }`, `view.Lookup()`, 1},
 		{"imported defined interface", `type Copy selected.Observer; type View struct { *selected.Service; Copy }`, `view.Lookup()`, 1},
 		{"imported embedded interface", `type View struct { *selected.Service; selected.Combined }`, `view.Lookup()`, 1},
+		{"imported predeclared any", `type View struct { *selected.Service; selected.EmptyAny }`, `view.Lookup()`, 1},
+		{"imported predeclared error", `type View struct { *selected.Service; selected.Failure }`, `view.Lookup()`, 1},
+		{"imported predeclared interface alias", `type Contract = selected.Failure; type View struct { *selected.Service; Contract }`, `view.Lookup()`, 1},
+		{"imported defined predeclared interface", `type Contract selected.Failure; type View struct { *selected.Service; Contract }`, `view.Lookup()`, 1},
 		{"imported interface method collision", `type View struct { *selected.Service; selected.Getter }`, `view.Lookup()`, 0},
 		{"imported interface shadows deeper getter", `type Inner struct { *selected.Service }; type View struct { selected.Getter; Inner }`, `view.Lookup()`, 0},
 		{"imported defined service", `type Copy selected.Service; type View struct { Copy }`, `view.Lookup()`, 0},
@@ -114,6 +118,8 @@ type Empty interface {}
 type Observer interface { Observe() }
 type Combined interface { Observer }
 type Getter interface { Lookup() Port }
+type EmptyAny interface { any }
+type Failure interface { error }
 func New(port Port) (*Service, error) { return &Service{port: port}, nil }
 func (s *Service) Lookup() Port { return s.port }
 func (s *Service) private() Port { return s.port }
