@@ -38,7 +38,7 @@ func (s *Service) StartCronWatchersForRuntime(
 		return
 	}
 
-	schedulerClock := s.supervisorClock()
+	schedulerClock := s.clock
 	scheduler, err := gocron.NewScheduler(
 		gocron.WithClock(schedulerClock),
 		gocron.WithLocation(time.UTC),
@@ -280,7 +280,7 @@ func (s *Service) submitCronTickForRuntime(
 		}
 
 		s.loggerValue.Warn("cron watcher trigger retrying", fields...)
-		timer := s.supervisorClock().NewTimer(cronRetryBackoff)
+		timer := s.clock.NewTimer(cronRetryBackoff)
 		select {
 		case <-ctx.Done():
 			timer.Stop()

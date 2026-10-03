@@ -30,7 +30,7 @@ import (
 )
 
 func TestRuntimeLifecycle_IsolatesOwnersAndClassifiesDuplicates(t *testing.T) {
-	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
+	service := New(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	root := service.Root()
 	ctx := context.Background()
 
@@ -77,7 +77,7 @@ func TestRuntimeLifecycle_IsolatesOwnersAndClassifiesDuplicates(t *testing.T) {
 }
 
 func TestRuntimeLifecycle_RejectsMissingIdentityWithTypedError(t *testing.T) {
-	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
+	service := New(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	_, err := service.Root().ActivateRuntime(context.Background(), automations.RuntimeActivationRequest{})
 	var typed *automations.Error
 	if !errors.As(err, &typed) || typed.Code != automations.ErrorCodeInvalid {
@@ -86,7 +86,7 @@ func TestRuntimeLifecycle_RejectsMissingIdentityWithTypedError(t *testing.T) {
 }
 
 func TestRuntimeLifecycle_RejectsBehavioralInputConflictsWithSameSnapshot(t *testing.T) {
-	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
+	service := New(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	base := runtimeActivationRequestForTest("runtime-input-conflict", "same")
 	if _, err := service.ActivateRuntime(context.Background(), base); err != nil {
 		t.Fatalf("ActivateRuntime(base) error = %v", err)
@@ -110,7 +110,7 @@ func TestRuntimeLifecycle_RejectsBehavioralInputConflictsWithSameSnapshot(t *tes
 }
 
 func TestRuntimeLifecycle_TreatsEquivalentOpaqueEffectsAsIdempotent(t *testing.T) {
-	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
+	service := New(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	base := runtimeActivationRequestForTest("runtime-opaque-effects", "same")
 	base.Inputs.Submitter = func(context.Context, work.WorkRequest) error { return nil }
 	if _, err := service.ActivateRuntime(context.Background(), base); err != nil {
@@ -129,7 +129,7 @@ func TestRuntimeLifecycle_TreatsEquivalentOpaqueEffectsAsIdempotent(t *testing.T
 }
 
 func TestRuntimeLifecycle_StartsAndStopsSchedulerOwnership(t *testing.T) {
-	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
+	service := New(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	request := runtimeActivationRequestForTest("runtime-scheduler", "scheduler")
 	request.Inputs.StartSchedulers = true
 	request.Inputs.Submitter = func(context.Context, work.WorkRequest) error { return nil }
@@ -251,7 +251,7 @@ func runtimeInstanceForWatcherTest(
 	return &runtimeInstance{
 		runtimeID:   "runtime-watcher-diagnostic",
 		watcherRoot: "/factories/example/inputs",
-		owner:       New(logger, nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService()),
+		owner:       New(logger, clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService()),
 		watcher:     runtimeLifecycleWatcher{watch: watch},
 		ctx:         ctx,
 		cancel:      cancel,
@@ -398,7 +398,7 @@ func TestRuntimeLifecycle_OpaqueIdentityUsesPresenceAndType(t *testing.T) {
 }
 
 func TestRuntimeLifecycle_CleansPendingAndMatchingRegistryEntries(t *testing.T) {
-	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
+	service := New(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	service.runtimeActivating["runtime-pending"] = struct{}{}
 	service.clearRuntimeActivation("runtime-pending")
 	if _, ok := service.runtimeActivating["runtime-pending"]; ok {
@@ -450,7 +450,7 @@ func TestRuntimeLifecycle_ClonesSnapshotConfigCollections(t *testing.T) {
 }
 
 func TestNewFilesystemWatcherUsesServiceOwnerAndHandlesNilOwner(t *testing.T) {
-	service := New(zap.NewNop(), nil, &internalScriptPollerRunner{}, "workflow", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
+	service := New(zap.NewNop(), clockwork.NewRealClock(), &internalScriptPollerRunner{}, "workflow", "", nil, nil, nil, cronwire.NewService(), fswire.NewService())
 	watcher := service.NewFilesystemWatcher(automations.FilesystemWatcherConfig{
 		Dir:            t.TempDir(),
 		Files:          watcherInputFilesystem{},
