@@ -875,16 +875,7 @@ func assertDurableReadOutcome(t *testing.T, tc durableReadCase, response mcpfact
 		if response.Error == nil || response.Error.Code != tc.code || response.Result != nil {
 			t.Fatalf("error = %#v, want %s", response, tc.code)
 		}
-		encoded, _ := json.Marshal(response)
-		if strings.Contains(string(encoded), "private/path") {
-			t.Fatal("internal detail leaked")
-		}
-		if response.Error.Retryable != (tc.code == "factory_session.request.timed_out") {
-			t.Fatalf("retryable = %v", response.Error.Retryable)
-		}
-		if tc.code == "factory_session.events.reconnect_cursor_not_found" && (response.Error.SessionID != runningSessionID || response.Error.Details["reason"] != "RECONNECT_CURSOR_NOT_FOUND") {
-			t.Fatalf("cursor correlation = %#v", response.Error)
-		}
+		assertDurableReadError(t, tc.code, response)
 		return
 	}
 	if response.Error != nil || response.Result == nil || response.Result.SessionID != runningSessionID || len(response.Result.Events) != len(tc.facts.Events) {
@@ -934,5 +925,19 @@ func TestCanonicalReadEventsValidationAndContextPrecedence(t *testing.T) {
 				t.Fatalf("validation = %s", raw)
 			}
 		})
+	}
+}
+
+func assertDurableReadError(t *testing.T, code string, response mcpfactorysession.ToolResponse[mcpfactorysession.ReadEventsResult]) {
+	t.Helper()
+	encoded, _ := json.Marshal(response)
+	if strings.Contains(string(encoded), "private/path") {
+		t.Fatal("internal detail leaked")
+	}
+	if response.Error.Retryable != (code == "factory_session.request.timed_out") {
+		t.Fatalf("retryable = %v", response.Error.Retryable)
+	}
+	if code == "factory_session.events.reconnect_cursor_not_found" && (response.Error.SessionID != runningSessionID || response.Error.Details["reason"] != "RECONNECT_CURSOR_NOT_FOUND") {
+		t.Fatalf("cursor correlation = %#v", response.Error)
 	}
 }

@@ -3,9 +3,9 @@ package stdio_test
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// M01/M08: each connection selects its own working root and owns its streams
+// M01-M05 plus the retained sequential peer-close witness: each connection selects its own working root and owns its streams
 // and profile. The immutable command edge attributes results by working root,
 // so simultaneous invocations need no mutable provider selector or long lock.
 func TestMCPStartSyncRunsFactorySessionThroughComposedProcess(t *testing.T) {
@@ -35,6 +35,12 @@ func TestMCPStartSyncRunsFactorySessionThroughComposedProcess(t *testing.T) {
 		assertComposedMCPEvents(t, server.client, sessionID)
 		server.closeInput(t)
 	})
+	for _, name := range []string{"reconnect suffix", "reconnect tail", "unknown session", "absent cursor"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assertComposedReconnect(t, process, name)
+		})
+	}
 	t.Run("closing one selection leaves its peer usable", func(t *testing.T) {
 		t.Parallel()
 		first := startComposedMemoryMCP(t, process)
@@ -131,7 +137,7 @@ func assertComposedMCPSync(t *testing.T, server *composedMemoryMCP, requestID st
 	return result.SessionId
 }
 
-func assertComposedMCPEvents(t *testing.T, client *stdioMCPClient, sessionID string) {
+func assertComposedMCPEvents(t *testing.T, client *stdioMCPClient, sessionID string) factorysessionmcp.ReadEventsResult {
 	t.Helper()
 	result := decodeComposedTool[factorysessionmcp.ReadEventsResult](t, client.call("tools/call", map[string]any{
 		"name": factorysessionmcp.ToolReadEvents, "arguments": map[string]any{"sessionId": sessionID},
@@ -147,9 +153,19 @@ func assertComposedMCPEvents(t *testing.T, client *stdioMCPClient, sessionID str
 			t.Fatalf("events are not ordered at %d: %#v", index, result.Events)
 		}
 	}
+	return result
 }
 
 func decodeComposedTool[T any](t *testing.T, response mcpJSONRPCResponse) T {
+	t.Helper()
+	envelope := decodeComposedEnvelope[T](t, response)
+	if envelope.Error != nil || envelope.Result == nil {
+		t.Fatalf("MCP tool outcome = %#v, want success", envelope)
+	}
+	return *envelope.Result
+}
+
+func decodeComposedEnvelope[T any](t *testing.T, response mcpJSONRPCResponse) factorysessionmcp.ToolResponse[T] {
 	t.Helper()
 	if response.Error != nil {
 		t.Fatalf("MCP protocol error: %#v", response.Error)
@@ -165,8 +181,60 @@ func decodeComposedTool[T any](t *testing.T, response mcpJSONRPCResponse) T {
 	if err := json.Unmarshal(encoded, &envelope); err != nil {
 		t.Fatalf("decode tool result: %v; response=%#v", err, response.Result)
 	}
-	if envelope.Error != nil || envelope.Result == nil {
-		t.Fatal(fmt.Sprintf("MCP tool outcome = %s, want success", encoded))
+	return envelope
+}
+
+func composedEventRead(client *stdioMCPClient, input factorysessionmcp.ReadEventsInput) mcpJSONRPCResponse {
+	return client.call("tools/call", map[string]any{"name": factorysessionmcp.ToolReadEvents, "arguments": input})
+}
+
+func assertComposedReconnect(t *testing.T, process support.ApplicationProcess, name string) {
+	t.Helper()
+	server := startComposedMemoryMCP(t, process)
+	initializeMCPClient(t, server.client)
+	sessionID := assertComposedMCPSync(t, server, name)
+	all := assertComposedMCPEvents(t, server.client, sessionID)
+	if len(all.Events) < 2 {
+		t.Fatal("reconnect witness requires at least two events")
 	}
-	return *envelope.Result
+	input := factorysessionmcp.ReadEventsInput{SessionID: sessionID, AfterEventID: all.Events[0].Id}
+	want := all.Events[1:]
+	switch name {
+	case "reconnect tail":
+		input.AfterEventID = all.Events[len(all.Events)-1].Id
+		want = nil
+	case "unknown session":
+		unknown := "dur-sess-" + strings.ReplaceAll(uuid.NewString(), "-", "")
+		assertComposedReadError(t, server.client, factorysessionmcp.ReadEventsInput{SessionID: unknown}, "factory_session.session.not_found", "")
+	case "absent cursor":
+		assertComposedReadError(t, server.client, factorysessionmcp.ReadEventsInput{SessionID: sessionID, AfterEventID: uuid.NewString()}, "factory_session.events.reconnect_cursor_not_found", "RECONNECT_CURSOR_NOT_FOUND")
+		negative := -1
+		assertComposedReadError(t, server.client, factorysessionmcp.ReadEventsInput{SessionID: sessionID, AfterSequence: &negative}, "BAD_REQUEST", "")
+	}
+	got := decodeComposedTool[factorysessionmcp.ReadEventsResult](t, composedEventRead(server.client, input))
+	if got.SessionID != sessionID || len(got.Events) != len(want) {
+		t.Fatalf("reconnect = %#v, want %d same-session events", got, len(want))
+	}
+	if len(want) > 0 && !reflect.DeepEqual(got.Events, want) {
+		t.Fatalf("reconnect changed canonical suffix: %#v vs %#v", got.Events, want)
+	}
+	// Failed or empty reads cannot poison the connection or its canonical history.
+	if reread := assertComposedMCPEvents(t, server.client, sessionID); !reflect.DeepEqual(reread, all) {
+		t.Fatal("subsequent read changed canonical history")
+	}
+	server.closeInput(t)
+}
+
+func assertComposedReadError(t *testing.T, client *stdioMCPClient, input factorysessionmcp.ReadEventsInput, code, reason string) {
+	t.Helper()
+	got := decodeComposedEnvelope[factorysessionmcp.ReadEventsResult](t, composedEventRead(client, input))
+	if got.Result != nil || got.Error == nil || got.Error.Code != code || got.Error.Retryable {
+		t.Fatalf("read error = %#v, want %s and retryable=false", got, code)
+	}
+	if code != "BAD_REQUEST" && got.Error.SessionID != input.SessionID {
+		t.Fatalf("error lost requested identity: %#v", got.Error)
+	}
+	if reason != "" && got.Error.Details["reason"] != reason {
+		t.Fatalf("error reason = %#v, want %s", got.Error.Details, reason)
+	}
 }
