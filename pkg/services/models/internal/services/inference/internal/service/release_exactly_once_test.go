@@ -388,17 +388,31 @@ func TestCancelAcceptedInvocationPreservesPeerScopeCapacity(t *testing.T) {
 	if host.leases[peerLease.String()].Status != models.ModelLeaseStatusActive {
 		t.Fatalf("selected cancellation changed peer capacity: %#v", host.leases[peerLease.String()])
 	}
+	// A fresh lease represents the host owner's eligible reacquisition. This
+	// witnesses Inference accepting it; capacity allocation itself stays in the
+	// leases component's exhausted/contended/recovery tests.
+	retryLease := mustLeaseRef(t, "retry-after-cancel")
+	host.leases[retryLease.String()] = activeLease(selectedScope, retryLease, "scoped-model", "worker-1")
+	retry, err := service.InvokeModelWithLease(t.Context(), releaseRequest(selectedScope, retryLease, "hold"))
+	if err != nil || retry.Status != models.ModelInvocationStatusAccepted || retry.Invocation == selected.Invocation {
+		t.Fatalf("retry after cancellation = (%#v, %v), want new accepted invocation", retry, err)
+	}
+	retryCancelled, err := service.CancelInvocation(t.Context(), models.CancelInvocationRequest{Scope: selectedScope, Invocation: retry.Invocation})
+	if err != nil || retryCancelled.LeaseDisposition != models.InvocationLeaseReleased || host.releaseCalls != 2 ||
+		host.leases[peerLease.String()].Status != models.ModelLeaseStatusActive {
+		t.Fatalf("retry cleanup = (%#v, %v), releases=%d peer=%#v", retryCancelled, err, host.releaseCalls, host.leases[peerLease.String()])
+	}
 	assertPeerCancellationScope(t, service, host, selectedScope, peer)
 }
 
 func assertPeerCancellationScope(t *testing.T, service inference.Service, host *recordingInferenceHost, selectedScope models.RuntimeScopeRef, peer models.InvokeModelResult) {
 	t.Helper()
 	wrongScope, err := service.CancelInvocation(t.Context(), models.CancelInvocationRequest{Scope: selectedScope, Invocation: peer.Invocation})
-	if !errors.Is(err, models.ErrInvocationNotFound) || wrongScope.Outcome != "" || host.releaseCalls != 1 {
+	if !errors.Is(err, models.ErrInvocationNotFound) || wrongScope.Outcome != "" || host.releaseCalls != 2 {
 		t.Fatalf("foreign cancellation = (%#v, %v), releases=%d", wrongScope, err, host.releaseCalls)
 	}
 	peerCancelled, err := service.CancelInvocation(t.Context(), models.CancelInvocationRequest{Scope: peer.Scope, Invocation: peer.Invocation})
-	if err != nil || peerCancelled.Outcome != models.InvocationCancellationRequested || peerCancelled.LeaseDisposition != models.InvocationLeaseReleased || host.releaseCalls != 2 {
+	if err != nil || peerCancelled.Outcome != models.InvocationCancellationRequested || peerCancelled.LeaseDisposition != models.InvocationLeaseReleased || host.releaseCalls != 3 {
 		t.Fatalf("peer-owned cancellation = (%#v, %v), releases=%d", peerCancelled, err, host.releaseCalls)
 	}
 }
@@ -413,7 +427,7 @@ func TestScopedInvocationAndRepeatKeepSelectedModelAndOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	peerScope := mustScopeRef(t, string(peerRef))
-	runtime := &recordingInvocationRuntime{}
+	runtime := &scopedRequestRuntime{}
 	service := newInferenceServiceWithHost(t, scopes, mustCatalog(t, scopes), host, runtime, fixedClock(), nil)
 	var previous models.ModelInvocationRef
 	for index, scenario := range []struct {
@@ -431,6 +445,12 @@ func TestScopedInvocationAndRepeatKeepSelectedModelAndOutput(t *testing.T) {
 		request.Input = models.InferenceInput{ContentType: "TEXT", Content: scenario.text}
 		result, err := service.InvokeModelWithLease(t.Context(), request)
 		assertReleaseOutcome(t, result, err, models.ModelInvocationStatusCompleted, nil)
+		observed := runtime.requests[index]
+		if observed.Request.Scope != scenario.scope || observed.Request.Lease != scenario.lease ||
+			observed.Request.ModelName != scenario.model || observed.Request.Input.Content != scenario.text ||
+			observed.Operation.Name != "generate" || !observed.HostSlot.Reused {
+			t.Fatalf("scenario %d runtime effect = %#v, want selected scope/model/lease/input/operation and ready host", index, observed)
+		}
 		if result.Scope != scenario.scope || result.ModelName != scenario.model || result.Lease != scenario.lease ||
 			result.Invocation.IsZero() || result.Invocation == previous || len(result.Content) != 1 || result.Content[0].Content != scenario.text {
 			t.Fatalf("scenario %d result = %#v, want selected identity and %q", index, result, scenario.text)
@@ -443,4 +463,14 @@ func TestScopedInvocationAndRepeatKeepSelectedModelAndOutput(t *testing.T) {
 	if runtime.invokeCalls != 3 || runtime.reusedHostSlots != 3 {
 		t.Fatalf("selected runtime calls=%d reused slots=%d, want three scoped executions", runtime.invokeCalls, runtime.reusedHostSlots)
 	}
+}
+
+type scopedRequestRuntime struct {
+	recordingInvocationRuntime
+	requests []inference.InvocationRuntimeRequest
+}
+
+func (runtime *scopedRequestRuntime) Invoke(ctx context.Context, request inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error) {
+	runtime.requests = append(runtime.requests, request)
+	return runtime.recordingInvocationRuntime.Invoke(ctx, request)
 }
