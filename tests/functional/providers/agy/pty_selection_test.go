@@ -62,17 +62,7 @@ func TestAgyCanonicalCommandRunnerExecutesWithZeroPTYEffects(t *testing.T) {
 	// is necessary for this immutable command-plus-PTY edge shape; existing AGY
 	// peers share a different graph without the PTY observer.
 	sessionID := uuid.NewString()
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir: workDir, Env: agySharedEnvironment(t.TempDir()),
-		Args:  []string{"--session", sessionID, "--continuously", "--no-record"},
-		Edges: serviceedges.Edges{ProviderCommandRunner: runner, AgyPTYHost: host},
-		BeforeStart: func(t testing.TB, _ support.Process, _ root.Input) {
-			host.assertUnused(t)
-			if runner.CallCount() != 0 {
-				t.Fatal("process construction executed provider command")
-			}
-		},
-	})
+	server, command := startCanonicalAgyScenario(t, workDir, sessionID, runner, host)
 	support.WaitForSessionTerminalStatus(t, server.URL(), sessionID, agySharedInvocationTimeout)
 	listed := support.GetJSON[factoryapi.ListWorkResponse](t, server.URL()+"/factory-sessions/"+sessionID+"/work")
 	assertAgyGoldenWorkCompleted(t, listed)
@@ -81,14 +71,52 @@ func TestAgyCanonicalCommandRunnerExecutesWithZeroPTYEffects(t *testing.T) {
 	assertAgySingleDispatchOutput(t, events, factoryapi.WorkOutcomeAccepted, output)
 	assertAgyCanonicalCommandScope(t, runner, events, sessionID, workDir, prompt)
 	host.assertUnused(t)
-	// This session owns the listener, so public Process.Close (via server.Close)
-	// releases it after canceling and joining Execute. Deleting that same session
-	// over HTTP would shut down its listener before the response can be sent.
+	support.CloseFactorySessionAt(t, server.URL(), sessionID)
+	command.Stop(t)
 	server.Close(t)
 	host.assertUnused(t)
 	if runner.CallCount() != 1 {
 		t.Fatal("provider command effect occurred after owned session cleanup")
 	}
+}
+
+func startCanonicalAgyScenario(
+	t *testing.T,
+	workDir, sessionID string,
+	runner *testutil.ProviderCommandRunner,
+	host *canonicalAgyPTYObserver,
+) (*support.FunctionalAPIServer, *support.ProcessCommand) {
+	t.Helper()
+	idleDir := filepath.Join(t.TempDir(), "idle")
+	copyAgyDirectory(t, support.LegacyFixtureDir(t, "executor_success"), idleDir)
+	commandEnv := agySharedEnvironment(t.TempDir())
+	var process support.Process
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: idleDir, Env: agySharedEnvironment(t.TempDir()),
+		Args:  []string{"--session", uuid.NewString()},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner, AgyPTYHost: host},
+		BeforeStart: func(t testing.TB, built support.Process, input root.Input) {
+			process = built
+			host.assertUnused(t)
+			if runner.CallCount() != 0 {
+				t.Fatal("process construction executed provider command")
+			}
+			// Bootstrap both private profiles before the host readiness clock.
+			support.InitializeCustomerHomeWithProcess(t, built, input.Env, idleDir)
+			support.InitializeCustomerHomeWithProcess(t, built, commandEnv, workDir)
+		},
+	})
+	if runner.CallCount() != 0 {
+		t.Fatal("idle host consumed scenario command effect")
+	}
+	host.assertUnused(t)
+	inputs := support.FakeInputs(context.Background(), []string{
+		"you", "run", "--dir", workDir, "--session", sessionID,
+		"--continuously", "--quiet", "--no-record",
+	})
+	inputs.Input.Env = commandEnv
+	inputs.Input.WorkingDirectory = workDir
+	return server, support.StartProcessCommand(t, process, inputs.Input)
 }
 
 func assertAgyCanonicalCommandScope(
