@@ -562,3 +562,52 @@ func TestFactoryConfigInitCommandHandlerReportsMissingStableInput(t *testing.T) 
 		t.Fatalf("FactoryList() error = %v, want missing stable dir input", err)
 	}
 }
+
+func TestFactoryListAndPackagedInitPreserveHomeErrorBeforeEffects(t *testing.T) {
+	t.Parallel()
+	homeErr := errors.New("home metadata unavailable")
+	called := false
+	handler := commandregistry.NewFactoryConfigInitCommandHandler(commandregistry.FactoryConfigInitServices{
+		HomeDir:       func() (string, error) { return "", homeErr },
+		ListFactories: func(factorycli.ListConfig) error { called = true; return nil },
+		ResolveFactoryRoots: func(string, string) (factorydefinitions.NamedFactoryRoots, error) {
+			called = true
+			return factorydefinitions.NamedFactoryRoots{}, nil
+		},
+		InstallPackagedFactory: func(factorydefinitionscli.InstallPackagedFactoryConfig) error { called = true; return nil },
+	})
+	globals := resolvedFactoryGlobals(t, false, false, false)
+	listInputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.factory.list.flag.dir", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("factory")},
+	)
+	initInputs := resolvedTestInputs(t,
+		resolvedTestValue{id: "you.init.flag.package", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("@you/goal")},
+		resolvedTestValue{id: "you.init.flag.dir", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("factories")},
+		resolvedTestValue{id: "you.init.flag.format", source: resolvedinput.SourceCLIFlag, value: resolvedinput.StringValue("json")},
+		resolvedTestValue{id: "you.init.flag.replace", source: resolvedinput.SourceCLIFlag, value: resolvedinput.BoolValue(false)},
+	)
+	for _, test := range []struct {
+		name   string
+		run    func() error
+		prefix string
+	}{
+		{"list", func() error { return handler.FactoryList(&cobra.Command{}, listInputs, globals) }, "resolve factory list home: "},
+		{"packaged init", func() error { return handler.Init(&cobra.Command{}, initInputs, globals) }, "resolve init home directory: "},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := test.run()
+			if !errors.Is(err, homeErr) || err.Error() != test.prefix+homeErr.Error() {
+				t.Fatalf("error=%v, want wrapped home error with prefix %q", err, test.prefix)
+			}
+			if called {
+				t.Fatal("root resolution or mutation ran after home failure")
+			}
+		})
+	}
+	// Stable-input validation still precedes home metadata resolution.
+	err := handler.FactoryList(&cobra.Command{}, resolvedinput.Inputs{}, globals)
+	var accessErr *resolvedinput.AccessError
+	if !errors.As(err, &accessErr) || errors.Is(err, homeErr) {
+		t.Fatalf("missing list input error=%v, want input error before home error", err)
+	}
+}
