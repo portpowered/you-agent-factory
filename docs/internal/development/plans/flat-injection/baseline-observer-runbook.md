@@ -1,9 +1,11 @@
-# Pinned baseline observer: owner and tool admissibility
+# Pinned baseline observer: deterministic infeasibility dossier
 
-This is the story 001 input to FI-PREREQ-BASELINE-OBS. It establishes source
-identity and rejects the cached stock Delve path before target attachment.
-It does not establish runtime feasibility, complete the story 002 dossier,
-release T27, or report P01 measurements. OBS-V/OBS-REVIEW remains independent.
+This runbook delivers the authorized dossier outcome for FI-PREREQ-BASELINE-OBS.
+The cached stock Windows Delve path is rejected before target attachment:
+its initialization writes target memory. A fresh-pin author rehearsal
+reproduces that boundary. No admitted observer, runtime values or P01
+measurements are delivered. T27 remains BLOCKED; OBS-V/OBS-REVIEW owns the
+independent verdict and any feasibility release.
 
 ## Authority and limits
 
@@ -29,7 +31,7 @@ scratch path outside other worktrees; the recorded path below was absent
 before creation. Do not operate on the repository root checkout.
 
 ```powershell
-$scratch = 'C:/Users/andre/work/portos/fi-obs-pin-20261003-001'
+$scratch = 'C:/Users/andre/work/portos/fi-obs-pin-20261003-002'
 $pin = '95e213cfb35b50236fd7a34ad66c797d2ee7b5b6'
 git worktree add --detach $scratch $pin
 git -C $scratch rev-parse HEAD
@@ -146,7 +148,7 @@ Require complete map paging and decoding, readable-empty versus unavailable
 distinction, every holder integer and total, and a feasible representative slot
 value greater than one. A missing owner, partial map, ambiguous pointer or
 unjoined writer is BLOCKED, never zero. The composed nonzero holder witness
-without a real model service remains unproved and belongs to story 002.
+without a real model service remains unproved in this dossier.
 
 ## Cached Delve command-path audit: rejected before attachment
 
@@ -220,24 +222,125 @@ variance requirement, quiet-host prerequisite, or performance threshold is
 introduced here. At most one unchanged-base contention retry with isolated
 `-p 1` is permitted; there was no build timeout or retry in story 001.
 
-## Remaining work and smallest decision
+## Deterministic dossier and stop boundary
 
-OBS-1 static identity and unsafe-path rejection are established. OBS-2 runtime
-access, coherent synchronization, complete values, nonmutation, nonzero fixture
-and cross-artifact correspondence remain BLOCKED. Story 002 must reproduce
-this boundary from a fresh pin and complete the deterministic dossier, or
-demonstrate a separately admissible path before any smoke. It must use the
-operator authority procedure if proceeding requires a scope/tool decision.
+Failure category: `missing_prerequisite`. The missing prerequisite is an
+admitted external reader, not a failing product implementation. This is a
+bounded rejection of the inspected cached path; it is not proof that every
+possible external reader is impossible. No alternative backend is admitted
+merely because its executable exists.
 
-The smallest missing capability is an independently auditable external reader
-that suspends and reads the exact target without automatic target writes and
-recovers complete composed owner state. The owning decision is whether to
-authorize investigation of that specific capability or retain P01 BLOCKED and
-accept an infeasibility dossier. No broader production instrumentation or
-changed pin is implied. This first-story increment does not request or assume
-that decision. Independent feasibility release belongs to OBS-V/OBS-REVIEW;
-T27/T22 own P01, I01 owns shutdown/flush, VAL01 owns composed acceptance and
-T29/S01 owns final construction policy.
+| Gate | Observed evidence | Result and impact |
+| --- | --- | --- |
+| OBS-1 identity | Clean exact pin; matching owner, tool and source hashes above | Static owner identities and unsafe-path rejection reproduced |
+| OBS-2 nonmutation | Native launch/attach invokes target initialization, automatic breakpoints and Windows preemption assignment | REJECTED before launch/attach; no admissible runtime observation |
+| OBS-2 access/value | No target or fixture artifact exists; no private pointers recovered | BLOCKED for all four observations; unavailable is not readable empty |
+| OBS-2 synchronization | No public-driving fixture signal gates or all-thread snapshot executed | BLOCKED: neither writer inactivity nor a coherent Q0/Q1/Q2 snapshot is proved |
+| OBS-2 complete maps | Default Delve map loading caps values at 64 | BLOCKED: no complete records, per-slot integer values or sum; no invented zeros |
+| OBS-2 holder witness | Lease acquisition requires READY slot facts from the composed host-backed adapter | BLOCKED: no composed slot with holder value greater than one demonstrated |
+| OBS-2 correspondence | No optimized or diagnostic target artifact built | BLOCKED: artifact correspondence and comparable timing are unproved |
+| OBS-3 reproducibility | Fresh-pin source/tool inspection reproduces the same rejection before target access | Author static rehearsal only; independent OBS-V still required |
+
+The Models fixture edge is specifically unresolved, rather than declared
+impossible. At the pin, `runtime_host/internal/service/slot_facts.go:28-44`
+constructs the leases owner with a host-backed `slotFactsAdapter`. Its
+`slotFacts` resolves the scope, inspects runtime cache assets, overlays
+supervised readiness and derives capacity from scoped configuration.
+Lease acquisition at `leases/internal/service/service.go:64-69` rejects
+non-READY facts before changing either map. Pinned `pkg/services/edges/definition.go`
+does expose `ModelRuntimeCommandRunner` and `ModelRuntimeHTTPClient` controlled
+effect ports (lines 133-134). Their presence alone does not demonstrate a
+permitted composed readiness fixture. A component-only fake slot-facts provider
+would manufacture a different owner graph and cannot discharge this edge.
+Investigating that fixture is conditional on an admitted observer; no real
+model process, endpoint, downloads or new public seam is justified here.
+
+Additional pinned SHA256 identities for this fixture inspection:
+
+| Source | SHA256 |
+| --- | --- |
+| `pkg/services/models/internal/services/runtime_host/internal/service/slot_facts.go` | `A77B4090C04CC04612B9D7E3F8F351C7C55EBF216F8D0EAAF9DAF7FFB2BDA7B7` |
+| `pkg/services/models/internal/services/runtime_host/internal/service/service.go` | `06ED2F2F74D2F168F29EE7C853FF3C98BC00074FA4FB2AD169171C113D2748BF` |
+| `pkg/services/edges/definition.go` | `7BDB347DEBB61FA85F7D654A72FE31C734B502ED829B5E37846F721784EFBD9D` |
+
+Reproduce that inspection without invoking product functions:
+
+```powershell
+$runtimeHost = "$scratch/pkg/services/models/internal/services/runtime_host/internal/service"
+Get-Content "$runtimeHost/slot_facts.go"
+Get-Content "$runtimeHost/service.go" | Select-Object -Skip 548 -First 40
+rg -n 'ModelRuntimeCommandRunner|ModelRuntimeHTTPClient' "$scratch/pkg/services/edges/definition.go"
+Get-FileHash -Algorithm SHA256 "$runtimeHost/slot_facts.go", "$runtimeHost/service.go", "$scratch/pkg/services/edges/definition.go"
+```
+
+Attempt history: story 001 located owners and rejected native stock Delve
+statically. Story 002 repeated that audit from a fresh detached pin using the
+same cached binary/source identities and confirmed the composition readiness
+boundary. Both stopped before target launch. GDB received identity/version
+checks only; no access attempt was made. A guessed `edges/edges.go` discovery
+path returned file-not-found; `rg --files` located `edges/definition.go` and the
+corrected inspection succeeded. No build timeout, contention retry, artifact
+smoke, unit/race support suite or lifecycle workload occurred. Optional support
+is absent because its runtime prerequisite failed, not because a fake passed.
+
+The smallest owning decision is whether to retain this dossier and P01 BLOCKED,
+or authorize a separately scoped investigation of a specific external reader
+with demonstrable no-write suspension, complete owner recovery and decoding.
+The current lane already authorizes delivering the dossier; it grants no
+authority to widen tools, change the pin, add production hooks or release P01.
+An operator decision is required before any such successor investigation.
+Independent review may accept the dossier's honesty and reproducibility while
+reporting observer feasibility BLOCKED. T27/T22 own later P01 measurements;
+I01 owns shutdown/flush; VAL01 owns composed acceptance; T29/S01 owns final
+construction policy.
+
+## Author clean-checkout rehearsal
+
+The 2026-10-03 rehearsal began with clean delivery commit
+`21c0e865022ee4b8b56951b05cbca115a8c3e765` and a fresh detached original pin.
+The final runbook must also be read from a clean committed delivery checkout
+before handoff. Use the PR's final head for independent OBS-V, not this
+historical rehearsal input.
+
+```powershell
+$delivery = 'C:/Users/andre/work/portos/fi-obs-delivery-20261003-002'
+git worktree add --detach $delivery HEAD
+git -C $delivery rev-parse HEAD
+git -C $delivery status --porcelain
+Get-Content "$delivery/docs/internal/development/plans/flat-injection/baseline-observer-runbook.md"
+git -C $scratch rev-parse HEAD
+git -C $scratch status --porcelain
+Get-ChildItem -LiteralPath $scratch, $delivery -Recurse -File -Force |
+    Measure-Object -Property Length -Sum
+```
+
+Both worktree creations and identity/status commands exited 0; delivery HEAD
+was the commit above and scratch HEAD was the original pin. Both statuses were
+empty. The exact owner/writer commands and seven Delve trace commands in this
+runbook returned the same fields, mutation paths and map cap; all six pinned
+owner hashes and seven Delve source hashes matched the tables. Binary identity
+checks matched cached Go, Delve and GDB; version commands returned Go 1.25.0
+windows/amd64, Delve 1.27.0 and GDB 16.3, each exit 0. No support overlay was
+installed and product bytes were unchanged. This proves static reproducibility
+at local-real fidelity. It proves no runtime value, quiescence, cleanup join,
+retention threshold, timing result or independent validation verdict.
+
+Readers must stop here on the same unsupported path. Do not compile or attach
+a target to turn this source rejection into a runtime experiment. If hashes,
+owners or source paths differ, record the mismatch and require a new audit;
+do not fall back to another tool or interpret unavailable storage as zero.
+
+Independent OBS-V/OBS-REVIEW uses the
+[canonical loopback template](../../../../../factory/docs/standards/validation-loopback-template.md)
+from a clean final delivery head and fresh original pin. Record environment,
+artifact identities, the exact journey, findings and criterion dispositions.
+OBS-1 and OBS-3 can pass dossier inspection; OBS-2 and FI-A6/P01 remain BLOCKED.
+Record OBS-Q quality independently and OBS-D as author delivery only. FI-A1
+through FI-A8 retain their original owner gates in the PRD; this slice makes
+no Project-wide PASS claim. A BLOCKED feasibility verdict needs the template's
+delta-plan request naming the external reader prerequisite. The reviewer must
+not silently repair the tool or substitute independent evidence with this
+author rehearsal.
 
 ## Quality and handoff
 
@@ -262,8 +365,8 @@ test. The source pin remained clean throughout; no overlay was installed.
 
 These checks prove Markdown/whitespace quality only. No test support or tests change;
 no source-scanning test substitutes for runtime proof. Commit only the new
-runbook, push the verified increment and open a draft PR while story 002
-remains. Independent readers use the
+runbook and push the verified final head to the existing PR. Keep a draft
+only while an authority decision or story work remains. Independent readers use the
 [canonical loopback template](../../../../../factory/docs/standards/validation-loopback-template.md).
 CI evidence belongs in a PR comment. Review owns terminal CI, current-main
 premerge checks and merge. Never claim an author-produced independent verdict.
