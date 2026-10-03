@@ -317,10 +317,22 @@ func (decoder *decoder) decodeRecord(raw []byte) {
 		detail, _ := json.Marshal(record.Usage)
 		decoder.addProgress("usage.updated", string(detail), nil)
 		decoder.addProgress("turn.completed", "completed", nil)
+	case "task_complete", "turn.failed", "error":
+		decoder.decodeFailureRecord(record)
+	case "item.started", "item.updated", "item.completed":
+		decoder.decodeItem(record.Type, record.Item)
+	default:
+		decoder.addDiagnostic("unsupported_event")
+	}
+}
+
+// decodeFailureRecord records the failure a task_complete, turn.failed, or
+// error record declares. A task_complete that carries an error (for example a
+// model-capacity overload with no final agent message) is a declared failure;
+// a task_complete without one carries no failure signal.
+func (decoder *decoder) decodeFailureRecord(record recordEnvelope) {
+	switch record.Type {
 	case "task_complete":
-		// A completion that carries an error (for example a model-capacity
-		// overload with no final agent message) is a declared failure; a
-		// completion without one carries no failure signal.
 		if record.Error != nil && strings.TrimSpace(record.Error.Message) != "" {
 			decoder.declareFailure(*record.Error)
 		}
@@ -330,16 +342,12 @@ func (decoder *decoder) decodeRecord(raw []byte) {
 			return
 		}
 		decoder.declareFailure(*record.Error)
-	case "error":
+	default:
 		if strings.TrimSpace(record.Message) == "" {
 			decoder.markDecodeFailure("malformed_error")
 			return
 		}
 		decoder.declareFailure(errorRecord{Message: record.Message, CodexErrorInfo: record.CodexErrorInfo})
-	case "item.started", "item.updated", "item.completed":
-		decoder.decodeItem(record.Type, record.Item)
-	default:
-		decoder.addDiagnostic("unsupported_event")
 	}
 }
 
