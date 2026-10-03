@@ -15,6 +15,7 @@ import contextlib
 import hashlib
 import json
 import os
+import random
 import re
 import shutil
 import stat
@@ -28,6 +29,16 @@ from pathlib import Path
 IMMUTABLE_OBJECT_ID = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 SNAPSHOT_REF_PREFIX = "refs/factory-snapshots/"
 ROOT_SYNC_LOCK_FILENAME = "setup-workspace-root-sync.lock"
+# Bounded retry for transient Git lock contention. Up to 16 lanes share one
+# root checkout, so another git process can briefly hold index.lock or a ref
+# lock. Base delays total ~60s before jitter. Lock files are never deleted.
+GIT_LOCK_RETRY_BASE_DELAYS = (4.0, 8.0, 12.0, 16.0, 20.0)
+GIT_LOCK_RETRY_ATTEMPTS = len(GIT_LOCK_RETRY_BASE_DELAYS) + 1
+GIT_LOCK_RETRY_JITTER = 0.25
+GIT_LOCK_CONTENTION = re.compile(
+    r"index\.lock|unable to create '[^']*\.lock': file exists|cannot lock ref",
+    re.IGNORECASE,
+)
 MAX_ANCESTOR_RESIDUE_PATHS = 20
 MAX_DIRTY_ROOT_SAMPLE_ENTRIES = 12
 MAX_DIRTY_ROOT_ATTRIBUTION_PATHS = 5
@@ -173,23 +184,55 @@ def format_stage_failure(stage, error):
     return f"{stage}: {details}"
 
 
-def run_git(*args, cwd=None, check=True, env=None):
-    """Run a git command, returning stdout. Raises on failure if check=True."""
-    result = subprocess.run(
-        ["git"] + list(args),
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="surrogateescape",
-        env=env,
-        check=False,
+def is_git_lock_contention(result):
+    """Recognize only Git's transient lock-contention diagnostics."""
+    return result.returncode != 0 and bool(
+        GIT_LOCK_CONTENTION.search(result.stderr or "")
     )
+
+
+def run_git(*args, cwd=None, check=True, env=None):
+    """Run a git command, returning the result. Raises on failure if check=True.
+
+    Transient lock contention (index.lock, ref locks) is retried a bounded
+    number of times with jittered backoff; every other failure returns or
+    raises immediately.
+    """
+    attempt = 1
+    while True:
+        result = subprocess.run(
+            ["git"] + list(args),
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="surrogateescape",
+            env=env,
+            check=False,
+        )
+        contended = is_git_lock_contention(result)
+        if not contended or attempt >= GIT_LOCK_RETRY_ATTEMPTS:
+            break
+        delay = GIT_LOCK_RETRY_BASE_DELAYS[attempt - 1] * random.uniform(
+            1 - GIT_LOCK_RETRY_JITTER, 1 + GIT_LOCK_RETRY_JITTER,
+        )
+        print(
+            f"git {bounded_failure_details(' '.join(args))}: lock contention "
+            f"(attempt {attempt} of {GIT_LOCK_RETRY_ATTEMPTS}); "
+            f"retrying in {delay:.1f}s",
+            file=sys.stderr,
+        )
+        time.sleep(delay)
+        attempt += 1
     if check and result.returncode != 0:
+        persisted = (
+            f"lock contention persisted after {attempt} attempts: "
+            if contended else ""
+        )
         raise RuntimeError(
             f"git {bounded_failure_details(' '.join(args))} failed "
             f"(exit {result.returncode}): "
-            f"{command_failure_details(result)}"
+            f"{persisted}{command_failure_details(result)}"
         )
     return result
 
