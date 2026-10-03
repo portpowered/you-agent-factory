@@ -6,7 +6,7 @@ flowchart TB
     s_services_automations["automations<br/>9101 LOC · 5 subservices"]
     s_services_chat_sessions["chat sessions<br/>4958 LOC · 0 subservices"]
     s_services_webhooks["webhooks<br/>762 LOC · 0 subservices"]
-    s_services_work["work<br/>20124 LOC · 3 subservices"]
+    s_services_work["work<br/>20108 LOC · 3 subservices"]
   end
   subgraph configuration["Configuration"]
     s_services_factory_definitions["factory definitions<br/>36134 LOC · 8 subservices"]
@@ -17,10 +17,10 @@ flowchart TB
     s_services_factory_sessions["factory sessions<br/>58106 LOC · 4 subservices"]
   end
   subgraph execution["Execution"]
-    s_services_models["models<br/>42606 LOC · 5 subservices"]
+    s_services_models["models<br/>42603 LOC · 5 subservices"]
     s_services_provider_sessions["provider sessions<br/>5402 LOC · 2 subservices"]
     s_services_providers["providers<br/>16381 LOC · 4 subservices"]
-    s_services_worker_sessions["worker sessions<br/>18428 LOC · 0 subservices"]
+    s_services_worker_sessions["worker sessions<br/>18363 LOC · 0 subservices"]
     s_services_workers["workers<br/>21946 LOC · 2 subservices"]
   end
   subgraph recordings["Recordings and events"]
