@@ -87,6 +87,10 @@ their result is a concrete indexed type. This establishes qualified method
 identity, not helper-return equivalence or required storage provenance; constructor
 field tracing still uses its separate allocation/alias rules. Interface
 implementation selection and opaque function values remain uncovered.
+Address and dereference expressions preserve the known receiver declaration,
+including helper results, tuple bindings and local aliases. This proves method
+identity only; it does not prove pointer validity, instance equivalence, or the
+method set of an arbitrary pointer depth or interface implementation.
 
 Required constructor records containing registered behavior/effect collaborators
 are reported as `required-dependency-bag`. Authored nested and embedded fields,
