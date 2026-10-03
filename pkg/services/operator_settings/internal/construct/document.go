@@ -33,14 +33,10 @@ func NewConfigDocumentService(
 	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) operatorsettings.ConfigDocumentService {
 	return operatorsettings.ConfigDocumentService{
-		Files:             files,
-		CreateTemp:        createTemp,
-		Providers:         providers,
-		Decoder:           decoder,
-		DiagnosticDecoder: firstDiagnosticDecoder(diagnosticDecoders),
-		Encoder:           encoder,
-		DocumentOwner:     NewDocumentOwner(files, createTemp, decoder, encoder, providers, diagnosticDecoders...),
-		PersistenceLock:   persistenceLock,
+		Decoder:         decoder,
+		Encoder:         encoder,
+		DocumentOwner:   NewDocumentOwner(files, createTemp, decoder, encoder, providers, diagnosticDecoders...),
+		PersistenceLock: persistenceLock,
 	}
 }
 

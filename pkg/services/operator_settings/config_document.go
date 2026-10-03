@@ -25,18 +25,13 @@ type ProviderModelUpdate struct {
 
 // ConfigDocumentService is a service-local compatibility adapter. It contains
 // a completed DocumentOwner and config codecs; it is not the peer-facing
-// Operator Settings authority. New code should depend on Service. Legacy ports
-// remain only for the construction entries awaiting compatibility retirement.
+// Operator Settings authority. New code should depend on Service. Filesystem,
+// preservation, catalog, and diagnostics policy belong to the completed owner.
 type ConfigDocumentService struct {
-	Files                 FileSystem
-	CreateTemp            CreateTemporaryFile
-	Providers             ProviderCatalog
-	Decoder               ConfigDecoder
-	DiagnosticDecoder     ConfigDiagnosticsDecoder
-	Encoder               ConfigEncoder
-	PreserveUnknownFields ConfigDocumentPreserver
-	DocumentOwner         DocumentOwner
-	PersistenceLock       sync.Locker
+	Decoder         ConfigDecoder
+	Encoder         ConfigEncoder
+	DocumentOwner   DocumentOwner
+	PersistenceLock sync.Locker
 }
 
 // ErrProviderModelInputCanceled is returned by a prompt when the operator
@@ -54,9 +49,9 @@ func (service ConfigDocumentService) owner() (DocumentOwner, error) {
 // Load reads and validates a complete operator configuration. A missing
 // destination is represented by an empty, valid document.
 func (service ConfigDocumentService) Load(path string) (ConfigDocument, error) {
-	// Preserve the legacy port-only boundary's failure while completed owners
+	// Preserve the zero-value adapter's failure while completed owners
 	// retain responsibility for their own filesystem and persistence effects.
-	if service.DocumentOwner == nil && service.Files == nil {
+	if service.DocumentOwner == nil {
 		return ConfigDocument{}, fmt.Errorf("operator settings filesystem is required")
 	}
 	if service.PersistenceLock != nil {
@@ -269,11 +264,8 @@ func (service ConfigDocumentService) validatePersistencePorts(path string) error
 	if strings.TrimSpace(path) == "" {
 		return fmt.Errorf("operator config path is required")
 	}
-	if service.DocumentOwner == nil && service.Files == nil {
+	if service.DocumentOwner == nil {
 		return fmt.Errorf("operator settings filesystem is required")
-	}
-	if service.DocumentOwner == nil && service.CreateTemp == nil {
-		return fmt.Errorf("operator settings temporary-file creator is required")
 	}
 	return nil
 }

@@ -1684,7 +1684,6 @@ pkg/services/operator_settings/internal/construct/resolution.go: unreachable fun
 pkg/services/operator_settings/internal/construct/resolution.go: unreachable func: SetConstructResolutionServiceForTests
 pkg/services/operator_settings/internal/construct/resolution.go: unreachable func: SetConstructResolutionWireForTests
 pkg/services/operator_settings/internal/construct/resolution.go: unreachable func: defaultResolutionService
-pkg/services/operator_settings/internal/construct/service_from_config_document.go: unreachable func: NewServiceFromConfigDocument
 pkg/services/operator_settings/internal/construct/service_from_home_ports.go: unreachable func: NewServiceFromHomePorts
 pkg/services/operator_settings/internal/providers_root_construct.go: unreachable func: ConfigureProvidersRootConstructor
 pkg/services/operator_settings/internal/providers_root_construct.go: unreachable func: ConstructProvidersRoot
