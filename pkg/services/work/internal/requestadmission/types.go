@@ -167,7 +167,10 @@ type FactoryWorkItem struct {
 	PreviousChainingTraceIDs []string
 	TraceID                  string
 	Content                  []ContentPart
-	Tags                     map[string]string
+	// Payload is the submitted raw Work payload, kept so the request record
+	// (and the canonical WORK_REQUEST event built from it) preserves it.
+	Payload []byte
+	Tags    map[string]string
 }
 
 type FactoryRelation struct {

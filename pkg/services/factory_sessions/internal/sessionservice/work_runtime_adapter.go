@@ -506,9 +506,10 @@ func workAdmissionsFromFactoryEvents(
 				continue
 			}
 			admissions = append(admissions, work.WorkAdmission{
-				WorkID: workID,
-				Name:   item.Name,
-				Order:  len(admissions),
+				WorkID:  workID,
+				Name:    item.Name,
+				Payload: string(item.Payload),
+				Order:   len(admissions),
 			})
 		}
 	}

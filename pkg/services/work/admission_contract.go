@@ -574,6 +574,7 @@ func workRequestRecordFromAdmission(record requestadmission.RequestRecord) WorkR
 			PreviousChainingTraceIDs: cloneStringSlice(item.PreviousChainingTraceIDs),
 			TraceID:                  item.TraceID,
 			Content:                  workContentPartsFromAdmission(item.Content),
+			Payload:                  eventPayload(item.Payload),
 			Tags:                     cloneStringMap(item.Tags),
 		})
 	}

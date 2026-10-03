@@ -556,3 +556,44 @@ func TestReplayDispatchFromEvent_DerivesCanonicalPreviousLineageFromMixedInputs(
 		t.Fatalf("replayed resource token data type = %q, want resource", tokens[3].Color.DataType)
 	}
 }
+
+func TestReplayWorkRequestWork_RestoresRecordedSubmittedPayload(t *testing.T) {
+	for name, tc := range map[string]struct {
+		submitted string
+		want      string
+	}{
+		"json object": {submitted: `{"contract":"keep me","scope":["a","b"]}`, want: `{"contract":"keep me","scope":["a","b"]}`},
+		"plain text":  {submitted: "plain customer ask", want: "plain customer ask"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			recorded := work.WorkRequestEventWork{
+				Name: "idea", WorkID: "w-1", WorkTypeID: "idea",
+				Payload: recordedJSON(tc.submitted),
+			}
+			// The recorded event round-trips through JSON before replay reads it.
+			encoded, err := json.Marshal(recorded)
+			if err != nil {
+				t.Fatalf("marshal recorded work: %v", err)
+			}
+			var decoded work.WorkRequestEventWork
+			if err := json.Unmarshal(encoded, &decoded); err != nil {
+				t.Fatalf("unmarshal recorded work: %v", err)
+			}
+			replayed := replayWorkRequestWork(decoded, "req-1").Payload
+			got, ok := replayed.([]byte)
+			if !ok || string(got) != tc.want {
+				t.Fatalf("replayed payload = %#v, want %q", replayed, tc.want)
+			}
+		})
+	}
+}
+
+// recordedJSON mirrors how a submitted payload is recorded on a WORK_REQUEST
+// event: valid JSON verbatim, plain text as a JSON string.
+func recordedJSON(submitted string) json.RawMessage {
+	if json.Valid([]byte(submitted)) {
+		return json.RawMessage(submitted)
+	}
+	encoded, _ := json.Marshal(submitted)
+	return encoded
+}

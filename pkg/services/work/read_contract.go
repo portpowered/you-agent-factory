@@ -3,6 +3,7 @@ package work
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	pathpkg "path"
 	"strings"
@@ -62,7 +63,9 @@ type ReadModel struct {
 	PreviousChainingTraceIDs  []string
 	TraceID                   string
 	Content                   []WorkContentPart
-	StructuredResult          any
+	// Payload is the submitted Work payload as a JSON value.
+	Payload          json.RawMessage
+	StructuredResult any
 	// StructuredResultPresent preserves an explicitly stored JSON null in the
 	// detached read contract while keeping absent results distinguishable.
 	StructuredResultPresent bool
@@ -487,7 +490,10 @@ type ListCountSummary struct {
 type WorkAdmission struct {
 	WorkID string
 	Name   string
-	Order  int
+	// Payload is the submitted Work payload recorded on the admission event,
+	// as a JSON value. Reads expose it as the Work payload.
+	Payload string
+	Order   int
 }
 
 // ReadSnapshot is the detached runtime observation consumed only by the Work

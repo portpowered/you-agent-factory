@@ -99,6 +99,9 @@ func WorkReadModelToAPI(item work.ReadModel) factoryapi.Work {
 		FailureDetail:            workFailureDetailToAPI(item.FailureDetail),
 		StopSummary:              workStopSummaryToAPI(item.StopSummary),
 	}
+	if len(item.Payload) > 0 {
+		result.Payload = json.RawMessage(append(json.RawMessage(nil), item.Payload...))
+	}
 	if jsonvalue.Present(item.StructuredResult, item.StructuredResultPresent) {
 		if item.StructuredResult == nil {
 			// A non-nil RawMessage keeps JSON null present through generated
