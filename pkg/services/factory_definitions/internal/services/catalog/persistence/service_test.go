@@ -30,11 +30,14 @@ func validPersistenceValidationRequest() factorydefinitions.DefinitionValidation
 func TestServiceRoutesPersistenceThroughFlatCapabilities(t *testing.T) {
 	t.Parallel()
 
-	validator := factoryvalidation.New(nil)
+	canonicalLoads := 0
+	validator := factoryvalidation.New(nil, func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+		canonicalLoads++
+		return nil, nil
+	})
 	prepared := &factorydefinitions.PreparedFactoryLayoutPayload{}
 	var preparedWith factorydefinitions.Validator
 	mapCalls := 0
-	canonicalLoads := 0
 	writeCalls := 0
 
 	service, err := catalogpersistence.New(
@@ -47,7 +50,7 @@ func TestServiceRoutesPersistenceThroughFlatCapabilities(t *testing.T) {
 			request := validPersistenceValidationRequest()
 			request.Profile = factorydefinitions.ValidationProfileTopology
 			request.CanonicalFactoryLoader = func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-				canonicalLoads++
+				t.Fatal("request replaced injected canonical loader")
 				return nil, nil
 			}
 			return request, nil
@@ -150,7 +153,7 @@ func TestServiceRoutesPersistenceThroughFlatCapabilities(t *testing.T) {
 func TestCreateNamedFactory_DiscardsStagingWhenLayoutValidationFails(t *testing.T) {
 	t.Parallel()
 
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, validPersistenceValidationRequest().CanonicalFactoryLoader)
 	service, err := catalogpersistence.New(
 		validator,
 		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
@@ -229,7 +232,7 @@ func TestCreateNamedFactory_DiscardsStagingWhenLayoutValidationFails(t *testing.
 func TestReplaceFactoryLayout_ValidationFailureLeavesCommittedFactoryUnchanged(t *testing.T) {
 	t.Parallel()
 
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, validPersistenceValidationRequest().CanonicalFactoryLoader)
 	service, err := catalogpersistence.New(
 		validator,
 		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {

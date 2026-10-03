@@ -31,7 +31,7 @@ func legacyEncodedNamedFactorySegment(name string) string {
 const generatedFactoryBoundaryErrorPrefix = "decode factory generated-schema boundary"
 
 func ownerFactoryDefinitionValidator() factorydefinitions.Validator {
-	return factoryvalidation.New(nil)
+	return factoryvalidation.New(nil, factorydefinitioncomposition.LoadCanonicalJSON)
 }
 
 func ownerFactoryDefinitionPersistence() factorydefinitions.PackagedFactoryPersistence {

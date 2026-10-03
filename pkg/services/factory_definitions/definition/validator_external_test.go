@@ -12,7 +12,7 @@ import (
 )
 
 func testFactoryDefinitionValidator() *factoryvalidation.Service {
-	return factoryvalidation.New(nil)
+	return factoryvalidation.New(nil, testCanonicalFactoryLoader)
 }
 
 func validateEditableFactorySnapshotForTest(

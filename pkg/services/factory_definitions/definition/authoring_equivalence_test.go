@@ -35,7 +35,7 @@ func newRootAuthoringServiceForPeer(t *testing.T) factoryroot.Service {
 	t.Helper()
 
 	composition := newAuthoringEquivalenceComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, testCanonicalFactoryLoader)
 	fileSystem := platformfilesystem.Local{}
 	paths, err := factorynamedpaths.New(fileSystem)
 	if err != nil {
@@ -462,7 +462,7 @@ func newRootAuthoringServiceWithCorruptingWriteForPeer(t *testing.T) factoryroot
 	t.Helper()
 
 	composition := newAuthoringEquivalenceComposition(t)
-	validator := factoryvalidation.New(nil)
+	validator := factoryvalidation.New(nil, testCanonicalFactoryLoader)
 	fileSystem := platformfilesystem.Local{}
 	paths, err := factorynamedpaths.New(fileSystem)
 	if err != nil {

@@ -36,7 +36,11 @@ func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.
 		staticClock{instant: time.Unix(0, 0)},
 		platformfilesystem.Local{},
 		rootSurfaceValidator{},
-		validationwire.NewService(factoryvalidation.New(nil), factoryvalidation.New(nil),
+		validationwire.NewService(factoryvalidation.New(nil, func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return nil, nil
+		}), factoryvalidation.New(nil, func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+			return nil, nil
+		}),
 			func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 				return nil, nil
 			}, nil, nil),
