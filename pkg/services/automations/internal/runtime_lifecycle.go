@@ -515,6 +515,7 @@ func (instance *runtimeInstance) stop(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {
 		instance.sidecars.Wait()
+		instance.releaseCursorScope()
 		close(done)
 	}()
 	if ctx == nil {
@@ -522,7 +523,6 @@ func (instance *runtimeInstance) stop(ctx context.Context) error {
 	}
 	select {
 	case <-done:
-		instance.releaseCursorScope()
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
