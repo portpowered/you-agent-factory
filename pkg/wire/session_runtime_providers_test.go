@@ -100,7 +100,7 @@ func TestProvideConfiguredProvidersServiceProjectsInjectedStdioPipeFactory(t *te
 		// channel factory reports the failure first.
 		ProvidersExecutableLocator: &wireTestExecutableLocator{},
 	}
-	service, err := provideConfiguredProvidersService(edges, []operatorsettings.ACPIntegration{{
+	service, err := provideConfiguredProvidersService(selectedTestTimeEdges(edges), []operatorsettings.ACPIntegration{{
 		ID: "wire-acp-channel", Name: "wire-acp-channel", Transport: "stdio", Command: "wire-acp-channel-agent acp",
 	}}, nil)
 	if err != nil {
@@ -188,7 +188,7 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsDefaultProvidersSe
 	edges := serviceedges.Edges{
 		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
 	}
-	providersService, err := provideProvidersService(edges)
+	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -210,7 +210,7 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsDefaultProvidersSe
 func TestProvideConductorInvocationWithProgressFactory_ExecutesCodexThroughInjectedRunner(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: codexWireTestOutput("child result")})
 	edges := serviceedges.Edges{ProviderCommandRunner: runner}
-	providersService, err := provideProvidersService(edges)
+	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -242,7 +242,7 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsSelectedProvidersS
 	edges := serviceedges.Edges{
 		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
 	}
-	providersService, err := provideProvidersService(edges)
+	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -268,7 +268,7 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 	t.Parallel()
 
 	edges := serviceedges.Edges{}
-	provider, err := provideProvidersService(edges)
+	provider, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -338,7 +338,7 @@ func TestProvideFactorySessionExecutionFactory_TakesNoProviderEdge(t *testing.T)
 func TestOperatorSettingsHomePortCompositionUsesProcessProviderRoot(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := provideProvidersService(serviceedges.Edges{})
+	providersRoot, err := provideProvidersService(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -362,7 +362,7 @@ func TestOperatorSettingsHomePortCompositionUsesProcessProviderRoot(t *testing.T
 func TestProvideApplicationProcessLifecycle_ComposesOwnersClose(t *testing.T) {
 	t.Parallel()
 
-	providersService, err := provideProvidersService(serviceedges.Edges{})
+	providersService, err := provideProvidersService(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
@@ -627,11 +627,11 @@ type nonLifecycleProvidersService struct {
 }
 
 func TestCanonicalStatelessWorkersExecuteBeforeRuntimeOpening(t *testing.T) {
-	providersService, err := provideProvidersService(serviceedges.Edges{})
+	providersService, err := provideProvidersService(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	modelsService, err := provideModelsService(serviceedges.Edges{})
+	modelsService, err := provideModelsService(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideModelsService() error = %v", err)
 	}
@@ -764,11 +764,11 @@ func newProductionCleanupStatelessService(
 		WorkersWorktreeFileSystem: statelessWorktreeFileSystem{},
 		WorkersWorktreeGit:        git,
 	}
-	providersService, err := provideProvidersService(edges)
+	providersService, err := provideProvidersService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	modelsService, err := provideModelsService(edges)
+	modelsService, err := provideModelsService(selectedTestTimeEdges(edges))
 	if err != nil {
 		t.Fatalf("provideModelsService() error = %v", err)
 	}

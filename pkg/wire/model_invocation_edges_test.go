@@ -43,7 +43,7 @@ var (
 func TestModelsServiceIsConstructedOnceAndOpensRuntimeScopeOnSameRoot(t *testing.T) {
 	t.Parallel()
 
-	root, err := provideModelsService(serviceedges.Edges{})
+	root, err := provideModelsService(selectedTestTimeEdges(serviceedges.Edges{}))
 	if err != nil {
 		t.Fatalf("provideModelsService: %v", err)
 	}
@@ -293,7 +293,7 @@ func TestModelsCompositionRejectsTypedNilHostEdges(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			_, err := provideModelsService(testCase.edges)
+			_, err := provideModelsService(selectedTestTimeEdges(testCase.edges))
 			if err == nil || !strings.Contains(err.Error(), testCase.want) {
 				t.Fatalf("provideModelsService() error = %v, want %q", err, testCase.want)
 			}
@@ -420,11 +420,11 @@ func TestManagedProcessCauseReducerUsesOnlySafeCodes(t *testing.T) {
 func TestModelsCompositionRejectsMissingAssetStagingCoordination(t *testing.T) {
 	t.Parallel()
 
-	_, err := provideModelsService(serviceedges.Edges{
+	_, err := provideModelsService(selectedTestTimeEdges(serviceedges.Edges{
 		ModelAssetStagingCoordinationFactory: func() (serviceedges.AssetStagingCoordination, error) {
 			return nil, nil
 		},
-	})
+	}))
 	if err == nil || !strings.Contains(err.Error(), "Models Assets staging coordination is required") {
 		t.Fatalf("provideModelsService() error = %v, want missing staging coordination diagnostic", err)
 	}

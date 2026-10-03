@@ -82,10 +82,10 @@ func TestProvideProvidersServicePrefersAgyCommandRunnerWithInjectedPTYHost(t *te
 	})
 	host := &recordingAgyPTYHost{}
 	workDir := t.TempDir()
-	service, err := provideProvidersService(serviceedges.Edges{
+	service, err := provideProvidersService(selectedTestTimeEdges(serviceedges.Edges{
 		ProviderCommandRunner: runner,
 		AgyPTYHost:            host,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
