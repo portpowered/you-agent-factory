@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestHandleSessionPromptFirstTurnStartsFactorySessionWithExactTargetRootAndContent
@@ -631,5 +632,87 @@ func TestServeDeliversMappedTextAsOneSessionUpdateNotificationBeforeTheFinalResp
 	}
 	if promptResp.StopReason != acpsdk.StopReasonEndTurn {
 		t.Fatalf("stopReason = %q, want end_turn", promptResp.StopReason)
+	}
+}
+
+// TestHandleSessionCancelBeforeFirstTurnBindsFactorySessionIsHonoured proves a
+// session/cancel that arrives after the first turn is admitted but before its
+// Factory Session start has recorded any pending or bound identity is applied
+// once that identity exists, instead of being silently dropped. Gates make the
+// ordering deterministic: Start blocks until the cancel handler has returned.
+func TestHandleSessionCancelBeforeFirstTurnBindsFactorySessionIsHonoured(t *testing.T) {
+	unbound := sessionAt("session-1", "factory:@you/review", 3, "/work/project")
+	unbound.Session.ActiveTurnID = "turn-1"
+	unbound.Episode = chatsessions.TargetEpisode{
+		Number: 1, State: chatsessions.TargetEpisodeStateOpen,
+		Target: chatsessions.ChatTargetRef{Kind: chatsessions.ChatTargetKindFactory, Ref: "factory:@you/review"},
+	}
+	chatSessions := &fakeChatSessionsService{
+		getSessionResult: unbound,
+		startTurnResult:  admittedTurnResult("session-1", "factory:@you/review", 4, "/work/project", "turn-1", ""),
+	}
+	catalog := &fakeFactoryTargetCatalogService{result: catalogResultWithCurrent("factory:@you/review")}
+	factoryTarget := &fakeFactoryTargetService{
+		startResult:  factorysessions.AsyncStartResult{SessionID: "fs-pending-1"},
+		startEnter:   make(chan struct{}),
+		startRelease: make(chan struct{}),
+	}
+	server := newTestServerWithFactoryTarget(chatSessions, catalog, factoryTarget, "/home/operator")
+	ctx := contextWithCancelFlights(context.Background(), &promptFlightRegistry{})
+
+	type promptDone struct {
+		result json.RawMessage
+		err    *acpsdk.RequestError
+	}
+	done := make(chan promptDone, 1)
+	go func() {
+		result, rpcErr := server.handleSessionPrompt(ctx, numberIdentityEnvelope(t, identity.NewConnectionID(), 1, acpsdk.AgentMethodSessionPrompt, promptTextParams("session-1", "cancel me early")))
+		done <- promptDone{result, rpcErr}
+	}()
+	select {
+	case <-factoryTarget.startEnter:
+	case got := <-done:
+		t.Fatalf("prompt finished before start: %s %+v", got.result, got.err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Factory Session start to be entered")
+	}
+
+	// The cancel is handled synchronously, so once it returns the runtime is
+	// still unstarted: no pending or bound identity exists to control yet.
+	server.handleSessionCancel(ctx, cancelNotificationEnvelope(t, "cancel-early", "session-1"))
+	factoryTarget.mu.Lock()
+	early := len(factoryTarget.cancelCalls)
+	factoryTarget.mu.Unlock()
+	if early != 0 {
+		t.Fatalf("Cancel calls before binding = %d, want 0", early)
+	}
+
+	bound := unbound
+	bound.Episode.PendingFactorySessionID = "fs-pending-1"
+	chatSessions.mu.Lock()
+	chatSessions.getSessionResult = bound
+	chatSessions.mu.Unlock()
+	close(factoryTarget.startRelease)
+
+	select {
+	case got := <-done:
+		factoryTarget.mu.Lock()
+		cancelCalls, invokeCalls := factoryTarget.cancelCalls, len(factoryTarget.invokeCalls)
+		factoryTarget.mu.Unlock()
+		if len(cancelCalls) != 1 || cancelCalls[0].sessionID != "fs-pending-1" {
+			t.Fatalf("Cancel calls = %+v, want exactly one against fs-pending-1", cancelCalls)
+		}
+		if invokeCalls != 0 {
+			t.Fatalf("Invoke calls = %d, want 0 for a prompt cancelled before binding", invokeCalls)
+		}
+		if got.err != nil {
+			t.Fatalf("handleSessionPrompt error = %v", got.err)
+		}
+		var resp acpsdk.PromptResponse
+		if err := json.Unmarshal(got.result, &resp); err != nil || resp.StopReason != acpsdk.StopReasonCancelled {
+			t.Fatalf("prompt response = %s (err %v), want cancelled", got.result, err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the cancelled prompt response")
 	}
 }
