@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -423,3 +425,117 @@ func (runner functionalReplayCommandRunner) Run(
 }
 
 var _ platformprocess.CommandRunner = functionalReplayCommandRunner{}
+
+func assertContinuationExport(t *testing.T, service recordings.Service, history recordings.HistoricalRecordingQueryResult, id, path string) {
+	t.Helper()
+	exported, err := service.ExportPortableArtifact(t.Context(), recordings.ExportPortableArtifactRequest{RecordingID: recordings.RecordingID(id)})
+	if err != nil || exported.Reference != recordings.RecordingArtifactReference(path) {
+		t.Fatalf("public successor export = (%#v, %v)", exported.Reference, err)
+	}
+	read, err := service.ReadPortableArtifact(t.Context(), recordings.ReadPortableArtifactRequest{
+		RecordingID: recordings.RecordingID(id), Reference: exported.Reference,
+	})
+	if err != nil || len(read.Artifact.Events) != len(history.Events) {
+		t.Fatalf("public exported read = %d events, %v", len(read.Artifact.Events), err)
+	}
+	for index, event := range read.Artifact.Events {
+		assertPublicHistoricalFact(t, event, history.Events[index])
+	}
+	exportedHistory := queryContinuationHistory(t, service, path, id)
+	// Legacy inspection reconstructs a historical generation; portable export
+	// preserves the native generation. Compare identity, order, usage and
+	// associations after mapping only that documented representation difference.
+	if len(exportedHistory.Dispatches) != len(history.Dispatches) {
+		t.Fatal("export lost dispatch history")
+	}
+	generation := read.Artifact.Events[0].Cursor.StreamGenerationID
+	if generation == "" {
+		t.Fatal("export lost native stream generation")
+	}
+	for index, dispatch := range exportedHistory.Dispatches {
+		want := history.Dispatches[index]
+		want.FirstCursor.StreamGenerationID = generation
+		want.LastCursor.StreamGenerationID = generation
+		if want.Association != nil {
+			association := *want.Association
+			association.Cursor.StreamGenerationID = generation
+			want.Association = &association
+		}
+		if !reflect.DeepEqual(dispatch, want) {
+			t.Fatalf("export changed dispatch[%d] facts: got=%#v want=%#v", index, dispatch, want)
+		}
+	}
+	bytesBefore, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := service.CreateReplayPlan(recordings.CreateReplayPlanRequest{
+		SchemaVersion: recordings.ReplayPlanSchemaV1, Timing: recordings.ReplayTimingOrderOnly,
+		Recording: recordings.ReplayRecordingFacts{RecordingID: recordings.RecordingID(id), Scope: history.Recording.Scope, Events: read.Artifact.Events},
+	})
+	if err != nil {
+		t.Fatalf("public exported replay plan: %v", err)
+	}
+	for index := range read.Artifact.Events {
+		observed, err := service.ObserveReplay(recordings.ObserveReplayRequest{Plan: plan.Plan.Handle})
+		if err != nil || observed.Observation.ProcessedEvents != index+1 {
+			t.Fatalf("public replay progress[%d] = (%#v, %v)", index, observed, err)
+		}
+		if index == len(read.Artifact.Events)-1 && observed.Observation.Kind != recordings.ReplayCompleted {
+			t.Fatalf("exported replay did not complete: %#v", observed)
+		}
+	}
+	bytesAfter, err := os.ReadFile(path)
+	if err != nil || !reflect.DeepEqual(bytesBefore, bytesAfter) {
+		t.Fatalf("read-only exported replay changed source: %v", err)
+	}
+}
+
+func TestHistoricalReadKeepsTypedCorruptionAndMissingCauses(t *testing.T) {
+	t.Parallel()
+	var service recordings.Service
+	var providerRuns, writes atomic.Int32
+	process := support.BuildProcess(t, serviceedges.Edges{
+		RecordingsRootObserver: func(root recordings.Service) { service = root },
+		RecordingReadFile:      os.ReadFile,
+		RecordingWriteFile:     func(string, []byte) error { writes.Add(1); return errors.New("unexpected historical write") },
+		ProviderCommandRunner:  functionalReplayCommandRunner{calls: &providerRuns},
+	})
+	corruptPath := filepath.Join(t.TempDir(), "corrupt.json")
+	corruptBytes := []byte(`{"schemaVersion":"agent-factory.replay.v1","recordedAt":"2026-10-03T12:34:56Z","events":[{"schemaVersion":"agent-factory.event.v1","id":"broken","type":"WORK_REQUEST","context":{"sequence":0,"eventTime":"2026-10-03T12:34:56Z"},"payload":[]}]}`)
+	if err := os.WriteFile(corruptPath, corruptBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, cell := range []struct {
+		name string
+		path string
+		kind recordings.HistoricalRecordingQueryErrorKind
+	}{
+		{"corrupt", corruptPath, recordings.HistoricalRecordingQueryErrorCorruptHistory},
+		{"missing", filepath.Join(t.TempDir(), "missing.json"), recordings.HistoricalRecordingQueryErrorMissingHistory},
+	} {
+		t.Run(cell.name, func(t *testing.T) {
+			result, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
+				Recording: recordings.HistoricalRecordingIdentity{RecordingID: "selected-history", Artifact: recordings.RecordingArtifactReference(cell.path)},
+			})
+			var typed *recordings.HistoricalRecordingQueryError
+			if !errors.As(err, &typed) || typed.Kind != cell.kind || len(result.Events) != 0 {
+				t.Fatalf("selected historical read = (%#v, %v), want typed %s and no partial facts", result, err, cell.kind)
+			}
+			if cell.name == "corrupt" && !errors.Is(err, recordings.ErrInvalidProjectionInput) {
+				t.Fatalf("corrupt event lost typed projection cause: %v", err)
+			}
+			if cell.name == "missing" && !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("missing history lost filesystem cause: %v", err)
+			}
+			inputs := recordingContinuationInputs(t, t.TempDir(), t.TempDir(), []string{"--replay", cell.path, "--no-record"}, false)
+			if err := process.Execute(inputs.Input); err == nil {
+				t.Fatal("invalid selected replay unexpectedly succeeded")
+			}
+		})
+	}
+	after, err := os.ReadFile(corruptPath)
+	if err != nil || !reflect.DeepEqual(corruptBytes, after) || writes.Load() != 0 || providerRuns.Load() != 0 {
+		t.Fatalf("failed historical read changed source or executed effects: read=%v writes=%d provider=%d", err, writes.Load(), providerRuns.Load())
+	}
+}

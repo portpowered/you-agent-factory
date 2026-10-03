@@ -778,3 +778,198 @@ func TestBuildProcessRejectsTypedNilRecordingClockBeforeActivation(t *testing.T)
 		t.Fatal("invalid clock published a usable Recordings root")
 	}
 }
+
+// The prefix is copied only after the public synchronous flush returns while
+// step two is held at the command edge. No terminal metadata is edited and no
+// OS kill/restart claim is made; I01 owns that separate production boundary.
+func TestExecuteResumesUnfinalizedPrefixWithoutRepeatingCompletedWork(t *testing.T) {
+	t.Parallel()
+	dir := scaffoldRecordingContinuation(t)
+	home := t.TempDir()
+	sourcePath := filepath.Join(home, "source.json")
+	prefixPath := filepath.Join(home, "prefix.json")
+	successorPath := filepath.Join(home, "successor.json")
+	sourceID := "019a07c0-0000-7000-8000-000000000041"
+	successorID := "019a07c0-0000-7000-8000-000000000042"
+	runner := &recordingContinuationRunner{secondStarted: make(chan struct{})}
+	var source recordings.Service
+	process := support.BuildProcess(t, recordingContinuationEdges(runner, sourceID, &source))
+	inputs := recordingContinuationInputs(t, dir, home, []string{"--record", sourcePath}, true)
+	ctx, cancel := context.WithCancel(inputs.Context)
+	inputs.Context = ctx
+	done := executeGatedRecordingCommand(t, process, inputs, cancel)
+	select {
+	case <-runner.secondStarted:
+	case err := <-done:
+		t.Fatalf("source returned before unfinished dispatch: %v", err)
+	case <-time.After(30 * time.Second):
+		t.Fatal("unfinished provider dispatch did not start")
+	}
+	flushed, err := source.FlushRecording(recordings.FlushRecordingRequest{RecordingID: recordings.RecordingID(sourceID)})
+	if err != nil || flushed.Status.FinalizedAt != nil || flushed.Status.FlushedThrough == nil {
+		t.Fatalf("active durable prefix = (%#v, %v)", flushed, err)
+	}
+	prefix, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(prefixPath, prefix, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before := queryContinuationHistory(t, source, prefixPath, sourceID)
+	selected, err := source.(recordings.RuntimeScopeService).LoadResumeInput(recordings.LoadResumeInputRequest{Path: prefixPath})
+	if err != nil {
+		t.Fatalf("public source recovery identity: %v", err)
+	}
+	if len(before.Dispatches) != 2 || before.Dispatches[0].Status != recordings.FactoryDispatchStatusCompleted {
+		t.Fatalf("prefix dispatches = %#v, want completed first and unfinished second", before.Dispatches)
+	}
+	for _, event := range before.Events {
+		if event.Kind == "RUN_RESPONSE" {
+			t.Fatal("prefix contains terminal run metadata")
+		}
+	}
+	cancel()
+	select {
+	case err := <-done:
+		assertCanceledExecuteDiagnostic(t, err, nil)
+	case <-time.After(30 * time.Second):
+		t.Fatal("source cancellation did not join")
+	}
+	var successor recordings.Service
+	successorRunner := support.NewRecordingCommandRunner("unfinished step resumed COMPLETE")
+	replacement := support.BuildProcess(t, recordingContinuationEdges(successorRunner, successorID, &successor))
+	resumeInput, err := successor.(recordings.RuntimeScopeService).LoadResumeInput(recordings.LoadResumeInputRequest{Path: prefixPath})
+	if err != nil || resumeInput.Input.Legacy == nil || resumeInput.RecoveryMetadata.SourceRecordingID == "" {
+		t.Fatalf("selected public resume identity = (%#v, %v)", resumeInput.RecoveryMetadata, err)
+	}
+	if resumeInput.RecoveryMetadata != selected.RecoveryMetadata || resumeInput.Input.ArtifactDigest != selected.Input.ArtifactDigest ||
+		resumeInput.SourceCanonicalSessionID != selected.SourceCanonicalSessionID {
+		t.Fatal("replacement graph changed selected source recovery identity")
+	}
+	resumed := recordingContinuationInputs(t, dir, home, []string{"--resume", prefixPath, "--record", successorPath}, false)
+	if err := replacement.Execute(resumed.Input); err != nil {
+		t.Fatalf("Execute resume: %v\n%s", err, resumed.Stderr())
+	}
+	after := queryContinuationHistory(t, successor, successorPath, successorID)
+	assertContinuationFacts(t, before, after)
+	if got := len(successorRunner.Requests()); got != 1 {
+		t.Fatalf("successor provider calls = %d, want only unfinished step", got)
+	}
+	assertContinuationExport(t, successor, after, successorID, successorPath)
+	if got := len(successorRunner.Requests()); got != 1 {
+		t.Fatalf("public export/replay executed provider: %d calls", got)
+	}
+	unchanged, err := os.ReadFile(prefixPath)
+	if err != nil || !reflect.DeepEqual(prefix, unchanged) {
+		t.Fatalf("resume changed its selected source bytes: %v", err)
+	}
+}
+
+type recordingContinuationRunner struct {
+	calls         atomic.Int32
+	secondStarted chan struct{}
+}
+
+func (runner *recordingContinuationRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	if runner.calls.Add(1) == 1 {
+		return support.NewStaticSuccessCommandRunner("first step COMPLETE").Run(ctx, request)
+	}
+	close(runner.secondStarted)
+	<-ctx.Done()
+	return platformprocess.CommandResult{}, ctx.Err()
+}
+
+func recordingContinuationEdges(runner platformprocess.CommandRunner, id string, observer *recordings.Service) serviceedges.Edges {
+	return serviceedges.Edges{
+		ProviderCommandRunner:                    runner,
+		RecordingsRootObserver:                   func(service recordings.Service) { *observer = service },
+		FactorySessionRuntimeInstanceIDGenerator: func() string { return id },
+		APIServerStarter: func(ctx context.Context, request platformhttpserver.StartRequest) error {
+			if request.OnBound != nil {
+				request.OnBound(platformhttpserver.Binding{Port: request.Port})
+			}
+			<-ctx.Done()
+			return nil
+		},
+		RecordingReadFile:  os.ReadFile,
+		RecordingWriteFile: func(path string, data []byte) error { return os.WriteFile(path, data, 0o600) },
+	}
+}
+
+func recordingContinuationInputs(t *testing.T, dir, home string, selection []string, admit bool) *support.CapturedInputs {
+	t.Helper()
+	args := []string{"you", "run", "--dir", dir, "--quiet"}
+	if admit {
+		path := filepath.Join(home, "work.json")
+		if err := os.WriteFile(path, []byte(`{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"continued-work","workTypeName":"task","payload":{"subject":"retained lineage"}}]}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		args = append(args, "--work", path)
+	}
+	inputs := support.FakeInputs(t.Context(), append(args, selection...))
+	inputs.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home,
+		"HOMEDRIVE="+filepath.VolumeName(home), "HOMEPATH="+strings.TrimPrefix(home, filepath.VolumeName(home)))
+	return inputs
+}
+
+func queryContinuationHistory(t *testing.T, service recordings.Service, path, id string) recordings.HistoricalRecordingQueryResult {
+	t.Helper()
+	history, err := service.QueryHistoricalRecording(recordings.HistoricalRecordingQueryRequest{
+		Recording: recordings.HistoricalRecordingIdentity{RecordingID: recordings.RecordingID(id),
+			Artifact: recordings.RecordingArtifactReference(path), Scope: recordings.CanonicalEventScope{FactorySessionID: "~default"}},
+	})
+	if err != nil {
+		t.Fatalf("public continuation history: %v", err)
+	}
+	return history
+}
+
+func assertContinuationFacts(t *testing.T, before, after recordings.HistoricalRecordingQueryResult) {
+	t.Helper()
+	byID := make(map[recordings.CanonicalEventID]recordings.CanonicalEvent)
+	for index, event := range after.Events {
+		if _, exists := byID[event.ID]; exists || (index > 0 && event.Sequence <= after.Events[index-1].Sequence) {
+			t.Fatal("successor history lost unique admitted order")
+		}
+		byID[event.ID] = event
+	}
+	for _, event := range before.Events {
+		got, ok := byID[event.ID]
+		if !ok {
+			t.Fatalf("successor lost admitted event %s", event.ID)
+		}
+		assertPublicHistoricalFact(t, got, event)
+	}
+	if len(after.Events) <= len(before.Events) || len(after.Dispatches) != 3 {
+		t.Fatalf("successor did not continue selected history: %#v", after.Dispatches)
+	}
+	if after.Dispatches[0].ID != before.Dispatches[0].ID || after.Dispatches[0].Status != recordings.FactoryDispatchStatusCompleted ||
+		after.Dispatches[1].ID != before.Dispatches[1].ID || after.Dispatches[1].Status != recordings.FactoryDispatchStatusInterrupted ||
+		after.Dispatches[2].ID == before.Dispatches[1].ID || after.Dispatches[2].Status != recordings.FactoryDispatchStatusCompleted ||
+		after.Dispatches[2].TransitionID != before.Dispatches[1].TransitionID {
+		t.Fatalf("successor dispatches = %#v, want original completed/interrupted attempts and new completed continuation", after.Dispatches)
+	}
+}
+
+func scaffoldRecordingContinuation(t *testing.T) string {
+	t.Helper()
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "recording-continuation",
+		"workTypes": []map[string]any{{"name": "task", "states": []map[string]string{
+			{"name": "init", "type": "INITIAL"}, {"name": "processing", "type": "PROCESSING"},
+			{"name": "complete", "type": "TERMINAL"}, {"name": "failed", "type": "FAILED"},
+		}}},
+		"workers": []map[string]string{{"name": "worker-a"}, {"name": "worker-b"}},
+		"workstations": []map[string]any{
+			{"name": "step-one", "worker": "worker-a", "inputs": []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs": []map[string]string{{"workType": "task", "state": "processing"}}, "onFailure": []map[string]string{{"workType": "task", "state": "failed"}}},
+			{"name": "step-two", "worker": "worker-b", "inputs": []map[string]string{{"workType": "task", "state": "processing"}},
+				"outputs": []map[string]string{{"workType": "task", "state": "complete"}}, "onFailure": []map[string]string{{"workType": "task", "state": "failed"}}},
+		},
+	})
+	for _, worker := range []string{"worker-a", "worker-b"} {
+		support.WriteAgentConfig(t, dir, worker, support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	}
+	return dir
+}
