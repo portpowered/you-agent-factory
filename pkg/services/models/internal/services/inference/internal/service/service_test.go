@@ -628,7 +628,12 @@ func inferenceWorker(model, operation string) models.RuntimeWorker {
 
 func mustCatalog(t *testing.T, scopes runtimescopes.Service) modelcatalog.Service {
 	t.Helper()
-	service, err := catalogwire.NewService(scopes)
+	service, err := catalogwire.NewService(scopes, func(ctx context.Context, _ models.RuntimeScopeRef, _ models.RuntimeScopeConfig, detail models.Detail) (models.Runtime, error) {
+		if err := ctx.Err(); err != nil {
+			return models.Runtime{}, err
+		}
+		return detail.ManagedRuntime.Clone(), nil
+	})
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}

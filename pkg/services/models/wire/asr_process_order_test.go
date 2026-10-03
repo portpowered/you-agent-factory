@@ -244,7 +244,12 @@ func newControlledASRScenario(t *testing.T) *controlledASRScenario {
 		controlledASRCompatibility{}, recorder,
 	)
 	invocation := newTestASRInvocationRuntime(t, controlledASRDialer{connection: connection}, tempDirectory)
-	catalog, err := catalogwire.NewService(scopes)
+	catalog, err := catalogwire.NewService(scopes, func(ctx context.Context, _ models.RuntimeScopeRef, _ models.RuntimeScopeConfig, detail models.Detail) (models.Runtime, error) {
+		if err := ctx.Err(); err != nil {
+			return models.Runtime{}, err
+		}
+		return detail.ManagedRuntime.Clone(), nil
+	})
 	if err != nil {
 		t.Fatalf("construct Models Catalog: %v", err)
 	}

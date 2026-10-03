@@ -82,7 +82,7 @@ func newAssetPullerForTest(
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		assets.ConstructionOptions{Coordination: coordination},
+		func(string) string { return "" }, func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, coordination,
 	)
 	if err != nil {
 		return nil, err

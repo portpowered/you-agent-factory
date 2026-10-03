@@ -122,7 +122,12 @@ func newRootConstructionArgs(t *testing.T) rootConstructionArgs {
 	if err != nil {
 		t.Fatalf("construct runtime scopes: %v", err)
 	}
-	catalog, err := catalogwire.NewService(scopes)
+	catalog, err := catalogwire.NewService(scopes, func(ctx context.Context, _ models.RuntimeScopeRef, _ models.RuntimeScopeConfig, detail models.Detail) (models.Runtime, error) {
+		if err := ctx.Err(); err != nil {
+			return models.Runtime{}, err
+		}
+		return detail.ManagedRuntime.Clone(), nil
+	})
 	if err != nil {
 		t.Fatalf("construct catalog: %v", err)
 	}
@@ -286,7 +291,12 @@ func TestInferenceWireConstructionIsInert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Runtime Host: %v", err)
 	}
-	catalog, err := catalogwire.NewService(scopes)
+	catalog, err := catalogwire.NewService(scopes, func(ctx context.Context, _ models.RuntimeScopeRef, _ models.RuntimeScopeConfig, detail models.Detail) (models.Runtime, error) {
+		if err := ctx.Err(); err != nil {
+			return models.Runtime{}, err
+		}
+		return detail.ManagedRuntime.Clone(), nil
+	})
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}
@@ -322,7 +332,12 @@ func TestNewRootAcceptsComposedDependenciesAndDefaultsLogger(t *testing.T) {
 		t.Fatalf("construct Runtime Scopes: %v", err)
 	}
 	assets := inferenceRecordingAssetsService{}
-	catalog, err := catalogwire.NewService(scopes)
+	catalog, err := catalogwire.NewService(scopes, func(ctx context.Context, _ models.RuntimeScopeRef, _ models.RuntimeScopeConfig, detail models.Detail) (models.Runtime, error) {
+		if err := ctx.Err(); err != nil {
+			return models.Runtime{}, err
+		}
+		return detail.ManagedRuntime.Clone(), nil
+	})
 	if err != nil {
 		t.Fatalf("construct Catalog: %v", err)
 	}

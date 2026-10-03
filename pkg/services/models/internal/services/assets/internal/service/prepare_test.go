@@ -21,7 +21,6 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	pullsupport "github.com/portpowered/infinite-you/pkg/services/models/internal/pullsupport"
-	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
@@ -909,7 +908,7 @@ func newPreparationTestService(
 			return os.Create(path)
 		},
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		assets.ConstructionOptions{Coordination: mustPreparationLockingService()},
+		func(string) string { return "" }, func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, mustPreparationLockingService(),
 	).(*service)
 }
 

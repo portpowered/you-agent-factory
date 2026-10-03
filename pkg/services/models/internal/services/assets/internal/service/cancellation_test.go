@@ -16,7 +16,6 @@ import (
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
-	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
@@ -48,10 +47,10 @@ func TestPreparationUsesConstructionSelectedCoordination(t *testing.T) {
 			if mode == "absent" {
 				coordination = nil
 			}
-			service := newGenericServiceWithOptions(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
+			service := newGenericServiceWithEffects(t, scopes, httpDoerFunc(func(*http.Request) (*http.Response, error) {
 				t.Fatal("fully described cached preparation contacted HTTP")
 				return nil, nil
-			}), assets.ConstructionOptions{Coordination: coordination})
+			}), func(string) string { return "" }, func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, coordination)
 			if calls != 0 {
 				t.Fatal("construction acquired staging ownership")
 			}
@@ -749,11 +748,13 @@ func TestPrepareGenericAssetsOfflinePartialSnapshotReportsOnlyMissingMembers(t *
 	assertFileBody(t, filepath.Join(legacySnapshot, modelRequirement.Name), body)
 }
 
-func newGenericServiceWithOptions(
+func newGenericServiceWithEffects(
 	t *testing.T,
 	scopes runtimescopes.Service,
 	client modelseffects.AssetHTTPDoer,
-	options assets.ConstructionOptions,
+	environment modelseffects.AssetResolveEnvironment,
+	resolver func(context.Context, string) (string, error),
+	coordination modelseffects.AssetStagingCoordination,
 ) *service {
 	t.Helper()
 	value := New(
@@ -771,7 +772,7 @@ func newGenericServiceWithOptions(
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		options,
+		environment, resolver, coordination,
 	)
 	service, ok := value.(*service)
 	if !ok {
