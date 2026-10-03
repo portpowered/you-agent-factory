@@ -18,7 +18,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingwire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -594,11 +593,7 @@ func TestFactorySessionsEqualFirstDispatchDefaultWorkerIdentityCharacterization(
 func identityServer(t *testing.T) (*identityFixture, *identityCharacterizationRunner, *identityRecordingWriter) {
 	t.Helper()
 	runner := &identityCharacterizationRunner{admitted: make(chan struct{}), release: make(chan struct{})}
-	writer, err := recordingwire.NewWorkerRecordingFileWriter(platformreplay.NewLocal(runtime.GOOS), t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	capture := &identityRecordingWriter{writer: writer}
+	capture := &identityRecordingWriter{root: t.TempDir(), storage: platformreplay.NewLocal(runtime.GOOS)}
 	dir := support.ScaffoldFactory(t, factoryRuntimeLifecycleActivationFactoryConfig())
 	home := t.TempDir()
 	env := append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "HOMEDRIVE=", "HOMEPATH="+home)
@@ -725,33 +720,70 @@ func (r *identityCharacterizationRunner) Run(ctx context.Context, req platformpr
 	return platformprocess.CommandResult{Stdout: w4ProviderStdout(req, output)}, nil
 }
 
-// identityRecordingWriter observes only the supported durable external-effect
-// boundary and delegates every write/read/failure to the standard file writer.
-// It changes neither source capture, topic selection nor identity allocation.
+// identityRecordingWriter owns the test's controlled filesystem acceptance
+// edge. Capture and the codec are production implementations; this stores raw
+// source records and uses the public reducer for reads, without allocating IDs.
 type identityRecordingWriter struct {
-	writer  recordings.WorkerRecordingWriter
+	root    string
+	storage platformreplay.Local
 	mu      sync.Mutex
 	records []recordings.WorkerRecordingRecord
 }
 
 func (w *identityRecordingWriter) PersistWorkerRecord(ctx context.Context, record recordings.WorkerRecordingRecord) error {
-	if err := w.writer.PersistWorkerRecord(ctx, record); err != nil {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	w.mu.Lock()
+	defer w.mu.Unlock()
+	var owned []recordings.WorkerRecordingRecord
+	for _, previous := range w.records {
+		if previous.RecordingID == record.RecordingID {
+			owned = append(owned, previous)
+		}
+	}
+	owned = append(owned, record)
+	encoded, err := json.Marshal(owned)
+	if err != nil {
+		return err
+	}
+	if err := w.storage.WriteFile(filepath.Join(w.root, record.RecordingID+".json"), encoded); err != nil {
+		return err
+	}
 	w.records = append(w.records, record)
-	w.mu.Unlock()
 	return nil
 }
 
-func (w *identityRecordingWriter) PersistWorkerRecordingFailure(ctx context.Context, failure recordings.WorkerRecordingFailure) error {
-	return w.writer.(recordings.WorkerRecordingFailureWriter).PersistWorkerRecordingFailure(ctx, failure)
-}
-
 func (w *identityRecordingWriter) LoadWorkerRecording(ctx context.Context, id string) (recordings.WorkerRecordingSnapshot, error) {
-	return w.writer.(recordings.WorkerRecordingReader).LoadWorkerRecording(ctx, id)
+	if err := ctx.Err(); err != nil {
+		return recordings.WorkerRecordingSnapshot{}, err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	data, err := w.storage.ReadFile(filepath.Join(w.root, id+".json"))
+	if err != nil {
+		return recordings.WorkerRecordingSnapshot{}, err
+	}
+	var owned []recordings.WorkerRecordingRecord
+	if err := json.Unmarshal(data, &owned); err != nil {
+		return recordings.WorkerRecordingSnapshot{}, err
+	}
+	if len(owned) == 0 {
+		return recordings.WorkerRecordingSnapshot{}, fmt.Errorf("empty owned recording %q", id)
+	}
+	history := recordings.WorkerRecordingHistory{RecordingID: id, WorkerSessionID: owned[0].WorkerSessionID}
+	for _, record := range owned {
+		history.Records = append(history.Records, record.Record)
+	}
+	projection, err := (recordings.WorkerRecordingCodec{}).ReduceWorkerRecording(history)
+	if err != nil {
+		return recordings.WorkerRecordingSnapshot{}, err
+	}
+	return recordings.WorkerRecordingSnapshot{RecordingID: id, Sessions: []recordings.WorkerSessionRecordingSnapshot{{
+		WorkerSessionID: projection.WorkerSessionID, Topic: projection.Topic, Status: projection.Status,
+		LastPosition: projection.LastPosition, ExecutionTerminal: projection.ExecutionTerminal, Records: projection.Records,
+	}}}, nil
 }
-
 func identityInspectRecording(t *testing.T, server *identityFixture, writer *identityRecordingWriter, factoryID, workerID, ownMarker, peerMarker string) string {
 	t.Helper()
 	writer.mu.Lock()
