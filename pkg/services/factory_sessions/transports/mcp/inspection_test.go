@@ -760,25 +760,43 @@ func TestCanonicalReadEventsRetainedDecodeFailureDoesNotFallback(t *testing.T) {
 		return factorysessions.EventReadResult{SessionID: runningSessionID, Events: []json.RawMessage{json.RawMessage(`{`)}}, nil
 	}})
 	input := mcpfactorysession.ReadEventsInput{SessionID: runningSessionID}
-	want := mcpfactorysession.ReadEvents(t.Context(), ledger, input)
 	got, err := newTestClientWithRecordings(scriptedExecutionService{}, nil, ledger).ReadEvents(t.Context(), input)
-	if err != nil || want.Error == nil || !reflect.DeepEqual(got.Error, want.Error) || got.Result != nil {
-		t.Fatalf("retained decode error = %#v, %v; want %#v", got, err, want)
+	if err != nil || got.Error == nil || got.Error.Code != "BAD_REQUEST" || got.Error.Retryable || got.Result != nil {
+		t.Fatalf("retained decode error = %#v, %v; want retained decode error", got, err)
 	}
 }
 
 func TestCanonicalReadEventsNonMissingFailuresDoNotFallback(t *testing.T) {
 	t.Parallel()
-	failures := []error{recordings.ErrServiceUnavailable, recordings.ErrPortableArtifactUnavailable, recordings.ErrReconnectCursorExpired, recordings.ErrReconnectCursorUnavailable, recordings.ErrReconnectCursorNotFound, errors.New("private/path prompt"), &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorMissingHistory}, &recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorUnavailable}}
+	failures := []struct {
+		err               error
+		code              string
+		retryable         bool
+		sessionID, reason string
+	}{
+		{recordings.ErrServiceUnavailable, "factory_session.service.unavailable", false, "", ""},
+		{recordings.ErrPortableArtifactUnavailable, "factory_session.result.not_ready", true, runningSessionID, "RESULT_NOT_READY"},
+		{recordings.ErrReconnectCursorExpired, "factory_session.events.reconnect_cursor_not_found", false, runningSessionID, "RECONNECT_CURSOR_NOT_FOUND"},
+		{recordings.ErrReconnectCursorUnavailable, "factory_session.events.reconnect_cursor_not_found", false, runningSessionID, "RECONNECT_CURSOR_NOT_FOUND"},
+		{recordings.ErrReconnectCursorNotFound, "factory_session.events.reconnect_cursor_not_found", false, runningSessionID, "RECONNECT_CURSOR_NOT_FOUND"},
+		{errors.New("retained inspection failure"), "BAD_REQUEST", false, "", "retained inspection failure"},
+		{&recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorMissingHistory}, "factory_session.session.not_found", false, runningSessionID, ""},
+		{&recordings.HistoricalRecordingQueryError{Kind: recordings.HistoricalRecordingQueryErrorUnavailable}, "factory_session.result.not_ready", true, runningSessionID, "RESULT_NOT_READY"},
+	}
 	for i, failure := range failures {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			t.Parallel()
-			ledger := eventStatusFailure{err: failure}
+			ledger := eventStatusFailure{err: failure.err}
 			input := mcpfactorysession.ReadEventsInput{SessionID: runningSessionID}
-			want := mcpfactorysession.ReadEvents(t.Context(), ledger, input)
 			got, err := newTestClientWithRecordings(scriptedExecutionService{}, nil, ledger).ReadEvents(t.Context(), input)
-			if err != nil || !reflect.DeepEqual(got.Error, want.Error) {
-				t.Fatalf("error precedence = %#v, %v; want %#v", got, err, want)
+			if err != nil || got.Result != nil || got.Error == nil {
+				t.Fatalf("error precedence = %#v, %v", got, err)
+			}
+			if got.Error.Code != failure.code || got.Error.Retryable != failure.retryable || got.Error.SessionID != failure.sessionID {
+				t.Fatalf("error classification = %#v, want %#v", got.Error, failure)
+			}
+			if failure.reason != "" && got.Error.Details["reason"] != failure.reason {
+				t.Fatalf("error reason = %#v", got.Error)
 			}
 		})
 	}

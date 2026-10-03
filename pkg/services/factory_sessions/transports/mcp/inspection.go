@@ -76,25 +76,6 @@ type ReadEventsResult struct {
 	Events    []factoryapi.FactoryEvent `json:"events,omitempty"`
 }
 
-// ReadEvents returns ordered Factory Session event facts for reconnect and
-// inspection through the you.factory_session.read_events MCP tool. Recordings
-// owns the canonical event subscription and reconnect cursor semantics.
-func ReadEvents(ctx context.Context, service RecordingsInspection, input ReadEventsInput) ToolResponse[ReadEventsResult] {
-	if ctx == nil {
-		envelope := executionErrorEnvelope(errMissingRequestContext)
-		return ToolResponse[ReadEventsResult]{Error: &envelope}
-	}
-	if response, done := requestContextErrorResponse[ReadEventsResult](ctx); done {
-		return response
-	}
-	result, err := readFactorySessionEvents(ctx, service, input)
-	if err != nil {
-		envelope := eventReadErrorEnvelope(input.SessionID, err)
-		return ToolResponse[ReadEventsResult]{Error: &envelope}
-	}
-	return ToolResponse[ReadEventsResult]{Result: &result}
-}
-
 // readEventsCanonical keeps retained Recordings authoritative, using the
 // already-injected durable owner only when Recordings has no target. This MCP
 // representation adapter preserves canonical facts without rewriting history.

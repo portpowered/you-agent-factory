@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,17 +17,27 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionmcp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// M01-M05 plus the retained sequential peer-close witness: each connection selects its own working root and owns its streams
+// M01-M06: each connection selects its own working root and owns its streams
 // and profile. The immutable command edge attributes results by working root,
 // so simultaneous invocations need no mutable provider selector or long lock.
 func TestMCPStartSyncRunsFactorySessionThroughComposedProcess(t *testing.T) {
 	t.Parallel()
-	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: mcpRootResultRunner{}})
+	runner := &mcpRootResultRunner{}
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{ProviderCommandRunner: runner})
+	if err != nil {
+		t.Fatalf("BuildProcess: %v", err)
+	}
+	support.CleanupProcess(t, process)
+	sessions, ok := process.FactorySessions().FactorySessions().(factorysessions.Service)
+	if !ok {
+		t.Fatal("composed process did not expose Factory Sessions")
+	}
 	t.Run("completion and ordered events", func(t *testing.T) {
 		t.Parallel()
 		server := startComposedMemoryMCP(t, process)
@@ -43,25 +54,35 @@ func TestMCPStartSyncRunsFactorySessionThroughComposedProcess(t *testing.T) {
 	}
 	t.Run("closing one selection leaves its peer usable", func(t *testing.T) {
 		t.Parallel()
-		first := startComposedMemoryMCP(t, process)
-		second := startComposedMemoryMCP(t, process)
-		initializeMCPClient(t, first.client)
-		initializeMCPClient(t, second.client)
-		firstID := assertComposedMCPSync(t, first, "first")
-		secondID := assertComposedMCPSync(t, second, "second")
-		if firstID == secondID {
-			t.Fatal("isolated requests shared a Factory Session identity")
-		}
-		first.closeInput(t)
-		assertComposedMCPEvents(t, second.client, secondID)
-		assertComposedMCPSync(t, second, "after-peer-close")
-		second.closeInput(t)
+		assertComposedPeerLifetime(t, process, runner, sessions)
 	})
 }
 
-type mcpRootResultRunner struct{}
+type mcpRootResultRunner struct{ gates sync.Map }
 
-func (mcpRootResultRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+type mcpCommandGate struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (runner *mcpRootResultRunner) gate(t *testing.T, root string) *mcpCommandGate {
+	t.Helper()
+	gate := &mcpCommandGate{entered: make(chan struct{}), release: make(chan struct{})}
+	runner.gates.Store(filepath.Clean(root), gate)
+	t.Cleanup(func() { runner.gates.Delete(filepath.Clean(root)) })
+	return gate
+}
+
+func (runner *mcpRootResultRunner) Run(ctx context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	if value, ok := runner.gates.LoadAndDelete(filepath.Clean(req.WorkDir)); ok {
+		gate := value.(*mcpCommandGate)
+		close(gate.entered)
+		select {
+		case <-gate.release:
+		case <-ctx.Done():
+			return platformprocess.CommandResult{}, ctx.Err()
+		}
+	}
 	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("completed at " + filepath.Clean(req.WorkDir))}, nil
 }
 
@@ -72,7 +93,7 @@ type composedMemoryMCP struct {
 	done   <-chan error
 }
 
-func startComposedMemoryMCP(t *testing.T, process support.ApplicationProcess) *composedMemoryMCP {
+func startComposedMemoryMCP(t *testing.T, process support.Process) *composedMemoryMCP {
 	t.Helper()
 	projectRoot := support.ScaffoldSingleStepFactory(t, "composed-mcp")
 	stdin, input := io.Pipe()
@@ -118,7 +139,8 @@ func (server *composedMemoryMCP) closeInput(t *testing.T) {
 
 func assertComposedMCPSync(t *testing.T, server *composedMemoryMCP, requestID string) string {
 	t.Helper()
-	workflow := `return (async function () { return await agent.run({prompt: "complete", modelProvider: "codex", model: "gpt-5-codex"}); })();`
+	workName, _ := json.Marshal("work-" + requestID)
+	workflow := `return (async function () { return await agent.run({label: ` + string(workName) + `, prompt: ` + string(workName) + `, modelProvider: "codex", model: "gpt-5-codex"}); })();`
 	response := server.client.call("tools/call", map[string]any{
 		"name": factorysessionmcp.ToolStartSync,
 		"arguments": map[string]any{
@@ -188,7 +210,7 @@ func composedEventRead(client *stdioMCPClient, input factorysessionmcp.ReadEvent
 	return client.call("tools/call", map[string]any{"name": factorysessionmcp.ToolReadEvents, "arguments": input})
 }
 
-func assertComposedReconnect(t *testing.T, process support.ApplicationProcess, name string) {
+func assertComposedReconnect(t *testing.T, process support.Process, name string) {
 	t.Helper()
 	server := startComposedMemoryMCP(t, process)
 	initializeMCPClient(t, server.client)
@@ -236,5 +258,102 @@ func assertComposedReadError(t *testing.T, client *stdioMCPClient, input factory
 	}
 	if reason != "" && got.Error.Details["reason"] != reason {
 		t.Fatalf("error reason = %#v, want %s", got.Error.Details, reason)
+	}
+}
+
+func assertComposedPeerLifetime(t *testing.T, process support.Process, runner *mcpRootResultRunner, sessions factorysessions.Service) {
+	t.Helper()
+	first := startComposedMemoryMCP(t, process)
+	second := startComposedMemoryMCP(t, process)
+	initializeMCPClient(t, first.client)
+	initializeMCPClient(t, second.client)
+	firstGate := runner.gate(t, first.root)
+	secondGate := runner.gate(t, second.root)
+	firstResult, secondResult := make(chan string, 1), make(chan string, 1)
+	go func() { firstResult <- assertComposedMCPSync(t, first, "first") }()
+	go func() { secondResult <- assertComposedMCPSync(t, second, "second") }()
+	// Both commands must enter before either is released: this proves live overlap.
+	awaitComposedSignal(t, firstGate.entered)
+	awaitComposedSignal(t, secondGate.entered)
+	close(firstGate.release)
+	firstID := awaitComposedSession(t, firstResult)
+	firstEvents := assertComposedMCPEvents(t, first.client, firstID)
+	assertComposedLedger(t, sessions, firstEvents, "work-first", "work-second")
+	first.closeInput(t)
+	select {
+	case err := <-second.done:
+		t.Fatalf("peer Execute joined while its command was gated: %v", err)
+	default:
+	}
+	close(secondGate.release)
+	secondID := awaitComposedSession(t, secondResult)
+	if firstID == secondID {
+		t.Fatal("isolated requests shared a Factory Session identity")
+	}
+	secondEvents := assertComposedMCPEvents(t, second.client, secondID)
+	assertComposedLedger(t, sessions, secondEvents, "work-second", "work-first")
+	nextID := assertComposedMCPSync(t, second, "after-peer-close")
+	if nextID == firstID || nextID == secondID {
+		t.Fatal("new request reused a Factory Session identity")
+	}
+	assertComposedLedger(t, sessions, assertComposedMCPEvents(t, second.client, nextID), "work-after-peer-close", "work-first")
+	second.closeInput(t)
+}
+
+// Literal event IDs may repeat across Sessions. Compare each complete ordered
+// result to its own canonical ledger, including Session identity and payload.
+func assertComposedLedger(t *testing.T, sessions factorysessions.Service, got factorysessionmcp.ReadEventsResult, ownWork, peerWork string) {
+	t.Helper()
+	ledger, err := sessions.ReadEvents(t.Context(), got.SessionID, factorysessions.EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("canonical ledger read: %v", err)
+	}
+	if ledger.SessionID != got.SessionID || len(ledger.Events) != len(got.Events) {
+		t.Fatal("MCP read differs from its own canonical ledger")
+	}
+	foundOwn := false
+	for i, raw := range ledger.Events {
+		var want factoryapi.FactoryEvent
+		if err := json.Unmarshal(raw, &want); err != nil {
+			t.Fatalf("decode canonical ledger: %v", err)
+		}
+		if !reflect.DeepEqual(got.Events[i], want) {
+			t.Fatalf("MCP event %d differs from its own canonical fact: %#v vs %#v", i, got.Events[i], want)
+		}
+		encoded, err := json.Marshal(got.Events[i].Payload)
+		if err != nil {
+			t.Fatalf("encode event payload: %v", err)
+		}
+		payload := string(encoded)
+		if strings.Contains(payload, peerWork) {
+			t.Fatalf("peer work leaked in event %s: %s", got.Events[i].Id, payload)
+		}
+		foundOwn = foundOwn || strings.Contains(payload, ownWork)
+	}
+	if !foundOwn {
+		t.Fatalf("canonical history contains no own work %q", ownWork)
+	}
+}
+
+func awaitComposedSignal(t *testing.T, signal <-chan struct{}) {
+	t.Helper()
+	// Signals synchronize execution; the deadline only bounds a broken fixture.
+	select {
+	case <-signal:
+	case <-t.Context().Done():
+		t.Fatal("context ended before provider entered")
+	case <-time.After(30 * time.Second):
+		t.Fatal("provider did not enter its owned gate")
+	}
+}
+
+func awaitComposedSession(t *testing.T, result <-chan string) string {
+	t.Helper()
+	select {
+	case id := <-result:
+		return id
+	case <-time.After(30 * time.Second):
+		t.Fatal("released provider did not complete start_sync")
+		return ""
 	}
 }
