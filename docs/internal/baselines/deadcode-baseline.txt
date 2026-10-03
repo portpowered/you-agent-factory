@@ -1794,7 +1794,6 @@ pkg/services/operator_settings/transports/mcp/tool.go: unreachable func: ToolDef
 pkg/services/operator_settings/wire/cli_defaults.go: unreachable func: RegisterDefaultsResolutionFromHome
 pkg/services/operator_settings/wire/construction_ports.go: unreachable func: RegisterProvidersRootConstructor
 pkg/services/operator_settings/wire/document_owner.go: unreachable func: NewConfigDocumentService
-pkg/services/operator_settings/wire/document_owner.go: unreachable func: NewConfigDocumentServiceWithPreserver
 pkg/services/operator_settings/wire/document_owner.go: unreachable func: firstDiagnosticDecoder
 pkg/services/operator_settings/wire/service_from_home_ports.go: unreachable func: NewServiceFromHomePorts
 pkg/services/operator_settings/wire/test_registration.go: unreachable func: RegisterTestComposition

@@ -232,7 +232,7 @@ func assertRuntimePreserved(t *testing.T, got operatorsettings.RuntimeSettings) 
 }
 
 func operatorConfigService() operatorsettings.ConfigDocumentService {
-	return settingswire.NewConfigDocumentService(
+	owner := settingswire.NewDocumentService(
 		operatorConfigOS{},
 		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 			return os.CreateTemp(dir, pattern)
@@ -249,8 +249,10 @@ func operatorConfigService() operatorsettings.ConfigDocumentService {
 				return "", false
 			}
 		},
-		&sync.Mutex{},
+		nil,
+		nil,
 	)
+	return settingswire.NewConfigDocumentService(owner, globalconfigmapping.Decode, globalconfigmapping.Encode, &sync.Mutex{})
 }
 
 func assertOperatorConfig(t *testing.T, document operatorsettings.ConfigDocument, provider, model string) {

@@ -33,51 +33,19 @@ func NewDocumentOwnerWithPreserver(
 	return settingsdocumentwire.NewServiceWithPreserver(files, createTemp, decoder, encoder, providers, preserveUnknown, diagnosticDecoder)
 }
 
-// NewConfigDocumentService constructs a root ConfigDocumentService whose load,
-// update, and persist operations delegate to the nested document owner.
+// NewConfigDocumentService binds a completed document owner to the legacy
+// config representation. Preservation and diagnostics belong to that owner.
 func NewConfigDocumentService(
-	files operatorsettings.FileSystem,
-	createTemp operatorsettings.CreateTemporaryFile,
+	document operatorsettings.DocumentOwner,
 	decoder operatorsettings.ConfigDecoder,
 	encoder operatorsettings.ConfigEncoder,
-	providers operatorsettings.ProviderCatalog,
 	persistenceLock sync.Locker,
-	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
 ) operatorsettings.ConfigDocumentService {
 	return operatorsettings.ConfigDocumentService{
-		Files:             files,
-		CreateTemp:        createTemp,
-		Providers:         providers,
-		Decoder:           decoder,
-		DiagnosticDecoder: firstDiagnosticDecoder(diagnosticDecoders),
-		Encoder:           encoder,
-		DocumentOwner:     NewDocumentOwner(files, createTemp, decoder, encoder, providers, firstDiagnosticDecoder(diagnosticDecoders)),
-		PersistenceLock:   persistenceLock,
-	}
-}
-
-// NewConfigDocumentServiceWithPreserver constructs a compatibility adapter
-// whose atomic updates retain unknown fields from the existing document.
-func NewConfigDocumentServiceWithPreserver(
-	files operatorsettings.FileSystem,
-	createTemp operatorsettings.CreateTemporaryFile,
-	decoder operatorsettings.ConfigDecoder,
-	encoder operatorsettings.ConfigEncoder,
-	providers operatorsettings.ProviderCatalog,
-	persistenceLock sync.Locker,
-	preserveUnknown operatorsettings.ConfigDocumentPreserver,
-	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
-) operatorsettings.ConfigDocumentService {
-	return operatorsettings.ConfigDocumentService{
-		Files:                 files,
-		CreateTemp:            createTemp,
-		Providers:             providers,
-		Decoder:               decoder,
-		DiagnosticDecoder:     firstDiagnosticDecoder(diagnosticDecoders),
-		Encoder:               encoder,
-		PreserveUnknownFields: preserveUnknown,
-		DocumentOwner:         NewDocumentOwnerWithPreserver(files, createTemp, decoder, encoder, providers, preserveUnknown, firstDiagnosticDecoder(diagnosticDecoders)),
-		PersistenceLock:       persistenceLock,
+		Decoder:         decoder,
+		Encoder:         encoder,
+		DocumentOwner:   document,
+		PersistenceLock: persistenceLock,
 	}
 }
 
