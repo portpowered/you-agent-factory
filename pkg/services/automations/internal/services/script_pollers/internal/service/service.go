@@ -8,34 +8,52 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"go.uber.org/zap"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 const scriptPollerRestartBackoffMax = 250 * time.Millisecond
 
 type service struct {
-	dependencies scriptpollers.Dependencies
+	logger           *zap.Logger
+	scheduler        scriptpollers.Scheduler
+	runner           platformprocess.CommandRunner
+	resolveTemplates workers.TemplateFieldResolver
+	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
+	recorder         scriptpollers.CursorRecorder
 }
 
 var _ scriptpollers.Service = (*service)(nil)
 
-// New constructs an inert script-poller service with injected runtime
-// dependencies. Construction never invokes the supplied functions.
-func New(dependencies scriptpollers.Dependencies) scriptpollers.Service {
-	return &service{dependencies: dependencies}
+// New stores explicit collaborators without executing any external effect.
+func New(
+	logger *zap.Logger,
+	scheduler scriptpollers.Scheduler,
+	commandRunner platformprocess.CommandRunner,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	cursorRecorder scriptpollers.CursorRecorder,
+) scriptpollers.Service {
+	return &service{
+		logger:           logger,
+		scheduler:        scheduler,
+		runner:           commandRunner,
+		resolveTemplates: resolveTemplates,
+		executionPolicy:  executionPolicy,
+		recorder:         cursorRecorder,
+	}
 }
 
 func (s *service) GetCursor(
 	ctx context.Context,
 	request automations.GetCursorRequest,
 ) (automations.GetCursorResult, error) {
-	recorder := s.cursorRecorder()
+	recorder := s.recorder
 	if recorder == nil {
 		return automations.GetCursorResult{}, unavailableCursorRecorderError()
 	}
@@ -70,8 +88,8 @@ func (s *service) superviseScriptPoller(
 	submitter automations.WorkRequestSubmitter,
 ) {
 	logger := s.pollerLogger(workstation.Name, workerDef.Name)
-	runner := s.commandRunner()
-	backoffClock := s.supervisorClock()
+	runner := s.runner
+	backoffClock := s.scheduler
 	attempt := 0
 	logger.Info("script poller started")
 	defer func() {
@@ -122,7 +140,7 @@ func (s *service) RunScriptPoller(
 		runtimeCfg,
 		workstation,
 		workerDef,
-		s.dependencies.ResolveTemplates,
+		s.resolveTemplates,
 		resume,
 	)
 	if err != nil {
@@ -183,7 +201,7 @@ func (s *service) resolveScriptPollerResume(
 		return scriptpollers.ResumeCursor{}, nil
 	}
 
-	recorder := s.cursorRecorder()
+	recorder := s.recorder
 	if recorder == nil {
 		return scriptpollers.ResumeCursor{}, unavailableCursorRecorderError()
 	}
@@ -223,7 +241,7 @@ func (s *service) commitScriptPollerRecovery(
 	if instanceID == "" {
 		return nil
 	}
-	recorder := s.cursorRecorder()
+	recorder := s.recorder
 	if recorder == nil {
 		return unavailableCursorRecorderError()
 	}
@@ -267,10 +285,7 @@ func (s *service) scriptPollerExecutionTimeout(
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
 ) (time.Duration, error) {
-	if s.dependencies.ExecutionPolicy == nil {
-		return 0, fmt.Errorf("Factory Definition Workstation execution policy service is required")
-	}
-	timeout, err := s.dependencies.ExecutionPolicy.ExecutionTimeout(&workstation)
+	timeout, err := s.executionPolicy.ExecutionTimeout(&workstation)
 	if err != nil {
 		return 0, err
 	}
@@ -290,40 +305,10 @@ func (s *service) scriptPollerExecutionTimeout(
 }
 
 func (s *service) pollerLogger(workstationName, workerName string) *zap.Logger {
-	if s.dependencies.Logger != nil {
-		if logger := s.dependencies.Logger(workstationName, workerName); logger != nil {
-			return logger
-		}
-	}
-	return zap.NewNop()
-}
-
-func (s *service) commandRunner() platformprocess.CommandRunner {
-	if s.dependencies.CommandRunner != nil {
-		if runner := s.dependencies.CommandRunner(); runner != nil {
-			return runner
-		}
-	}
-	return unavailableCommandRunner{}
-}
-
-type unavailableCommandRunner struct{}
-
-func (unavailableCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	return platformprocess.CommandResult{}, errors.New("automation command runner is required")
-}
-
-func (s *service) supervisorClock() clockwork.Clock {
-	if s.dependencies.Clock != nil {
-		if clock := s.dependencies.Clock(); clock != nil {
-			return clock
-		}
-	}
-	return clockwork.NewRealClock()
-}
-
-func (s *service) cursorRecorder() scriptpollers.CursorRecorder {
-	return s.dependencies.CursorRecorder
+	return s.logger.With(
+		zap.String("workstation", workstationName),
+		zap.String("worker", workerName),
+	)
 }
 
 func unavailableCursorRecorderError() error {

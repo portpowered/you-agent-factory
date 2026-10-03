@@ -126,6 +126,11 @@ func TestStartScriptPoller_RestartsOnMalformedOutputWithBackoff(t *testing.T) {
 		t.Fatal("expected restart log for malformed poller output")
 	}
 	entry := observedLogs.FilterMessage("script poller restarting").All()[0]
+	for field, want := range map[string]string{"workstation": poller.Name, "worker": worker.Name} {
+		if got := entry.ContextMap()[field]; got != want {
+			t.Fatalf("restart %s = %#v, want %q", field, got, want)
+		}
+	}
 	if got := entry.ContextMap()["error"]; got == nil || !strings.Contains(got.(string), "malformed stdout") {
 		t.Fatalf("restart error = %#v, want malformed stdout context", got)
 	}
@@ -332,23 +337,11 @@ func newScriptPollersServiceWithOptions(options scriptPollersServiceOptions) scr
 			},
 		}
 	}
-	deps := scriptpollers.Dependencies{
-		Logger: func(workstationName, workerName string) *zap.Logger {
-			return logger
-		},
-		CommandRunner: func() platformprocess.CommandRunner {
-			return options.runner
-		},
-		ExecutionPolicy: executionPolicy,
-		CursorRecorder:  options.cursorRecorder,
+	clock := options.clock
+	if clock == nil {
+		clock = clockwork.NewRealClock()
 	}
-	if options.clock != nil {
-		clock := options.clock
-		deps.Clock = func() clockwork.Clock {
-			return clock
-		}
-	}
-	return scriptpollerswire.NewService(deps)
+	return scriptpollerswire.NewService(logger, clock, options.runner, nil, executionPolicy, options.cursorRecorder)
 }
 
 func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waiters int) {
