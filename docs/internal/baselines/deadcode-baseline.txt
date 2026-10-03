@@ -2172,8 +2172,6 @@ pkg/services/work/transports/mcp/schemas.go: unreachable func: workRequestSchema
 pkg/services/work/transports/mcp/schemas.go: unreachable func: workRequestSubmitResultSchema
 pkg/services/work/transports/mcp/submit.go: unreachable func: Submit
 pkg/services/work/transports/mcp/tool.go: unreachable func: ToolDefinition.MarshalJSON
-pkg/services/work/wire/wire.go: unreachable func: NewService
-pkg/services/work/wire/wire.go: unreachable func: validateNewServiceInputs
 pkg/services/worker_sessions/internal/service/classify.go: unreachable func: safeDetailWithDiagnostics
 pkg/services/worker_sessions/internal/service/invoke_session.go: unreachable func: registry.driveInvocation
 pkg/services/worker_sessions/internal/service/invoke_session.go: unreachable func: registry.ensureObservation

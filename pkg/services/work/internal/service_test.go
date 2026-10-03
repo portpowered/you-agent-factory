@@ -32,7 +32,7 @@ func (r workRuntimeResolver) ResolveWorkRuntime(string) (work.Runtime, error) {
 
 func TestNewServiceRoutesThroughWorkRootRuntimeContract(t *testing.T) {
 	runtime := &recordingFactory{}
-	service := internalservice.NewService(workRuntimeResolver{runtime: runtime}, os.ReadFile, nil, nil, nil)
+	service := newTestWorkService(workRuntimeResolver{runtime: runtime}, os.ReadFile, nil, nil, nil)
 
 	request := work.WorkRequest{RequestID: "request-root-contract"}
 	if _, err := service.SubmitWorkRequestForSession(
@@ -78,7 +78,7 @@ func (f *recordingFactory) ReadWorkSnapshot(context.Context) (work.ReadSnapshot,
 }
 
 func TestNewServicePropagatesRuntimeResolverError(t *testing.T) {
-	service := internalservice.NewService(workRuntimeResolver{err: factorysessions.ErrSessionNotFound}, os.ReadFile, nil, nil, nil)
+	service := newTestWorkService(workRuntimeResolver{err: factorysessions.ErrSessionNotFound}, os.ReadFile, nil, nil, nil)
 	_, err := service.SubmitWorkRequestForSession(context.Background(), "missing", work.WorkRequest{})
 	if !errors.Is(err, factorysessions.ErrSessionNotFound) {
 		t.Fatalf("error = %v, want ErrSessionNotFound", err)
@@ -90,7 +90,7 @@ func TestNewServiceConcurrentSessionOperationsRemainIsolated(t *testing.T) {
 
 	first := &isolatedWorkRuntime{sessionID: "session-first"}
 	second := &isolatedWorkRuntime{sessionID: "session-second"}
-	service := internalservice.NewService(isolatedWorkRuntimeResolver{
+	service := newTestWorkService(isolatedWorkRuntimeResolver{
 		runtimes: map[string]work.Runtime{
 			first.sessionID:  first,
 			second.sessionID: second,
@@ -259,7 +259,7 @@ func TestSubmitFileParsesAndSubmitsCanonicalWorkRequest(t *testing.T) {
 func TestSubmitFileForSessionUsesInjectedReaderAndRuntime(t *testing.T) {
 	runtime := &recordingFactory{}
 	readPath := ""
-	service := internalservice.NewService(workRuntimeResolver{runtime: runtime}, func(path string) ([]byte, error) {
+	service := newTestWorkService(workRuntimeResolver{runtime: runtime}, func(path string) ([]byte, error) {
 		readPath = path
 		return []byte(`{"requestId":"request-edge","type":"FACTORY_REQUEST_BATCH","works":[]}`), nil
 	}, nil, nil, nil)
@@ -310,7 +310,7 @@ func TestSubmitFileReportsReadParseAndRuntimeFailures(t *testing.T) {
 }
 
 func TestNewServiceExposesInvocationAndReturnPolicySlice(t *testing.T) {
-	service := internalservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil, nil)
+	service := newTestWorkService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil, nil)
 	ctx := context.Background()
 
 	stdin := "from service root"
@@ -393,7 +393,7 @@ func (s *recordingContentStaging) CleanupContent(_ context.Context, ref string) 
 
 func TestNewServiceDelegatesContentStagingSlice(t *testing.T) {
 	staging := &recordingContentStaging{}
-	service := internalservice.NewService(
+	service := newTestWorkService(
 		workRuntimeResolver{runtime: &recordingFactory{}},
 		os.ReadFile,
 		nil,
@@ -435,7 +435,7 @@ func TestNewServiceDelegatesContentMaterializationSlice(t *testing.T) {
 		materialized = rawURL
 		return "/tmp/materialized/svc.png", func() {}, nil
 	})
-	service := internalservice.NewService(
+	service := newTestWorkService(
 		workRuntimeResolver{runtime: &recordingFactory{}},
 		os.ReadFile,
 		nil,
@@ -452,7 +452,7 @@ func TestNewServiceDelegatesContentMaterializationSlice(t *testing.T) {
 }
 
 func TestNewServiceContentSliceRequiresInjectedDependencies(t *testing.T) {
-	service := internalservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil, nil)
+	service := newTestWorkService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil, nil)
 	ctx := context.Background()
 
 	if _, err := service.StageContent(ctx, work.StageContentRequest{}); err == nil || !strings.Contains(err.Error(), "content staging is required") {
@@ -472,25 +472,25 @@ func TestNewServiceContentSliceRequiresInjectedDependencies(t *testing.T) {
 	}
 }
 
-func TestNewServiceDelegatesPrepareWorkRequest(t *testing.T) {
-	service := internalservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil, nil)
-	ctx := context.Background()
+type fakeRequestPreparation func(context.Context, work.WorkRequestPreparation) (work.WorkRequest, error)
 
-	prepared, err := service.PrepareWorkRequest(ctx, work.WorkRequestPreparation{
-		Request: work.WorkRequest{
-			RequestID: "request-service-1",
-			Type:      work.WorkRequestTypeFactoryRequestBatch,
-			Works: []work.Work{{
-				Name:       "draft",
-				WorkTypeID: "task",
-				Content:    []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
-			}},
-		},
-	})
-	if err != nil {
-		t.Fatalf("PrepareWorkRequest: %v", err)
-	}
-	if prepared.RequestID != "request-service-1" || len(prepared.Works) != 1 || prepared.Works[0].Name != "draft" {
-		t.Fatalf("prepared = %#v, want normalized draft work request", prepared)
+func (f fakeRequestPreparation) PrepareWorkRequest(ctx context.Context, input work.WorkRequestPreparation) (work.WorkRequest, error) {
+	return f(ctx, input)
+}
+func TestNewServiceDelegatesPrepareWorkRequest(t *testing.T) {
+	t.Parallel()
+	expected := work.WorkRequest{RequestID: "injected-request", Works: []work.Work{{Name: "prepared"}}}
+	failure := errors.New("preparation failed")
+	for _, wantErr := range []error{nil, failure, context.Canceled, context.DeadlineExceeded} {
+		service := internalservice.NewService(nil, nil, nil, nil, nil, nil, fakeRequestPreparation(func(ctx context.Context, input work.WorkRequestPreparation) (work.WorkRequest, error) {
+			if ctx != t.Context() || input.Request.RequestID != "caller" {
+				t.Fatal("request changed during delegation")
+			}
+			return expected, wantErr
+		}), nil)
+		got, err := service.PrepareWorkRequest(t.Context(), work.WorkRequestPreparation{Request: work.WorkRequest{RequestID: "caller"}})
+		if err != wantErr || got.RequestID != expected.RequestID {
+			t.Fatalf("preparation = %#v, error = %v", got, err)
+		}
 	}
 }

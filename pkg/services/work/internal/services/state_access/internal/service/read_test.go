@@ -23,7 +23,7 @@ func TestListWorkReturnsDetachedReadModels(t *testing.T) {
 	t.Parallel()
 
 	adapter := &recordingSessionAdapter{snapshot: querySnapshot()}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil, nil)
 	ctx := context.Background()
 
 	got, err := svc.ListWork(ctx, "session-1", work.ListOptions{WorkTypeName: "bug"})
@@ -50,7 +50,7 @@ func TestListWorkHonorsPaginationNextToken(t *testing.T) {
 		{CursorID: "tok-active-1", WorkID: "work-active-1", Name: "Alpha first", WorkTypeName: "task", State: &work.State{Name: "review", Type: work.StateTypeProcessing}},
 		{CursorID: "tok-active-2", WorkID: "work-active-2", Name: "Alpha second", WorkTypeName: "task", State: &work.State{Name: "review", Type: work.StateTypeProcessing}},
 	}}}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil, nil)
 	ctx := context.Background()
 
 	first, err := svc.ListWork(ctx, "session-1", work.ListOptions{Name: "alpha", MaxResults: 1})
@@ -68,7 +68,7 @@ func TestListWorkDerivesSupersessionBeforeCountsAndPagination(t *testing.T) {
 
 	svc := internalservice.New(stubSessionResolver{adapter: &recordingSessionAdapter{
 		snapshot: supersessionReadSnapshot(),
-	}}, nil)
+	}}, nil, nil)
 	assertDefaultSupersessionSelection(t, svc)
 	assertIncludedSupersessionHistory(t, svc)
 }
@@ -173,8 +173,8 @@ func TestLiveAndReplaySnapshotsProduceIdenticalSupersessionSelection(t *testing.
 	}
 	live := internalservice.New(stubSessionResolver{
 		adapter: &recordingSessionAdapter{snapshot: snapshot},
-	}, nil)
-	replay := internalservice.New(stubSessionResolver{}, &recordingSnapshotReader{snapshot: snapshot})
+	}, nil, nil)
+	replay := internalservice.New(stubSessionResolver{}, &recordingSnapshotReader{snapshot: snapshot}, nil)
 	options := work.ListOptions{Counts: true}
 
 	liveResult, err := live.ListWork(context.Background(), "session-1", options)
@@ -209,7 +209,7 @@ func TestListWorkTerminalityCountsAndPaginationUseOneFilteredSelection(t *testin
 		{CursorID: "tok-story-unknown", WorkID: "work-story-unknown", WorkTypeName: "story", State: &work.State{Name: "unknown", Type: "UNKNOWN"}},
 		{CursorID: "tok-story-missing", WorkID: "work-story-missing", WorkTypeName: "story"},
 	}}}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil, nil)
 	ctx := context.Background()
 	options := work.ListOptions{WorkTypeName: "story", NonTerminal: true, Counts: true, MaxResults: 1}
 
@@ -290,7 +290,7 @@ func TestListWorkRejectsContradictoryTerminalityBeforeReadingSnapshot(t *testing
 	t.Parallel()
 
 	adapter := &recordingSessionAdapter{snapshotErr: errors.New("snapshot must not be read")}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil, nil)
 
 	_, err := svc.ListWork(context.Background(), "session-1", work.ListOptions{Terminal: true, NonTerminal: true})
 	if err == nil || err.Error() != "terminal and nonTerminal cannot both be selected" {
@@ -306,7 +306,7 @@ func TestGetWorkByCursorOrWorkIDAndNotFound(t *testing.T) {
 	t.Parallel()
 
 	adapter := &recordingSessionAdapter{snapshot: querySnapshot()}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil, nil)
 	ctx := context.Background()
 
 	for _, id := range []string{"tok-story", "work-story"} {
@@ -429,7 +429,7 @@ func TestMoveWorkAndReadReturnsDetachedPostMoveReadModel(t *testing.T) {
 		Name:     "one",
 		State:    &work.State{Name: "review", Type: work.StateTypeProcessing},
 	}}}}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil, nil)
 	ctx := context.Background()
 
 	read, err := svc.MoveWorkAndRead(ctx, "session-1", "work-1", "complete", "request-1")
@@ -450,7 +450,7 @@ func TestReadSnapshotUsesSessionAdapterOnly(t *testing.T) {
 	t.Parallel()
 
 	adapter := &recordingSessionAdapter{snapshotErr: errors.New("snapshot unavailable")}
-	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil)
+	svc := internalservice.New(stubSessionResolver{adapter: adapter}, nil, nil)
 	ctx := context.Background()
 
 	_, err := svc.ListWork(ctx, "session-1", work.ListOptions{})
@@ -471,6 +471,7 @@ func TestReadSnapshotFallsBackToTheSnapshotReaderWhenSessionUnavailable(t *testi
 			WorkTypeName: "story",
 			State:        &work.State{Name: "review", Type: work.StateTypeProcessing},
 		}}}},
+		nil,
 	)
 	ctx := context.Background()
 

@@ -3,9 +3,9 @@ package internal_test
 import (
 	"context"
 	"errors"
-	"io/fs"
+
 	"testing"
-	"testing/fstest"
+
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -33,10 +33,13 @@ func TestInvocationInputPreservesContextErrorsAndTypesOtherFailures(t *testing.T
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			service := internalservice.NewService(nil, func(string) ([]byte, error) { return nil, readFailure },
-				func(string) (fs.FileInfo, error) {
-					return fstest.MapFS{"input.txt": &fstest.MapFile{Data: []byte("input")}}.Stat("input.txt")
-				}, nil, nil)
+			service := internalservice.NewService(nil, nil, nil, nil, nil, nil, nil,
+				fakeInvocationPreparation(func(ctx context.Context, input work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
+					if ctx != test.ctx {
+						t.Fatal("context changed during delegation")
+					}
+					return work.PreparedInvocationInput{}, test.want
+				}))
 			_, err := service.PrepareInvocationInput(test.ctx, test.request)
 			if !errors.Is(err, test.want) {
 				t.Fatalf("preparation error = %v, want identity %v", err, test.want)
@@ -49,3 +52,25 @@ func TestInvocationInputPreservesContextErrorsAndTypesOtherFailures(t *testing.T
 }
 
 func stringPtrForInput(value string) *string { return &value }
+
+type fakeInvocationPreparation func(context.Context, work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error)
+
+func (f fakeInvocationPreparation) PrepareInvocationInput(ctx context.Context, input work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
+	return f(ctx, input)
+}
+func TestInvocationInputReturnsCompletedCollaboratorOutput(t *testing.T) {
+	t.Parallel()
+	expected := work.PreparedInvocationInput{Source: work.InputSourcePositionalText, ResolvedInput: &work.ResolvedInput{Text: "injected output"}}
+	service := internalservice.NewService(nil, nil, nil, nil, nil, nil, nil, fakeInvocationPreparation(func(ctx context.Context, input work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
+		if ctx != t.Context() || input.Arguments[0] != "caller" {
+			t.Fatal("invocation input changed")
+		}
+		return expected, nil
+	}))
+	for range 2 {
+		got, err := service.PrepareInvocationInput(t.Context(), work.InvocationInputPreparationRequest{Arguments: []string{"caller"}})
+		if err != nil || got.ResolvedInput != expected.ResolvedInput {
+			t.Fatalf("output = %#v, error = %v", got, err)
+		}
+	}
+}

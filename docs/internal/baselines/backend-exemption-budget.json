@@ -639,18 +639,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "tests/functional/runtime_api/api_work_root_policy_slices_test.go#TestWorkRootPolicySlicesRejectUnsupportedOperations",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
-      "target": "tests/functional/runtime_api/api_work_service_application_slices_test.go#TestWorkServiceApplicationSlicesExerciseFunctionalLane",
-      "owner": "backend-maintainers",
-      "removalReason": "pre-existing baseline debt recorded 2026-08-08; split this oversized code into focused units and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
       "target": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go#TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExecution",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-function threshold. Current rationale: this end-to-end current-factory layout round-trip test keeps save, reload, persistence, and runtime assertions on one contract seam."
