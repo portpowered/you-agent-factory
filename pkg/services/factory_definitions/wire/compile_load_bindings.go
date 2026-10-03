@@ -10,6 +10,8 @@ import (
 	compilationloadedsource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
+	runtimesnapshot "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot"
+	runtimesnapshotwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/runtime_snapshot/wire"
 	wirevalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
@@ -155,4 +157,17 @@ func NewCompilationService(
 	encodeFactory factorydefinitions.FactoryConfigJSONEncoder,
 ) Compilation {
 	return compilationwire.NewService(loadCanonical, loadFromFactoryDir, encodeFactory)
+}
+
+// RuntimeSnapshot is the completed source resolution owner supplied to Definitions.
+type RuntimeSnapshot = runtimesnapshot.Service
+
+// NewRuntimeSnapshot constructs an inert resolver with the exact source and query ports.
+func NewRuntimeSnapshot(
+	loadCanonical factorydefinitions.CanonicalFactoryJSONLoader,
+	loadFactory factorydefinitions.LoadedFactoryLoader,
+	workstationLoader func() factorydefinitions.WorkstationLoader,
+	readFile factorydefinitions.FileReader,
+) RuntimeSnapshot {
+	return runtimesnapshotwire.NewService(loadCanonical, loadFactory, workstationLoader, readFile)
 }
