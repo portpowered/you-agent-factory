@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -55,7 +56,9 @@ func TestPrepareGenericAssetsUsesOrderedHFCachesWithoutNetworkOnHit(t *testing.T
 		requests.Add(1)
 		return nil, errors.New("network should not be used for a cache hit")
 	})
+	var environmentReads []string
 	environment := func(name string) string {
+		environmentReads = append(environmentReads, name)
 		switch name {
 		case "HUGGINGFACE_HUB_CACHE":
 			return first
@@ -68,6 +71,9 @@ func TestPrepareGenericAssetsUsesOrderedHFCachesWithoutNetworkOnHit(t *testing.T
 	scopes := newScopes(t, "generic-cache-order")
 	scope := openScope(t, scopes, you, models.RuntimeConfig{})
 	service := newGenericService(t, scopes, client, environment)
+	if len(environmentReads) != 0 {
+		t.Fatal("construction read the selected environment")
+	}
 
 	result, err := service.PrepareModelAssets(context.Background(), models.PrepareModelAssetsRequest{
 		Scope:     scope,
@@ -78,6 +84,9 @@ func TestPrepareGenericAssetsUsesOrderedHFCachesWithoutNetworkOnHit(t *testing.T
 		t.Fatalf("PrepareModelAssets: %v", err)
 	}
 	assertGenericHFCachedResult(t, result, body, requests.Load())
+	if !reflect.DeepEqual(environmentReads, []string{"HUGGINGFACE_HUB_CACHE", "HF_HOME"}) {
+		t.Fatalf("environment reads = %v, want selected cache keys", environmentReads)
+	}
 	assertGenericRootUntouched(t, second)
 	assertGenericRootUntouched(t, filepath.Join(third, "models--owner--repo"))
 }
@@ -759,6 +768,20 @@ func newGenericService(
 	if err != nil {
 		t.Fatalf("construct asset coordination: %v", err)
 	}
+	return newGenericServiceWithOptions(t, scopes, client, assets.ConstructionOptions{
+		ResolveEnvironment: environment,
+		ResolveRevision:    resolver,
+		Coordination:       coordination,
+	})
+}
+
+func newGenericServiceWithOptions(
+	t *testing.T,
+	scopes runtimescopes.Service,
+	client modelseffects.AssetHTTPDoer,
+	options assets.ConstructionOptions,
+) *service {
+	t.Helper()
 	value := New(
 		scopes,
 		models.AssetHostPlatform{OperatingSystem: "linux", Architecture: "amd64"},
@@ -774,11 +797,7 @@ func newGenericService(
 		os.ReadDir,
 		func(path string) (io.WriteCloser, error) { return os.Create(path) },
 		func(path string) (io.ReadCloser, error) { return os.Open(path) },
-		assets.ConstructionOptions{
-			ResolveEnvironment: environment,
-			ResolveRevision:    resolver,
-			Coordination:       coordination,
-		},
+		options,
 	)
 	service, ok := value.(*service)
 	if !ok {
