@@ -114,7 +114,7 @@ func startComposedRun(
 	args := []string{"you", "run", "--dir", workingDirectory, "--continuously", "--with-server", "--quiet"}
 	args = append(args, recordingArgs...)
 	inputs := support.FakeInputs(t.Context(), args)
-	inputs.Input.Env = isolatedReplayEnvironment(t)
+	inputs.Input.Env = isolatedReplayEnvironmentFor(t)
 	inputs.Input.WorkingDirectory = workingDirectory
 	command := support.StartProcessCommand(t, process, inputs.Input)
 	return command, api.WaitForURL(t)
@@ -265,3 +265,81 @@ func (runner *composedReplayCommandRunner) Run(
 }
 
 var _ platformprocess.CommandRunner = (*composedReplayCommandRunner)(nil)
+
+// TestReplayUsesRecordedArtifactClockThroughComposedProcess characterizes
+// regenerated public event origins, not corrected replay-clock selection.
+// Each local Current Factory command opens its own ~default process/profile;
+// replay's local selection is the customer boundary being characterized.
+func TestReplayUsesRecordedArtifactClockThroughComposedProcess(t *testing.T) {
+	for _, name := range []string{"default-process-clock", "explicit-process-clock"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			characterizeComposedReplayClock(t, name == "explicit-process-clock")
+		})
+	}
+}
+
+func characterizeComposedReplayClock(t *testing.T, explicit bool) {
+	t.Helper()
+	payload := selectedTickArtifactPayload(t, true)
+	artifactPath := filepath.Join(t.TempDir(), "known-ticks.replay.json")
+	if err := os.WriteFile(artifactPath, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	api := support.NewProcessAPIServer()
+	runner := &composedReplayCommandRunner{}
+	effects := newComposedRecordingEffects()
+	edges := effects.edges(api, runner)
+	processTime := time.Date(2040, time.January, 1, 0, 0, 0, 0, time.UTC)
+	if explicit {
+		edges.Clock = replayOriginClock{at: processTime}
+	}
+	process, err := root.BuildProcess(t.Context(), edges)
+	if err != nil {
+		t.Fatalf("root.BuildProcess: %v", err)
+	}
+	support.CleanupProcess(t, process)
+	before := time.Now()
+	command, url := startComposedRun(t, process, api, t.TempDir(), "--replay", artifactPath, "--no-record")
+	support.WaitForTerminalStatus(t, url, 15*time.Second)
+	listed := support.ListDefaultSessionWork(t, url)
+	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
+		t.Fatalf("replayed terminal Work count = %d, want 1", got)
+	}
+	events := support.GetFactoryEventsAt(t, url)
+	after := time.Now()
+	seenRun, seenWork := false, false
+	for _, event := range events {
+		at := event.Context.EventTime
+		t.Logf("regenerated replay fact id=%s type=%s tick=%d time=%s explicit-process-clock=%t", event.Id, event.Type, event.Context.Tick, at.Format(time.RFC3339Nano), explicit)
+		if explicit && !at.Equal(processTime) {
+			t.Errorf("replay fact %s time = %v, want selected process time %v", event.Id, at, processTime)
+		}
+		if !explicit && (at.Before(before) || at.After(after)) {
+			t.Errorf("replay fact %s time = %v, want wall time in [%v, %v]", event.Id, at, before, after)
+		}
+		if event.Type == factoryapi.FactoryEventTypeRunRequest {
+			seenRun = true
+		}
+		if event.Type == factoryapi.FactoryEventTypeWorkRequest {
+			seenWork = true
+			if event.Context.Tick != 1 {
+				t.Errorf("replayed Work Request tick = %d, want recorded tick 1", event.Context.Tick)
+			}
+		}
+	}
+	if !seenRun || !seenWork {
+		t.Fatalf("public replay facts missing Run Request or Work Request: run=%t work=%t", seenRun, seenWork)
+	}
+	command.Stop(t)
+	if runner.calls.Load() != 0 {
+		t.Fatalf("replay provider calls = %d, want 0", runner.calls.Load())
+	}
+	if got, err := os.ReadFile(artifactPath); err != nil || !bytes.Equal(got, payload) {
+		t.Fatalf("source artifact changed after replay: %v", err)
+	}
+}
+
+type replayOriginClock struct{ at time.Time }
+
+func (clock replayOriginClock) Now() time.Time { return clock.at }
