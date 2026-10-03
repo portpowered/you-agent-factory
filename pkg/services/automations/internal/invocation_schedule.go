@@ -270,7 +270,7 @@ func (entry *preparedInvocationSchedule) fireAt(nominal time.Time) {
 			ExecutionWorkType: entry.executionWorkType,
 		})
 		if err != nil {
-			entry.owner.logger().Error("invocation interval observation failed", zap.Error(err))
+			entry.owner.loggerValue.Error("invocation interval observation failed", zap.Error(err))
 			return
 		}
 	}
@@ -281,7 +281,7 @@ func (entry *preparedInvocationSchedule) fireAt(nominal time.Time) {
 		entry.mu.Unlock()
 		if failureCeilingReached && entry.request.FailController != nil {
 			if err := entry.request.FailController(entry.ctx, controllerWorkID); err != nil && entry.ctx.Err() == nil {
-				entry.owner.logger().Error("invocation interval failure ceiling transition failed",
+				entry.owner.loggerValue.Error("invocation interval failure ceiling transition failed",
 					zap.String("workstation", entry.workstation.Name), zap.Error(err))
 			}
 		}
@@ -319,7 +319,7 @@ func (entry *preparedInvocationSchedule) fireAt(nominal time.Time) {
 		}},
 	}
 	if err := entry.request.Submitter(entry.ctx, request); err != nil && entry.ctx.Err() == nil {
-		entry.owner.logger().Error("invocation interval trigger failed",
+		entry.owner.loggerValue.Error("invocation interval trigger failed",
 			zap.String("workstation", entry.workstation.Name),
 			zap.Int64("sequence", sequence), zap.Error(err))
 	}

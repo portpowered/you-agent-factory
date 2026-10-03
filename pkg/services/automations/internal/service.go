@@ -9,7 +9,6 @@ package internal
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync"
 
@@ -151,9 +150,9 @@ func (s *Service) newScriptPollers() scriptpollers.Service {
 	}
 	cursors := scriptpollerswire.NewCursorScopes(s.cursorFileSystem)
 	return scriptpollerswire.NewService(
-		s.logger(),
+		s.loggerValue,
 		s.supervisorClock(),
-		s.commandRunner(),
+		s.commandRunnerEdge,
 		s.resolveTemplates,
 		s.executionPolicy,
 		cursors,
@@ -245,26 +244,6 @@ func (s *Service) GetCursor(
 		return s.scriptPollers.GetCursorForScope(ctx, s.cursorScope, request)
 	}
 	return s.reconciler.GetCursor(ctx, request)
-}
-
-func (s *Service) logger() *zap.Logger {
-	if s == nil || s.loggerValue == nil {
-		return zap.NewNop()
-	}
-	return s.loggerValue
-}
-
-func (s *Service) commandRunner() platformprocess.CommandRunner {
-	if s != nil && s.commandRunnerEdge != nil {
-		return s.commandRunnerEdge
-	}
-	return unavailableCommandRunner{}
-}
-
-type unavailableCommandRunner struct{}
-
-func (unavailableCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	return platformprocess.CommandResult{}, errors.New("automation command runner is required")
 }
 
 func (s *Service) supervisorClock() clockwork.Clock {
