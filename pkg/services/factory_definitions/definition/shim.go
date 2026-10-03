@@ -30,7 +30,21 @@ func New(
 	activationGateway factoryroot.DefinitionActivationGateway,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	return lifecycle.New(host, activationGateway, versionFileSystems...)
+	var versionFileSystem factoryroot.VersionFileSystem
+	if len(versionFileSystems) > 0 {
+		versionFileSystem = versionFileSystems[0]
+	}
+	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
+		host,
+		activationGateway,
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		nil,
+		factoryroot.UnimplementedService{},
+		versionFileSystem,
+	)
 }
 
 func NewWithCatalog(
@@ -39,7 +53,21 @@ func NewWithCatalog(
 	catalogService catalog.Service,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	return lifecycle.NewWithCatalog(host, activationGateway, catalogService, versionFileSystems...)
+	var versionFileSystem factoryroot.VersionFileSystem
+	if len(versionFileSystems) > 0 {
+		versionFileSystem = versionFileSystems[0]
+	}
+	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
+		host,
+		activationGateway,
+		catalogService,
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		nil,
+		factoryroot.UnimplementedService{},
+		versionFileSystem,
+	)
 }
 
 func NewWithCatalogAndPackages(
@@ -91,12 +119,20 @@ func NewWithValidation(
 	validationService validationservice.Service,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	return lifecycle.NewWithValidation(
+	var versionFileSystem factoryroot.VersionFileSystem
+	if len(versionFileSystems) > 0 {
+		versionFileSystem = versionFileSystems[0]
+	}
+	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		host,
 		activationGateway,
 		catalogService,
 		validationService,
-		versionFileSystems...,
+		factoryroot.UnimplementedService{},
+		factoryroot.UnimplementedService{},
+		nil,
+		factoryroot.UnimplementedService{},
+		versionFileSystem,
 	)
 }
 
