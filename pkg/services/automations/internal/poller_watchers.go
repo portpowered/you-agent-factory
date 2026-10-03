@@ -42,7 +42,7 @@ func (s *Service) startPollersForRuntime(
 
 		workerName := strings.TrimSpace(ws.WorkerTypeName)
 		if workerName == "" {
-			s.logger().Warn("script poller disabled",
+			s.loggerValue.Warn("script poller disabled",
 				zap.String("workstation", ws.Name),
 				zap.String("reason", "missing worker binding"),
 			)
@@ -51,7 +51,7 @@ func (s *Service) startPollersForRuntime(
 
 		workerDef, ok := runtimeCfg.Worker(workerName)
 		if !ok || workerDef == nil {
-			s.logger().Warn("script poller disabled",
+			s.loggerValue.Warn("script poller disabled",
 				zap.String("workstation", ws.Name),
 				zap.String("worker", workerName),
 				zap.String("reason", "worker config not found"),
@@ -63,7 +63,7 @@ func (s *Service) startPollersForRuntime(
 			s.StartScriptPoller(ctx, sidecars, runtimeCfg, ws, workerDef, submitter)
 		case interfaces.IsPollerWorkerType(workerDef.Type):
 			if workerDef.Provider != interfaces.HostedWorkerProviderLinear {
-				s.logger().Warn("hosted poller disabled",
+				s.loggerValue.Warn("hosted poller disabled",
 					zap.String("workstation", ws.Name),
 					zap.String("worker", workerName),
 					zap.String("provider", workerDef.Provider),

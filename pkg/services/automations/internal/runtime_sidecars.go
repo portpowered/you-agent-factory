@@ -163,14 +163,14 @@ func (s *Service) monitorSchedulerSource(
 	if _, err := s.reconciler.StopSource(stopCtx, automations.StopSourceRequest{
 		Identity: identity,
 	}); err != nil {
-		s.logger().Error("stop scheduler source reconciliation failed", zap.Error(err))
+		s.loggerValue.Error("stop scheduler source reconciliation failed", zap.Error(err))
 		return
 	}
 	if _, err := s.reconciler.WaitSource(stopCtx, automations.WaitSourceRequest{
 		Identity: identity,
 		Desired:  automations.DesiredLifecycleStopped,
 	}); err != nil {
-		s.logger().Error("wait scheduler source reconciliation failed", zap.Error(err))
+		s.loggerValue.Error("wait scheduler source reconciliation failed", zap.Error(err))
 	}
 }
 

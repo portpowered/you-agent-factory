@@ -20,12 +20,12 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestNilServiceUsesSafeSchedulerDefaults(t *testing.T) {
+func TestExplicitServiceConstructionDoesNotExecuteCommandRunner(t *testing.T) {
 	t.Parallel()
-
-	var svc *Service
-	if svc.logger() == nil || svc.commandRunner() == nil || svc.supervisorClock() == nil {
-		t.Fatal("nil worker service did not provide safe scheduler defaults")
+	runner := &internalScriptPollerRunner{outcomes: []internalScriptPollerOutcome{{}}}
+	service := New(zap.NewNop(), clockwork.NewFakeClock(), runner, "", "", nil, nil, nil)
+	if service == nil || len(runner.outcomes) != 1 {
+		t.Fatal("construction executed the supplied command runner")
 	}
 }
 
@@ -52,7 +52,7 @@ func TestSchedulerSidecarsReconcileLifecycleBeforeCanonicalWorkSubmission(t *tes
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{},
 	}
 	service := New(
-		zap.NewNop(), clock, nil, workflowID, "", nil, nil, nil,
+		zap.NewNop(), clock, &internalScriptPollerRunner{}, workflowID, "", nil, nil, nil,
 	)
 	identity := automations.SourceIdentity{
 		AutomationID: workflowID,
@@ -115,7 +115,7 @@ func TestSchedulerSidecarsReconcileLifecycleBeforeCanonicalWorkSubmission(t *tes
 }
 
 func TestSchedulerSourceObservationAttachesBeforeStartEffectInitialization(t *testing.T) {
-	service := New(zap.NewNop(), clockwork.NewFakeClock(), nil, "", "", nil, nil, nil)
+	service := New(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil)
 	identity := automations.SourceIdentity{
 		AutomationID: "workflow-start-barrier",
 		SourceID:     runtimeSchedulerSourceID,
@@ -169,7 +169,7 @@ func TestProductionRootUsesScriptPollersOwner(t *testing.T) {
 	t.Parallel()
 
 	service := NewService(
-		zap.NewNop(), clockwork.NewFakeClock(), nil, "workflow-script-pollers", "", nil, nil, nil,
+		zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "workflow-script-pollers", "", nil, nil, nil,
 	)
 	if service.scriptPollers == nil {
 		t.Fatal("expected script pollers owner on production Automations root")
@@ -331,7 +331,7 @@ func startProductionRootScheduler(
 ) (*Service, automations.SourceIdentity, *sync.WaitGroup, context.CancelFunc) {
 	t.Helper()
 	service := NewService(
-		zap.NewNop(), clockwork.NewFakeClock(), nil, workflowID, "", nil, nil, nil,
+		zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, workflowID, "", nil, nil, nil,
 	)
 	identity := automations.SourceIdentity{
 		AutomationID: workflowID,
@@ -531,7 +531,7 @@ func startSchedulerConcurrently(
 }
 
 func TestSchedulerSidecarsReconcileDifferentRuntimeIdentitiesConcurrently(t *testing.T) {
-	service := New(zap.NewNop(), clockwork.NewFakeClock(), nil, "", "", nil, nil, nil)
+	service := New(zap.NewNop(), clockwork.NewFakeClock(), &internalScriptPollerRunner{}, "", "", nil, nil, nil)
 	factoryConfig := &interfaces.FactoryConfig{}
 	directories := []string{t.TempDir(), t.TempDir()}
 	contexts := make([]context.Context, len(directories))

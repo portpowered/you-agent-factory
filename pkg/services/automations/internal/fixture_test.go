@@ -27,6 +27,12 @@ type automationFixture struct {
 }
 
 func newAutomationService(fixture automationFixture) *automationinternal.Service {
+	if fixture.Logger == nil {
+		fixture.Logger = zap.NewNop()
+	}
+	if fixture.CommandRunner == nil {
+		fixture.CommandRunner = unusedAutomationCommandRunner{}
+	}
 	return automationinternal.New(
 		fixture.Logger,
 		fixture.Clock,
@@ -102,4 +108,11 @@ func automationWorkstationExecutionPolicy() factorydefinitions.WorkstationExecut
 			}
 		},
 	}
+}
+
+// This fixture fails unexpected command execution instead of hiding a missing edge.
+type unusedAutomationCommandRunner struct{}
+
+func (unusedAutomationCommandRunner) Run(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, errors.New("unexpected automation command execution")
 }
