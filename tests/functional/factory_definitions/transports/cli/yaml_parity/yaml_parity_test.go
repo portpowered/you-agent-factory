@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -16,13 +17,14 @@ const (
 	goalFactoryName      = "portable-goal"
 	goalWorkerName       = "goal-executor"
 	goalWorkstationName  = "execute-goal"
-	wantInvocationResult = "mock worker accepted"
+	wantInvocationResult = "controlled Codex accepted"
 )
 
 // TestCLIFactoryJSONAndYAMLValidateFlattenAndRunParity proves validate, flatten,
 // and run behave equivalently for representative packaged Factory sources
 // authored as JSON and YAML, and each yields the same public primary result.
 func TestCLIFactoryJSONAndYAMLValidateFlattenAndRunParity(t *testing.T) {
+	baseURL := startAuthoredSourceHost(t)
 	jsonDir := materializePackagedGoal(t, "factory.json")
 	yamlDir := materializePackagedGoal(t, "factory.yaml")
 
@@ -46,32 +48,38 @@ func TestCLIFactoryJSONAndYAMLValidateFlattenAndRunParity(t *testing.T) {
 	} {
 		source := source
 		t.Run(source.name, func(t *testing.T) {
-			if got := invokeGoal(t, customerEnvironment(t.TempDir()), t.TempDir(), source.args...); got != wantInvocationResult {
+			t.Parallel()
+			if got := invokeGoal(t, baseURL, customerEnvironment(t.TempDir()), t.TempDir(), source.args...); got != wantInvocationResult {
 				t.Fatalf("invocation result = %q, want %q", got, wantInvocationResult)
 			}
 		})
 	}
+	t.Run("YAML create and JSON update", func(t *testing.T) {
+		t.Parallel()
+		runYAMLCreateAndUpdate(t, baseURL)
+	})
 }
 
 // TestCLIFactoryYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence proves
 // a named Factory created from YAML and later updated from JSON remains runnable
 // via the public named-factory run path after the CLI persists the canonical
 // factory.json durable form.
-func TestCLIFactoryYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence(t *testing.T) {
+func runYAMLCreateAndUpdate(t *testing.T, baseURL string) {
 	homeDir := t.TempDir()
 	workingDirectory := t.TempDir()
 	yamlSource := filepath.Join(materializePackagedGoal(t, "factory.yaml"), "factory.yaml")
 	jsonSource := filepath.Join(materializePackagedGoal(t, "factory.json"), "factory.json")
 
-	factoryDir := support.CreateNamedFactory(
+	factoryDir := support.CreateNamedFactoryWithProcess(
 		t,
+		yamlParityCLIProcess,
 		homeDir,
 		workingDirectory,
 		goalFactoryName,
 		yamlSource,
 	)
 	env := customerEnvironment(homeDir)
-	if got := invokeGoal(t, env, workingDirectory, "--named", goalFactoryName); got != wantInvocationResult {
+	if got := invokeGoal(t, baseURL, env, workingDirectory, "--named", goalFactoryName); got != wantInvocationResult {
 		t.Fatalf("YAML-created invocation result = %q, want %q", got, wantInvocationResult)
 	}
 	if _, err := os.Stat(filepath.Join(factoryDir, "factory.json")); err != nil {
@@ -96,7 +104,7 @@ func TestCLIFactoryYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence(t 
 			update.Stderr(),
 		)
 	}
-	if got := invokeGoal(t, env, workingDirectory, "--named", goalFactoryName); got != wantInvocationResult {
+	if got := invokeGoal(t, baseURL, env, workingDirectory, "--named", goalFactoryName); got != wantInvocationResult {
 		t.Fatalf("JSON-updated invocation result = %q, want %q", got, wantInvocationResult)
 	}
 }
@@ -253,6 +261,7 @@ func validateFactory(t *testing.T, path string) {
 		[]string{"you", "factory", "config", "validate", path},
 	)
 	inputs.Input.WorkingDirectory = filepath.Dir(path)
+	inputs.Input.Env = customerEnvironment(t.TempDir())
 	if err := yamlParityCLIProcess.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(factory config validate %s) error = %v\nstdout:\n%s\nstderr:\n%s",
@@ -266,7 +275,7 @@ func validateFactory(t *testing.T, path string) {
 
 func flattenFactory(t *testing.T, path string) map[string]any {
 	t.Helper()
-	payload, err := support.FlattenFactoryConfig(t, path)
+	payload, err := support.FlattenFactoryConfigWithProcessAndEnv(t, yamlParityCLIProcess, customerEnvironment(t.TempDir()), path)
 	if err != nil {
 		t.Fatalf("flatten Factory %s: %v", path, err)
 	}
@@ -279,49 +288,70 @@ func flattenFactory(t *testing.T, path string) map[string]any {
 
 func invokeGoal(
 	t *testing.T,
+	baseURL string,
 	env []string,
 	workingDirectory string,
 	sourceArgs ...string,
 ) string {
 	t.Helper()
-	mockWorkersPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
-		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []workers.MockWorkerConfig{{
-			WorkerName:      goalWorkerName,
-			WorkstationName: goalWorkstationName,
-			RunType:         workers.MockWorkerRunTypeAccept,
-		}},
-	})
-
-	args := []string{"you", "run"}
+	factoryDir := filepath.Dir(sourceArgs[1])
+	if sourceArgs[0] == "--factory" {
+		// Session opening consumes canonical layouts. Persist the selected authored
+		// source through the public create command before opening; run still uses
+		// the original JSON/YAML selection and its invocation signature.
+		factoryDir = support.CreateNamedFactoryWithProcess(t, yamlParityCLIProcess,
+			t.TempDir(), workingDirectory, goalFactoryName, sourceArgs[1])
+	}
+	if sourceArgs[0] == "--named" {
+		for _, entry := range env {
+			if strings.HasPrefix(entry, "HOME=") {
+				factoryDir = filepath.Join(strings.TrimPrefix(entry, "HOME="), ".you-agent-factory", "factories", sourceArgs[1])
+			}
+		}
+	}
+	opened := support.OpenFactorySessionAt(t, baseURL, factoryDir)
+	sessionID := opened.Session.Id
+	runner := testutil.NewProviderCommandRunner(support.CodexDecisionCommandResult(wantInvocationResult))
+	yamlParityCommands.registerSession(t, sessionID, runner)
+	t.Cleanup(func() { support.CloseFactorySessionAt(t, baseURL, sessionID) })
+	args := []string{"you", "--remote", "--server", baseURL, "run", "--session", sessionID}
 	args = append(args, sourceArgs...)
-	args = append(
-		args,
-		"--with-mock-workers", mockWorkersPath,
-		"--no-record",
-		"--quiet",
-		"prove packaged YAML parity",
-	)
+	args = append(args, "--no-record", "--quiet", "--executor-provider", "codex", "prove packaged YAML parity")
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = workingDirectory
 	if err := yamlParityCLIProcess.Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
-			args,
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
+		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
 	}
 	if inputs.Stderr() != "" {
 		t.Fatalf("Process.Execute(%v) stderr = %q, want empty", args, inputs.Stderr())
+	}
+	calls := runner.Requests()
+	if len(calls) != 1 || calls[0].Command != "codex" || calls[0].ExecutionScopeID != sessionID {
+		t.Fatalf("provider requests = %#v, want one Codex request scoped to %s", calls, sessionID)
+	}
+	if !strings.Contains(string(calls[0].Stdin), "prove packaged YAML parity") {
+		t.Fatalf("provider prompt = %q, want submitted Work input", calls[0].Stdin)
+	}
+	work := support.GetJSON[factoryapi.ListWorkResponse](t,
+		baseURL+"/factory-sessions/"+sessionID+"/work")
+	if len(work.Results) != 1 || work.Results[0].State == nil ||
+		work.Results[0].State.Name != "complete" || work.Results[0].State.Type != "TERMINAL" {
+		t.Fatalf("session Work = %#v, want one completed terminal Work item", work.Results)
 	}
 	return inputs.Stdout()
 }
 
 func customerEnvironment(homeDir string) []string {
-	return append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	env := make([]string, 0, len(os.Environ())+2)
+	for _, entry := range os.Environ() {
+		name := strings.SplitN(entry, "=", 2)[0]
+		if strings.EqualFold(name, "HOME") || strings.EqualFold(name, "USERPROFILE") || strings.EqualFold(name, "HOMEDRIVE") || strings.EqualFold(name, "HOMEPATH") {
+			continue
+		}
+		env = append(env, entry)
+	}
+	return append(env, "HOME="+homeDir, "USERPROFILE="+homeDir)
 }
 
 func writeFile(t *testing.T, path, body string) string {
