@@ -405,13 +405,13 @@ type genericRemovalFixture struct {
 
 func writeGenericRemovalFixture(t *testing.T) genericRemovalFixture {
 	t.Helper()
-	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameASR)
+	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameEmbed)
 	if !ok {
-		t.Fatal("built-in catalog did not publish ASR")
+		t.Fatal("built-in catalog did not publish EMBED")
 	}
 	source, err := parseGenericSource(definition.Source)
 	if err != nil {
-		t.Fatalf("parse built-in ASR source: %v", err)
+		t.Fatalf("parse built-in EMBED source: %v", err)
 	}
 	cacheDirectory := t.TempDir()
 	modelRoot := filepath.Join(cacheDirectory, canonicalModelName(definition.Name))

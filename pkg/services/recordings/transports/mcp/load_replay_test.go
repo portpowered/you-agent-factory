@@ -35,7 +35,7 @@ func TestBind_LoadReplaySuccessReturnsFactsFromInjectedRoot(t *testing.T) {
 			}, nil
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolLoadReplay,
@@ -70,7 +70,7 @@ func TestBind_LoadReplayNotFoundReturnsTypedErrorEnvelope(t *testing.T) {
 			return recordings.LoadReplayRecordingResult{}, recordings.ErrReplayRecordingNotFound
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolLoadReplay,
@@ -99,7 +99,7 @@ func TestBind_LoadReplayNotFinalizedReturnsTypedErrorEnvelope(t *testing.T) {
 			return recordings.LoadReplayRecordingResult{}, recordings.ErrReplayRecordingNotFinalized
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolLoadReplay,
@@ -151,9 +151,7 @@ func TestBind_LoadReplayInvalidJSONReturnsBadRequestWithoutInvokingFakeRoot(t *t
 	t.Parallel()
 
 	var invoked bool
-	operation := mcprecording.Bind(mcprecording.RootDependencies{
-		Recordings: fakeRecordingsRoot{invoked: &invoked},
-	})
+	operation := mcprecording.BindToolOperation(fakeRecordingsRoot{invoked: &invoked})
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolLoadReplay,
@@ -171,7 +169,7 @@ func TestBind_LoadReplayInvalidJSONReturnsBadRequestWithoutInvokingFakeRoot(t *t
 func mustCallLoadReplay(t *testing.T, fake fakeRecordingsRoot) json.RawMessage {
 	t.Helper()
 
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolLoadReplay,
@@ -186,7 +184,7 @@ func mustCallLoadReplay(t *testing.T, fake fakeRecordingsRoot) json.RawMessage {
 func mustCallReadPortableArtifact(t *testing.T, fake fakeRecordingsRoot) json.RawMessage {
 	t.Helper()
 
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolReadPortableArtifact,

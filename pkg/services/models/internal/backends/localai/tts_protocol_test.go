@@ -3,6 +3,7 @@ package localai
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -158,15 +159,37 @@ func TestPinnedTTSBackendMapsRefTextToProtobufParams(t *testing.T) {
 		codecs.TTSRequest{
 			Text:       "hello",
 			Model:      "tts",
-			Parameters: map[string]any{"ref_text": "reference transcript"},
+			Parameters: map[string]any{"ref_text": "reference transcript", "max_new_tokens": json.Number("1.0")},
 		},
 	)
 	if err != nil {
 		t.Fatalf("backend error = %v", err)
 	}
 	params := connection.request.GetParams()
-	if len(params) != 1 || params["ref_text"] != "reference transcript" {
-		t.Fatalf("protobuf params = %v, want exactly ref_text=%q", params, "reference transcript")
+	if len(params) != 2 || params["ref_text"] != "reference transcript" || params["max_new_tokens"] != "1" {
+		t.Fatalf("protobuf params = %v, want ref_text and canonical integer budget", params)
+	}
+}
+
+func TestPinnedTTSBackendRejectsInvalidBudgetBeforeConnection(t *testing.T) {
+	t.Parallel()
+	for _, value := range []any{0, -1, 1.5, "1", true, nil, int64(2147483648)} {
+		dialer := &ttsProtocolDialer{connection: &ttsProtocolConnection{}}
+		backend := NewPinnedTTSBackend(
+			dialer, func() string { return "temp" },
+			func(string, string) (TempFile, error) { return &ttsProtocolTempFile{path: "temp/output.wav"}, nil },
+			ttsTestWriteFile,
+			func(string) (os.FileInfo, error) { t.Fatal("unexpected output inspection"); return nil, nil },
+			func(string) ([]byte, error) { t.Fatal("unexpected output read"); return nil, nil },
+			func(string) error { return nil },
+		)
+		_, err := backend(WithInvocationEndpoint(t.Context(), "127.0.0.1:45912"), codecs.TTSRequest{
+			Text: "hello", Parameters: map[string]any{"max_new_tokens": value},
+		})
+		var failure *models.InvocationFailure
+		if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassInvalidParameter || dialer.endpoint != "" {
+			t.Fatalf("invalid budget %v = %v endpoint=%q, want rejection before backend connection", value, err, dialer.endpoint)
+		}
 	}
 }
 
@@ -662,5 +685,50 @@ func TestConfinedVibeVoiceRolePathsRejectsInjectedResolvedEscape(t *testing.T) {
 	_, err = confinedVibeVoiceRolePaths(modelFile, []string{modelFile, tokenizerFile, voiceFile}, definition, resolve)
 	if !errors.Is(err, errVibeVoiceLayout) {
 		t.Fatalf("confinedVibeVoiceRolePaths error = %v, want injected resolved escape rejection", err)
+	}
+}
+
+func TestTTSNativeExhaustionMapsOnlyExactDiagnosticAndKeepsCause(t *testing.T) {
+	t.Parallel()
+	const diagnostic = "qwen3-tts: synthesis failed: pipeline_tts_synthesize: generation exhausted max_new_tokens=2048 without EOS"
+	for _, tc := range []struct {
+		name, message, want string
+	}{
+		{"native exhaustion", diagnostic, "TTS generation limit reached without EOS"},
+		{"unrelated error", "private path and token", "TTS backend request failed"},
+		{"suffix detail", diagnostic + " private path", "TTS backend request failed"},
+		{"zero limit", strings.Replace(diagnostic, "2048", "0", 1), "TTS backend request failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			private := status.Error(codes.Unknown, tc.message)
+			err := ttsTransportFailure(t.Context(), "TTS backend request failed", private)
+			var failure *models.InvocationFailure
+			if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassBackendProtocol ||
+				failure.Message != tc.want || !errors.Is(err, private) || !errors.Is(err, models.ErrInferenceFailed) ||
+				strings.Contains(err.Error(), "private") {
+				t.Fatalf("failure = %v (%#v), want safe exact mapping and preserved cause", err, failure)
+			}
+		})
+	}
+}
+
+func TestTTSExhaustionRejectsProtocolResultAndCancellationTakesPrecedence(t *testing.T) {
+	t.Parallel()
+	const diagnostic = "qwen3-tts: synthesis failed: pipeline_tts_synthesize: generation exhausted max_new_tokens=1 without EOS"
+	payload, err := proto.Marshal(&Result{Success: false, Message: diagnostic})
+	if err != nil {
+		t.Fatal(err)
+	}
+	connection := &ttsProtocolConnection{response: payload}
+	err = invokeTTSProtocol(t.Context(), connection, &TTSRequest{Text: "hello"})
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Message != "TTS generation limit reached without EOS" {
+		t.Fatalf("protocol failure = %v, want classified rejection before audio consumption", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := ttsTransportFailure(ctx, "failed", errors.New(diagnostic)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled exhaustion = %v, want cancellation", err)
 	}
 }

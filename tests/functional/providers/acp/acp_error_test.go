@@ -94,22 +94,36 @@ func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 	t.Fatalf("ACP response stream omitted redacted stderr diagnostic: %#v", responseEvents)
 }
 
-// Isolation: isolated-with-reason - ACP initialization negotiation; the
-// retained version branch must observe a real incompatible peer response at
-// the stdio boundary. The generic protocol-failure branch is migrated to the
-// shared behavior matrix.
+// The peer receives this configured value; failure diagnostics must not echo it.
+const acpProtocolFailureSecret = "acp-protocol-failure-super-secret-token"
+
+// Isolation: isolated-with-reason - scenario-owned protocol negotiation.
+// Authentication failures must explain all advertised login methods.
 func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 	for _, test := range []struct {
-		mode string
-		want factoryapi.WorkFailureType
+		mode       string
+		want       factoryapi.WorkFailureType
+		wantDetail []string
 	}{
 		{mode: "version", want: factoryapi.WorkFailureTypeMisconfigured},
+		{
+			mode: "auth",
+			want: factoryapi.WorkFailureTypeAuthFailure,
+			wantDetail: []string{
+				"ACP authentication required",
+				"Agent login",
+				"Env var login",
+				"Terminal login",
+			},
+		},
 	} {
 		t.Run(test.mode, func(t *testing.T) {
 			t.Parallel()
 			dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP failure"}`))
 			writeACPWorker(t, dir, "cursor")
+			support.WriteWorkstationConfig(t, dir, "process",
+				"---\ntype: MODEL_WORKSTATION\nenv:\n  ACP_TEST_API_TOKEN: "+acpProtocolFailureSecret+"\n---\n\nTest workstation.\n")
 			fixture := functionalACPFixture(test.mode)
 
 			var starts atomic.Int32
@@ -120,10 +134,14 @@ func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 			if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 				t.Fatalf("failed work = %d, want 1", got)
 			}
+			if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
+				t.Fatalf("completed work = %d, want 0 for a provider the Factory could not use", got)
+			}
 			if starts.Load() == 0 {
 				t.Fatal("ACP protocol failure did not start the Agent process")
 			}
-			assertFactoryFailureReason(t, events, test.want)
+			assertFactoryFailureReason(t, events, test.want, test.wantDetail...)
+
 		})
 	}
 }
@@ -150,7 +168,13 @@ func TestUnavailableACPExecutableFailsBeforeStartWithMissingExecutableClass(t *t
 	assertFactoryFailureReason(t, events, factoryapi.WorkFailureTypeMissingExecutable)
 }
 
-func assertFactoryFailureReason(t *testing.T, events []factoryapi.FactoryEvent, want factoryapi.WorkFailureType) {
+// Pin the public failure, absence of an answer, and optional login guidance.
+func assertFactoryFailureReason(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	want factoryapi.WorkFailureType,
+	wantDetail ...string,
+) {
 	t.Helper()
 	for _, event := range events {
 		if event.Type != factoryapi.FactoryEventTypeModelResponse {
@@ -160,9 +184,24 @@ func assertFactoryFailureReason(t *testing.T, events []factoryapi.FactoryEvent, 
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}
-		if payload.FailureDetail != nil && payload.FailureDetail.Reason == want {
-			return
+		if payload.FailureDetail == nil || payload.FailureDetail.Reason != want {
+			continue
 		}
+		if strings.Contains(payload.FailureDetail.Message, acpProtocolFailureSecret) {
+			t.Fatalf("public failure detail leaked a configured invocation secret: %q", payload.FailureDetail.Message)
+		}
+		if payload.Outcome != factoryapi.InferenceOutcomeFailed {
+			t.Fatalf("failed dispatch outcome = %q, want %q", payload.Outcome, factoryapi.InferenceOutcomeFailed)
+		}
+		if payload.OutputContent != nil && len(*payload.OutputContent) > 0 {
+			t.Fatalf("failed dispatch published a primary answer: %#v", *payload.OutputContent)
+		}
+		for _, fragment := range wantDetail {
+			if !strings.Contains(payload.FailureDetail.Message, fragment) {
+				t.Fatalf("public failure detail %q omits required fragment %q", payload.FailureDetail.Message, fragment)
+			}
+		}
+		return
 	}
 	t.Fatalf("Factory events omitted failure reason %q: %#v", want, events)
 }

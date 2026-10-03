@@ -16,28 +16,14 @@ var errMissingRequestContext = errors.New("MCP request context is required")
 // tests replace this exact function role.
 type ToolOperation func(context.Context, string, json.RawMessage) (json.RawMessage, error)
 
-// RootDependencies are the accepted Recordings root roles consumed by the MCP
-// adapter. Recordings is the singular Service root; transports inject an
-// implementation or test fake rather than importing Recordings internals or
-// constructing canonical state.
-type RootDependencies struct {
-	Recordings recordings.Service
-}
-
-// Bind constructs the canonical ToolOperation from explicit Recordings root
-// dependencies. Adapter tests replace Recordings with a root-shaped fake
-// without constructing real ledger, projection, lifecycle, replay, or artifact
-// graphs or service-local Wire.
-func Bind(deps RootDependencies) ToolOperation {
-	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
-		return CallTool(ctx, deps.Recordings, name, input)
-	}
-}
-
 // BindToolOperation binds the canonical tool registry to an explicit Recordings
-// Service root without constructing an alternate MCP client.
+// Service root without constructing an alternate MCP client. Recordings is the
+// singular Service root; transports inject an implementation or test fake rather
+// than importing Recordings internals or constructing canonical state.
 func BindToolOperation(service recordings.Service) ToolOperation {
-	return Bind(RootDependencies{Recordings: service})
+	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+		return CallTool(ctx, service, name, input)
+	}
 }
 
 func callToolJSON[Input any, Output any](

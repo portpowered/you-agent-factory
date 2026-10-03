@@ -1,0 +1,485 @@
+// LOCALAI_LLAMACPP_INDEPENDENT_IMAGE_MEDIA_BOUNDARIES_TEST
+//
+// Standalone CPU regression for the authored independent-IMAGE media-boundary
+// patch on the pinned LocalAI grpc-server reconstruction helper. It compiles
+// the ACTUAL patched `message_content.h` that the backend build uses, so it
+// witnesses real reconstructed content parts rather than a reimplementation of
+// them. No model, no GPU, no inference.
+//
+// Build and run (nlohmann/json.hpp must be reachable as <nlohmann/json.hpp>):
+//   g++ -std=c++17 -I<dir-with-nlohmann> -I<dir-with-message_content.h> message_content_independent_images_test.cpp -o t
+//   ./t
+//
+// Coverage:
+//   * three independent images keep their exact bytes and order, and gain two
+//     nonempty inter-image boundaries;
+//   * the same invariant for media-only reconstruction;
+//   * single-image, text-only, and JSON-looking-prompt layouts are byte-stable;
+//   * audio-only and video-only reconstruction, and audio routing, are unchanged;
+//   * the final independent IMAGE gets a boundary before a following VIDEO when
+//     no audio intervenes, and independent videos get their own boundaries;
+//   * the deliberate within-one-video lazy frame expansion is untouched;
+//   * the exact pinned mtmd split_text / can_merge_with / pair-merge semantics
+//     group the OLD contiguous markers into 2 logical image chunks and the NEW
+//     boundary-separated markers into 3.
+
+#include <cstddef>
+#include <iostream>
+#include <string>
+#include <vector>
+
+#include "message_content.h"
+
+using nlohmann::ordered_json;
+using llama_grpc::build_reconstructed_message;
+using llama_grpc::normalize_message_content;
+using llama_grpc::ReconstructedMessageInput;
+
+static int failures = 0;
+
+static void check(bool ok, const std::string& name, const std::string& detail = "") {
+    if (!ok) {
+        std::cerr << "FAIL " << name << (detail.empty() ? "" : ": " + detail) << "\n";
+        failures++;
+    }
+}
+
+// Both accessors are total: they report an empty string instead of throwing when
+// a part has the wrong shape, so running this against an unpatched header fails
+// with readable assertions rather than an unhandled nlohmann type error.
+static std::string part_type(const ordered_json& part) {
+    return part.is_object() && part.contains("type") && part["type"].is_string()
+               ? part["type"].get<std::string>()
+               : std::string();
+}
+
+static std::string text_of(const ordered_json& part) {
+    return part.is_object() && part.contains("text") && part["text"].is_string()
+               ? part["text"].get<std::string>()
+               : std::string();
+}
+
+static std::string image_url(const ordered_json& part) {
+    if (!part.is_object() || !part.contains("image_url") || !part["image_url"].is_object() ||
+        !part["image_url"].contains("url") || !part["image_url"]["url"].is_string()) {
+        return std::string();
+    }
+    return part["image_url"]["url"].get<std::string>();
+}
+
+static std::string nested_string(const ordered_json& part, const char* outer, const char* inner) {
+    if (!part.is_object() || !part.contains(outer) || !part[outer].is_object() ||
+        !part[outer].contains(inner) || !part[outer][inner].is_string()) {
+        return std::string();
+    }
+    return part[outer][inner].get<std::string>();
+}
+
+// Mirrors the whole-content `|trim` filter in the pinned Qwen chat template.
+// Interior separators remain intact after native media parts are concatenated.
+static std::string trim(const std::string& value) {
+    const std::string whitespace = " \t\n\r\f\v";
+    const std::size_t first = value.find_first_not_of(whitespace);
+    if (first == std::string::npos) return "";
+    const std::size_t last = value.find_last_not_of(whitespace);
+    return value.substr(first, last - first + 1);
+}
+
+static std::vector<ordered_json> reconstruct(const std::string& content,
+                                             const std::vector<std::string>& images,
+                                             const std::vector<std::string>& audios = {},
+                                             const std::vector<std::string>& videos = {}) {
+    ReconstructedMessageInput in;
+    in.role = "user";
+    in.content = content;
+    in.is_last_user_msg = true;
+    in.images = images;
+    in.audios = audios;
+    in.videos = videos;
+    ordered_json message = build_reconstructed_message(in);
+    check(message["content"].is_array(), "reconstructed content is a typed-part array");
+    return message["content"].get<std::vector<ordered_json>>();
+}
+
+// ---------------------------------------------------------------------------
+// Pinned mtmd grouping semantics.
+//
+// split_text, can_merge_with, and the pair-merge loop below are transcribed
+// from the pinned llama.cpp 6b4dc2116a92c5c8f2782bfe51fabe5ee66fb5ef sources
+// (tools/mtmd/mtmd.cpp), with ordinals recorded to inspect grouping. The separate
+// CPU witness executes the unmodified source bodies; this fixture preserves their
+// splitting and adjacency semantics without loading a model.
+// ---------------------------------------------------------------------------
+
+struct mtmd_bitmap {
+    bool is_audio = false;
+    int nx = 1280;
+    int ny = 60;
+
+    bool can_merge_with(const mtmd_bitmap& other) const {
+        // [QWEN_VIDEO] can (temporal) merge if both are images with same size.
+        return !is_audio && !other.is_audio && nx == other.nx && ny == other.ny;
+    }
+};
+
+static std::vector<std::string> split_text(const std::string& input, const std::string& delimiter) {
+    std::vector<std::string> result;
+    if (input.empty()) {
+        return result;
+    }
+    size_t start = 0;
+    size_t pos = 0;
+    while ((pos = input.find(delimiter, start)) != std::string::npos) {
+        if (pos > start) {
+            result.push_back(input.substr(start, pos - start));
+        }
+        result.push_back(delimiter);
+        start = pos + delimiter.length();
+    }
+    if (start < input.length()) {
+        result.push_back(input.substr(start));
+    }
+    return result;
+}
+
+// Returns the logical media groups the pinned merge loop produces for a
+// rendered marker string. Each group lists the 0-based ordinals of the bitmaps it
+// absorbed, so callers can assert both the group count and which parts were
+// folded together.
+static std::vector<std::vector<std::size_t>> merge_groups(const std::string& text,
+                                                          const std::vector<mtmd_bitmap>& bitmaps) {
+    struct part {
+        std::string text;
+        const mtmd_bitmap* bitmap;
+        std::size_t ordinal;
+    };
+    std::vector<part> parts;
+    std::size_t next_ordinal = 0;
+    int n_merge_frames = 2;
+    for (const auto& piece : split_text(text, "<media>")) {
+        if (piece == "<media>") {
+            parts.push_back({"", &bitmaps.at(next_ordinal), next_ordinal});
+            next_ordinal++;
+        } else {
+            parts.push_back({piece, nullptr, next_ordinal});
+        }
+    }
+    std::vector<std::vector<std::size_t>> merged_bitmaps;
+    if (n_merge_frames > 1) {
+        for (std::size_t index = 0; index < parts.size(); ++index) {
+            if (parts[index].bitmap == nullptr) {
+                continue;
+            }
+            if (index + 1 < parts.size() && parts[index + 1].bitmap != nullptr) {
+                if (parts[index].bitmap->can_merge_with(*parts[index + 1].bitmap)) {
+                    merged_bitmaps.push_back({parts[index].ordinal, parts[index + 1].ordinal});
+                    parts.erase(parts.begin() + index + 1);  // collapse the second bitmap part
+                    continue;
+                }
+            }
+            merged_bitmaps.push_back({parts[index].ordinal});
+        }
+    } else {
+        for (const auto& piece : parts) {
+            if (piece.bitmap != nullptr) {
+                merged_bitmaps.push_back({piece.ordinal});
+            }
+        }
+    }
+    return merged_bitmaps;
+}
+
+// Renders a reconstructed typed-part array the way llama.cpp's chat template
+// emits media markers: text parts contribute their own bytes, an image part
+// contributes one <media> marker, an audio part contributes its audio marker,
+// and a video part contributes one <media> marker per lazily expanded frame.
+// The native chat formatter concatenates media content before the Qwen template
+// trims the whole content string; interior text is retained.
+static std::string render_markers(const std::vector<ordered_json>& parts, std::size_t video_frames = 1) {
+    std::string rendered;
+    for (const auto& part : parts) {
+        const std::string type = part.value("type", std::string());
+        if (type == "text") {
+            const std::string text = part["text"].get<std::string>();
+            rendered += text;
+        } else if (type == "image_url") {
+            rendered += "<media>";
+        } else if (type == "input_audio") {
+            rendered += "<audio>";
+        } else if (type == "input_video") {
+            for (std::size_t frame = 0; frame < video_frames; ++frame) {
+                rendered += "<media>";
+            }
+        }
+    }
+    return rendered;
+}
+
+// ---------------------------------------------------------------------------
+// Independent IMAGE boundaries
+// ---------------------------------------------------------------------------
+
+static void three_independent_images_keep_order_bytes_and_separators() {
+    const std::vector<std::string> images = {"AAAfirst", "BBBsecond", "CCCthird"};
+    const std::string prompt = "Compare these three crops.";
+    auto parts = reconstruct(prompt, images);
+
+    check(parts.size() == 6, "three images produce prompt, image, boundary, image, boundary, image",
+          "got " + std::to_string(parts.size()) + " parts");
+    check(!parts.empty() && text_of(parts[0]) == prompt, "user prompt stays first and byte-identical");
+    const std::vector<std::string> expected_types = {"image_url", "text", "image_url", "text", "image_url"};
+    for (std::size_t index = 0; index < expected_types.size(); ++index) {
+        const std::string label = "part " + std::to_string(index + 1) + " is a " + expected_types[index];
+        check(1 + index < parts.size() && part_type(parts[1 + index]) == expected_types[index], label,
+              1 + index < parts.size() ? "got " + parts[1 + index].dump() : "part missing");
+    }
+    // Exact image bytes and order are retained.
+    for (std::size_t index = 0; index < images.size(); ++index) {
+        const std::size_t position = 1 + index * 2;
+        const std::string label = "image " + std::to_string(index + 1) + " retains its exact bytes and position";
+        check(position < parts.size() && image_url(parts[position]) == "data:image/jpeg;base64," + images[index],
+              label, position < parts.size() ? "got " + parts[position].dump() : "part missing");
+    }
+    // The two boundaries are typed text, ordinal, and nonempty after trimming.
+    check(parts.size() > 2 && text_of(parts[2]) == "Image 2:\n", "boundary before image 2 is the ordinal Image 2",
+          parts.size() > 2 ? "got " + parts[2].dump() : "part missing");
+    check(parts.size() > 4 && text_of(parts[4]) == "Image 3:\n", "boundary before image 3 is the ordinal Image 3",
+          parts.size() > 4 ? "got " + parts[4].dump() : "part missing");
+    for (const std::size_t index : {std::size_t(2), std::size_t(4)}) {
+        if (index >= parts.size()) {
+            check(false, "boundary before image " + std::to_string(index / 2 + 1) + " survives a trim filter",
+                  "part missing");
+            continue;
+        }
+        const std::string text = text_of(parts[index]);
+        check(!trim(text).empty(), "boundary before image " + std::to_string(index / 2 + 1) + " survives a trim filter",
+              "got " + text);
+    }
+}
+
+static void media_only_images_keep_boundaries() {
+    const std::vector<std::string> images = {"AAAfirst", "BBBsecond", "CCCthird"};
+    auto parts = reconstruct("", images);
+    check(parts.size() == 5, "media-only three images add exactly two boundaries",
+          "got " + std::to_string(parts.size()) + " parts");
+    if (parts.size() != 5) return;
+    check(part_type(parts[0]) == "image_url", "media-only reconstruction still starts with the first image");
+    check(text_of(parts[1]) == "Image 2:\n" && text_of(parts[3]) == "Image 3:\n",
+          "media-only boundaries are the same ordinals");
+    check(image_url(parts[0]) == "data:image/jpeg;base64," + images[0] &&
+              image_url(parts[2]) == "data:image/jpeg;base64," + images[1] &&
+              image_url(parts[4]) == "data:image/jpeg;base64," + images[2],
+          "media-only image bytes and order are preserved");
+}
+
+// ---------------------------------------------------------------------------
+// Unchanged layouts
+// ---------------------------------------------------------------------------
+
+static void single_image_layout_is_unchanged() {
+    auto parts = reconstruct("Describe this crop.", {"AAAonly"});
+    check(parts.size() == 2, "a single image keeps the original two-part layout",
+          "got " + std::to_string(parts.size()) + " parts");
+    if (parts.size() != 2) return;
+    check(part_type(parts[0]) == "text" && part_type(parts[1]) == "image_url", "single image is prompt then image");
+    check(image_url(parts[1]) == "data:image/jpeg;base64,AAAonly", "single image bytes are unchanged");
+
+    auto media_only = reconstruct("", {"AAAonly"});
+    check(media_only.size() == 1 && part_type(media_only[0]) == "image_url", "single media-only image is unchanged");
+}
+
+static void text_only_layout_is_unchanged() {
+    ReconstructedMessageInput in;
+    in.role = "user";
+    in.content = "no media at all";
+    in.is_last_user_msg = true;
+    auto message = build_reconstructed_message(in);
+    check(message["content"].is_string() && message["content"] == "no media at all",
+          "a text-only request keeps plain string content", "got " + message["content"].dump());
+}
+
+static void json_looking_prompt_stays_opaque() {
+    // #10524: an ingredient-list prompt must never be reinterpreted as typed
+    // parts, and the inserted boundaries must not alter its bytes.
+    const std::string prompt = R"(["1/4 cup brown sugar, packed","1 pound ground beef"])";
+    check(normalize_message_content("user", prompt).is_string(), "a JSON-looking user prompt normalizes to a string");
+    auto parts = reconstruct(prompt, {"AAA", "BBB"});
+    check(parts.size() == 4, "two images add exactly one boundary",
+          "got " + std::to_string(parts.size()) + " parts");
+    if (parts.size() != 4) return;
+    check(text_of(parts[0]) == prompt, "the JSON-looking prompt bytes are untouched");
+    check(part_type(parts[1]) == "image_url", "the first image still follows the opaque prompt");
+    check(text_of(parts[2]) == "Image 2:\n", "the boundary is a plain ordinal, not parsed content");
+    check(image_url(parts[3]) == "data:image/jpeg;base64,BBB", "the second image bytes are unchanged");
+}
+
+static void audio_only_and_video_only_are_unchanged() {
+    auto audio_only = reconstruct("Transcribe this.", {}, {"WAVBASE64"});
+    check(audio_only.size() == 2 && part_type(audio_only[1]) == "input_audio",
+          "an audio-only request keeps prompt then audio", "got " + std::to_string(audio_only.size()) + " parts");
+    if (audio_only.size() == 2) {
+        check(nested_string(audio_only[1], "input_audio", "data") == "WAVBASE64" &&
+                  nested_string(audio_only[1], "input_audio", "format") == "wav",
+              "audio data and default format routing are unchanged");
+    }
+
+    auto video_only = reconstruct("Watch this.", {}, {}, {"MP4BASE64"});
+    check(video_only.size() == 2 && part_type(video_only[1]) == "input_video",
+          "a video-only request keeps prompt then video", "got " + std::to_string(video_only.size()) + " parts");
+    if (video_only.size() == 2) {
+        check(nested_string(video_only[1], "input_video", "data") == "MP4BASE64", "video data is unchanged");
+    }
+
+    auto media_only_audio = reconstruct("", {}, {"WAVBASE64"});
+    check(media_only_audio.size() == 1 && part_type(media_only_audio[0]) == "input_audio",
+          "media-only audio is unchanged");
+    auto media_only_video = reconstruct("", {}, {}, {"MP4BASE64"});
+    check(media_only_video.size() == 1 && part_type(media_only_video[0]) == "input_video",
+          "media-only video is unchanged");
+}
+
+// ---------------------------------------------------------------------------
+// IMAGE -> VIDEO boundaries
+// ---------------------------------------------------------------------------
+
+static void image_then_video_gets_a_boundary_without_audio() {
+    auto parts = reconstruct("Compare these.", {"AAA"}, {}, {"MP4"});
+    check(parts.size() == 4, "image then video adds exactly one boundary",
+          "got " + std::to_string(parts.size()) + " parts");
+    if (parts.size() != 4) return;
+    check(part_type(parts[1]) == "image_url", "the image keeps its position");
+    check(text_of(parts[2]) == "Video 1:\n",
+          "the first video is preceded by the ordinal Video 1", "got " + parts[2].dump());
+    check(nested_string(parts[3], "input_video", "data") == "MP4", "video data is unchanged");
+}
+
+static void audio_intervenes_so_no_image_video_boundary_is_added() {
+    auto parts = reconstruct("Compare these.", {"AAA"}, {"WAV"}, {"MP4"});
+    check(parts.size() == 4, "image, audio, video adds no boundary",
+          "got " + std::to_string(parts.size()) + " parts");
+    if (parts.size() != 4) return;
+    check(part_type(parts[1]) == "image_url" && part_type(parts[2]) == "input_audio" && part_type(parts[3]) == "input_video",
+          "audio routing is preserved and separates the media runs");
+    check(nested_string(parts[2], "input_audio", "data") == "WAV", "the audio part is not duplicated or dropped");
+}
+
+static void independent_videos_get_their_own_boundaries() {
+    auto parts = reconstruct("Watch these.", {}, {}, {"MP4ONE", "MP4TWO"});
+    check(parts.size() == 4, "two independent videos add one boundary between them",
+          "got " + std::to_string(parts.size()) + " parts");
+    if (parts.size() != 4) return;
+    check(text_of(parts[2]) == "Video 2:\n",
+          "the second video is preceded by the ordinal Video 2", "got " + parts[2].dump());
+    check(nested_string(parts[1], "input_video", "data") == "MP4ONE" && nested_string(parts[3], "input_video", "data") == "MP4TWO",
+          "video data and order are preserved");
+}
+
+static void three_images_audio_and_video_layout() {
+    auto parts = reconstruct("All of it.", {"AAA", "BBB", "CCC"}, {"WAV"}, {"MP4"});
+    check(parts.size() == 8, "three images, audio, and video add exactly two boundaries",
+          "got " + std::to_string(parts.size()) + " parts");
+    if (parts.size() != 8) return;
+    check(text_of(parts[2]) == "Image 2:\n" && text_of(parts[4]) == "Image 3:\n", "both image boundaries are present");
+    check(image_url(parts[1]) == "data:image/jpeg;base64,AAA" && image_url(parts[3]) == "data:image/jpeg;base64,BBB" &&
+              image_url(parts[5]) == "data:image/jpeg;base64,CCC",
+          "all three image payloads are present exactly once and in order");
+    check(part_type(parts[6]) == "input_audio" && nested_string(parts[6], "input_audio", "data") == "WAV",
+          "audio follows the images in the original routing order");
+    check(part_type(parts[7]) == "input_video" && nested_string(parts[7], "input_video", "data") == "MP4",
+          "video follows audio in the original routing order and gains no extra boundary");
+}
+
+// ---------------------------------------------------------------------------
+// Pinned grouping semantics
+// ---------------------------------------------------------------------------
+
+static void pinned_grouping_separates_independent_images() {
+    const std::vector<std::string> images = {"AAAfirst", "BBBsecond", "CCCthird"};
+    std::vector<mtmd_bitmap> equal_stills(3);  // the observed 1280x60 crops
+    const std::vector<mtmd_bitmap> unequal_stills = [] {
+        std::vector<mtmd_bitmap> bitmaps(3);
+        bitmaps[1].ny = 61;
+        return bitmaps;
+    }();
+
+    // OLD shape: contiguous markers with no separating text at all.
+    const auto old_groups = merge_groups("Compare these three crops.<media><media><media>", equal_stills);
+    check(old_groups.size() == 2, "the old contiguous layout still merges into 2 logical image chunks",
+          "got " + std::to_string(old_groups.size()));
+    check(old_groups[0].size() == 2 && old_groups[1].size() == 1, "the old layout folds the first two equal stills");
+
+    // NEW shape: exactly what the patched helper reconstructs. Both the raw
+    // marker string and the template-trimmed form must yield 3 groups, which is
+    // the distinct-image property the boundary preserves.
+    const auto parts = reconstruct("Compare these three crops.", images);
+    const auto new_groups = merge_groups(render_markers(parts), equal_stills);
+    check(new_groups.size() == 3, "the patched layout yields 3 logical image chunks",
+          "got " + std::to_string(new_groups.size()));
+    for (const auto& group : new_groups) {
+        check(group.size() == 1, "no independent image is folded into another");
+    }
+    check(merge_groups(trim(render_markers(parts)), equal_stills).size() == 3,
+          "the ordinal boundaries survive whole-content template trimming");
+
+    // Current native rendering trims the whole concatenated content, not each
+    // text part. Interior whitespace also separates markers; do not invent a
+    // per-part trim that is absent from this source path. Non-whitespace labels
+    // remain the authored boundary contract and provide stable image ordinals.
+    check(merge_groups(trim("Compare these three crops.<media>\n<media>\n<media>"), equal_stills).size() == 3,
+          "whole-content trim preserves interior whitespace separators");
+
+    // Unequal stills never merged under the old layout either; that is
+    // unchanged, so the fix never relied on it.
+    check(merge_groups("Compare these three crops.<media><media><media>", unequal_stills).size() == 3,
+          "unequal dimensions already produced 3 groups before the patch");
+
+    // The single-image layout is unchanged, so it still merges with nothing.
+    check(merge_groups(render_markers(reconstruct("One crop.", {"AAAonly"})), equal_stills).size() == 1,
+          "a single image still yields exactly one logical image chunk");
+}
+
+static void deliberate_video_frames_are_untouched() {
+    // One video expands lazily into several equal-sized frames. The patch must
+    // not insert boundaries between those frames, so they must still fold into
+    // a single logical media group, and one video must still be one part.
+    auto parts = reconstruct("Watch this.", {}, {}, {"MP4"});
+    check(parts.size() == 2, "one video remains exactly one typed part", "got " + std::to_string(parts.size()));
+    std::vector<mtmd_bitmap> frames(2);
+    const auto groups = merge_groups(render_markers(parts, /*video_frames=*/2), frames);
+    check(frames[0].can_merge_with(frames[1]), "lazy video frames of equal size remain temporally mergeable");
+    check(groups.size() == 1 && groups[0].size() == 2,
+          "video frames inside ONE video still fold together", "got " + std::to_string(groups.size()) + " groups");
+
+    // A preceding still plus one video: the boundary keeps them independent
+    // while each video's own frames still fold.
+    std::vector<mtmd_bitmap> mixed(3);  // still, video frame 1, video frame 2
+    auto mixed_parts = reconstruct("Compare these.", {"AAA"}, {}, {"MP4"});
+    const auto mixed_groups = merge_groups(render_markers(mixed_parts, /*video_frames=*/2), mixed);
+    check(mixed_groups.size() == 2, "an independent still and one video remain two logical groups",
+          "got " + std::to_string(mixed_groups.size()));
+    check(mixed_groups[0].size() == 1 && mixed_groups[1].size() == 2,
+          "the video's own frames still fold together after the boundary");
+}
+
+int main() {
+    three_independent_images_keep_order_bytes_and_separators();
+    media_only_images_keep_boundaries();
+    single_image_layout_is_unchanged();
+    text_only_layout_is_unchanged();
+    json_looking_prompt_stays_opaque();
+    audio_only_and_video_only_are_unchanged();
+    image_then_video_gets_a_boundary_without_audio();
+    audio_intervenes_so_no_image_video_boundary_is_added();
+    independent_videos_get_their_own_boundaries();
+    three_images_audio_and_video_layout();
+    pinned_grouping_separates_independent_images();
+    deliberate_video_frames_are_untouched();
+
+    if (failures == 0) {
+        std::cout << "PASS: independent IMAGE media boundaries ("
+                  << "3 images -> 3 logical groups, single/media-only/audio-only/video-only unchanged)\n";
+        return 0;
+    }
+    std::cerr << failures << " test(s) failed\n";
+    return 1;
+}

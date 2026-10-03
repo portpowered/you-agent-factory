@@ -68,7 +68,7 @@ func (runtime tts) Invoke(
 			Class:     models.InvocationFailureClassBackendProtocol,
 			Operation: models.OperationTTS,
 			Message:   "TTS backend invocation failed",
-			Cause:     models.ErrInferenceFailed,
+			Cause:     errors.Join(models.ErrInferenceFailed, err),
 		}
 	}
 	if err := ctx.Err(); err != nil {

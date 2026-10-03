@@ -3,7 +3,6 @@ module github.com/portpowered/infinite-you
 go 1.25.0
 
 require (
-	github.com/coder/acp-go-sdk v0.13.5
 	github.com/creack/pty v1.1.24
 	github.com/dop251/goja v0.0.0-20251201205617-2bb4c724c0f9
 	github.com/fsnotify/fsnotify v1.9.0
@@ -25,6 +24,7 @@ require (
 	github.com/tdewolff/parse/v2 v2.8.13
 	go.uber.org/zap v1.27.1
 	golang.org/x/sys v0.41.0
+	golang.org/x/term v0.40.0
 	golang.org/x/text v0.34.0
 	google.golang.org/grpc v1.65.0
 	google.golang.org/protobuf v1.36.6

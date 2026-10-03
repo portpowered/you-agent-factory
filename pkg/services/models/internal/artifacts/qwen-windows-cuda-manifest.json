@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "kind": "localai-backend-artifacts",
   "publication": {
-    "id": "localai-backends-v1-3dc488f3dc9848f8e245954d28a3cd223aca1be42003e739d66ee3dd3b423598",
-    "releaseTag": "localai-backends-v1-3dc488f3dc9848f8e245954d28a3cd223aca1be42003e739d66ee3dd3b423598",
+    "id": "localai-backends-v1-53cf3a40d01e831eff5ba390a8f761badef03824e2b6439dfc1fd5ac0072cc87",
+    "releaseTag": "localai-backends-v1-53cf3a40d01e831eff5ba390a8f761badef03824e2b6439dfc1fd5ac0072cc87",
     "repository": "portpowered/you-agent-factory",
-    "pinFingerprint": "3dc488f3dc9848f8e245954d28a3cd223aca1be42003e739d66ee3dd3b423598",
-    "packagingRevision": 6,
+    "pinFingerprint": "53cf3a40d01e831eff5ba390a8f761badef03824e2b6439dfc1fd5ac0072cc87",
+    "packagingRevision": 11,
     "source": {
       "repository": "https://github.com/mudler/LocalAI.git",
       "commit": "b224c96db6f4b87306a33a808650bfce63b12588"
@@ -17,11 +17,10 @@
     },
     "toolchain": {
       "goVersion": "1.26.0",
-      "cmakeVersion": "4.4.0",
+      "cmakeVersion": "4.4.1",
       "protobufVersion": "1.36.11",
       "grpcVersion": "1.80.0",
-      "grpcCommit": "08cc1787de022069135004adfdd17938b5062319",
-      "vcpkgCommit": "7f3781e19cc7d4e4882a4caec01668c6f7b5c163"
+      "grpcCommit": "397e45edaa68f8763773bbaaf539cf7894169cd2"
     }
   },
   "artifacts": [
@@ -53,10 +52,10 @@
         ]
       },
       "artifact": {
-        "name": "localai-backend-localai-qwen3-tts-cpp-windows-amd64-cuda-d17c33d4ee2f56d15f9ca8a1bb82f7389305f838.zip",
-        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-3dc488f3dc9848f8e245954d28a3cd223aca1be42003e739d66ee3dd3b423598/localai-backend-localai-qwen3-tts-cpp-windows-amd64-cuda-d17c33d4ee2f56d15f9ca8a1bb82f7389305f838.zip",
-        "sizeBytes": 446509483,
-        "sha256": "63f26241a917c5340b2bdbb611c6362ae04fcae9d8dd6a7682c71b5c628f33b4"
+        "name": "localai-backend-localai-qwen3-tts-cpp-windows-amd64-cuda-d17c33d4ee2f56d15f9ca8a1bb82f7389305f838-dea7691547a1.zip",
+        "location": "https://github.com/portpowered/you-agent-factory/releases/download/localai-backends-v1-53cf3a40d01e831eff5ba390a8f761badef03824e2b6439dfc1fd5ac0072cc87/localai-backend-localai-qwen3-tts-cpp-windows-amd64-cuda-d17c33d4ee2f56d15f9ca8a1bb82f7389305f838-dea7691547a1.zip",
+        "sizeBytes": 445867793,
+        "sha256": "58fe20ab56dcf6f4e4e485d71138bfa2c24605c1823817a763617199c9172422"
       }
     }
   ]

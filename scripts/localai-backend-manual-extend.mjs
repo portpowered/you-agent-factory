@@ -128,8 +128,8 @@ export function extendManualBackendRelease({
 	}
 	if (existsSync(outputRoot)) throw new Error(`output directory must not exist: ${outputRoot}`);
 	if (existsSync(notesPath)) throw new Error(`release notes path must not exist: ${notesPath}`);
-	if (config.packagingRevision !== 5) {
-		throw new Error(`current configuration packagingRevision must be 5, received ${config.packagingRevision}`);
+	if (config.packagingRevision !== 6) {
+		throw new Error(`current configuration packagingRevision must be 6, received ${config.packagingRevision}`);
 	}
 	const configIdentity = publicationIdentity(config);
 	const manifestPath = join(baselineRoot, "manifest.json");

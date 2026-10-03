@@ -11,6 +11,23 @@ import models "github.com/portpowered/infinite-you/pkg/services/models"
 import modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 import scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 
+func TestBuiltInASRRequiresRecognitionAndPinnedAlignmentAssets(t *testing.T) {
+	definition, _ := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameASR)
+	requirements, err := joinedModelAssetRequirements(definition, definition.Source)
+	if err != nil || len(requirements) != 2 {
+		t.Fatalf("ASR bundle=%#v error=%v", requirements, err)
+	}
+	if requirements[0].Name != "qwen3-asr-0.6b-q8_0.gguf" || requirements[0].Bytes != 1354082624 ||
+		requirements[1].Name != "qwen3-forced-aligner-0.6b-q8_0.gguf" || requirements[1].Bytes != 994404608 {
+		t.Fatalf("ASR must require both complete immutable assets: %#v", requirements)
+	}
+	for _, requirement := range requirements {
+		if len(requirement.SHA256) != 64 {
+			t.Fatalf("ASR artifact missing hash: %#v", requirement)
+		}
+	}
+}
+
 type modelRuntimeConfig = models.RuntimeConfig
 type modelRuntimeWorker = models.RuntimeWorker
 type modelRuntimeResource = models.RuntimeResource

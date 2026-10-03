@@ -88,6 +88,48 @@ $llamaRoot = Join-Path $env:LOCALAI_ROOT 'backend\cpp\llama-cpp'
 $llamaSource = Join-Path $llamaRoot 'llama.cpp'
 $serverSource = Join-Path $llamaSource 'tools\grpc-server\grpc-server.cpp'
 if (-not (Test-Path -LiteralPath $serverSource)) { throw 'pinned llama gRPC source must be prepared before the MSVC build' }
+
+# Independent still images must not share adjacent native media markers: pinned
+# mtmd groups equal-sized neighbors as temporal frames. Patch the prepared header
+# actually compiled, after source verification, and run its standalone CPU
+# regression before the native dependency/backend build. Unknown header shapes fail.
+$independentImagesPatch = Join-Path $PSScriptRoot 'localai-llamacpp-independent-images.patch'
+$independentImagesTest = Join-Path $PSScriptRoot 'localai-llamacpp-independent-images_test.cpp.in'
+$independentImagesHeader = Join-Path $llamaSource 'tools\grpc-server\message_content.h'
+Invoke-Checked node @((Join-Path $PSScriptRoot 'localai-llamacpp-independent-images-patch.mjs'), 'apply',
+    '--header', $independentImagesHeader, '--patch', $independentImagesPatch,
+    '--test-template', $independentImagesTest,
+    '--test-destination', (Join-Path $llamaSource 'tools\grpc-server\message_content_independent_images_test.cpp'))
+$independentImagesCpuRoot = Join-Path $llamaRoot 'independent-images-cpu'
+New-Item -ItemType Directory -Path $independentImagesCpuRoot -Force | Out-Null
+$independentImagesCpuExecutable = Join-Path $independentImagesCpuRoot 'independent-images-test.exe'
+Invoke-Checked cl @('/nologo', '/std:c++17', '/EHsc', '/W4', '/WX',
+    "/I$(Join-Path $llamaSource 'vendor')", "/I$(Join-Path $llamaSource 'tools\grpc-server')",
+    (Join-Path $llamaSource 'tools\grpc-server\message_content_independent_images_test.cpp'),
+    "/Fe$independentImagesCpuExecutable", "/Fo$(Join-Path $independentImagesCpuRoot 'independent-images-test.obj')")
+Invoke-Checked $independentImagesCpuExecutable @()
+
+# LocalAI delivers a request-scoped json_schema as gRPC request Metadata, which
+# the pinned llama grpc-server.cpp ignores. Apply the authored patch to the
+# prepared server that is actually compiled - after verify-source pins
+# LOCALAI_ROOT/BACKEND_SOURCE_COMMIT, so the pinned upstream commits stay
+# unchanged - and generate the CPU regression sources from the patched bytes.
+# The generated fixture stays beside the native tree and outside the pinned
+# llama.cpp checkout, so it can never be compiled into grpc-server.exe; the
+# regression itself links the native libraries and therefore runs after the
+# native build below, once those libraries exist.
+$requestJsonSchemaPatch = Join-Path $PSScriptRoot 'localai-llamacpp-json-schema.patch'
+$requestJsonSchemaTestTemplate = Join-Path $PSScriptRoot 'localai-llamacpp-json-schema-test.cpp.in'
+$requestJsonSchemaFixtureRoot = Join-Path $llamaRoot 'request-json-schema'
+New-Item -ItemType Directory -Path $requestJsonSchemaFixtureRoot -Force | Out-Null
+$requestJsonSchemaHelper = Join-Path $requestJsonSchemaFixtureRoot 'request_json_schema_test_helper.h'
+$requestJsonSchemaFixtureSource = Join-Path $requestJsonSchemaFixtureRoot 'request_json_schema_test.cpp'
+Invoke-Checked node @((Join-Path $PSScriptRoot 'localai-llamacpp-json-schema-patch.mjs'), 'apply',
+    '--server', $serverSource, '--patch', $requestJsonSchemaPatch,
+    '--test-template', $requestJsonSchemaTestTemplate,
+    '--test-destination', $requestJsonSchemaFixtureSource,
+    '--helper-destination', $requestJsonSchemaHelper)
+
 $source = Get-Content -LiteralPath $serverSource -Raw
 $needle = 'reply->set_message(arr);'
 $patchedNeedle = 'reply->set_message(arr.dump());'
@@ -286,9 +328,61 @@ $cmakeArgs = @('-S', $llamaSource, '-B', $llamaBuild, '-G', 'Visual Studio 17 20
 Invoke-Checked cmake $cmakeArgs
 Invoke-Checked cmake @('--build', $llamaBuild, '--config', 'Release', '--target', 'grpc-server', 'ggml-cuda', '--parallel', '4')
 
+# The request schema regression links the native libraries the build above just
+# produced, so it cannot be compiled before it. Fail closed when any of them is
+# absent rather than silently regressing to a weaker check. The fixture loads the
+# pinned vocabulary-only GGUF with n_gpu_layers = 0 and vocab_only = true: no
+# weights, no decode, no GPU, and no packaged model. Its two arguments are exactly
+# the supplied Qwen vocabulary and chat template.
+$requestJsonSchemaLibraries = @(
+    (Join-Path $llamaBuild 'common\Release\llama-common.lib'),
+    (Join-Path $llamaBuild 'src\Release\llama.lib'),
+    (Join-Path $llamaBuild 'ggml\src\Release\ggml.lib'),
+    (Join-Path $llamaBuild 'ggml\src\Release\ggml-base.lib'))
+foreach ($library in $requestJsonSchemaLibraries) {
+    if (-not (Test-Path -LiteralPath $library)) { throw "native build did not produce $library for the request schema regression" }
+}
+$requestJsonSchemaVocabulary = Join-Path $llamaSource 'models\ggml-vocab-qwen2.gguf'
+$requestJsonSchemaChatTemplate = Join-Path $llamaSource 'models\templates\Qwen3.5-4B.jinja'
+foreach ($fixtureInput in @($requestJsonSchemaVocabulary, $requestJsonSchemaChatTemplate)) {
+    if (-not (Test-Path -LiteralPath $fixtureInput)) { throw "pinned llama sources must ship $fixtureInput for the request schema regression" }
+}
+$requestJsonSchemaExecutable = Join-Path $requestJsonSchemaFixtureRoot 'request-json-schema-test.exe'
+$requestJsonSchemaCompilerArguments = @('/nologo', '/std:c++17', '/utf-8', '/EHsc', '/MD', '/O1',
+    "/I$llamaSource", "/I$(Join-Path $llamaSource 'include')", "/I$(Join-Path $llamaSource 'common')",
+    "/I$(Join-Path $llamaSource 'ggml\include')", "/I$(Join-Path $llamaSource 'vendor')",
+    $requestJsonSchemaFixtureSource, "/Fe$requestJsonSchemaExecutable",
+    "/Fo$(Join-Path $requestJsonSchemaFixtureRoot 'request-json-schema-test.obj')") + $requestJsonSchemaLibraries
+Invoke-Checked cl $requestJsonSchemaCompilerArguments
+# The shared runtime DLLs live in the native build output. Scope that to this
+# regression and restore the caller's PATH whatever the exit code.
+$originalPath = $env:PATH
+try {
+    $env:PATH = "$(Join-Path $llamaBuild 'bin\Release')$([IO.Path]::PathSeparator)$originalPath"
+    Invoke-Checked $requestJsonSchemaExecutable @($requestJsonSchemaVocabulary, $requestJsonSchemaChatTemplate)
+} finally {
+    $env:PATH = $originalPath
+}
+
 $packageRoot = Join-Path $llamaRoot 'package'
 if (Test-Path -LiteralPath $packageRoot) { Remove-GeneratedDirectory -Path $packageRoot -Parent $llamaRoot -ExpectedName 'package' }
 New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
+# Record the native patch and its regression as repeatable build inputs next to
+# build-metadata.json; the regression gates the build and is not shipped as code.
+# A publication that cannot name the authored inputs that produced it is not
+# reproducible.
+Invoke-Checked node @((Join-Path $PSScriptRoot 'localai-llamacpp-independent-images-patch.mjs'), 'provenance',
+    '--repository-root', $repositoryRoot, '--patch', $independentImagesPatch,
+    '--test-template', $independentImagesTest, '--output', (Join-Path $packageRoot 'source-patches.json'))
+# Two authored patches, two provenance records: the independent-images inputs keep
+# their own source-patches.json unchanged, and the request schema patch records the
+# applicator that produced the compiled bytes plus its generated regression sources.
+Invoke-Checked node @((Join-Path $PSScriptRoot 'localai-llamacpp-json-schema-patch.mjs'), 'provenance',
+    '--server', $serverSource, '--patch', $requestJsonSchemaPatch,
+    '--test-template', $requestJsonSchemaTestTemplate,
+    '--test-destination', $requestJsonSchemaFixtureSource,
+    '--helper-destination', $requestJsonSchemaHelper,
+    '--output', (Join-Path $packageRoot 'request-json-schema-inputs.json'))
 $server = Get-ChildItem -LiteralPath $llamaBuild -Recurse -File -Filter 'grpc-server.exe' | Where-Object Length -gt 0 | Select-Object -First 1
 if (-not $server) { throw 'MSVC CUDA build did not produce grpc-server.exe' }
 Copy-Item -LiteralPath $server.FullName -Destination (Join-Path $packageRoot 'llama-cpp-cpu-all.exe')

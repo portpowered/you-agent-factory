@@ -1,0 +1,294 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/ebitengine/purego"
+	localgrpc "github.com/mudler/LocalAI/pkg/grpc"
+	"github.com/mudler/LocalAI/pkg/grpc/base"
+	pb "github.com/mudler/LocalAI/pkg/grpc/proto"
+	"golang.org/x/sys/windows"
+)
+
+var native struct {
+	load        func(string, string, string) int
+	transcribe  func(string, string, int) int
+	error       func() string
+	text        func() string
+	language    func() string
+	duration    func() float64
+	count       func() int64
+	word        func(int64) string
+	start       func(int64) int64
+	end         func(int64) int64
+	resetCancel func()
+	cancel      func()
+}
+
+type model struct {
+	base.SingleThread
+	mu     sync.Mutex
+	loaded string
+}
+
+func (m *model) Load(opts *pb.ModelOptions) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	path := opts.ModelFile
+	if path == "" {
+		path = opts.Model
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(opts.ModelPath, path)
+	}
+	if m.loaded == path {
+		return nil
+	}
+	aligner := filepath.Join(filepath.Dir(path), "qwen3-forced-aligner-0.6b-q8_0.gguf")
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	dictionary := filepath.Join(filepath.Dir(exe), "assets", "korean_dict_jieba.dict")
+	if native.load(path, aligner, dictionary) != 0 {
+		m.loaded = ""
+		return fmt.Errorf("qwen3-asr load: %s", native.error())
+	}
+	m.loaded = path
+	return nil
+}
+
+func (m *model) AudioTranscription(ctx context.Context, req *pb.TranscriptRequest) (pb.TranscriptResult, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return pb.TranscriptResult{}, err
+	}
+	if req.Translate || req.Diarize {
+		return pb.TranscriptResult{}, fmt.Errorf("qwen3-asr does not support translation or speaker diarization")
+	}
+	if req.Prompt != "" || req.Temperature != 0 {
+		return pb.TranscriptResult{}, fmt.Errorf("qwen3-asr native greedy decoder does not support prompt or temperature options")
+	}
+	for _, value := range req.TimestampGranularities {
+		if value != "word" && value != "segment" {
+			return pb.TranscriptResult{}, fmt.Errorf("qwen3-asr unsupported timestamp granularity %q", value)
+		}
+	}
+	language, err := nativeLanguage(req.Language)
+	if err != nil {
+		return pb.TranscriptResult{}, err
+	}
+	native.resetCancel()
+	finished, joined := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(joined)
+		select {
+		case <-ctx.Done():
+			native.cancel()
+		case <-finished:
+		}
+	}()
+	status := native.transcribe(req.Dst, language, int(req.Threads))
+	close(finished)
+	<-joined
+	if err := ctx.Err(); err != nil {
+		return pb.TranscriptResult{}, err
+	}
+	if status != 0 {
+		return pb.TranscriptResult{}, fmt.Errorf("qwen3-asr transcription: %s", native.error())
+	}
+	if err := ctx.Err(); err != nil {
+		return pb.TranscriptResult{}, err
+	}
+	result := pb.TranscriptResult{Text: native.text(), Language: native.language(), Duration: float32(native.duration())}
+	// Native forced alignment returns real word spans. Preserve each span on the
+	// standard LocalAI wire in nanoseconds, including word-level evidence.
+	var words []*pb.TranscriptWord
+	for i, n := int64(0), native.count(); i < n; i++ {
+		text, start, end := native.word(i), native.start(i), native.end(i)
+		words = append(words, &pb.TranscriptWord{Text: text, Start: start, End: end})
+	}
+	result.Segments = phraseSegments(words, result.Language)
+	for _, segment := range result.Segments {
+		if segment.End <= segment.Start {
+			return pb.TranscriptResult{}, fmt.Errorf("qwen3-asr forced aligner returned no positive duration for speech")
+		}
+	}
+	return result, nil
+}
+
+// Keep actual aligned spans, grouping words into useful speech phrases. The
+// duration is a phrase boundary, never an input limit or generated timestamp.
+func phraseSegments(words []*pb.TranscriptWord, language string) []*pb.TranscriptSegment {
+	var result []*pb.TranscriptSegment
+	var current *pb.TranscriptSegment
+	lang := strings.ToLower(strings.TrimSpace(language))
+	separator := " "
+	if lang == "chinese" || lang == "japanese" || lang == "cantonese" {
+		separator = ""
+	}
+	for _, word := range words {
+		if strings.TrimSpace(word.Text) == "" {
+			continue
+		}
+		// Punctuation has alignment evidence but is not a speech cue. Attach it
+		// before considering a pause or phrase length, including a closed phrase.
+		if punctuationOnly(word.Text) {
+			target := current
+			if target == nil && len(result) > 0 {
+				target = result[len(result)-1]
+			}
+			if target == nil {
+				current = &pb.TranscriptSegment{Id: int32(len(result)), Start: word.Start}
+				target = current
+			}
+			appendAlignedWord(target, word, separator)
+			if target == current && !punctuationOnly(current.Text) {
+				last, _ := utf8.DecodeLastRuneInString(strings.TrimSpace(word.Text))
+				if current.End > current.Start && strings.ContainsRune(".!?。！？", last) {
+					result = append(result, current)
+					current = nil
+				}
+			}
+			continue
+		}
+		if current != nil && !punctuationOnly(current.Text) && current.End > current.Start && (word.Start-current.End > 500000000 || word.End-current.Start > 8000000000) {
+			result = append(result, current)
+			current = nil
+		}
+		if current == nil {
+			current = &pb.TranscriptSegment{Id: int32(len(result)), Start: word.Start}
+		}
+		appendAlignedWord(current, word, separator)
+		last, _ := utf8.DecodeLastRuneInString(strings.TrimSpace(word.Text))
+		if current.End > current.Start && strings.ContainsRune(".!?。！？", last) {
+			result = append(result, current)
+			current = nil
+		}
+	}
+	if current != nil {
+		if punctuationOnly(current.Text) {
+			return result
+		}
+		if current.End == current.Start && len(result) > 0 {
+			prior := result[len(result)-1]
+			prior.Text += wordSeparator(prior.Text, current.Text, separator) + current.Text
+			prior.End = max(prior.End, current.End)
+			prior.Start = min(prior.Start, current.Start)
+			prior.Words = append(prior.Words, current.Words...)
+		} else {
+			result = append(result, current)
+		}
+	}
+	return mergeOverlappingPhrases(result, separator)
+}
+
+func appendAlignedWord(phrase *pb.TranscriptSegment, word *pb.TranscriptWord, separator string) {
+	if phrase.Text != "" {
+		phrase.Text += wordSeparator(phrase.Text, word.Text, separator)
+	}
+	phrase.Text += word.Text
+	phrase.Start = min(phrase.Start, word.Start)
+	phrase.End = max(phrase.End, word.End)
+	phrase.Words = append(phrase.Words, word)
+}
+
+// A quantized word at a window seam can genuinely overlap its neighbor. Keep
+// lexical order and every word span, combining only their speech envelopes.
+func mergeOverlappingPhrases(phrases []*pb.TranscriptSegment, separator string) []*pb.TranscriptSegment {
+	var result []*pb.TranscriptSegment
+	for _, phrase := range phrases {
+		for len(result) > 0 && phrase.Start < result[len(result)-1].End {
+			prior := result[len(result)-1]
+			result = result[:len(result)-1]
+			phrase.Text = prior.Text + wordSeparator(prior.Text, phrase.Text, separator) + phrase.Text
+			phrase.Start = min(prior.Start, phrase.Start)
+			phrase.End = max(prior.End, phrase.End)
+			phrase.Words = append(prior.Words, phrase.Words...)
+		}
+		phrase.Id = int32(len(result))
+		result = append(result, phrase)
+	}
+	return result
+}
+
+func punctuationOnly(text string) bool {
+	found := false
+	for _, r := range text {
+		if unicode.IsSpace(r) {
+			continue
+		}
+		if !unicode.IsPunct(r) {
+			return false
+		}
+		found = true
+	}
+	return found
+}
+
+func wordSeparator(previous, next, fallback string) string {
+	first, _ := utf8.DecodeRuneInString(next)
+	last, _ := utf8.DecodeLastRuneInString(previous)
+	if strings.ContainsRune(".,!?;:。！？", first) {
+		return ""
+	}
+	latin := func(r rune) bool {
+		return r < 128 && ((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'))
+	}
+	if latin(first) && latin(last) {
+		return " "
+	}
+	return fallback
+}
+
+func nativeLanguage(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	primary := strings.ToLower(strings.SplitN(strings.ReplaceAll(value, "_", "-"), "-", 2)[0])
+	names := map[string]string{"en": "English", "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "yue": "Cantonese", "ar": "Arabic", "de": "German", "fr": "French", "es": "Spanish", "pt": "Portuguese", "ru": "Russian", "it": "Italian", "hi": "Hindi", "th": "Thai", "id": "Indonesian", "ms": "Malay", "vi": "Vietnamese", "tr": "Turkish", "nl": "Dutch", "pl": "Polish", "el": "Greek", "hu": "Hungarian", "fi": "Finnish", "sv": "Swedish", "da": "Danish", "cs": "Czech", "ro": "Romanian", "fa": "Persian", "mk": "Macedonian", "tl": "Filipino", "fil": "Filipino"}
+	if name, ok := names[primary]; ok {
+		return name, nil
+	}
+	if value == "" || strings.EqualFold(value, "auto") {
+		return "", nil
+	}
+	for _, name := range names {
+		if strings.EqualFold(value, name) {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("qwen3-asr unsupported explicit language %q", value)
+}
+
+func main() {
+	addr := flag.String("addr", "localhost:50051", "gRPC listen address")
+	flag.Parse()
+	path := os.Getenv("QWEN3ASR_LIBRARY")
+	if path == "" {
+		exe, err := os.Executable()
+		if err != nil {
+			panic(err)
+		}
+		path = filepath.Join(filepath.Dir(exe), "libgoqwen3asrcpp.dll")
+	}
+	handle, err := windows.LoadLibrary(path)
+	if err != nil {
+		panic(err)
+	}
+	for name, fn := range map[string]any{"qa_reset_cancel": &native.resetCancel, "qa_cancel": &native.cancel, "qa_load": &native.load, "qa_transcribe": &native.transcribe, "qa_error": &native.error, "qa_text": &native.text, "qa_language": &native.language, "qa_duration": &native.duration, "qa_word_count": &native.count, "qa_word_text": &native.word, "qa_word_start": &native.start, "qa_word_end": &native.end} {
+		// RegisterLibFunc accepts C strings as Go strings and copies returned strings
+		// before the next native call. Memory stays owned by the serialized DLL.
+		purego.RegisterLibFunc(fn, uintptr(handle), name)
+	}
+	if err := localgrpc.StartServer(*addr, &model{}); err != nil {
+		panic(err)
+	}
+}

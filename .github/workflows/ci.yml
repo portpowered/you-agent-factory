@@ -314,6 +314,9 @@ jobs:
           GO_UNIT_COVERAGE_PROFILE: .artifacts/unit-coverage/coverage.out
           GO_UNIT_COVERAGE_JSON_OUTPUT: .artifacts/unit-coverage/coverage-summary.json
           GO_UNIT_COVERAGE_TIMING_OUTPUT: .artifacts/unit-coverage/unit-timing-summary.json
+      - name: Run retained ACP SDK regression tests
+        if: matrix.suite == 'unit'
+        run: make test-acp-sdk
       - name: Save unit coverage Go build and test cache
         if: always() && matrix.suite == 'unit' && steps.unit-go-build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
@@ -630,7 +633,7 @@ jobs:
         run: |
           set -o pipefail
           go test -tags managed_process_integration ./tests/integration/models \
-            -run '^TestBlockedLoadModelStopsOwnedProcess$' -count=1 -v -timeout=5m \
+            -run '^TestBlockedLoadModelStopsOwnedProcess$' -count=1 -v -timeout=6m \
             2>&1 | tee .artifacts/integration/blocked-loadmodel-process-witness.log
         env:
           LOCALAI_READINESS_HELPER: ${{ steps.blocked-loadmodel-helper.outputs.path }}
@@ -679,6 +682,10 @@ jobs:
           path: .artifacts/integration/runtime-metrics-session-probe.log
           if-no-files-found: error
           retention-days: 14
+      - name: Run delivered ACP response integration
+        run: make test-acp-provider-prebuilt
+        env:
+          INFINITE_YOU_INTEGRATION_BINARY: ${{ github.workspace }}/.artifacts/integration/bin/you
       - name: Run pinned real ACP integration
         run: go test ./tests/integration/transport/acp/realclient -run '^TestPinnedAcpxCompletesDefaultFactoryBuilderPrompt$' -count=1 -timeout=15m
         env:
@@ -804,6 +811,7 @@ jobs:
         run: make test-functional-long-compile
       - name: Select Backend Lint runner parallelism
         id: backend-lint-parallelism
+        if: always()
         shell: bash
         run: |
           runner_cpus="$(nproc 2>/dev/null || true)"
@@ -834,7 +842,7 @@ jobs:
           printf 'exit_code=%s\n' "$status" >> "$GITHUB_OUTPUT"
           exit "$status"
         env:
-          LINT_JOBS: ${{ steps.backend-lint-parallelism.outputs.jobs }}
+          LINT_JOBS: ${{ steps.backend-lint-parallelism.outputs.jobs || '2' }}
       - name: Render Backend Lint summary and gate
         if: always()
         run: >-

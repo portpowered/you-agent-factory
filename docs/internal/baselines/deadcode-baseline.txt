@@ -1762,7 +1762,6 @@ pkg/services/operator_settings/transports/http/resolve_effective_mapping.go: unr
 pkg/services/operator_settings/transports/http/resolve_effective_mapping.go: unreachable func: overrideFactsFromHTTP
 pkg/services/operator_settings/transports/http/resolve_effective_operations.go: unreachable func: Adapter.ResolveEffective
 pkg/services/operator_settings/transports/http/root_binding.go: unreachable func: NewAdapterFromRoot
-pkg/services/operator_settings/transports/mcp/client.go: unreachable func: Bind
 pkg/services/operator_settings/transports/mcp/client.go: unreachable func: BindToolOperation
 pkg/services/operator_settings/transports/mcp/client.go: unreachable func: CallTool
 pkg/services/operator_settings/transports/mcp/configure_subagents.go: unreachable func: ConfigureSubagentsTool
@@ -1962,12 +1961,8 @@ pkg/services/providers/wire/wire.go: unreachable func: CatalogOption
 pkg/services/providers/wire/wire.go: unreachable func: DefaultPTYSessionConfig
 pkg/services/providers/wire/wire.go: unreachable func: NewFactory
 pkg/services/providers/wire/wire.go: unreachable func: WithLogger
-pkg/services/providers/wire/wire.go: unreachable func: argsValue
-pkg/services/providers/wire/wire.go: unreachable func: asPlatformClock
 pkg/services/providers/wire/wire.go: unreachable func: catalogOption.apply
 pkg/services/providers/wire/wire.go: unreachable func: loggerOption.apply
-pkg/services/providers/wire/wire.go: unreachable func: newRoot
-pkg/services/providers/wire/wire.go: unreachable func: registrationsFromValues
 pkg/services/recordings/internal/artifacts/projection.go: unreachable func: ApplyJavaScriptProjectionFacts
 pkg/services/recordings/internal/artifacts/projection.go: unreachable func: resultFromJavaScriptProjection
 pkg/services/recordings/internal/contracts/contracts.go: unreachable func: LiveRecordingTargetPlannerFunc.PlanLiveRecordingTarget
@@ -2082,7 +2077,6 @@ pkg/services/recordings/transports/http/workstation_projection.go: unreachable f
 pkg/services/recordings/transports/http/workstation_projection.go: unreachable func: valueOrNil
 pkg/services/recordings/transports/mcp/append_event.go: unreachable func: AppendEvent
 pkg/services/recordings/transports/mcp/append_event.go: unreachable func: canonicalEventInput.toCanonicalEvent
-pkg/services/recordings/transports/mcp/client.go: unreachable func: Bind
 pkg/services/recordings/transports/mcp/client.go: unreachable func: BindToolOperation
 pkg/services/recordings/transports/mcp/client.go: unreachable func: CallTool
 pkg/services/recordings/transports/mcp/client.go: unreachable func: callToolJSON

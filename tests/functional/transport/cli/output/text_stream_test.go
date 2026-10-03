@@ -400,11 +400,8 @@ func containsHumanLifecycleLine(stdout string) bool {
 
 func assertStableWorkerProgress(t *testing.T, stderr string) {
 	t.Helper()
-	if !strings.Contains(stderr, "worker ") || !strings.Contains(stderr, ": active") {
-		t.Fatalf("stderr = %q, want stable worker progress", stderr)
-	}
-	if strings.ContainsAny(stderr, "\x1b\r") {
-		t.Fatalf("stderr = %q, want no ANSI or cursor controls for redirected output", stderr)
+	if stderr != "" {
+		t.Fatalf("redirected progress = %q, want only stdout lifecycle milestones", stderr)
 	}
 }
 

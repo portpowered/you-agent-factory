@@ -36,25 +36,7 @@ func EnsureLogger(l Logger) Logger {
 }
 
 func NewDefaultLogger() (*zap.Logger, error) {
-	return BuildLogger(false, false)
-}
-
-// BuildLogger creates a zap.Logger with the appropriate verbosity level.
-//   - debug=true: Debug+ (implies verbose; development-style output)
-//   - verbose=true: Info+ (development-style output)
-//   - default: Warn+ (production-like)
-func BuildLogger(verbose, debug bool) (*zap.Logger, error) {
-	if debug {
-		return zap.NewDevelopment()
-	}
-	if verbose {
-		cfg := zap.NewDevelopmentConfig()
-		cfg.Level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
-		return cfg.Build()
-	}
-	cfg := zap.NewProductionConfig()
-	cfg.Level = zap.NewAtomicLevelAt(zapcore.WarnLevel)
-	return cfg.Build()
+	return BuildTerminalMutedLogger()
 }
 
 // BuildTerminalMutedLogger returns a warn-level zap logger that discards all
@@ -67,7 +49,7 @@ func BuildTerminalMutedLogger() (*zap.Logger, error) {
 		zapcore.AddSync(io.Discard),
 		zapcore.WarnLevel,
 	)
-	return zap.New(core), nil
+	return zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel)), nil
 }
 
 // BuildTerminalLogger selects a process terminal logger for the resolved CLI
@@ -79,6 +61,11 @@ func BuildTerminalLogger(mode string, debug bool) (*zap.Logger, error) {
 	case "normal":
 		return BuildTerminalMutedLogger()
 	default:
-		return BuildLogger(true, debug)
+		if debug {
+			return zap.NewDevelopment()
+		}
+		cfg := zap.NewDevelopmentConfig()
+		cfg.Level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
+		return cfg.Build()
 	}
 }

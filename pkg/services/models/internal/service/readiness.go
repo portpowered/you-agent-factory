@@ -285,6 +285,15 @@ func joinedModelAssetRequirements(
 	definition models.ModelDefinition,
 	source string,
 ) ([]models.AssetRequirement, error) {
+	if strings.EqualFold(strings.TrimSpace(definition.Backend), "localai-qwen3-asr-cpp") {
+		builtIn, _ := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameASR)
+		if strings.TrimSpace(source) == builtIn.Source {
+			return []models.AssetRequirement{
+				{Name: "qwen3-asr-0.6b-q8_0.gguf", Bytes: 1354082624, SHA256: "e777dacf2c23e4a3eafbec64e4e9d522b662c693c5189d4fd38ff39b92c9a334"},
+				{Name: "qwen3-forced-aligner-0.6b-q8_0.gguf", Bytes: 994404608, SHA256: "5de69a8cfc49c95a6520f50f2f15cfce9af35bc4723a10c56fc64e51dc966b3a"},
+			}, nil
+		}
+	}
 	if strings.EqualFold(strings.TrimSpace(definition.Name), models.BuiltInModelNameQwen3TTSBase) &&
 		strings.EqualFold(strings.TrimSpace(definition.Backend), "localai-qwen3-tts-cpp") {
 		builtIn, _ := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameQwen3TTSBase)

@@ -170,6 +170,7 @@ func provideConfiguredProvidersService(
 		providerswire.WithAgyCommandClock(effectiveProviderCommandClock(edges)),
 		providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
 		providerswire.WithExecutableLocator(provideProvidersExecutableLocator(edges)),
+		providerswire.WithStdioPipeFactory(provideProvidersStdioPipeFactory(edges)),
 		providerswire.WithACPIntegrations(projectACPIntegrations(integrations)...),
 		providerswire.WithCatalogCapabilityOverrides(edges.ProviderCatalogCapabilityOverrides...),
 		providerswire.WithRegistrations(edges.ProviderRegistrations...),
@@ -218,6 +219,18 @@ func provideProvidersExecutableLocator(edges serviceedges.Edges) platformprocess
 		return edges.ProvidersExecutableLocator
 	}
 	return platformprocess.HostExecutableLocator{}
+}
+
+// provideProvidersStdioPipeFactory is the single canonical selection of the
+// parent-owned ACP standard-stream channel implementation. An injected edge
+// wins so functional tests can replace the exact channel effect; otherwise the
+// policy-free host pipe channel is used. Nothing below this boundary is allowed
+// to select a channel for itself.
+func provideProvidersStdioPipeFactory(edges serviceedges.Edges) platformprocess.StdioPipeFactory {
+	if edges.ProvidersStdioPipeFactory != nil {
+		return edges.ProvidersStdioPipeFactory
+	}
+	return platformprocess.NewParentOwnedStdio
 }
 
 func providerCommandRunnerWithLogging(

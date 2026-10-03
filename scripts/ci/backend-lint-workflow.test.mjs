@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { evaluateVerificationPolicy } from "../verification-policy.mjs";
@@ -16,6 +17,15 @@ import {
 import { resolveRunnerParallelism } from "./runner-parallelism.mjs";
 
 const SHA = (character) => character.repeat(40);
+
+test("complete lint inventory keeps positive concurrency after an earlier step fails", () => {
+	const workflow = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
+	const selector = workflow.split("      - name: Select Backend Lint runner parallelism")[1]?.split("      - name:")[0];
+	assert.match(selector ?? "", /\n\s+if: always\(\)/);
+	const inventory = workflow.split("      - name: Run complete canonical Backend Lint inventory")[1]?.split("      - name:")[0];
+	assert.match(inventory ?? "", /\n\s+if: always\(\)/);
+	assert.match(inventory ?? "", new RegExp(`LINT_JOBS: \\$\\{\\{ steps\\.backend-lint-parallelism\\.outputs\\.jobs \\|\\| '${BACKEND_LINT_FALLBACK_JOBS}' \\}\\}`));
+});
 
 test("selects pull requests at the merge result and pushes to main at the tested commit", () => {
 	assert.deepEqual(

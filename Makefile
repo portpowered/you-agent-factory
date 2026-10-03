@@ -225,7 +225,12 @@ LINT_CHECKER_FALLBACK ?= 0
 LINT_CHECKER_DRIVER_PACKAGE := ./cmd/lintcheck
 LINT_CHECKER_DRIVER ?=
 LINT_LANE_PACKAGE := ./cmd/lintlane
+# Optional CI outputs can be defined but blank. Use the canonical lane budget
+# for blank handoffs; lintlane still rejects invalid nonblank overrides.
 LINT_JOBS ?= $(GO_LANE_BUDGET)
+ifeq ($(strip $(LINT_JOBS)),)
+override LINT_JOBS := $(GO_LANE_BUDGET)
+endif
 # Keep the recursive command available to lintlane without spelling the
 # special $(MAKE) variable in this recipe; GNU Make executes such recipes
 # during -n so recursive builds can receive the dry-run flag.
@@ -551,8 +556,16 @@ readme-check:
 
 test: test-unit test-ci-workflows
 
+.PHONY: test-acp-sdk test-acp-provider-prebuilt
+test-acp-sdk:
+	$(GO) test -race ./third_party/acp-go-sdk/... -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+test-acp-provider-prebuilt: export INFINITE_YOU_REQUIRE_PREBUILT_ARTIFACT := 1
+test-acp-provider-prebuilt:
+	$(GO) test ./tests/integration/providers/acp -run '^TestPrebuiltACPDeliveredResultsSurvivePeerExit$$' -count=1 -v -timeout $(GO_TEST_TIMEOUT)
+
 test-ci-workflows:
-	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-visualizations-workflow.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/ci/backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs
+	$(NODE) --test scripts/default-pipeline.test.mjs scripts/development-package-workflow.test.mjs scripts/verification-policy.test.mjs scripts/ci/backend-visualizations-workflow.test.mjs scripts/ci/lane-budget.test.mjs scripts/ci/unit-coverage-workflow.test.mjs scripts/ci/backend-lint-report.test.mjs scripts/ci/backend-lint-workflow.test.mjs scripts/ci/main-ci-churn-report.test.mjs scripts/ci/functional-coverage-comment.test.mjs scripts/ci/functional-coverage-verdict.test.mjs scripts/ci/unit-coverage-report.test.mjs scripts/ci/workflow-lint.test.mjs scripts/ci/functional-coverage-workflow.test.mjs scripts/ci/functional-coverage-supervisor.test.mjs scripts/ci/shared-baseline-regeneration-workflow.test.mjs scripts/ci/published-backend-conformance-workflow.test.mjs scripts/ci/backend-conformance-workflow.test.mjs scripts/localai-backend-artifact-workflow.test.mjs scripts/localai-llamacpp-independent-images-patch.test.mjs scripts/localai-llamacpp-json-schema-patch.test.mjs
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
@@ -1160,7 +1173,7 @@ fmt-check:
 	fi
 
 vet:
-	$(GO) vet ./...
+	$(GO) vet ./cmd/... ./contracts/... ./docs/... ./internal/... ./packages/... ./pkg/... ./scripts/... ./tests/... ./ui/...
 
 deps:
 	$(GO) mod download

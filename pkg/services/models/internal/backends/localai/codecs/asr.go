@@ -178,11 +178,17 @@ func (codec ASRCodec) MarshalRequest(request models.InvokeModelRequest) ([]byte,
 // DecodeResponse validates a JSON response and returns both required named
 // outputs atomically. On failure it returns no partial output.
 func (codec ASRCodec) DecodeResponse(payload []byte) ([]models.InferenceContent, error) {
-	var response ASRResponse
+	var response struct {
+		Text     *string       `json:"text"`
+		Segments *[]ASRSegment `json:"segments"`
+	}
 	if err := asrDecodeSingleJSON(payload, &response); err != nil {
 		return nil, asrMalformedResponseFailure("", "ASR backend response is not valid JSON")
 	}
-	return codec.DecodeResponseValue(response)
+	if response.Text == nil || response.Segments == nil {
+		return nil, asrMalformedResponseFailure("", "ASR backend response requires text and a segments array")
+	}
+	return codec.DecodeResponseValue(ASRResponse{Text: *response.Text, Segments: *response.Segments})
 }
 
 // DecodeResponseValue validates an already decoded backend response and
@@ -197,7 +203,7 @@ func (ASRCodec) DecodeResponseValue(response ASRResponse) ([]models.InferenceCon
 // check at the private codec boundary prevents an otherwise valid-looking
 // transcript from publishing impossible media coordinates.
 func (ASRCodec) DecodeResponseValueWithinAudio(response ASRResponse, audio []byte) ([]models.InferenceContent, error) {
-	durationMilliseconds, hasDuration := pcmWAVDurationMilliseconds(audio)
+	durationMilliseconds, hasDuration := PCMWAVDurationMilliseconds(audio)
 	if !hasDuration {
 		return decodeASRResponse(response, nil)
 	}
@@ -207,6 +213,12 @@ func (ASRCodec) DecodeResponseValueWithinAudio(response ASRResponse, audio []byt
 func decodeASRResponse(response ASRResponse, durationMilliseconds *float64) ([]models.InferenceContent, error) {
 	if err := validateASRResponse(response, durationMilliseconds); err != nil {
 		return nil, err
+	}
+	if len(response.Segments) == 0 {
+		// A successful provider response can contain no detected speech. Protobuf
+		// repeated fields omit empty arrays; publish stable JSON [] rather than null.
+		response.Text = ""
+		response.Segments = []ASRSegment{}
 	}
 	segments, err := json.Marshal(response.Segments)
 	if err != nil {
@@ -225,6 +237,9 @@ func decodeASRResponse(response ASRResponse, durationMilliseconds *float64) ([]m
 }
 
 func validateASRResponse(response ASRResponse, durationMilliseconds *float64) error {
+	if strings.TrimSpace(response.Text) == "" && len(response.Segments) == 0 {
+		return nil
+	}
 	if strings.TrimSpace(response.Text) == "" {
 		return asrMalformedResponseFailure("transcript", "ASR backend response is missing the transcript")
 	}
@@ -256,7 +271,10 @@ func validASRSegment(segment ASRSegment) bool {
 		strings.TrimSpace(segment.Text) != ""
 }
 
-func pcmWAVDurationMilliseconds(audio []byte) (float64, bool) {
+// PCMWAVDurationMilliseconds reads the exact PCM frame duration without copying
+// the media payload. Provider timestamp normalization uses the same bounds as
+// response validation.
+func PCMWAVDurationMilliseconds(audio []byte) (float64, bool) {
 	if !validPCMWAVEnvelope(audio) {
 		return 0, false
 	}
@@ -301,6 +319,17 @@ func pcmRF64DataBytes(audio []byte) (uint64, bool) {
 type pcmWAVFormat struct {
 	sampleRate uint32
 	blockAlign uint16
+	channels   uint16
+	bits       uint16
+}
+
+// IsMono16KPCMWAV reports whether audio already matches native ASR input.
+func IsMono16KPCMWAV(audio []byte) bool {
+	if !validPCMWAVEnvelope(audio) {
+		return false
+	}
+	format, _, ok := parsePCMWAVChunks(audio)
+	return ok && format.sampleRate == 16000 && format.channels == 1 && format.bits == 16 && format.blockAlign == 2
 }
 
 func parsePCMWAVChunks(audio []byte) (pcmWAVFormat, uint64, bool) {
@@ -328,6 +357,8 @@ func parsePCMWAVChunks(audio []byte) (pcmWAVFormat, uint64, bool) {
 			chunk := audio[chunkStart:int(chunkEnd)]
 			format.sampleRate = binary.LittleEndian.Uint32(chunk[4:8])
 			format.blockAlign = binary.LittleEndian.Uint16(chunk[12:14])
+			format.channels = binary.LittleEndian.Uint16(chunk[2:4])
+			format.bits = binary.LittleEndian.Uint16(chunk[14:16])
 			formatFound = true
 		case "data":
 			if dataFound {

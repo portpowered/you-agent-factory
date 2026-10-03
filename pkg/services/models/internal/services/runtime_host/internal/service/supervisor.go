@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	DefaultReadinessTimeout      = 30 * time.Second
+	DefaultReadinessTimeout      = 5 * time.Minute
 	DefaultHealthCheckInterval   = 100 * time.Millisecond
 	DefaultHealthCheckPath       = "/health"
 	supervisedHealthEndpointFlag = "--health-endpoint"

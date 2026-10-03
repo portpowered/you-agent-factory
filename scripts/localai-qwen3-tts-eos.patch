@@ -1,0 +1,15 @@
+diff --git a/src/pipeline-tts.cpp b/src/pipeline-tts.cpp
+index 252dbcb..126fd60 100644
+--- a/src/pipeline-tts.cpp
++++ b/src/pipeline-tts.cpp
+@@ -670,0 +671 @@ qt_status pipeline_tts_synthesize(PipelineTTS *                pt,
++    bool observed_eos = false;
+@@ -736,0 +738 @@ qt_status pipeline_tts_synthesize(PipelineTTS *                pt,
++            observed_eos = true;
+@@ -818,0 +821,6 @@ qt_status pipeline_tts_synthesize(PipelineTTS *                pt,
++    if (!observed_eos) {
++        qt_set_error("pipeline_tts_synthesize: generation exhausted max_new_tokens=%d without EOS", params->max_new_tokens);
++        qt_log(QT_LOG_ERROR, "[Pipeline] Generation exhausted %d frames without EOS", params->max_new_tokens);
++        return QT_STATUS_GENERATE_FAILED;
++    }
++

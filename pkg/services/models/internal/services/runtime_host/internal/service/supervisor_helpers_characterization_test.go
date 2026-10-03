@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
@@ -264,6 +265,28 @@ func TestRequiresSupervisedBackend_CharacterizesCurrentMembership(t *testing.T) 
 				t.Fatalf("requiresSupervisedBackend(%q) = %t, want %t", testCase.backend, got, testCase.want)
 			}
 		})
+	}
+}
+
+func TestNewInertRuntimeHostAppliesDefaultReadinessTimeout(t *testing.T) {
+	t.Parallel()
+
+	hostService, ok := New(nil, nil, nil, nil, nil, nil, nil, nil).(*service)
+	if !ok {
+		t.Fatal("New did not return the internal runtime host service implementation")
+	}
+	if hostService.supervisor.ReadinessTimeout != 5*time.Minute {
+		t.Fatalf(
+			"supervised readiness timeout = %s, want 5m so large cold model loads are not killed at 30s",
+			hostService.supervisor.ReadinessTimeout,
+		)
+	}
+	if hostService.supervisor.HealthCheckInterval != DefaultHealthCheckInterval {
+		t.Fatalf(
+			"health check interval = %s, want unchanged default %s",
+			hostService.supervisor.HealthCheckInterval,
+			DefaultHealthCheckInterval,
+		)
 	}
 }
 

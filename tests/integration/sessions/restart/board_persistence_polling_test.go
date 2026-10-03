@@ -8,12 +8,30 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+)
+
+const (
+	// Structured terminal-log vocabulary shared by the whole-line JSON records
+	// written to runtime logs and the Zap CONSOLE records written to stderr.
+	boardPersistenceRunServiceOperation = "run.service"
+	boardPersistenceOutcomeCancelled    = "cancelled"
+	boardPersistenceCancelReason        = "context canceled"
+	boardPersistencePlainCancelLine     = "Error: " + boardPersistenceCancelReason
+
+	// Fixed positions inside a Zap CONSOLE record: time, level, caller, and
+	// message precede the trailing structured context object.
+	boardPersistenceConsoleTimeSegment   = 0
+	boardPersistenceConsoleLevelSegment  = 1
+	boardPersistenceConsoleCallerSegment = 2
+	// A cancellation record carries four console prefixes plus the context.
+	boardPersistenceConsoleContextSegments = 5
 )
 
 func newBoardPersistenceLogWatcher(t *testing.T, logDir string) *fsnotify.Watcher {
@@ -132,28 +150,108 @@ func boardPersistenceCancellationObserved(daemon *boardPersistenceDaemon, path s
 
 func boardPersistenceReportsCancellation(logs string) bool {
 	for _, line := range strings.Split(logs, "\n") {
-		// The CLI currently reports an interrupted startup on stderr rather than
-		// emitting a structured run.service record on this path.
-		if strings.TrimSpace(line) == "Error: context canceled" {
+		if boardPersistenceLineReportsCancellation(line) {
 			return true
 		}
-		var fields map[string]any
-		if err := json.Unmarshal([]byte(line), &fields); err != nil {
-			continue
-		}
-		if fields["operation"] == "run.service" && fields["outcome"] == "cancelled" {
+	}
+	return false
+}
+
+// boardPersistenceLineReportsCancellation classifies one captured output line.
+// The terminal logger writes Zap CONSOLE records whose structured fields follow
+// the message, so cancellation is read from either a whole-line JSON record or
+// the console trailing context object. Both forms are classified from their
+// fields alone; no message text is matched as a substring.
+func boardPersistenceLineReportsCancellation(line string) bool {
+	// The CLI currently reports an interrupted startup on stderr rather than
+	// emitting a structured run.service record on this path.
+	if strings.TrimSpace(line) == boardPersistencePlainCancelLine {
+		return true
+	}
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(line), &fields); err == nil && boardPersistenceFieldsReportCancellation(fields) {
+		return true
+	}
+	context, ok := boardPersistenceConsoleLogContext(line)
+	if !ok {
+		return false
+	}
+	return boardPersistenceFieldsReportCancellation(context)
+}
+
+// boardPersistenceConsoleLogContext parses the structured context of one Zap
+// CONSOLE record written by the terminal logger:
+//
+//	<time>\t<level>\t<caller>\t<message>\t<json-context>
+//
+// The canonical timestamp, capital level, and source-location prefixes plus one
+// complete JSON object context are all required, so ordinary terminal output,
+// truncated records, and records that only mention cancellation never match.
+func boardPersistenceConsoleLogContext(line string) (map[string]any, bool) {
+	segments := strings.Split(strings.TrimSuffix(line, "\r"), "\t")
+	if len(segments) < boardPersistenceConsoleContextSegments {
+		return nil, false
+	}
+	if _, err := time.Parse(time.RFC3339Nano, segments[boardPersistenceConsoleTimeSegment]); err != nil {
+		return nil, false
+	}
+	if !boardPersistenceConsoleLevel(segments[boardPersistenceConsoleLevelSegment]) {
+		return nil, false
+	}
+	if !boardPersistenceConsoleCaller(segments[boardPersistenceConsoleCallerSegment]) {
+		return nil, false
+	}
+	contextSegment := segments[len(segments)-1]
+	if !strings.HasPrefix(contextSegment, "{") || !strings.HasSuffix(contextSegment, "}") {
+		return nil, false
+	}
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(contextSegment), &fields); err != nil || fields == nil {
+		return nil, false
+	}
+	return fields, true
+}
+
+// boardPersistenceConsoleLevel reports whether a segment is one of the capital
+// level names the console encoder emits.
+func boardPersistenceConsoleLevel(segment string) bool {
+	switch segment {
+	case "DEBUG", "INFO", "WARN", "ERROR", "DPANIC", "PANIC", "FATAL":
+		return true
+	default:
+		return false
+	}
+}
+
+// boardPersistenceConsoleCaller reports whether a segment is a short caller
+// reference of the form "<path>/<file>.go:<line>".
+func boardPersistenceConsoleCaller(segment string) bool {
+	separator := strings.LastIndexByte(segment, ':')
+	if separator <= 0 || separator == len(segment)-1 {
+		return false
+	}
+	line, err := strconv.Atoi(segment[separator+1:])
+	if err != nil || line <= 0 {
+		return false
+	}
+	return strings.HasSuffix(segment[:separator], ".go")
+}
+
+// boardPersistenceFieldsReportCancellation classifies one decoded structured
+// record from either encoding form.
+func boardPersistenceFieldsReportCancellation(fields map[string]any) bool {
+	if fields["operation"] == boardPersistenceRunServiceOperation && fields["outcome"] == boardPersistenceOutcomeCancelled {
+		return true
+	}
+	// The runtime can stop after its first log write but before the
+	// automation phase reports startup cancellation to the CLI.
+	if fields["msg"] == "engine stopped" && fields["reason"] == boardPersistenceCancelReason {
+		return true
+	}
+	if fields["level"] == "error" && fields["error"] == boardPersistenceCancelReason {
+		message, _ := fields["msg"].(string)
+		if message == "engine initial tick error" || message == "failed to compile factory orchestration" {
 			return true
-		}
-		// The runtime can stop after its first log write but before the
-		// automation phase reports startup cancellation to the CLI.
-		if fields["msg"] == "engine stopped" && fields["reason"] == "context canceled" {
-			return true
-		}
-		if fields["level"] == "error" && fields["error"] == "context canceled" {
-			message, _ := fields["msg"].(string)
-			if message == "engine initial tick error" || message == "failed to compile factory orchestration" {
-				return true
-			}
 		}
 	}
 	return false
@@ -166,6 +264,79 @@ func TestBoardPersistenceReportsStructuredEngineCancellation(t *testing.T) {
 	}
 	if boardPersistenceReportsCancellation(`{"level":"info","msg":"engine stopped","reason":"completed"}`) {
 		t.Fatal("normal engine stop was classified as cancellation")
+	}
+}
+
+// Console record segments shared by every classification case below. The
+// terminal logger writes each record as
+// "<time>\t<level>\t<caller>:<line>\t<message>\t<json-context>\n", and the
+// timestamp and caller path are taken from the captured successor stderr line,
+// so each case differs only in the segments under test.
+const (
+	boardPersistenceCapturedTime        = "2026-10-02T20:18:57.191Z"
+	boardPersistenceCapturedCaller      = "run/invocation_observability.go"
+	boardPersistenceCancellationContext = `{"operation": "run.service", "outcome": "cancelled", "hosting_intent": true, "failure_class": "none"}`
+)
+
+// capturedCancellationStderr is the exact 189-byte stderr line captured from the
+// pre-readiness successor process in
+// C:/t/dub-ci-e4dd-restart-diagnostics/cancellation-scenario.json (CI37059462705,
+// head e4dd9b69), which exited 130 without a JSON record.
+const capturedCancellationStderr = boardPersistenceCapturedTime + "\tINFO\t" +
+	boardPersistenceCapturedCaller + ":89\trun service completed\t" +
+	boardPersistenceCancellationContext + "\n"
+
+// boardPersistenceConsoleRecord renders one Zap CONSOLE record from the captured
+// prefix. An empty context omits the trailing object, which is how a record that
+// stopped before structured logging is captured.
+func boardPersistenceConsoleRecord(level string, callerLine int, message, context string) string {
+	record := fmt.Sprintf("%s\t%s\t%s:%d\t%s", boardPersistenceCapturedTime, level, boardPersistenceCapturedCaller, callerLine, message)
+	if context != "" {
+		record += "\t" + context
+	}
+	return record + "\n"
+}
+
+type boardPersistenceCancellationCase struct {
+	name string
+	logs string
+	want bool
+}
+
+// boardPersistenceConsoleCancellationCases returns the console-encoding cases,
+// including the negatives that keep the parser from matching message text,
+// incomplete prefixes, or other operations and outcomes.
+func boardPersistenceConsoleCancellationCases() []boardPersistenceCancellationCase {
+	return []boardPersistenceCancellationCase{
+		{name: "captured console cancellation record", logs: capturedCancellationStderr, want: true},
+		{name: "captured console cancellation record after unrelated startup output", logs: "Home directory: /tmp/successor-home\nRuntime log start (UTC): 2026-10-02 20:18:57 UTC\n" + capturedCancellationStderr, want: true},
+		{name: "console success record", logs: boardPersistenceConsoleRecord("INFO", 141, "run service completed", `{"operation": "run.service", "outcome": "success", "hosting_intent": true, "failure_class": "none"}`), want: false},
+		{name: "console failure record", logs: boardPersistenceConsoleRecord("ERROR", 128, "run service failed", `{"operation": "run.service", "outcome": "failure", "hosting_intent": true, "failure_class": "runtime_failure"}`), want: false},
+		{name: "console cancellation record for another operation", logs: boardPersistenceConsoleRecord("INFO", 177, "run recovery outcome", `{"operation": "run.recovery", "outcome": "cancelled", "hosting_intent": true, "failure_class": "none"}`), want: false},
+		{name: "console record whose message only mentions cancellation", logs: boardPersistenceConsoleRecord("INFO", 120, "invocation cancelled before readiness", `{"hosting_intent": true, "failure_class": "none"}`), want: false},
+		{name: "console record without structured context", logs: boardPersistenceConsoleRecord("INFO", 89, "run service completed", ""), want: false},
+		{name: "console record with truncated context", logs: boardPersistenceConsoleRecord("INFO", 89, "run service completed", `{"operation": "run.service", "outcome": "cancelled", "hosting_intent": true`), want: false},
+		{name: "console record with unquoted context value", logs: boardPersistenceConsoleRecord("INFO", 89, "run service completed", `{"operation": "run.service", "outcome": cancelled}`), want: false},
+		{name: "structured record without a console timestamp prefix", logs: "cancellation\tINFO\t" + boardPersistenceCapturedCaller + ":89\trun service completed\t" + boardPersistenceCancellationContext + "\n", want: false},
+		{name: "structured record without a console caller segment", logs: boardPersistenceCapturedTime + "\tINFO\trun service completed\t" + boardPersistenceCancellationContext + "\n", want: false},
+		{name: "plain line spelling cancellation differently", logs: "Error: context cancelled\n", want: false},
+		{name: "preserved whole-line JSON cancellation record", logs: `{"level":"info","msg":"run service completed","operation":"run.service","outcome":"cancelled"}`, want: true},
+		{name: "preserved plain cancellation line", logs: boardPersistencePlainCancelLine + "\n", want: true},
+	}
+}
+
+// TestBoardPersistenceReportsConsoleRunServiceCancellation covers the terminal
+// encoding of the run.service cancellation record that the pre-readiness
+// successor writes to stderr, including capturedCancellationStderr itself.
+func TestBoardPersistenceReportsConsoleRunServiceCancellation(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range boardPersistenceConsoleCancellationCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			if got := boardPersistenceReportsCancellation(testCase.logs); got != testCase.want {
+				t.Fatalf("boardPersistenceReportsCancellation(%q) = %t, want %t", testCase.logs, got, testCase.want)
+			}
+		})
 	}
 }
 

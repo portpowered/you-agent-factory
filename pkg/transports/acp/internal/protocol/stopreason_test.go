@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	acpsdk "github.com/coder/acp-go-sdk"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
 func TestMapStopReason_SupportedOutcomes(t *testing.T) {

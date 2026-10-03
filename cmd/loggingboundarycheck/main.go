@@ -19,6 +19,7 @@ import (
 const loggingPackagePath = "github.com/portpowered/infinite-you/pkg/platform/logging"
 
 var approvedFiles = map[string]struct{}{
+	"pkg/wire/profiles.go":                        {},
 	"pkg/transports/cli/root.go":                  {},
 	"pkg/transports/cli/terminalpolicy/policy.go": {},
 	"pkg/platform/logging/logger.go":              {},
@@ -26,7 +27,7 @@ var approvedFiles = map[string]struct{}{
 
 var prohibitedCalls = map[string]map[string]string{
 	loggingPackagePath: {
-		"BuildLogger": "accept or propagate an injected logger",
+		"BuildTerminalLogger": "accept or propagate an injected logger",
 	},
 	"go.uber.org/zap": {
 		"L":                    "accept or propagate an injected logger instead of consulting the process-global logger",

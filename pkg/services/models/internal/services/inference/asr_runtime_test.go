@@ -23,7 +23,7 @@ func TestASRInvocationRuntimeMapsRequestAndReturnsNamedOutputs(t *testing.T) {
 		Text:     "hello world",
 		Segments: []codecs.ASRSegment{{ID: 0, Start: 0, End: 1500, Text: "hello world"}},
 	}}
-	runtime, err := asrruntime.New(backend.transcribe, nil)
+	runtime, err := asrruntime.New(backend.transcribe, nil, nil)
 	if err != nil {
 		t.Fatalf("asrruntime.New() error = %v", err)
 	}
@@ -72,7 +72,7 @@ func TestASRInvocationRuntimeClassifiesMalformedAndBackendFailuresAtomically(t *
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			backend := test.backend
-			runtime, err := asrruntime.New(backend.transcribe, nil)
+			runtime, err := asrruntime.New(backend.transcribe, nil, nil)
 			if err != nil {
 				t.Fatalf("asrruntime.New() error = %v", err)
 			}
@@ -91,13 +91,13 @@ func TestASRInvocationRuntimeClassifiesMalformedAndBackendFailuresAtomically(t *
 	}
 }
 
-func TestASRInvocationRuntimeFailureEvidenceCollapsesBackendCauses(t *testing.T) {
+func TestASRInvocationRuntimeFailureEvidenceDistinguishesBackendCauses(t *testing.T) {
 	t.Parallel()
 
 	firstDigest := runASRRuntimeFailureEvidenceCase(t, errors.New("transport unavailable private-a"))
 	secondDigest := runASRRuntimeFailureEvidenceCase(t, errors.New("transport internal private-b"))
-	if secondDigest != firstDigest {
-		t.Fatalf("different backend failures produced digests %q and %q", secondDigest, firstDigest)
+	if secondDigest == firstDigest {
+		t.Fatalf("different backend failures collapsed to digests %q and %q", secondDigest, firstDigest)
 	}
 }
 
@@ -111,7 +111,7 @@ func runASRRuntimeFailureEvidenceCase(t *testing.T, cause error) string {
 	if !errors.Is(failure, cause) {
 		t.Fatalf("test backend failure = %v, want its private transport cause", failure)
 	}
-	runtime, err := asrruntime.New(backend.transcribe, nil)
+	runtime, err := asrruntime.New(backend.transcribe, nil, nil)
 	if err != nil {
 		t.Fatalf("asrruntime.New() error = %v", err)
 	}
@@ -120,7 +120,7 @@ func runASRRuntimeFailureEvidenceCase(t *testing.T, cause error) string {
 	diagnostic := modelseffects.ProjectRuntimeFailure(
 		modelseffects.WrapRuntimeFailure(modelseffects.RuntimeStageInvoke, invocationErr), 0,
 	)
-	assertASRFailureDiagnostic(t, diagnostic)
+	assertASRFailureDiagnostic(t, diagnostic, cause)
 	return diagnostic.CauseSHA256
 }
 
@@ -138,15 +138,15 @@ func assertASRRuntimeFailure(
 	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassBackendProtocol {
 		t.Fatalf("invocation error = %v, failure = %#v, want backend protocol failure", err, failure)
 	}
-	if err.Error() != "ASR backend invocation failed" || !errors.Is(err, models.ErrInferenceFailed) || errors.Is(err, cause) {
-		t.Fatalf("invocation error identity = %q, want generic ASR failure without its backend cause", err.Error())
+	if err.Error() != "ASR backend request failed" || !errors.Is(err, models.ErrInferenceFailed) || !errors.Is(err, cause) {
+		t.Fatalf("invocation error identity = %q, want safe ASR failure preserving its backend cause", err.Error())
 	}
 }
 
-func assertASRFailureDiagnostic(t *testing.T, diagnostic modelseffects.RuntimeFailureDiagnostic) {
+func assertASRFailureDiagnostic(t *testing.T, diagnostic modelseffects.RuntimeFailureDiagnostic, cause error) {
 	t.Helper()
-	if diagnostic.CauseSHA256 != modelseffects.RuntimeCauseSHA256(models.ErrInferenceFailed) {
-		t.Fatalf("cause digest = %q, want the generic inference failure digest", diagnostic.CauseSHA256)
+	if diagnostic.CauseSHA256 != modelseffects.RuntimeCauseSHA256(errors.Join(models.ErrInferenceFailed, cause)) {
+		t.Fatalf("cause digest = %q, want the private cause digest", diagnostic.CauseSHA256)
 	}
 	encodedDiagnostic, err := json.Marshal(diagnostic)
 	if err != nil {
@@ -162,7 +162,7 @@ func TestASRInvocationRuntimeHonorsCancellationBeforeAndDuringBackendCall(t *tes
 	t.Parallel()
 
 	backend := &recordingASRBackend{waitForCancellation: true}
-	runtime, err := asrruntime.New(backend.transcribe, nil)
+	runtime, err := asrruntime.New(backend.transcribe, nil, nil)
 	if err != nil {
 		t.Fatalf("asrruntime.New() error = %v", err)
 	}
@@ -174,7 +174,7 @@ func TestASRInvocationRuntimeHonorsCancellationBeforeAndDuringBackendCall(t *tes
 	}
 
 	backend = &recordingASRBackend{waitForCancellation: true}
-	runtime, err = asrruntime.New(backend.transcribe, nil)
+	runtime, err = asrruntime.New(backend.transcribe, nil, nil)
 	if err != nil {
 		t.Fatalf("asrruntime.New() error = %v", err)
 	}
@@ -202,8 +202,8 @@ func TestASRInvocationRuntimeHonorsCancellationBeforeAndDuringBackendCall(t *tes
 func TestASRInvocationRuntimeRejectsNilBackend(t *testing.T) {
 	t.Parallel()
 
-	if _, err := asrruntime.New(nil, nil); !errors.Is(err, models.ErrInvalidInferenceDependencies) {
-		t.Fatalf("asrruntime.New(nil, nil) error = %v, want ErrInvalidInferenceDependencies", err)
+	if _, err := asrruntime.New(nil, nil, nil); !errors.Is(err, models.ErrInvalidInferenceDependencies) {
+		t.Fatalf("asrruntime.New(nil, nil, nil) error = %v, want ErrInvalidInferenceDependencies", err)
 	}
 }
 
@@ -256,7 +256,7 @@ func TestASRInvocationRuntimeExtractsVideoBeforeCodecAndBoundsSegmentsByWAV(t *t
 			runtime, err := asrruntime.New(backend.transcribe, func(ctx context.Context, video []byte) ([]byte, error) {
 				extracted = append([]byte(nil), video...)
 				return wav, nil
-			})
+			}, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -290,7 +290,7 @@ func TestASRInvocationRuntimeVideoFailuresStopBeforeTranscription(t *testing.T) 
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			backend := &recordingASRBackend{}
-			runtime, err := asrruntime.New(backend.transcribe, func(context.Context, []byte) ([]byte, error) { return scenario.audio, scenario.err })
+			runtime, err := asrruntime.New(backend.transcribe, func(context.Context, []byte) ([]byte, error) { return scenario.audio, scenario.err }, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

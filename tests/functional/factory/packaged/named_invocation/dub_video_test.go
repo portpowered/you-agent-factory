@@ -10,12 +10,184 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+// CLI starts the root-built hosted process. Explicit Session admission, shared
+// resource usage, and retained Session events are API-owned observation/control
+// surfaces; they expose the reservation while a script is blocked. The adjacent
+// named CLI proof covers ordinary stage bindings and primary result delivery.
+func TestPackagedDubVideoGPUContentionAndFailureRelease(t *testing.T) {
+	t.Parallel()
+	for _, failFirst := range []bool{false, true} {
+		t.Run(fmt.Sprintf("first_ASR_failure_%t", failFirst), func(t *testing.T) {
+			t.Parallel()
+			home := t.TempDir()
+			directory := support.InstallPackagedFactory(t, home, "@you/dub-video")
+			runner := &dubVideoGPUCommands{entered: make(chan string, 8), release: make(chan struct{}),
+				stop: make(chan struct{}), failFirst: failFirst, manifest: filepath.Join(t.TempDir(), "manifest.json")}
+			t.Cleanup(func() { close(runner.stop) })
+			host := support.ScaffoldFactory(t, map[string]any{"name": "dub-gpu-host", "workTypes": []map[string]any{{
+				"name": "idle", "states": []map[string]string{{"name": "ready", "type": "INITIAL"}, {"name": "done", "type": "TERMINAL"}},
+			}}})
+			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: host,
+				Edges: serviceedges.Edges{ScriptCommandRunner: runner, ProviderCommandRunner: runner}})
+			sessionID := support.OpenFactorySessionAt(t, server.URL(), directory).Session.Id
+			t.Cleanup(func() { support.CloseFactorySessionAt(t, server.URL(), sessionID) })
+			firstName, secondName := "first-video", "second-video"
+			first := support.SubmitSessionWorkAt(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
+				WorkTypeName: "video-dub", Name: &firstName, Payload: "first video"})
+			select {
+			case stage := <-runner.entered:
+				if stage != "transcribe" {
+					t.Fatalf("first stage=%q", stage)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("first ASR did not reach controlled script edge")
+			}
+			second := support.SubmitSessionWorkAt(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
+				WorkTypeName: "video-dub", Name: &secondName, Payload: "second video"})
+			calls := 6
+			if failFirst {
+				calls = 4
+			}
+			for index := 0; index < calls; index++ {
+				if index > 0 {
+					select {
+					case <-runner.entered:
+					case <-time.After(10 * time.Second):
+						t.Fatalf("model stage %d did not progress after GPU release", index)
+					}
+				}
+				response := support.GetJSON[factoryapi.FactorySessionGetResponse](t, server.URL()+"/factory-sessions/"+sessionID)
+				session, err := response.AsFactorySession()
+				if err != nil {
+					t.Fatal(err)
+				}
+				found := false
+				for _, usage := range session.Runtime.Usage.Resources {
+					if usage.Name == "gpu" {
+						found = true
+						if usage.Total != 1 || usage.Available != 0 {
+							t.Fatalf("blocked stage GPU usage=%#v", usage)
+						}
+					}
+				}
+				if !found {
+					t.Fatal("blocked model stage did not reserve public GPU resource")
+				}
+				events := support.GetFactoryEventsForSessionAt(t, server.URL(), sessionID)
+				active := 0
+				for _, dispatch := range support.ObserveDispatchEvents(t, events) {
+					if dispatch.Response == nil && !strings.Contains(dispatch.Request.TransitionId, "render-subtitles-and-dub") {
+						active++
+					}
+				}
+				if active != 1 {
+					t.Fatalf("blocked GPU has %d active model dispatches, want one", active)
+				}
+				runner.release <- struct{}{}
+			}
+			assertDubVideoGPUTerminal(t, server.URL(), sessionID, first, second, failFirst)
+			runner.mu.Lock()
+			maxActive := runner.maxActive
+			runner.mu.Unlock()
+			if maxActive != 1 {
+				t.Fatalf("concurrent Models scripts=%d, want one", maxActive)
+			}
+		})
+	}
+}
+
+func assertDubVideoGPUTerminal(t *testing.T, baseURL, sessionID string, first, second factoryapi.SubmitWorkResponse, failFirst bool) {
+	t.Helper()
+	status := support.WaitForSessionTerminalStatus(t, baseURL, sessionID, 10*time.Second)
+	wantFailed, firstState := 0, "video-dub:complete"
+	if failFirst {
+		wantFailed, firstState = 1, "video-dub:failed"
+	}
+	if status.Categories.Terminal != 2-wantFailed || status.Categories.Failed != wantFailed {
+		t.Fatalf("two-Work terminal outcome=%#v", status.Categories)
+	}
+	listed := support.GetJSON[factoryapi.ListWorkResponse](t, baseURL+"/factory-sessions/"+sessionID+"/work")
+	if support.CountWorkAtCustomerState(listed, "video-dub:complete") != 2-wantFailed ||
+		support.CountWorkAtCustomerState(listed, "video-dub:failed") != wantFailed {
+		t.Fatalf("first=%v second=%v terminal Work=%#v", first.WorkId, second.WorkId, listed)
+	}
+	if first.WorkId == nil || second.WorkId == nil ||
+		!support.HasWorkAtCustomerState(listed, *first.WorkId, firstState) ||
+		!support.HasWorkAtCustomerState(listed, *second.WorkId, "video-dub:complete") {
+		t.Fatal("terminal outcomes did not preserve submitted Work identities")
+	}
+	response := support.GetJSON[factoryapi.FactorySessionGetResponse](t, baseURL+"/factory-sessions/"+sessionID)
+	session, err := response.AsFactorySession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, usage := range session.Runtime.Usage.Resources {
+		if usage.Name == "gpu" && (usage.Total != 1 || usage.Available != 1) {
+			t.Fatalf("terminal GPU resource was not released: %#v", usage)
+		}
+	}
+}
+
+type dubVideoGPUCommands struct {
+	mu                       sync.Mutex
+	entered                  chan string
+	release, stop            chan struct{}
+	active, maxActive, calls int
+	failFirst                bool
+	manifest                 string
+}
+
+func (runner *dubVideoGPUCommands) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	if request.Command != "python" || len(request.Args) < 2 {
+		return platformprocess.CommandResult{}, fmt.Errorf("unexpected command %q", request.Command)
+	}
+	stage := request.Args[1]
+	if stage == "render" {
+		return platformprocess.CommandResult{Stdout: []byte(`{"video":"dubbed.mp4","asr":"asr.json","translations":"translations.json","srt":"subtitles.srt","ass":"subtitles.ass","language":"en-US"}`)}, nil
+	}
+	runner.mu.Lock()
+	runner.calls++
+	call := runner.calls
+	runner.active++
+	if runner.active > runner.maxActive {
+		runner.maxActive = runner.active
+	}
+	runner.mu.Unlock()
+	defer func() { runner.mu.Lock(); runner.active--; runner.mu.Unlock() }()
+	select {
+	case runner.entered <- stage:
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	select {
+	case <-runner.release:
+	case <-runner.stop:
+		return platformprocess.CommandResult{}, context.Canceled
+	case <-ctx.Done():
+		return platformprocess.CommandResult{}, ctx.Err()
+	}
+	if runner.failFirst && call == 1 {
+		return platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("ASR failed: controlled decoder failure")}, nil
+	}
+	return platformprocess.CommandResult{Stdout: []byte(runner.manifest)}, nil
+}
+
+func (runner *dubVideoGPUCommands) RunStreaming(ctx context.Context, request platformprocess.CommandRequest, observer platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if observer != nil {
+		observer(platformprocess.OutputStreamStdout, result.Stdout)
+		observer(platformprocess.OutputStreamStderr, result.Stderr)
+	}
+	return result, err
+}
 
 // One immutable process serves success, preparation failure, and stage failures.
 // Cases are sequential to prove a failed invocation does not poison process reuse.

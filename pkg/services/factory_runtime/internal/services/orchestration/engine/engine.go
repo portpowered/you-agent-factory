@@ -717,6 +717,13 @@ func (e *FactoryEngine) forwardDispatches(ctx context.Context, records []interfa
 	if e.dispatchHandler == nil && e.dispatchHook == nil && !containsHumanApprovalDispatch(e.state, records) {
 		return false, snapshot, nil
 	}
+	for index, rec := range records {
+		records[index] = e.registerDispatchRecord(rec)
+	}
+	// Subsystem mutations reserve the entire batch. Publish all matching
+	// in-flight entries and recorded requests before any external execution
+	// can observe that boundary while the tick still holds the engine mutex.
+	e.publishRuntimeSnapshotLocked()
 	for _, rec := range records {
 		if err := e.forwardDispatchRecord(ctx, rec); err != nil {
 			return false, snapshot, err
@@ -726,7 +733,7 @@ func (e *FactoryEngine) forwardDispatches(ctx context.Context, records []interfa
 	return true, e.runtimeState.Snapshot(), nil
 }
 
-func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interfaces.DispatchRecord) error {
+func (e *FactoryEngine) registerDispatchRecord(rec interfaces.DispatchRecord) interfaces.DispatchRecord {
 	now := e.clock.Now()
 	humanApproval := isHumanApprovalDispatch(e.state, rec.Dispatch)
 	rec.Dispatch.Execution.DispatchCreatedTick = e.runtimeState.TickCount
@@ -751,10 +758,14 @@ func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interface
 			HumanApproval:  humanApproval,
 		})
 	}
+	return rec
+}
+
+func (e *FactoryEngine) forwardDispatchRecord(ctx context.Context, rec interfaces.DispatchRecord) error {
 	// A HUMAN_APPROVAL dispatch remains reserved in the in-flight table until a
 	// later resolution lane supplies an explicit result. It never enters the
 	// worker/provider/model/script or capacity execution boundary.
-	if humanApproval {
+	if isHumanApprovalDispatch(e.state, rec.Dispatch) {
 		return nil
 	}
 	if e.dispatchHook != nil {

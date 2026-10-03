@@ -106,6 +106,27 @@ func TestTTSInvocationRuntimeRejectsNilBackend(t *testing.T) {
 	}
 }
 
+func TestTTSInvocationRuntimePreservesPrivateBackendCauseWithoutOutput(t *testing.T) {
+	t.Parallel()
+	private := errors.New("private backend path and token")
+	runtime, err := ttsruntime.NewTTS(func(context.Context, codecs.TTSRequest) (codecs.TTSResponse, error) {
+		return codecs.TTSResponse{Audio: ttsRuntimeWAV()}, private
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runtime.Invoke(t.Context(), inference.InvocationRuntimeRequest{Request: models.InvokeModelRequest{
+		Operation: models.OperationTTS,
+		Inputs:    []models.InferenceInput{{Name: "text", Modality: models.ModalityText, Content: "hello"}},
+	}})
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassBackendProtocol ||
+		!errors.Is(err, private) || !errors.Is(err, models.ErrInferenceFailed) ||
+		result.Content != nil || result.Artifacts != nil || strings.Contains(err.Error(), "private") {
+		t.Fatalf("backend failure = result:%#v error:%v, want safe message, preserved cause, and no output", result, err)
+	}
+}
+
 func ttsRuntimeWAV() []byte {
 	audio := make([]byte, 46)
 	copy(audio[0:4], "RIFF")

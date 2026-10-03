@@ -9,7 +9,9 @@ import (
 
 	platformgrpc "github.com/portpowered/infinite-you/pkg/platform/grpc"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai/codecs"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -92,9 +94,13 @@ func (client grpcProtocolClient) transcribe(
 	if observation != nil {
 		observation.record.Phase = modelseffects.RuntimeASRPhaseMapResponse
 	}
+	backend, _ := ctx.Value(invocationBackendContextKey{}).(string)
 	backendResponse, err := transcriptResponse(response)
 	if err != nil {
 		return models.ASRBackendResponse{}, err
+	}
+	if backend == "localai-whisper" {
+		backendResponse = boundWhisperFinalSegment(backendResponse, request.Audio)
 	}
 	if err := observation.awaitDecodedResponse(ctx, backendResponse); err != nil {
 		return models.ASRBackendResponse{}, err
@@ -331,7 +337,7 @@ func asrStringSlice(value any) ([]string, bool) {
 
 func transcriptResponse(response *TranscriptResult) (models.ASRBackendResponse, error) {
 	if response == nil {
-		return models.ASRBackendResponse{}, nil
+		return models.ASRBackendResponse{}, malformedASRProtocolResponse("", "ASR backend response is unavailable")
 	}
 	result := models.ASRBackendResponse{Text: response.GetText()}
 	result.Segments = make([]models.ASRBackendSegment, 0, len(response.GetSegments()))
@@ -426,6 +432,12 @@ func protocolContextOrFailure(ctx context.Context, message string, err error) er
 	if contextErr := ctx.Err(); contextErr != nil {
 		return contextErr
 	}
+	// Only known path-free native diagnostics cross the public boundary. Keep
+	// arbitrary backend text in the cause so paths and payloads stay private.
+	if InvocationBackend(ctx) == "localai-qwen3-asr-cpp" && status.Convert(err).Message() ==
+		"qwen3-asr transcription: ASR requires mono 16 kHz PCM16 or float32 WAV" {
+		message += ": ASR requires mono 16 kHz PCM16 or float32 WAV"
+	}
 	return asrProtocolFailure(message, err)
 }
 
@@ -471,4 +483,26 @@ func audioFileSuffix(mediaType string) string {
 	default:
 		return ".audio"
 	}
+}
+
+// Whisper predicts timestamp tokens within a padded 30-second inference window.
+// A trailing token can exceed the actual final PCM frame even though its speech
+// starts inside the input. Normalize that provider artifact before the generic
+// codec applies its strict media-coordinate invariants. Do not rescue an empty,
+// wholly out-of-input, nonterminal, or beyond-window range.
+func boundWhisperFinalSegment(response models.ASRBackendResponse, audio []byte) models.ASRBackendResponse {
+	duration, ok := codecs.PCMWAVDurationMilliseconds(audio)
+	if !ok || len(response.Segments) == 0 {
+		return response
+	}
+	last := len(response.Segments) - 1
+	segment := response.Segments[last]
+	end := int64(math.Floor(duration))
+	windowEnd := math.Ceil(duration/30_000) * 30_000
+	if float64(segment.Start) < windowEnd-30_000 || segment.Start >= end || segment.End <= end || float64(segment.End) > windowEnd {
+		return response
+	}
+	response.Segments = append([]models.ASRBackendSegment(nil), response.Segments...)
+	response.Segments[last].End = end
+	return response
 }

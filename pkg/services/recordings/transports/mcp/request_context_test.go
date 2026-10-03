@@ -15,9 +15,7 @@ func TestBind_ReadPortableArtifactContextCanceledBeforeRootReturnsDocumentedEnve
 	t.Parallel()
 
 	var invoked bool
-	operation := mcprecording.Bind(mcprecording.RootDependencies{
-		Recordings: fakeRecordingsRoot{invoked: &invoked},
-	})
+	operation := mcprecording.BindToolOperation(fakeRecordingsRoot{invoked: &invoked})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	raw, err := operation(
@@ -55,7 +53,7 @@ func TestBind_ReadPortableArtifactContextCanceledDuringRootReturnsDocumentedEnve
 			return recordings.ReadPortableArtifactResult{}, ctx.Err()
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	var raw json.RawMessage
@@ -103,7 +101,7 @@ func TestBind_ReadPortableArtifactContextDeadlineExceededDuringRootReturnsDocume
 			return recordings.ReadPortableArtifactResult{}, ctx.Err()
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()
 	raw, err := operation(

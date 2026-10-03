@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -19,6 +20,7 @@ type FactoryEventRendererConfig struct {
 	Color                bool
 	ProgressIsTTY        bool
 	ProgressTicks        <-chan time.Time
+	ProgressColumns      func() int
 	InvocationOutputMode string
 }
 
@@ -57,6 +59,8 @@ type factoryEventStream interface {
 }
 
 type humanFactoryEventRenderer struct {
+	mu                     sync.Mutex
+	finished               bool
 	stream                 factoryEventStream
 	progress               *humanWorkerProgressRenderer
 	pendingTerminalSuccess []interfaces.FactoryEvent
@@ -66,14 +70,20 @@ func newHumanFactoryEventRenderer(
 	cfg FactoryEventRendererConfig,
 	presentation factoryvisualization.ResponsePresentation,
 ) *humanFactoryEventRenderer {
+	progress := newHumanWorkerProgressRenderer(cfg.ProgressOutput, cfg.ProgressIsTTY, cfg.ProgressTicks, cfg.ProgressColumns)
 	return &humanFactoryEventRenderer{stream: presentation.OpenBestEffortFactoryEventStream(
-		cfg.Output,
+		humanProgressOutput{renderer: progress, output: cfg.Output},
 		newHumanFactoryEventFormatter(cfg.Color),
-	), progress: newHumanWorkerProgressRenderer(cfg.ProgressOutput, cfg.ProgressIsTTY, cfg.ProgressTicks)}
+	), progress: progress}
 }
 
 func (renderer *humanFactoryEventRenderer) PresentFactoryEvents(events []interfaces.FactoryEvent) {
 	if renderer == nil {
+		return
+	}
+	renderer.mu.Lock()
+	defer renderer.mu.Unlock()
+	if renderer.finished {
 		return
 	}
 	renderer.progress.PresentFactoryEvents(events)
@@ -92,6 +102,9 @@ func (renderer *humanFactoryEventRenderer) PresentFactoryEvents(events []interfa
 
 func (renderer *humanFactoryEventRenderer) StopProgressRendering() {
 	if renderer != nil {
+		renderer.mu.Lock()
+		defer renderer.mu.Unlock()
+		renderer.finished = true
 		renderer.progress.Stop()
 		_ = renderer.stream.CloseAndDrain()
 	}
@@ -103,6 +116,9 @@ func (renderer *humanFactoryEventRenderer) WriteFinalInvocationResult(
 	if renderer == nil {
 		return fmt.Errorf("Factory Event renderer is nil")
 	}
+	renderer.mu.Lock()
+	defer renderer.mu.Unlock()
+	renderer.finished = true
 	renderer.progress.Stop()
 	if result.Status == interfaces.InvocationTerminalStatusCompleted {
 		renderer.stream.PresentFactoryEvents(renderer.pendingTerminalSuccess)

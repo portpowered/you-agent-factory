@@ -186,6 +186,37 @@ test("make -n default emits all phases without running tool or nested-make proce
 	}
 });
 
+test("the lint lane receives a positive jobs value for every CI jobs handoff", async (t) => {
+	if (!requireMake(t)) return;
+
+	const probe = await createHarness(t);
+	const printed = runMakeTarget(probe, "print-go-parallelism");
+	assert.equal(printed.status, 0, `${printed.stdout}\n${printed.stderr}`);
+	const budget = /GO_LANE_BUDGET=(\d+)/.exec(printed.stdout)?.[1] ?? "";
+	assert.match(budget, /^[1-9]\d*$/, `harness lane budget is not positive: ${printed.stdout}`);
+
+	for (const scenario of [
+		{ label: "empty LINT_JOBS environment handoff", args: [], envJobs: "", jobs: budget },
+		{ label: "whitespace LINT_JOBS environment handoff", args: [], envJobs: "  ", jobs: budget },
+		{ label: "empty LINT_JOBS command-line handoff", args: ["LINT_JOBS="], jobs: budget },
+		{ label: "explicit LINT_JOBS override", args: ["LINT_JOBS=3"], jobs: "3" },
+	]) {
+		const harness = await createHarness(t);
+		if (scenario.envJobs !== undefined) harness.harnessEnv.LINT_JOBS = scenario.envJobs;
+		const result = runMake(harness, scenario.args);
+		assert.equal(result.status, 0, `${scenario.label}: ${result.stdout}\n${result.stderr}`);
+		const lintEvents = (await toolEvents(harness.logPath)).filter((event) =>
+			event.includes("./cmd/lintlane"),
+		);
+		assert.equal(lintEvents.length, 1, `${scenario.label}: ${lintEvents.join("\n")}`);
+		assert.match(
+			lintEvents[0],
+			new RegExp(`\\s-jobs\\s+${scenario.jobs}\\s`),
+			`${scenario.label}: ${lintEvents[0]}`,
+		);
+	}
+});
+
 test("local build and install use an overridable VCS build flag", async (t) => {
 	if (!requireMake(t)) return;
 

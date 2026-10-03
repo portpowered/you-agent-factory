@@ -11,6 +11,7 @@ import (
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	localai "github.com/portpowered/infinite-you/pkg/services/models/internal/backends/localai"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
@@ -589,6 +590,7 @@ func (o *Root) InvokeModel(
 	}
 
 	ctx = modelseffects.WithRuntimeObservation(ctx, invocationEvidence, plan.configuration)
+	ctx = localai.WithInvocationBackend(ctx, plan.configuration.Backend)
 	result, invokeStage, err := o.executeJoinedInvocation(ctx, plan, started)
 	stage = invokeStage
 	return finish(result, joinedInvocationContextError(ctx, err))

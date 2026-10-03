@@ -58,6 +58,14 @@ func Records() []Record {
 			},
 			RequiredArtifactTargets: []string{"windows-amd64-cuda"},
 		},
+		{
+			Artifact: ArtifactFacts{
+				ID:               "localai-qwen3-asr-cpp",
+				SourceRepository: "https://github.com/predict-woo/qwen3-asr.cpp",
+				SourcePath:       "pkg/grpc",
+			},
+			RequiredArtifactTargets: []string{"windows-amd64-cuda"},
+		},
 	}
 }
 

@@ -514,6 +514,122 @@ test("the Windows CUDA gRPC checkout avoids recursive bloaty submodules", async 
 	assert.match(cudaScript, /fetch', '--depth', '1', 'origin', \$env:GRPC_COMMIT/);
 });
 
+test("the Windows CUDA recipe applies the patch after verify-source and records the inputs", async () => {
+	const cudaScript = await readFile("scripts/build-localai-backend-cuda.ps1", "utf8");
+	// The patch must be applied to the prepared header that is actually compiled,
+	// after verify-source pins LOCALAI_ROOT/BACKEND_SOURCE_COMMIT, so the pinned
+	// upstream commits stay unchanged.
+	const verifySourceIndex = cudaScript.indexOf("'verify-source'");
+	const applyIndex = cudaScript.indexOf("localai-llamacpp-independent-images-patch.mjs'), 'apply'");
+	assert.ok(verifySourceIndex >= 0, "the CUDA recipe verifies the pinned source");
+	assert.ok(applyIndex > verifySourceIndex, "the patch is applied after verify-source");
+	const cpuCompileIndex = cudaScript.indexOf("Invoke-Checked cl @(");
+	const nativeBuildIndex = cudaScript.indexOf("Invoke-Checked cmake @('--build', $llamaBuild", applyIndex);
+	assert.ok(cpuCompileIndex > applyIndex && cpuCompileIndex < nativeBuildIndex,
+		"the actual patched helper regression runs before the native build");
+	assert.match(cudaScript, /Invoke-Checked \$independentImagesCpuExecutable @\(\)/);
+	assert.match(cudaScript, /\$independentImagesHeader = Join-Path \$llamaSource 'tools\\grpc-server\\message_content\.h'/);
+	assert.match(cudaScript, /\$independentImagesPatch = Join-Path \$PSScriptRoot 'localai-llamacpp-independent-images\.patch'/);
+	assert.match(cudaScript, /\$independentImagesTest = Join-Path \$PSScriptRoot 'localai-llamacpp-independent-images_test\.cpp\.in'/);
+	assert.match(cudaScript, /'--test-destination', \(Join-Path \$llamaSource 'tools\\grpc-server\\message_content_independent_images_test\.cpp'\)/);
+	// Provenance lands next to build-metadata.json inside the published package.
+	const provenanceIndex = cudaScript.indexOf("localai-llamacpp-independent-images-patch.mjs'), 'provenance'");
+	const metadataIndex = cudaScript.indexOf("'metadata'");
+	assert.ok(provenanceIndex > 0, "the recipe records the authored inputs");
+	assert.ok(provenanceIndex < metadataIndex, "provenance is staged before the metadata sidecar");
+	assert.match(cudaScript, /'--output', \(Join-Path \$packageRoot 'source-patches\.json'\)/);
+	assert.match(cudaScript, /'--repository-root', \$repositoryRoot/);
+});
+
+test("the Windows CUDA recipe forwards the request json_schema with a native-linked CPU regression", async () => {
+	const cudaScript = await readFile("scripts/build-localai-backend-cuda.ps1", "utf8");
+	// The schema patch must reach the prepared grpc-server.cpp that is actually
+	// compiled, and the regression that binds the patched bytes needs the native
+	// libraries, so the order is verify-source, apply, native build, fixture
+	// compile/run, then the package provenance records.
+	const verifySourceIndex = cudaScript.indexOf("'verify-source'");
+	const applyIndex = cudaScript.indexOf("localai-llamacpp-json-schema-patch.mjs'), 'apply'");
+	const nativeBuildIndex = cudaScript.indexOf("Invoke-Checked cmake @('--build', $llamaBuild", applyIndex);
+	const compileIndex = cudaScript.indexOf("/std:c++17', '/utf-8', '/EHsc', '/MD', '/O1'", applyIndex);
+	const runIndex = cudaScript.indexOf("Invoke-Checked $requestJsonSchemaExecutable @(");
+	const provenanceIndex = cudaScript.indexOf("localai-llamacpp-json-schema-patch.mjs'), 'provenance'");
+	const metadataIndex = cudaScript.indexOf("'metadata'");
+	assert.ok(verifySourceIndex >= 0, "the CUDA recipe verifies the pinned source");
+	assert.ok(applyIndex > verifySourceIndex, "the schema patch is applied after verify-source");
+	assert.ok(nativeBuildIndex > applyIndex, "the schema patch is applied before the native build");
+	assert.ok(compileIndex > nativeBuildIndex && runIndex > compileIndex,
+		"the regression compiles against the native build and runs before the package is staged");
+	assert.ok(provenanceIndex > runIndex && provenanceIndex < metadataIndex,
+		"the schema provenance is staged after the regression and before the metadata sidecar");
+
+	// Exact applicator wiring: prepared server, authored patch, authored template,
+	// and both generated sources outside the pinned llama.cpp checkout.
+	assert.match(cudaScript, /\$requestJsonSchemaPatch = Join-Path \$PSScriptRoot 'localai-llamacpp-json-schema\.patch'/);
+	assert.match(cudaScript, /\$requestJsonSchemaTestTemplate = Join-Path \$PSScriptRoot 'localai-llamacpp-json-schema-test\.cpp\.in'/);
+	assert.match(cudaScript, /\$requestJsonSchemaFixtureRoot = Join-Path \$llamaRoot 'request-json-schema'/);
+	assert.match(cudaScript, /'--server', \$serverSource, '--patch', \$requestJsonSchemaPatch,/);
+	assert.match(
+		cudaScript,
+		/'--test-template', \$requestJsonSchemaTestTemplate,\s*\n\s*'--test-destination', \$requestJsonSchemaFixtureSource,\s*\n\s*'--helper-destination', \$requestJsonSchemaHelper\)/,
+	);
+	assert.match(cudaScript, /\$requestJsonSchemaHelper = Join-Path \$requestJsonSchemaFixtureRoot 'request_json_schema_test_helper\.h'/);
+	assert.match(cudaScript, /\$requestJsonSchemaFixtureSource = Join-Path \$requestJsonSchemaFixtureRoot 'request_json_schema_test\.cpp'/);
+	// The existing independent-images wiring keeps its own generated test under the
+	// pinned grpc-server tools directory, unchanged.
+	assert.match(cudaScript, /'--test-destination', \(Join-Path \$llamaSource 'tools\\grpc-server\\message_content_independent_images_test\.cpp'\)\)/);
+
+	// The regression links the libraries the native build just produced and fails
+	// closed when any of them is missing.
+	for (const library of [
+		"common\\Release\\llama-common.lib",
+		"src\\Release\\llama.lib",
+		"ggml\\src\\Release\\ggml.lib",
+		"ggml\\src\\Release\\ggml-base.lib",
+	]) {
+		assert.ok(cudaScript.includes(`Join-Path $llamaBuild '${library}'`), `missing ${library} link input`);
+	}
+	assert.match(cudaScript, /native build did not produce \$library for the request schema regression/);
+	assert.match(
+		cudaScript,
+		/\$requestJsonSchemaCompilerArguments = @\('\/nologo', '\/std:c\+\+17', '\/utf-8', '\/EHsc', '\/MD', '\/O1',\s*\n\s*"\/I\$llamaSource", "\/I\$\(Join-Path \$llamaSource 'include'\)", "\/I\$\(Join-Path \$llamaSource 'common'\)",\s*\n\s*"\/I\$\(Join-Path \$llamaSource 'ggml\\include'\)", "\/I\$\(Join-Path \$llamaSource 'vendor'\)",\s*\n\s*\$requestJsonSchemaFixtureSource/,
+	);
+	assert.match(cudaScript, /\) \+ \$requestJsonSchemaLibraries\nInvoke-Checked cl \$requestJsonSchemaCompilerArguments/);
+
+	// The fixture runs vocabulary-only against the pinned Qwen vocabulary and chat
+	// template, with the build output on PATH only for the run.
+	assert.match(cudaScript, /\$requestJsonSchemaVocabulary = Join-Path \$llamaSource 'models\\ggml-vocab-qwen2\.gguf'/);
+	assert.match(cudaScript, /\$requestJsonSchemaChatTemplate = Join-Path \$llamaSource 'models\\templates\\Qwen3\.5-4B\.jinja'/);
+	assert.match(cudaScript, /pinned llama sources must ship \$fixtureInput for the request schema regression/);
+	assert.match(
+		cudaScript,
+		/Invoke-Checked \$requestJsonSchemaExecutable @\(\$requestJsonSchemaVocabulary, \$requestJsonSchemaChatTemplate\)/,
+	);
+	assert.match(cudaScript, /\$originalPath = \$env:PATH\ntry \{\n\s*\$env:PATH = "\$\(Join-Path \$llamaBuild 'bin\\Release'\)\$\(\[IO\.Path\]::PathSeparator\)\$originalPath"\n[\s\S]*?\} finally \{\n\s*\$env:PATH = \$originalPath\n\s*\}/);
+
+	// Provenance is recorded by the applicator itself, next to the existing image
+	// patch record, which stays unchanged.
+	assert.match(
+		cudaScript,
+		/localai-llamacpp-json-schema-patch\.mjs'\), 'provenance',\s*\n\s*'--server', \$serverSource, '--patch', \$requestJsonSchemaPatch,\s*\n\s*'--test-template', \$requestJsonSchemaTestTemplate,\s*\n\s*'--test-destination', \$requestJsonSchemaFixtureSource,\s*\n\s*'--helper-destination', \$requestJsonSchemaHelper,\s*\n\s*'--output', \(Join-Path \$packageRoot 'request-json-schema-inputs\.json'\)\)/,
+	);
+	assert.match(cudaScript, /'--output', \(Join-Path \$packageRoot 'source-patches\.json'\)\)/);
+
+	// The authored fixture is vocabulary-only and never touches a GPU.
+	const fixture = await readFile("scripts/localai-llamacpp-json-schema-test.cpp.in", "utf8");
+	assert.match(fixture, /mparams\.n_gpu_layers = 0/);
+	assert.match(fixture, /mparams\.vocab_only = true/);
+	assert.match(fixture, /usage: %s <vocab-only-gguf> <qwen-chat-template>/);
+	assert.doesNotMatch(cudaScript, /--gpu_layers|-ngl|--split-mode|--model/);
+});
+
+test("the packaging revision gives this publication a distinct identity", () => {
+	assert.ok(Number.isSafeInteger(config.packagingRevision) && config.packagingRevision >= 6);
+	const previous = structuredClone(config);
+	previous.packagingRevision = config.packagingRevision - 1;
+	assert.notEqual(publicationIdentity(config).pinFingerprint, publicationIdentity(previous).pinFingerprint);
+	assert.notEqual(publicationIdentity(config).releaseTag, publicationIdentity(previous).releaseTag);
+});
+
 test("the Windows CUDA retry reuses the retained gRPC checkout and patch", async () => {
 	const cudaScript = await readFile("scripts/build-localai-backend-cuda.ps1", "utf8");
 	assert.match(cudaScript, /reply->set_message\(arr\.dump\(\)\)/);

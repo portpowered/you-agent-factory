@@ -10,7 +10,7 @@
 package acp
 
 import (
-	acpsdk "github.com/coder/acp-go-sdk"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/negotiation"
 )

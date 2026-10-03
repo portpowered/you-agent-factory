@@ -15,7 +15,7 @@ import (
 	"errors"
 	"fmt"
 
-	acpsdk "github.com/coder/acp-go-sdk"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
 // ErrUnsupportedContent marks a prompt or update content variant this L1 V0

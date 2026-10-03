@@ -663,6 +663,8 @@ func boundedManagedBackendID(value string) string {
 		return "localai-vibevoice"
 	case "localai-whisper":
 		return "localai-whisper"
+	case "localai-qwen3-asr-cpp":
+		return "localai-qwen3-asr-cpp"
 	default:
 		return "UNKNOWN"
 	}

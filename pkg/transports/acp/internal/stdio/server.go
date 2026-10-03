@@ -33,7 +33,7 @@ import (
 	"strings"
 	"sync"
 
-	acpsdk "github.com/coder/acp-go-sdk"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"

@@ -35,8 +35,8 @@ const (
 	blockedReadinessHeadEnv      = "LOCALAI_READINESS_SOURCE_HEAD"
 	blockedRuntimeEvidenceEnv    = "INFINITE_YOU_INTEGRATION_MODEL_RUNTIME_EVIDENCE"
 	blockedReadinessModel        = "OMNIVOICE_Q4_K_M"
-	blockedReadinessBudget       = 30 * time.Second
-	blockedReadinessMaximum      = 35 * time.Second
+	blockedReadinessBudget       = 5 * time.Minute
+	blockedReadinessMaximum      = blockedReadinessBudget + 5*time.Second
 	blockedReadinessWait         = 5 * time.Second
 )
 
@@ -320,7 +320,7 @@ func assertBlockedReadinessCompletion(t *testing.T, witness *blockedReadinessHar
 	select {
 	case outcome = <-witness.ensureCh:
 	case <-timer.C:
-		t.Fatal("EnsureModelHost did not return within 35 seconds of blocked LoadModel")
+		t.Fatalf("EnsureModelHost did not return within %s of blocked LoadModel", blockedReadinessMaximum)
 	}
 	if !errors.Is(outcome.err, models.ErrHostLoadingTimeout) || errors.Is(outcome.err, models.ErrHostCancelled) {
 		t.Fatalf("EnsureModelHost outcome = %#v, error %v; want typed readiness timeout without caller cancellation", outcome.result, outcome.err)
@@ -361,7 +361,7 @@ func assertBlockedReadinessStopped(
 		t.Fatalf("owned helper stop observed %s after LoadModel started, budget is %s", elapsed, blockedReadinessMaximum)
 	}
 	if elapsed := time.Since(witness.loadObservedAt); elapsed > blockedReadinessMaximum {
-		t.Fatalf("witness exceeded 35 seconds from LoadModel observation: %s", elapsed)
+		t.Fatalf("witness exceeded %s from LoadModel observation: %s", blockedReadinessMaximum, elapsed)
 	}
 }
 

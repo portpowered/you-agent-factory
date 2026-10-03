@@ -191,7 +191,9 @@ func setupTTSStory(t *testing.T) ttsStory {
 	if !ok {
 		t.Fatal("built-in catalog did not publish the ASR model definition")
 	}
+	asrDefinition.Name, asrDefinition.Source, asrDefinition.Backend = "whisper-asr-fixture", pullToReadySource, "localai-whisper"
 	writeGenericBuiltinModelCache(t, home, asrDefinition.Source)
+	writeGenericModelSourceOverride(t, home, asrDefinition.Name, asrDefinition.Source, asrDefinition.Backend)
 	asrSelection, asrBackendBody := fixtureBackendSelection(asrDefinition.Backend)
 	writeGenericBackendCache(t, home, asrDefinition.Backend, asrSelection, asrBackendBody)
 	selection := pinnedTTSBackendSelection()
@@ -340,7 +342,7 @@ func runExactTTSToASRChain(t *testing.T, story ttsStory) {
 	segmentsPath := filepath.Join(story.dir, "exact-chain-segments.json")
 	var asrStdout, asrStderr bytes.Buffer
 	asrInputs := support.FakeInputs(t.Context(), []string{
-		"you", "models", "invoke", models.BuiltInModelNameASR, "--operation", "ASR", "--input", "audio=@" + ttsPath,
+		"you", "models", "invoke", "whisper-asr-fixture", "--operation", "ASR", "--input", "audio=@" + ttsPath,
 		"--output", "transcript=" + transcriptPath, "--output", "segments=" + segmentsPath,
 	})
 	asrInputs.Input.Env = story.environment
@@ -397,7 +399,7 @@ func runExactTTSToASRChain(t *testing.T, story ttsStory) {
 
 	var jsonOutput, jsonStderr bytes.Buffer
 	jsonInputs := support.FakeInputs(t.Context(), []string{
-		"you", "--json", "models", "invoke", models.BuiltInModelNameASR, "--operation", "ASR", "--input", "audio=@" + ttsPath,
+		"you", "--json", "models", "invoke", "whisper-asr-fixture", "--operation", "ASR", "--input", "audio=@" + ttsPath,
 	})
 	jsonInputs.Input.Env = story.environment
 	jsonInputs.Input.WorkingDirectory = story.dir

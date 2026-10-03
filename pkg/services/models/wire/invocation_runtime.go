@@ -114,7 +114,7 @@ func configureASRRuntime(runtime *operationInvocationRuntime, options invocation
 	if backend == nil {
 		return nil
 	}
-	asr, err := newASRInvocationRuntime(backend, videoAudioExtractor(options))
+	asr, err := newASRInvocationRuntime(backend, videoAudioExtractor(options), audioNormalizer(options))
 	if err != nil {
 		return err
 	}
@@ -193,7 +193,7 @@ func (failClosedInvocationRuntime) Invoke(
 	}
 }
 
-func newASRInvocationRuntime(backend ASRBackend, extract localai.VideoAudioExtractor) (invocationRuntime, error) {
+func newASRInvocationRuntime(backend ASRBackend, extract, normalize localai.VideoAudioExtractor) (invocationRuntime, error) {
 	return modelsruntime.New(func(
 		ctx context.Context,
 		request modelcodecs.ASRRequest,
@@ -212,7 +212,7 @@ func newASRInvocationRuntime(backend ASRBackend, extract localai.VideoAudioExtra
 			}
 		}
 		return modelcodecs.ASRResponse{Text: response.Text, Segments: segments}, response.Artifacts, nil
-	}, modelsruntime.VideoAudioExtractor(extract))
+	}, modelsruntime.VideoAudioExtractor(extract), modelsruntime.VideoAudioExtractor(normalize))
 }
 
 func newEmbeddingInvocationRuntime(backend EmbeddingBackend) (invocationRuntime, error) {
@@ -375,5 +375,14 @@ func videoAudioExtractor(options invocationRuntimeOptions) localai.VideoAudioExt
 	}
 	return func(ctx context.Context, video []byte) ([]byte, error) {
 		return videoaudio.ExtractVideoAudio(ctx, options.VideoAudioRunner, video, options.ASRTempDirectory, options.ASRCreateTemp, options.ASRWriteFile, options.ASRReadFile, options.ASRRemoveFile)
+	}
+}
+
+func audioNormalizer(options invocationRuntimeOptions) localai.VideoAudioExtractor {
+	if options.VideoAudioRunner == nil {
+		return nil
+	}
+	return func(ctx context.Context, audio []byte) ([]byte, error) {
+		return videoaudio.NormalizeAudio(ctx, options.VideoAudioRunner, audio, options.ASRTempDirectory, options.ASRCreateTemp, options.ASRWriteFile, options.ASRReadFile, options.ASRRemoveFile)
 	}
 }

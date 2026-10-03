@@ -620,7 +620,14 @@ func selectExecutionRunner(
 	}
 	if workerName != "" {
 		if worker, ok := workers[workerName]; ok && worker.ModelProvider != "" {
-			return normalizeExecutionRunner(worker.ModelProvider), "legacy_provider"
+			// A worker modelProvider is a Providers identity first. Only the
+			// built-in compatibility aliases may stand in for a runner; a
+			// registered custom provider (for example a named external ACP peer)
+			// keeps its authored identity on the worker and lets the default
+			// runner apply. Explicitly authored runners remain strict below.
+			if runner := normalizeExecutionRunner(worker.ModelProvider); knownExecutionRunner(runner) {
+				return runner, "legacy_provider"
+			}
 		}
 	}
 	return "codex", "default"

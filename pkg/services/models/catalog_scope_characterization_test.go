@@ -430,8 +430,8 @@ func TestBuiltInModelCatalogPublishesCanonicalDefinitions(t *testing.T) {
 		},
 		{
 			name:      "asr",
-			source:    "hf://ggerganov/whisper.cpp/ggml-base.en.bin@5359861c739e955e79d9a303bcbc70fb988958b1",
-			backend:   "localai-whisper",
+			source:    "hf://OpenVoiceOS/qwen3-asr-0.6b-q8-0/qwen3-asr-0.6b-q8_0.gguf@47fe022389f25564002e574e5d82aa32a268893b",
+			backend:   "localai-qwen3-asr-cpp",
 			operation: models.OperationASR,
 		},
 		{

@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	acpsdk "github.com/coder/acp-go-sdk"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"

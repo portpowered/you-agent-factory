@@ -7,12 +7,29 @@ import math
 import subprocess
 from pathlib import Path
 
+from dub_contract import LANGUAGES, target_language
+
+
+class CommandFailed(ValueError):
+    def __init__(self, executable, returncode, detail):
+        super().__init__(f"{executable} failed ({returncode}): {detail[-4000:]}")
+        self.returncode = returncode
+        self.detail = detail
+
+
+class SpeechDoesNotFit(ValueError):
+    def __init__(self, identifier, duration_ms, available_ms, speed):
+        super().__init__(f"Segment {identifier} needs {speed:.2f}x speech speed to fit; "
+                         "shorten its translation before rendering to avoid unintelligible dubbing")
+        self.duration_ms = duration_ms
+        self.available_ms = available_ms
+
 
 def command(argv: list[str]) -> None:
     result = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     if result.returncode:
         detail = result.stderr.decode("utf-8", errors="replace").strip()
-        raise ValueError(f"{argv[0]} failed ({result.returncode}): {detail[-4000:]}")
+        raise CommandFailed(argv[0], result.returncode, detail)
 
 
 def probe(path: Path) -> dict:
@@ -44,6 +61,7 @@ def reference(video: Path, segment: dict, destination: Path) -> None:
         "-ss", f"{segment['start'] / 1000:.3f}", "-i", str(video),
         "-t", f"{(segment['end'] - segment['start']) / 1000:.3f}",
         "-map", "0:a:0", "-vn", "-ac", "1", "-ar", "24000",
+        "-af", f"aresample=24000:async=1:first_pts=0:min_hard_comp=0.001,apad,atrim=end_sample={(segment['end'] - segment['start']) * 24},asetpts=N/SR/TB",
         "-c:a", "pcm_s16le", "-rf64", "auto", str(destination),
     ])
     duration = float(probe(destination).get("format", {}).get("duration", "nan"))
@@ -51,22 +69,36 @@ def reference(video: Path, segment: dict, destination: Path) -> None:
         raise ValueError(f"Source segment {segment['id']} has no reference audio")
 
 
-def fit_speech(source: Path, destination: Path, segment: dict) -> float:
+def preserve_nonverbal(source: Path, destination: Path, segment: dict) -> None:
+    """Decode the original reference without time stretching or gap borrowing."""
+    command(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+             "-i", str(source), "-map", "0:a:0", "-c:a", "pcm_s16le", "-f", "s16le", str(destination)])
+    expected = (segment["end"] - segment["start"]) * 48
+    if destination.stat().st_size != expected:
+        raise ValueError(f"Source nonverbal cue {segment['id']} PCM does not match its original interval")
+    segment["speech_end"] = segment["end"]
+
+
+def fit_speech(source: Path, destination: Path, segment: dict, playback_limit=None) -> float:
     duration = float(probe(source).get("format", {}).get("duration", "nan"))
-    target = (segment["end"] - segment["start"]) / 1000
     if not math.isfinite(duration) or duration <= 0:
         raise ValueError(f"TTS returned empty audio for segment {segment['id']}")
+    limit = segment["end"] if playback_limit is None else playback_limit
+    if type(limit) is not int or limit < segment["end"]:
+        raise ValueError("Speech playback limit must not precede the source cue end")
+    # Borrow only as much following silence as the generated speech needs.
+    # Source bounds still identify the original voice reference and ASR evidence.
+    end = min(limit, max(segment["end"], segment["start"] + math.ceil(duration * 1000)))
+    target = (end - segment["start"]) / 1000
     speed = max(1.0, duration / target)
     if speed > 2.0:
-        raise ValueError(
-            f"Segment {segment['id']} needs {speed:.2f}x speech speed to fit; "
-            "shorten its translation before rendering to avoid unintelligible dubbing"
-        )
+        raise SpeechDoesNotFit(segment['id'], math.ceil(duration * 1000), end - segment['start'], speed)
     command([
         "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", str(source),
         "-af", f"atempo={speed:.8f},apad,atrim=duration={target:.3f}",
         "-ac", "1", "-ar", "24000", "-c:a", "pcm_s16le", "-f", "s16le", str(destination),
     ])
+    segment["speech_end"] = end
     return speed
 
 
@@ -108,10 +140,8 @@ def timeline(segments: list[dict], duration_ms: int, destination: Path) -> None:
 
 def mux(video: Path, audio: Path, subtitles: Path, destination: Path, language: str) -> None:
     # MP4 uses ISO 639-2 codes, not customer-facing BCP47 language tags.
-    codes = {"zh": "zho", "en": "eng", "ja": "jpn", "ko": "kor", "de": "deu",
-             "fr": "fra", "ru": "rus", "pt": "por", "es": "spa", "it": "ita"}
-    container_language = language if destination.suffix.lower() == ".mkv" else codes.get(
-        language.split("-")[0].lower(), language if len(language) == 3 else "und")
+    language = target_language(language)
+    container_language = language if destination.suffix.lower() == ".mkv" else LANGUAGES[language.split("-")[0]][1]
     args = ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", str(video),
             "-f", "s16le", "-ar", "24000", "-ac", "1", "-i", str(audio), "-i", str(subtitles),
             "-map", "0:v:0", "-map", "1:a:0", "-map", "2:0",

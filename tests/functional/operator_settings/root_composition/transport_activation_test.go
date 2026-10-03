@@ -84,7 +84,7 @@ func TestMCPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *t
 		func(_ *operatorSettingsEffectRoute) {
 			beforeTransport := fixture.router.readFileCalls.Load()
 			settingsRoot := newRoutedOperatorSettingsRoot(t, fixture)
-			operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{Settings: settingsRoot})
+			operation := mcpoperatorsettings.BindToolOperation(settingsRoot)
 			raw, err := operation(
 				t.Context(),
 				mcpoperatorsettings.ToolLoadDocument,

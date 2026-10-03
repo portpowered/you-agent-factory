@@ -10,6 +10,7 @@ import (
 
 	grpcgo "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 // Connection is the minimal unary transport used by generated or hand-owned
@@ -18,6 +19,15 @@ import (
 type Connection interface {
 	Invoke(context.Context, string, []byte) ([]byte, error)
 	Close() error
+}
+
+// HeaderConnection is the optional extension of Connection for callers that
+// also need response metadata. The transport only reports the headers the
+// peer sent; it does not interpret them or decide what they mean. Callers
+// that only need response bytes keep using Connection.
+type HeaderConnection interface {
+	Connection
+	InvokeWithHeaders(context.Context, string, []byte) ([]byte, map[string][]string, error)
 }
 
 // Dialer creates one transport connection to an already selected endpoint.
@@ -60,25 +70,56 @@ type networkConnection struct {
 	next *grpcgo.ClientConn
 }
 
+var _ HeaderConnection = networkConnection{}
+
+// Invoke keeps the byte-only call contract by discarding response headers.
 func (connection networkConnection) Invoke(
 	ctx context.Context,
 	method string,
 	request []byte,
 ) ([]byte, error) {
+	response, _, err := connection.InvokeWithHeaders(ctx, method, request)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+// InvokeWithHeaders returns the same response bytes as Invoke together with
+// the response metadata the peer sent. Header keys are normalized to lower
+// case and the returned map is a copy the caller may keep.
+func (connection networkConnection) InvokeWithHeaders(
+	ctx context.Context,
+	method string,
+	request []byte,
+) ([]byte, map[string][]string, error) {
 	if connection.next == nil {
-		return nil, fmt.Errorf("gRPC connection is unavailable")
+		return nil, nil, fmt.Errorf("gRPC connection is unavailable")
 	}
 	var response []byte
+	var headers metadata.MD
 	if err := connection.next.Invoke(
 		ctx,
 		method,
 		request,
 		&response,
 		grpcgo.ForceCodec(rawCodec{}),
+		grpcgo.Header(&headers),
 	); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return response, nil
+	return response, copyHeaderValues(headers), nil
+}
+
+func copyHeaderValues(headers metadata.MD) map[string][]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	values := make(map[string][]string, len(headers))
+	for key, entries := range headers {
+		values[key] = append([]string(nil), entries...)
+	}
+	return values
 }
 
 func (connection networkConnection) Close() error {

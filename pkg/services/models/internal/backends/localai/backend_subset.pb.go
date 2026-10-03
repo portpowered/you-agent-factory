@@ -357,6 +357,7 @@ type PredictOptions struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	Prompt               string                 `protobuf:"bytes,1,opt,name=Prompt,proto3" json:"Prompt,omitempty"`
 	Tokens               int32                  `protobuf:"varint,4,opt,name=Tokens,proto3" json:"Tokens,omitempty"`
+	Grammar              string                 `protobuf:"bytes,29,opt,name=Grammar,proto3" json:"Grammar,omitempty"`
 	Embeddings           string                 `protobuf:"bytes,36,opt,name=Embeddings,proto3" json:"Embeddings,omitempty"`
 	Images               []string               `protobuf:"bytes,42,rep,name=Images,proto3" json:"Images,omitempty"`
 	UseTokenizerTemplate bool                   `protobuf:"varint,43,opt,name=UseTokenizerTemplate,proto3" json:"UseTokenizerTemplate,omitempty"`
@@ -410,6 +411,13 @@ func (x *PredictOptions) GetTokens() int32 {
 		return x.Tokens
 	}
 	return 0
+}
+
+func (x *PredictOptions) GetGrammar() string {
+	if x != nil {
+		return x.Grammar
+	}
+	return ""
 }
 
 func (x *PredictOptions) GetEmbeddings() string {
@@ -1003,10 +1011,11 @@ const file_pkg_services_models_internal_backends_localai_backend_subset_proto_ra
 	"\acontent\x18\x01 \x01(\tR\acontent\x12+\n" +
 	"\x11reasoning_content\x18\x02 \x01(\tR\x10reasoningContent\x125\n" +
 	"\n" +
-	"tool_calls\x18\x03 \x03(\v2\x16.backend.ToolCallDeltaR\ttoolCalls\"\x8a\x03\n" +
+	"tool_calls\x18\x03 \x03(\v2\x16.backend.ToolCallDeltaR\ttoolCalls\"\xa4\x03\n" +
 	"\x0ePredictOptions\x12\x16\n" +
 	"\x06Prompt\x18\x01 \x01(\tR\x06Prompt\x12\x16\n" +
-	"\x06Tokens\x18\x04 \x01(\x05R\x06Tokens\x12\x1e\n" +
+	"\x06Tokens\x18\x04 \x01(\x05R\x06Tokens\x12\x18\n" +
+	"\aGrammar\x18\x1d \x01(\tR\aGrammar\x12\x1e\n" +
 	"\n" +
 	"Embeddings\x18$ \x01(\tR\n" +
 	"Embeddings\x12\x16\n" +

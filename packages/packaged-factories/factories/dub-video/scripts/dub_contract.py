@@ -8,6 +8,50 @@ import unicodedata
 from pathlib import Path, PureWindowsPath
 
 
+LANGUAGES = {"zh": ("Chinese", "zho"), "en": ("English", "eng"),
+             "ja": ("Japanese", "jpn"), "ko": ("Korean", "kor"),
+             "de": ("German", "deu"), "fr": ("French", "fra"),
+             "ru": ("Russian", "rus"), "pt": ("Portuguese", "por"),
+             "es": ("Spanish", "spa"), "it": ("Italian", "ita")}
+
+
+def target_language(value):
+    """Normalize supported BCP 47 language/script/region/variant tags."""
+    if not isinstance(value, str) or not re.fullmatch(
+            r"[A-Za-z]{2}(?:-[A-Za-z]{4})?(?:-[A-Za-z]{2}|-[0-9]{3})?"
+            r"(?:-[A-Za-z0-9]{5,8}|-[0-9][A-Za-z0-9]{3})*"
+            r"(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*"
+            r"(?:-x(?:-[A-Za-z0-9]{1,8})+)?", value):
+        raise ValueError("Target language needs a BCP 47 tag such as en-US, zh-CN, ja-JP, or ko-KR")
+    parts = value.split("-")
+    if parts[0].lower() not in LANGUAGES:
+        raise ValueError("Unsupported target speech language: " + value)
+    normalized = [parts[0].lower()]
+    index = 1
+    if index < len(parts) and len(parts[index]) == 4 and parts[index].isalpha():
+        normalized.append(parts[index].title())
+        index += 1
+    if index < len(parts) and (len(parts[index]) == 2 or parts[index].isdigit() and len(parts[index]) == 3):
+        normalized.append(parts[index].upper())
+        index += 1
+    variants, singletons, extensions = set(), set(), False
+    for part in parts[index:]:
+        part = part.lower()
+        if part == "x":
+            break  # Private-use subtags have no uniqueness requirement.
+        if len(part) == 1:
+            if part in singletons:
+                raise ValueError("BCP 47 extension singletons must not repeat")
+            singletons.add(part)
+            extensions = True
+        elif not extensions:
+            if part in variants:
+                raise ValueError("BCP 47 variants must not repeat")
+            variants.add(part)
+    normalized.extend(part.lower() for part in parts[index:])
+    return "-".join(normalized)
+
+
 def validate_segments(value, duration_ms=None):
     if duration_ms is not None and (type(duration_ms) is not int or duration_ms <= 0):
         raise ValueError("Video duration must be a positive integer in milliseconds")
@@ -32,10 +76,45 @@ def validate_segments(value, duration_ms=None):
     return result
 
 
+def playback_segments(segments, duration_ms):
+    """Derive presentation windows without changing source alignment evidence."""
+    validate_segments(segments, duration_ms)
+    result = []
+    for index, segment in enumerate(segments):
+        limit = segments[index + 1]["start"] if index + 1 < len(segments) else duration_ms
+        end = segment.get("speech_end", segment["end"])
+        if type(end) is not int or not segment["end"] <= end <= limit:
+            raise ValueError(f"Segment {segment['id']} playback must stay inside its trailing silent gap")
+        result.append({**segment, "end": end})
+    return result
+
+
 def _contains_name(text, name):
     # Latin identifiers must match whole names; Chinese can adjoin a name.
     return re.search(r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])",
                      text, re.IGNORECASE) is not None
+
+
+def nonverbal_kind(source_text, translation, preserve_names=None):
+    """A narrow phonetic-text policy, not independent acoustic classification."""
+    if any(_contains_name(source_text, name) for name in (preserve_names or [])):
+        return None
+    inventory = {
+        "cry": r"(?:啊{2,}|あ{3,}|ア{3,}|아{3,}|a+h{2,}|a{3,})",
+        "laugh": r"(?:哈{3,}|呵{3,}|は{3,}|ハ{3,}|하{3,}|히{3,}|ひ{3,}|(?:ha){3,}|(?:he){3,}|(?:ja){3,})",
+        # An affirmative hum is nonverbal on both cue sides at once: a lone m,
+        # a written hmm, and any spoken yes/no answer stay lexical. Japanese and
+        # Korean hums stay unclassified here rather than guessed at.
+        "hum": r"(?:嗯+|m{2,})",
+    }
+    # Only outer punctuation/space may be removed. Mixed words, annotations,
+    # single cries or laughs and internal phrase boundaries remain unmatched.
+    source = source_text.strip(" \t\r\n.,!?…，。！？¡¿").casefold()
+    target = translation.strip(" \t\r\n.,!?…，。！？¡¿").casefold()
+    for kind, pattern in inventory.items():
+        if re.fullmatch(pattern, source) and re.fullmatch(pattern, target):
+            return kind
+    return None
 
 
 def _check_chinese(text, source_text, preserve_names):
@@ -51,6 +130,23 @@ def _check_chinese(text, source_text, preserve_names):
     )
     if not proper_name:
         raise ValueError("Chinese translation contains only Latin prose; proper names may remain unchanged")
+
+
+def _check_target_script(text, source_text, language, preserve_names):
+    base = target_language(language).split("-")[0]
+    if base == "zh":
+        _check_chinese(text, source_text, preserve_names)
+        return
+    if any(text.casefold().strip(" \t\r\n.,!?，。！？") == name.casefold()
+           and _contains_name(source_text, name) for name in preserve_names):
+        return
+    if base == "en" and re.search(r"[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]", text) and not re.search(r"[A-Za-z]", text):
+        raise ValueError("English translation contains only East Asian prose; declare name-only cues in preserve_names")
+    if base in ("ja", "ko") and re.search(r"[A-Za-z]", text) and not re.search(
+            r"[\u3400-\u9fff\u3040-\u30ff]" if base == "ja" else r"[\uac00-\ud7af]", text):
+        words = re.findall(r"[A-Za-z]+", text)
+        if text != source_text or len(words) > 3 or not all(word[0].isupper() for word in words):
+            raise ValueError("Target translation contains only Latin prose; proper names may remain unchanged")
 
 
 def validate_translations(value, source, language, preserve_names=None):
@@ -77,8 +173,7 @@ def validate_translations(value, source, language, preserve_names=None):
         for name in preserve_names:
             if _contains_name(original["text"], name) and not _contains_name(text, name):
                 raise ValueError(f"Segment {original['id']} must preserve the full name verbatim: {name}")
-        if language.split("-")[0].lower() == "zh":
-            _check_chinese(text, original["text"], preserve_names)
+        _check_target_script(text, original["text"], language, preserve_names)
         result.append({"id": original["id"], "start": original["start"], "end": original["end"],
                        "source_text": original["text"], "text": text})
     return result
@@ -88,7 +183,9 @@ def translation_prompt(source, language, preserve_names=None):
     source = validate_segments(source)
     if not isinstance(language, str) or not language.strip():
         raise ValueError("Target language must be nonempty")
-    request = {"language": language, "segments": [{"id": item["id"], "text": item["text"]} for item in source]}
+    request = {"language": language, "segments": [
+        {"id": item["id"], "text": item["text"], "duration_ms": item["end"] - item["start"]}
+        for item in source]}
     if preserve_names:
         request["preserve_names"] = preserve_names
     return (
@@ -96,8 +193,20 @@ def translation_prompt(source, language, preserve_names=None):
         "Return exactly one JSON object with only language and segments. Preserve the requested language, "
         "segment count, integer IDs, and order. Each segment must have only id and text. Do not return "
         "timestamps, commentary, extra keys, or empty translations. Preserve meaning and proper names. "
+        "Each cue's text must be ONE natural spoken rendition: choose one faithful interpretation, "
+        "not alternatives for the listener to choose. Do not add translator explanations, uncertainty "
+        "annotations, or parenthetical glosses to speech. Preserve genuine source-spoken content, "
+        "including parenthetical content when it belongs to the source; punctuation alone is not an error. "
+        "The source duration_ms describes each cue's speech window. Use concise natural spoken phrasing "
+        "that can fit that duration; short cues need compact wording. Preserve the complete proposition, "
+        "questions, roles, negation, and names; never drop meaning just to shorten speech. Use neighboring "
+        "source context to choose natural word order across fragments without moving meaning arbitrarily. "
         "Preserve who is speaking and who is being addressed. A request for the listener to help "
-        "must remain a request, never an offer by the speaker to help the listener. Preserve negation. "
+        "must remain a request, never an offer by the speaker to help the listener. Preserve semantic "
+        "polarity using the source language's idioms, not mechanical negation of individual words. "
+        "For example, Chinese 不少 means many/quite a few, and 不错 means good/not bad; do not turn "
+        "them into not many or not good. Preserve the literal proposition when speech is ironic "
+        "or sarcastic; do not substitute an inferred opposite claim. "
         "Use neighboring segments to resolve context. In music playback requests, preserve artist, band, "
         "and song names verbatim in the source language, even when ASR lowercases them; do not literally "
         "translate the name's words. Treat the noun phrase requested after play/resume as a band, artist, "
@@ -109,8 +218,7 @@ def translation_prompt(source, language, preserve_names=None):
         "The preserve_names metadata is an operator glossary: when a complete listed name occurs in a "
         "source segment, retain that full phrase verbatim in its translation, including conjunctions "
         "and spaces; do not translate its individual words or add absent glossary terms. "
-        "If returning a file, return only {\"filename\":\"relative-file.json\"}; the file must stay inside "
-        "the artifact directory and contain the complete object.\n"
+        "Return the complete object directly, without filename pointers or additional keys.\n"
         + json.dumps(request, ensure_ascii=False)
     )
 
@@ -139,10 +247,12 @@ def _json_object(text):
     return value
 
 
-def load_translation_response(text, root):
+def load_translation_response(text, root=None):
     value = _json_object(text)
     if set(value) != {"filename"}:
         return value
+    if root is None:
+        raise ValueError("Constrained model translation must contain the complete object, not a filename")
     filename = value["filename"]
     if not isinstance(filename, str) or not filename.strip():
         raise ValueError("Translation filename must be a relative JSON filename")

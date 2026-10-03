@@ -19,11 +19,11 @@ import (
 	"sync"
 	"time"
 
-	acpsdk "github.com/coder/acp-go-sdk"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service/cancelwindow"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
 // Command is one configured stdio ACP launch command.
@@ -32,45 +32,81 @@ type Command struct {
 	Args []string
 }
 
-// Service owns one retained daemon per configured ACP integration.
+// Service owns the configured ACP integrations and every live request-owned
+// ACP attempt.
+//
+// Every Execute and Continue allocates one attempt that owns its own process,
+// connection, client, standard streams, stderr capture, cancel window and
+// lifecycle, and that attempt is torn down on every terminal path. Two attempts
+// against the same canonical provider therefore share no mutable protocol state
+// and never serialize on one another, and each attempt's own working directory
+// and environment reach only its own process startup.
+//
+// The service lock guards exactly the configured integrations, their aliases,
+// and the provider registry. It is never held across process or protocol I/O.
 type Service struct {
 	mu           sync.RWMutex
-	daemons      map[providers.ID]*daemon
 	integrations map[providers.ID]providers.ACPIntegration
 	aliases      map[string]providers.ID
+	providers    map[providers.ID]*provider
 	newCommand   platformprocess.CommandFactory
 	locator      platformprocess.ExecutableLocator
+	stdioPipes   platformprocess.StdioPipeFactory
 }
 
 var _ acp.ContinuationService = (*Service)(nil)
 
-func New(integrations []providers.ACPIntegration, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) (acp.ContinuationService, error) {
-	service := &Service{newCommand: newCommand, locator: locator}
+// New constructs the ACP continuation owner. stdioPipes is the exact
+// parent-owned standard-stream channel factory this service is allowed to use;
+// it is never selected here, so a composition that omits it produces a clear
+// dependency failure on the first execution rather than a service that quietly
+// opens a host pipe for itself.
+func New(
+	integrations []providers.ACPIntegration,
+	newCommand platformprocess.CommandFactory,
+	locator platformprocess.ExecutableLocator,
+	stdioPipes platformprocess.StdioPipeFactory,
+) (acp.ContinuationService, error) {
+	service := &Service{
+		providers:  map[providers.ID]*provider{},
+		newCommand: newCommand,
+		locator:    locator,
+		stdioPipes: stdioPipes,
+	}
 	if err := service.Configure(context.Background(), integrations); err != nil {
 		return nil, err
 	}
 	return service, nil
 }
 
-// resolveDaemon resolves id (including an accepted alias) to its canonical
-// identity and owning daemon under a single read lock. ok mirrors
-// resolveLocked's own result; it does not additionally guarantee daemon is
-// non-nil, matching Execute's pre-existing behavior. Claim additionally
-// checks for a nil daemon itself.
-func (service *Service) resolveDaemon(id providers.ID) (target *daemon, canonical providers.ID, ok bool) {
+// beginAttempt resolves id (including an accepted alias) to its canonical
+// identity and registers one request-owned attempt against the provider owning
+// that integration in a single read-locked step.
+//
+// Resolving and registering must not be separable: a Close or Configure that
+// retired the provider between two independent operations would replace the
+// registry entry the second one resolves, so the attempt it registers would
+// spawn a process that nothing owns. Holding the read lock across both steps
+// makes a concurrent Close or Configure wait until this attempt is registered
+// against the provider it then retires, so a retired provider can never be the
+// one a later spawn escapes through. The critical section is map lookup plus
+// append only - it never spans process or protocol I/O.
+func (service *Service) beginAttempt(id providers.ID, request providers.ExecuteRequest) (*attempt, providers.ID, bool) {
 	service.mu.RLock()
-	canonical, ok = service.resolveLocked(id)
-	target = service.daemons[canonical]
-	service.mu.RUnlock()
-	return target, canonical, ok
+	defer service.mu.RUnlock()
+	canonical, ok := service.resolveLocked(id)
+	if !ok {
+		return nil, canonical, false
+	}
+	target := service.providers[canonical]
+	if target == nil {
+		return nil, canonical, false
+	}
+	return target.newAttempt(request), canonical, true
 }
 
 func (service *Service) Execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
-	daemon, canonical, ok := service.resolveDaemon(id)
-	if !ok {
-		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
-	}
-	return daemon.execute(ctx, canonical, request, nil)
+	return service.run(ctx, id, request, nil)
 }
 
 // Continue resumes the exact private Providers session reference without
@@ -81,33 +117,78 @@ func (service *Service) Continue(
 	request providers.ExecuteRequest,
 	reference providers.SessionRef,
 ) (providers.ExecuteResult, error) {
-	daemon, canonical, ok := service.resolveDaemon(id)
+	return service.run(ctx, id, request, &reference)
+}
+
+// run registers one request-owned attempt against the resolved canonical
+// provider and executes it. It never takes, waits for, or shares another
+// attempt's live state: the attempt is released - unregistering itself and
+// tearing down the process it owns - on every terminal path, including an
+// unexpected unwind and a rejected working directory.
+//
+// The attempt is registered before the request's working root is validated so a
+// request rejected afterwards is still owned by a Close or Configure that is
+// already draining this provider; it owns no process at that point, so its
+// teardown completes immediately.
+func (service *Service) run(
+	ctx context.Context,
+	id providers.ID,
+	request providers.ExecuteRequest,
+	resume *providers.SessionRef,
+) (providers.ExecuteResult, error) {
+	attempt, canonical, ok := service.beginAttempt(id, request)
 	if !ok {
 		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
 	}
-	return daemon.execute(ctx, canonical, request, &reference)
+	defer attempt.release()
+	cwd, err := absoluteWorkingDirectory(request.WorkingDirectory)
+	if err != nil {
+		return providers.ExecuteResult{}, invalidFailure(err)
+	}
+	return attempt.execute(ctx, cwd, openCodeEnvironment(canonical, requestEnvironment(request)), resume)
 }
 
-// NegotiatedCapabilities returns id's daemon's last successfully negotiated
-// AgentCapabilities without starting a connection or touching the daemon's
-// execute gate.
+// resolveProvider resolves id (including an accepted alias) to its canonical
+// identity and the provider owning that integration's configuration and live
+// attempts. It is the read-only resolution used by callers that inspect a
+// provider rather than register work against it; a caller that spawns must use
+// beginAttempt so registration cannot be separated from resolution.
+func (service *Service) resolveProvider(id providers.ID) (target *provider, canonical providers.ID, ok bool) {
+	service.mu.RLock()
+	defer service.mu.RUnlock()
+	canonical, ok = service.resolveLocked(id)
+	if !ok {
+		return nil, canonical, false
+	}
+	target = service.providers[canonical]
+	return target, canonical, target != nil
+}
+
+// NegotiatedCapabilities returns the exact AgentCapabilities id's provider
+// negotiated the last time one of its own attempts completed an ACP initialize
+// handshake successfully, without starting a connection or any other side
+// effect. Those are observed negotiation facts, not a capability this service
+// infers or assumes.
 func (service *Service) NegotiatedCapabilities(id providers.ID) (acpsdk.AgentCapabilities, bool) {
-	target, _, ok := service.resolveDaemon(id)
-	if !ok || target == nil {
+	target, _, ok := service.resolveProvider(id)
+	if !ok {
 		return acpsdk.AgentCapabilities{}, false
 	}
 	return target.negotiatedCapabilities()
 }
 
 // Claim atomically captures the exact live cancel-window generation named by
-// id/attemptID, if id's daemon currently has an established session/prompt
-// turn in flight for it.
+// id/attemptID, if this service currently has an established session/prompt
+// turn in flight for it. The generation is bound to the canonical provider and
+// to the one attempt that opened it, so a stale claim can never be redirected
+// to a different attempt - including a replacement attempt that reuses the
+// identical provider and attempt ID strings.
 func (service *Service) Claim(id providers.ID, attemptID string) (acp.Generation, bool) {
-	target, _, ok := service.resolveDaemon(id)
-	if !ok || target == nil {
+	target, _, ok := service.resolveProvider(id)
+	if !ok {
 		return nil, false
 	}
-	return target.window.Claim(attemptID)
+	return target.claim(attemptID)
 }
 
 // TryCancel delivers a session/cancel notification to the exact generation
@@ -123,17 +204,25 @@ func (service *Service) TryCancel(ctx context.Context, generation acp.Generation
 	return session.TryCancel(ctx)
 }
 
+// Close stops every registered attempt and forgets the configured integration
+// set. The provider registry is taken under the service lock and each
+// provider's attempts are retired outside it, so closing never holds the
+// service lock across process or protocol I/O and never misses an attempt that
+// registered before it spawned its process.
 func (service *Service) Close(ctx context.Context) error {
 	service.mu.Lock()
-	daemons := service.daemons
-	service.daemons = map[providers.ID]*daemon{}
+	retired := make([]*provider, 0, len(service.providers))
+	for _, target := range service.providers {
+		retired = append(retired, target)
+	}
+	service.providers = map[providers.ID]*provider{}
 	service.integrations = map[providers.ID]providers.ACPIntegration{}
 	service.aliases = map[string]providers.ID{}
 	service.mu.Unlock()
 	var first error
-	for id, daemon := range daemons {
-		if err := daemon.close(ctx); err != nil && first == nil {
-			first = fmt.Errorf("close ACP provider %q: %w", id, err)
+	for _, target := range retired {
+		if err := target.stopAttempts(ctx); err != nil && first == nil {
+			first = fmt.Errorf("close ACP provider %q: %w", target.id, err)
 		}
 	}
 	return first
@@ -185,30 +274,37 @@ func (service *Service) Configure(ctx context.Context, integrations []providers.
 	}
 
 	service.mu.Lock()
-	next := make(map[providers.ID]*daemon, len(commands))
-	retired := make(map[providers.ID]*daemon)
+	next := make(map[providers.ID]*provider, len(commands))
+	retired := make([]*provider, 0, len(commands))
 	for id, command := range commands {
-		if current, ok := service.daemons[id]; ok && current.matches(command) {
+		if current, ok := service.providers[id]; ok && current.matches(values[id], command) {
+			// An unchanged integration keeps its provider object, so the
+			// attempts already registered against it - and the capability
+			// facts its own handshakes negotiated - stay live and untouched.
 			next[id] = current
 			continue
 		}
-		next[id] = newDaemon(command, service.newCommand, service.locator)
-		if current := service.daemons[id]; current != nil {
-			retired[id] = current
+		next[id] = newProvider(id, values[id], command, service.newCommand, service.locator, service.stdioPipes)
+		if current := service.providers[id]; current != nil {
+			retired = append(retired, current)
 		}
 	}
-	for id, current := range service.daemons {
+	for id, current := range service.providers {
 		if _, kept := next[id]; !kept {
-			retired[id] = current
+			retired = append(retired, current)
 		}
 	}
-	service.daemons, service.integrations, service.aliases = next, values, aliases
+	service.providers, service.integrations, service.aliases = next, values, aliases
 	service.mu.Unlock()
 
+	// Only attempts belonging to a removed or changed integration are stopped
+	// here; an unchanged configuration preserves the attempts still running
+	// against it. Validation above has already completed, so a rejected
+	// replacement never reaches this point.
 	var first error
-	for id, daemon := range retired {
-		if err := daemon.close(ctx); err != nil && first == nil {
-			first = fmt.Errorf("drain ACP provider %q: %w", id, err)
+	for _, target := range retired {
+		if err := target.stopAttempts(ctx); err != nil && first == nil {
+			first = fmt.Errorf("drain ACP provider %q: %w", target.id, err)
 		}
 	}
 	return first
@@ -236,68 +332,326 @@ func (service *Service) resolveLocked(id providers.ID) (providers.ID, bool) {
 	return canonical, ok
 }
 
-func newDaemon(command Command, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) *daemon {
+// provider is one configured ACP integration: its immutable launch
+// configuration, the capability facts its own attempts actually negotiated, and
+// the registry of live request-owned attempts currently executing against it.
+// Its mutex guards only that registry; the facts have their own lock. Neither is
+// ever held across process or protocol I/O.
+type provider struct {
+	id          providers.ID
+	integration providers.ACPIntegration
+	command     Command
+	newCommand  platformprocess.CommandFactory
+	locator     platformprocess.ExecutableLocator
+	stdioPipes  platformprocess.StdioPipeFactory
+
+	mu sync.Mutex
+	// attempts is registration-ordered so Claim resolves an ambiguous
+	// provider/attempt identity to the same attempt on every run rather than
+	// to an arbitrary map-order member.
+	attempts []*attempt
+
+	factsMu sync.RWMutex
+	facts   acpsdk.AgentCapabilities
+	known   bool
+}
+
+func newProvider(
+	id providers.ID,
+	integration providers.ACPIntegration,
+	command Command,
+	newCommand platformprocess.CommandFactory,
+	locator platformprocess.ExecutableLocator,
+	stdioPipes platformprocess.StdioPipeFactory,
+) *provider {
+	return &provider{
+		id:          id,
+		integration: integration.Clone(),
+		command:     Command{Name: command.Name, Args: append([]string(nil), command.Args...)},
+		newCommand:  newCommand,
+		locator:     locator,
+		stdioPipes:  stdioPipes,
+	}
+}
+
+// matches reports whether a reconfiguration leaves this provider's live
+// attempts exactly as configured. Retention is decided by every field that
+// decides what one of this provider's attempts is - the resolved launch
+// executable and argv, plus the transport, runtime posture and implementation
+// profile the rest of Providers uses to select and shape an ACP invocation -
+// so a changed behavior field replaces the provider and drains its attempts
+// instead of leaving work running against a configuration that no longer
+// exists. Identity and aliases are deliberately not part of this comparison:
+// they decide how a request resolves to this provider, which Configure rebuilds
+// on every call, and never change what an attempt already running here is.
+func (target *provider) matches(integration providers.ACPIntegration, command Command) bool {
+	return target.command.Name == command.Name &&
+		slices.Equal(target.command.Args, command.Args) &&
+		target.integration.Transport == integration.Transport &&
+		target.integration.RuntimePosture == integration.RuntimePosture &&
+		target.integration.ImplementationProfile == integration.ImplementationProfile
+}
+
+// newAttempt allocates this request's attempt and registers it under the
+// provider's short owner lock before any process is spawned, so Close and
+// Configure can never miss an attempt that is about to own a process.
+func (target *provider) newAttempt(request providers.ExecuteRequest) *attempt {
 	lifecycle, cancelLifecycle := context.WithCancel(context.Background())
-	daemon := &daemon{command: Command{Name: command.Name, Args: append([]string(nil), command.Args...)}, newCommand: newCommand, locator: locator, gate: make(chan struct{}, 1), lifecycle: lifecycle, cancelLifecycle: cancelLifecycle}
-	daemon.gate <- struct{}{}
-	return daemon
+	owned := &attempt{
+		provider:        target,
+		request:         request,
+		lifecycle:       lifecycle,
+		cancelLifecycle: cancelLifecycle,
+		startupSettled:  make(chan struct{}),
+		teardownChanged: make(chan struct{}),
+	}
+	target.mu.Lock()
+	target.attempts = append(target.attempts, owned)
+	target.mu.Unlock()
+	return owned
 }
 
-func (daemon *daemon) matches(command Command) bool {
-	return daemon.command.Name == command.Name && slices.Equal(daemon.command.Args, command.Args)
+// claim returns the exact cancel-window generation one of this provider's live
+// attempts currently has open for attemptID. The registry snapshot is taken
+// under the short owner lock and each candidate's own synchronized window is
+// consulted outside it, so a claim never blocks behind an unrelated attempt.
+func (target *provider) claim(attemptID string) (acp.Generation, bool) {
+	target.mu.Lock()
+	live := append([]*attempt(nil), target.attempts...)
+	target.mu.Unlock()
+	for _, owned := range live {
+		if generation, ok := owned.window.Claim(attemptID); ok {
+			return generation, true
+		}
+	}
+	return nil, false
 }
 
-type daemon struct {
-	gate            chan struct{}
+// stopAttempts retires every attempt registered to this provider and then
+// finishes tearing each one down. Cancellation is deliberately a separate pass:
+// an attempt whose teardown has to wait for a peer or an in-flight startup must
+// not hold back the cancellation of its siblings, or one stuck attempt would
+// leave every other same-provider attempt running after this returned.
+//
+// Retire elects exactly one caller to begin each attempt's teardown, and the
+// teardown claim keeps this from ever stopping an attempt twice, so this can
+// neither double-stop an attempt that is already finishing on its own nor leave
+// one unfinished. An attempt that never launched a process completes here
+// immediately.
+func (target *provider) stopAttempts(ctx context.Context) error {
+	target.mu.Lock()
+	live := target.attempts
+	target.attempts = nil
+	target.mu.Unlock()
+	owned := make([]*attempt, 0, len(live))
+	for _, current := range live {
+		if current.retire() {
+			owned = append(owned, current)
+		}
+	}
+	var first error
+	for _, current := range owned {
+		if err := current.stop(ctx); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+// negotiatedCapabilities returns the AgentCapabilities from the last successful
+// initialize handshake one of this provider's own attempts completed, without
+// touching any live attempt or causing a connection side effect. ok is false
+// until the first successful handshake.
+func (target *provider) negotiatedCapabilities() (acpsdk.AgentCapabilities, bool) {
+	target.factsMu.RLock()
+	defer target.factsMu.RUnlock()
+	return target.facts, target.known
+}
+
+func (target *provider) recordNegotiated(capabilities acpsdk.AgentCapabilities) {
+	target.factsMu.Lock()
+	target.facts = capabilities
+	target.known = true
+	target.factsMu.Unlock()
+}
+
+// attempt is one request-owned ACP execution: it owns its own process,
+// connection, client, standard streams, stderr capture, cancel window and
+// lifecycle for exactly the span of one Execute or Continue, and it tears all
+// of that down on every terminal path.
+//
+// All process state lives in one immutable handle bundle that startup publishes
+// exactly once. Nothing ever clears or replaces a published handle, so the
+// executing goroutine and a concurrent teardown may hold the same bundle
+// without either of them observing the other's writes. stateMu guards only the
+// lifecycle decisions around that publication - retiring, beginning a launch,
+// startup having settled, and who currently owns the teardown - and its
+// critical sections are memory-only, never process or protocol I/O.
+type attempt struct {
+	provider *provider
+	request  providers.ExecuteRequest
+
 	lifecycle       context.Context
 	cancelLifecycle context.CancelFunc
-	command         Command
-	newCommand      platformprocess.CommandFactory
-	locator         platformprocess.ExecutableLocator
 
-	cmd         *exec.Cmd
-	stdin       io.WriteCloser
-	connection  *acpsdk.ClientSideConnection
-	client      *client
-	initialized acpsdk.InitializeResponse
-	finished    chan error
-	tree        platformprocess.SubprocessTree
-	stderr      syncBuffer
+	// stateMu guards retired, launching, handles, the settling of
+	// startupSettled and the three teardown decisions below.
+	stateMu sync.Mutex
+	// retired is set once, by the single retire winner. From that moment this
+	// attempt may no longer launch a process, which is what makes retirement a
+	// complete answer to "may this attempt still spawn a process".
+	retired bool
+	// launching records that startup has claimed the right to launch and has
+	// not yet settled, so a concurrent teardown knows a process can still
+	// appear and must wait for publication instead of concluding there is
+	// nothing to terminate.
+	launching bool
+	// handles is the published process bundle, or nil until startup publishes
+	// one. It is written once and only read afterwards.
+	handles *attemptHandles
+	// startupSettled is closed exactly once, by startup, on every path -
+	// success, refusal and failure - so a teardown waiting on a launch that
+	// actually began is always released.
+	startupSettled chan struct{}
+	// teardownOwner elects the single caller currently performing this
+	// attempt's process teardown. Retirement does not decide this: a Close or
+	// Configure that retired an attempt can still give its teardown back when
+	// its own context ends during startup, and the attempt's own release is
+	// then the one caller that must finish the teardown.
+	teardownOwner bool
+	// teardownDone records that nothing is owned anymore - because a teardown
+	// terminated the published process, or because startup settled without ever
+	// publishing one - so no later caller has anything left to do.
+	teardownDone bool
+	// teardownChanged is closed and replaced on every change of the two
+	// decisions above, so a caller waiting for a teardown it lost wakes for the
+	// handover as well as for that teardown's completion.
+	teardownChanged chan struct{}
 
+	stderr syncBuffer
+
+	// window tracks only this attempt's own live session/prompt turn.
 	window cancelwindow.Window
-
-	// negotiatedMu guards negotiated/negotiatedKnown separately from gate so
-	// a capability read never blocks on (or is blocked by) an in-flight
-	// execute call holding the gate for the duration of a live attempt.
-	negotiatedMu    sync.RWMutex
-	negotiated      acpsdk.AgentCapabilities
-	negotiatedKnown bool
 }
 
-// negotiatedCapabilities returns the AgentCapabilities from the daemon's
-// last successful initialize handshake, without touching gate or causing any
-// connection side effect. ok is false until the first successful handshake.
-func (daemon *daemon) negotiatedCapabilities() (acpsdk.AgentCapabilities, bool) {
-	daemon.negotiatedMu.RLock()
-	defer daemon.negotiatedMu.RUnlock()
-	return daemon.negotiated, daemon.negotiatedKnown
+// attemptHandles is the immutable set of process handles one attempt owns for
+// the whole of its attempt: the launched process, its standard streams, its
+// protocol connection and client, its wait channel and its supervised process
+// tree. Teardown and execution may both hold this bundle concurrently, so every
+// field is written before publication and never written again.
+type attemptHandles struct {
+	cmd        *exec.Cmd
+	stdin      io.WriteCloser
+	stdout     io.ReadCloser
+	connection *acpsdk.ClientSideConnection
+	client     *client
+	finished   chan error
+	tree       platformprocess.SubprocessTree
 }
 
-func (daemon *daemon) recordNegotiated(capabilities acpsdk.AgentCapabilities) {
-	daemon.negotiatedMu.Lock()
-	daemon.negotiated = capabilities
-	daemon.negotiatedKnown = true
-	daemon.negotiatedMu.Unlock()
+// release unregisters this attempt and completes the teardown of the process it
+// owns. It runs on every terminal path of an Execute or Continue, including an
+// unexpected unwind.
+//
+// Teardown is claimed, not assumed: when a Close or Configure already retired
+// this attempt, either that teardown still owns it - and release waits for the
+// completion it will reach - or that teardown gave it back because its own
+// context ended while startup was still in flight, and release is the caller
+// that must complete it. Releasing an attempt can therefore never leave a
+// published process running, however its retirement was decided.
+func (a *attempt) release() {
+	a.provider.unregister(a)
+	// Retirement only refuses later launches; the attempt's own terminal path
+	// always offers to complete the teardown, and the claim below decides
+	// whether this call is the one that performs it.
+	a.retire()
+	_ = a.stop(context.Background())
 }
 
-func (daemon *daemon) execute(
+// retire cancels this attempt's own lifecycle, refuses any later launch, and
+// elects the single caller that begins its process teardown. No caller can both
+// retire and later spawn. Retirement decides only who starts the teardown, never
+// that nobody finishes it: the teardown claim below is what carries an elected
+// starter that hands its teardown back to the attempt's own release.
+func (a *attempt) retire() bool {
+	a.stateMu.Lock()
+	if a.retired {
+		a.stateMu.Unlock()
+		return false
+	}
+	a.retired = true
+	a.stateMu.Unlock()
+	a.cancelLifecycle()
+	return true
+}
+
+// beginLaunch claims this attempt's right to launch its process, and refuses
+// once retirement has begun. Because that refusal is decided in the same
+// critical section that records retirement, a spawn either happens entirely
+// before a teardown observed this attempt - and is therefore published for that
+// teardown - or does not happen at all.
+func (a *attempt) beginLaunch() bool {
+	a.stateMu.Lock()
+	defer a.stateMu.Unlock()
+	if a.retired {
+		return false
+	}
+	a.launching = true
+	return true
+}
+
+// publish records the launched process's immutable handle bundle. Publication
+// happens exactly once per attempt, while this attempt's startup still holds
+// the claim beginLaunch granted.
+func (a *attempt) publish(handles *attemptHandles) {
+	a.stateMu.Lock()
+	a.handles = handles
+	a.stateMu.Unlock()
+}
+
+// process returns the published handle bundle. A nil-error start guarantees one
+// has been published, so every caller after start observes it non-nil.
+func (a *attempt) process() *attemptHandles {
+	a.stateMu.Lock()
+	defer a.stateMu.Unlock()
+	return a.handles
+}
+
+// settleStartup records that this attempt's startup will not touch a process
+// again. Startup calls it exactly once, through a defer, on every path - a
+// refusal, a failed launch and a successful launch alike - so a teardown that
+// observed a launch in progress is always released, and one that observed no
+// launch in progress never waits at all.
+func (a *attempt) settleStartup() {
+	a.stateMu.Lock()
+	a.launching = false
+	a.stateMu.Unlock()
+	close(a.startupSettled)
+}
+
+func (target *provider) unregister(owned *attempt) {
+	target.mu.Lock()
+	defer target.mu.Unlock()
+	for index, current := range target.attempts {
+		if current == owned {
+			target.attempts = slices.Delete(target.attempts, index, index+1)
+			return
+		}
+	}
+}
+
+// execute runs one complete request-owned ACP attempt. Its defer makes every
+// early return below leave nothing owned behind: the caller releases this
+// attempt, which terminates this attempt's process.
+func (a *attempt) execute(
 	ctx context.Context,
-	id providers.ID,
-	request providers.ExecuteRequest,
+	cwd string,
+	environment []string,
 	resume *providers.SessionRef,
 ) (providers.ExecuteResult, error) {
+	request, id := a.request, a.provider.id
 	executionCtx, cancelExecution := context.WithCancel(ctx)
-	stopLifecycleWatch := context.AfterFunc(daemon.lifecycle, cancelExecution)
+	stopLifecycleWatch := context.AfterFunc(a.lifecycle, cancelExecution)
 	defer func() {
 		stopLifecycleWatch()
 		cancelExecution()
@@ -306,38 +660,28 @@ func (daemon *daemon) execute(
 	if err := ctx.Err(); err != nil {
 		return providers.ExecuteResult{}, nativeFailure(err)
 	}
-	select {
-	case <-ctx.Done():
-		return providers.ExecuteResult{}, nativeFailure(ctx.Err())
-	case <-daemon.gate:
-	}
-	defer func() { daemon.gate <- struct{}{} }()
-
-	cwd, err := absoluteWorkingDirectory(request.WorkingDirectory)
-	if err != nil {
-		return providers.ExecuteResult{}, invalidFailure(err)
-	}
-	environment := requestEnvironment(request)
-	environment = openCodeEnvironment(id, environment)
-	if err := daemon.preflight(ctx, id, cwd, environment); err != nil {
+	if err := a.provider.preflight(ctx, cwd, environment); err != nil {
 		return providers.ExecuteResult{}, err
 	}
 	prompt := promptBlocks(request)
 
-	if err := daemon.ensureStarted(ctx, id, cwd, environment, request); err != nil {
+	initialized, err := a.start(ctx, cwd, environment)
+	if err != nil {
 		return providers.ExecuteResult{}, err
 	}
-	daemon.client.reset(request.ProgressObserver)
-	client := daemon.client
-	connection := daemon.connection
-	initialized := daemon.initialized
+	// Every handle this attempt uses from here on comes from the one immutable
+	// bundle startup published, so a concurrent Close or Configure that
+	// terminates the process cannot race a read of this attempt's state.
+	process := a.process()
+	client, connection := process.client, process.connection
 
-	session, err := daemon.openSession(ctx, id, cwd, initialized, request, resume)
+	client.reset(request.ProgressObserver)
+	session, err := a.openSession(ctx, cwd, connection, initialized, request, resume)
 	if err != nil {
 		return providers.ExecuteResult{}, err
 	}
 	client.suppressStartupChunk(providerStartupInfo(id, session.Meta))
-	daemon.client.setSessionID(string(session.SessionId))
+	client.setSessionID(string(session.SessionId))
 	request.ObserveSession(providers.SessionRef{
 		Provider: id,
 		Kind:     providers.SessionIDKind,
@@ -349,14 +693,13 @@ func (daemon *daemon) execute(
 		if errors.As(err, &failure) {
 			return providers.ExecuteResult{}, withSessionRef(failure, id, string(session.SessionId))
 		}
-		daemon.invalidateDisconnected(ctx)
 		return providers.ExecuteResult{}, withSessionRef(
-			rpcFailure(ctx, "session/set_config_option", id, err, daemon.stderr.String(), request),
+			rpcFailure(ctx, "session/set_config_option", id, err, a.stderr.String(), request),
 			id,
 			string(session.SessionId),
 		)
 	}
-	response, err := daemon.promptWithWindow(request.AttemptID, session.SessionId, connection, func() (acpsdk.PromptResponse, error) {
+	response, err := a.promptWithWindow(request.AttemptID, session.SessionId, connection, func() (acpsdk.PromptResponse, error) {
 		return connection.Prompt(ctx, acpsdk.PromptRequest{SessionId: session.SessionId, Prompt: prompt})
 	})
 	if err != nil {
@@ -365,12 +708,7 @@ func (daemon *daemon) execute(
 			_ = connection.Cancel(cancelCtx, acpsdk.CancelNotification{SessionId: session.SessionId})
 			cancel()
 		}
-		// A failed prompt leaves the ACP turn's connection state
-		// authoritative only after the process has been retired. Waiting for
-		// stopLocked here prevents a retry from racing cmd.Wait or reusing a
-		// connection whose peer is already exiting.
-		_ = daemon.stopLocked(context.Background())
-		return providers.ExecuteResult{}, withPartial(rpcFailure(ctx, "session/prompt", id, err, daemon.stderr.String(), request), client, id)
+		return providers.ExecuteResult{}, withPartial(rpcFailure(ctx, "session/prompt", id, err, a.stderr.String(), request), client, id)
 	}
 	if response.StopReason == acpsdk.StopReasonCancelled {
 		return providers.ExecuteResult{}, withPartial(acpControlCanceledFailure(id), client, id)
@@ -389,28 +727,29 @@ func (daemon *daemon) execute(
 // absence starts an ordinary fresh session/new. openSession never falls back
 // from a requested resume to a fresh session - a session/load failure is
 // returned as-is so a continuation can never silently adopt a different
-// Provider Session.
-func (daemon *daemon) openSession(
+// Provider Session, and whether this request's own peer supports session/load
+// is answered by that peer on this attempt's own process rather than guessed
+// from any assumed capability.
+func (a *attempt) openSession(
 	ctx context.Context,
-	id providers.ID,
 	cwd string,
+	connection *acpsdk.ClientSideConnection,
 	initialized acpsdk.InitializeResponse,
 	request providers.ExecuteRequest,
 	resume *providers.SessionRef,
 ) (acpsdk.NewSessionResponse, error) {
-	connection := daemon.connection
 	if resume != nil {
 		if resumeID := strings.TrimSpace(resume.ID); resumeID != "" {
 			loaded, err := connection.LoadSession(ctx, acpsdk.LoadSessionRequest{SessionId: acpsdk.SessionId(resumeID), Cwd: cwd, McpServers: []acpsdk.McpServer{}})
 			if err != nil {
-				return acpsdk.NewSessionResponse{}, daemon.sessionOpenFailure(ctx, id, "session/load", err, initialized, request)
+				return acpsdk.NewSessionResponse{}, a.sessionOpenFailure(ctx, "session/load", err, initialized, request)
 			}
 			return acpsdk.NewSessionResponse{Meta: loaded.Meta, ConfigOptions: loaded.ConfigOptions, Modes: loaded.Modes, SessionId: acpsdk.SessionId(resumeID)}, nil
 		}
 	}
 	session, err := connection.NewSession(ctx, acpsdk.NewSessionRequest{Cwd: cwd, McpServers: []acpsdk.McpServer{}})
 	if err != nil {
-		return acpsdk.NewSessionResponse{}, daemon.sessionOpenFailure(ctx, id, "session/new", err, initialized, request)
+		return acpsdk.NewSessionResponse{}, a.sessionOpenFailure(ctx, "session/new", err, initialized, request)
 	}
 	return session, nil
 }
@@ -424,11 +763,11 @@ const (
 	piAcpStartupInfoField = "startupInfo"
 )
 
-func (daemon *daemon) preflight(ctx context.Context, id providers.ID, cwd string, environment []string) error {
-	if id != providers.IDPi {
+func (target *provider) preflight(ctx context.Context, cwd string, environment []string) error {
+	if target.id != providers.IDPi {
 		return nil
 	}
-	return piPreflight(ctx, daemon.newCommand, daemon.locator, cwd, environment)
+	return piPreflight(ctx, target.newCommand, target.locator, cwd, environment)
 }
 
 // pi-acp replays this session metadata as an agent message outside the prompt
@@ -469,18 +808,18 @@ const (
 	acpServerErrorMaximum = -32000
 )
 
-// sessionOpenFailure normalizes a session/new or session/load failure. An
-// authentication-required failure closes the unusable daemon so a later
-// execution establishes a fresh authenticated connection. A session/load
-// failure reporting ResourceNotFound means the daemon itself is healthy but
-// does not recognize the exact requested Provider Session id, so it is
-// reported as ExecuteFailureKindSessionNotFound instead of the generic RPC
+// sessionOpenFailure normalizes a session/new or session/load failure. A
+// session/load failure reporting ResourceNotFound means this attempt's own peer
+// is healthy but does not recognize the exact requested Provider Session id, so
+// it is reported as ExecuteFailureKindSessionNotFound instead of the generic RPC
 // failure Continue would otherwise be unable to distinguish from any other
-// dependency failure. Every other failure is reported through the same
-// rpcFailure normalization every other ACP RPC failure in this service uses.
-func (daemon *daemon) sessionOpenFailure(
+// dependency failure. Every other failure - including an authentication-required
+// failure on an unusable connection - is reported through the same rpcFailure
+// normalization every other ACP RPC failure in this service uses; the owned
+// process is then retired by the caller's release on every one of these paths,
+// so no unusable peer is ever retained.
+func (a *attempt) sessionOpenFailure(
 	ctx context.Context,
-	id providers.ID,
 	method string,
 	err error,
 	initialized acpsdk.InitializeResponse,
@@ -488,23 +827,19 @@ func (daemon *daemon) sessionOpenFailure(
 ) error {
 	var requestErr *acpsdk.RequestError
 	if errors.As(err, &requestErr) && requestErr.Code == -32000 {
-		// The current connection cannot serve work until the operator
-		// authenticates. No login operation is exposed through this service,
-		// so retaining the process only leaves an unusable daemon (and its
-		// working directory) alive. Close it now and let a later execution
-		// establish a fresh authenticated connection.
-		_ = daemon.stopLocked(context.Background())
+		// No login operation is exposed through this service, so this
+		// connection cannot serve work until the operator authenticates. The
+		// attempt's own release closes it now; the next request establishes a
+		// fresh authenticated connection.
 		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: "ACP authentication required" + authenticationMethodHint(initialized.AuthMethods)}
 	}
 	if method == "session/load" && requestErr != nil && requestErr.Code == acpErrorCodeResourceNotFound {
-		daemon.invalidateDisconnected(ctx)
 		return providers.ExecuteFailure{
 			Kind:    providers.ExecuteFailureKindSessionNotFound,
-			Message: fmt.Sprintf("ACP provider %q does not recognize the referenced Provider Session as live", id),
+			Message: fmt.Sprintf("ACP provider %q does not recognize the referenced Provider Session as live", a.provider.id),
 		}
 	}
-	daemon.invalidateDisconnected(ctx)
-	return rpcFailure(ctx, method, id, err, daemon.stderr.String(), request)
+	return rpcFailure(ctx, method, a.provider.id, err, a.stderr.String(), request)
 }
 
 // promptWithWindow opens the cancelable window for attemptID, runs prompt,
@@ -513,27 +848,28 @@ func (daemon *daemon) sessionOpenFailure(
 // instead of leaving it stale. A stale window would let a later execution
 // that reuses this same attempt ID bind at the root and have a racing
 // control claim, or hang indefinitely on, this dead session (see
-// cancelwindow's package doc). response/err are read by the deferred closure
-// only after the assignment below completes, so a normal return still
-// records the actual outcome.
-func (daemon *daemon) promptWithWindow(
+// cancelwindow's package doc). The window is this attempt's own, so a
+// concurrent attempt against the same provider is untouched by it.
+// response/err are read by the deferred closure only after the assignment
+// below completes, so a normal return still records the actual outcome.
+func (a *attempt) promptWithWindow(
 	attemptID string,
 	sessionID acpsdk.SessionId,
 	connection *acpsdk.ClientSideConnection,
 	prompt func() (acpsdk.PromptResponse, error),
 ) (response acpsdk.PromptResponse, err error) {
-	cancelable := daemon.window.Begin(attemptID, sessionID, connection)
+	cancelable := a.window.Begin(attemptID, sessionID, connection)
 	defer func() {
-		daemon.window.End(cancelable, err == nil && response.StopReason == acpsdk.StopReasonCancelled)
+		a.window.End(cancelable, err == nil && response.StopReason == acpsdk.StopReasonCancelled)
 	}()
 	response, err = prompt()
 	return response, err
 }
 
-func (daemon *daemon) resolveLaunchName(id providers.ID) (string, error) {
-	name := daemon.command.Name
-	if id == providers.ID("pi") && name == "you" && slices.Equal(daemon.command.Args, []string{"pi-acp"}) {
-		current, ok := daemon.locator.(platformprocess.CurrentExecutableLocator)
+func (target *provider) resolveLaunchName() (string, error) {
+	name := target.command.Name
+	if target.id == providers.ID("pi") && name == "you" && slices.Equal(target.command.Args, []string{"pi-acp"}) {
+		current, ok := target.locator.(platformprocess.CurrentExecutableLocator)
 		if !ok {
 			return "", dependencyFailure("ACP current executable locator is unavailable")
 		}
@@ -546,8 +882,8 @@ func (daemon *daemon) resolveLaunchName(id providers.ID) (string, error) {
 		}
 		return resolved, nil
 	}
-	if daemon.locator != nil {
-		if _, err := daemon.locator.LookPath(name); err != nil {
+	if target.locator != nil {
+		if _, err := target.locator.LookPath(name); err != nil {
 			return "", providers.ExecuteFailure{
 				Kind:    providers.ExecuteFailureKindDependency,
 				Message: fmt.Sprintf("ACP executable %q is unavailable", name),
@@ -560,140 +896,272 @@ func (daemon *daemon) resolveLaunchName(id providers.ID) (string, error) {
 	return name, nil
 }
 
-func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd string, environment []string, request providers.ExecuteRequest) error {
-	if daemon.connection != nil {
-		// A peer disconnect is authoritative even when cmd.Wait has not yet
-		// published the process result. Retrying through a connection whose
-		// reader has already terminated sends the continuation to a dead ACP
-		// process and loses the original attempt outcome.
-		daemon.invalidateDisconnected(ctx)
-		if daemon.connection != nil {
-			select {
-			case <-daemon.finished:
-				daemon.clearProcess()
-			default:
-				return nil
-			}
-		}
+// classifyNegotiatedVersion owns the decision to reject an initialize
+// response this service cannot speak. An agent that negotiates another
+// protocol version is a provider configuration the operator must correct, so
+// it is reported as a misconfigured provider rather than a dependency outage.
+// It returns nil for the version this SDK speaks.
+func classifyNegotiatedVersion(id providers.ID, initialized acpsdk.InitializeResponse) error {
+	if initialized.ProtocolVersion == acpsdk.ProtocolVersionNumber {
+		return nil
 	}
-	if daemon.newCommand == nil {
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP command is unavailable"}
+	return providers.ExecuteFailure{
+		Kind:    providers.ExecuteFailureKindMisconfigured,
+		Message: fmt.Sprintf("ACP provider %q negotiated unsupported protocol version %v", id, initialized.ProtocolVersion),
 	}
-	launchName, err := daemon.resolveLaunchName(id)
+}
+
+// newACPStdio opens this peer's parent-owned standard-stream channel. The
+// factory is the exact effect injected at composition; a missing one is reported
+// as a dependency failure rather than defaulted here, so this service never
+// selects a pipe implementation for itself. Every attempt gets its own channel,
+// so no two attempts can ever read or write through the same pipe.
+func (target *provider) newACPStdio() (platformprocess.StdioChannel, error) {
+	if target.stdioPipes == nil {
+		return nil, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP standard stream channel is unavailable"}
+	}
+	channel, err := target.stdioPipes()
 	if err != nil {
-		return err
+		return nil, dependencyFailure(err.Error())
 	}
-	cmd := daemon.newCommand(launchName, daemon.command.Args...)
+	if channel == nil {
+		return nil, dependencyFailure("ACP standard stream channel factory returned nil")
+	}
+	return channel, nil
+}
+
+// start launches this request's own process with this request's own working
+// directory and environment, completes the ACP initialize handshake on it, and
+// returns the negotiated initialize response.
+//
+// Publication is what lets a Close or Configure that retires this attempt during
+// startup still terminate the process this attempt created instead of missing
+// it. The bundle is published - including the connection and client, so no
+// handle is ever handed out ahead of the process that owns it - before the
+// handshake begins, and the defer settles startup on every path, so a teardown
+// racing startup is released either way.
+func (a *attempt) start(ctx context.Context, cwd string, environment []string) (acpsdk.InitializeResponse, error) {
+	request, id := a.request, a.provider.id
+	if !a.beginLaunch() {
+		// Retirement already refused this launch, so there is no process for
+		// anyone to wait for: report the retirement rather than starting a peer
+		// nothing owns.
+		return acpsdk.InitializeResponse{}, dependencyFailure(fmt.Sprintf("ACP provider %q attempt was retired before it started", id))
+	}
+	defer a.settleStartup()
+	if a.provider.newCommand == nil {
+		return acpsdk.InitializeResponse{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP command is unavailable"}
+	}
+	if a.provider.stdioPipes == nil {
+		return acpsdk.InitializeResponse{}, dependencyFailure("ACP standard stream channel is unavailable")
+	}
+	launchName, err := a.provider.resolveLaunchName()
+	if err != nil {
+		return acpsdk.InitializeResponse{}, err
+	}
+	cmd := a.provider.newCommand(launchName, a.provider.command.Args...)
 	if cmd == nil {
-		return dependencyFailure("ACP command factory returned nil")
+		return acpsdk.InitializeResponse{}, dependencyFailure("ACP command factory returned nil")
 	}
 	cmd.Dir, cmd.Env = cwd, append([]string(nil), environment...)
-	stdin, err := cmd.StdinPipe()
+	a.stderr.Reset()
+	cmd.Stderr = &a.stderr
+	// The parent-owned channel keeps the response reader independent of
+	// cmd.Wait: this process holds its own read end until the peer is retired,
+	// and releases only its copies of the child's ends once the start succeeds.
+	stdio, err := a.provider.newACPStdio()
 	if err != nil {
-		return dependencyFailure(err.Error())
+		return acpsdk.InitializeResponse{}, err
 	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return dependencyFailure(err.Error())
-	}
-	daemon.stderr.Reset()
-	cmd.Stderr = &daemon.stderr
+	stdio.Attach(cmd)
 	platformprocess.ConfigureSubprocessTree(cmd)
 	if err := cmd.Start(); err != nil {
-		return dependencyFailure(fmt.Sprintf("start ACP provider %q: %v", id, err))
+		stdio.Close()
+		return acpsdk.InitializeResponse{}, dependencyFailure(fmt.Sprintf("start ACP provider %q: %v", id, err))
 	}
+	stdio.Detach()
 	tree, _ := platformprocess.AttachSubprocessTree(cmd)
 	finished := make(chan error, 1)
 	go func() { finished <- cmd.Wait() }()
+	requests, responses := stdio.Requests(), stdio.Responses()
 	client := &client{}
-	connection := acpsdk.NewClientSideConnection(client, stdin, stdout)
+	connection := acpsdk.NewClientSideConnection(client, requests, responses)
+	a.publish(&attemptHandles{
+		cmd: cmd, stdin: requests, stdout: responses,
+		connection: connection, client: client, finished: finished, tree: tree,
+	})
 	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{
 		ProtocolVersion:    acpsdk.ProtocolVersionNumber,
 		ClientCapabilities: acpClientCapabilities(),
 	})
 	if err != nil {
-		daemon.cmd, daemon.stdin, daemon.finished, daemon.tree = cmd, stdin, finished, tree
-		_ = daemon.stopLocked(context.Background())
-		return rpcFailure(ctx, "initialize", id, err, daemon.stderr.String(), request)
+		// An agent's final diagnostic reaches this attempt's stderr as it fails
+		// the handshake, and os/exec finishes copying that stream only when the
+		// process is reaped. Completing this attempt's own arbitrated teardown -
+		// the stop the caller's release performs anyway - first lets that copy
+		// finish, so the redacted stderr detail is captured instead of racing
+		// it. Retirement is deliberately not performed here: this failure keeps
+		// its original RPC cause, context and typed classification.
+		_ = a.stop(context.Background())
+		return acpsdk.InitializeResponse{}, rpcFailure(ctx, "initialize", id, err, a.stderr.String(), request)
 	}
-	if initialized.ProtocolVersion != acpsdk.ProtocolVersionNumber {
-		daemon.cmd, daemon.stdin, daemon.finished, daemon.tree = cmd, stdin, finished, tree
-		_ = daemon.stopLocked(context.Background())
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindMisconfigured, Message: fmt.Sprintf("ACP provider %q negotiated unsupported protocol version %v", id, initialized.ProtocolVersion)}
+	if version := classifyNegotiatedVersion(id, initialized); version != nil {
+		return acpsdk.InitializeResponse{}, version
 	}
-	daemon.cmd = cmd
-	daemon.stdin = stdin
-	daemon.connection = connection
-	daemon.client = client
-	daemon.initialized = initialized
-	daemon.finished = finished
-	daemon.tree = tree
-	daemon.recordNegotiated(initialized.AgentCapabilities)
-	return nil
+	a.provider.recordNegotiated(initialized.AgentCapabilities)
+	return initialized, nil
 }
 
-func (daemon *daemon) invalidateDisconnected(ctx context.Context) {
-	if daemon.connection == nil {
-		return
+// stop terminates the process this attempt owns and releases every stream it
+// published. It waits only for a launch that has actually begun, so an attempt
+// that never started one - a canceled or preflight-rejected request, or an
+// attempt a Close or Configure retired before it could spawn - completes its
+// teardown immediately instead of waiting on an operation that will never
+// happen.
+//
+// Exactly one caller performs the teardown, so the process and its streams are
+// terminated once however many callers reach here. If this caller's own context
+// ends while startup is still in flight it hands the teardown back rather than
+// terminating nothing, which is what keeps a later spawned process owned even
+// when an external Close or Configure could not wait for it.
+func (a *attempt) stop(ctx context.Context) error {
+	owned, err := a.acquireTeardown(ctx)
+	if !owned {
+		// Another caller already completed this teardown, so nothing is owned;
+		// or this caller's own context ended before it could take the teardown.
+		return err
 	}
-	select {
-	case <-daemon.connection.Done():
-		_ = daemon.stopLocked(ctx)
-	default:
+	handles, err := a.awaitStartup(ctx)
+	if err != nil {
+		// Startup has not settled, so a process this attempt would own can still
+		// be published. Handing the teardown back instead of abandoning it is
+		// what makes the eventual caller that does reach a settled startup -
+		// this attempt's own release - the one that terminates that process.
+		a.handBackTeardown()
+		return err
 	}
-}
-
-func (daemon *daemon) close(ctx context.Context) error {
-	daemon.cancelLifecycle()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-daemon.gate:
-	}
-	defer func() { daemon.gate <- struct{}{} }()
-	return daemon.stopLocked(ctx)
-}
-
-func (daemon *daemon) stopLocked(ctx context.Context) error {
-	if daemon.cmd == nil {
+	if handles == nil {
+		// Startup settled without ever publishing a process, so this attempt owns
+		// nothing and no later caller has anything left to do.
+		a.completeTeardown()
 		return nil
 	}
-	cmd, tree, finished := daemon.cmd, daemon.tree, daemon.finished
-	_ = daemon.stdin.Close()
+	defer a.completeTeardown()
+	return handles.terminate(ctx)
+}
+
+// acquireTeardown elects the single caller that performs this attempt's process
+// teardown. owned is false, with a nil error, once teardown has completed,
+// because then this attempt owns nothing any caller could terminate. A caller
+// that finds another caller performing the teardown waits for that teardown to
+// complete or hand ownership back, so a handover is always picked up by exactly
+// one caller instead of being dropped between two.
+func (a *attempt) acquireTeardown(ctx context.Context) (bool, error) {
+	for {
+		a.stateMu.Lock()
+		if a.teardownDone {
+			a.stateMu.Unlock()
+			return false, nil
+		}
+		if !a.teardownOwner {
+			a.teardownOwner = true
+			a.stateMu.Unlock()
+			return true, nil
+		}
+		changed := a.teardownChanged
+		a.stateMu.Unlock()
+		select {
+		case <-changed:
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
+	}
+}
+
+// completeTeardown records that this attempt owns nothing further: either its
+// published process was terminated, or startup settled without ever publishing
+// one. It wakes every caller waiting to learn the teardown's outcome.
+func (a *attempt) completeTeardown() {
+	a.stateMu.Lock()
+	a.teardownOwner, a.teardownDone = false, true
+	a.signalTeardownLocked()
+	a.stateMu.Unlock()
+}
+
+// handBackTeardown returns an unfinished teardown to the pool of claimants,
+// because this caller released it before terminating anything. No goroutine is
+// left behind to finish it: the attempt's own release is the caller that
+// reaches it, and it claims the teardown through the same critical section.
+func (a *attempt) handBackTeardown() {
+	a.stateMu.Lock()
+	a.teardownOwner = false
+	a.signalTeardownLocked()
+	a.stateMu.Unlock()
+}
+
+// signalTeardownLocked wakes every caller waiting on the teardown decisions.
+// Callers must hold stateMu.
+func (a *attempt) signalTeardownLocked() {
+	close(a.teardownChanged)
+	a.teardownChanged = make(chan struct{})
+}
+
+// awaitStartup returns this attempt's published handle bundle, waiting only
+// when startup has claimed a launch and has not settled yet.
+//
+// It returns the caller's own context error when that context ends before
+// startup settles, including the case where a process was published in the same
+// instant; the bundle is published exactly once and stays readable, so the
+// caller that takes over the handed-back teardown still finds it.
+func (a *attempt) awaitStartup(ctx context.Context) (*attemptHandles, error) {
+	a.stateMu.Lock()
+	handles, launching := a.handles, a.launching
+	a.stateMu.Unlock()
+	if handles != nil || !launching {
+		return handles, nil
+	}
+	select {
+	case <-a.startupSettled:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return a.process(), nil
+}
+
+// terminate ends the launched peer and releases the streams this attempt owns.
+// The bundle is immutable, so this can run while the attempt's own goroutine is
+// still issuing protocol calls: those calls fail against the closed stream and
+// the process, which is the outcome that ends this attempt.
+func (h *attemptHandles) terminate(ctx context.Context) error {
+	if h == nil {
+		return nil
+	}
+	_ = h.stdin.Close()
 	var stopErr error
 	exited := false
 	select {
-	case <-finished:
+	case <-h.finished:
 		exited = true
 	case <-ctx.Done():
 		stopErr = ctx.Err()
-		_ = platformprocess.TerminateSubprocessTree(cmd, tree)
+		_ = platformprocess.TerminateSubprocessTree(h.cmd, h.tree)
 	case <-time.After(500 * time.Millisecond):
-		_ = platformprocess.TerminateSubprocessTree(cmd, tree)
+		_ = platformprocess.TerminateSubprocessTree(h.cmd, h.tree)
 	}
 	if !exited {
 		select {
-		case <-finished:
+		case <-h.finished:
 		case <-time.After(2 * time.Second):
 			if stopErr == nil {
 				stopErr = errors.New("ACP process did not exit after termination")
 			}
 		}
 	}
-	daemon.clearProcess()
+	platformprocess.CloseSubprocessTree(h.cmd, h.tree)
+	// The response reader outlives the peer only while the peer is retained;
+	// releasing it here keeps a retired peer from holding an open pipe handle.
+	_ = h.stdout.Close()
 	return stopErr
-}
-
-func (daemon *daemon) clearProcess() {
-	if daemon.cmd != nil {
-		platformprocess.CloseSubprocessTree(daemon.cmd, daemon.tree)
-	}
-	daemon.cmd = nil
-	daemon.stdin = nil
-	daemon.connection = nil
-	daemon.client = nil
-	daemon.finished = nil
-	daemon.tree = platformprocess.SubprocessTree{}
 }
 
 func requestEnvironment(request providers.ExecuteRequest) []string {
@@ -799,8 +1267,14 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 		message = fmt.Sprintf("ACP provider %q is temporarily unavailable due to usage or capacity limits", id)
 	} else if isACPPeerClosedFailure(err) {
 		message = fmt.Sprintf("ACP provider %q disconnected before responding; retry the request", id)
-	} else if detail := safeACPStderr(stderr, request.EnvVars); detail != "" {
-		message += " (stderr: " + detail + ")"
+	}
+	// A disconnect can accompany an agent's final stderr diagnostic. Keep
+	// that redacted evidence without exposing private model/throttle details
+	// or changing the authoritative RPC failure classification.
+	if !piModelConnection && kind != providers.ExecuteFailureKindThrottled {
+		if detail := safeACPStderr(stderr, request.EnvVars); detail != "" {
+			message += " (stderr: " + detail + ")"
+		}
 	}
 	if method == "initialize" {
 		native := strings.ToLower(err.Error())

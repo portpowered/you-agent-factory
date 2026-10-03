@@ -250,8 +250,7 @@ func runControlledRolloutCase(t *testing.T, fixture *rolloutSharedFixture, testC
 	eventStream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(fixture.baseURL, sessionID))
 	workID := submitControlledRolloutWork(t, ctx, fixture.process, rolloutEnvironment(homeDir), factoryDir, fixture.baseURL, sessionID, testCase.route)
 	events := readRolloutEventsUntilDispatchResponse(t, ctx, eventStream, workID)
-	work := listRolloutWork(t, fixture.baseURL, sessionID)
-	session := getRolloutSession(t, fixture.baseURL, sessionID)
+	work, session := waitForRolloutTerminalProjection(t, ctx, fixture.baseURL, sessionID, testCase, workID)
 
 	assertControlledRolloutWork(t, testCase, workID, work, session)
 	assertControlledRolloutEvents(t, testCase, workID, events)
@@ -373,6 +372,44 @@ func getRolloutSession(t *testing.T, baseURL, sessionID string) factoryapi.Facto
 		t.Fatalf("decode controlled rollout Factory Session: %v", err)
 	}
 	return session
+}
+
+func waitForRolloutTerminalProjection(
+	t *testing.T,
+	ctx context.Context,
+	baseURL, sessionID string,
+	testCase controlledRolloutCase,
+	workID string,
+) (factoryapi.ListWorkResponse, factoryapi.FactorySession) {
+	t.Helper()
+	observeContext, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	wantTerminal, wantFailed := 0, 1
+	if testCase.wantWorkState == "done" {
+		wantTerminal, wantFailed = 1, 0
+	}
+	for {
+		work := listRolloutWork(t, baseURL, sessionID)
+		session := getRolloutSession(t, baseURL, sessionID)
+		progress := session.Runtime.Progress.Categories
+		// DISPATCH_RESPONSE is recorded before end-of-tick snapshot publication.
+		// Observe the actual customer projection, rather than treating that
+		// earlier event as a barrier for projected terminal Work and progress.
+		matchingWork := len(work.Results) == 1 && work.Results[0].WorkId != nil && *work.Results[0].WorkId == workID &&
+			support.CountWorkAtCustomerState(work, support.WorkCustomerLocation("task", testCase.wantWorkState)) == 1
+		matchingProgress := progress.Initial == 0 && progress.Processing == 0 &&
+			progress.Terminal == wantTerminal && progress.Failed == wantFailed
+		if matchingWork && matchingProgress {
+			return work, session
+		}
+		select {
+		case <-observeContext.Done():
+			t.Fatalf("%s terminal public projection did not arrive: %v; work=%#v progress=%+v", testCase.name, observeContext.Err(), work.Results, progress)
+		case <-ticker.C:
+		}
+	}
 }
 
 func assertControlledRolloutWork(

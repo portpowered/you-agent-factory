@@ -1,0 +1,238 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"path/filepath"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	pb "github.com/mudler/LocalAI/pkg/grpc/proto"
+)
+
+func TestLoadedPairAndAlignedWireContract(t *testing.T) {
+	native.resetCancel = func() {}
+	native.cancel = func() {}
+	loads, calls := 0, 0
+	native.load = func(model, aligner, dictionary string) int {
+		loads++
+		if filepath.Base(model) != "asr.gguf" || filepath.Base(aligner) != "qwen3-forced-aligner-0.6b-q8_0.gguf" || filepath.Base(dictionary) != "korean_dict_jieba.dict" {
+			t.Fatalf("wrong model pair or dictionary: %q %q %q", model, aligner, dictionary)
+		}
+		return 0
+	}
+	native.transcribe = func(path, language string, threads int) int {
+		calls++
+		if path != "source.wav" {
+			t.Fatalf("source=%q", path)
+		}
+		return 0
+	}
+	native.text = func() string { return "Hello world" }
+	native.language = func() string { return "English" }
+	native.duration = func() float64 { return 2.5 }
+	native.count = func() int64 { return 2 }
+	native.word = func(i int64) string { return []string{"Hello", "world"}[i] }
+	native.start = func(i int64) int64 { return []int64{320000000, 960000000}[i] }
+	native.end = func(i int64) int64 { return []int64{800000000, 1600000000}[i] }
+	m := &model{}
+	if err := m.Load(&pb.ModelOptions{ModelFile: "asr.gguf", ModelPath: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	// A repeated readiness load of the exact same asset does not reload either
+	// resident native model, and repeated inference retains aligned nanoseconds.
+	path := m.loaded
+	if err := m.Load(&pb.ModelOptions{ModelFile: path}); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		result, err := m.AudioTranscription(context.Background(), &pb.TranscriptRequest{Dst: "source.wav"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Text != "Hello world" || result.Duration != 2.5 || len(result.Segments) != 1 || result.Segments[0].Start != 320000000 || result.Segments[0].End != 1600000000 || result.Segments[0].Words[1].Text != "world" {
+			t.Fatalf("lost real alignment: %+v", result)
+		}
+	}
+	if loads != 1 || calls != 2 {
+		t.Fatalf("loads=%d calls=%d", loads, calls)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := m.AudioTranscription(ctx, &pb.TranscriptRequest{Dst: "source.wav"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancel=%v", err)
+	}
+	if calls != 2 {
+		t.Fatal("canceled request reached native inference")
+	}
+}
+
+func TestNaturalAlignedPhrases(t *testing.T) {
+	for _, test := range []struct {
+		language string
+		texts    []string
+		expected []string
+	}{
+		{"English", []string{"Can", "anyone", "help?", "Yes."}, []string{"Can anyone help?", "Yes."}},
+		{"chinese", []string{"你", "好", "。", "再", "见", "！"}, []string{"你好。", "再见！"}},
+		{"Chinese", []string{"喜欢", "Silver", "Clouds", "。"}, []string{"喜欢Silver Clouds。"}},
+		{"English", []string{"Hello", "world", "!"}, []string{"Hello world!"}},
+	} {
+		var words []*pb.TranscriptWord
+		for i, text := range test.texts {
+			words = append(words, &pb.TranscriptWord{Text: text, Start: int64(i) * 400000000, End: int64(i+1) * 400000000})
+		}
+		got := phraseSegments(words, test.language)
+		if len(got) != len(test.expected) {
+			t.Fatalf("%s phrases=%v", test.language, got)
+		}
+		for i, want := range test.expected {
+			if got[i].Text != want || len(got[i].Words) == 0 || got[i].Start != got[i].Words[0].Start || got[i].End != got[i].Words[len(got[i].Words)-1].End {
+				t.Fatalf("%s phrase=%+v want=%q", test.language, got[i], want)
+			}
+		}
+	}
+	words := []*pb.TranscriptWord{{Text: "Before", Start: 0, End: 1000000000}, {Text: "pause", Start: 2000000000, End: 2500000000}, {Text: "long", Start: 3000000000, End: 11000000000}}
+	if got := phraseSegments(words, "English"); len(got) != 3 {
+		t.Fatalf("pause/duration boundaries lost: %v", got)
+	}
+}
+
+func TestNativeLanguageHints(t *testing.T) {
+	for value, want := range map[string]string{"en-US": "English", "zh-Hans": "Chinese", "zh-HK": "Chinese", "zh-TW": "Chinese", "ja-JP": "Japanese", "ko_KR": "Korean", "yue-HK": "Cantonese", "fil-PH": "Filipino", "tl": "Filipino", "english": "English", "Chinese": "Chinese", "": "", "auto": ""} {
+		if got, err := nativeLanguage(value); got != want || err != nil {
+			t.Fatalf("%q => %q err=%v want %q", value, got, err, want)
+		}
+	}
+	for _, value := range []string{"unknown", "bn", "Bengali", "auto-US"} {
+		if _, err := nativeLanguage(value); err == nil {
+			t.Fatalf("unsupported language %q accepted", value)
+		}
+	}
+}
+
+func TestUnsupportedExplicitLanguageDoesNotReachNative(t *testing.T) {
+	native.resetCancel = func() { t.Fatal("unsupported language reset native state") }
+	native.transcribe = func(string, string, int) int {
+		t.Fatal("unsupported language reached native inference")
+		return 1
+	}
+	result, err := (&model{}).AudioTranscription(context.Background(), &pb.TranscriptRequest{
+		Dst: "source.wav", Language: "unknown",
+	})
+	if err == nil || result.Text != "" || len(result.Segments) != 0 {
+		t.Fatalf("unsupported language published a result: %+v err=%v", result, err)
+	}
+}
+
+func TestCancellationJoinsBeforeNextNativeRequest(t *testing.T) {
+	var cancelled atomic.Bool
+	started, observed := make(chan struct{}), make(chan struct{})
+	native.resetCancel = func() { cancelled.Store(false) }
+	native.cancel = func() { cancelled.Store(true); close(observed) }
+	native.transcribe = func(string, string, int) int { close(started); <-observed; return 1 }
+	m := &model{}
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	go func() { _, err := m.AudioTranscription(ctx, &pb.TranscriptRequest{}); result <- err }()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("native request never started")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error=%v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("native cancellation was not joined")
+	}
+	native.transcribe = func(string, string, int) int {
+		if cancelled.Load() {
+			t.Fatal("stale cancellation crossed requests")
+		}
+		return 0
+	}
+	native.text = func() string { return "" }
+	native.language = func() string { return "" }
+	native.duration = func() float64 { return 0 }
+	native.count = func() int64 { return 0 }
+	if _, err := m.AudioTranscription(context.Background(), &pb.TranscriptRequest{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestZeroDurationWordStaysWithRealPhrase(t *testing.T) {
+	words := []*pb.TranscriptWord{{Text: "啊", Start: 10960000000, End: 10960000000}, {Text: "啊！", Start: 16320000000, End: 18400000000}}
+	got := phraseSegments(words, "Chinese")
+	if len(got) != 1 || got[0].Text != "啊啊！" || got[0].Start != 10960000000 || got[0].End != 18400000000 || len(got[0].Words) != 2 {
+		t.Fatalf("lost upstream timing evidence: %v", got)
+	}
+}
+
+func TestSeparatedPunctuationPreservesRealPhraseRanges(t *testing.T) {
+	words := []*pb.TranscriptWord{
+		{Text: "有没有好心人可以帮帮我", Start: 18400000000, End: 19520000000},
+		{Text: "？", Start: 21280000000, End: 21360000000},
+		{Text: "有没有好心人可以帮帮我？", Start: 21360000000, End: 22480000000},
+		{Text: "大叔", Start: 33840000000, End: 34240000000},
+		{Text: "，", Start: 34880000000, End: 34960000000},
+		{Text: "那去吧", Start: 34960000000, End: 35360000000},
+		{Text: "。", Start: 44000000000, End: 44080000000},
+	}
+	got := phraseSegments(words, "Chinese")
+	if len(got) != 3 {
+		t.Fatalf("punctuation became a standalone cue: %v", got)
+	}
+	if got[0].Text != "有没有好心人可以帮帮我？" || got[0].Start != 18400000000 || got[0].End != 21360000000 || len(got[0].Words) != 2 {
+		t.Fatalf("question span=%+v", got[0])
+	}
+	if got[2].Text != "大叔，那去吧。" || got[2].Start != 33840000000 || got[2].End != 44080000000 || len(got[2].Words) != 4 {
+		t.Fatalf("pause/duration split punctuation: %+v", got[2])
+	}
+	for _, segment := range got {
+		if punctuationOnly(segment.Text) {
+			t.Fatalf("punctuation cue=%+v", segment)
+		}
+	}
+	// A closed sentence still owns delayed standalone punctuation.
+	got = phraseSegments([]*pb.TranscriptWord{{Text: "Done.", Start: 0, End: 1000000000}, {Text: "!", Start: 3000000000, End: 3080000000}}, "English")
+	if len(got) != 1 || got[0].Text != "Done.!" || got[0].End != 3080000000 {
+		t.Fatalf("closed phrase=%v", got)
+	}
+	if got := phraseSegments([]*pb.TranscriptWord{{Text: "？", Start: 0, End: 80000000}}, "Chinese"); len(got) != 0 {
+		t.Fatalf("pure punctuation has no spoken cue: %v", got)
+	}
+}
+
+func TestNativeSeamOverlapKeepsEveryWordAndMergesEnvelopes(t *testing.T) {
+	words := []*pb.TranscriptWord{
+		{Text: "疯子", Start: 167000000000, End: 168400000000},
+		{Text: "。", Start: 168480000000, End: 168480000000},
+		{Text: "跟", Start: 168400000000, End: 170240000000},
+		{Text: "我。", Start: 170240000000, End: 171000000000},
+		{Text: "后来。", Start: 172000000000, End: 173000000000},
+	}
+	got := phraseSegments(words, "Chinese")
+	if len(got) != 2 || got[0].Text != "疯子。跟我。" || got[0].Start != 167000000000 || got[0].End != 171000000000 || len(got[0].Words) != 4 || got[1].Id != 1 {
+		t.Fatalf("actual seam evidence lost: %v", got)
+	}
+	if got[0].Words[1] != words[1] || got[0].Words[2] != words[2] {
+		t.Fatal("word spans were rewritten")
+	}
+	// Positive speech spans can overlap by one 80 ms alignment class too.
+	a, b := &pb.TranscriptWord{Text: "First.", Start: 1000000000, End: 2000000000}, &pb.TranscriptWord{Text: "Next.", Start: 1920000000, End: 3000000000}
+	got = phraseSegments([]*pb.TranscriptWord{a, b}, "English")
+	if len(got) != 1 || got[0].Text != "First. Next." || got[0].Start != 1000000000 || got[0].End != 3000000000 || got[0].Words[0] != a || got[0].Words[1] != b {
+		t.Fatalf("positive overlap was dropped or clipped: %v", got)
+	}
+	// A last aligned word may end inside a preceding word. Envelopes must use
+	// extrema, preserving the complete evidence rather than just first/last.
+	got = phraseSegments([]*pb.TranscriptWord{{Text: "Long", Start: 1000000000, End: 4000000000}, {Text: "inside.", Start: 2000000000, End: 3000000000}}, "English")
+	if len(got) != 1 || got[0].End != 4000000000 {
+		t.Fatalf("phrase excluded a word span: %v", got)
+	}
+}

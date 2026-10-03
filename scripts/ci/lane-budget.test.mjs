@@ -18,16 +18,38 @@ function requireMake(t) {
 	return true;
 }
 
-function runMake(variables, targets = ["print-go-parallelism"]) {
+// Hosted CI passes lane job counts as environment handoffs that a skipped step
+// can leave defined but empty, so an explicit undefined removes the inherited
+// value on every platform's variable-name casing.
+function makeEnv(overrides = {}) {
+	const result = { ...env };
+	for (const [name, value] of Object.entries(overrides)) {
+		for (const key of Object.keys(result)) {
+			if (key.toUpperCase() === name.toUpperCase()) delete result[key];
+		}
+		if (value !== undefined) result[name] = value;
+	}
+	return result;
+}
+
+function runMake(variables, targets = ["print-go-parallelism"], envOverrides = {}) {
 	return spawnSync(
 		makeCommand,
 		["--no-print-directory", "-f", "Makefile", ...variables, ...targets],
 		{
 			cwd: repositoryRoot,
-			env,
+			env: makeEnv(envOverrides),
 			encoding: "utf8",
 		},
 	);
+}
+
+// The dry-run lint recipe is the command CI actually executes, so assert the
+// expanded -jobs argument instead of the variable alone.
+function expandedLintJobs(stdout) {
+	const match = stdout.match(/lintlane\b[^\r\n]*?\s-jobs\s+"(\d+)"/);
+	assert.ok(match, `lintlane -jobs argument was not expanded to a positive integer:\n${stdout}`);
+	return Number(match[1]);
 }
 
 function outputValue(stdout, name) {
@@ -96,6 +118,68 @@ test("corrupted production result warns, falls back, and reaches numeric job fla
 		assert.match(result.stdout, /unitlane -jobs 2/);
 		assert.match(result.stdout, /functionallane -jobs 2/);
 		assert.match(result.stdout, /lintlane -make .* -jobs "2"/);
+	}
+});
+
+test("empty or whitespace LINT_JOBS handoffs fall back to the bounded budget", (t) => {
+	if (!requireMake(t)) return;
+
+	const capacity = ["YOU_LOGICAL_CPUS=16", "YOU_EXPECTED_CONCURRENT_LANES=4"];
+	// The bounded budget is host dependent, so read the canonical value the same
+	// Makefile resolves for an omitted LINT_JOBS instead of restating it here.
+	const control = runMake(capacity, ["print-go-parallelism"], { LINT_JOBS: undefined });
+	assert.equal(control.status, 0, `${control.stdout}\n${control.stderr}`);
+	const budget = outputValue(control.stdout, "GO_LANE_BUDGET");
+	const handoffs = [
+		{ label: "omitted LINT_JOBS", variables: capacity, envOverrides: { LINT_JOBS: undefined } },
+		{ label: "empty LINT_JOBS environment handoff", variables: capacity, envOverrides: { LINT_JOBS: "" } },
+		{
+			label: "whitespace LINT_JOBS environment handoff",
+			variables: capacity,
+			envOverrides: { LINT_JOBS: "  " },
+		},
+		{ label: "empty LINT_JOBS command-line handoff", variables: [...capacity, "LINT_JOBS="] },
+	];
+	for (const handoff of handoffs) {
+		const printed = runMake(handoff.variables, ["print-go-parallelism"], handoff.envOverrides);
+		assert.equal(printed.status, 0, `${handoff.label}: ${printed.stdout}\n${printed.stderr}`);
+		assert.equal(outputValue(printed.stdout, "GO_LANE_BUDGET"), budget, `${handoff.label}: ${printed.stdout}`);
+		assert.equal(outputValue(printed.stdout, "LINT_JOBS"), budget, `${handoff.label}: ${printed.stdout}`);
+
+		const dryRun = runMake(handoff.variables, ["-n", "lint"], handoff.envOverrides);
+		assert.equal(dryRun.status, 0, `${handoff.label}: ${dryRun.stdout}\n${dryRun.stderr}`);
+		assert.equal(expandedLintJobs(dryRun.stdout), budget, `${handoff.label}: ${dryRun.stdout}`);
+	}
+});
+
+test("explicit LINT_JOBS overrides are forwarded and non-positive values stay rejected", (t) => {
+	if (!requireMake(t)) return;
+
+	const capacity = ["YOU_LOGICAL_CPUS=16", "YOU_EXPECTED_CONCURRENT_LANES=4"];
+	const overrides = [
+		{ label: "environment override", variables: capacity, envOverrides: { LINT_JOBS: "7" }, jobs: 7 },
+		{ label: "command-line override", variables: [...capacity, "LINT_JOBS=3"], jobs: 3 },
+	];
+	for (const override of overrides) {
+		const printed = runMake(override.variables, ["print-go-parallelism"], override.envOverrides);
+		assert.equal(printed.status, 0, `${override.label}: ${printed.stdout}\n${printed.stderr}`);
+		assert.equal(outputValue(printed.stdout, "LINT_JOBS"), override.jobs, `${override.label}: ${printed.stdout}`);
+
+		const dryRun = runMake(override.variables, ["-n", "lint"], override.envOverrides);
+		assert.equal(dryRun.status, 0, `${override.label}: ${dryRun.stdout}\n${dryRun.stderr}`);
+		assert.equal(expandedLintJobs(dryRun.stdout), override.jobs, `${override.label}: ${dryRun.stdout}`);
+	}
+
+	// An explicit non-positive request must keep reaching lintlane verbatim so
+	// its positive-integer parser stays the single rejecting authority.
+	for (const invalid of ["LINT_JOBS=0", "LINT_JOBS=many"]) {
+		const dryRun = runMake([...capacity, invalid], ["-n", "lint"]);
+		assert.equal(dryRun.status, 0, `${invalid}: ${dryRun.stdout}\n${dryRun.stderr}`);
+		assert.match(dryRun.stdout, /lintlane\b[^\r\n]*?\s-jobs\s+"[^"]*"/, `${invalid}: ${dryRun.stdout}`);
+		assert.ok(
+			!/lintlane\b[^\r\n]*?\s-jobs\s+"[1-9]/.test(dryRun.stdout),
+			`${invalid} must not be replaced by a budget:\n${dryRun.stdout}`,
+		);
 	}
 });
 

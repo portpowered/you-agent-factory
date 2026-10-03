@@ -47,7 +47,7 @@ func TestBind_ReadPortableArtifactSuccessReturnsOutcomeFromInjectedRoot(t *testi
 			}, nil
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolReadPortableArtifact,
@@ -85,7 +85,7 @@ func TestBind_ReadPortableArtifactUnavailableReturnsTypedErrorEnvelope(t *testin
 			return recordings.ReadPortableArtifactResult{}, recordings.ErrPortableArtifactUnavailable
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolReadPortableArtifact,
@@ -114,7 +114,7 @@ func TestBind_ReadPortableArtifactInvalidReturnsTypedErrorEnvelope(t *testing.T)
 			return recordings.ReadPortableArtifactResult{}, recordings.ErrInvalidPortableArtifact
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolReadPortableArtifact,
@@ -143,7 +143,7 @@ func TestBind_ReadPortableArtifactForeignReturnsTypedErrorEnvelope(t *testing.T)
 			return recordings.ReadPortableArtifactResult{}, recordings.ErrForeignPortableArtifact
 		},
 	}
-	operation := mcprecording.Bind(mcprecording.RootDependencies{Recordings: fake})
+	operation := mcprecording.BindToolOperation(fake)
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolReadPortableArtifact,
@@ -189,9 +189,7 @@ func TestBind_ReadPortableArtifactInvalidJSONReturnsBadRequestWithoutInvokingFak
 	t.Parallel()
 
 	var invoked bool
-	operation := mcprecording.Bind(mcprecording.RootDependencies{
-		Recordings: fakeRecordingsRoot{invoked: &invoked},
-	})
+	operation := mcprecording.BindToolOperation(fakeRecordingsRoot{invoked: &invoked})
 	raw, err := operation(
 		context.Background(),
 		mcprecording.ToolReadPortableArtifact,

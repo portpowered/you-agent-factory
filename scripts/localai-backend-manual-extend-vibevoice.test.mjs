@@ -7,9 +7,8 @@ import test from "node:test";
 import { extendManualBackendReleaseVibevoice } from "./localai-backend-manual-extend-vibevoice.mjs";
 import { artifactArchiveName, loadConfig, minimumPublishedArchiveSizeBytes } from "./localai-backend-artifact-workflow.mjs";
 
-// The checked-in configuration remains at revision 4 until the Whisper CUDA
-// release is published. The VibeVoice extension explicitly requires revision 5.
-const config = { ...loadConfig(), packagingRevision: 5 };
+// Extension metadata must match the current recipe publication identity.
+const config = loadConfig();
 const baselinePairs = [
 	["localai-llamacpp", "darwin-arm64"],
 	["localai-llamacpp", "linux-amd64"],
@@ -141,5 +140,5 @@ test("VibeVoice extension rejects false metadata and wrong configuration revisio
 	metadata.buildInputs.packagingRevision = 4;
 	writeFileSync(paths.vibevoiceCudaMetadata, JSON.stringify(metadata));
 	assert.throws(() => extendManualBackendReleaseVibevoice({ ...paths, outputDirectory }), /vibevoice CUDA metadata buildInputs.packagingRevision mismatch/);
-	assert.throws(() => extendManualBackendReleaseVibevoice({ ...paths, config: { ...config, packagingRevision: 4 }, outputDirectory: join(paths.root, "bad-config") }), /packagingRevision must be 5/);
+	assert.throws(() => extendManualBackendReleaseVibevoice({ ...paths, config: { ...config, packagingRevision: 5 }, outputDirectory: join(paths.root, "bad-config") }), /packagingRevision must be 6/);
 });

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -124,6 +125,13 @@ func (p *functionalRPCPeer) serve() error {
 				return err
 			}
 		case "session/prompt":
+			if p.mode == "disconnect-once" {
+				if _, err := os.Stat(p.fixture.DisconnectMarkerPath); os.IsNotExist(err) {
+					return p.disconnectAndAwaitRetirement()
+				} else if err != nil {
+					return err
+				}
+			}
 			if err := p.prompt(request); err != nil {
 				return err
 			}
@@ -133,52 +141,12 @@ func (p *functionalRPCPeer) serve() error {
 			if p.mode == "package-conformance" {
 				return p.waitForPackageConformanceRelease()
 			}
-			if p.mode == "disconnect-once" && p.sessions == 1 {
-				marker := p.fixture.DisconnectMarkerPath
-				ready := p.fixture.DisconnectReadyPath
-				release := p.fixture.DisconnectReleasePath
-				if marker == "" {
-					return fmt.Errorf("disconnect-once mode requires disconnectMarkerPath")
-				}
-				if ready == "" || release == "" {
-					return fmt.Errorf("disconnect-once mode requires disconnectReadyPath and disconnectReleasePath")
-				}
-				if _, err := os.Stat(marker); os.IsNotExist(err) {
-					if err := os.WriteFile(ready, []byte("response-ready"), 0o600); err != nil {
-						return fmt.Errorf("write ACP response-ready marker: %w", err)
-					}
-					for {
-						if _, err := os.Stat(release); err == nil {
-							break
-						} else if !os.IsNotExist(err) {
-							return fmt.Errorf("inspect ACP disconnect release: %w", err)
-						}
-						time.Sleep(10 * time.Millisecond)
-					}
-					if p.closeOutput == nil {
-						return fmt.Errorf("disconnect-once mode cannot close its output")
-					}
-					if err := p.closeOutput.Close(); err != nil {
-						return fmt.Errorf("close disconnected ACP output: %w", err)
-					}
-					if err := os.WriteFile(marker, []byte("disconnected"), 0o600); err != nil {
-						return fmt.Errorf("write ACP disconnect marker: %w", err)
-					}
-					for p.scanner.Scan() {
-					}
-					return p.scanner.Err()
-				} else if err != nil {
-					return fmt.Errorf("inspect ACP disconnect marker: %w", err)
-				}
-			}
-			if (p.mode == "spawn" && p.sessions >= 4) ||
-				(p.mode == "tournament" && p.sessions >= 3) ||
-				((p.mode == "persistent" || p.mode == "serialize") && p.sessions >= 2) {
-				return nil
-			}
-			if p.mode != "persistent" && p.mode != "serialize" && p.mode != "spawn" && p.mode != "tournament" {
-				return nil
-			}
+			// Production ACP retires the process it owns for the request that
+			// just ended, so a peer keeps no state across requests: it stays on
+			// stdin until the provider closes it and then exits. That also keeps
+			// the client free to finish draining this turn's notifications
+			// before the process goes away.
+			continue
 		case "$/cancel_request", "session/cancel":
 			return nil
 		default:
@@ -189,6 +157,79 @@ func (p *functionalRPCPeer) serve() error {
 		return fmt.Errorf("read client RPC: %w", err)
 	}
 	return nil
+}
+
+// disconnectAndAwaitRetirement models an agent that drops its standard output
+// in the middle of a turn: it closes stdout without answering, records that it
+// did so, and then stays alive on stdin. Production ACP owns one process per
+// request, so this peer is retired when its own request ends - the parent closes
+// its stdin and the peer exits on that EOF. The disconnect marker is the only
+// post-terminal evidence the scenario relies on, and it is written before this
+// peer stops answering.
+func (p *functionalRPCPeer) disconnectAndAwaitRetirement() error {
+	if p.fixture.DisconnectMarkerPath == "" {
+		return fmt.Errorf("disconnect-once mode requires disconnectMarkerPath")
+	}
+	if p.closeOutput == nil {
+		return fmt.Errorf("disconnect-once mode cannot close its output")
+	}
+	if err := p.closeOutput.Close(); err != nil {
+		return fmt.Errorf("close disconnected ACP output: %w", err)
+	}
+	if err := os.WriteFile(p.fixture.DisconnectMarkerPath, []byte("disconnected"), 0o600); err != nil {
+		return fmt.Errorf("write ACP disconnect marker: %w", err)
+	}
+	// Retirement, not the test, ends this peer: it exits only when the provider
+	// closes the stdin it owns.
+	for p.scanner.Scan() {
+	}
+	return p.scanner.Err()
+}
+
+// concurrentPromptRole identifies which of a workflow's independent prompts
+// this request owns. Production ACP starts one process per request, so the role
+// must come from the prompt this process actually received - a per-process
+// counter would restart at one for every concurrent prompt.
+func concurrentPromptRole(request rpcEnvelope) (string, error) {
+	message := strings.TrimSpace(promptRequestLastText(request))
+	for _, role := range []string{"first", "second"} {
+		if strings.EqualFold(message, role) {
+			return role, nil
+		}
+	}
+	return "", fmt.Errorf("unrecognized concurrent ACP prompt %q", message)
+}
+
+// holdConcurrentPrompt publishes this prompt's own entry marker and blocks
+// until this prompt's own release file appears. Because the barrier is keyed by
+// the prompt rather than shared, the parent can observe that both independent
+// prompts were inside their own turn at the same time: neither can proceed until
+// the test releases it specifically.
+func (p *functionalRPCPeer) holdConcurrentPrompt(request rpcEnvelope) (string, error) {
+	if p.fixture.PromptSignalDirectory == "" || p.fixture.PromptReleaseDirectory == "" {
+		return "", fmt.Errorf("concurrent mode requires promptSignalDirectory and promptReleaseDirectory")
+	}
+	role, err := concurrentPromptRole(request)
+	if err != nil {
+		return "", err
+	}
+	entered := filepath.Join(p.fixture.PromptSignalDirectory, role+".entered")
+	if err := os.WriteFile(entered, []byte("prompt-entered"), 0o600); err != nil {
+		return "", fmt.Errorf("record ACP prompt entry for %q: %w", role, err)
+	}
+	release := filepath.Join(p.fixture.PromptReleaseDirectory, role+".released")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(release); err == nil {
+			return role, nil
+		} else if !os.IsNotExist(err) {
+			return "", fmt.Errorf("inspect ACP prompt release for %q: %w", role, err)
+		}
+		if time.Now().After(deadline) {
+			return "", fmt.Errorf("timed out waiting for release of ACP prompt %q", role)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func (p *functionalRPCPeer) waitForPackageConformanceRelease() error {
@@ -243,14 +284,9 @@ func (p *functionalRPCPeer) createSession(request rpcEnvelope) error {
 	}
 	config := `[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]`
 	p.sessions++
-	sessionID := p.sessionID
-	if p.mode == "persistent" || p.mode == "serialize" {
-		sessionID = fmt.Sprintf("acp-session-functional-1-%d", p.sessions)
-	}
-	p.sessionID = sessionID
-	result := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"configOptions":%s}`, sessionID, config))
+	result := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"configOptions":%s}`, p.sessionID, config))
 	if p.mode == "pi-startup" || p.mode == "pi-failure" {
-		result = json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"configOptions":%s,"_meta":{"piAcp":{"startupInfo":"Pi startup banner"}}}`, sessionID, config))
+		result = json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"configOptions":%s,"_meta":{"piAcp":{"startupInfo":"Pi startup banner"}}}`, p.sessionID, config))
 	}
 	return p.respond(request.ID, result)
 }
@@ -337,22 +373,6 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 			return fmt.Errorf("unexpected retry-resume prompt on ACP process attempt %d", p.retryAttempt)
 		}
 	}
-	if p.mode == "serialize" && p.sessions == 1 {
-		if signal := p.fixture.PromptSignalPath; signal != "" {
-			_ = os.WriteFile(signal, []byte("first-prompt-started"), 0o600)
-		}
-		release := p.fixture.PromptReleasePath
-		deadline := time.Now().Add(5 * time.Second)
-		for {
-			if _, err := os.Stat(release); err == nil {
-				break
-			}
-			if time.Now().After(deadline) {
-				return fmt.Errorf("timed out waiting for first prompt release")
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
 	if p.mode == "block" {
 		if signal := p.fixture.PromptSignalPath; signal != "" {
 			_ = os.WriteFile(signal, []byte("prompt-started"), 0o600)
@@ -370,6 +390,18 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 	}
 	if err := p.validatePromptPayload(request); err != nil {
 		return err
+	}
+	if p.mode == "concurrent" {
+		role, err := p.holdConcurrentPrompt(request)
+		if err != nil {
+			return err
+		}
+		// Answer with this prompt's own role so the parent can prove the two
+		// concurrent prompts produced independent results.
+		if err := p.update(fmt.Sprintf(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"%s independent answer execution COMPLETE"}}`, role)); err != nil {
+			return err
+		}
+		return p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
 	}
 	if (p.mode == "model" || p.mode == "package-conformance") && !p.modelSet {
 		return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "advertised model was not applied"})
@@ -456,23 +488,132 @@ func (p *functionalRPCPeer) respondToPackagedPrompt(request rpcEnvelope) (bool, 
 		}
 		return true, p.respond(request.ID, json.RawMessage(`{"stopReason":"cancelled"}`))
 	}
-	responses := map[string][]string{
-		"tournament": {"candidate one", "candidate two", `{"winner":"B","rationale":"candidate two is stronger"}`},
-		"spawn":      {`{"tasks":["research climate","research cost"]}`, `{"result":"climate findings"}`, `{"result":"cost findings"}`, `{"answer":"merged travel answer"}`},
+	text := promptRequestText(request)
+	switch p.mode {
+	case "spawn":
+		answer, err := spawnPromptAnswer(text)
+		if err != nil {
+			return true, p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": err.Error()})
+		}
+		if err := p.update(fmt.Sprintf(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":%q}}`, answer)); err != nil {
+			return true, err
+		}
+		return true, p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
+	case "tournament":
+		answer, err := tournamentPromptAnswer(text)
+		if err != nil {
+			return true, p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": err.Error()})
+		}
+		if err := p.update(fmt.Sprintf(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":%q}}`, answer)); err != nil {
+			return true, err
+		}
+		return true, p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
 	}
-	modeResponses, ok := responses[p.mode]
-	if !ok {
-		return false, nil
+	return false, nil
+}
+
+// promptRequestText joins every text block of one session/prompt request. The
+// prompt identifies which workflow agent owns the request, so a peer must read
+// the whole turn rather than one positional block.
+func promptRequestText(request rpcEnvelope) string {
+	var params struct {
+		Prompt []struct {
+			Text string `json:"text"`
+		} `json:"prompt"`
 	}
-	index := p.sessions - 1
-	if index < 0 || index >= len(modeResponses) {
-		message := fmt.Sprintf("unexpected packaged %s prompt", p.mode)
-		return true, p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": message})
+	if err := json.Unmarshal(request.Params, &params); err != nil {
+		return ""
 	}
-	if err := p.update(fmt.Sprintf(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":%q}}`, modeResponses[index])); err != nil {
-		return true, err
+	var builder strings.Builder
+	for _, block := range params.Prompt {
+		builder.WriteString(block.Text)
+		builder.WriteString("\n")
 	}
-	return true, p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
+	return builder.String()
+}
+
+// promptRequestLastText returns the final text block of a session/prompt
+// request - the user message itself, ahead of any system-instructions or input
+// Work block the provider prepends.
+func promptRequestLastText(request rpcEnvelope) string {
+	var params struct {
+		Prompt []struct {
+			Text string `json:"text"`
+		} `json:"prompt"`
+	}
+	if err := json.Unmarshal(request.Params, &params); err != nil {
+		return ""
+	}
+	for index := len(params.Prompt) - 1; index >= 0; index-- {
+		if text := strings.TrimSpace(params.Prompt[index].Text); text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+var spawnPlannerMarker = "You are a task planner with zero prior context"
+
+var spawnMergerMarker = "You are the final merger with no context beyond"
+
+// spawnChildFindings maps each planned spawn task to the finding that task's
+// independent executor returns. Production ACP owns a new process per request,
+// so the peer recognizes the assigned task inside the prompt it actually
+// received instead of indexing a per-process prompt counter.
+var spawnChildFindings = []struct {
+	task   string
+	answer string
+}{
+	{"research climate", `{"result":"climate findings"}`},
+	{"research cost", `{"result":"cost findings"}`},
+}
+
+func spawnPromptAnswer(text string) (string, error) {
+	// The merger prompt carries the ordered results of every child, so it must
+	// be recognized before the child tasks it quotes.
+	if strings.Contains(text, spawnMergerMarker) {
+		return `{"answer":"merged travel answer"}`, nil
+	}
+	if strings.Contains(text, spawnPlannerMarker) {
+		return `{"tasks":["research climate","research cost"]}`, nil
+	}
+	for _, child := range spawnChildFindings {
+		if strings.Contains(text, "Assigned task") && strings.Contains(text, child.task) {
+			return child.answer, nil
+		}
+	}
+	return "", fmt.Errorf("unrecognized spawn agent prompt")
+}
+
+var tournamentJudgeMarker = "You are an independent judge with zero prior context"
+
+var tournamentCompetitorPrefix = "You are competitor "
+
+// tournamentCandidates names the answer each blind competitor returns. The
+// judge prompt quotes both candidate answers, so the competitor role is matched
+// only against the competitor instruction line.
+var tournamentCandidates = map[string]string{
+	"1": "candidate one",
+	"2": "candidate two",
+	"3": "candidate three",
+	"4": "candidate four",
+}
+
+const tournamentJudgment = `{"winner":"B","rationale":"candidate two is stronger"}`
+
+func tournamentPromptAnswer(text string) (string, error) {
+	if strings.Contains(text, tournamentJudgeMarker) {
+		return tournamentJudgment, nil
+	}
+	if strings.Contains(text, tournamentCompetitorPrefix) {
+		remainder := text[strings.Index(text, tournamentCompetitorPrefix)+len(tournamentCompetitorPrefix):]
+		number := strings.TrimSpace(strings.SplitN(remainder, " ", 2)[0])
+		if answer, ok := tournamentCandidates[number]; ok {
+			return answer, nil
+		}
+		return "", fmt.Errorf("unrecognized tournament competitor number %q", number)
+	}
+	return "", fmt.Errorf("unrecognized tournament agent prompt")
 }
 
 // validatePromptPayload checks that the inbound session/prompt request

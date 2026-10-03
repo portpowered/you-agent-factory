@@ -505,8 +505,8 @@ func TestManualPublicationManifestProbe(t *testing.T) {
 	}
 }
 
-func TestPublishedQwenWindowsCUDAReleasePreservesOtherBackendFallbacks(t *testing.T) {
-	t.Parallel()
+func qwenCUDAPublicationFixture(t *testing.T) []byte {
+	t.Helper()
 	var document map[string]any
 	if err := json.Unmarshal(windowsCUDAPublicationFixture(t), &document); err != nil {
 		t.Fatal(err)
@@ -524,6 +524,12 @@ func TestPublishedQwenWindowsCUDAReleasePreservesOtherBackendFallbacks(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
+	return manifest
+}
+
+func TestPublishedQwenWindowsCUDAReleasePreservesOtherBackendFallbacks(t *testing.T) {
+	t.Parallel()
+	manifest := qwenCUDAPublicationFixture(t)
 	tag := publicationTag(t, manifest)
 	index := publicationIndex(t, tag, manifest)
 	resolver, err := NewPublishedBackendArtifactResolver(backendPublicationDoer(func(request *http.Request) (*http.Response, error) {
@@ -550,6 +556,86 @@ func TestPublishedQwenWindowsCUDAReleasePreservesOtherBackendFallbacks(t *testin
 	}
 }
 
+func TestPublishedQwenResolverUsesPublicationDateBeforeAPIListingOrder(t *testing.T) {
+	t.Parallel()
+	older := qwenCUDAPublicationFixture(t)
+	oldTag := publicationTag(t, older)
+	newTag := "localai-backends-v1-" + strings.Repeat("a", 64)
+	newer := bytes.ReplaceAll(older, []byte(oldTag), []byte(newTag))
+	newer = bytes.ReplaceAll(newer, []byte(strings.TrimPrefix(oldTag, "localai-backends-v1-")), []byte(strings.Repeat("a", 64)))
+	var newDocument map[string]any
+	if err := json.Unmarshal(newer, &newDocument); err != nil {
+		t.Fatal(err)
+	}
+	newDocument["artifacts"].([]any)[0].(map[string]any)["artifact"].(map[string]any)["sha256"] = strings.Repeat("b", 64)
+	newer, err := json.Marshal(newDocument)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, oldDate, newDate, wantTag string }{
+		{"old listed first", "2026-10-02T04:42:07Z", "2026-10-02T08:41:57Z", newTag},
+		{"invalid older date", "invalid", "2026-10-02T08:41:57Z", newTag},
+		{"missing dates preserve listing", "", "", oldTag},
+		{"tied dates preserve listing", "2026-10-02T08:41:57Z", "2026-10-02T08:41:57Z", oldTag},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			encoded := publicationIndexWithDates(t, older, newer, tc.oldDate, tc.newDate)
+			var fetched []string
+			resolver, err := NewPublishedBackendArtifactResolver(backendPublicationDoer(func(request *http.Request) (*http.Response, error) {
+				switch request.URL.String() {
+				case backendReleasesURL:
+					return publicationResponse(encoded), nil
+				case backendReleaseBase + oldTag + "/manifest.json":
+					fetched = append(fetched, oldTag)
+					return publicationResponse(older), nil
+				case backendReleaseBase + newTag + "/manifest.json":
+					fetched = append(fetched, newTag)
+					return publicationResponse(newer), nil
+				default:
+					return nil, fmt.Errorf("unexpected publication request")
+				}
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := publishedWindowsRequest("localai-qwen3-tts-cpp")
+			assertUnpinnedSelection(t, resolver, request, false, "cuda", tc.wantTag)
+			selection, err := resolver(t.Context(), request, false)
+			if err != nil || (tc.wantTag == newTag && selection.SHA256 != strings.Repeat("b", 64)) {
+				t.Fatalf("current archive checksum = %q/%v, want new publication's checksum", selection.SHA256, err)
+			}
+			if len(fetched) != 2 || fetched[0] != tc.wantTag {
+				t.Fatalf("manifest fetch order = %v, want selected publication fetched first", fetched)
+			}
+			assertUnpinnedSelection(t, resolver, request, true, "cuda", tc.wantTag)
+			if len(fetched) != 2 {
+				t.Fatal("cached offline selection fetched manifests again")
+			}
+		})
+	}
+}
+
+func publicationIndexWithDates(t *testing.T, older, newer []byte, oldDate, newDate string) []byte {
+	t.Helper()
+	var index []map[string]any
+	for _, publication := range []struct {
+		date string
+		data []byte
+	}{{oldDate, older}, {newDate, newer}} {
+		var entries []map[string]any
+		if err := json.Unmarshal(publicationIndex(t, publicationTag(t, publication.data), publication.data), &entries); err != nil {
+			t.Fatal(err)
+		}
+		entries[0]["published_at"] = publication.date
+		index = append(index, entries[0])
+	}
+	encoded, err := json.Marshal(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
+}
+
 func TestPinnedQwenWindowsCUDACandidateAllowsOfflineSelectionAndRejectsCPU(t *testing.T) {
 	t.Parallel()
 	resolver, err := NewDefaultBackendArtifactResolver()
@@ -558,8 +644,13 @@ func TestPinnedQwenWindowsCUDACandidateAllowsOfflineSelectionAndRejectsCPU(t *te
 	}
 	request := publishedWindowsRequest("localai-qwen3-tts-cpp")
 	selection, err := resolver(t.Context(), request, true)
-	if err != nil || selection.Accelerator != "cuda" || selection.Bytes != 446509483 || selection.SHA256 != "63f26241a917c5340b2bdbb611c6362ae04fcae9d8dd6a7682c71b5c628f33b4" {
+	if err != nil || selection.Accelerator != "cuda" || selection.Bytes != 445867793 || selection.SHA256 != "58fe20ab56dcf6f4e4e485d71138bfa2c24605c1823817a763617199c9172422" {
 		t.Fatalf("pinned Qwen candidate = %#v/%v, want exact verified Windows archive", selection, err)
+	}
+	const archiveName = "localai-backend-localai-qwen3-tts-cpp-windows-amd64-cuda-d17c33d4ee2f56d15f9ca8a1bb82f7389305f838-dea7691547a1.zip"
+	const releaseTag = "localai-backends-v1-53cf3a40d01e831eff5ba390a8f761badef03824e2b6439dfc1fd5ac0072cc87"
+	if selection.Name != archiveName || selection.Location != backendReleaseBase+releaseTag+"/"+archiveName {
+		t.Fatalf("pinned Qwen identity = %q/%q, want exact immutable sampler publication", selection.Name, selection.Location)
 	}
 	request.Platform.CUDAAvailable = false
 	if _, err := resolver(t.Context(), request, true); !errors.Is(err, artifacts.ErrIncompatibleAccelerator) {

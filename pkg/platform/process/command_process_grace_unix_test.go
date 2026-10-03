@@ -212,3 +212,45 @@ func TestExecCommandRunner_SupersededCauseReachesCleanupTelemetry(t *testing.T) 
 		t.Fatalf("cleanup completion = %#v, want SUPERSEDED force-kill success", last.fields)
 	}
 }
+
+func TestCommandProcessLeaderRunningUsesInjectedStateWithoutProcessStateRace(t *testing.T) {
+
+	cmd := &exec.Cmd{Process: &os.Process{Pid: os.Getpid()}}
+	if commandProcessLeaderRunning(cmd, func(int) (byte, bool) { return 'Z', true }) {
+		t.Fatal("zombie process state reported as running")
+	}
+	if !commandProcessLeaderRunning(cmd, func(int) (byte, bool) { return 'S', true }) {
+		t.Fatal("live process state reported as stopped")
+	}
+	if commandProcessLeaderRunning(nil, nil) {
+		t.Fatal("nil command reported as running")
+	}
+}
+
+func TestProcessLifecycleMonitorStopsDuringExitObservationGrace(t *testing.T) {
+
+	cmd := &exec.Cmd{Process: &os.Process{Pid: os.Getpid()}}
+	waitDone := make(chan struct{})
+	stateRead := make(chan struct{}, 1)
+	observer := &lifecycleObserverRecorder{
+		started: make(chan ProcessInfo, 1),
+		exited:  make(chan ProcessInfo, 1),
+	}
+	monitor := startProcessLifecycleMonitor(cmd, waitDone, observer, func(int) (byte, bool) {
+		select {
+		case stateRead <- struct{}{}:
+		default:
+		}
+		return 'Z', true
+	})
+	if monitor == nil {
+		t.Fatal("startProcessLifecycleMonitor() returned nil")
+	}
+	<-stateRead
+	monitor.stopAndWait()
+	select {
+	case <-observer.exited:
+		t.Fatal("monitor reported exit after stop")
+	default:
+	}
+}

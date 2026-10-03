@@ -42,8 +42,8 @@ func assertSuccessfulPresentation(t *testing.T, name string, result modesInvocat
 	switch name {
 	case "default human response stream", "human response stream":
 		assertHumanResponseStream(t, result.stdout)
-		if strings.TrimSpace(result.stderr) == "" {
-			t.Fatal("human response-stream stderr is empty, want worker progress diagnostics")
+		if result.stderr != "" {
+			t.Fatalf("human response-stream stderr = %q, want empty redirected diagnostics", result.stderr)
 		}
 	case "primary text", "quiet primary text":
 		if strings.TrimSpace(result.stdout) != wantPrimaryResult {
@@ -73,6 +73,9 @@ func assertSuccessfulPresentation(t *testing.T, name string, result modesInvocat
 
 func assertHumanResponseStream(t *testing.T, stdout string) {
 	t.Helper()
+	if strings.ContainsAny(stdout, "\r\x1b") {
+		t.Fatalf("redirected human stdout contains terminal animation: %q", stdout)
+	}
 	markers := []string{
 		"[0] factory started",
 		"[1] work accepted:",

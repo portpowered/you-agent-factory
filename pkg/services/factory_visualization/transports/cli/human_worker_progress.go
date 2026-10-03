@@ -7,6 +7,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+
+	"golang.org/x/text/width"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -17,47 +20,38 @@ const humanWorkerProgressInterval = 120 * time.Millisecond
 var humanWorkerSpinnerFrames = [...]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 // humanWorkerProgressRenderer owns stderr-only worker progress. Interactive
-// terminals receive a transient spinner; redirected output receives stable
-// status lines. Its state is independent from the response stream so
+// terminals receive a transient spinner; redirected output uses only the
+// response stream milestones. Its state is independent from the response stream so
 // JSON/NDJSON output remains byte-for-byte owned by the stream writer.
 type humanWorkerProgressRenderer struct {
-	output           io.Writer
-	interactive      bool
-	ticks            <-chan time.Time
-	ticker           *time.Ticker
-	stop             chan struct{}
-	done             chan struct{}
-	once             sync.Once
-	mu               sync.Mutex
-	active           map[string]humanWorkerProgressState
-	pending          map[string]humanWorkerProgressState
-	workerByDispatch map[string]string
-	colors           map[string]string
-	lastStable       string
-	frame            int
-	drawn            bool
-	stopped          bool
+	output      io.Writer
+	columns     func() int
+	interactive bool
+	ticks       <-chan time.Time
+	ticker      *time.Ticker
+	stop        chan struct{}
+	done        chan struct{}
+	once        sync.Once
+	mu          sync.Mutex
+	active      map[string]humanWorkerProgressState
+	pending     map[string]humanWorkerProgressState
+	frame       int
+	drawn       bool
+	stopped     bool
 }
 
 type humanWorkerProgressState struct {
-	dispatchID  string
-	workerID    string
 	workstation string
-	workIDs     []string
 }
 
-func newHumanWorkerProgressRenderer(output io.Writer, isTTY bool, ticks <-chan time.Time) *humanWorkerProgressRenderer {
-	renderer := &humanWorkerProgressRenderer{output: output, interactive: isTTY}
-	if output == nil {
+func newHumanWorkerProgressRenderer(output io.Writer, isTTY bool, ticks <-chan time.Time, columns func() int) *humanWorkerProgressRenderer {
+	renderer := &humanWorkerProgressRenderer{output: output, interactive: isTTY, columns: columns}
+	if output == nil || !isTTY {
+		renderer.output = nil
 		return renderer
 	}
 	renderer.active = make(map[string]humanWorkerProgressState)
 	renderer.pending = make(map[string]humanWorkerProgressState)
-	renderer.workerByDispatch = make(map[string]string)
-	renderer.colors = make(map[string]string)
-	if !isTTY {
-		return renderer
-	}
 	if ticks == nil {
 		ticker := time.NewTicker(humanWorkerProgressInterval)
 		ticks = ticker.C
@@ -95,8 +89,6 @@ func (renderer *humanWorkerProgressRenderer) applyEventLocked(event interfaces.F
 	switch event.Type {
 	case interfaces.FactoryEventTypeDispatchQueued:
 		renderer.applyDispatchQueuedLocked(event)
-	case interfaces.FactoryEventTypeDispatchWorkerSessionAssoc:
-		renderer.applyWorkerAssociationLocked(event)
 	case interfaces.FactoryEventTypeDispatchRequest:
 		renderer.applyDispatchRequestLocked(event)
 	case interfaces.FactoryEventTypeDispatchResponse,
@@ -112,52 +104,17 @@ func (renderer *humanWorkerProgressRenderer) applyDispatchQueuedLocked(event int
 		return
 	}
 	state := renderer.pending[dispatchID]
-	state.dispatchID = dispatchID
 	payload, ok := decodeFactoryEventPayload[interfaces.DispatchQueuedEventPayload](event)
 	if ok {
 		state.workstation = boundedHumanProgressPayload(stringPointerValue(payload.Label))
-		state.workIDs = mergeHumanWorkIDs(state.workIDs, stringSlicePointerValue(payload.InputWorkIDs))
 	}
 	renderer.pending[dispatchID] = state
 	if active, exists := renderer.active[dispatchID]; exists {
-		renderer.active[dispatchID] = mergeHumanWorkerProgressState(active, state)
+		if state.workstation != "" {
+			active.workstation = state.workstation
+		}
+		renderer.active[dispatchID] = active
 	}
-}
-
-func (renderer *humanWorkerProgressRenderer) applyWorkerAssociationLocked(event interfaces.FactoryEvent) {
-	dispatchID := humanWorkerProgressDispatchID(event)
-	if dispatchID == "" {
-		return
-	}
-	payload, ok := decodeFactoryEventPayload[interfaces.DispatchWorkerSessionAssociationEventPayload](event)
-	workerID := boundedHumanProgressPayload(payload.WorkerSessionID)
-	if !ok || workerID == "" {
-		return
-	}
-	renderer.workerByDispatch[dispatchID] = workerID
-	renderer.migrateProgressColorLocked(dispatchID, workerID)
-	if state, exists := renderer.active[dispatchID]; exists {
-		state.workerID = workerID
-		renderer.active[dispatchID] = state
-	}
-	if state, exists := renderer.pending[dispatchID]; exists {
-		state.workerID = workerID
-		renderer.pending[dispatchID] = state
-	}
-}
-
-func (renderer *humanWorkerProgressRenderer) migrateProgressColorLocked(from, to string) {
-	if from == "" || to == "" || from == to {
-		return
-	}
-	color := renderer.colors[from]
-	if color == "" {
-		return
-	}
-	if renderer.colors[to] == "" {
-		renderer.colors[to] = color
-	}
-	delete(renderer.colors, from)
 }
 
 func (renderer *humanWorkerProgressRenderer) applyDispatchRequestLocked(event interfaces.FactoryEvent) {
@@ -169,25 +126,18 @@ func (renderer *humanWorkerProgressRenderer) applyDispatchRequestLocked(event in
 	state := renderer.active[identity]
 	if dispatchID != "" {
 		if pending, exists := renderer.pending[dispatchID]; exists {
-			state = mergeHumanWorkerProgressState(pending, state)
+			if state.workstation == "" {
+				state.workstation = pending.workstation
+			}
 			delete(renderer.pending, dispatchID)
 		}
-	}
-	state.dispatchID = dispatchID
-	if state.dispatchID == "" {
-		state.dispatchID = identity
-	}
-	if state.workerID == "" && dispatchID != "" {
-		state.workerID = renderer.workerByDispatch[dispatchID]
 	}
 	payload, ok := decodeFactoryEventPayload[interfaces.DispatchRequestEventPayload](event)
 	if ok {
 		if workstation := boundedHumanProgressPayload(payload.TransitionID); workstation != "" {
 			state.workstation = workstation
 		}
-		state.workIDs = mergeHumanWorkIDs(state.workIDs, dispatchInputWorkIDs(payload))
 	}
-	state.workIDs = mergeHumanWorkIDs(state.workIDs, factoryEventWorkIDs(event))
 	renderer.active[identity] = state
 }
 
@@ -203,34 +153,8 @@ func (renderer *humanWorkerProgressRenderer) removeTerminalDispatchLocked(event 
 	if identity == "" {
 		return
 	}
-	if state, exists := renderer.active[identity]; exists {
-		colorIdentity := state.workerID
-		if colorIdentity == "" {
-			colorIdentity = identity
-		}
-		delete(renderer.colors, colorIdentity)
-		delete(renderer.colors, state.dispatchID)
-	}
 	delete(renderer.active, identity)
 	delete(renderer.pending, dispatchID)
-	delete(renderer.workerByDispatch, dispatchID)
-}
-
-func mergeHumanWorkerProgressState(
-	base humanWorkerProgressState,
-	additional humanWorkerProgressState,
-) humanWorkerProgressState {
-	if base.dispatchID == "" {
-		base.dispatchID = additional.dispatchID
-	}
-	if additional.workerID != "" {
-		base.workerID = additional.workerID
-	}
-	if additional.workstation != "" {
-		base.workstation = additional.workstation
-	}
-	base.workIDs = mergeHumanWorkIDs(base.workIDs, additional.workIDs)
-	return base
 }
 
 func (renderer *humanWorkerProgressRenderer) Stop() {
@@ -243,8 +167,6 @@ func (renderer *humanWorkerProgressRenderer) Stop() {
 			renderer.stopped = true
 			renderer.active = nil
 			renderer.pending = nil
-			renderer.workerByDispatch = nil
-			renderer.colors = nil
 			renderer.mu.Unlock()
 			return
 		}
@@ -258,19 +180,22 @@ func (renderer *humanWorkerProgressRenderer) Stop() {
 
 func (renderer *humanWorkerProgressRenderer) run() {
 	defer close(renderer.done)
+	defer func() {
+		renderer.mu.Lock()
+		defer renderer.mu.Unlock()
+		renderer.stopped = true
+		renderer.active = nil
+		renderer.pending = nil
+		renderer.clearLocked()
+	}()
 	for {
 		select {
 		case <-renderer.stop:
-			renderer.mu.Lock()
-			renderer.stopped = true
-			renderer.active = nil
-			renderer.pending = nil
-			renderer.workerByDispatch = nil
-			renderer.colors = nil
-			renderer.clearLocked()
-			renderer.mu.Unlock()
 			return
-		case <-renderer.ticks:
+		case _, open := <-renderer.ticks:
+			if !open {
+				return
+			}
 			renderer.mu.Lock()
 			if len(renderer.active) > 0 {
 				renderer.frame = (renderer.frame + 1) % len(humanWorkerSpinnerFrames)
@@ -283,10 +208,20 @@ func (renderer *humanWorkerProgressRenderer) run() {
 
 func (renderer *humanWorkerProgressRenderer) drawLocked() {
 	if !renderer.interactive {
-		renderer.drawStableLocked()
 		return
 	}
 	if len(renderer.active) == 0 {
+		renderer.clearLocked()
+		return
+	}
+	columns := 80
+	if renderer.columns != nil {
+		if observed := renderer.columns(); observed > 0 {
+			columns = observed
+		}
+	}
+	budget := columns - 1 // Never write the final column: terminals may wrap there.
+	if budget < 1 {
 		renderer.clearLocked()
 		return
 	}
@@ -295,92 +230,62 @@ func (renderer *humanWorkerProgressRenderer) drawLocked() {
 		identities = append(identities, identity)
 	}
 	sort.Strings(identities)
-	glyphs := make([]string, 0, len(identities))
-	for index, identity := range identities {
+	line := humanWorkerSpinnerFrames[renderer.frame] + " "
+	labels := make([]string, 0, len(identities))
+	for _, identity := range identities {
 		state := renderer.active[identity]
-		frame := humanWorkerSpinnerFrames[(renderer.frame+index)%len(humanWorkerSpinnerFrames)]
-		line := formatHumanWorkerProgressLine(frame, state)
-		colorIdentity := state.workerID
-		if colorIdentity == "" {
-			colorIdentity = identity
+		label := state.workstation
+		if label == "" {
+			label = "worker"
 		}
-		color := renderer.progressColorLocked(colorIdentity)
-		glyphs = append(glyphs, "\x1b["+color+"m"+line+"\x1b[0m")
+		labels = append(labels, label)
 	}
-	_, _ = fmt.Fprint(renderer.output, "\r\x1b[2K"+strings.Join(glyphs, " "))
+	line += strings.Join(labels, ", ")
+	if len(identities) > 1 {
+		line = humanWorkerSpinnerFrames[renderer.frame] + fmt.Sprintf(" %d workers: ", len(identities)) + strings.Join(labels, ", ")
+	}
+	_, _ = fmt.Fprint(renderer.output, "\r\x1b[2K"+fitHumanProgressColumns(line, budget))
 	renderer.drawn = true
 }
 
-func (renderer *humanWorkerProgressRenderer) drawStableLocked() {
-	if len(renderer.active) == 0 {
-		renderer.lastStable = ""
-		return
+func fitHumanProgressColumns(text string, columns int) string {
+	used := 0
+	var result strings.Builder
+	for _, r := range text {
+		cells := 1
+		if unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Me, r) {
+			cells = 0
+		}
+		kind := width.LookupRune(r).Kind()
+		if kind == width.EastAsianWide || kind == width.EastAsianFullwidth {
+			cells = 2
+		}
+		if used+cells > columns {
+			return result.String()
+		}
+		result.WriteRune(r)
+		used += cells
 	}
-	identities := make([]string, 0, len(renderer.active))
-	for identity := range renderer.active {
-		identities = append(identities, identity)
-	}
-	sort.Strings(identities)
-	lines := make([]string, 0, len(identities))
-	for _, identity := range identities {
-		lines = append(lines, formatHumanWorkerProgressLine("", renderer.active[identity]))
-	}
-	frame := strings.Join(lines, "\n")
-	if frame == renderer.lastStable {
-		return
-	}
-	_, _ = fmt.Fprintln(renderer.output, frame)
-	renderer.lastStable = frame
+	return result.String()
 }
 
-func (renderer *humanWorkerProgressRenderer) progressColorLocked(identity string) string {
-	if color := renderer.colors[identity]; color != "" {
-		return color
-	}
-	start := stableWorkstationColorIndex(identity)
-	for offset := 0; offset < len(humanWorkerProgressColors); offset++ {
-		color := humanWorkerProgressColors[(start+offset)%len(humanWorkerProgressColors)]
-		used := false
-		for _, assigned := range renderer.colors {
-			if assigned == color {
-				used = true
-				break
-			}
-		}
-		if !used {
-			renderer.colors[identity] = color
-			return color
-		}
-	}
-	color := humanWorkerProgressColors[start%len(humanWorkerProgressColors)]
-	renderer.colors[identity] = color
-	return color
+// Each stream write interrupts the transient line under the same lock used by
+// event updates and animation. The response stream remains the record owner.
+type humanProgressOutput struct {
+	renderer *humanWorkerProgressRenderer
+	output   io.Writer
 }
 
-func formatHumanWorkerProgressLine(frame string, state humanWorkerProgressState) string {
-	identity := boundedHumanProgressPayload(state.workerID)
-	if identity == "" {
-		identity = boundedHumanProgressPayload(state.dispatchID)
+func (writer humanProgressOutput) Write(data []byte) (int, error) {
+	renderer := writer.renderer
+	renderer.mu.Lock()
+	defer renderer.mu.Unlock()
+	renderer.clearLocked()
+	n, err := writer.output.Write(data)
+	if !renderer.stopped && renderer.interactive {
+		renderer.drawLocked()
 	}
-	label := "dispatch"
-	if state.workerID != "" {
-		label = "worker"
-	}
-	prefix := ""
-	if frame != "" {
-		prefix = frame + " "
-	}
-	line := prefix + label + " " + identity + ": active"
-	if workstation := boundedHumanProgressPayload(state.workstation); workstation != "" {
-		line += " at " + workstation
-	}
-	if len(state.workIDs) > 0 {
-		line += " (" + strings.Join(state.workIDs, ", ") + ")"
-	}
-	if state.workerID != "" && state.dispatchID != "" {
-		line += " [dispatch " + boundedHumanProgressPayload(state.dispatchID) + "]"
-	}
-	return line
+	return n, err
 }
 
 func (renderer *humanWorkerProgressRenderer) clearLocked() {

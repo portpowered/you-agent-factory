@@ -12,18 +12,21 @@ import (
 )
 
 const genericLLMFixtureSource = "hf://fixture/root-composition/gemma-4-E4B-it-Q4_K_M.gguf@0000000000000000000000000000000000000000"
+const genericASRFixtureSource = "hf://fixture/root-composition/qwen3-asr-0.6b-q8_0.gguf@0000000000000000000000000000000000000000"
 
 func genericModelFixtureSource(t *testing.T, home, source string) string {
 	t.Helper()
-	definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameLLM)
-	if !ok || strings.TrimSpace(source) != strings.TrimSpace(definition.Source) {
-		return source
+	for name, fixtureSource := range map[string]string{models.BuiltInModelNameLLM: genericLLMFixtureSource, models.BuiltInModelNameASR: genericASRFixtureSource} {
+		definition, ok := (models.BuiltInCatalog{}).ModelDefinitionFor(name)
+		if ok && strings.TrimSpace(source) == strings.TrimSpace(definition.Source) {
+			writeGenericModelSourceOverride(t, home, name, fixtureSource, "")
+			return fixtureSource
+		}
 	}
-	writeGenericLLMSourceOverride(t, home)
-	return genericLLMFixtureSource
+	return source
 }
 
-func writeGenericLLMSourceOverride(t *testing.T, home string) {
+func writeGenericModelSourceOverride(t *testing.T, home, modelName, source, backend string) {
 	t.Helper()
 	configPath := filepath.Join(home, ".you-agent-factory", "config.json")
 	config := map[string]any{}
@@ -43,15 +46,22 @@ func writeGenericLLMSourceOverride(t *testing.T, home string) {
 		modelsConfig = map[string]any{}
 		config["models"] = modelsConfig
 	}
-	llmConfig, ok := modelsConfig[models.BuiltInModelNameLLM].(map[string]any)
+	llmConfig, ok := modelsConfig[modelName].(map[string]any)
 	if !ok {
-		if modelsConfig[models.BuiltInModelNameLLM] != nil {
-			t.Fatalf("operator config llm has type %T, want object", modelsConfig[models.BuiltInModelNameLLM])
+		if modelsConfig[modelName] != nil {
+			t.Fatalf("operator config model has type %T, want object", modelsConfig[modelName])
 		}
 		llmConfig = map[string]any{}
-		modelsConfig[models.BuiltInModelNameLLM] = llmConfig
+		modelsConfig[modelName] = llmConfig
 	}
-	llmConfig["source"] = genericLLMFixtureSource
+	llmConfig["source"] = source
+	if backend != "" {
+		llmConfig["backend"] = backend
+	}
+	if modelName == "whisper-asr-fixture" {
+		llmConfig["loadPolicy"] = "ON_DEMAND"
+		llmConfig["operations"] = []string{models.OperationASR}
+	}
 
 	data, err := json.Marshal(config)
 	if err != nil {

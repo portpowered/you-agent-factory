@@ -141,6 +141,8 @@ func managedBackendEnvironment(backend, root string) []string {
 		return []string{"VIBEVOICECPP_LIBRARY=" + filepath.Join(root, "libgovibevoicecpp.dll")}
 	case "localai-qwen3-tts-cpp":
 		return []string{"QWEN3TTS_LIBRARY=" + filepath.Join(root, "libgoqwen3ttscpp.dll")}
+	case "localai-qwen3-asr-cpp":
+		return []string{"QWEN3ASR_LIBRARY=" + filepath.Join(root, "libgoqwen3asrcpp.dll")}
 	default:
 		return nil
 	}
@@ -372,6 +374,8 @@ func managedBackendExecutableName(backend string) string {
 		return "vibevoice-cpp"
 	case "localai-qwen3-tts-cpp":
 		return "qwen3-tts-cpp"
+	case "localai-qwen3-asr-cpp":
+		return "qwen3-asr-cpp"
 	default:
 		return ""
 	}

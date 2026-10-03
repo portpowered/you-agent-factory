@@ -8,11 +8,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 
-	acpsdk "github.com/coder/acp-go-sdk"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -35,9 +36,21 @@ import (
 // edge intact so a passing result proves both attribution and the subprocess
 // protocol, rather than only an in-process projection.
 
-const acpWorkerChildPeerFlag = "you-test-acp-worker-child-peer"
+const (
+	acpWorkerChildPeerFlag        = "you-test-acp-worker-child-peer"
+	acpWorkerChildPeerOrdinalFlag = "you-test-acp-worker-child-peer-ordinal"
+)
 
 var runACPWorkerChildPeer = flag.Bool(acpWorkerChildPeerFlag, false, "run the scripted ACP worker-child peer")
+
+// acpWorkerChildPeerOrdinal is this peer's position among the peers its fixture
+// started. Every dispatch owns its own peer process, and each peer counts its
+// own protocol sessions, so without a per-process ordinal two peers would both
+// mint the provider session id "acp-child-1". Their Workers' child streams
+// would then collide on identity for a reason the product never caused, which
+// is exactly what the two-Worker cell must not mistake for a merged stream.
+var acpWorkerChildPeerOrdinal = flag.Int(acpWorkerChildPeerOrdinalFlag, 0,
+	"this scripted ACP worker-child peer's ordinal among the peers its fixture run started")
 
 // acpWorkerChildCompletionText ends in the fixture worker's own stopToken, so
 // the Work genuinely reaches its declared terminal state. Without a literal
@@ -154,10 +167,12 @@ func TestTwoACPWorkersKeepChildStreamsAttributed(t *testing.T) {
 	}
 }
 
-// acpWorkerChildPeerMarker extracts the scripted peer's own provider session
-// id from a Worker's child content. The peer embeds it in every update it
-// emits, so its presence proves Worker-authored content reached the stream and
-// its value proves which Worker authored it.
+// acpWorkerChildPeerMarker extracts the scripted peer's own provider identity
+// from a Worker's child content: the session-id prefix the re-exec'd peer was
+// given, up to and including its per-process ordinal. The peer embeds it in
+// every update it emits, so its presence proves Worker-authored content reached
+// the stream and its value proves which request-owned peer -- and therefore
+// which Worker -- authored it.
 func acpWorkerChildPeerMarker(body string) string {
 	const prefix = "tool-acp-child-"
 	index := strings.Index(body, prefix)
@@ -308,11 +323,11 @@ func describeACPWorkerNotifications(notifications []acpsdk.SessionNotification) 
 func runACPWorkerChildFixture(t *testing.T, name string, stages int) []acpsdk.SessionNotification {
 	t.Helper()
 
-	// The ACP-execution provider keeps one self-reexec'd peer process for all
-	// stages in this Factory and opens distinct protocol sessions for distinct
-	// Workers. This fixture deliberately keeps its root scenario-local: the
-	// seeded stage topology and the completed on-demand Factory activation are
-	// immutable process-scoped inputs that cannot be safely combined with
+	// Each dispatch opens its own request-owned ACP peer process, so this linear
+	// Factory starts one self-reexec'd peer per stage and no peer is shared
+	// across stages. This fixture deliberately keeps its root scenario-local:
+	// the seeded stage topology and the completed on-demand Factory activation
+	// are immutable process-scoped inputs that cannot be safely combined with
 	// another cell until Factory release/reopen is publicly supported.
 	home, cwd := seedACPWorkerChildHome(t, name, stages)
 	var starts atomic.Int32
@@ -339,8 +354,10 @@ func runACPWorkerChildFixture(t *testing.T, name string, stages int) []acpsdk.Se
 		t.Fatalf("stopReason = %q, want %q; notifications = %s",
 			decoded.StopReason, acpsdk.StopReasonEndTurn, describeACPWorkerNotifications(notifications))
 	}
-	if got := starts.Load(); got != 1 {
-		t.Fatalf("ACP peer subprocess starts = %d, want exactly 1 (one local-real peer shared by this Factory's Worker sessions)", got)
+	if got, want := starts.Load(), int32(stages); got != want {
+		t.Fatalf("ACP peer subprocess starts = %d, want %d (one request-owned peer per Worker "+
+			"dispatch -- each stage's Execute owns its own peer process, and this Factory dispatches "+
+			"one Worker per stage)", got, want)
 	}
 	return notifications
 }
@@ -470,12 +487,20 @@ const acpWorkerChildWorkstationAgents = "---\n" +
 
 // acpWorkerChildCommandFactory intercepts the built-in cursor-acp integration's
 // own command and re-execs this test binary as the scripted peer, matching the
-// pattern in acp_streaming_usage_composition_test.go.
+// pattern in acp_streaming_composition_test.go. Each dispatch owns its own peer
+// process, so the same counter that reports the starts this cell asserts on also
+// hands each re-exec'd peer a distinct ordinal; that ordinal seeds the peer's
+// provider session id, which is what keeps two independently started peers from
+// minting the same session and masquerading as one Worker's stream.
 func acpWorkerChildCommandFactory(starts *atomic.Int32, peerOwner string) platformprocess.CommandFactory {
 	return func(name string, args ...string) *exec.Cmd {
 		if name == "cursor-agent" && len(args) == 1 && args[0] == "acp" {
-			starts.Add(1)
-			return exec.Command(os.Args[0], "-test.run=^TestACPWorkerChildPeerProcess$", "-"+acpWorkerChildPeerFlag)
+			ordinal := starts.Add(1)
+			return exec.Command(os.Args[0],
+				"-test.run=^TestACPWorkerChildPeerProcess$",
+				"-"+acpWorkerChildPeerFlag,
+				"-"+acpWorkerChildPeerOrdinalFlag+"="+strconv.FormatInt(int64(ordinal), 10),
+			)
 		}
 		return exec.Command(name, args...)
 	}
@@ -493,7 +518,10 @@ func TestACPWorkerChildPeerProcess(t *testing.T) {
 		return
 	}
 	err := support.RunACPWorkerPeer(support.ACPWorkerPeerConfig{
-		SessionIDPrefix: "acp-child",
+		// This peer's own session counter starts at 1 in every process, so the
+		// per-process ordinal is what makes its provider session id -- and the
+		// tool-call ids it authors from it -- distinct from a sibling peer's.
+		SessionIDPrefix: "acp-child-" + strconv.Itoa(*acpWorkerChildPeerOrdinal),
 		CompletionText:  acpWorkerChildCompletionText,
 		Model:           "test-model",
 	}, os.Stdin, os.Stdout)

@@ -7038,3 +7038,21 @@ func TestStreamObservationsByWorkerSessionIDCloseCancelsBlockedNext(t *testing.T
 		t.Fatal("Close() did not unblock the active live Next call")
 	}
 }
+
+func TestScriptDeadlineUsesAuthoredBudgetOrCallerCancellation(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		execution workers.WorkstationExecutionRequest
+		want      time.Duration
+	}{
+		{"long script", workers.WorkstationExecutionRequest{WorkerType: "dub-synthesize", RunnerID: "script"}, 0},
+		{"authored script deadline", workers.WorkstationExecutionRequest{WorkerType: "dub-synthesize", RunnerID: "script", Timeout: 20 * time.Minute}, 20 * time.Minute},
+		{"agent default", workers.WorkstationExecutionRequest{WorkerType: "translate", RunnerID: "codex"}, workers.DefaultWorkstationExecutionTimeout},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := resolvedHardExecutionTimeout(test.execution); got != test.want {
+				t.Fatalf("execution deadline = %s, want %s", got, test.want)
+			}
+		})
+	}
+}

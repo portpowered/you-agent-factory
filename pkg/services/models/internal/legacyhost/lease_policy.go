@@ -22,7 +22,7 @@ func normalizeLeasePolicy(idleUnloadAfter time.Duration, maxLoadedRuntimes int) 
 func (h *CatalogHost) leaseCapacityForModel(runtimeCfg *models.RuntimeConfig, modelName string) int {
 	resource := modelScopedResource(runtimeCfg, modelName)
 	if resource == nil || resource.Capacity <= 0 {
-		return 0
+		return models.DefaultInvocationCapacity
 	}
 	return resource.Capacity
 }

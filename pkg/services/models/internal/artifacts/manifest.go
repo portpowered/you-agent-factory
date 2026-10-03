@@ -171,12 +171,12 @@ type wirePublication struct {
 }
 
 type wireToolchain struct {
-	GoVersion       string `json:"goVersion"`
-	CMakeVersion    string `json:"cmakeVersion"`
-	ProtobufVersion string `json:"protobufVersion"`
-	GRPCVersion     string `json:"grpcVersion"`
-	GRPCCommit      string `json:"grpcCommit"`
-	VCPKGCommit     string `json:"vcpkgCommit"`
+	GoVersion       string          `json:"goVersion"`
+	CMakeVersion    string          `json:"cmakeVersion"`
+	ProtobufVersion string          `json:"protobufVersion"`
+	GRPCVersion     string          `json:"grpcVersion"`
+	GRPCCommit      string          `json:"grpcCommit"`
+	VCPKGCommit     json.RawMessage `json:"vcpkgCommit"`
 }
 
 type wireArtifact struct {
@@ -333,7 +333,15 @@ func validateToolchain(toolchain wireToolchain) error {
 			return failure(FailureMalformedManifest, "publication.toolchain."+field, value, "must be non-empty")
 		}
 	}
-	for field, value := range map[string]string{"grpcCommit": toolchain.GRPCCommit, "vcpkgCommit": toolchain.VCPKGCommit} {
+	commits := map[string]string{"grpcCommit": toolchain.GRPCCommit}
+	if len(toolchain.VCPKGCommit) > 0 {
+		var commit string
+		if err := json.Unmarshal(toolchain.VCPKGCommit, &commit); err != nil {
+			return failure(FailureMalformedManifest, "publication.toolchain.vcpkgCommit", "", "must be a lowercase 40-character commit SHA")
+		}
+		commits["vcpkgCommit"] = commit
+	}
+	for field, value := range commits {
 		if !commitPattern.MatchString(value) {
 			return failure(FailureMalformedManifest, "publication.toolchain."+field, value, "must be a lowercase 40-character commit SHA")
 		}

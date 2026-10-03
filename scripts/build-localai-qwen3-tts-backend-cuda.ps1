@@ -30,6 +30,12 @@ if (-not (Test-Path -LiteralPath $sourceRoot)) {
 Invoke-Checked git @('-C', $sourceRoot, 'checkout', '--detach', $qwenCommit)
 Invoke-Checked git @('-C', $sourceRoot, 'submodule', 'update', '--init', '--recursive')
 
+# The sampler patch shifts the zero-context EOS patch's line offsets. Remove
+# only our already-applied sampler patch before checking the pinned EOS base.
+$samplingPatch = Join-Path $PSScriptRoot 'localai-qwen3-tts-sampling.patch'
+& git -C $sourceRoot apply --unidiff-zero --reverse --check $samplingPatch 2>$null
+if ($LASTEXITCODE -eq 0) { Invoke-Checked git @('-C', $sourceRoot, 'apply', '--unidiff-zero', '--reverse', $samplingPatch) }
+
 # The pinned direct CUDA decode graphs gather Q6_K embedding rows. Backport
 # upstream's exact Q6_K gather kernel rather than silently changing model weights.
 $ggmlRoot = Join-Path $sourceRoot 'ggml'
@@ -37,18 +43,46 @@ $patch = Join-Path $PSScriptRoot 'localai-qwen3-tts-cuda-getrows.patch'
 & git -C $ggmlRoot apply --unidiff-zero --reverse --check $patch 2>$null
 if ($LASTEXITCODE -ne 0) { Invoke-Checked git @('-C', $ggmlRoot, 'apply', '--unidiff-zero', $patch) }
 
+# The native decoder must observe EOS; exhausting the caller/model budget is
+# a failed generation, never a successfully published truncated waveform.
+$eosPatch = Join-Path $PSScriptRoot 'localai-qwen3-tts-eos.patch'
+& git -C $sourceRoot apply --unidiff-zero --reverse --check $eosPatch 2>$null
+if ($LASTEXITCODE -ne 0) { Invoke-Checked git @('-C', $sourceRoot, 'apply', '--unidiff-zero', $eosPatch) }
+
+# Guard both Talker and CodePredictor sampling against invalid distributions;
+# retain private seed/EOS diagnostics without altering normal sampling defaults.
+& git -C $sourceRoot apply --unidiff-zero --reverse --check $samplingPatch 2>$null
+if ($LASTEXITCODE -ne 0) { Invoke-Checked git @('-C', $sourceRoot, 'apply', '--unidiff-zero', $samplingPatch) }
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'localai-qwen3-tts-sampling_test.cpp.in') -Destination (Join-Path $backendRoot 'sampling_test.cpp') -Force
+
 $main = Join-Path $backendRoot 'main.go'
 $loader = Join-Path $backendRoot 'localai-backend-library_windows.go'
 if (-not (Test-Path -LiteralPath $loader)) {
     Invoke-Checked node @((Join-Path $PSScriptRoot 'localai-backend-windows-patch.mjs'), $main, $loader, 'libgoqwen3ttscpp.dll', 'localai-qwen3-tts-cpp')
 }
+$errorPatch = Join-Path $PSScriptRoot 'localai-qwen3-tts-errors.patch'
+& git -C $LocalAIRoot apply --unidiff-zero --reverse --check $errorPatch 2>$null
+if ($LASTEXITCODE -ne 0) { Invoke-Checked git @('-C', $LocalAIRoot, 'apply', '--unidiff-zero', $errorPatch) }
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'localai-qwen3-tts-errors_test.go.in') -Destination (Join-Path $backendRoot 'termination_test.go') -Force
+
 $cmakePath = Join-Path $backendRoot 'CMakeLists.txt'
 $cmakeText = [IO.File]::ReadAllText($cmakePath)
 $cmakeText = $cmakeText.Replace('add_library(goqwen3ttscpp MODULE cpp/goqwen3ttscpp.cpp)', 'add_library(goqwen3ttscpp SHARED cpp/goqwen3ttscpp.cpp)')
+if (-not $cmakeText.Contains('add_executable(qwen-sampling-test')) {
+    $cmakeText += @'
+
+# Standalone CPU regression; no model, CUDA calls, or qwen-core linkage.
+add_executable(qwen-sampling-test sampling_test.cpp)
+target_include_directories(qwen-sampling-test PRIVATE ${QWENTTS_DIR}/src)
+set_target_properties(qwen-sampling-test PROPERTIES CXX_STANDARD 17 RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+'@
+}
 [IO.File]::WriteAllText($cmakePath, $cmakeText, [Text.UTF8Encoding]::new($false))
 Invoke-Checked cmake @('-S', $backendRoot, '-B', $BuildRoot, '-G', 'Visual Studio 17 2022', '-A', 'x64', '-T', "cuda=$CudaRoot",
     '-DBUILD_SHARED_LIBS=ON', '-DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON', '-DGGML_BACKEND_DL=OFF', '-DGGML_NATIVE=OFF',
     '-DGGML_CUDA=ON', "-DCMAKE_CUDA_ARCHITECTURES=$CudaArchitectures", '-DCMAKE_CXX_STANDARD=17')
+Invoke-Checked cmake @('--build', $BuildRoot, '--config', 'Release', '--target', 'qwen-sampling-test', '--parallel', '4')
+Invoke-Checked (Join-Path $BuildRoot 'Release\qwen-sampling-test.exe') @()
 Invoke-Checked cmake @('--build', $BuildRoot, '--config', 'Release', '--target', 'goqwen3ttscpp', '--parallel', '4')
 
 New-Item -ItemType Directory -Path $PackageRoot -Force | Out-Null
@@ -69,6 +103,10 @@ try {
             '--go-grpc_opt=paths=source_relative', 'backend/backend.proto')
     } finally { Pop-Location }
     $env:CGO_ENABLED = '0'
+    # Upstream e2e_test.go directly uses Unix-only Dlopen. This CPU regression
+    # compiles the actual Windows backend without executing GPU inference.
+    Invoke-Checked go @('test', '-C', $backendRoot, 'audio.go', 'options.go', 'goqwen3ttscpp.go',
+        'main.go', 'localai-backend-library_windows.go', 'termination_test.go')
     Invoke-Checked go @('build', '-C', $backendRoot, '-o', (Join-Path $PackageRoot 'qwen3-tts-cpp.exe'), './')
 } finally {
     $env:GOBIN = $previousGoBin
@@ -90,3 +128,9 @@ if (-not $redist) { throw 'MSVC redistributables are required' }
 Get-ChildItem -LiteralPath (Join-Path $redist.FullName 'x64\Microsoft.VC143.CRT') -Filter '*.dll' | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $PackageRoot -Force
 }
+
+$licenses = Join-Path $PackageRoot 'licenses'
+New-Item -ItemType Directory -Path $licenses -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $LocalAIRoot 'LICENSE') -Destination (Join-Path $licenses 'LocalAI.LICENSE') -Force
+Copy-Item -LiteralPath (Join-Path $sourceRoot 'LICENSE') -Destination (Join-Path $licenses 'qwentts.LICENSE') -Force
+Copy-Item -LiteralPath (Join-Path $ggmlRoot 'LICENSE') -Destination (Join-Path $licenses 'ggml.LICENSE') -Force

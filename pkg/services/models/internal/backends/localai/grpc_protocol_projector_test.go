@@ -3,9 +3,11 @@ package localai
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -518,5 +520,202 @@ func TestDecodePredictResponseReasoningOnly(t *testing.T) {
 	}
 	if response.Text != "" || response.ReasoningBytes != len("private reasoning")+len("more reasoning") || response.GeneratedTokens != 256 {
 		t.Fatalf("decoded reasoning-only reply shape = %#v", response)
+	}
+}
+
+// A reasoning-enabled LocalAI Predict reply leaves the legacy message bytes
+// empty and streams the assistant answer as chat-delta content interleaved with
+// private reasoning content that can itself contain a JSON object shaped like a
+// final answer. Decoding must reassemble only the content deltas into the exact
+// structured answer bytes while still reporting the reasoning bytes.
+//
+// The nil delta covers the empty-delta case, and exact equality against the
+// whole expected answer already proves that neither the JSON decoy nor any
+// reasoning prose leaked into the decoded text, so no narrower containment
+// assertions are needed.
+func TestDecodePredictResponseSeparatesStructuredFinalAnswerFromPrivateReasoning(t *testing.T) {
+	t.Parallel()
+
+	const finalAnswer = `{"status":"ok","findings":[{"file":"grpc_protocol.go","severity":"low"}],"count":1}`
+	contentChunks := []string{`{"status":"ok",`, `"findings":[{"file":"grpc_protocol.go","severity":"low"}],`, `"count":1}`}
+	reasoning := []string{
+		"The operator asked for one structured answer. ",
+		`draft shape: {"status":"ok","findings":[],"count":0}`,
+		"the answer must stay a single object",
+	}
+	payload, err := proto.Marshal(&Reply{
+		Tokens: 512, PromptTokens: 64,
+		ChatDeltas: []*ChatDelta{
+			{ReasoningContent: reasoning[0]},
+			{Content: contentChunks[0]},
+			{ReasoningContent: reasoning[1]},
+			nil,
+			{Content: contentChunks[1]},
+			{ReasoningContent: reasoning[2]},
+			{Content: contentChunks[2]},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal reasoning reply payload: %v", err)
+	}
+
+	response, err := decodePredictResponse(payload)
+	if err != nil {
+		t.Fatalf("decodePredictResponse() error = %v", err)
+	}
+	if response.Text != finalAnswer {
+		t.Fatalf("decoded text = %q, want the exact reassembled content deltas %q", response.Text, finalAnswer)
+	}
+	wantReasoningBytes := 0
+	for _, fragment := range reasoning {
+		wantReasoningBytes += len(fragment)
+	}
+	if response.ReasoningBytes != wantReasoningBytes {
+		t.Fatalf("decoded reasoning bytes = %d, want %d from reasoning delta content only", response.ReasoningBytes, wantReasoningBytes)
+	}
+	if response.MessageBytes != 0 || response.ReplyBytes != len(payload) ||
+		response.ChatDeltaCount != 7 || response.GeneratedTokens != 512 || response.PromptTokens != 64 {
+		t.Fatalf("decoded reply diagnostics = %#v, want absent message bytes and one count per wire delta", response)
+	}
+}
+
+func TestOmniJSONSchemaReachesMetadataWithoutChangingThinkingOrCaps(t *testing.T) {
+	t.Parallel()
+	schema := map[string]any{"type": "object", "properties": map[string]any{
+		"language": map[string]any{"const": "ko-KR"},
+		"segments": map[string]any{"prefixItems": []any{map[string]any{"const": 4}, map[string]any{"const": 11}}},
+	}}
+	connection := &schemaHeaderConnection{recordingGRPCConnection: &recordingGRPCConnection{},
+		headers: map[string][]string{"x-you-json-schema": {"1"}}}
+	connection.response, _ = proto.Marshal(&Reply{
+		ChatDeltas: []*ChatDelta{{Content: `{"language":"ko-KR"}`, ReasoningContent: "private comparison"}}})
+	client := NewPinnedGRPCProtocolClient(schemaHeaderDialer{connection: connection})
+	reply, err := client.Predict(WithInvocationEndpoint(t.Context(), "fixture"), PredictRequest{
+		Prompt: "Translate", Inputs: []ProtocolInput{{Modality: models.ModalityImage, Content: "image"}},
+		Parameters: []models.OperationParameter{{Name: "json_schema", Value: schema}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reply.Text != `{"language":"ko-KR"}` {
+		t.Fatalf("public text = %q", reply.Text)
+	}
+	if !reflect.DeepEqual(connection.methods, []string{localAIHealthMethod, localAIPredictMethod}) {
+		t.Fatalf("schema method order = %v", connection.methods)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(connection.request.Metadata["json_schema"]), &got); err != nil {
+		t.Fatal(err)
+	}
+	want, _ := json.Marshal(schema)
+	actual, _ := json.Marshal(got)
+	if !bytes.Equal(want, actual) || connection.request.Grammar != "" || connection.request.Tokens != 0 {
+		t.Fatalf("schema/caps = %#v, want preserved schema without raw grammar or caps", &connection.request)
+	}
+	if _, present := connection.request.Metadata["chat_template_kwargs"]; present {
+		t.Fatal("schema changed thinking")
+	}
+	if len(connection.request.Images) != 1 {
+		t.Fatal("schema dropped media")
+	}
+}
+
+func assertOmniJSONSchemaInvalid(t *testing.T, err error) {
+	t.Helper()
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassInvalidParameter ||
+		failure.Operation != models.OperationOMNI || failure.Parameter != "json_schema" {
+		t.Fatalf("error = %v, want typed schema InvalidParameter", err)
+	}
+	if strings.Contains(err.Error(), "secret") {
+		t.Fatal("schema error leaked input")
+	}
+}
+
+// These fixtures expose transport metadata explicitly; a byte-only connection
+// intentionally does not claim support for native structured generation.
+type schemaHeaderDialer struct{ connection platformgrpc.Connection }
+
+func (dialer schemaHeaderDialer) Dial(context.Context, string) (platformgrpc.Connection, error) {
+	return dialer.connection, nil
+}
+
+type schemaHeaderConnection struct {
+	*recordingGRPCConnection
+	headers map[string][]string
+}
+
+func (connection *schemaHeaderConnection) InvokeWithHeaders(ctx context.Context, method string, payload []byte) ([]byte, map[string][]string, error) {
+	body, err := connection.recordingGRPCConnection.Invoke(ctx, method, payload)
+	return body, connection.headers, err
+}
+
+func TestOmniJSONSchemaRequiresNativeCapabilityBeforePredict(t *testing.T) {
+	t.Parallel()
+	for _, headers := range []map[string][]string{nil, {"x-you-json-schema": {"2"}}, {"x-you-json-schema": {"1", "2"}}} {
+		connection := &schemaHeaderConnection{recordingGRPCConnection: &recordingGRPCConnection{}, headers: headers}
+		client := NewPinnedGRPCProtocolClient(schemaHeaderDialer{connection: connection})
+		_, err := client.Predict(WithInvocationEndpoint(t.Context(), "fixture"), PredictRequest{Prompt: "Answer",
+			Parameters: []models.OperationParameter{{Name: "json_schema", Value: map[string]any{"type": "object"}}}})
+		if !errors.Is(err, models.ErrHostProtocolIncompatible) || !reflect.DeepEqual(connection.methods, []string{localAIHealthMethod}) {
+			t.Fatalf("error/methods = %v / %v, expected Health only", err, connection.methods)
+		}
+	}
+	connection := &recordingGRPCConnection{}
+	_, err := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection}).Predict(
+		WithInvocationEndpoint(t.Context(), "fixture"), PredictRequest{Prompt: "Answer",
+			Parameters: []models.OperationParameter{{Name: "json_schema", Value: map[string]any{"type": "object"}}}})
+	if !errors.Is(err, models.ErrHostProtocolIncompatible) || len(connection.methods) != 0 {
+		t.Fatalf("missing header accessor error/methods = %v / %v", err, connection.methods)
+	}
+}
+
+func TestOmniCodecSchemaPreflightFailsBeforeMediaEffects(t *testing.T) {
+	t.Parallel()
+	request := omniMediaRequest(t, models.InferenceInput{Name: "video", Modality: models.ModalityVideo, Content: "video"})
+	request.Parameters = []models.OperationParameter{{Name: "json_schema", Value: map[string]any{"type": "object"}}}
+	failure := errors.New("native schema unavailable")
+	fixture := &scriptedOmniProtocol{schemaErr: failure}
+	_, err := NewPinnedOmniCodec(fixture, func(context.Context, []byte) ([]byte, error) {
+		t.Fatal("unsupported schema extracted video")
+		return nil, nil
+	}).Invoke(t.Context(), request)
+	if !errors.Is(err, failure) || len(fixture.requests) != 0 {
+		t.Fatalf("preflight error/calls = %v / %d", err, len(fixture.requests))
+	}
+	_, err = NewPinnedOmniCodec(&protocolFixture{}).Invoke(t.Context(), request)
+	if !errors.Is(err, models.ErrHostProtocolIncompatible) {
+		t.Fatalf("missing preflight = %v", err)
+	}
+}
+
+func TestOmniSchemaCapabilityFailureDistinguishesUnknownSupport(t *testing.T) {
+	t.Parallel()
+	privateFailure := errors.New("private endpoint secret unavailable")
+	for _, test := range []struct {
+		name     string
+		rpcError error
+		cause    error
+		message  string
+	}{
+		{"missing capability", nil, models.ErrHostProtocolIncompatible, "update or install a schema-capable backend"},
+		{"Health unavailable", privateFailure, privateFailure, "check local backend readiness and connectivity, then retry"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			connection := &schemaHeaderConnection{recordingGRPCConnection: &recordingGRPCConnection{invokeErr: test.rpcError}}
+			client := NewPinnedGRPCProtocolClient(schemaHeaderDialer{connection: connection})
+			err := client.(JSONSchemaProtocolClient).ValidateJSONSchemaSupport(WithInvocationEndpoint(t.Context(), "fixture"))
+			var failure *models.InvocationFailure
+			if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassBackendProtocol ||
+				failure.Parameter != omniJSONSchemaParameter || failure.Operation != models.OperationOMNI {
+				t.Fatalf("failure = %v, want typed OMNI schema protocol failure", err)
+			}
+			if !errors.Is(err, test.cause) || !strings.Contains(err.Error(), test.message) || strings.Contains(err.Error(), "secret") {
+				t.Fatalf("cause/message = %v, want actionable safe failure preserving cause", err)
+			}
+			if !reflect.DeepEqual(connection.methods, []string{localAIHealthMethod}) {
+				t.Fatalf("failed preflight methods = %v", connection.methods)
+			}
+		})
 	}
 }

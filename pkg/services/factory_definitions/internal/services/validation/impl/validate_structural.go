@@ -787,7 +787,7 @@ type managedRuntimeDependencySpec struct {
 var managedRuntimeDependencySpecs = map[string]managedRuntimeDependencySpec{
 	canonicalManagedRuntimeIdentity("OMNIVOICE_Q4_K_M"): {backend: "LLAMACPP"},
 	canonicalManagedRuntimeIdentity("llm"):              {backend: "LOCALAI-LLAMACPP"},
-	canonicalManagedRuntimeIdentity("asr"):              {backend: "LOCALAI-WHISPER"},
+	canonicalManagedRuntimeIdentity("asr"):              {backend: "LOCALAI-QWEN3-ASR-CPP"},
 	canonicalManagedRuntimeIdentity("tts"):              {backend: "LOCALAI-VIBEVOICE"},
 	canonicalManagedRuntimeIdentity("embed"):            {backend: "LOCALAI-LLAMACPP"},
 	canonicalManagedRuntimeIdentity("qwen3-tts-base"):   {backend: "LOCALAI-QWEN3-TTS-CPP"},

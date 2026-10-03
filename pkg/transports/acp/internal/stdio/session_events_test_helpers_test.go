@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	acpsdk "github.com/coder/acp-go-sdk"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
 type fakeEventsService struct {

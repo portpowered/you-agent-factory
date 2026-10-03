@@ -1,6 +1,8 @@
 package logging
 
 import (
+	"io"
+	"os"
 	"testing"
 
 	"go.uber.org/zap/zapcore"
@@ -110,10 +112,10 @@ func TestLogger_VerboseIsAvailableOnLoggerContract(t *testing.T) {
 	}
 }
 
-func TestBuildLogger_Verbose(t *testing.T) {
-	logger, err := BuildLogger(true, false)
+func TestBuildTerminalLogger_Verbose(t *testing.T) {
+	logger, err := BuildTerminalLogger("verbose", false)
 	if err != nil {
-		t.Fatalf("BuildLogger(true, false): %v", err)
+		t.Fatalf("BuildTerminalLogger(verbose, false): %v", err)
 	}
 	if !logger.Core().Enabled(zapcore.InfoLevel) {
 		t.Error("verbose logger should enable info level")
@@ -123,23 +125,23 @@ func TestBuildLogger_Verbose(t *testing.T) {
 	}
 }
 
-func TestBuildLogger_Quiet(t *testing.T) {
-	logger, err := BuildLogger(false, false)
+func TestBuildTerminalLogger_Normal(t *testing.T) {
+	logger, err := BuildTerminalLogger("normal", false)
 	if err != nil {
-		t.Fatalf("BuildLogger(false, false): %v", err)
+		t.Fatalf("BuildTerminalLogger(normal, false): %v", err)
 	}
 	if logger.Core().Enabled(zapcore.InfoLevel) {
-		t.Error("quiet logger should not enable info level")
+		t.Error("normal logger should not enable info level")
 	}
 	if !logger.Core().Enabled(zapcore.WarnLevel) {
-		t.Error("quiet logger should enable warn level")
+		t.Error("normal logger should enable warn level")
 	}
 }
 
-func TestBuildLogger_Debug(t *testing.T) {
-	logger, err := BuildLogger(false, true)
+func TestBuildTerminalLogger_Debug(t *testing.T) {
+	logger, err := BuildTerminalLogger("debug", true)
 	if err != nil {
-		t.Fatalf("BuildLogger(false, true): %v", err)
+		t.Fatalf("BuildTerminalLogger(debug, true): %v", err)
 	}
 	if !logger.Core().Enabled(zapcore.DebugLevel) {
 		t.Error("debug logger should enable debug level")
@@ -149,10 +151,10 @@ func TestBuildLogger_Debug(t *testing.T) {
 	}
 }
 
-func TestBuildLogger_DebugOverridesVerbose(t *testing.T) {
-	logger, err := BuildLogger(true, true)
+func TestBuildTerminalLogger_DebugOverridesVerbose(t *testing.T) {
+	logger, err := BuildTerminalLogger("verbose", true)
 	if err != nil {
-		t.Fatalf("BuildLogger(true, true): %v", err)
+		t.Fatalf("BuildTerminalLogger(verbose, true): %v", err)
 	}
 	if !logger.Core().Enabled(zapcore.DebugLevel) {
 		t.Error("debug logger should enable debug level even when verbose is also set")
@@ -169,5 +171,34 @@ func TestBuildTerminalMutedLogger_EnablesWarnAndDiscardsOutput(t *testing.T) {
 	}
 	if !logger.Core().Enabled(zapcore.WarnLevel) {
 		t.Fatal("expected terminal-muted logger to enable warn level")
+	}
+}
+
+func TestDefaultLoggerDoesNotInterleaveTerminalDiagnostics(t *testing.T) {
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer read.Close()
+	previous := os.Stderr
+	os.Stderr = write
+	defer func() { os.Stderr = previous; _ = write.Close() }()
+	logger, err := NewDefaultLogger()
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger.Warn("background warning")
+	logger.Error("background error")
+	_ = logger.Sync()
+	_ = write.Close()
+	got, err := io.ReadAll(read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("default terminal emitted raw runtime diagnostics: %q", got)
+	}
+	if !logger.Core().Enabled(zapcore.WarnLevel) {
+		t.Fatal("file tee lost warning eligibility")
 	}
 }

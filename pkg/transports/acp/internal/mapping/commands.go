@@ -1,6 +1,6 @@
 package mapping
 
-import acpsdk "github.com/coder/acp-go-sdk"
+import acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
 // FactoryCommandName is the one prompt command this transport implements.
 // Advertising is derived from it rather than duplicating the literal, so the

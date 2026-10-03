@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	acpsdk "github.com/coder/acp-go-sdk"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
 func TestMapSessionUpdateCompletedToolWithDiffKeepsOwningTool(t *testing.T) {

@@ -763,7 +763,9 @@ func stageGenericCLIOutputs(
 		if !ok {
 			return staged, fmt.Errorf("model invocation returned unmapped output slot %q", output.Name)
 		}
-		if output.Content == "" {
+		// ASR publishes an empty transcript when the successful response detected
+		// no speech; its companion segments output remains the JSON array [].
+		if output.Content == "" && !(result.Operation == modelinference.OperationASR && output.Name == "transcript") {
 			return staged, fmt.Errorf("output slot %q has no inline bytes for mapped publication", output.Name)
 		}
 		temporary, err := stageGenericCLIOutputFile(ctx, fileSystem, mapping.path, []byte(output.Content))

@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	acpsdk "github.com/coder/acp-go-sdk"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
 // sendTimeout is passed to the outbound session/cancel notification send as

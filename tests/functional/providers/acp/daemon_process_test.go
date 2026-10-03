@@ -35,7 +35,7 @@ const singleACPAgentWorkflow = `return (async function () {
     modelProvider: "cursor"
   });
   if (result.status !== "COMPLETED") { throw "ACP child failed"; }
-  return result.output;
+  return result.output.text;
 })();`
 
 const parallelACPAgentWorkflow = `return (async function () {
@@ -46,7 +46,7 @@ const parallelACPAgentWorkflow = `return (async function () {
   if (results[0].status !== "COMPLETED" || results[1].status !== "COMPLETED") {
     throw "parallel ACP child failed";
   }
-  return results;
+  return results[0].output.text + "\n" + results[1].output.text;
 })();`
 
 func startACPDaemonProcess(t *testing.T, starts *atomic.Int32, fixture acpFixtureConfig) *acpDaemonProcess {

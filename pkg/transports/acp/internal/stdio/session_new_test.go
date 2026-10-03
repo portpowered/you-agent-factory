@@ -8,10 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	acpsdk "github.com/coder/acp-go-sdk"
 	chatsessions "github.com/portpowered/infinite-you/pkg/services/chat_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 	"strings"
 	"testing"
 )

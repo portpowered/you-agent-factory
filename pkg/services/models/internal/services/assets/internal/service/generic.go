@@ -405,6 +405,9 @@ func (s *service) genericModelRequirements(
 	source genericSource,
 	explicit []models.AssetRequirement,
 ) ([]genericArtifact, error) {
+	if isBuiltInQwenASRSource(source) {
+		return s.genericArtifactsFromRequirements(source, builtInQwenASRRequirements()), nil
+	}
 	if isBuiltInGemmaLLMSource(source) {
 		return s.genericArtifactsFromRequirements(source, builtInGemmaLLMRequirements()), nil
 	}
@@ -425,6 +428,18 @@ func (s *service) genericModelRequirements(
 		return nil, err
 	}
 	return nil, nil
+}
+
+func builtInQwenASRRequirements() []models.AssetRequirement {
+	return []models.AssetRequirement{
+		{Name: "qwen3-asr-0.6b-q8_0.gguf", Bytes: 1354082624, SHA256: "e777dacf2c23e4a3eafbec64e4e9d522b662c693c5189d4fd38ff39b92c9a334"},
+		{Name: "qwen3-forced-aligner-0.6b-q8_0.gguf", Bytes: 994404608, SHA256: "5de69a8cfc49c95a6520f50f2f15cfce9af35bc4723a10c56fc64e51dc966b3a"},
+	}
+}
+
+func isBuiltInQwenASRSource(source genericSource) bool {
+	definition, _ := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameASR)
+	return source.kind == genericSourceHF && genericHFSafeReference(source) == definition.Source
 }
 
 func builtInGemmaLLMRequirements() []models.AssetRequirement {

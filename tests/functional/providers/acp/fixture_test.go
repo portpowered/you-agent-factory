@@ -29,26 +29,30 @@ type acpFixtureConfig struct {
 	Mode      string `json:"mode"`
 	SessionID string `json:"sessionId,omitempty"`
 
-	RetryAttemptDirectory         string `json:"retryAttemptDirectory,omitempty"`
-	RetryHoldPath                 string `json:"retryHoldPath,omitempty"`
+	RetryAttemptDirectory string `json:"retryAttemptDirectory,omitempty"`
+	RetryHoldPath         string `json:"retryHoldPath,omitempty"`
+	// DisconnectMarkerPath records the peer closing stdout during its turn.
 	DisconnectMarkerPath          string `json:"disconnectMarkerPath,omitempty"`
-	DisconnectReadyPath           string `json:"disconnectReadyPath,omitempty"`
-	DisconnectReleasePath         string `json:"disconnectReleasePath,omitempty"`
 	PackageConformanceReleasePath string `json:"packageConformanceReleasePath,omitempty"`
 	CrashMarkerPath               string `json:"crashMarkerPath,omitempty"`
-	PromptSignalPath              string `json:"promptSignalPath,omitempty"`
-	PromptReleasePath             string `json:"promptReleasePath,omitempty"`
-	ContentSentinel               string `json:"contentSentinel,omitempty"`
-	HelperStartMarkerPath         string `json:"helperStartMarkerPath,omitempty"`
-	HelperExitMarkerPath          string `json:"helperExitMarkerPath,omitempty"`
-	HelperReadyMarkerPath         string `json:"helperReadyMarkerPath,omitempty"`
+	// PromptSignalPath marks the single prompt a blocked peer has received.
+	PromptSignalPath string `json:"promptSignalPath,omitempty"`
+	// PromptSignalDirectory and PromptReleaseDirectory hold one barrier per
+	// concurrent prompt. Every request-owned prompt process owns its own
+	// "<role>.entered" marker and waits only for its own "<role>.release" file.
+	PromptSignalDirectory  string `json:"promptSignalDirectory,omitempty"`
+	PromptReleaseDirectory string `json:"promptReleaseDirectory,omitempty"`
+	ContentSentinel        string `json:"contentSentinel,omitempty"`
+	HelperStartMarkerPath  string `json:"helperStartMarkerPath,omitempty"`
+	HelperExitMarkerPath   string `json:"helperExitMarkerPath,omitempty"`
+	HelperReadyMarkerPath  string `json:"helperReadyMarkerPath,omitempty"`
 }
 
 var acpFunctionalModes = map[string]struct{}{
 	"1": {}, "fail": {}, "auth": {}, "model": {}, "package-conformance": {},
 	"resource": {}, "content": {}, "version": {}, "init-fail": {}, "stderr": {},
 	"malformed": {}, "eof": {}, "block": {}, "isolate": {}, "unsupported": {},
-	"persistent": {}, "serialize": {}, "crash-once": {}, "spawn": {},
+	"concurrent": {}, "crash-once": {}, "spawn": {},
 	"tournament": {}, "cancelled-response": {}, "resume": {}, "resume-not-found": {},
 	"retry-resume": {}, "disconnect-once": {}, "shared-spine": {},
 	"elicitation": {}, "pi-version": {}, "pi-startup": {}, "pi-failure": {},
@@ -68,12 +72,11 @@ var acpAbsolutePathFields = []acpFixturePathField{
 	{name: "retryAttemptDirectory", value: func(config acpFixtureConfig) string { return config.RetryAttemptDirectory }},
 	{name: "retryHoldPath", value: func(config acpFixtureConfig) string { return config.RetryHoldPath }},
 	{name: "disconnectMarkerPath", value: func(config acpFixtureConfig) string { return config.DisconnectMarkerPath }},
-	{name: "disconnectReadyPath", value: func(config acpFixtureConfig) string { return config.DisconnectReadyPath }},
-	{name: "disconnectReleasePath", value: func(config acpFixtureConfig) string { return config.DisconnectReleasePath }},
 	{name: "packageConformanceReleasePath", value: func(config acpFixtureConfig) string { return config.PackageConformanceReleasePath }},
 	{name: "crashMarkerPath", value: func(config acpFixtureConfig) string { return config.CrashMarkerPath }},
 	{name: "promptSignalPath", value: func(config acpFixtureConfig) string { return config.PromptSignalPath }},
-	{name: "promptReleasePath", value: func(config acpFixtureConfig) string { return config.PromptReleasePath }},
+	{name: "promptSignalDirectory", value: func(config acpFixtureConfig) string { return config.PromptSignalDirectory }},
+	{name: "promptReleaseDirectory", value: func(config acpFixtureConfig) string { return config.PromptReleaseDirectory }},
 	{name: "helperStartMarkerPath", value: func(config acpFixtureConfig) string { return config.HelperStartMarkerPath }},
 	{name: "helperExitMarkerPath", value: func(config acpFixtureConfig) string { return config.HelperExitMarkerPath }},
 	{name: "helperReadyMarkerPath", value: func(config acpFixtureConfig) string { return config.HelperReadyMarkerPath }},

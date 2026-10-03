@@ -144,8 +144,11 @@ func TestASRCodecRejectsMalformedAndInvalidTimestampResponsesAtomically(t *testi
 		slot        string
 		wantMessage string
 	}{
+		{name: "empty object", payload: []byte(`{}`), slot: "", wantMessage: "ASR backend response requires text and a segments array"},
+		{name: "null segments", payload: []byte(`{"text":"","segments":null}`), slot: "", wantMessage: "ASR backend response requires text and a segments array"},
 		{name: "missing segments", payload: []byte(`{"text":"hello","segments":[]}`), slot: "segments", wantMessage: "ASR backend response is missing segments"},
 		{name: "invalid segment bounds", payload: []byte(`{"text":"hello","segments":[{"id":0,"start":2,"end":1,"text":"bad"}]}`), slot: "segments", wantMessage: "ASR backend response contains an invalid segment"},
+		{name: "zero duration lexical segment after valid speech", payload: []byte(`{"text":"first second","segments":[{"id":0,"start":149980,"end":151980,"text":"first"},{"id":1,"start":151980,"end":151980,"text":"second"}]}`), slot: "segments", wantMessage: "ASR backend response contains an invalid segment"},
 		{name: "trailing JSON", payload: []byte(`{"text":"hello","segments":[{"id":0,"start":0,"end":1,"text":"ok"}]} trailing`), slot: "", wantMessage: "ASR backend response is not valid JSON"},
 		{name: "missing transcript", payload: []byte(`{"text":"  ","segments":[{"id":0,"start":0,"end":1,"text":"ok"}]}`), slot: "transcript", wantMessage: "ASR backend response is missing the transcript"},
 	}
@@ -169,6 +172,20 @@ func TestASRCodecRejectsMalformedAndInvalidTimestampResponsesAtomically(t *testi
 				t.Fatalf("error = %v, want ErrInferenceFailed cause", err)
 			}
 		})
+	}
+}
+
+func TestASRCodecPublishesNoDetectedSpeechAsEmptyNamedOutputs(t *testing.T) {
+	codec := codecs.NewASRCodec()
+	for _, response := range []codecs.ASRResponse{{}, {Text: " \n", Segments: []codecs.ASRSegment{}}} {
+		outputs, err := codec.DecodeResponseValue(response)
+		if err != nil || len(outputs) != 2 || outputs[0].Name != "transcript" || outputs[0].Content != "" || outputs[1].Name != "segments" || outputs[1].Content != "[]" {
+			t.Fatalf("no speech outputs = %#v, err=%v", outputs, err)
+		}
+	}
+	outputs, err := codec.DecodeResponse([]byte(`{"text":" ","segments":[]}`))
+	if err != nil || len(outputs) != 2 || outputs[1].Content != "[]" {
+		t.Fatalf("explicit no speech JSON outputs = %#v, err=%v", outputs, err)
 	}
 }
 

@@ -235,6 +235,30 @@ tree before retrying, and never re-issue the same request blind.
 
 ## Limitations of this note
 
+### 2026-10-01 concurrent MCP reports outside the workspace
+
+Two concurrent outer MCP dispatches used provider `opencode`, model
+`opencode/mimo-v2.6-flash-free`, `timeoutMillis: 120000`, and the managed
+worktree as `workingRoot`. Both returned `COMPLETED` with primary results;
+the combined elapsed time was 44.5 seconds. No permission or edit-policy
+override was supplied.
+
+- Grammar audit session: `8ad25445-a152-42a3-9744-900b861f8d4d`.
+  Requested report: `C:/t/dub-multilingual-validation/opencode-concurrency/grammar-audit.txt`.
+- Resource audit session: `cea7278e-a97f-4ac8-8cfc-e5f54fda3e82`.
+  Requested report: `C:/t/dub-multilingual-validation/opencode-concurrency/resources-audit.txt`.
+
+Independent reads verified both distinct reports existed outside
+`workingRoot`. The grammar report described the authored translation and
+audit GBNF shapes and `PredictOptions.Grammar` field 29. The resource report
+identified GPU capacity 1, the ASR/translation/TTS guards, and unguarded
+rendering. Neither report claimed native inference was exercised.
+
+This proves concurrent MCP dispatch, primary-result delivery, and these
+requested writes outside the workspace. No permission elicitation trace was
+captured, so it does not prove how a permission request was granted or resolve
+the causes of earlier timeouts.
+
 ### 2026-10-01 dubbing Factory exercise
 
 - A read-only OpenCode research dispatch completed through MCP, session
@@ -273,3 +297,1255 @@ tree before retrying, and never re-issue the same request blind.
   handling.
 - This note documents a single-operator desktop environment. Results may differ
   on other hosts.
+
+## October 1 multilingual follow-up
+
+A bounded read-only OpenCode audit (`opencode/mimo-v2.6-flash-free`, 60-second
+budget) inspected only the dubbing scripts inside the managed workspace. It
+returned `factory_session.subagent.timed_out` without a primary result. Session
+`6cc5268e-09ea-44ed-89ee-7e836ffab278`, request
+`088c09d0-757c-4aa0-a2c9-66e6b3f1c38c`. The structured outcome recorded one
+in-flight dispatch and a provider reasoning delta, and reported that cleanup
+closed the live Factory Session. This bounded outcome does not establish the
+cause of previous long timeouts. Implementation continued with the existing
+collaboration agents rather than repeating the same probe.
+
+## October 1 successful GPU-resource editing audit
+
+A fresh outer MCP `you_subagent` dispatch using
+`opencode/mimo-v2.6-flash-free` completed in 21.1 seconds with a primary result,
+session `5a50809d-985f-4a58-94d0-41c547fa46bf`. Its 120-second budget was not
+exhausted. The managed worktree was supplied as `workingRoot`; no edit-policy
+or approval override was passed. It read only the dubbing Factory YAML and
+created `docs/internal/development/opencode-gpu-resource-audit-2026-10-01.md`.
+Independent inspection confirmed the sole requested file was created and its
+claims match the source: one GPU capacity unit guards ASR, translation, and
+TTS; rendering does not request it. No Models inference or browser operation
+was requested. This demonstrates a successful bounded editing dispatch and
+useful primary-result delivery through the MCP infrastructure. It does not
+establish the cause of the previous timeout, approval, or connection failures,
+or prove general outside-workspace permission handling.
+
+## October 2 two-stage audit review timeout
+
+A subsequent OpenCode MCP review using `opencode/mimo-v2.6-flash-free`
+and `timeoutMillis: 120000` returned
+`factory_session.subagent.timed_out` without a primary result. Session:
+`b3437d1a-ec69-4236-8fef-31fad5cf14d5`; request:
+`c79d0302-2370-4c37-8c16-e24703585a7f`. The structured result recorded a
+provider reasoning activity delta at `2026-10-02T07:00:20.1545846Z`, reported
+that cleanup closed the Factory Session, and warned that partial effects
+were possible.
+
+The requested external report,
+`C:/t/dub-multilingual-validation/opencode-concurrency/two-stage-audit-review.txt`,
+was absent when checked after the response. The activity delta does not prove
+useful review progress or explain the timeout. The earlier two concurrent
+dispatches remain verified successes; this later failure does not invalidate
+their results or establish a common cause.
+
+## OpenCode bounded review retry completed (2026-10-02)
+
+After the 120,000 ms review timeout recorded above, a bounded retry used
+`opencode/mimo-v2.6-flash-free` with a 300,000 ms allowance and a requested short
+report. Session `54e2230b-b1a4-4d34-8f1a-5e3a2e97af7f` returned `COMPLETED` and a
+primary result. The requested external report exists at
+`C:/t/dub-multilingual-validation/opencode-concurrency/two-stage-audit-review-retry.txt`.
+Root read it and corroborated its findings: comparison has no grammar/output
+cap, the indexed final decision treats comparison as untrusted evidence, and
+model failures/cancellation propagate. No source edits or local model calls
+were requested. This proves this retry completed and wrote the report with
+ordinary defaults; it does not prove the original timeout's cause or that a
+longer allowance alone explains the different result.
+
+## October 2 native sampler review timeout
+
+A bounded two-file native sampler/recipe review using
+`opencode/mimo-v2.6-flash-free` and `timeoutMillis: 300000` returned
+`factory_session.subagent.timed_out`. Session
+`9370501b-5db6-4a64-9e06-4b50922bc4a8`, request
+`6709d5c7-062c-413f-a8ce-4cd44cbb7fd2`. Human-readable MCP text and structured
+error both reported the timeout; cleanup closed the live Factory Session and
+partial effects were possible. The last recorded provider reasoning delta was
+`2026-10-02T08:35:41.0208094Z`. The requested external report
+`C:/t/dub-multilingual-validation/opencode-concurrency/native-sampler-review.txt`
+was absent afterward. No model inference/build/source edits were requested.
+Independent collaboration review and CPU sampler regression passed, but this
+dispatch produced no review evidence. The reason for its timeout is unproven;
+a five-minute allowance alone does not establish harness stability.
+
+## October 2 concurrent ten-minute dispatch timeouts
+
+Two concurrent OpenCode MCP dispatches using `opencode/mimo-v2.6-flash-free`
+each received a `timeoutMillis: 600000` allowance. One requested a CPU-only
+code/startup audit report; the other requested bounded dubbing prompt edits.
+Both timed out. Root checked afterward: the requested audit report was absent,
+and the requested dubbing prompt edits had no Git diff. The human-readable MCP
+responses reported that cleanup closed the sessions and that partial effects
+were possible. These observations do not identify the timeout cause or prove
+that no other partial effects occurred.
+
+The root wrapper did not retain the structured request/session IDs, so no IDs
+are assigned to these dispatches here. A live-inspection identifier beginning
+`07f22431` disappeared after cleanup; it does not establish the identity of the
+first dispatch. Collaboration-agent fallback implemented the prompt edits for
+independent review. No local Models inference was requested in either task.
+
+## October 2 bounded startup audit retry completed
+
+A narrower read-only OpenCode MCP retry using `opencode/big-pickle`, session
+`7a3300f5-1a6d-4183-990d-07a85b61a713`, completed within its 300,000 ms allowance
+and returned a primary result. It reviewed two files inside `workingRoot`,
+without requesting report files, edits, or local Models inference. Root
+corroborated the reported full-file hash calls in `findGenericArtifact`
+(`generic_cache.go`) and `verifyGenericCachedArtifact` (`generic_source.go`)
+before known-size rejection, plus conditional additional hashing during legacy
+repair. This identifies source-level opportunities for repeated reads; it does
+not prove how many passes one Models invocation performs or explain the
+observed 143 GB read volume.
+
+This demonstrates useful primary-result delivery for this bounded review. The
+model, prompt scope, and requested effects differed from the two ten-minute
+timeouts, so the successful retry does not identify their cause or demonstrate
+editing stability.
+
+## October 2 bounded dubbing context design audit completed
+
+OpenCode MCP with `opencode/big-pickle`, session
+`3451c58a-67dd-45fe-93ff-e18807887569`, completed a two-file read-only audit
+inside the workspace within its 300,000 ms allowance and returned a primary
+result. It identified the ASR segment projection and proposed a separate frame
+evidence artifact. Independent review confirmed that source evidence must also
+reach both audit passes and fit repair, not only initial translation.
+
+The result is design input, not accepted implementation: its proposed total
+evidence caps conflict with the large-input requirement; its suggested frame
+input slot was unverified; supplied ASS currently supplements rendered media
+and does not correct ASR. A conflict-only gate cannot recover the disputed
+source meaning. No edits or GPU inference were requested. This is another
+bounded primary-result success, with no new editing or concurrency guarantee.
+
+A subsequent bounded editing dispatch with the same model, session
+`31e8d34b-3ca2-4fe3-b06a-1249e624df62`, completed and appended the supplied
+Qwen ASR size-comparison facts to the plan. Root inspected the actual diff,
+checked it against the saved comparison, and corrected one phrase from
+identical requests to identical recognition results. No external reads or GPU
+calls were requested. This establishes one completed documentation edit and
+primary result; concurrent editing stability remains unproven. Both exact MCP
+results were retained externally for independent inspection.
+
+## October 2 engine review timeout
+
+The OpenCode MCP engine review using `opencode/big-pickle` and a 300,000 ms
+allowance returned `factory_session.subagent.timed_out`, with no primary
+result. Session `4d14464f-f822-449c-8a0a-38ba485bdae6`, request
+`dc8610e3-8079-4073-a3d5-11cf16fc6739`. Human-readable text and structured
+error both reported cleanup closing the live Factory Session and possible
+partial effects. The last retained provider observation was a reasoning delta
+at `2026-10-02T11:48:59.5075866Z`; one dispatch remained in flight.
+
+Root inspected Git status afterward and found only expected files. This does
+not prove that no partial effects occurred. The cause remains unknown, and the
+dispatch supplies no independent engine review. The exact MCP response is
+saved at `C:/t/dub-multilingual-validation/opencode-engine-review-timeout-result.json`.
+
+A read-only retry with `opencode/big-pickle`, session
+`881987fb-f1cf-48f6-a3fe-19ba325490dd`, completed within a 1,200,000 ms
+allowance and returned a primary review. The exact response is saved at
+`C:/t/dub-multilingual-validation/opencode-engine-review-completed-result.json`.
+It found no blocking correctness defect in publishing the complete reserved
+dispatch batch before external execution. It raised the fatal submission-error
+path as nonblocking and suggested deleting unsubmitted tail entries.
+
+Independent source review confirmed that all batch resource mutations already
+precede submission, and a submission error already aborts the runtime loop.
+Root rejected deleting entries alone: it would discard held-mutation and
+recovery lineage without restoring consumed resources or resolving recorded
+dispatch events. No partial rollback was implemented. This review does not
+show actual execution overlap. It proves one completed read-only retry;
+timeout allowance and prompt scope both changed, so timeout causation and
+general harness stability remain unproven.
+
+## October 2 engine regression complexity edit
+
+The first bounded editing request used provider `opencode`, unqualified model
+`big-pickle`, and a 1,200,000 ms allowance. It returned
+`factory_session.subagent.provider_request_rejected`, with
+`failureReason: permanent_bad_request`, session
+`c22a773a-18d3-4a8f-9ad0-e58d6fc37214`, and cleanup closing the live session.
+The requested test file had no diff afterward. The unqualified model identifier
+may have affected the request; the saved error does not establish that cause.
+Exact result: `C:/t/dub-multilingual-validation/opencode-engine-complexity-bad-request-result.json`.
+
+After that terminal result, the next editing dispatch requested
+`opencode/space-bunny-free` with the same allowance. Session
+`71f62be8-f48d-4b3b-9f2d-275c4fad1730` returned `COMPLETED` and a primary
+result. The actual diff extracted the held-resource reservation assertion into
+a private test helper in `engine_runtime_snapshot_test.go`, preserving every
+assertion. Independent review confirmed the change; final repository
+maintainability and engine race checks passed. No production/native files,
+baselines, model defaults, or GPU inference changed in this task. Exact result:
+`C:/t/dub-multilingual-validation/opencode-engine-complexity-space-bunny-result.json`.
+This establishes one successful bounded edit with the requested model. Both
+model and identifier form changed, so it does not identify the first rejection
+cause or prove general concurrent editing stability.
+
+## October 2 native independent-image implementation dispatches
+
+The implementation request using `opencode/mimo-v2.6-flash-free` timed out
+with a 1,200,000 ms allowance, without a primary result or the requested edits
+in the inspected scope. Session `57888254-fb89-45af-b963-e2c3d3dd673c`, request
+`ae266748-da6d-42df-8143-b00019494cec`. Its retained provider activity had
+`kind: ERROR`, `phase: FAILED`, and `providerSessionObserved: true` at
+`2026-10-02T12:02:42.3171664Z`, but omitted the underlying error payload.
+Cleanup closed the live session; the terminal response reported possible
+partial effects. The cause remains unknown. A later session lookup returning
+404 does not prove a lookup bug: the response explicitly documents its session
+ID as correlation-only and warns that lookup may return `session.not_found`.
+
+A BigPickle retry completed with a primary result, session
+`7b2f5175-1a52-48e0-8ee0-6a4d3ea65393`, and actual native packing source edits
+plus CPU evidence. Independent review corrected the author's inaccurate
+per-text-part trim assumption, comments, test/recipe execution, and incomplete
+provenance. The actual template trims the whole rendered content; interior
+whitespace remains intact. Nonwhitespace ordinal media boundaries were retained.
+The reviewed source was committed as `6d1aede588`; native compilation is active,
+with no public inference or correspondence acceptance from these CPU proofs.
+This is author delivery followed by independent repair and review, not proof
+that the initial implementation needed no correction or that timeout causes
+are understood.
+
+Exact terminal results and the reviewed handoff are preserved under
+`C:/t/dub-llama-independent-images-source-proof/` in
+`opencode-dispatch-terminal.json`, `opencode-bigpickle-terminal.json`, and
+`handoff.md`. Workspace observations cover the inspected owned scope; they do
+not rule out all other partial effects.
+
+A subsequent read-only native review requested `opencode/space-bunny-free`
+with a 1,200,000 ms allowance. Session
+`1b0daa67-8099-48c2-aaaa-c6fbdca0a625` completed with a primary result. It
+traced the pinned LocalAI/llama.cpp rendering and media-tokenization chain,
+found no blocking Windows defect, and ran the applicator helper's five tests
+successfully. Its observation of pre-existing Git modifications does not alone
+prove absence of other effects; root independently checked that workspace
+changes were limited to expected notes. The result is saved as
+`C:/t/dub-llama-independent-images-source-proof/opencode-space-bunny-native-review.json`.
+This establishes one completed bounded review, without native inference
+acceptance or a claim that non-Windows recipes received the same repair.
+
+A separate read-only `opencode/space-bunny-free` dispatch with a 1,200,000 ms
+allowance completed as session `2095f3d8-747e-44d8-97e8-d0dbdf9d2c60`. Its
+primary result corroborated that Worker Session terminal publication precedes
+canonical Factory result acceptance and projection publication. Independent
+review accepts that ordering, while retaining uncertainty about the precise CI
+interleaving and requiring a public Factory completion barrier before asserting
+the Work projection. This is a completed source audit, not a repaired test or
+proof of the cleanup failure's cause. Exact result:
+`C:/t/dub-multilingual-validation/opencode-submit-observer-space-bunny-result.json`.
+
+The follow-up bounded editing task on `opencode/space-bunny-free` completed as
+session `659e972f-1558-4d52-82a9-66c0670f972c`, with a primary blocker report
+and no final test diff. It verified that the public open mapping selects SERVICE
+mode, which deliberately does not terminate when Work finishes. A natural
+`RUN_RESPONSE` therefore cannot provide this test's requested completion
+barrier. Independent source review confirmed that contract. The author removed
+its temporary probe; the owned submit package had no remaining diff. This is
+useful completed analysis, not a delivered test repair. Exact result:
+`C:/t/dub-multilingual-validation/opencode-submit-barrier-space-bunny-result.json`.
+
+### Rebuilt stdio server and actionable failure classification
+
+Space Bunny completed the timeout-advisory implementation as session
+`5f884551-b1ab-4cef-af98-f21f2a08f6a4`. Commit `ca27b505d5` now reports a last
+observed provider ERROR/FAILED even when a provider-session reference was
+observed. It preserves timeout classification, cleanup and partial-effects
+metadata, and excludes raw provider payloads. Root independently reviewed the
+diff and ran the owning MCP package race suite successfully in 18.264 seconds.
+This corrects diagnostic evidence; it does not establish the cause of the
+earlier Mimo stall. Exact author result:
+`C:/t/dub-multilingual-validation/opencode-mcp-diagnostic-space-bunny-edit.json`.
+
+The rebuilt executable was installed as `C:/Users/andre/bin/you.exe`, SHA-256
+`6e91728f298ea7115ee48ec70a49d1ae0ea02325c1b25150935b33f7aa011a85`.
+Its committed Go production inputs include `ca27b505d5`; unrelated live native
+draft/test artifacts were present in the worktree during compilation, so this
+is not a clean-whole-tree build claim. A fresh `you server mcp` child performed
+initialize, tools/list and an actual default-editing call on
+`opencode/space-bunny-free`. Session
+`1fe8d108-4798-492c-bd33-e4d7a429cb43` returned COMPLETED with a primary result;
+root confirmed the requested file bytes and child exit 0 after closing stdin.
+The whole fresh-server probe took 68.093 seconds. Exact protocol and executable
+identity: `C:/t/dub-multilingual-validation/repaired-mcp-proof/result.json`.
+
+A second fresh-server probe deliberately supplied an unregistered provider.
+It returned human-readable text, `isError=true`, and matching structured error
+metadata, and exited 0 in 1.328 seconds. However, it classified that known bad
+input as `factory_session.subagent.provider_unknown_failure` with message
+"provider failed for an unknown reason". That ambiguity is an observed remaining
+defect; provider validation/classification repair is delegated. Exact result:
+`C:/t/dub-multilingual-validation/repaired-mcp-error-proof/result.json`.
+
+Space Bunny subsequently delivered the submit projection barrier as session
+`4e6b840f-f650-4e8f-bcd8-9d857802f782`. It uses the existing public status
+terminality observer before reading Work and preserves every failed/done
+assertion. Independent full submit race suite, three runs, passed in 41.633
+seconds; maintainability and diff checks passed. This addresses the source
+ordering risk, not a proven cause of the earlier CI failure. The previously
+pushed `0a83cd7816` already passed required CI, run `37056730593`; newer local
+changes still require their own CI. Exact author result:
+`C:/t/dub-multilingual-validation/opencode-submit-status-barrier-space-bunny-result.json`.
+
+The separate native final-answer grammar editing call reached its 1200000 ms
+timeout without a primary result but left patch/test drafts. Those partial
+edits were inspected, the fixture renamed `.cpp.in`, and an actual MSVC syntax
+check passed. They have not yet passed linked sampler execution or live
+thinking-enabled inference and are not accepted as production-ready. Thinking
+remains enabled; reasoning is never promoted into the public structured answer.
+
+The first linked execution of that native draft subsequently failed: the
+Qwen2 vocab-only fixture did not enter COUNTING from its generation prefix,
+and the eager grammar consumed the reasoning decoy. The original failure is
+preserved at `C:/t/dub-llamacpp-final-grammar-cpu-review/native-test-result.json`.
+Context-sensitive tokenization of ordinary thinking delimiters is under
+investigation. A syntax pass therefore did not establish correct behavior;
+the draft remains unaccepted and separate from the independently verified
+Windows CUDA image-boundary build.
+
+### Subsequent structured-output and ACP evidence
+
+A fresh stdio Space Bunny editing call completed as session
+`bc7c7ebe-5271-4733-b0e6-8b6281a5b24a` in 549.594 seconds. It added an actual
+protobuf decoder regression with mixed private reasoning and split final JSON
+content. The focused tests passed, but the first draft failed maintainability
+(complexity 21 versus limit 15). The author reported a temporary production
+decoder mutation and revert despite an only-test-file prompt; root confirmed
+the production diff was empty. This is a scoped-writing lapse, even though no
+production change remained. Exact result:
+`C:/t/dub-multilingual-validation/repaired-mcp-privacy-edit-proof/result.json`.
+
+A bounded follow-up completed as session
+`5f6745b1-457b-4abd-bbda-9ff8bd58efda` in 124.906 seconds and removed redundant
+assertions. Root independently ran the decoder tests and full maintainability
+gate successfully, then committed the final regression as `0d195960e5`.
+It proves that private reasoning, including a misleading JSON draft, does not
+enter final text. It does not prove live native structured generation. Thinking
+remains enabled. Exact result:
+`C:/t/dub-multilingual-validation/repaired-mcp-privacy-refine-proof/result.json`.
+
+The next pushed head, `e4dd9b69c4`, failed CI run `37059462705`. Unit verification
+failed the ACP version-classification case with a peer-disconnected error;
+integration verification failed to recognize startup cancellation. The captured
+successor actually exited 130 and emitted a canonical Zap console record whose
+context says `operation=run.service` and `outcome=cancelled`. The test previously
+accepted whole-line JSON or a plain cancellation line, so it missed that console
+representation. The exact captured record is preserved in
+`C:/t/dub-ci-e4dd-restart-diagnostics/cancellation-scenario.json`.
+
+Space Bunny delivered a narrowly scoped cancellation parser/test edit as session
+`7714ee5a-8daa-4087-abd2-f0d3447f8c21` in 229.844 seconds. Root independently
+reviewed the parser and ran all `TestBoardPersistenceReports` tests successfully.
+The compiled cancellation scenario has not yet been rerun with a current
+prebuilt artifact. A bounded Big Pickle refinement is pending to reduce the
+test function below the repository's 80-line review limit without losing cases.
+Exact author result:
+`C:/t/dub-multilingual-validation/repaired-mcp-restart-log-edit-proof/result.json`.
+
+Controlled in-memory experiments independently reproduced two ACP SDK v0.13.5
+ordering failures. With a buffered Initialize response and EOF both ready,
+16 draws produced six valid responses and ten peer-disconnected failures.
+With a held pre-response notification callback, a buffered final Prompt response,
+and EOF, 16 draws produced zero successes: ten failed waiting for notifications
+and six failed before reading the response. These are deterministic readiness
+arrangements with nondeterministic select outcomes, not timeout-cause guesses.
+Exact harnesses and logs:
+`C:/t/dub-acp-version-ordering-proof/sdk-order/`.
+The reviewed upstream release and main still point to the affected version.
+Repair of the canonical SDK dependency and parent-owned subprocess pipes is in
+progress; fixture keepalive alone cannot establish that the customer race is fixed.
+
+Two concurrent 20-minute Space Bunny schema-authoring calls timed out without
+primary results. Native session `aaf311fc...` left useful partial patch/fixture
+bytes, while Go session `c461eef0...` left no owned Go changes. Both reported
+closed-session cleanup, with partial effects possible. The native partial was
+archived before review; it required correction to reject explicitly empty
+schemas rather than silently permit unconstrained output. The initial ACP
+service-author call also reached its 20-minute bound without a primary result.
+The common duration does not establish a shared timeout cause. Narrow repairs
+continue using reviewed partials and bounded follow-up MCP tasks.
+
+Big Pickle completed the cancellation-test refinement as session
+`1689fee3-8c8b-46a2-b5fb-2aa2e60db565` through a fresh stdio server in 186.563
+seconds, with a primary result and child exit 0. Root independently reviewed
+the final diff and reran all fourteen console cases plus the existing helpers
+successfully (0.037 seconds). Commit `1378e88d48` retains the exact captured
+189-byte record, typed-field classification, and negative cases. This remains
+a parser-level proof; the compiled restart scenario still needs its current
+artifact run. Exact result:
+`C:/t/dub-multilingual-validation/repaired-mcp-restart-refine-proof/result.json`.
+
+The provider-validation edit first timed out after twenty minutes with partial
+edits and no primary result. A completed Big Pickle review found a real privacy
+defect in the non-not-found catalog error fallback. The subsequent ten-minute
+Big Pickle edit also timed out with partial changes and no primary result.
+Independent review finished and narrowed those changes, preserving previous
+failure assertions. Commit `8d0225132e` rejects unknown provider names before
+session creation, resolves configured aliases through the authoritative
+Providers catalog, keeps defaults, bounds catalog lookup by the invocation
+deadline, and uses fixed safe catalog-unavailable errors. Root's independent
+race run passed MCP (18.307 seconds), CLI MCP (1.299 seconds), and Wire (29.512
+seconds). The author also passed full maintainability and file-count gates.
+Fresh rebuilt-binary verification remains pending. Exact timeout evidence:
+`C:/t/dub-multilingual-validation/opencode-provider-validation-space-bunny-timeout-result.json`
+and `C:/t/dub-multilingual-validation/opencode-provider-catalog-privacy-bigpickle-timeout-result.json`.
+
+Root then built committed `8d0225132e` in an isolated clean source copy, excluding
+all concurrent ACP/native/schema drafts. A fresh server rejected the same bad
+provider in 1.500 seconds with `provider_not_found`, readable content text,
+matching structured error, and no session identity. A valid Big Pickle editing
+probe failed in 15.641 seconds with `provider_throttled`, retryable true and
+confirmed cleanup. Its existing suggested action still omitted the direct
+recovery of waiting/retrying or selecting another available model; that
+guidance improvement is delegated. Exact results:
+`C:/t/dub-multilingual-validation/repaired-mcp-provider-validation-proof/result.json`
+and `C:/t/dub-multilingual-validation/repaired-mcp-provider-valid-edit-proof/result.json`.
+
+The separate Space Bunny edit succeeded in 10.375 seconds as session
+`2f8afe30-1711-480e-b872-39a14ad6039f`. Root verified the exact requested file
+change, COMPLETED primary result, and child exit 0. Big Pickle's observed limit
+therefore does not establish unavailability of Space Bunny or failure of the
+new provider admission path. Exact result:
+`C:/t/dub-multilingual-validation/repaired-mcp-provider-valid-space-proof/result.json`.
+
+The same clean committed source was rebuilt with matching embedded VCS metadata
+and `vcs.modified=false`. The compiled Windows
+`TestRestartRecoveryCancellationBeforeReadinessDoesNotClaimSuccess` actually
+ran and passed (scenario 1.56 seconds, package 1.779 seconds), using that prebuilt
+artifact. Source revision, binary hash and captured evidence are recorded in
+`C:/t/dub-mcp-provider-validation-build/restart-proof/`. This supersedes the
+earlier skipped-artifact limitation for that Windows scenario; Linux CI and
+the broader integration suite still require their own verification.
+
+That clean binary is now installed at `C:/Users/andre/bin/you.exe`, SHA-256
+`48a2b10e63fdf7d28d30912f6031a97d05f44de60cfba2ad6ad3da3d4d314c52`.
+A new stdio child using the installed executable repeated unknown-provider
+rejection successfully in 0.735 seconds. Exact protocol and binary identity:
+`C:/t/dub-multilingual-validation/repaired-mcp-provider-installed-proof/result.json`.
+
+Separately, the normal public custom-model CLI discovered the published
+independent-image Windows CUDA package without a backend source override.
+The downloaded 443,193,250-byte archive hash and loaded executable/CUDA DLL
+hashes matched the reviewed release. It returned all three literal Chinese
+subtitles in the correct order, exited 0 after 405.406 seconds including asset
+preparation, and left no owned processes. Its cue-25 overlay hallucination
+(`EPISODE 01`) remains a semantic defect; this is not acceptance of a full dub
+or a general vision-quality claim. Exact evidence:
+`C:/t/dub-qwen-independent-images-managed-proof/`.
+
+Two later bounded real editing tasks completed successfully on Space Bunny.
+Session `ad458be5-2931-4bc4-b289-a67753459b74` removed the MCP binding dependency
+bag and forwarding wrapper in 94.625 seconds. Root reviewed every converted
+injection argument and ran the full owning MCP suite successfully (17.114
+seconds), then committed the two-file flattening as `44310080b4`. Exact result:
+`C:/t/dub-multilingual-validation/repaired-mcp-flatten-bind-proof/result.json`.
+
+Session `8646ba5f-f544-477d-aabe-f72b8365abbb` delivered the throttled recovery
+guidance in 218 seconds. Root reviewed the final two-file change and independently
+ran the classification race test three times successfully (1.056 seconds).
+The remedy now explicitly recommends waiting/retrying or another available
+configured model/provider, while preserving partial-edit inspection, log
+correlation, typed failure and private-payload protection. Exact author result:
+`C:/t/dub-multilingual-validation/opencode-throttle-action-space-bunny-result.json`.
+
+The IndexTTS feasibility audit first received a typed Big Pickle throttle after
+117 seconds, then completed on Space Bunny after 281 seconds as session
+`b859380c-79b3-49cd-8450-271538b943cd`. Independent source review confirmed the
+current pinned LocalAI source has no audio-cpp backend. A newer immutable
+LocalAI/audio.cpp pair documents Windows MSVC/CUDA and reference-audio IndexTTS
+support, but it needs a distinct source/protobuf build and actual invocation
+proof. The audit is useful planning evidence, not verified runtime support.
+Exact results and source review:
+`C:/t/dub-multilingual-validation/opencode-indextts-feasibility-result.json`,
+`C:/t/dub-multilingual-validation/opencode-indextts-space-bunny-result.json`, and
+`C:/t/dub-multilingual-validation/indextts-windows-feasibility-review.md`.
+
+The initial SDK edit completed with a primary result, but its claim of no false
+success was contradicted by an independent already-canceled-caller witness:
+fourteen of sixteen buffered-response/EOF draws falsely succeeded. A bounded
+five-minute Space Bunny corrective call then timed out with partial guards and
+an incomplete decoder regression. Independent review finished the correction,
+and root ran the full SDK race suite successfully in 7.388 seconds, including
+the new EOF, notification, cancellation, deadline and decode cases. This does
+not establish the compiled provider boundary until its separate test runs.
+
+Root review also found that the proposed local `go.mod replace` would break the
+published `go install ...@version` path. The replacement arrangement is therefore
+unaccepted and is being changed to one preserved SDK package within the root
+module, with mechanical namespace changes and truthful provenance. The twelve
+unreachable-code vet findings in upstream generated SDK code were reproduced
+on pristine upstream bytes; authored application checks must remain intact.
+No SDK draft has been included in the installed clean `8d0225132e` executable.
+
+The IndexTTS build-author task reached its five-minute timeout without a
+primary result or authored wrapper. The reviewer then executed the unmodified
+official immutable Windows MSVC/CUDA build script. That standalone native build
+passed in 419.740 seconds, and its help/version commands succeeded with CPU and
+CUDA reported. Its identified executable is recorded with build commands and
+toolchain evidence in `C:/t/dub-indextts-windows-native-proof/`. Reference-audio
+GPU inference, gRPC packaging, and public Models invocation are still pending;
+a compiled executable alone does not establish those requirements.
+
+### SDK repair, final structured schema, and native reference-audio proof
+
+The corrected SDK repair is committed as `71dffd4e3f`. It keeps the preserved
+SDK package under the root-owned `third_party` namespace and introduces no
+local `go.mod replace` and no nested module, so the published
+`go install ...@version` path remains intact. Root independently ran the full
+SDK race suite successfully in 7.432 seconds. The compiled EOF proof at the CLI
+provider boundary is still pending, so this remains a source and suite result
+rather than a compiled boundary acceptance.
+
+The final structured-schema change is committed as
+`a335e9cfb9943f354b2a0c58e3d6cbd28baa7ee1`. It retains thinking and the default
+uncapped generation path and excludes `ReasoningContent` from the final JSON
+answer. Root's independent localai and platform race runs passed in 1.217 and
+1.057 seconds. An isolated native CUDA build of that change is still pending,
+so this is not live native structured-generation acceptance.
+
+The standalone native IndexTTS Windows CUDA executable then produced actual
+reference-audio output for the original video cue 13.44-16.32 s: English in
+9.625 s and Chinese in 10.031 s, both exiting 0 and generating valid WAV files.
+Exact evidence:
+`C:/t/dub-indextts-windows-native-proof/native-reference-results.json`.
+
+The normal installed public Models ASR path also agreed exactly with the target
+text in both languages: English in 31.203 s and Chinese in 29.454 s. Exact
+evidence: `public-asr/acceptance-summary.json` in the same proof root.
+
+Taken together, these establish native conditioning invocation and intelligibility
+only. They do not establish perceptual voice similarity to the reference, the
+public `models IndexTTS` surface, gRPC packaging, or full English dub
+acceptance.
+
+One external QA script first failed on an erroneous nonexistent input path
+before any backend call; after the input was corrected, the Chinese run
+executed. That was a harness input error, not an MCP failure.
+
+### Compiled ACP boundary acceptance and installed clean a335 verification
+
+A clean build of committed `a335e9cfb9943f354b2a0c58e3d6cbd28baa7ee1` is now
+installed at `C:/Users/andre/bin/you.exe`, SHA-256
+`38964fcd5f8f7ca908523e8801b3bf3d65d1a654958a7ce201b94cec54f50704`. This
+replaces the previously installed `8d0225132e` binary and is the first
+installed executable that contains the corrected SDK repair, so the earlier
+"no SDK draft has been included in the installed clean executable" statement no
+longer describes the installed artifact.
+
+The compiled CLI provider boundary case was never skipped: its earlier compiled
+trials FAILED before the peer was invoked. The first attempt failed with
+`execution catalog resolution failed: runner is not a supported built-in
+identity`, and the next attempt failed with `ACP session does not advertise
+requested model "fixture"`. Both are custom-runner rejections ahead of any
+peer response, not delivery evidence. After the fixture correction in
+`72c209d9ff` advertised its capabilities, both advertised-fixture cases passed
+against the current prebuilt artifact: `Initialize` negotiated against protocol
+version `999` under immediate EOF, and the Prompt primary-result case also
+passed under immediate EOF. Source and compiled passes are accepted now; root's
+independent suite run passed in 5.721 seconds and the preserved compiled run
+passed in 4.977 seconds, with one compiled trial per mode. This closes the
+pending compiled-boundary item recorded above for the EOF arrangement only; it
+is not evidence about the broader timeout cause.
+
+A real MCP editing call on the clean candidate
+`C:/t/dub-acp-version-ordering-proof/you-a335-eof.exe`, SHA-256
+`38964fcd5f8f7ca908523e8801b3bf3d65d1a654958a7ce201b94cec54f50704`, returned
+`COMPLETED` in 38.750 seconds, session
+`fdc04954-0606-4560-98a2-9c19a76f91df`. That same candidate SHA is what was
+installed at `C:/Users/andre/bin/you.exe`; the edit itself ran on the candidate
+path, not on the installed path. This is a bounded editing success with the
+requested model, not a general editing or concurrency guarantee.
+
+The installed path itself validated unknown-provider rejection: a readable
+content text plus matching structured error metadata and `isError=true` were
+returned in 1.110 seconds, rejected before dispatch. This confirms the provider
+admission path is present in the installed artifact, and narrows the previously
+delegated classification ambiguity for this input.
+
+The installed path also ran an intentional 5000 ms timeout probe, which
+returned in 6.360 seconds with the typed `timed_out` outcome. Cleanup closed the
+live Factory Session, and the structured result carried private reasoning
+activity metadata without the reasoning text. Session
+`406a90a4-8826-475d-9961-51bcaadb43b9`, request
+`9d3c2c04-050d-409b-ab3b-191927ac1308`. The suggested action named
+partial-edit inspection, log correlation, a longer timeout, or another model,
+with no raw provider payload. This verifies typed timeout reporting and
+redaction on the installed binary; it deliberately proves no successful
+long-running edit.
+
+Exact evidence directories:
+`C:/t/dub-multilingual-validation/repaired-mcp-a335-edit-proof/`,
+`C:/t/dub-multilingual-validation/repaired-mcp-a335-installed-invalid-proof/`,
+and
+`C:/t/dub-multilingual-validation/repaired-mcp-a335-timeout-proof/`.
+
+### Recordings MCP flatten and deadcode gate
+
+Two separate bounded tasks both completed successfully, and they are not a
+before/after or candidate comparison.
+
+The first task ran against the previously installed clean `8d0225132e`
+executable and took 163.266 seconds, session
+`d77b24c9-bef3-407e-901e-934f47a79a50`. It implemented the Recordings
+injection flatten across seven owned files: `client.go` lost the
+`RootDependencies` struct and the `Bind` wrapper while `BindToolOperation` began
+binding directly by closure, and 29 call sites across six owning MCP test files
+were converted.
+
+The second task was different work, not a faster rerun of the first: it ran on
+the `a335` candidate and took 107.187 seconds, session
+`858301d8-90a5-44d0-bab9-0b33d8e17389`. It updated one functional caller,
+`tests/functional/recordings/root_composition/portable_transport_activation_test.go`,
+and deleted one stale deadcode baseline line for the retired recordings `Bind`.
+
+Root ran the full owning tests and the functional race suite, which passed in
+15.552 seconds, and the combined change is committed as `87e55a1fb9`. The two
+durations bound two distinct tasks and identify no cost attribution.
+
+The deadcode gate started from a baseline of 3154 and reported 3171 current
+findings, so the additions exceeded the baseline by seventeen. Eighteen of the
+added findings were upstream ACP SDK helpers in the preserved dependency tree
+that the root module compiles but this repository does not author; the one
+removal was the repository's own
+`pkg/services/recordings/transports/mcp/client.go: unreachable func: Bind`,
+unrelated to the SDK. Exact preserved-dependency handling drops those eighteen
+dependency findings, and the separately removed stale baseline line drops the
+baseline from 3154 to 3153, so the remaining 3153 owned findings match the 3153
+baseline and root's authoritative gate run passes. This makes the gate count
+comparable instead of including dependency code; it does not reduce the review
+burden on owned paths.
+
+### Open items
+
+A fresh native structured-schema build failed after 5.7 seconds, before any
+dependency download. The cause was a patch written with CRLF line endings
+applied to LF-prepared source. A real `git apply`-based fix and its test are
+underway. This is a build-plumbing failure, not native endpoint acceptance, and
+the pending native structured-generation claim above remains pending.
+
+The unsupported-runner bug for a custom named ACP provider is newly reproduced
+and fails before dispatch. Repair is underway and no success is claimed for that
+configuration.
+
+### Independent evidence correction and bounded writer timeout
+
+The evidence entry above was authored through MCP session
+`d9070497-837d-4651-bdb2-72a728d70dfc` in 68.500 seconds. Independent review
+found reversed baseline/current counts, an invalid comparison between two
+separate editing tasks, and confusion between the candidate and installed
+executable paths. A bounded corrective Space Bunny task applied those
+corrections but timed out after 121.688 seconds without a primary result:
+session `9c06e220-aa1d-4602-bd0b-93faec41f200`, request
+`c7045e88-8fd6-4b58-9e66-f0167364bc80`. The MCP response reported the timeout,
+closed session, last activity, partial effects and concrete retry guidance.
+Root independently reviewed the corrected partial edit before retaining it;
+a completed file edit does not convert the terminal timeout into success.
+Exact terminal: `C:/t/dub-multilingual-validation/repaired-mcp-evidence-log-correction-proof/result.json`.
+
+The line-ending repair is now committed as `cb59c212d3`. Actual Git tests cover
+LF and CRLF prepared sources with opposite patch endings, repeat application,
+unknown/partial source rejection and mixed-source rejection without mutation.
+Root's combined CI/applicator run passed all eleven tests. A new isolated
+canonical CUDA build is live from the frozen committed inputs; runtime native
+structured-answer acceptance remains pending.
+
+### Versioned install, compiled EOF suite, and concurrency evidence
+
+The normal network versioned install path now works with the preserved
+`third_party` namespace arrangement:
+`go install github.com/portpowered/infinite-you/cmd/factory@14a917cd88a164b045a65211256b747a511ec778`
+succeeded using an isolated GOBIN with GOWORK off, and Go auto-selected toolchain
+1.26.8. The resulting binary has SHA-256
+`16b6284525348cfbf40e118dacb956c9aab838f31968eb014003b31dd6f5900a` and is installed at
+`C:/Users/andre/bin/you.exe`. This is the first published `go install ...@version`
+verification recorded for the repaired dependency layout.
+
+The compiled three-row EOF suite passes against that artifact: root's independent
+run completed in 10.022 seconds and verifies the immediate-EOF `Initialize` case
+returning the unsupported protocol version `999` error, the Prompt primary-result
+case, and the registered custom `eof-peer` provider on the actual ACP route. The
+provider repair is `c09d7254f4`; the previously recorded unsupported-runner repair
+is no longer pending.
+
+An unregistered provider `unregistered-acp-proof` supplied to the installed binary was rejected
+at canonical provider-selection activation, before any session, workstation, or
+external execution, in 1.082 seconds. Exact evidence:
+`C:/t/dub-acp-version-ordering-proof/versioned-14a917`.
+
+Two queued tool calls on the same server both returned COMPLETED, sessions
+`fd7261b6-acc1-414b-8255-95a47151390e` and `651a89b8-f30d-48e3-bdbe-f951d667b923`,
+replying at 17.359 s and 27.343 s with a 27.484 s total, exit 0, and both requested
+exact edits passed independent inspection. Exact evidence:
+`C:/t/dub-multilingual-validation/concurrent-installed-14-proof`.
+
+A stronger live probe captured 16 snapshots while both calls were pending. The
+final-correlated session IDs `4c200484-7e20-488e-a887-4a53af8fc50d` and
+`e7e75f73-dfda-4d3d-8de2-e80c772e49c3` were simultaneously live from 1.844 s to
+17.469 s. Replies returned COMPLETED at 18.078 s and 37.360 s, total 37.422 s, exit
+0. Task (a) passed exact edit inspection; task (b) omitted the requested period and
+failed exact inspection, which the task itself admitted was model judgment rather
+than a harness requirement. Evidence is under `concurrent-installed-14-live-proof`
+in the same proof root. This proves two live sessions and a responsive session list
+during pending calls; it does not prove precise provider-worker execution overlap
+or semantic correctness.
+
+An invalid-model probe against the installed path returned the typed
+`provider_request_rejected` outcome with `isError` true in 2.485 seconds, and
+cleanup closed session `bd546097-8d1d-48e4-aafd-195dd2fb9f70`. Root record:
+`repaired-mcp-public-invalid-model-proof`. The correct recovery for this input is to
+verify the advertised model list before retrying.
+
+The settings injection flatten completed through actual MCP in 143.875 seconds,
+session `d3c61847-73cf-4dbc-a45a-b9b184390e0d`. Root independently reviewed the
+change and the owning and functional race suites passed; it is committed as
+`879601d1a8`. It removed one owned deadcode baseline line (3153 to 3152) with no
+baseline increase.
+
+CI run `37070592713` at head `14a917cd88a1` failed at the BackendLint fmt-check step because a new catalog test file
+lacked a final newline. The selector step was skipped after that failure, and the
+inventory step, configured with `if: always()`, received an empty `LINT_JOBS`, which the strict parser
+rejected with exit 2 and no inventory output. Commit
+`9aa9fea9a82fe120f7ee671cfc387392c9f630ba` adds the gofmt final newline, makes the
+selector always run with a positive fallback output, and gives the Make target a
+blank-only fallback to the existing budget; nonempty invalid values keep strict
+validation. Root's 20 Node checks passed in 32.216 seconds. CI run `37071707444` was
+still in progress as recorded; no green claim is made for it.
+
+A bounded Make-author task timed out at 300000 ms, session
+`3b7646bc-f23c-4e33-830e-356059a52bb5`, request
+`69f04bed-f1e9-4c00-821a-81b1026b640d`, with last FILE_CHANGE
+`2026-10-02T22:13:23.5849185Z`; the session was closed and partial effects are
+possible. The partial sources were independently reviewed and finalized. A completed
+local edit does not convert that timeout into a COMPLETED result.
+
+The native structured-schema build is live at this checkpoint; there is still no final native
+structured-answer acceptance. The IndexTTS gRPC build and two reference RPCs
+succeeded, which is not yet public Models acceptance, and no new ASR exactness claim
+is made.
+
+### Correction to the compiled ACP boundary paragraph
+
+The earlier phrase "Both are custom-runner rejections ahead of any peer response"
+overstates the model-advertisement failure. Only the unsupported-runner trial failed
+before the peer was invoked. The advertisement error for the requested model
+`fixture` occurred after the `Initialize` and `session/new` replies and before
+`session/prompt`. The earlier paragraph is left unchanged; this section corrects its
+scope.
+
+The latest appendix was authored through bounded OpenCode MCP session
+`4d31efe1-adff-4fe5-86d0-030d24cfbcd6`, which returned a COMPLETED primary
+result. Independent review corrected the unknown-provider name, the second
+concurrency session ID and first reply duration, and the full CI run identity
+before retaining the appendix. The original log bytes were preserved.
+
+### 2026-10-02 CI run `37071707444` outcome and goal-resume evidence
+
+CI run `37071707444` at commit
+`9aa9fea9a82fe120f7ee671cfc387392c9f630ba` completed `FAILURE`. This
+supersedes the earlier "still in progress" record above. No final green, merge,
+live schema inference, or proven duplicate cause is claimed here.
+
+- **Backend lint.** It identifies two new direct `os.File` usages in the
+  Providers ACP `command_parse.go`. Proper Platform process ownership plus
+  explicit canonical Wire injection is being authored via MCP and is **not
+  accepted yet**.
+- **Functional.** The raw artifact shows one underlying failing scenario,
+  `TestPackagedGoalSharedScenarios/PausedSubmissionResumes`, plus its failed
+  parent suite; these are not two independent defects.
+  `shared_scenarios_test.go:177` observes two `execute-goal` dispatch
+  observations for the same Work where exactly one is expected after paused
+  submission and resume. The duplicate-dispatch cause remains unproven.
+- **Targeted repetition.** Root ran
+  `go test ./tests/functional/factory/packaged/goal -run
+  '^TestPackagedGoalSharedScenarios/PausedSubmissionResumes$' -count=10` in the
+  Windows live worktree, and it passed in 12.774s, so isolated repetition did
+  not reproduce the CI sibling-parallel context.
+- **In flight.** Root dispatched an actual installed `you.subagent` read-only
+  Space Bunny audit with a 600000 ms allowance. No conclusion yet.
+
+Exact external evidence:
+`C:/t/dub-multilingual-validation/ci-37071707444-functional-artifact/raw-failures/index.json`
+and `C:/t/dub-multilingual-validation/repaired-mcp-goal-resume-audit-proof`.
+
+### Canonical Windows CUDA schema build from `cb59c212d3`
+
+The canonical Windows CUDA schema build from commit
+`cb59c212d351f1a63235330b10ac5ae4a8dfe300` passed `exit 0` in 40m39.75s. The
+linked CPU schema, startup, and payload gates passed, with 23 authored inputs
+and 18 package files verified. Live inference and public release are still
+pending, so this is not native structured-answer acceptance. Exact evidence:
+`C:/t/dub-llamacpp-schema-build-proof/build-result.json` and
+`verified-package-provenance.json` in the same proof root.
+
+### 2026-10-02 parallel Goal suite repetition, log-edit terminal result, and author timeouts
+
+Root ran the full parallel Goal suite, `go test ./tests/functional/factory/packaged/goal -run '^TestPackagedGoalSharedScenarios$' -count=10`, and it also passed in 17.699s. Together with the earlier isolated scenario repetition, this does not reproduce `PausedSubmissionResumes` in the CI sibling-parallel context, so the duplicate-dispatch cause remains unproven and no duplicate defect is claimed fixed by repetition alone.
+
+The latest actual MCP attempt to edit this log wrote the requested 39-line appendix, but its terminal result is a failure: `isError` true, code `factory_session.subagent.provider_unknown_failure`, provider activity `FAILED`, `sessionClosed` true, elapsed 103.781s, session `2f046143-8fc4-4d70-bf6f-f1434730e439`. Server stderr contains only a peer connection closed line at 22:52:05, and provider log run `9828d7af` records no proven root cause. The partial edit is not counted as success, and the EOF peer-connection line is not evidence of a timeout or of a permission outcome. Exact evidence: `C:/t/dub-multilingual-validation/repaired-mcp-ci-resume-log-proof/result.json`.
+
+The IPC author timed out at 1200000 ms with partial edits and no primary result, session `769c0b53-a28f-4b36-9e0e-be7a5b5cc62a`, request `2f57f4fd-d338-425a-9fde-bc2b24e50ff1`, last `FILE_CHANGE` `22:51:37.6139021Z`; the session was closed. Independent review is finishing the proper pipe-ownership change.
+
+The six-file Index author also timed out at 600000 ms with partial edits and no primary result, session `3a91afb6-4a8d-475a-a570-82402e33085d`, request `10a4a143-e790-49a3-ad89-aed4cc301bc1`, closed, with no proven cause. A completed local edit does not convert either terminal timeout into a COMPLETED result.
+
+Root independently rehashed all 18 schema candidate payload files, and every size and hash matched. Public live schema proof is still pending, so no merge, green CI, or public structured-answer acceptance is claimed here.
+
+### 2026-10-02 Index follow-up and Goal audit terminal outcomes
+
+The narrowed Index repair completed with a primary result in 99s, session
+`05a99439-5955-4780-944b-5e7a1c22ec64`. It corrected two fixtures, removed a
+needless exported constant, and corrected a discovery comment. It also adjusted
+two characterization-test references outside its three named paths but inside
+the approved owner scope. Independent Models, backend-registry, and wire tests
+passed in 0.030s, 0.026s, and 0.036s. Exact result:
+`C:/t/dub-indextts-localai-grpc-proof/opencode-public-integration-repair-result.json`.
+
+Two launcher edit requests failed immediately with
+`factory_session.subagent.provider_unknown_failure`, `INVOCATION_RUNTIME_FAILURE`,
+and cleanup closed: Space Bunny session
+`c86c01d9-3d8f-4e9e-b413-395c1a3b8d47`, then BigPickle session
+`d9cfaec9-8924-40dd-b211-107e14d71398`. No launcher edits were observed. A later
+Space Bunny request to append these notes also failed immediately with the same
+classification, session `06c38510-f2c0-4914-8a7b-e42ea674b9e5`; no note edit was
+observed, so this appendix was written manually. The causes remain unknown.
+These three calls used the exposed `you.subagent` connector from `functions.exec`,
+with the managed worktree as `workingRoot`; its server binary identity was not
+exposed. They did not use root's installed-binary stdio proof client, so the
+results do not establish failure of that separately successful invocation path.
+Exact results are `opencode-launch-writer-space-result.json`,
+`opencode-launch-writer-bigpickle-result.json`, and
+`opencode-deferred-notes-result.json` in the same external proof root.
+
+The user prioritized Qwen full dubbing. With root approval, the six owned
+optional Index drafts were preserved externally and removed from the release
+tree; unrelated changes were preserved. The exact patch is
+`C:/t/dub-indextts-localai-grpc-proof/deferred-index-public-integration.patch`,
+SHA256 `9a66d7b3f76fa3339c34f6fbff3f05c2445a6af438acad566ef9aac4f7ca249a`.
+`deferred-index-public-integration-provenance.json` records the per-file hashes
+and Git identities. Private Index CUDA reference-audio and actual production
+codec interoperability proofs remain retained. Normal public Index discovery
+and invocation remain incomplete.
+
+The root Goal read-only audit timed out at its 600000ms allowance, measured
+elapsed 602.406s, session `129dc0b4-66ed-4d6f-bf48-371362cc370b`, request
+`71b71e61-4341-4817-8613-2efd72786cff`. Its last activity was `REASONING` at
+`22:57:36.8893634Z`; cleanup closed the session. It returned no conclusion and
+made no observed edits. The timeout cause remains unknown. A narrower Goal
+diagnostic writer is in progress; that is not acceptance evidence.
+
+### 2026-10-02 versioned `b050` install, native release download, and CI outcome
+
+- The normal network versioned Go install of
+  `b050291bfd91b847410e2d0c08810b851b5185ba` succeeded and produced
+  `C:/Users/andre/bin/you.exe`, SHA256
+  `fe20cf4fb9a2b38cdb421b1ab758c45854d27e8c0501b3adfe699c7b261b9384`, from
+  module `v0.0.8-0.20261002232031-b050291bfd91`.
+- The compiled ACP EOF three-row proof passed in 6.746s against that install.
+- A fresh installed stdio MCP edit completed in 33.954s, session
+  `96929d18-8a1e-46c3-90ed-8ce92a00b1f5`. The exact edit was independently
+  verified and the server exited 0. Proof:
+  `C:/t/dub-multilingual-validation/installed-versioned-b050-proof`.
+- Codex config was pointing at the old `you-model-infer-20260929.exe`. The
+  command was updated to `you.exe` with `tool_timeout_sec` 3700 preserved, but
+  already loaded connector processes remain the old ones. An exposed connector
+  edit nevertheless completed in 7.816s, session
+  `03b79549-318b-4091-9b28-a78cae00c155`; that success is not a new binary
+  identity proof.
+- The native schema Windows CUDA archive was published at release
+  `localai-backends-v1-90eb06d7fb9a54cb8ae9ca83172ca599cbd1252d500446dedbf8400a9405add5`,
+  archive SHA256
+  `272233b21ce0d353b10bfdd31dffb5d37bfc21a55a2efee5dd57490be34a2c19`.
+  A full normal installed factory downloaded that exact archive and uses native
+  executable SHA256
+  `8ece891bfd64a1526a58a22cd4e82bf8bab572aaaea4f8372a03fb33c2e7c475`.
+- The public prerelease Models schema proof retained 855 private reasoning bytes
+  while the public JSON omitted the reasoning/thinking keys. The Korean prompt
+  fixture returned English, so this is representation acceptance, not Korean
+  translation acceptance.
+- The full actual original 240-second Chinese video is still running toward
+  en-US. ASR produced 59 cues and the initial exact ordered 59-cue translation
+  completed; the semantic audit is in progress and no final dubbed output is
+  accepted yet.
+- CI run `37077160500` on `b050` completed with Backend Functional Coverage and
+  Verification Policy failure. Diagnosis is in progress; no merge or green CI
+  claim is made.
+
+The bounded installed-`b050` MCP author for this section returned `COMPLETED`
+with a primary result in 53.782s, session
+`38acf72d-5647-4284-b81d-9e540eb79fc0`, and the server exited 0. Root
+independently verified the exact append-only 37-line edit; no other file was
+touched and no Git mutation was run. This records authoring provenance for the
+section above only and adds no new install, native, CI, or dubbing evidence.
+Exact raw result:
+`C:/t/dub-multilingual-validation/b050-release-progress-log-proof/result.json`.
+
+### 2026-10-02 controlled-clock CI repair and bounded MCP outcomes
+
+The preceding `b050` CI run `37077160500` failed
+`TestModelsASRControlledHealthTimeoutStopsReadiness` and
+`TestModelsGenericCLIProcessTimeoutStopsReadinessAndPublishesNothing` because
+the shared fake clock still advanced only 31 seconds, below the new five-minute
+production deadline those tests now assert. The Verification Policy failure was
+cascading from those two tests and was not a separate defect.
+
+The installed-`b050` MCP OpenCode Space Bunny author returned `COMPLETED` in
+54.047s, session
+`fbad23a4-9ce7-4d0f-9d7d-12650d28a124`, and changed one test helper only, running
+against the same actual installed server SHA256
+`fe20cf4fb9a2b38cdb421b1ab758c45854d27e8c0501b3adfe699c7b261b9384`. Root
+independently verified the focused race pass in 2.651s and the full Models
+`root_composition` pass in 25.907s. Public error and cleanup assertions and
+wall-clock waits were unchanged, and no production code changed. The fix was
+committed and pushed as
+`8e1daf1b861f8341c83512a22c1d1d0d5ac611bc`. CI run `37078759573` Backend
+Integration passed, including the real five-minute blocked-load witness. The
+functional lane was still active with no failures observed, and no merge is
+claimed here. Exact evidence: `C:/t/dub-ci-b050-review/proof.json`.
+
+Separately, a documentation provenance paragraph author returned `COMPLETED`
+with a primary result in 397.578s and server exit 0, session
+`08c0fd90-4ed3-42dd-8d9d-64a4f296c05b`, with a verified additive 9-line edit
+only. That call was not a timeout, but the cause of the long latency remains
+unproven, and the different prompts mean it does not establish before/after
+performance. It overlapped the 54.047s one-test writer; both completed
+independently in separate source paths with no conflicting edits. Raw result:
+`C:/t/dub-multilingual-validation/b050-log-terminal-proof/result.json`.
+
+A subsequent plan author returned `COMPLETED` in 46.469s, session
+`b1cbd733-8e70-49c6-994f-494083b937e9`, with an independently verified
+append-only 48-line edit and no other file changed. Raw result:
+`C:/t/dub-multilingual-validation/b050-current-delivery-plan-proof/result.json`.
+
+### 2026-10-02 failure-correlation diagnostics, broad-author timeout, and green CI
+
+An installed-`b050` OpenCode Space Bunny bounded diagnostics review completed in
+42.500s, session `d06715cf-d272-417f-abd9-f178fe1285e2`, with a primary result
+and server exit 0 against the same actual server SHA256
+`fe20cf4fb9a2b38cdb421b1ab758c45854d27e8c0501b3adfe699c7b261b9384`; it made no
+source edits. It independently found that ordinary `FAILED` results drop the
+runtime RequestID/TraceID/WorkID because those fields are attached only in the
+timeout branch. A broad author for that correlation work was already dispatched
+with snapshot expansion when root narrowed final acceptance to IDs-only; it
+reached `TIMED_OUT` at 301.125s against the requested 300000ms, session
+`257eeb51-2839-47c6-871d-4e5d6a799b48`, request
+`ced92381-1f26-4249-8e24-749dafea954e`, last `FILE_CHANGE` `UPDATED`
+`23:58:28.9122711Z`, with cleanup closed and `partialEffectsPossible`. It left
+two-file partial changes and no primary result, so it is not a completed author.
+The exact broad patch, protocol, and result are retained at
+`C:/t/dub-multilingual-validation/mcp-failure-correlation-edit-proof`, patch
+SHA256
+`de8f824b0b73720681bb1e33172c42290773c4fe910b84fd2372b8e3f804475d`. A separate
+narrow author is now active after the broad call reached its true terminal, with
+no overlapping writer. Final acceptance is IDs-only, with no extra snapshot calls
+or helpers and private-payload protection preserved; it is not yet verified or
+committed. A caller-selected five-minute budget exhaustion is not evidence of a
+harness root defect, and the underlying long-task cause remains unproven.
+Separately, CI run `37078759573` completed `SUCCESS` on
+`8e1daf1b861f8341c83512a22c1d1d0d5ac611bc`, superseding the earlier in-progress
+record above; raw artifact `C:/t/dub-ci-8e-green-proof/run.json`. The newer
+pending diagnostics are not CI-proven, and no merge is claimed.
+
+The separate narrow author that followed the broad call also failed: it reached
+`TIMED_OUT` in 181.422s against the requested 180000 ms with no primary result,
+session `274185d3-73d7-45dd-8ead-fc4b6e08036d`, request
+`9a7536eb-edd7-4b82-b28c-f3354d6c80f5`, last `FILE_CHANGE` `UPDATED`
+`00:01:51.9520886Z`, cleanup closed with `partialEffectsPossible`, exact evidence
+`C:/t/dub-multilingual-validation/mcp-failure-correlation-narrow-proof`. Its
+partial IDs-only patch passed the tests independently, but the new test
+scaffolding breached the file budget at 1051 > 1000 lines and the helper budget
+at CC 16 > 15, so it was not accepted at that time and no baseline was increased.
+A subsequent installed-`b050` OpenCode Space Bunny test-maintenance author with a
+1200000 ms allowance `COMPLETED` in 324.297s with a primary result and server exit
+0, session `dfa5953e-0dec-40b5-9030-9f56b8ec1029`, exact evidence
+`C:/t/dub-multilingual-validation/mcp-failure-correlation-maint-proof`. The final
+scoped source keeps the original timeout and snapshot behavior and only hoists
+the guarded runtime IDs before terminal classification, and the tests enhance
+the existing seven-row classification/private-secret/cleanup table without
+production helpers, state, or service reads. Independent verification passed the
+full MCP race in 18.217s and package maintainability at 997 test lines and helper
+CC 15, and the scoped diff check passed; the exact final reviewed patch is
+SHA256 `7b5d4b3ee0b95481937f9e84fc94acddba6413b43a0d75ead502b6d083049af8`.
+Root independently reviewed the source, while commit, push, and new-artifact
+concurrency or failure proof remain pending. The earlier broad and narrow
+timeouts stay recorded failures with partial effects and are not retroactive
+completions; the larger task allowance is what allowed this task to finish and
+does not establish historical root causes or a controlled performance comparison,
+and no new CI, merge, or final-video success is claimed.
+
+### 2026-10-02 full-video dub failure, PID-only teardown correction, and unaccepted concurrency draft
+
+The normal versioned installed `b050` CLI ran the original 240.066667-second
+Chinese video to `en-US` with the supplied `customqwen` model and the default Qwen
+ASR plus reference-audio Qwen TTS. The saved run record shows
+`backendOverride: false`, `thinkingDisable: false`, `tokenCaps: false`, and
+`publicArtifactDiscovery: true`, so no backend override, thinking disable, or
+token cap was used. ASR produced 59 cues, the audited 59-cue translation
+completed, and the saved manifest records 59 segments at stage `translated`.
+
+Cue 35 required the bounded fit repair. Revision 1 failed with `speech-too-long`
+at 2240 ms generated against 960 ms available for source bounds 134240-134560 ms.
+Revision 2 was audited and accepted the four-word `quite a few friends.` while
+reusing the identical original reference. That retained fit generated 1520 ms
+into the 960 ms playback window at 1.583x, inside the unchanged two-times fit
+guard. Cues 0 through 44 then produced 45 fitted PCM outputs.
+
+Cue 45 is the stopping point. Its source is U+55EF followed by U+3002, a hum or
+acknowledgment, translated as `Mm.`, with source bounds 178000-179520 ms. All
+three normal TTS attempts returned typed `MODEL_BACKEND_FAILURE` with reason
+`generation-exhausted-without-eos` and the safe message `TTS generation limit
+reached without EOS`. No truncated or non-EOS WAV was accepted, and cue 45
+produced no fitted audio. The full original run's process 39968 terminated with
+exit code 1 after 4753.828 seconds; the saved stderr records
+`INVOCATION_RUNTIME_FAILURE` for `video-dub:failed` before a primary result, and
+the output video does not exist. This stays a failure result: the 45 validated
+segments, their fitted PCM, and the accepted 59-cue translation are retained
+evidence, not a completed dub, and no final video or full acceptance is claimed.
+Exact evidence: `C:/t/dub-schema-english-end-to-end`, artifact directory
+`chinese-english-dub-l01i4t49`, with `segment-45.tts-attempt-1-failure.json`,
+`segment-45.tts-attempt-2-failure.json`, and
+`segment-45.tts-attempt-3-failure.json`.
+
+The smallest repair under investigation is conservative whole-cue nonverbal
+source-audio preservation, which would keep a nonverbal cue's original source
+audio instead of synthesizing `Mm.`. No such repair is implemented, accepted, or
+restarted, and no rerun result is claimed.
+
+The external teardown proof also corrects a PID-only reading of this run.
+`result.json` lists exactly one `ownedProcessesAlive` entry, 93828, originally
+the `qwen3-tts-cpp.exe` backend host observed at 2471.765 seconds. The teardown
+record classifies 93828 as a reused PID owned by an unrelated OpenCode process
+created at 23:38:42Z and left it untouched, with no matching owned process still
+alive. Never kill a process by PID alone, and no process leak is established from
+that list.
+
+Root's independent source review of the currently unaccepted ACP concurrency
+draft separately found registration/retirement and startup publication risks.
+Those are risks in an unaccepted draft. They are not evidence for the causes of
+the historical timeouts recorded above, which remain unknown.
+
+Committed `ad128` CI run `37081425137` completed `SUCCESS`. Any repair requires
+its own final-head verification, and no merge is claimed. The user priority
+remains a valid mostly working dub plus merge, with imperfect wording acceptable;
+the broader MCP, GPU, and public Index goals remain incomplete.
+
+This section was authored through an actual `you.subagent` MCP call using
+the normal isolated versioned `ad128` artifact, SHA-256
+`e0c32a11c4595a043af676b33635a85b9e117c4936ec2fa59a69453f51019580`, with
+provider `opencode` and model `opencode/space-bunny-free` at a 1200000 ms
+allowance. The invocation returned `COMPLETED` with a primary result in 188.5
+seconds, session `3f906937-4d97-4acc-835e-4439ad19c119`, and its owned stdio
+MCP server 96320 exited 0. No source, plan, or baseline file changed, no GPU
+inference ran, nothing was staged or committed, and no binary was replaced.
+Exact result:
+`C:/t/dub-multilingual-validation/mcp-cue45-terminal-log-proof/result.json`.
+
+### 2026-10-02 request-owned ACP author timeout, `bb15` continuation CI repair, and single-hum recovery
+
+The 20-minute SpaceBunny request-owned ACP author, dispatched through the
+actual `you.subagent` MCP tool against the isolated versioned `ad128` binary
+(SHA-256 `e0c32a11c4595a043af676b33635a85b9e117c4936ec2fa59a69453f51019580`,
+owned MCP server PID 80332), returned `TIMED_OUT` at 1201.343s against the
+requested 1200000 ms. Session `af059731-a9dc-4473-a908-66f5071b424a`, request
+`fff43a9c-aba4-448c-901c-db93fa005f4a`, model `opencode/space-bunny-free`. The
+human-readable content was `subagent timed out before producing a result;
+workspace edits may have occurred; you.subagent cleanup closed the live Factory
+Session`, with typed code `factory_session.subagent.timed_out`, `isError:
+true`, `sessionClosed: true`, and `partialEffectsPossible: true`. Progress
+still reported one in-flight dispatch with provider `REASONING` activity
+observed at `2026-10-03T00:47:23Z`, and the owned server exited 0. No primary
+result was produced, so this is a failed author with partial effects, not a
+completion.
+
+Those partial effects are saved, not merged: tracked partial patch SHA-256
+`85efa64e63409c243a5e71ad61db68db13a6f9a946aa2ec8b35b143619e4a3b9` across ACP
+service files, plus untracked
+`pkg/services/providers/internal/services/acp/internal/service/attempt_concurrency_test.go`
+at SHA-256 `d8c460856ad809d6ce10bc7de17b43bf23a8103018f7d793a9a75d91fc6124e2`.
+A post-terminal process check confirmed owned server 80332, OpenCode 62900 and
+93828, and Go 97536 and 93288 were all absent, so this call establishes no
+process leak.
+
+Cause discipline is unchanged. That author ran the ACP tests with a 900 s test
+timeout that outlived the remaining MCP allowance, and an independent review of
+the still-unaccepted draft separately found a registration/retirement race,
+startup-publication and early-cleanup deadlock risks, and faulty barrier
+tests. Those are draft defects plus a self-inflicted overrun; they are not
+evidence for the historical timeouts recorded above, which remain unknown. The
+critical repair (a new author with a 20-minute allowance and 30-60 s Go test
+deadlines) is still running and is not accepted. Exact evidence:
+`C:/t/dub-multilingual-validation/mcp-acp-request-attempt-author-proof`.
+
+Separately, `bb15` CI run `37083980489` failed Backend Unit Coverage job
+`111090439901` on exactly
+`TestContinue_IdempotencyAndLineageConflictsAvoidDuplicateAdmission`:
+`boundary publish count = 1, want source plus one successor`. Coverage floors
+were never evaluated on that run because the test failed first, so this is a
+single-test failure and not a coverage result. The cause is a contract
+mismatch rather than a production defect: `Continue` returns at the Worker
+Sessions admission barrier, which is signalled before the driver goroutine
+enters the Workers handoff, so a publish count read immediately after return is
+not yet guaranteed to include the successor dispatch. `Continue` promises that
+Worker Sessions starts the successor under server-owned supervision, not that
+the Workers `Execute` call has already been entered.
+
+The test-only repair ran through an actual `you.subagent` MCP call and
+returned `COMPLETED` with a primary result in 308.734s, session
+`31ef5943-df78-4c37-a996-48952dc0fe5f`, owned MCP server 55088 exit 0. It
+observes the single successor handoff through the fixture's existing bounded
+`requestFor` channel wait before counting, with no sleeps, polling, count
+weakening, or production change. An earlier, longer form of the same fix
+pushed `fakes_test.go` to 1010 lines and failed `backendsizecheck` against the
+1000-line limit; the accepted form stays inside that limit with no baseline and
+no ignore directive. Honest negative result: the pre-fix file did not reproduce
+locally at `-count=3000` or `-count=300 -cpu=8`, so CI remains the only
+environment that has actually shown the race. Root independently verified 100
+race repetitions passing in 1.149s, and the fix was committed and pushed as
+`9369e75900`. Final-head CI for that commit is still required, and no green CI
+or merge is claimed. Exact evidence:
+`C:/t/dub-multilingual-validation/mcp-bb15-continuation-ci-repair-proof`.
+
+The normal immutable `bb15` install used module
+`v0.0.8-0.20261003005406-bb15c76cd302` with checksum
+`h1:SPkW85ns5bu+28gm37657l+DesGZXtBbsWY6ycsRtXc=` and compiled binary SHA-256
+`f3c47ea2f6533143317c5cdaddec6875a002ba4424778cda4ab1c918672d0edd`. The
+actual compiled public `run --dir <materialized @you/dub-video> --work
+<translated-state original hum cue45 batch> --record <recording>` invocation
+passed with exit code 0 in 2.109s. Root verified a complete manifest, a single
+original cue, a nonverbal hum source (U+55EF U+3002), zero TTS attempts, speech
+identical to the original reference, an unchanged reference hash, fitted PCM
+equal to the reference decode, full source duration, only the expected
+transitions, all dispatches accepted, the shipped hum script matching, no model
+host observed, and the sampled owned process absent. The output
+`hum45-recovered.mp4` is a valid 240.067-second H.264/AAC/`mov_text` video.
+
+That is one hum cue only. It is not full 59-cue success and not
+recording-resume acceptance, and the loaded Codex connector and the active
+`C:\Users\andre\bin\you.exe` CLI were unchanged throughout. The error
+classification is narrow: the first attempt passed the authored `factory.yaml`
+as `--dir` and failed with the generic `CLI_COMMAND_FAILED`; `--debug` showed
+the layout was not found, and using the valid normal named materialized layout
+fixed the invocation. No acceptance beyond this single cue is claimed yet. The
+first external verifier also read the source with the Windows default cp1252
+encoding and reported a false source mismatch; an explicit UTF-8 read matches
+the original Chinese source, and that diagnostic is preserved separately rather
+than erased. Exact evidence:
+`C:/t/dub-hum-recovery-bb15-proof/acceptance-summary.json`.
+
+The remaining 45 cues were additionally reconstructed on CPU: an explicit
+reconstruction re-checked every original reference SHA-256 for cues 0 through
+44 and confirmed byte-exact fit replay against the recorded public
+`you models invoke qwen3-tts-base --operation TTS` witnesses. This is an
+explicit external reconstruction, not a prior automatic checkpoint resume; the
+earlier run directory stayed immutable and automatic resume is not claimed. The
+checkpoint work is still author-active, and the full 59-cue video and the merge
+remain unproven. Exact evidence:
+`C:/t/dub-schema-english-recovery/cpu-reconstruction-evidence.json`.
+
+This section was itself authored through an actual `you.subagent` MCP
+dispatch, so the dispatch exists rather than being asserted. Its elapsed
+duration and session identifiers are not yet known to this note and are
+deliberately left unrecorded instead of guessed. No GPU inference ran, no
+source, plan, or baseline file changed, nothing was staged or committed, and no
+install was replaced. Unrelated live ACP, dub Python, and CLI edits already
+present in the tree were preserved untouched. The prior user priority stands:
+a valid mostly working dub plus a merge, with imperfect wording acceptable.
+
+## 2026-10-02: accepted recovered video; two CI repair authors timed out
+
+The compiled public Factory run at immutable `63f555985a9f7fd1315d8866071852174491f5ac`
+completed all 59 cues in 16.843 seconds after explicit reconstruction and
+seeding of verified checkpoints. Two independent CPU reviews accepted the
+240.067-second H264/AAC/subtitle video, all 59 cue identities and timing, and
+7,202 unchanged source video packets. There are 57 original-audio
+reference-conditioned TTS cues and two preserved nonverbal cues. Output:
+`C:/t/dub-schema-english-recovery/chinese-english.mp4`, SHA-256
+`76d4ce661e512c6caa8582e4da3fca50be8140509e8fba769272a069e0225737`.
+This is explicit recovered work, not a fresh one-shot success. Cue 50 needed
+the manual punctuation-only `Hey,` to `Hey!` change; proposed `Hello.` was
+rejected. No generic EOS cure or voice-similarity proof is claimed. Evidence:
+`C:/t/dub-schema-english-recovery/result.json`,
+`independent-final-acceptance.json`, and
+`independent-review/delivery-acceptance.json` in that directory.
+
+The published `495ccf342cd4652cb5652388ed59f6cd9d99a1fe` CI run
+`37087859555` failed seven functional tests. Functional coverage floors were
+not evaluated. All other product jobs passed, including Backend Lint; its
+normalized deadcode finding set is exactly the unchanged 3148 baseline.
+Merge is pending those required repairs.
+
+Two actual `you.subagent` calls through the normal immutable `495` binary and
+`opencode/space-bunny-free` reached the requested 1,200,000-ms bound:
+
+| Task | Observed duration | Session | Request |
+| --- | --- | --- | --- |
+| ACP functional fixture repair | 1203.531 s | `f03ab86d-6114-4a21-b5d8-2c55d986d694` | `44bbcc52-6901-4cee-9140-26a952e7747c` |
+| Canonical topology event test repair | 1206 s | `000ab856-4762-4c4f-8a62-9dce5cc1f5af` | `a057c400-6048-424a-83ea-05e59f8a126b` |
+
+Both returned `isError: true`, typed `factory_session.subagent.timed_out`,
+human-readable content explaining possible partial edits, `sessionClosed: true`,
+and correlation IDs. Neither returned a primary result; both owned MCP servers
+exited 0. The ACP patch is preserved with SHA-256
+`b05eb866e6963cfa84938def4905fe680e29c2e9c255760d822ad0238ad445ca`;
+the topology task left temporary diagnostic edits. Last observed provider
+activity was `REASONING`, phase `COMPLETED`, which is not evidence of a final
+operation result. Causes remain unproven. Reviewers are finishing narrow manual
+fallbacks after preserving the terminal evidence, without restarting another
+20-minute author. Exact receipts:
+`C:/t/dub-multilingual-validation/mcp-acp-functional-495-repair-proof/result.json`
+and `C:/t/dub-multilingual-validation/functional-495/topology-mcp/result.json`.
+
+This entry was appended directly by root after inspecting the receipts; it is
+not another claimed MCP author success. The broader goal remains incomplete.
+
+## 2026-10-02: functional tests pass; authentication coverage author times out
+
+At published `1ae5ef011916b8f48cda918aef60f26c536f8cc6`, CI run
+`37091318531` passed all functional tests, including the seven repaired tests.
+The functional verdict failed one measured coverage threshold: ACP service
+822/1028 statements, 79.9611%, against its unchanged 80.22% minimum. All other
+product jobs passed. Evidence:
+`C:/t/dub-multilingual-validation/functional-1ae5/functional-coverage-verdict.txt`.
+
+The missing customer behavior selected for coverage is authentication-required
+failure with actionable login guidance. The existing controlled ACP peer
+advertises agent, environment-variable and terminal login methods, but no
+functional scenario exercised that branch. A bounded one-file actual MCP
+author used the normal immutable `1ae5` binary and
+`opencode/space-bunny-free`, with `timeoutMillis: 600000`.
+
+It returned typed `factory_session.subagent.timed_out` after 601.046 seconds,
+with human-readable error content, `partialEffectsPossible: true`,
+`sessionClosed: true`, and no primary result. Session:
+`2cea060a-7839-4e01-899c-46902bfb7d6c`; request:
+`a82814c8-6a5b-4303-95b4-230c26d37092`; owned server 70104 exited 0.
+Last recorded provider activity was `FILE_CHANGE`, phase `UPDATED`, at
+`2026-10-03T03:18:57.4560797Z`. The partial one-file patch is preserved,
+SHA-256 `7dad9ed4c6d7a2ae113ab8a6c7103850d4a45fd673d61de1aacdd30cad589e14`.
+No timeout cause is proven. Exact receipt:
+`C:/t/dub-multilingual-validation/mcp-acp-auth-functional-floor-proof/result.json`.
+
+The partial edit uses real existing helpers and public payload fields.
+Independent review accepted its public failed-Work, authentication-class,
+no-answer and all-three-login-label assertions. Manual corrections trim
+repetitive comments and restrict the secret assertion to the public failure
+diagnostic: the initial whole-event scan also read the intentionally authored
+workstation environment blueprint. Focused protocol-table race passed in
+4.842 seconds; full package passed in 8.524 seconds. An initial unquoted
+PowerShell coverage argument yielded no statements; corrected instrumentation
+and exact profile-union verification are pending at this entry's capture.
+No coverage floor was changed and no final green CI or merge is claimed.
+
+During preparation, the author coordinator accidentally overwrote an existing
+shared install receipt with a shorter receipt for the same unchanged binary.
+That version is preserved as `C:/t/dub-release-1ae5-proof/actor-install-identity.json`;
+the independent reviewer regenerated its fuller receipt from saved install
+metadata, using an honest regeneration timestamp, without reinstalling.
+Subsequent author evidence uses its own proof directory. This is a coordinator
+evidence-handling error, not an inferred provider failure.

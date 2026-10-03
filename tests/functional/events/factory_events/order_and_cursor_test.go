@@ -698,7 +698,6 @@ func TestCanonicalTopologySnapshotsPreservePublicIdentityAndResourceEvidence(t *
 	}
 	assertCanonicalTopologyFactoryEvidence(t, initialPayload.Factory)
 
-	initialEvents := server.GetFactoryEvents(t)
 	current := getCurrentFactoryAt(t, server.URL())
 	saveCurrentFactoryAt(
 		t,
@@ -710,13 +709,29 @@ func TestCanonicalTopologySnapshotsPreservePublicIdentityAndResourceEvidence(t *
 		"waiting",
 		"approval",
 	)
-
-	factoryChange := requireFactoryChangeAfterEvents(t, initialEvents, server.GetFactoryEvents(t))
+	// Saving can rebind the current stream generation, so its sequences cannot
+	// be compared with those from the initial stream. Match the saved topology
+	// in the current retained history instead.
+	factoryChange := requireSavedTopologyFactoryChange(t, server.GetFactoryEvents(t))
 	changePayload, err := factoryChange.Payload.AsFactoryChangeEventPayload()
 	if err != nil {
 		t.Fatalf("decode factory-change payload: %v", err)
 	}
 	assertCanonicalTopologyFactoryEvidence(t, changePayload.Factory)
+	assertSavedTopologyResourceEvidence(t, changePayload.Factory)
+}
+
+func assertSavedTopologyResourceEvidence(t *testing.T, factory factoryapi.Factory) {
+	t.Helper()
+	if (*factory.Resources)[0].Capacity != 2 {
+		t.Fatalf("saved resource capacity = %d, want 2", (*factory.Resources)[0].Capacity)
+	}
+	workerRequirement := (*(*factory.Workers)[0].Resources)[0]
+	stationRequirement := (*(*factory.Workstations)[0].Resources)[0]
+	if workerRequirement.Name != "accelerator" || workerRequirement.Capacity != 1 ||
+		stationRequirement.Name != "accelerator" || stationRequirement.Capacity != 1 {
+		t.Fatalf("saved resource requirements = worker %#v, workstation %#v, want accelerator capacity 1", workerRequirement, stationRequirement)
+	}
 }
 
 func scaffoldCanonicalTopologyFactory(
@@ -941,25 +956,30 @@ func requireInitialStructureFactoryEvent(
 	return factoryapi.FactoryEvent{}
 }
 
-func requireFactoryChangeAfterEvents(
+func requireSavedTopologyFactoryChange(
 	t *testing.T,
-	before []factoryapi.FactoryEvent,
-	after []factoryapi.FactoryEvent,
+	events []factoryapi.FactoryEvent,
 ) factoryapi.FactoryEvent {
 	t.Helper()
 
-	minSequence := -1
-	for _, event := range before {
-		if event.Context.Sequence > minSequence {
-			minSequence = event.Context.Sequence
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeFactoryChange {
+			continue
 		}
-	}
-	for _, event := range after {
-		if event.Context.Sequence > minSequence && event.Type == factoryapi.FactoryEventTypeFactoryChange {
+		payload, err := event.Payload.AsFactoryChangeEventPayload()
+		if err != nil {
+			t.Fatalf("decode retained factory-change payload: %v", err)
+		}
+		factory := payload.Factory
+		if factory.Resources != nil && len(*factory.Resources) == 1 && (*factory.Resources)[0].Name == "accelerator" &&
+			factory.Workers != nil && len(*factory.Workers) == 1 && (*factory.Workers)[0].Name == "author" &&
+			factory.WorkTypes != nil && len(*factory.WorkTypes) == 1 && (*factory.WorkTypes)[0].Name == "job" &&
+			len((*factory.WorkTypes)[0].States) == 3 && (*factory.WorkTypes)[0].States[0].Name == "waiting" &&
+			factory.Workstations != nil && len(*factory.Workstations) == 1 && (*factory.Workstations)[0].Name == "approval" {
 			return event
 		}
 	}
-	t.Fatal("retained Factory Event history missing FactoryChange after save")
+	t.Fatal("current retained Factory Event history missing FactoryChange with saved customer names")
 	return factoryapi.FactoryEvent{}
 }
 

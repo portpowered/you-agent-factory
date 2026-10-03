@@ -537,7 +537,7 @@ func (s *service) inspectGenericRuntimeCache(
 	inspection.ManifestPresent = true
 	inspection.ManifestValid = true
 	inspection.ExpectedArtifacts = genericRuntimeRequirements(metadata)
-	if adjusted, handled := s.inspectBuiltInGemmaLLMCache(inspection, source, metadata); handled {
+	if adjusted, handled := s.inspectBuiltInRequiredAssets(inspection, source, metadata); handled {
 		return adjusted, true, nil
 	}
 	revisionPath, err := managedCacheChildPath(root, metadata.Revision, "revision")
@@ -585,20 +585,20 @@ func (s *service) inspectGenericRuntimeCache(
 	return inspection, true, nil
 }
 
-// inspectBuiltInGemmaLLMCache applies the built-in Gemma LLM requirement
+// inspectBuiltInRequiredAssets applies the pinned multi-file requirement
 // override when the configured source matches the persisted metadata but the
 // cached artifacts do not satisfy the built-in model requirements.
-func (s *service) inspectBuiltInGemmaLLMCache(
+func (s *service) inspectBuiltInRequiredAssets(
 	inspection assets.RuntimeCacheInspection,
 	source genericSource,
 	metadata cacheMetadata,
 ) (assets.RuntimeCacheInspection, bool) {
-	if !isBuiltInGemmaLLMSource(source) ||
+	if (!isBuiltInGemmaLLMSource(source) && !isBuiltInQwenASRSource(source)) ||
 		!genericRuntimeSourceMatchesMetadata(source, metadata) ||
-		genericRuntimeRequirementsSatisfy(builtInGemmaLLMRequirements(), inspection.ExpectedArtifacts) {
+		genericRuntimeRequirementsSatisfy(genericRuntimeExpectedArtifacts(source), inspection.ExpectedArtifacts) {
 		return inspection, false
 	}
-	required := builtInGemmaLLMRequirements()
+	required := genericRuntimeExpectedArtifacts(source)
 	inspection.ExpectedArtifacts = required
 	cached := make([]models.AssetArtifact, len(metadata.Files))
 	for index, file := range metadata.Files {
@@ -970,6 +970,9 @@ func genericRuntimeRequirements(metadata cacheMetadata) []models.AssetRequiremen
 }
 
 func genericRuntimeExpectedArtifacts(source genericSource) []models.AssetRequirement {
+	if isBuiltInQwenASRSource(source) {
+		return builtInQwenASRRequirements()
+	}
 	if isBuiltInGemmaLLMSource(source) {
 		return builtInGemmaLLMRequirements()
 	}

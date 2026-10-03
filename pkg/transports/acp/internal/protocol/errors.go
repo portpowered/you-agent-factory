@@ -3,7 +3,7 @@ package protocol
 import (
 	"errors"
 
-	acpsdk "github.com/coder/acp-go-sdk"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/envelope"
 	"github.com/portpowered/infinite-you/pkg/transports/acp/internal/identity"

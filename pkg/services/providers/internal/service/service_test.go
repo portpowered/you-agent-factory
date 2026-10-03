@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	acpsdk "github.com/coder/acp-go-sdk"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -20,6 +19,7 @@ import (
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
 func TestNew_RejectsNilCatalog(t *testing.T) {

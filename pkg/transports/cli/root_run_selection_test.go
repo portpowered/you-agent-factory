@@ -3,7 +3,9 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +15,9 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/factoryload"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestResolveRunNamedFactorySelectionForwardsFailureToInjectedCandidatePaths(t *testing.T) {
@@ -309,4 +313,192 @@ func reservedInvocationHelpPayload(externalName string) []byte {
 		[]byte(`"name": "mode", "externalName": "`+externalName+`",`),
 		1,
 	)
+}
+
+// TestRunExplicitDirectoryStartupLayoutFailureRendersActionableNotFoundDiagnostic
+// covers the proven public failure: an explicit --dir run against an
+// authored-only directory reports a wrapped layout sentinel that the Current
+// Factory classifier intentionally skips.
+func TestRunExplicitDirectoryStartupLayoutFailureRendersActionableNotFoundDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	const privateCause = "PRIVATE_LAYOUT_PAYLOAD_DO_NOT_LEAK"
+	authoredDir := seedAuthoredOnlyFactoryDirectory(t)
+	workFile := writeTestRunWorkFile(t, "batch.json")
+	startupFailure := fmt.Errorf(
+		"open Factory from %s: %w", privateCause, interfaces.ErrFactoryLayoutNotFound,
+	)
+
+	diagnostic, err := executeRunStartupFailure(t, startupFailure, []string{
+		"--json", "run", "--dir", authoredDir, "--work", workFile,
+	})
+
+	if diagnostic.Code != runcli.CurrentFactoryNotFoundCode {
+		t.Fatalf("diagnostic code = %q, want %q", diagnostic.Code, runcli.CurrentFactoryNotFoundCode)
+	}
+	if diagnostic.Family != string(factoryapi.ErrorFamilyNotFound) {
+		t.Fatalf("diagnostic family = %q, want %q", diagnostic.Family, factoryapi.ErrorFamilyNotFound)
+	}
+	if diagnostic.Message != explicitFactoryDirectoryLayoutMessage {
+		t.Fatalf("diagnostic message = %q, want %q", diagnostic.Message, explicitFactoryDirectoryLayoutMessage)
+	}
+	if !errors.Is(err, interfaces.ErrFactoryLayoutNotFound) {
+		t.Fatalf("ExecuteCommand() error = %v, want preserved layout sentinel", err)
+	}
+	for _, forbidden := range []string{privateCause, authoredDir, "CLI_COMMAND_FAILED", "command failed"} {
+		if strings.Contains(diagnostic.Output, forbidden) {
+			t.Fatalf("run diagnostic disclosed %q:\n%s", forbidden, diagnostic.Output)
+		}
+	}
+}
+
+// TestRunExplicitDirectoryStartupLayoutFailureBoundaries keeps the new
+// classification narrow: joined sentinels classify, unrelated startup failures
+// stay on the generic fallback, and an authored --factory selection is not
+// mapped by error text.
+func TestRunExplicitDirectoryStartupLayoutFailureBoundaries(t *testing.T) {
+	t.Parallel()
+
+	const (
+		privateCause = "PRIVATE_JOINED_PAYLOAD_DO_NOT_LEAK"
+		factoryPath  = "authored-factory.json"
+	)
+	tests := []struct {
+		name           string
+		startupFailure error
+		wantCode       string
+	}{
+		{
+			name: "joined layout sentinel",
+			startupFailure: errors.Join(
+				errors.New(privateCause),
+				interfaces.ErrFactoryLayoutNotFound,
+			),
+			wantCode: runcli.CurrentFactoryNotFoundCode,
+		},
+		{
+			name:           "unrelated startup failure",
+			startupFailure: fmt.Errorf("initialize %s: %w", privateCause, errors.New("host unavailable")),
+			wantCode:       clidiag.DefaultFailureCode,
+		},
+		{
+			name:           "layout sentinel text without identity",
+			startupFailure: errors.New("factory layout not found"),
+			wantCode:       clidiag.DefaultFailureCode,
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			authoredDir := seedAuthoredOnlyFactoryDirectory(t)
+			diagnostic, _ := executeRunStartupFailure(t, test.startupFailure, []string{
+				"--json", "run", "--dir", authoredDir, "--work", writeTestRunWorkFile(t, "batch.json"),
+			})
+			if diagnostic.Code != test.wantCode {
+				t.Fatalf("diagnostic code = %q, want %q (output=%s)", diagnostic.Code, test.wantCode, diagnostic.Output)
+			}
+			if strings.Contains(diagnostic.Output, privateCause) {
+				t.Fatalf("diagnostic disclosed a private cause:\n%s", diagnostic.Output)
+			}
+		})
+	}
+
+	t.Run("authored --factory selection stays unmapped", func(t *testing.T) {
+		t.Parallel()
+
+		authoredFile := filepath.Join(t.TempDir(), factoryPath)
+		if err := os.WriteFile(authoredFile, portableFactoryPayloadWithDefaultHandling(), 0o600); err != nil {
+			t.Fatalf("WriteFile(%q): %v", authoredFile, err)
+		}
+		diagnostic, _ := executeRunStartupFailure(t, interfaces.ErrFactoryLayoutNotFound, []string{
+			"--json", "run", "--factory", authoredFile, "--work", writeTestRunWorkFile(t, "batch.json"),
+		})
+		if diagnostic.Code != clidiag.DefaultFailureCode {
+			t.Fatalf("--factory diagnostic code = %q, want %q (output=%s)", diagnostic.Code, clidiag.DefaultFailureCode, diagnostic.Output)
+		}
+		if strings.Contains(diagnostic.Output, explicitFactoryDirectoryLayoutMessage) {
+			t.Fatalf("--factory selection used the --dir diagnostic:\n%s", diagnostic.Output)
+		}
+	})
+}
+
+type runStartupDiagnostic struct {
+	Code    string `json:"code"`
+	Family  string `json:"family"`
+	Message string `json:"message"`
+	Output  string
+}
+
+// executeRunStartupFailure runs one real composed `you run` invocation whose
+// injected initializer reports startupFailure, then decodes the single
+// diagnostic envelope owned by the central renderer.
+func executeRunStartupFailure(t *testing.T, startupFailure error, args []string) (runStartupDiagnostic, error) {
+	t.Helper()
+
+	selectionOpened := false
+	factory := withTestInjectedPlatformRoles(CommandFactory{})
+	workDir := t.TempDir()
+
+	var stdout, stderr bytes.Buffer
+	executionErr := factory.ExecuteCommand(startupcli.CommandInvocation{
+		Arguments: args,
+		Stdin:     strings.NewReader(""),
+		Stdout:    &stdout,
+		Stderr:    &stderr,
+		Context:   startupcli.WithWorkingDirectory(context.Background(), workDir),
+		HomeDir:   func() (string, error) { return workDir, nil },
+		LookupEnv: func(string) (string, bool) { return "", false },
+		Initializer: startupcli.Functions{
+			RunFunc: func(_ context.Context, _ startupcli.RunIntent, selection startupcli.RunSelection) error {
+				selectionOpened = true
+				return startupFailure
+			},
+		},
+	})
+	if !selectionOpened {
+		t.Fatalf("run command never reached the injected initializer for %v", args)
+	}
+	return decodeRunStartupDiagnostic(t, stdout.String()+stderr.String()), executionErr
+}
+
+func decodeRunStartupDiagnostic(t *testing.T, output string) runStartupDiagnostic {
+	t.Helper()
+
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		t.Fatal("run failure rendered no diagnostic output")
+	}
+	lines := strings.Split(trimmed, "\n")
+	if len(lines) != 1 {
+		t.Fatalf("run diagnostic output = %q, want exactly one envelope", output)
+	}
+	var diagnostic runStartupDiagnostic
+	if err := json.Unmarshal([]byte(lines[0]), &diagnostic); err != nil {
+		t.Fatalf("decode run diagnostic: %v; output=%q", err, output)
+	}
+	diagnostic.Output = output
+	return diagnostic
+}
+
+func seedAuthoredOnlyFactoryDirectory(t *testing.T) string {
+	t.Helper()
+
+	authoredDir := t.TempDir()
+	authored := []byte("name: authored-only\nworkTypes: []\n")
+	if err := os.WriteFile(filepath.Join(authoredDir, "factory.yaml"), authored, 0o600); err != nil {
+		t.Fatalf("WriteFile(authored Factory source): %v", err)
+	}
+	return authoredDir
+}
+
+func writeTestRunWorkFile(t *testing.T, name string) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte(`{"requests":[]}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(%q): %v", path, err)
+	}
+	return path
 }

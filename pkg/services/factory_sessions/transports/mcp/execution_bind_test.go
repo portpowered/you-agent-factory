@@ -12,6 +12,7 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -30,10 +31,7 @@ func TestBind_FakeExecutionRootInvokedThroughCanonicalListSessionsTool(t *testin
 			return factorysessions.ListSessionsResult{Scope: factorysessions.SessionListScopePersisted}, nil
 		},
 	}
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fake,
-		Prepare:  canonicalMCPRequestPreparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(context.Background(), mcpfactorysession.ToolListSessions, json.RawMessage(`{"scope":"persisted"}`))
 	if err != nil {
 		t.Fatalf("CallTool(list_sessions) error = %v", err)
@@ -59,10 +57,7 @@ func TestBind_FakeExecutionRootInvokedThroughCanonicalGetSessionTool(t *testing.
 			return runningSessionRead(), nil
 		},
 	}
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fake,
-		Prepare:  canonicalMCPRequestPreparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolGetSession,
@@ -99,11 +94,7 @@ func TestBind_FakeRecordingsRootInvokedThroughCanonicalListDispatchesTool(t *tes
 			}, nil
 		},
 	}
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions:   fakeExecutionRoot{},
-		Recordings: fake,
-		Prepare:    canonicalMCPRequestPreparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(fake, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{}, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolListDispatches,
@@ -156,10 +147,7 @@ func TestBind_ReadListToolsInvalidJSONDecodeReturnsBadRequestWithoutInvokingFake
 	t.Parallel()
 
 	var invoked bool
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fakeExecutionRoot{invoked: &invoked},
-		Prepare:  canonicalMCPRequestPreparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
 	raw, err := operation(context.Background(), mcpfactorysession.ToolGetSession, json.RawMessage(`{"sessionId":`))
 	if err != nil {
 		t.Fatalf("CallTool(get_session) transport error = %v, want typed tool response", err)
@@ -179,10 +167,7 @@ func TestBind_ReadListToolsValidationFailureReturnsBadRequestWithoutInvokingFake
 			return factorysessions.ListSessionsRequest{}, errors.New(`unsupported Factory Session scope "workspace"`)
 		},
 	}
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fakeExecutionRoot{invoked: &invoked},
-		Prepare:  preparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, preparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
 	raw, err := operation(context.Background(), mcpfactorysession.ToolListSessions, json.RawMessage(`{"scope":"workspace"}`))
 	if err != nil {
 		t.Fatalf("CallTool(list_sessions) transport error = %v, want typed tool response", err)
@@ -209,10 +194,7 @@ func TestBind_FakeExecutionRootInvokedThroughCanonicalStartAsyncTool(t *testing.
 			return runningAsyncStart(), nil
 		},
 	}
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fake,
-		Prepare:  canonicalMCPRequestPreparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolStartAsync,
@@ -247,10 +229,7 @@ func TestBind_FakeExecutionRootInvokedThroughCanonicalControlTool(t *testing.T) 
 			return acceptedControl(runningSessionID, "PAUSE", factorysessions.LifecycleStatusPaused), nil
 		},
 	}
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fake,
-		Prepare:  canonicalMCPRequestPreparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolControl,
@@ -273,10 +252,7 @@ func TestBind_StartControlToolsInvalidJSONDecodeReturnsBadRequestWithoutInvoking
 	t.Parallel()
 
 	var invoked bool
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fakeExecutionRoot{invoked: &invoked},
-		Prepare:  canonicalMCPRequestPreparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
 	raw, err := operation(context.Background(), mcpfactorysession.ToolStartAsync, json.RawMessage(`{"requestId":`))
 	if err != nil {
 		t.Fatalf("CallTool(start_async) transport error = %v, want typed tool response", err)
@@ -296,10 +272,7 @@ func TestBind_StartControlToolsValidationFailureReturnsBadRequestWithoutInvoking
 			return factorysessions.StartRequest{}, errors.New("factory session source factoryId is required")
 		},
 	}
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fakeExecutionRoot{invoked: &invoked},
-		Prepare:  preparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, preparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolStartAsync,
@@ -325,10 +298,7 @@ func TestBind_GetSessionTypedNotFoundErrorReturnsToolErrorEnvelope(t *testing.T)
 			return factorysessions.SessionReadResult{}, factorysessions.ErrDurableSessionNotFound
 		},
 	}
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fake,
-		Prepare:  canonicalMCPRequestPreparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolGetSession,
@@ -363,10 +333,7 @@ func TestBind_ListDispatchesExecutionValidationErrorReturnsBadRequestEnvelope(t 
 			}
 		},
 	}
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fake,
-		Prepare:  canonicalMCPRequestPreparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolListDispatches,
@@ -395,10 +362,7 @@ func TestBind_UnmappedRootErrorDoesNotLeakInternalPackagePaths(t *testing.T) {
 			)
 		},
 	}
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fake,
-		Prepare:  canonicalMCPRequestPreparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	raw, err := operation(
 		context.Background(),
 		mcpfactorysession.ToolGetSession,
@@ -424,10 +388,7 @@ func TestBind_GetSessionContextCanceledBeforeRootReturnsDocumentedEnvelope(t *te
 	t.Parallel()
 
 	var invoked bool
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fakeExecutionRoot{invoked: &invoked},
-		Prepare:  canonicalMCPRequestPreparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fakeExecutionRoot{invoked: &invoked}, "", nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	raw, err := operation(
@@ -465,10 +426,7 @@ func TestBind_GetSessionContextCanceledDuringRootReturnsDocumentedEnvelope(t *te
 			return factorysessions.SessionReadResult{}, ctx.Err()
 		},
 	}
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fake,
-		Prepare:  canonicalMCPRequestPreparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	var raw json.RawMessage
@@ -516,10 +474,7 @@ func TestBind_StartAsyncContextDeadlineExceededDuringRootReturnsDocumentedEnvelo
 			return factorysessions.AsyncStartResult{}, ctx.Err()
 		},
 	}
-	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
-		Sessions: fake,
-		Prepare:  canonicalMCPRequestPreparation,
-	})
+	operation := mcpfactorysession.BindToolOperation(nil, canonicalMCPRequestPreparation, nil, fake, "", nil, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()
 	raw, err := operation(
@@ -738,7 +693,7 @@ func TestSubagentRejectsInputsOutsidePublishedSchemaBeforeStartingSession(t *tes
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			target := &subagentTargetFake{}
-			operation := mcpfactorysession.BindToolOperation(nil, nil, nil, target, "C:/project", func() string { return "request-1" })
+			operation := mcpfactorysession.BindToolOperation(nil, nil, nil, target, "C:/project", func() string { return "request-1" }, nil)
 			raw, err := operation(context.Background(), mcpfactorysession.ToolSubagent, json.RawMessage(test.input))
 			if err != nil {
 				t.Fatalf("CallTool() transport error = %v", err)
@@ -755,4 +710,109 @@ func TestSubagentRejectsInputsOutsidePublishedSchemaBeforeStartingSession(t *tes
 			}
 		})
 	}
+}
+
+// TestSubagentPublicToolOperationRejectsUnknownProviderWithoutDispatch proves
+// the bound public you.subagent MCP operation turns an explicitly invalid
+// provider identifier into the actionable not-found envelope and never starts a
+// Factory Session, invokes one, or claims a session identity.
+func TestSubagentPublicToolOperationRejectsUnknownProviderWithoutDispatch(t *testing.T) {
+	t.Parallel()
+
+	target := &subagentTargetFake{}
+	resolver := &subagentProviderResolverFake{}
+	operation := mcpfactorysession.BindToolOperation(
+		nil, nil, nil, target, "C:/project",
+		func() string { return "request-unknown-provider" }, resolver.resolve,
+	)
+	raw, err := operation(context.Background(), mcpfactorysession.ToolSubagent,
+		json.RawMessage(`{"prompt":"Edit a file","provider":"deliberately-invalid-probe-provider"}`))
+	if err != nil {
+		t.Fatalf("CallTool() transport error = %v", err)
+	}
+	var response mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Result != nil || response.Error == nil ||
+		response.Error.Code != "factory_session.subagent.provider_not_found" ||
+		response.Error.Retryable || response.Error.SessionID != "" {
+		t.Fatalf("response = %#v", response)
+	}
+	if action, ok := response.Error.Details["suggestedAction"].(string); !ok || action == "" {
+		t.Fatalf("suggestedAction = %#v", response.Error.Details["suggestedAction"])
+	}
+	assertSubagentProviderRejectedBeforeStart(t, target)
+	if len(resolver.asked) != 1 || resolver.asked[0] != "deliberately-invalid-probe-provider" {
+		t.Fatalf("catalog lookups = %#v", resolver.asked)
+	}
+	encoded, err := mcpfactorysession.MarshalDomainErrorCallToolResultJSON(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"isError":true`) {
+		t.Fatalf("MCP content is not a typed error: %s", encoded)
+	}
+}
+
+func TestSubagentExplicitProviderRequiresCatalogBinding(t *testing.T) {
+	target := &subagentTargetFake{}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-unbound" }, nil,
+		mcpfactorysession.SubagentInput{Prompt: "Return OK", Provider: "codex"})
+	if response.Error == nil || response.Result != nil || response.Error.Code != "factory_session.subagent.provider_catalog_unavailable" {
+		t.Fatalf("missing catalog accepted explicit provider: %#v", response)
+	}
+	assertSubagentProviderRejectedBeforeStart(t, target)
+}
+
+// Catalog failures remain distinct from unknown selections and cannot expose
+// private resolver details through either public MCP error representation.
+func TestSubagentProviderSelectionKeepsNonNotFoundFailuresDistinct(t *testing.T) {
+	t.Parallel()
+	const secret = "private-catalog-credential /private/config/provider.yaml"
+	for _, resolverErr := range []error{
+		fmt.Errorf("%w: %s", providers.ErrProviderUnavailable, secret),
+		errors.New(secret),
+	} {
+		target := &subagentTargetFake{}
+		resolver := &subagentProviderResolverFake{err: resolverErr}
+		response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-provider-unavailable" }, resolver.resolve,
+			mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "codex"})
+		if response.Error == nil || response.Result != nil || response.Error.Code != "factory_session.subagent.provider_catalog_unavailable" || response.Error.Retryable || response.Error.SessionID != "" {
+			t.Fatalf("catalog failure response = %#v", response)
+		}
+		assertSubagentProviderRejectedBeforeStart(t, target)
+		raw, err := json.Marshal(response)
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := mcpfactorysession.MarshalDomainErrorCallToolResultJSON(raw)
+		if err != nil || strings.Contains(string(encoded), secret) || !strings.Contains(string(encoded), "provider catalog resolution unavailable") {
+			t.Fatalf("catalog error leaked private data or lost public explanation: %s, %v", encoded, err)
+		}
+		for _, field := range []string{"sessionClosed", "partialEffectsPossible", "invocationCode", "failureReason"} {
+			if _, present := response.Error.Details[field]; present {
+				t.Fatalf("catalog error claims execution field %q: %#v", field, response.Error.Details)
+			}
+		}
+	}
+}
+
+func TestSubagentProviderLookupReceivesInvocationDeadline(t *testing.T) {
+	t.Parallel()
+	target := &subagentTargetFake{}
+	timeoutMillis := int64(20)
+	resolver := func(ctx context.Context, _ string) (string, error) {
+		if _, bounded := ctx.Deadline(); !bounded {
+			t.Fatal("provider lookup has no invocation deadline")
+		}
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-catalog-deadline" }, resolver,
+		mcpfactorysession.SubagentInput{Prompt: "Return OK", Provider: "codex", TimeoutMillis: &timeoutMillis})
+	if response.Error == nil || response.Error.Details["reason"] != "TIMED_OUT" || response.Error.SessionID != "" {
+		t.Fatalf("provider lookup deadline response = %#v", response)
+	}
+	assertSubagentProviderRejectedBeforeStart(t, target)
 }

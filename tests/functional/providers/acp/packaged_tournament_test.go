@@ -16,9 +16,9 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// Isolation: isolated-with-reason - persistent connection count; competitors
-// and judge must share one real ACP stdio peer for the packaged workflow.
-func TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio(t *testing.T) {
+// Prove blind competitors and judge produce the champion and decision trail.
+// Isolation: isolated-with-reason - packaged Factory and operator integration.
+func TestPackagedTournamentRunsCompetitorsAndJudgeThroughRequestOwnedACPStdio(t *testing.T) {
 	t.Parallel()
 	fixture := functionalACPFixture("tournament")
 	var starts atomic.Int32
@@ -85,8 +85,9 @@ func TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio(t *t
 		!strings.Contains(part.Text, "candidate two is stronger") {
 		t.Fatalf("packaged tournament primary result = %q, want champion and judge rationale", part.Text)
 	}
-	if starts.Load() != 1 {
-		t.Fatalf("ACP process starts = %d, want one persistent stdio peer for three agents", starts.Load())
+	// One request-owned process per agent call: two competitors and one judge.
+	if starts.Load() != 3 {
+		t.Fatalf("ACP process starts = %d, want 3 request-owned stdio peers for three agents", starts.Load())
 	}
 	stopAndAssertACPServer(t, server)
 }

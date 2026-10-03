@@ -17,6 +17,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// Lifecycle fixtures accept their authored identities through this controlled
+// catalog edge; provider selection behavior has dedicated resolver witnesses.
+func testSubagentProviderIdentity(_ context.Context, identity string) (string, error) {
+	return strings.TrimSpace(identity), nil
+}
+
 type subagentTargetFake struct {
 	factorysessions.Service
 	start                 factorysessions.SessionStartRequest
@@ -77,7 +83,7 @@ func (fake *subagentTargetFake) GetFactorySession(ctx context.Context, sessionID
 
 func TestSubagentRunsPackagedFactoryWithDefaultsAndReturnsText(t *testing.T) {
 	target := &subagentTargetFake{}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-1" }, mcpfactorysession.SubagentInput{Prompt: "Summarize this"})
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-1" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Summarize this"})
 	if response.Error != nil || response.Result == nil {
 		t.Fatalf("Subagent response = %#v", response)
 	}
@@ -140,7 +146,7 @@ func assertSubagentInvocationAndClose(t *testing.T, target *subagentTargetFake) 
 
 func TestSubagentUsesRequestedWorkingRoot(t *testing.T) {
 	target := &subagentTargetFake{}
-	response := mcpfactorysession.Subagent(context.Background(), target, "server-root", func() string { return "request-3" }, mcpfactorysession.SubagentInput{
+	response := mcpfactorysession.Subagent(context.Background(), target, "server-root", func() string { return "request-3" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{
 		Prompt: "Inspect this repository", WorkingRoot: "selected-root",
 	})
 	if response.Error != nil || response.Result == nil {
@@ -156,7 +162,7 @@ func TestSubagentUsesRequestedWorkingRoot(t *testing.T) {
 
 func TestSubagentForwardsModelOverridesAndCleansUpOnInvocationFailure(t *testing.T) {
 	target := &subagentTargetFake{invokeErr: errors.New("provider unavailable")}
-	response := mcpfactorysession.Subagent(context.Background(), target, "", func() string { return "request-2" }, mcpfactorysession.SubagentInput{
+	response := mcpfactorysession.Subagent(context.Background(), target, "", func() string { return "request-2" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{
 		Prompt: "Explain this", Provider: "opencode", Model: "local-model", ReasoningEffort: "high",
 	})
 	if response.Error == nil || response.Result != nil {
@@ -181,7 +187,7 @@ func TestSubagentSurfacesSafeProviderThrottleFailure(t *testing.T) {
 		Message:       "sensitive ACP session/prompt output with token secret",
 		FailureReason: "throttled",
 	}}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-throttled" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-throttled" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
 	if response.Error == nil || response.Error.Code != "factory_session.subagent.provider_throttled" || !response.Error.Retryable {
 		t.Fatalf("throttled response = %#v", response)
 	}
@@ -201,7 +207,7 @@ func TestSubagentSurfacesProviderMisconfiguredFailure(t *testing.T) {
 		Message:       "sensitive provider configuration token",
 		FailureReason: string(workers.WorkFailureTypeMisconfigured),
 	}}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-misconfigured" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-misconfigured" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
 	if response.Error == nil || response.Error.Code != "factory_session.subagent.provider_misconfigured" || response.Error.Retryable {
 		t.Fatalf("misconfigured response = %#v", response)
 	}
@@ -223,7 +229,7 @@ func TestSubagentPiMisconfigurationSuggestsVersionCheck(t *testing.T) {
 		Message:       "sensitive local model endpoint",
 		FailureReason: string(workers.WorkFailureTypeMisconfigured),
 	}}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-pi-misconfigured" }, mcpfactorysession.SubagentInput{Prompt: "Read README", Provider: "pi"})
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-pi-misconfigured" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Read README", Provider: "pi"})
 	if response.Error == nil || response.Error.Code != "factory_session.subagent.provider_misconfigured" {
 		t.Fatalf("Pi misconfigured response = %#v", response)
 	}
@@ -240,7 +246,7 @@ func TestSubagentSurfacesProviderExecutableMissingFailure(t *testing.T) {
 		Message:       "sensitive provider executable path",
 		FailureReason: string(workers.WorkFailureTypeMissingExecutable),
 	}}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-executable-missing" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-executable-missing" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Edit a file", Provider: "opencode"})
 	if response.Error == nil || response.Error.Code != "factory_session.subagent.provider_executable_missing" || response.Error.Retryable {
 		t.Fatalf("executable missing response = %#v", response)
 	}
@@ -265,7 +271,7 @@ func TestSubagentTimeoutReportsPossibleWorkspaceEdits(t *testing.T) {
 		TraceID:   "trace-abc-123",
 		WorkID:    "work-42",
 	}}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-timeout" }, mcpfactorysession.SubagentInput{
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-timeout" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{
 		Prompt: "Edit one file", TimeoutMillis: &timeout,
 	})
 	if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" || response.Error.Retryable {
@@ -331,7 +337,7 @@ func TestSubagentClosesSessionCreatedAfterStartTimeout(t *testing.T) {
 	}()
 	returned := make(chan mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult], 1)
 	go func() {
-		returned <- mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "late-start" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", TimeoutMillis: &timeout})
+		returned <- mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "late-start" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Edit a file", TimeoutMillis: &timeout})
 	}()
 	<-target.entered
 	select {
@@ -395,7 +401,7 @@ func TestSubagentTimeoutReturnsWhenDependencyIgnoresContext(t *testing.T) {
 			}
 			returned := make(chan mcpfactorysession.ToolResponse[mcpfactorysession.SubagentResult], 1)
 			go func() {
-				returned <- mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-stalled" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file", TimeoutMillis: &timeout})
+				returned <- mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-stalled" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Edit a file", TimeoutMillis: &timeout})
 			}()
 			select {
 			case <-target.entered:
@@ -458,7 +464,7 @@ func TestSubagentTimeoutSnapshotPrecedesCloseAndExcludesProjectionText(t *testin
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			target := &subagentTargetFake{invokeErr: tc.invokeErr, invokeResult: tc.result, projection: projection}
-			response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-snapshot" }, mcpfactorysession.SubagentInput{Prompt: secret})
+			response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-snapshot" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: secret})
 			if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" {
 				t.Fatalf("timeout response = %#v", response)
 			}
@@ -498,7 +504,7 @@ func TestSubagentTimeoutSnapshotFailureStillCloses(t *testing.T) {
 		invokeResult:  &factorysessions.InvocationResult{Status: factorysessions.InvocationTerminalStatusTimedOut},
 		projectionErr: errors.New("sensitive projection failure"),
 	}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-snapshot-error" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file"})
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-snapshot-error" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Edit a file"})
 	if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" || !target.closed || target.getCalls != 1 {
 		t.Fatalf("snapshot failure response = %#v, target = %#v", response, target)
 	}
@@ -518,7 +524,7 @@ func TestSubagentTimeoutSnapshotRejectsUnknownScriptStatus(t *testing.T) {
 			JavaScript: &factorysessions.JavaScriptRuntimeProjection{ScriptStatus: factorydefinitions.FactorySessionJavaScriptScriptStatus(secret)},
 		}},
 	}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-unknown-status" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file"})
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-unknown-status" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Edit a file"})
 	progress, ok := response.Error.Details["progress"].(map[string]any)
 	if !ok || progress["available"] != true {
 		t.Fatalf("progress = %#v", response.Error.Details["progress"])
@@ -533,7 +539,7 @@ func TestSubagentTimeoutCloseFailureDoesNotClaimClosedSession(t *testing.T) {
 		invokeErr: fmt.Errorf("private: %w", context.DeadlineExceeded),
 		closeErr:  errors.New("private close failure"),
 	}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-close-failure" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file"})
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-close-failure" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Edit a file"})
 	if response.Error == nil || response.Error.Code != "factory_session.subagent.cleanup_failed" || target.getCalls != 1 || !target.getBeforeClose {
 		t.Fatalf("close failure response = %#v, target = %#v", response, target)
 	}
@@ -549,7 +555,7 @@ func TestSubagentTimeoutReportsExplicitProviderAndModel(t *testing.T) {
 	target := &subagentTargetFake{invokeResult: &factorysessions.InvocationResult{
 		Status: factorysessions.InvocationTerminalStatusTimedOut,
 	}}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-timeout" }, mcpfactorysession.SubagentInput{
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-timeout" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{
 		Prompt: "Edit one file", Provider: "opencode", Model: "local-model",
 	})
 	if response.Error == nil || response.Error.Code != "factory_session.subagent.timed_out" || response.Error.Retryable {
@@ -589,7 +595,7 @@ func TestSubagentReportsEmptyResultWhenCompletedWithoutText(t *testing.T) {
 		Status:  factorysessions.InvocationTerminalStatusCompleted,
 		Message: "sensitive provider output",
 	}}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-empty" }, mcpfactorysession.SubagentInput{Prompt: "Summarize this"})
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-empty" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Summarize this"})
 	if response.Error == nil || response.Result != nil {
 		t.Fatalf("Subagent response = %#v", response)
 	}
@@ -625,7 +631,7 @@ func TestSubagentWaitTimeoutAndCancellation(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			target := &subagentTargetFake{}
-			response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-cancel" }, mcpfactorysession.SubagentInput{
+			response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-cancel" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{
 				Prompt: "Run this", TimeoutMillis: test.timeoutMillis,
 			})
 			if response.Error != nil || response.Result == nil {
@@ -643,7 +649,7 @@ func TestSubagentWaitTimeoutAndCancellation(t *testing.T) {
 
 func TestSubagentInvokeErrorIsPrivateAndIncludesSessionID(t *testing.T) {
 	target := &subagentTargetFake{invokeErr: errors.New("sensitive provider token abc123")}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-invoke-err" }, mcpfactorysession.SubagentInput{Prompt: "Do work"})
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-invoke-err" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Do work"})
 	if response.Error == nil || response.Result != nil {
 		t.Fatalf("Subagent response = %#v", response)
 	}
@@ -668,7 +674,7 @@ func TestSubagentInvokeErrorIsPrivateAndIncludesSessionID(t *testing.T) {
 func TestSubagentInvokeDeadlineExceededReportsPossibleWorkspaceEdits(t *testing.T) {
 	timeout := int64(45_000)
 	target := &subagentTargetFake{invokeErr: fmt.Errorf("sensitive provider token abc123: %w", context.DeadlineExceeded)}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-deadline" }, mcpfactorysession.SubagentInput{
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-deadline" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{
 		Prompt: "Edit a file", Provider: "opencode", Model: "local-model", TimeoutMillis: &timeout,
 	})
 	if response.Error == nil || response.Result != nil {
@@ -698,7 +704,7 @@ func TestSubagentCloseErrorIsPrivateAndIncludesSessionID(t *testing.T) {
 		invokeErr: errors.New("sensitive provider token abc123"),
 		closeErr:  errors.New("sensitive close failure xyz789"),
 	}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-close-err" }, mcpfactorysession.SubagentInput{Prompt: "Do work"})
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-close-err" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Do work"})
 	if response.Error == nil || response.Result != nil {
 		t.Fatalf("Subagent response = %#v", response)
 	}
@@ -724,7 +730,7 @@ func TestSubagentCloseDeadlineExceededReportsCleanupTimeout(t *testing.T) {
 		invokeErr: errors.New("sensitive provider token abc123"),
 		closeErr:  fmt.Errorf("sensitive close failure xyz789: %w", context.DeadlineExceeded),
 	}
-	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-close-timeout" }, mcpfactorysession.SubagentInput{Prompt: "Edit a file"})
+	response := mcpfactorysession.Subagent(context.Background(), target, "C:/project", func() string { return "request-close-timeout" }, testSubagentProviderIdentity, mcpfactorysession.SubagentInput{Prompt: "Edit a file"})
 	if response.Error == nil || response.Result != nil {
 		t.Fatalf("Subagent response = %#v", response)
 	}

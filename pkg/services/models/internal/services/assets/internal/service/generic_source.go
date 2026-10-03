@@ -156,6 +156,12 @@ func (s *service) genericAssetURL(source genericSource, name string) string {
 	if source.kind == genericSourceRelease {
 		return source.artifactURL
 	}
+	// The canonical Qwen ASR bundle includes an independently pinned aligner.
+	// Both required hashes participate in cache identity and integrity checks.
+	definition, _ := (models.BuiltInCatalog{}).ModelDefinitionFor(models.BuiltInModelNameASR)
+	if source.safe == definition.Source && name == "qwen3-forced-aligner-0.6b-q8_0.gguf" {
+		return strings.TrimRight(s.endpoints.BaseURL, "/") + "/OpenVoiceOS/qwen3-forced-aligner-0.6b-q8-0/resolve/efe4002aa7d567851883c05f9950c869debe8847/" + name + "?download=true"
+	}
 	return strings.TrimRight(s.endpoints.BaseURL, "/") + "/" + source.owner + "/" +
 		source.repository + "/resolve/" + source.revision + "/" + url.PathEscape(name) + "?download=true"
 }

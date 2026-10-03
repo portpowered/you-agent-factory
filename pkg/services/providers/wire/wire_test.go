@@ -219,6 +219,7 @@ launch: {posture: installed_executable, transport: stdio, command: 'agent''\tool
 		WithACPIntegrations(integrations...),
 		WithCommandFactory(commandFactory),
 		WithExecutableLocator(fakeExecutableLocator{wantExecutable: wantExecutable}),
+		WithStdioPipeFactory(platformprocess.NewParentOwnedStdio),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -283,6 +284,96 @@ func TestACPWireOptionsComposeConfiguredCatalogAndValidateCommands(t *testing.T)
 	factory := NewFactory(nil)
 	if _, err := factory([]providers.ACPIntegration{{ID: "bad", Name: "bad-acp", Transport: "stdio", Command: "'"}}); err == nil {
 		t.Fatal("factory(invalid command) error = nil")
+	}
+}
+
+// acpChannelInjectionRequest is one ordinary ACP execution request aimed at the
+// private channel factories exercised below.
+func acpChannelInjectionRequest(t *testing.T, id providers.ID) providers.ExecuteRequest {
+	t.Helper()
+	return providers.ExecuteRequest{
+		Provider:         id,
+		AttemptID:        "acp-stdio-channel-attempt",
+		UserMessage:      "exercise the parent-owned channel",
+		WorkingDirectory: t.TempDir(),
+	}
+}
+
+// TestACPExecutionUsesTheInjectedStdioPipeFactory proves the parent-owned ACP
+// standard-stream channel reaches the private ACP service as an exact injected
+// role: the composed channel factory is the one invoked, and its own failure is
+// the reported dependency outcome, with no host channel selected behind it.
+func TestACPExecutionUsesTheInjectedStdioPipeFactory(t *testing.T) {
+	t.Parallel()
+
+	const id = providers.ID("acp-injected-channel")
+	sentinel := errors.New("injected stdio channel unavailable")
+	calls := 0
+	root, err := NewService(
+		WithACPIntegrations(providers.ACPIntegration{ID: string(id), Name: id, Transport: "stdio", Command: "acp-channel-agent acp"}),
+		WithCommandFactory(exec.Command),
+		WithExecutableLocator(fakeExecutableLocator{"acp-channel-agent": "/injected/acp-channel-agent"}),
+		WithStdioPipeFactory(func() (platformprocess.StdioChannel, error) {
+			calls++
+			return nil, sentinel
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	request := acpChannelInjectionRequest(t, id)
+	_, err = root.Execute(context.Background(), request)
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v (%T), want ExecuteFailure", err, err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindDependency {
+		t.Fatalf("ExecuteFailure.Kind = %q, want %q", failure.Kind, providers.ExecuteFailureKindDependency)
+	}
+	if !strings.Contains(failure.Message, sentinel.Error()) {
+		t.Fatalf("ExecuteFailure.Message = %q, want the injected channel failure %q", failure.Message, sentinel)
+	}
+	if calls != 1 {
+		t.Fatalf("injected stdio channel factory calls = %d, want exactly 1", calls)
+	}
+}
+
+// TestACPExecutionWithoutStdioPipeFactoryFailsClosed proves a composition that
+// omits the injected channel factory never falls back to a host pipe. The
+// missing role is reported as a clear dependency failure before any command is
+// created, so a caller cannot mistake it for a provider defect.
+func TestACPExecutionWithoutStdioPipeFactoryFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	const id = providers.ID("acp-missing-channel")
+	commands := 0
+	root, err := NewService(
+		WithACPIntegrations(providers.ACPIntegration{ID: string(id), Name: id, Transport: "stdio", Command: "acp-missing-channel-agent acp"}),
+		WithCommandFactory(func(name string, arguments ...string) *exec.Cmd {
+			commands++
+			return exec.Command(name, arguments...)
+		}),
+		WithExecutableLocator(fakeExecutableLocator{"acp-missing-channel-agent": "/injected/acp-missing-channel-agent"}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	request := acpChannelInjectionRequest(t, id)
+	_, err = root.Execute(context.Background(), request)
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %v (%T), want ExecuteFailure", err, err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindDependency {
+		t.Fatalf("ExecuteFailure.Kind = %q, want %q", failure.Kind, providers.ExecuteFailureKindDependency)
+	}
+	if !strings.Contains(failure.Message, "standard stream channel") {
+		t.Fatalf("ExecuteFailure.Message = %q, want a missing standard stream channel dependency", failure.Message)
+	}
+	if commands != 0 {
+		t.Fatalf("command factory calls = %d, want no command created without an injected channel", commands)
 	}
 }
 
@@ -594,18 +685,7 @@ func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
 		{
 			name: "catalog",
 			call: func() (providers.Service, error) {
-				return newRoot(
-					nil,
-					nil,
-					nil,
-					nil,
-					nil,
-					AgyPTYPlatformDependencies{},
-					nil,
-					nil,
-					nil,
-					nil,
-				)
+				return newRootWithOptions(nil, nil, nil, nil, AgyPTYPlatformDependencies{}, nil, nil, nil, nil, nil)
 			},
 			want: "construct Providers: catalog is required",
 		},

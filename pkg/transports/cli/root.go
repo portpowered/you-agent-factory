@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 
+	"golang.org/x/term"
+
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
@@ -589,9 +591,13 @@ func configureRunProgressOutput(cmd *cobra.Command, cfg *runcli.RunConfig, polic
 	// stderr when that policy permits human terminal output.
 	cfg.ProgressOutput = nil
 	cfg.ProgressIsTTY = false
+	cfg.ProgressColumns = nil
 	if policy.AllowsHumanTerminalOutput() {
 		cfg.ProgressOutput = cmd.ErrOrStderr()
-		cfg.ProgressIsTTY = startupcli.StderrIsTTY(cmd.Context())
+		cfg.ProgressIsTTY = startupcli.StderrIsTTY(cmd.Context()) && !policy.VerboseEnabled()
+		if descriptor, ok := cfg.ProgressOutput.(interface{ Fd() uintptr }); ok {
+			cfg.ProgressColumns = func() int { columns, _, _ := term.GetSize(int(descriptor.Fd())); return columns }
+		}
 	}
 }
 
@@ -604,6 +610,8 @@ func handleRunExecutionError(cmd *cobra.Command, resolvedConfig runcli.RunConfig
 	err = runcli.MapServerFailureForInvocation(err, strings.TrimSpace(resolvedConfig.ResumePath) != "")
 	if currentFactorySelected {
 		err = runcli.MapCurrentFactoryFailure(err)
+	} else if explicitFactoryDirectorySelected(cmd) {
+		err = mapExplicitFactoryDirectoryLayoutFailure(err)
 	}
 	if len(promptArgs) > 0 {
 		err = runcli.MapInvocationFailure(err)
@@ -623,6 +631,38 @@ func handleRunExecutionError(cmd *cobra.Command, resolvedConfig runcli.RunConfig
 		writeRunHumanError(cmd, errorWriter, err)
 	}
 	return err
+}
+
+// explicitFactoryDirectoryLayoutMessage is the fixed actionable diagnostic for
+// an explicit --dir selection that has no materialized Factory layout. It names
+// only public flags, so the submitted directory, the underlying cause, and any
+// private payload never reach the rendered envelope.
+const explicitFactoryDirectoryLayoutMessage = "--dir requires a materialized Factory directory, and the selected directory has no Factory layout. Select an authored Factory JSON or YAML source with --factory <path>."
+
+// explicitFactoryDirectorySelected reports whether the operator selected the
+// Factory directory explicitly. runUsesCurrentFactory intentionally excludes
+// --dir, so this selection needs its own narrow diagnostic classification.
+func explicitFactoryDirectorySelected(cmd *cobra.Command) bool {
+	return cmd != nil && cmd.Flags().Changed("dir")
+}
+
+// mapExplicitFactoryDirectoryLayoutFailure classifies a missing Factory layout
+// reported for an explicit --dir selection into the stable NOT_FOUND invocation
+// contract that the central renderer already owns. Only the exported layout
+// sentinel qualifies, including wrapped and joined forms; an already-authored
+// diagnostic and every unrelated startup failure are returned unchanged.
+func mapExplicitFactoryDirectoryLayoutFailure(err error) error {
+	if err == nil || clidiag.HasCodedDiagnostic(err) {
+		return err
+	}
+	if !errors.Is(err, interfaces.ErrFactoryLayoutNotFound) {
+		return err
+	}
+	return &runcli.InvocationError{
+		Code:    runcli.CurrentFactoryNotFoundCode,
+		Message: explicitFactoryDirectoryLayoutMessage,
+		Cause:   err,
+	}
 }
 
 func writeRunIncompleteDrainError(cmd *cobra.Command, err error) bool {

@@ -185,17 +185,17 @@ func (runner ControlledRunner) executeControlledAttempt(ctx context.Context, spe
 	attempt.process.Stderr = attempt.stderr
 	attempt.process.WaitDelay = runner.waitDelay
 	configureControlledProcessTree(attempt.process)
-	waitCh := runner.startControlledAttempt(options, attempt)
+	waitCh := runner.startControlledAttempt(ctx, options, attempt)
 	runner.waitControlledAttempt(ctx, waitCh, attempt)
 	runner.collectControlledAttempt(spec, attempt)
 }
 
-func (runner ControlledRunner) startControlledAttempt(options ControlledRunOptions, attempt *controlledAttempt) <-chan error {
+func (runner ControlledRunner) startControlledAttempt(ctx context.Context, options ControlledRunOptions, attempt *controlledAttempt) <-chan error {
 	starter := runner.starter
 	if starter == nil {
 		starter = func(command *exec.Cmd) error { return command.Start() }
 	}
-	if err := starter(attempt.process); err != nil {
+	if err := startControlledProcess(ctx, attempt.process, starter); err != nil {
 		attempt.startErr = err
 		attempt.cleanupErr = err
 		return nil

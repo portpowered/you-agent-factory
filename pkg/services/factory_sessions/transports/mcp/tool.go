@@ -13,6 +13,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -48,6 +49,7 @@ var subagentAdmissionSlots = make(chan struct{}, 16)
 var subagentInvokeSlots = make(chan struct{}, 16)
 var subagentSnapshotSlots = make(chan struct{}, 16)
 var errSubagentCapacity = errors.New("subagent operation capacity exhausted")
+var errSubagentModelProviderConflict = errors.New("selected model requires provider opencode, but a different provider was requested")
 
 // subagentDefaultTimeoutMillis bounds a subagent wait when the caller omits timeoutMillis.
 const subagentDefaultTimeoutMillis = int64((20 * time.Minute) / time.Millisecond)
@@ -153,12 +155,33 @@ type SubagentResult struct {
 }
 
 // Subagent invokes the packaged @you/subagent Factory through the canonical
-// Factory Sessions Service.
-func Subagent(ctx context.Context, target factorysessionexecution.Service, workingRoot string, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) ToolResponse[SubagentResult] {
+// Factory Sessions Service. One explicitly requested provider selection is
+// canonicalized through the Providers-owned resolver before the Factory Session
+// starts, so an unknown identifier is rejected without dispatching work and
+// without claiming any execution happened.
+func Subagent(
+	ctx context.Context,
+	target factorysessionexecution.Service,
+	workingRoot string,
+	generateID factorysessionexecution.SessionIDGenerator,
+	resolveProvider ProviderIdentityResolver,
+	input SubagentInput,
+) ToolResponse[SubagentResult] {
 	if err := validateSubagentRequest(ctx, target, generateID, input); err != nil {
 		envelope := subagentRequestErrorEnvelope(err, ctx, target, generateID)
 		return ToolResponse[SubagentResult]{Error: &envelope}
 	}
+	timeoutMillis := subagentDefaultTimeoutMillis
+	if input.TimeoutMillis != nil {
+		timeoutMillis = *input.TimeoutMillis
+	}
+	callCtx, stopCall := context.WithTimeout(ctx, time.Duration(timeoutMillis)*time.Millisecond)
+	defer stopCall()
+	selected, providerErr := resolveSubagentProvider(callCtx, resolveProvider, input.Provider, input.Model)
+	if providerErr != nil {
+		return subagentProviderSelectionFailure(providerErr, input.Provider)
+	}
+	input.Provider = selected
 	requestID := generateID()
 	select {
 	case subagentAdmissionSlots <- struct{}{}:
@@ -174,12 +197,6 @@ func Subagent(ctx context.Context, target factorysessionexecution.Service, worki
 	if input.WorkingRoot != "" {
 		workingRoot = input.WorkingRoot
 	}
-	timeoutMillis := subagentDefaultTimeoutMillis
-	if input.TimeoutMillis != nil {
-		timeoutMillis = *input.TimeoutMillis
-	}
-	callCtx, stopCall := context.WithTimeout(ctx, time.Duration(timeoutMillis)*time.Millisecond)
-	defer stopCall()
 	started, err, startAbandoned := startSubagentSession(callCtx, target, workingRoot, requestID)
 	if startAbandoned {
 		releaseAdmission = false // The Start goroutine owns the slot and any late cleanup.
@@ -479,31 +496,48 @@ func subagentAttachProgress(details map[string]any, progress map[string]any) {
 	}
 }
 
-// subagentProviderErrorObserved reports whether the bounded timeout progress
-// captured a terminal provider error event without a provider session
-// reference. The observation is timing evidence only: it does not prove the
-// error caused the timeout, and no provider payload is exposed.
-func subagentProviderErrorObserved(progress map[string]any) bool {
+// subagentProviderErrorObservation reports whether the bounded timeout progress
+// captured a terminal provider error event as the last observed provider
+// activity, and whether a provider session reference was observed alongside it.
+// The observation is timing evidence only: it does not prove the error caused
+// the timeout, it is not a terminal Factory failure, and no provider payload or
+// reference value leaves this edge. A real timed-out dispatch can be observed
+// with a provider session reference, so the reference never suppresses the
+// observation.
+func subagentProviderErrorObservation(progress map[string]any) (errorObserved, providerSessionObserved bool) {
 	activity, ok := progress["lastObservedProviderActivity"].(map[string]any)
 	if !ok {
-		return false
+		return false, false
 	}
-	return activity["kind"] == string(workers.KindError) &&
-		activity["phase"] == string(workers.PhaseFailed) &&
-		activity["providerSessionObserved"] != true
+	if activity["kind"] != string(workers.KindError) || activity["phase"] != string(workers.PhaseFailed) {
+		return false, false
+	}
+	return true, activity["providerSessionObserved"] == true
 }
 
 // subagentTimeoutProviderErrorEvidence refines the timeout message and action
-// when the progress snapshot captured a terminal provider error without a
-// provider session reference. The default retry guidance assumes a slow model;
-// an observed provider error does not support that remedy, so the action points
-// at provider logs instead without claiming a cause or a provider session.
+// when the progress snapshot captured a terminal provider error. The default
+// retry guidance assumes a slow model; an observed provider error does not
+// support that remedy, so the action points at provider logs instead without
+// claiming a cause. The action states the observed provider session reference
+// only in the form actually observed, and never asserts its absence when one
+// was seen.
 func subagentTimeoutProviderErrorEvidence(envelope *ToolErrorEnvelope, progress map[string]any) {
-	if !subagentProviderErrorObserved(progress) {
+	errorObserved, providerSessionObserved := subagentProviderErrorObservation(progress)
+	if !errorObserved {
 		return
 	}
 	envelope.Message = "subagent timed out after a provider error was observed; workspace edits may have occurred"
-	envelope.Details["suggestedAction"] = "The last observed provider activity was an error before the deadline and no provider session reference was observed; a longer timeout may not resolve an observed provider error."
+	envelope.Details["suggestedAction"] = subagentProviderErrorSuggestedAction(providerSessionObserved)
+}
+
+func subagentProviderErrorSuggestedAction(providerSessionObserved bool) string {
+	observed := "a provider session reference was observed"
+	if !providerSessionObserved {
+		observed = "no provider session reference was observed"
+	}
+	return "The last observed provider activity was an error before the deadline and " + observed +
+		"; a longer timeout may not resolve an observed provider error."
 }
 
 // subagentPrimaryText joins the text parts of a completed invocation with
@@ -537,6 +571,84 @@ func subagentInvocationArgs(input SubagentInput) map[string]any {
 	return args
 }
 
+// resolveSubagentProvider canonicalizes one explicitly requested provider
+// selection through the resolver bound by production composition from the
+// authoritative Providers catalog. The catalog stays the only accepted source
+// of provider ids and aliases, so dynamically registered providers are
+// accepted without this adapter holding a whitelist. An omitted selection keeps
+// operator and provider defaults. Explicit selections require the bound catalog.
+func resolveSubagentProvider(ctx context.Context, resolveProvider ProviderIdentityResolver, provider, model string) (string, error) {
+	selected := strings.TrimSpace(provider)
+	if selected == "" {
+		return selected, nil
+	}
+	if resolveProvider == nil {
+		return "", errors.New("subagent provider catalog resolver is unavailable")
+	}
+	canonical, err := resolveProvider(ctx, selected)
+	if err != nil {
+		return "", err
+	}
+	if strings.HasPrefix(model, "opencode/") && !strings.EqualFold(canonical, "opencode") {
+		return "", errSubagentModelProviderConflict
+	}
+	return canonical, nil
+}
+
+// subagentProviderSelectionFailure reports one explicit provider selection the
+// Providers catalog cannot resolve. Both envelopes are pre-dispatch: they carry
+// no session identity, no partial-execution claim, and no private provider or
+// resolver text because no Factory Session started and no dispatch reached
+// Workers. The unknown-provider envelope is not retryable and stays actionable
+// about the selected provider. Any other catalog failure is an internal
+// configuration or availability problem rather than a rejected request, so it
+// returns its own static envelope instead of the shared execution mapping,
+// which copies arbitrary resolver text into the message and reason.
+func subagentProviderSelectionFailure(err error, provider string) ToolResponse[SubagentResult] {
+	if errors.Is(err, errSubagentModelProviderConflict) {
+		envelope := ToolErrorEnvelope{Code: errorCodeBadRequest, Message: errSubagentModelProviderConflict.Error(), Retryable: false}
+		return ToolResponse[SubagentResult]{Error: &envelope}
+	}
+	if envelope, ok := contextRequestErrorEnvelope(err); ok {
+		return ToolResponse[SubagentResult]{Error: &envelope}
+	}
+	if !errors.Is(err, providers.ErrUnknownProvider) {
+		return subagentProviderCatalogUnavailable(provider)
+	}
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.provider_not_found",
+		Message:   "selected subagent provider is not a known model provider; no Factory Session was started",
+		Retryable: false,
+		Details: map[string]any{
+			"provider":        provider,
+			"reason":          "UNKNOWN_PROVIDER",
+			"suggestedAction": "Use a model provider id or alias from the configured Providers catalog, or omit provider to use operator defaults.",
+		},
+	}
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
+// subagentProviderCatalogUnavailable reports one catalog resolution failure that
+// is not a rejected selection, such as an unreadable or unbound catalog. The
+// resolver error can wrap credentials, absolute paths, or catalog-authored
+// text, so this envelope is fixed vocabulary only: it never embeds the error, a
+// session identity, or a partial-execution claim. The failure is an internal
+// configuration problem rather than a transient provider error, so retrying the
+// same selection without an operator fix cannot help.
+func subagentProviderCatalogUnavailable(provider string) ToolResponse[SubagentResult] {
+	envelope := ToolErrorEnvelope{
+		Code:      "factory_session.subagent.provider_catalog_unavailable",
+		Message:   "provider catalog resolution unavailable",
+		Retryable: false,
+		Details: map[string]any{
+			"provider":        provider,
+			"reason":          "PROVIDER_CATALOG_UNAVAILABLE",
+			"suggestedAction": "Inspect the configured Providers catalog and this MCP server's provider catalog binding, then retry with a configured provider id or alias, or omit provider to use operator defaults.",
+		},
+	}
+	return ToolResponse[SubagentResult]{Error: &envelope}
+}
+
 func validateSubagentRequest(ctx context.Context, target factorysessionexecution.Service, generateID factorysessionexecution.SessionIDGenerator, input SubagentInput) error {
 	switch {
 	case ctx == nil:
@@ -549,8 +661,6 @@ func validateSubagentRequest(ctx context.Context, target factorysessionexecution
 		return errors.New("subagent request ID generator is unavailable")
 	case strings.TrimSpace(input.Prompt) == "":
 		return fmt.Errorf("prompt is required")
-	case strings.HasPrefix(input.Model, "opencode/") && input.Provider != "" && !strings.EqualFold(strings.TrimSpace(input.Provider), "opencode"):
-		return fmt.Errorf("model %q requires provider opencode, but provider %q was requested", input.Model, input.Provider)
 	case input.TimeoutMillis != nil && *input.TimeoutMillis <= 0:
 		return fmt.Errorf("timeoutMillis must be greater than zero")
 	case input.TimeoutMillis != nil && *input.TimeoutMillis > subagentMaxTimeoutMillis:
@@ -667,6 +777,21 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 	if result.ErrorCode != "" {
 		envelope.Details["invocationCode"] = result.ErrorCode
 	}
+	// Cleanup closes the live Factory Session for every terminal result, so the
+	// runtime correlation identities it published are recorded on the envelope
+	// before the outcome branch decides timeout evidence or failure
+	// classification. They are fixed runtime vocabulary, so they carry no
+	// provider, prompt, or workspace content, and an unpublished identity is
+	// omitted rather than reported as empty.
+	if result.RequestID != "" {
+		envelope.Details["requestId"] = result.RequestID
+	}
+	if result.TraceID != "" {
+		envelope.Details["traceId"] = result.TraceID
+	}
+	if result.WorkID != "" {
+		envelope.Details["workId"] = result.WorkID
+	}
 	if result.Status == factorysessionexecution.InvocationTerminalStatusTimedOut {
 		envelope.Code = "factory_session.subagent.timed_out"
 		envelope.Message = "subagent timed out before producing a result; workspace edits may have occurred"
@@ -681,15 +806,6 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 		if timeoutMillis > 0 {
 			envelope.Details["timeoutMillis"] = timeoutMillis
 		}
-		if result.RequestID != "" {
-			envelope.Details["requestId"] = result.RequestID
-		}
-		if result.TraceID != "" {
-			envelope.Details["traceId"] = result.TraceID
-		}
-		if result.WorkID != "" {
-			envelope.Details["workId"] = result.WorkID
-		}
 		subagentAttachProgress(envelope.Details, progress)
 		subagentTimeoutProviderErrorEvidence(&envelope, progress)
 		return ToolResponse[SubagentResult]{Error: &envelope}
@@ -701,10 +817,13 @@ func subagentTerminalFailure(sessionID string, result factorysessionexecution.In
 func subagentClassifyFailure(envelope *ToolErrorEnvelope, reason workers.WorkFailureType, provider string) {
 	switch reason {
 	case workers.WorkFailureTypeThrottled:
+		// Keep recovery guidance fixed; cleanup adds partial-edit inspection
+		// and log correlation without exposing provider response text.
 		envelope.Code = "factory_session.subagent.provider_throttled"
 		envelope.Message = "provider is temporarily unavailable due to usage or capacity limits"
 		envelope.Retryable = true
 		envelope.Details["failureReason"] = string(workers.WorkFailureTypeThrottled)
+		envelope.Details["suggestedAction"] = "Wait for the provider usage or capacity limit to clear, then retry the same request. If the limit persists, select another available configured model or provider."
 	case workers.WorkFailureTypeAuthFailure:
 		envelope.Code = "factory_session.subagent.provider_auth_failure"
 		envelope.Message = "provider authentication failed"

@@ -18,11 +18,11 @@ type testClient struct {
 }
 
 func newTestClient() *testClient {
-	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, nil, nil, ".", nil)}
+	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, nil, nil, ".", nil, nil)}
 }
 
 func newTestClientWithWorkflows(workflows factoryruntime.WorkflowPreviewOperation) *testClient {
-	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, workflows, nil, ".", nil)}
+	return &testClient{call: mcpfactorysession.BindToolOperation(nil, nil, workflows, nil, ".", nil, nil)}
 }
 
 func newTestClientWithService(
@@ -34,7 +34,7 @@ func newTestClientWithService(
 	if len(workflows) > 0 {
 		workflow = workflows[0]
 	}
-	return &testClient{call: mcpfactorysession.BindToolOperation(nil, prepare, workflow, service, ".", nil)}
+	return &testClient{call: mcpfactorysession.BindToolOperation(nil, prepare, workflow, service, ".", nil, nil)}
 }
 
 func newTestClientWithRecordings(
@@ -47,7 +47,7 @@ func newTestClientWithRecordings(
 	if len(workflows) > 0 {
 		workflow = workflows[0]
 	}
-	return &testClient{call: mcpfactorysession.BindToolOperation(recordingRoot, prepare, workflow, service, ".", nil)}
+	return &testClient{call: mcpfactorysession.BindToolOperation(recordingRoot, prepare, workflow, service, ".", nil, nil)}
 }
 
 func (c *testClient) CallTool(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {

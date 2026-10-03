@@ -126,6 +126,34 @@ func TestRunBaselineMatchWritesCurrentReport(t *testing.T) {
 	}
 }
 
+func TestRunBaselineMatchIgnoresVendoredSDKFindings(t *testing.T) {
+	restore := stubDeadcodecheckCommand(t, "third_party/acp-go-sdk/helpers.go: Upstream\npkg/foo.go: Current\n", nil)
+	defer restore()
+
+	tempDir := t.TempDir()
+	writeDeadcodeBaseline(t, tempDir, "pkg/foo.go: Current\n")
+	chdirForTest(t, tempDir)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	exitCode := run(nil, stdout, stderr)
+
+	if exitCode != 0 {
+		t.Fatalf("run() exit code = %d, want 0 with stderr %q", exitCode, stderr.String())
+	}
+	if got := stdout.String(); got != "[agent-factory:deadcode] baseline matches\n" {
+		t.Fatalf("run() stdout = %q, want baseline match message", got)
+	}
+	currentReport, err := os.ReadFile(filepath.Join(tempDir, currentPath))
+	if err != nil {
+		t.Fatalf("read current deadcode report: %v", err)
+	}
+	if got := string(currentReport); got != "pkg/foo.go: Current\n" {
+		t.Fatalf("current deadcode report = %q, want SDK findings excluded from the authored report", got)
+	}
+}
+
 func TestNormalizeReportOmitsPlatformSpecificFindings(t *testing.T) {
 	report := "pkg\\runner_windows.go:1:2: unreachable func: windowsOnly\n" +
 		"pkg/runner_unix.go: unreachable func: unixOnly\n" +
@@ -133,6 +161,49 @@ func TestNormalizeReportOmitsPlatformSpecificFindings(t *testing.T) {
 		"pkg/runner.go:3:4: unreachable func: portable\n"
 	if got, want := normalizeReport(report), "pkg/runner.go: unreachable func: portable\n"; got != want {
 		t.Fatalf("normalizeReport() = %q, want %q", got, want)
+	}
+}
+
+func TestNormalizeReportOmitsVendoredSDKSources(t *testing.T) {
+	tests := []struct {
+		name   string
+		report string
+		want   string
+	}{
+		{
+			name: "excludes only the preserved SDK directory",
+			report: strings.Join([]string{
+				"third_party/acp-go-sdk/helpers.go:12:4: unreachable func: upstreamHelper",
+				"third_party/acp-go-sdk/internal/session/session_windows.go: unreachable func: upstreamWindowsOnly",
+				"third_party\\acp-go-sdk\\nested\\agent_gen.go: unreachable func: nestedUpstreamHelper",
+				"third_party/acp-go-sdk-extra/helper.go: unreachable func: siblingVendored",
+				"pkg/transports/acp/third_party/acp-go-sdk/helper.go: unreachable func: nestedMisleadingPrefix",
+				"third_party/other-vendor/helper.go: unreachable func: otherVendored",
+				"pkg/services/acp/negotiation.go: unreachable func: authoredService",
+				"cmd/deadcodecheck/main.go: unreachable func: authoredCommand",
+			}, "\n"),
+			want: "cmd/deadcodecheck/main.go: unreachable func: authoredCommand\n" +
+				"pkg/services/acp/negotiation.go: unreachable func: authoredService\n" +
+				"pkg/transports/acp/third_party/acp-go-sdk/helper.go: unreachable func: nestedMisleadingPrefix\n" +
+				"third_party/acp-go-sdk-extra/helper.go: unreachable func: siblingVendored\n" +
+				"third_party/other-vendor/helper.go: unreachable func: otherVendored\n",
+		},
+		{
+			name: "drops reports with only SDK findings",
+			report: strings.Join([]string{
+				"third_party/acp-go-sdk/client.go: unreachable func: upstreamClientHelper",
+				"third_party/acp-go-sdk/example/agent/main.go: unreachable func: upstreamExampleHelper",
+			}, "\n"),
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeReport(tt.report); got != tt.want {
+				t.Fatalf("normalizeReport() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

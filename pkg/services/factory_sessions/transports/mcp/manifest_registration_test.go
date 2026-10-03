@@ -93,7 +93,7 @@ func TestSubagentFullAdmissionCapacityDoesNotStartSession(t *testing.T) {
 		}
 	}()
 	target := &admissionTarget{}
-	response := Subagent(context.Background(), target, "", func() string { return "full-admission" }, SubagentInput{Prompt: "Do work"})
+	response := Subagent(context.Background(), target, "", func() string { return "full-admission" }, nil, SubagentInput{Prompt: "Do work"})
 	if response.Error == nil || response.Error.Code != "factory_session.subagent.capacity_exhausted" || !response.Error.Retryable || target.started {
 		t.Fatalf("full admission response = %#v, started = %t", response, target.started)
 	}

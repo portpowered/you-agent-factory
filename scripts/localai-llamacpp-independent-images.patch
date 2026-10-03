@@ -1,0 +1,111 @@
+LocalAI llama.cpp grpc-server: keep independent IMAGE media parts independent.
+
+The pinned mtmd splitter omits empty text between adjacent media markers and the pinned
+merge rule temporally merges two adjacent non-audio bitmaps of equal dimensions, so a
+reconstructed message carrying independent IMAGE parts pairs adjacent equal-sized
+stills. Insert a neutral ordinal non-whitespace text boundary between independent
+media parts, and between the final independent IMAGE and a following VIDEO when no audio
+intervenes. The user prompt bytes, the single-media layout, audio routing, and the
+deliberate lazy frame expansion inside one video are unchanged.
+
+Authored working-tree patch applied to the prepared tree that is actually compiled; the
+pinned LocalAI and llama.cpp source commits are unchanged. Apply it with
+scripts/localai-llamacpp-independent-images-patch.mjs, which fails closed on any other
+header shape and is safe to re-run.
+
+diff --git a/tools/grpc-server/message_content.h b/tools/grpc-server/message_content.h
+--- a/tools/grpc-server/message_content.h
++++ b/tools/grpc-server/message_content.h
+@@ -94,35 +94,61 @@
+ // Appends the request's media as OpenAI typed content parts. Imperative (not
+ // brace-init) to avoid nlohmann's object-vs-array initializer-list ambiguity.
+-inline void append_media_parts(nlohmann::ordered_json& content_array,
+-                               const std::vector<std::string>& images,
+-                               const std::vector<std::string>& audios,
+-                               const std::vector<std::string>& videos) {
+-    for (const auto& img : images) {
+-        nlohmann::ordered_json image_chunk;
+-        image_chunk["type"] = "image_url";
+-        nlohmann::ordered_json image_url;
+-        image_url["url"] = "data:image/jpeg;base64," + img;
+-        image_chunk["image_url"] = image_url;
+-        content_array.push_back(image_chunk);
+-    }
+-    for (const auto& aud : audios) {
+-        nlohmann::ordered_json audio_chunk;
+-        audio_chunk["type"] = "input_audio";
+-        nlohmann::ordered_json input_audio;
+-        input_audio["data"] = aud;
+-        input_audio["format"] = "wav"; // default; could be made configurable
+-        audio_chunk["input_audio"] = input_audio;
+-        content_array.push_back(audio_chunk);
+-    }
+-    for (const auto& vid : videos) {
+-        nlohmann::ordered_json video_chunk;
+-        video_chunk["type"] = "input_video";
+-        nlohmann::ordered_json input_video;
+-        input_video["data"] = vid;
+-        video_chunk["input_video"] = input_video;
+-        content_array.push_back(video_chunk);
+-    }
+-}
++// LOCALAI_LLAMACPP_INDEPENDENT_IMAGE_MEDIA_BOUNDARIES: independent still images must
++// not become adjacent mtmd bitmaps. The pinned tokenizer groups equal-sized neighbors
++// as temporal video frames. Non-whitespace ordinal text preserves independent image
++// identity through rendering without changing caller prompt bytes, single-media
++// layouts, audio routing, or lazy frame expansion inside one video.
++inline void append_media_parts(nlohmann::ordered_json& content_array,
++                               const std::vector<std::string>& images,
++                               const std::vector<std::string>& audios,
++                               const std::vector<std::string>& videos) {
++    // Ordinals are 1-based and read from the caller's media vector so each boundary
++    // corresponds to the independent part that follows it.
++    auto append_media_boundary = [&content_array](const char* kind, std::size_t ordinal) {
++        nlohmann::ordered_json boundary;
++        boundary["type"] = "text";
++        boundary["text"] = std::string(kind) + " " + std::to_string(ordinal) + ":\n";
++        content_array.push_back(boundary);
++    };
++    for (std::size_t index = 0; index < images.size(); ++index) {
++        if (index > 0) {
++            // Independent stills stay independent. The first image keeps its existing
++            // position directly after the user prompt.
++            append_media_boundary("Image", index + 1);
++        }
++        nlohmann::ordered_json image_chunk;
++        image_chunk["type"] = "image_url";
++        nlohmann::ordered_json image_url;
++        image_url["url"] = "data:image/jpeg;base64," + images[index];
++        image_chunk["image_url"] = image_url;
++        content_array.push_back(image_chunk);
++    }
++    for (const auto& aud : audios) {
++        nlohmann::ordered_json audio_chunk;
++        audio_chunk["type"] = "input_audio";
++        nlohmann::ordered_json input_audio;
++        input_audio["data"] = aud;
++        input_audio["format"] = "wav"; // default; could be made configurable
++        audio_chunk["input_audio"] = input_audio;
++        content_array.push_back(audio_chunk);
++    }
++    for (std::size_t index = 0; index < videos.size(); ++index) {
++        // A video expands lazily into its own frames before merging, so a first frame with
++        // the same dimensions as the preceding still would meet the same adjacency
++        // predicate. Audio already separates the media runs, so only close that gap when
++        // nothing intervenes. Independent videos get their own boundary; frames inside one
++        // video are never separated.
++        if (index > 0 || (!images.empty() && audios.empty())) {
++            append_media_boundary("Video", index + 1);
++        }
++        nlohmann::ordered_json video_chunk;
++        video_chunk["type"] = "input_video";
++        nlohmann::ordered_json input_video;
++        input_video["data"] = videos[index];
++        video_chunk["input_video"] = input_video;
++        content_array.push_back(video_chunk);
++    }
++}
+-
++
+ // Reconstructs a single OpenAI-format message (the object fed to
+ // oaicompat_chat_params_parse) from a proto message. Shared by PredictStream and

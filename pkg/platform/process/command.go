@@ -661,11 +661,17 @@ func (m *processLifecycleMonitor) watch(cmd *exec.Cmd, waitDone <-chan struct{})
 		select {
 		case <-m.stop:
 			return
+		case <-waitDone:
+			return
 		case <-ticker.C:
 			if commandProcessLeaderRunning(cmd, m.stateReader) {
 				continue
 			}
-			grace := time.NewTimer(processExitObservationGrace)
+			// Wait joins output-copy goroutines after the leader exits. Give them
+			// the same bounded drain window as cmd.WaitDelay before treating an
+			// inherited pipe as a lost process, plus a short scheduling margin so
+			// the authoritative Wait result can be published first.
+			grace := time.NewTimer(orphanedOutputPipeGracePeriod() + processExitObservationGrace)
 			select {
 			case <-m.stop:
 				if !grace.Stop() {
@@ -678,6 +684,11 @@ func (m *processLifecycleMonitor) watch(cmd *exec.Cmd, waitDone <-chan struct{})
 				}
 				return
 			case <-grace.C:
+				select {
+				case <-waitDone:
+					return
+				default:
+				}
 				m.notifyExit()
 				return
 			}

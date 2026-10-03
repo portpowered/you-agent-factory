@@ -48,7 +48,9 @@ class DubContractTests(unittest.TestCase):
                         {"id": 8, "start": 1000, "end": 2000, "text": "Let us listen to music."}]
         music_prompt = translation_prompt(music_source, "zh-CN")
         request = json.loads(music_prompt.split("\n")[-1])
-        self.assertEqual(request["segments"], [{"id": item["id"], "text": item["text"]} for item in music_source])
+        self.assertEqual(request["segments"], [{"id": item["id"], "text": item["text"],
+                                              "duration_ms": item["end"] - item["start"]}
+                                             for item in music_source])
         self.assertIn("Keep the explicit play/resume music action", music_prompt)
         self.assertIn("ASR lowercases", music_prompt)
 

@@ -12,9 +12,67 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
+
+// A concurrent fork can briefly inherit a staging writer until its exec closes
+// CLOEXEC descriptors. Only the kernel's executable-busy result is transient;
+// keep all other start failures immediate and the admitted timeout authoritative.
+func startControlledProcess(ctx context.Context, command *exec.Cmd, starter controlledProcessStarter) error {
+	const attempts = 5
+	for attempt := 0; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := starter(command)
+		if !errors.Is(err, syscall.ETXTBSY) || attempt == attempts-1 {
+			return err
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func TestControlledProcessStartBusyRetryIsBoundedAndCancellationAware(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		err       error
+		cancel    bool
+		wantCalls int
+	}{
+		{"busy bound", syscall.ETXTBSY, false, 5},
+		{"ordinary failure", errors.New("injected start failure"), false, 1},
+		{"cancel busy wait", syscall.ETXTBSY, true, 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			calls := 0
+			err := startControlledProcess(ctx, &exec.Cmd{}, func(*exec.Cmd) error {
+				calls++
+				if test.cancel {
+					cancel()
+				}
+				return test.err
+			})
+			want := test.err
+			if test.cancel {
+				want = context.Canceled
+			}
+			if calls != test.wantCalls || !errors.Is(err, want) {
+				t.Fatalf("start calls=%d error=%v, want calls=%d error=%v", calls, err, test.wantCalls, want)
+			}
+		})
+	}
+}
 
 func TestPortableControlledRunner(t *testing.T) {
 	cases := []struct {

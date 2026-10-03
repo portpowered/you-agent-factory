@@ -1,6 +1,7 @@
 package localai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,7 +12,118 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 )
+
+func TestOmniGrammarReachesDedicatedWireFieldUnchanged(t *testing.T) {
+	t.Parallel()
+	const grammar = "root ::= \"English\"\n"
+	connection := &recordingGRPCConnection{}
+	connection.response, _ = proto.Marshal(&Reply{Message: []byte("English")})
+	client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
+	_, err := client.Predict(WithInvocationEndpoint(t.Context(), "fixture"), PredictRequest{
+		Prompt: "Translate", Parameters: []models.OperationParameter{
+			{Name: "grammar", Value: grammar}, {Name: "temperature", Value: 0.2},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := protowire.AppendTag(nil, 29, protowire.BytesType)
+	want = protowire.AppendString(want, grammar)
+	if !bytes.Contains(connection.predictPayload, want) || connection.request.Grammar != grammar {
+		t.Fatalf("wire = %x, grammar = %q, want exact field 29", connection.predictPayload, connection.request.Grammar)
+	}
+	if _, present := connection.request.Metadata["grammar"]; present {
+		t.Fatalf("grammar duplicated in metadata: %#v", connection.request.Metadata)
+	}
+	if connection.request.Metadata["temperature"] != "0.2" || connection.request.Tokens != 0 {
+		t.Fatalf("unrelated/default parameters changed: %#v", &connection.request)
+	}
+}
+
+func TestOmniGrammarRejectsInvalidValuesBeforeInference(t *testing.T) {
+	t.Parallel()
+	for _, value := range []any{nil, 1, true, []string{"root"}, map[string]any{"root": "a"}, "", " \n\t"} {
+		request := omniMediaRequest(t)
+		request.Parameters = []models.OperationParameter{{Name: "grammar", Value: value}}
+		fixture := &scriptedOmniProtocol{}
+		_, err := NewPinnedOmniCodec(fixture).Invoke(t.Context(), request)
+		assertOmniGrammarInvalid(t, err)
+		if len(fixture.requests) != 0 {
+			t.Fatalf("invalid grammar %#v invoked backend", value)
+		}
+		connection := &recordingGRPCConnection{}
+		client := NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection})
+		_, err = client.Predict(WithInvocationEndpoint(t.Context(), "fixture"), PredictRequest{
+			Prompt: "Translate", Parameters: request.Parameters,
+		})
+		assertOmniGrammarInvalid(t, err)
+		if len(connection.methods) != 0 {
+			t.Fatalf("invalid grammar %#v reached gRPC", value)
+		}
+	}
+}
+
+func TestOmniGrammarSupportsTextOnlyBeforeMediaExtraction(t *testing.T) {
+	t.Parallel()
+	for _, modality := range []models.Modality{models.ModalityImage, models.ModalityAudio, models.ModalityVideo} {
+		request := omniMediaRequest(t, models.InferenceInput{Name: strings.ToLower(string(modality)),
+			Modality: modality, Content: "media"})
+		request.Parameters = []models.OperationParameter{{Name: "grammar", Value: `root ::= "yes"`}}
+		fixture := &scriptedOmniProtocol{}
+		extractor := func(context.Context, []byte) ([]byte, error) {
+			t.Fatal("grammar rejection must precede media extraction")
+			return nil, nil
+		}
+		_, err := NewPinnedOmniCodec(fixture, extractor).Invoke(t.Context(), request)
+		assertOmniGrammarInvalid(t, err)
+		if len(fixture.requests) != 0 {
+			t.Fatalf("grammar with %s invoked inference", modality)
+		}
+	}
+}
+
+func assertOmniGrammarInvalid(t *testing.T, err error) {
+	t.Helper()
+	var failure *models.InvocationFailure
+	if !errors.As(err, &failure) || failure.Class != models.InvocationFailureClassInvalidParameter ||
+		failure.Operation != models.OperationOMNI || failure.Parameter != "grammar" {
+		t.Fatalf("error = %v, want typed OMNI grammar InvalidParameter", err)
+	}
+}
+
+func TestOmniJSONSchemaRejectsInvalidRequestsBeforeEffects(t *testing.T) {
+	t.Parallel()
+	schema := models.OperationParameter{Name: "json_schema", Value: map[string]any{"type": "object"}}
+	cases := [][]models.OperationParameter{{schema, {Name: "grammar", Value: `root ::= "yes"`}}, {schema, schema}}
+	for _, value := range []any{nil, "{}", "secret-schema", true, 1, []any{}, map[string]any{},
+		map[string]any{"unsupported": make(chan int)}, json.RawMessage(`{"secret":`)} {
+		cases = append(cases, []models.OperationParameter{{Name: "json_schema", Value: value}})
+	}
+	for _, parameters := range cases {
+		request := omniMediaRequest(t, models.InferenceInput{Name: "video", Modality: models.ModalityVideo, Content: "video"})
+		request.Parameters = parameters
+		fixture := &scriptedOmniProtocol{}
+		extractor := func(context.Context, []byte) ([]byte, error) {
+			t.Fatal("invalid schema extracted media")
+			return nil, nil
+		}
+		_, err := NewPinnedOmniCodec(fixture, extractor).Invoke(t.Context(), request)
+		assertOmniJSONSchemaInvalid(t, err)
+		if len(fixture.requests) != 0 {
+			t.Fatal("invalid schema invoked inference")
+		}
+		connection := &recordingGRPCConnection{}
+		_, err = NewPinnedGRPCProtocolClient(recordingGRPCDialer{connection: connection}).Predict(
+			WithInvocationEndpoint(t.Context(), "fixture"), PredictRequest{Prompt: "Translate", Parameters: parameters})
+		assertOmniJSONSchemaInvalid(t, err)
+		if len(connection.methods) != 0 {
+			t.Fatal("invalid schema reached gRPC")
+		}
+	}
+}
 
 func TestProbePinnedOmniProtocolRecordsMediaCapability(t *testing.T) {
 	t.Parallel()
@@ -453,10 +565,15 @@ type protocolFixture struct {
 }
 
 type scriptedOmniProtocol struct {
+	schemaErr error
 	requests  []PredictRequest
 	responses []PredictResponse
 	errors    map[int]error
 	afterCall func(int)
+}
+
+func (fixture *scriptedOmniProtocol) ValidateJSONSchemaSupport(context.Context) error {
+	return fixture.schemaErr
 }
 
 func (fixture *scriptedOmniProtocol) Predict(_ context.Context, request PredictRequest) (PredictResponse, error) {
@@ -514,6 +631,71 @@ func TestOmniCodecComposesAudioAndVideoObservations(t *testing.T) {
 		strings.Contains(fixture.requests[1].Prompt, "audio") ||
 		strings.Contains(fixture.requests[1].Prompt, "speech") {
 		t.Fatalf("modality prompts = %#v", fixture.requests)
+	}
+}
+
+func TestOmniCodecMediaSchemaReturnsOneFinalObject(t *testing.T) {
+	t.Parallel()
+	final := `{"spoken":"zero","visual":"red then blue"}`
+	fixture := &scriptedOmniProtocol{responses: []PredictResponse{
+		{Text: "zero", Usage: `{"tokens":2,"promptTokens":10}`},
+		{Text: "red then blue", Usage: `{"tokens":4,"promptTokens":20}`},
+		{Text: final, Usage: `{"tokens":8,"promptTokens":30}`},
+	}}
+	request := omniMediaRequest(t,
+		models.InferenceInput{Name: "video", Modality: models.ModalityVideo, Content: "MP4"})
+	request.Parameters = []models.OperationParameter{{Name: "max_tokens", Value: 7},
+		{Name: "json_schema", Value: map[string]any{"type": "object"}}}
+	codec := NewPinnedOmniCodec(fixture, func(context.Context, []byte) ([]byte, error) { return []byte("WAV"), nil })
+	result, err := codec.Invoke(t.Context(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fixture.requests) != 3 || len(result.Content) != 2 || result.Content[0].Content != final ||
+		result.Content[1].Content != `{"tokens":14,"promptTokens":60}` {
+		t.Fatalf("calls/results = %#v / %#v", fixture.requests, result)
+	}
+	for _, observation := range fixture.requests[:2] {
+		if len(observation.Parameters) != 0 {
+			t.Fatal("source observation was constrained by the response schema")
+		}
+	}
+	assertSchemaFinalMediaRequest(t, fixture.requests[2])
+}
+
+func assertSchemaFinalMediaRequest(t *testing.T, answer PredictRequest) {
+	t.Helper()
+	if len(answer.Parameters) != 2 || answer.Parameters[0].Name != "max_tokens" || answer.Parameters[0].Value != 7 || answer.Parameters[1].Name != "json_schema" || len(answer.Inputs) != 1 ||
+		answer.Inputs[0].Modality != models.ModalityText {
+		t.Fatalf("final request = %#v", answer)
+	}
+	for _, evidence := range []string{"Name the spoken word", "untrusted_media_observations", "zero", "red then blue"} {
+		if !strings.Contains(answer.Prompt, evidence) {
+			t.Fatalf("final request lost original prompt/evidence %q", evidence)
+		}
+	}
+}
+
+func TestOmniCodecMediaSchemaFinalFailureDoesNotReturnObservations(t *testing.T) {
+	t.Parallel()
+	fixture := &scriptedOmniProtocol{responses: []PredictResponse{{Text: "audio evidence"}, {Text: "visual evidence"}},
+		errors: map[int]error{2: context.Canceled}}
+	request := omniMediaRequest(t,
+		models.InferenceInput{Name: "audio", Modality: models.ModalityAudio, Content: "WAV"},
+		models.InferenceInput{Name: "video", Modality: models.ModalityVideo, Content: "MP4"})
+	request.Parameters = []models.OperationParameter{{Name: "json_schema", Value: map[string]any{"type": "object"}}}
+	result, err := NewPinnedOmniCodec(fixture).Invoke(t.Context(), request)
+	if !errors.Is(err, context.Canceled) || len(result.Content) != 0 || len(fixture.requests) != 3 {
+		t.Fatalf("error/result/calls = %v / %#v / %d", err, result, len(fixture.requests))
+	}
+}
+
+func TestCombinedMediaUsageOmitsUnknownTotals(t *testing.T) {
+	t.Parallel()
+	for _, missing := range []string{"", "{}", `{"tokens":5}`, `{"tokens":-1,"promptTokens":2}`, "invalid"} {
+		if got := combinedMediaUsage([]PredictResponse{{Usage: `{"tokens":3,"promptTokens":4}`}, {Usage: missing}}); got != "" {
+			t.Fatalf("usage %q produced misleading total %q", missing, got)
+		}
 	}
 }
 

@@ -413,19 +413,7 @@ func writeVideoReadinessModelSource(t *testing.T, source string, includeProjecto
 
 func writeVideoReadinessOperatorConfig(t *testing.T, home, source string) {
 	t.Helper()
-	path := filepath.Join(home, ".you-agent-factory", "config.json")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("create video readiness operator config: %v", err)
-	}
-	data, err := json.Marshal(map[string]any{
-		"models": map[string]any{models.BuiltInModelNameLLM: map[string]any{"source": source}},
-	})
-	if err != nil {
-		t.Fatalf("marshal video readiness operator config: %v", err)
-	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		t.Fatalf("write video readiness operator config: %v", err)
-	}
+	writeGenericModelSourceOverride(t, home, models.BuiltInModelNameLLM, source, "")
 }
 
 func writeVideoReadinessManagedCache(t *testing.T, home string, includeProjector bool) {

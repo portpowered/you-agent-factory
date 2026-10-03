@@ -78,7 +78,7 @@ func TestExtractVideoAudioPassesMP4ThroughProbeAndDecoder(t *testing.T) {
 		}
 	}
 	args := strings.Join(runner.requests[1].Args, " ")
-	for _, option := range []string{"-map 0:a:0", "-ac 1", "-ar 16000", "-c:a pcm_s16le", "-f wav", "-rf64 auto"} {
+	for _, option := range []string{"-map 0:a:0", "-ac 1", "-ar 16000", "-af aresample=16000:async=1:first_pts=0:min_hard_comp=0.001", "-c:a pcm_s16le", "-f wav", "-rf64 auto"} {
 		if !strings.Contains(args, option) {
 			t.Errorf("decoder args %q missing %q", args, option)
 		}
@@ -237,5 +237,22 @@ func TestExtractVideoAudioAcceptsUnknownContainerDurationAndRF64Audio(t *testing
 	got, err := extractTestVideoAudio(t, t.Context(), runner, testMP4Video())
 	if err != nil || !bytes.Equal(got, wav) {
 		t.Fatalf("RF64 extraction with unknown container duration = %d bytes, %v", len(got), err)
+	}
+}
+
+func TestNormalizeAudioDecodesWithoutRequiringVideoStream(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	wav := testAudioWAV()
+	runner := &videoAudioRunner{results: []platformprocess.CommandResult{{Stdout: wav}}}
+	got, err := NormalizeAudio(t.Context(), runner, []byte("compressed audio"), func() string { return directory },
+		func(directory, pattern string) (localai.TempFile, error) { return os.CreateTemp(directory, pattern) },
+		func(path string, content []byte) error { return os.WriteFile(path, content, 0o600) }, os.ReadFile, os.Remove)
+	if err != nil || !bytes.Equal(got, wav) || len(runner.requests) != 1 || runner.requests[0].Command != "ffmpeg" {
+		t.Fatalf("normalization=%dbytes,%v commands=%v", len(got), err, runner.requests)
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("staging leaked: %v,%v", entries, err)
 	}
 }

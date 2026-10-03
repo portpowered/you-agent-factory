@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	acpsdk "github.com/coder/acp-go-sdk"
+	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 
 	"github.com/portpowered/infinite-you/internal/testutil/acpfixtures"
 	"github.com/portpowered/infinite-you/pkg/transports/acp"

@@ -194,10 +194,15 @@ The original video is preserved.
 
 Every translation must retain the exact source segment IDs and order. Source
 timestamps are preserved. Invalid model responses are retried up to three
-times, then fail before speech generation. A model may return its translation
-object directly or identify a JSON file within the output artifact directory.
-A separate model audit checks meaning, speaker/addressee, negation, and proper
-names before TTS. Rejected translations enter the same correction retry loop.
+times, then fail before speech generation. Text inference uses a constrained
+JSON grammar for the complete translation object; the model has no filesystem
+access and must return the object directly. Semantic meaning remains a separate
+validation concern.
+A separate model audit first saves a freeform source/candidate comparison, then
+checks that evidence against the source before returning a constrained decision
+about meaning, speaker/addressee, modifiers, negation, and proper names. The
+comparison is review evidence, not authoritative instructions. Rejected
+translations enter the same correction retry loop.
 Model audits can miss mistakes; review the saved source and translations when
 translation accuracy matters.
 
@@ -206,14 +211,72 @@ remain unchanged. Multiple names can be supplied as one newline-separated
 argument. The Factory rejects translations that omit or translate a listed name
 found in the source, even if the model audit approves them.
 
+Structured audit corrections can replace only the reported original segment IDs.
+The complete candidate is validated and audited again; generic audit issues
+regenerate the translation batch. Each batch permits at most three audit reviews,
+and saved candidates/audits remain available for inspection.
+
 Each TTS call receives a mono 24 kHz sample extracted from its original video
-segment, that segment's source transcript, and its translated text. The
+segment and its translated text. Qwen uses the audio's speaker embedding;
+the Factory omits `ref_text` to avoid generating source-language speech before
+the translation. Source transcripts and reference hashes remain in artifacts.
+The Factory preserves the original audio for a narrowly matched nonverbal cue
+when both the complete source and approved translation spell the same kind of
+cry or laughter. Cry spellings are repeated Chinese 啊 (at least two), Japanese
+あ/ア or Korean 아 (at least three), or Latin `aaa`/`ahh` and longer repetitions.
+Laughter requires at least three repetitions of 哈/呵, は/ハ/ひ, 하/히, or
+Latin `ha`/`he`/`ja`. Outer punctuation may surround them; mixed words, single
+interjections, annotations, and glossary names do not qualify. These cues keep
+their source interval at normal speed and record `audio_origin: source-nonverbal`;
+spoken translations record `audio_origin: reference-conditioned`. This is a
+conservative text policy, not independent acoustic proof that no words occur.
+It runs before TTS and never acts as a fallback for synthesis errors. The
+generated speech can use the unoccupied gap after its source cue, up to the next
+cue's start or the video end. Only the needed part of that gap is used. Saved
+translations retain the source `start` and `end` and record a separate
+`speech_end` for playback. Generated subtitles follow the playback window;
+operator-supplied ASS files retain their authored timing. Speech that still
+requires more than twice normal speed triggers a concise translation revision.
+The revision must preserve the complete meaning and pass validation and a model
+audit with source context before new speech is generated. Each cue permits the
+original speech version and at most two replacement versions. Each replacement
+proposal permits at most three audited candidate forms: a suggested indexed
+correction is validated and audited again before TTS. This bounds intermediate
+text reviews separately from generated speech versions. Unresolved fit or semantic failures
+stop before rendering. Failed candidates and speech remain inspectable. The
 default VibeVoice Realtime model cannot encode arbitrary reference audio;
 use `qwen3-tts-base` or another configured reference-capable model. Override
 Models catalog names with `--asr-model`, `--llm-model`, and `--tts-model`.
-The default ASR model is English-only; select a configured multilingual ASR
-model when the source speech uses another language.
+If the native TTS model reaches its generation limit without an end-of-speech
+token, the Factory repeats the same text and original audio reference. Each text
+version permits at most three TTS attempts. Attempt audio paths and failure evidence remain
+in the artifact directory. Other failures and cancellation stop the step.
+The default `asr` uses Qwen3-ASR with its required forced aligner, including
+Chinese, English, Japanese, and Korean recognition. Recognition quality depends on the recording
+and language. Target tags include `en-US`, `zh-CN`, `zh-Hant-TW`, `ja-JP`, and
+`ko-KR`; these select Qwen's English, Chinese, Japanese, or Korean speech modes.
+Regional/script tags describe the requested translation; they do not guarantee
+a particular regional accent. German, French, Russian, Portuguese, Spanish, and
+Italian targets are also accepted. Unsupported or malformed tags fail before
+model invocation.
 `--tts-server` can select a configured Models HTTP endpoint for speech.
+
+Long sources are transcribed in sequential five-minute audio clips. Segment
+timestamps are offset back to the original video, which remains the reference
+source for every TTS call. Audio is synchronized to the media timestamps before
+clipping, so ASR and original-audio references use the same video timeline.
+Intervals are bounded by sample count and padded with silence when audio ends
+before the requested video interval. Translation batches measure the complete UTF-8 prompt
+and contain at most 64 segments. The 12,000-byte prompt target partitions calls;
+it does not reject total input size or an individually longer segment. Model
+context and hardware limits still apply. The Factory imposes no stage deadline;
+the caller's cancellation or explicitly selected execution budget governs long
+runs.
+
+The Factory declares one `gpu` slot shared by transcription, translation, and
+synthesis within its session. Each model stage acquires and releases that slot;
+rendering does not reserve it. This Factory resource does not reserve the GPU
+across independently running sessions or direct Models invocations.
 
 Speech is fitted to each source segment without cutting off translated words.
 If fitting requires more than twice the normal speech speed, the Factory
