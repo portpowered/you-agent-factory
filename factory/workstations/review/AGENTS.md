@@ -76,7 +76,7 @@ main — backend-size, pkg-maint, pkg-file-count, pkg-structure, vet —
 stay green on the head. Do not block a lane on pre-existing debt it
 did not touch; do record which gate outputs you compared.
 
-If the change involves modification to the website, you should use the playwright browser and READ instructions for docs/internal/processes/manual-qa.md.
+If the change involves modification to the website, you should use the playwright browser and READ instructions for docs/internal/processes/manual-qa.md. This worker starts without the Playwright MCP, so run the browser check in a nested `codex exec --dangerously-bypass-approvals-and-sandbox "<verification steps>"` from the shell. The nested session loads the full browser tooling for that step only. See "Worker browser tooling" in `factory/docs/operating-policy.md`.
 
 ### Step 2.1 — Reconcile CI state before commenting
 - CI is guaranteed TERMINAL on arrival: this work item reached you through the

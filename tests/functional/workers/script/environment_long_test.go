@@ -101,6 +101,48 @@ func TestScriptWorkstationDropsResourceTokensFromPromptTemplates(t *testing.T) {
 	assertProviderStdin(t, req, wantPrompt)
 }
 
+// TestCodexAgentWorkerArgsReachProviderCommand proves AGENT_WORKER `args`
+// authored on a codex worker are forwarded to `codex exec` as extra options,
+// which is how a factory starts selected workers without optional MCP servers
+// or plugins.
+func TestCodexAgentWorkerArgsReachProviderCommand(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
+	writeNamedWorkerAgents(t, dir, "processor", `---
+type: AGENT_WORKER
+executorProvider: SCRIPT_WRAP
+model: test-model
+modelProvider: codex
+stopToken: COMPLETE
+args:
+  - --config
+  - 'mcp_servers.playwright={command="none",enabled=false}'
+  - --disable
+  - plugins
+---
+Process the input task.
+`)
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		Name:       "codex-worker-args",
+		WorkID:     "work-codex-worker-args",
+		WorkTypeID: "task",
+		TraceID:    "trace-codex-worker-args",
+		Payload:    []byte("codex-worker-args-payload"),
+	})
+
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Done. COMPLETE")})
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertProviderWorkCompleted(t, listed)
+
+	assertCommandArgs(t, runner.LastRequest(), []string{
+		"exec", "--json", "--model", "test-model",
+		"--config", `mcp_servers.playwright={command="none",enabled=false}`,
+		"--disable", "plugins",
+		"-",
+	})
+}
+
 // TestScriptWorkerOrdersMultipleInputsByWorkstationConfigWithResources proves
 // root-built script worker arg templates honor workstation input ordering when
 // multiple resource-gated inputs are present.

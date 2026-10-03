@@ -185,6 +185,7 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 		UserMessage:              request.UserMessage,
 		InputTokens:              cloneInputTokens(request.InputTokens),
 		OutputSchema:             request.OutputSchema,
+		Args:                     append([]string(nil), request.Args...),
 		WorkingDirectory:         request.WorkingDirectory,
 		Worktree:                 request.Worktree,
 		EnvVars:                  cloneMetadata(request.EnvVars),
