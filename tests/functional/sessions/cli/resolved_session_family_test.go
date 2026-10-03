@@ -41,7 +41,7 @@ func TestRemotePauseRejectionRetainsSelectedTargetAndError(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = io.WriteString(w, `{"code":"SESSION_CONTROL_REJECTED","family":"SERVICE_UNAVAILABLE","message":"selected session cannot pause"}`)
+		_, _ = io.WriteString(w, `{"code":"SERVICE_UNAVAILABLE","family":"INTERNAL_SERVER_ERROR","message":"factory session service is unavailable"}`)
 	}))
 	t.Cleanup(server.Close)
 	var stdout, stderr bytes.Buffer
@@ -51,14 +51,15 @@ func TestRemotePauseRejectionRetainsSelectedTargetAndError(t *testing.T) {
 		WorkingDirectory: t.TempDir(), Stdout: &stdout, Stderr: &stderr,
 	})
 	var apiErr *clihttp.APIError
-	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusServiceUnavailable || apiErr.CLIErrorCode() != "SESSION_CONTROL_REJECTED" {
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusServiceUnavailable ||
+		apiErr.CLIErrorCode() != "SERVICE_UNAVAILABLE" || string(apiErr.CLIErrorFamily()) != "INTERNAL_SERVER_ERROR" {
 		t.Fatalf("pause error = %v, want typed remote unavailable error", err)
 	}
 	if calls.Load() != 1 || stdout.Len() != 0 {
 		t.Fatalf("requests=%d stdout=%q, want one rejection and no success output", calls.Load(), stdout.String())
 	}
 	var diagnostic map[string]any
-	if err := json.Unmarshal(stderr.Bytes(), &diagnostic); err != nil || diagnostic["code"] != "SESSION_CONTROL_REJECTED" {
+	if err := json.Unmarshal(stderr.Bytes(), &diagnostic); err != nil || diagnostic["code"] != "SERVICE_UNAVAILABLE" {
 		t.Fatalf("stderr=%q error=%v, want one public rejection envelope", stderr.String(), err)
 	}
 }
