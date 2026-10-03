@@ -17,7 +17,7 @@ flowchart TB
     s_services_factory_sessions["factory sessions<br/>58106 LOC · 4 subservices"]
   end
   subgraph execution["Execution"]
-    s_services_models["models<br/>42621 LOC · 5 subservices"]
+    s_services_models["models<br/>42606 LOC · 5 subservices"]
     s_services_provider_sessions["provider sessions<br/>5402 LOC · 2 subservices"]
     s_services_providers["providers<br/>16367 LOC · 4 subservices"]
     s_services_worker_sessions["worker sessions<br/>18428 LOC · 0 subservices"]
@@ -130,7 +130,7 @@ Each arrow shows a service's most frequent direct import. Its color identifies t
 | [`factory_runtime`](services/factory_runtime.md) | (subservice) checkpoint recovery (982 LOC)<br/>(subservice) dispatch planning (828 LOC)<br/>(subservice) instance host (727 LOC)<br/>(subservice) orchestration (32819 LOC) |
 | [`factory_sessions`](services/factory_sessions.md) | (subservice) durable execution (164 LOC)<br/>(subservice) identity (141 LOC)<br/>(subservice) invocation (171 LOC)<br/>(subservice) response stream (381 LOC) |
 | [`factory_visualization`](services/factory_visualization.md) | (subservice) activation lifecycle (444 LOC)<br/>(subservice) live view projection (530 LOC)<br/>(subservice) response event presentation (329 LOC) |
-| [`models`](services/models.md) | (subservice) assets (7203 LOC)<br/>(subservice) catalog (741 LOC)<br/>(subservice) inference (1128 LOC)<br/>(subservice) runtime host (3363 LOC)<br/>(subservice) runtime scopes (185 LOC) |
+| [`models`](services/models.md) | (subservice) assets (7203 LOC)<br/>(subservice) catalog (741 LOC)<br/>(subservice) inference (1128 LOC)<br/>(subservice) runtime host (3338 LOC)<br/>(subservice) runtime scopes (185 LOC) |
 | [`operator_settings`](services/operator_settings.md) | (subservice) document (797 LOC)<br/>(subservice) resolution (302 LOC) |
 | [`provider_sessions`](services/provider_sessions.md) | (subservice) codex reader (1533 LOC)<br/>(subservice) cursor reader (2914 LOC) |
 | [`providers`](services/providers.md) | (subservice) acp (2682 LOC)<br/>(subservice) builtins (190 LOC)<br/>(subservice) catalog (888 LOC)<br/>(subservice) execution (5777 LOC) |
