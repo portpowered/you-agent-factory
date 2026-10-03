@@ -36,7 +36,7 @@ func TestSourceLifecycleRestartRestoresDetachedObservations(t *testing.T) {
 			t.Parallel()
 
 			effects := &recordingEffects{}
-			service := reconciliationwire.NewService(effects.bundle())
+			service := reconciliationwire.NewService(effects)
 			identity := sourceIdentity("restart-" + test.name)
 			resume := automations.SourceObservation{
 				Identity:   identity,
@@ -106,7 +106,7 @@ func TestSourceLifecycleRestartContinuesTransitionalObservation(t *testing.T) {
 			t.Parallel()
 
 			effects := &recordingEffects{waitStates: []automations.ObservedLifecycleState{test.observed}}
-			service := reconciliationwire.NewService(effects.bundle())
+			service := reconciliationwire.NewService(effects)
 			identity := sourceIdentity("transition-" + test.suffix)
 			resume := automations.SourceObservation{
 				Identity: identity, InstanceID: "persisted-" + test.suffix,
@@ -157,7 +157,7 @@ func TestSourceLifecycleRejectsStaleAndForeignResumeWithoutMutation(t *testing.T
 	t.Parallel()
 
 	effects := &recordingEffects{}
-	service := reconciliationwire.NewService(effects.bundle())
+	service := reconciliationwire.NewService(effects)
 	identity := sourceIdentity("authoritative")
 	original := automations.SourceObservation{
 		Identity: identity, InstanceID: "persisted-authoritative",
@@ -214,16 +214,16 @@ func TestRuntimeSourceControlIsolatesSharedIdentityAndRetainsResume(t *testing.T
 	ctx := context.Background()
 	identity := sourceIdentity("shared-runtime-source")
 	var starts, stops, waits []string
-	service := reconciliationwire.NewService(reconciliation.Effects{
-		Start: func(_ context.Context, e reconciliation.StartEffect) error {
+	service := reconciliationwire.NewService(lifecycleFixture{
+		start: func(_ context.Context, e reconciliation.StartEffect) error {
 			starts = append(starts, e.RuntimeID)
 			return nil
 		},
-		Stop: func(_ context.Context, e reconciliation.StopEffect) error {
+		stop: func(_ context.Context, e reconciliation.StopEffect) error {
 			stops = append(stops, e.RuntimeID)
 			return nil
 		},
-		Wait: func(_ context.Context, e reconciliation.WaitEffect) (automations.SourceObservation, error) {
+		wait: func(_ context.Context, e reconciliation.WaitEffect) (automations.SourceObservation, error) {
 			waits = append(waits, e.RuntimeID)
 			observation, err := convergedWait(ctx, e)
 			observation.Cursor = automations.Cursor("cursor-" + e.RuntimeID)
@@ -302,7 +302,7 @@ func assertDetachedScopeCursor(t *testing.T, service reconciliation.Service, ide
 func TestRuntimeSourceControlInstanceOwnershipIsRuntimeLocal(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	service := reconciliationwire.NewService((&recordingEffects{}).bundle())
+	service := reconciliationwire.NewService(&recordingEffects{})
 	identity := sourceIdentity("first")
 	resume := automations.SourceObservation{Identity: identity, InstanceID: "same-persisted-instance", State: automations.ObservedLifecycleRunning, Cursor: "first-cursor"}
 	request := automations.StartSourceRequest{Identity: identity, Kind: "hosted", Resume: &resume}

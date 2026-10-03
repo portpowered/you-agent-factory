@@ -19,7 +19,7 @@ func TestInstanceStatusAndCursorReadAuthoritativeObservation(t *testing.T) {
 		State:      automations.ObservedLifecycleRunning,
 		Cursor:     "cursor-1",
 	}
-	service := reconciliationwire.NewService()
+	service := reconciliationwire.NewService(lifecycleFixture{})
 	if _, err := service.StartSource(
 		context.Background(),
 		automations.StartSourceRequest{
