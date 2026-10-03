@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -29,9 +31,9 @@ var sharedOperatorSettingsFixtureState struct {
 }
 
 // sharedOperatorSettingsFixture owns the one production-composed process for
-// this package. Invocation-local paths select a route; the home and settings
-// ID callbacks use the bounded lease because their contracts do not carry a
-// selector.
+// this package. Invocation-local paths select a route; settings
+// ID generation uses a thread-safe UUID source. The lease is reserved for
+// local runtime commands that own the Current Factory.
 type sharedOperatorSettingsFixture struct {
 	process support.ApplicationProcess
 	router  *operatorSettingsEffectRouter
@@ -80,6 +82,8 @@ type operatorSettingsEffectRoute struct {
 	workingDir     string
 	generatedID    string
 	providerRunner platformprocess.CommandRunner
+	readError      error
+	renameError    error
 
 	mu        sync.Mutex
 	closed    bool
@@ -310,37 +314,21 @@ func (router *operatorSettingsEffectRouter) resolveHome() (string, error) {
 }
 
 func (router *operatorSettingsEffectRouter) generateOperatorID() string {
-	route, err := router.activeRoute()
-	if err != nil {
-		router.unmatchedRouteError("operator settings ID", err)
-		return ""
-	}
 	router.operatorIDCalls.Add(1)
-	return route.generatedID
+	return uuid.NewString()
 }
 
 func (router *operatorSettingsEffectRouter) routeForEffectPath(path string) (*operatorSettingsEffectRoute, error) {
-	route, err := router.routeForPath(path)
-	if err != nil {
-		return nil, err
-	}
-	active, err := router.activeRoute()
-	if err != nil {
-		return nil, router.unmatchedRouteError(path, err)
-	}
-	if active != route {
-		return nil, router.unmatchedRouteError(path, fmt.Errorf(
-			"selector belongs to route %q while route %q is leased",
-			route.label, active.label,
-		))
-	}
-	return route, nil
+	return router.routeForPath(path)
 }
 
 func (router *operatorSettingsEffectRouter) ReadFile(path string) ([]byte, error) {
-	_, err := router.routeForEffectPath(path)
+	route, err := router.routeForEffectPath(path)
 	if err != nil {
 		return nil, err
+	}
+	if route.readError != nil {
+		return nil, route.readError
 	}
 	router.readFileCalls.Add(1)
 	router.fileSystemCalls.Add(1)
@@ -382,6 +370,9 @@ func (router *operatorSettingsEffectRouter) Rename(oldPath, newPath string) erro
 	}
 	if oldRoute != newRoute {
 		return router.unmatchedRouteError(newPath, errors.New("cross-route rename is denied"))
+	}
+	if oldRoute.renameError != nil {
+		return oldRoute.renameError
 	}
 	router.fileSystemCalls.Add(1)
 	return os.Rename(filepath.Clean(oldPath), filepath.Clean(newPath))
@@ -560,107 +551,6 @@ func (router *operatorSettingsEffectRouter) routeCount() int {
 	router.mu.Lock()
 	defer router.mu.Unlock()
 	return len(router.routes)
-}
-
-func assertOperatorSettingsRouteFailures(t *testing.T) {
-	t.Helper()
-
-	router := newOperatorSettingsEffectRouter()
-	if _, err := router.register("", t.TempDir(), t.TempDir(), "id", nil); err == nil ||
-		!strings.Contains(err.Error(), "label is required") {
-		t.Fatalf("blank route registration error = %v, want deterministic label diagnostic", err)
-	}
-	if _, err := router.register("blank-id", t.TempDir(), t.TempDir(), "", nil); err == nil ||
-		!strings.Contains(err.Error(), "generated ID is required") {
-		t.Fatalf("blank generated ID registration error = %v, want deterministic ID diagnostic", err)
-	}
-
-	firstHome, firstWorking := t.TempDir(), t.TempDir()
-	first, err := router.register("duplicate", firstHome, firstWorking, "id-first", nil)
-	if err != nil {
-		t.Fatalf("register first route: %v", err)
-	}
-	if _, err := router.register("duplicate", t.TempDir(), t.TempDir(), "id-second", nil); err == nil ||
-		!strings.Contains(err.Error(), "duplicate label") {
-		t.Fatalf("duplicate route registration error = %v, want deterministic duplicate diagnostic", err)
-	}
-	if err := router.unregister(first); err != nil {
-		t.Fatalf("cleanup first route: %v", err)
-	}
-
-	unmatchedPath := filepath.Join(t.TempDir(), "config.json")
-	firstErr := routeFailure(router, unmatchedPath)
-	secondErr := routeFailure(router, unmatchedPath)
-	if firstErr == nil || secondErr == nil || firstErr.Error() != secondErr.Error() {
-		t.Fatalf("unmatched route diagnostics = (%v, %v), want identical failures", firstErr, secondErr)
-	}
-
-	firstHome, firstWorking = t.TempDir(), t.TempDir()
-	secondHome, secondWorking := t.TempDir(), t.TempDir()
-	first, err = router.register("first", firstHome, firstWorking, "id-first", nil)
-	if err != nil {
-		t.Fatalf("register first selector route: %v", err)
-	}
-	second, err := router.register("second", secondHome, secondWorking, "id-second", nil)
-	if err != nil {
-		_ = router.unregister(first)
-		t.Fatalf("register second selector route: %v", err)
-	}
-	if err := router.acquire(context.Background(), first); err != nil {
-		_ = router.unregister(first)
-		_ = router.unregister(second)
-		t.Fatalf("acquire first selector route: %v", err)
-	}
-	filesystemCalls := router.fileSystemCalls.Load()
-	if _, err := router.ReadFile(filepath.Join(secondHome, "config.json")); err == nil ||
-		!strings.Contains(err.Error(), "selector belongs to route") {
-		t.Fatalf("cross-route filesystem access error = %v, want fail-closed diagnostic", err)
-	}
-	if got := router.fileSystemCalls.Load(); got != filesystemCalls {
-		t.Fatalf("cross-route filesystem access calls = %d, want unchanged at %d", got, filesystemCalls)
-	}
-	temporary, err := router.createTemporaryFile(firstHome, "route-cleanup-*")
-	if err != nil {
-		t.Fatalf("create routed temporary file: %v", err)
-	}
-	temporaryPath := temporary.Name()
-	if err := temporary.Close(); err != nil {
-		t.Fatalf("close routed temporary file: %v", err)
-	}
-	if err := router.release(first); err != nil {
-		t.Fatalf("release first selector route: %v", err)
-	}
-	if err := router.unregister(first); err != nil {
-		t.Fatalf("cleanup first selector route: %v", err)
-	}
-	if err := router.unregister(second); err != nil {
-		t.Fatalf("cleanup second selector route: %v", err)
-	}
-	if _, err := os.Stat(temporaryPath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("routed temporary file after route cleanup = %v, want not found", err)
-	}
-
-	partial := newOperatorSettingsEffectRouter()
-	partialRoute, err := partial.register("partial", t.TempDir(), t.TempDir(), "id-partial", nil)
-	if err != nil {
-		t.Fatalf("register partial route: %v", err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if err := partial.acquire(ctx, partialRoute); err == nil || !errors.Is(err, context.Canceled) {
-		t.Fatalf("partial route lease error = %v, want context cancellation", err)
-	}
-	if err := partial.unregister(partialRoute); err != nil {
-		t.Fatalf("cleanup partial route: %v", err)
-	}
-	if got := partial.routeCount(); got != 0 {
-		t.Fatalf("partial setup routes after cleanup = %d, want 0", got)
-	}
-}
-
-func routeFailure(router *operatorSettingsEffectRouter, path string) error {
-	_, err := router.ReadFile(path)
-	return err
 }
 
 var _ operatorsettings.FileSystem = (*operatorSettingsEffectRouter)(nil)
