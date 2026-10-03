@@ -341,3 +341,96 @@ func assertStaleWaitResult(t *testing.T, ctx context.Context, results <-chan aut
 		t.Fatalf("superseded wait observation = %+v, want %+v", result.Outcome.Observation, stopped)
 	}
 }
+
+func TestRuntimeSourceControlStaleStopDoesNotOverwriteRestartOrPeer(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name string
+		err  error
+	}{{"success", nil}, {"failure", errors.New("late stop failure")}, {"cancelled", context.Canceled}} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assertStaleRuntimeStop(t, test.err)
+		})
+	}
+}
+
+func assertStaleRuntimeStop(t *testing.T, lateErr error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+	identity := sourceIdentity("shared-stale-stop")
+	entered, release := make(chan struct{}), make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	service := reconciliationwire.NewService(staleStopLifecycle(entered, release, lateErr))
+	request := automations.StartSourceRequest{Identity: identity, Kind: "schedule"}
+	for _, runtimeID := range []string{"A", "B"} {
+		if _, err := service.StartSourceForRuntime(ctx, runtimeID, request); err != nil {
+			t.Fatal(err)
+		}
+		waitScopedSource(t, service, runtimeID, identity, automations.DesiredLifecycleRunning, "")
+	}
+	results := make(chan automations.StopSourceResult, 1)
+	errs := make(chan error, 1)
+	go func() {
+		result, err := service.StopSourceForRuntime(ctx, "A", automations.StopSourceRequest{Identity: identity})
+		results <- result
+		errs <- err
+	}()
+	select {
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	case <-entered:
+	}
+	peer := waitScopedSource(t, service, "B", identity, automations.DesiredLifecycleRunning, "")
+	waitScopedSource(t, service, "A", identity, automations.DesiredLifecycleStopped, "")
+	if _, err := service.StartSourceForRuntime(ctx, "A", request); err != nil {
+		t.Fatal(err)
+	}
+	running := waitScopedSource(t, service, "A", identity, automations.DesiredLifecycleRunning, "")
+	close(release)
+	select {
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	case err := <-errs:
+		if err != nil {
+			t.Fatalf("superseded stop error = %v, want current authoritative result", err)
+		}
+	}
+	result := <-results
+	assertLifecycle(t, result.Outcome, automations.DesiredLifecycleStopped, automations.ObservedLifecycleRunning, automations.ConvergenceStatusProgressing, true)
+	if result.Outcome.Observation != running.Outcome.Observation {
+		t.Fatalf("late stop observation = %+v, want %+v", result.Outcome.Observation, running.Outcome.Observation)
+	}
+	for runtimeID, expected := range map[string]automations.SourceObservation{"A": running.Outcome.Observation, "B": peer.Outcome.Observation} {
+		current := waitScopedSource(t, service, runtimeID, identity, automations.DesiredLifecycleRunning, "")
+		if current.Outcome.Observation != expected || !current.Outcome.Idempotent {
+			t.Fatalf("late A stop disturbed %s's authoritative observation", runtimeID)
+		}
+	}
+}
+
+func staleStopLifecycle(entered, release chan struct{}, lateErr error) lifecycleFixture {
+	return lifecycleFixture{
+		start: func(context.Context, reconciliation.StartEffect) error { return nil },
+		stop: func(ctx context.Context, effect reconciliation.StopEffect) error {
+			if effect.RuntimeID != "A" {
+				return errors.New("stop routed to peer")
+			}
+			close(entered)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-release:
+				return lateErr
+			}
+		},
+		wait: convergedWait,
+	}
+}
