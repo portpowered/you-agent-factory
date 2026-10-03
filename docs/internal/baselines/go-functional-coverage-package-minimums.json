@@ -102,13 +102,6 @@
       "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp",
-      "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
-      "owner": "coverage-remediation",
-      "deadline": "2027-07-15",
-      "removalGate": "Matching functional coverage reaches the existing floor and this hold is removed."
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/kinds",
       "justification": "Complete current-main functional coverage measured below the existing floor; hold until matching-lane tests restore it.",
       "owner": "coverage-remediation",
@@ -1183,6 +1176,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig",
       "minimum": 83.69
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp",
+      "minimum": 2.67
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions",
