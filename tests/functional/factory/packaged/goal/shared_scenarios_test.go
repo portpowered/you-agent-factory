@@ -165,7 +165,7 @@ func runPackagedGoalPausedScenario(t *testing.T, fixture *packagedGoalSharedFixt
 	}
 	assertPackagedGoalLifecycleControl(t, scenario, sessionPath, "resume", factoryapi.FactorySessionLifecycleControlKindResume, "resume")
 	assertPackagedGoalLifecycleControl(t, scenario, sessionPath, "resume", factoryapi.FactorySessionLifecycleControlKindResume, "repeat resume")
-	support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.session, packagedGoalSharedFixtureShutdownTimeout)
+	support.WaitForSessionTerminalStatus(t, scenario.fixture.baseURL, scenario.session, support.ScaledTimeout(packagedGoalSharedFixtureShutdownTimeout))
 	completed := listPackagedGoalSessionWork(t, scenario.fixture.baseURL, scenario.session)
 	listedWork := findPackagedGoalWorkByID(t, completed, workID)
 	if packagedGoalWorkStateName(listedWork.State) != "complete" {
@@ -339,12 +339,12 @@ func newPackagedGoalSharedFixture(t *testing.T) *packagedGoalSharedFixture {
 	inputs.Input.Env = environment
 	inputs.Input.WorkingDirectory = hostDir
 	support.StartProcessCommand(t, process, inputs.Input)
-	baseURL, err := api.WaitForBaseURL(packagedGoalSharedFixtureShutdownTimeout)
+	baseURL, err := api.WaitForBaseURL(support.ScaledTimeout(packagedGoalSharedFixtureShutdownTimeout))
 	if err != nil {
 		t.Fatalf("wait for shared Goal API server: %v", err)
 	}
 	fixture.baseURL = baseURL
-	support.WaitForStatus(t, baseURL, packagedGoalSharedFixtureShutdownTimeout, func(status factoryapi.StatusResponse) bool {
+	support.WaitForStatus(t, baseURL, support.ScaledTimeout(packagedGoalSharedFixtureShutdownTimeout), func(status factoryapi.StatusResponse) bool {
 		return strings.TrimSpace(status.RuntimeStatus) != ""
 	})
 	return fixture
@@ -367,7 +367,7 @@ func (fixture *packagedGoalSharedFixture) close(t testing.TB) {
 	if fixture == nil || fixture.process == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), packagedGoalSharedFixtureShutdownTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), support.ScaledTimeout(packagedGoalSharedFixtureShutdownTimeout))
 	defer cancel()
 	if err := fixture.process.Close(ctx); err != nil {
 		t.Errorf("close shared Goal root process: %v", err)

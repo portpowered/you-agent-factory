@@ -304,7 +304,7 @@ func (fixture *loadingFixture) startAPIServer(t *testing.T) {
 			close(fixture.processDone)
 		}()
 
-		fixture.baseURL, fixture.serverErr = fixture.api.WaitForBaseURL(loadingFixtureTimeout)
+		fixture.baseURL, fixture.serverErr = fixture.api.WaitForBaseURL(support.ScaledTimeout(loadingFixtureTimeout))
 		if fixture.serverErr != nil {
 			cancel()
 			<-fixture.processDone
@@ -607,7 +607,7 @@ func (fixture *loadingFixture) shutdown() error {
 		<-fixture.processDone
 	}
 
-	closeContext, cancel := context.WithTimeout(context.Background(), loadingFixtureTimeout)
+	closeContext, cancel := context.WithTimeout(context.Background(), support.ScaledTimeout(loadingFixtureTimeout))
 	defer cancel()
 	closeErr := fixture.process.Close(closeContext)
 

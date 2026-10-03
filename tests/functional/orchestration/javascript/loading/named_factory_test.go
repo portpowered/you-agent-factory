@@ -387,7 +387,7 @@ func readNamedJavaScriptDurableSession(
 
 func waitForNamedJavaScriptSessionStarted(t *testing.T, baseURL string, sessionID string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), namedJavaScriptSessionControlWait)
+	ctx, cancel := context.WithTimeout(t.Context(), support.ScaledTimeout(namedJavaScriptSessionControlWait))
 	defer cancel()
 	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(baseURL, sessionID))
 	for {
