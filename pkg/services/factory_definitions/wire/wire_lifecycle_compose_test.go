@@ -22,6 +22,7 @@ func TestNewServiceConstructsLifecycleHostThroughInternalComposition(t *testing.
 		ports.persistence,
 		ports.loader,
 		compilationForLoader(ports.loader),
+		validationForLoader(ports.loader, ports.requiredToolChecker, ports.orchestratorValidator),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,

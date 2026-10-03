@@ -586,6 +586,7 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 		persistence,
 		loader,
 		compilationForLoader(loader),
+		validationForLoader(loader, requiredToolChecker, stubOrchestratorValidator{}),
 		applySupportedFiles,
 		applyStarterWork,
 		namedPaths,

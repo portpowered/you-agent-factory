@@ -27,8 +27,8 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
-// NewService constructs an inert Factory Definitions root from completed catalog
-// and compilation owners plus construction and process-edge ports. Private owner
+// NewService constructs an inert Factory Definitions root from completed catalog,
+// validation and compilation owners plus construction and process-edge ports. Private owner
 // types remain behind the returned peer surface.
 func NewService(
 	sessionHost factorydefinitions.SessionHost,
@@ -37,6 +37,7 @@ func NewService(
 	persistence factorydefinitions.Persistence,
 	loader *compilationloading.Loader,
 	compilation Compilation,
+	validationService Validation,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
@@ -74,7 +75,7 @@ func NewService(
 		return nil, err
 	}
 	return composeService(
-		sessionHost, activationGateway, validator, persistence, loader, compilation,
+		sessionHost, activationGateway, validator, persistence, loader, compilation, validationService,
 		applySupportedFiles, applyStarterWork, namedPaths,
 		catalogService, clock, versionFileSystem, listEffective,
 		packagedCatalog, packagedInstaller, requiredToolChecker,
@@ -90,6 +91,7 @@ func composeService(
 	persistence factorydefinitions.Persistence,
 	loader *compilationloading.Loader,
 	compilation Compilation,
+	validationService Validation,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
@@ -124,7 +126,7 @@ func composeService(
 		clock,
 		versionFileSystem,
 		validator,
-		loader.LoadSourceFromCanonicalJSON,
+		validationService,
 		func(
 			factoryDir string,
 			workstationLoader factorydefinitions.WorkstationLoader,

@@ -11,6 +11,8 @@ import (
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	factorylifecycle "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 )
 
 func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.T) {
@@ -34,9 +36,10 @@ func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.
 		staticClock{instant: time.Unix(0, 0)},
 		platformfilesystem.Local{},
 		rootSurfaceValidator{},
-		func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			return nil, nil
-		},
+		validationwire.NewService(factoryvalidation.New(nil), factoryvalidation.New(nil),
+			func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+				return nil, nil
+			}, nil, nil),
 		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return nil, nil
 		},
