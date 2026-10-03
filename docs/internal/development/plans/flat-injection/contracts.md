@@ -365,6 +365,8 @@ Remove BindCoordinator, CoordinatorBindable and the mutable coordinator setter; 
 
 ## T12 — Automations runtime/source isolation
 
+**AM16 / T12 — deferred: needs operator decision.** The 2026-10-03T09:05Z operator amendment records the late private-contract conflict witnessed in `docs/temp/projects/flat-injection/reconciliation/wake-report68-20261003/t12-correction-evidence.md:5-15`. Retain draft [#2683](https://github.com/portpowered/you-agent-factory/pull/2683) at `62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7`; stories 002/003 and full F10/S01 remain incomplete. T12 owns source behavior, private contract placement and obsolete-helper removal; T20 owns service-root interface-count enforcement, the script_pollers baseline and deadcode measurement. A corrected private layout/packet needs operator disposition and consistent T12/T20 ownership before successor admission. No checker allowance, baseline debt, acceptance/API/persistence-policy change or implementation repair is authorized by this docs amendment. Release requires that decision and reviewed corrected packet, then the retained implementation successor's exact-head quality, full F10/S01 and independent review/merge. This hold does not block the amendment PR. The proposed T12 shapes below are held planning intent, not an approved gate-compatible layout; do not implement them until the corrected packet resolves the root-interface conflict.
+
 Authored source: `pkg/services/automations/internal/service.go`.
 
 Current:
@@ -752,10 +754,36 @@ func New(
  scheduler platformclock.TimerSource,
  lifecycle *factoryhost.LifecycleService,
 ) (instancehost.Service, error)
+```
+
+Authored source: `pkg/services/factory_runtime/internal/host/service.go:16` (current import name `factory`).
+
+Current:
+
+```go
+func NewLifecycleService(clock factory.Clock) (*LifecycleService, error)
+```
+
+Proposed:
+
+```go
 func NewLifecycleService(
  clock factoryruntime.Clock,
  scheduler platformclock.TimerSource,
 ) (*LifecycleService, error)
+```
+
+Authored source: `pkg/services/factory_runtime/internal/host/lifecycle.go:164`.
+
+Current:
+
+```go
+func WaitForStart(ctx context.Context, handle *Handle) error
+```
+
+Proposed:
+
+```go
 func WaitForStart(
  ctx context.Context,
  handle *Handle,
@@ -763,7 +791,7 @@ func WaitForStart(
 ) error
 ```
 
-AM08: delete the one-field instancehost.Dependencies wrapper. LifecycleService stores both Clock and TimerSource; forward scheduler to WaitForStart and all readiness callers (including legacy Assembly host injection). Current lifecycle signature is `NewLifecycleService(clock factoryruntime.Clock) (*LifecycleService, error)` and current readiness helper is `WaitForStart(ctx context.Context, handle *Handle) error` (`host/service.go:16`; `host/lifecycle.go:164`). Proposed signatures above separate replay-sensitive timestamps from OS scheduling. Preserve the one-second ceiling and 10ms poll using cancellable NewTimer loops; never fall back to real time or use replay ticks for readiness. Host handles remain keyed by runtime identity. T15/T31 build redesign is not part of this minimal propagation.
+AM08: delete the one-field instancehost.Dependencies wrapper. LifecycleService stores both Clock and TimerSource; forward scheduler to WaitForStart and all readiness callers (including legacy Assembly host injection). The native pairs above retain the current signatures and separate replay-sensitive timestamps from OS scheduling. Preserve the one-second ceiling and 10ms poll using cancellable NewTimer loops; never fall back to real time or use replay ticks for readiness. Host handles remain keyed by runtime identity. T15/T31 build redesign is not part of this minimal propagation.
 
 ## T15 — Runtime activation, replacement and replay
 

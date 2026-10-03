@@ -109,7 +109,7 @@ All seven were decided by the operator on 2026-10-02 and applied to plan.md, tas
 
 ## v1.1 planning-consumer validation and remaining runtime gates
 
-This correction record supersedes contradictory 2026-10-02 findings above. It is a validation procedure, not an author verdict or independent PASS. AM01–AM15 have exact source locators, resolution/hold, unchanged criterion, owner and release in plan.md; tasks.md gives executable packets, contracts.md gives native pairs, inventory.md gives lifetime/removal/count owners, and lint.md classifies evidence.
+This correction record supersedes contradictory 2026-10-02 findings above. It is a validation procedure, not an author verdict or independent PASS. AM01–AM16 have exact source locators, resolution/hold, unchanged criterion, owner and release in plan.md; tasks.md gives executable packets, contracts.md gives native pairs, inventory.md gives lifetime/removal/count owners, and lint.md classifies evidence.
 
 ### AMD-VAL journey
 
@@ -136,5 +136,6 @@ This correction record supersedes contradictory 2026-10-02 findings above. It is
 | AM13 | Characterization vs production prerequisite vs cutover; both retained heads/reproduction preserved | FI-PREREQ-WEBHOOK-READINESS authority held; F18a-f unchanged |
 | AM14 | Author evidence/handoff separate from independent validator result; #2676/T06 preserved | VAL25 M01/M06/M07/M08/L25-7, exact-head L25-6, real Linux/artifact, VAL01 and review merge |
 | AM15 | T01/T06 retained, no invented shared release or waiver | FI-SHARED-QUALITY primary-lane/fixture-isolation/lane-audit; G02/independent review |
+| AM16 | deferred: needs operator decision. Verify 09:05Z authority and T12 evidence at `wake-report68-20261003/t12-correction-evidence.md:5-15`; retain draft #2683/head `62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7`, incomplete stories 002/003 and T12/T20 layout/enforcement ownership across all companions | Operator disposition and reviewed corrected packet before successor admission; retained successor exact-head quality/full F10/S01/independent review/merge. Recording this permitted hold proves no runtime acceptance and does not block amendment delivery. |
 
 FI-A1–A8 remain owned by their original F01–F18/U01/U02/S01/G01/G02/P01/I01/VAL01 and delivery gates. This amendment proves planning usability and preservation only. AMD-REVIEW merge releases amended-main consumption; it does not release production prerequisites or certify unmet Project criteria. No product/server processes, provider calls, downloads or browser work are required for this docs-only journey.

@@ -234,7 +234,7 @@ The audit found no issues in these areas:
 
 ## v1.1 amendment impact and counted owners
 
-AM01–AM15 dispatch authority is the [plan amendment table](plan.md#authorized-amendment-flat-injection-v11); task packets and contracts carry the native changes. These are planned dispositions, not terminal production proof. Preserve existing T30 terminal rows, T12/T19 live work and T25 #2676 rows.
+AM01–AM16 dispatch authority is the [plan amendment table](plan.md#authorized-amendment-flat-injection-v11); task packets and contracts carry the native changes. These are planned dispositions, not terminal production proof. Preserve existing T30 terminal rows, T12/T19 live work and T25 #2676 rows.
 
 | AM / owner | Additional impact or classification | Required disposition / gate |
 | --- | --- | --- |
@@ -253,6 +253,7 @@ AM01–AM15 dispatch authority is the [plan amendment table](plan.md#authorized-
 | AM13 / FI Sessions/Runtime/Webhooks | Replacement lacks webhook readiness | FI-PREREQ-WEBHOOK-READINESS authority held; retained characterization is not production release; unchanged F18a-f. |
 | AM14 / T25,T06,independent review | Author handoff and independent validation are separate | Keep #2676/retained T06 and VAL25 artifact/Linux/quality obligations; no author-produced independent PASS. |
 | AM15 / Factory Reliability | Retained T01/T06 lack shared quality release | FI-SHARED-QUALITY real primary-lane/fixture-isolation/audit proof remains; docs neither fixes nor exempts it. |
+| AM16 / T12 | Retained draft #2683/head `62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7`; late private root-interface conflict | deferred: needs operator decision. T12 owns private layout/source behavior/obsolete-helper removal; T20 owns interface-count enforcement, script_pollers baseline and deadcode measurement. Existing T12 rows remain active, not terminal S01 proof; operator disposition and reviewed corrected packet precede successor admission, followed by exact-head quality/full F10/S01/review/merge. No amendment repair or checker allowance. |
 
 ### P01 counted resources at pinned baseline
 

@@ -178,7 +178,7 @@ Compiled `pkg/transports/http/servertests/...` support files appear in a `pkg` p
 
 ## 9. v1.1 enforcement classifications and gate ownership
 
-Follow AM01–AM15 in the [plan amendment table](plan.md#authorized-amendment-flat-injection-v11), with task/native pairs and inventory dispositions; this appendix does not release production or shared quality holds.
+Follow AM01–AM16 in the [plan amendment table](plan.md#authorized-amendment-flat-injection-v11), with task/native pairs and inventory dispositions; this appendix does not release production or shared quality holds.
 
 | Amendment | Static classification and required behavior evidence |
 | --- | --- |
@@ -197,5 +197,6 @@ Follow AM01–AM15 in the [plan amendment table](plan.md#authorized-amendment-fl
 | AM13 | Characterization/source topology does not prove replacement webhook readiness; operator authorization and FI-PREREQ-WEBHOOK-READINESS merge precede F18a-f cutover. |
 | AM14 | Author stops at pushed head/open PR/CI start/feedback; independent validator/review owns exact-head artifact/Linux/terminal quality and merge. |
 | AM15 | FI-SHARED-QUALITY belongs to Factory Reliability; required lane-audit/primary-lane/fixture-isolation proof is not waived by retained work or this amendment. |
+| AM16 | deferred: needs operator decision. Retain T12 draft #2683/head `62cff1c7cfb4d734d462aa1ef08d2d5e0e6c4ba7`; T12 owns private layout/obsolete-helper removal and T20 owns root-interface enforcement, script_pollers baseline and deadcode measurement. Root-interface findings, stale baseline, unmeasured pkg-structure and hosted deadcode 3154 against zero allowance are failures, not waived properties. Operator disposition/reviewed corrected packet precede successor admission; exact-head quality and full F10/S01 remain mandatory. No checker allowance/baseline debt or policy change. |
 
 Narrow changed-package tests and applicable lint precede early push/open PR. Required CI runs broad verify-pr/test-functional/test-full gates; do not run those locally as push gates on the shared host. Review immediately before merge rebases current origin/main and reruns make lint pkg-file-count (plus generate-wire/clean diff only when Wire changed). Evidence belongs in PR comments, never a new CI-results commit. DOC-LINT for this amendment runs `go run ./cmd/markdown-linter docs/internal/development/plans/flat-injection`; no new source-shape tests or production checker/baseline changes are authorized.
