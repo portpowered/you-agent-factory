@@ -654,6 +654,7 @@ func persistedConfigService(files operatorsettings.FileSystem, create operatorse
 			decodeTestConfig,
 			encodeTestConfig,
 			controlledProviderCatalog,
+			nil,
 		),
 	}
 }

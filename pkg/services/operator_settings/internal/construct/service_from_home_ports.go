@@ -20,7 +20,7 @@ func NewServiceFromHomePorts(
 	if decode == nil {
 		return nil, fmt.Errorf("operator settings decoder is required")
 	}
-	documentOwner := settingsdocumentwire.NewService(files, nil, decode, nil, nil, diagnosticDecoders...)
+	documentOwner := settingsdocumentwire.NewService(files, nil, decode, nil, nil, firstDiagnosticDecoder(diagnosticDecoders))
 	resolutionService, err := constructResolutionService()
 	if err != nil {
 		return nil, err

@@ -24,6 +24,7 @@ func TestNewServiceConstructsInertDocumentOwner(t *testing.T) {
 		decoder.fn,
 		encoder.fn,
 		providers.fn,
+		nil,
 	)
 	if service == nil {
 		t.Fatal("NewService() = nil")
@@ -63,6 +64,7 @@ func TestNewServiceRejectsMalformedLoadWithoutFilesystemOrCodecEffects(t *testin
 		newRecordingConfigDecoder().fn,
 		newRecordingConfigEncoder().fn,
 		newRecordingProviderCatalog().fn,
+		nil,
 	)
 	_, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{})
 	if !errors.Is(err, operatorsettings.ErrDocumentMalformed) {

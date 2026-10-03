@@ -36,8 +36,7 @@ var _ operatorsettings.Service = (*Service)(nil)
 
 // New constructs an inert Operator Settings root facade over the private
 // document and resolution capabilities. logger is the repository-injected
-// operation-logging abstraction; a nil logger resolves to a safe no-op so
-// construction never fails or discovers its own logger.
+// operation-logging abstraction selected at the supported wire boundary.
 func New(
 	documentService settingsdocument.Service,
 	resolutionService resolution.Service,
@@ -47,18 +46,8 @@ func New(
 	encoder operatorsettings.ConfigEncoder,
 	idGenerator operatorsettings.IDGenerator,
 	logger logging.Logger,
-	diagnosticDecoders ...operatorsettings.ConfigDiagnosticsDecoder,
+	diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder,
 ) (operatorsettings.Service, error) {
-	if documentService == nil {
-		return nil, fmt.Errorf("construct Operator Settings: document is required")
-	}
-	if resolutionService == nil {
-		return nil, fmt.Errorf("construct Operator Settings: resolution is required")
-	}
-	var diagnosticDecoder operatorsettings.ConfigDiagnosticsDecoder
-	if len(diagnosticDecoders) > 0 {
-		diagnosticDecoder = diagnosticDecoders[0]
-	}
 	return &Service{
 		document:          documentService,
 		resolution:        resolutionService,
@@ -68,7 +57,7 @@ func New(
 		diagnosticDecoder: diagnosticDecoder,
 		encoder:           encoder,
 		idGenerator:       idGenerator,
-		logger:            logging.EnsureLogger(logger),
+		logger:            logger,
 	}, nil
 }
 

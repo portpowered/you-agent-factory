@@ -58,6 +58,7 @@ func TestNewServiceFromConfigDocumentUsesInjectedDocumentOwner(t *testing.T) {
 		service.Decoder,
 		service.Encoder,
 		service.Providers,
+		nil,
 	)
 
 	root, err := settingswire.NewServiceFromConfigDocument(

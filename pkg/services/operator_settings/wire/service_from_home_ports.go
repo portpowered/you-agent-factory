@@ -5,7 +5,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	documentwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire"
 	resolutionwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -35,12 +34,13 @@ func NewServiceFromHomePorts(
 	if idGenerator == nil {
 		return nil, fmt.Errorf("operator settings ID generator is required")
 	}
-	document := documentwire.NewService(files, nil, decode, nil, nil, diagnosticDecoders...)
+	document := documentwire.NewService(files, nil, decode, nil, nil, firstDiagnosticDecoder(diagnosticDecoders))
 	resolution, err := resolutionwire.NewService(providersRoot)
 	if err != nil {
 		return nil, err
 	}
-	return operatorservice.New(
+	diagnostics := firstDiagnosticDecoder(diagnosticDecoders)
+	return NewService(
 		document,
 		resolution,
 		files,
@@ -49,6 +49,6 @@ func NewServiceFromHomePorts(
 		nil,
 		idGenerator,
 		logger,
-		diagnosticDecoders...,
+		diagnostics,
 	)
 }

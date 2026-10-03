@@ -232,6 +232,7 @@ func newDocumentPersistService(
 		globalconfigmapping.Decode,
 		globalconfigmapping.Encode,
 		controlledProviderCatalog,
+		nil,
 	)
 }
 
