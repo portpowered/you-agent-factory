@@ -1,10 +1,12 @@
 package runtime_metrics_test
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 )
 
@@ -34,6 +36,9 @@ func (group *costsProcessGroup) checkPhysicalSettingsRecovery(t *testing.T) {
 	settingsDir = resolved
 	backup := settingsDir + ".saved"
 	if err := os.Rename(settingsDir, backup); err != nil {
+		if runtime.GOOS == "windows" && errors.Is(err, os.ErrPermission) {
+			t.Skipf("M08-S unavailable: Windows denies renaming the active no-work Settings directory; native Linux proof is required: %v", err)
+		}
 		t.Fatal(err)
 	}
 	restored := false
