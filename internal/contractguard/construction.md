@@ -172,6 +172,16 @@ values, cross-package paths and noncyclic secondary graphs still need bounded
 classification/debt before whole-set readiness. This is syntactic reachability,
 not proof that a conditional path executes or that a recursive call terminates.
 
+Called package closure values and immutable alias chains are also followed
+within the provider package, across authored files. Closure bodies retain their
+declaring source for qualified call resolution. Assignments, range writes or
+address escapes anywhere in that package prevent choosing the initializer;
+local shadows do not write the package binding. Uncalled package values and
+cyclic value aliases do not establish invocation. This is bounded authored-source
+reachability, not proof of external mutation safety or initialization order.
+Mutable/escaped package values and callback-parameter dispatch still require
+classification/debt before whole-set readiness.
+
 The initial repository set is report-only. Its metadata comes from the Chat
 Sessions catalog implementation and its authored owner Wire provider. Report
 observations do not change existing gate status or enter deletion-only finding
