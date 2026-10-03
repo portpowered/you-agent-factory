@@ -42,4 +42,11 @@ acknowledge a report whose child you did not inspect.
 
 Return only a decision envelope. Use `ACCEPTED` after a verified pass. Its
 feedback names the finished child, its terminal state, and the action you took.
-Use `FAILED` with the exact blocker when inspection or submission fails.
+Use `FAILED` with the exact blocker only when inspection or submission fails and
+the Project cannot continue.
+`FAILED` is project-fatal: it routes the Project through `needs-supervision`
+to `blocked` and stops every further lead pass until an operator moves it
+back. Reserve it for conditions that make this Project itself unable to
+continue. Factory, tooling, or topology defects and operator decisions are not
+project-fatal: file them in the operator mailbox named in your Project rules,
+then end the pass with the normal non-FAILED decision.

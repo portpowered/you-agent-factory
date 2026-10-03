@@ -23,8 +23,11 @@ tag. Pending `project-report` items for this Project are not stalls; they
 wake the lead as soon as this check-in returns. Read and follow the Project
 ownership procedure in
 `factory/workstations/project-lead/AGENTS.md`. Inspect all pages of current
-Work, active Worker Sessions, recent events, retained prior-Session inventory,
-and open PRs at exact heads. For each red or unreviewed PR and failed Work item,
+Work, active Worker Sessions, recent events, and open PRs at exact heads. The
+retained prior-Session inventory is best-effort: if history listing fails
+(for example on a degraded recording), record the failure in state.md and
+continue from the live board and the Project state files; never block or
+return `FAILED` on it. For each red or unreviewed PR and failed Work item,
 record its current owner or the concrete reason it cannot be assigned yet.
 Neither an old failed Work ID nor a running unrelated child counts as an owner.
 
@@ -52,11 +55,19 @@ route must be diagnosed, not treated as success.
 If the children are healthy and no independent ready work exists,
 record that finding and return. If a stalled child or missing wake route
 cannot be repaired through a supported control, escalate the precise topology defect to Factory
-Reliability and the portfolio supervisor. Keep all changes scoped to this
+Reliability and the portfolio supervisor through the operator mailbox named in
+your Project rules, then return `ACCEPTED`. Keep all changes scoped to this
 Project and preserve history, review, CI, acceptance, privacy, and budgets.
 
 Return only a decision envelope. Use `ACCEPTED` after verified inspection or
 repair, with concise feedback naming the observed owner and action. Use
-`FAILED` with the exact blocker when inspection or a supported repair fails.
+`FAILED` with the exact blocker only when inspection or a supported repair of
+this Project fails and the Project cannot continue.
+`FAILED` is project-fatal: it routes the Project through `needs-supervision`
+to `blocked` and stops every further lead pass until an operator moves it
+back. Reserve it for conditions that make this Project itself unable to
+continue. Factory, tooling, or topology defects and operator decisions are not
+project-fatal: file them in the operator mailbox named in your Project rules,
+then end the pass with the normal non-FAILED decision.
 Do not emit a Work batch in this response. A permitted batch must already
 have been accepted by the explicit-session CLI and verified on the board.
