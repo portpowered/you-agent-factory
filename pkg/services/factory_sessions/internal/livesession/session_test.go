@@ -156,3 +156,26 @@ func newSession(t *testing.T, id string, clock factoryruntime.Clock) *livesessio
 	}
 	return session
 }
+
+func TestApplyStartedTargetIsSafeAgainstConcurrentPlacementReads(t *testing.T) {
+	t.Parallel()
+
+	session := newSession(t, "session-target-publication", platformclock.Real{})
+	target := factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "reviews"}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 200 {
+			session.ApplyStartedTarget(target, "/project/factory/reviews")
+		}
+	}()
+	for range 200 {
+		_ = session.Placement()
+	}
+	<-done
+
+	placement := session.Placement()
+	if placement.Target != target || placement.FolderPath != "/project/factory/reviews" || placement.Project != "reviews" {
+		t.Fatalf("placement = %+v, want named target in /project/factory/reviews", placement)
+	}
+}

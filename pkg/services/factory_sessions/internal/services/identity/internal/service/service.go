@@ -82,8 +82,9 @@ func (s *Service) ResolveLogical(registry sessionregistry.Service, backendScopeI
 		if session == nil {
 			continue
 		}
+		placement := session.Placement()
 		resolved, err := s.Normalize(context.Background(), identity.NormalizeRequest{
-			BackendScopeID: backendScopeID, FolderPath: session.FolderPath, Target: session.Target,
+			BackendScopeID: backendScopeID, FolderPath: placement.FolderPath, Target: placement.Target,
 		})
 		if err == nil && resolved.LogicalSessionKeyID == strings.TrimSpace(logicalSessionKeyID) {
 			return session

@@ -577,7 +577,7 @@ func projectDefinitionSession(
 	return &factorydefinitions.DefinitionSession{
 		ID:         session.ID,
 		IsDefault:  session.IsDefault,
-		FolderPath: session.FolderPath,
+		FolderPath: session.Placement().FolderPath,
 		FactoryDir: session.FactoryDir,
 	}
 }

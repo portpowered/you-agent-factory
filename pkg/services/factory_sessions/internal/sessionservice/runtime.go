@@ -176,10 +176,11 @@ func (fs *SessionRuntime) StartDefaultRuntime(
 	}
 	target := sessionruntime.DefaultTarget(runtimeBundle.Directory(), runtimeBundle.FolderDirectory(), fs.factoryRootDir)
 	if session := fs.sessionState.Resolve(sessionID); session != nil {
-		target.Ref = session.Target
+		placement := session.Placement()
+		target.Ref = placement.Target
 		target.FactoryDir = session.FactoryDir
-		target.FolderPath = session.FolderPath
-		target.Project = session.Project
+		target.FolderPath = placement.FolderPath
+		target.Project = placement.Project
 	}
 	return runtimebinding.StartInitial(
 		ctx,

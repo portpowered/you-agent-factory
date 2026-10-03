@@ -3,6 +3,7 @@ package livesession
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -50,6 +51,39 @@ type LiveSession struct {
 	ResponseEvents        *responseeventstore.SessionResponseEventStore
 	JavaScriptCheckpoints factoryruntime.JavaScriptCheckpointStore
 	LiveChangeMu          sync.Mutex
+	// placementMu guards Target, FolderPath and Project, which Factory Session
+	// start rewrites after the session is already resolvable. Concurrent code
+	// reads them through Placement and writes them through ApplyStartedTarget.
+	placementMu sync.RWMutex
+}
+
+// Placement is a consistent snapshot of the session fields that start may
+// rewrite after the session has been published.
+type Placement struct {
+	Target     factorysessions.TargetRef
+	FolderPath string
+	Project    string
+}
+
+// Placement returns a consistent snapshot of the session's target, folder and
+// project. Concurrent readers must use it instead of reading the fields.
+func (s *LiveSession) Placement() Placement {
+	s.placementMu.RLock()
+	defer s.placementMu.RUnlock()
+	return Placement{Target: s.Target, FolderPath: s.FolderPath, Project: s.Project}
+}
+
+// ApplyStartedTarget records the target selected by Factory Session start on an
+// already-published session. A named target also moves the session's folder
+// and project to the selected folder.
+func (s *LiveSession) ApplyStartedTarget(target factorysessions.TargetRef, folderPath string) {
+	s.placementMu.Lock()
+	defer s.placementMu.Unlock()
+	s.Target = target
+	if target.Kind == factorysessions.TargetKindNamed {
+		s.FolderPath = folderPath
+		s.Project = filepath.Base(folderPath)
+	}
 }
 
 // CompleteResponseEvents marks the session-owned response-event publication

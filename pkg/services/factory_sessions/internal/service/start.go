@@ -235,11 +235,7 @@ func (r *Root) setStartedSessionTarget(selectedID string, selected factorysessio
 	if session == nil {
 		return
 	}
-	session.Target = *selected.Target
-	if selected.Target.Kind == factorysessions.TargetKindNamed {
-		session.FolderPath = selected.FolderPath
-		session.Project = filepath.Base(selected.FolderPath)
-	}
+	session.ApplyStartedTarget(*selected.Target, selected.FolderPath)
 }
 
 func (r *Root) bindStartedSession(ctx context.Context, selectedID string, selected factorysessions.SessionStartRequest, products runtimeProducts, activation *sessionActivation, requestID string, previousControl *runtimebinding.SessionState) (*livesession.LiveSession, error) {
@@ -421,15 +417,16 @@ func bindSessionProducts(bound *runtimebinding.SessionState, products runtimePro
 
 func liveStartResult(session *livesession.LiveSession) factorysessions.SessionStartResult {
 	status := "RUNNING"
+	placement := session.Placement()
 	view := factorysessions.SessionView{
 		SessionID: livesession.CanonicalID(session), Mode: factorysessions.SessionOperationModeLive,
-		Status: status, FactoryDir: session.FactoryDir, FolderPath: session.FolderPath,
-		Project: session.Project, IsDefault: session.IsDefault, Target: session.Target,
+		Status: status, FactoryDir: session.FactoryDir, FolderPath: placement.FolderPath,
+		Project: placement.Project, IsDefault: session.IsDefault, Target: placement.Target,
 		RuntimeAvailable: session.Runtime != nil,
 	}
 	return factorysessions.SessionStartResult{
 		SessionID: view.SessionID, Mode: factorysessions.SessionOperationModeLive, Status: status,
-		Live: &factorysessions.SessionOpenResult{SessionID: view.SessionID, Session: &view, FolderPath: session.FolderPath},
+		Live: &factorysessions.SessionOpenResult{SessionID: view.SessionID, Session: &view, FolderPath: placement.FolderPath},
 	}
 }
 
@@ -440,15 +437,16 @@ func (r *Root) startedForRequestID(requestID string) (factorysessions.SessionSta
 		if bound == nil || bound.StartRequestID() != requestID || bound.Activation == nil {
 			continue
 		}
+		placement := session.Placement()
 		view := factorysessions.SessionView{
 			SessionID: livesession.CanonicalID(session), Mode: factorysessions.SessionOperationModeLive,
-			Status: "RUNNING", FactoryDir: session.FactoryDir, FolderPath: session.FolderPath,
-			Project: session.Project, IsDefault: session.IsDefault, Target: session.Target,
+			Status: "RUNNING", FactoryDir: session.FactoryDir, FolderPath: placement.FolderPath,
+			Project: placement.Project, IsDefault: session.IsDefault, Target: placement.Target,
 			RuntimeAvailable: session.Runtime != nil,
 		}
 		return factorysessions.SessionStartResult{
 			SessionID: view.SessionID, Mode: factorysessions.SessionOperationModeLive, Status: "RUNNING",
-			Live: &factorysessions.SessionOpenResult{SessionID: view.SessionID, Session: &view, FolderPath: session.FolderPath},
+			Live: &factorysessions.SessionOpenResult{SessionID: view.SessionID, Session: &view, FolderPath: placement.FolderPath},
 		}, true
 	}
 	return factorysessions.SessionStartResult{}, false

@@ -181,9 +181,10 @@ func (a *Assembly) listLiveSessions() []factorysessions.LiveSessionSummary {
 		if session == nil {
 			continue
 		}
+		placement := session.Placement()
 		sessions = append(sessions, factorysessions.LiveSessionSummary{
 			ID: livesession.CanonicalID(session), FactoryDir: session.FactoryDir,
-			FolderPath: session.FolderPath, Project: session.Project, IsDefault: session.IsDefault,
+			FolderPath: placement.FolderPath, Project: placement.Project, IsDefault: session.IsDefault,
 		})
 	}
 	return sessions
@@ -339,8 +340,9 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 		if session == nil {
 			return ""
 		}
+		placement := session.Placement()
 		resolved, err := runtime.identity.Normalize(context.Background(), identity.NormalizeRequest{
-			BackendScopeID: backendScopeID(), FolderPath: session.FolderPath, Target: session.Target,
+			BackendScopeID: backendScopeID(), FolderPath: placement.FolderPath, Target: placement.Target,
 		})
 		if err != nil {
 			return ""

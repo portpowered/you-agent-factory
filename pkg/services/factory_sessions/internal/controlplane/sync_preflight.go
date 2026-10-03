@@ -139,12 +139,13 @@ func logicalSessionKeyID(session *livesession.LiveSession) string {
 	if session == nil {
 		return ""
 	}
-	folderPath := filepath.Clean(strings.TrimSpace(session.FolderPath))
+	placement := session.Placement()
+	folderPath := filepath.Clean(strings.TrimSpace(placement.FolderPath))
 	if folderPath == "." {
 		folderPath = ""
 	}
-	targetKind := strings.TrimSpace(string(session.Target.Kind))
-	targetName := strings.TrimSpace(session.Target.Name)
+	targetKind := strings.TrimSpace(string(placement.Target.Kind))
+	targetName := strings.TrimSpace(placement.Target.Name)
 	if targetKind == "" {
 		targetKind = string(factorysessions.TargetKindDefault)
 	}
