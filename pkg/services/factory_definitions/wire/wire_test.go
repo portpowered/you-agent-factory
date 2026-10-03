@@ -996,12 +996,3 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 		)
 	}
 }
-
-// compilationForLoader supplies a completed owner without loading a Factory.
-func compilationForLoader(loader *compilationloading.Loader) factorydefinitionswire.Compilation {
-	return factorydefinitionswire.NewCompilationService(
-		loader.LoadSourceFromCanonicalJSON,
-		loader.LoadSourceFromFactoryDir,
-		factorydefinitionswire.FactoryConfigJSONEncoder(),
-	)
-}
