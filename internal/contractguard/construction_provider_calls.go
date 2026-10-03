@@ -30,14 +30,15 @@ func constructionIndirectProviderCalls(body ast.Node) map[*ast.CallExpr]bool {
 // A focused allowance cannot authorize a recursive construction path. Follow
 // resolved authored calls within the provider package; merely declaring a
 // closure or referencing an uncalled helper does not establish such a path.
-func constructionRecursiveProvider(source *constructionSource, caller ConstructionSymbol, allowances []ConstructionAllowance) bool {
+func constructionRecursiveProvider(source *constructionSource, caller ConstructionSymbol, allowances []ConstructionAllowance) (bool, bool) {
 	approved := false
 	for _, allowance := range allowances {
 		approved = approved || (allowance.Kind == "focused-provider" && allowance.Caller == caller && allowance.FilePath == source.path)
 	}
 	if !approved {
-		return false
+		return false, false
 	}
+	unresolved := false
 	visited := make(map[ConstructionSymbol]bool)
 	pending := []ConstructionSymbol{caller}
 	for len(pending) > 0 {
@@ -51,19 +52,22 @@ func constructionRecursiveProvider(source *constructionSource, caller Constructi
 		if decl.function == nil || decl.function.Body == nil {
 			continue
 		}
-		for _, callee := range constructionProviderCallees(decl) {
+		callees, debt := constructionProviderCallees(decl)
+		unresolved = unresolved || debt
+		for _, callee := range callees {
 			if callee == caller {
-				return true
+				return true, unresolved
 			}
 			if callee.ImportPath == caller.ImportPath && !visited[callee] {
 				pending = append(pending, callee)
 			}
 		}
 	}
-	return false
+	return false, unresolved
 }
 
-func constructionProviderCallees(decl constructionDeclaration) []ConstructionSymbol {
+func constructionProviderCallees(decl constructionDeclaration) ([]ConstructionSymbol, bool) {
+	unresolved := false
 	var callees []ConstructionSymbol
 	type bodySource struct {
 		body   ast.Node
@@ -83,6 +87,9 @@ func constructionProviderCallees(decl constructionDeclaration) []ConstructionSym
 					callees = append(callees, symbol)
 				}
 				closure, closureSource := constructionProviderClosure(call.Fun, body.source, map[*ast.Object]bool{})
+				if closure == nil {
+					unresolved = unresolved || constructionProviderCallableDebt(call.Fun, body.source)
+				}
 				if closure != nil && !visited[closure] {
 					visited[closure] = true
 					pending = append(pending, bodySource{closure.Body, closureSource})
@@ -91,7 +98,7 @@ func constructionProviderCallees(decl constructionDeclaration) []ConstructionSym
 			return true
 		})
 	}
-	return callees
+	return callees, unresolved
 }
 
 // Calling an immutable local function value establishes a closure edge. Merely

@@ -82,7 +82,7 @@ func scanConstructionOperation(source *constructionSource, caller ConstructionSy
 	}
 	callees := make(map[ast.Expr]bool)
 	indirectCalls := constructionIndirectProviderCalls(body)
-	recursiveProvider := constructionRecursiveProvider(source, caller, registry.Allowances)
+	recursiveProvider, providerDebt := constructionRecursiveProvider(source, caller, registry.Allowances)
 	ast.Inspect(body, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
 		if !ok {
@@ -94,7 +94,7 @@ func scanConstructionOperation(source *constructionSource, caller ConstructionSy
 			return true
 		}
 		for _, constructor := range registry.Constructors {
-			if constructor.Symbol != symbol || !constructionProhibitedKind(constructor, registry.Types) || constructionCallAllowed(registry.Allowances, caller, symbol, source.path, indirectCalls[call] || recursiveProvider) {
+			if constructor.Symbol != symbol || !constructionProhibitedKind(constructor, registry.Types) || constructionCallAllowed(registry.Allowances, caller, symbol, source.path, indirectCalls[call] || recursiveProvider || providerDebt) {
 				continue
 			}
 			mode := ConstructionReport
@@ -103,9 +103,13 @@ func scanConstructionOperation(source *constructionSource, caller ConstructionSy
 					mode = set.Mode
 				}
 			}
+			rule := "registered-construction"
+			if providerDebt && !recursiveProvider && !indirectCalls[call] && constructionCallAllowed(registry.Allowances, caller, symbol, source.path, false) {
+				rule = "unresolved-focused-provider-dispatch"
+			}
 			findings = append(findings, ConstructionFinding{
 				FilePath: source.path, Line: source.set.Position(call.Pos()).Line,
-				Caller: caller, Callee: symbol, CapabilitySet: constructor.CapabilitySet, Mode: mode, Rule: "registered-construction",
+				Caller: caller, Callee: symbol, CapabilitySet: constructor.CapabilitySet, Mode: mode, Rule: rule,
 			})
 		}
 		return true

@@ -10,6 +10,7 @@ type constructionProviderCycleCase struct {
 func constructionProviderCycleCases() []constructionProviderCycleCase {
 	return []constructionProviderCycleCase{
 		{"direct recursion", `Provide(p); selected.New(p)`, "", 1},
+		{"recursion beside opaque dispatch", `var next func(); next(); Provide(p); selected.New(p)`, "", 1},
 		{"conditional recursion", `if flag { Provide(p) }; selected.New(p)`, "", 1},
 		{"provider alias", `again := Provide; again(p); selected.New(p)`, "", 1},
 		{"mutual recursion", `step(p); selected.New(p)`, `func step(p selected.Port) { Provide(p) }`, 1},
@@ -42,14 +43,9 @@ func constructionProviderCycleCases() []constructionProviderCycleCase {
 		{"uncalled package closure", `selected.New(p)`, `var again = func(p selected.Port) { Provide(p) }`, 0},
 		{"shadowed package closure", `again := func(selected.Port) {}; again(p); selected.New(p)`, `var again = func(p selected.Port) { Provide(p) }`, 0},
 		{"acyclic package closure", `again(p); selected.New(p)`, `var again = func(selected.Port) {}`, 0},
-		{"cyclic package aliases", `again(p); selected.New(p)`, `var again = next; var next = again`, 0},
-		{"package closure changed in caller file", `again = func(selected.Port) {}; again(p); selected.New(p)`, `var again = func(p selected.Port) { Provide(p) }`, 0},
-		{"package closure changed in declaration file", `again(p); selected.New(p)`, `var again = func(p selected.Port) { Provide(p) }; func replace() { again = func(selected.Port) {} }`, 0},
-		{"package closure address escapes", `_ = &again; again(p); selected.New(p)`, `var again = func(p selected.Port) { Provide(p) }`, 0},
 		{"package closure called in declaration file", `step(p); selected.New(p)`, `var again = func(p selected.Port) { Provide(p) }; func step(p selected.Port) { again(p) }`, 1},
 		{"package closure local shadow write", `{ again := func(selected.Port) {}; again = func(selected.Port) {}; _ = again }; again(p); selected.New(p)`, `var again = func(p selected.Port) { Provide(p) }`, 1},
 		{"package closure local shadow address", `{ again := func(selected.Port) {}; _ = &again }; again(p); selected.New(p)`, `var again = func(p selected.Port) { Provide(p) }`, 1},
-		{"package closure range write", `for _, again = range []func(selected.Port){} {}; again(p); selected.New(p)`, `var again = func(p selected.Port) { Provide(p) }`, 0},
 		{"acyclic helper", `step(p); selected.New(p)`, `func step(p selected.Port) { consume(p) }; func consume(selected.Port) {}`, 0},
 		{"unrelated helper cycle", `step(p); selected.New(p)`, `func step(p selected.Port) { step(p) }`, 0},
 		{"shadowed provider", `Provide := func(selected.Port) {}; Provide(p); selected.New(p)`, "", 0},
@@ -64,37 +60,42 @@ func TestConstructionRecursiveFocusedProvider(t *testing.T) {
 	for _, tc := range constructionProviderCycleCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			root, registry := constructionFixture(t)
-			writeConstructionFixture(t, root, "pkg/owner/service.go", `package owner
+			checkConstructionProviderCase(t, tc, "registered-construction")
+		})
+	}
+}
+
+func checkConstructionProviderCase(t *testing.T, tc constructionProviderCycleCase, wantRule string) {
+	t.Helper()
+	root, registry := constructionFixture(t)
+	writeConstructionFixture(t, root, "pkg/owner/service.go", `package owner
 type Port interface { Execute() }
 type Service struct { port Port }
 func New(p Port) (*Service, error) { return &Service{port: p}, nil }
 `)
-			writeConstructionFixture(t, root, "pkg/wire/provider.go", `package wire
+	writeConstructionFixture(t, root, "pkg/wire/provider.go", `package wire
 import selected "example.test/factory/pkg/owner"
 func Provide(p selected.Port) { `+tc.body+` }
 var flag bool
 `)
-			writeConstructionFixture(t, root, "pkg/wire/helpers.go", "package wire\nimport selected \"example.test/factory/pkg/owner\"\n"+tc.helpers)
-			for _, mode := range []ConstructionMode{ConstructionReport, ConstructionEnforce} {
-				registry.CapabilitySets[0].Mode = mode
-				findings, err := ScanConstruction(root, registry)
-				if err != nil || len(findings) != tc.want {
-					t.Fatalf("mode %s: findings = %+v, error = %v, want %d", mode, findings, err, tc.want)
-				}
-				blocking := tc.want
-				if mode == ConstructionReport {
-					blocking = 0
-				}
-				if CountBlockingConstructionFindings(findings) != blocking {
-					t.Fatalf("unexpected blocking findings: %+v", findings)
-				}
-				for _, finding := range findings {
-					if finding.Rule != "registered-construction" || finding.Caller != registry.Allowances[0].Caller || finding.Callee != registry.Constructors[0].Symbol || finding.FilePath != "pkg/wire/provider.go" || finding.Line != 3 {
-						t.Fatalf("unexpected qualified finding: %+v", finding)
-					}
-				}
+	writeConstructionFixture(t, root, "pkg/wire/helpers.go", "package wire\nimport selected \"example.test/factory/pkg/owner\"\n"+tc.helpers)
+	for _, mode := range []ConstructionMode{ConstructionReport, ConstructionEnforce} {
+		registry.CapabilitySets[0].Mode = mode
+		findings, err := ScanConstruction(root, registry)
+		if err != nil || len(findings) != tc.want {
+			t.Fatalf("mode %s: findings = %+v, error = %v, want %d", mode, findings, err, tc.want)
+		}
+		blocking := tc.want
+		if mode == ConstructionReport {
+			blocking = 0
+		}
+		if CountBlockingConstructionFindings(findings) != blocking {
+			t.Fatalf("unexpected blocking findings: %+v", findings)
+		}
+		for _, finding := range findings {
+			if finding.Rule != wantRule || finding.Caller != registry.Allowances[0].Caller || finding.Callee != registry.Constructors[0].Symbol || finding.FilePath != "pkg/wire/provider.go" || finding.Line != 3 {
+				t.Fatalf("unexpected qualified finding: %+v", finding)
 			}
-		})
+		}
 	}
 }

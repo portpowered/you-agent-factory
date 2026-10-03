@@ -62,3 +62,47 @@ func TestConstructionReportIsNotAdmittedToRecordedBaseline(t *testing.T) {
 		t.Fatal("construction finding lost to existing baseline partition")
 	}
 }
+
+func TestFocusedProviderDispatchDebtControlsCommandStatus(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []contractguard.ConstructionMode{contractguard.ConstructionReport, contractguard.ConstructionEnforce} {
+		t.Run(string(mode), func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeGoSourceFile(t, root, "go.mod", "module example.test/factory\n\ngo 1.25.0\n")
+			writeGoSourceFile(t, root, "pkg/services/example/service.go", `package example
+type Service struct{}
+func New() *Service { return &Service{} }
+`)
+			writeGoSourceFile(t, root, "pkg/wire/provider.go", `package wire
+import "example.test/factory/pkg/services/example"
+func Provide(callback func()) { callback(); example.New() }
+`)
+			const owner = "example.test/factory/pkg/services/example"
+			constructor := contractguard.ConstructionSymbol{ImportPath: owner, Name: "New"}
+			provider := contractguard.ConstructionSymbol{ImportPath: "example.test/factory/pkg/wire", Name: "Provide"}
+			service := contractguard.ConstructionSymbol{ImportPath: owner, Name: "Service"}
+			registry := contractguard.ConstructionRegistry{
+				CapabilitySets: []contractguard.ConstructionCapabilitySet{{Name: "example", OwnerTask: "T20", Mode: mode}},
+				Constructors:   []contractguard.ConstructionConstructor{{Symbol: constructor, CapabilitySet: "example", Results: []contractguard.ConstructionSymbol{service}}},
+				Types:          []contractguard.ConstructionType{{Symbol: service, CapabilitySet: "example", Kind: contractguard.ConstructionBehavior}},
+				Allowances: []contractguard.ConstructionAllowance{{Caller: provider, Callee: constructor, FilePath: "pkg/wire/provider.go",
+					Kind: "focused-provider", OwnerTask: "T20", Reason: "direct focused construction"}},
+			}
+			var stdout, stderr bytes.Buffer
+			err := run(config{root: root, packageRoot: defaultScanRoot, constructionRegistry: &registry}, &stdout, &stderr)
+			if (err != nil) != (mode == contractguard.ConstructionEnforce) {
+				t.Fatalf("mode %s: unexpected command status %v; stderr=%s", mode, err, &stderr)
+			}
+			output := stdout.String() + stderr.String()
+			for _, want := range []string{"pkg/wire/provider.go:3", "caller=" + provider.String(), "callee=" + constructor.String(), "mode=" + string(mode), "rule=unresolved-focused-provider-dispatch"} {
+				if !strings.Contains(output, want) {
+					t.Fatalf("output %q missing %q", output, want)
+				}
+			}
+			if strings.Contains(output, "callback();") {
+				t.Fatalf("diagnostic exposed source text: %q", output)
+			}
+		})
+	}
+}

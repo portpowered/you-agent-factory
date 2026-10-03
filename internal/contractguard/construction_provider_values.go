@@ -5,6 +5,33 @@ import (
 	"go/token"
 )
 
+// A called variable without a stable authored function or closure cannot
+// establish an acyclic provider path. Calling a parameter is dispatch debt,
+// even when one caller happens to pass a known callback. Types and builtins
+// are not variable calls and must not acquire debt from their spelling.
+func constructionProviderCallableDebt(expr ast.Expr, source *constructionSource) bool {
+	if parenthesized, ok := expr.(*ast.ParenExpr); ok {
+		return constructionProviderCallableDebt(parenthesized.X, source)
+	}
+	ident, ok := expr.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	object, _, safe := constructionProviderValue(ident, source)
+	if object == nil || object.Kind != ast.Var {
+		// An unsafe package value still has its declaration in the index.
+		for _, candidate := range source.packageSources {
+			found := candidate.file.Scope.Lookup(ident.Name)
+			if found != nil && found.Kind == ast.Var && (ident.Obj == nil || ident.Obj == found) {
+				return true
+			}
+		}
+		return false
+	}
+	symbol, resolved := resolveConstructionCall(expr, source)
+	return !safe || !resolved || source.declarations[symbol].function == nil
+}
+
 // Package values need their declaring source's imports and a package-wide
 // write check. A local shadow must never fall through to a package binding.
 func constructionProviderValue(ident *ast.Ident, source *constructionSource) (*ast.Object, *constructionSource, bool) {

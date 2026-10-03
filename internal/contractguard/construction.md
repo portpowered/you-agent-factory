@@ -179,8 +179,17 @@ address escapes anywhere in that package prevent choosing the initializer;
 local shadows do not write the package binding. Uncalled package values and
 cyclic value aliases do not establish invocation. This is bounded authored-source
 reachability, not proof of external mutation safety or initialization order.
-Mutable/escaped package values and callback-parameter dispatch still require
-classification/debt before whole-set readiness.
+Called mutable/escaped package values, cyclic value aliases, opaque declared
+function variables and callback parameters now retain
+`unresolved-focused-provider-dispatch` at the allowed constructor call. This
+debt follows the same bounded helper/closure walk, is nonblocking in report
+mode, and blocks an enforced set without claiming a concrete recursive path.
+Uncalled callbacks, uninvoked closure bodies, shadowed bindings, builtins and
+type conversions do not acquire dispatch debt. A proved recursive path still
+reports `registered-construction` even if another path is unresolved.
+Field, returned-function, cross-package and arbitrary callback dispatch still
+need classification/debt before whole-set readiness; this does not prove
+callback argument equivalence or control-flow execution.
 
 The initial repository set is report-only. Its metadata comes from the Chat
 Sessions catalog implementation and its authored owner Wire provider. Report
