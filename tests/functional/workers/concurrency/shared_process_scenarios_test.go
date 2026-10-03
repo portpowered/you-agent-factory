@@ -204,15 +204,14 @@ func (fixture *concurrencySharedProcessFixture) runAdmittedWorkCancellation(t *t
 	}
 	peerBefore := concurrencyWorkByID(t, survivor, second.WorkId)
 	peerEventsBefore := concurrencySessionEvents(t, fixture.baseURL, survivor.id)
-	if err := cancelConcurrencySession(fixture.baseURL, canceled.id); err != nil {
-		t.Fatalf("AWC public session cancellation: %v", err)
-	}
+	control := cancelAdmittedWorkSession(t, canceled)
 	observedCancel := canceled.runner.waitCanceled(t, concurrencySharedProcessTimeout)
 	if observedCancel.index != canceledCall.index {
 		t.Fatalf("AWC canceled call = %d, want original %d", observedCancel.index, canceledCall.index)
 	}
 	canceled.runner.joinCalls(t)
 	terminal := admittedWorkCancellationEvent(t, canceled)
+	t.Logf("AWC public control operation=%s outcome=%s status=%s", control.Operation, control.Outcome, control.Status)
 	assertAdmittedWorkCanceled(t, canceled, first, firstDispatch)
 	if survivor.runner.activeCallCount() != 1 || survivor.runner.callCount() != 1 || survivor.runner.canceledCount() != 0 || channelClosed(survivorCall.returned) ||
 		!reflect.DeepEqual(peerBefore, concurrencyWorkByID(t, survivor, second.WorkId)) {
