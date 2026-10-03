@@ -1503,3 +1503,49 @@ and `C:/t/dub-multilingual-validation/functional-495/topology-mcp/result.json`.
 
 This entry was appended directly by root after inspecting the receipts; it is
 not another claimed MCP author success. The broader goal remains incomplete.
+
+## 2026-10-02: functional tests pass; authentication coverage author times out
+
+At published `1ae5ef011916b8f48cda918aef60f26c536f8cc6`, CI run
+`37091318531` passed all functional tests, including the seven repaired tests.
+The functional verdict failed one measured coverage threshold: ACP service
+822/1028 statements, 79.9611%, against its unchanged 80.22% minimum. All other
+product jobs passed. Evidence:
+`C:/t/dub-multilingual-validation/functional-1ae5/functional-coverage-verdict.txt`.
+
+The missing customer behavior selected for coverage is authentication-required
+failure with actionable login guidance. The existing controlled ACP peer
+advertises agent, environment-variable and terminal login methods, but no
+functional scenario exercised that branch. A bounded one-file actual MCP
+author used the normal immutable `1ae5` binary and
+`opencode/space-bunny-free`, with `timeoutMillis: 600000`.
+
+It returned typed `factory_session.subagent.timed_out` after 601.046 seconds,
+with human-readable error content, `partialEffectsPossible: true`,
+`sessionClosed: true`, and no primary result. Session:
+`2cea060a-7839-4e01-899c-46902bfb7d6c`; request:
+`a82814c8-6a5b-4303-95b4-230c26d37092`; owned server 70104 exited 0.
+Last recorded provider activity was `FILE_CHANGE`, phase `UPDATED`, at
+`2026-10-03T03:18:57.4560797Z`. The partial one-file patch is preserved,
+SHA-256 `7dad9ed4c6d7a2ae113ab8a6c7103850d4a45fd673d61de1aacdd30cad589e14`.
+No timeout cause is proven. Exact receipt:
+`C:/t/dub-multilingual-validation/mcp-acp-auth-functional-floor-proof/result.json`.
+
+The partial edit uses real existing helpers and public payload fields.
+Independent review accepted its public failed-Work, authentication-class,
+no-answer and all-three-login-label assertions. Manual corrections trim
+repetitive comments and restrict the secret assertion to the public failure
+diagnostic: the initial whole-event scan also read the intentionally authored
+workstation environment blueprint. Focused protocol-table race passed in
+4.842 seconds; full package passed in 8.524 seconds. An initial unquoted
+PowerShell coverage argument yielded no statements; corrected instrumentation
+and exact profile-union verification are pending at this entry's capture.
+No coverage floor was changed and no final green CI or merge is claimed.
+
+During preparation, the author coordinator accidentally overwrote an existing
+shared install receipt with a shorter receipt for the same unchanged binary.
+That version is preserved as `C:/t/dub-release-1ae5-proof/actor-install-identity.json`;
+the independent reviewer regenerated its fuller receipt from saved install
+metadata, using an honest regeneration timestamp, without reinstalling.
+Subsequent author evidence uses its own proof directory. This is a coordinator
+evidence-handling error, not an inferred provider failure.
