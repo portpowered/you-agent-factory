@@ -175,10 +175,6 @@ func TestDefinitionValidationUsesInjectedCanonicalLoader(t *testing.T) {
 	request := factorydefinitions.DefinitionValidationRequest{
 		Profile: factorydefinitions.ValidationProfilePrePersist,
 		Config:  cfg, CanonicalPayload: payload, WorkstationLoader: workstationLoader,
-		CanonicalFactoryLoader: func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			t.Fatal("request substituted the injected loader")
-			return nil, nil
-		},
 	}
 	result, err := validator.ValidateDefinition(context.Background(), request)
 	if err != nil || result.HasTargets() || calls != 1 {

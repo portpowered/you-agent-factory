@@ -58,10 +58,9 @@ func (s *Service) ValidateStructuralFactoryDefinition(
 		return factoryroot.ValidateStructuralFactoryDefinitionResult{}, err
 	}
 	profileResult, err := s.operations.ValidateDefinition(ctx, factoryroot.DefinitionValidationRequest{
-		Profile:                factoryroot.ResolveValidationProfile(request.Profile),
-		Config:                 cfg,
-		CanonicalPayload:       canonical,
-		CanonicalFactoryLoader: s.loadCanonical,
+		Profile:          factoryroot.ResolveValidationProfile(request.Profile),
+		Config:           cfg,
+		CanonicalPayload: canonical,
 	})
 	if err != nil {
 		return factoryroot.ValidateStructuralFactoryDefinitionResult{}, err

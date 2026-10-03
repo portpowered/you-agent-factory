@@ -208,7 +208,7 @@ func composeFactoryDefinitionSupport(
 	authoringLayout, err := NewAuthoringLayoutService(AuthoringLayoutDependencies{
 		Validator: validator,
 		MapInput: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload, loader.LoadSourceFromCanonicalJSON)
+			return validationentry.MapFactoryJSONForPersistence(payload)
 		},
 		Loader:             loader,
 		MaterializeFiles:   internalportableconfig.NewMaterializer(portableFileSystem),

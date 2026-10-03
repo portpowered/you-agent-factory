@@ -14,13 +14,14 @@ import (
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 )
 
+func persistenceValidationLoader([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	return nil, nil
+}
+
 func validPersistenceValidationRequest() factorydefinitions.DefinitionValidationRequest {
 	return factorydefinitions.DefinitionValidationRequest{
 		Config:           &factorydefinitions.FactoryConfig{},
 		CanonicalPayload: []byte(`{}`),
-		CanonicalFactoryLoader: func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			return nil, nil
-		},
 	}
 }
 
@@ -49,10 +50,6 @@ func TestServiceRoutesPersistenceThroughFlatCapabilities(t *testing.T) {
 			mapCalls++
 			request := validPersistenceValidationRequest()
 			request.Profile = factorydefinitions.ValidationProfileTopology
-			request.CanonicalFactoryLoader = func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-				t.Fatal("request replaced injected canonical loader")
-				return nil, nil
-			}
 			return request, nil
 		},
 		func(
@@ -153,7 +150,7 @@ func TestServiceRoutesPersistenceThroughFlatCapabilities(t *testing.T) {
 func TestCreateNamedFactory_DiscardsStagingWhenLayoutValidationFails(t *testing.T) {
 	t.Parallel()
 
-	validator := factoryvalidation.New(nil, validPersistenceValidationRequest().CanonicalFactoryLoader)
+	validator := factoryvalidation.New(nil, persistenceValidationLoader)
 	service, err := catalogpersistence.New(
 		validator,
 		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
@@ -232,7 +229,7 @@ func TestCreateNamedFactory_DiscardsStagingWhenLayoutValidationFails(t *testing.
 func TestReplaceFactoryLayout_ValidationFailureLeavesCommittedFactoryUnchanged(t *testing.T) {
 	t.Parallel()
 
-	validator := factoryvalidation.New(nil, validPersistenceValidationRequest().CanonicalFactoryLoader)
+	validator := factoryvalidation.New(nil, persistenceValidationLoader)
 	service, err := catalogpersistence.New(
 		validator,
 		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {

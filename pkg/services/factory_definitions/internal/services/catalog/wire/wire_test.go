@@ -382,9 +382,6 @@ func TestNewPersistencePrepareAndCreateAndReplaceNamedFactoryLayout(t *testing.T
 			return factorydefinitions.DefinitionValidationRequest{
 				Config:           &factorydefinitions.FactoryConfig{},
 				CanonicalPayload: []byte(`{}`),
-				CanonicalFactoryLoader: func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-					return nil, nil
-				},
 			}, nil
 		},
 		func(
