@@ -37,9 +37,9 @@ func constructionValueInitializer(object *ast.Object) ast.Expr {
 }
 
 // Resolve declared receiver types and aliases, never a method's spelling alone.
-// Promoted methods and arbitrary helper-returned receivers need further proof.
-func resolveConstructionMethod(selector *ast.SelectorExpr, source *constructionSource) (ConstructionSymbol, bool) {
-	typ, resolved := constructionStoredType(selector.X, source, map[*ast.Object]bool{})
+// Promoted methods and interface implementation selection need further proof.
+func resolveConstructionMethod(selector *ast.SelectorExpr, source *constructionSource, visited map[*ast.Object]bool) (ConstructionSymbol, bool) {
+	typ, resolved := constructionMethodReceiverType(selector.X, source, visited)
 	if !resolved && constructionIsTypeExpression(selector.X, source) {
 		typ, resolved = constructionResultSymbol(constructionMethodTypeExpression(selector.X), source)
 	}
