@@ -890,7 +890,7 @@
   "name": "you-agent-factory",
   "resources": [
     {
-      "capacity": 16,
+      "capacity": 10,
       "id": "executor-slot",
       "name": "executor-slot"
     },
