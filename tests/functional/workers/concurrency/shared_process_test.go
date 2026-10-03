@@ -65,6 +65,7 @@ func TestConcurrencySharedProcess(t *testing.T) {
 	})
 	t.Run("Cancel", func(t *testing.T) {
 		t.Parallel()
+		t.Run("AdmittedWorkCancellation", func(t *testing.T) { t.Parallel(); fixture.runAdmittedWorkCancellation(t) })
 		t.Run("CC-04", func(t *testing.T) { t.Parallel(); fixture.runSessionCancellationIsolation(t) })
 		t.Run("CC-05", func(t *testing.T) { t.Parallel(); fixture.runWorkerSessionCancellation(t) })
 		t.Run("CC-13", func(t *testing.T) { t.Parallel(); fixture.runRecovery(t) })

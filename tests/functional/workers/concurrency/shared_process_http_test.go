@@ -428,6 +428,115 @@ func concurrencySessionEvents(t testing.TB, baseURL, sessionID string) []factory
 	return support.GetFactoryEventsForSessionAt(t, baseURL, sessionID)
 }
 
+func awaitAdmittedWorkEvent(t *testing.T, stream *support.FactoryEventStream, matches func(factoryapi.FactoryEvent) bool) factoryapi.FactoryEvent {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), concurrencySharedProcessTimeout)
+	defer cancel()
+	for {
+		event := stream.NextEventContext(ctx)
+		if matches(event) {
+			return event
+		}
+	}
+}
+
+func admittedWorkDispatch(t *testing.T, session *concurrencySession, response factoryapi.SubmitWorkResponse) string {
+	t.Helper()
+	events := concurrencySessionEvents(t, session.fixture.baseURL, session.id)
+	hasRequest := false
+	dispatchID := ""
+	for _, event := range events {
+		if event.Context.SessionId == nil || *event.Context.SessionId != session.id ||
+			event.Context.RequestId == nil || *event.Context.RequestId != response.RequestId || !concurrencyEventHasWork(event, stringPointerValue(response.WorkId)) {
+			continue
+		}
+		if event.Type == factoryapi.FactoryEventTypeWorkRequest {
+			hasRequest = true
+		}
+		if event.Type == factoryapi.FactoryEventTypeDispatchRequest {
+			if dispatchID != "" {
+				t.Fatal("AWC Work has more than one dispatch request")
+			}
+			dispatchID = stringPointerValue(event.Context.DispatchId)
+		}
+	}
+	if !hasRequest || dispatchID == "" {
+		t.Fatalf("AWC session=%s request=%s work=%s missing admission/dispatch correlation: %s", session.id, response.RequestId, stringPointerValue(response.WorkId), concurrencyEventSummary(events))
+	}
+	return dispatchID
+}
+
+func assertAdmittedWorkCanceled(t *testing.T, session *concurrencySession, response factoryapi.SubmitWorkResponse, dispatchID string) {
+	t.Helper()
+	publicSession := getConcurrencyFactorySession(t, session.fixture.baseURL, session.id)
+	if publicSession.Runtime.LifecycleControlStatus == nil || *publicSession.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusCanceled {
+		t.Fatalf("AWC selected session lifecycle = %#v, want CANCELED", publicSession.Runtime.LifecycleControlStatus)
+	}
+	work := concurrencyWorkByID(t, session, response.WorkId)
+	if work.State == nil || work.State.Type == factoryapi.WorkStateTypeTERMINAL || work.State.Type == factoryapi.WorkStateTypeFAILED || strings.Contains(workContentText(t, work), session.marker+" output") {
+		t.Fatalf("AWC canceled Work became a business success/failure: %#v", work)
+	}
+	if got := admittedWorkDispatch(t, session, response); got != dispatchID || session.runner.callCount() != 1 || session.runner.activeCallCount() != 0 || session.runner.canceledCount() != 1 {
+		t.Fatalf("AWC selected dispatch/command changed: dispatch=%s calls=%d active=%d canceled=%d", got, session.runner.callCount(), session.runner.activeCallCount(), session.runner.canceledCount())
+	}
+	// Session control stops the runtime; it must not synthesize an ACCEPTED
+	// business completion for the held admitted Work.
+	for _, dispatch := range support.ObserveDispatchEvents(t, concurrencySessionEvents(t, session.fixture.baseURL, session.id)) {
+		if dispatch.DispatchID == dispatchID && dispatch.Response != nil && dispatch.Response.Outcome == factoryapi.WorkOutcomeAccepted {
+			t.Fatalf("AWC canceled dispatch has accepted success: %#v", dispatch)
+		}
+	}
+	t.Logf("AWC selected-session mapping: session=%s CANCELED; work=%s state=%s; no accepted success/output", session.id, stringPointerValue(response.WorkId), work.State.Name)
+}
+
+func completeAdmittedWork(t *testing.T, session *concurrencySession, stream *support.FactoryEventStream, response factoryapi.SubmitWorkResponse, call concurrencyStartedCall, marker string) {
+	t.Helper()
+	dispatchID := admittedWorkDispatch(t, session, response)
+	session.runner.releaseCall(call.index)
+	haveResponse, haveComplete := false, false
+	awaitAdmittedWorkEvent(t, stream, func(event factoryapi.FactoryEvent) bool {
+		if event.Type == factoryapi.FactoryEventTypeDispatchResponse && stringPointerValue(event.Context.DispatchId) == dispatchID {
+			haveResponse = true
+		}
+		if event.Type == factoryapi.FactoryEventTypeWorkStateChange {
+			payload, err := event.Payload.AsWorkStateChangeEventPayload()
+			haveComplete = haveComplete || (err == nil && payload.WorkId == stringPointerValue(response.WorkId) && payload.ToState == "complete")
+		}
+		return haveResponse && haveComplete
+	})
+	session.runner.joinCalls(t)
+	work := concurrencyWorkByID(t, session, response.WorkId)
+	want := marker + " output COMPLETE"
+	if work.State == nil || work.State.Type != factoryapi.WorkStateTypeTERMINAL || work.State.Name != "complete" || workContentText(t, work) != want || session.runner.canceledCount() != 0 {
+		t.Fatalf("AWC surviving Work = %#v content=%q canceled=%d, want complete with exact %q", work, workContentText(t, work), session.runner.canceledCount(), want)
+	}
+	events := concurrencySessionEvents(t, session.fixture.baseURL, session.id)
+	assertConcurrencyRequestDispatchTerminalCorrelation(t, session, events, response)
+	for _, dispatch := range support.ObserveDispatchEvents(t, events) {
+		if dispatch.DispatchID == dispatchID && (dispatch.Response == nil || support.StringPointerValue(dispatch.Response.Output) != want) {
+			t.Fatalf("AWC surviving dispatch output = %#v, want exact %q", dispatch, want)
+		}
+	}
+	t.Logf("AWC completion session=%s request=%s work=%s dispatch=%s output=%q command-returned", session.id, response.RequestId, stringPointerValue(response.WorkId), dispatchID, want)
+}
+
+func assertAdmittedWorkEventIsolation(t *testing.T, first, second *concurrencySession) {
+	t.Helper()
+	for _, pair := range [][2]*concurrencySession{{first, second}, {second, first}} {
+		own, peer := pair[0], pair[1]
+		events := concurrencySessionEvents(t, own.fixture.baseURL, own.id)
+		for _, event := range events {
+			if event.Context.SessionId != nil && *event.Context.SessionId != own.id {
+				t.Fatalf("AWC event escaped session %s: %#v", own.id, event.Context)
+			}
+		}
+		encoded, err := json.Marshal(events)
+		if err != nil || strings.Contains(string(encoded), peer.marker) {
+			t.Fatalf("AWC session %s events contain peer marker %q (marshal error %v)", own.id, peer.marker, err)
+		}
+	}
+}
+
 func concurrencyEventTypeSummary(events []factoryapi.FactoryEvent) []string {
 	result := make([]string, 0, len(events))
 	for _, event := range events {
