@@ -48,7 +48,6 @@ func TestWSRFT009CanonicalRestartRecoversWorkerHistory(t *testing.T) {
 
 func testWSRFT009InterruptedPrefix(t *testing.T) {
 	const wantPosition = events.AggregateSequence(1)
-
 	sidecarRoot := t.TempDir()
 	trace := &wsrFT009Trace{started: time.Now()}
 	writer := newWSRFT009DurableWriter(t, sidecarRoot, platformreplay.NewLocal(runtime.GOOS))
@@ -58,7 +57,6 @@ func testWSRFT009InterruptedPrefix(t *testing.T) {
 	runner := &wsrFT009BlockingProviderRunner{started: make(chan struct{}), trace: trace}
 	dir := wsrFT004Factory(t)
 	trace.fixture = dir
-
 	process, err := support.BuildProcessWithContext(context.Background(), serviceedges.Edges{
 		ProviderCommandRunner: runner,
 		WorkerRecordingWriter: writer,
@@ -68,7 +66,6 @@ func testWSRFT009InterruptedPrefix(t *testing.T) {
 		t.Fatalf("BuildProcess(first run): %v", err)
 	}
 	support.CleanupProcess(t, process)
-
 	invocationContext, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	inputs := support.FakeInputs(invocationContext, []string{
@@ -98,7 +95,6 @@ func testWSRFT009InterruptedPrefix(t *testing.T) {
 		}
 		t.Logf("diagnostic stdout=%q stderr=%q provider_calls=%d\n%s", stdout.snapshot(), stderr.snapshot(), runner.calls.Load(), trace.snapshot())
 	})
-
 	// These waits synchronize only with the injected durable edge and blocked
 	// command runner; they do not poll or sleep while waiting for a product
 	// state transition.
@@ -139,8 +135,7 @@ func testWSRFT009InterruptedPrefix(t *testing.T) {
 		session.InterruptionReason != recordings.WorkerRecordingInterruptionProcessStopped {
 		t.Fatalf(
 			"recovered interruption = position %d/reason %q, want position %d/%q",
-			session.LastPosition, session.InterruptionReason, wantPosition,
-			recordings.WorkerRecordingInterruptionProcessStopped,
+			session.LastPosition, session.InterruptionReason, wantPosition, recordings.WorkerRecordingInterruptionProcessStopped,
 		)
 	}
 	if len(session.Records) != 1 || session.Records[0].ID.Position != wantPosition {
