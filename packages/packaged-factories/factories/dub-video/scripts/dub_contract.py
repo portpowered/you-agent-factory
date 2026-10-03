@@ -102,9 +102,13 @@ def nonverbal_kind(source_text, translation, preserve_names=None):
     inventory = {
         "cry": r"(?:啊{2,}|あ{3,}|ア{3,}|아{3,}|a+h{2,}|a{3,})",
         "laugh": r"(?:哈{3,}|呵{3,}|は{3,}|ハ{3,}|하{3,}|히{3,}|ひ{3,}|(?:ha){3,}|(?:he){3,}|(?:ja){3,})",
+        # An affirmative hum is nonverbal on both cue sides at once: a lone m,
+        # a written hmm, and any spoken yes/no answer stay lexical. Japanese and
+        # Korean hums stay unclassified here rather than guessed at.
+        "hum": r"(?:嗯+|m{2,})",
     }
     # Only outer punctuation/space may be removed. Mixed words, annotations,
-    # single interjections and internal phrase boundaries remain unmatched.
+    # single cries or laughs and internal phrase boundaries remain unmatched.
     source = source_text.strip(" \t\r\n.,!?…，。！？¡¿").casefold()
     target = translation.strip(" \t\r\n.,!?…，。！？¡¿").casefold()
     for kind, pattern in inventory.items():
