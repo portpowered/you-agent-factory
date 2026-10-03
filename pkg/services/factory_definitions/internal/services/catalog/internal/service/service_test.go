@@ -10,7 +10,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
-	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 )
@@ -402,29 +401,6 @@ func TestPrivateCatalog_RootTypedMissingAndCurrentNotFound(t *testing.T) {
 	}
 }
 
-func TestPrivateCatalog_RequiresInjectedPorts(t *testing.T) {
-	t.Parallel()
-
-	fileSystem := platformfilesystem.Local{}
-	paths, err := catalognamedpaths.New(fileSystem)
-	if err != nil {
-		t.Fatalf("catalognamedpaths.New: %v", err)
-	}
-
-	if _, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      nil,
-		FileSystem: fileSystem,
-	}); err == nil {
-		t.Fatal("NewService(nil paths): expected path resolver required error")
-	}
-	if _, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: nil,
-	}); err == nil {
-		t.Fatal("NewService(nil filesystem): expected catalog filesystem required error")
-	}
-}
-
 func assertTypedInvalidName(t *testing.T, op string, err error) {
 	t.Helper()
 	if !errors.Is(err, factorydefinitions.ErrInvalidNamedFactoryName) {
@@ -443,14 +419,19 @@ func newRootCatalog(t *testing.T) factorydefinitions.Service {
 	if err != nil {
 		t.Fatalf("catalognamedpaths.New: %v", err)
 	}
-	catalogService, err := catalogwire.NewService(catalog.Dependencies{
-		Paths:      paths,
-		FileSystem: fileSystem,
-	})
-	if err != nil {
-		t.Fatalf("catalogwire.NewService: %v", err)
-	}
-	return lifecycle.NewWithCatalog(nil, lifecycle.StubActivationGateway(), catalogService)
+	catalogService := catalogwire.NewService(paths, fileSystem)
+	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
+		nil,
+		lifecycle.StubActivationGateway(),
+		catalogService,
+		factorydefinitions.UnimplementedService{},
+		factorydefinitions.UnimplementedService{},
+		factorydefinitions.UnimplementedService{},
+		nil,
+		factorydefinitions.UnimplementedService{},
+		nil,
+		factorydefinitions.UnimplementedService{}.ListEffectiveFactories,
+	)
 }
 
 func writeNamedFactory(t *testing.T, rootDir, name string) string {

@@ -74,11 +74,6 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			want:   "named path resolver is required",
 		},
 		{
-			name:   "named Factory catalog filesystem",
-			mutate: func(ports *constructionPorts) { ports.namedFactoryCatalogFileSystem = nil },
-			want:   "named Factory catalog filesystem is required",
-		},
-		{
 			name:   "clock",
 			mutate: func(ports *constructionPorts) { ports.clock = nil },
 			want:   "clock is required",
@@ -142,10 +137,13 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
 				ports.persistence,
 				ports.loader,
+				compilationForLoader(ports.loader),
+				validationForLoader(ports.loader, ports.requiredToolChecker, ports.orchestratorValidator),
+				runtimeSnapshotForLoader(ports.loader, ports.sessionHost),
 				ports.applySupportedFiles,
 				ports.applyStarterWork,
 				ports.namedPaths,
-				ports.namedFactoryCatalogFileSystem,
+				factorydefinitionswire.NewCatalogService(ports.namedPaths, ports.namedFactoryCatalogFileSystem),
 				ports.clock,
 				ports.versionFileSystem,
 				ports.listEffective,
@@ -191,10 +189,13 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	service, err := factorydefinitionswire.NewService(sessionHost, wireStubActivationGateway{}, stubValidator{},
 		stubPersistence{},
 		&compilationloading.Loader{},
+		compilationForLoader(&compilationloading.Loader{}),
+		validationForLoader(&compilationloading.Loader{}, stubRequiredToolChecker{}, stubOrchestratorValidator{}),
+		runtimeSnapshotForLoader(&compilationloading.Loader{}, sessionHost),
 		func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
 		func(string, *factorydefinitions.FactoryConfig) error { return nil },
 		namedPaths,
-		namedFactoryCatalogFileSystem,
+		factorydefinitionswire.NewCatalogService(namedPaths, namedFactoryCatalogFileSystem),
 		clock,
 		versionFileSystem,
 		func(
@@ -287,10 +288,13 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 	service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
 		ports.persistence,
 		ports.loader,
+		compilationForLoader(ports.loader),
+		validationForLoader(ports.loader, ports.requiredToolChecker, ports.orchestratorValidator),
+		runtimeSnapshotForLoader(ports.loader, ports.sessionHost),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
-		ports.namedFactoryCatalogFileSystem,
+		factorydefinitionswire.NewCatalogService(ports.namedPaths, ports.namedFactoryCatalogFileSystem),
 		ports.clock,
 		ports.versionFileSystem,
 		ports.listEffective,
@@ -348,10 +352,13 @@ func TestNewServiceServesPublishedCompilePeerBehavior(t *testing.T) {
 		ports.validator,
 		ports.persistence,
 		ports.loader,
+		compilationForLoader(ports.loader),
+		validationForLoader(ports.loader, ports.requiredToolChecker, ports.orchestratorValidator),
+		runtimeSnapshotForLoader(ports.loader, ports.sessionHost),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
-		ports.namedFactoryCatalogFileSystem,
+		factorydefinitionswire.NewCatalogService(ports.namedPaths, ports.namedFactoryCatalogFileSystem),
 		ports.clock,
 		ports.versionFileSystem,
 		ports.listEffective,
@@ -427,10 +434,13 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
 		ports.persistence,
 		ports.loader,
+		compilationForLoader(ports.loader),
+		validationForLoader(ports.loader, ports.requiredToolChecker, ports.orchestratorValidator),
+		runtimeSnapshotForLoader(ports.loader, ports.sessionHost),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
-		ports.namedFactoryCatalogFileSystem,
+		factorydefinitionswire.NewCatalogService(ports.namedPaths, ports.namedFactoryCatalogFileSystem),
 		ports.clock,
 		ports.versionFileSystem,
 		ports.listEffective,
@@ -463,10 +473,13 @@ func TestNewServiceDelegatesSnapshotPortabilityThroughRoot(t *testing.T) {
 		ports.validator,
 		ports.persistence,
 		ports.loader,
+		compilationForLoader(ports.loader),
+		validationForLoader(ports.loader, ports.requiredToolChecker, ports.orchestratorValidator),
+		runtimeSnapshotForLoader(ports.loader, ports.sessionHost),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
-		ports.namedFactoryCatalogFileSystem,
+		factorydefinitionswire.NewCatalogService(ports.namedPaths, ports.namedFactoryCatalogFileSystem),
 		ports.clock,
 		ports.versionFileSystem,
 		ports.listEffective,
@@ -502,24 +515,6 @@ func TestNewServiceDelegatesSnapshotPortabilityThroughRoot(t *testing.T) {
 	if !errors.Is(err, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize) {
 		t.Fatalf("MaterializeFactorySnapshot() error = %v, want ErrUnsafeFactorySnapshotMaterialize", err)
 	}
-}
-
-type stubRequiredToolChecker struct{}
-
-func (stubRequiredToolChecker) Check(
-	factorydefinitions.RequiredToolConfig,
-) factorydefinitions.RequiredToolCheckResult {
-	return factorydefinitions.RequiredToolCheckResult{}
-}
-
-type stubOrchestratorValidator struct{}
-
-func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
-	context.Context,
-	*factorydefinitions.FactoryOrchestratorJavaScriptConfig,
-	factorydefinitions.WorkflowSourceReader,
-) []factorydefinitions.ValidationTarget {
-	return nil
 }
 
 type constructionPorts struct {
@@ -934,10 +929,13 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 		ports.validator,
 		ports.persistence,
 		ports.loader,
+		compilationForLoader(ports.loader),
+		validationForLoader(ports.loader, ports.requiredToolChecker, ports.orchestratorValidator),
+		runtimeSnapshotForLoader(ports.loader, ports.sessionHost),
 		ports.applySupportedFiles,
 		ports.applyStarterWork,
 		ports.namedPaths,
-		ports.namedFactoryCatalogFileSystem,
+		factorydefinitionswire.NewCatalogService(ports.namedPaths, ports.namedFactoryCatalogFileSystem),
 		ports.clock,
 		ports.versionFileSystem,
 		ports.listEffective,
