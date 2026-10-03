@@ -104,6 +104,9 @@ func scanConstructionOperation(source *constructionSource, caller ConstructionSy
 		}
 		return true
 	})
+	for expression := range constructionSafeValueReferences(body, source, callees) {
+		callees[expression] = true
+	}
 	findings = append(findings, constructionReferenceDebt(source, caller, body, callees, registry)...)
 	return findings
 }
@@ -150,13 +153,21 @@ func constructionProhibitedKind(constructor ConstructionConstructor, types []Con
 }
 
 func resolveConstructionCall(expr ast.Expr, source *constructionSource) (ConstructionSymbol, bool) {
+	return resolveConstructionValue(expr, source, map[*ast.Object]bool{})
+}
+
+func resolveConstructionValue(expr ast.Expr, source *constructionSource, visited map[*ast.Object]bool) (ConstructionSymbol, bool) {
 	switch value := expr.(type) {
 	case *ast.Ident:
-		if source.imports[value.Name] != "" {
+		if value.Obj == nil && source.imports[value.Name] != "" {
 			return ConstructionSymbol{}, false
 		}
 		if value.Obj != nil && value.Obj.Kind != ast.Fun {
-			return ConstructionSymbol{}, false
+			if visited[value.Obj] || source.mutations[value.Obj] {
+				return ConstructionSymbol{}, false
+			}
+			visited[value.Obj] = true
+			return resolveConstructionValue(constructionValueInitializer(value.Obj), source, visited)
 		}
 		local := ConstructionSymbol{ImportPath: source.importPath, Name: value.Name}
 		if value.Obj != nil || source.declarations[local].function != nil {
@@ -175,12 +186,13 @@ func resolveConstructionCall(expr ast.Expr, source *constructionSource) (Constru
 				return ConstructionSymbol{ImportPath: imported, Name: value.Sel.Name}, true
 			}
 		}
+		return resolveConstructionMethod(value, source)
 	case *ast.ParenExpr:
-		return resolveConstructionCall(value.X, source)
+		return resolveConstructionValue(value.X, source, visited)
 	case *ast.IndexExpr:
-		return resolveConstructionCall(value.X, source)
+		return resolveConstructionValue(value.X, source, visited)
 	case *ast.IndexListExpr:
-		return resolveConstructionCall(value.X, source)
+		return resolveConstructionValue(value.X, source, visited)
 	}
 	return ConstructionSymbol{}, false
 }

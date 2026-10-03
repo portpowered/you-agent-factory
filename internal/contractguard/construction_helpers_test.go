@@ -24,7 +24,8 @@ func TestConstructionHelperReturnProvenance(t *testing.T) {
 		{"mutated helper", `func pass(p Port) Port { p = nil; return p }`, `if pass(renamed) == nil {}; return &Service{port: renamed}, nil`, ``, "unresolved-required-dependency-guard"},
 		{"mutated argument", `func pass(p Port) Port { return p }`, `renamed = nil; if pass(renamed) == nil {}; return &Service{port: renamed}, nil`, ``, "unresolved-required-dependency-guard"},
 		{"named result", `func pass(p Port) (result Port) { result = p; return }`, `if pass(renamed) == nil {}; return &Service{port: renamed}, nil`, ``, "unresolved-required-dependency-guard"},
-		{"unresolved function value", `func pass(p Port) Port { return p }`, `alias := pass; if alias(renamed) == nil {}; return &Service{port: renamed}, nil`, ``, "unresolved-required-dependency-guard"},
+		{"resolved function value", `func pass(p Port) Port { return p }`, `alias := pass; if alias(renamed) == nil {}; return &Service{port: renamed}, nil`, ``, "required-dependency-guard"},
+		{"reassigned function value", `func pass(p Port) Port { return p }`, `alias := pass; alias = pass; if alias(renamed) == nil {}; return &Service{port: renamed}, nil`, ``, "unresolved-required-dependency-guard"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

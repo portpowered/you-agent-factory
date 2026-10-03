@@ -19,6 +19,7 @@ type constructionSource struct {
 	dotImports   []string
 	set          *token.FileSet
 	declarations map[ConstructionSymbol]constructionDeclaration
+	mutations    map[*ast.Object]bool
 }
 
 type constructionDeclaration struct {
@@ -86,6 +87,7 @@ func loadConstructionIndex(root string) (constructionIndex, error) {
 	})
 	for _, source := range index.sources {
 		source.declarations = index.declarations
+		source.mutations = constructionValueMutations(source.file)
 	}
 	return index, err
 }
