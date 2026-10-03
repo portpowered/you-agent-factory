@@ -1493,6 +1493,12 @@
         }
       ],
       "name": "project-lead",
+      "onContinue": [
+        {
+          "state": "waiting",
+          "workType": "project"
+        }
+      ],
       "onFailure": [
         {
           "state": "needs-supervision",
@@ -2403,6 +2409,16 @@
           "state": "delivered"
         }
       ],
+      "onContinue": [
+        {
+          "workType": "project",
+          "state": "waiting"
+        },
+        {
+          "workType": "project-report",
+          "state": "delivered"
+        }
+      ],
       "onFailure": [
         {
           "workType": "project",
@@ -2441,6 +2457,12 @@
         }
       ],
       "outputs": [
+        {
+          "workType": "project",
+          "state": "waiting"
+        }
+      ],
+      "onContinue": [
         {
           "workType": "project",
           "state": "waiting"
