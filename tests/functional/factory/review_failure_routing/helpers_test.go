@@ -31,12 +31,12 @@ type reviewFailureScenario struct {
 }
 
 type reviewFailureSeed struct {
-	Name      string
-	WorkID    string
-	WorkType  string
-	State     string
-	TraceID   string
-	Payload   string
+	Name     string
+	WorkID   string
+	WorkType string
+	State    string
+	TraceID  string
+	Payload  string
 	// PayloadValue, when set, is submitted as the Work payload instead of
 	// Payload so scenarios can send a structured JSON object.
 	PayloadValue any
@@ -44,7 +44,7 @@ type reviewFailureSeed struct {
 	DependsOn      string
 	DependsOnState string
 	Tags           map[string]string
-	StateType factoryapi.WorkStateType
+	StateType      factoryapi.WorkStateType
 }
 
 func openReviewFailureScenario(

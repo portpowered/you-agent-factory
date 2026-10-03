@@ -455,10 +455,10 @@ type FactoryWorkItem struct {
 	Content                  []WorkContentPart `json:"content,omitempty"`
 	// Payload is the submitted Work payload as a JSON value (EventPayload).
 	// It is populated from admission and WORK_REQUEST events only.
-	Payload  json.RawMessage `json:"payload,omitempty"`
-	ParentID string          `json:"parentId,omitempty"`
-	StructuredResult         any               `json:"structuredResult,omitempty"`
-	Tags                     map[string]string `json:"tags,omitempty"`
+	Payload          json.RawMessage   `json:"payload,omitempty"`
+	ParentID         string            `json:"parentId,omitempty"`
+	StructuredResult any               `json:"structuredResult,omitempty"`
+	Tags             map[string]string `json:"tags,omitempty"`
 	// StructuredResultPresent preserves an explicitly stored JSON null without
 	// making absent results appear on older snapshots or API projections.
 	StructuredResultPresent bool `json:"-"`
