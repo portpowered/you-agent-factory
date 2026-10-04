@@ -37,10 +37,10 @@ func (unavailableProviderSessions) Project(providersessions.ProjectRequest) (pro
 func TestLiveProviderSessionObservationEnablesExactWorkerSessionContinuation(t *testing.T) {
 	command := newLiveSessionCommandRunner()
 	providerService, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil,
-		providerswire.WithCommandEffectRunner(command))
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		providerswire.NewCodexEffect(command, platformclock.Real{}),
+		providerswire.NewClaudeEffect(command, platformclock.Real{}))
 	if err != nil {
 		t.Fatalf("providers wire NewService() error = %v", err)
 	}

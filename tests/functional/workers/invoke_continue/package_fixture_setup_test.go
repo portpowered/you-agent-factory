@@ -274,10 +274,10 @@ func startInvokeContinuePackageProcess(
 ) (invokeContinueStartedProcess, error) {
 	t.Helper()
 	fallbackProvider, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil,
-		providerswire.WithCommandRunner(route))
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		providerswire.NewCodexEffect(providerswire.AdaptPlatformCommandRunner(route), platformclock.Real{}),
+		providerswire.NewClaudeEffect(providerswire.AdaptPlatformCommandRunner(route), platformclock.Real{}))
 	if err != nil {
 		return invokeContinueStartedProcess{}, fmt.Errorf("build fixture provider fallback: %w", err)
 	}

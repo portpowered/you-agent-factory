@@ -623,9 +623,10 @@ func TestRootCatalogProbeFailureMatchesPrivateCatalog(t *testing.T) {
 			Prerequisites: descriptor.Prerequisites,
 		}, nil
 	}),
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil)
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -681,9 +682,10 @@ func TestRootConstructionIsInert(t *testing.T) {
 		probeCalls++
 		return catalog.ProbeFacts{}, nil
 	}),
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil)
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -899,12 +901,12 @@ func (session *mockPTYSession) Close() error { return nil }
 
 func newAgyProvidersServiceWithPTY(t *testing.T, allocator *mockPTYAllocator) providers.Service {
 	t.Helper()
+	runner := providerswire.AdaptPlatformCommandRunner(testutil.NewProviderCommandRunner())
 	service, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil,
-		providerswire.WithCommandRunner(testutil.NewProviderCommandRunner()),
-		providerswire.WithAgyPTYEffect(providerswire.NewAgyPTYEffect(allocator, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformclock.Real{}, providerswire.AgyPTYPolicy{})))
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		providerswire.NewAgyPTYEffect(allocator, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformclock.Real{}, providerswire.AgyPTYPolicy{}),
+		providerswire.NewCodexEffect(runner, platformclock.Real{}),
+		providerswire.NewClaudeEffect(runner, platformclock.Real{}))
 	if err != nil {
 		t.Fatalf("providerswire.NewService() error = %v", err)
 	}
@@ -915,9 +917,10 @@ func mustRootService(t *testing.T) *providerservice.Service {
 	t.Helper()
 
 	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil)
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}

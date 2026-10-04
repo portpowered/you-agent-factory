@@ -27,10 +27,8 @@ import (
 
 // newConfiguredProvidersService always installs the shell-free Antigravity
 // print-mode command effect. An injected serviceedges.Edges.AgyPTYHost exists
-// only to satisfy the legacy PTY allocator construction port and must never
-// suppress the canonical command adapter; the command effect unconditionally
-// takes priority over the legacy PTY effect in executionwire's built-in
-// dependency selection.
+// for hosts that intentionally select the legacy PTY seam. Canonical command
+// construction does not allocate or construct that unused effect.
 func newConfiguredProvidersService(
 	options []providerswire.Option,
 	agyRunner platformprocess.CommandRunner,
@@ -41,11 +39,11 @@ func newConfiguredProvidersService(
 	locator platformprocess.ExecutableLocator,
 	stdioPipes platformprocess.StdioPipeFactory,
 ) (providers.Service, error) {
-	options = append(options, providerswire.WithAgyCommandRunner(
-		workerswire.NewProviderCommandRunner(agyRunner),
-	))
-	return providerswire.NewService(providerswire.IdentityCatalogProbe, clock, scheduler, logger, commandFactory, locator, stdioPipes,
-		options...)
+	runner := workerswire.NewProviderCommandRunner(agyRunner)
+	return providerswire.NewService(providerswire.IdentityCatalogProbe, scheduler, logger, commandFactory, locator, stdioPipes,
+		providerswire.NewAgyCommandEffect(runner, clock, scheduler),
+		providerswire.NewCodexEffect(runner, clock),
+		providerswire.NewClaudeEffect(runner, clock), options...)
 }
 
 type modelsProcessLauncher struct {

@@ -306,9 +306,10 @@ func TestControlAttempt_ProductionWiredRootIsDeterministicallyUnsupported(t *tes
 
 	logger := &recordingControlLogger{}
 	root, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logger, nil, nil, nil)
+		platformclock.Real{}, logger, nil, nil, nil,
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		t.Fatalf("providerswire.NewService() = %v", err)
 	}

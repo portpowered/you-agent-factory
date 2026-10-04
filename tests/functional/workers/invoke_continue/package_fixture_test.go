@@ -163,10 +163,10 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 	}
 	route := &invokeContinueStaticCommandRoute{routes: setup.routes}
 	unsupportedProvider, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil,
-		providerswire.WithCommandRunner(route),
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		providerswire.NewCodexEffect(providerswire.AdaptPlatformCommandRunner(route), platformclock.Real{}),
+		providerswire.NewClaudeEffect(providerswire.AdaptPlatformCommandRunner(route), platformclock.Real{}),
 		providerswire.WithCatalogCapabilityOverrides(providerswire.CatalogCapabilityOverride{
 			Provider:     providers.IDCodex,
 			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},

@@ -198,9 +198,10 @@ func TestConfigurerRejectsPromptedInvalidProviderWithoutPersisting(t *testing.T)
 
 func testConfigService() operatorsettings.Service {
 	providersRoot, err := providerswire.NewService(providerswire.IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil)
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		panic(err)
 	}

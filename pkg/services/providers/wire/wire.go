@@ -68,6 +68,30 @@ func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source, sched
 // AgyEffect exposes the completed AGY execution collaborator to composition.
 type AgyEffect = executionwire.AgyEffect
 
+// Native effect aliases expose individually completed command collaborators.
+type CodexEffect = executionwire.CodexEffect
+type ClaudeEffect = executionwire.ClaudeEffect
+
+// NewCodexEffect constructs one Codex command effect.
+func NewCodexEffect(runner CommandRunner, clock platformclock.Source) CodexEffect {
+	return executionwire.NewCodexEffect(runner, clock)
+}
+
+// NewClaudeEffect constructs one Claude command effect.
+func NewClaudeEffect(runner CommandRunner, clock platformclock.Source) ClaudeEffect {
+	return executionwire.NewClaudeEffect(runner, clock)
+}
+
+// NewAgyCommandEffect constructs one AGY print-mode effect.
+func NewAgyCommandEffect(runner CommandRunner, clock platformclock.Source, scheduler platformclock.TimerSource) AgyEffect {
+	return executionwire.NewAgyCommandEffect(runner, clock, scheduler)
+}
+
+// AdaptPlatformCommandRunner projects the process edge at composition.
+func AdaptPlatformCommandRunner(runner platformprocess.CommandRunner) CommandRunner {
+	return executionwire.AdaptPlatformCommandRunner(runner)
+}
+
 // AgyPTYPolicy contains detached native-session policy, without host effects.
 type AgyPTYPolicy = executionwire.AgyPTYPolicy
 
@@ -101,9 +125,6 @@ type Option interface {
 type wireOptions struct {
 	catalogDescriptors []providers.Descriptor
 	catalogOverrides   []catalog.CapabilityOverride
-	commandRunner      providerservice.CommandRunner
-	agyCommandRunner   providerservice.CommandRunner
-	agyPTYEffect       AgyEffect
 	acpIntegrations    []providers.ACPIntegration
 	registrations      ProviderRegistrations
 }
@@ -181,76 +202,23 @@ func WithCatalogCapabilityOverrides(overrides ...CatalogCapabilityOverride) Opti
 	return catalogCapabilityOverridesOption{overrides: cloned}
 }
 
-type commandRunnerOption struct {
-	runner platformprocess.CommandRunner
-}
-
-func (o commandRunnerOption) apply(opts *wireOptions) {
-	opts.commandRunner = executionwire.AdaptPlatformCommandRunner(o.runner)
-}
-
-// WithCommandRunner injects the shared streaming subprocess runner used by
-// built-in Codex and Claude command effects.
-func WithCommandRunner(runner platformprocess.CommandRunner) Option {
-	return commandRunnerOption{runner: runner}
-}
-
-type commandEffectRunnerOption struct {
-	runner providerservice.CommandRunner
-}
-
-func (o commandEffectRunnerOption) apply(opts *wireOptions) {
-	opts.commandRunner = o.runner
-}
-
-type agyCommandRunnerOption struct {
-	runner CommandRunner
-}
-
-func (o agyCommandRunnerOption) apply(opts *wireOptions) {
-	opts.agyCommandRunner = o.runner
-}
-
-// WithAgyCommandRunner injects the Providers command-runner effect used by
-// canonical AGY print-mode execution. The PTY option remains available for
-// direct compatibility tests and hosts that intentionally select that seam.
-func WithAgyCommandRunner(runner CommandRunner) Option {
-	return agyCommandRunnerOption{runner: runner}
-}
-
-type agyPTYEffectOption struct {
-	effect AgyEffect
-}
-
-func (o agyPTYEffectOption) apply(opts *wireOptions) {
-	opts.agyPTYEffect = o.effect
-}
-
-// WithAgyPTYEffect supplies the completed legacy PTY effect. An explicit
-// command runner retains priority over this effect.
-func WithAgyPTYEffect(effect AgyEffect) Option {
-	return agyPTYEffectOption{effect: effect}
-}
-
-// WithCommandEffectRunner supplies the completed Providers command effect.
-// Later command options retain precedence over earlier options.
-func WithCommandEffectRunner(runner CommandRunner) Option {
-	return commandEffectRunnerOption{runner: runner}
-}
-
 // NewService constructs one inert Providers root over sibling Catalog and
 // Execution capabilities sharing the same private catalog identity authority.
 // The caller supplies the completed readiness projection; this boundary never
 // substitutes an identity projection for a missing effect. ACP process,
 // executable discovery and standard streams are supplied directly by composition.
+// Native effects are completed before this consumer is called; it neither
+// constructs command adapters nor selects between command and legacy PTY effects.
 func NewService(
 	probe CatalogProbeOperation,
-	clock platformclock.Source,
 	scheduler platformclock.TimerSource,
 	logger logging.Logger,
 	commandFactory platformprocess.CommandFactory,
 	executableLocator platformprocess.ExecutableLocator,
 	stdioPipes platformprocess.StdioPipeFactory,
+	antigravity AgyEffect,
+	codex CodexEffect,
+	claude ClaudeEffect,
 	options ...Option,
 ) (providers.Service, error) {
 	var config wireOptions
@@ -277,11 +245,10 @@ func NewService(
 	}
 	return newRootWithOptions(
 		catalogService,
-		config.commandRunner,
-		config.agyCommandRunner,
-		clock,
+		antigravity,
+		codex,
+		claude,
 		scheduler,
-		config.agyPTYEffect,
 		acp,
 		commandFactory,
 		executableLocator,
@@ -328,11 +295,10 @@ func ACPIntegrationsFromRuntimeCatalog(document []byte) ([]providers.ACPIntegrat
 
 func newRootWithOptions(
 	catalogService catalog.Service,
-	commandRunner providerservice.CommandRunner,
-	agyCommandRunner providerservice.CommandRunner,
-	clock platformclock.Source,
+	antigravity AgyEffect,
+	codex CodexEffect,
+	claude ClaudeEffect,
 	scheduler platformclock.TimerSource,
-	agyPTYEffect AgyEffect,
 	acpIntegrations []providers.ACPIntegration,
 	commandFactory platformprocess.CommandFactory,
 	executableLocator platformprocess.ExecutableLocator,
@@ -343,7 +309,7 @@ func newRootWithOptions(
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
 	}
-	registrations := executionserviceRegistrations(commandRunner, agyCommandRunner, clock, scheduler, agyPTYEffect)
+	registrations := executionwire.BuiltInRegistrations(antigravity, codex, claude)
 	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator, stdioPipes, scheduler, logger)
 	if err != nil {
 		return nil, err
@@ -483,24 +449,6 @@ func (writer *externalResponseWriter) Close(_ context.Context, completion Comple
 	clone := completion
 	writer.completion = &clone
 	return nil
-}
-
-func executionserviceRegistrations(
-	commandRunner providerservice.CommandRunner,
-	agyCommandRunner providerservice.CommandRunner,
-	clock platformclock.Source,
-	scheduler platformclock.TimerSource,
-	agyPTYEffect AgyEffect,
-) []execution.Registration {
-	antigravity := agyPTYEffect
-	if agyCommandRunner != nil {
-		antigravity = executionwire.NewAgyCommandEffect(agyCommandRunner, clock, scheduler)
-	}
-	return executionwire.BuiltInRegistrations(
-		antigravity,
-		executionwire.NewCodexEffect(commandRunner, clock),
-		executionwire.NewClaudeEffect(commandRunner, clock),
-	)
 }
 
 func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) []providers.ACPIntegration {

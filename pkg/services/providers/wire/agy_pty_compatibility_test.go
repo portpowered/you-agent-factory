@@ -125,10 +125,10 @@ func newLegacyAgyProvidersService(
 		t.Fatalf("NewAgyPTYAllocator() error = %v", err)
 	}
 	service, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil,
-		WithAgyPTYEffect(NewAgyPTYEffect(allocator, legacyAgyExecutableLocator{path: executable}, platformfilesystem.Local{}, clock, AgyPTYPolicy{})))
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		NewAgyPTYEffect(allocator, legacyAgyExecutableLocator{path: executable}, platformfilesystem.Local{}, clock, AgyPTYPolicy{}),
+		nil,
+		nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -268,17 +268,24 @@ func TestNewServicePreservesSelectedClockForCodexAndClaude(t *testing.T) {
 			t.Parallel()
 			clock := platformclock.NewDeterministic(time.Unix(0, 0), time.Millisecond)
 			runner := &clockCommandRunner{clock: clock}
-			root, err := NewService(IdentityCatalogProbe, clock, platformclock.Real{}, logging.NoopLogger{},
+			peer := &clockCommandRunner{clock: clock}
+			codexRunner, claudeRunner := runner, peer
+			if id == providers.IDClaude {
+				codexRunner, claudeRunner = peer, runner
+			}
+			root, err := NewService(IdentityCatalogProbe,
+				platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 				nil,
-				nil,
-				nil,
-				WithCommandEffectRunner(runner),
-				WithAgyCommandRunner(runner))
+				NewCodexEffect(codexRunner, clock),
+				NewClaudeEffect(claudeRunner, clock))
 			if err != nil {
 				t.Fatal(err)
 			}
 			if runner.calls != 0 {
 				t.Fatal("construction started a provider command")
+			}
+			if peer.calls != 0 {
+				t.Fatal("construction started a peer command")
 			}
 			result, err := root.Execute(t.Context(), providers.ExecuteRequest{AttemptID: "clock-attempt", Provider: id, UserMessage: "clock proof", WorkingDirectory: t.TempDir()})
 			if err != nil {
@@ -289,6 +296,9 @@ func TestNewServicePreservesSelectedClockForCodexAndClaude(t *testing.T) {
 			}
 			if runner.calls != 1 {
 				t.Fatalf("command calls = %d, want one", runner.calls)
+			}
+			if peer.calls != 0 {
+				t.Fatalf("peer command calls = %d, want isolated effects", peer.calls)
 			}
 		})
 	}

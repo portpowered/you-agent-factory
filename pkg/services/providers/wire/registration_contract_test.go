@@ -145,9 +145,10 @@ func TestNewServiceRejectsManifestIntegrationPermissionBypassMismatch(t *testing
 	}
 	integration := ProgressingExternalIntegration("mismatch-provider", "must not execute")
 	_, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
 		WithRegistrations(Registration{
 			Manifest:    manifest,
 			Integration: integration,

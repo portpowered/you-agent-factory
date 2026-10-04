@@ -28,9 +28,10 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
 	service, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil)
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -55,9 +56,10 @@ func TestNewServiceComposesCatalogAndExecutionWithSharedCatalogAuthority(t *test
 	t.Parallel()
 
 	root, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil)
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -96,9 +98,10 @@ func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *test
 	t.Parallel()
 
 	root, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil)
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -168,9 +171,10 @@ func TestPackagedACPIdentitiesAndLegacyAliasesResolveToTheirCanonicalIDs(t *test
 
 func TestNewServiceBuildsUsableRoot(t *testing.T) {
 	root, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil)
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -230,12 +234,10 @@ launch: {posture: installed_executable, transport: stdio, command: 'agent''\tool
 		return exec.Command(os.Args[0], "-test.run=^TestGeneratedRuntimeExecutableReachesCommandFactoryLosslessly$")
 	}
 	root, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{},
-		commandFactory,
-		fakeExecutableLocator{wantExecutable: wantExecutable},
-		platformprocess.NewParentOwnedStdio,
+		platformclock.Real{}, logging.NoopLogger{}, commandFactory, fakeExecutableLocator{wantExecutable: wantExecutable}, platformprocess.NewParentOwnedStdio,
+		nil,
+		nil,
+		nil,
 		WithACPIntegrations(integrations...))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -264,9 +266,10 @@ func TestACPWireOptionsComposeConfiguredCatalogAndValidateCommands(t *testing.T)
 
 	integration := providers.ACPIntegration{ID: "custom-acp", Name: "custom-acp", Transport: "stdio", Command: "custom-agent --acp"}
 	root, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
 		WithACPIntegrations(integration))
 	if err != nil {
 		t.Fatalf("NewService(ACP) = %v", err)
@@ -298,9 +301,10 @@ func TestACPWireOptionsComposeConfiguredCatalogAndValidateCommands(t *testing.T)
 	}
 
 	if _, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil,
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil,
 		WithACPIntegrations(providers.ACPIntegration{ID: "bad", Name: "bad-acp", Transport: "stdio", Command: "'"})); err == nil {
 		t.Fatal("NewService(invalid command) error = nil")
 	}
@@ -313,18 +317,16 @@ func TestACPConfigurationReusesInertRootAndPreservesCatalogAfterRejection(t *tes
 	channels := 0
 	locator := &inertExecutableLocator{}
 	root, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{},
-		func(name string, args ...string) *exec.Cmd {
+		platformclock.Real{}, logging.NoopLogger{}, func(name string, args ...string) *exec.Cmd {
 			commands++
 			return exec.Command(name, args...)
-		},
-		locator,
-		func() (platformprocess.StdioChannel, error) {
+		}, locator, func() (platformprocess.StdioChannel, error) {
 			channels++
 			return nil, errors.New("unexpected ACP channel creation")
-		})
+		},
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,15 +388,13 @@ func TestACPExecutionUsesTheInjectedStdioPipeFactory(t *testing.T) {
 	sentinel := errors.New("injected stdio channel unavailable")
 	calls := 0
 	root, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{},
-		exec.Command,
-		fakeExecutableLocator{"acp-channel-agent": "/injected/acp-channel-agent"},
-		func() (platformprocess.StdioChannel, error) {
+		platformclock.Real{}, logging.NoopLogger{}, exec.Command, fakeExecutableLocator{"acp-channel-agent": "/injected/acp-channel-agent"}, func() (platformprocess.StdioChannel, error) {
 			calls++
 			return nil, sentinel
 		},
+		nil,
+		nil,
+		nil,
 		WithACPIntegrations(providers.ACPIntegration{ID: string(id), Name: id, Transport: "stdio", Command: "acp-channel-agent acp"}))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -427,14 +427,12 @@ func TestACPExecutionWithoutStdioPipeFactoryFailsClosed(t *testing.T) {
 	const id = providers.ID("acp-missing-channel")
 	commands := 0
 	root, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{},
-		func(name string, arguments ...string) *exec.Cmd {
+		platformclock.Real{}, logging.NoopLogger{}, func(name string, arguments ...string) *exec.Cmd {
 			commands++
 			return exec.Command(name, arguments...)
-		},
-		fakeExecutableLocator{"acp-missing-channel-agent": "/injected/acp-missing-channel-agent"},
+		}, fakeExecutableLocator{"acp-missing-channel-agent": "/injected/acp-missing-channel-agent"}, nil,
+		nil,
+		nil,
 		nil,
 		WithACPIntegrations(providers.ACPIntegration{ID: string(id), Name: id, Transport: "stdio", Command: "acp-missing-channel-agent acp"}))
 	if err != nil {
@@ -462,7 +460,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 
 	probeCalls := 0
-	platformRunner := &inertPlatformCommandRunner{}
 	workersRunner := &inertWorkersCommandRunner{}
 	agyAllocator := &inertPTYAllocator{}
 	agyLocator := &inertExecutableLocator{}
@@ -482,12 +479,10 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 			Prerequisites: descriptor.Prerequisites,
 		}, nil
 	}),
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil,
-		WithCommandRunner(platformRunner),
-		WithCommandEffectRunner(workersRunner),
-		WithAgyPTYEffect(NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, platformclock.Real{}, AgyPTYPolicy{})))
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, platformclock.Real{}, AgyPTYPolicy{}),
+		NewCodexEffect(workersRunner, platformclock.Real{}),
+		NewClaudeEffect(workersRunner, platformclock.Real{}))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -501,9 +496,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 
 	if probeCalls != 0 {
 		t.Fatalf("construction probe calls = %d, want 0", probeCalls)
-	}
-	if platformRunner.calls != 0 {
-		t.Fatalf("platform command runner calls = %d, want inert construction", platformRunner.calls)
 	}
 	if workersRunner.calls != 0 {
 		t.Fatalf("workers command runner calls = %d, want inert construction", workersRunner.calls)
@@ -541,9 +533,10 @@ func TestNewServiceAgyExecuteFailsClosedWithoutInjectedPTY(t *testing.T) {
 	t.Parallel()
 
 	root, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil)
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -566,7 +559,7 @@ func TestNewServiceAgyExecuteFailsClosedWithoutInjectedPTY(t *testing.T) {
 	}
 }
 
-func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
+func TestNewServiceUsesCompletedNativeEffects(t *testing.T) {
 	t.Parallel()
 
 	workersRunner := &recordingWorkersCommandRunner{}
@@ -582,11 +575,10 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 	agyInspector := fakeExecutableInspector{agyPath: fakeExecutableInfo{directory: false}}
 
 	root, err := NewService(IdentityCatalogProbe,
-		platformclock.NewDeterministic(time.Unix(0, 0), time.Second),
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil,
-		WithCommandEffectRunner(workersRunner),
-		WithAgyPTYEffect(NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, clock, AgyPTYPolicy{SessionConfig: policy})))
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, clock, AgyPTYPolicy{SessionConfig: policy}),
+		NewCodexEffect(workersRunner, platformclock.NewDeterministic(time.Unix(0, 0), time.Second)),
+		NewClaudeEffect(workersRunner, platformclock.NewDeterministic(time.Unix(0, 0), time.Second)))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -639,9 +631,10 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 			Prerequisites: descriptor.Prerequisites,
 		}, nil
 	}),
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil)
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -735,9 +728,10 @@ func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 			Prerequisites: descriptor.Prerequisites,
 		}, nil
 	}),
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil)
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		t.Fatalf("NewService() = %v", err)
 	}
@@ -783,7 +777,7 @@ func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
 		{
 			name: "catalog",
 			call: func() (providers.Service, error) {
-				return newRootWithOptions(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+				return newRootWithOptions(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 			},
 			want: "construct Providers: catalog is required",
 		},
@@ -806,9 +800,10 @@ func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
 	}
 
 	service, err := NewService(IdentityCatalogProbe,
-		platformclock.Real{},
-		platformclock.Real{},
-		logging.NoopLogger{}, nil, nil, nil)
+		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
+		nil,
+		nil,
+		nil)
 	if err != nil {
 		t.Fatalf("NewService() error = %v, want successful construction with required ports", err)
 	}

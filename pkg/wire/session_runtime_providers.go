@@ -161,12 +161,7 @@ func provideConfiguredProvidersService(
 	integrations []operatorsettings.ACPIntegration,
 	workersRunner platformprocess.CommandRunner,
 ) (providers.Service, error) {
-	agyPTYEffect, err := provideProvidersAgyPTYEffect(edges)
-	if err != nil {
-		return nil, err
-	}
 	options := []providerswire.Option{
-		providerswire.WithAgyPTYEffect(agyPTYEffect),
 		providerswire.WithACPIntegrations(projectACPIntegrations(integrations)...),
 		providerswire.WithCatalogCapabilityOverrides(edges.ProviderCatalogCapabilityOverrides...),
 		providerswire.WithRegistrations(edges.ProviderRegistrations...),
@@ -177,9 +172,6 @@ func provideConfiguredProvidersService(
 			provideWorkersAgentToolFileSystem(edges),
 		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		options = append(options, providerswire.WithCommandEffectRunner(
-			workerswire.NewProviderCommandRunner(loggedRunner),
-		))
 		return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
 			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 	}
@@ -189,10 +181,6 @@ func provideConfiguredProvidersService(
 			provideWorkersAgentToolFileSystem(edges),
 		)
 		loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-		options = append(options, providerswire.WithCommandRunner(edges.ProviderCommandRunner))
-		options = append(options, providerswire.WithCommandEffectRunner(
-			workerswire.NewProviderCommandRunner(loggedRunner),
-		))
 		return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
 			providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 	}
@@ -205,10 +193,6 @@ func provideConfiguredProvidersService(
 		provideWorkersAgentToolFileSystem(edges),
 	)
 	loggedRunner := providerCommandRunnerWithLogging(edges, contextualRunner)
-	options = append(options, providerswire.WithCommandRunner(commandRunner))
-	options = append(options, providerswire.WithCommandEffectRunner(
-		workerswire.NewProviderCommandRunner(loggedRunner),
-	))
 	return newConfiguredProvidersService(options, loggedRunner, effectiveProviderCommandClock(edges), effectiveProviderScheduler(edges), logging.NoopLogger{},
 		providePlatformProcessCommandFactory(edges), provideProvidersExecutableLocator(edges), provideProvidersStdioPipeFactory(edges))
 }
@@ -1029,26 +1013,6 @@ func provideWorkersProviderTemporaryFileSystem(edges serviceedges.Edges) platfor
 		return edges.WorkersProviderTemporaryFileSystem
 	}
 	return platformfilesystem.Local{}
-}
-
-// provideProvidersAgyPTYEffect completes the native adapter before root assembly.
-func provideProvidersAgyPTYEffect(edges serviceedges.Edges) (providerswire.AgyEffect, error) {
-	allocator, err := provideProvidersAgyPTYAllocator(edges)
-	if err != nil {
-		return nil, err
-	}
-	executableLocator := edges.WorkersExecutableLocator
-	if executableLocator == nil {
-		executableLocator = platformprocess.HostExecutableLocator{}
-	}
-	executableInspector := edges.WorkersExecutablePathInspector
-	if executableInspector == nil {
-		executableInspector = platformfilesystem.Local{}
-	}
-	return providerswire.NewAgyPTYEffect(
-		allocator, executableLocator, executableInspector,
-		effectiveProviderCommandClock(edges), providerswire.AgyPTYPolicy{},
-	), nil
 }
 
 func provideWorkersFactoryDocsFileSystem(edges serviceedges.Edges) platformfilesystem.ReadFileTree {
