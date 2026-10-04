@@ -94,10 +94,14 @@ a valid decision.
   Actual behavior regressions caused by the diff remain blocking.
 - Commit frequently
 - Push early and keep pushing. Once a story's commits pass narrow checks (the
-  changed packages' tests plus lint), rebase on origin/main, push, and open the
-  PR (as a draft if stories remain); keep pushing as each further story lands.
-  Required CI is the arbiter: do not run `make verify-pr`, `make test-functional`
-  or `make test-full` locally as a push gate on the shared host. Never run
+  targeted `go test -run` on the touched packages plus the changed lint target),
+  push, and open the PR (as a draft if stories remain); keep pushing as each
+  further story lands. Keep local verification under about 10 minutes per
+  visit; hosted CI is the arbiter and covers the rest. Do not run
+  `make verify-pr`, `make test-functional`, `make test-full`, `make lint`,
+  `make test`, or any `-race` run locally (native `-race` does not work on this
+  Windows host; hosted CI's race jobs are the evidence). A race in code the PR
+  does not change becomes a separate fix and never blocks the PR. Never run
   baselines or `go list ./...` in the repository ROOT checkout (untracked files
   there break package discovery); run them in your worktree. A lane that must
   stop on a contract conflict still pushes its verified commits and opens a
@@ -121,8 +125,8 @@ a valid decision.
   loop. One rerun of failed jobs per unchanged head, maximum. Never wait for
   CI to FINISH before ending `ACCEPTED`: after your final push, the
   `ci-wait` gate between process and review owns waiting for terminal CI.
-- Sync with origin/main ONLY immediately before your final push, when GitHub
-  reports a real conflict, or when the reviewer asks. New commits on main are
+- Sync with origin/main ONLY when GitHub reports a real conflict, or when the
+  reviewer asks for one because of a real conflict. New commits on main are
   not by themselves a reason for another sync pass.
 - prd.json and progress.txt are untracked worktree scaffolding and must NEVER
   appear in your PR diff. Never `git add -f` them. If your branch already
@@ -175,7 +179,11 @@ Only add patterns that are **general and reusable**, not story-specific details.
 
 ## Operator questions (mailbox)
 
-Before asking: if the packet contradicts repository reality and a
+Before asking, check whether the standing rules already answer the question.
+Questions about evidence, authority, or untouched-package CI are answered by
+the rules: merge on green, and failures in untouched packages are
+operator-owned. Decide for yourself; do not ask the mailbox about them. Also:
+if the packet contradicts repository reality and a
 conservative reading exists that weakens no acceptance criterion, raises no
 baseline and widens no scope, take it, record it (in `progress.txt` and the PR body), and
 continue. Ask the mailbox only when no such reading exists. Examples:
@@ -186,8 +194,8 @@ continue. Ask the mailbox only when no such reading exists. Examples:
   file or delete the dead export, and never raise the baseline.
 - A literal criterion contradicts documented current behavior (for example
   "quiet emits no output" when the docs say quiet emits the raw result, or
-  "every event has sessionId" when startup frames have none): characterize
-  what exists and record the gap.
+  "every event has sessionId" when startup frames have none): assert
+  what exists in the product-change PR and record the gap.
 - A criterion assumes an ID is globally unique when the contract makes it
   session-scoped: assert uniqueness within the session.
 

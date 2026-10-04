@@ -143,10 +143,19 @@ according to the actual owner; do not invent a PR defect. `FAILED` is reserved
 for a review that cannot complete or cannot make a valid decision, not a
 successfully diagnosed red CI job.
 
-When the PR conflicts with its base, review requests the exact reconciliation
-needed and returns it to implementation. When all blocking criteria pass,
-required CI is terminal and green, conflicts are resolved, and policy permits,
-review merges the PR. Approval or green CI without merge is not lane-wide
+When the PR has a real conflict with its base, review requests the exact
+reconciliation needed and returns it to implementation. A PR that is merely
+behind its base is not conflicted: when all blocking criteria pass, required CI
+is terminal and green, and GitHub reports mergeable state `MERGEABLE`, review
+merges it with `gh pr merge <n> --squash` without rebasing or re-running checks
+(the same command enqueues it when a merge queue is enabled).
+
+Review judges the diff against the acceptance criteria plus the hosted CI.
+Review does not run `make lint`, `make test`, `make test-functional`, or
+`-race` locally, and never demands characterization PRs, evidence documents,
+per-head checklist files, pre-change witnesses, or "baseline proof" as merge
+conditions. A failure in a package the PR does not touch is operator-owned and
+does not block the PR. Approval or green CI without merge is not lane-wide
 completion.
 
 ## 6. Validation loopback

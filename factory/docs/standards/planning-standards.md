@@ -21,8 +21,9 @@ the agent factory. Authors **MUST** use [plan-template.md](./plan-template.md),
   not automatic task boundaries.
 - Establish a narrow executable spine early and preserve it throughout the
   lane. Build narrowly, but test as deeply as practical.
-- Put characterization coverage before structural change when current behavior
-  is not adequately protected.
+- Ship tests with the product change they cover, in the same PR. Never plan or
+  admit a characterization-only, evidence-only, witness, "correction", or
+  plan-amendment lane or PR.
 - Every task proves its own increment. Final loopback confirms integration and
   usability; it is not the first serious test.
 - Acceptance criteria state observable outcomes and named evidence. Phrases
@@ -123,8 +124,9 @@ Tasks within the lane **SHOULD** either:
 Backend-only, frontend-only, contract-only, test-only, or documentation-only
 tasks **MUST NOT** be the default split for behavior spanning those surfaces.
 A horizontal enabling task is allowed only when it is independently safe and
-useful—for example characterization coverage, an additive compatibility seam,
-a reusable migration primitive, or test-harness infrastructure. Its task packet
+useful—for example an additive compatibility seam, a reusable migration
+primitive, or test-harness infrastructure. Tests that protect current behavior
+ship in the PR that changes it, never as their own task. Its task packet
 **MUST** explain why it cannot be part of a behavior slice.
 
 Task size is governed by cognitive load, independently verifiable outcome, and
@@ -134,9 +136,11 @@ on later work to become correct.
 
 ## 5. Sequencing structural and replacement work
 
-When existing behavioral coverage is insufficient, characterization tests
-**MUST** land before restructuring and preserve current behavior even when the
-current behavior appears wrong. Behavior correction is a separate task.
+When existing behavioral coverage is insufficient, the tests that protect
+current behavior **MUST** ship in the same PR as the restructuring and
+preserve current behavior even when the current behavior appears wrong. Do not
+split them into a characterization-only PR. Behavior correction is a separate
+task.
 
 Replacement work **SHOULD** use this sequence:
 
@@ -221,9 +225,9 @@ fidelity.
   inventory baselines) always win over a named artifact: place tests in
   existing files, delete dead exports rather than baselining them, and never
   raise a baseline.
-- Characterization criteria assert the CURRENT documented behavior. When the
-  literal text contradicts the docs, tests or contracts, characterize what
-  exists and record the gap for the lead without blocking.
+- Criteria assert the CURRENT documented behavior. When the literal text
+  contradicts the docs, tests or contracts, assert what exists in the
+  product-change PR and record the gap for the lead without blocking.
 
 ## 7. Acceptance criteria
 
@@ -338,7 +342,7 @@ skipped.
 - Tasks are behavior slices or justified bounded enablers.
 - The executable spine appears early and every task preserves it.
 - Acceptance criteria are observable, measurable, and evidence-backed.
-- Current coverage is measured and characterization precedes structural change.
+- Current coverage is measured and its protecting tests ship in the same PR as the structural change.
 - Contracts, state, ownership, compatibility, rollout, and removal are explicit.
 - Failure, security, privacy, accessibility, localization, performance, cost,
   and observability concerns are handled when applicable.

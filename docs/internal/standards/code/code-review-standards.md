@@ -17,6 +17,9 @@ Every contributor **MUST** review this standard before conducting or requesting 
 - Review correctness before style or preference.
 - Check design fit, readability, and test coverage on every non-trivial change.
 - Make review comments specific, actionable, and classified as blocking or non-blocking.
+- Judge the diff against the acceptance criteria plus hosted CI. Tests ship in the same PR as the product change they cover; do not demand characterization PRs, evidence documents, per-head checklist files, pre-change witnesses, or "baseline proof" as merge conditions.
+- Hosted CI is the evidence for lint, test, and race results. Reviewers do not run full local suites or a local `-race` run (native `-race` does not work on the Windows factory host). A race in code the PR does not change is a separate fix and does not block the PR.
+- A PR with passing required checks, no content blocker, and GitHub mergeable state `MERGEABLE` is merged even when it is behind main; rebase only on a real conflict.
 - Approve when the change is correct and within standards, even if you would have written it differently.
 - Request changes for correctness bugs, security issues, missing required tests, or standards violations.
 - Review AI-generated code with extra scrutiny.
