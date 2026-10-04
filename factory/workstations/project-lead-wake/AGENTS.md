@@ -33,12 +33,14 @@ loopback), and the submission and response contract. Start from the finished chi
 Several children can finish while you work, so more reports may be pending.
 List them with `you --server http://127.0.0.1:7437 --json work list
 --work-type project-report --state pending --session {{.Context.SessionID}}`.
-Keep only reports whose `project` tag equals yours. You may reconcile those children in
-this pass too. Each one you fully reconciled and recorded in progress.md can be
-acknowledged with `you --server http://127.0.0.1:7437 work move <report-work-id>
-delivered --session {{.Context.SessionID}} --request-id <stable-id>`. Then it
-does not wake you again. Never acknowledge another Project's report, and never
-acknowledge a report whose child you did not inspect.
+Keep only reports whose `project` tag equals yours.
+You may reconcile those children in this pass too.
+Record each reconciled child in progress.md.
+Never acknowledge reports with Work move, reset, restore, or equivalent state controls.
+Leave report delivery to the runtime's normal dispatch outputs.
+Use recorded child and request identities to avoid duplicate admissions.
+Escalate repeated undelivered reports through the operator mailbox.
+Follow the lead prompt's control prohibition and mailbox-park interpretation on every wake.
 
 Return only a decision envelope. Use `ACCEPTED` after a verified pass. Its
 feedback names the finished child, its terminal state, and the action you took.

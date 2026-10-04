@@ -1,12 +1,17 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"reflect"
 	"runtime"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
@@ -764,5 +769,231 @@ func workerOutputAppend(topic events.Topic, sessionID string, sequence events.So
 		SourceEventID:  events.SourceEventID(eventID),
 		SchemaID:       "workers.draft.v1",
 		Payload:        draft,
+	}
+}
+
+// journalProbe observes persistence at the filesystem effect; one recording
+// may be held without delaying an unrelated recording's durable acceptance.
+type journalProbe struct {
+	platformreplay.Local
+	mu                  sync.Mutex
+	reads, replacements int
+	suffixes            [][]byte
+	gatePath            string
+	entered             chan struct{}
+	release             chan struct{}
+	failAfterSync       bool
+}
+
+func (probe *journalProbe) ReadFile(path string) ([]byte, error) {
+	probe.mu.Lock()
+	probe.reads++
+	probe.mu.Unlock()
+	return probe.Local.ReadFile(path)
+}
+func (probe *journalProbe) WriteFile(path string, data []byte) error {
+	probe.mu.Lock()
+	probe.replacements++
+	probe.mu.Unlock()
+	return probe.Local.WriteFile(path, data)
+}
+func (probe *journalProbe) AppendFile(path string, data []byte) error {
+	if path == probe.gatePath {
+		close(probe.entered)
+		<-probe.release
+	}
+	probe.mu.Lock()
+	probe.suffixes = append(probe.suffixes, bytes.Clone(data))
+	uncertain := probe.failAfterSync
+	probe.failAfterSync = false
+	probe.mu.Unlock()
+	if err := probe.Local.AppendFile(path, data); err != nil {
+		return err
+	}
+	if uncertain {
+		return errors.New("sentinel private fault after sync")
+	}
+	return nil
+}
+func journalWriter(t *testing.T, storage platformreplay.Storage) *FileWriter {
+	t.Helper()
+	writer, err := NewFileWriter(storage, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return writer.(*FileWriter)
+}
+func journalRecord(t *testing.T, id, session string) recordings.WorkerRecordingRecord {
+	t.Helper()
+	topic := events.Topic("worker-session/" + session + "/events")
+	return recordings.WorkerRecordingRecord{RecordingID: id, WorkerSessionID: session, Record: mustRecord(t, openingAppend(topic, session), 1)}
+}
+func TestFileWriterAppendsBoundedSuffixAndRehydratesUncertainCommit(t *testing.T) {
+	t.Parallel()
+	probe := &journalProbe{Local: platformreplay.NewLocal(runtime.GOOS)}
+	writer := journalWriter(t, probe)
+	record := journalRecord(t, "bounded", "session")
+	if err := writer.PersistWorkerRecord(context.Background(), record); err != nil {
+		t.Fatal(err)
+	}
+	probe.mu.Lock()
+	reads := probe.reads
+	probe.mu.Unlock()
+	assertJournalRedelivery(t, writer, record)
+	if probe.reads != reads || probe.replacements != 0 || len(probe.suffixes) != 1 || bytes.Count(probe.suffixes[0], []byte("\n")) != 1 {
+		t.Fatalf("reads=%d replacements=%d suffixes=%d", probe.reads, probe.replacements, len(probe.suffixes))
+	}
+	assertJournalUncertainCommit(t, writer, probe, record)
+}
+func assertJournalRedelivery(t *testing.T, writer *FileWriter, record recordings.WorkerRecordingRecord) {
+	t.Helper()
+	if err := writer.PersistWorkerRecord(context.Background(), record); err != nil {
+		t.Fatal(err)
+	}
+	changed := record
+	changed.Record = record.Record.Detached()
+	changed.Record.SourceEventID = "changed"
+	if err := writer.PersistWorkerRecord(context.Background(), changed); !errors.Is(err, recordings.ErrWorkerRecordingOrder) {
+		t.Fatalf("invalid opening: %v", err)
+	}
+	changed = record
+	changed.Record = record.Record.Detached()
+	changed.Record.ID.Position = 2
+	if err := writer.PersistWorkerRecord(context.Background(), changed); !errors.Is(err, recordings.ErrWorkerRecordingDuplicate) {
+		t.Fatalf("changed duplicate: %v", err)
+	}
+}
+
+func assertJournalUncertainCommit(t *testing.T, writer *FileWriter, probe *journalProbe, record recordings.WorkerRecordingRecord) {
+	t.Helper()
+	output := record
+	output.Record = mustRecord(t, workerOutputAppend(record.Record.ID.Topic, "session", 1, "output"), 2)
+	probe.failAfterSync = true
+	if err := writer.PersistWorkerRecord(context.Background(), output); err == nil {
+		t.Fatal("uncertain append succeeded")
+	}
+	if err := writer.PersistWorkerRecord(context.Background(), output); err != nil {
+		t.Fatal(err)
+	}
+	if len(probe.suffixes) != 2 {
+		t.Fatal("uncertain commit duplicated on retry")
+	}
+	snapshot, err := writer.LoadWorkerRecording(context.Background(), "bounded")
+	if err != nil || len(snapshot.Sessions[0].Records) != 2 {
+		t.Fatalf("snapshot=%#v err=%v", snapshot, err)
+	}
+	snapshot.Sessions[0].Records[0].Payload[0] = 'x'
+	snapshot, err = writer.LoadWorkerRecording(context.Background(), "bounded")
+	if err != nil || !json.Valid(snapshot.Sessions[0].Records[0].Payload) {
+		t.Fatal("reader leaked mutable payload")
+	}
+}
+func TestFileWriterDifferentRecordingsCommitIndependently(t *testing.T) {
+	t.Parallel()
+	probe := &journalProbe{Local: platformreplay.NewLocal(runtime.GOOS), entered: make(chan struct{}), release: make(chan struct{})}
+	writer := journalWriter(t, probe)
+	a := journalRecord(t, "a", "a-session")
+	b := journalRecord(t, "b", "b-session")
+	probe.gatePath = writer.path("a") + "l"
+	aResult := make(chan error, 1)
+	bResult := make(chan error, 1)
+	go func() { aResult <- writer.PersistWorkerRecord(context.Background(), a) }()
+	select {
+	case <-probe.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("append did not reach gate")
+	}
+	go func() { bResult <- writer.PersistWorkerRecord(context.Background(), b) }()
+	defer close(probe.release)
+	select {
+	case err := <-bResult:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("unrelated recording serialized behind blocked append")
+	}
+	// a is released by cleanup after b's committed history has been observed.
+	snapshot, err := writer.LoadWorkerRecording(context.Background(), "b")
+	if err != nil || len(snapshot.Sessions) != 1 {
+		t.Fatalf("B did not commit: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := <-aResult; err != nil {
+			t.Error(err)
+		}
+	})
+}
+func TestFileWriterLegacyBaselineAndDamagedJournal(t *testing.T) {
+	t.Parallel()
+	local := platformreplay.NewLocal(runtime.GOOS)
+	writer := journalWriter(t, local)
+	record := journalRecord(t, "legacy", "legacy-session")
+	// Fixed legacy bytes keep this compatibility witness independent of the
+	// current snapshot encoder.
+	data := []byte(legacyWorkerOpeningFixture)
+	if err := local.WriteFile(writer.path("legacy"), data); err != nil {
+		t.Fatal(err)
+	}
+	baseline, err := writer.LoadWorkerRecording(context.Background(), "legacy")
+	if err != nil || len(baseline.Sessions) != 1 || len(baseline.Sessions[0].Records) != 1 || baseline.Sessions[0].LastPosition != 1 {
+		t.Fatalf("legacy baseline=%#v err=%v", baseline, err)
+	}
+	output := record
+	output.Record = mustRecord(t, workerOutputAppend(record.Record.ID.Topic, record.WorkerSessionID, 1, "later"), 2)
+	if err := writer.PersistWorkerRecord(context.Background(), output); err != nil {
+		t.Fatal(err)
+	}
+	unchanged, err := local.ReadFile(writer.path("legacy"))
+	if err != nil || !bytes.Equal(data, unchanged) {
+		t.Fatal("legacy baseline rewritten")
+	}
+	if err := local.AppendFile(writer.path("legacy")+"l", []byte(`{"version":`)); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewFileWriter(local, writer.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := reopened.(recordings.WorkerRecordingReader).LoadWorkerRecording(context.Background(), "legacy")
+	if err != nil || len(snapshot.Sessions[0].Records) != 2 || snapshot.Sessions[0].Failure != "PERSISTENCE_FAILED" {
+		t.Fatalf("damaged prefix=%#v err=%v", snapshot, err)
+	}
+	if err := reopened.PersistWorkerRecord(context.Background(), output); !errors.Is(err, recordings.ErrWorkerRecordingReplay) {
+		t.Fatalf("damaged journal allowed writes: %v", err)
+	}
+}
+func TestFileWriterRejectsMalformedCompleteJournal(t *testing.T) {
+	t.Parallel()
+	for _, line := range []string{`{}`, `{"version":2}`, `{"version":1,"kind":"unknown","recordingId":"bad","workerSessionId":"s"}`, `{"version":1,"kind":"record","recordingId":"other","workerSessionId":"s"}`, `not json`} {
+		t.Run(strings.ReplaceAll(line, "/", "_"), func(t *testing.T) {
+			t.Parallel()
+			local := platformreplay.NewLocal(runtime.GOOS)
+			writer := journalWriter(t, local)
+			if err := local.AppendFile(writer.path("bad")+"l", []byte(line+"\n")); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := writer.LoadWorkerRecording(context.Background(), "bad"); err == nil {
+				t.Fatal("invalid complete journal accepted")
+			}
+		})
+	}
+}
+func TestFileWriterSameRecordingDuplicateIsExactlyOnce(t *testing.T) {
+	t.Parallel()
+	writer := journalWriter(t, platformreplay.NewLocal(runtime.GOOS))
+	record := journalRecord(t, "same", "same-session")
+	results := make(chan error, 2)
+	for range 2 {
+		go func() { results <- writer.PersistWorkerRecord(context.Background(), record) }()
+	}
+	for range 2 {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := os.ReadFile(writer.path("same") + "l")
+	if err != nil || bytes.Count(data, []byte("\n")) != 1 {
+		t.Fatalf("duplicate durable records: %v", err)
 	}
 }

@@ -36,6 +36,7 @@ type Config struct {
 // constructed from the injected operator-config service ports.
 func NewConfigurer(
 	service operatorsettings.Service,
+	adapter operatorsettingscli.Service,
 	newLineReader ContextLineReaderFactory,
 	packagedACPDefaults ...[]operatorsettings.ACPIntegration,
 ) func(Config) error {
@@ -53,7 +54,7 @@ func NewConfigurer(
 		if err := operatorsettingscli.ValidateConfigureBoundary(adapterCfg); err != nil {
 			return err
 		}
-		if service == nil {
+		if service == nil || adapter == nil {
 			return fmt.Errorf("operator settings service is required")
 		}
 		if len(packagedACPDefaults) > 0 {
@@ -62,7 +63,7 @@ func NewConfigurer(
 				return fmt.Errorf("materialize packaged ACP integrations: %w", err)
 			}
 		}
-		return operatorsettingscli.Configure(adapterCfg, service)
+		return adapter.Configure(adapterCfg)
 	}
 }
 

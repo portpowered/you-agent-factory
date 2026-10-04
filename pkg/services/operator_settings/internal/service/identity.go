@@ -23,9 +23,6 @@ func (s *Service) ensureLocalBackendScope(configPath string) (operatorsettings.R
 	if configPath == "" {
 		return operatorsettings.ResolvedBackendScope{}, fmt.Errorf("system config path is required to resolve backend scope")
 	}
-	if s.files == nil {
-		return operatorsettings.ResolvedBackendScope{}, fmt.Errorf("operator settings filesystem is required")
-	}
 	config, err := s.LoadFileConfig(configPath)
 	if err != nil {
 		return operatorsettings.ResolvedBackendScope{}, err
@@ -72,6 +69,12 @@ func (s *Service) persistBackendScopeID(configPath string, config operatorsettin
 	if err != nil {
 		return err
 	}
+	return s.publishBackendScopeConfig(configPath, data)
+}
+
+// publishBackendScopeConfig uses the effects validated by the identity
+// operation, without selecting defaults or repeating requiredness checks.
+func (s *Service) publishBackendScopeConfig(configPath string, data []byte) error {
 	dir := filepath.Dir(configPath)
 	if err := s.files.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create system config directory %q: %w", dir, err)

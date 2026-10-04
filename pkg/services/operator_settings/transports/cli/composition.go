@@ -18,9 +18,7 @@ func BindConfigure(root operatorsettings.Service) ConfigureOperation {
 	if root == nil {
 		return nil
 	}
-	return func(cfg ConfigureConfig) error {
-		return Configure(cfg, root)
-	}
+	return New(root).Configure
 }
 
 // BindResolveOperatorDefaults returns the composition-facing operation closure
@@ -29,15 +27,16 @@ func BindResolveOperatorDefaults(root operatorsettings.Service) ResolveOperatorD
 	if root == nil {
 		return nil
 	}
+	adapter := New(root)
 	return func(
 		homeDir string,
 		environment operatorsettings.Defaults,
 		flags operatorsettings.FlagOverrides,
 	) (operatorsettings.ResolvedDefaults, error) {
-		return ResolveOperatorDefaults(ResolveOperatorDefaultsConfig{
+		return adapter.ResolveOperatorDefaults(ResolveOperatorDefaultsConfig{
 			HomeDir:     homeDir,
 			Environment: environment,
 			Flags:       flags,
-		}, root)
+		})
 	}
 }

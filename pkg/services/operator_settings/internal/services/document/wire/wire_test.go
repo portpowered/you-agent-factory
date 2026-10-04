@@ -9,7 +9,7 @@ import (
 	settingsdocumentwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire"
 )
 
-func TestNewServiceConstructsInertDocumentOwner(t *testing.T) {
+func TestNewServiceWithPreserverConstructsInertDocumentOwner(t *testing.T) {
 	t.Parallel()
 
 	files := &recordingFileSystem{}
@@ -18,15 +18,17 @@ func TestNewServiceConstructsInertDocumentOwner(t *testing.T) {
 	encoder := newRecordingConfigEncoder()
 	providers := newRecordingProviderCatalog()
 
-	service := settingsdocumentwire.NewService(
+	service := settingsdocumentwire.NewServiceWithPreserver(
 		files,
 		createTemp.fn,
 		decoder.fn,
 		encoder.fn,
 		providers.fn,
+		nil,
+		nil,
 	)
 	if service == nil {
-		t.Fatal("NewService() = nil")
+		t.Fatal("NewServiceWithPreserver() = nil")
 	}
 	if files.readCalls != 0 {
 		t.Fatalf("construction invoked ReadFile %d times, want inert construction", files.readCalls)
@@ -54,15 +56,17 @@ func TestNewServiceConstructsInertDocumentOwner(t *testing.T) {
 	}
 }
 
-func TestNewServiceRejectsMalformedLoadWithoutFilesystemOrCodecEffects(t *testing.T) {
+func TestNewServiceWithPreserverRejectsMalformedLoadWithoutFilesystemOrCodecEffects(t *testing.T) {
 	t.Parallel()
 
-	service := settingsdocumentwire.NewService(
+	service := settingsdocumentwire.NewServiceWithPreserver(
 		&recordingFileSystem{},
 		newRecordingCreateTemporaryFile().fn,
 		newRecordingConfigDecoder().fn,
 		newRecordingConfigEncoder().fn,
 		newRecordingProviderCatalog().fn,
+		nil,
+		nil,
 	)
 	_, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{})
 	if !errors.Is(err, operatorsettings.ErrDocumentMalformed) {

@@ -105,12 +105,15 @@ func (local Local) WriteFile(path string, data []byte) error {
 // AppendFile appends one complete replay-framing suffix and synchronizes it
 // before returning. It never replaces or renames the existing artifact.
 func (local Local) AppendFile(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create replay artifact directory: %w", err)
-	}
-
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o600)
+	// Existing journals need only open, append and sync. Avoid inspecting the
+	// parent directory on every record; create it only for a missing path.
+	if errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return fmt.Errorf("create replay artifact directory: %w", err)
+		}
+		file, err = os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o600)
+	}
 	if err != nil {
 		return fmt.Errorf("open replay artifact for append: %w", err)
 	}

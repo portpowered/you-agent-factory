@@ -967,7 +967,7 @@ func newACPCLIOwnerRoots(t *testing.T) (operatorsettings.Service, providers.Serv
 	if err != nil {
 		t.Fatalf("logging.NewDefaultLogger() error = %v", err)
 	}
-	settings, err := provideOperatorSettingsService(
+	settings, err := newOperatorSettingsTestService(
 		provideOperatorSettingsFileSystem(edges),
 		provideOperatorSettingsCreateTemporaryFile(edges),
 		provideOperatorSettingsProviderCatalog(providersRoot),
@@ -979,7 +979,7 @@ func newACPCLIOwnerRoots(t *testing.T) (operatorsettings.Service, providers.Serv
 		logging.NewZapLogger(zapLogger, false),
 	)
 	if err != nil {
-		t.Fatalf("provideOperatorSettingsService() error = %v", err)
+		t.Fatalf("newOperatorSettingsTestService() error = %v", err)
 	}
 	return settings, providersRoot
 }

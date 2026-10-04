@@ -31,6 +31,7 @@ import (
 	modelservice "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	operatorsettingscli "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli/initsetup"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/globalconfig"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -609,7 +610,7 @@ func provideExpandFactoryConfigOperation(
 
 func provideConfigureInitOperation(
 	service operatorsettings.Service,
-
+	adapter operatorsettingscli.Service,
 ) (cli.ConfigureInitOperation, error) {
 	packaged, err := providerswire.PackagedACPIntegrations()
 	if err != nil {
@@ -624,6 +625,7 @@ func provideConfigureInitOperation(
 	}
 	return initsetup.NewConfigurer(
 		service,
+		adapter,
 		func(input io.Reader, maxLines int) (initsetup.ContextLineReader, error) {
 			return platformstdio.NewContextLineReader(input, maxLines)
 		},
