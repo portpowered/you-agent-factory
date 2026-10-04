@@ -1,11 +1,13 @@
 package acp_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -79,6 +81,101 @@ func TestPrebuiltACPDeliveredResultsSurvivePeerExit(t *testing.T) {
 	// same-daemon witness in that selection, sharing the upstream artifact.
 	t.Run("daemon-recovery", testDeliveredACPDaemonRecoversAfterDisconnect)
 	t.Run("daemon-worker-disconnect-recovery", testDeliveredACPWorkerDisconnectRecovery)
+	t.Run("daemon-worker-cancel-peer", testDeliveredACPWorkerCancelPeer)
+}
+
+// The control socket belongs to the external peer fixture. Its signals prove
+// both actual prompts are in flight before the public selected cancel action.
+func testDeliveredACPWorkerCancelPeer(t *testing.T) {
+	binary := prebuiltCLI(t)
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer, err := filepath.Abs(filepath.Join("testdata", "delivered-peer.cjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	directory := t.TempDir()
+	env := builtcliacceptance.ProcessEnvForIsolatedHome(directory)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	deadline, _ := ctx.Deadline()
+	if err := listener.(*net.TCPListener).SetDeadline(deadline); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"cancelled", "survivor"} {
+		launch := fmt.Sprintf("%q %q controlled %s %s", node, peer, listener.Addr(), id)
+		_, stderr, err := invokeCLI(ctx, binary, directory, env,
+			"workers", "acp", "add", "--name", id, "--transport", "stdio", "--argument", launch)
+		if err != nil {
+			t.Fatalf("register %s: %v %s", id, err, stderr)
+		}
+	}
+	baseURL := startDeliveredACPDaemon(t, ctx, binary, directory, env)
+	client := &http.Client{Timeout: 20 * time.Second}
+	defer client.CloseIdleConnections()
+	connections := make(map[string]net.Conn)
+	for _, id := range []string{"cancelled", "survivor"} {
+		request := map[string]any{
+			"requestId": id, "workerSessionId": id,
+			"execution": map[string]any{
+				"factorySessionId": "~default", "workstationName": "__provider_invocation__", "workerType": "direct-worker",
+				"workingDirectory": directory, "workstationType": "MODEL_WORKSTATION", "runnerId": id,
+				"executorProvider": "ACP", "modelProvider": id, "model": "fixture", "userMessage": "complete one turn",
+				"dispatch": map[string]any{"dispatchId": id, "workstationName": "__provider_invocation__", "workerType": "direct-worker"},
+			},
+		}
+		payload, err := json.Marshal(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stdout, stderr, runErr := invokeCLI(ctx, binary, directory, env,
+			"--remote", "--server", baseURL, "--json", "worker-sessions", "invoke", "--async", "--execution", string(payload), "--retry-max-attempts", "1")
+		var admission factoryapi.WorkerSessionStartResponse
+		if err := json.Unmarshal([]byte(stdout), &admission); err != nil || runErr != nil || !admission.Accepted || admission.WorkerSessionId != id || admission.RequestId != id {
+			t.Fatalf("async admission: result=%#v error=%v stdout=%q stderr=%q", admission, runErr, stdout, stderr)
+		}
+		connection, err := listener.Accept()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer connection.Close()
+		if err := connection.SetDeadline(deadline); err != nil {
+			t.Fatal(err)
+		}
+		reader := bufio.NewReader(connection)
+		line, err := reader.ReadString('\n')
+		if err != nil || line != id+" started\n" {
+			t.Fatalf("real prompt readiness = %q, error=%v", line, err)
+		}
+		connections[id] = connection
+	}
+	stdout, stderr, err := invokeCLI(ctx, binary, directory, env,
+		"--remote", "--server", baseURL, "--json", "worker-sessions", "cancel", "cancelled")
+	var control factoryapi.WorkerSessionControlResponse
+	if decodeErr := json.Unmarshal([]byte(stdout), &control); err != nil || decodeErr != nil || control.WorkerSessionId != "cancelled" || string(control.Outcome) != "APPLIED" || string(control.State) != "CANCELED" {
+		t.Fatalf("selected cancel: result=%#v error=%v stdout=%q stderr=%q", control, err, stdout, stderr)
+	}
+	var survivor factoryapi.WorkerSessionObservation
+	if err := json.Unmarshal(deliveredACPRead(t, ctx, client, baseURL+"/worker-sessions/survivor"), &survivor); err != nil || survivor.EndedAt != nil || string(survivor.State) != "RUNNING" {
+		t.Fatalf("peer after selected cancel = %#v error=%v", survivor, err)
+	}
+	if _, err := io.WriteString(connections["survivor"], "release\n"); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, err = invokeCLI(ctx, binary, directory, env,
+		"--remote", "--server", baseURL, "--json", "worker-sessions", "stream", "--worker-session-id", "survivor", "--follow")
+	if err != nil || !strings.Contains(stdout, "delivered EOF primary result") {
+		t.Fatalf("surviving stream: error=%v stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	assertDeliveredWorkerTerminal(t, ctx, client, baseURL, "cancelled", "CANCELED")
+	assertDeliveredWorkerTerminal(t, ctx, client, baseURL, "survivor", "COMPLETED")
 }
 
 const deliveredACPSecret = "delivered-acp-configured-secret-token"
@@ -164,6 +261,10 @@ func assertDeliveredWorkerTerminal(t *testing.T, ctx context.Context, client *ht
 	if state == "FAILED" {
 		if observation.Failure == nil || observation.Failure.Detail != "family=terminal type=permanent_bad_request" {
 			t.Fatalf("direct failure classification = %#v", observation.Failure)
+		}
+	} else if state == "CANCELED" {
+		if observation.Failure == nil || observation.Failure.Kind != "OPERATOR_CANCELED" || observation.Failure.Detail != "an operator cancel control ended the Worker Session" {
+			t.Fatalf("selected cancel classification = %#v", observation.Failure)
 		}
 	} else if observation.Failure != nil {
 		t.Fatalf("recovered direct session retained failure = %#v", observation.Failure)

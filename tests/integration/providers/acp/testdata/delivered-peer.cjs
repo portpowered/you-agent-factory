@@ -12,6 +12,19 @@ if (mode === "disconnect-once") {
 const input = readline.createInterface({ input: process.stdin });
 const result = (id, value) => JSON.stringify({ jsonrpc: "2.0", id, result: value }) + "\n";
 const flushAndExit = (payload) => process.stdout.write(payload, () => process.exit(0));
+let control;
+let promptID;
+const finish = () => {
+  const notification = JSON.stringify({
+    jsonrpc: "2.0", method: "session/update", params: {
+      sessionId: "eof-fixture-session", update: {
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "text", text: "delivered EOF primary result" },
+      },
+    },
+  }) + "\n";
+  flushAndExit(notification + result(promptID, { stopReason: "end_turn" }));
+};
 input.on("line", (line) => {
   const request = JSON.parse(line);
   if (request.method === "initialize") {
@@ -24,6 +37,17 @@ input.on("line", (line) => {
   } else if (request.method === "session/new") {
     process.stdout.write(result(request.id, { sessionId: "eof-fixture-session", configOptions: [{ id: "model", name: "Model", category: "model", type: "select", currentValue: "fixture", options: [{ value: "fixture", name: "Fixture" }] }] }));
   } else if (request.method === "session/prompt") {
+    if (mode === "controlled") {
+      promptID = request.id;
+      const [host, port] = attempts.split(":");
+      control = require("node:net").connect(Number(port), host, () => {
+        control.write(process.argv[4] + " started\n");
+      });
+      control.on("data", (data) => {
+        if (data.toString().trim() === "release") finish();
+      });
+      return;
+    }
     if (disconnect) {
       // A real pipe EOF before any result must remain a failed attempt.
       const secret = process.env.ACP_TEST_API_TOKEN;
@@ -44,6 +68,10 @@ input.on("line", (line) => {
       },
     }) + "\n";
     flushAndExit(notification + result(request.id, { stopReason: "end_turn" }));
+  } else if (request.method === "session/cancel" && mode === "controlled") {
+    control.write(process.argv[4] + " cancelled\n", () => {
+      flushAndExit(result(promptID, { stopReason: "cancelled" }));
+    });
   } else if (request.id !== undefined) {
     process.stdout.write(result(request.id, {}));
   }
