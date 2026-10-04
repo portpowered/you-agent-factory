@@ -124,6 +124,8 @@ func TestFactorySessionsAssemblyRequiresRuntimeClockBinding(t *testing.T) {
 	streams := factorysessionwire.NewStreamManager(state, factorysessionwire.NewStreamObserver(), responseRegistry, responses)
 	assembly, err := provideFactorySessionsAssembly(
 		registry, state, streams,
+		factorysessionwire.NewInvocationAuthority(state, platformclock.Real{}, nil),
+		factorysessionwire.NewScopeControl(state, func(factoryruntime.RuntimeRun, factoryruntime.Clock) error { return nil }),
 		factoryruntime.NewSessionResultProjectionOperation(),
 		nil,
 		nil,

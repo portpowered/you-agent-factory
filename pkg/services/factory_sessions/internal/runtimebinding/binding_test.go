@@ -107,6 +107,15 @@ type lifecycleFake struct{}
 
 type canceledReadinessLifecycle struct{ lifecycleFake }
 
+type startupReadinessLifecycle struct {
+	lifecycleFake
+	readiness func(context.Context, factory.RuntimeRun) error
+}
+
+func (l startupReadinessLifecycle) WaitForStart(ctx context.Context, run factory.RuntimeRun) error {
+	return l.readiness(ctx, run)
+}
+
 func (canceledReadinessLifecycle) WaitForStart(ctx context.Context, _ factory.RuntimeRun) error {
 	return ctx.Err()
 }
@@ -600,6 +609,69 @@ func TestStartInitialPreservesCancellationAfterStartupCleanup(t *testing.T) {
 	}
 	if sessions.Resolve(factorysessions.DefaultSessionID) != nil || runtimeState.ActiveHandle() != nil {
 		t.Fatal("canceled startup retained an active Factory Session")
+	}
+}
+
+func TestStartUnpublishedFailureJoinsRunAndPreservesPeerForRetry(t *testing.T) {
+	t.Parallel()
+	for _, phase := range []string{"readiness", "sidecars"} {
+		t.Run(phase, func(t *testing.T) {
+			t.Parallel()
+			sessions := newRuntimeBindingState()
+			peer := registerTestSession(sessions, "peer")
+			var active runtimebinding.State
+			active.SetActive(t.Context(), peer.ID, runtimebinding.HandleFromSession(peer))
+			startupErr := errors.New("injected " + phase + " failure")
+			failed := true
+			var acquired factory.RuntimeRun
+			lifecycle := startupReadinessLifecycle{readiness: func(_ context.Context, run factory.RuntimeRun) error {
+				acquired = run
+				if failed && phase == "readiness" {
+					return startupErr
+				}
+				return nil
+			}}
+			startSidecars := func(context.Context, factory.RuntimeRun) error {
+				if failed && phase == "sidecars" {
+					return startupErr
+				}
+				return nil
+			}
+			stop := func(run factory.RuntimeRun) error {
+				run.CancelRun()
+				return run.Wait()
+			}
+			bundle := &hostedInstanceFake{dir: "/factory", service: replacementFactory{}}
+			start := func() (factory.RuntimeRun, error) {
+				return runtimebinding.Start(t.Context(), sessions, &active, "/factory", "retry", bundle,
+					factorysessions.Target{Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "retry"}},
+					true, lifecycle, startSidecars, stop)
+			}
+			run, err := start()
+			if run != nil || !errors.Is(err, startupErr) {
+				t.Fatalf("failed start = (%v, %v), want original startup error and no run", run, err)
+			}
+			if acquired == nil || !acquired.Completed() || sessions.Resolve("retry") != nil {
+				t.Fatal("failed unpublished startup must join its acquired run without publishing a ghost")
+			}
+			if runtimebinding.HandleFromSession(sessions.Resolve(peer.ID)).Completed() || active.Active().SessionID != peer.ID {
+				t.Fatal("failed startup canceled or displaced the live peer")
+			}
+			failed = false
+			run, err = start()
+			if err != nil || run == nil || sessions.Resolve("retry") == nil {
+				t.Fatalf("retry = (%v, %v), want published live run", run, err)
+			}
+			if err := runtimebinding.StopSession(sessions, &active, "retry", stop); err != nil {
+				t.Fatalf("close retry: %v", err)
+			}
+			if !run.Completed() || sessions.Resolve("retry") != nil || active.Active().SessionID != peer.ID {
+				t.Fatal("retry close did not join and retire only its own run")
+			}
+			if err := runtimebinding.StopSession(sessions, &active, peer.ID, stop); err != nil {
+				t.Fatalf("close peer: %v", err)
+			}
+		})
 	}
 }
 
