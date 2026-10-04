@@ -746,6 +746,20 @@ func (r *registry) associateProviderSession(
 	return r.associateProviderSessionLocked(req)
 }
 
+func (r *registry) providerBindingOwner(req workersessions.ProviderBindingRequest) (string, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	dispatchID := strings.TrimSpace(req.DispatchID)
+	if req.WorkerSessionID != "" {
+		if attempt := r.runtimeAttemptControls[req.WorkerSessionID]; attempt != nil {
+			return req.WorkerSessionID, attempt.attemptID == dispatchID && r.runtimeAttemptOwners[attempt.key] == req.WorkerSessionID
+		}
+		return req.WorkerSessionID, r.dispatchOwners[dispatchID] == req.WorkerSessionID
+	}
+	ownerID, exists := r.dispatchOwners[dispatchID]
+	return ownerID, exists
+}
+
 func (r *registry) associateProviderSessionLocked(
 	req workersessions.ProviderSessionAssociationRequest,
 ) (workersessions.ProviderSessionAssociationResult, error) {

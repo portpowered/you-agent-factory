@@ -561,13 +561,19 @@ type PublishRecordResult struct {
 // canonical draft or trusted provider metadata; Worker Sessions never derives
 // it from a Provider Session's opaque ID.
 type ProviderBindingRequest struct {
-	DispatchID string
-	Provider   string
+	// WorkerSessionID selects an already-resolved owner. Runtime progress must
+	// not repeat a bare-dispatch lookup after validating its scoped key.
+	WorkerSessionID string
+	DispatchID      string
+	Provider        string
 }
 
 // Validate reports whether the dispatch and provider identities are present.
 // The registry resolves the dispatch to its owning Worker Session.
 func (req ProviderBindingRequest) Validate() error {
+	if req.WorkerSessionID != "" && !validSessionID(req.WorkerSessionID) {
+		return ErrInvalidSessionID
+	}
 	if strings.TrimSpace(req.DispatchID) == "" || strings.TrimSpace(req.Provider) == "" {
 		return ErrInvalidProviderBinding
 	}

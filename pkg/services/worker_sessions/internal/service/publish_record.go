@@ -692,9 +692,7 @@ func (r *registry) EnsureProviderBinding(
 		return workersessions.ProviderBindingResult{}, err
 	}
 
-	r.mu.RLock()
-	ownerID, exists := r.dispatchOwners[strings.TrimSpace(req.DispatchID)]
-	r.mu.RUnlock()
+	ownerID, exists := r.providerBindingOwner(req)
 	if !exists {
 		r.logger.Info("worker session provider binding rejected", "attemptID", req.DispatchID, "outcome", "unknown_dispatch")
 		return workersessions.ProviderBindingResult{}, workersessions.ErrProviderBindingAttemptMismatch

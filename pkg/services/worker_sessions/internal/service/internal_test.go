@@ -1076,6 +1076,38 @@ func TestKeyedRuntime_CompatibilityInvocationRetainsCorrelatedProgress(t *testin
 	}
 }
 
+func TestKeyedRuntime_CanonicalProgressPreservesDraftBeforeForwarding(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []string{"", "codex"} {
+		t.Run(fmt.Sprintf("provenance=%q", provider), func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			first := newPerRuntimeAttemptFixture(t, "a", sink)
+			newPerRuntimeAttemptFixture(t, "b", sink, first)
+			payload, _ := json.Marshal(workers.MessagePayload{
+				Role: "assistant", ContentBlocks: []workers.ContentBlock{{Kind: workers.ContentBlockText, Text: "canonical output"}},
+			})
+			draft := workers.Draft{Kind: workers.KindMessage, Phase: workers.PhaseCompleted,
+				DispatchID: first.request.AttemptID, Payload: payload, Provenance: workers.Provenance{Provider: provider}}
+			fragment := keyedRuntimeProgressFragment(first)
+			fragment.CanonicalDraft = draft
+			forwarded := 0
+			publisher := workersessions.NewProviderSessionObservationPublisher(func(got workers.ProgressFragment) {
+				forwarded++
+				records := sink.requestsFor(workersessions.Topic(first.request.ID))
+				if len(records) != 3 || !reflect.DeepEqual(decodePerRuntimeDraft(t, records[2]), draft) || !reflect.DeepEqual(got, fragment) {
+					t.Fatalf("canonical publication changed draft/fragment or preceded binding: %#v", records)
+				}
+			})
+			publisher.Bind(first.service)
+			publisher.Publish(fragment)
+			if forwarded != 1 {
+				t.Fatalf("canonical output forwarded=%d, want 1", forwarded)
+			}
+		})
+	}
+}
+
 func testKeyedRuntimeCompatibilityProgress(t *testing.T, runtimeID string) {
 	t.Helper()
 	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}

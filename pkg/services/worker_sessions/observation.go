@@ -843,7 +843,7 @@ func (p *ProviderSessionObservationPublisher) PublishWorkerSessionProgress(
 	if canonical && !providerIdentityAgrees(fragment, draft) {
 		return ErrProviderBindingConflict
 	}
-	if canonical && draft.DispatchID != "" && draft.DispatchID != fragment.Correlation.AttemptID && draft.DispatchID != fragment.Correlation.DispatchID {
+	if canonical && draft.DispatchID != fragment.Correlation.AttemptID {
 		return ErrProviderBindingAttemptMismatch
 	}
 	if reference := sessionRefFromContinuation(fragment.Continuation); reference != nil {
@@ -869,9 +869,15 @@ func (p *ProviderSessionObservationPublisher) PublishWorkerSessionProgress(
 	}
 	// The registry supplied the physical attempt, while downstream consumers
 	// retain the original logical dispatch and correlation unchanged.
-	draft.DispatchID = fragment.Correlation.AttemptID
-	if draft.Provenance.Provider == "" {
-		draft.Provenance.Provider = providerIdentityForFragment(fragment, &draft)
+	if !canonical {
+		draft.DispatchID = fragment.Correlation.AttemptID
+	}
+	if provider := providerIdentityForFragment(fragment, &draft); provider != "" {
+		if _, err := observer.EnsureProviderBinding(ctx, ProviderBindingRequest{
+			WorkerSessionID: workerSessionID, DispatchID: fragment.Correlation.AttemptID, Provider: provider,
+		}); err != nil {
+			return err
+		}
 	}
 	return p.publishWorkerDraftContext(ctx, observer, workerSessionID, draft)
 }
