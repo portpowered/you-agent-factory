@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/events"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -402,7 +403,9 @@ func (r *registry) continueReserved(plan continuePlan) (workersessions.ContinueR
 			verifyTopicReady: true,
 			lineage:          plan.lineage,
 		},
+		r.execution,
 		r.clock,
+		r.scheduler,
 	)
 	if err != nil {
 		r.releaseContinuationReservation(plan)
@@ -927,4 +930,57 @@ func (r *registry) CloseRuntimeAttempts(ctx context.Context, runtimeID string) e
 		}
 	}
 	return closeErr
+}
+
+func (r *registry) registerInvocationSupervision(
+	ctx context.Context,
+	req workersessions.InvokeSessionRequest,
+	options invocationPreparationOptions,
+	executor workers.Service,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+) (invocationPreparation, error) {
+	attemptID := req.Execution.Execution.Dispatch.DispatchID
+	if options.verifyTopicReady {
+		eventReadyFields := []any{"sessionID", req.ID, "attemptID", attemptID, "outcome", "event_ready", "state", string(workersessions.StateStarting)}
+		if options.requestID != "" {
+			eventReadyFields = append(eventReadyFields, "requestID", options.requestID)
+		}
+		r.logger.Info("worker session start", eventReadyFields...)
+	}
+	supervision, canStart := r.registerSupervisionOwned(
+		options.serverOwned,
+		req.ID,
+		attemptID,
+		req.Execution.Execution.Dispatch.Execution.RequestID,
+		executor,
+		clock,
+		scheduler,
+		req.Execution,
+	)
+	if !canStart {
+		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
+		if options.serverOwned && r.isStopping() && !final.Terminal() {
+			final = r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
+			return invocationPreparation{
+				session:  final,
+				terminal: true,
+				failure:  workersessions.ErrStartServerStopping,
+			}, nil
+		}
+		if final.Terminal() {
+			r.publishTerminalSnapshot(ctx, req.ID, attemptID, final)
+			return invocationPreparation{
+				session:  final,
+				terminal: true,
+				failure:  workersessions.ErrStartAdmissionFailed,
+			}, nil
+		}
+		return invocationPreparation{}, startNotAccepted(workersessions.ErrStartAdmissionFailed)
+	}
+	supervision.mu.Lock()
+	supervision.retryBudget = req.Retry.Attempts()
+	supervision.continuing = options.continuation
+	supervision.mu.Unlock()
+	return invocationPreparation{supervision: supervision}, nil
 }

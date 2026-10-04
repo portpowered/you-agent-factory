@@ -36,7 +36,10 @@ func (r *registry) logReconciliation(
 ) {
 	elapsedMS := int64(0)
 	if !startedAt.IsZero() {
-		elapsedMS = r.clock.Now().Sub(startedAt).Milliseconds()
+		r.mu.RLock()
+		clock := r.observationClockLocked(id)
+		r.mu.RUnlock()
+		elapsedMS = clock.Now().Sub(startedAt).Milliseconds()
 		if elapsedMS < 0 {
 			elapsedMS = 0
 		}
@@ -88,7 +91,7 @@ func (r *registry) publishExecution(
 	admitted := make(chan struct{})
 	finished := make(chan struct{})
 	dispatchDone := make(chan error, 1)
-	execution := r.execution
+	execution := supervision.executor
 	go func() {
 		defer close(finished)
 		result, dispatchErr := executeWithService(attemptContext, execution, request, supervision, func() {
@@ -790,7 +793,9 @@ func (r *registry) BeginRuntimeAttempt(
 		context.WithoutCancel(ctx),
 		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution},
 		invocationPreparationOptions{runtimeOwned: true},
+		r.execution,
 		clock,
+		r.scheduler,
 	)
 	if err != nil {
 		return nil, err
@@ -883,4 +888,45 @@ func publishOutcomeLabel(outcome workersessions.PublishOutcome) string {
 	default:
 		return "unspecified"
 	}
+}
+
+func (r *registry) registerSupervision(
+	id, dispatchID, turnID string,
+	executions ...workers.WorkstationDispatchRequest,
+) (*supervision, bool) {
+	return r.registerSupervisionOwned(false, id, dispatchID, turnID, r.execution, r.clock, r.scheduler, executions...)
+}
+
+func (r *registry) registerServerOwnedSupervision(
+	id, dispatchID, turnID string,
+	executions ...workers.WorkstationDispatchRequest,
+) (*supervision, bool) {
+	return r.registerSupervisionOwned(true, id, dispatchID, turnID, r.execution, r.clock, r.scheduler, executions...)
+}
+
+func (r *registry) registerSupervisionOwned(
+	serverOwned bool,
+	id, dispatchID, turnID string,
+	executor workers.Service,
+	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
+	executions ...workers.WorkstationDispatchRequest,
+) (*supervision, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.stopping {
+		return nil, false
+	}
+	if session, exists := r.sessions[id]; !exists || session.State != workersessions.StateStarting {
+		return nil, false
+	}
+	supervision := newSupervision(dispatchID, turnID, executions...)
+	supervision.executor = executor
+	supervision.clock = clock
+	supervision.scheduler = scheduler
+	supervision.serverOwned = serverOwned
+	supervision.startedAt = clock.Now()
+	r.supervisions[id] = supervision
+	r.dispatchOwners[dispatchID] = id
+	return supervision, true
 }

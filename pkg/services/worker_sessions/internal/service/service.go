@@ -911,11 +911,11 @@ func (r *registry) startDeadlineWatcher(id string, supervision *supervision, acc
 	supervision.deadlineAt = deadlineAt
 	supervision.mu.Unlock()
 
-	remaining := deadlineAt.Sub(r.clock.Now())
+	remaining := deadlineAt.Sub(supervision.clock.Now())
 	if remaining < 0 {
 		remaining = 0
 	}
-	timer := r.scheduler.NewTimer(remaining)
+	timer := supervision.scheduler.NewTimer(remaining)
 	go func() {
 		defer timer.Stop()
 		select {

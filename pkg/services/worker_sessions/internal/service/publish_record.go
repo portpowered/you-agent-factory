@@ -213,11 +213,15 @@ type invocationPreparation struct {
 // two entry points cannot drift in event ordering or terminal classification;
 // callers choose only whether that deterministic failure is returned as an
 // InvokeSession result or as Start's not-accepted error.
+// Execution and timing effects are explicit inputs, retained before the
+// supervision is published so retries and controls keep the same selection.
 func (r *registry) prepareInvocation(
 	ctx context.Context,
 	req workersessions.InvokeSessionRequest,
 	options invocationPreparationOptions,
+	executor workers.Service,
 	clock platformclock.Source,
+	scheduler platformclock.TimerSource,
 ) (invocationPreparation, error) {
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	r.reserveIfAbsent(req.ID)
@@ -290,7 +294,7 @@ func (r *registry) prepareInvocation(
 		return invocationPreparation{}, nil
 	}
 
-	return r.registerInvocationSupervision(ctx, req, options)
+	return r.registerInvocationSupervision(ctx, req, options, executor, clock, scheduler)
 }
 
 // rejectOpening logs the underlying opening failure at Warn (the runtime
@@ -313,53 +317,6 @@ func (r *registry) rejectOpening(
 	}
 }
 
-func (r *registry) registerInvocationSupervision(
-	ctx context.Context,
-	req workersessions.InvokeSessionRequest,
-	options invocationPreparationOptions,
-) (invocationPreparation, error) {
-	attemptID := req.Execution.Execution.Dispatch.DispatchID
-	if options.verifyTopicReady {
-		eventReadyFields := []any{"sessionID", req.ID, "attemptID", attemptID, "outcome", "event_ready", "state", string(workersessions.StateStarting)}
-		if options.requestID != "" {
-			eventReadyFields = append(eventReadyFields, "requestID", options.requestID)
-		}
-		r.logger.Info("worker session start", eventReadyFields...)
-	}
-	supervision, canStart := r.registerSupervisionOwned(
-		options.serverOwned,
-		req.ID,
-		attemptID,
-		req.Execution.Execution.Dispatch.Execution.RequestID,
-		req.Execution,
-	)
-	if !canStart {
-		final, _ := r.Get(context.Background(), workersessions.GetRequest{ID: req.ID})
-		if options.serverOwned && r.isStopping() && !final.Terminal() {
-			final = r.terminalizeInvocationBeforeAdmission(ctx, req.ID, attemptID)
-			return invocationPreparation{
-				session:  final,
-				terminal: true,
-				failure:  workersessions.ErrStartServerStopping,
-			}, nil
-		}
-		if final.Terminal() {
-			r.publishTerminalSnapshot(ctx, req.ID, attemptID, final)
-			return invocationPreparation{
-				session:  final,
-				terminal: true,
-				failure:  workersessions.ErrStartAdmissionFailed,
-			}, nil
-		}
-		return invocationPreparation{}, startNotAccepted(workersessions.ErrStartAdmissionFailed)
-	}
-	supervision.mu.Lock()
-	supervision.retryBudget = req.Retry.Attempts()
-	supervision.continuing = options.continuation
-	supervision.mu.Unlock()
-	return invocationPreparation{supervision: supervision}, nil
-}
-
 // startReserved runs the original Start state machine after reserveStart has
 // atomically installed the request replay and RESERVED session records.
 func (r *registry) startReserved(ctx context.Context, req workersessions.StartRequest) (workersessions.StartResult, error) {
@@ -373,7 +330,9 @@ func (r *registry) startReserved(ctx context.Context, req workersessions.StartRe
 			requestID:        req.RequestID,
 			verifyTopicReady: true,
 		},
+		r.execution,
 		r.clock,
+		r.scheduler,
 	)
 	if err != nil {
 		return workersessions.StartResult{}, err

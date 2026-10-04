@@ -4985,7 +4985,7 @@ func TestStartPreparationFailureBranches(t *testing.T) {
 		t.Fatalf("transitionToStarting(stopping) = %v, want nil", err)
 	}
 	stopping.stopping = true
-	prepared, err := stopping.registerInvocationSupervision(ctx, coverageInvokeRequest("stopping"), invocationPreparationOptions{serverOwned: true})
+	prepared, err := stopping.registerInvocationSupervision(ctx, coverageInvokeRequest("stopping"), invocationPreparationOptions{serverOwned: true}, stopping.execution, stopping.clock, stopping.scheduler)
 	if err != nil || !prepared.terminal || !errors.Is(prepared.failure, workersessions.ErrStartServerStopping) {
 		t.Fatalf("stopping registration = %+v, %v, want terminal server-stopping result", prepared, err)
 	}
@@ -4996,14 +4996,14 @@ func TestStartPreparationFailureBranches(t *testing.T) {
 		t.Fatalf("transitionToStarting(terminal) = %v, want nil", err)
 	}
 	terminal.commitTerminal("terminal", workersessions.StateCompleted, workersessions.TerminalResult{Outcome: workersessions.TerminalOutcomeCompleted})
-	prepared, err = terminal.registerInvocationSupervision(ctx, coverageInvokeRequest("terminal"), invocationPreparationOptions{})
+	prepared, err = terminal.registerInvocationSupervision(ctx, coverageInvokeRequest("terminal"), invocationPreparationOptions{}, terminal.execution, terminal.clock, terminal.scheduler)
 	if err != nil || !prepared.terminal || !errors.Is(prepared.failure, workersessions.ErrStartAdmissionFailed) {
 		t.Fatalf("terminal registration = %+v, %v, want terminal admission-failed result", prepared, err)
 	}
 
 	reserved := newTestRegistry(t)
 	reserved.reserveIfAbsent("reserved")
-	_, err = reserved.registerInvocationSupervision(ctx, coverageInvokeRequest("reserved"), invocationPreparationOptions{})
+	_, err = reserved.registerInvocationSupervision(ctx, coverageInvokeRequest("reserved"), invocationPreparationOptions{}, reserved.execution, reserved.clock, reserved.scheduler)
 	if !errors.Is(err, workersessions.ErrStartNotAccepted) {
 		t.Fatalf("reserved registration error = %v, want ErrStartNotAccepted", err)
 	}
@@ -6269,6 +6269,203 @@ func TestStreamObservationsByWorkerSessionIDRejectsDurableCursorOnLiveFallback(t
 	}
 }
 
+// These component tests protect selected effects in the invocation driver.
+// Keyed compatibility admission and public shared-process wiring have separate
+// U16-COMPAT/F16 obligations; this is not evidence for their final cutover.
+func TestKeyedRuntimeInvocationRetainsSelectedEffects(t *testing.T) {
+	for _, outcome := range []string{"success", "failure", "timeout", "cancel"} {
+		t.Run(outcome, func(t *testing.T) {
+			t.Parallel()
+			defaults := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+			svc, err := New(unusedExecution{t: t}, newInternalTestEventsService(), logging.NoopLogger{}, defaults, defaults, unavailableProviderSessions{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := svc.(*registry)
+			t.Cleanup(func() { _ = r.Stop(context.Background()) })
+			target := startSelectedEffectsInvocation(t, r, "selected-"+outcome, outcome, 2035)
+			peer := startSelectedEffectsInvocation(t, r, "selected-peer", "success", 2040)
+			defaults.SetTick(1000)
+			target.facts.SetTick(10)
+			assertSelectedEffectsObservation(t, r, target, workersessions.StateRunning)
+			assertSelectedEffectsObservation(t, r, peer, workersessions.StateRunning)
+			state := workersessions.StateCompleted
+			switch outcome {
+			case "success":
+				close(target.release)
+			case "failure":
+				state = workersessions.StateFailed
+				close(target.release)
+			case "timeout":
+				state = workersessions.StateFailed
+				target.scheduler.SetTick(5)
+			case "cancel":
+				state = workersessions.StateCanceled
+				control, controlErr := r.Cancel(context.Background(), workersessions.ControlRequest{ID: target.id})
+				if controlErr != nil || control.Outcome != workersessions.ControlOutcomeApplied {
+					t.Fatalf("target cancel: %#v, %v", control, controlErr)
+				}
+			}
+			result := awaitSelectedEffectsInvocation(t, target)
+			if result.Session.State != state {
+				t.Fatalf("selected %s: %#v, want %s", outcome, result, state)
+			}
+			assertSelectedEffectsResult(t, outcome, result)
+			assertSelectedEffectsObservation(t, r, target, state)
+			assertSelectedEffectsObservation(t, r, peer, workersessions.StateRunning)
+			close(peer.release)
+			if result := awaitSelectedEffectsInvocation(t, peer); result.Session.State != workersessions.StateCompleted || result.Dispatch.Result.Output != peer.id {
+				t.Fatalf("peer selected execution: %#v", result)
+			}
+		})
+	}
+}
+
+type selectedEffectsInvocation struct {
+	id        string
+	facts     *platformclock.Deterministic
+	scheduler *platformclock.Deterministic
+	release   chan struct{}
+	results   chan workersessions.InvokeSessionResult
+}
+
+func startSelectedEffectsInvocation(t *testing.T, r *registry, id, outcome string, year int) selectedEffectsInvocation {
+	t.Helper()
+	f := selectedEffectsInvocation{
+		id: id, facts: platformclock.NewDeterministic(time.Date(year, 1, 2, 3, 4, 5, 0, time.UTC), time.Second),
+		scheduler: platformclock.NewDeterministic(time.Unix(0, 0), time.Second),
+		release:   make(chan struct{}), results: make(chan workersessions.InvokeSessionResult, 1),
+	}
+	started := make(chan workers.ExecuteRequest, 1)
+	execution := coverageExecution{execute: func(ctx context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		started <- request
+		select {
+		case <-ctx.Done():
+			return workers.ExecuteResult{Correlation: request.Correlation}, ctx.Err()
+		case <-f.release:
+			result := workers.ExecuteResult{Correlation: request.Correlation, Outcome: workers.ExecutionOutcomeAccepted}
+			result.Output.Primary = []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: id}}
+			if outcome == "failure" {
+				result.Outcome = workers.ExecutionOutcomeFailed
+				result.Failure = &workers.ExecutionFailure{Type: workers.WorkFailureTypeAuthFailure, Family: workers.WorkFailureFamilyTerminal, Message: "selected execution denied"}
+			}
+			return result, nil
+		}
+	}}
+	request := validStartRequest(id, id+"-dispatch")
+	request.Execution.Execution.Timeout = 5 * time.Second
+	request.Execution.Execution.Model = id + "-model"
+	prepared, err := r.prepareInvocation(context.Background(), request, invocationPreparationOptions{}, execution, f.facts, f.scheduler)
+	if err != nil || prepared.terminal {
+		t.Fatalf("prepare selected invocation: %#v, %v", prepared, err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_, _ = r.Cancel(ctx, workersessions.ControlRequest{ID: id})
+		if err := r.waitForSupervisionDriver(ctx, id); err != nil {
+			t.Errorf("join selected invocation: %v", err)
+		}
+	})
+	go func() {
+		result, invokeErr := r.driveRegisteredInvocation(context.Background(), request, prepared.supervision)
+		if invokeErr != nil {
+			t.Errorf("drive selected invocation: %v", invokeErr)
+		}
+		f.results <- result
+	}()
+	select {
+	case executed := <-started:
+		if executed.Correlation.DispatchID != id+"-dispatch" || executed.Target.Model.Name != id+"-model" {
+			t.Fatalf("selected execution received wrong request: %#v", executed)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("selected execution was not admitted")
+	}
+	return f
+}
+
+func awaitSelectedEffectsInvocation(t *testing.T, f selectedEffectsInvocation) workersessions.InvokeSessionResult {
+	t.Helper()
+	select {
+	case result := <-f.results:
+		return result
+	case <-time.After(30 * time.Second):
+		t.Fatal("selected invocation did not terminalize")
+		return workersessions.InvokeSessionResult{}
+	}
+}
+
+func assertSelectedEffectsObservation(t *testing.T, r *registry, f selectedEffectsInvocation, state workersessions.State) {
+	t.Helper()
+	observation, err := r.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: f.id})
+	startedAt := time.Date(f.facts.Now().Year(), 1, 2, 3, 4, 5, 0, time.UTC)
+	if err != nil || observation.State != state || observation.StartedAt == nil || !observation.StartedAt.Equal(startedAt) {
+		t.Fatalf("selected facts/state: %#v, %v, want %s at selected epoch", observation, err, state)
+	}
+	if observation.Duration == nil || *observation.Duration != f.facts.Now().Sub(startedAt) {
+		t.Fatalf("selected elapsed facts: %#v, want %s", observation, f.facts.Now().Sub(startedAt))
+	}
+	if state.Terminal() && (observation.EndedAt == nil || !observation.EndedAt.Equal(f.facts.Now())) {
+		t.Fatalf("selected terminal facts: %#v, want %s", observation, f.facts.Now())
+	}
+}
+
+func assertSelectedEffectsResult(t *testing.T, outcome string, result workersessions.InvokeSessionResult) {
+	t.Helper()
+	switch outcome {
+	case "success":
+		if result.Dispatch.Result.Output != result.Session.ID {
+			t.Fatalf("selected output lost: %#v", result)
+		}
+	case "failure", "timeout":
+		cause := workersessions.FailureCauseWorkersExecutionFailure
+		if outcome == "timeout" {
+			cause = workersessions.FailureCauseTimeout
+		}
+		if result.Session.Result == nil || result.Session.Result.Cause == nil || result.Session.Result.Cause.Kind != cause {
+			t.Fatalf("selected %s classification: %#v", outcome, result)
+		}
+	}
+}
+
+func TestKeyedRuntimeInvocationRetryKeepsSelectedExecution(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+	facts := platformclock.NewDeterministic(time.Date(2035, 1, 2, 3, 4, 5, 0, time.UTC), time.Second)
+	scheduler := platformclock.NewDeterministic(time.Unix(0, 0), time.Second)
+	calls := 0
+	execution := coverageExecution{execute: func(_ context.Context, executed workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		calls++
+		if executed.Target.Model.Name != "selected-retry-model" {
+			t.Errorf("retry lost selected request: %#v", executed)
+		}
+		facts.SetTick(calls)
+		result := workers.ExecuteResult{Correlation: executed.Correlation, Outcome: workers.ExecutionOutcomeAccepted}
+		if calls == 1 {
+			result.Outcome = workers.ExecutionOutcomeFailed
+			result.Failure = &workers.ExecutionFailure{Type: workers.WorkFailureTypeThrottled, Family: workers.WorkFailureFamilyRetryable, Message: "controlled retry"}
+		}
+		return result, nil
+	}}
+	request := validStartRequest("selected-retry", "selected-retry-dispatch")
+	request.Retry = workersessions.RetryPolicy{MaxAttempts: 2}
+	request.Execution.Execution.Timeout = 5 * time.Second
+	request.Execution.Execution.Model = "selected-retry-model"
+	prepared, err := r.prepareInvocation(context.Background(), request, invocationPreparationOptions{}, execution, facts, scheduler)
+	if err != nil || prepared.terminal {
+		t.Fatalf("prepare retry: %#v, %v", prepared, err)
+	}
+	result, err := r.driveRegisteredInvocation(context.Background(), request, prepared.supervision)
+	if err != nil || result.Session.State != workersessions.StateCompleted || result.Attempts != 2 || calls != 2 {
+		t.Fatalf("selected retry: %#v, %v, calls=%d", result, err, calls)
+	}
+	observation, err := r.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: request.ID})
+	if err != nil || observation.EndedAt == nil || !observation.EndedAt.Equal(facts.Now()) {
+		t.Fatalf("selected retry terminal facts: %#v, %v", observation, err)
+	}
+}
+
 func TestKeyedRuntimeSupervisorUsesSuppliedDeadlineScheduler(t *testing.T) {
 	t.Parallel()
 	facts := platformclock.NewDeterministic(time.Date(2035, 3, 4, 5, 6, 7, 0, time.UTC), time.Second)
@@ -6354,6 +6551,8 @@ func TestDeadlineSupervisionCoversInactiveAndExpiredAttempts(t *testing.T) {
 			Timeout:    time.Second,
 		},
 	})
+	expired.clock = clock
+	expired.scheduler = serviceRegistry.scheduler
 	expired.accepted = true
 	expired.attemptDone = make(chan struct{})
 	expired.installCancel(func() {

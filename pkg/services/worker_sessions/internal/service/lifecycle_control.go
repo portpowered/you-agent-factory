@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workersessions "github.com/portpowered/infinite-you/pkg/services/worker_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -549,6 +550,11 @@ func sessionIsTerminal(r *registry, id string) bool {
 // supervision remains Worker Sessions-owned so callers address controls by
 // stable session ID while Worker Sessions retains the exact dispatch ID.
 type supervision struct {
+	// Selected effects are fixed before this supervision becomes visible to
+	// controls. Retry and resume keep the same execution and timing sources.
+	executor   workers.Service
+	clock      platformclock.Source
+	scheduler  platformclock.TimerSource
 	dispatchID string
 	turnID     string
 	execution  workers.WorkstationDispatchRequest
@@ -901,7 +907,7 @@ func (r *registry) acceptSupervision(id string, supervision *supervision) {
 	running := r.transitionToRunning(id)
 	acceptedAt := time.Time{}
 	if running {
-		acceptedAt = r.clock.Now()
+		acceptedAt = supervision.clock.Now()
 	}
 	reservation := controlReservationFor(supervision)
 	if reservation != nil && reservation.action == workersessions.ControlActionResume {
@@ -943,41 +949,6 @@ func (r *registry) finishSupervisionPublication(supervision *supervision) {
 	supervision.publishing = false
 	supervision.mu.Unlock()
 	supervision.signalPublished()
-}
-
-func (r *registry) registerSupervision(
-	id, dispatchID, turnID string,
-	executions ...workers.WorkstationDispatchRequest,
-) (*supervision, bool) {
-	return r.registerSupervisionOwned(false, id, dispatchID, turnID, executions...)
-}
-
-func (r *registry) registerServerOwnedSupervision(
-	id, dispatchID, turnID string,
-	executions ...workers.WorkstationDispatchRequest,
-) (*supervision, bool) {
-	return r.registerSupervisionOwned(true, id, dispatchID, turnID, executions...)
-}
-
-func (r *registry) registerSupervisionOwned(
-	serverOwned bool,
-	id, dispatchID, turnID string,
-	executions ...workers.WorkstationDispatchRequest,
-) (*supervision, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.stopping {
-		return nil, false
-	}
-	if session, exists := r.sessions[id]; !exists || session.State != workersessions.StateStarting {
-		return nil, false
-	}
-	supervision := newSupervision(dispatchID, turnID, executions...)
-	supervision.serverOwned = serverOwned
-	supervision.startedAt = r.clock.Now()
-	r.supervisions[id] = supervision
-	r.dispatchOwners[dispatchID] = id
-	return supervision, true
 }
 
 func (r *registry) beginExecutionPublish(id string, supervision *supervision) bool {

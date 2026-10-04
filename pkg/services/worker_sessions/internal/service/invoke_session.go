@@ -427,7 +427,7 @@ func (r *registry) InvokeSession(ctx context.Context, req workersessions.InvokeS
 		return workersessions.InvokeSessionResult{}, err
 	}
 
-	prepared, err := r.prepareInvocation(ctx, req, invocationPreparationOptions{}, r.clock)
+	prepared, err := r.prepareInvocation(ctx, req, invocationPreparationOptions{}, r.execution, r.clock, r.scheduler)
 	if err != nil {
 		return workersessions.InvokeSessionResult{}, err
 	}
