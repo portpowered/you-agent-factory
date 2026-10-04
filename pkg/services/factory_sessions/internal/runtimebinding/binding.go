@@ -19,7 +19,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
-	sessionstream "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -572,20 +571,6 @@ func StreamGenerationID(session *livesession.LiveSession) string {
 		return instance.StartTime().UTC().Format(time.RFC3339Nano)
 	}
 	return ""
-}
-
-// NewStreamManager composes provider response streams from the canonical
-// Session registry and Factory Runtime telemetry resolver.
-func NewStreamManager(state *sessionruntime.Service) *sessionstream.Manager {
-	if state == nil {
-		return nil
-	}
-	return sessionstream.NewManagerWithResponseService(
-		state,
-		sessionruntime.NewResponseStreamObserver(ResponseStreamRuntimeFromSessionHandle),
-		state.ResponseStreams(),
-		state.ResponseEventService(),
-	)
 }
 
 func ResponseStreamRuntimeFromSessionHandle(handle any) (factory.MetricsEmitter, *zap.Logger) {

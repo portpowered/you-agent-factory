@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-
 	events "github.com/portpowered/infinite-you/pkg/services/events"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -19,6 +18,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livechange"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/requestpreparation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
+	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
@@ -27,6 +29,9 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
+	sessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
+	sessionstream "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -72,10 +77,53 @@ func NewResponseStreams(eventIDs factorysessions.ResponseEventIDGenerator, limit
 	return responsestreamwire.NewService(eventIDs, limits, eventsService, logger)
 }
 
+// SessionRegistry is the explicit process-owned live session directory.
+type SessionRegistry = sessionregistry.Service
+
+// ResponseStreamRegistry is the paired dispatch-stream registry.
+type ResponseStreamRegistry = responsestream.Registry
+
+// SessionState is the independent live session authority.
+type SessionState = sessionruntime.Service
+
+// StreamManager supplies provider progress and dispatch completion factories.
+type StreamManager = sessionservice.StreamManager
+
+// StreamObserver supplies runtime telemetry for response streams.
+type StreamObserver = sessionstream.Observer
+
+// NewSessionRegistry allocates the process-owned live directory.
+func NewSessionRegistry() SessionRegistry {
+	return sessionregistry.New()
+}
+
+// NewResponseStreamRegistry allocates dispatch state through the selected response owner.
+func NewResponseStreamRegistry(responses ResponseStreams, clock factoryruntime.Clock) (*ResponseStreamRegistry, error) {
+	return responses.NewStreamRegistry(clock)
+}
+
+// NewSessionState constructs authority over the explicitly paired registries.
+func NewSessionState(registry SessionRegistry, responseRegistry *ResponseStreamRegistry, clock factoryruntime.Clock, eventIDs factorysessions.ResponseEventIDGenerator, sessionIDs factorysessions.SessionIDGenerator, responses ResponseStreams) *SessionState {
+	return sessionruntime.NewWithResponseService(registry, responseRegistry, nil, clock, eventIDs, sessionIDs, responses)
+}
+
+// NewStreamObserver constructs telemetry using the existing runtime handle resolver.
+func NewStreamObserver() StreamObserver {
+	return sessionruntime.NewResponseStreamObserver(runtimebinding.ResponseStreamRuntimeFromSessionHandle)
+}
+
+// NewStreamManager constructs reusable streams over the supplied authority and response owner.
+func NewStreamManager(state *SessionState, observer StreamObserver, responseRegistry *ResponseStreamRegistry, responses ResponseStreams) StreamManager {
+	return sessionstream.NewManagerWithResponseService(state, observer, responseRegistry, responses)
+}
+
 // NewRuntimeAssembly builds the one owner-private Factory Sessions assembly
 // used by peer roots while canonical Wire completes the rest of the process
 // graph. It is an assembly capability, not a second published Service root.
 func NewRuntimeAssembly(
+	registry SessionRegistry,
+	state *SessionState,
+	streams StreamManager,
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
@@ -95,6 +143,7 @@ func NewRuntimeAssembly(
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (RuntimeAssembly, error) {
 	assembly, err := factorysessionroot.NewAssembly(
+		registry, state, streams,
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
 		interpolation,
