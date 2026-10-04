@@ -223,6 +223,15 @@ func (r *registry) prepareInvocation(
 	clock platformclock.Source,
 	scheduler platformclock.TimerSource,
 ) (invocationPreparation, error) {
+	if executor == nil {
+		return invocationPreparation{}, ErrMissingExecution
+	}
+	if clock == nil {
+		return invocationPreparation{}, ErrMissingClock
+	}
+	if scheduler == nil {
+		return invocationPreparation{}, ErrMissingScheduler
+	}
 	attemptID := req.Execution.Execution.Dispatch.DispatchID
 	r.reserveIfAbsent(req.ID)
 	acceptedFields := []any{

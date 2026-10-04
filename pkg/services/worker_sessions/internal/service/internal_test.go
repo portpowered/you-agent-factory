@@ -1763,6 +1763,67 @@ func TestKeyedRuntime_OpeningFailureRetainsSelectedFactClock(t *testing.T) {
 	assertPerRuntimeObservation(t, peer, workersessions.StateRunning)
 }
 
+func TestKeyedRuntimeInvocationMissingEffectsRejectBeforeOpening(t *testing.T) {
+	for _, missing := range []string{"execution", "clock", "scheduler"} {
+		t.Run(missing, func(t *testing.T) {
+			t.Parallel()
+			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+			peer := newPerRuntimeAttemptFixture(t, "b", sink)
+			r := peer.service
+			request := validStartRequest("selected-target", "selected-dispatch")
+			request.Execution.Execution.RecordingID = "selected-recording"
+			clock := platformclock.Source(coverageClock{now: peer.clock.Add(time.Hour)})
+			scheduler := platformclock.TimerSource(platformclock.NewDeterministic(time.Unix(0, 0), time.Second))
+			execution := workers.Service(coverageExecution{execute: func(_ context.Context, executed workers.ExecuteRequest) (workers.ExecuteResult, error) {
+				return workers.ExecuteResult{Correlation: executed.Correlation, Outcome: workers.ExecutionOutcomeAccepted}, nil
+			}})
+			selectedExecution, selectedClock, selectedScheduler := execution, clock, scheduler
+			wantErr := ErrMissingExecution
+			switch missing {
+			case "execution":
+				selectedExecution = nil
+			case "clock":
+				selectedClock, wantErr = nil, ErrMissingClock
+			case "scheduler":
+				selectedScheduler, wantErr = nil, ErrMissingScheduler
+			}
+			before := sink.requestsFor("")
+			prepared, err := r.prepareInvocation(context.Background(), request, invocationPreparationOptions{}, selectedExecution, selectedClock, selectedScheduler)
+			if !errors.Is(err, wantErr) || prepared.supervision != nil || prepared.terminal {
+				t.Fatalf("missing %s: %#v, %v, want %v", missing, prepared, err, wantErr)
+			}
+			assertSelectedEffectsRejectionIsInert(t, peer, request.ID, sink, before)
+			prepared, err = r.prepareInvocation(context.Background(), request, invocationPreparationOptions{}, execution, clock, scheduler)
+			if err != nil || prepared.terminal {
+				t.Fatalf("valid retry: %#v, %v", prepared, err)
+			}
+			result, err := r.driveRegisteredInvocation(context.Background(), request, prepared.supervision)
+			if err != nil || result.Session.State != workersessions.StateCompleted {
+				t.Fatalf("selected execution after rejection: %#v, %v", result, err)
+			}
+			assertPerRuntimeObservation(t, peer, workersessions.StateRunning)
+			assertPerRuntimeCancellationCalls(t, peer.control, 0)
+			publishPerRuntimeProgress(t, peer, sink)
+		})
+	}
+}
+
+func assertSelectedEffectsRejectionIsInert(t *testing.T, peer *perRuntimeAttemptFixture, id string, sink *perRuntimeAppendCapture, before []events.AppendRequest) {
+	t.Helper()
+	if _, err := peer.service.Get(context.Background(), workersessions.GetRequest{ID: id}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("rejected identity: %v", err)
+	}
+	if !reflect.DeepEqual(before, sink.requestsFor("")) {
+		t.Fatal("missing effect appended observations")
+	}
+	peer.capture.mu.Lock()
+	captures := append([]recordings.WorkerSessionRecordingRequest(nil), peer.capture.requests...)
+	peer.capture.mu.Unlock()
+	if len(captures) != 1 || captures[0].WorkerSessionID != peer.request.ID {
+		t.Fatalf("missing effect started recording: %#v", captures)
+	}
+}
+
 func TestKeyedRuntime_MissingFactClockRejectsBeforeOpeningEffects(t *testing.T) {
 	t.Parallel()
 	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
@@ -7030,7 +7091,9 @@ func TestWorkerSessionContinuationAndReconciliation_CoversAdmissionFailurePaths(
 
 func TestWorkerSessionInvocationAndReplay_CoversDetachedFailurePaths(t *testing.T) {
 	r := newTestRegistry(t)
-	r.execution = nil
+	r.execution = coverageExecution{execute: func(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		return workers.ExecuteResult{}, workers.ErrExecuteUnavailable
+	}}
 	result, err := r.InvokeSession(context.Background(), workersessions.InvokeSessionRequest{ID: "invoke-no-execution", Execution: dispatchHandoff("invoke-dispatch")})
 	if err != nil || result.Session.State != workersessions.StateFailed {
 		t.Fatalf("InvokeSession(no execution) = %#v, %v, want failed terminal result", result, err)
@@ -7326,8 +7389,11 @@ func TestWorkerSessionInterruptAndStartCompletion_CoversEarlyBranches(t *testing
 		ID:        "start-no-execution-session",
 		Execution: dispatchHandoff("start-no-execution-dispatch"),
 	})
-	if err == nil || result.Session.State != workersessions.StateFailed {
-		t.Fatalf("startReserved(no execution) = %#v, %v, want failed admission result", result, err)
+	if !errors.Is(err, ErrMissingExecution) || result.Session.ID != "" {
+		t.Fatalf("startReserved(no execution) = %#v, %v, want missing execution before admission", result, err)
+	}
+	if _, err := r.Get(context.Background(), workersessions.GetRequest{ID: "start-no-execution-session"}); !errors.Is(err, workersessions.ErrSessionNotFound) {
+		t.Fatalf("startReserved(no execution) reserved identity: %v", err)
 	}
 }
 
