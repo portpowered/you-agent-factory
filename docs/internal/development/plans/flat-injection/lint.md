@@ -96,6 +96,8 @@ Rollback reverts the affected independently valid slice and its enforcement meta
 
 `LINT_TARGETS` includes `pkg-maint`, `pkg-boundary`, `service-cycle-check`, `golangci-lint-run`, and `repolint`. Durable construction runs in `cmd/repolint` through `go vet -vettool`, replacing the durable scanner and its target. Logging uses the pinned golangci-lint configuration. Registered T20 construction still runs through `pkg-boundary` pending its analyzer cutover. Backend Lint requires canonical lint on every PR and main push; do not add a competing checker execution path.
 
+T20 metadata now belongs to `internal/lint/analyzers/construction_registry.go`. `RegisteredConstruction` resolves qualified calls and constructor references with `pass.TypesInfo`, returns observations as `[]ConstructionFinding`, and sends enforced findings through the shared exact baseline. Fixtures configure an invocation-owned registry; the repository's chat-target-catalog remains report-only. The temporary `contractguard` aliases keep the retained scanner consuming this same metadata. Guard/storage/getter summaries and focused-provider recursion/dispatch remain scanner-owned until their typed replacements land; then delete the scanner and aliases together. This seam does not enable any additional owner or establish full T20/T29 coverage.
+
 Required evidence, per change and per PR, free or bounded local resource use:
 
 - Unit/controlled: `go test ./internal/lint/analyzers ./cmd/pkgboundarycheck ./cmd/pkgmaintcheck ./cmd/servicecyclecheck`; fixture matrix proves specified matches and exclusions, not application behavior.
