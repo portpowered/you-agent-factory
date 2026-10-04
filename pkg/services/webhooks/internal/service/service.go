@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -13,12 +15,17 @@ import (
 )
 
 type Service struct {
-	events        recordings.Service
-	httpClient    webhooks.HTTPClient
+	events     recordings.Service
+	httpClient interface {
+		Do(*http.Request) (*http.Response, error)
+	}
 	secretResolve webhooks.SecretResolver
-	clock         webhooks.Clock
-	deadLetters   webhooks.DeadLetterAppender
-	logger        logging.Logger
+	clock         interface {
+		Now() time.Time
+		After(time.Duration) <-chan time.Time
+	}
+	deadLetters webhooks.DeadLetterAppender
+	logger      logging.Logger
 }
 
 // activation owns serialization of dead-letter writes for one subscription.
@@ -30,8 +37,12 @@ type activation struct {
 var _ webhooks.Service = (*Service)(nil)
 
 // New constructs an inert service from individually selected required effects.
-func New(events recordings.Service, httpClient webhooks.HTTPClient,
-	secretResolve webhooks.SecretResolver, clock webhooks.Clock,
+func New(events recordings.Service, httpClient interface {
+	Do(*http.Request) (*http.Response, error)
+}, secretResolve webhooks.SecretResolver, clock interface {
+	Now() time.Time
+	After(time.Duration) <-chan time.Time
+},
 	deadLetters webhooks.DeadLetterAppender, logger logging.Logger) *Service {
 	return &Service{events: events, httpClient: httpClient, secretResolve: secretResolve,
 		clock: clock, deadLetters: deadLetters, logger: logger}

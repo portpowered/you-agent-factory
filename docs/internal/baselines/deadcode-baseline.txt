@@ -2141,7 +2141,6 @@ pkg/services/system_initialization/transports/cli/initialize.go: unreachable fun
 pkg/services/system_initialization/transports/cli/initialize.go: unreachable func: renderInitializeSuccess
 pkg/services/system_initialization/transports/cli/initialize.go: unreachable func: service.Initialize
 pkg/services/system_initialization/transports/cli/service.go: unreachable func: New
-pkg/services/webhooks/internal/service/service.go: unreachable func: New
 pkg/services/work/admission_contract.go: unreachable func: ResolveWorkRequestCurrentChainingTraceID
 pkg/services/work/admission_contract.go: unreachable func: SubmitResultFromNormalized
 pkg/services/work/admission_contract.go: unreachable func: SubmitWorkName

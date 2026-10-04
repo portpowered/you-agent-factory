@@ -526,9 +526,9 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	httpClient := provideFactoryWebhookHTTPClient(edges2)
 	secretResolver := provideFactoryWebhookSecretResolver(edges2)
-	webhooksClock := provideFactoryWebhookClock(edges2)
+	wireClock := provideFactoryWebhookClock(edges2)
 	deadLetterAppender := provideFactoryWebhookDeadLetterAppender(edges2)
-	webhooksService := wire7.NewService(recordingsService, httpClient, secretResolver, webhooksClock, deadLetterAppender, loggingLogger)
+	webhooksService := wire7.NewService(recordingsService, httpClient, secretResolver, wireClock, deadLetterAppender, loggingLogger)
 	v129 := &wire.WebhooksPorts{
 		Service: webhooksService,
 	}

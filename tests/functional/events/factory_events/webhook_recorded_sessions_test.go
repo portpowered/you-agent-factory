@@ -183,6 +183,38 @@ func TestFactoryWebhooksRecordedFaultsAndPeerContinuation(t *testing.T) {
 
 func runRecordedWebhookFault(t *testing.T, peer *initialRecordedWebhookSession, peerReceiver *functionalWebhookReceiver, fault string) {
 	t.Helper()
+	session, receiver, path, appendCalls := setupRecordedWebhookFault(t, fault)
+	event := completeInitialWebhookWork(t, session)
+	if fault != "F18d secret" && fault != "empty" {
+		first := receiver.waitForWorkEvent(t, eventWorkID(t, event), 30*time.Second)
+		advanceRecordedWebhookRetries(t, receiver, first.eventID, fault)
+		if fault == "F18f close" {
+			terminateRecordedWebhookSession(t, session)
+		} else {
+			assertRecordedWebhookCompletion(t, session, receiver, first)
+			verifyRecordedWebhookFault(t, receiver, first, path, appendCalls, fault)
+		}
+	}
+	session.command.Stop(t)
+	before := len(receiver.requestsSnapshot())
+	if fault == "F18f close" && before != 1 {
+		t.Fatalf("close attempts = %d, want one before retry cancellation", before)
+	}
+	peerEvent := completeInitialWebhookWork(t, peer)
+	delivery := peerReceiver.waitForEvent(t, peerEvent.Id, 30*time.Second)
+	assertSignedCanonicalWebhook(t, delivery, peerEvent, functionalWebhookSecret)
+	if len(receiver.requestsSnapshot()) != before {
+		t.Fatal("closed session delivered while its peer progressed")
+	}
+	if fault == "F18d secret" || fault == "empty" {
+		if before != 0 {
+			t.Fatalf("inert subscription delivered %d requests", before)
+		}
+	}
+}
+
+func setupRecordedWebhookFault(t *testing.T, fault string) (*initialRecordedWebhookSession, *functionalWebhookReceiver, string, <-chan []byte) {
+	t.Helper()
 	var mu sync.Mutex
 	firstID := ""
 	attempts := 0
@@ -235,77 +267,65 @@ func runRecordedWebhookFault(t *testing.T, peer *initialRecordedWebhookSession, 
 			recordedWebhookEffects.Unlock()
 		})
 	}
-	event := completeInitialWebhookWork(t, session)
-	if fault != "F18d secret" && fault != "empty" {
-		first := receiver.waitForWorkEvent(t, eventWorkID(t, event), 30*time.Second)
-		retries := 2
-		if fault == "F18b retry success" {
-			retries = 1
-		}
-		if fault == "terminal 400" {
-			retries = 0
-		}
-		for retry := 0; retry < retries; retry++ {
-			waitRecordedWebhookTimer(t)
-			if fault == "F18f close" {
-				break
-			}
-			recordedWebhookClock.Advance(time.Duration(1<<retry) * time.Second)
-			receiver.waitForEvent(t, first.eventID, 30*time.Second)
-		}
-		if fault == "F18f close" {
-			response, err := http.Post(session.url+"/factory-sessions/"+session.id+"/terminate", "application/json", strings.NewReader("{}"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			body, _ := io.ReadAll(response.Body)
-			response.Body.Close()
-			if response.StatusCode != 200 {
-				t.Fatalf("terminate status=%d: %s", response.StatusCode, body)
-			}
-			var control factoryapi.FactorySessionLifecycleControlResponse
-			if err := json.Unmarshal(body, &control); err != nil {
-				t.Fatal(err)
-			}
-			// Live terminate preserves its existing public SUCCEEDED outcome.
-			if control.SessionId != session.id || string(control.Status) != "SUCCEEDED" {
-				t.Fatalf("terminate result: %s", body)
-			}
+	return session, receiver, path, appendCalls
+}
 
-		} else {
-			// The later terminal Work event is processed only after the first event's
-			// persistence/success. This observes a deterministic appender completion.
-			followup := completeInitialWebhookWork(t, session)
-			receiver.waitForEvent(t, followup.Id, 30*time.Second)
-			events := support.GetFactoryEventsForSessionAt(t, session.url, session.id)
-			found := false
-			for _, canonical := range events {
-				if canonical.Id == first.eventID {
-					found = true
-					assertSignedCanonicalWebhook(t, first, canonical, functionalWebhookSecret)
-				}
-			}
-			if !found {
-				t.Fatal("first delivery absent from canonical session read")
-			}
-			verifyRecordedWebhookFault(t, receiver, first, path, appendCalls, fault)
+func advanceRecordedWebhookRetries(t *testing.T, receiver *functionalWebhookReceiver, eventID, fault string) {
+	t.Helper()
+	retries := 2
+	if fault == "F18b retry success" {
+		retries = 1
+	}
+	if fault == "terminal 400" {
+		retries = 0
+	}
+	for retry := 0; retry < retries; retry++ {
+		waitRecordedWebhookTimer(t)
+		if fault == "F18f close" {
+			break
+		}
+		recordedWebhookClock.Advance(time.Duration(1<<retry) * time.Second)
+		receiver.waitForEvent(t, eventID, 30*time.Second)
+	}
+}
+
+func terminateRecordedWebhookSession(t *testing.T, session *initialRecordedWebhookSession) {
+	t.Helper()
+	response, err := http.Post(session.url+"/factory-sessions/"+session.id+"/terminate", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if response.StatusCode != 200 {
+		t.Fatalf("terminate status=%d: %s", response.StatusCode, body)
+	}
+	var control factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(body, &control); err != nil {
+		t.Fatal(err)
+	}
+	// Live terminate preserves its existing public SUCCEEDED outcome.
+	if control.SessionId != session.id || string(control.Status) != "SUCCEEDED" {
+		t.Fatalf("terminate result: %s", body)
+	}
+}
+
+func assertRecordedWebhookCompletion(t *testing.T, session *initialRecordedWebhookSession, receiver *functionalWebhookReceiver, first functionalWebhookRequest) {
+	t.Helper()
+	// The later terminal Work event is processed only after the first event's
+	// persistence/success. This observes a deterministic appender completion.
+	followup := completeInitialWebhookWork(t, session)
+	receiver.waitForEvent(t, followup.Id, 30*time.Second)
+	events := support.GetFactoryEventsForSessionAt(t, session.url, session.id)
+	found := false
+	for _, canonical := range events {
+		if canonical.Id == first.eventID {
+			found = true
+			assertSignedCanonicalWebhook(t, first, canonical, functionalWebhookSecret)
 		}
 	}
-	session.command.Stop(t)
-	before := len(receiver.requestsSnapshot())
-	if fault == "F18f close" && before != 1 {
-		t.Fatalf("close attempts = %d, want one before retry cancellation", before)
-	}
-	peerEvent := completeInitialWebhookWork(t, peer)
-	delivery := peerReceiver.waitForEvent(t, peerEvent.Id, 30*time.Second)
-	assertSignedCanonicalWebhook(t, delivery, peerEvent, functionalWebhookSecret)
-	if len(receiver.requestsSnapshot()) != before {
-		t.Fatal("closed session delivered while its peer progressed")
-	}
-	if fault == "F18d secret" || fault == "empty" {
-		if before != 0 {
-			t.Fatalf("inert subscription delivered %d requests", before)
-		}
+	if !found {
+		t.Fatal("first delivery absent from canonical session read")
 	}
 }
 

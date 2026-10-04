@@ -3,8 +3,6 @@ package webhooks
 
 import (
 	"context"
-	"net/http"
-	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -33,17 +31,6 @@ type SecretResolver func(
 // session-owned runtime path. The appender owns directory creation and file
 // permissions; the Webhooks service owns record redaction and line framing.
 type DeadLetterAppender func(string, []byte) error
-
-// HTTPClient is the selected outbound delivery effect.
-type HTTPClient interface {
-	Do(*http.Request) (*http.Response, error)
-}
-
-// Clock supplies delivery timestamps and cancellable retry scheduling.
-type Clock interface {
-	Now() time.Time
-	After(time.Duration) <-chan time.Time
-}
 
 // Service starts session-scoped outbound subscriptions.
 type Service interface {

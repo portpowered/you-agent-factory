@@ -15,6 +15,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/webhooks"
+	webhookswire "github.com/portpowered/infinite-you/pkg/services/webhooks/wire"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"go.uber.org/zap"
 )
@@ -76,7 +77,7 @@ func provideAutomationsOwner(logger *zap.Logger, clock automationswire.Clock,
 		hosted, policy, cursors, true, "", "", "")
 }
 
-func provideFactoryWebhookHTTPClient(edges serviceedges.Edges) webhooks.HTTPClient {
+func provideFactoryWebhookHTTPClient(edges serviceedges.Edges) webhookswire.HTTPClient {
 	if edges.FactoryWebhookHTTPClient != nil {
 		return edges.FactoryWebhookHTTPClient
 	}
@@ -94,7 +95,7 @@ func provideFactoryWebhookSecretResolver(edges serviceedges.Edges) webhooks.Secr
 }
 
 // T21 owns adoption of the canonical process clock; preserve current selection.
-func provideFactoryWebhookClock(edges serviceedges.Edges) webhooks.Clock {
+func provideFactoryWebhookClock(edges serviceedges.Edges) webhookswire.Clock {
 	if edges.FactoryWebhookClock != nil {
 		return edges.FactoryWebhookClock
 	}
