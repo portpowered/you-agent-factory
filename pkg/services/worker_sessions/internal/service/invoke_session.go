@@ -67,6 +67,7 @@ type runtimeAttempt struct {
 	workerID       string
 	dispatchID     string
 	attemptID      string
+	correlation    workers.ExecutionCorrelation
 	once           sync.Once
 	mu             sync.Mutex
 	cancel         func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)
@@ -97,10 +98,14 @@ func (r *registry) PublishRuntimeProgress(
 		key.DispatchID != strings.TrimSpace(fragment.Correlation.DispatchID) {
 		return workersessions.ErrProviderBindingAttemptMismatch
 	}
-	progress, ownerID, attemptID, err := r.runtimeProgressOwner(key)
+	progress, ownerID, correlation, err := r.runtimeProgressOwner(key)
 	if err != nil {
 		return err
 	}
+	if !runtimeProgressMetadataAgrees(fragment.Correlation, correlation) {
+		return workersessions.ErrProviderBindingAttemptMismatch
+	}
+	attemptID := correlation.AttemptID
 	physicalID := strings.TrimSpace(fragment.Correlation.AttemptID)
 	if physicalID == "" {
 		physicalID = strings.TrimSpace(fragment.DispatchID)
@@ -125,20 +130,21 @@ func (r *registry) PublishRuntimeProgress(
 	return nil
 }
 
-func (r *registry) runtimeProgressOwner(key workersessions.RuntimeAttemptKey) (*workersessions.ProviderSessionObservationPublisher, string, string, error) {
+func (r *registry) runtimeProgressOwner(key workersessions.RuntimeAttemptKey) (*workersessions.ProviderSessionObservationPublisher, string, workers.ExecutionCorrelation, error) {
 	r.mu.RLock()
 	ownerID := r.runtimeAttemptOwners[key]
 	attempt := r.runtimeAttemptControls[ownerID]
 	if attempt != nil {
 		r.mu.RUnlock()
-		return &attempt.progress, ownerID, attempt.attemptID, nil
+		return &attempt.progress, ownerID, attempt.correlation, nil
 	}
 	if supervision := r.supervisions[ownerID]; supervision != nil && supervision.runtimeKey == key {
 		supervision.mu.Lock()
-		attemptID := supervision.dispatchID
+		request := cloneWorkstationDispatchRequest(supervision.execution)
 		supervision.mu.Unlock()
 		r.mu.RUnlock()
-		return &supervision.progress, ownerID, attemptID, nil
+		resolved, err := executeRequestFromSessionDispatch(request)
+		return &supervision.progress, ownerID, resolved.Correlation, err
 	}
 	// Compatibility InvokeSession still owns its directly supervised attempt
 	// until the atomic opener cutover. Check its supplied runtime correlation
@@ -153,10 +159,10 @@ func (r *registry) runtimeProgressOwner(key workersessions.RuntimeAttemptKey) (*
 		supervision.mu.Unlock()
 		resolved, err := executeRequestFromSessionDispatch(request)
 		if err == nil && resolved.Correlation.RuntimeID == key.RuntimeID && attemptID == key.DispatchID {
-			return nil, "", "", workersessions.ErrRuntimeProgressDirectSupervision
+			return nil, "", workers.ExecutionCorrelation{}, workersessions.ErrRuntimeProgressDirectSupervision
 		}
 	}
-	return nil, "", "", workersessions.ErrProviderSessionAssociationAttemptMismatch
+	return nil, "", workers.ExecutionCorrelation{}, workersessions.ErrProviderSessionAssociationAttemptMismatch
 }
 
 var errRuntimeAttemptControlUnavailable = errors.New("worker sessions: runtime attempt cancellation is unavailable")

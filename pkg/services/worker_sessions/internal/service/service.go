@@ -119,6 +119,33 @@ type registry struct {
 // broader API.
 var _ workersessions.Service = (*registry)(nil)
 
+func runtimeProgressMetadataAgrees(actual, expected workers.ExecutionCorrelation) bool {
+	// Legacy fragments may omit metadata, but supplied values must belong to
+	// the admitted execution before association or downstream publication.
+	for _, pair := range [][2]string{
+		{actual.FactorySessionID, expected.FactorySessionID},
+		{actual.GenerationID, expected.GenerationID},
+		{actual.RequestID, expected.RequestID},
+		{actual.TraceID, expected.TraceID},
+	} {
+		if value := strings.TrimSpace(pair[0]); value != "" && value != strings.TrimSpace(pair[1]) {
+			return false
+		}
+	}
+	return true
+}
+
+func prepareRuntimeAttemptExecution(req workersessions.RuntimeAttemptRequest) (workers.WorkstationDispatchRequest, workers.ExecuteRequest, error) {
+	if err := req.Validate(); err != nil {
+		return workers.WorkstationDispatchRequest{}, workers.ExecuteRequest{}, err
+	}
+	_, attemptID := runtimeAttemptIDs(req)
+	execution := cloneWorkstationDispatchRequest(req.Execution)
+	execution.Execution.Dispatch.DispatchID = attemptID
+	resolved, err := executeRequestFromSessionDispatch(execution)
+	return execution, resolved, err
+}
+
 // New constructs the process-local Worker Session registry from its required
 // lifecycle, time, and Provider Sessions collaborators. The supplied logger
 // is retained directly; callers disabling logging supply logging.NoopLogger{}.

@@ -771,7 +771,8 @@ func (r *registry) BeginRuntimeAttempt(
 	if r == nil {
 		return nil, workersessions.ErrStartAdmissionFailed
 	}
-	if err := req.Validate(); err != nil {
+	execution, resolved, err := prepareRuntimeAttemptExecution(req)
+	if err != nil {
 		return nil, err
 	}
 	if executor == nil {
@@ -809,9 +810,6 @@ func (r *registry) BeginRuntimeAttempt(
 		}
 	}()
 
-	execution := req.Execution
-	execution.Execution = workers.CloneWorkstationExecutionRequest(req.Execution.Execution)
-	execution.Execution.Dispatch.DispatchID = attemptID
 	prepared, err := r.prepareInvocation(
 		context.WithoutCancel(ctx),
 		workersessions.InvokeSessionRequest{ID: req.ID, Execution: execution},
@@ -827,13 +825,14 @@ func (r *registry) BeginRuntimeAttempt(
 		return nil, preparationErr
 	}
 	handle := &runtimeAttempt{
-		registry:   r,
-		key:        key,
-		workerID:   req.ID,
-		dispatchID: logicalDispatchID,
-		attemptID:  attemptID,
-		completed:  make(chan struct{}),
-		cancel:     cancel,
+		registry:    r,
+		key:         key,
+		workerID:    req.ID,
+		dispatchID:  logicalDispatchID,
+		attemptID:   attemptID,
+		correlation: resolved.Correlation,
+		completed:   make(chan struct{}),
+		cancel:      cancel,
 	}
 	if err := r.claimRuntimeAttempt(logicalDispatchID, req.ID, attemptID, handle); err != nil {
 		if errors.Is(err, workersessions.ErrStartAdmissionFailed) {

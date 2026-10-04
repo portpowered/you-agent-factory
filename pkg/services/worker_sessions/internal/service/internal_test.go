@@ -1285,7 +1285,7 @@ func TestKeyedRuntime_ProgressCommitsScopedAssociationBeforeForwarding(t *testin
 
 func TestKeyedRuntime_ProgressRejectsForeignIdentityBeforeEffects(t *testing.T) {
 	t.Parallel()
-	for _, mutation := range []string{"key", "physical", "missing-physical", "dispatch", "canonical", "provider"} {
+	for _, mutation := range []string{"key", "physical", "missing-physical", "dispatch", "canonical", "provider", "factory", "generation", "request", "trace"} {
 		t.Run(mutation, func(t *testing.T) {
 			t.Parallel()
 			sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
@@ -1331,6 +1331,95 @@ func mutateKeyedRuntimeProgress(mutation string, key *workersessions.RuntimeAtte
 		fragment.CanonicalDraft = workers.Draft{Kind: workers.KindMessage, DispatchID: "physical-b"}
 	case "provider":
 		fragment.Provider = "claude"
+	case "factory":
+		fragment.Correlation.FactorySessionID = "foreign-factory"
+	case "generation":
+		fragment.Correlation.GenerationID = "foreign-generation"
+	case "request":
+		fragment.Correlation.RequestID = "foreign-request"
+	case "trace":
+		fragment.Correlation.TraceID = "foreign-trace"
+	}
+}
+
+func TestKeyedRuntime_ProgressRetainsAdmittedMetadata(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	fixture := preparePerRuntimeAttemptFixture(t, "a", sink)
+	fixture.request.Execution.Execution.GenerationID = "admitted-generation"
+	fixture.request.Execution.Execution.Dispatch.Execution.TraceID = "admitted-trace"
+	var err error
+	fixture.attempt, err = fixture.service.BeginRuntimeAttempt(context.Background(), fixture.request, fixture.service.execution, coverageClock{now: fixture.clock}, fixture.service.scheduler, fixture.control.cancel)
+	if err != nil || fixture.attempt == nil {
+		t.Fatalf("admitted attempt: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := fixture.attempt.Complete(context.Background(), runtimeAttemptCompletedDispatch(perRuntimeLogicalDispatchID), nil); err != nil {
+			t.Error(err)
+		}
+	})
+	_, resolved, err := prepareRuntimeAttemptExecution(fixture.request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fragment := keyedRuntimeProgressFragment(fixture)
+	fragment.Correlation = resolved.Correlation
+	fragment.Correlation.DispatchID = fixture.request.Key.DispatchID
+	fragment.Correlation.AttemptID = fixture.request.AttemptID
+	// Caller-owned request replacement cannot change the admitted owner.
+	fixture.request.Execution.Execution.FactorySessionID = "replacement-factory"
+	fixture.request.Execution.Execution.GenerationID = "replacement-generation"
+	fixture.request.Execution.Execution.Dispatch.Execution.TraceID = "replacement-trace"
+	forwarded := 0
+	if err := fixture.service.PublishRuntimeProgress(context.Background(), fixture.request.Key, fragment, func(actual workers.ProgressFragment) {
+		forwarded++
+		if !reflect.DeepEqual(actual, fragment) {
+			t.Fatal("forwarded correlation changed")
+		}
+		assertKeyedRuntimeProgressCommitted(t, fixture, sink, 1)
+	}); err != nil || forwarded != 1 {
+		t.Fatalf("admitted metadata publication: %v, forwarded=%d", err, forwarded)
+	}
+}
+
+func TestKeyedRuntimeCompatibilityProgressRejectsForeignMetadataBeforeEffects(t *testing.T) {
+	t.Parallel()
+	sink := &perRuntimeAppendCapture{EventsAppender: newEventsAppender()}
+	r := newRuntimeIdentityRegistry(t)
+	r.events = sink
+	execution := coverageExecution{execute: func(_ context.Context, request workers.ExecuteRequest) (workers.ExecuteResult, error) {
+		fragment := workers.ProgressFragment{
+			Correlation: request.Correlation, DispatchID: request.Correlation.AttemptID,
+			Kind: workers.ProgressFragmentKind, Type: "message.delta", Payload: "owned output", Provider: "codex",
+			Continuation: &providers.ContinuationRef{Provider: "codex", Kind: providers.SessionIDKind, ProviderSessionID: "owned-provider"},
+		}
+		key := workersessions.RuntimeAttemptKey{RuntimeID: request.Correlation.RuntimeID, DispatchID: request.Correlation.DispatchID}
+		for _, mutation := range []string{"factory", "generation", "request", "trace"} {
+			foreign := fragment
+			mutateKeyedRuntimeProgress(mutation, &key, &foreign)
+			before := sink.requestsFor("")
+			forwarded := false
+			err := r.PublishRuntimeProgress(context.Background(), key, foreign, func(workers.ProgressFragment) { forwarded = true })
+			if !errors.Is(err, workersessions.ErrProviderBindingAttemptMismatch) || forwarded || !reflect.DeepEqual(before, sink.requestsFor("")) {
+				t.Fatalf("%s compatibility rejection: %v, forwarded=%t", mutation, err, forwarded)
+			}
+		}
+		if err := r.PublishRuntimeProgress(context.Background(), key, fragment, nil); err != nil {
+			t.Fatalf("valid compatibility progress after rejection: %v", err)
+		}
+		return coverageExecutionResult(request, workers.ExecutionOutcomeAccepted), nil
+	}}
+	request := validStartRequest("metadata-worker", "metadata-dispatch")
+	request.Execution.Execution.RuntimeID = "metadata-runtime"
+	result, err := r.InvokeRuntimeSession(context.Background(), workersessions.RuntimeAttemptRequest{
+		Key: workersessions.RuntimeAttemptKey{RuntimeID: "metadata-runtime", DispatchID: "metadata-dispatch"},
+		ID:  request.ID, Execution: request.Execution,
+	}, request.Retry, execution, r.clock, r.scheduler)
+	if err != nil || result.Session.State != workersessions.StateCompleted || result.Session.ProviderSessionAssociation == nil {
+		t.Fatalf("retained compatibility result: %#v, %v", result, err)
+	}
+	if records := sink.requestsFor(workersessions.Topic(request.ID)); len(records) != 4 {
+		t.Fatalf("retained opening/binding/output/terminal records: %d", len(records))
 	}
 }
 
