@@ -107,17 +107,23 @@ func assertInterruptedScriptOutcome(
 	if deadline {
 		wantCause = context.DeadlineExceeded
 		assertFailureType(t, err, workers.WorkFailureTypeTimeout)
+		var failure *workers.ProviderError
+		if !errors.As(err, &failure) {
+			t.Fatalf("timeout error = %v", err)
+		}
+		assertObservedValue(t, "timeout message", failure.Message, "execution timeout")
+	} else {
+		assertObservedValue(t, "cancellation error", err, context.Canceled)
 	}
 	if !errors.Is(err, wantCause) {
 		t.Fatalf("Execute() error = %v, want cause %v", err, wantCause)
 	}
 	command := result.Diagnostics.Command
-	if result.Content != "partial stdout" ||
-		command.Stdout != "partial stdout" ||
-		command.Stderr != "partial stderr" ||
-		command.TimedOut != deadline {
-		t.Fatalf("interrupted result = %#v", result)
-	}
+	assertObservedValue(t, "interrupted content", result.Content, "partial stdout")
+	assertObservedValue(t, "interrupted stdout", command.Stdout, "partial stdout")
+	assertObservedValue(t, "interrupted stderr", command.Stderr, "partial stderr")
+	assertObservedValue(t, "interrupted timed out", command.TimedOut, deadline)
+	assertObservedValue(t, "interrupted duration", command.Duration, 3*time.Second)
 }
 
 func assertInterruptedTerminal(

@@ -495,11 +495,12 @@ func runCommandFailureCase(
 	request := observedRequest()
 	result, executeErr := scriptRunner.Execute(t.Context(), request)
 	var failure *workers.ProviderError
-	if !errors.As(executeErr, &failure) ||
-		failure.Type != wantWorkFailure ||
-		failure.Message != wantMessage {
-		t.Fatalf("Execute() error = %#v, want normalized failure type %q message %q", executeErr, wantWorkFailure, wantMessage)
+	if !errors.As(executeErr, &failure) {
+		t.Fatalf("Execute() error = %#v, want ProviderError", executeErr)
 	}
+	assertObservedValue(t, "error type", failure.Type, wantWorkFailure)
+	assertObservedValue(t, "error message", failure.Message, wantMessage)
+	assertObservedValue(t, "error cause", failure.Cause, commandErr)
 	if commandErr != nil && !errors.Is(executeErr, commandErr) {
 		t.Fatalf("Execute() error = %v, want process cause %v", executeErr, commandErr)
 	}

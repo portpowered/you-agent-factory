@@ -251,6 +251,14 @@ func (log *observationLog) CaptureEvent(event workers.ScriptEvent) {
 	}
 	if event.Response != nil {
 		payload := *event.Response
+		if payload.ExitCode != nil {
+			code := *payload.ExitCode
+			payload.ExitCode = &code
+		}
+		if payload.FailureType != nil {
+			failure := *payload.FailureType
+			payload.FailureType = &failure
+		}
 		event.Response = &payload
 	}
 	log.events = append(log.events, event)
@@ -301,10 +309,15 @@ func assertAttributedObservations(t *testing.T, log *observationLog, request wor
 			assertObservedValue(t, "request event kind", event.Kind, workers.ScriptEventKindRequest)
 			assertObservedValue(t, "request time", event.EventTime, started.UTC())
 			assertObservedValue(t, "request response payload", event.Response, (*workers.ScriptResponseEventPayload)(nil))
-			assertObservedValue(t, "request payload", event.Request, &workers.ScriptRequestEventPayload{
-				Args: args, Attempt: 1, Command: command, DispatchID: "dispatch-1",
-				ScriptRequestID: "dispatch-1/script-request/1", TransitionID: "transition-1",
-			})
+			if event.Request == nil {
+				t.Fatal("request payload missing")
+			}
+			assertObservedValue(t, "request args", event.Request.Args, args)
+			assertObservedValue(t, "request attempt", event.Request.Attempt, 1)
+			assertObservedValue(t, "request command", event.Request.Command, command)
+			assertObservedValue(t, "request dispatch", event.Request.DispatchID, "dispatch-1")
+			assertObservedValue(t, "request script request", event.Request.ScriptRequestID, "dispatch-1/script-request/1")
+			assertObservedValue(t, "request transition", event.Request.TransitionID, "transition-1")
 		} else {
 			assertObservedValue(t, "response event ID", event.ID, "factory-event/script-response/dispatch-1/1")
 			assertObservedValue(t, "response event kind", event.Kind, workers.ScriptEventKindResponse)
