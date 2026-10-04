@@ -54,10 +54,7 @@ func TestWorkPayloadAdmissionRejectsOneByteOverWithoutPayloadContent(t *testing.
 func TestPrepareWorkRequestAppliesPayloadLimitAtCanonicalAdmission(t *testing.T) {
 	t.Parallel()
 
-	service, err := NewRequestPreparationService(NewContentPreparation())
-	if err != nil {
-		t.Fatalf("NewRequestPreparationService: %v", err)
-	}
+	service := NewRequestPreparationService(NewContentPreparation())
 	accepted := json.RawMessage(`"` + strings.Repeat("a", MaxWorkPayloadBytes-2) + `"`)
 	prepared, err := service.PrepareWorkRequest(context.Background(), WorkRequestPreparation{
 		Request: Request{

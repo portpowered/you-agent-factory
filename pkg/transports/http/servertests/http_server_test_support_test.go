@@ -2,6 +2,7 @@ package apiserver_test
 
 import (
 	"context"
+	"errors"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -65,7 +66,12 @@ func newAPIServerFromRoles(
 		WorkerPrompts:   workerPrompts,
 		SessionRequests: sessionRequests,
 	}, logger)
-	workRoot := work.AdmissionContentService(contentStaging, requestPreparation)
+	workRoot := &completeWorkTestRoot{
+		submission: workAPI, read: workRead, staging: contentStaging, preparation: requestPreparation,
+		invocationInput: func(context.Context, work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
+			return work.PreparedInvocationInput{}, errWorkFixtureUnavailable
+		},
+	}
 	var providerSessionsHTTP *providersessionshttp.Handler
 	if providerSessions != nil {
 		providerSessionsHTTP = providersessionshttp.NewHandler(
@@ -74,7 +80,7 @@ func newAPIServerFromRoles(
 	}
 	return api.NewServerWithRecordings(
 		recordingshttp.NewAdapterWithSessions(nil, sessionsRoot, inspection),
-		handler, workhttp.NewAdapterFromRoles(workRoot, workRoot, workAPI, workRead),
+		handler, workhttp.NewAdapter(workRoot),
 		modelsHTTP, providerSessionsHTTP, nil, logger,
 	)
 }
@@ -97,4 +103,99 @@ type canonicalOpenTestRoot struct{ factorysessions.Service }
 func (canonicalOpenTestRoot) Start(_ context.Context, request factorysessions.SessionStartRequest) (factorysessions.SessionStartResult, error) {
 	return factorysessions.SessionStartResult{SessionID: "opened", Mode: factorysessions.SessionOperationModeLive,
 		Live: &factorysessions.SessionOpenResult{SessionID: "opened", FolderPath: request.FolderPath}}, nil
+}
+
+// completeWorkTestRoot supplies all Work operations explicitly; unexpected
+// fixture operations fail instead of relying on an embedded nil service.
+type completeWorkTestRoot struct {
+	invocationInput func(context.Context, work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error)
+	submission      apisurface.WorkAPI
+	read            apisurface.WorkReadAPI
+	staging         work.ContentStagingService
+	preparation     work.RequestPreparationService
+}
+
+var errWorkFixtureUnavailable = errors.New("work service is unavailable")
+var _ work.Service = (*completeWorkTestRoot)(nil)
+
+func (r *completeWorkTestRoot) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	if r.submission == nil {
+		return work.WorkRequestSubmitResult{}, errWorkFixtureUnavailable
+	}
+	return r.submission.SubmitWorkRequestForSession(ctx, sessionID, request)
+}
+
+func (r *completeWorkTestRoot) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
+	if r.submission == nil {
+		return work.OperatorMoveResult{}, errWorkFixtureUnavailable
+	}
+	return r.submission.MoveWorkForSession(ctx, sessionID, workID, stateName, requestID)
+}
+
+func (r *completeWorkTestRoot) ListWork(ctx context.Context, sessionID string, options work.ListOptions) (work.ListResult, error) {
+	if r.read == nil {
+		return work.ListResult{}, errWorkFixtureUnavailable
+	}
+	return r.read.ListWork(ctx, sessionID, options)
+}
+
+func (r *completeWorkTestRoot) GetWork(ctx context.Context, sessionID, workID string) (work.ReadModel, error) {
+	if r.read == nil {
+		return work.ReadModel{}, errWorkFixtureUnavailable
+	}
+	return r.read.GetWork(ctx, sessionID, workID)
+}
+
+func (r *completeWorkTestRoot) MoveWorkAndRead(ctx context.Context, sessionID, workID, stateName, requestID string) (work.ReadModel, error) {
+	if r.read == nil {
+		return work.ReadModel{}, errWorkFixtureUnavailable
+	}
+	return r.read.MoveWorkAndRead(ctx, sessionID, workID, stateName, requestID)
+}
+
+func (r *completeWorkTestRoot) PrepareWorkRequest(ctx context.Context, input work.WorkRequestPreparation) (work.WorkRequest, error) {
+	if r.preparation == nil {
+		return work.WorkRequest{}, errWorkFixtureUnavailable
+	}
+	return r.preparation.PrepareWorkRequest(ctx, input)
+}
+
+func (r *completeWorkTestRoot) StageContent(ctx context.Context, request work.StageContentRequest) (work.StageContentResult, error) {
+	if r.staging == nil {
+		return work.StageContentResult{}, errWorkFixtureUnavailable
+	}
+	return r.staging.StageContent(ctx, request)
+}
+
+func (r *completeWorkTestRoot) PrepareContent(ctx context.Context, items []work.StagedSubmissionItem) ([]work.WorkContentPart, error) {
+	if r.staging == nil {
+		return nil, errWorkFixtureUnavailable
+	}
+	return r.staging.PrepareContent(ctx, items)
+}
+
+func (r *completeWorkTestRoot) ResolveContent(ctx context.Context, ref string) (work.ResolvedStagedContent, error) {
+	if r.staging == nil {
+		return work.ResolvedStagedContent{}, errWorkFixtureUnavailable
+	}
+	return r.staging.ResolveContent(ctx, ref)
+}
+
+func (r *completeWorkTestRoot) CleanupContent(ctx context.Context, ref string) error {
+	if r.staging == nil {
+		return errWorkFixtureUnavailable
+	}
+	return r.staging.CleanupContent(ctx, ref)
+}
+func (*completeWorkTestRoot) MaterializeContentURL(context.Context, string) (string, work.ContentCleanup, error) {
+	return "", nil, errWorkFixtureUnavailable
+}
+func (*completeWorkTestRoot) MaterializeWorkerOutput(context.Context, work.MaterializeWorkerOutputRequest) (work.MaterializeWorkerOutputResult, error) {
+	return work.MaterializeWorkerOutputResult{}, errWorkFixtureUnavailable
+}
+func (r *completeWorkTestRoot) PrepareInvocationInput(ctx context.Context, request work.InvocationInputPreparationRequest) (work.PreparedInvocationInput, error) {
+	return r.invocationInput(ctx, request)
+}
+func (*completeWorkTestRoot) ResolvePrimaryResult(context.Context, work.PrimaryResultSelectionInput) (work.PrimaryResultSelection, error) {
+	return work.PrimaryResultSelection{}, errWorkFixtureUnavailable
 }
