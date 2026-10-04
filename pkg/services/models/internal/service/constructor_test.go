@@ -147,74 +147,118 @@ func projectTestModelsRuntimeConfig(factoryDir string, cfg *testFactoryConfig) *
 	}
 }
 
-func TestService_AcquireLease_RejectsEmptyModelName(t *testing.T) {
+// Root forwards scoped lease requests and preserves the selected host's outcomes.
+// Validation belongs to Runtime Host; this fixture observes that boundary.
+func TestRootScopedLeaseDelegationPreservesRequestsAndOutcomes(t *testing.T) {
 	t.Parallel()
-
-	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := mustConstructModelService(t, modelServiceFixture{
-		RuntimeConfig: func() *modelRuntimeConfig { return runtimeCfg },
-		ModelHost:     hostLeaseTestHost{},
-	})
-
-	_, err := svc.AcquireLease(context.Background(), models.AcquireLeaseRequest{})
-	if !errors.Is(err, models.ErrNotFound) {
-		t.Fatalf("AcquireLease empty model = %v, want ErrNotFound", err)
-	}
-}
-
-func TestService_ReleaseLease_RejectsEmptyLeaseID(t *testing.T) {
-	t.Parallel()
-
-	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := mustConstructModelService(t, modelServiceFixture{
-		RuntimeConfig: func() *modelRuntimeConfig { return runtimeCfg },
-		ModelHost:     hostLeaseTestHost{},
-	})
-
-	err := svc.ReleaseLease(context.Background(), models.ReleaseLeaseRequest{})
-	if !errors.Is(err, models.ErrHostLeaseNotFound) {
-		t.Fatalf("ReleaseLease empty lease id = %v, want ErrHostLeaseNotFound", err)
-	}
-}
-
-func TestService_AcquireLease_ReturnsUnavailableWhenRuntimeMissing(t *testing.T) {
-	t.Parallel()
-
-	svc := mustConstructModelService(t, modelServiceFixture{
-		RuntimeConfig: func() *modelRuntimeConfig { return nil },
-		ModelHost:     hostLeaseTestHost{},
-	})
-
-	_, err := svc.AcquireLease(context.Background(), models.AcquireLeaseRequest{ModelName: "OMNIVOICE_Q4_K_M"})
-	if err == nil || !strings.Contains(err.Error(), "runtime is not available") {
-		t.Fatalf("AcquireLease missing runtime = %v, want runtime unavailable", err)
-	}
-}
-
-func TestService_AcquireLeaseAndReleaseLease_HappyPathThroughStubHost(t *testing.T) {
-	t.Parallel()
-
-	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	host := hostLeaseTestHost{}
-	svc := mustConstructModelService(t, modelServiceFixture{
-		RuntimeConfig: func() *modelRuntimeConfig { return runtimeCfg },
-		ModelHost:     host,
-	})
-
-	lease, err := svc.AcquireLease(context.Background(), models.AcquireLeaseRequest{
-		ModelName: "OMNIVOICE_Q4_K_M",
-		Holder:    "dispatch-1",
-	})
+	scope, err := (models.RuntimeScopeRef{}).Parse("lease-scope")
 	if err != nil {
-		t.Fatalf("AcquireLease: %v", err)
+		t.Fatal(err)
 	}
-	if lease.ID != "lease-OMNIVOICE_Q4_K_M" || lease.Holder != "dispatch-1" || lease.Endpoint != "http://127.0.0.1:8080" {
-		t.Fatalf("AcquireLease = %#v, want stub host lease", lease)
+	lease, err := (models.ModelLeaseRef{}).Parse("selected-lease")
+	if err != nil {
+		t.Fatal(err)
 	}
+	acquire := models.AcquireModelLeaseRequest{Scope: scope, Name: "voice", Holder: "dispatch-1"}
+	release := models.ReleaseModelLeaseRequest{Scope: scope, Lease: lease}
+	failure := errors.New("selected host failure")
+	for _, test := range []struct {
+		name    string
+		acquire models.AcquireModelLeaseRequest
+		release models.ReleaseModelLeaseRequest
+		failure error
+	}{
+		{"success", acquire, release, nil},
+		{"empty model", models.AcquireModelLeaseRequest{Scope: scope, Holder: acquire.Holder}, release, nil},
+		{"empty lease", acquire, models.ReleaseModelLeaseRequest{Scope: scope}, nil},
+		{"host unavailable", acquire, release, models.ErrHostRuntimeNotReady},
+		{"host fault", acquire, release, failure},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			host := &rootLeaseBoundary{failure: test.failure, lease: models.ModelLease{Lease: lease, Scope: scope, ModelName: acquire.Name, Holder: acquire.Holder, Status: models.ModelLeaseStatusActive, HostReadiness: models.ReadinessStateReady}}
+			root := newLeaseBoundaryRoot(t, host)
+			type contextKey struct{}
+			ctx := context.WithValue(t.Context(), contextKey{}, "selected")
+			assertRootLeaseAcquisition(t, root, host, ctx, test.acquire)
+			assertRootLeaseRelease(t, root, host, ctx, test.release)
+		})
+	}
+}
 
-	if err := svc.ReleaseLease(context.Background(), models.ReleaseLeaseRequest{LeaseID: lease.ID}); err != nil {
-		t.Fatalf("ReleaseLease: %v", err)
+func assertRootLeaseAcquisition(t *testing.T, root *modelsservice.Root, host *rootLeaseBoundary, ctx context.Context, request models.AcquireModelLeaseRequest) {
+	t.Helper()
+	acquired, gotErr := root.AcquireModelLease(ctx, request)
+	wantErr := host.failure
+	if request.Name == "" {
+		wantErr = models.ErrNotFound
 	}
+	if !errors.Is(gotErr, wantErr) || host.acquired != request || host.acquireContext != ctx {
+		t.Fatalf("acquire = %#v, %v; request = %#v", acquired, gotErr, host.acquired)
+	}
+	if wantErr == nil && acquired.Lease != host.lease {
+		t.Fatalf("acquired lease = %#v", acquired.Lease)
+	}
+}
+func assertRootLeaseRelease(t *testing.T, root *modelsservice.Root, host *rootLeaseBoundary, ctx context.Context, request models.ReleaseModelLeaseRequest) {
+	t.Helper()
+	released, gotErr := root.ReleaseModelLease(ctx, request)
+	wantErr := host.failure
+	if request.Lease.IsZero() {
+		wantErr = models.ErrHostLeaseNotFound
+	}
+	if !errors.Is(gotErr, wantErr) || host.released != request || host.releaseContext != ctx {
+		t.Fatalf("release = %#v, %v; request = %#v", released, gotErr, host.released)
+	}
+	if wantErr == nil && (released.Lease != host.lease || released.Outcome != models.ModelLeaseReleased) {
+		t.Fatalf("released lease = %#v", released)
+	}
+}
+
+type rootLeaseBoundary struct {
+	runtimehost.Service
+	failure                        error
+	lease                          models.ModelLease
+	acquired                       models.AcquireModelLeaseRequest
+	released                       models.ReleaseModelLeaseRequest
+	acquireContext, releaseContext context.Context
+}
+
+func (h *rootLeaseBoundary) AcquireModelLease(ctx context.Context, r models.AcquireModelLeaseRequest) (models.AcquireModelLeaseResult, error) {
+	h.acquired, h.acquireContext = r, ctx
+	if err := r.Validate(); err != nil {
+		return models.AcquireModelLeaseResult{}, err
+	}
+	return models.AcquireModelLeaseResult{Lease: h.lease}, h.failure
+}
+func (h *rootLeaseBoundary) ReleaseModelLease(ctx context.Context, r models.ReleaseModelLeaseRequest) (models.ReleaseModelLeaseResult, error) {
+	h.released, h.releaseContext = r, ctx
+	if err := r.Validate(); err != nil {
+		return models.ReleaseModelLeaseResult{}, err
+	}
+	return models.ReleaseModelLeaseResult{Lease: h.lease, Outcome: models.ModelLeaseReleased}, h.failure
+}
+func newLeaseBoundaryRoot(t *testing.T, host runtimehost.Service) *modelsservice.Root {
+	t.Helper()
+	resources, err := localmodels.NewResourceLimiter(modelseffects.LocalRuntimeHooks{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := modelsservice.NewRoot(resources,
+		func(context.Context, models.PullModelRequest) (models.PullResult, error) {
+			return models.PullResult{}, nil
+		},
+		func(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
+			return models.LocalInvocationResult{}, nil
+		},
+		func(models.RuntimeScopeRef) {}, func() {},
+		struct{ runtimescopes.Service }{}, struct{ modelcatalog.Service }{}, struct{ scopedassets.Service }{}, host, struct{ inference.Service }{},
+		zap.NewNop(), time.Now, nil, nil,
+		func(context.Context, string) (string, error) { return "", models.ErrModelRevisionUnresolved }, nil, models.AssetHostPlatform{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
 }
 
 func TestService_GetModel_RejectsEmptyModelName(t *testing.T) {

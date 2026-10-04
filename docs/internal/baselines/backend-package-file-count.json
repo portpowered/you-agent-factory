@@ -164,12 +164,6 @@
       "removalReason": "Split local model lifecycle and invocation responsibilities."
     },
     {
-      "packagePath": "pkg/services/models/internal/service",
-      "fileCount": 16,
-      "owner": "model-runtime-maintainers",
-      "removalReason": "Separate model runtime scope, catalog, host lease, and local execution responsibilities."
-    },
-    {
       "packagePath": "pkg/services/models/transports/cli",
       "fileCount": 26,
       "owner": "backend-maintainers",
