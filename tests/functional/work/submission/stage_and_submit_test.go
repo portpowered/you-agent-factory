@@ -4,9 +4,16 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	platformcontentstaging "github.com/portpowered/infinite-you/pkg/platform/contentstaging"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"io"
+	"io/fs"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -60,6 +67,9 @@ func assertAPIStageAndSubmitFileCreatesExpectedWork(
 		)
 	}
 
+	if got, err := os.ReadFile(stagedFilesystemPath(t, string(staged.Url))); err != nil || !bytes.Equal(got, fileBytes) {
+		t.Fatalf("staged URL bytes = %q, %v", got, err)
+	}
 	imageItem := mustStageAndSubmitImageItem(
 		t,
 		staged.StagedFileRef,
@@ -272,7 +282,8 @@ func TestSelectedProcessClockControlsStagedSubmissionExpiry(t *testing.T) {
 			selected.nanos.Store(base.UnixNano())
 			specialized.nanos.Store(base.Add(24 * time.Hour).UnixNano())
 			effective := selected
-			edges := serviceedges.Edges{Clock: selected, ProviderCommandRunner: submissionInputPreservingProviderRunner()}
+			edges := serviceedges.Edges{Clock: selected, ProviderCommandRunner: submissionInputPreservingProviderRunner(),
+				WorkContentStagingFileSystem: stagingRootFiles{root: t.TempDir()}}
 			if override {
 				edges.WorkContentStagingClock = specialized
 				effective = specialized
@@ -294,6 +305,9 @@ func TestSelectedProcessClockControlsStagedSubmissionExpiry(t *testing.T) {
 			prior := support.ListDefaultSessionWork(t, server.URL())
 			effective.nanos.Store(issuedAt.Add(time.Hour).UnixNano())
 			assertExpiredStagedSubmissionRejected(t, server, expired)
+			if _, err := os.Stat(stagedFilesystemPath(t, string(expired.Url))); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("expired file cleanup = %v", err)
+			}
 			after := support.ListDefaultSessionWork(t, server.URL())
 			if len(after.Results) != len(prior.Results) {
 				t.Fatalf("expired submission admitted Work: before=%d after=%d", len(prior.Results), len(after.Results))
@@ -320,5 +334,64 @@ func assertExpiredStagedSubmissionRejected(t *testing.T, server *support.Functio
 	}
 	if response.StatusCode != http.StatusBadRequest || !strings.Contains(string(payload), "stagedFileRef has expired") {
 		t.Fatalf("expiry response = %d %s", response.StatusCode, payload)
+	}
+}
+
+func stagedFilesystemPath(t *testing.T, contentURL string) string {
+	t.Helper()
+	parsed, err := url.Parse(contentURL)
+	if err != nil || parsed.Scheme != "file" {
+		t.Fatalf("content URL = %q, %v", contentURL, err)
+	}
+	path := parsed.Path
+	if runtime.GOOS == "windows" {
+		path = strings.TrimPrefix(path, "/")
+	}
+	return filepath.FromSlash(path)
+}
+
+type stagingRootFiles struct {
+	platformcontentstaging.FileSystem
+	root string
+}
+
+func (files stagingRootFiles) MkdirTemp(_ string, pattern string) (string, error) {
+	return os.MkdirTemp(files.root, pattern)
+}
+
+type failingStagingFiles struct{ stagingRootFiles }
+
+func (files failingStagingFiles) WriteFile(string, []byte, fs.FileMode) error {
+	return errors.New("controlled private staging failure")
+}
+
+func TestStagingWriteFailureRemovesPartialContentThroughPublicAPI(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	dir := support.ScaffoldFactory(t, submissionInputPreservingFactoryConfig())
+	configureSubmissionCodexWorkers(t, dir, "worker-a")
+	cfg := submissionServerConfig(dir, submissionInputPreservingProviderRunner())
+	cfg.Edges.WorkContentStagingFileSystem = failingStagingFiles{stagingRootFiles: stagingRootFiles{root: root}}
+	server := support.StartFunctionalAPIServer(t, cfg)
+	t.Cleanup(func() { server.Stop(t) })
+	payload := `{"itemType":"image","fileName":"failure.png","mediaType":"image/png","contentBase64":"aW1hZ2U="}`
+	response, err := http.Post(support.DefaultSessionWorkURL(server.URL(), "/work/staged-files"), "application/json", strings.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var failure factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&failure); err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusInternalServerError || failure.Family != factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("staging failure = %d %#v", response.StatusCode, failure)
+	}
+	if strings.Contains(failure.Message, "controlled private") {
+		t.Fatalf("private effect detail exposed: %#v", failure)
+	}
+	remaining, err := os.ReadDir(root)
+	if err != nil || len(remaining) != 0 {
+		t.Fatalf("partial staged content remains = %v, %v", remaining, err)
 	}
 }

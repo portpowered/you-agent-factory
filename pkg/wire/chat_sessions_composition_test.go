@@ -850,10 +850,12 @@ func TestChatSessionTurnFactsUseSelectedSource(t *testing.T) {
 	assertChatTimestampFacts(t, final.Session, base, terminalAt)
 	assertChatTimestampFacts(t, created.Session, base, base)
 	assertChatTimestampFacts(t, admitted.Session, base, admittedAt)
+	source.nanos.Store(base.Add(3 * time.Second).UnixNano())
 	retried, err := service.StartTurn(t.Context(), chatsessions.StartTurnRequest{RequestID: identity, SessionID: created.Session.ID, ExpectedVersion: final.Session.Version})
 	if err != nil || retried.Turn.ID != admitted.Turn.ID {
 		t.Fatalf("retry = %#v, %v", retried, err)
 	}
+	assertChatTimestampFacts(t, retried.Session, base, terminalAt)
 }
 
 func assertChatTimestampFacts(t *testing.T, session chatsessions.Session, createdAt, updatedAt time.Time) {

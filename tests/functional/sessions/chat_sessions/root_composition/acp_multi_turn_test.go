@@ -203,11 +203,12 @@ func TestSelectedProcessClockStampsChatTurnsAndRuntimeArtifacts(t *testing.T) {
 			seedProjectPackagedFactory(t, cwd, controlledACPFactory)
 			support.SeedACPAgentProfile(t, home, "factory:"+controlledACPFactory, []string{"factory:" + controlledACPFactory})
 			source := &selectedChatWall{}
+			runner := &controlledACPCommandRunner{}
 			base := time.Date(year, 2, 3, 4, 5, 6, 0, time.UTC)
 			source.nanos.Store(base.UnixNano())
 			// Different selected sources require distinct immutable process graphs.
 			process, err := buildChatProcess(t, "selected wall", serviceedges.Edges{
-				Clock: source, ProviderCommandRunner: &controlledACPCommandRunner{},
+				Clock: source, ProviderCommandRunner: runner,
 				FactorySessionResolveHomeDirectory: func() (string, error) { return home, nil },
 			})
 			if err != nil {
@@ -229,6 +230,8 @@ func TestSelectedProcessClockStampsChatTurnsAndRuntimeArtifacts(t *testing.T) {
 				assertSelectedTranscriptFrame(t, home, base, requestID, instant)
 			}
 
+			assertSelectedChatRedelivery(t, stdin, stdout, sessionID, runner, source, base.Add(8*time.Second))
+			assertSelectedChatFailureRecovery(t, stdin, stdout, sessionID, source, base)
 			// Re-read the first fact after advancing and executing another turn.
 			assertSelectedTranscriptFrame(t, home, base, "selected-time-0", base)
 		})
@@ -269,5 +272,36 @@ func assertSelectedTranscriptFrame(t *testing.T, home string, openedAt time.Time
 	}
 	if !found {
 		t.Fatalf("transcript missing request %q", requestID)
+	}
+}
+
+func assertSelectedChatRedelivery(t *testing.T, stdin *os.File, stdout *bufio.Reader, sessionID string, runner *controlledACPCommandRunner, source *selectedChatWall, advancedAt time.Time) {
+	t.Helper()
+	before := runner.requestCount()
+	source.nanos.Store(advancedAt.UnixNano())
+	response, _ := driveIdentifiedSessionPrompt(t, stdin, stdout, "selected-time-1", sessionID, "pursue the first goal")
+	if response.Error != nil {
+		t.Fatalf("redelivery: %+v", response.Error)
+	}
+	var decoded acpsdk.PromptResponse
+	if err := json.Unmarshal(response.Result, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.StopReason != acpsdk.StopReasonEndTurn || runner.requestCount() != before {
+		t.Fatalf("redelivery = %#v; provider calls before=%d after=%d", decoded, before, runner.requestCount())
+	}
+}
+
+func assertSelectedChatFailureRecovery(t *testing.T, stdin *os.File, stdout *bufio.Reader, sessionID string, source *selectedChatWall, base time.Time) {
+	t.Helper()
+	source.nanos.Store(base.Add(9 * time.Second).UnixNano())
+	failure, _ := driveIdentifiedSessionPrompt(t, stdin, stdout, "selected-failure", sessionID, "please help [cohort-failure]")
+	if failure.Error == nil || failure.Error.Code != internalErrorCode {
+		t.Fatalf("malformed result = %#v", failure)
+	}
+	source.nanos.Store(base.Add(10 * time.Second).UnixNano())
+	recovered, notifications := driveIdentifiedSessionPrompt(t, stdin, stdout, "selected-recovery", sessionID, "please help [selected-recovery]")
+	if recovered.Error != nil || !strings.Contains(agentMessageText(t, notifications), "selected recovery answer") {
+		t.Fatalf("later eligible turn = %#v", recovered)
 	}
 }
