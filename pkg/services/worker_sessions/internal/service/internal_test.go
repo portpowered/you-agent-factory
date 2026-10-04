@@ -253,6 +253,12 @@ func assertPerRuntimeOpeningAttribution(t *testing.T, fixture *perRuntimeAttempt
 		t.Fatalf("opening appends = %#v", appends)
 	}
 	draft := decodePerRuntimeDraft(t, appends[0])
+	assertPerRuntimeOpeningPayload(t, fixture, draft)
+}
+
+func assertPerRuntimeOpeningPayload(t *testing.T, fixture *perRuntimeAttemptFixture, draft workers.Draft) {
+	t.Helper()
+	execution := fixture.request.Execution.Execution
 	var payload workers.SessionPayload
 	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
 		t.Fatal(err)
@@ -308,21 +314,26 @@ func assertPerRuntimeTerminalAppends(t *testing.T, fixture *perRuntimeAttemptFix
 			continue
 		}
 		terminals++
-		var payload workers.SessionPayload
-		if err := json.Unmarshal(draft.Payload, &payload); err != nil {
-			t.Fatal(err)
-		}
-		wantPhase := workers.PhaseCompleted
-		if state == workersessions.StateCanceled {
-			wantPhase = workers.PhaseCanceled
-		}
-		if request.SourceID != events.SourceID(fixture.request.ID) || draft.DispatchID != fixture.request.AttemptID ||
-			draft.Kind != workers.KindSession || draft.Phase != wantPhase || payload.Status != string(state) {
-			t.Fatalf("terminal attribution = %#v / %#v", request, draft)
-		}
+		assertPerRuntimeTerminalPayload(t, fixture, request, draft, state)
 	}
 	if terminals != 1 || progress != 1 {
 		t.Fatalf("%s append counts: terminal=%d progress=%d, want one each", fixture.request.ID, terminals, progress)
+	}
+}
+
+func assertPerRuntimeTerminalPayload(t *testing.T, fixture *perRuntimeAttemptFixture, request events.AppendRequest, draft workers.Draft, state workersessions.State) {
+	t.Helper()
+	var payload workers.SessionPayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	wantPhase := workers.PhaseCompleted
+	if state == workersessions.StateCanceled {
+		wantPhase = workers.PhaseCanceled
+	}
+	if request.SourceID != events.SourceID(fixture.request.ID) || draft.DispatchID != fixture.request.AttemptID ||
+		draft.Kind != workers.KindSession || draft.Phase != wantPhase || payload.Status != string(state) {
+		t.Fatalf("terminal attribution = %#v / %#v", request, draft)
 	}
 }
 
