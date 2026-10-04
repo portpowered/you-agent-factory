@@ -53,7 +53,10 @@ def build_profile(source, output, tool, manifest, files, mode,
                       inputManifestPath=str(seed_path), inputManifestSHA256=sha(seed_path),
                       offline=True, cachePolicy="copied go.mod expanded modules and metadata; owned build cache; no shared build cache seeding"),
                   fixtureSHA256=sha(tool / "testdata/lifecycle-tests.go.txt"),
-                  methodSHA256=sha(tool / "testdata/profile-tests.go.txt"), instrumentation=instrumentation,
-                  profileCommand="unsupported until joined cycles and composed capacity are implemented",
-                  capabilityCommand=subprocess.list2cmdline([str(artifact), "-test.run=^TestLifecycleProfileSamplesCapability$", "-test.short=false", "-test.count=1", "-test.timeout=5m", "-test.v"]))
+                  methodSHA256=hashlib.sha256(b"".join(
+                      name.encode() + b"\0" + (tool / "testdata" / name).read_bytes() + b"\0"
+                      for name in ("profile-tests.go.txt", "profile-cycles.go.txt", "profile-report.go.txt"))).hexdigest(),
+                  instrumentation=instrumentation,
+                  profileCommand="unsupported until composed public Models capacity is implemented; joined cycle driver supplied",
+                  capabilityCommand=subprocess.list2cmdline([str(artifact), "-test.run=^TestLifecycleProfileCapability$", "-test.short=false", "-test.count=1", "-test.timeout=5m", "-test.v"]))
     (output / "profile-manifest.json").write_text(json.dumps(report, indent=2) + "\n")

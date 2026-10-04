@@ -107,7 +107,7 @@ def prepare(args):
                     "internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 2})\n\tleaseswire.BindCoordinator(owner, &recordingSlotCapacityCoordinator{})",
                 )
         add(path + "/" + existing, original.replace("import (", "import (" + imports, 1) + calibration)
-    for template, virtual in [("collector-tests.go.txt", "pkg/platform/baselineobservation/hook_test.go"), ("q0-tests.go.txt", "tests/stress/observer/observer_test.go"), ("lifecycle-tests.go.txt", "tests/stress/observer/lifecycle_test.go"), ("report.go.txt", "tests/stress/observer/report_test.go"), ("report-tests.go.txt", "tests/stress/observer/report_validation_test.go"), ("profile-tests.go.txt", "tests/stress/observer/profile_test.go"), ("profile-report.go.txt", "tests/stress/observer/profile_report_test.go")]:
+    for template, virtual in [("collector-tests.go.txt", "pkg/platform/baselineobservation/hook_test.go"), ("q0-tests.go.txt", "tests/stress/observer/observer_test.go"), ("lifecycle-tests.go.txt", "tests/stress/observer/lifecycle_test.go"), ("report.go.txt", "tests/stress/observer/report_test.go"), ("report-tests.go.txt", "tests/stress/observer/report_validation_test.go"), ("profile-tests.go.txt", "tests/stress/observer/profile_test.go"), ("profile-report.go.txt", "tests/stress/observer/profile_report_test.go"), ("profile-cycles.go.txt", "tests/stress/observer/profile_cycles_test.go")]:
         add(virtual, (templates / template).read_text())
     overlay = output / "overlay.json"
     overlay.write_text(json.dumps({"Replace": replacements}, indent=2) + "\n")

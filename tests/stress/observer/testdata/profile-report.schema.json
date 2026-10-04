@@ -463,7 +463,8 @@
           "complete",
           "barriers",
           "errors",
-          "checkpoints"
+          "checkpoints",
+          "runtimeInstanceIDs"
         ],
         "properties": {
           "cycle": {
@@ -523,6 +524,13 @@
             "type": "array",
             "items": {
               "$ref": "#/$defs/profileCheckpoint"
+            }
+          },
+          "runtimeInstanceIDs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
             }
           }
         }

@@ -35,6 +35,8 @@ type profileManifest struct {
  MethodSHA256 string
 }
 type sampleProfile struct {
+ Mode string
+ Cycles []profileCycle
  Manifest profileManifest
  ManifestPath,ManifestSHA256 string
  Attempts []profileAttempt
@@ -47,20 +49,32 @@ type sampleProfile struct {
 }
 
 // Full profiling is deliberately unavailable until the same artifact also
-// implements joined cycles and the composed public Models capacity witness.
+// implements the composed public Models capacity witness.
 func TestLifecycleProfile(t *testing.T) {
  if testing.Short(){t.Skip("dedicated lifecycle profile; no construction under -short")}
- t.Fatal("full profile unsupported: joined 100-cycle retention and composed Models capacity remain required; use TestLifecycleProfileSamplesCapability")
+ t.Fatal("full profile unsupported: composed public Models capacity remains required; use TestLifecycleProfileSamplesCapability or the incomplete replacement diagnostic")
 }
 func TestLifecycleProfileCapability(t *testing.T) {
  if testing.Short(){t.Skip("dedicated composed capability")}
- t.Fatal("composed capability unsupported until replacement cycles and public Models capacity are implemented")
+ r:=newSampleProfile("capability")
+ defer r.emit(t)
+ r.load(t)
+ baselineobservation.Close();defer baselineobservation.Close()
+ artifact:=smokeArtifact(t)
+ ctx,cancel:=context.WithTimeout(t.Context(),2*time.Minute);defer cancel()
+ r.session(t,ctx,artifact)
+ r.Errors=append(r.Errors,"composed Models capacity unsupported: replacement diagnostic retained; story 003 must supply a real public acquisition witness")
+ t.Error(r.Errors[len(r.Errors)-1])
+}
+
+func newSampleProfile(mode string)*sampleProfile {
+ return &sampleProfile{Mode:mode,Cycles:[]profileCycle{},ManifestPath:os.Getenv("OBSERVER_PROFILE_MANIFEST"),Attempts:[]profileAttempt{},Final:[]profileCheckpoint{},Errors:[]string{},CleanupErrors:[]string{},LastBarrier:"manifest identity",Started:time.Now().UTC().Format(time.RFC3339Nano)}
 }
 
 // This dedicated tool is sequential because it observes all process owners.
 func TestLifecycleProfileSamplesCapability(t *testing.T) {
  if testing.Short(){t.Skip("dedicated sample capability")}
- r:=&sampleProfile{ManifestPath:os.Getenv("OBSERVER_PROFILE_MANIFEST"),Attempts:[]profileAttempt{},Final:[]profileCheckpoint{},Errors:[]string{},CleanupErrors:[]string{},LastBarrier:"manifest identity",Started:time.Now().UTC().Format(time.RFC3339Nano)}
+ r:=newSampleProfile("samples_capability")
  defer r.emit(t)
  r.load(t)
  baselineobservation.Close()
@@ -161,6 +175,10 @@ func (r *sampleProfile) session(t *testing.T,ctx context.Context,artifact artifa
  bootstrap,err:=service.List(ctx,sessions.SessionListRequest{Mode:sessions.SessionOperationModeLive});if err!=nil{t.Fatal(err)}
  bootstrapIDs:=[]string{};for _,s:=range bootstrap.Sessions{bootstrapIDs=append(bootstrapIDs,s.SessionID)}
  r.Final=append(r.Final,r.capture(t,artifact,"HOST_BASELINE",nil,bootstrapIDs))
+ if r.Mode=="capability" {
+  r.runCycles(t,ctx,service,home,folder,artifact,bootstrapIDs,1)
+  return
+ }
  r.attempt(t,"session",func(t *testing.T,a *profileAttempt){r.sessionAttempt(t,ctx,service,home,folder,artifact,bootstrapIDs,a)})
 }
 func (r *sampleProfile) sessionAttempt(t *testing.T,ctx context.Context,service sessions.Service,home,folder string,artifact artifactIdentity,bootstrap []string,a *profileAttempt) {
@@ -200,9 +218,9 @@ func (r *sampleProfile) emit(t *testing.T) {
  complete:=!t.Failed() && r.validateSamples()==nil
  host,_:=os.Hostname();if host==""{host="unavailable"}
  summaries:=map[string]profileSummary{"inert":summarizeProfile(r.Attempts,"inert",false),"session":summarizeProfile(r.Attempts,"session",false)}
- payload:=map[string]any{"schemaVersion":1,"mode":"samples_capability","manifestPath":r.ManifestPath,"manifestSHA256":r.ManifestSHA256,
+ payload:=map[string]any{"schemaVersion":1,"mode":r.Mode,"manifestPath":r.ManifestPath,"manifestSHA256":r.ManifestSHA256,
  "hostWindow":map[string]any{"confirmed":false,"authorityReference":nil,"host":host,"cpu":fmt.Sprintf("%s/%s; CPUs=%d",runtime.GOOS,runtime.GOARCH,runtime.NumCPU()),"memory":"not measured; shared host","cache":"owned runtime paths; cached preparation toolchain","startedUTC":r.Started,"endedUTC":time.Now().UTC().Format(time.RFC3339Nano),"coTenantBreach":false},
- "complete":complete,"baselineQualified":false,"lastBarrier":r.LastBarrier,"errors":r.Errors,"cleanupErrors":r.CleanupErrors,"attempts":r.Attempts,"summaries":summaries,"cycles":[]any{},"capacityWitnesses":[]any{},"finalCheckpoints":r.Final,
+ "complete":complete,"baselineQualified":false,"lastBarrier":r.LastBarrier,"errors":r.Errors,"cleanupErrors":r.CleanupErrors,"attempts":r.Attempts,"summaries":summaries,"cycles":r.Cycles,"capacityWitnesses":[]any{},"finalCheckpoints":r.Final,
  "overhead":map[string]any{"methodSHA256":r.Manifest.MethodSHA256,"registrationCallbacks":r.Callbacks,"retainedOwnerCallbacks":r.Callbacks,"snapshotCount":r.SnapshotCount,"captureOutsideSpanNs":r.CaptureNs,"serializationOutsideSpanNs":int64(0),"matchedFinalRequired":true}}
  path:=os.Getenv("OBSERVER_REPORT")
  data,err:=writeProfileReport(path,payload,json.MarshalIndent,os.WriteFile,time.Now)

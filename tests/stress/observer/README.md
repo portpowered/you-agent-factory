@@ -192,11 +192,13 @@ immediate lint/pkg-file-count before merge.
 
 ## Dedicated lifecycle profile preparation and sample capability
 
-The first profile increment supports preparation, the short guard and one inert
-plus one explicit-session sample. Full profiling and composed capability fail
-with an actionable unsupported-workload error until the joined cycle and Models
-capacity stories ship. This capability produces no timing summary, capacity
-witness, retention verdict or qualified baseline.
+The profile tool supports preparation, the short guard, one inert plus one
+explicit-session sample, and a joined replacement-cycle diagnostic. Full profiling
+remains unsupported until the composed Models capacity story ships. The composed
+capability selector retains the replacement diagnostic and fails explicitly with
+complete:false because it has no public Models acquisition witness yet. These
+diagnostics produce no timing summary, capacity witness, retention verdict or
+qualified baseline.
 
 Use clean committed tooling and clean source. Compilation is optional and occurs
 only in preparation, using cached Go 1.25 with GOPROXY=off. Preparation retains
@@ -258,7 +260,7 @@ in the raw report and test output. Preserve full stdout/stderr and exit status.
 The statistics helper uses all valid values, sorted ascending, arithmetic mean
 of the middle pair for even N and nearest-rank p95 ceil(0.95*N), one-based.
 At N=10 p95 equals max. Capability summaries contain counts with null timing
-statistics; cycles and capacityWitnesses are empty arrays. No ordinary test has
+statistics; samples capability cycles and capacityWitnesses are empty arrays. No ordinary test has
 a wall-clock performance threshold. Report tests also reject failed barriers,
 missing owners, null known-empty attempt arrays and mismatched artifact bytes.
 
@@ -289,6 +291,39 @@ go test -overlay $overlay -p 1 -count=1 -short=true -run '^Test(ObserverReport|L
 go test -overlay $overlay -p 1 -count=1 -run TestInProcessObserver ./pkg/platform/baselineobservation ./pkg/services/factory_runtime/internal/services/instance_host/internal/service ./pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service
 Pop-Location
 ```
+
+The replacement diagnostic uses the same prepared artifact and owned environment:
+
+```powershell
+$env:OBSERVER_REPORT = Join-Path $pinOutput 'replacement.json'
+& $artifact '-test.run=^TestLifecycleProfileCapability$' '-test.short=false' '-test.count=1' '-test.timeout=5m' '-test.v'
+# Expected exit 1 until story 003: composed Models capacity unsupported.
+```
+
+It opens one explicitly allocated session, completes Work, cancels, replaces that
+same session with a fresh runtime, completes Work again, and closes. CYCLE_OPEN
+follows Start and terminal Work; CYCLE_REPLACED follows Cancel, replacement Start
+(including prior runtime cleanup), and terminal Work; CYCLE_CLOSED follows public
+Close and owned stop. Each checkpoint retains both known generation identities
+where available, runtime instance IDs, actual handle identities, owner discovery
+status, lease records/statuses, per-slot integer holders/totals, and live goroutines.
+The current handle must exist exactly once; the replaced handle must be absent;
+after close both scenario handles must be absent. Bootstrap handles remain visible.
+Read-only snapshots neither expire overdue ACTIVE records nor remove RELEASED or
+EXPIRED records. Capture, sorting and serialization occur outside sample spans.
+
+The sequential driver accepts up to 100 cycles on one compatible shared process;
+unit callbacks prove exactly 100 contiguous cycles with distinct session/runtime
+identities. The real diagnostic runs only one cycle. The full selector remains
+disabled pending composition; no 100-real-cycle retention verdict is claimed.
+Failed cycles retain their partial checkpoints, attempted/failed barriers and
+causes; no automatic retry replaces a failed cycle. Every attempted Start receives
+owned Close cleanup on failure, using a fresh bounded context, even if the main
+context is canceled. Cleanup errors are joined with the original cause. Execute
+and server are canceled/joined before Process.Close; a failed join prevents Q2.
+The method hash covers the named sample, cycle and report templates in that order
+(UTF-8 name, NUL, raw template bytes, NUL); individual backing hashes remain in the
+manifest. Match these bytes and barriers during later baseline/final validation.
 
 Full workload remains 10 inert and 10 explicit-session samples plus 100 joined
 open/replace/close cycles and composed nonzero Models capacity. Its eventual
