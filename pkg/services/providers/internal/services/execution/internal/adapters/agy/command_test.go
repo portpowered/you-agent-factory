@@ -613,7 +613,7 @@ func TestCommandEffectScheduledTimeoutPreservesPeerAndReuse(t *testing.T) {
 // fixtureCommandRunner projects the controlled buffered platform fake into the
 // component's direct Providers command port. Production selects its own bridge.
 func fixtureCommandRunner(runner platformprocess.CommandRunner) providerservice.CommandRunner {
-	return bufferedFixtureRunner{runner: runner}
+	return bufferedFixtureRunner{runner: runner}.commandEffect()
 }
 
 type bufferedFixtureRunner struct{ runner platformprocess.CommandRunner }
@@ -625,4 +625,19 @@ func (r bufferedFixtureRunner) Run(ctx context.Context, request providerservice.
 		ExecutionLogger: request.ExecutionLogger, ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	})
 	return providerservice.CommandResult{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, err
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (r bufferedFixtureRunner) RunStreaming(ctx context.Context, request providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providerservice.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (r bufferedFixtureRunner) commandEffect() providerservice.CommandRunner {
+	return providerservice.CommandRunner{Run: r.Run, RunStreaming: r.RunStreaming}
 }

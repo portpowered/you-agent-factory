@@ -120,22 +120,12 @@ func runStreaming(
 	command providerservice.CommandRequest,
 	observe func([]byte) error,
 ) (providerservice.CommandResult, error) {
-	if streaming, ok := runner.(providerservice.StreamingCommandRunner); ok {
-		return streaming.RunStreaming(ctx, command, func(stream string, chunk []byte) error {
-			if strings.TrimSpace(stream) != providerservice.OutputStreamStdout {
-				return nil
-			}
-			return observe(chunk)
-		})
-	}
-	result, err := runner.Run(ctx, command)
-	if len(result.Stdout) > 0 {
-		observeErr := observe(result.Stdout)
-		if err == nil {
-			err = observeErr
+	return runner.RunStreaming(ctx, command, func(stream string, chunk []byte) error {
+		if strings.TrimSpace(stream) != providerservice.OutputStreamStdout {
+			return nil
 		}
-	}
-	return result, err
+		return observe(chunk)
+	})
 }
 
 func nativeCommandError(ctx context.Context, err error) error {

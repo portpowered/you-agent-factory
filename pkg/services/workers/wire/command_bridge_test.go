@@ -57,7 +57,7 @@ func TestNewProviderCommandRunnerProjectsRequestsAndBufferedOutput(t *testing.T)
 			ExitCode: 7,
 		},
 	}
-	runner := requireProviderCommandRunner(t, NewProviderCommandRunner(workerprocess.ProjectPlatformCommandRunner(next)))
+	runner := NewProviderCommandRunner(workerprocess.ProjectPlatformCommandRunner(next))
 	request := providers.CommandRequest{
 		Command:          "codex",
 		Args:             []string{"exec", "--json"},
@@ -108,7 +108,7 @@ func TestNewProviderCommandRunnerForwardsStreamingOutputAndRejectsMissingRunner(
 	next := &wireStreamingWorkerCommandRunner{
 		result: workerprocess.CommandResult{Stdout: []byte("live"), ExitCode: 0},
 	}
-	runner := requireProviderCommandRunner(t, NewProviderCommandRunner(workerprocess.ProjectPlatformCommandRunner(next)))
+	runner := NewProviderCommandRunner(workerprocess.ProjectPlatformCommandRunner(next))
 	var chunks []string
 	result, err := runner.RunStreaming(
 		context.Background(),
@@ -128,7 +128,7 @@ func TestNewProviderCommandRunnerForwardsStreamingOutputAndRejectsMissingRunner(
 		t.Fatalf("streaming provider dispatch ID = %q, want dispatch-live", next.request.DispatchID)
 	}
 
-	missing := requireProviderCommandRunner(t, NewProviderCommandRunner(nil))
+	missing := NewProviderCommandRunner(nil)
 	if _, err := missing.Run(context.Background(), providers.CommandRequest{}); err == nil || !strings.Contains(err.Error(), "provider command runner is required") {
 		t.Fatalf("missing provider Run() error = %v, want required-runner error", err)
 	}
@@ -161,15 +161,6 @@ func TestNewProviderFromCommandRunnerReturnsSelectedProvidersService(t *testing.
 	if _, err := NewProviderFromCommandRunner(nil, nil, nil, nil, nil, nil, nil, ""); err == nil || !strings.Contains(err.Error(), "service is required") {
 		t.Fatalf("NewProviderFromCommandRunner(nil) error = %v, want required-service error", err)
 	}
-}
-
-func requireProviderCommandRunner(t *testing.T, candidate providers.CommandRunner) providers.StreamingCommandRunner {
-	t.Helper()
-	runner, ok := candidate.(providers.StreamingCommandRunner)
-	if !ok {
-		t.Fatalf("provider command runner = %T, want streaming provider command contract", candidate)
-	}
-	return runner
 }
 
 func assertProjectedWorkerRequest(t *testing.T, got workerprocess.CommandRequest, want providers.CommandRequest) {
@@ -254,7 +245,7 @@ func TestNewProviderCommandRunnerRetainsObserverFailureAndNativeError(t *testing
 			if streaming {
 				next = streamingCanonicalCommandRunner{chunk: "stdout"}
 			}
-			runner := requireProviderCommandRunner(t, NewProviderCommandRunner(next))
+			runner := NewProviderCommandRunner(next)
 			calls := 0
 			result, err := runner.RunStreaming(t.Context(), providers.CommandRequest{}, func(string, []byte) error {
 				calls++
@@ -268,7 +259,7 @@ func TestNewProviderCommandRunnerRetainsObserverFailureAndNativeError(t *testing
 	next := canonicalCommandRunnerFunc(func(context.Context, platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 		return platformprocess.CommandResult{Stdout: []byte("partial"), ExitCode: 9}, nativeFailure
 	})
-	result, err := requireProviderCommandRunner(t, NewProviderCommandRunner(next)).RunStreaming(t.Context(), providers.CommandRequest{}, func(string, []byte) error {
+	result, err := NewProviderCommandRunner(next).RunStreaming(t.Context(), providers.CommandRequest{}, func(string, []byte) error {
 		return observerFailure
 	})
 	if !errors.Is(err, nativeFailure) || result.ExitCode != 9 || string(result.Stdout) != "partial" {

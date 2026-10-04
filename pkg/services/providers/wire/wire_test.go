@@ -482,8 +482,8 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	}),
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, platformclock.Real{}, AgyPTYPolicy{}),
-		NewCodexEffect(workersRunner, platformclock.Real{}),
-		NewClaudeEffect(workersRunner, platformclock.Real{}),
+		NewCodexEffect((workersRunner).commandEffect(), platformclock.Real{}),
+		NewClaudeEffect((workersRunner).commandEffect(), platformclock.Real{}),
 		Configuration{})
 	if err != nil {
 		t.Fatalf("newTestProvidersService() error = %v", err)
@@ -580,8 +580,8 @@ func TestNewServiceUsesCompletedNativeEffects(t *testing.T) {
 	root, err := newTestProvidersService(IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		NewAgyPTYEffect(agyAllocator, agyLocator, agyInspector, clock, AgyPTYPolicy{SessionConfig: policy}),
-		NewCodexEffect(workersRunner, platformclock.NewDeterministic(time.Unix(0, 0), time.Second)),
-		NewClaudeEffect(workersRunner, platformclock.NewDeterministic(time.Unix(0, 0), time.Second)),
+		NewCodexEffect((workersRunner).commandEffect(), platformclock.NewDeterministic(time.Unix(0, 0), time.Second)),
+		NewClaudeEffect((workersRunner).commandEffect(), platformclock.NewDeterministic(time.Unix(0, 0), time.Second)),
 		Configuration{})
 	if err != nil {
 		t.Fatalf("newTestProvidersService() error = %v", err)
@@ -906,3 +906,33 @@ func (i fakeExecutableInfo) Mode() fs.FileMode  { return 0o755 }
 func (i fakeExecutableInfo) ModTime() time.Time { return time.Time{} }
 func (i fakeExecutableInfo) IsDir() bool        { return i.directory }
 func (i fakeExecutableInfo) Sys() any           { return nil }
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (r *inertWorkersCommandRunner) RunStreaming(ctx context.Context, request CommandRequest, observe OutputChunkObserver) (CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (r *recordingWorkersCommandRunner) RunStreaming(ctx context.Context, request CommandRequest, observe OutputChunkObserver) (CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (r *inertWorkersCommandRunner) commandEffect() CommandRunner {
+	return CommandRunner{Run: r.Run, RunStreaming: r.RunStreaming}
+}
+
+func (r *recordingWorkersCommandRunner) commandEffect() CommandRunner {
+	return CommandRunner{Run: r.Run, RunStreaming: r.RunStreaming}
+}

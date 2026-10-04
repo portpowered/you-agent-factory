@@ -65,10 +65,7 @@ func TestWorkersWireProviderRunnerBuffersOutput(t *testing.T) {
 	next := canonicalCommandRunnerFunc(func(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 		return platformprocess.CommandResult{Stdout: []byte("stdout"), Stderr: []byte("stderr")}, nil
 	})
-	providerRunner, ok := NewProviderCommandRunner(next).(providerCommandRunner)
-	if !ok {
-		t.Fatal("NewProviderCommandRunner() did not return providerCommandRunner")
-	}
+	providerRunner := NewProviderCommandRunner(next)
 	request := providerCoverageCommandRequest()
 	result, err := providerRunner.Run(context.Background(), request)
 	if err != nil || string(result.Stdout) != "stdout" {
@@ -91,10 +88,7 @@ func TestWorkersWireProviderRunnerBuffersOutput(t *testing.T) {
 func TestWorkersWireProviderRunnerStreamsOutput(t *testing.T) {
 	t.Parallel()
 
-	providerRunner, ok := NewProviderCommandRunner(streamingCanonicalCommandRunner{chunk: "streamed"}).(providerCommandRunner)
-	if !ok {
-		t.Fatal("NewProviderCommandRunner() did not return providerCommandRunner")
-	}
+	providerRunner := NewProviderCommandRunner(streamingCanonicalCommandRunner{chunk: "streamed"})
 	var chunks []recordedOutputChunk
 	result, err := providerRunner.RunStreaming(context.Background(), providerCoverageCommandRequest(), func(stream string, chunk []byte) error {
 		recordOutputChunks(&chunks)(stream, chunk)

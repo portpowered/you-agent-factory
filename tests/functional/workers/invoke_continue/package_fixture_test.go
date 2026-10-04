@@ -165,8 +165,8 @@ func newInvokeContinuePackageFixture(t *testing.T) (*invokeContinuePackageFixtur
 	unsupportedProvider, err := newTestProvidersService(providerswire.IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 		nil,
-		providerswire.NewCodexEffect(invokeContinueProviderRunner{route}, platformclock.Real{}),
-		providerswire.NewClaudeEffect(invokeContinueProviderRunner{route}, platformclock.Real{}),
+		providerswire.NewCodexEffect((invokeContinueProviderRunner{route}).commandEffect(), platformclock.Real{}),
+		providerswire.NewClaudeEffect((invokeContinueProviderRunner{route}).commandEffect(), platformclock.Real{}),
 		providerswire.Configuration{CatalogOverrides: []providerswire.CatalogCapabilityOverride{providerswire.CatalogCapabilityOverride{
 			Provider:     providers.IDCodex,
 			Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
@@ -624,4 +624,19 @@ func (runner invokeContinueProviderRunner) Run(ctx context.Context, request prov
 		ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	})
 	return providers.CommandResult{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, err
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (runner invokeContinueProviderRunner) RunStreaming(ctx context.Context, request providers.CommandRequest, observe providers.OutputChunkObserver) (providers.CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providers.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (runner invokeContinueProviderRunner) commandEffect() providers.CommandRunner {
+	return providers.CommandRunner{Run: runner.Run, RunStreaming: runner.RunStreaming}
 }

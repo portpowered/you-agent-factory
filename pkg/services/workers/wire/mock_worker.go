@@ -51,7 +51,8 @@ func NewLoggingCommandRunner(
 // NewProviderCommandRunner projects the Workers-private runner into the typed
 // Providers effect, retaining request correlation and contextual mock policy.
 func NewProviderCommandRunner(next platformprocess.CommandRunner) providers.CommandRunner {
-	return providerCommandRunner{runner: workerprocess.AdaptPlatformCommandRunner(next)}
+	runner := providerCommandRunner{runner: workerprocess.AdaptPlatformCommandRunner(next)}
+	return providers.CommandRunner{Run: runner.Run, RunStreaming: runner.RunStreaming}
 }
 
 type providerCommandRunner struct {

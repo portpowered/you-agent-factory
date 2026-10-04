@@ -277,8 +277,8 @@ func TestNewServicePreservesSelectedClockForCodexAndClaude(t *testing.T) {
 			root, err := newTestProvidersService(IdentityCatalogProbe,
 				platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,
 				nil,
-				NewCodexEffect(codexRunner, clock),
-				NewClaudeEffect(claudeRunner, clock),
+				NewCodexEffect((codexRunner).commandEffect(), clock),
+				NewClaudeEffect((claudeRunner).commandEffect(), clock),
 				Configuration{})
 			if err != nil {
 				t.Fatal(err)
@@ -324,4 +324,19 @@ func (runner *clockCommandRunner) Run(_ context.Context, request CommandRequest)
 		output = `{"type":"result","subtype":"success","is_error":false,"result":"selected clock result","session_id":"clock-session"}` + "\n"
 	}
 	return CommandResult{Stdout: []byte(output)}, nil
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (runner *clockCommandRunner) RunStreaming(ctx context.Context, request CommandRequest, observe OutputChunkObserver) (CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (runner *clockCommandRunner) commandEffect() CommandRunner {
+	return CommandRunner{Run: runner.Run, RunStreaming: runner.RunStreaming}
 }

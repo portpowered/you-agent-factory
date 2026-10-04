@@ -350,13 +350,13 @@ func newTestProvidersService(probe providerswire.CatalogProbeOperation, schedule
 	}
 	// Absent fixture routes receive completed command effects with a disabled edge.
 	if antigravity == nil {
-		antigravity = providerswire.NewAgyCommandEffect(disabledNativeRunner{"Antigravity"}, platformclock.Real{}, scheduler)
+		antigravity = providerswire.NewAgyCommandEffect((disabledNativeRunner{"Antigravity"}).commandEffect(), platformclock.Real{}, scheduler)
 	}
 	if codex == nil {
-		codex = providerswire.NewCodexEffect(disabledNativeRunner{"Codex"}, platformclock.Real{})
+		codex = providerswire.NewCodexEffect((disabledNativeRunner{"Codex"}).commandEffect(), platformclock.Real{})
 	}
 	if claude == nil {
-		claude = providerswire.NewClaudeEffect(disabledNativeRunner{"Claude"}, platformclock.Real{})
+		claude = providerswire.NewClaudeEffect((disabledNativeRunner{"Claude"}).commandEffect(), platformclock.Real{})
 	}
 	registrations, err := providerswire.ExecutionRegistrations(antigravity, codex, claude, acpService, config.ACPIntegrations, config.Registrations)
 	if err != nil {
@@ -376,4 +376,19 @@ func (runner disabledNativeRunner) Run(context.Context, providers.CommandRequest
 		Kind:    providers.ExecuteFailureKindDependency,
 		Message: runner.name + " native execution is unavailable",
 	}
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (runner disabledNativeRunner) RunStreaming(ctx context.Context, request providers.CommandRequest, observe providers.OutputChunkObserver) (providers.CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providers.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (runner disabledNativeRunner) commandEffect() providers.CommandRunner {
+	return providers.CommandRunner{Run: runner.Run, RunStreaming: runner.RunStreaming}
 }

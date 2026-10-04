@@ -11,7 +11,6 @@ import (
 // Command effect aliases retain the owner-private adapter vocabulary while
 // peers consume the Providers root contract.
 type CommandRunner = providers.CommandRunner
-type StreamingCommandRunner = providers.StreamingCommandRunner
 type CommandRequest = providers.CommandRequest
 type CommandResult = providers.CommandResult
 type OutputChunkObserver = providers.OutputChunkObserver

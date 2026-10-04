@@ -89,13 +89,13 @@ func TestNativeEffectsUseSuppliedClockAndRunner(t *testing.T) {
 			var err error
 			switch provider {
 			case providers.IDCodex:
-				result, effectErr := NewCodexEffect(adapted, clock).Execute(t.Context(), request, observe)
+				result, effectErr := NewCodexEffect((adapted).commandEffect(), clock).Execute(t.Context(), request, observe)
 				duration, err = result.DurationMillis, effectErr
 			case providers.IDClaude:
-				result, effectErr := NewClaudeEffect(adapted, clock).Execute(t.Context(), request, observe)
+				result, effectErr := NewClaudeEffect((adapted).commandEffect(), clock).Execute(t.Context(), request, observe)
 				duration, err = result.DurationMillis, effectErr
 			case providers.IDAntigravity:
-				result, effectErr := NewAgyCommandEffect(adapted, clock, clock).Execute(t.Context(), request, observe)
+				result, effectErr := NewAgyCommandEffect((adapted).commandEffect(), clock, clock).Execute(t.Context(), request, observe)
 				duration, err = result.DurationMillis, effectErr
 			}
 			if err != nil || duration != 37 || string(output) != "ok" {
@@ -123,4 +123,19 @@ func (r *clockRecordingProviderRunner) Run(_ context.Context, request providerse
 	r.request = request
 	r.clock.SetTick(1)
 	return providerservice.CommandResult{Stdout: []byte("ok")}, nil
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (r *clockRecordingProviderRunner) RunStreaming(ctx context.Context, request providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providerservice.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (r *clockRecordingProviderRunner) commandEffect() providerservice.CommandRunner {
+	return providerservice.CommandRunner{Run: r.Run, RunStreaming: r.RunStreaming}
 }

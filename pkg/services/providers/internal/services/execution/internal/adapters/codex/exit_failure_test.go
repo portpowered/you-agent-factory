@@ -50,12 +50,12 @@ func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			effect := codex.NewCommandEffect(codexCommandRunnerStub{
+			effect := codex.NewCommandEffect((codexCommandRunnerStub{
 				result: providerservice.CommandResult{
 					ExitCode: 1,
 					Stderr:   []byte(test.stderr),
 				},
-			}, platformclock.Real{})
+			}).commandEffect(), platformclock.Real{})
 			_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
 			var failure providers.ExecuteFailure
 			if !errors.As(err, &failure) {
@@ -72,12 +72,12 @@ func TestCodexCommandEffectClassifiesUntrustedWorkingDirectoryAsTerminalWithSafe
 	t.Parallel()
 
 	workingDirectory := `C:\isolated\factory\with spaces`
-	effect := codex.NewCommandEffect(codexCommandRunnerStub{
+	effect := codex.NewCommandEffect((codexCommandRunnerStub{
 		result: providerservice.CommandResult{
 			ExitCode: 1,
 			Stderr:   []byte("Not inside a trusted directory and --skip-git-repo-check was not specified."),
 		},
-	}, platformclock.Real{})
+	}).commandEffect(), platformclock.Real{})
 	request := codexFailureRequest()
 	request.WorkingDirectory = workingDirectory
 	_, err := newCodexRoot(t, effect).Execute(t.Context(), request)
@@ -110,12 +110,12 @@ func TestCodexCommandEffectMarksUnknownTurnFailedFromExitOutput(t *testing.T) {
 	t.Parallel()
 
 	const providerDetail = "future turn failure credential=secret"
-	effect := codex.NewCommandEffect(codexCommandRunnerStub{
+	effect := codex.NewCommandEffect((codexCommandRunnerStub{
 		result: providerservice.CommandResult{
 			ExitCode: 1,
 			Stderr:   []byte(`{"type":"turn.failed","error":{"message":"` + providerDetail + `"}}`),
 		},
-	}, platformclock.Real{})
+	}).commandEffect(), platformclock.Real{})
 	_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
 
 	var failure providers.ExecuteFailure
@@ -145,13 +145,13 @@ func (stub codexCommandRunnerStub) Run(_ context.Context, _ providerservice.Comm
 func TestCodexCommandEffectClassifiesServerOverloadedExitOutputAsThrottled(t *testing.T) {
 	t.Parallel()
 
-	effect := codex.NewCommandEffect(codexCommandRunnerStub{
+	effect := codex.NewCommandEffect((codexCommandRunnerStub{
 		result: providerservice.CommandResult{
 			ExitCode: 1,
 			Stdout:   []byte(`{"type":"item.completed","item":{"type":"reasoning"}}` + "\n"),
 			Stderr:   []byte(`codex_error_info=server_overloaded`),
 		},
-	}, platformclock.Real{})
+	}).commandEffect(), platformclock.Real{})
 	_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
 
 	var failure providers.ExecuteFailure
@@ -161,4 +161,19 @@ func TestCodexCommandEffectClassifiesServerOverloadedExitOutputAsThrottled(t *te
 	if failure.Kind != providers.ExecuteFailureKindThrottled {
 		t.Fatalf("failure kind = %q, want throttled", failure.Kind)
 	}
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (stub codexCommandRunnerStub) RunStreaming(ctx context.Context, request providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
+	result, err := stub.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providerservice.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (stub codexCommandRunnerStub) commandEffect() providerservice.CommandRunner {
+	return providerservice.CommandRunner{Run: stub.Run, RunStreaming: stub.RunStreaming}
 }

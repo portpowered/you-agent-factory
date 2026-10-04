@@ -21,7 +21,7 @@ func TestCommandEffectPreservesDispatchContextForProviderRunner(t *testing.T) {
 	t.Parallel()
 
 	runner := &recordingProviderCommandRunner{}
-	effect := codex.NewCommandEffect(runner, platformclock.Real{})
+	effect := codex.NewCommandEffect((runner).commandEffect(), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -234,7 +234,7 @@ func TestCommandEffectUsesInjectedRunnerAndClockOnTerminalPaths(t *testing.T) {
 				clock.SetTick(37)
 				return providerservice.CommandResult{Stdout: []byte("delivered"), Stderr: []byte("private diagnostic")}, tc.runErr
 			})
-			effect := codex.NewCommandEffect(runner, clock)
+			effect := codex.NewCommandEffect((runner).commandEffect(), clock)
 			var observed strings.Builder
 			result, err := effect.Execute(t.Context(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 				Provider:    providers.IDCodex,
@@ -268,7 +268,7 @@ func (runner terminalCommandRunner) Run(ctx context.Context, request providerser
 // fixtureCommandRunner projects the controlled buffered platform fake into the
 // component's direct Providers command port. Production selects its own bridge.
 func fixtureCommandRunner(runner platformprocess.CommandRunner) providerservice.CommandRunner {
-	return bufferedFixtureRunner{runner: runner}
+	return bufferedFixtureRunner{runner: runner}.commandEffect()
 }
 
 type bufferedFixtureRunner struct{ runner platformprocess.CommandRunner }
@@ -280,4 +280,49 @@ func (r bufferedFixtureRunner) Run(ctx context.Context, request providerservice.
 		ExecutionLogger: request.ExecutionLogger, ProcessLifecycleObserver: request.ProcessLifecycleObserver,
 	})
 	return providerservice.CommandResult{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}, err
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (runner *recordingProviderCommandRunner) RunStreaming(ctx context.Context, request providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providerservice.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (runner terminalCommandRunner) RunStreaming(ctx context.Context, request providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
+	result, err := runner.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providerservice.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+// RunStreaming supplies the buffered fixture's completed stdout chunk.
+func (r bufferedFixtureRunner) RunStreaming(ctx context.Context, request providerservice.CommandRequest, observe providerservice.OutputChunkObserver) (providerservice.CommandResult, error) {
+	result, err := r.Run(ctx, request)
+	if len(result.Stdout) > 0 && observe != nil {
+		if observeErr := observe(providerservice.OutputStreamStdout, result.Stdout); err == nil {
+			err = observeErr
+		}
+	}
+	return result, err
+}
+
+func (runner *recordingProviderCommandRunner) commandEffect() providerservice.CommandRunner {
+	return providerservice.CommandRunner{Run: runner.Run, RunStreaming: runner.RunStreaming}
+}
+
+func (runner terminalCommandRunner) commandEffect() providerservice.CommandRunner {
+	return providerservice.CommandRunner{Run: runner.Run, RunStreaming: runner.RunStreaming}
+}
+
+func (r bufferedFixtureRunner) commandEffect() providerservice.CommandRunner {
+	return providerservice.CommandRunner{Run: r.Run, RunStreaming: r.RunStreaming}
 }

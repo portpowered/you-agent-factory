@@ -188,21 +188,12 @@ func runCommand(
 	command providerservice.CommandRequest,
 	observe func([]byte) error,
 ) (providerservice.CommandResult, error) {
-	if streaming, ok := runner.(providerservice.StreamingCommandRunner); ok {
-		return streaming.RunStreaming(ctx, command, func(stream string, chunk []byte) error {
-			if strings.TrimSpace(stream) != providerservice.OutputStreamStdout || len(chunk) == 0 {
-				return nil
-			}
-			return observe(chunk)
-		})
-	}
-	result, err := runner.Run(ctx, command)
-	if len(result.Stdout) > 0 {
-		if observeErr := observe(result.Stdout); err == nil {
-			err = observeErr
+	return runner.RunStreaming(ctx, command, func(stream string, chunk []byte) error {
+		if strings.TrimSpace(stream) != providerservice.OutputStreamStdout || len(chunk) == 0 {
+			return nil
 		}
-	}
-	return result, err
+		return observe(chunk)
+	})
 }
 
 func nativeCommandError(ctx context.Context, err error) error {

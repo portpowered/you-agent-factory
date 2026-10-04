@@ -661,17 +661,11 @@ func (result ContinueResult) Clone() ContinueResult {
 // CommandRunner is the Providers-owned subprocess effect used by provider
 // adapters. The composition root may project a platform or request-scoped
 // runner into this contract, but Providers never consumes a Workers command
-// interface directly.
-type CommandRunner interface {
-	Run(context.Context, CommandRequest) (CommandResult, error)
-}
-
-// StreamingCommandRunner is the optional streaming extension of
-// CommandRunner. Adapters fall back to one completed output chunk when only
-// CommandRunner is available.
-type StreamingCommandRunner interface {
-	CommandRunner
-	RunStreaming(context.Context, CommandRequest, OutputChunkObserver) (CommandResult, error)
+// interface directly. Composition supplies both operations, projecting buffered
+// runners to a completed output chunk before adapter construction.
+type CommandRunner struct {
+	Run          func(context.Context, CommandRequest) (CommandResult, error)
+	RunStreaming func(context.Context, CommandRequest, OutputChunkObserver) (CommandResult, error)
 }
 
 // OutputChunkObserver receives output from one provider subprocess effect and
