@@ -24,18 +24,14 @@ type ProviderModelUpdate struct {
 }
 
 // ConfigDocumentService is a service-local compatibility adapter. It contains
-// injected ports and a private DocumentOwner; it is not the peer-facing
-// Operator Settings authority. New code should depend on Service.
+// a completed DocumentOwner and config codecs; it is not the peer-facing
+// Operator Settings authority. New code should depend on Service. Filesystem,
+// preservation, catalog, and diagnostics policy belong to the completed owner.
 type ConfigDocumentService struct {
-	Files                 FileSystem
-	CreateTemp            CreateTemporaryFile
-	Providers             ProviderCatalog
-	Decoder               ConfigDecoder
-	DiagnosticDecoder     ConfigDiagnosticsDecoder
-	Encoder               ConfigEncoder
-	PreserveUnknownFields ConfigDocumentPreserver
-	DocumentOwner         DocumentOwner
-	PersistenceLock       sync.Locker
+	Decoder         ConfigDecoder
+	Encoder         ConfigEncoder
+	DocumentOwner   DocumentOwner
+	PersistenceLock sync.Locker
 }
 
 // ErrProviderModelInputCanceled is returned by a prompt when the operator
@@ -47,51 +43,22 @@ func (service ConfigDocumentService) owner() (DocumentOwner, error) {
 	if service.DocumentOwner == nil {
 		return nil, fmt.Errorf("operator settings document owner is required")
 	}
-	if rebindable, ok := service.DocumentOwner.(interface {
-		RebindDocumentOwner(FileSystem, CreateTemporaryFile, ConfigDecoder, ConfigEncoder, ProviderCatalog, ...ConfigDiagnosticsDecoder) DocumentOwner
-	}); ok {
-		if service.PreserveUnknownFields != nil {
-			if rebindableWithPreserver, ok := service.DocumentOwner.(interface {
-				RebindDocumentOwnerWithPreserver(FileSystem, CreateTemporaryFile, ConfigDecoder, ConfigEncoder, ProviderCatalog, ConfigDocumentPreserver, ...ConfigDiagnosticsDecoder) DocumentOwner
-			}); ok {
-				return rebindableWithPreserver.RebindDocumentOwnerWithPreserver(
-					service.Files,
-					service.CreateTemp,
-					service.Decoder,
-					service.Encoder,
-					service.Providers,
-					service.PreserveUnknownFields,
-					service.DiagnosticDecoder,
-				), nil
-			}
-		}
-		return rebindable.RebindDocumentOwner(
-			service.Files,
-			service.CreateTemp,
-			service.Decoder,
-			service.Encoder,
-			service.Providers,
-			service.DiagnosticDecoder,
-		), nil
-	}
 	return service.DocumentOwner, nil
 }
 
 // Load reads and validates a complete operator configuration. A missing
 // destination is represented by an empty, valid document.
 func (service ConfigDocumentService) Load(path string) (ConfigDocument, error) {
-	if service.Files == nil {
+	// Preserve the zero-value adapter's failure while completed owners
+	// retain responsibility for their own filesystem and persistence effects.
+	if service.DocumentOwner == nil {
 		return ConfigDocument{}, fmt.Errorf("operator settings filesystem is required")
 	}
 	if service.PersistenceLock != nil {
 		service.PersistenceLock.Lock()
 		defer service.PersistenceLock.Unlock()
 	}
-	owner, err := service.owner()
-	if err != nil {
-		return ConfigDocument{}, err
-	}
-	result, err := owner.LoadDocument(LoadDocumentRequest{Path: path})
+	result, err := service.DocumentOwner.LoadDocument(LoadDocumentRequest{Path: path})
 	if err != nil {
 		return ConfigDocument{}, err
 	}
@@ -279,11 +246,7 @@ func (service ConfigDocumentService) Persist(ctx context.Context, path string, d
 	}
 	service.PersistenceLock.Lock()
 	defer service.PersistenceLock.Unlock()
-	owner, err := service.owner()
-	if err != nil {
-		return err
-	}
-	return owner.PersistDocument(ctx, PersistDocumentRequest{
+	return service.DocumentOwner.PersistDocument(ctx, PersistDocumentRequest{
 		Path:     path,
 		Document: documentFromConfigDocument(document),
 	})
@@ -293,11 +256,8 @@ func (service ConfigDocumentService) validatePersistencePorts(path string) error
 	if strings.TrimSpace(path) == "" {
 		return fmt.Errorf("operator config path is required")
 	}
-	if service.Files == nil {
+	if service.DocumentOwner == nil {
 		return fmt.Errorf("operator settings filesystem is required")
-	}
-	if service.CreateTemp == nil {
-		return fmt.Errorf("operator settings temporary-file creator is required")
 	}
 	return nil
 }

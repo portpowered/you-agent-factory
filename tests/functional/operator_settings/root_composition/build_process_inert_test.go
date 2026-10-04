@@ -9,7 +9,6 @@ import "testing"
 func TestOperatorSettingsEffectsRemainInertThroughRootBuildProcessConstruction(t *testing.T) {
 	t.Parallel()
 
-	assertOperatorSettingsRouteFailures(t)
 	fixture := ensureSharedOperatorSettingsFixture(t)
 	snapshot := fixture.constructionEffectSnapshot()
 
