@@ -604,22 +604,21 @@ func provideFactorySessionsAssembly(
 	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
 	ttsObservability factorydefinitions.TTSObservabilityService,
 	eventIDs factorysessions.ResponseEventIDGenerator,
-	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directories factorysessionwire.DirectoryInspection,
 	namedPaths factorydefinitions.NamedPathResolver,
 	invocationInputFiles factorysessionwire.InvocationInputReader,
 	initialWorkFiles factorysessionwire.InitialWorkReader,
-	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
-	eventsService events.Service,
+	identity factorysessionwire.Identity,
+	responseStreams factorysessionwire.ResponseStreams,
 	clock factoryruntime.Clock,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 	recordedSessionInventory recordings.RecordedSessionInventory,
 ) (factorysessionwire.RuntimeAssembly, error) {
 	return factorysessionwire.NewRuntimeAssembly(func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks, eventsService, clock, liveChangeCoordinator, recordedSessionInventory)
+	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, identity, responseStreams, clock, liveChangeCoordinator, recordedSessionInventory)
 }
 
 func provideFactorySessionsService(
@@ -742,11 +741,10 @@ func provideFactorySessionExecutionFactory(
 	syncWaits factorysessionwire.SyncWaitScheduler,
 	sessionIDs factorysessions.SessionIDGenerator,
 	responseEventIDs factorysessions.ResponseEventIDGenerator,
-	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
+	responseStreams factorysessionwire.ResponseStreams,
 	allocator providerswire.PTYAllocator,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
 	providerOverride providerOverrideService,
-	eventsService events.Service,
 	liveChangeCoordinator factorysessionwire.LiveChangeCoordinator,
 ) factorysessionwire.FactorySessionExecutionFactory {
 	// The allocator, runner adapter, and fixed provider override are read only
@@ -791,8 +789,7 @@ func provideFactorySessionExecutionFactory(
 			recordingWriter,
 			sessionIDs,
 			responseEventIDs,
-			responseEventRetentionLimits,
-			eventsService,
+			responseStreams,
 			liveChangeCoordinator,
 		)
 	}

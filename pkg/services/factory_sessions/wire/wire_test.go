@@ -1,8 +1,17 @@
 package wire
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	identitycontract "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	responsecontract "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"io/fs"
+	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -296,6 +305,14 @@ func validNewServiceInputs() newServiceInputs {
 }
 
 func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
+	identity, err := NewIdentity(in.resolveSymlinks, in.resolveHome)
+	if err != nil {
+		return nil, err
+	}
+	responses, err := NewResponseStreams(in.eventIDs, in.responseEventRetentionLimits, in.eventsService, logging.NoopLogger{})
+	if err != nil {
+		return nil, err
+	}
 	return NewRuntimeAssembly(
 		in.newJavaScriptCheckpointStore,
 		in.sessionResultProjection,
@@ -303,15 +320,14 @@ func (in newServiceInputs) callNewRuntimeAssembly() (RuntimeAssembly, error) {
 		in.invocationWorkTypes,
 		in.ttsObservability,
 		in.eventIDs,
-		in.responseEventRetentionLimits,
 		in.sessionIDs,
 		in.resolveHome,
 		in.directoryInspection,
 		in.namedPaths,
 		in.invocationInputFiles,
 		in.initialWorkFiles,
-		in.resolveSymlinks,
-		in.eventsService,
+		identity,
+		responses,
 		in.clock,
 		in.liveChangeCoordinator,
 		nil,
@@ -349,3 +365,79 @@ func (namedPathResolver) ReadCurrentPointer(string) (string, error)         { re
 func (namedPathResolver) WriteCurrentPointer(string, string) error          { return nil }
 
 var _ DirectoryInspection = (*recordingDirectoryInspection)(nil)
+
+func TestIdentityNormalizesUsingSelectedEffects(t *testing.T) {
+	t.Parallel()
+	home, canonical := t.TempDir(), t.TempDir()
+	var homes, symlinks int
+	service, err := NewIdentity(func(path string) (string, error) {
+		symlinks++
+		if path != filepath.Join(home, "factory") {
+			t.Fatalf("symlink input = %q", path)
+		}
+		return canonical, nil
+	}, func() (string, error) { homes++; return home, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := service.Normalize(t.Context(), identitycontract.NormalizeRequest{BackendScopeID: "scope", FolderPath: "~/factory", Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Reference.FolderPath != canonical || got.Reference.BackendScopeID != "scope" || got.LogicalSessionKeyID == "" || homes != 1 || symlinks != 1 {
+		t.Fatalf("normalized identity = %#v, home=%d symlinks=%d", got, homes, symlinks)
+	}
+	_, err = service.Normalize(t.Context(), identitycontract.NormalizeRequest{FolderPath: "~/factory", Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}})
+	if err == nil {
+		t.Fatal("missing backend scope accepted")
+	}
+}
+
+type selectedResponseClock struct{ now time.Time }
+
+func (c selectedResponseClock) Now() time.Time { return c.now }
+
+func TestResponseStreamsRetainIndependentStoresAtSelectedClocks(t *testing.T) {
+	t.Parallel()
+	var ids atomic.Uint64
+	limits := &factorysessions.ResponseEventRetentionLimits{MaxEvents: 2, MaxBytes: 1 << 20, CompletedRetentionWindow: time.Minute}
+	service, err := NewResponseStreams(func() string { return fmt.Sprintf("selected-%d", ids.Add(1)) }, limits, eventsstub.New(), logging.NoopLogger{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstTime := time.Date(2026, 10, 4, 0, 0, 0, 0, time.UTC)
+	stores := []string{"first", "second"}
+	for i, name := range stores {
+		now := firstTime.Add(time.Duration(i) * time.Hour)
+		store, err := service.NewEventStore(name, selectedResponseClock{now})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { service.Close(store) })
+		if store.RetentionLimits().MaxEvents != 2 || store.RetentionLimits().MaxBytes != 1<<20 || store.RetentionLimits().CompletedRetentionWindow != time.Minute {
+			t.Fatalf("retention = %#v", store.RetentionLimits())
+		}
+		var last responseevents.FactoryResponseEvent
+		for range 3 {
+			last, err = service.Publish(store, responseevents.FactoryResponseEvent{Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta, RunID: "run-" + name, Provenance: responseevents.Provenance{Provider: "test", NativeEventType: "delta", Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationDelta, Fidelity: responseevents.FidelityLossless}, Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"` + name + `"}`)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if last.FactorySessionID != name || !last.RecordedAt.Equal(now) || last.EventID != fmt.Sprintf("selected-%d", ids.Load()) {
+				t.Fatalf("published = %#v", last)
+			}
+		}
+		service.Complete(store)
+		cursor, err := service.Subscribe(t.Context(), store, responsecontract.SubscriptionRequest{AfterSequence: last.Sequence - 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(cursor.Detach)
+		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+		got, err := cursor.Next(ctx)
+		cancel()
+		if err != nil || len(got) != 1 || got[0].EventID != last.EventID || got[0].FactorySessionID != name {
+			t.Fatalf("retained suffix = %#v, %v", got, err)
+		}
+	}
+}
