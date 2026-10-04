@@ -251,12 +251,6 @@ func filterRecordedPackageFindings(visible, recorded *scanResult, baseline recor
 	visible.retiredPackageRootFindings, recorded.retiredPackageRootFindings = splitRecordedFindings(visible.retiredPackageRootFindings, func(finding retiredPackageRootFinding) string {
 		return boundaryFindingFingerprint("retired-package-root", finding)
 	}, baseline)
-	visible.migrationShimFindings, recorded.migrationShimFindings = splitRecordedFindings(visible.migrationShimFindings, func(finding migrationShimFinding) string {
-		return boundaryFindingFingerprint("migration-shim", finding)
-	}, baseline)
-	visible.retiredPackageImportFindings, recorded.retiredPackageImportFindings = splitRecordedFindings(visible.retiredPackageImportFindings, func(finding retiredPackageImportFinding) string {
-		return boundaryFindingFingerprint("retired-package-import", finding)
-	}, baseline)
 	visible.applicationGraphImportFindings, recorded.applicationGraphImportFindings = splitRecordedFindings(visible.applicationGraphImportFindings, func(finding applicationGraphImportFinding) string {
 		return boundaryFindingFingerprint("application-graph-import", finding)
 	}, baseline)
@@ -280,9 +274,6 @@ func filterRecordedServiceFindings(visible, recorded *scanResult, baseline recor
 	}, baseline)
 	visible.serviceConstructionFindings, recorded.serviceConstructionFindings = splitRecordedFindings(visible.serviceConstructionFindings, func(finding serviceConstructionFinding) string {
 		return boundaryFindingFingerprint("service-construction", finding)
-	}, baseline)
-	visible.transportImplementationFindings, recorded.transportImplementationFindings = splitRecordedFindings(visible.transportImplementationFindings, func(finding transportServiceImplementationFinding) string {
-		return boundaryFindingFingerprint("transport-implementation", finding)
 	}, baseline)
 	visible.externalImplementationFindings, recorded.externalImplementationFindings = splitRecordedFindings(visible.externalImplementationFindings, func(finding transportServiceImplementationFinding) string {
 		return boundaryFindingFingerprint("external-implementation", finding)
@@ -367,8 +358,6 @@ func boundaryFindingFingerprints(result scanResult) map[string]struct{} {
 	fingerprints := make(map[string]struct{})
 	addBoundaryFindingFingerprints(fingerprints, "root-package", result.rootPackageFindings)
 	addBoundaryFindingFingerprints(fingerprints, "retired-package-root", result.retiredPackageRootFindings)
-	addBoundaryFindingFingerprints(fingerprints, "retired-package-import", result.retiredPackageImportFindings)
-	addBoundaryFindingFingerprints(fingerprints, "migration-shim", result.migrationShimFindings)
 	addBoundaryFindingFingerprints(fingerprints, "application-graph-import", result.applicationGraphImportFindings)
 	addBoundaryFindingFingerprints(fingerprints, "handwritten-generated", result.handwrittenGeneratedFindings)
 	addBoundaryFindingFingerprints(fingerprints, "domain-transport-import", result.domainTransportFindings)
@@ -380,7 +369,6 @@ func boundaryFindingFingerprints(result scanResult) map[string]struct{} {
 	addBoundaryFindingFingerprints(fingerprints, "support-service-import", result.recordedSupportServiceImportFindings)
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.serviceConstructionFindings)
 	addBoundaryFindingFingerprints(fingerprints, "service-construction", result.recordedServiceConstructionFindings)
-	addBoundaryFindingFingerprints(fingerprints, "transport-implementation", result.transportImplementationFindings)
 	addBoundaryFindingFingerprints(fingerprints, "external-implementation", result.externalImplementationFindings)
 	addBoundaryFindingFingerprints(fingerprints, "transport-behavior", result.transportBehaviorFindings)
 	addBoundaryFindingFingerprints(fingerprints, "transport-behavior", result.recordedTransportBehaviorFindings)

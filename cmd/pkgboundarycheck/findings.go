@@ -6,8 +6,6 @@ type scanResult struct {
 	constructionFindings                 []contractguard.ConstructionFinding
 	rootPackageFindings                  []rootPackageFinding
 	retiredPackageRootFindings           []retiredPackageRootFinding
-	retiredPackageImportFindings         []retiredPackageImportFinding
-	migrationShimFindings                []migrationShimFinding
 	applicationGraphImportFindings       []applicationGraphImportFinding
 	handwrittenGeneratedFindings         []handwrittenGeneratedFinding
 	domainTransportFindings              []domainTransportImportFinding
@@ -27,7 +25,6 @@ type scanResult struct {
 	recordedServiceConstructionFindings  []serviceConstructionFinding
 	staleServiceConstructionEntries      []serviceConstructionBaselineEntry
 	serviceConstructionBaselineCount     int
-	transportImplementationFindings      []transportServiceImplementationFinding
 	externalImplementationFindings       []transportServiceImplementationFinding
 	transportBehaviorFindings            []transportBehaviorFinding
 	recordedTransportBehaviorFindings    []transportBehaviorFinding
@@ -65,13 +62,6 @@ type retiredPackageRootFinding struct {
 	retiredPackageRoot
 }
 
-type retiredPackageImportFinding struct {
-	retiredPackageRoot
-	importPath string
-	filePath   string
-	class      boundarySourceClass
-}
-
 type handwrittenGeneratedFinding struct {
 	filePath    string
 	packagePath string
@@ -79,12 +69,6 @@ type handwrittenGeneratedFinding struct {
 
 type rootPackageFinding struct {
 	packagePath string
-}
-
-type migrationShimFinding struct {
-	packagePath     string
-	marker          string
-	canonicalTarget string
 }
 
 type applicationGraphImportFinding struct {

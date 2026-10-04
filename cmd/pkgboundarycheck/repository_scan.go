@@ -123,13 +123,6 @@ func scanRootPackageFamilies(
 			result.retiredPackageRootFindings = append(result.retiredPackageRootFindings, retiredPackageRootFinding{retiredRoot})
 			continue
 		}
-		migrationShimFinding, found, err := detectMigrationShimFinding(repoRoot, packagePath)
-		if err != nil {
-			return err
-		}
-		if found {
-			result.migrationShimFindings = append(result.migrationShimFindings, migrationShimFinding)
-		}
 		if isAllowedRootPackageFamily(policy, cfg.packageRoot, packagePath) {
 			continue
 		}
@@ -164,10 +157,6 @@ func scanRepositoryPackageImports(
 ) error {
 	var err error
 	result.applicationGraphImportFindings, err = scanApplicationGraphImports(repoRoot, scanRoot, packageRoot)
-	if err != nil {
-		return err
-	}
-	result.retiredPackageImportFindings, err = scanRetiredPackageImports(repoRoot, scanRoot, packageRoot)
 	if err != nil {
 		return err
 	}
@@ -281,10 +270,6 @@ func scanRepositoryServiceConstruction(repoRoot string, result *scanResult) erro
 
 func scanRepositoryTransportBoundaries(repoRoot string, result *scanResult) error {
 	var err error
-	result.transportImplementationFindings, err = scanTransportServiceImplementationImports(repoRoot)
-	if err != nil {
-		return err
-	}
 	result.externalImplementationFindings, err = scanConvergedServiceSubpackageImports(repoRoot)
 	if err != nil {
 		return err
@@ -437,15 +422,6 @@ func scanRepositoryPetriAndProviderBoundaries(repoRoot string, result *scanResul
 func sortScanResult(result *scanResult) {
 	slices.SortFunc(result.rootPackageFindings, func(left, right rootPackageFinding) int {
 		return strings.Compare(left.packagePath, right.packagePath)
-	})
-	slices.SortFunc(result.migrationShimFindings, func(left, right migrationShimFinding) int {
-		return strings.Compare(left.packagePath, right.packagePath)
-	})
-	slices.SortFunc(result.retiredPackageImportFindings, func(left, right retiredPackageImportFinding) int {
-		if comparison := strings.Compare(left.filePath, right.filePath); comparison != 0 {
-			return comparison
-		}
-		return strings.Compare(left.importPath, right.importPath)
 	})
 }
 
@@ -631,61 +607,6 @@ func findRetiredPackageRoot(packagePath string) (retiredPackageRoot, bool) {
 		}
 	}
 	return retiredPackageRoot{}, false
-}
-
-func scanRetiredPackageImports(repoRoot string, scanRoot string, packageRoot string) ([]retiredPackageImportFinding, error) {
-	var findings []retiredPackageImportFinding
-	err := filepath.WalkDir(scanRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
-			return filepath.SkipDir
-		}
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
-			return nil
-		}
-
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("read package import file %s: %w", filepath.ToSlash(path), err)
-		}
-		if bytesContainGeneratedMarker(content) {
-			return nil
-		}
-		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
-		if err != nil {
-			return fmt.Errorf("parse package imports %s: %w", filepath.ToSlash(path), err)
-		}
-		filePath, err := filepath.Rel(repoRoot, path)
-		if err != nil {
-			return fmt.Errorf("resolve importing file %s: %w", filepath.ToSlash(path), err)
-		}
-
-		for _, importSpec := range parsedFile.Imports {
-			importPath, err := strconv.Unquote(importSpec.Path.Value)
-			if err != nil {
-				continue
-			}
-			packagePath := strings.TrimPrefix(importPath, repositoryImportPrefix)
-			for _, retiredRoot := range retiredPackageRoots {
-				if packagePath != retiredRoot.packagePath && !strings.HasPrefix(packagePath, retiredRoot.packagePath+"/") {
-					continue
-				}
-				findings = append(findings, retiredPackageImportFinding{
-					retiredPackageRoot: retiredRoot,
-					importPath:         importPath,
-					filePath:           filepath.ToSlash(filePath),
-					class:              classifyBoundarySource(filepath.ToSlash(filePath)),
-				})
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("scan %s retired package imports: %w", filepath.ToSlash(packageRoot), err)
-	}
-	return findings, nil
 }
 
 func scanApplicationGraphImports(repoRoot string, scanRoot string, packageRoot string) ([]applicationGraphImportFinding, error) {
