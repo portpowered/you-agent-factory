@@ -25,6 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/cobracompletion"
 	configcli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli/config"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -376,6 +377,7 @@ func provideLocalWorkerSessionsBoundary(
 	logger logging.Logger,
 	workerService workers.Service,
 	recording recordings.WorkerSessionRecordingService,
+	clock factoryruntime.Clock,
 	scheduler platformclock.TimerSource,
 ) (*localWorkerSessionsBoundary, error) {
 	if workerService == nil {
@@ -391,7 +393,7 @@ func provideLocalWorkerSessionsBoundary(
 		execution,
 		eventsService,
 		logger,
-		platformclock.Real{},
+		clock,
 		scheduler,
 		providerSessions,
 		recording,

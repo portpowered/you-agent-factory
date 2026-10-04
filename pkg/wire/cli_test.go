@@ -403,6 +403,7 @@ func TestProvideLocalWorkerSessionsBoundaryUsesProviderInvocationRoute(t *testin
 		workerService,
 		nil,
 		platformclock.Real{},
+		platformclock.Real{},
 	)
 	if err != nil {
 		t.Fatalf("provideLocalWorkerSessionsBoundary() error = %v", err)
@@ -459,6 +460,7 @@ func TestProvideLocalWorkerSessionsBoundaryRequiresWorkersService(t *testing.T) 
 		logging.NoopLogger{},
 		nil,
 		nil,
+		platformclock.Real{},
 		platformclock.Real{},
 	)
 	if err == nil || !strings.Contains(err.Error(), "Workers service is required") {
