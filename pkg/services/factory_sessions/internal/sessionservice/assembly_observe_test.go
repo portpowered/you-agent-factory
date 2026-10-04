@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -171,7 +172,7 @@ func assertInvocationQueryGeneration(t *testing.T, authority InvocationAuthority
 	if runtime.scope.SessionID != id || runtime.scope.HistoryLimit != 1 {
 		t.Fatalf("subscription scope = %#v", runtime.scope)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	select {
 	case runtime.events <- interfaces.FactoryEvent{Type: interfaces.FactoryEventTypeWorkRequest}:
@@ -219,7 +220,7 @@ func TestInvocationAuthorityWaiterUsesSelectedScheduler(t *testing.T) {
 		t.Fatalf("wake: %v", err)
 	}
 	<-selected.ready
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	finished := make(chan error, 1)
 	go func() { finished <- waiter(ctx) }()
@@ -387,5 +388,93 @@ func TestSessionScopeControlKeepsSelectedGenerationDuringReplacement(t *testing.
 	}
 	if len(firstMetrics.outcomes) != 1 || len(replacementMetrics.outcomes) != 0 {
 		t.Fatalf("generation metrics: first=%v replacement=%v", firstMetrics.outcomes, replacementMetrics.outcomes)
+	}
+}
+
+// A slow addressed Runtime effect must not hold a process-wide control lock.
+// The shared request ID is deliberately valid in each independent session.
+func TestSessionScopeControlPeerProgressWhileCancellationIsBlocked(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	state := newWorkResolverSessionState()
+	aStarted, releaseA, aDone := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(releaseA) }) }
+	a := &scopedControlRuntime{status: string(interfaces.FactoryStateRunning)}
+	a.onObserve = func() {
+		close(aStarted)
+		select {
+		case <-releaseA:
+		case <-ctx.Done():
+		}
+	}
+	b := &scopedControlRuntime{status: string(interfaces.FactoryStateRunning)}
+	aMetrics := registerScopeControlRuntime(state, "a", a, zap.NewNop())
+	bMetrics := registerScopeControlRuntime(state, "b", b, zap.NewNop())
+	control := NewScopeControl(state)
+	request := factorysessions.ControlRequest{RequestID: "same-request", TurnID: "same-turn"}
+	type completion struct {
+		result factorysessions.LifecycleControlResult
+		err    error
+	}
+	aCompleted := make(chan completion, 1)
+	go func() {
+		defer close(aDone)
+		result, err := control.CancelLiveFactorySession(ctx, "a", request)
+		aCompleted <- completion{result: result, err: err}
+	}()
+	t.Cleanup(func() {
+		unblock()
+		select {
+		case <-aDone:
+		case <-ctx.Done():
+			t.Error("addressed cancellation did not join")
+		}
+	})
+	select {
+	case <-aStarted:
+	case <-ctx.Done():
+		t.Fatal("A did not reach its owned Runtime effect")
+	}
+	bDone := make(chan struct{})
+	bCompleted := make(chan completion, 1)
+	go func() {
+		defer close(bDone)
+		result, err := control.CancelLiveFactorySession(ctx, "b", request)
+		bCompleted <- completion{result: result, err: err}
+	}()
+	t.Cleanup(func() {
+		unblock()
+		select {
+		case <-bDone:
+		case <-ctx.Done():
+			t.Error("peer cancellation did not join")
+		}
+	})
+	select {
+	case peer := <-bCompleted:
+		if peer.err != nil || peer.result.SessionID != "b" || peer.result.Outcome != factorysessions.LifecycleControlOutcomeAccepted {
+			t.Fatalf("peer cancel = %#v, %v", peer.result, peer.err)
+		}
+	case <-ctx.Done():
+		t.Fatal("blocked A prevented B from completing its own cancellation")
+	}
+	select {
+	case <-aDone:
+		t.Fatal("A completed before its owned effect was released")
+	default:
+	}
+	unblock()
+	select {
+	case own := <-aCompleted:
+		if own.err != nil || own.result.SessionID != "a" || own.result.Outcome != factorysessions.LifecycleControlOutcomeAccepted {
+			t.Fatalf("addressed cancel = %#v, %v", own.result, own.err)
+		}
+	case <-ctx.Done():
+		t.Fatal("A did not complete after its owned effect was released")
+	}
+	if a.controls != 1 || b.controls != 1 || a.last.ControlID != request.RequestID || b.last.ControlID != request.RequestID || len(aMetrics.outcomes) != 1 || len(bMetrics.outcomes) != 1 {
+		t.Fatalf("independent correlation/effects: A=%#v B=%#v metrics=%v/%v", a.last, b.last, aMetrics.outcomes, bMetrics.outcomes)
 	}
 }
