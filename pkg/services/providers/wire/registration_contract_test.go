@@ -283,38 +283,8 @@ func (integration *permissionBypassIntegration) Capabilities(context.Context, In
 	return integration.MaximumCapabilities(), nil
 }
 
-func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
+func TestNewServiceUsesCompletedConstructionPorts(t *testing.T) {
 	t.Parallel()
-
-	tests := []struct {
-		name string
-		call func() (providers.Service, error)
-		want string
-	}{
-		{
-			name: "catalog",
-			call: func() (providers.Service, error) {
-				return NewService(nil, nil, nil, nil, logging.NoopLogger{}, nil)
-			},
-			want: "construct Providers: catalog is required",
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			service, err := test.call()
-			if err == nil {
-				t.Fatalf("newTestProvidersService() error = nil, want missing %s construction port", test.name)
-			}
-			if service != nil {
-				t.Fatalf("newTestProvidersService() = %#v, want nil service", service)
-			}
-			if !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("newTestProvidersService() error = %q, want %q", err.Error(), test.want)
-			}
-		})
-	}
 
 	service, err := newTestProvidersService(IdentityCatalogProbe,
 		platformclock.Real{}, logging.NoopLogger{}, nil, nil, nil,

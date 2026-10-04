@@ -23,33 +23,6 @@ import (
 	acpsdk "github.com/portpowered/infinite-you/third_party/acp-go-sdk"
 )
 
-func TestNew_RejectsNilCatalog(t *testing.T) {
-	t.Parallel()
-
-	service, err := providerservice.NewWithACP(nil, &stubExecution{}, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
-	if err == nil || service != nil {
-		t.Fatalf("New(nil) = (%v, %v), want error", service, err)
-	}
-}
-
-func TestNewRejectsInvalidExecutionComposition(t *testing.T) {
-	t.Parallel()
-
-	catalogService, err := catalogwire.NewService(catalogwire.IdentityProbe, nil, nil)
-	if err != nil {
-		t.Fatalf("catalogwire.NewService() = %v", err)
-	}
-	var nilExecution execution.ContinuationService
-	service, constructionErr := providerservice.NewWithACP(catalogService, nilExecution, &stubACPService{integrations: []providers.ACPIntegration{}}, nil, logging.NoopLogger{}, &stubACPService{integrations: []providers.ACPIntegration{}})
-	if constructionErr == nil || service != nil {
-		t.Fatalf(
-			"New() = (%v, %v), want invalid execution composition error",
-			service,
-			constructionErr,
-		)
-	}
-}
-
 func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	t.Parallel()
 

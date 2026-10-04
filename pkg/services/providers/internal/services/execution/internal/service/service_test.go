@@ -35,7 +35,6 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 		catalog       catalog.Service
 		registrations []execution.Registration
 	}{
-		{name: "nil catalog"},
 		{
 			name:    "invalid provider",
 			catalog: mustCatalog(t),

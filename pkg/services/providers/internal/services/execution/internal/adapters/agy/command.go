@@ -24,12 +24,9 @@ const (
 
 // NewCommandEffect binds the canonical AGY print-mode invocation to the
 // Providers command-runner boundary. The command runner owns process
-// creation; this adapter owns only AGY's argv and timeout policy.
-
+// creation; this adapter owns only AGY's argv and timeout policy. Composition
+// supplies the completed runner, duration source and scheduler.
 func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source, scheduler platformclock.TimerSource) Effect {
-	if runner == nil || clock == nil || scheduler == nil {
-		return nil
-	}
 	return EffectFunc(func(
 		ctx context.Context,
 		request execution.ContinuationRequest,

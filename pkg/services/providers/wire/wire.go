@@ -4,8 +4,8 @@
 // Canonical composition assembles these once; the Providers root consumes them
 // directly. Peers depend on Service rather than private construction roles. The
 // process-edge registration contract in this package is for root composition,
-// not a second peer-facing Providers service. Missing required construction
-// ports fail with a deterministic construction error and a nil service.
+// not a second peer-facing Providers service. Required collaborators are
+// completed by composition before they reach the internal consumers.
 package wire
 
 import (

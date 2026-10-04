@@ -35,12 +35,6 @@ func TestServiceInternalDelegationCoverage(t *testing.T) {
 	); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if root, err := NewWithACP(nil, execution, internalDisabledACP{}, nil, logging.NoopLogger{}, internalDisabledACP{}); err == nil || root != nil {
-		t.Fatalf("New(nil, execution) = (%v, %v), want error", root, err)
-	}
-	if root, err := NewWithACP(catalog, nil, internalDisabledACP{}, nil, logging.NoopLogger{}, internalDisabledACP{}); err == nil || root != nil {
-		t.Fatalf("New(catalog, nil) = (%v, %v), want error", root, err)
-	}
 }
 
 func TestEffectiveACPIntegrationsPreservesUnchangedPackageRuntimeBinding(t *testing.T) {

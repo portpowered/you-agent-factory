@@ -27,12 +27,8 @@ var commandAutomationDefaults = []platformprocess.CommandEnvEntry{
 	{Name: "VISUAL", Value: "true"},
 }
 
-// NewCommandEffect binds one streaming subprocess runner to the Claude adapter.
-
+// NewCommandEffect binds the completed runner and duration source to Claude.
 func NewCommandEffect(runner providerservice.CommandRunner, clock platformclock.Source) Effect {
-	if runner == nil || clock == nil {
-		return nil
-	}
 	return EffectFunc(func(
 		ctx context.Context,
 		request execution.ContinuationRequest,

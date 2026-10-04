@@ -26,13 +26,11 @@ var _ execution.ContinuationService = (*service)(nil)
 // New constructs an inert execution service over one canonical catalog
 // authority and an immutable set of private adapter attempts. The returned
 // role includes exact-session continuation for direct injection into the root.
+// Composition supplies the completed catalog authority.
 func New(
 	catalogService catalog.Service,
 	registrations ...execution.Registration,
 ) (execution.ContinuationService, error) {
-	if catalogService == nil {
-		return nil, fmt.Errorf("construct Providers Execution: catalog is required")
-	}
 	adapters := make(map[providers.ID]adapterBinding, len(registrations))
 	for _, registration := range registrations {
 		if err := registration.Provider.Validate(); err != nil {

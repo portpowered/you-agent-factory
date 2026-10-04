@@ -41,7 +41,8 @@ var _ providers.Service = (*Service)(nil)
 // logging.NoopLogger{}. acpService is completed even for native-only hosts,
 // which supply an explicit disabled ACP implementation. Both execution roles
 // include continuation; unsupported operations are supplied explicitly rather
-// than discovered or substituted while dispatching an attempt.
+// than discovered or substituted while dispatching an attempt. Required ports
+// are completed by composition before this internal constructor is called.
 func NewWithACP(
 	catalogService catalog.Service,
 	executionService execution.ContinuationService,
@@ -50,12 +51,6 @@ func NewWithACP(
 	logger logging.Logger,
 	lifecycle Lifecycle,
 ) (*Service, error) {
-	if catalogService == nil {
-		return nil, fmt.Errorf("construct Providers: catalog is required")
-	}
-	if executionService == nil {
-		return nil, fmt.Errorf("construct Providers: execution is required")
-	}
 	return &Service{
 		catalog:     catalogService,
 		execution:   executionService,
