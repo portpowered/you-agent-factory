@@ -39,9 +39,20 @@ Before making a decision, read these files in full:
 Inspect the live Factory Session and queue before submitting or repairing Work:
 
 ```sh
-you --server http://127.0.0.1:7437 session list
-you --server http://127.0.0.1:7437 work list --session {{.Context.SessionID}}
+python factory/scripts/ideafy-read.py --server http://127.0.0.1:7437 session list
+python factory/scripts/ideafy-read.py --server http://127.0.0.1:7437 work list --session {{.Context.SessionID}}
 ```
+
+Use this helper for these read-only inspection commands.
+The helper enables the CLI's supported `--debug` diagnostics to classify
+HTTP status and transport timeouts hidden by the default error envelope.
+Successful command streams are forwarded unchanged; retry metadata omits error bodies.
+It retries HTTP 5xx and timeouts three times after the initial attempt.
+Backoff is 1, 2, then 4 seconds, each with at most 0.25 seconds of jitter.
+Each attempt has a 30-second timeout.
+Do not add another agent-level retry loop after helper exhaustion.
+Fail with the final command evidence when the helper exhausts its budget.
+Never use this helper for submissions, Work controls, or other mutations.
 
 The canonical local Factory server for this factory is
 `http://127.0.0.1:7437`; it is documented in
@@ -75,12 +86,12 @@ applies:
   wrong or incomplete; or
 - `terminal_healthy`: no action is required.
 
-There are no blind retries. A retry needs new evidence and a concrete reason,
-is recorded with its request identity, and is limited to one attempt for the
-same unchanged failure in a supervision pass. A deterministic blocker gets a
-narrow correction, a contract clarification, or an external hold. A stranded
-item may be moved only to a valid input state, never to skip implementation,
-review, or validation.
+Work repair and resubmission require new evidence and a concrete reason.
+Record the request identity and allow one attempt for the same unchanged Work failure per supervision pass.
+Read-only inspections use the helper's separate three-retry budget.
+A deterministic blocker gets a narrow correction, a contract clarification, or an external hold.
+Supervisor Work authority remains governed by the operating policy.
+Never skip implementation, review, or validation.
 
 The supervisor may report or repair Factory-level state and a clearly stranded
 Work when the runtime exposes that safe route. It
