@@ -31,8 +31,9 @@ return `FAILED` on it. For each red or unreviewed PR and failed Work item,
 record its current owner or the concrete reason it cannot be assigned yet.
 Neither an old failed Work ID nor a running unrelated child counts as an owner.
 
-First repair an actually stranded current-Session item through a supported
-event-producing Work control, with a recorded cause and verified transition.
+First inspect a stranded current-Session item without changing its state.
+Follow the lead prompt's control prohibition and mailbox-park interpretation.
+Escalate required Work state repair through the operator mailbox with the exact cause and evidence.
 If an independent correction or validation is ready, submit one or a few
 small `idea:init` or `validation:init` items through the explicit-session CLI:
 write a raw batch in the Project root, dry-run, submit with a stable unique
@@ -55,17 +56,17 @@ project-cycle only as the terminal `complete` or `blocked` decision allowed by
 the lead prompt, and never while one is already pending. A missing feedback
 route must be diagnosed, not treated as success.
 
-If the children are healthy and no independent ready work exists,
-record that finding and return. If a stalled child or missing wake route
-cannot be repaired through a supported control, escalate the precise topology defect to Factory
-Reliability and the portfolio supervisor through the operator mailbox named in
-your Project rules, then return `ACCEPTED`. Keep all changes scoped to this
-Project and preserve history, review, CI, acceptance, privacy, and budgets.
+If the children are healthy and no independent ready work exists, record that finding and return.
+Treat a verified mailbox park as an external wait, using the request's release condition.
+Escalate a stalled child or missing wake route through the operator mailbox named in your Project rules.
+Name Factory Reliability and the portfolio supervisor as the requested repair owners.
+Return `ACCEPTED` with the observed owner, mailbox request, and safe action.
+Keep all changes scoped to this Project and preserve history, review, CI, acceptance, privacy, and budgets.
 
-Return only a decision envelope. Use `ACCEPTED` after verified inspection or
-repair, with concise feedback naming the observed owner and action. Use
-`FAILED` with the exact blocker only when inspection or a supported repair of
-this Project fails and the Project cannot continue.
+Return only a decision envelope.
+Use `ACCEPTED` after verified inspection, submission, or nonfatal escalation.
+Use `FAILED` only when the Project itself cannot continue.
+Never attempt Work move, reset, restore, or equivalent state controls.
 `FAILED` is project-fatal: it routes the Project through `needs-supervision`
 to `blocked` and stops every further lead pass until an operator moves it
 back. Reserve it for conditions that make this Project itself unable to
