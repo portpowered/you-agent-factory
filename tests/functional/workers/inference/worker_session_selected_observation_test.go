@@ -74,6 +74,7 @@ func runSelectedObservationScenario(t *testing.T, variant string) {
 	workerID := rows[0].WorkerSessionId
 	assertSelectedObservationParity(t, group, dir, sessionID, workID, workerID, runner.providerID, variant, "RUNNING")
 	assertSelectedObservationErrors(t, group, dir, sessionID, otherID, workID, workerID)
+	assertSelectedObservationParity(t, group, dir, sessionID, workID, workerID, runner.providerID, variant, "RUNNING")
 	runner.unblock()
 	support.WaitForSessionTerminalStatus(t, group.baseURL, sessionID, sharedInferenceScenarioTimeout)
 	assertSelectedObservationParity(t, group, dir, sessionID, workID, workerID, runner.providerID, variant, "COMPLETED")
@@ -181,26 +182,46 @@ func assertSelectedObservationParity(t *testing.T, group *inferenceProcessGroup,
 		t.Fatal(err)
 	}
 	for _, row := range []factoryapi.WorkerSessionObservation{matching[0], workRows[0], shown} {
-		if row.State != factoryapi.WorkerSessionObservationState(state) || row.FactorySessionId == nil || *row.FactorySessionId != sessionID || row.WorkerSessionId != workerID {
-			t.Fatalf("live facts = %#v; want %s in %s", row, state, sessionID)
-		}
-		if row.ProviderSessionAvailable != (providerID != "") || (providerID == "" && row.ProviderSession != nil) ||
-			(providerID != "" && (row.ProviderSession == nil || row.ProviderSession.Id != providerID || row.ProviderSession.Provider != "codex" || row.ProviderSession.Kind != "session_id")) {
-			t.Fatalf("provider facts = %#v/%t, want controlled tuple %q", row.ProviderSession, row.ProviderSessionAvailable, providerID)
-		}
-		wantTranscript := factoryapi.WorkerSessionObservationTranscriptUNAVAILABLE
-		if variant == "available" {
-			wantTranscript = factoryapi.WorkerSessionObservationTranscriptAVAILABLE
-		}
-		if row.Transcript != wantTranscript || row.Failure != nil {
-			t.Fatalf("optional facts = %#v", row)
-		}
-		if state == "RUNNING" && row.ConfirmationState != factoryapi.UNCONFIRMED {
-			t.Fatalf("active confirmation = %s", row.ConfirmationState)
-		}
-		if !reflect.DeepEqual(row.RecordingHealth, matching[0].RecordingHealth) || !reflect.DeepEqual(row.RecordingHealthReason, matching[0].RecordingHealthReason) || row.ConfirmationState != matching[0].ConfirmationState {
-			t.Fatalf("health/confirmation disagree: fleet=%#v scoped=%#v", matching[0], row)
-		}
+		assertSelectedObservationFacts(t, row, matching[0], sessionID, workerID, providerID, variant, state)
+	}
+}
+
+func assertSelectedObservationFacts(t *testing.T, row, fleet factoryapi.WorkerSessionObservation, sessionID, workerID, providerID, variant, state string) {
+	t.Helper()
+	if row.State != factoryapi.WorkerSessionObservationState(state) || row.FactorySessionId == nil || *row.FactorySessionId != sessionID || row.WorkerSessionId != workerID {
+		t.Fatalf("live facts = %#v; want %s in %s", row, state, sessionID)
+	}
+	assertSelectedProviderFacts(t, row, providerID, variant)
+	if state == "RUNNING" && row.ConfirmationState != factoryapi.UNCONFIRMED {
+		t.Fatalf("active confirmation = %s", row.ConfirmationState)
+	}
+	if !reflect.DeepEqual(row.RecordingHealth, fleet.RecordingHealth) || !reflect.DeepEqual(row.RecordingHealthReason, fleet.RecordingHealthReason) || row.ConfirmationState != fleet.ConfirmationState {
+		t.Fatalf("health/confirmation disagree: fleet=%#v scoped=%#v", fleet, row)
+	}
+}
+
+func assertSelectedProviderFacts(t *testing.T, row factoryapi.WorkerSessionObservation, providerID, variant string) {
+	t.Helper()
+	wantProvider := (*factoryapi.WorkerSessionProviderSessionRef)(nil)
+	if providerID != "" {
+		wantProvider = &factoryapi.WorkerSessionProviderSessionRef{Provider: "codex", Kind: "session_id", Id: providerID}
+	}
+	if row.ProviderSessionAvailable != (providerID != "") || !reflect.DeepEqual(row.ProviderSession, wantProvider) {
+		t.Fatalf("provider facts = %#v/%t, want controlled tuple %q", row.ProviderSession, row.ProviderSessionAvailable, providerID)
+	}
+	wantTranscript := factoryapi.WorkerSessionObservationTranscriptUNAVAILABLE
+	if variant == "available" {
+		wantTranscript = factoryapi.WorkerSessionObservationTranscriptAVAILABLE
+	}
+	wantHealth := factoryapi.WorkerSessionObservationRecordingHealthComplete
+	if row.State == factoryapi.WorkerSessionObservationStateRunning {
+		wantHealth = factoryapi.WorkerSessionObservationRecordingHealthIncomplete
+	}
+	if row.RecordingHealth == nil || *row.RecordingHealth != wantHealth || row.RecordingHealthReason != nil {
+		t.Fatalf("controlled recording health = %#v/%v, want %s without interruption", row.RecordingHealth, row.RecordingHealthReason, wantHealth)
+	}
+	if row.Transcript != wantTranscript || row.Failure != nil {
+		t.Fatalf("optional facts = %#v", row)
 	}
 }
 

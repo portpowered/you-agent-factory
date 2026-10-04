@@ -230,6 +230,17 @@ func TestWorkerSessionCopiedLedgerRestartPreservesWorkTranscriptAndCursor(t *tes
 	}
 
 	fixture.server.Stop(t)
+	// Live terminal facts belong to the registry and may differ from canonical
+	// history timing and safe failure detail. Compare historical reconstruction
+	// before and after relocation, retaining the live assertions above.
+	historicalServer := startCopiedLedgerResumeProcess(t, fixture.factoryDir, fixture.factoryID,
+		fixture.recordPath, fixture.homeDir, fixture.workerRecordingPath, fixture.runtimeInstanceID)
+	t.Cleanup(func() { historicalServer.Stop(t) })
+	support.WaitForSessionTerminalStatus(t, historicalServer.URL(), fixture.factoryID, copiedLedgerReplayTimeout)
+	historicalBefore := captureCopiedLedgerSnapshot(t, historicalServer.URL(), fixture.factoryID, workIDs, targetWorkID, failureWorkID)
+	assertCopiedLedgerLiveHistoryIdentities(t, before, historicalBefore)
+	before = historicalBefore
+	historicalServer.Stop(t)
 	copyDirectory := t.TempDir()
 	copiedRecording := copyCopiedLedgerFile(t, fixture.recordPath, filepath.Join(copyDirectory, "worker-session-recording.json"))
 	copiedFactoryDir := filepath.Join(copyDirectory, "factory")

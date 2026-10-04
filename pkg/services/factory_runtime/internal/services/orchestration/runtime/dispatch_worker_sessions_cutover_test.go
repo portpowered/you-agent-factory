@@ -847,6 +847,75 @@ func TestRecordedWorkerSessionObservationConsultsLiveBeforeHistory(t *testing.T)
 	}
 }
 
+func TestRecordedWorkerSessionObservationFallsBackOnTypedAbsence(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 4, 19, 34, 0, 0, time.UTC)
+	service := &recordedWorkerSessionObservation{
+		Service: &selectedObservationSource{err: fmt.Errorf("absent: %w", workersessions.ErrObservationSessionNotFound)},
+		ledger:  &recordingfixtures.ScriptedRuntimeLedger{Events: recordedObservationTestEvents(t, base, "work-1")},
+		projector: func([]interfaces.FactoryEvent, int) (interfaces.FactoryWorldState, error) {
+			return interfaces.FactoryWorldState{}, nil
+		},
+	}
+	got, err := service.GetObservationByWorkerSessionID(context.Background(), workersessions.GetObservationByWorkerSessionIDRequest{WorkerSessionID: "worker-early"})
+	if err != nil || got.WorkerSessionID != "worker-early" || got.AttemptID != "dispatch-early" || got.StartedAt == nil || !got.StartedAt.Equal(base.Add(time.Second)) {
+		t.Fatalf("typed-absence fallback = %#v, %v; want unchanged recorded identity and timing", got, err)
+	}
+}
+
+func TestRecordedWorkerSessionObservationLiveRecordingHealth(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name               string
+		state              workersessions.State
+		status             recordings.WorkerRecordingStatus
+		failure            *workersessions.FailureCause
+		reason, wantReason string
+	}{
+		{"running partial capture", workersessions.StateRunning, recordings.WorkerRecordingStatusIncomplete, nil, recordings.WorkerRecordingInterruptionProcessStopped, ""},
+		{"completed before flush", workersessions.StateCompleted, recordings.WorkerRecordingStatusIncomplete, nil, recordings.WorkerRecordingInterruptionProcessStopped, ""},
+		{"actual process loss", workersessions.StateFailed, recordings.WorkerRecordingStatusIncomplete, &workersessions.FailureCause{Kind: workersessions.FailureCauseProcessGone}, recordings.WorkerRecordingInterruptionProcessStopped, recordings.WorkerRecordingInterruptionProcessStopped},
+		{"capture fault", workersessions.StateRunning, recordings.WorkerRecordingStatusDegraded, nil, "WRITE_FAILED", "WRITE_FAILED"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got := liveRecordingHealth(workersessions.Observation{State: test.state, RecordingHealth: test.status, RecordingHealthReason: test.reason, Failure: test.failure})
+			if got.State != test.state || got.RecordingHealth != test.status || got.RecordingHealthReason != test.wantReason || got.Failure != test.failure {
+				t.Fatalf("live recording health = %#v, want retained facts and reason %q", got, test.wantReason)
+			}
+		})
+	}
+}
+
+func TestRecordedWorkerSessionObservationConfirmsMatchingLiveTerminalOutcome(t *testing.T) {
+	t.Parallel()
+	events := recordedObservationTestEvents(t, time.Now(), "work-1")
+	events = append(events, interfaces.FactoryEvent{
+		Context: interfaces.FactoryEventContext{Sequence: 3, DispatchID: stringPointerForRecordedTest("dispatch-early")},
+		Type:    interfaces.FactoryEventTypeDispatchResponse,
+		Payload: mustMarshalRecordedTest(t, workers.DispatchResponseEventPayload{Outcome: workers.OutcomeAccepted}),
+	})
+	service := &recordedWorkerSessionObservation{ledger: &recordingfixtures.ScriptedRuntimeLedger{Events: events}}
+	observations := []workersessions.Observation{
+		{WorkerSessionID: "worker-early", AttemptID: "dispatch-early", State: workersessions.StateCompleted},
+		{WorkerSessionID: "worker-early", AttemptID: "dispatch-early", State: workersessions.StateRunning},
+		{WorkerSessionID: "worker-early", AttemptID: "dispatch-early", State: workersessions.StateFailed},
+		{WorkerSessionID: "worker-early", AttemptID: "other-attempt", State: workersessions.StateCompleted},
+	}
+	service.applyConfirmation(observations, completedFlushWatermarkSample{
+		available: true, generationID: "generation",
+		watermark: recordings.CanonicalEventCursor{Sequence: 3, StreamGenerationID: "generation"},
+	})
+	if observations[0].ConfirmationState != workersessions.ConfirmationStateConfirmed || observations[0].State != workersessions.StateCompleted {
+		t.Fatalf("matching terminal confirmation = %#v", observations[0])
+	}
+	for _, got := range observations[1:] {
+		if got.ConfirmationState != workersessions.ConfirmationStateUnconfirmed || got.StateSequenceKnown {
+			t.Fatalf("unmatched live state was confirmed: %#v", got)
+		}
+	}
+}
+
 func TestRecordedDispatchFactsBranches(t *testing.T) {
 	base, events := recordedDispatchFactTestEvents(t)
 	associations, requests := recordedDispatchFacts(events)
