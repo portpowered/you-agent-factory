@@ -1829,10 +1829,14 @@ This lane edits `factory_runtime/internal/{build.go,runtime_build.go}` and `comp
 
 1. `TestRuntimeAttemptsFromTwoRuntimesWithEqualDispatchIDsRemainIsolated`. Layer: unit. Path: `pkg/services/worker_sessions/internal/service/runtime_attempt_keying_test.go`.
    - Given two runtime contexts.
-   - When each begins an attempt with the same `DispatchID` and one is cancelled.
+   - When each begins an attempt with the same logical `DispatchID`, distinct already-supplied Worker Session IDs and its own selected execution handle/clock/scheduler, and one is cancelled.
    - Then there is no owner conflict, only the cancelled attempt terminates, and each publishes to its own session.
-   - Write it against today's per-runtime factory first.
+   - Write it against today's per-runtime factory first; port only after approved cutover. U03-T16 also preserves duplicate Worker ID rejection before peer owner/topic mutation, replay selection, lifecycle and correlation rules. This controlled component proof does not characterize production allocation.
 2. `TestTwoFactorySessionsCancelOneInFlightProviderAttemptPeerCompletes`. Layer: functional. Shared with T09; see T09 for the path and Given/When/Then.
+3. T16-CHAR-PRODUCTION-ID: independently reviewed default production allocation through explicit Factory Sessions/public dispatch and Worker events/recording association. [The binding boundary](contracts.md#binding-production-identity-boundary) pins native source routes and exact retained evidence: default Petri dispatch/initial Worker IDs are distinct UUIDs; the strict expected-equal assertion is BLOCKED-premise, not failed isolation or collision PASS. Task39's retained characterization is provisional until its own review/merge. Do not replace it with supplied identities or a deterministic allocator.
+4. T16-REAL-PATH-COLLISION: Lead owns admission/disposition of every applicable existing route; the admitted proof owner follows the actual supported entry through public Worker lifecycle/events/control and recording association at functional local-real fidelity with a controlled provider edge. Equal JavaScript collector text alone is insufficient: runtime-backed execution qualifies it; direct/standalone execution bypasses Worker Sessions. Preserve compatibility/replay/retry association. Require independently reviewed public proof or explicit Lead disposition supported by exact reachability evidence; source non-reachability is no functional isolation PASS. Only an observed collision requiring correction triggers operator-authorized T16-IDENTITY-DELTA, never the false Petri premise alone.
+
+**Cutover hold:** T16-CUTOVER requires merged AM09 contract and production characterization, U03-T16 selection/lifecycle/correlation proof, disposition of every applicable real-path collision and any required authorized identity delta before complete factory removal. T15 consumes the completed cutover. Full T16, F06/F07/F08 and FI-A1–A8 remain unproven; [the independent reader journey](validation-review.md#t16-allocation-premise--independent-reader-journey) supplies the documentation review procedure, not runtime acceptance.
 
 **Also in scope (inventory additions):**
 - the `WorkerSessionsObservationForSession` locator sites;
