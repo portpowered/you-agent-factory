@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 )
 
@@ -51,7 +51,7 @@ func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 			t.Parallel()
 
 			effect := codex.NewCommandEffect(codexCommandRunnerStub{
-				result: platformprocess.CommandResult{
+				result: providerservice.CommandResult{
 					ExitCode: 1,
 					Stderr:   []byte(test.stderr),
 				},
@@ -73,7 +73,7 @@ func TestCodexCommandEffectClassifiesUntrustedWorkingDirectoryAsTerminalWithSafe
 
 	workingDirectory := `C:\isolated\factory\with spaces`
 	effect := codex.NewCommandEffect(codexCommandRunnerStub{
-		result: platformprocess.CommandResult{
+		result: providerservice.CommandResult{
 			ExitCode: 1,
 			Stderr:   []byte("Not inside a trusted directory and --skip-git-repo-check was not specified."),
 		},
@@ -111,7 +111,7 @@ func TestCodexCommandEffectMarksUnknownTurnFailedFromExitOutput(t *testing.T) {
 
 	const providerDetail = "future turn failure credential=secret"
 	effect := codex.NewCommandEffect(codexCommandRunnerStub{
-		result: platformprocess.CommandResult{
+		result: providerservice.CommandResult{
 			ExitCode: 1,
 			Stderr:   []byte(`{"type":"turn.failed","error":{"message":"` + providerDetail + `"}}`),
 		},
@@ -135,10 +135,10 @@ func TestCodexCommandEffectMarksUnknownTurnFailedFromExitOutput(t *testing.T) {
 }
 
 type codexCommandRunnerStub struct {
-	result platformprocess.CommandResult
+	result providerservice.CommandResult
 }
 
-func (stub codexCommandRunnerStub) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+func (stub codexCommandRunnerStub) Run(_ context.Context, _ providerservice.CommandRequest) (providerservice.CommandResult, error) {
 	return stub.result, nil
 }
 
@@ -146,7 +146,7 @@ func TestCodexCommandEffectClassifiesServerOverloadedExitOutputAsThrottled(t *te
 	t.Parallel()
 
 	effect := codex.NewCommandEffect(codexCommandRunnerStub{
-		result: platformprocess.CommandResult{
+		result: providerservice.CommandResult{
 			ExitCode: 1,
 			Stdout:   []byte(`{"type":"item.completed","item":{"type":"reasoning"}}` + "\n"),
 			Stderr:   []byte(`codex_error_info=server_overloaded`),

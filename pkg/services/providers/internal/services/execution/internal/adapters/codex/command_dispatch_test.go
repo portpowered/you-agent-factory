@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -13,6 +14,7 @@ import (
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
+	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
 
 func TestCommandEffectPreservesDispatchContextForProviderRunner(t *testing.T) {
@@ -70,7 +72,7 @@ func TestCommandEffectRejectsUnsupportedReasoningEffortBeforeDispatch(t *testing
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(platformRunner, platformclock.Real{})
+	effect := codex.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(platformRunner), platformclock.Real{})
 	_, err := effect.Execute(context.Background(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
 		Provider:        providers.IDCodex,
 		AttemptID:       "invalid-effort-dispatch",
@@ -92,7 +94,7 @@ func TestCommandEffectRendersResumeSessionBeforeFreshSessionFlags(t *testing.T) 
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(platformRunner, platformclock.Real{})
+	effect := codex.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(platformRunner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -132,7 +134,7 @@ func TestCommandEffectForwardsWorkerArgsBeforeResumeAndPrompt(t *testing.T) {
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(platformRunner, platformclock.Real{})
+	effect := codex.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(platformRunner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -176,7 +178,7 @@ func TestCommandEffectRendersLunaXHighReasoningEffort(t *testing.T) {
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(platformRunner, platformclock.Real{})
+	effect := codex.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(platformRunner), platformclock.Real{})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -202,4 +204,63 @@ func TestCommandEffectRendersLunaXHighReasoningEffort(t *testing.T) {
 	if !reflect.DeepEqual(request.Args, want) {
 		t.Fatalf("command args = %#v, want %#v", request.Args, want)
 	}
+}
+
+// The runner advances only the supplied clock: elapsed host time cannot satisfy
+// this assertion, including on unsuccessful attempts.
+func TestCommandEffectUsesInjectedRunnerAndClockOnTerminalPaths(t *testing.T) {
+	t.Parallel()
+	observerErr := errors.New("observer stopped")
+	for _, tc := range []struct {
+		name       string
+		runErr     error
+		observeErr error
+		wantKind   providers.ExecuteFailureKind
+	}{
+		{name: "success"},
+		{name: "timeout", runErr: context.DeadlineExceeded, wantKind: providers.ExecuteFailureKindTimeout},
+		{name: "cancellation", runErr: context.Canceled, wantKind: providers.ExecuteFailureKindCanceled},
+		{name: "observer failure", observeErr: observerErr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			clock := platformclock.NewDeterministic(time.Unix(0, 0).UTC(), time.Millisecond)
+			calls := 0
+			runner := terminalCommandRunner(func(ctx context.Context, request providerservice.CommandRequest) (providerservice.CommandResult, error) {
+				calls++
+				if request.FactorySessionID != "owned-session" || request.Command != "codex" {
+					t.Fatalf("command = %#v, want owned session and provider", request)
+				}
+				clock.SetTick(37)
+				return providerservice.CommandResult{Stdout: []byte("delivered"), Stderr: []byte("private diagnostic")}, tc.runErr
+			})
+			effect := codex.NewCommandEffect(runner, clock)
+			var observed strings.Builder
+			result, err := effect.Execute(t.Context(), execution.ContinuationRequest{ExecuteRequest: providers.ExecuteRequest{
+				Provider:    providers.IDCodex,
+				UserMessage: "perform work",
+				Correlation: providers.ExecuteCorrelation{FactorySessionID: "owned-session"},
+			}}, func(chunk []byte) error {
+				observed.Write(chunk)
+				return tc.observeErr
+			})
+			if calls != 1 || result.DurationMillis != 37 || observed.String() != "delivered" {
+				t.Fatalf("calls = %d, duration = %d, stdout = %q", calls, result.DurationMillis, observed.String())
+			}
+			if tc.wantKind != "" {
+				var failure providers.ExecuteFailure
+				if !errors.As(err, &failure) || failure.Kind != tc.wantKind {
+					t.Fatalf("error = %v, want %s", err, tc.wantKind)
+				}
+			} else if !errors.Is(err, tc.observeErr) {
+				t.Fatalf("error = %v, want %v", err, tc.observeErr)
+			}
+		})
+	}
+}
+
+type terminalCommandRunner func(context.Context, providerservice.CommandRequest) (providerservice.CommandResult, error)
+
+func (runner terminalCommandRunner) Run(ctx context.Context, request providerservice.CommandRequest) (providerservice.CommandResult, error) {
+	return runner(ctx, request)
 }
