@@ -45,3 +45,95 @@ type State struct{ port Port }
 func NewState(port Port) *State { return &State{port: port} }
 func (s *State) Lookup() Port   { return s.port }
 func Local(s *Service)          { _ = s.Lookup() } // want "service-getter-locator.*Service.*Lookup"
+
+func (s *Service) NamedParenthesized() (result Port) { // want NamedParenthesized:"construction-getter=unresolved-service-getter-locator"
+	result = s.port
+	return (result)
+}
+func (s *Service) NamedChain() (result Port) { // want NamedChain:"construction-getter=unresolved-service-getter-locator"
+	result = s.port
+	alias := result
+	second := alias
+	return second
+}
+func (s *Service) NamedDeclared() (result Port) { // want NamedDeclared:"construction-getter=unresolved-service-getter-locator"
+	result = s.port
+	var alias Port = result
+	return alias
+}
+func (s *Service) NamedGrouped() (result Port) { // want NamedGrouped:"construction-getter=unresolved-service-getter-locator"
+	result = s.port
+	var other, alias Port = s.optional, result
+	_ = other
+	return alias
+}
+func (s *Service) NamedLaterAlias() (result Port) { // want NamedLaterAlias:"construction-getter=unresolved-service-getter-locator"
+	result = s.port
+	alias := s.optional
+	alias = result
+	return alias
+}
+func (s *Service) NamedHelper() (result Port) { // want NamedHelper:"construction-getter=unresolved-service-getter-locator"
+	result = s.port
+	return identity(result)
+}
+func (s *Service) NamedCrossResult() (first, second Port) { // want NamedCrossResult:"construction-getter=unresolved-service-getter-locator"
+	alias := second
+	first = alias
+	second = s.port
+	return first, s.optional
+}
+func (s *Service) NamedClosure() (result Port) { // want NamedClosure:"construction-getter=unresolved-service-getter-locator"
+	alias := s.optional
+	func() { result = s.port; alias = result }()
+	return alias
+}
+func (s *Service) NamedCycle() (result Port) { // want NamedCycle:"construction-getter=unresolved-service-getter-locator"
+	result = s.port
+	first := result
+	second := first
+	first = second
+	return second
+}
+func (s *Service) NamedGroupedResult() (first, second Port) { // want NamedGroupedResult:"construction-getter=unresolved-service-getter-locator"
+	second = s.port
+	return
+}
+func (s *Service) NamedParallel() (err error, result Port) { // want NamedParallel:"construction-getter=unresolved-service-getter-locator"
+	err, result = nil, s.port
+	return
+}
+func (s *Service) NamedTuple() (result Port, err error) { // want NamedTuple:"construction-getter=unresolved-service-getter-locator"
+	result, err = pair(s.port)
+	return
+}
+func (s *Service) NamedConflict() (result Port) { // want NamedConflict:"construction-getter=unresolved-service-getter-locator"
+	result = s.port
+	result = s.optional
+	return
+}
+func (s *Service) DomainSlot() (Port, any) { return s.optional, s.port }
+func (s *Service) NamedDomainSlot() (result Port, data any) {
+	data = s.port
+	alias := result
+	return alias, data
+}
+func (s *Service) NamedOptional() (result Port) {
+	result = s.optional
+	alias := result
+	return alias
+}
+func (s *Service) NamedShadow() (result Port) {
+	{
+		result := s.port
+		_ = result
+	}
+	alias := result
+	return alias
+}
+func (s *Service) NamedUnused() (result Port) {
+	result = s.port
+	alias := s.optional
+	return alias
+}
+func (s *Service) NamedZero() (result Port) { return }
