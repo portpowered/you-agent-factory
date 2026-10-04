@@ -797,7 +797,7 @@ func TestRuntimeAttemptPreparationPreservesResolvedRouting(t *testing.T) {
 		t.Run("runtime="+runtimeID, func(t *testing.T) {
 			t.Parallel()
 			sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
-			cfg := &runtimeConfig{workerSessions: sessions}
+			cfg := &runtimeConfig{workerSessions: sessions, workerAttempts: sessions}
 			request := workers.WorkstationDispatchRequest{WorkstationName: workers.ProviderInvocationRoute}
 			request.Execution.RuntimeID = runtimeID
 			request.Execution.Dispatch.DispatchID = "logical-dispatch"
@@ -831,7 +831,7 @@ func TestWorkerSessionRuntimeShutdownClosesExactRuntimeAndRetainsFailure(t *test
 	t.Parallel()
 	cause := errors.New("owned observation close failure")
 	sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}, closeErr: cause}
-	f := &factoryImpl{cfg: &runtimeConfig{workerSessions: sessions, runtimeID: "owned-runtime"}}
+	f := &factoryImpl{cfg: &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, runtimeID: "owned-runtime"}}
 	if err := f.stopDispatchRuntime(context.Background(), ""); !errors.Is(err, cause) {
 		t.Fatalf("stop runtime = %v, want exact close failure", err)
 	}
@@ -846,7 +846,7 @@ func TestWorkerAttemptPreparationCapturesSelectedEffects(t *testing.T) {
 	selected := platformclock.NewDeterministic(time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC), time.Second)
 	selectedExecution := &testWorkstationBoundary{}
 	selectedScheduler := platformclock.NewDeterministic(time.Date(2040, 1, 1, 0, 0, 0, 0, time.UTC), time.Second)
-	cfg := &runtimeConfig{workerSessions: sessions, clock: selected,
+	cfg := &runtimeConfig{workerSessions: struct{ workersessions.Service }{sessions.Service}, workerAttempts: sessions, clock: selected,
 		workerExecution: selectedExecution, workerAttemptScheduler: selectedScheduler}
 	request := workers.WorkstationDispatchRequest{Execution: workers.WorkstationExecutionRequest{RuntimeID: "runtime-clock"}}
 	execution := workers.ExecuteRequest{Correlation: workers.ExecutionCorrelation{RuntimeID: "runtime-clock", DispatchID: "dispatch-clock", AttemptID: "physical-clock"}}
@@ -854,6 +854,7 @@ func TestWorkerAttemptPreparationCapturesSelectedEffects(t *testing.T) {
 	cfg.clock = platformclock.Real{}
 	cfg.workerExecution = &testWorkstationBoundary{}
 	cfg.workerAttemptScheduler = platformclock.Real{}
+	cfg.workerAttempts = &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
 	terminal, err := prepare(context.Background(), &execution)
 	if err != nil || terminal == nil {
 		t.Fatalf("preparation = %v, %v", terminal, err)
@@ -867,6 +868,7 @@ func TestWorkerAttemptPreparationCapturesSelectedEffects(t *testing.T) {
 }
 
 type beginRuntimeAttemptService struct {
+	factory.WorkerAttemptOpener
 	workersessions.Service
 	request       workersessions.RuntimeAttemptRequest
 	completed     *workers.WorkstationDispatchResult

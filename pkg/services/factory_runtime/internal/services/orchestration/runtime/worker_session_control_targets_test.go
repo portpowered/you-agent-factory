@@ -105,7 +105,7 @@ func TestBeginWorkerAttemptRecordsAssociationAndCompletesTerminal(t *testing.T) 
 	ledger := &recordingfixtures.ScriptedRuntimeLedger{}
 	sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
 	f := &factoryImpl{
-		cfg:          &runtimeConfig{workerSessions: sessions, clock: platformclock.Real{}},
+		cfg:          &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: platformclock.Real{}},
 		eventHistory: ledger,
 	}
 	request := detachedTargetRequest()
@@ -148,7 +148,7 @@ func TestBeginWorkerAttemptPreparationFailureDoesNotPublishOrphanAssociation(t *
 		beginErr: beginErr,
 	}
 	f := &factoryImpl{
-		cfg:          &runtimeConfig{workerSessions: sessions, clock: platformclock.Real{}},
+		cfg:          &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: platformclock.Real{}},
 		eventHistory: ledger,
 	}
 	request := detachedTargetRequest()
@@ -205,7 +205,7 @@ func TestBeginWorkerAttemptCompletesEveryTerminalExitExactlyOnce(t *testing.T) {
 			ledger := &recordingfixtures.ScriptedRuntimeLedger{}
 			sessions := &beginRuntimeAttemptService{Service: &fakeWorkerSessionsService{}}
 			f := &factoryImpl{
-				cfg:          &runtimeConfig{workerSessions: sessions, clock: platformclock.Real{}},
+				cfg:          &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: platformclock.Real{}},
 				eventHistory: ledger,
 			}
 
@@ -240,7 +240,7 @@ func TestBeginWorkerAttemptReopensTerminalSessionWithPhysicalAttemptIdentity(t *
 		},
 	}
 	f := &factoryImpl{
-		cfg:          &runtimeConfig{workerSessions: sessions, clock: platformclock.Real{}},
+		cfg:          &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: platformclock.Real{}},
 		eventHistory: ledger,
 	}
 	request := detachedTargetRequest()

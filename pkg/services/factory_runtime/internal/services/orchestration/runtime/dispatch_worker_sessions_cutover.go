@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -21,25 +20,16 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-type runtimeSessionInvoker interface {
-	InvokeRuntimeSession(context.Context, workersessions.RuntimeAttemptRequest, workersessions.RetryPolicy, workers.Service, platformclock.Source, platformclock.TimerSource) (workersessions.InvokeSessionResult, error)
-}
-
 func runtimeAttemptPreparation(
 	cfg *runtimeConfig,
 	request workers.WorkstationDispatchRequest,
 	executeRequest workers.ExecuteRequest,
 	allowRetry bool,
 ) attemptPreparation {
-	if cfg == nil || cfg.workerSessions == nil {
+	if cfg == nil || cfg.workerAttempts == nil {
 		return nil
 	}
-	recorder, ok := cfg.workerSessions.(interface {
-		BeginRuntimeAttempt(context.Context, workersessions.RuntimeAttemptRequest, workers.Service, platformclock.Source, platformclock.TimerSource, func(context.Context) (workers.WorkstationDispatchCancelOutcome, error)) (workersessions.RuntimeAttempt, error)
-	})
-	if !ok || recorder == nil {
-		return nil
-	}
+	recorder := cfg.workerAttempts
 	lifecycle := cfg.attempts
 	clock := cfg.clock
 	execution := cfg.workerExecution

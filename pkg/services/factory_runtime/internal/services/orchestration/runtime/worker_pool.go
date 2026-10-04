@@ -665,12 +665,8 @@ func (f *factoryImpl) stopDispatchRuntimeLocked(
 	// Seal and join this runtime's supervision scope, including compatibility
 	// invocations. The process supervisor retains peer Factory Sessions and
 	// remains available for their admission; only its lifecycle owner stops it.
-	if f.cfg != nil && f.cfg.workerSessions != nil {
-		if closer, ok := f.cfg.workerSessions.(interface {
-			CloseRuntimeAttempts(context.Context, string) error
-		}); ok {
-			stopErr = errors.Join(stopErr, closer.CloseRuntimeAttempts(stopCtx, f.cfg.runtimeID))
-		}
+	if f.cfg != nil && f.cfg.workerAttempts != nil {
+		stopErr = errors.Join(stopErr, f.cfg.workerAttempts.CloseRuntimeAttempts(stopCtx, f.cfg.runtimeID))
 	}
 	return stopErr
 }

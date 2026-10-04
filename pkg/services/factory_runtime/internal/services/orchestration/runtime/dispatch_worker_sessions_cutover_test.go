@@ -61,7 +61,7 @@ func TestInvokeWorkerRuntimeAttemptReservesBeforeAssociationAndMapsCanceledAdmis
 	ledger := newBlockingAssociationLedger()
 	release := sync.OnceFunc(func() { close(ledger.release) })
 	t.Cleanup(release)
-	f := &factoryImpl{cfg: &runtimeConfig{workerSessions: sessions, clock: testRuntimeClock{}, runtimeID: "runtime-window"}, eventHistory: ledger}
+	f := &factoryImpl{cfg: &runtimeConfig{workerSessions: sessions, workerAttempts: sessions, clock: testRuntimeClock{}, runtimeID: "runtime-window"}, eventHistory: ledger}
 	results := make(chan struct {
 		result factory.InvokeWorkerResult
 		err    error

@@ -618,13 +618,10 @@ func (f *factoryImpl) InvokeWorker(
 	if f != nil && f.cfg != nil && f.cfg.attempts != nil {
 		return f.invokeStatelessWorker(ctx, req)
 	}
-	if f == nil || f.cfg == nil || f.cfg.workerSessions == nil || f.eventHistory == nil {
+	if f == nil || f.cfg == nil || f.cfg.workerSessions == nil || f.cfg.workerAttempts == nil || f.eventHistory == nil {
 		return factory.InvokeWorkerResult{}, factory.ErrNotRunning
 	}
-	opener, ok := f.cfg.workerSessions.(runtimeSessionInvoker)
-	if !ok {
-		return factory.InvokeWorkerResult{}, factory.ErrNotRunning
-	}
+	opener := f.cfg.workerAttempts
 
 	dispatchID := strings.TrimSpace(req.DispatchID)
 	sessionID, err := f.reserveWorkerSession(ctx, dispatchID)

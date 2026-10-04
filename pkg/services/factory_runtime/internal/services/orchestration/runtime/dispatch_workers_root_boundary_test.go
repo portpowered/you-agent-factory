@@ -815,7 +815,7 @@ func TestInvokeWorkerRuntimeAttemptUsesSelectedEffectsAndResumeIdentity(t *testi
 			execution := &testWorkstationBoundary{}
 			probe := &runtimeInvocationProbe{Service: &fakeWorkerSessionsService{}, outcome: outcome}
 			ledger := &recordingfixtures.ScriptedRuntimeLedger{}
-			f := &factoryImpl{cfg: &runtimeConfig{workerSessions: probe, workerExecution: execution,
+			f := &factoryImpl{cfg: &runtimeConfig{workerSessions: struct{ workersessions.Service }{probe}, workerAttempts: probe, workerExecution: execution,
 				clock: clock, workerAttemptScheduler: scheduler, runtimeID: "runtime-selected", publicSessionID: "factory-selected"}, eventHistory: ledger}
 			result, err := f.InvokeWorker(context.Background(), factory.InvokeWorkerRequest{DispatchID: "child", Prompt: "run", MaxAttempts: 3, RecordingID: "recording-selected"})
 			if err != nil {
@@ -866,6 +866,7 @@ func TestInvokeWorkerRuntimeAttemptMissingCapabilityDoesNotReserve(t *testing.T)
 }
 
 type runtimeInvocationProbe struct {
+	factory.WorkerAttemptOpener
 	workersessions.Service
 	request      workersessions.RuntimeAttemptRequest
 	retry        workersessions.RetryPolicy
@@ -893,6 +894,7 @@ func (p *runtimeInvocationProbe) InvokeRuntimeSession(_ context.Context, req wor
 // component tests prove the control/command race. Here the observer is Runtime's
 // reservation/association/invocation order and outward result mapping.
 type associationWindowSessions struct {
+	factory.WorkerAttemptOpener
 	workersessions.Service
 	reserved chan workersessions.ReserveRequest
 	invoked  chan workersessions.RuntimeAttemptRequest

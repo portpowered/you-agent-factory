@@ -410,6 +410,10 @@ func assembleRuntimeBundle(
 	if workerSessions == nil {
 		return nil, fmt.Errorf("construct Worker Sessions service: factory returned nil")
 	}
+	workerAttempts, ok := workerSessions.(factory.WorkerAttemptOpener)
+	if !ok {
+		return nil, fmt.Errorf("Worker Sessions runtime attempt capability is required")
+	}
 	effectiveSubmissionRecorder := recordings.SubmissionRecorder(bundle.RecordSubmissionMetric)
 	if submissionRecorder != nil {
 		effectiveSubmissionRecorder = submissionRecorder
@@ -419,6 +423,7 @@ func assembleRuntimeBundle(
 		runtimeScheduler,
 		workerService,
 		workerSessions,
+		workerAttempts,
 		loadedFactoryCfg,
 		invocationInterpolation,
 		invocationFileReader(inputFiles),

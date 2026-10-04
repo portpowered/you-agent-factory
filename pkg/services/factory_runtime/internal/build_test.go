@@ -333,6 +333,7 @@ func failingRuntimeWorkerSessionsFactory() factory.WorkerSessionsFactory {
 // Workers execution boundary, mirroring the real cutover seam's shape
 // without pulling in the peer worker_sessions implementation package.
 type stubWorkerSessionsService struct {
+	factory.WorkerAttemptOpener
 	execution workers.Service
 }
 

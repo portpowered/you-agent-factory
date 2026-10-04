@@ -13,6 +13,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
@@ -22,6 +23,7 @@ import (
 )
 
 type orderedWorkerSessionsLifecycle struct {
+	factory.WorkerAttemptOpener
 	workersessions.Service
 	order *[]string
 }
@@ -41,7 +43,7 @@ func TestWorkerSessionRuntimeShutdownClosesOwnedScopesWithoutStoppingSupervisor(
 	order := make([]string, 0, 2)
 	sessions := &orderedWorkerSessionsLifecycle{order: &order}
 	for _, runtimeID := range []string{"owned-runtime", "peer-runtime"} {
-		f := &factoryImpl{cfg: &runtimeConfig{workerSessions: sessions, runtimeID: runtimeID}}
+		f := &factoryImpl{cfg: &runtimeConfig{workerSessions: struct{ workersessions.Service }{sessions}, workerAttempts: sessions, runtimeID: runtimeID}}
 		if err := f.stopDispatchRuntimeLocked(context.Background(), dispatchplanning.RuntimeStopReasonCancelled); err != nil {
 			t.Fatalf("stop runtime %q = %v, want nil", runtimeID, err)
 		}

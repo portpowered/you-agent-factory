@@ -91,6 +91,7 @@ type runtimeConfig struct {
 	attemptCapacity                    int
 	newID                              factory.IDGenerator
 	workerSessions                     workersessions.Service
+	workerAttempts                     factory.WorkerAttemptOpener
 	runtimeConfig                      interfaces.RuntimeDefinitionLookup
 	invocationInterpolation            interfaces.InvocationInterpolationService
 	invocationFileReader               interfaces.FileReader
@@ -140,6 +141,7 @@ func New(
 	runtimeScheduler scheduler.Scheduler,
 	statelessService workers.Service,
 	workerSessionsService workersessions.Service,
+	workerAttempts factory.WorkerAttemptOpener,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	invocationInterpolation interfaces.InvocationInterpolationService,
 	invocationFileReader interfaces.FileReader,
@@ -188,6 +190,7 @@ func New(
 		promptRenderer:                     promptRenderer,
 		templateFieldResolver:              templateFieldResolver,
 		workerSessions:                     workerSessionsService,
+		workerAttempts:                     workerAttempts,
 		attemptCapacity:                    defaultRuntimeAttemptCapacity,
 		newID:                              newID,
 		runtimeConfig:                      runtimeDefinitions,
