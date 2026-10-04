@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"go.uber.org/goleak"
 	"os"
 	"path/filepath"
 	"strings"
@@ -435,6 +436,10 @@ func TestJavaScriptRuntimeService_StartAsync_FailedAndTimedOut(t *testing.T) {
 	})
 }
 
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
+
 func TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSessionRunning(t *testing.T) {
 	t.Parallel()
 	service := newDefaultJavaScriptRuntimeService(t, scriptedBlockingRuntimeWorkflows())
@@ -457,6 +462,11 @@ func TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSession
 	if err != nil {
 		t.Fatalf("StartSync: %v", err)
 	}
+	// The scripted workflow blocks on its session context and the wait timeout
+	// deliberately leaves the session running, so end it when the test ends.
+	t.Cleanup(func() {
+		_, _ = service.Cancel(context.Background(), started.SessionID, ControlRequest{})
+	})
 	if started.SyncOutcome != SyncOutcomeTimedOut || !started.TimedOut {
 		t.Fatalf("sync response = %#v, want TIMED_OUT", started)
 	}

@@ -17,8 +17,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"go.uber.org/goleak"
 	"go.uber.org/zap"
 )
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
+}
 
 func newTestHost(t *testing.T) *Host {
 	t.Helper()
@@ -34,13 +39,29 @@ func newTestHost(t *testing.T) *Host {
 }
 
 type executeObserverFactory struct {
+	// release lets the owning test end Run even when the test never stops the
+	// hosted handle, so no run loop outlives the test.
+	release     chan struct{}
 	mu          sync.RWMutex
 	engineState *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 }
 
+// newExecuteObserverFactory returns a factory whose Run is released when the
+// test ends.
+func newExecuteObserverFactory(t *testing.T) *executeObserverFactory {
+	t.Helper()
+	f := &executeObserverFactory{release: make(chan struct{})}
+	t.Cleanup(func() { close(f.release) })
+	return f
+}
+
 func (f *executeObserverFactory) Run(ctx context.Context) error {
-	<-ctx.Done()
-	return ctx.Err()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-f.release:
+		return nil
+	}
 }
 func (f *executeObserverFactory) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	return work.WorkRequestSubmitResult{}, nil
@@ -142,7 +163,7 @@ func TestStartStartsOneRunLoopAndWaitForStartObservesReadiness(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := &executeObserverFactory{}
+	factoryStub := newExecuteObserverFactory(t)
 	factoryStub.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,
 		FactoryState:  string(interfaces.FactoryStateRunning),
@@ -181,7 +202,7 @@ func TestWaitForStartFailureCleansUpHandleWithoutOrphan(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := &executeObserverFactory{}
+	factoryStub := newExecuteObserverFactory(t)
 	factoryStub.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,
 		FactoryState:  string(interfaces.FactoryStateIdle),
@@ -225,7 +246,7 @@ func TestStartAfterStopAllowsNewHandleForSameInstance(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := &executeObserverFactory{}
+	factoryStub := newExecuteObserverFactory(t)
 	factoryStub.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,
 		FactoryState:  string(interfaces.FactoryStateRunning),
@@ -262,7 +283,7 @@ func TestWaitForStartObservesReadinessWithoutSecondHandle(t *testing.T) {
 	t.Parallel()
 
 	host := newTestHost(t)
-	factoryStub := &executeObserverFactory{}
+	factoryStub := newExecuteObserverFactory(t)
 	factoryStub.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,
 		FactoryState:  string(interfaces.FactoryStateRunning),
